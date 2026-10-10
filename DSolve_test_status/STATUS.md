@@ -2064,6 +2064,73 @@ Full per-case results: `reports/2.2.39.tsv`; bucketed report: `reports/2.2.39.md
 
 ---
 
+## Section 2.2.40 — "Problems 3901 to 4000" (Nasser Abbasi)
+
+Corpus: `DE_examples_2240.m` — 100 records, **74 scalar (58 IVP) + 26 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.40,
+`Ch2.S1.SS40.htm`; the internal `2.2.40` name is kept for continuity — see
+`README.md`). A **Laplace-transform-style** chapter: 26 constant-coefficient
+linear systems (2×2 / 3×3 / 4×4, a few forced), first- and second-order linear
+IVPs with `E^{kt}` / trig forcing (3927–3954, incl. a symbolic-IC case 3954),
+**step / Piecewise / DiracDelta-impulse-forced** IVPs (3955–3984), and a
+variable-coefficient series / special-function tail (3985–4000: Emden–Fowler,
+Gegenbauer, `_erf`, regular-singular). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_40_tests` · gate baseline **0**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-11 (M67 baseline) | 100 / 100 | 100.0% | 0 | 0 FAIL, 0 crash by the harness count — but spot-checking the forced **first-order** family exposed a **masked wrong answer** class (below): 13 cases passed on a malformed inert form that is wrong past the step/impulse. |
+| 2026-10-11 (**M67**) | **100 / 100** | **100.0%** | **0** | **0 FAIL, 0 crash; the 13 forced first-order cases now GENUINELY correct** (clean `Piecewise` / `HeavisideTheta` closed forms). One root-cause fix (below). Gate baseline **0**. |
+
+**M67 fix — forced first-order linear routes to a correct method instead of a
+broken inert integral** (`src/calculus/dsolve_linear1.c`, shared helper refactor
+in `dsolve_common.c`). The section solves 100/100 out of the box, but the
+first-order step/impulse IVPs (3955–3961, 3970–3975) were **masked wrong
+answers**: `DSolve\`LinearFirstOrder` (cascade slot 4) owns them with the
+integrating-factor form `y = μ⁻¹(C[1] + ∫μq dx)`, whose **indefinite** `∫μq`
+stays inert for a `UnitStep` / `Piecewise` / `DiracDelta` forcing, and the
+downstream IC-fit then substitutes `x → 0` *into that inert `Integrate`* — a
+capture on its bound variable that yields a malformed `Integrate[·, 0]` and a
+solution **correct only before the breakpoint** (`y'+2y==2 UnitStep[t−1], y(0)=1`
+gave garbage at t=2; `y+y'==DiracDelta[t−5], y(0)=3` dropped the impulse jump
+entirely). The harness passed them because its residual probe reads the ODE
+(where the inert integral differentiates back via FTC → structurally 0) and
+checks the IC only at `t=0`, before the breakpoint fires.
+
+The 2nd-order forced cases are already correct — `DSolve\`PiecewiseForcing`
+(interval continuation, per-interval verified) owns the step cases and the VoP
+causal Duhamel convolution owns the impulses — so the fix routes first order the
+same way. In `dsolve_linear1_try`, for a distributional/step IVP:
+  - **UnitStep / Piecewise with NUMERIC breakpoints** → decline so the already
+    order-agnostic `DSolve\`PiecewiseForcing` (slot 15) returns a clean
+    `Piecewise`. A **symbolic** breakpoint (`UnitStep[t−a]`, 3961) it cannot
+    resolve, discriminated by a `NumericQ`-after-probe test, routes to →
+  - **the causal definite convolution** `y = μ⁻¹(C[1] + Integrate[μ(s) q(s),
+    {s, 0, x}])` (new `dsolve_linear_factor_solve_causal`), whose definite
+    `DiracDelta` integral sifts to a clean `f(a) HeavisideTheta[x−a]` (M26
+    `integrate_dirac`) and whose kernel vanishes at the base point so the IVP fit
+    is well-posed. Used for every impulse forcing and the symbolic-breakpoint
+    step.
+Gated to IVPs (`P->ncond ≥ 1`); a no-IC general-solution request keeps the
+indefinite form (inert but not wrong) unchanged — zero regression. The shared
+`linfac_mu` prologue (integrating factor) is factored out of
+`dsolve_linear_factor_solve`, behaviour-identical for the smooth path.
+
+*Measured, all residual-verified:* 3955 now `Piecewise[{{E^(−2t),t<1},{…,t≥1}}]`
+(y(2)=0.883, was garbage); 3972 now `E^(−t)(3 + E⁵ HeavisideTheta[t−5])`
+(y(6)=0.375, was 0.0074); 3961 (symbolic breakpoint) a correct inert causal
+convolution. **Side-effect (0 regressions, A/B-confirmed):** §2.2.1 2→0, §2.2.6
+5→3, §2.2.16 3→1 non-PASS as the same forced first-order cases there become
+correct; §2.2.15 / §2.2.37 unchanged. The two §2.2.8 / §2.2.30 timing flutters
+(753 solves in 21 s, 2973 >30 s) are **pre-existing drift — identical on a HEAD
+binary**, not this wave.
+
+Residue: none (0 UNEVAL, 0 FAIL).
+
+Full per-case results: `reports/2.2.40.tsv`; bucketed report: `reports/2.2.40.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

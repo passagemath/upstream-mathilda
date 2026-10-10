@@ -4663,6 +4663,21 @@ add_test(NAME dsolve_corpus_2_2_39_tests
                  ../../DSolve_test_status/DE_examples_2239.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
 
+# M67 (Problems 3901-4000, our section 2.2.40 = upstream 2.1.40).  A Laplace-
+# transform-style chapter: 26 constant-coefficient linear systems + first/second-
+# order linear IVPs with E/trig forcing, step/Piecewise/DiracDelta-forced IVPs
+# (3955-3984), and a variable-coefficient series/special-function tail (3985-4000).
+# Solves 100/100 out of the box, but the forced FIRST-ORDER family (3955-3961,
+# 3970-3975) passed on a malformed inert integrating-factor form that is WRONG past
+# the step/impulse (the IC-fit substitutes x->0 into an inert Integrate).  M67
+# routes them to the correct method: numeric-breakpoint step -> PiecewiseForcing,
+# impulse/symbolic-breakpoint -> causal definite convolution (dsolve_linear1.c +
+# dsolve_common.c).  Now genuinely correct; 0 non-PASS.  Baseline argv3 = 0.
+add_test(NAME dsolve_corpus_2_2_40_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2240.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

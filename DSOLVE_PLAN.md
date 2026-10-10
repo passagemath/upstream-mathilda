@@ -2803,6 +2803,53 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     is a constant-coefficient 3×3 system with an irreducible cubic-`Root` spectrum (`l³−5l²+8l−8`),
     the known spectrum-churn class (>45 s, cf. §2.2.23's 2289/2220). v0.342→0.343.
 
+- **M67 — §2.2.40 corpus (Problems 3901–4000, Nasser Abbasi) + forced first-order linear
+  routes to a correct method instead of a broken inert integral.** ✅ DONE. The next hundred,
+  measured end to end: **100/100, 0 FAIL, 0 crash** — but the harness count is not the story.
+  New corpus `DE_examples_2240.m` (upstream §2.1.40, 100 records — **74 scalar, 58 IVP, 26
+  systems**; `make check-corpus-indvar` green); new gate `dsolve_corpus_2_2_40_tests` at baseline
+  **0**; report `DSolve_test_status/reports/2.2.40.md`. A **Laplace-transform-style** chapter:
+  26 constant-coefficient linear systems, first/second-order linear IVPs with `E^{kt}`/trig
+  forcing (incl. a symbolic-IC case 3954), **step / Piecewise / DiracDelta-impulse-forced** IVPs
+  (3955–3984), and a variable-coefficient series/special-function tail (3985–4000). The
+  constant-coefficient system + VoP + `PiecewiseForcing` + Kovacic/Frobenius stack solves the bulk
+  out of the box, hence the perfect count.
+  - **The wave is a correctness fix the count hides.** Spot-checking the forced **first-order**
+    family exposed a *masked wrong-answer* class: `y'+2y==2 UnitStep[t−1], y(0)=1` was correct only
+    for `t<1` (garbage at `t=2`), and `y+y'==DiracDelta[t−5], y(0)=3` dropped the impulse jump
+    entirely (`y(6)=0.0074` vs the exact `0.375`). Thirteen first-order cases (3955–3961, 3970–3975).
+    `DSolve\`LinearFirstOrder` (cascade slot 4) owns them with the integrating-factor form
+    `y = μ⁻¹(C[1] + ∫μq dx)`, whose **indefinite** `∫μq` stays inert for a UnitStep/Piecewise/
+    DiracDelta forcing; the downstream IC-fit then substitutes `x → 0` *into that inert `Integrate`*
+    — a capture on its bound variable — producing a malformed `Integrate[·, 0]` and a function wrong
+    past the breakpoint. The harness passed all thirteen because its residual probe reads the ODE
+    (where the inert integral differentiates back via FTC → structurally 0) and checks the IC only
+    at `t=0`, before the breakpoint fires. The 2nd-order forced cases were already correct —
+    `DSolve\`PiecewiseForcing` (interval continuation, per-interval verified) and the VoP causal
+    Duhamel convolution own them — so the fix routes first order the same way.
+  - **The fix, in `dsolve_linear1.c` (+ a shared-helper refactor in `dsolve_common.c`).** For a
+    distributional/step IVP (`P->ncond ≥ 1`), `dsolve_linear1_try` no longer builds the inert form:
+    **UnitStep/Piecewise with NUMERIC breakpoints** decline so the already order-agnostic
+    `DSolve\`PiecewiseForcing` (slot 15) returns a clean `Piecewise`; a **symbolic** breakpoint
+    (`UnitStep[t−a]`, 3961), which it cannot resolve (`pw_numval` is NaN) and is discriminated by a
+    `NumericQ`-after-probe test, and every **DiracDelta impulse** route to the new
+    `dsolve_linear_factor_solve_causal` — the causal definite convolution
+    `y = μ⁻¹(C[1] + Integrate[μ(s) q(s), {s, 0, x}])`, whose definite DiracDelta integral sifts to a
+    clean `f(a) HeavisideTheta[x−a]` (M26 `integrate_dirac`) and whose kernel vanishes at the base
+    point so the IVP fit is well-posed. A mixed step+impulse declines honestly; a no-IC
+    general-solution request keeps the indefinite form (inert but not wrong) — zero regression. The
+    integrating-factor prologue `μ = Exp[∫p]` is factored into a shared static `linfac_mu`,
+    behaviour-identical for the smooth path.
+  - *Measured, all residual-verified:* 3955 → `Piecewise[{{E^(−2t),t<1},{…,t≥1}}]` (`y(2)=0.883`);
+    3972 → `E^(−t)(3 + E⁵ HeavisideTheta[t−5])` (`y(6)=0.375`); 3961 a correct inert causal
+    convolution. **Side-effect, A/B-confirmed 0 regression:** the same forced first-order cases in
+    other sections become correct too — §2.2.1 2→0, §2.2.6 5→3, §2.2.16 3→1 non-PASS; §2.2.15 /
+    §2.2.37 unchanged. The two §2.2.8 / §2.2.30 timing flutters (753 solves in 21 s, 2973 >30 s) are
+    **pre-existing drift — byte-identical on a HEAD binary**, not this wave. (`dsolve_tests` aborts
+    at the pre-existing `t_m17_normalform_bessel` SpecialFunctionForm failure, also identical on
+    HEAD — unrelated.)
+  - *Residue: none* (0 UNEVAL, 0 FAIL). v0.343→0.344.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

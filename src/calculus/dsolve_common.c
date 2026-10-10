@@ -2954,11 +2954,16 @@ Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char*
     return R;
 }
 
-Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+/* Integrating factor mu = Exp[Integrate[p, x]], simplified and (for an
+ * inverse-hyperbolic exponent) rationalised — the shared prologue of both the
+ * indefinite dsolve_linear_factor_solve and the causal (definite-convolution)
+ * dsolve_linear_factor_solve_causal.  Pcoef consumed.  Returns mu, or NULL when
+ * Integrate[p, x] is non-elementary (left as an inert Integrate). */
+static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
     g_integrate_quiet++;   /* a non-elementary integrating-factor integral is kept
                             * unevaluated below, not surfaced as a speculative message */
     Expr* Pint = ds_integrate(Pcoef, expr_new_symbol(xvar));       /* consumes Pcoef */
-    if (ds_has_head(Pint, SYM_Integrate)) { g_integrate_quiet--; expr_free(Pint); expr_free(Qcoef); return NULL; }
+    if (ds_has_head(Pint, SYM_Integrate)) { g_integrate_quiet--; expr_free(Pint); return NULL; }
     Expr* mu = eval_and_free(ds_call1("Exp", Pint));
     /* Simplify the integrating factor before integrating mu*q.  ∫p can come back
      * in an un-collapsed form (e.g. ∫Tan[x] as a sum/difference of three Logs
@@ -2995,6 +3000,14 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
         else
             expr_free(mu2);
     }
+    g_integrate_quiet--;
+    return mu;
+}
+
+Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+    Expr* mu = linfac_mu(Pcoef, xvar);                             /* consumes Pcoef */
+    if (!mu) { expr_free(Qcoef); return NULL; }
+    g_integrate_quiet++;
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
     Expr* Qint = ds_integrate(integrand, expr_new_symbol(xvar));
     g_integrate_quiet--;
@@ -3007,6 +3020,51 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
      * $IterationLimit, and let y' + y == Q[x] be fabricated wrong downstream by
      * UndeterminedCoefficients.  We keep Qint as-is. */
     Expr* num = eval_and_free(ds_call2(SYM_Plus, Qint, ds_const(1)));
+    Expr* body = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+        num,
+        expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ mu, expr_new_integer(-1) }, 2)
+    }, 2));
+    return body;
+}
+
+/* Causal (definite-convolution) variant, for a DISTRIBUTIONAL / impulse forcing q:
+ *
+ *     y = mu(x)^-1 ( C[1] + Integrate[ mu(s) q(s), {s, 0, x} ] )
+ *
+ * over a fresh dummy s.  The indefinite dsolve_linear_factor_solve above leaves
+ * Integrate[mu q, x] inert for a DiracDelta / step q (neither integrates
+ * indefinitely in Mathilda), and the downstream IC-fit then substitutes x -> x0
+ * INTO that inert Integrate — a capture on its bound variable that produces a
+ * malformed Integrate[., x0] and a solution WRONG past the impulse/breakpoint.
+ * The definite form sifts a DiracDelta q to a clean f(a) HeavisideTheta[x-a] (the
+ * M26 integrate_dirac path, which DOES close the definite integral) and anchors
+ * the base point at x0 = 0: the kernel vanishes there (Integrate[.,{s,0,0}] == 0),
+ * so the IVP fit is well-posed, y(0) = C[1]/mu(0).  Pcoef, Qcoef consumed. */
+Expr* dsolve_linear_factor_solve_causal(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+    Expr* mu = linfac_mu(Pcoef, xvar);                             /* consumes Pcoef */
+    if (!mu) { expr_free(Qcoef); return NULL; }
+    /* Fresh dummy s, distinct from xvar and any symbol occurring in q or mu
+     * (mirrors vp_definite_convolution). */
+    const char* sname = intern_symbol("DSolve`vpS");
+    if (strcmp(sname, xvar) == 0 || ds_contains(Qcoef, sname) || ds_contains(mu, sname)) {
+        char buf[32];
+        for (int k = 1; ; k++) {
+            snprintf(buf, sizeof buf, "DSolve`vpS%d", k);
+            sname = intern_symbol(buf);
+            if (strcmp(sname, xvar) != 0 && !ds_contains(Qcoef, sname) && !ds_contains(mu, sname)) break;
+        }
+    }
+    Expr* mu_s = ds_subst(expr_copy(mu), expr_new_symbol(xvar), expr_new_symbol(sname));
+    Expr* q_s  = ds_subst(Qcoef, expr_new_symbol(xvar), expr_new_symbol(sname)); /* consumes Qcoef */
+    Expr* integrand = eval_and_free(ds_call2(SYM_Times, mu_s, q_s));
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_symbol(sname), expr_new_integer(0), expr_new_symbol(xvar) }, 3);
+    g_integrate_quiet++;
+    Expr* Qdef = eval_and_free(ds_call2(SYM_Integrate, integrand, spec));
+    g_integrate_quiet--;
+    /* As in the indefinite path, keep Qdef even when it stays an (unevaluated)
+     * convolution: it is exact and differentiates back to the forcing. */
+    Expr* num = eval_and_free(ds_call2(SYM_Plus, Qdef, ds_const(1)));
     Expr* body = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
         num,
         expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ mu, expr_new_integer(-1) }, 2)

@@ -1,59 +1,57 @@
-# DSolve corpus wave M66 — §2.2.39 (Problems 3801–3900)
+# DSolve corpus wave M67 — §2.2.40 (Problems 3901–4000)
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-keen-hollerith.md`
+Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-cozy-minsky.md`
 
 ## Phase A — land & audit the corpus
-- [x] Fetch upstream §2.1.39 `Ch2.S1.SS39.htm` (browser-UA curl) → scratchpad
-- [x] Convert → `DSolve_test_status/DE_examples_2239.m` (label 2.2.39)
-- [x] `make check-corpus-indvar` green; eyeballed — clean
-- [x] 100 records; 8 scalar (0 IVP) + 92 systems (53 2×2, 32 3×3, 7 4×4)
+- [x] Fetch upstream §2.1.40 `Ch2.S1.SS40.htm` (browser-UA curl) → scratchpad (HTTP 200)
+- [x] Convert → `DSolve_test_status/DE_examples_2240.m` (label 2.2.40)
+- [x] `make check-corpus-indvar` green
+- [x] 100 records: 74 scalar (58 IVP) + 26 systems — Laplace-transform-style chapter
 
 ## Phase B — measure baseline
-- [x] Build `dsolve_corpus_tests`
-- [x] Baseline run → 95/100, 5 UNEVAL (3804,3805,3832,3886,3891), 0 FAIL/crash
-- [x] Non-PASS diagnosed from inside cascade (pinned methods, profiler)
+- [x] Build `dsolve_corpus_tests`; baseline run → 100/100, 0 FAIL/UNEVAL/crash
+- [x] Staff-engineer spot-check (NOT vacuous): forced FIRST-ORDER family (3955–3961,
+      3970–3975) are **masked wrong answers** — inert `∫μq` + malformed `Integrate[.,0]`
+      from the IC-fit; wrong past the step/impulse (3955 y(2) garbage; 3972 drops impulse)
 
-## Phase C — diagnose & fix (FAIL > crash > UNEVAL)
-- [x] Classified: 3805 = latency (Log·trig ∫ falls to PMS 9.4s); other 4 hard residues
-- [x] Fix: new `Integrate` LogByParts stage (`integrate_logbyparts.c`) — 3805 9.4→0.35s
-- [x] §2.2.39 → 96/100; integrate/risch suite (35) green, 0 regressions
-- [x] A/B kill-switch: 4 failing dsolve unit/stress tests are PRE-EXISTING on HEAD
+## Phase C — diagnose & fix (correctness: masked FAIL class)
+- [x] Root cause: `DSolve`LinearFirstOrder` (slot 4) owns step/impulse IVPs with the
+      indefinite integrating-factor form; 2nd-order already correct (PiecewiseForcing / VoP)
+- [x] Fix: route first-order — numeric-breakpoint step → PiecewiseForcing; impulse /
+      symbolic-breakpoint → new `dsolve_linear_factor_solve_causal` (definite convolution);
+      shared `linfac_mu` refactor. `dsolve_linear1.c` + `dsolve_common.{c,h}`
+- [x] §2.2.40 → 100/100, 0 FAIL; all 13 rerouted cases now genuinely correct (verified)
+- [x] Regression (7 sections): 0 FAIL; §2.2.1/6/16 +2 each, others unchanged
+- [x] A/B vs HEAD: 753/2973 flutters + dsolve_tests `t_m17_normalform_bessel` abort all
+      PRE-EXISTING (identical on HEAD binary) — not this wave
 
 ## Phase D — lock in & document
-- [x] Add `dsolve_corpus_2_2_39_tests` gate at baseline 4
-- [x] STATUS.md section + wave-history M66; DSOLVE_PLAN.md M66; README rows (37/38/39)
-- [x] Changelog `docs/spec/changelog/2026-10-05.md`; spec `calculus.md` LogByParts note
-- [x] Bump `src/version.h` → 0.343
-- [x] Targeted regression on VoP/trig/Log sections (19/25/27/32/34/35/36/38/39)
-- [x] Regenerate `reports/2.2.39.{tsv,md}` post-fix → 96/100, 4 non-PASS
-- [x] valgrind: new file in 0/31581 leak records, no invalid access; check-c99 ✓ / check-messages ✓
-- [ ] Commit + tag v0.343
+- [x] Gate `dsolve_corpus_2_2_40_tests` baseline 0; `ctest` passes (32 s)
+- [x] STATUS.md §2.2.40 block + README Contents row; DSOLVE_PLAN.md M67 block
+- [x] Changelog `docs/spec/changelog/2026-10-05.md`; spec `calculus.md` LinearFirstOrder row
+- [x] Bump `src/version.h` → 0.344
+- [x] `make check-c99` ✓ / `make check-messages` ✓
+- [x] Regenerate `reports/2.2.40.{tsv,md}`
+- [ ] Commit + tag v0.344 + push --follow-tags
 
 ## Review
+**Outcome.** §2.2.40 lands **100/100, 0 FAIL, 0 crash, 0 UNEVAL**. The count was 100/100
+out of the box, so the wave is a *correctness* fix the harness could not see: 13 forced
+first-order IVPs (UnitStep/Piecewise/DiracDelta) were returning functions wrong past the
+step/impulse, masked because the harness samples the ODE residual (FTC-zero on the inert
+integral) and checks the IC only at t=0.
 
-**Result:** §2.2.39 (Problems 3801–3900) landed at **95 → 96/100, 0 FAIL, 0 crash**,
-gate `dsolve_corpus_2_2_39_tests` at baseline **4**.
+**Fix (one root cause, 3 files).** `dsolve_linear1_try` stops building the broken inert
+integrating-factor form for a distributional/step IVP and routes to a correct method:
+numeric-breakpoint step → the proven `DSolve`PiecewiseForcing`; DiracDelta impulse or
+symbolic breakpoint → the causal definite convolution `y=μ⁻¹(C[1]+∫_0^x μq ds)` (new
+`dsolve_linear_factor_solve_causal`, definite DiracDelta sifts to HeavisideTheta). Gated to
+IVPs; smooth / no-IC path behaviour-identical (shared `linfac_mu`).
 
-**One general fix:** new `Integrate` stage `LogByParts`
-(`src/calculus/integrate_logbyparts.c`) — recognises `c Log[g] K` with a
-trig/hyperbolic cofactor and does one integration by parts, closing the `Log·trig`
-family to `Log·trig + Si/Ci` instead of the ~4.7–12 s `ParallelMixedSpecial`
-search. `3805` (`y''+4y==Log[x]`): 9.4 s → 0.35 s. Placed after the cheap stages
-(cascade `if(!result)` short-circuit ⇒ sees only what they declined, perturbs
-nothing already fast) and before the heavy tail; recursive sub-integrals raise
-`g_integrate_no_special` so a non-closing residual declines fast; exact `Simplify`
-diff-back is the sole acceptance test.
+**Verification.** 13 rerouted cases now clean Piecewise/HeavisideTheta forms, residual-
+verified at points past the breakpoint. Side-effect: §2.2.1/6/16 +2 each. 0 regression,
+A/B-confirmed. Residue: none.
 
-**Regression-free (A/B kill-switch proven):** integrate/risch suite 35/35 green;
-every affected corpus section identical with/without the stage; valgrind — new
-file in 0 leak records, no invalid access.
-
-**Residue (4, honest hard classes):** 3804 (variable-coeff Airy-inhomogeneous),
-3832/3891 (variable-coeff 2×2/3×3 systems), 3886 (const-coeff 3×3, irreducible
-cubic-`Root` spectrum churn).
-
-**Pre-existing, NOT this wave (flagged for a drift-reconciliation pass):** gates
-`dsolve_corpus_2_2_19_tests` (8 vs stale baseline 5) and `_2_2_35_tests` (3 vs 2)
-have drifted across M40–M65; unit/stress `dsolve_tests`, `dsolve_m34/m62/m63_stress`
-are red on HEAD. All A/B-confirmed independent of M66; baselines left untouched
-(raising without root-cause could mask a real regression).
+**Pre-existing, out of scope (flagged):** `dsolve_tests` aborts at `t_m17_normalform_bessel`
+(SpecialFunctionForm declines the spherical-Bessel eqn `y''+(2/x)y'+y==0`) — identical on
+HEAD; §2.2.8-753 (21 s) / §2.2.30-2973 (>30 s) latency drift, identical on HEAD.

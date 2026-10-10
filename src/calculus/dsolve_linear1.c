@@ -47,8 +47,51 @@ Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(FY);
     if (!ok) { expr_free(p); expr_free(q); return NULL; }
 
-    /* y' + p y == q  ->  integrating-factor solve (p, q consumed) */
-    Expr* body = dsolve_linear_factor_solve(p, q, xvar);
+    /* Distributional / step forcing on an IVP.  The plain integrating-factor form
+     * below integrates mu*q INDEFINITELY, which stays inert for a DiracDelta / step
+     * q; the downstream IC-fit then substitutes x -> x0 into that inert Integrate
+     * (a capture on its bound variable), yielding a malformed Integrate[.,x0] and a
+     * solution WRONG past the impulse / breakpoint (e.g. y'+2y==2 UnitStep[t-1],
+     * y(0)=1 was correct only for t<1).  Route an IVP two ways:
+     *   - UnitStep / Piecewise / Heaviside (no impulse): decline so the proven,
+     *     per-interval-verified DSolve`PiecewiseForcing (interval continuation)
+     *     owns it — it is already order-agnostic.
+     *   - DiracDelta impulse (no step): use the CAUSAL definite convolution, whose
+     *     definite DiracDelta integral sifts to a clean HeavisideTheta.
+     * A mixed step+impulse forcing declines (neither path closes it) rather than
+     * ship the broken inert form.  A no-IC general-solution request keeps the
+     * indefinite form unchanged (inert but not wrong — zero regression). */
+    bool has_dirac = ds_contains(q, intern_symbol("DiracDelta"));
+    bool has_step  = ds_contains(q, SYM_UnitStep) || ds_contains(q, SYM_Piecewise)
+                     || ds_contains(q, SYM_HeavisideTheta);
+    Expr* body;
+    if (P->ncond >= 1 && (has_dirac || has_step)) {
+        if (has_step && !has_dirac) {
+            /* Pure step forcing.  With NUMERIC breakpoints, decline so the proven,
+             * per-interval-verified DSolve`PiecewiseForcing (interval continuation)
+             * returns a clean Piecewise.  A SYMBOLIC breakpoint — UnitStep[t-a] — it
+             * cannot resolve (pw_numval is NaN), so route THAT to the causal form.
+             * Probe: substitute a non-special real for x; a numeric-breakpoint
+             * forcing then collapses to a pure number (NumericQ True), whereas a
+             * symbolic breakpoint keeps the parameter inside the step (False). */
+            Expr* nq = eval_and_free(ds_call1("NumericQ",
+                           ds_subst(expr_copy(q), expr_new_symbol(xvar),
+                                    expr_new_real(0.3728810))));
+            bool numeric_bp = (nq && nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True);
+            expr_free(nq);
+            if (numeric_bp) { expr_free(p); expr_free(q); return NULL; }  /* -> PiecewiseForcing */
+            body = dsolve_linear_factor_solve_causal(p, q, xvar);
+        } else if (has_dirac && !has_step) {
+            body = dsolve_linear_factor_solve_causal(p, q, xvar);   /* impulse */
+        } else {
+            /* Mixed step + impulse: neither path closes it cleanly — decline
+             * (honest UNEVAL) rather than ship the broken inert indefinite form. */
+            expr_free(p); expr_free(q); return NULL;
+        }
+    } else {
+        /* y' + p y == q  ->  integrating-factor solve (p, q consumed) */
+        body = dsolve_linear_factor_solve(p, q, xvar);
+    }
     if (!body) return NULL;
 
     Expr** out = malloc(sizeof(Expr*));

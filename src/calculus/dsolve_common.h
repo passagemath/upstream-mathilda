@@ -199,6 +199,12 @@ Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char*
  * elementary.  Pcoef and Qcoef are consumed. */
 Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar);
 
+/* Causal (definite-convolution) variant for a distributional / impulse forcing:
+ * y = mu^-1 (C[1] + Integrate[mu(s) Qcoef(s), {s, 0, x}]).  The definite integral
+ * sifts a DiracDelta Qcoef to a HeavisideTheta where the indefinite form above
+ * stays inert and corrupts the IC fit.  Pcoef and Qcoef are consumed. */
+Expr* dsolve_linear_factor_solve_causal(Expr* Pcoef, Expr* Qcoef, const char* xvar);
+
 /* Extract the RHS values of the single-variable solutions in a Solve result
  * List[List[Rule[var, val]], ...] whose rule LHS is the symbol `varname`.
  * Returns a malloc'd array of *n owned values, or NULL if none.  Borrows solres. */

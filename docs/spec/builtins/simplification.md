@@ -168,6 +168,15 @@ canonical forms that the generic pipeline alone does not:
   `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. The emitted
   `(-1)^K` is then canonicalised by the root-of-unity reducer above. Also
   `E^(2 I Pi n + z) -> E^z` and `E^(I Pi n + z) -> (-1)^n E^z`.
+- **Gamma / factorial / combinatorics ratios under integer assumptions** — the
+  Factorial-ratio engine first converts `Gamma[z] -> Factorial[z-1]`,
+  `Pochhammer[a,m] -> Factorial[a+m-1]/Factorial[a-1]`, and
+  `Binomial[p,q] -> Factorial[p]/(Factorial[q] Factorial[p-q])` (restoring the
+  Gamma form on output), so for integer `n, k`: `Gamma[n+1] = n!`,
+  `Gamma[n+2]/Gamma[n] = n(n+1)`, `Binomial[n,k] = Binomial[n,n-k]`, Pascal's
+  rule, `Pochhammer[1,n] = n!`, and `Factorial2[2n] = 2^n n!`. The conversion is
+  gated on an active integer-assumption context so unassumed `Simplify` and the
+  Sum engine are unaffected.
 - **Rounding and modular reductions under integer assumptions** — for integer
   `n`: `Floor[n] -> n`, `Ceiling[n] -> n`, `Round[n] -> n`,
   `FractionalPart[n] -> 0`, `Mod[n, 1] -> 0`; integer-shift extraction

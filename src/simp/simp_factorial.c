@@ -715,14 +715,118 @@ static Expr* simp_fact_double_factorial_walk(const Expr* e) {
 /* Top-level transform. Returns NULL when the input contains no factorial
  * or when the rewrite produced no change. Otherwise returns the
  * candidate (a freshly-allocated Expr*; caller takes ownership). */
-Expr* simp_factorial(const Expr* e) {
-    if (!contains_factorial(e)) return NULL;
+/* Count Gamma/Factorial/Pochhammer/Binomial atoms. Used to gate the
+ * to-Factorial conversion: convert only when >= 2 such atoms are present, so a
+ * standalone Gamma[n+1] is left as Gamma (the conversion is only interesting
+ * when terms can combine or cancel). */
+static int simp_fact_count_like(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int c = 0;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (strcmp(h, "Factorial") == 0 || strcmp(h, "Gamma") == 0 ||
+            strcmp(h, "Pochhammer") == 0 || strcmp(h, "Binomial") == 0) c++;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += simp_fact_count_like(e->data.function.args[i]);
+    return c;
+}
+
+/* True iff e mentions any factorial-like head (the FactorialRules gate). */
+bool contains_factorial_like(const Expr* e) { return simp_fact_count_like(e) > 0; }
+
+/* Convert Gamma/Pochhammer/Binomial to Factorial, bottom-up. Identities
+ * (Factorial[x] := Gamma[x+1]): Gamma[z] -> Factorial[z-1],
+ * Pochhammer[a,m] -> Factorial[a+m-1]/Factorial[a-1],
+ * Binomial[p,q] -> Factorial[p]/(Factorial[q] Factorial[p-q]). */
+static Expr* simp_fact_to_factorial(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = simp_fact_to_factorial(e->data.function.args[i]);
+    Expr* node = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    if (node->data.function.head->type != EXPR_SYMBOL) return node;
+    const char* h = node->data.function.head->data.symbol.name;
+    size_t nn = node->data.function.arg_count;
+    Expr* out = NULL;
+    if (strcmp(h, "Gamma") == 0 && nn == 1) {
+        Expr* zm1 = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ expr_copy(node->data.function.args[0]), expr_new_integer(-1) }, 2));
+        out = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){ zm1 }, 1);
+    } else if (strcmp(h, "Pochhammer") == 0 && nn == 2) {
+        Expr* A = node->data.function.args[0];
+        Expr* M = node->data.function.args[1];
+        Expr* num = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){
+            eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(A), expr_copy(M), expr_new_integer(-1) }, 3)) }, 1);
+        Expr* den = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){
+            eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(A), expr_new_integer(-1) }, 2)) }, 1);
+        out = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ num,
+            expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2);
+    } else if (strcmp(h, "Binomial") == 0 && nn == 2) {
+        Expr* P = node->data.function.args[0];
+        Expr* Q = node->data.function.args[1];
+        Expr* fp = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){ expr_copy(P) }, 1);
+        Expr* fq = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){ expr_copy(Q) }, 1);
+        Expr* fpq = expr_new_function(expr_new_symbol("Factorial"), (Expr*[]){
+            eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(P), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(Q) }, 2) }, 2)) }, 1);
+        Expr* den = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ fq, fpq }, 2);
+        out = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ fp,
+            expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 2);
+    }
+    if (out) { expr_free(node); return out; }
+    return node;
+}
+
+/* Factorial[z] -> Gamma[z+1], bottom-up. Used to restore the Gamma vocabulary
+ * in a result when the ORIGINAL input had no Factorial head (so the to-Factorial
+ * conversion is an internal device, not a change to the user's form). */
+static Expr* simp_fact_to_gamma(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = simp_fact_to_gamma(e->data.function.args[i]);
+    Expr* node = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    if (node->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(node->data.function.head->data.symbol.name, "Factorial") == 0 &&
+        node->data.function.arg_count == 1) {
+        Expr* zp1 = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ expr_copy(node->data.function.args[0]), expr_new_integer(1) }, 2));
+        Expr* out = expr_new_function(expr_new_symbol("Gamma"), (Expr*[]){ zp1 }, 1);
+        expr_free(node);
+        return out;
+    }
+    return node;
+}
+
+Expr* simp_factorial(const Expr* e, const AssumeCtx* ctx) {
+    /* Normalise Gamma/Pochhammer/Binomial to Factorial first (only when >= 2
+     * factorial-like atoms can interact) so the ratio/cancellation engine
+     * below reduces them too; e.g. Gamma[n+2]/Gamma[n] -> n(n+1). Gated on
+     * an active integer-assumption context: the conversion is only wanted for
+     * the assumed-integer campaign, and keeping it out of UNASSUMED Simplify
+     * calls (e.g. Gosper's internal term-ratio simplification in the Sum
+     * engine) avoids disturbing them. */
+    bool had_factorial = contains_factorial(e);
+    bool do_convert = (ctx && ctx->count > 0 && !ctx->inconsistent &&
+                       simp_fact_count_like(e) >= 2);
+    Expr* ef = do_convert ? simp_fact_to_factorial(e) : expr_copy((Expr*)e);
+    if (!contains_factorial(ef)) { expr_free(ef); return NULL; }
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
 
     SimpFactGroupSet groups;
     simp_fgs_init(&groups);
-    simp_fact_gather(e, &groups);
+    simp_fact_gather(ef, &groups);
 
     /* If every group has exactly one offset (no shifting possible) AND the
      * tree contains only one factorial, the substitution step is a no-op.
@@ -753,7 +857,7 @@ Expr* simp_factorial(const Expr* e) {
          * that any residual rational form left by the evaluator is
          * reduced. Skip if the evaluator's own auto-cancel already
          * produced a form without nested Times/Power[Times,-1] noise. */
-        Expr* rewritten = simp_fact_rewrite(e, &groups);
+        Expr* rewritten = simp_fact_rewrite(ef, &groups);
         /* Force a full evaluator pass so the auto-cancellation between
          * Factorial[base] in the numerator and the same factor in a
          * Pochhammer-expanded denominator collapses. evaluate() does NOT
@@ -872,12 +976,12 @@ Expr* simp_factorial(const Expr* e) {
          * the (base+j) factors become visible). The NULL memo push
          * mirrors the any_shift path -- see comment there. */
         Expr* factored = NULL;
-        if (!has_non_integer_power(e)) {
+        if (!has_non_integer_power(ef)) {
             factor_memo_push(NULL);
-            factored = call_unary_copy("Factor", e);
+            factored = call_unary_copy("Factor", ef);
             factor_memo_pop();
         }
-        if (!factored) factored = expr_copy((Expr*)e);
+        if (!factored) factored = expr_copy((Expr*)ef);
         result = simp_fact_refold(factored);
         expr_free(factored);
     }
@@ -901,6 +1005,16 @@ Expr* simp_factorial(const Expr* e) {
     }
 
     simp_fgs_free(&groups);
+    expr_free(ef);
+    /* Restore the Gamma vocabulary if the user's input had no Factorial (the
+     * to-Factorial pass was only an internal device): 1/Factorial[a-1] back to
+     * 1/Gamma[a]. A result that genuinely collapsed to a polynomial has no
+     * Factorial left, so this is a no-op there. */
+    if (result && do_convert && !had_factorial && contains_factorial(result)) {
+        Expr* g = simp_fact_to_gamma(result);
+        expr_free(result);
+        result = eval_and_free(g);
+    }
     if (result && expr_eq(result, e)) {
         if (dbg) simp_debug_log("FactorialRules", e, NULL,
                                 simp_debug_elapsed_ms(t0));

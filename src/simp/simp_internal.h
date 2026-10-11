@@ -301,8 +301,9 @@ bool transform_can_fire(const char* name, const Expr* e,
 /* simp_factorial.c                                                   */
 /* ------------------------------------------------------------------ */
 
-Expr* simp_factorial(const Expr* e);
+Expr* simp_factorial(const Expr* e, const AssumeCtx* ctx);
 bool  contains_factorial(const Expr* e);
+bool  contains_factorial_like(const Expr* e);  /* Factorial|Gamma|Pochhammer|Binomial */
 
 /* ------------------------------------------------------------------ */
 /* simp_bottomup.c                                                    */

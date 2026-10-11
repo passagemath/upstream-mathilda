@@ -42,6 +42,7 @@
  * firing the FactorialRules seed, and simp_search uses simp_eq_head_sym
  * to count factorials in candidates -- both must be visible here. */
 bool contains_factorial(const Expr* e);
+bool contains_factorial_like(const Expr* e);
 bool simp_eq_head_sym(const Expr* e, const char* name);
 
 /* True if `e` contains a Root[...] head anywhere.  Two uses:
@@ -349,7 +350,7 @@ bool transform_can_fire(const char* name, const Expr* e,
     /* Factorial rewriter: nothing fires unless the input mentions
      * Factorial somewhere in the tree. */
     if (strcmp(name, "FactorialRules") == 0) {
-        if (!contains_factorial(e)) return false;
+        if (!contains_factorial_like(e)) return false;
     }
     return true;
 }
@@ -570,7 +571,7 @@ SimpShape simp_classify(const Expr* e) {
      * polynomial pipelines short-circuit past it, leaving Factorial[arg]
      * structurally opaque to Together/Cancel and missing the shift-
      * normalization that closes (n+3)!/(n+1)! -> (n+2)(n+3) etc. */
-    if (contains_factorial(e))          return SIMP_SHAPE_GENERAL;
+    if (contains_factorial_like(e))     return SIMP_SHAPE_GENERAL;
     if (contains_log(e))                return SIMP_SHAPE_LOGEXP;
     /* No trig, no abs, no log. Decide poly / rational / general. */
     if (!has_non_integer_power(e) && simp_is_polynomial_in_own_vars(e)) {
@@ -586,7 +587,7 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
 
 /* Forward declaration for simp_factorial (defined alongside simp_bottomup
  * further down). contains_factorial was forward-declared above. */
-Expr* simp_factorial(const Expr* e);
+Expr* simp_factorial(const Expr* e, const AssumeCtx* ctx);
 
 /* ----------------------------------------------------------------------- */
 /* Specialised pipelines                                                   */
@@ -1922,7 +1923,7 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
      * force-take whenever the number of Factorial atoms strictly drops
      * (or stays the same and the leaf count is no worse). */
     if (transform_can_fire("FactorialRules", input, NULL)) {
-        Expr* alt = simp_factorial(input);
+        Expr* alt = simp_factorial(input, ctx);
         if (alt && !expr_eq(alt, input)) {
             size_t s = score_with_func(alt, complexity_func);
             /* Count Factorial atoms in input and alt. */

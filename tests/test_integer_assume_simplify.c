@@ -130,6 +130,29 @@ void test_int_c_mod_divis(void) {
     assert_eval_eq("Simplify[Mod[n m, m], Element[{n,m},Integers]]", "0", 0);
 }
 
+/* ---- Phase 3 Group D: Gamma / factorial / combinatorics ---- */
+void test_int_d_gamma_fact(void) {
+    assert_eval_eq("Simplify[Gamma[n + 1] - n!, Element[n,Integers]]", "0", 0);
+}
+void test_int_d_binom_symmetry(void) {
+    assert_eval_eq("Simplify[Binomial[n, k] - Binomial[n, n - k], Element[{n,k},Integers]]", "0", 0);
+}
+void test_int_d_pascal(void) {
+    assert_eval_eq("Simplify[Binomial[n + 1, k] - (Binomial[n, k] + Binomial[n, k - 1]), Element[{n,k},Integers]]", "0", 0);
+}
+void test_int_d_pochhammer(void) {
+    assert_eval_eq("Simplify[Pochhammer[1, n] - n!, Element[n,Integers]]", "0", 0);
+}
+void test_int_d_gamma_ratio2(void) {
+    assert_eval_eq("Simplify[Gamma[n + 2]/Gamma[n] - n (n + 1), Element[n,Integers]]", "0", 0);
+}
+void test_int_d_gamma_ratio1(void) {
+    assert_eval_eq("Simplify[Gamma[n]/Gamma[n - 1] - (n - 1), Element[n,Integers]]", "0", 0);
+}
+void test_int_d_factorial2(void) {
+    assert_eval_eq("Simplify[Factorial2[2 n] - 2^n n!, Element[n,Integers]]", "0", 0);
+}
+
 /* ---- Soundness: these must DECLINE off the integer assumption ---- */
 void test_int_soundness_declines(void) {
     /* Parity folding needs integrality: n real => (-1)^(2n) is not 1. */
@@ -205,6 +228,14 @@ int main(void) {
     TEST(test_int_c_mod1_sum);
     TEST(test_int_c_mod2_nested);
     TEST(test_int_c_mod_divis);
+
+    TEST(test_int_d_gamma_fact);
+    TEST(test_int_d_binom_symmetry);
+    TEST(test_int_d_pascal);
+    TEST(test_int_d_pochhammer);
+    TEST(test_int_d_gamma_ratio2);
+    TEST(test_int_d_gamma_ratio1);
+    TEST(test_int_d_factorial2);
 
     TEST(test_int_soundness_declines);
     TEST(test_int_nonidentities);

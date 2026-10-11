@@ -24,10 +24,13 @@ Baseline: 51/100 on v0.346. Target ~90/100 (Phases 1–4).
 - [x] tests + declines; no regressions (fixed logexp (ab)^c re-contraction); valgrind clean
 - residual: #54 Mod[n,2]+Mod[n+1,2]=1 (parity complement), not asserted
 
-## Phase 3 — Gamma/Factorial (Cat D)
-- [ ] Gamma↔Factorial normalizer routing through simp_factorial
-- [ ] Fix zero_test integer-sampler Gamma-pole exclusion (Infinity::indet)
-- [ ] tests; build; bump+tag; docs
+## Phase 3 — Gamma/Factorial (Cat D)  ✅ DONE v0.349 (78->85/100)
+- [x] Gamma/Pochhammer/Binomial->Factorial conversion in simp_factorial (ctx-gated)
+      + Factorial->Gamma back-conversion; shape/gate widened to factorial-like
+- [x] Factorial2[2n]=2^n n! in assume_structural_rewrite (even, prov_int-gated)
+- [x] Infinity::indet gone (symbolic reduction fires before the pole sampler)
+- [x] ctx-gating fixed the Gosper/Sum regression (found via expand_tests A/B)
+- [x] tests + no regressions (gamma/pochhammer/fullsimplify/expand/sum); valgrind clean
 
 ## Phase 4 — LegendreP + GCD/LCM (Cat E-partial, F)
 - [ ] LegendreP[n,-1], [n,0] special values

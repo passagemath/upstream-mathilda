@@ -875,6 +875,26 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             expr_free(node); *changed = 1; return expr_new_integer(0);
         }
 
+        /* Double factorial of an even integer argument: (2q)!! = 2^q q!,
+         * gated on q = arg/2 being a provable integer (so it declines for a
+         * generic/odd argument). The odd case is handled elsewhere. */
+        if (strcmp(h, "Factorial2") == 0 && ctx) {
+            Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy(a0),
+                           expr_new_function(expr_new_symbol(SYM_Rational),
+                               (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2));
+            if (prov_int(ctx, half)) {
+                Expr* pow2 = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_integer(2), expr_copy(half) }, 2);
+                Expr* fac = expr_new_function(expr_new_symbol("Factorial"),
+                    (Expr*[]){ half }, 1);
+                Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ pow2, fac }, 2));
+                expr_free(node); *changed = 1; return out;
+            }
+            expr_free(half);
+        }
+
         /* Integer-shift extraction: Floor[k + t] -> k + Floor[t] (same for
          * Ceiling/Round), FractionalPart[k + t] -> FractionalPart[t], pulling
          * the provably-integer part k out of a sum argument. Sound for any

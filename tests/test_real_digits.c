@@ -260,6 +260,46 @@ static void test_real_negative_arg(void) {
         0);
 }
 
+/* --- Power-of-the-base boundary exponents (regression) --------------
+ *
+ * The exponent must come from the full-precision canonical digits, not a
+ * log-quotient estimate or a short round-to-nearest string.  A 99... tail
+ * must not round up a whole decade (0.999 is exponent 0, not 1), and an exact
+ * power of ten must keep its leading 1 rather than drop it and emit all zeros.
+ * Both were wrong before v0.358. */
+static void test_real_near_one_exponent(void) {
+    /* Reported case: exponent 0 (value is in [0.1, 1)), leading digit 9. */
+    Expr* p = parse_expression("RealDigits[0.9991251116426123]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    ASSERT(e->type == EXPR_FUNCTION && e->data.function.arg_count == 2);
+    Expr* digits = e->data.function.args[0];
+    Expr* expv   = e->data.function.args[1];
+    ASSERT(expv->type == EXPR_INTEGER && expv->data.integer == 0);
+    ASSERT(digits->data.function.args[0]->type == EXPR_INTEGER &&
+           digits->data.function.args[0]->data.integer == 9);
+    expr_free(e);
+}
+
+static void test_real_boundary_exponents(void) {
+    /* Exponent-only checks straddling the power-of-ten boundary. */
+    assert_eval_eq("Last[RealDigits[0.999]]", "0", 0);
+    assert_eval_eq("Last[RealDigits[0.9999999999]]", "0", 0);
+    assert_eval_eq("Last[RealDigits[99.6]]", "2", 0);
+    assert_eval_eq("Last[RealDigits[0.0999999999999999]]", "-1", 0);
+    /* Large magnitude: mantissa ~ a power of ten must not bump a decade. */
+    assert_eval_eq("Last[RealDigits[N[10^15]]]", "16", 0);
+    assert_eval_eq("Last[RealDigits[N[9959306433341448*10^240]]]", "256", 0);
+}
+
+static void test_real_power_of_ten_digits(void) {
+    /* The leading 1 must survive (was dropped -> all zeros + Indeterminate). */
+    assert_eval_eq(
+        "RealDigits[1000.0]",
+        "{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}",
+        0);
+}
+
 /* --- Pi numericalize, len ------------------------------------------ */
 
 static void test_pi_25(void) {
@@ -534,6 +574,9 @@ int main(void) {
     TEST(test_real_indeterminate_fill);
     TEST(test_real_indet_with_offset);
     TEST(test_real_negative_arg);
+    TEST(test_real_near_one_exponent);
+    TEST(test_real_boundary_exponents);
+    TEST(test_real_power_of_ten_digits);
 
     TEST(test_pi_25);
     TEST(test_pi_20_neg5);

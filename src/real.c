@@ -283,33 +283,56 @@ static long rd_rational_natural_exp(const mpq_t q, const mpz_t base) {
     return -(shift - 1);
 }
 
-/* Natural exponent of |x| in base b for inexact (machine or MPFR) x.
- * Returns LONG_MIN as a sentinel for "x is zero". */
+/* Natural exponent of |x| in base b for inexact (machine or MPFR) x: the n
+ * such that x = 0.d1 d2 ... * b^n (the first significant digit is the
+ * coefficient of b^(n-1)).  Returns LONG_MIN as a sentinel for "x is zero".
+ *
+ * With MPFR we read n from mpfr_get_str at the SAME digit count and rounding
+ * that rd_inexact_canonical_digits uses to lay the digits out, so the exponent
+ * reported here and the one the digits are indexed against can never disagree.
+ * The two classic estimates both tip the wrong way AT a power of the base: a
+ * log quotient floor(log(x)/log(b)) + 1 because log(1000)/log(10) evaluates to
+ * 2.9999999996 (floor 2, not 3), and a SHORT round-to-nearest string because a
+ * 99... tail rounds up to 10... and carries the exponent a whole decade. Either
+ * one, disagreeing with the full-precision digit placement, drops the leading
+ * digit (RealDigits[1000.] -> all zeros) or reports the exponent one decade too
+ * high (RealDigits[0.999] -> 1 instead of 0).  mpfr_get_str at the full
+ * available precision does neither: a carry there is self-consistent with the
+ * digits it also produces. */
 static long rd_inexact_natural_exp(const Expr* x, unsigned long b_ulong) {
+#ifdef USE_MPFR
+    mpfr_t v;
+    mpfr_prec_t pb;
+    if (x->type == EXPR_REAL) {
+        if (x->data.real == 0.0) return LONG_MIN;
+        pb = REAL_MACHINE_BITS;
+        mpfr_init2(v, pb);
+        mpfr_set_d(v, fabs(x->data.real), MPFR_RNDN);
+    } else if (x->type == EXPR_MPFR) {
+        if (mpfr_zero_p(x->data.mpfr)) return LONG_MIN;
+        pb = mpfr_get_prec(x->data.mpfr);
+        mpfr_init2(v, pb);
+        mpfr_abs(v, x->data.mpfr, MPFR_RNDN);
+    } else {
+        return 0;
+    }
+    size_t count = rd_available_digits(x, b_ulong);
+    if (count < 2) count = 2;          /* mpfr_get_str requires n >= 2 */
+    mpfr_exp_t ep = 0;
+    char* s = mpfr_get_str(NULL, &ep, (int)b_ulong, count, v, MPFR_RNDN);
+    long out = 0;
+    if (s) { out = (long)ep; mpfr_free_str(s); }
+    mpfr_clear(v);
+    return out;
+#else
     double log_b = log((double)b_ulong);
     if (x->type == EXPR_REAL) {
         double v = fabs(x->data.real);
         if (v == 0.0) return LONG_MIN;
         return (long)floor(log(v) / log_b) + 1;
     }
-#ifdef USE_MPFR
-    if (x->type == EXPR_MPFR) {
-        if (mpfr_zero_p(x->data.mpfr)) return LONG_MIN;
-        /* mpfr_get_exp returns the exponent e such that x = m * 2^e with
-         * 1/2 <= |m| < 1.  Equivalently, 2^(e-1) <= |x| < 2^e, so
-         * log2(|x|) is in [e-1, e).  Converting to base b: log_b(|x|) =
-         * log2(|x|) / log2(b).  We compute via mpfr_log which is exact
-         * enough for the floor. */
-        mpfr_t t;
-        mpfr_init2(t, 64);
-        mpfr_abs(t, x->data.mpfr, MPFR_RNDN);
-        mpfr_log(t, t, MPFR_RNDN);
-        double v = mpfr_get_d(t, MPFR_RNDN);
-        mpfr_clear(t);
-        return (long)floor(v / log_b) + 1;
-    }
-#endif
     return 0;
+#endif
 }
 
 /* Generate digits of an exact rational q (q >= 0) in base b via long
@@ -1112,42 +1135,13 @@ Expr* builtin_realdigits(Expr* res) {
     }
 
     /* --- Assemble output ------------------------------------------ */
+    /* out_exp is the natural exponent.  For inexact x (no explicit n),
+     * natural_exp is read from mpfr_get_str at full precision in
+     * rd_inexact_natural_exp -- the SAME quantity (`exp_p`) used to place the
+     * digits above -- so the reported exponent and the digit layout are
+     * consistent by construction.  No boundary fix-up is needed or correct:
+     * the former 2-digit recompute rounded 99... tails up a decade. */
     long out_exp = has_n ? (start_n + 1) : natural_exp;
-
-    /* Special-case for inexact x when no `n` was given: the canonical
-     * exponent comes from mpfr_get_str (`exp_p`) rather than the rough
-     * log_b estimate in natural_exp.  We already used exp_p above when
-     * placing digits; reflect it in out_exp too so the result is
-     * self-consistent.  This is harmless when natural_exp == exp_p
-     * (the typical case) and corrects the rare boundary case where the
-     * MPFR rounding pushes the value into the next decade. */
-    if (inexact && !has_n) {
-#ifdef USE_MPFR
-        /* Recompute exp_p without redoing the full mpfr_get_str by
-         * asking for a single digit at default rounding.  This is
-         * O(log avail) effectively a no-op for typical inputs. */
-        mpfr_t v;
-        mpfr_prec_t pb;
-        if (x_expr->type == EXPR_REAL) {
-            pb = REAL_MACHINE_BITS;
-            mpfr_init2(v, pb);
-            mpfr_set_d(v, fabs(x_expr->data.real), MPFR_RNDN);
-        } else {
-            pb = mpfr_get_prec(x_expr->data.mpfr);
-            mpfr_init2(v, pb);
-            mpfr_abs(v, x_expr->data.mpfr, MPFR_RNDN);
-        }
-        if (!mpfr_zero_p(v)) {
-            mpfr_exp_t ep = 0;
-            char* s = mpfr_get_str(NULL, &ep, (int)b_ulong, 2, v, MPFR_RNDN);
-            if (s) {
-                out_exp = (long)ep;
-                mpfr_free_str(s);
-            }
-        }
-        mpfr_clear(v);
-#endif
-    }
 
     Expr* digits_list = expr_new_function(expr_new_symbol(SYM_List),
                                             out_args, out_len);

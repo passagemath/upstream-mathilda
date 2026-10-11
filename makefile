@@ -129,6 +129,20 @@ endif
 
 LDFLAGS = $(READLINE_LIBS) $(THREAD_LIBS) -L/usr/local/lib -lgmp -lm
 
+# macOS: reserve maximum Mach-O header padding so the baked-in absolute dylib
+# install names (/usr/local/opt/.../libgmp.10.dylib, …) can later be rewritten
+# to LONGER relocatable paths (@loader_path/../../.dylibs/…) by install_name_tool
+# WITHOUT a relink. Downstream packagers that repackage the binary into a
+# relocatable bundle — Homebrew, conda-forge, and the passagemath pip wheel
+# (delocate) — all do exactly that rewrite, and the longer load commands do not
+# fit in the default padding the linker happens to leave, failing with
+# "larger updated load commands do not fit ... use -headerpad_max_install_names".
+# CMake adds this automatically on Apple platforms; a hand-written makefile must
+# opt in. No-op at build time; Darwin-only (the flag is an Apple ld feature).
+ifeq ($(BUILD_PLATFORM),Darwin)
+LDFLAGS += -Wl,-headerpad_max_install_names
+endif
+
 # Site-specific link libraries, appended verbatim to the link line. Some
 # distributions need extra libraries the autodetection can't infer — e.g. on
 # certain Ubuntu setups a statically-linked raylib pulls in `-lX11`, or a

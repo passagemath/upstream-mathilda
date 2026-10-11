@@ -122,10 +122,9 @@ static void test_number_field(void) {
          "Times[2, x, Power[Plus[-2, Power[x, 2]], -1]]");
     /* Two distinct radicals: Q(Sqrt3, Sqrt5) tower kept. */
     spec("Together[1/(x-Sqrt[3])+1/(x-Sqrt[5])]",
-         "Times[Plus[Times[-1, Power[3, Rational[1, 2]]], Times[-1, Power[5, Rational[1, 2]]], "
-         "Times[2, x]], Power[Plus[Power[15, Rational[1, 2]], "
-         "Times[-1, Times[Power[3, Rational[1, 2]], x]], "
-         "Times[-1, Times[Power[5, Rational[1, 2]], x]], Power[x, 2]], -1]]");
+         "Times[Plus[Times[-1, Power[3, Rational[1, 2]]], Times[-1, Power[5, Rational[1, "
+         "2]]], Times[2, x]], Power[Plus[Power[15, Rational[1, 2]], Times[-1, Power[3, "
+         "Rational[1, 2]], x], Times[-1, Power[5, Rational[1, 2]], x], Power[x, 2]], -1]]");
     /* WL keeps a coprime constant fraction (no rationalization for Cancel). */
     spec("Cancel[(1+Sqrt[2])/(1-Sqrt[2])]",
          "Times[Plus[1, Power[2, Rational[1, 2]]], "

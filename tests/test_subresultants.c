@@ -43,24 +43,22 @@ void test_subresultants_numeric() {
 /* PSCs are polynomials in the coefficients of the inputs. */
 void test_subresultants_symbolic() {
     run_test("Subresultants[a x^3+b x^2+c x+d,x^3-5b x-7a,x]",
-             "List[Plus[Times[-343, Power[a, 6]], Times[245, Times[Power[a, 4], Power[b, 2]]], "
-             "Times[-49, Times[Power[a, 2], Power[b, 3]]], Times[147, Times[Power[a, 3], b, c]], "
-             "Times[-175, Times[Power[a, 3], Power[b, 2], c]], Times[35, Times[a, Power[b, 3], c]], "
-             "Times[-70, Times[Power[a, 2], b, Power[c, 2]]], Times[-7, Times[a, Power[c, 3]]], "
-             "Times[-147, Times[Power[a, 4], d]], Times[-35, Times[Power[a, 2], Power[b, 2], d]], "
-             "Times[125, Times[Power[a, 2], Power[b, 3], d]], Times[-25, Times[Power[b, 4], d]], "
-             "Times[21, Times[a, b, c, d]], Times[50, Times[a, Power[b, 2], c, d]], "
-             "Times[5, Times[b, Power[c, 2], d]], Times[-21, Times[Power[a, 2], Power[d, 2]]], "
-             "Times[-10, Times[Power[b, 2], Power[d, 2]]], Times[-1, Power[d, 3]]], "
-             "Plus[Times[-7, Times[Power[a, 2], b]], Times[25, Times[Power[a, 2], Power[b, 2]]], "
-             "Times[-5, Power[b, 3]], Times[10, Times[a, b, c]], Power[c, 2], Times[-1, Times[b, d]]], "
+             "List[Plus[Times[-343, Power[a, 6]], Times[245, Power[a, 4], Power[b, 2]], "
+             "Times[-49, Power[a, 2], Power[b, 3]], Times[147, Power[a, 3], b, c], "
+             "Times[-175, Power[a, 3], Power[b, 2], c], Times[35, a, Power[b, 3], c], "
+             "Times[-70, Power[a, 2], b, Power[c, 2]], Times[-7, a, Power[c, 3]], Times[-147, "
+             "Power[a, 4], d], Times[-35, Power[a, 2], Power[b, 2], d], Times[125, Power[a, "
+             "2], Power[b, 3], d], Times[-25, Power[b, 4], d], Times[21, a, b, c, d], "
+             "Times[50, a, Power[b, 2], c, d], Times[5, b, Power[c, 2], d], Times[-21, "
+             "Power[a, 2], Power[d, 2]], Times[-10, Power[b, 2], Power[d, 2]], Times[-1, "
+             "Power[d, 3]]], Plus[Times[-7, Power[a, 2], b], Times[25, Power[a, 2], Power[b, "
+             "2]], Times[-5, Power[b, 3]], Times[10, a, b, c], Power[c, 2], Times[-1, b, d]], "
              "Times[-1, b], 1]");
     /* One pair of equal roots: first PSC disappears. */
     run_test("Subresultants[(x-a)(x-b)(x-c),(x-1)(x-2)(x-3),x] /. {a->1}",
-             "List[0, Plus[36, Times[-30, b], Times[6, Power[b, 2]], Times[-30, c], "
-             "Times[25, Times[b, c]], Times[-5, Times[Power[b, 2], c]], Times[6, Power[c, 2]], "
-             "Times[-5, Times[b, Power[c, 2]]], Times[Power[b, 2], Power[c, 2]]], "
-             "Plus[-5, b, c], 1]");
+             "List[0, Plus[36, Times[-30, b], Times[6, Power[b, 2]], Times[-30, c], Times[25, "
+             "b, c], Times[-5, Power[b, 2], c], Times[6, Power[c, 2]], Times[-5, b, Power[c, "
+             "2]], Times[Power[b, 2], Power[c, 2]]], Plus[-5, b, c], 1]");
     /* Two pairs of equal roots: first two PSCs disappear. */
     run_test("Subresultants[(x-a)(x-b)(x-c),(x-1)(x-2)(x-3),x] /. {a->1,b->2}",
              "List[0, 0, Plus[-3, c], 1]");

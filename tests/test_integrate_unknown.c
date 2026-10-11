@@ -127,7 +127,7 @@ static void test_power_part(void) {
 static void test_fraction_part(void) {
     run_eq("Integrate[f'[x]/f[x]^2, x]", "-1/f[x]");
     run_eq("Integrate[f''[x]/f'[x]^3, x]",
-           "-1/2/Derivative[1][f][x]^2");
+           "-1/(2 Derivative[1][f][x]^2)");
     assert_dintegral_zero("f'[x]/f[x]^3");
 }
 

@@ -120,7 +120,7 @@ static void test_factortermslist_numerical(void) {
     run_full("FactorTermsList[2 x^2-2]",
              "List[2, Plus[-1, Power[x, 2]]]");
     run_full("FactorTermsList[14 x+21 y+35 x y+63]",
-             "List[7, Plus[9, Times[2, x], Times[3, y], Times[5, Times[x, y]]]]");
+             "List[7, Plus[9, Times[2, x], Times[3, y], Times[5, x, y]]]");
 }
 
 /* ------------------------------------------------------------------- */
@@ -133,9 +133,9 @@ static void test_factorterms_one_var(void) {
              "List[3, Plus[1, a], Plus[1, Times[2, x], Times[4, Power[x, 2]]]]");
 
     run_full("FactorTerms[-6 y-6 a y+2 x^2 y+2 a x^2 y+4 a y^2+4 a^2 y^2,x]",
-             "Times[2, Plus[y, Times[a, y]], Plus[-3, Power[x, 2], Times[2, Times[a, y]]]]");
+             "Times[2, Plus[y, Times[a, y]], Plus[-3, Power[x, 2], Times[2, a, y]]]");
     run_full("FactorTermsList[-6 y-6 a y+2 x^2 y+2 a x^2 y+4 a y^2+4 a^2 y^2,x]",
-             "List[2, Plus[y, Times[a, y]], Plus[-3, Power[x, 2], Times[2, Times[a, y]]]]");
+             "List[2, Plus[y, Times[a, y]], Plus[-3, Power[x, 2], Times[2, a, y]]]");
 
     /* If x does not appear, FactorTerms[poly, x] still extracts the */
     /* numerical content (the only x-independent factor available).    */
@@ -148,20 +148,20 @@ static void test_factorterms_one_var(void) {
 /* ------------------------------------------------------------------- */
 static void test_factorterms_var_list(void) {
     run_full("FactorTerms[-6 y-6 a y+2 x^2 y+2 a x^2 y+4 a y^2+4 a^2 y^2,{x,y}]",
-             "Times[2, Plus[1, a], y, Plus[-3, Power[x, 2], Times[2, Times[a, y]]]]");
+             "Times[2, Plus[1, a], y, Plus[-3, Power[x, 2], Times[2, a, y]]]");
     run_full("FactorTermsList[-6 y-6 a y+2 x^2 y+2 a x^2 y+4 a y^2+4 a^2 y^2,{x,y}]",
-             "List[2, Plus[1, a], y, Plus[-3, Power[x, 2], Times[2, Times[a, y]]]]");
+             "List[2, Plus[1, a], y, Plus[-3, Power[x, 2], Times[2, a, y]]]");
 
     /* Three-variable polynomial f = 2 x^2 y z + ... -- the documented */
     /* canonical FactorTerms / FactorTermsList examples.                */
     run_full("FactorTerms[2 x^2 y z+2 x^2 y+4 x^2 z+4 x^2+4 y^2 z^2+4 z y^2+8 z^2 y+2 z y-6 y-12 z-12,x]",
-             "Times[2, Plus[2, y, Times[2, z], Times[y, z]], Plus[-3, Power[x, 2], Times[2, Times[y, z]]]]");
+             "Times[2, Plus[2, y, Times[2, z], Times[y, z]], Plus[-3, Power[x, 2], Times[2, y, z]]]");
     run_full("FactorTerms[2 x^2 y z+2 x^2 y+4 x^2 z+4 x^2+4 y^2 z^2+4 z y^2+8 z^2 y+2 z y-6 y-12 z-12,{x,y}]",
-             "Times[2, Plus[2, y], Plus[1, z], Plus[-3, Power[x, 2], Times[2, Times[y, z]]]]");
+             "Times[2, Plus[2, y], Plus[1, z], Plus[-3, Power[x, 2], Times[2, y, z]]]");
     run_full("FactorTermsList[2 x^2 y z+2 x^2 y+4 x^2 z+4 x^2+4 y^2 z^2+4 z y^2+8 z^2 y+2 z y-6 y-12 z-12,x]",
-             "List[2, Plus[2, y, Times[2, z], Times[y, z]], Plus[-3, Power[x, 2], Times[2, Times[y, z]]]]");
+             "List[2, Plus[2, y, Times[2, z], Times[y, z]], Plus[-3, Power[x, 2], Times[2, y, z]]]");
     run_full("FactorTermsList[2 x^2 y z+2 x^2 y+4 x^2 z+4 x^2+4 y^2 z^2+4 z y^2+8 z^2 y+2 z y-6 y-12 z-12,{x,y}]",
-             "List[2, Plus[1, z], Plus[2, y], Plus[-3, Power[x, 2], Times[2, Times[y, z]]]]");
+             "List[2, Plus[1, z], Plus[2, y], Plus[-3, Power[x, 2], Times[2, y, z]]]");
 
     /* Round-trip via Apply[Times, FactorTermsList[...]] = original.     */
     run_roundtrip("-6 y-6 a y+2 x^2 y+2 a x^2 y+4 a y^2+4 a^2 y^2");

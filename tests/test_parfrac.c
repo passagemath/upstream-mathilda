@@ -55,9 +55,9 @@ static void assert_apart_recombines(const char* f, const char* var) {
  * by recombination instead (test_apart_multivariate_decline). */
 void test_apart_basic(void) {
     struct { const char* input; const char* expected; } tests[] = {
-        {"Apart[1/((1+x)(5+x))]", "-1/4/(5 + x) + 1/4/(1 + x)"},
-        {"Apart[(x^5-2)/((1+x+x^2)(2+x)(1-x))]", "2 - x - 34/9/(2 + x) + 1/9/(-1 + x) + (-1 - 1/3 x)/(1 + x + x^2)"},
-        {"Apart[1/(1-x^3)]", "-1/3/(-1 + x) + (2/3 + 1/3 x)/(1 + x + x^2)"},
+        {"Apart[1/((1+x)(5+x))]", "-1/(4 (5 + x)) + 1/(4 (1 + x))"},
+        {"Apart[(x^5-2)/((1+x+x^2)(2+x)(1-x))]", "2 - x - 34/(9 (2 + x)) + 1/(9 (-1 + x)) + (-1 - 1/3 x)/(1 + x + x^2)"},
+        {"Apart[1/(1-x^3)]", "-1/(3 (-1 + x)) + (2/3 + 1/3 x)/(1 + x + x^2)"},
         {"Apart[16x/((1+x)^2*(5+x))]", "-5/(5 + x) - 4/(1 + x)^2 + 5/(1 + x)"},
     };
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++)
@@ -72,31 +72,31 @@ void test_apart_flint_forms(void) {
     struct { const char* input; const char* expected; } tests[] = {
         /* irreducible quadratic: (a + b x)/(x^2 + 1) numerator preserved */
         {"Apart[(2x+1)/((x^2+1)(x-3)), x]",
-         "7/10/(-3 + x) + (-1/10 - 7/10 x)/(1 + x^2)"},
+         "7/(10 (-3 + x)) + (-1/10 - 7/10 x)/(1 + x^2)"},
         /* repeated irreducible quadratic + a linear factor */
         {"Apart[(x^3+1)/((x^2+x+1)^2 (x+5)), x]",
-         "-124/441/(5 + x) + (8/21 - 2/21 x)/(1 + x + x^2)^2 + (-55/441 + 124/441 x)/(1 + x + x^2)"},
+         "-124/(441 (5 + x)) + (8/21 - 2/21 x)/(1 + x + x^2)^2 + (-55/441 + 124/441 x)/(1 + x + x^2)"},
         /* improper fraction: polynomial (quotient) part present */
         {"Apart[(x^5+1)/((x+1)(x+2)(x+3)), x]",
          "25 - 6 x + x^2 - 121/(3 + x) + 31/(2 + x)"},
         /* repeated linear */
         {"Apart[1/((x-1)^2 (x+2)), x]",
-         "-1/9/(-1 + x) + 1/9/(2 + x) + 1/3/(-1 + x)^2"},
+         "-1/(9 (-1 + x)) + 1/(9 (2 + x)) + 1/(3 (-1 + x)^2)"},
         /* rational leading content in the denominator */
         {"Apart[(x+1)/(2 (x-1)(x-3)), x]",
-         "1/(-3 + x) - 1/2/(-1 + x)"},
+         "1/(-3 + x) - 1/(2 (-1 + x))"},
         /* non-monic linear factors */
         {"Apart[1/((2x+1)(3x-2)), x]",
-         "-2/7/(1 + 2 x) + 3/7/(-2 + 3 x)"},
+         "-2/(7 (1 + 2 x)) + 3/(7 (-2 + 3 x))"},
         /* two repeated linear factors, higher multiplicity */
         {"Apart[(x^2+1)/((x-1)^3 (x+2)^2), x]",
-         "-5/27/(2 + x)^2 - 1/27/(2 + x) + 1/27/(-1 + x) + 2/27/(-1 + x)^2 + 2/9/(-1 + x)^3"},
+         "-5/(27 (2 + x)^2) - 1/(27 (2 + x)) + 1/(27 (-1 + x)) + 2/(27 (-1 + x)^2) + 2/(9 (-1 + x)^3)"},
         /* two linear + one irreducible quadratic (x^4 - 1) */
         {"Apart[1/(x^4-1), x]",
-         "-1/4/(1 + x) + 1/4/(-1 + x) - 1/2/(1 + x^2)"},
+         "-1/(4 (1 + x)) + 1/(4 (-1 + x)) - 1/(2 (1 + x^2))"},
         /* repeated irreducible quadratic + linear, non-trivial numerators */
         {"Apart[(5x^2-3)/((x^2+2)^2 (x-1)), x]",
-         "2/9/(-1 + x) + (13/3 + 13/3 x)/(2 + x^2)^2 + (-2/9 - 2/9 x)/(2 + x^2)"},
+         "2/(9 (-1 + x)) + (13/3 + 13/3 x)/(2 + x^2)^2 + (-2/9 - 2/9 x)/(2 + x^2)"},
     };
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++)
         assert_apart_form(tests[i].input, tests[i].expected);

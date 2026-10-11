@@ -266,6 +266,18 @@ static void render_denom_factor(LBuf* b, const Expr* pow_expr) {
     /* pow_expr is Power[base, neg_exp] */
     const Expr* base = pow_expr->data.function.args[0];
     const Expr* nexp = pow_expr->data.function.args[1];
+    /* Power[x, -1/2] is 1/Sqrt[x]: render the root, as the numerator side
+     * does, rather than x^{\frac{1}{2}}. */
+    if (head_is(nexp, SYM_Rational) && nexp->data.function.arg_count == 2 &&
+        nexp->data.function.args[0]->type == EXPR_INTEGER &&
+        nexp->data.function.args[0]->data.integer == -1 &&
+        nexp->data.function.args[1]->type == EXPR_INTEGER &&
+        nexp->data.function.args[1]->data.integer == 2) {
+        lb_cat(b, "\\sqrt{");
+        to_latex_prec(b, base, 0);
+        lb_cat(b, "}");
+        return;
+    }
     to_latex_maybe_paren(b, base, PREC_POW);
     /* Negate the exponent */
     if (nexp->type == EXPR_INTEGER && nexp->data.integer == -1) {
@@ -822,32 +834,45 @@ static void render_negate(LBuf* b, const Expr* e) {
     if (e->type == EXPR_INTEGER) { lb_catf(b, "%lld", (long long)-e->data.integer); return; }
     if (e->type == EXPR_REAL)    { lb_catf(b, "%g",             -e->data.real);     return; }
     if (is_neg_rational(e))      { render_rational_abs(b, e); return; }
-    if (head_is(e, SYM_Times) && e->data.function.arg_count >= 1) {
+    if (head_is(e, SYM_Times) && e->data.function.arg_count >= 2) {
+        /* Times[-c, rest...] with c a positive integer, real or rational
+         * (is_negative_term's three lead kinds): render Times[c, rest...]
+         * through render_times, dropping c == 1, so a denominator among
+         * `rest` still forms one fraction (1 - 2 a/c is 1-\frac{2 a}{c},
+         * not 1-2 a \frac{1}{c}). The temporary borrows `rest`: the
+         * argument slots are NULLed before the wrapper is freed. */
         const Expr* first = e->data.function.args[0];
-        if (is_neg_rational(first)) {
-            /* Times[-p/q, rest...] → (p/q) rest */
-            render_rational_abs(b, first);
-            for (size_t i = 1; i < e->data.function.arg_count; i++) {
-                lb_cat(b, "\\,");
-                to_latex_maybe_paren(b, e->data.function.args[i], PREC_MUL + 1);
-            }
+        Expr* pos = NULL;
+        if (first->type == EXPR_INTEGER && first->data.integer < 0 &&
+            first->data.integer != INT64_MIN) {
+            if (first->data.integer != -1) pos = expr_new_integer(-first->data.integer);
+        } else if (first->type == EXPR_REAL && first->data.real < 0) {
+            pos = expr_new_real(-first->data.real);
+        } else if (is_neg_rational(first)) {
+            Expr* r[2] = { expr_new_integer(-first->data.function.args[0]->data.integer),
+                           expr_copy(first->data.function.args[1]) };
+            pos = expr_new_function(expr_new_symbol(SYM_Rational), r, 2);
+        } else {
+            to_latex_prec(b, e, PREC_MUL);
             return;
         }
-        int ok; double v = atom_value(first, &ok);
-        if (ok && v == -1 && e->data.function.arg_count == 2) {
-            /* Times[-1, x] → just render x */
-            to_latex_prec(b, e->data.function.args[1], PREC_MUL);
-            return;
+        size_t rest = e->data.function.arg_count - 1;
+        size_t n = rest + (pos ? 1 : 0);
+        Expr** t = malloc(sizeof(Expr*) * n);
+        size_t k = 0;
+        if (pos) t[k++] = pos;
+        for (size_t i = 1; i <= rest; i++) t[k++] = e->data.function.args[i];
+        if (n == 1) {
+            to_latex_prec(b, t[0], PREC_MUL);
+        } else {
+            Expr* tmp = expr_new_function(expr_new_symbol(SYM_Times), t, n);
+            to_latex_prec(b, tmp, PREC_MUL);
+            for (size_t i = pos ? 1 : 0; i < n; i++) tmp->data.function.args[i] = NULL;
+            expr_free(tmp);
         }
-        if (ok && v < 0) {
-            /* Times[-n, ...] → render n * rest */
-            lb_catf(b, "%g", -v);
-            for (size_t i = 1; i < e->data.function.arg_count; i++) {
-                lb_cat(b, " ");
-                to_latex_maybe_paren(b, e->data.function.args[i], PREC_MUL + 1);
-            }
-            return;
-        }
+        if (n == 1 && pos) expr_free(pos);
+        free(t);
+        return;
     }
     to_latex_prec(b, e, PREC_MUL);
 }
@@ -875,6 +900,22 @@ static void render_plus(LBuf* b, const Expr* e, int ctx_prec) {
  * Times renderer — handles fractions and implicit multiplication
  * ======================================================================== */
 
+/* Render |n| for an integer or bigint atom. */
+static void render_abs_integer(LBuf* b, const Expr* n) {
+    if (n->type == EXPR_INTEGER) {
+        long long v = (long long)n->data.integer;
+        lb_catf(b, "%lld", v < 0 ? -v : v);
+    } else if (n->type == EXPR_BIGINT) {
+        mpz_t a; mpz_init(a); mpz_abs(a, n->data.bigint);
+        char* str = mpz_get_str(NULL, 10, a);
+        lb_cat(b, str);
+        free(str);
+        mpz_clear(a);
+    } else {
+        to_latex_prec(b, n, PREC_ATOM);
+    }
+}
+
 static void render_times(LBuf* b, const Expr* e, int ctx_prec) {
     size_t argc = e->data.function.arg_count;
     const Expr** args = (const Expr**)e->data.function.args;
@@ -899,21 +940,58 @@ static void render_times(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     int is_frac = nden > 0;
+    /* A leading rational coefficient p/q of a fraction folds q into the
+     * denominator, as Mathematica does: Times[-1/2, a, 1/h] is
+     * -\frac{a}{2 h}, not -\frac{\frac{1}{2} a}{h}. Its sign joins the
+     * leading minus. */
+    const Expr* coeff = NULL;
+    const Expr* int_coeff = NULL;  /* negative integer lead of a fraction */
+    if (is_frac && nnum > 0 && head_is(num_f[0], SYM_Rational) &&
+        num_f[0]->data.function.arg_count == 2) {
+        coeff = num_f[0];
+        const Expr* p = coeff->data.function.args[0];
+        if ((p->type == EXPR_INTEGER && p->data.integer < 0) ||
+            (p->type == EXPR_BIGINT && mpz_sgn(p->data.bigint) < 0))
+            sign = -sign;
+    } else if (is_frac && nnum > 0 &&
+               ((num_f[0]->type == EXPR_INTEGER && num_f[0]->data.integer < 0) ||
+                (num_f[0]->type == EXPR_BIGINT && mpz_sgn(num_f[0]->data.bigint) < 0))) {
+        /* Times[-2, a, 1/c]: -\frac{2 a}{c}, not \frac{(-2) a}{c}. */
+        int_coeff = num_f[0];
+        sign = -sign;
+    }
     int need_paren = ctx_prec > PREC_MUL && !is_frac;
     if (need_paren) lb_cat(b, "\\left(");
     if (sign < 0) lb_cat(b, "-");
 
     if (is_frac) {
+        int first = 0;
         lb_cat(b, "\\frac{");
-        if (nnum == 0) {
-            lb_cat(b, "1");
+        if (coeff) {
+            const Expr* p = coeff->data.function.args[0];
+            int unit = p->type == EXPR_INTEGER &&
+                       (p->data.integer == 1 || p->data.integer == -1);
+            first = 1;
+            if (!unit || nnum == 1) render_abs_integer(b, p);
+            if (!unit && nnum > 1) lb_cat(b, " ");
+        } else if (int_coeff) {
+            first = 1;
+            if (!is_neg_one(int_coeff) || nnum == 1) render_abs_integer(b, int_coeff);
+            if (!is_neg_one(int_coeff) && nnum > 1) lb_cat(b, " ");
+        }
+        if (nnum - first == 0) {
+            if (!coeff) lb_cat(b, "1");
         } else {
-            for (int i = 0; i < nnum; i++) {
-                if (i > 0) lb_cat(b, " ");
+            for (int i = first; i < nnum; i++) {
+                if (i > first) lb_cat(b, " ");
                 to_latex_maybe_paren(b, num_f[i], PREC_MUL + 1);
             }
         }
         lb_cat(b, "}{");
+        if (coeff) {
+            to_latex_prec(b, coeff->data.function.args[1], PREC_ATOM);
+            if (nden > 0) lb_cat(b, " ");
+        }
         for (int i = 0; i < nden; i++) {
             if (i > 0) lb_cat(b, " ");
             render_denom_factor(b, den_f[i]);

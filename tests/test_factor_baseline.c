@@ -105,7 +105,7 @@ static void test_bivariate_simple(void) {
     eval_check("Factor[x^2 - 4 y^2]",
                "Times[Plus[x, Times[-2, y]], Plus[x, Times[2, y]]]", 50.0);
     eval_check("Factor[x^3 + y^3]",
-               "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, Times[x, y]], Power[y, 2]]]", 50.0);
+               "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, x, y], Power[y, 2]]]", 50.0);
     eval_check("Factor[x^2 y + x y^2]",
                "Times[x, y, Plus[x, y]]", 50.0);
 }
@@ -127,8 +127,8 @@ static void test_multivariate_via_factor_roots(void) {
      * smallest) variable it contains — a for (a - x), a^2 for (3 a^2 - 2 x y)
      * — giving a-leading factors, not the x-leading associates. */
     eval_check("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-               "Times[Plus[a, x], Plus[a, Times[-1, x]], "
-                     "Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]", 100.0);
+               "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, "
+               "x, y]]]", 100.0);
 }
 
 /* Irreducibility short-circuit (Phase 1) -- 60x speedup vs main. */

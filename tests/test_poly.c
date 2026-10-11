@@ -118,7 +118,7 @@ void test_polynomial_div_rem() {
     run_test("PolynomialRemainder[x^2+2x+1, x+1, x]", "0");
     run_test("PolynomialRemainder[x^3, a x+b, x]", "Times[-1, Power[a, -3], Power[b, 3]]");
     run_test("PolynomialRemainder[x^2+x+1, 2x+1, x]", "Rational[3, 4]");
-    run_test("PolynomialRemainder[x^2+ b x+1, a x+1, x]", "Plus[1, Power[a, -2], Times[-1, Times[Power[a, -1], b]]]");
+    run_test("PolynomialRemainder[x^2+ b x+1, a x+1, x]", "Plus[1, Power[a, -2], Times[-1, Power[a, -1], b]]");
 
     /* Radical (algebraic-number) coefficients: the symbolic-q_coeff branch
      * subtracts coefficient-wise so the leading term cancels via the field
@@ -138,7 +138,7 @@ void test_collect() {
     run_test("Collect[a x^4+b x^4+2a^2 x-3b x+x-7, x]", "Plus[-7, Times[Plus[1, Times[2, Power[a, 2]], Times[-3, b]], x], Times[Plus[a, b], Power[x, 4]]]");
     run_test("Collect[a Sqrt[x]+Sqrt[x]+x^(2/3)-c x+3x-2b x^(2/3)+5, x]", "Plus[5, Times[Plus[1, a], Power[x, Rational[1, 2]]], Times[Plus[1, Times[-2, b]], Power[x, Rational[2, 3]]], Times[Plus[3, Times[-1, c]], x]]");
     run_test("Collect[(x y+x z+y z+x+y)^3, {x,y}]", "Plus[Times[Power[y, 3], Plus[1, Times[3, z], Times[3, Power[z, 2]], Power[z, 3]]], Times[x, Plus[Times[Power[y, 2], Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 3], Plus[3, Times[6, z], Times[3, Power[z, 2]]]]]], Times[Power[x, 2], Plus[Times[y, Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 2], Plus[6, Times[12, z], Times[6, Power[z, 2]]]], Times[Power[y, 3], Plus[3, Times[3, z]]]]], Times[Power[x, 3], Plus[1, Power[y, 3], Times[3, z], Times[3, Power[z, 2]], Power[z, 3], Times[y, Plus[3, Times[6, z], Times[3, Power[z, 2]]]], Times[Power[y, 2], Plus[3, Times[3, z]]]]]]");
-    run_test("Collect[(1-x-(1+a)^2 x^2)^2, x]", "Plus[1, Times[-2, x], Times[Plus[1, Times[-2, Power[Plus[1, a], 2]]], Power[x, 2]], Times[2, Times[Power[Plus[1, a], 2], Power[x, 3]]], Times[Power[Plus[1, a], 4], Power[x, 4]]]");
+    run_test("Collect[(1-x-(1+a)^2 x^2)^2, x]", "Plus[1, Times[-2, x], Times[Plus[1, Times[-2, Power[Plus[1, a], 2]]], Power[x, 2]], Times[2, Power[Plus[1, a], 2], Power[x, 3]], Times[Power[Plus[1, a], 4], Power[x, 4]]]");
 }
 
 void test_coefficientlist() {
@@ -158,7 +158,7 @@ void test_decompose() {
     run_test("Decompose[(x^2 + x)^4 + 1, x]", "List[Plus[1, x], Power[x, 4], Plus[x, Power[x, 2]]]");
     run_test("Decompose[(x^2 + 1)^4 + 3, x]", "List[Plus[4, Times[2, x], Power[x, 2]], Plus[Times[2, x], Power[x, 2]], Power[x, 2]]");
     run_test("Decompose[2 x + 1, x]", "List[Plus[1, Times[2, x]]]");
-    run_test("Decompose[(a x^3 + 1)^2 + b, x]", "List[Plus[1, b, Times[2, Times[a, x]], Times[Power[a, 2], Power[x, 2]]], Power[x, 3]]");
+    run_test("Decompose[(a x^3 + 1)^2 + b, x]", "List[Plus[1, b, Times[2, a, x], Times[Power[a, 2], Power[x, 2]]], Power[x, 3]]");
 }
 
 void test_hornerform() {
@@ -178,14 +178,14 @@ void test_resultant() {
     run_test("Resultant[x^2 - 2 x + 7, x^3 - x + 5, x]", "265");
     run_test("Resultant[x^3 - 5 x^2 - 7 x + 3, x^3 - 8 x^2 + 9 x - 11, x]", "-10321");
     run_test("Resultant[x^3 - 5 x^2 - 7 x + 14, x^3 - 8 x^2 + 9 x + 58, x]", "0");
-    run_test("Resultant[a x + b, c x + d, x]", "Plus[Times[-1, Times[b, c]], Times[a, d]]");
+    run_test("Resultant[a x + b, c x + d, x]", "Plus[Times[-1, b, c], Times[a, d]]");
     run_test("Resultant[a, b, x]", "1");
     run_test("Resultant[a x + b, c, x]", "c");
     run_test("Resultant[a, b x + c, x]", "a");
 }
 
 void test_discriminant() {
-    run_test("Discriminant[a x^2 + b x + c, x]", "Plus[Power[b, 2], Times[-4, Times[a, c]]]");
+    run_test("Discriminant[a x^2 + b x + c, x]", "Plus[Power[b, 2], Times[-4, a, c]]");
     run_test("Discriminant[5 x^4 - 3 x + 9, x]", "23273325");
     run_test("Discriminant[(x-1)(x-2)(x-3), x]", "4");
     run_test("Discriminant[(x-1)(x-2)(x-1), x]", "0");
@@ -218,7 +218,7 @@ void test_polynomial_modulus() {
 
 void test_polynomialextendedgcd() {
     run_test("PolynomialExtendedGCD[2x^5-2x, (x^2-1)^2, x]", "List[Plus[-1, Power[x, 2]], List[Times[Rational[1, 4], x], Times[Rational[1, 2], Plus[-2, Times[-1, Power[x, 2]]]]]]");
-    run_test("PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]", "List[Plus[b, x], List[Times[-1, Power[Plus[Power[a, 2], Times[-1, Times[a, b]]], -1]], Power[Plus[a, Times[-1, b]], -1]]]");
+    run_test("PolynomialExtendedGCD[a (x+b)^2, (x+a)(x+b), x]", "List[Plus[b, x], List[Times[-1, Power[Plus[Power[a, 2], Times[-1, a, b]], -1]], Power[Plus[a, Times[-1, b]], -1]]]");
     run_test("PolynomialExtendedGCD[(x-1)(x-2)^2, (x-1)(x^2-3), x]", "List[Plus[-1, x], List[Plus[7, Times[4, x]], Plus[9, Times[-4, x]]]]");
     run_test("PolynomialExtendedGCD[x^2+x+1, x+1, x, Modulus -> 2]", "List[1, List[1, x]]");
 }

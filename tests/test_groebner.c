@@ -157,10 +157,8 @@ static void test_eliminate_xy(void) {
      * Times[-1, ...] is grafted on after the variable-factor Times is
      * already an Expr*. */
     check_eq("GroebnerBasis[{x^2+y^2+z^2-1, x y z-3}, {x, y}, {z}]",
-             "List[Plus[9, "
-                  "Times[-1, Times[Power[x, 2], Power[y, 2]]], "
-                  "Times[Power[x, 4], Power[y, 2]], "
-                  "Times[Power[x, 2], Power[y, 4]]]]");
+             "List[Plus[9, Times[-1, Power[x, 2], Power[y, 2]], Times[Power[x, 4], Power[y, "
+             "2]], Times[Power[x, 2], Power[y, 4]]]]");
 }
 
 static void test_eliminate_two_polys(void) {
@@ -391,18 +389,12 @@ static void test_coeff_domain_integers_gcd_combination(void) {
 static void test_coeff_domain_integers_documented(void) {
     check_eq("GroebnerBasis[{a x^2 + 5 x - 1, 2 x + 3 x y + y^2}, {x, y}, "
              "CoefficientDomain -> Integers]",
-             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
-                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
-                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
-                       "Times[45, Power[y, 2]], "
-                       "Times[2, Times[a, Power[y, 2]]], "
-                       "Times[-3, Times[a, Power[y, 3]]]], "
-                  "Plus[Times[2, x], Times[3, Times[x, y]], Power[y, 2]], "
-                  "Plus[6, Times[2, Times[a, x]], Times[9, y], "
-                       "Times[a, x, y], Times[15, Power[y, 2]], "
-                       "Times[a, Power[y, 2]], "
-                       "Times[-1, Times[a, Power[y, 3]]]], "
-                  "Plus[-1, Times[5, x], Times[a, Power[x, 2]]]]");
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], Times[-15, Power[y, 3]], "
+             "Times[a, Power[y, 4]]], Plus[18, Times[4, a, x], Times[27, y], Times[45, "
+             "Power[y, 2]], Times[2, a, Power[y, 2]], Times[-3, a, Power[y, 3]]], "
+             "Plus[Times[2, x], Times[3, x, y], Power[y, 2]], Plus[6, Times[2, a, x], "
+             "Times[9, y], Times[a, x, y], Times[15, Power[y, 2]], Times[a, Power[y, 2]], "
+             "Times[-1, a, Power[y, 3]]], Plus[-1, Times[5, x], Times[a, Power[x, 2]]]]");
 }
 
 static void test_deglex_honoured(void) {
@@ -443,15 +435,10 @@ static void test_parametric_coeffs_in_q_of_a(void) {
      * polynomials that mention x or y.  Matches Mathematica's
      * `GroebnerBasis[{a x^2 + 5x - 1, 3 x y + y^2 + 2 x}, {x, y}]`. */
     check_eq("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}]",
-             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
-                       "Times[-15, Power[y, 3]], "
-                       "Times[a, Power[y, 4]]], "
-                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
-                       "Times[45, Power[y, 2]], "
-                       "Times[2, Times[a, Power[y, 2]]], "
-                       "Times[-3, Times[a, Power[y, 3]]]], "
-                  "Plus[Times[2, x], Times[3, Times[x, y]], "
-                       "Power[y, 2]]]");
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], Times[-15, Power[y, 3]], "
+             "Times[a, Power[y, 4]]], Plus[18, Times[4, a, x], Times[27, y], Times[45, "
+             "Power[y, 2]], Times[2, a, Power[y, 2]], Times[-3, a, Power[y, 3]]], "
+             "Plus[Times[2, x], Times[3, x, y], Power[y, 2]]]");
 }
 
 /* CoefficientDomain -> Polynomials[a]: `a` is a coefficient-ring
@@ -492,12 +479,9 @@ static void test_real_input_rationalised(void) {
 static void test_coeff_domain_rational_functions(void) {
     check_eq("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
              "CoefficientDomain -> RationalFunctions]",
-             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
-                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
-                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
-                       "Times[45, Power[y, 2]], "
-                       "Times[2, Times[a, Power[y, 2]]], "
-                       "Times[-3, Times[a, Power[y, 3]]]]]");
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], Times[-15, Power[y, 3]], "
+             "Times[a, Power[y, 4]]], Plus[18, Times[4, a, x], Times[27, y], Times[45, "
+             "Power[y, 2]], Times[2, a, Power[y, 2]], Times[-3, a, Power[y, 3]]]]");
 }
 
 /* With no parameters Q(params) == Q, so RationalFunctions must reproduce
@@ -513,9 +497,8 @@ static void test_coeff_domain_rational_functions_no_params(void) {
 static void test_coeff_domain_rational_functions_eliminates(void) {
     check_eq("GroebnerBasis[{a x + b y, x^2 - y}, {x, y}, "
              "CoefficientDomain -> RationalFunctions]",
-             "List[Plus[Times[-1, Times[Power[a, 2], y]], "
-                       "Times[Power[b, 2], Power[y, 2]]], "
-                  "Plus[Times[a, x], Times[b, y]]]");
+             "List[Plus[Times[-1, Power[a, 2], y], Times[Power[b, 2], Power[y, 2]]], "
+             "Plus[Times[a, x], Times[b, y]]]");
 }
 
 /* ------------------------------------------------------------------ */

@@ -116,7 +116,7 @@ static void test_trivariate_xy_xyz(void) {
     /* (x + y)(x + y + z): x + y is z-independent. */
     check_factor_expands_to(
         "Factor[(x + y) (x + y + z)]",
-        "Plus[Power[x, 2], Times[2, Times[x, y]], Power[y, 2], Times[x, z], Times[y, z]]");
+        "Plus[Power[x, 2], Times[2, x, y], Power[y, 2], Times[x, z], Times[y, z]]");
 }
 
 static void test_trivariate_quadratic_z_indep(void) {
@@ -132,8 +132,8 @@ static void test_trivariate_three_factors_with_z_indep(void) {
      * (their product is x^2 - 4 y^2), one is y-independent. */
     check_factor_expands_to(
         "Factor[(x + 2 y) (x - 2 y) (x + 3 z)]",
-        "Plus[Power[x, 3], Times[-4, Times[x, Power[y, 2]]], "
-        "Times[3, Times[Power[x, 2], z]], Times[-12, Times[Power[y, 2], z]]]");
+        "Plus[Power[x, 3], Times[-4, x, Power[y, 2]], Times[3, Power[x, 2], z], "
+        "Times[-12, Power[y, 2], z]]");
 }
 
 static void test_trivariate_already_factored_irreducible_x_indep(void) {
@@ -259,8 +259,7 @@ static void test_f1_scale_with_negate(void) {
      * so the path selected depends on heuristics — we only verify
      * the result expands correctly. */
     check_factor_expands_to("Factor[Expand[-(2x+3y)(3x+5y)]]",
-        "Plus[Times[-6, Power[x, 2]], Times[-19, Times[x, y]], "
-        "Times[-15, Power[y, 2]]]");
+        "Plus[Times[-6, Power[x, 2]], Times[-19, x, y], Times[-15, Power[y, 2]]]");
 }
 
 static void test_f1_scale_three_factors(void) {
@@ -295,8 +294,7 @@ static void test_f1_scale_irreducible_lc_two(void) {
      * "no progress" so the legacy pipeline takes over and leaves the
      * input unchanged.  Verify the canonical form is preserved. */
     check_factor("Factor[2 x^2 + 3 x y + 7 y^2]",
-                 "Plus[Times[2, Power[x, 2]], Times[3, Times[x, y]], "
-                 "Times[7, Power[y, 2]]]");
+                 "Plus[Times[2, Power[x, 2]], Times[3, x, y], Times[7, Power[y, 2]]]");
 }
 
 /* ====================================================================== */
@@ -325,9 +323,8 @@ static void test_f1_polylc_y2_plus_one(void) {
      * x^2 + 4x + 3 = (x+1)(x+3), both monic. */
     check_factor_expands_to(
         "Factor[Expand[((y^2 + 1)*x + 1)*(x + 3)]]",
-        "Plus[3, Times[4, x], Power[x, 2], "
-        "Times[3, Times[x, Power[y, 2]]], "
-        "Times[Power[x, 2], Power[y, 2]]]");
+        "Plus[3, Times[4, x], Power[x, 2], Times[3, x, Power[y, 2]], Times[Power[x, 2], "
+        "Power[y, 2]]]");
 }
 
 static void test_f1_polylc_linear_lc(void) {
@@ -335,8 +332,8 @@ static void test_f1_polylc_linear_lc(void) {
      * A(2) = 1 ✓ (α=0 gives -1, skipped by MVP). */
     check_factor_expands_to(
         "Factor[Expand[((y - 1)*x + 1)*(x + 2)]]",
-        "Plus[2, Times[-1, x], Times[-1, Power[x, 2]], "
-        "Times[2, Times[x, y]], Times[Power[x, 2], y]]");
+        "Plus[2, Times[-1, x], Times[-1, Power[x, 2]], Times[2, x, y], Times[Power[x, "
+        "2], y]]");
 }
 
 static void test_f1_polylc_y_plus_one_squared(void) {
@@ -489,7 +486,7 @@ static void test_f2_trivariate_z_plus_xy_times_z_minus_xy(void) {
      * factor; F2's trivariate Hensel is required. */
     check_factor_expands_to(
         "Factor[Expand[(z + x y)(z - x y)]]",
-        "Plus[Times[-1, Times[Power[x, 2], Power[y, 2]]], Power[z, 2]]");
+        "Plus[Times[-1, Power[x, 2], Power[y, 2]], Power[z, 2]]");
 }
 
 static void test_f2_trivariate_z_plus_x_z_plus_y(void) {
@@ -508,15 +505,10 @@ static void test_f2_trivariate_user_reported(void) {
      * P = (z x - x^2 - y^2)(3 z + 4 x y - y^2). */
     check_factor_expands_to(
         "Factor[Expand[(z*x - x^2 - y^2)*(3*z + 4*x*y - y^2)]]",
-        "Plus[Times[-4, Times[Power[x, 3], y]], "
-             "Times[Power[x, 2], Power[y, 2]], "
-             "Times[-4, Times[x, Power[y, 3]]], "
-             "Power[y, 4], "
-             "Times[-3, Times[Power[x, 2], z]], "
-             "Times[4, Times[Power[x, 2], y, z]], "
-             "Times[-3, Times[Power[y, 2], z]], "
-             "Times[-1, Times[x, Power[y, 2], z]], "
-             "Times[3, Times[x, Power[z, 2]]]]");
+        "Plus[Times[-4, Power[x, 3], y], Times[Power[x, 2], Power[y, 2]], Times[-4, x, "
+        "Power[y, 3]], Power[y, 4], Times[-3, Power[x, 2], z], Times[4, Power[x, 2], y, "
+        "z], Times[-3, Power[y, 2], z], Times[-1, x, Power[y, 2], z], Times[3, x, "
+        "Power[z, 2]]]");
 }
 
 static void test_f5_recombination_still_works_k2(void) {
@@ -529,8 +521,7 @@ static void test_f5_recombination_still_works_k2(void) {
      * correct pair has already been found and the lift succeeds.
      * This verifies F5 does not break legitimate k = 2 recombination. */
     check_factor_expands_to("Factor[Expand[(x^2 - y) (x^2 - 4 y)]]",
-        "Plus[Power[x, 4], Times[-5, Times[Power[x, 2], y]], "
-        "Times[4, Power[y, 2]]]");
+        "Plus[Power[x, 4], Times[-5, Power[x, 2], y], Times[4, Power[y, 2]]]");
 }
 
 /* ====================================================================== */

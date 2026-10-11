@@ -337,6 +337,32 @@ static void print_definition_body(const char* name) {
 }
 #endif
 
+/* A rational coefficient p/q in a product that already has a denominator
+ * folds q into that denominator, as Mathematica does: Times[-1/2, a, 1/h]
+ * prints "-a/(2 h)", not "-(1/2 a)/h", and Times[1/2, 1/h] prints
+ * "1/(2 h)", not "1/2/h". Shared by the plain and TeX Times printers, which
+ * both strip the sign first, so the coefficient (if any) is num[0] and is
+ * positive. num/den own their entries and have room for one more each. */
+static void fold_rational_coeff_into_den(Expr** num, size_t* nnum,
+                                         Expr** den, size_t* nden) {
+    if (*nden == 0 || *nnum == 0) return;
+    Expr* r = num[0];
+    if (r->type != EXPR_FUNCTION || r->data.function.head->type != EXPR_SYMBOL ||
+        r->data.function.head->data.symbol.name != SYM_Rational ||
+        r->data.function.arg_count != 2) return;
+    Expr* p = r->data.function.args[0];
+    memmove(den + 1, den, sizeof(Expr*) * *nden);
+    den[0] = expr_copy(r->data.function.args[1]);
+    (*nden)++;
+    if (p->type == EXPR_INTEGER && p->data.integer == 1 && *nnum > 1) {
+        memmove(num, num + 1, sizeof(Expr*) * (*nnum - 1));
+        (*nnum)--;
+    } else {
+        num[0] = expr_copy(p);
+    }
+    expr_free(r);
+}
+
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
     /* Intercept before the delegation below: a packed list is not an
@@ -654,6 +680,8 @@ static void print_standard(Expr* e, int parent_prec) {
                 }
             }
             
+            fold_rational_coeff_into_den(num_args, &num_count, den_args, &den_count);
+
             if (den_count == 0) {
                 for (size_t i = 0; i < num_count; i++) {
                     if (i > 0) printf(" ");
@@ -1740,6 +1768,8 @@ static void print_tex(Expr* e, int parent_prec) {
                 }
                 if (!den_ok) num_args[num_count++] = expr_copy(arg);
             }
+
+            fold_rational_coeff_into_den(num_args, &num_count, den_args, &den_count);
 
             if (den_count == 0) {
                 for (size_t i = 0; i < num_count; i++) {

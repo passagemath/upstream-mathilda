@@ -83,7 +83,7 @@ static void test_apart_radical(void) {
      * r^(1/7) by substituting g = r^(1/7), then 1/(g^3-1) decomposes,
      * and back-substitution yields the radical form. */
     run_test("Apart[1/(-1 + r^(3/7))]",
-             "1/3/(-1 + r^(1/7)) + (-2/3 - 1/3 r^(1/7))/(1 + r^(1/7) + r^(2/7))");
+             "1/(3 (-1 + r^(1/7))) + (-2/3 - 1/3 r^(1/7))/(1 + r^(1/7) + r^(2/7))");
 }
 
 static void test_no_trigger_when_unhelpful(void) {

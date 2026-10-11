@@ -236,7 +236,7 @@ static void test_helpers_extract_constants(void) {
 static void test_helpers_apartlist(void) {
     /* Three-pole partial-fraction expansion as a List. */
     run_eq("Integrate`Helpers`ApartList[1/((x-1)(x-2)(x-3)), x]",
-           "{-1/(-2 + x), 1/2/(-3 + x), 1/2/(-1 + x)}");
+           "{-1/(-2 + x), 1/(2 (-3 + x)), 1/(2 (-1 + x))}");
 }
 
 static void test_intrationallogpart(void) {

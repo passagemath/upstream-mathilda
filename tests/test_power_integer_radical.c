@@ -61,7 +61,7 @@ static void test_small_radicands(void) {
     check("Sqrt[72]",       "6 Sqrt[2]");
     check("Sqrt[2^62]",     "2147483648");
     check("Sqrt[-12]",      "(2*I) Sqrt[3]");
-    check("Sqrt[1/12]",     "1/2/Sqrt[3]");
+    check("Sqrt[1/12]",     "1/(2 Sqrt[3])");
     check("12^(1/3)",       "2^(2/3) 3^(1/3)");
     check("54^(1/3)",       "3 2^(1/3)");
     check("(16/81)^(1/4)",  "2/3");

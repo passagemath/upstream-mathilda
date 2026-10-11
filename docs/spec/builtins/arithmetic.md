@@ -150,6 +150,9 @@ Symbolic sum.
   the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
   not pay the generic `Orderless` sort over all N raw terms. `Times` collects
   factors the same way.
+- A collected term is a flat `Times`: `2 a b + x` holds `Times[2, a, b]`, never
+  `Times[2, Times[a, b]]`. The coefficient is spliced in front of the
+  monomial's factors.
 - Returns `0` if no arguments are provided.
 - Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),

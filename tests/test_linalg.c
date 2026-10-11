@@ -48,7 +48,7 @@ void test_dot() {
 void test_det() {
     run_test("Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]", "0");
     run_test("Det[{{1.7, 7.1, -2.7}, {2.2, 8.7, 3.2}, {3.2, -9.2, 1.2}}]", "251.572");
-    run_test("Expand[Det[{{a, b, c}, {d, e, f}, {g, h, i}}]]", "Plus[Times[-1, Times[c, e, g]], Times[b, f, g], Times[c, d, h], Times[-1, Times[a, f, h]], Times[-1, Times[b, d, i]], Times[a, e, i]]");
+    run_test("Expand[Det[{{a, b, c}, {d, e, f}, {g, h, i}}]]", "Plus[Times[-1, c, e, g], Times[b, f, g], Times[c, d, h], Times[-1, a, f, h], Times[-1, b, d, i], Times[a, e, i]]");
 }
 
 void test_cross() {
@@ -138,10 +138,10 @@ void test_inverse() {
 
     /* 2x2 symbolic matrix */
     run_test("Inverse[{{a,b},{c,d}}]",
-        "List[List[Times[d, Power[Plus[Times[-1, Times[b, c]], Times[a, d]], -1]], "
-        "Times[-1, b, Power[Plus[Times[-1, Times[b, c]], Times[a, d]], -1]]], "
-        "List[Times[-1, c, Power[Plus[Times[-1, Times[b, c]], Times[a, d]], -1]], "
-        "Times[a, Power[Plus[Times[-1, Times[b, c]], Times[a, d]], -1]]]]");
+        "List[List[Times[d, Power[Plus[Times[-1, b, c], Times[a, d]], -1]], Times[-1, b, "
+        "Power[Plus[Times[-1, b, c], Times[a, d]], -1]]], List[Times[-1, c, "
+        "Power[Plus[Times[-1, b, c], Times[a, d]], -1]], Times[a, Power[Plus[Times[-1, "
+        "b, c], Times[a, d]], -1]]]]");
 
     /* Symmetric symbolic matrix (use p,q to avoid polluted u,v from test_dot) */
     run_test("Inverse[{{p,q},{q,p}}]",

@@ -52,7 +52,7 @@ static void test_uniform_scalar_spacing(void) {
 
 static void test_symbolic_spacing(void) {
     run_infix("ListGradient[{a, b, c}, h]",
-              "{-a/h + b/h, -1/2 a/h + 1/2 c/h, -b/h + c/h}");
+              "{-a/h + b/h, -a/(2 h) + c/(2 h), -b/h + c/h}");
 }
 
 static void test_nonuniform_coordinates(void) {

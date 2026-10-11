@@ -43,13 +43,11 @@ void test_subrespoly_numeric() {
  * coefficients of the inputs. */
 void test_subrespoly_symbolic() {
     run_test("SubresultantPolynomials[a x^3 + b x^2 + c x + d, 3 a x^2 + b x + c, x]",
-             "List[Plus[Times[4, Times[Power[a, 2], Power[c, 3]]], "
-             "Times[2, Times[a, Power[b, 3], d]], "
-             "Times[-18, Times[Power[a, 2], b, c, d]], "
-             "Times[27, Times[Power[a, 3], Power[d, 2]]]], "
-             "Plus[Times[-2, Times[a, b, c]], Times[9, Times[Power[a, 2], d]], "
-             "Times[-2, Times[a, Power[b, 2], x]], Times[6, Times[Power[a, 2], c, x]]], "
-             "Plus[c, Times[b, x], Times[3, Times[a, Power[x, 2]]]]]");
+             "List[Plus[Times[4, Power[a, 2], Power[c, 3]], Times[2, a, Power[b, 3], d], "
+             "Times[-18, Power[a, 2], b, c, d], Times[27, Power[a, 3], Power[d, 2]]], "
+             "Plus[Times[-2, a, b, c], Times[9, Power[a, 2], d], Times[-2, a, Power[b, 2], "
+             "x], Times[6, Power[a, 2], c, x]], Plus[c, Times[b, x], Times[3, a, Power[x, "
+             "2]]]]");
 }
 
 /* The first subresultant polynomial equals the Resultant. */

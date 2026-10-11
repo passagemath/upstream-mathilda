@@ -188,7 +188,7 @@ static void test_closed_forms(void) {
     assert_eval("EllipticE[-1]", "EllipticE[-1]");
 
     /* the third kind at m = 0, both arities */
-    assert_eval("EllipticPi[n, 0]", "(1/2 Pi)/Sqrt[1 - n]");
+    assert_eval("EllipticPi[n, 0]", "Pi/(2 Sqrt[1 - n])");
     assert_true("Abs[N[EllipticPi[3/10, 0], 25] - N[Pi/(2 Sqrt[1 - 3/10]), 25]] < 10^-23");
     assert_eval("EllipticPi[n, phi, 0]", "ArcTanh[Sqrt[-1 + n] Tan[phi]]/Sqrt[-1 + n]");
 

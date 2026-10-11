@@ -62,7 +62,7 @@ static void test_beta_unit(void) {
 static void test_beta_logweight(void) {
     /* Log[x] weight = d/dk Beta[k,l]. */
     check_eq("Integrate`Beta[x^(1/2)(1-x)^(1/2) Log[x], {x, 0, 1}]",
-             "1/8 Pi (1/2 - 2 Log[2])");
+             "1/16 Pi (1 - 4 Log[2])");
     /* Log[1-x] weight = d/dl Beta[k,l]. */
     check_eq("Integrate`Beta[x^2 (1-x)^3 Log[1-x], {x, 0, 1}]", "-37/3600");
     /* Mixed Log[x] Log[1-x] weight = d^2/dk dl Beta. */

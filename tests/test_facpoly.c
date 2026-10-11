@@ -35,7 +35,7 @@ void test_factorsquarefree() {
     /* Squared factor (x - y)^2: Wolfram normalises it to a positive leading
      * coefficient in the FIRST variable x, i.e. (x - y), not the (y - x)
      * associate (both square to the same thing). */
-    run_test("FactorSquareFree[x^5-x^3*y^2-x^2*y^3+y^5]", "Times[Power[Plus[x, Times[-1, y]], 2], Plus[Power[x, 3], Times[2, Times[Power[x, 2], y]], Times[2, Times[x, Power[y, 2]]], Power[y, 3]]]");
+    run_test("FactorSquareFree[x^5-x^3*y^2-x^2*y^3+y^5]", "Times[Power[Plus[x, Times[-1, y]], 2], Plus[Power[x, 3], Times[2, Power[x, 2], y], Times[2, x, Power[y, 2]], Power[y, 3]]]");
     run_test("FactorSquareFree[{(x^2-1)(x-1),(x^4-1)(x^2-1)}]", "List[Times[Plus[1, x], Power[Plus[-1, x], 2]], Times[Plus[1, Power[x, 2]], Power[Plus[-1, Power[x, 2]], 2]]]");
     run_test("FactorSquareFree[Exp[2 x] - Log[x] - 1/x]", "Plus[Times[-1, Power[x, -1]], Times[-1, Log[x]], Power[E, Times[2, x]]]");
     run_test("FactorSquareFree[1 - x^3]", "Plus[1, Times[-1, Power[x, 3]]]");
@@ -124,13 +124,13 @@ void test_factor() {
     run_test("Factor[1 + 2 x + x^2]", "Power[Plus[1, x], 2]");
     run_test("Factor[x^10 - 1]", "Times[Plus[-1, x], Plus[1, x], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]]]");
     run_test("Factor[1 - x^3]", "Times[-1, Plus[-1, x], Plus[1, x, Power[x, 2]]]");
-    run_test("Factor[x^10 - y^10]", "Times[Plus[x, y], Plus[x, Times[-1, y]], Plus[Power[x, 4], Times[-1, Times[Power[x, 3], y]], Times[Power[x, 2], Power[y, 2]], Times[-1, Times[x, Power[y, 3]]], Power[y, 4]], Plus[Power[x, 4], Times[Power[x, 3], y], Times[Power[x, 2], Power[y, 2]], Times[x, Power[y, 3]], Power[y, 4]]]");
+    run_test("Factor[x^10 - y^10]", "Times[Plus[x, y], Plus[x, Times[-1, y]], Plus[Power[x, 4], Times[Power[x, 3], y], Times[Power[x, 2], Power[y, 2]], Times[x, Power[y, 3]], Power[y, 4]], Plus[Power[x, 4], Times[-1, Power[x, 3], y], Times[Power[x, 2], Power[y, 2]], Times[-1, x, Power[y, 3]], Power[y, 4]]]");
     run_test("Factor[x^3 - 6x^2 + 11x - 6]", "Times[Plus[-3, x], Plus[-2, x], Plus[-1, x]]");
     /* Now factored transparently via FLINT, which normalises each irreducible
      * factor to a positive leading coefficient (a - x, 3a^2 - 2 x y) rather
      * than the classical heuristic factorer's mixed signs (-a + x, -3a^2 + 2xy);
      * the two sign flips cancel, so the product is identical. */
-    run_test("Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]", "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]");
+    run_test("Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]", "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]");
     run_test("Factor[(x^3+2x^2)/(x^2-4y^2)-(x+2)/(x^2-4y^2)]", "Times[Plus[-1, x], Plus[1, x], Plus[2, x], Power[Plus[x, Times[-2, y]], -1], Power[Plus[x, Times[2, y]], -1]]");
     run_test("Factor[{x^2-1, x^4-1, x^8-1}]", "List[Times[Plus[-1, x], Plus[1, x]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Power[x, 4]]]]");
     run_test("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]", "Inequality[1, Less, Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]], Less, 2]");

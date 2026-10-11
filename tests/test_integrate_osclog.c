@@ -66,13 +66,13 @@ static void test_sinpow_negative(void) {
  * ---------------------------------------------------------------------- */
 static void test_oscpower(void) {
     check_eq("Integrate`OscillatoryPower[Cos[x^2], {x, 0, Infinity}]",
-             "(1/2 Sqrt[Pi])/Sqrt[2]");
+             "Sqrt[Pi]/(2 Sqrt[2])");
     check_eq("Integrate`OscillatoryPower[Sin[x^2], {x, 0, Infinity}]",
-             "(1/2 Sqrt[Pi])/Sqrt[2]");
+             "Sqrt[Pi]/(2 Sqrt[2])");
     check_eq("Integrate`OscillatoryPower[Cos[2 x^2], {x, 0, Infinity}]", "1/4 Sqrt[Pi]");
     /* n = 3. */
     check_eq("Integrate`OscillatoryPower[Cos[x^3], {x, 0, Infinity}]",
-             "(1/3 Pi)/Gamma[2/3]");
+             "Pi/(3 Gamma[2/3])");
 }
 
 /* -------------------------------------------------------------------------
@@ -110,7 +110,7 @@ static void test_dispatch(void) {
     check_eq("Integrate[Sin[x]^3/x^3, {x, 0, Infinity}, Method -> \"SinPowerMonomial\"]",
              "3/8 Pi");
     check_eq("Integrate[Cos[x^2], {x, 0, Infinity}, Method -> \"OscillatoryPower\"]",
-             "(1/2 Sqrt[Pi])/Sqrt[2]");
+             "Sqrt[Pi]/(2 Sqrt[2])");
     check_eq("Integrate[Log[x]/((1+x)(2+x)), {x, 0, Infinity}, Method -> \"RationalLog\"]",
              "1/2 Log[2]^2");
     /* Strict: wrong family under a pinned method stays unevaluated. */
@@ -126,7 +126,7 @@ static void test_stress(void) {
     check_eq("Integrate`SinPowerMonomial[Sin[x]^8/x^2, {x, 0, Infinity}]", "5/32 Pi");
     /* Distinct triple simple poles close to a clean combination of Log^2. */
     check_eq("Integrate`RationalLog[Log[x]/((1+x)(2+x)(3+x)), {x, 0, Infinity}]",
-             "1/4 (-Log[3]^2 + 2 Log[2]^2)");
+             "-1/4 Log[3]^2 + 1/2 Log[2]^2");
 }
 
 int main(void) {

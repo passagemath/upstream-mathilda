@@ -255,7 +255,7 @@ static void test_regression_sum_of_cubes(void) {
     /* Canonical ordering of the second factor's terms is determined
      * by Plus' Orderless attribute; match the actual surface form. */
     expect_fullform("Factor[x^3 + y^3]",
-                    "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, Times[x, y]], Power[y, 2]]]");
+                    "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, x, y], Power[y, 2]]]");
 }
 
 static void test_regression_factor_roots_case(void) {
@@ -265,7 +265,7 @@ static void test_regression_factor_roots_case(void) {
     /* = (a - x)(a + x)(3 a^2 - 2 x y): each factor positive-leading in its
      * first (alphabetically smallest) variable a / a^2. */
     expect_fullform("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-                    "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]");
+                    "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]");
 }
 
 /* =====================================================================

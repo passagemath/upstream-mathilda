@@ -107,7 +107,7 @@ static void test_pairs_form(void) {
     run_full("InterpolatingPolynomial[{{1,a},{2,b},{3,c}},x] /. x->2", "b");
     /* symbolic abscissae. */
     run_print("Expand[InterpolatingPolynomial[{{p,1},{q,4}},x]]",
-              "1 - 3 p/(-p + q) + 3 x/(-p + q)");
+              "1 - (3 p)/(-p + q) + (3 x)/(-p + q)");
 }
 
 /* --- Hermite / confluent divided differences reproduce derivatives. --- */

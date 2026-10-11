@@ -250,6 +250,35 @@ EXEMPT = {
                          "machine type); AWARE only to read a packed value tensor",
     "InterpolatingPolynomial": "returns a symbolic polynomial in x, not a machine "
                                "array (cf. CharacteristicPolynomial)",
+    # Image / graphics heads.  An Image (or Graphics) object has no compiled
+    # machine type, so a head that constructs one, queries one, or takes one as
+    # its argument cannot lower -- the AWARE entry only lets the transparency
+    # gate read the image's packed pixel buffer straight through.
+    "Image": "constructs an Image object; no compiled image type",
+    "Image3D": "constructs an Image3D object; no compiled image type",
+    "ImageQ": "predicate on an Image; the Image is the argument",
+    "Image3DQ": "predicate on an Image3D; the Image is the argument",
+    "ImageChannels": "reads Image metadata (channel count); the Image is the argument",
+    "ImageDimensions": "reads Image metadata (dimensions); the Image is the argument",
+    "ImageType": "reads an Image's pixel type (a string); the Image is the argument",
+    "ImageData": "extracts an Image's pixel array; the Image is the argument",
+    "ImageResize": "returns an Image; no compiled image type",
+    "ImageConvolve": "returns an Image; no compiled image type",
+    "Binarize": "returns a binarized Image; no compiled image type",
+    "ColorConvert": "operates on an Image/color; no compiled image type",
+    "GaussianFilter": "image-pipeline filter; declines a plain numeric list, "
+                      "needs an Image",
+    "ArrayPlot": "returns a Graphics object; no compiled type",
+    "FindThreshold": "computes a threshold FROM an Image; the Image is the argument",
+    # Representation predicate (cf. NDArrayQ).
+    "PackedArrayQ": "asks about the REPRESENTATION, which the compiler erases",
+    # Fitting / structural results that are not a machine array.
+    "Fit": "returns a symbolic Plus in the fit variable, not a machine array "
+           "(cf. CharacteristicPolynomial)",
+    "DesignMatrix": "basis is a symbolic function list and a variable, not "
+                    "compilable argument types",
+    "HermiteDecomposition": "returns a pair of (exact-integer) matrices "
+                            "(cf. QRDecomposition)",
 }
 
 
@@ -310,6 +339,11 @@ BASELINE = {
     # (A_STORE_B).  No such lowering yet: they moved here from EXEMPT because the
     # dtype that blocked them is no longer missing, only the lowering is.
     "Positive", "Negative", "NonNegative", "NonPositive",
+    # Elementwise numeric->numeric with a machine answer but no (full) lowering.
+    # Chop's SCALAR form already compiles; its array form, and both Clip forms
+    # (a clamp against a {lo, hi} spec), want an elementwise opcode over the
+    # buffer -- the same kind of lowering the sign predicates above await.
+    "Chop", "Clip",
     # Boole: the CONVERSE bridge, a bool array -> an int64 one.  Joined pack.c's
     # AWARE with the NDT_BOOL work; a compiled array form (bool -> A_STORE_I) is
     # possible but likewise undone.  Its real call shape is Boole[boolArray],

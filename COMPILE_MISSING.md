@@ -246,11 +246,21 @@ looking for the entry point to delegate to.
 |---|---|
 | `LerchPhi` | an n-ary kernel is registered, but neither the scalar nor the array form lowers. The only head on the list that is missing *both*. |
 
+## 11. Elementwise clamp / threshold
+
+Numeric → numeric, with a machine answer, needing an elementwise opcode over the
+buffer — the same kind of lowering the sign predicates await.
+
+| head | note |
+|---|---|
+| `Chop` | the SCALAR form already lowers (`Compiled -> True`); the array form does not — an elementwise "replace \|x\| < tol with 0" over the buffer. |
+| `Clip` | neither form lowers — an elementwise clamp against a `{lo, hi}` spec (two scalar operands), at scalar and array shape. |
+
 ---
 
 ## What is deliberately NOT here
 
-52 further heads are **exempt with a recorded reason** in
+72 further heads are **exempt with a recorded reason** in
 `tools/compile_coverage.py`'s `EXEMPT` table. The reasons that recur:
 
 - **The result length is data-dependent** — `Union`, `Intersection`,
@@ -266,8 +276,18 @@ looking for the entry point to delegate to.
   `NonNegative`, `NonPositive`, and the definite-matrix predicates. Closing
   these needs the dtype, not a lowering.
 - **The head asks about the REPRESENTATION**, which the compiler erases —
-  `NDArrayQ`, `DataType`, `ByteCount`, `Head`, `AtomQ`, `Normal`,
+  `NDArrayQ`, `PackedArrayQ`, `DataType`, `ByteCount`, `Head`, `AtomQ`, `Normal`,
   `ToNDArray`/`FromNDArray`.
+- **The value is an `Image` (or `Graphics`) object**, which has no compiled type
+  — `Image`, `Image3D`, `ImageResize`, `ImageConvolve`, `Binarize`,
+  `ColorConvert`, `GaussianFilter`, `ArrayPlot`, and the Image queries
+  `ImageQ`/`Image3DQ`/`ImageChannels`/`ImageDimensions`/`ImageType`/`ImageData`/
+  `FindThreshold` (the Image is the argument). The `AWARE` entry only lets the
+  transparency gate read the packed pixel buffer through.
+- **The result is symbolic or structural, not a machine array** — `Fit` (a
+  symbolic `Plus` in the fit variable, cf. `CharacteristicPolynomial`),
+  `DesignMatrix` (symbolic basis + variable arguments), `HermiteDecomposition`
+  (a pair of exact-integer matrices, cf. `QRDecomposition`).
 - **It is not a callable head at all** — `If`, `Which`, `Module`, `With`,
   `Print`; each is lowered as control flow, register allocation or a side
   effect.

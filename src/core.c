@@ -49,6 +49,7 @@
 #include "lerchphi.h"
 #include "productlog.h"
 #include "legendre.h"
+#include "chebyshev_u.h"
 #include "airyai.h"
 #include "airybi.h"
 #include "bessel.h"
@@ -809,6 +810,7 @@ void core_init(void) {
     lerchphi_init();
     productlog_init();
     legendre_init();
+    chebyshev_u_init();
     airyai_init();
     airybi_init();
     bessel_init();

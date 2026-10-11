@@ -699,6 +699,7 @@ NDK_BIN2(BesselK,           sf_machine_bessel_k)
 NDK_BIN2(PolyLog,           sf_machine_polylog)
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(Hypergeometric0F1, sf_machine_hyper0f1)
+NDK_BIN2(ChebyshevU,        sf_machine_chebyshev_u)
 #undef NDK_BIN2
 
 /* N-ary kernels: arity >= 3, which the unary/binary descriptors cannot express.
@@ -807,6 +808,7 @@ void ndkernels_init(void) {
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
     REG_B(LegendreQ,   NDKB_LegendreQ);
+    REG_B(ChebyshevU,  NDKB_ChebyshevU);
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

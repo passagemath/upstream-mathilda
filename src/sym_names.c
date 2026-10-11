@@ -78,6 +78,7 @@ const char* SYM_Buchberger = NULL;
 const char* SYM_CFRAC = NULL;
 const char* SYM_Catalan = NULL;
 const char* SYM_Ceiling = NULL;
+const char* SYM_ChebyshevU = NULL;
 const char* SYM_ChineseRemainder = NULL;
 const char* SYM_Chop = NULL;
 const char* SYM_ClearAll = NULL;
@@ -1075,6 +1076,7 @@ void sym_names_init(void) {
     SYM_CFRAC                      = intern_symbol("CFRAC");
     SYM_Catalan                    = intern_symbol("Catalan");
     SYM_Ceiling                    = intern_symbol("Ceiling");
+    SYM_ChebyshevU                 = intern_symbol("ChebyshevU");
     SYM_ChineseRemainder           = intern_symbol("ChineseRemainder");
     SYM_Chop                       = intern_symbol("Chop");
     SYM_ClearAll                   = intern_symbol("ClearAll");

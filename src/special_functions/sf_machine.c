@@ -580,6 +580,24 @@ bool sf_machine_legendre_p(double n, double x, double* out) {
     return isfinite(p1);
 }
 
+/* ChebyshevU[n, x] for a non-negative integer degree, by the three-term
+ * recurrence U_0 = 1, U_1 = 2x, U_k = 2x U_{k-1} - U_{k-2} -- stable upward for
+ * this polynomial family. A non-integer, negative, or very large degree is left
+ * to the MPFR / symbolic path, matching how sf_machine_legendre_p declines. */
+bool sf_machine_chebyshev_u(double n, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *out = 1.0; return true; }
+    double u0 = 1.0, u1 = 2.0 * x;
+    if (N == 1) { *out = u1; return isfinite(u1); }
+    for (int k = 2; k <= N; k++) {
+        double uk = 2.0 * x * u1 - u0;
+        u0 = u1; u1 = uk;
+    }
+    *out = u1;
+    return isfinite(u1);
+}
+
 /* LegendreQ[n, x] for a non-negative integer degree on the cut |x| < 1, by the
  * same three-term recurrence as P_n but seeded Q_0 = atanh(x), Q_1 = x atanh(x)
  * - 1.  Declines (returns false) for a non-integer/negative/large degree and for

@@ -1753,6 +1753,55 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- ChebyshevU[N, Z]:
+         *   d/dZ U_N(Z) = ((-1-N) U_(N-1)(Z) + N Z U_N(Z)) / (Z^2 - 1).
+         *   d/dN U_N(Z) = Derivative[1,0][ChebyshevU][N,Z]  (no elementary form).
+         * Enables D[] and, via it, the generic Interval threading in eval.c. */
+        if (h == SYM_ChebyshevU && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (-1-N) U_{N-1}(Z) */
+                Expr* c0 = mk_fn2("Plus", mk_int(-1), mk_neg(expr_copy(N)));
+                Expr* uNm1 = mk_fn2("ChebyshevU",
+                                mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* t0 = mk_fn2("Times", c0, uNm1);
+                /* N Z U_N(Z) */
+                Expr* uN = mk_fn2("ChebyshevU", expr_copy(N), expr_copy(Z));
+                Expr* t1 = mk_fn2("Times", expr_copy(N),
+                                mk_fn2("Times", expr_copy(Z), uN));
+                Expr* num = mk_fn2("Plus", t0, t1);
+                /* Z^2 - 1 */
+                Expr* den = mk_fn2("Plus", mk_int(-1),
+                                mk_fn2("Power", expr_copy(Z), mk_int(2)));
+                Expr* dUdZ = mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dUdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][ChebyshevU][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("ChebyshevU"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- ExpIntegralE[N, Z]: d/dZ E_N(Z) = -E_(N-1)(Z) (DLMF 8.19.13);
          *     d/dN has no elementary form (kept inert via Derivative[1,0]). */
         if (h == SYM_ExpIntegralE && n == 2) {

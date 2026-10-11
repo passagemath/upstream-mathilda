@@ -1156,6 +1156,15 @@ void info_init(void) {
         "{1, 2, 3}, default 1). Integer n yields the explicit polynomial; a\n"
         "non-integer order with an inexact argument evaluates numerically at\n"
         "machine or arbitrary (MPFR) precision, real or complex. Listable.");
+    symtab_set_docstring("ChebyshevU",
+        "ChebyshevU[n, x]\n"
+        "\tgives the Chebyshev polynomial of the second kind U_n(x).\n"
+        "Integer n yields the explicit polynomial (exact for an exact x, and via\n"
+        "a stable recurrence for an inexact x); a non-integer or complex order\n"
+        "with an inexact argument evaluates numerically at machine or arbitrary\n"
+        "(MPFR) precision, real or complex. Special values include U_n(0) =\n"
+        "Cos[n Pi/2] and U_n(1) = n + 1. D[ChebyshevU[n,x],x] is supported.\n"
+        "Listable.");
     symtab_set_docstring("LegendreQ",
         "LegendreQ[n, x]\n"
         "\tgives the Legendre function of the second kind Q_n(x).\n"

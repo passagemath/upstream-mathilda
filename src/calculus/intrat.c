@@ -2435,6 +2435,17 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
 /* Sign tests, canonic-zero, and the positive-symbol Sqrt simplifier
  * used by logtoreal_dispatch live in intsimp.c — see intsimp.h. */
 
+/* True when `e` contains an explicit Complex[..] number (e.g. I). */
+static bool intrat_contains_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    if (intrat_contains_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_contains_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* Try to dispatch a single quadratic factor `Q(t) = a t^2 + b t + c`
  * to its real-form contribution.  Returns NULL on failure (caller
  * falls back to symbolic RootSum). */
@@ -2511,6 +2522,15 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
      * Sqrt[4 a^2 b^2] -> 2 a b); fall back to the held Sqrt[..] when
      * it can't extract a clean radical form. */
     Expr* sqrt_neg_disc = intsimp_pos_sqrt(neg_disc_raw);
+    /* A sign-undecided monomial such as -16 Sin[k] has a negative
+     * numeric factor that intsimp_pos_sqrt turns into Sqrt[-16] = 4 I,
+     * making v_root imaginary and collapsing the result to 0.  Keep
+     * the radical held instead: v_root must stay formally real. */
+    if (intrat_contains_complex(sqrt_neg_disc)) {
+        expr_free(sqrt_neg_disc);
+        sqrt_neg_disc = expr_new_function(expr_new_symbol(SYM_Sqrt),
+            (Expr*[]){expr_copy(neg_disc_raw)}, 1);
+    }
     expr_free(neg_disc_raw);
     Expr* v_root = eval_and_free(internal_divide(
         (Expr*[]){sqrt_neg_disc, two_a}, 2));

@@ -26,6 +26,9 @@
 #include "arithmetic.h"
 #include "core.h"
 #include "sym_names.h"
+#include "attr.h"
+#include "symtab.h"
+#include "numeric.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,6 +94,23 @@ Expr* intsimp_simplify_if_radical(Expr* e) {
  * definite-sign Real / Integer; 0 otherwise.
  */
 
+/* True when `e` is an opaque parameter: an application of an UNDEFINED head
+ * (not protected, no builtin, no rules) that is not itself a numeric quantity --
+ * DSolve's generated constants C[2], a user's c[2] or f[a].  It denotes an
+ * arbitrary value exactly like a bare symbol, so the positive-parameter sign
+ * convention applies to it too.  Without this, the discriminant 16 C[2] of the
+ * log part of Integrate[1/(C[2] - u^2), u] read as sign-unknown and the whole
+ * ArcTanh contribution was lost (the integral came back 0). */
+static bool intsimp_is_opaque_parameter(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION
+        || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (get_attributes(h) & ATTR_PROTECTED) return false;
+    SymbolDef* def = symtab_lookup(h);
+    if (def && (def->builtin_func || def->own_values || def->down_values)) return false;
+    return !expr_is_numeric_quantity(e);
+}
+
 int intsimp_sign_pos_assumption(Expr* e) {
     if (!e) return 0;
     if (e->type == EXPR_INTEGER) {
@@ -119,6 +139,11 @@ int intsimp_sign_pos_assumption(Expr* e) {
     }
     if (e->type == EXPR_SYMBOL) {
         /* Free symbols treated as positive reals. */
+        return 1;
+    }
+    if (intsimp_is_opaque_parameter(e)) {
+        /* An opaque parameter such as DSolve's C[2] or a user's c[2]
+         * is a free parameter exactly like a bare symbol. */
         return 1;
     }
     if (e->type == EXPR_FUNCTION

@@ -724,6 +724,21 @@ static void test_closed_nth_root_nonic_plus(void) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
+/* An undefined-head parameter (DSolve's C[2], a user's c[2]) is a free parameter
+ * exactly like a symbol.  intsimp_sign_pos_assumption gave it sign 0, so the log
+ * part's discriminant 16 c[2] read as sign-unknown and the complex-pair branch's
+ * Sqrt[-16 c[2]] = 4 I Sqrt[c[2]] collapsed the ArcTanh contribution to 0:
+ * Integrate[1/(c[2] - x^2), x] was 0. */
+static void test_opaque_parameter_log_part(void) {
+    assert_integral_correct("1/(c[2] - x^2)");
+    assert_integral_correct("1/(C[2] - x^2)");
+    assert_integral_correct("4 a/(c[2] - x^2)^2");
+    assert_integral_correct("1/(a c[2] - x^2)");
+    run_eq("Integrate[1/(c[2] - x^2), x]", "ArcTanh[x/Sqrt[c[2]]]/Sqrt[c[2]]");
+    /* a sign-undecided monomial discriminant no longer collapses to 0 either */
+    run_eq("FreeQ[Integrate[1/(Sin[k] - x^2), x], ArcTan]", "False");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -783,6 +798,7 @@ int main(void) {
     TEST(test_closed_nth_root_sextic_plus);
     TEST(test_closed_nth_root_octic_plus);
     TEST(test_closed_nth_root_nonic_plus);
+    TEST(test_opaque_parameter_log_part);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

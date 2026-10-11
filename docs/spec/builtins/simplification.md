@@ -151,10 +151,23 @@ canonical forms that the generic pipeline alone does not:
   `ArcCot[Cot[x]] -> x` on `0 < x < Pi` (each inverse is a bijection from exactly
   that strip; mirrors the existing `ArcTan[Tan[x]]`). Off-range inputs are left
   unchanged.
-- **Root-of-unity periodicity under integer assumptions** — for integer `n`,
-  `E^(2 I Pi n + z) -> E^z`, `E^(I Pi n + z) -> (-1)^n E^z`, and
-  `(-1)^(k + n) -> (-1)^k (-1)^n`, so e.g. `E^(x + 2 I Pi n) - E^x -> 0` and
-  `Cos[n Pi] - E^(I n Pi) -> 0`.
+- **Root-of-unity powers under integer assumptions** — a root of unity raised to
+  an integer-valued exponent is reduced modulo the base's order. The exponent is
+  reduced by a Boolean-ring mod-2 reduction (`F2[g]/(g^2-g)`: coefficients mod 2,
+  `g^e -> g`, like-monomials XOR — sound because `g^e == g (mod 2)` for integer
+  `g`), with `I = (-1)^(1/2)`, `-I = (-1)^(-1/2)` and `E^(I Pi X) = (-1)^X` routed
+  to the same engine. So for integer `n, m`: `(-1)^(2n+1) -> -1`, `(-1)^(3n) ->
+  (-1)^n`, `(-1)^(n^2) -> (-1)^n`, `(-1)^(n(n+1)) -> 1`, `I^(4n) -> 1`,
+  `I^(2n) -> (-1)^n`, `(-I)^(2n) -> (-1)^n`, `(-1)^Mod[n,2] -> (-1)^n`, and
+  `(-1)^(n-m) -> (-1)^(n+m)`. It declines (leaves the power unevaluated) on any
+  exponent it cannot express as a polynomial in provably-integer generators, and
+  off the integer assumption (e.g. `(-1)^(2n)` does **not** fold for real `n`).
+- **Pi-periodicity with a compound integer coefficient** — `Sin[K Pi] -> 0`,
+  `Cos[K Pi] -> (-1)^K`, and the shift `Sin[t + K Pi] -> (-1)^K Sin[t]` fire for
+  any provably-integer `K` (not only a bare symbol), so e.g.
+  `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. The emitted
+  `(-1)^K` is then canonicalised by the root-of-unity reducer above. Also
+  `E^(2 I Pi n + z) -> E^z` and `E^(I Pi n + z) -> (-1)^n E^z`.
 - **Branch-gated power of an exponential** — `(E^w)^r -> E^(r w)` when `Im[w]` is
   provably in `(-Pi, Pi]` (so the principal `Log` recovers `w`), e.g.
   `Sqrt[E^(2 I x)] -> E^(I x)` under `-Pi/2 < x < Pi/2`. This is the sound,

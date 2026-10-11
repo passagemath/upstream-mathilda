@@ -304,6 +304,232 @@ static int pi_parity(const AssumeCtx* ctx, const Expr* K) {
     return km1_even ? 1 : -1;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Root-of-unity power canonicalizer under integer assumptions.            */
+/*                                                                         */
+/* The elegant core: for a root of unity raised to an integer-valued       */
+/* exponent, reduce the exponent modulo the base's order. Everything is    */
+/* routed to (-1)^Y via the identities  I = (-1)^(1/2),  -I = (-1)^(-1/2), */
+/* E^(I Pi X) = (-1)^X, and (-1)^Y is reduced by a Boolean-ring mod-2       */
+/* reduction of the integer-valued part of Y:                              */
+/*   F2[g]/(g^2 - g):  coeffs mod 2, g^e -> g (sound: g^e == g (mod 2) for  */
+/*   integer g), like monomials XOR. So n^2 -> n, n(n+1) -> 0, 3n -> n,     */
+/*   2n+1 -> 1, n-m -> n+m.  A rational constant in Y (e.g. the 1/2 of I)   */
+/*   stays as a literal factor (-1)^(1/2) = I.                              */
+/* Sound by construction and declines (returns NULL) on anything it cannot  */
+/* express as a polynomial in provably-integer generators.                 */
+/* ----------------------------------------------------------------------- */
+
+/* Complex[0, sign]: the imaginary unit (sign=1) or its negative (sign=-1). */
+static bool is_imag_unit(const Expr* e, long sign) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Complex) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* re = e->data.function.args[0];
+    const Expr* im = e->data.function.args[1];
+    return re->type == EXPR_INTEGER && re->data.integer == 0 &&
+           im->type == EXPR_INTEGER && im->data.integer == sign;
+}
+
+/* Replace Mod[t, M] by t wherever M is a nonzero even integer literal:
+ * Mod[t, M] == t (mod 2) when 2 | M, so this is sound inside a mod-2
+ * reduction. Recurses; caller owns the result. */
+static Expr* mod2_absorb(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (sr_head(e, "Mod") && e->data.function.arg_count == 2) {
+        const Expr* M = e->data.function.args[1];
+        if (M->type == EXPR_INTEGER && M->data.integer != 0 &&
+            (M->data.integer % 2) == 0)
+            return mod2_absorb(e->data.function.args[0]);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = mod2_absorb(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+/* Parity (0/1) of an integer literal/bigint, else -1. */
+static int lit_parity(const Expr* e) {
+    if (e->type == EXPR_INTEGER) return (int)(((e->data.integer % 2) + 2) % 2);
+    if (e->type == EXPR_BIGINT)  return mpz_odd_p(e->data.bigint) ? 1 : 0;
+    return -1;
+}
+
+#define IVP_MAX_TERMS 512
+#define IVP_MAX_GENS   32
+
+/* Decompose a single expanded monomial `term` into an integer-coefficient
+ * parity and its set of (provably-integer) generators. Returns:
+ *   1  success (coeff_odd and gens filled; gens are borrowed pointers)
+ *   0  coefficient even -> term vanishes mod 2 (gens irrelevant)
+ *  -1  not an integer-coefficient monomial in integer generators -> decline. */
+static int ivp_term_decompose(const AssumeCtx* ctx, const Expr* term,
+                              const Expr** gens, size_t* ngen) {
+    *ngen = 0;
+    int coeff_odd = 1;
+    const Expr* const* facs; size_t nf; const Expr* single = term;
+    if (sr_head(term, "Times")) { nf = term->data.function.arg_count;
+        facs = (const Expr* const*)term->data.function.args; }
+    else { nf = 1; facs = &single; }
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* f = facs[i];
+        int lp = lit_parity(f);
+        if (lp >= 0) { if (lp == 0) return 0; continue; }   /* integer coeff */
+        /* a generator factor: g or Power[g, positive-integer] */
+        const Expr* g = f;
+        if (sr_head(f, "Power") && f->data.function.arg_count == 2) {
+            const Expr* k = f->data.function.args[1];
+            if (k->type != EXPR_INTEGER || k->data.integer <= 0) return -1;
+            g = f->data.function.args[0];               /* g^k == g (mod 2) */
+        }
+        /* reject anything numeric-but-not-integer (Rational, Real) */
+        if (g->type == EXPR_INTEGER || g->type == EXPR_BIGINT) { continue; }
+        if (g->type == EXPR_REAL || sr_head(g, "Rational")) return -1;
+        if (!prov_int(ctx, g)) return -1;
+        if (*ngen >= IVP_MAX_GENS) return -1;
+        /* multilinear: include each distinct generator once */
+        bool seen = false;
+        for (size_t j = 0; j < *ngen; j++) if (expr_eq((Expr*)gens[j], (Expr*)g)) { seen = true; break; }
+        if (!seen) gens[(*ngen)++] = g;
+    }
+    (void)coeff_odd;
+    return 1;
+}
+
+/* Boolean-ring reduction of an integer-valued polynomial E modulo 2.
+ * Returns a fresh reduced exponent (multilinear, {0,1} coefficients), or
+ * NULL to decline. */
+static Expr* simp_reduce_mod2(const AssumeCtx* ctx, const Expr* E) {
+    Expr* pre = mod2_absorb(E);
+    Expr* ex = expr_expand(pre);
+    expr_free(pre);
+    if (!ex) return NULL;
+
+    const Expr* const* terms; size_t nt; const Expr* single = ex;
+    if (sr_head(ex, "Plus")) { nt = ex->data.function.arg_count;
+        terms = (const Expr* const*)ex->data.function.args; }
+    else { nt = 1; terms = &single; }
+    if (nt > IVP_MAX_TERMS) { expr_free(ex); return NULL; }
+
+    /* Accumulate surviving monomials (canonicalised) with XOR semantics. */
+    Expr** mons = (Expr**)malloc((nt ? nt : 1) * sizeof(Expr*));
+    size_t nmon = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nt && ok; i++) {
+        const Expr* gens[IVP_MAX_GENS]; size_t ng = 0;
+        int st = ivp_term_decompose(ctx, terms[i], gens, &ng);
+        if (st < 0) { ok = false; break; }
+        if (st == 0) continue;                      /* even coefficient */
+        /* canonical monomial = Times[gens...] (empty -> 1) */
+        Expr* mon;
+        if (ng == 0) mon = expr_new_integer(1);
+        else if (ng == 1) mon = expr_copy((Expr*)gens[0]);
+        else {
+            Expr** gc = (Expr**)malloc(ng * sizeof(Expr*));
+            for (size_t j = 0; j < ng; j++) gc[j] = expr_copy((Expr*)gens[j]);
+            mon = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gc, ng));
+            free(gc);
+        }
+        /* XOR into the accumulator. */
+        size_t found = nmon;
+        for (size_t j = 0; j < nmon; j++) if (expr_eq(mons[j], mon)) { found = j; break; }
+        if (found < nmon) { expr_free(mons[found]); mons[found] = mons[--nmon]; expr_free(mon); }
+        else mons[nmon++] = mon;
+    }
+    expr_free(ex);
+    if (!ok) { for (size_t j = 0; j < nmon; j++) expr_free(mons[j]); free(mons); return NULL; }
+
+    Expr* R;
+    if (nmon == 0) R = expr_new_integer(0);
+    else if (nmon == 1) { R = mons[0]; }
+    else R = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), mons, nmon));
+    free(mons);
+    return R;
+}
+
+/* Canonical value of (-1)^Y where Y is a rational-linear combination of
+ * provably-integer generators. The non-integer rational-constant part of Y
+ * is kept as a literal factor (-1)^c (e.g. (-1)^(1/2) = I); the rest is
+ * reduced mod 2. Returns a fresh, evaluated Expr, or NULL to decline. */
+static Expr* canon_neg1_pow(const AssumeCtx* ctx, const Expr* Y) {
+    const Expr* const* terms; size_t nt; const Expr* single = Y;
+    if (sr_head(Y, "Plus")) { nt = Y->data.function.arg_count;
+        terms = (const Expr* const*)Y->data.function.args; }
+    else { nt = 1; terms = &single; }
+
+    Expr** ratc = (Expr**)malloc((nt ? nt : 1) * sizeof(Expr*)); size_t nrat = 0;
+    Expr** intp = (Expr**)malloc((nt ? nt : 1) * sizeof(Expr*)); size_t nip = 0;
+    for (size_t i = 0; i < nt; i++) {
+        const Expr* t = terms[i];
+        if (t->type == EXPR_REAL) {                 /* inexact: bail */
+            for (size_t j = 0; j < nrat; j++) expr_free(ratc[j]);
+            for (size_t j = 0; j < nip;  j++) expr_free(intp[j]);
+            free(ratc); free(intp); return NULL;
+        }
+        /* Every numeric constant (integer or rational) becomes a literal
+         * (-1)^c factor: an odd integer constant thus yields a -1 pulled OUT
+         * as Times[-1, ...], the form the evaluator keeps and cancels against
+         * a sibling (-1)^E (it does NOT re-absorb it into the exponent). */
+        if (t->type == EXPR_INTEGER || t->type == EXPR_BIGINT || sr_head(t, "Rational"))
+            ratc[nrat++] = expr_copy((Expr*)t);
+        else
+            intp[nip++] = expr_copy((Expr*)t);
+    }
+
+    Expr* Yint = (nip == 0) ? expr_new_integer(0)
+               : (nip == 1) ? intp[0]
+               : expr_new_function(expr_new_symbol(SYM_Plus), intp, nip);
+    free(intp);
+    Expr* R = simp_reduce_mod2(ctx, Yint);
+    expr_free(Yint);
+    if (!R) { for (size_t j = 0; j < nrat; j++) expr_free(ratc[j]); free(ratc); return NULL; }
+
+    /* (-1)^R times (-1)^(sum of rational constants). */
+    Expr* factors[2]; size_t nfac = 0;
+    factors[nfac++] = expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ expr_new_integer(-1), R }, 2);
+    if (nrat > 0) {
+        Expr* c = (nrat == 1) ? ratc[0]
+                : eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), ratc, nrat));
+        factors[nfac++] = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ expr_new_integer(-1), c }, 2);
+    }
+    free(ratc);
+    Expr* out = (nfac == 1) ? factors[0]
+              : expr_new_function(expr_new_symbol(SYM_Times), factors, nfac);
+    return eval_and_free(out);
+}
+
+/* True iff a Complex[...] node appears anywhere in e (head or args). */
+static bool sr_has_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sr_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* If `ex` is a pure imaginary multiple of Pi, i.e. ex == I Pi X, return X
+ * (I- and Pi-free), else NULL. Used for E^(I Pi X) = (-1)^X. */
+static Expr* exp_ipi_coeff(const Expr* ex) {
+    if (!sr_mentions_pi(ex)) return NULL;
+    Expr* denom = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Complex),
+                                     (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2),
+                                 expr_new_symbol(SYM_Pi) }, 2);
+    Expr* dinv = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ denom, expr_new_integer(-1) }, 2);
+    Expr* X = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ expr_copy((Expr*)ex), dinv }, 2));
+    if (sr_mentions_pi(X) || sr_has_complex(X)) { expr_free(X); return NULL; }
+    return X;
+}
+
 /* Reduce H[t + K Pi] for a trig head H, K a provable integer: Tan/Cot have
  * period Pi (no sign); Sin/Cos/Sec/Csc flip sign with the parity of K. Returns
  * a fresh Expr on success, NULL if there is no integer-Pi part or the parity
@@ -339,23 +565,27 @@ static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
             : expr_new_function(expr_new_symbol(SYM_Plus), kco, nk);
     free(kco);
     K = eval_and_free(K);
+    /* K is a provable integer by construction (pi_integer_coeff gated on
+     * prov_int), so H[t + K Pi] = (-1)^K H[t] is EXACT whether or not the
+     * parity of K is known as a literal. Tan/Cot have period Pi (no sign).
+     * Emit the symbolic (-1)^K when the parity is undetermined rather than
+     * declining; the root-of-unity canonicalizer reduces it further. */
     int parity = is_tan_cot ? 0 : pi_parity(ctx, K);
-    expr_free(K);
-    if (parity < 0) {
-        for (size_t i = 0; i < nth; i++) expr_free(theta[i]);
-        free(theta);
-        return NULL;
-    }
 
     Expr* th = (nth == 0) ? expr_new_integer(0)
              : (nth == 1) ? theta[0]
              : expr_new_function(expr_new_symbol(SYM_Plus), theta, nth);
     free(theta);
     Expr* hcall = expr_new_function(expr_new_symbol(h), (Expr*[]){ th }, 1);
-    if (parity == 1)
+    if (parity == 0) { expr_free(K); return hcall; }
+    if (parity == 1) { expr_free(K);
         return expr_new_function(expr_new_symbol(SYM_Times),
-                   (Expr*[]){ expr_new_integer(-1), hcall }, 2);
-    return hcall;
+                   (Expr*[]){ expr_new_integer(-1), hcall }, 2); }
+    /* parity undetermined: (-1)^K H[t], K consumed. */
+    Expr* sign = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_new_integer(-1), K }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+               (Expr*[]){ sign, hcall }, 2);
 }
 
 /* If `term` is (integer)*Pi*I, return its integer coefficient m as a fresh Expr
@@ -998,6 +1228,38 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
                                (Expr*[]){ expr_copy((Expr*)b), pq }, 2));
                 expr_free(node); *changed = 1; return out;
             }
+        }
+    }
+
+    /* Root-of-unity power: (-1)^E, I^E, (-I)^E, E^(I Pi X) under integer
+     * assumptions, reduced by canon_neg1_pow. All route to (-1)^Y. */
+    if (strcmp(h, "Power") == 0 && nn == 2 && ctx) {
+        const Expr* base = node->data.function.args[0];
+        const Expr* ex   = node->data.function.args[1];
+        Expr* Y = NULL;
+        if (base->type == EXPR_INTEGER && base->data.integer == -1 &&
+            prov_int(ctx, ex)) {
+            Y = expr_copy((Expr*)ex);                    /* (-1)^ex */
+        } else if (is_imag_unit(base, 1) && prov_int(ctx, ex)) {
+            /* I^ex = (-1)^(ex/2) */
+            Y = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_copy((Expr*)ex),
+                               expr_new_function(expr_new_symbol(SYM_Rational),
+                                   (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2));
+        } else if (is_imag_unit(base, -1) && prov_int(ctx, ex)) {
+            /* (-I)^ex = (-1)^(-ex/2) */
+            Y = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_copy((Expr*)ex),
+                               expr_new_function(expr_new_symbol(SYM_Rational),
+                                   (Expr*[]){ expr_new_integer(-1), expr_new_integer(2) }, 2) }, 2));
+        } else if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
+            Y = exp_ipi_coeff(ex);                       /* E^(I Pi X) = (-1)^X */
+        }
+        if (Y) {
+            Expr* out = canon_neg1_pow(ctx, Y);
+            expr_free(Y);
+            if (out && !expr_eq(out, node)) { expr_free(node); *changed = 1; return out; }
+            if (out) expr_free(out);
         }
     }
 

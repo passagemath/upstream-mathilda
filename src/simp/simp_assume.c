@@ -707,6 +707,9 @@ bool prov_int(const AssumeCtx* ctx, const Expr* x) {
         if (n == 1 && prov_re(ctx, a[0]) &&
             (h == SYM_Floor || h == SYM_Ceiling ||
              h == SYM_Round || h == SYM_IntegerPart)) return true;
+        /* Mod[a,b] / Quotient[a,b] of integers are integers. */
+        if (n == 2 && prov_int(ctx, a[0]) && prov_int(ctx, a[1]) &&
+            (strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0)) return true;
     }
     return false;
 }

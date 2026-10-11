@@ -3628,6 +3628,10 @@ target_include_directories(invtrig_simplify_tests PRIVATE ../src)
 add_executable(hyp_assume_simplify_tests test_hyp_assume_simplify.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hyp_assume_simplify_tests PRIVATE ../src)
 
+add_executable(integer_assume_simplify_tests test_integer_assume_simplify.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integer_assume_simplify_tests PRIVATE ../src)
+add_test(NAME integer_assume_simplify_tests COMMAND integer_assume_simplify_tests)
+
 add_executable(radical_simplify_tests test_radical_simplify.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(radical_simplify_tests PRIVATE ../src)
 
@@ -3761,6 +3765,7 @@ if(USE_ECM)
     add_dependencies(simp_log_tests build_ecm)
     add_dependencies(invtrig_simplify_tests build_ecm)
     add_dependencies(hyp_assume_simplify_tests build_ecm)
+    add_dependencies(integer_assume_simplify_tests build_ecm)
     add_dependencies(radical_simplify_tests build_ecm)
     add_dependencies(rationalize_tests build_ecm)
     add_dependencies(inexact_dispatch_tests build_ecm)

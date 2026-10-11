@@ -1,64 +1,36 @@
-# Assumed-Hyperbolic Simplify Stress Corpus
+# TODO: Integer-assumption Simplify campaign
 
-Parallel to the trig campaign (v0.332–v0.338, 22→49/50). Build a 50-case
-`Simplify[diff, assumptions] → 0` hyperbolic corpus + the C changes to prove it.
-Plan: `/Users/user/.claude/plans/for-each-of-the-mighty-dove.md`.
+Plan: `~/.claude/plans/here-s-some-problems-to-floating-milner.md`
+Baseline: 51/100 on v0.346. Target ~90/100 (Phases 1–4).
 
-## Phase 0 — construct + baseline (no commit)
-- [ ] Write corpus `.m` to scratchpad ({id, asm, expr} + Do scorer)
-- [ ] Numeric-verify all 50 identities in-region (reject wrong constructions)
-- [ ] Run `./Mathilda` baseline; record pass/fail per case
+## Phase 0 — harness (folded into per-phase; asserts active by default so each
+## commit's test must be green → assert only cases that pass at that commit)
+- Measurement throughout: `./Mathilda -file` heredoc over all 100 (non-aborting).
+- `test_integer_assume_simplify.c` created in P1 with Cat A/B + declines + #29/#88
+  non-identity asserts + #94; later phases APPEND their green cases.
+- CMake: add_executable + include dirs + build_ecm dep + add_test.
 
-## Phase A — M1 hyperbolic sign oracle (simp_assume.c)  [commit+tag]
-- [ ] prov_pos: Sinh/Tanh/Coth/Csch > 0 when arg > 0; Sech > 0 for real arg
-- [ ] prov_neg: Sinh/Tanh/Coth/Csch < 0 when arg < 0
-- [ ] prov_nn: Sech >= 0 for real arg
-- [ ] Re-score corpus (expect G2/G5 sqrt/abs cases)
+## Phase 1 — root-of-unity / parity (Cat A, B, #94)  ✅ DONE v0.347 (51->64/100)
+- [x] `simp_reduce_mod2` Boolean-ring primitive + `canon_neg1_pow` + Mod-absorption
+- [x] New `Power[-1|I|-I|E^(IPi·)]` block in `assume_structural_rewrite`
+- [x] Supersede even-only `prov_even` fold; added base-I/-I folding
+- [x] De-restrict `trig_pi_shift_symbolic` (emit symbolic `(-1)^K`); prov_int(Mod)
+- [x] test_integer_assume_simplify.c + CMake; declines; #94 Arg bug fixed
+- [x] no regressions (logexp/invtrig/hyp/refine/element); valgrind clean; gates green
 
-## Phase B — M4 reciprocal-Pythag radicand prep (simp_logexp_abs.c)  [commit+tag]
-- [ ] Add `1 - Sech^2 :> Tanh^2`, `-1 + Coth^2 :> Csch^2`
-- [ ] Re-score (#17, #18, #45)
+## Phase 2 — Cat C modular/rounding
+- [ ] (3a) root-cause + fix Simplify↔Refine structural-rewrite surfacing
+- [ ] (3b) integer-shift extraction, floor-division, Mod[P,m] via reducer, Mod divisibility
+- [ ] tests; build; bump+tag; docs
 
-## Phase C — M5 inverse-of-forward (simp_assume_rewrite.c)  [commit+tag]
-- [ ] ArcCsch[Csch]->e, ArcCoth[Coth]->e, ArcSech[Sech]->±e
-- [ ] Re-score (#50)
+## Phase 3 — Gamma/Factorial (Cat D)
+- [ ] Gamma↔Factorial normalizer routing through simp_factorial
+- [ ] Fix zero_test integer-sampler Gamma-pole exclusion (Infinity::indet)
+- [ ] tests; build; bump+tag; docs
 
-## Phase D — G4 imaginary-period symbolic-integer shift  [commit+tag]
-- [ ] New hyperbolic-period helper mirroring trig_pi_shift_symbolic
-- [ ] Re-score (#34–#39; confirm #31–33/#40)
+## Phase 4 — LegendreP + GCD/LCM (Cat E-partial, F)
+- [ ] LegendreP[n,-1], [n,0] special values
+- [ ] GCD/LCM symbolic rules under integer assumptions
+- [ ] tests; build; bump+tag; docs
 
-## Phase E — G3 residue (measure first)  [commit+tag if needed]
-- [ ] Check #21–30 via existing roundtrip; #20 via TrigToExp
-- [ ] Add M7 hyperbolic multiangle candidate only if gap remains
-
-## Wrap-up
-- [ ] New `tests/test_hyp_assume_simplify.c` + CMakeLists registration
-- [ ] Soundness decline tests
-- [ ] No trig regression (logexp/invtrig/trigexp_zero tests)
-- [ ] Docs: changelog 2026-10-05.md + simplification.md
-- [ ] version.h bumps + tags; make check-messages / check-c99 / full make
-- [ ] Memory update; rebuild code-review graph
-
-## Review (v0.346)
-
-Built the assumed-hyperbolic Simplify stress corpus, sibling of the assumed-trig
-campaign. Baseline **30/50 → 48/50**; all 50 numerically verified as true
-identities first. New `tests/test_hyp_assume_simplify.c` (48 collapse asserts + 5
-soundness declines), registered in CMakeLists.
-
-Mechanisms (all sound, each with a decline test; verified off-identity behaviour):
-- M1 sign oracle (`simp_assume.c`): `sign(Sinh/Tanh/Coth/Csch[u])=sign(u)`, `Sech>0`;
-  + fixed a latent `prov_re` gap (a `Rational` literal was not recognised real, so
-  `prov_re[x/2]` failed — closed #16). Unlocked Groups 2 & 5 sqrt/abs.
-- M4 radicand prep (`simp_logexp_abs.c`): `1 ± Cosh[u] → 2{Cosh,Sinh}[u/2]²`.
-- M5 inverse-of-forward (`simp_assume_rewrite.c`): ArcSech/ArcCsch/ArcCoth.
-- Imaginary-period shift (`simp_assume_rewrite.c`): `H[t + m Pi I]`, symbolic int m;
-  correctly rejects real-Pi shifts.
-
-Residuals (true identities, documented, not hyperbolic-specific): #26, #29 — need
-radical-gradient / inverse-hyperbolic constant zero-testing (as trig left #20).
-
-Verification: all 4 suites green (logexp/invtrig/trigexp_zero/hyp_assume, 0 FAIL),
-corpus 48/50, `make check-c99` (exit 0), `make check-messages` (OK), full build
-clean. `$VersionNumber` 0.346.
-
+## Out of scope: ChebyshevT/U (#76-81), binomial sum #87.

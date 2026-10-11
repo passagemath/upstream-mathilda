@@ -91,15 +91,18 @@ static void test_threading(void) {
 /* Assumptions -> True: universally-correct branch-correction formulas. */
 static void test_true(void) {
     run_test("PowerExpand[Sqrt[x y], Assumptions -> True]",
-             "Times[Power[x, Rational[1, 2]], Power[y, Rational[1, 2]], Power[E, "
-             "Times[Complex[0, 1], Pi, Floor[Plus[Rational[1, 2], Times[Rational[-1, 2], "
-             "Power[Pi, -1], Plus[Arg[x], Arg[y]]]]]]]]");
+             "Times[Power[x, Rational[1, 2]], Power[y, Rational[1, 2]], "
+             "Power[E, Times[Complex[0, 1], Pi, Floor[Plus[Rational[1, 2], "
+             "Times[Rational[-1, 2], Power[Pi, -1], "
+             "Plus[Arg[x], Arg[y]]]]]]]]");
     run_test("PowerExpand[Log[x y], Assumptions -> True]",
-             "Plus[Log[x], Log[y], Times[Complex[0, 2], Pi, Floor[Plus[Rational[1, 2], "
-             "Times[Rational[-1, 2], Power[Pi, -1], Plus[Arg[x], Arg[y]]]]]]]");
+             "Plus[Log[x], Log[y], Times[Complex[0, 2], Pi, "
+             "Floor[Plus[Rational[1, 2], Times[Rational[-1, 2], "
+             "Power[Pi, -1], Plus[Arg[x], Arg[y]]]]]]]");
     run_test("PowerExpand[Arg[x y], Assumptions -> True]",
-             "Plus[Arg[x], Arg[y], Times[2, Pi, Floor[Plus[Rational[1, 2], Times[Rational[-1, "
-             "2], Power[Pi, -1], Plus[Arg[x], Arg[y]]]]]]]");
+             "Plus[Arg[x], Arg[y], Times[2, Pi, "
+             "Floor[Plus[Rational[1, 2], Times[Rational[-1, 2], "
+             "Power[Pi, -1], Plus[Arg[x], Arg[y]]]]]]]");
 }
 
 /* Assumptions -> assum: refinement of the correction terms. */

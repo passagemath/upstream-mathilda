@@ -605,8 +605,8 @@ static void test_factorable_conic(void) {
     /* Non-square discriminant (delta = 5) is a genuine Pell-type conic, not
      * factorable: unbounded -> left unevaluated, never a wrong {}. */
     run_test("Solve[x^2 + 3 x y + y^2 == 11, {x, y}, Integers]",
-        "Solve[Equal[Plus[Power[x, 2], Times[3, x, y], Power[y, 2]], 11], List[x, y], "
-        "Integers]");
+        "Solve[Equal[Plus[Power[x, 2], Times[3, x, y], Power[y, 2]], 11], "
+             "List[x, y], Integers]");
 }
 
 /* Generalised Pell  x^2 - D y^2 == N  (N != +1) with x > 0 && y > 0, unbounded:

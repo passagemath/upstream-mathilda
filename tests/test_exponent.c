@@ -82,10 +82,12 @@ void test_exponent_syntactic() {
 
 /* ---- non-flat Times terms (complex + symbolic coefficients) ---- */
 void test_exponent_nonflat_times() {
-    /* -a x^2 beside a complex sibling (I x) evaluates to a NON-FLAT term
-     * Times[-1, Times[a, Power[x,2]]]; base_exp_in_monomial must recurse into
-     * the nested Times or it misses the x^2 and reports degree 1.  (This blocked
-     * the residue Gaussian family on Exp[-a x^2] Cos[b x].) */
+    /* -a x^2 beside a complex sibling (I x) used to evaluate to a NON-FLAT
+     * term Times[-1, Times[a, Power[x,2]]], because Plus's like-term
+     * collection nested the monomial under its coefficient (fixed in v0.355).
+     * base_exp_in_monomial still recurses into a nested Times, since one can
+     * be built directly or held. Missing the x^2 reports degree 1, which
+     * blocked the residue Gaussian family on Exp[-a x^2] Cos[b x]. */
     check("Exponent[-a x^2 + I x, x]", "2");
     check("Exponent[a x^2 + I x, x]", "2");
     check("Exponent[-a x^3 + I b x, x]", "3");

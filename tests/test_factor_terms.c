@@ -5,8 +5,7 @@
  * adapted to Mathilda's printer (canonical Times/Plus ordering, flat
  * Times for small polynomials). Where Mathilda legitimately produces a
  * mathematically-equivalent but textually-different result (e.g.
- * Gaussian-integer content, nested Times[c, Times[...]] leftovers from
- * Expand), the assertion uses the actual Mathilda form. Each FactorTerms
+ * Gaussian-integer content), the assertion uses the actual Mathilda form. Each FactorTerms
  * case is paired with a multiplicative round-trip so that the factor
  * decomposition and the residue together reproduce the input.
  */

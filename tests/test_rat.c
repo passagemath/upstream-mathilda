@@ -229,8 +229,9 @@ void test_together() {
              "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");
     /* Complex coefficient over a real denominator (the undetermined-coefficient shape). */
     run_test("Together[a/(x - 1) + I b/(x - 2)]",
-             "Times[Power[Plus[2, Times[-3, x], Power[x, 2]], -1], Plus[Times[-2, a], "
-             "Times[Complex[0, -1], b], Times[a, x], Times[Complex[0, 1], b, x]]]");
+             "Times[Power[Plus[2, Times[-3, x], Power[x, 2]], -1], "
+             "Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "
+             "Times[Complex[0, 1], b, x]]]");
 }
 
 int main() {

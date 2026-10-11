@@ -182,11 +182,12 @@ static void test_equations(void) {
     /* The flagship 3-level split for a fully parametric quadratic. */
     run_test("Reduce[a x^2 + b x + c == 0, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-             "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], Rational[1, "
-             "2]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-             "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, a, c]], "
-             "Rational[1, 2]]]]]]], And[Equal[a, 0], Unequal[b, 0], Equal[x, Times[-1, "
-             "Power[b, -1], c]]], And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
+             "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], "
+             "Rational[1, 2]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], "
+             "Power[a, -1], Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], "
+             "Times[-4, a, c]], Rational[1, 2]]]]]]], And[Equal[a, 0], "
+             "Unequal[b, 0], Equal[x, Times[-1, Power[b, -1], c]]], "
+             "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
 
 /* Phase-1 soundness boundary: Complexes routes only on a single equation atom;
@@ -1528,9 +1529,10 @@ static void test_transcendental_log_exp(void) {
 
     /* Polynomial in Exp[t]: two 2 Pi I C[1] periodic families. */
     run_test("Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t]",
-             "Or[And[Element[C[1], Integers], Equal[t, Times[Complex[0, 2], C[1], Pi]]], "
-             "And[Element[C[1], Integers], Equal[t, Plus[Log[2], Times[Complex[0, 2], C[1], "
-             "Pi]]]]]");
+             "Or[And[Element[C[1], Integers], "
+                    "Equal[t, Times[Complex[0, 2], C[1], Pi]]], "
+                "And[Element[C[1], Integers], "
+                    "Equal[t, Plus[Log[2], Times[Complex[0, 2], C[1], Pi]]]]]");
 
     /* A single forward-trig equation is solved (its complete periodic family),
      * not echoed. */
@@ -1540,11 +1542,13 @@ static void test_transcendental_log_exp(void) {
      * split (not misrouted to the transcendental solver). */
     run_test("Reduce[a x^2 + b x + c == 0, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-             "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], Rational[1, "
-             "2]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-             "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, a, c]], "
-             "Rational[1, 2]]]]]]], And[Equal[a, 0], Unequal[b, 0], Equal[x, Times[-1, "
-             "Power[b, -1], c]]], And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
+                 "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], "
+                 "Rational[1, 2]]]]]], "
+                 "And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
+                 "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, "
+                 "a, c]], Rational[1, 2]]]]]]], "
+                 "And[Equal[a, 0], Unequal[b, 0], Equal[x, Times[-1, Power[b, -1], c]]], "
+                 "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
 
 /* Two-argument trig/hyperbolic pairs (solvetrigpair.c) and SINGLE forward

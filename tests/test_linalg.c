@@ -138,10 +138,10 @@ void test_inverse() {
 
     /* 2x2 symbolic matrix */
     run_test("Inverse[{{a,b},{c,d}}]",
-        "List[List[Times[d, Power[Plus[Times[-1, b, c], Times[a, d]], -1]], Times[-1, b, "
-        "Power[Plus[Times[-1, b, c], Times[a, d]], -1]]], List[Times[-1, c, "
-        "Power[Plus[Times[-1, b, c], Times[a, d]], -1]], Times[a, Power[Plus[Times[-1, "
-        "b, c], Times[a, d]], -1]]]]");
+        "List[List[Times[d, Power[Plus[Times[-1, b, c], Times[a, d]], -1]], "
+        "Times[-1, b, Power[Plus[Times[-1, b, c], Times[a, d]], -1]]], "
+        "List[Times[-1, c, Power[Plus[Times[-1, b, c], Times[a, d]], -1]], "
+        "Times[a, Power[Plus[Times[-1, b, c], Times[a, d]], -1]]]]");
 
     /* Symmetric symbolic matrix (use p,q to avoid polluted u,v from test_dot) */
     run_test("Inverse[{{p,q},{q,p}}]",

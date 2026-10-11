@@ -89,8 +89,8 @@ static void test_symmetric_functions(void) {
     /* Eliminate[{f == x^5+y^5, a == x+y, b == x*y}, {x, y}]
      * Mathematica: f == a^5 - 5 a^3 b + 5 a b^2 (sign-balanced equiv). */
     check_eq("Eliminate[{f == x^5+y^5, a == x+y, b == x*y}, {x, y}]",
-             "Equal[Plus[Power[a, 5], Times[5, a, Power[b, 2]]], Plus[Times[5, Power[a, 3], "
-             "b], f]]");
+             "Equal[Plus[Power[a, 5], Times[5, a, Power[b, 2]]], "
+                   "Plus[Times[5, Power[a, 3], b], f]]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,8 +303,9 @@ static void test_radical_dt_y_arc(void) {
     mute_stderr_once();
     check_eq("Eliminate[{Dt[y] == x^3/Sqrt[x^2+1] Dt[x], u == x^2 + 1,"
              " Dt[u] == 2 x Dt[x]}, {Dt[x], x}]",
-             "Equal[Plus[Power[Dt[u], 2], Times[Power[u, 2], Power[Dt[u], 2]]], Plus[Times[2, "
-             "u, Power[Dt[u], 2]], Times[4, u, Power[Dt[y], 2]]]]");
+             "Equal[Plus[Power[Dt[u], 2], Times[Power[u, 2], Power[Dt[u], 2]]], "
+                   "Plus[Times[2, u, Power[Dt[u], 2]], "
+                        "Times[4, u, Power[Dt[y], 2]]]]");
 }
 
 static void test_radical_nested_sqrt(void) {
@@ -317,9 +318,11 @@ static void test_radical_nested_sqrt(void) {
     check_eq("Eliminate[{Dt[y] == Sqrt[x + Sqrt[x]] Dt[x],"
              " u == Sqrt[x + Sqrt[x]],"
              " Dt[u] == (1 + 1/2/Sqrt[x]) Dt[x]}, {Dt[x], x}]",
-             "Equal[Plus[Times[4, Power[u, 4], Power[Dt[u], 2]], Power[Dt[y], 2], Times[4, "
-             "Power[u, 2], Power[Dt[y], 2]]], Plus[Times[2, u, Dt[u], Dt[y]], Times[8, "
-             "Power[u, 3], Dt[u], Dt[y]]]]");
+             "Equal[Plus[Times[4, Power[u, 4], Power[Dt[u], 2]], "
+                       "Power[Dt[y], 2], "
+                       "Times[4, Power[u, 2], Power[Dt[y], 2]]], "
+                   "Plus[Times[2, u, Dt[u], Dt[y]], "
+                        "Times[8, Power[u, 3], Dt[u], Dt[y]]]]");
 }
 
 static void test_radical_quartic_with_d(void) {
@@ -332,8 +335,9 @@ static void test_radical_quartic_with_d(void) {
     check_eq("Eliminate[{Dt[y] == (x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]) Dt[x],"
              " u == x + 1/x,"
              " Dt[u] == (D[x + 1/x, x]) Dt[x]}, {Dt[x], x}]",
-             "Equal[Plus[Power[Dt[u], 2], Times[2, Power[u, 2], Power[Dt[y], 2]]], "
-             "Times[Power[u, 4], Power[Dt[y], 2]]]");
+             "Equal[Plus[Power[Dt[u], 2], "
+                       "Times[2, Power[u, 2], Power[Dt[y], 2]]], "
+                   "Times[Power[u, 4], Power[Dt[y], 2]]]");
 }
 
 static void test_radical_sqrtxp1_with_d(void) {
@@ -347,8 +351,11 @@ static void test_radical_sqrtxp1_with_d(void) {
     check_eq("Eliminate[{Dt[y] == (x^2 - 1)/((x^2 + 1) Sqrt[x + 1]) Dt[x],"
              " u == Sqrt[x + 1],"
              " Dt[u] == (D[Sqrt[x + 1], x]) Dt[x]}, {Dt[x], x}]",
-             "Equal[Plus[Times[2, Power[u, 4], Dt[u]], Times[2, Power[u, 2], Dt[y]]], "
-             "Plus[Times[4, Power[u, 2], Dt[u]], Times[2, Dt[y]], Times[Power[u, 4], Dt[y]]]]");
+             "Equal[Plus[Times[2, Power[u, 4], Dt[u]], "
+                       "Times[2, Power[u, 2], Dt[y]]], "
+                   "Plus[Times[4, Power[u, 2], Dt[u]], "
+                        "Times[2, Dt[y]], "
+                        "Times[Power[u, 4], Dt[y]]]]");
 }
 
 static void test_radical_memory_smoke(void) {

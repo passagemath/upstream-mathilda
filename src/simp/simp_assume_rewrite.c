@@ -875,6 +875,91 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             expr_free(node); *changed = 1; return expr_new_integer(0);
         }
 
+        /* Integer-shift extraction: Floor[k + t] -> k + Floor[t] (same for
+         * Ceiling/Round), FractionalPart[k + t] -> FractionalPart[t], pulling
+         * the provably-integer part k out of a sum argument. Sound for any
+         * integer k; fires only when there is both an integer part and a
+         * non-integer remainder. */
+        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
+             strcmp(h, "Round") == 0 || strcmp(h, "FractionalPart") == 0) &&
+            ctx && sr_head(a0, "Plus")) {
+            size_t na = a0->data.function.arg_count;
+            Expr** kp = (Expr**)malloc(na * sizeof(Expr*)); size_t nkp = 0;
+            Expr** tp = (Expr**)malloc(na * sizeof(Expr*)); size_t ntp = 0;
+            for (size_t i = 0; i < na; i++) {
+                Expr* term = a0->data.function.args[i];
+                if (prov_int(ctx, term)) kp[nkp++] = expr_copy(term);
+                else                     tp[ntp++] = expr_copy(term);
+            }
+            if (nkp > 0 && ntp > 0) {
+                Expr* K = (nkp == 1) ? kp[0]
+                        : expr_new_function(expr_new_symbol(SYM_Plus), kp, nkp);
+                Expr* T = (ntp == 1) ? tp[0]
+                        : expr_new_function(expr_new_symbol(SYM_Plus), tp, ntp);
+                free(kp); free(tp);
+                Expr* out;
+                if (strcmp(h, "FractionalPart") == 0) {
+                    expr_free(K);
+                    out = expr_new_function(expr_new_symbol("FractionalPart"),
+                              (Expr*[]){ T }, 1);
+                } else {
+                    Expr* inner = expr_new_function(expr_new_symbol(h),
+                                      (Expr*[]){ T }, 1);
+                    out = expr_new_function(expr_new_symbol(SYM_Plus),
+                              (Expr*[]){ K, inner }, 2);
+                }
+                out = eval_and_free(out);
+                expr_free(node); *changed = 1; return out;
+            }
+            for (size_t i = 0; i < nkp; i++) expr_free(kp[i]);
+            for (size_t i = 0; i < ntp; i++) expr_free(tp[i]);
+            free(kp); free(tp);
+        }
+
+        /* Floor/Ceiling of an exact division by a positive integer:
+         *   Floor[P/d]   -> (P - Mod[P,d]) / d
+         *   Ceiling[P/d] -> (P + Mod[-P,d]) / d
+         * for a provably-integer P and integer denominator d > 1. This is the
+         * definition of floor-division; the Mod residue is reduced by the
+         * Mod rules below (iterated by the Simplify confluence post-pass), so
+         * e.g. Floor[n/2] + Ceiling[n/2] -> n. */
+        if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0) && ctx) {
+            Expr* den = eval_and_free(expr_new_function(
+                            expr_new_symbol("Denominator"),
+                            (Expr*[]){ expr_copy(a0) }, 1));
+            if (den->type == EXPR_INTEGER && den->data.integer > 1) {
+                Expr* P = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_copy(a0), expr_copy(den) }, 2));
+                if (prov_int(ctx, P)) {
+                    bool is_floor = (strcmp(h, "Floor") == 0);
+                    /* residue argument: P (Floor) or -P (Ceiling) */
+                    Expr* resarg = is_floor ? expr_copy(P)
+                        : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(-1), expr_copy(P) }, 2));
+                    Expr* modr = expr_new_function(expr_new_symbol("Mod"),
+                                     (Expr*[]){ resarg, expr_copy(den) }, 2);
+                    /* P +/- Mod, all over d */
+                    Expr* signed_mod = is_floor
+                        ? expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(-1), modr }, 2)
+                        : modr;
+                    Expr* numer = expr_new_function(expr_new_symbol(SYM_Plus),
+                                      (Expr*[]){ expr_copy(P), signed_mod }, 2);
+                    Expr* out = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ numer, expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ expr_copy(den), expr_new_integer(-1) }, 2) }, 2);
+                    /* Distribute the 1/d so the P/d term collects against an
+                     * enclosing Plus (Floor[n/2] + Ceiling[n/2] - n -> 0). */
+                    out = eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                              (Expr*[]){ out }, 1));
+                    expr_free(P); expr_free(den);
+                    expr_free(node); *changed = 1; return out;
+                }
+                expr_free(P);
+            }
+            expr_free(den);
+        }
+
         /* Ceiling[x] / Floor[x] pinned to a single integer by numeric bounds. */
         if ((strcmp(h, "Ceiling") == 0 || strcmp(h, "Floor") == 0) &&
             a0->type == EXPR_SYMBOL) {
@@ -1260,6 +1345,36 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             expr_free(Y);
             if (out && !expr_eq(out, node)) { expr_free(node); *changed = 1; return out; }
             if (out) expr_free(out);
+        }
+    }
+
+    /* Mod of a provably-integer argument under integer assumptions:
+     *   Mod[c, m] -> 0         when m | c  (c/m is a provable integer),
+     *   Mod[P, 2] -> Mod[R, 2] where R is the Boolean-ring reduction of P
+     *                          (parity-preserving; e.g. Mod[n^2,2] -> Mod[n,2],
+     *                           Mod[-n,2] -> Mod[n,2]). */
+    if (strcmp(h, "Mod") == 0 && nn == 2 && ctx) {
+        Expr* c = node->data.function.args[0];
+        Expr* m = node->data.function.args[1];
+        if (prov_int(ctx, c) && prov_int(ctx, m)) {
+            /* divisibility: c/m a provable integer => Mod == 0 */
+            Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_copy(c),
+                                     expr_new_function(expr_new_symbol(SYM_Power),
+                                         (Expr*[]){ expr_copy(m), expr_new_integer(-1) }, 2) }, 2));
+            bool divides = prov_int(ctx, q);
+            expr_free(q);
+            if (divides) { expr_free(node); *changed = 1; return expr_new_integer(0); }
+            /* parity-preserving reduction of the Mod-2 argument */
+            if (m->type == EXPR_INTEGER && m->data.integer == 2) {
+                Expr* R = simp_reduce_mod2(ctx, c);
+                if (R && !expr_eq(R, c)) {
+                    Expr* out = expr_new_function(expr_new_symbol("Mod"),
+                                    (Expr*[]){ R, expr_new_integer(2) }, 2);
+                    expr_free(node); *changed = 1; return eval_and_free(out);
+                }
+                if (R) expr_free(R);
+            }
         }
     }
 

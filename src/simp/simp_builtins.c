@@ -1408,6 +1408,25 @@ static Expr* simp_const_cpow_fold(const Expr* e) {
     return result;
 }
 
+/* True iff e mentions a head whose integer-assumption rewrite the heuristic
+ * search can leave on the table for a bare input (Floor[n] -> n etc.). The
+ * confluence post-pass runs only then, so it never re-evaluates (and thereby
+ * re-contracts) an already-good power/log form such as a^c b^c. */
+static bool simp_has_rounding_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
+            strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0 ||
+            strcmp(h, "FractionalPart") == 0 || strcmp(h, "Mod") == 0 ||
+            strcmp(h, "Quotient") == 0)
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (simp_has_rounding_head(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_simplify(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1972,6 +1991,43 @@ Expr* builtin_simplify(Expr* res) {
         best = t;
     }
     free(user_funcs);
+
+    /* Confluence post-pass. The structural assumption rewrites
+     * (Floor/Ceiling/Round/IntegerPart/FractionalPart/Mod of integers,
+     * Re/Im/Conjugate/Arg, ...) are applied by apply_assumption_rules and
+     * surfaced by Refine, but the heuristic search can drop them for a bare
+     * input whose ONLY applicable rule is structural -- e.g.
+     * Simplify[Floor[n], n in Integers] returned Floor[n] while
+     * Refine[Floor[n], ...] gives n. apply_assumption_rules is
+     * correctness-preserving under the assumption set, so run it once on the
+     * final form and take it when no worse. A no-op (returns an expr_eq form
+     * or NULL) for everything already reduced. */
+    if (best && ctx && ctx->count > 0 && !ctx->inconsistent &&
+        simp_has_rounding_head(best)) {
+        /* Run the assumption rewrites to a fixpoint and keep the result only
+         * if it is no worse than what the search produced. The fixpoint is
+         * ungated per step because a sound rewrite can temporarily INCREASE
+         * complexity before a later pass cancels it (e.g. floor-division
+         * Floor[n/2] -> (n - Mod[n,2])/2 pays off only once Ceiling[n/2]'s
+         * expansion cancels it to n); the end-to-end score gate against the
+         * original best is what guarantees no regression. apply_assumption_rules
+         * is a near no-op (returns an expr_eq form) for anything already
+         * reduced, so the loop exits on the first pass in the common case. */
+        size_t s0 = score_with_func(best, opt_complexity);
+        Expr* cur = expr_copy(best);
+        for (int it = 0; it < 8; it++) {
+            Expr* ar = apply_assumption_rules(cur, ctx);
+            if (!ar) break;
+            if (expr_eq(ar, cur)) { expr_free(ar); break; }
+            expr_free(cur); cur = ar;
+        }
+        if (!expr_eq(cur, best) &&
+            score_with_func(cur, opt_complexity) <= s0) {
+            expr_free(best); best = cur;
+        } else {
+            expr_free(cur);
+        }
+    }
 
     factor_memo_pop();
     factor_memo_free(fmemo);

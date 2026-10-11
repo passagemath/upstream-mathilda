@@ -18,10 +18,11 @@ Baseline: 51/100 on v0.346. Target ~90/100 (Phases 1–4).
 - [x] test_integer_assume_simplify.c + CMake; declines; #94 Arg bug fixed
 - [x] no regressions (logexp/invtrig/hyp/refine/element); valgrind clean; gates green
 
-## Phase 2 — Cat C modular/rounding
-- [ ] (3a) root-cause + fix Simplify↔Refine structural-rewrite surfacing
-- [ ] (3b) integer-shift extraction, floor-division, Mod[P,m] via reducer, Mod divisibility
-- [ ] tests; build; bump+tag; docs
+## Phase 2 — Cat C modular/rounding  ✅ DONE v0.348 (64->78/100)
+- [x] (3a) confluence post-pass in builtin_simplify (fixpoint, gated to rounding heads)
+- [x] (3b) integer-shift extraction, floor-division (Expand), Mod[P,2] reduce, Mod divisibility
+- [x] tests + declines; no regressions (fixed logexp (ab)^c re-contraction); valgrind clean
+- residual: #54 Mod[n,2]+Mod[n+1,2]=1 (parity complement), not asserted
 
 ## Phase 3 — Gamma/Factorial (Cat D)
 - [ ] Gamma↔Factorial normalizer routing through simp_factorial

@@ -86,6 +86,50 @@ void test_int_arg_exp(void) {
     assert_eval_eq("Simplify[Arg[Exp[I Pi (2 n + 1/2)]] - Pi/2, Element[n,Integers]]", "0", 0);
 }
 
+/* ---- Phase 2 Group C: rounding / modular of integers ---- */
+void test_int_c_fracpart(void) {
+    assert_eval_eq("Simplify[FractionalPart[n], Element[n,Integers]]", "0", 0);
+}
+void test_int_c_floor(void) {
+    assert_eval_eq("Simplify[Floor[n] - n, Element[n,Integers]]", "0", 0);
+}
+void test_int_c_ceiling(void) {
+    assert_eval_eq("Simplify[Ceiling[n] - n, Element[n,Integers]]", "0", 0);
+}
+void test_int_c_round(void) {
+    assert_eval_eq("Simplify[Round[n] - n, Element[n,Integers]]", "0", 0);
+}
+void test_int_c_mod1(void) {
+    assert_eval_eq("Simplify[Mod[n, 1], Element[n,Integers]]", "0", 0);
+}
+void test_int_c_mod2n(void) {
+    assert_eval_eq("Simplify[Mod[2 n, 2], Element[n,Integers]]", "0", 0);
+}
+void test_int_c_floorceil_half(void) {
+    assert_eval_eq("Simplify[Floor[n/2] + Ceiling[n/2] - n, Element[n,Integers]]", "0", 0);
+}
+void test_int_c_mod_sq(void) {
+    assert_eval_eq("Simplify[Mod[n^2, 2] - Mod[n, 2], Element[n,Integers]]", "0", 0);
+}
+void test_int_c_floor_shift(void) {
+    assert_eval_eq("Simplify[Floor[n + x] - (n + Floor[x]), Element[n,Integers]]", "0", 0);
+}
+void test_int_c_ceil_shift(void) {
+    assert_eval_eq("Simplify[Ceiling[n + x] - (n + Ceiling[x]), Element[n,Integers]]", "0", 0);
+}
+void test_int_c_fracpart_shift(void) {
+    assert_eval_eq("Simplify[FractionalPart[n + x] - FractionalPart[x], Element[n,Integers]]", "0", 0);
+}
+void test_int_c_mod1_sum(void) {
+    assert_eval_eq("Simplify[Mod[n + m, 1] - Mod[m, 1], Element[{n,m},Integers]]", "0", 0);
+}
+void test_int_c_mod2_nested(void) {
+    assert_eval_eq("Simplify[Mod[n + m, 2] - Mod[Mod[n, 2] + Mod[m, 2], 2], Element[{n,m},Integers]]", "0", 0);
+}
+void test_int_c_mod_divis(void) {
+    assert_eval_eq("Simplify[Mod[n m, m], Element[{n,m},Integers]]", "0", 0);
+}
+
 /* ---- Soundness: these must DECLINE off the integer assumption ---- */
 void test_int_soundness_declines(void) {
     /* Parity folding needs integrality: n real => (-1)^(2n) is not 1. */
@@ -97,7 +141,21 @@ void test_int_soundness_declines(void) {
     assert_eval_eq("Simplify[Sin[(n + m) Pi], Element[{n,m},Reals]] === 0", "False", 0);
     /* The Arg fold must not fire for a non-integer phase. */
     assert_eval_eq("Simplify[Arg[Exp[I Pi (2 n + 1/2)]] - Pi/2, Element[n,Reals]] === 0", "False", 0);
+    /* Rounding/mod rules need integrality: Floor[n] != n, Floor[n+x] shift,
+     * and Mod[n,1] != 0 (it is FractionalPart[n]) for real n. */
+    assert_eval_eq("Simplify[Floor[n] - n, Element[n,Reals]] === 0", "False", 0);
+    assert_eval_eq("Simplify[Floor[n + x] - (n + Floor[x]), Element[x,Reals]] === 0", "False", 0);
+    assert_eval_eq("Simplify[Mod[n, 1], Element[n,Reals]] === 0", "False", 0);
+    assert_eval_eq("Simplify[Floor[n/2] + Ceiling[n/2] - n, Element[n,Reals]] === 0", "False", 0);
 }
+
+/*
+ * Documented residual (true identity, not yet collapsed):
+ *   #54  Mod[n,2] + Mod[n+1,2] - 1   (Element[n,Integers])
+ * Needs the parity-complement identity Mod[n+1,2] == 1 - Mod[n,2]; the
+ * mod-2 argument reducer keeps both as Mod[.,2] and they do not cancel. Not
+ * asserted (it would pin the current non-reduced form).
+ */
 
 /* ---- Non-identities: Mathilda is correct that these do NOT vanish ---- */
 void test_int_nonidentities(void) {
@@ -132,6 +190,21 @@ int main(void) {
     TEST(test_int_b_cos_sum);
 
     TEST(test_int_arg_exp);
+
+    TEST(test_int_c_fracpart);
+    TEST(test_int_c_floor);
+    TEST(test_int_c_ceiling);
+    TEST(test_int_c_round);
+    TEST(test_int_c_mod1);
+    TEST(test_int_c_mod2n);
+    TEST(test_int_c_floorceil_half);
+    TEST(test_int_c_mod_sq);
+    TEST(test_int_c_floor_shift);
+    TEST(test_int_c_ceil_shift);
+    TEST(test_int_c_fracpart_shift);
+    TEST(test_int_c_mod1_sum);
+    TEST(test_int_c_mod2_nested);
+    TEST(test_int_c_mod_divis);
 
     TEST(test_int_soundness_declines);
     TEST(test_int_nonidentities);

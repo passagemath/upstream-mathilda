@@ -168,6 +168,14 @@ canonical forms that the generic pipeline alone does not:
   `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. The emitted
   `(-1)^K` is then canonicalised by the root-of-unity reducer above. Also
   `E^(2 I Pi n + z) -> E^z` and `E^(I Pi n + z) -> (-1)^n E^z`.
+- **Rounding and modular reductions under integer assumptions** — for integer
+  `n`: `Floor[n] -> n`, `Ceiling[n] -> n`, `Round[n] -> n`,
+  `FractionalPart[n] -> 0`, `Mod[n, 1] -> 0`; integer-shift extraction
+  `Floor[n + x] -> n + Floor[x]` (and `Ceiling`/`Round`/`FractionalPart`);
+  floor-division `Floor[P/d] -> (P - Mod[P,d])/d` so
+  `Floor[n/2] + Ceiling[n/2] -> n`; divisibility `Mod[n m, m] -> 0`; and
+  parity-preserving `Mod[n^2, 2] -> Mod[n, 2]`. Each declines off the integer
+  assumption (`Floor[n]` and `Mod[n,1]` are left alone for real `n`).
 - **Branch-gated power of an exponential** — `(E^w)^r -> E^(r w)` when `Im[w]` is
   provably in `(-Pi, Pi]` (so the principal `Log` recovers `w`), e.g.
   `Sqrt[E^(2 I x)] -> E^(I x)` under `-Pi/2 < x < Pi/2`. This is the sound,

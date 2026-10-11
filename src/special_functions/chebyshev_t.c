@@ -155,43 +155,77 @@ static bool cheb_reflect(int64_t ni, unsigned long* deg) {
 /* ------------------------------------------------------------------ */
 
 #ifdef USE_MPFR
-/* T_deg(x) for an inexact x, by the stable forward recurrence in complex MPFR
- * arithmetic (seed T_0 = 1, T_1 = x). Returns NULL if x is not numeric. */
+/* T_deg(x) for an inexact x, by the stable forward recurrence (seed T_0 = 1,
+ * T_1 = x). A real x runs a real MPFR recurrence; a complex x the complex ncpx
+ * one. Splitting the real case is not cosmetic: the complex recurrence carries
+ * an always-zero imaginary part through every ncpx_mul (4 real mults/step), so
+ * a real arbitrary-precision argument -- the common case, and every deg>1000
+ * real argument that falls off the machine fast path -- paid ~2x for nothing.
+ * Returns NULL if x is not numeric. */
 static Expr* cheb_numeric_recurrence(unsigned long deg,
                                      const Expr* x_e, mpfr_prec_t out_prec) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec) + 32;
 
-    ncpx x, t0, t1, tk, t;
-    ncpx_init(&x, wp);  ncpx_init(&t0, wp); ncpx_init(&t1, wp);
-    ncpx_init(&tk, wp); ncpx_init(&t, wp);
+    ncpx x;
+    ncpx_init(&x, wp);
 
     Expr* out = NULL;
     bool inexact = false;
     if (get_approx_mpfr(x_e, x.re, x.im, &inexact)) {
-        bool real_input = mpfr_zero_p(x.im);
+        if (mpfr_zero_p(x.im)) {
+            /* real recurrence: plain MPFR, half the per-step work */
+            mpfr_t r0, r1, rk, t;
+            mpfr_init2(r0, wp); mpfr_init2(r1, wp);
+            mpfr_init2(rk, wp); mpfr_init2(t, wp);
+            mpfr_set_ui(r0, 1, PRND);       /* T_0 = 1 */
+            mpfr_set(r1, x.re, PRND);       /* T_1 = x */
 
-        ncpx_set_ui(&t0, 1);        /* T_0 = 1 */
-        ncpx_set(&t1, &x);          /* T_1 = x */
-
-        ncpx* res;
-        if      (deg == 0) res = &t0;
-        else if (deg == 1) res = &t1;
-        else {
-            for (unsigned long k = 2; k <= deg; k++) {
-                ncpx_mul(&t, &x, &t1, wp);   /* t = x t1      */
-                ncpx_add(&t, &t, &t);        /* t = 2x t1     */
-                ncpx_sub(&tk, &t, &t0);      /* tk = 2x t1-t0 */
-                ncpx_set(&t0, &t1);
-                ncpx_set(&t1, &tk);
+            mpfr_ptr res;
+            if      (deg == 0) res = r0;
+            else if (deg == 1) res = r1;
+            else {
+                for (unsigned long k = 2; k <= deg; k++) {
+                    mpfr_mul(t, x.re, r1, PRND);  /* t = x t1      */
+                    mpfr_mul_2ui(t, t, 1, PRND);  /* t = 2x t1     */
+                    mpfr_sub(rk, t, r0, PRND);    /* rk = 2x t1-t0 */
+                    mpfr_set(r0, r1, PRND);
+                    mpfr_set(r1, rk, PRND);
+                }
+                res = r1;
             }
-            res = &t1;
+            if (!mpfr_nan_p(res))
+                out = cheb_make_result(res, res, out_prec, true);
+
+            mpfr_clear(r0); mpfr_clear(r1); mpfr_clear(rk); mpfr_clear(t);
+        } else {
+            /* complex recurrence in ncpx arithmetic */
+            ncpx t0, t1, tk, t;
+            ncpx_init(&t0, wp); ncpx_init(&t1, wp);
+            ncpx_init(&tk, wp); ncpx_init(&t, wp);
+            ncpx_set_ui(&t0, 1);        /* T_0 = 1 */
+            ncpx_set(&t1, &x);          /* T_1 = x */
+
+            ncpx* res;
+            if      (deg == 0) res = &t0;
+            else if (deg == 1) res = &t1;
+            else {
+                for (unsigned long k = 2; k <= deg; k++) {
+                    ncpx_mul(&t, &x, &t1, wp);   /* t = x t1      */
+                    ncpx_add(&t, &t, &t);        /* t = 2x t1     */
+                    ncpx_sub(&tk, &t, &t0);      /* tk = 2x t1-t0 */
+                    ncpx_set(&t0, &t1);
+                    ncpx_set(&t1, &tk);
+                }
+                res = &t1;
+            }
+            if (!mpfr_nan_p(res->re) && !mpfr_nan_p(res->im))
+                out = cheb_make_result(res->re, res->im, out_prec, false);
+
+            ncpx_clear(&t0); ncpx_clear(&t1); ncpx_clear(&tk); ncpx_clear(&t);
         }
-        if (!mpfr_nan_p(res->re) && !mpfr_nan_p(res->im))
-            out = cheb_make_result(res->re, res->im, out_prec, real_input);
     }
 
-    ncpx_clear(&x);  ncpx_clear(&t0); ncpx_clear(&t1);
-    ncpx_clear(&tk); ncpx_clear(&t);
+    ncpx_clear(&x);
     return out;
 }
 #endif /* USE_MPFR */

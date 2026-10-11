@@ -32,9 +32,12 @@ Baseline: 51/100 on v0.346. Target ~90/100 (Phases 1–4).
 - [x] ctx-gating fixed the Gosper/Sum regression (found via expand_tests A/B)
 - [x] tests + no regressions (gamma/pochhammer/fullsimplify/expand/sum); valgrind clean
 
-## Phase 4 — LegendreP + GCD/LCM (Cat E-partial, F)
-- [ ] LegendreP[n,-1], [n,0] special values
-- [ ] GCD/LCM symbolic rules under integer assumptions
-- [ ] tests; build; bump+tag; docs
+## Phase 4 — LegendreP + GCD/LCM (Cat E-partial, F)  ✅ DONE v0.350 (85->90/100)
+- [x] LegendreP[n,-1]=(-1)^n (assumption path, prov_int-gated)
+- [x] GCD[a,a]=Abs, GCD[a,1]=1, LCM[a,1]=Abs, GCD[n,n+1]=1 (consecutive coprime)
+- [x] post-pass gate widened to GCD/LCM/LegendreP; tests + soundness; valgrind clean
 
-## Out of scope: ChebyshevT/U (#76-81), binomial sum #87.
+## CAMPAIGN COMPLETE: 51 -> 90/100 (target met). Remaining 10:
+##   #29,#88 non-identities (Mathilda correct); #54 Mod parity-complement residual;
+##   #76-81 ChebyshevT/U (unimplemented functions, separate feature); #87 binomial sum.
+## Out of scope (per plan): ChebyshevT/U, binomial sum #87.

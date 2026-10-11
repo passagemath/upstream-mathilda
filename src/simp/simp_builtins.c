@@ -1419,7 +1419,8 @@ static bool simp_has_rounding_head(const Expr* e) {
         if (strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
             strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0 ||
             strcmp(h, "FractionalPart") == 0 || strcmp(h, "Mod") == 0 ||
-            strcmp(h, "Quotient") == 0)
+            strcmp(h, "Quotient") == 0 || strcmp(h, "GCD") == 0 ||
+            strcmp(h, "LCM") == 0 || strcmp(h, "LegendreP") == 0)
             return true;
     }
     for (size_t i = 0; i < e->data.function.arg_count; i++)

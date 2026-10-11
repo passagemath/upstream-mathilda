@@ -168,6 +168,11 @@ canonical forms that the generic pipeline alone does not:
   `Sin[(n+m) Pi] -> 0` and `Cos[(n+m) Pi] - (-1)^(n+m) -> 0`. The emitted
   `(-1)^K` is then canonicalised by the root-of-unity reducer above. Also
   `E^(2 I Pi n + z) -> E^z` and `E^(I Pi n + z) -> (-1)^n E^z`.
+- **Symbolic GCD/LCM and orthogonal-polynomial values under integer
+  assumptions** — for integer `a, b, n`: `GCD[a,a] = Abs[a]`, `GCD[a,1] = 1`,
+  `LCM[a,1] = Abs[a]`, `GCD[a,b] = 1` when `|a-b| = 1` (so `GCD[n,n+1] = 1`), and
+  `LegendreP[n,-1] = (-1)^n` (`LegendreP[n,1] = 1` is unconditional). The core
+  GCD/LCM evaluators are unchanged, so these fire only under the assumption.
 - **Gamma / factorial / combinatorics ratios under integer assumptions** — the
   Factorial-ratio engine first converts `Gamma[z] -> Factorial[z-1]`,
   `Pochhammer[a,m] -> Factorial[a+m-1]/Factorial[a-1]`, and

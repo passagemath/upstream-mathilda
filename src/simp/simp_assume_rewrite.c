@@ -1426,6 +1426,50 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
         }
     }
 
+    /* LegendreP[n, -1] -> (-1)^n for integer n (P_n(1)=1 is unconditional and
+     * handled in the evaluator; at x=-1 the closed form needs n integer). */
+    if (strcmp(h, "LegendreP") == 0 && nn == 2 && ctx) {
+        Expr* n_e = node->data.function.args[0];
+        Expr* x_e = node->data.function.args[1];
+        if (x_e->type == EXPR_INTEGER && x_e->data.integer == -1 &&
+            prov_int(ctx, n_e)) {
+            Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(n_e) }, 2));
+            expr_free(node); *changed = 1; return out;
+        }
+    }
+
+    /* Symbolic GCD/LCM of provable integers:
+     *   GCD[a,a] = LCM[a,a] = Abs[a],  GCD[a,1] = 1,  LCM[a,1] = Abs[a],
+     *   GCD[a,b] = 1 when |a-b| = 1 (consecutive integers are coprime). */
+    if ((strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0) && nn == 2 && ctx) {
+        Expr* a = node->data.function.args[0];
+        Expr* b = node->data.function.args[1];
+        if (prov_int(ctx, a) && prov_int(ctx, b)) {
+            bool isgcd = (strcmp(h, "GCD") == 0);
+            bool a1 = (a->type == EXPR_INTEGER && a->data.integer == 1);
+            bool b1 = (b->type == EXPR_INTEGER && b->data.integer == 1);
+            Expr* out = NULL;
+            if (expr_eq(a, b)) {
+                out = eval_and_free(expr_new_function(expr_new_symbol("Abs"),
+                          (Expr*[]){ expr_copy(a) }, 1));
+            } else if (a1 || b1) {
+                out = isgcd ? expr_new_integer(1)
+                    : eval_and_free(expr_new_function(expr_new_symbol("Abs"),
+                          (Expr*[]){ expr_copy(a1 ? b : a) }, 1));
+            } else if (isgcd) {
+                Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy(b), expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(a) }, 2) }, 2));
+                if (diff->type == EXPR_INTEGER &&
+                    (diff->data.integer == 1 || diff->data.integer == -1))
+                    out = expr_new_integer(1);
+                expr_free(diff);
+            }
+            if (out) { expr_free(node); *changed = 1; return out; }
+        }
+    }
+
     return node;
 }
 

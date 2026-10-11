@@ -153,6 +153,23 @@ void test_int_d_factorial2(void) {
     assert_eval_eq("Simplify[Factorial2[2 n] - 2^n n!, Element[n,Integers]]", "0", 0);
 }
 
+/* ---- Phase 4 Group E/F: orthogonal-poly value + symbolic GCD/LCM ---- */
+void test_int_ef_legendre_m1(void) {
+    assert_eval_eq("Simplify[LegendreP[n, -1] - (-1)^n, Element[n,Integers]]", "0", 0);
+}
+void test_int_ef_gcd_self(void) {
+    assert_eval_eq("Simplify[GCD[n, n] - Abs[n], Element[n,Integers]]", "0", 0);
+}
+void test_int_ef_gcd_one(void) {
+    assert_eval_eq("Simplify[GCD[n, 1] - 1, Element[n,Integers]]", "0", 0);
+}
+void test_int_ef_lcm_one(void) {
+    assert_eval_eq("Simplify[LCM[n, 1] - Abs[n], Element[n,Integers]]", "0", 0);
+}
+void test_int_ef_gcd_consecutive(void) {
+    assert_eval_eq("Simplify[GCD[n, n + 1] - 1, Element[n,Integers]]", "0", 0);
+}
+
 /* ---- Soundness: these must DECLINE off the integer assumption ---- */
 void test_int_soundness_declines(void) {
     /* Parity folding needs integrality: n real => (-1)^(2n) is not 1. */
@@ -170,6 +187,9 @@ void test_int_soundness_declines(void) {
     assert_eval_eq("Simplify[Floor[n + x] - (n + Floor[x]), Element[x,Reals]] === 0", "False", 0);
     assert_eval_eq("Simplify[Mod[n, 1], Element[n,Reals]] === 0", "False", 0);
     assert_eval_eq("Simplify[Floor[n/2] + Ceiling[n/2] - n, Element[n,Reals]] === 0", "False", 0);
+    /* Symbolic GCD/LCM rules need integrality. */
+    assert_eval_eq("Simplify[GCD[n, n] - Abs[n]] === 0", "False", 0);
+    assert_eval_eq("Simplify[GCD[n, n + 1] - 1] === 0", "False", 0);
 }
 
 /*
@@ -236,6 +256,12 @@ int main(void) {
     TEST(test_int_d_gamma_ratio2);
     TEST(test_int_d_gamma_ratio1);
     TEST(test_int_d_factorial2);
+
+    TEST(test_int_ef_legendre_m1);
+    TEST(test_int_ef_gcd_self);
+    TEST(test_int_ef_gcd_one);
+    TEST(test_int_ef_lcm_one);
+    TEST(test_int_ef_gcd_consecutive);
 
     TEST(test_int_soundness_declines);
     TEST(test_int_nonidentities);

@@ -80,6 +80,7 @@ extern const char* SYM_Buchberger;
 extern const char* SYM_CFRAC;
 extern const char* SYM_Catalan;
 extern const char* SYM_Ceiling;
+extern const char* SYM_ChebyshevT;
 extern const char* SYM_ChebyshevU;
 extern const char* SYM_ChineseRemainder;
 extern const char* SYM_Chop;

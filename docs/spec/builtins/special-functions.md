@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, and the Chebyshev polynomial of the second kind `ChebyshevU`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, and the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`.
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -1766,6 +1766,58 @@ In[2]:= ProductLog[-1/E]
 Out[2]= -1
 ```
 
+## ChebyshevT
+
+`ChebyshevT[n, x]` gives the Chebyshev polynomial of the first kind `T_n(x)`.
+
+- **Exact polynomial.** An exact integer order `n` produces the explicit
+  degree-`|n|` polynomial in `x` with exact integer coefficients (from FLINT's
+  `fmpz_poly_chebyshev_t` when available, otherwise the three-term recurrence
+  `T_0 = 1`, `T_1 = x`, `T_k = 2x T_{k-1} - T_{k-2}`). `T` is even in its order
+  index, so a negative order reflects via `T_{-n} = T_n` (no sign, and
+  `T_{-1} = x`). For example `ChebyshevT[10, x] = -1 + 50 x² - 400 x⁴ + 1120 x⁶
+  - 1280 x⁸ + 512 x¹⁰`, and `ChebyshevT[2, 3] = 17`.
+- **Numerics.** For an integer order with an inexact argument the value comes
+  from the *stable* three-term recurrence, not from substituting into the
+  explicit polynomial — so `ChebyshevT[60, N[2/3, 16]] = 0.980336` rather than a
+  catastrophically-cancelled result. A non-integer or complex order with an
+  inexact argument evaluates through `T_v(x) = 2F1(-v, v; 1/2; (1-x)/2)` where
+  the Gauss series converges (`|(1-x)/2| < 1`), and otherwise through the
+  whole-plane closed form `T_v(x) = Cos[v ArcCos x]`, which takes Mathematica's
+  branch cut from `-∞` to `-1`. All paths run at machine or arbitrary (MPFR)
+  precision, real or complex: `ChebyshevT[12, 2.5] = 7.31808× 10⁷`,
+  `N[ChebyshevT[1/7, 1/3], 50]` is accurate to 50 digits, `ChebyshevT[2 - 4 I,
+  3`40] = 12.23044… - 11.78701… I`, and `ChebyshevT[-1.5, -2.4`100] ≈ -4.85263
+  I`.
+- **Special values.** `ChebyshevT[0, x] = 1`, `ChebyshevT[n, 0] = Cos[n π/2]`,
+  and `ChebyshevT[n, 1] = 1` (the last two hold for symbolic order).
+- **Derivative.** `D[ChebyshevT[n, x], x] = n U_{n-1}(x)` (the first kind
+  differentiates to the second kind), which also lets the generic
+  `NumericFunction` interval threading handle `Interval[]` arguments.
+- **Listable.** `ChebyshevT[2, {1, 2, 3}] = {1, 7, 17}`.
+- **Performance (machine reals and complexes).** For an integer order with a
+  machine-precision argument the recurrence runs in hardware `double` /
+  `double`-complex, the same kernel used by the NDArray fast path and
+  `Compile[]`, so a scalar `ChebyshevT[n, x]` is bit-identical to its packed and
+  compiled forms. A packed **complex** buffer stays on the buffer (the ND kernel
+  has a complex arm). An arbitrary-precision argument, a degree above 1000, or an
+  overflow falls back to the stable MPFR recurrence unchanged, so accuracy and
+  the overflow→MPFR behaviour are preserved.
+
+An exact non-integer order with an exact/symbolic argument (e.g.
+`ChebyshevT[1/2, x]`) stays symbolic; symbolic `Series` / `SeriesCoefficient`
+and the half-integer closed forms are deferred.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= ChebyshevT[7, x]
+Out[1]= -7 x + 56 x^3 - 112 x^5 + 64 x^7
+
+In[2]:= Table[ChebyshevT[n, Pi/2], {n, 0, 3}]
+Out[2]= {1, Pi/2, -1 + Pi^2/2, -(3 Pi)/2 + Pi^3/2}
+```
+
 ## ChebyshevU
 
 `ChebyshevU[n, x]` gives the Chebyshev polynomial of the second kind `U_n(x)`.
@@ -1794,6 +1846,16 @@ Out[2]= -1
   (x² - 1)`, which also lets the generic `NumericFunction` interval threading
   handle `Interval[]` arguments.
 - **Listable.** `ChebyshevU[2, {1, 2, 3}] = {3, 15, 35}`.
+- **Performance (machine reals and complexes).** For an integer order with a
+  machine-precision argument the recurrence runs in hardware `double` /
+  `double`-complex, the same kernel used by the NDArray fast path and
+  `Compile[]`, so a scalar `ChebyshevU[n, x]` is bit-identical to its packed and
+  compiled forms. A packed **complex** buffer stays on the buffer (the ND kernel
+  has a complex arm — `ChebyshevU[10, cvec]` over `10^6` complexes is ~1200×
+  faster than materialising to the scalar path, and faster than SciPy's
+  `eval_chebyu`). An arbitrary-precision argument, a degree above 1000, or an
+  overflow falls back to the stable MPFR recurrence unchanged, so accuracy and
+  the overflow→MPFR behaviour are preserved.
 
 An exact non-integer order with an exact/symbolic argument (e.g.
 `ChebyshevU[1/2, x]`) stays symbolic; symbolic `Series` / `SeriesCoefficient`

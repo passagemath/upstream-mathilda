@@ -33,8 +33,14 @@
  * symbolic order (the D[ChebyshevU[n,x],x] recurrence lives in calculus/deriv.c),
  * half-integer closed forms, and bespoke tight Interval enclosures (the generic
  * NumericFunction + D[] interval threading in eval.c handles those best-effort).
+ *
+ * The argument-shape predicates, the explicit-polynomial assembler, the MPFR
+ * result builder, the output-precision rule, and U_n(0) = Cos[n Pi/2] are shared
+ * with ChebyshevT via chebyshev_common.{c,h}; only the recurrence seed, the
+ * negative-order reflection, and the non-integer-order closed forms live here.
  */
 #include "chebyshev_u.h"
+#include "chebyshev_common.h"
 #include "sym_names.h"
 
 #include <limits.h>
@@ -45,13 +51,14 @@
 
 #include <gmp.h>
 
-#include "arithmetic.h"      /* make_rational, make_complex, is_complex */
+#include "arithmetic.h"      /* make_rational, make_complex */
 #include "attr.h"
 #include "common.h"          /* builtin_arg_error */
 #include "eval.h"            /* eval_and_free */
 #include "expr.h"
-#include "numeric.h"         /* numeric_min_inexact_bits, get_approx_mpfr */
+#include "numeric.h"         /* get_approx_mpfr */
 #include "numeric_complex.h" /* ncpx toolkit */
+#include "sf_machine.h"      /* sf_machine_chebyshev_u[_c] -- raw-double path */
 #include "symtab.h"
 
 #ifdef USE_MPFR
@@ -64,130 +71,9 @@
 #include <flint/fmpz_poly.h>
 #endif
 
-/* Largest order for which the explicit polynomial is built; beyond this a
- * symbolic/exact-x call stays symbolic. */
-#define CHEB_POLY_CAP 2000
-
-/* Largest |order| for which the numeric recurrence runs; beyond this an inexact
- * call stays symbolic rather than looping for an absurd number of steps. */
-#define CHEB_NUMERIC_DEG_CAP 2000000
-
-/* ------------------------------------------------------------------ */
-/* Small leaf helpers                                                  */
-/* ------------------------------------------------------------------ */
-
-/* Recognise an exact integer (machine or GMP) argument that fits a long. */
-static bool cheb_exact_int(const Expr* e, int64_t* out) {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (e->type == EXPR_BIGINT) {
-        if (!mpz_fits_slong_p(e->data.bigint)) return false;
-        *out = (int64_t)mpz_get_si(e->data.bigint);
-        return true;
-    }
-    return false;
-}
-
-/* True if `e` is exactly the integer `v`. */
-static bool cheb_is_int(const Expr* e, int64_t v) {
-    return e && e->type == EXPR_INTEGER && e->data.integer == v;
-}
-
-/* True if `e` is an inexact numeric leaf (Real or MPFR). */
-static bool cheb_is_inexact_leaf(const Expr* e) {
-    if (!e) return false;
-    if (e->type == EXPR_REAL) return true;
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) return true;
-#endif
-    return false;
-}
-
-/* True if `e` carries an inexact numeric leaf (also inside Complex[..]). */
-static bool cheb_is_inexact(const Expr* e) {
-    if (cheb_is_inexact_leaf(e)) return true;
-    Expr *re, *im;
-    if (is_complex((Expr*)e, &re, &im))
-        return cheb_is_inexact_leaf(re) || cheb_is_inexact_leaf(im);
-    return false;
-}
-
-/* True iff `e` is a pure numeric quantity (Integer/Real/MPFR/BigInt, or
- * Rational/Complex of such), i.e. a numeric series actually collapsed. */
-static bool cheb_is_number_leaf(const Expr* e) {
-    if (!e) return false;
-    switch (e->type) {
-        case EXPR_INTEGER:
-        case EXPR_REAL:
-        case EXPR_BIGINT:
-#ifdef USE_MPFR
-        case EXPR_MPFR:
-#endif
-            return true;
-        default: break;
-    }
-    if (e->type == EXPR_FUNCTION && e->data.function.head &&
-        e->data.function.head->type == EXPR_SYMBOL &&
-        (e->data.function.head->data.symbol.name == SYM_Rational ||
-         e->data.function.head->data.symbol.name == SYM_Complex)) {
-        for (size_t i = 0; i < e->data.function.arg_count; i++)
-            if (!cheb_is_number_leaf(e->data.function.args[i])) return false;
-        return true;
-    }
-    return false;
-}
-
 /* ------------------------------------------------------------------ */
 /* Explicit integer-coefficient polynomial                             */
 /* ------------------------------------------------------------------ */
-
-static mpz_t* cheb_mpz_array_new(size_t len) {
-    mpz_t* a = (mpz_t*)malloc(len * sizeof(mpz_t));
-    if (!a) return NULL;
-    for (size_t i = 0; i < len; i++) mpz_init(a[i]);   /* value 0 */
-    return a;
-}
-
-static void cheb_mpz_array_free(mpz_t* a, size_t len) {
-    if (!a) return;
-    for (size_t i = 0; i < len; i++) mpz_clear(a[i]);
-    free(a);
-}
-
-/* Build the monomial polynomial Sum_i c[i] x^i (i = 0..deg), skipping zero
- * coefficients, then evaluate once. Returns integer 0 if all vanish. */
-static Expr* cheb_poly_from_coeffs(mpz_t* c, size_t deg, const Expr* x) {
-    Expr** terms = (Expr**)malloc((deg + 1) * sizeof(Expr*));
-    if (!terms) return NULL;
-    size_t count = 0;
-
-    for (size_t i = 0; i <= deg; i++) {
-        if (mpz_sgn(c[i]) == 0) continue;
-        Expr* coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(c[i]));
-        Expr* term;
-        if (i == 0) {
-            term = coeff;
-        } else if (i == 1) {
-            term = expr_new_function(expr_new_symbol(SYM_Times),
-                       (Expr*[]){ coeff, expr_copy((Expr*)x) }, 2);
-        } else {
-            Expr* xi = expr_new_function(expr_new_symbol(SYM_Power),
-                          (Expr*[]){ expr_copy((Expr*)x),
-                                     expr_new_integer((int64_t)i) }, 2);
-            term = expr_new_function(expr_new_symbol(SYM_Times),
-                       (Expr*[]){ coeff, xi }, 2);
-        }
-        terms[count++] = term;
-    }
-
-    Expr* poly;
-    if (count == 0)      poly = expr_new_integer(0);
-    else if (count == 1) poly = terms[0];
-    else                 poly = expr_new_function(expr_new_symbol(SYM_Plus),
-                                                  terms, count);
-    free(terms);
-    return eval_and_free(poly);
-}
 
 /* Fill `out` (length deg+1, mpz_init'd to 0) with the integer coefficients of
  * U_deg(x) = Sum_i out[i] x^i. */
@@ -276,43 +162,6 @@ static bool cheb_reflect(int64_t ni, unsigned long* deg, int* sign) {
 /* ------------------------------------------------------------------ */
 
 #ifdef USE_MPFR
-/* Build a numeric result Expr from an (re, im) MPFR pair at out_prec bits: a
- * real leaf when `force_real` or im rounds to zero, else Complex[..]. */
-static Expr* cheb_make_result(const mpfr_t re, const mpfr_t im,
-                              mpfr_prec_t out_prec, bool force_real) {
-    bool real = force_real || mpfr_zero_p(im);
-    if (out_prec <= 53) {
-        double dr = mpfr_get_d(re, PRND);
-        if (real) {
-            if (isinf(dr) && !mpfr_inf_p(re)) return expr_new_mpfr_copy(re);
-            return expr_new_real(dr);
-        }
-        double di = mpfr_get_d(im, PRND);
-        bool overflow = (isinf(dr) && !mpfr_inf_p(re)) ||
-                        (isinf(di) && !mpfr_inf_p(im));
-        if (overflow)
-            return make_complex(expr_new_mpfr_copy(re), expr_new_mpfr_copy(im));
-        return make_complex(expr_new_real(dr), expr_new_real(di));
-    }
-    Expr* rr = expr_new_mpfr_bits(out_prec);
-    mpfr_set(rr->data.mpfr, re, PRND);
-    if (real) return rr;
-    Expr* ii = expr_new_mpfr_bits(out_prec);
-    mpfr_set(ii->data.mpfr, im, PRND);
-    return make_complex(rr, ii);
-}
-
-/* Output precision: the minimum precision among the inexact arguments. */
-static mpfr_prec_t cheb_out_prec(const Expr* n_e, const Expr* x_e) {
-    long bn = cheb_is_inexact(n_e) ? numeric_min_inexact_bits(n_e) : 0;
-    long bx = cheb_is_inexact(x_e) ? numeric_min_inexact_bits(x_e) : 0;
-    long bits;
-    if (bn > 0 && bx > 0) bits = (bn < bx) ? bn : bx;
-    else                  bits = (bn > bx) ? bn : bx;
-    if (bits < 53) bits = 53;
-    return (mpfr_prec_t)bits;
-}
-
 /* U_deg(x) for an inexact x, by the stable forward recurrence in complex MPFR
  * arithmetic. `sign` negates the result (negative-order reflection). Returns
  * NULL if x is not numeric. */
@@ -427,34 +276,6 @@ static Expr* cheb_numeric_general(const Expr* n_e, const Expr* x_e) {
 /* Special values and the two-argument driver                          */
 /* ------------------------------------------------------------------ */
 
-#ifdef USE_MPFR
-/* If n is an inexact real (or MPFR) whose value is an integer within the cap,
- * return true and set *k. An inexact *integer-valued* order evaluates through
- * the stable recurrence (a clean real/complex) rather than the general ArcCos
- * form, which would leave a spurious tiny imaginary part at integer order. */
-static bool cheb_inexact_int_order(const Expr* n_e, int64_t* k) {
-    double v;
-    if (n_e->type == EXPR_REAL) v = n_e->data.real;
-    else if (n_e->type == EXPR_MPFR) v = mpfr_get_d(n_e->data.mpfr, PRND);
-    else return false;
-    if (v != floor(v)) return false;
-    if (v < -(double)CHEB_NUMERIC_DEG_CAP || v > (double)CHEB_NUMERIC_DEG_CAP)
-        return false;
-    *k = (int64_t)v;
-    return true;
-}
-#endif
-
-/* U_n(0) = Cos[n Pi/2]. Built as an expression and evaluated, so it serves a
- * symbolic n (-> Cos[n Pi/2]) and an inexact n (-> a number) alike. */
-static Expr* cheb_value_at_zero(const Expr* n_e) {
-    Expr* arg = expr_new_function(expr_new_symbol(SYM_Times),
-                   (Expr*[]){ make_rational(1, 2), expr_copy((Expr*)n_e),
-                              expr_new_symbol(SYM_Pi) }, 3);
-    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Cos),
-                   (Expr*[]){ arg }, 1));
-}
-
 static Expr* chebyshev_u_two_arg(Expr* n_e, Expr* x_e) {
     int64_t ni;
     bool n_is_int = cheb_exact_int(n_e, &ni);
@@ -482,6 +303,28 @@ static Expr* chebyshev_u_two_arg(Expr* n_e, Expr* x_e) {
             if (k == -1) return expr_new_integer(0);                     /* U_{-1}(x)=0 */
             unsigned long deg; int sign;
             if (cheb_reflect(k, &deg, &sign)) {
+                /* Machine fast path: the raw-double / double-complex recurrence,
+                 * bit-identical to the ND kernel and Compile[].  Taken only when
+                 * the requested precision is machine (<= 53 bits) and x is a
+                 * machine real/complex.  A large degree, an overflow, or an
+                 * arbitrary-precision argument makes the helper decline, and we
+                 * fall through to the MPFR recurrence below unchanged. */
+                if (cheb_out_prec(n_e, x_e) <= 53 && deg <= 1000) {
+                    double xr, xi; bool real;
+                    if (cheb_machine_xy(x_e, &xr, &xi, &real)) {
+                        if (real) {
+                            double v;
+                            if (sf_machine_chebyshev_u((double)deg, xr, &v))
+                                return expr_new_real(sign < 0 ? -v : v);
+                        } else {
+                            double rr, ri;
+                            if (sf_machine_chebyshev_u_c((double)deg, xr, xi, &rr, &ri))
+                                return make_complex(
+                                    expr_new_real(sign < 0 ? -rr : rr),
+                                    expr_new_real(sign < 0 ? -ri : ri));
+                        }
+                    }
+                }
                 Expr* out = cheb_numeric_recurrence(deg, sign, x_e,
                                                     cheb_out_prec(n_e, x_e));
                 if (out) return out;

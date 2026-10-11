@@ -1802,6 +1802,46 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- ChebyshevT[N, Z]:
+         *   d/dZ T_N(Z) = N U_(N-1)(Z)  (first kind differentiates to the
+         *                                second kind).
+         *   d/dN T_N(Z) = Derivative[1,0][ChebyshevT][N,Z]  (no elementary form).
+         * Enables D[] and, via it, the generic Interval threading in eval.c. */
+        if (h == SYM_ChebyshevT && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* N U_{N-1}(Z) */
+                Expr* uNm1 = mk_fn2("ChebyshevU",
+                                mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* dTdZ = mk_fn2("Times", expr_copy(N), uNm1);
+                terms[nt++] = mk_fn2("Times", dTdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][ChebyshevT][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("ChebyshevT"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- ExpIntegralE[N, Z]: d/dZ E_N(Z) = -E_(N-1)(Z) (DLMF 8.19.13);
          *     d/dN has no elementary form (kept inert via Derivative[1,0]). */
         if (h == SYM_ExpIntegralE && n == 2) {

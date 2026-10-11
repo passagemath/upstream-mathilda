@@ -580,6 +580,52 @@ bool sf_machine_legendre_p(double n, double x, double* out) {
     return isfinite(p1);
 }
 
+/* ChebyshevT[n, x] for a non-negative integer degree, by the three-term
+ * recurrence T_0 = 1, T_1 = x, T_k = 2x T_{k-1} - T_{k-2} -- stable upward for
+ * this polynomial family. A non-integer, negative, or very large degree is left
+ * to the MPFR / symbolic path, matching the ChebyshevU helper (the seed T_1 = x
+ * is the only difference from U_1 = 2x). */
+bool sf_machine_chebyshev_t(double n, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *out = 1.0; return true; }
+    double t0 = 1.0, t1 = x;
+    if (N == 1) { *out = t1; return isfinite(t1); }
+    for (int k = 2; k <= N; k++) {
+        double tk = 2.0 * x * t1 - t0;
+        t0 = t1; t1 = tk;
+    }
+    *out = t1;
+    return isfinite(t1);
+}
+
+/* ChebyshevT[n, x] for a non-negative integer degree with a machine COMPLEX
+ * argument x = xre + i*xim, by the same three-term recurrence carried in two
+ * doubles (manual re/im, no <complex.h> -- C99-portable).  Declines for a
+ * non-integer/negative/large degree or a non-finite result, mirroring the real
+ * helper so the ND kernel and the scalar dispatch fall back to the MPFR path
+ * exactly where the real path would. */
+bool sf_machine_chebyshev_t_c(double n, double xre, double xim,
+                              double* rr, double* ri) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *rr = 1.0; *ri = 0.0; return true; }
+    double t1r = xre, t1i = xim;                     /* T_1 = x */
+    if (N == 1) { *rr = t1r; *ri = t1i; return isfinite(t1r) && isfinite(t1i); }
+    double t0r = 1.0, t0i = 0.0;                     /* T_0 = 1 */
+    const double tr = 2.0 * xre, ti = 2.0 * xim;     /* 2x */
+    for (int k = 2; k <= N; k++) {
+        /* tk = 2x*t1 - t0  (complex multiply, then subtract) */
+        double pr = tr * t1r - ti * t1i;
+        double pi = tr * t1i + ti * t1r;
+        double tkr = pr - t0r, tki = pi - t0i;
+        t0r = t1r; t0i = t1i;
+        t1r = tkr; t1i = tki;
+    }
+    *rr = t1r; *ri = t1i;
+    return isfinite(t1r) && isfinite(t1i);
+}
+
 /* ChebyshevU[n, x] for a non-negative integer degree, by the three-term
  * recurrence U_0 = 1, U_1 = 2x, U_k = 2x U_{k-1} - U_{k-2} -- stable upward for
  * this polynomial family. A non-integer, negative, or very large degree is left
@@ -596,6 +642,33 @@ bool sf_machine_chebyshev_u(double n, double x, double* out) {
     }
     *out = u1;
     return isfinite(u1);
+}
+
+/* ChebyshevU[n, x] for a non-negative integer degree with a machine COMPLEX
+ * argument x = xre + i*xim, by the same three-term recurrence carried in two
+ * doubles (manual re/im, no <complex.h> -- C99-portable).  Declines for a
+ * non-integer/negative/large degree or a non-finite result, mirroring the real
+ * helper so the ND kernel and the scalar dispatch fall back to the MPFR path
+ * exactly where the real path would. */
+bool sf_machine_chebyshev_u_c(double n, double xre, double xim,
+                              double* rr, double* ri) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *rr = 1.0; *ri = 0.0; return true; }
+    double u1r = 2.0 * xre, u1i = 2.0 * xim;        /* U_1 = 2x */
+    if (N == 1) { *rr = u1r; *ri = u1i; return isfinite(u1r) && isfinite(u1i); }
+    double u0r = 1.0, u0i = 0.0;                     /* U_0 = 1  */
+    const double tr = 2.0 * xre, ti = 2.0 * xim;     /* 2x */
+    for (int k = 2; k <= N; k++) {
+        /* uk = 2x*u1 - u0  (complex multiply, then subtract) */
+        double pr = tr * u1r - ti * u1i;
+        double pi = tr * u1i + ti * u1r;
+        double ukr = pr - u0r, uki = pi - u0i;
+        u0r = u1r; u0i = u1i;
+        u1r = ukr; u1i = uki;
+    }
+    *rr = u1r; *ri = u1i;
+    return isfinite(u1r) && isfinite(u1i);
 }
 
 /* LegendreQ[n, x] for a non-negative integer degree on the cut |x| < 1, by the

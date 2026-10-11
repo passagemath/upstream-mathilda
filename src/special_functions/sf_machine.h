@@ -44,7 +44,16 @@ bool sf_machine_pochhammer(double a, double n, double* out);    /* Pochhammer */
 bool sf_machine_binomial(double n, double k, double* out);      /* Binomial */
 bool sf_machine_legendre_p(double n, double x, double* out);    /* LegendreP, integer n */
 bool sf_machine_legendre_q(double n, double x, double* out);    /* LegendreQ, integer n, |x|<1 */
+bool sf_machine_chebyshev_t(double n, double x, double* out);   /* ChebyshevT, integer n >= 0 */
+/* ChebyshevT with a machine COMPLEX argument x = xre + i*xim (integer n >= 0).
+ * Same contract/regime as the real helper; result in (*rr, *ri). */
+bool sf_machine_chebyshev_t_c(double n, double xre, double xim,
+                              double* rr, double* ri);
 bool sf_machine_chebyshev_u(double n, double x, double* out);   /* ChebyshevU, integer n >= 0 */
+/* ChebyshevU with a machine COMPLEX argument x = xre + i*xim (integer n >= 0).
+ * Same contract/regime as the real helper; result in (*rr, *ri). */
+bool sf_machine_chebyshev_u_c(double n, double xre, double xim,
+                              double* rr, double* ri);
 bool sf_machine_airy_ai(double x, double* out);        /* AiryAi */
 bool sf_machine_airy_bi(double x, double* out);        /* AiryBi */
 bool sf_machine_airy_ai_prime(double x, double* out);  /* AiryAiPrime */

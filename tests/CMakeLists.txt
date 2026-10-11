@@ -387,6 +387,8 @@ set(COMMON_SRC
     ../src/special_functions/lerchphi.c
     ../src/special_functions/productlog.c
     ../src/special_functions/legendre.c
+    ../src/special_functions/chebyshev_common.c
+    ../src/special_functions/chebyshev_t.c
     ../src/special_functions/chebyshev_u.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
@@ -3564,6 +3566,10 @@ target_include_directories(legendre_tests PRIVATE ../src)
 add_executable(legendreq_tests test_legendreq.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(legendreq_tests PRIVATE ../src)
 add_test(NAME legendreq_tests COMMAND legendreq_tests)
+
+add_executable(chebyshev_t_tests test_chebyshev_t.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(chebyshev_t_tests PRIVATE ../src)
+add_test(NAME chebyshev_t_tests COMMAND chebyshev_t_tests)
 
 add_executable(chebyshev_u_tests test_chebyshev_u.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(chebyshev_u_tests PRIVATE ../src)

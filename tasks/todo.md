@@ -41,3 +41,23 @@ Baseline: 51/100 on v0.346. Target ~90/100 (Phases 1–4).
 ##   #29,#88 non-identities (Mathilda correct); #54 Mod parity-complement residual;
 ##   #76-81 ChebyshevT/U (unimplemented functions, separate feature); #87 binomial sum.
 ## Out of scope (per plan): ChebyshevT/U, binomial sum #87.
+
+## Review (campaign complete)
+Result: assumed-integer `Simplify` suite **51 → 90/100** across v0.347–v0.350,
+four tagged commits. One elegant core primitive (`simp_reduce_mod2`, Boolean
+ring mod 2) drives the root-of-unity work; the rest reuses existing engines
+(`simp_factorial` ratio cancellation, `trig_pi_shift_symbolic`) by routing into
+them. Each mechanism declines off the integer assumption (soundness tests in
+`tests/test_integer_assume_simplify.c`). Zero regressions across 17 suites;
+valgrind-clean; `check-c99`/`check-messages` green.
+
+Key lessons (also in harness memory):
+- A broad Gamma/Binomial→Factorial conversion in general `Simplify` silently
+  corrupts the Sum engine's (unassumed) internal Simplify (Gosper) → gate it on
+  an active integer-assumption `ctx`. Found via an `expand_tests` git-stash A/B.
+- `Simplify` drops bare structural assumption rewrites that `Refine` surfaces →
+  a confluence post-pass in `builtin_simplify` (gated to the relevant heads).
+
+Not done (deliberate / out of scope): ChebyshevT/U (#76–81, unimplemented
+functions), binomial sum #87 (Sum subsystem), #54 residual, #29/#88 non-identities.
+Tags are LOCAL (not pushed) — push with `git push --follow-tags` when ready.

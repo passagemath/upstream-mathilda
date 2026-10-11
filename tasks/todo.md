@@ -1,57 +1,64 @@
-# DSolve corpus wave M67 — §2.2.40 (Problems 3901–4000)
+# Assumed-Hyperbolic Simplify Stress Corpus
 
-Plan: `/Users/user/.claude/plans/let-s-continue-our-implementation-cozy-minsky.md`
+Parallel to the trig campaign (v0.332–v0.338, 22→49/50). Build a 50-case
+`Simplify[diff, assumptions] → 0` hyperbolic corpus + the C changes to prove it.
+Plan: `/Users/user/.claude/plans/for-each-of-the-mighty-dove.md`.
 
-## Phase A — land & audit the corpus
-- [x] Fetch upstream §2.1.40 `Ch2.S1.SS40.htm` (browser-UA curl) → scratchpad (HTTP 200)
-- [x] Convert → `DSolve_test_status/DE_examples_2240.m` (label 2.2.40)
-- [x] `make check-corpus-indvar` green
-- [x] 100 records: 74 scalar (58 IVP) + 26 systems — Laplace-transform-style chapter
+## Phase 0 — construct + baseline (no commit)
+- [ ] Write corpus `.m` to scratchpad ({id, asm, expr} + Do scorer)
+- [ ] Numeric-verify all 50 identities in-region (reject wrong constructions)
+- [ ] Run `./Mathilda` baseline; record pass/fail per case
 
-## Phase B — measure baseline
-- [x] Build `dsolve_corpus_tests`; baseline run → 100/100, 0 FAIL/UNEVAL/crash
-- [x] Staff-engineer spot-check (NOT vacuous): forced FIRST-ORDER family (3955–3961,
-      3970–3975) are **masked wrong answers** — inert `∫μq` + malformed `Integrate[.,0]`
-      from the IC-fit; wrong past the step/impulse (3955 y(2) garbage; 3972 drops impulse)
+## Phase A — M1 hyperbolic sign oracle (simp_assume.c)  [commit+tag]
+- [ ] prov_pos: Sinh/Tanh/Coth/Csch > 0 when arg > 0; Sech > 0 for real arg
+- [ ] prov_neg: Sinh/Tanh/Coth/Csch < 0 when arg < 0
+- [ ] prov_nn: Sech >= 0 for real arg
+- [ ] Re-score corpus (expect G2/G5 sqrt/abs cases)
 
-## Phase C — diagnose & fix (correctness: masked FAIL class)
-- [x] Root cause: `DSolve`LinearFirstOrder` (slot 4) owns step/impulse IVPs with the
-      indefinite integrating-factor form; 2nd-order already correct (PiecewiseForcing / VoP)
-- [x] Fix: route first-order — numeric-breakpoint step → PiecewiseForcing; impulse /
-      symbolic-breakpoint → new `dsolve_linear_factor_solve_causal` (definite convolution);
-      shared `linfac_mu` refactor. `dsolve_linear1.c` + `dsolve_common.{c,h}`
-- [x] §2.2.40 → 100/100, 0 FAIL; all 13 rerouted cases now genuinely correct (verified)
-- [x] Regression (7 sections): 0 FAIL; §2.2.1/6/16 +2 each, others unchanged
-- [x] A/B vs HEAD: 753/2973 flutters + dsolve_tests `t_m17_normalform_bessel` abort all
-      PRE-EXISTING (identical on HEAD binary) — not this wave
+## Phase B — M4 reciprocal-Pythag radicand prep (simp_logexp_abs.c)  [commit+tag]
+- [ ] Add `1 - Sech^2 :> Tanh^2`, `-1 + Coth^2 :> Csch^2`
+- [ ] Re-score (#17, #18, #45)
 
-## Phase D — lock in & document
-- [x] Gate `dsolve_corpus_2_2_40_tests` baseline 0; `ctest` passes (32 s)
-- [x] STATUS.md §2.2.40 block + README Contents row; DSOLVE_PLAN.md M67 block
-- [x] Changelog `docs/spec/changelog/2026-10-05.md`; spec `calculus.md` LinearFirstOrder row
-- [x] Bump `src/version.h` → 0.344
-- [x] `make check-c99` ✓ / `make check-messages` ✓
-- [x] Regenerate `reports/2.2.40.{tsv,md}`
-- [ ] Commit + tag v0.344 + push --follow-tags
+## Phase C — M5 inverse-of-forward (simp_assume_rewrite.c)  [commit+tag]
+- [ ] ArcCsch[Csch]->e, ArcCoth[Coth]->e, ArcSech[Sech]->±e
+- [ ] Re-score (#50)
 
-## Review
-**Outcome.** §2.2.40 lands **100/100, 0 FAIL, 0 crash, 0 UNEVAL**. The count was 100/100
-out of the box, so the wave is a *correctness* fix the harness could not see: 13 forced
-first-order IVPs (UnitStep/Piecewise/DiracDelta) were returning functions wrong past the
-step/impulse, masked because the harness samples the ODE residual (FTC-zero on the inert
-integral) and checks the IC only at t=0.
+## Phase D — G4 imaginary-period symbolic-integer shift  [commit+tag]
+- [ ] New hyperbolic-period helper mirroring trig_pi_shift_symbolic
+- [ ] Re-score (#34–#39; confirm #31–33/#40)
 
-**Fix (one root cause, 3 files).** `dsolve_linear1_try` stops building the broken inert
-integrating-factor form for a distributional/step IVP and routes to a correct method:
-numeric-breakpoint step → the proven `DSolve`PiecewiseForcing`; DiracDelta impulse or
-symbolic breakpoint → the causal definite convolution `y=μ⁻¹(C[1]+∫_0^x μq ds)` (new
-`dsolve_linear_factor_solve_causal`, definite DiracDelta sifts to HeavisideTheta). Gated to
-IVPs; smooth / no-IC path behaviour-identical (shared `linfac_mu`).
+## Phase E — G3 residue (measure first)  [commit+tag if needed]
+- [ ] Check #21–30 via existing roundtrip; #20 via TrigToExp
+- [ ] Add M7 hyperbolic multiangle candidate only if gap remains
 
-**Verification.** 13 rerouted cases now clean Piecewise/HeavisideTheta forms, residual-
-verified at points past the breakpoint. Side-effect: §2.2.1/6/16 +2 each. 0 regression,
-A/B-confirmed. Residue: none.
+## Wrap-up
+- [ ] New `tests/test_hyp_assume_simplify.c` + CMakeLists registration
+- [ ] Soundness decline tests
+- [ ] No trig regression (logexp/invtrig/trigexp_zero tests)
+- [ ] Docs: changelog 2026-10-05.md + simplification.md
+- [ ] version.h bumps + tags; make check-messages / check-c99 / full make
+- [ ] Memory update; rebuild code-review graph
 
-**Pre-existing, out of scope (flagged):** `dsolve_tests` aborts at `t_m17_normalform_bessel`
-(SpecialFunctionForm declines the spherical-Bessel eqn `y''+(2/x)y'+y==0`) — identical on
-HEAD; §2.2.8-753 (21 s) / §2.2.30-2973 (>30 s) latency drift, identical on HEAD.
+## Review (v0.346)
+
+Built the assumed-hyperbolic Simplify stress corpus, sibling of the assumed-trig
+campaign. Baseline **30/50 → 48/50**; all 50 numerically verified as true
+identities first. New `tests/test_hyp_assume_simplify.c` (48 collapse asserts + 5
+soundness declines), registered in CMakeLists.
+
+Mechanisms (all sound, each with a decline test; verified off-identity behaviour):
+- M1 sign oracle (`simp_assume.c`): `sign(Sinh/Tanh/Coth/Csch[u])=sign(u)`, `Sech>0`;
+  + fixed a latent `prov_re` gap (a `Rational` literal was not recognised real, so
+  `prov_re[x/2]` failed — closed #16). Unlocked Groups 2 & 5 sqrt/abs.
+- M4 radicand prep (`simp_logexp_abs.c`): `1 ± Cosh[u] → 2{Cosh,Sinh}[u/2]²`.
+- M5 inverse-of-forward (`simp_assume_rewrite.c`): ArcSech/ArcCsch/ArcCoth.
+- Imaginary-period shift (`simp_assume_rewrite.c`): `H[t + m Pi I]`, symbolic int m;
+  correctly rejects real-Pi shifts.
+
+Residuals (true identities, documented, not hyperbolic-specific): #26, #29 — need
+radical-gradient / inverse-hyperbolic constant zero-testing (as trig left #20).
+
+Verification: all 4 suites green (logexp/invtrig/trigexp_zero/hyp_assume, 0 FAIL),
+corpus 48/50, `make check-c99` (exit 0), `make check-messages` (OK), full build
+clean. `$VersionNumber` 0.346.
+

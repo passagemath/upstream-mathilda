@@ -778,7 +778,12 @@ static Expr* sqrt_prepare_radicand(const Expr* R) {
             "  (1 + Cosh[u_])/2 :> Cosh[u/2]^2, "
             "  (-1 + Cosh[u_])/2 :> Sinh[u/2]^2, "
             "  -1 + Cosh[u_]^2 :> Sinh[u]^2, "
-            "  1 + Sinh[u_]^2 :> Cosh[u]^2 "
+            "  1 + Sinh[u_]^2 :> Cosh[u]^2, "
+            /* Half-angle in the form left after Sqrt distributes the 1/2 out,
+             * e.g. Sqrt[(1+Cosh[x])/2] -> Sqrt[1+Cosh[x]]/Sqrt[2]. Unconditional:
+             * 1 +/- Cosh[u] = 2 {Cosh,Sinh}[u/2]^2. */
+            "  1 + Cosh[u_] :> 2 Cosh[u/2]^2, "
+            "  -1 + Cosh[u_] :> 2 Sinh[u/2]^2 "
             "}");
     }
     if (!rules) return expr_copy((Expr*)R);

@@ -102,7 +102,21 @@ canonical forms that the generic pipeline alone does not:
   - radical-product combine `Sqrt[a] Sqrt[b] -> Sqrt[a b]` when a base is
     provably non-negative (`Simplify[Sqrt[x-1] Sqrt[x+1] - Sqrt[x^2-1], x>1] -> 0`);
   - inverse-of-forward `ArcTanh[Tanh[x]] -> x` (`x in Reals`), the hyperbolic
-    analogue of `ArcTan[Tan[x]] -> x` on `-Pi/2 < x < Pi/2`;
+    analogue of `ArcTan[Tan[x]] -> x` on `-Pi/2 < x < Pi/2`; also `ArcSinh[Sinh]`,
+    `ArcCsch[Csch]`, `ArcCoth[Coth]` (real argument) and `ArcCosh[Cosh[x]] -> |x|`,
+    `ArcSech[Sech[x]] -> |x|` (sign from the assumptions);
+  - **hyperbolic sign oracle** — the odd hyperbolics are sign-preserving, so
+    `sign(Sinh[u]) = sign(Tanh[u]) = sign(Coth[u]) = sign(Csch[u]) = sign(u)` and
+    `Sech[u] > 0`, feeding the principal-root / `Abs` collapse: `Sqrt[Cosh[x]^2-1]
+    -> Sinh[x]` and `Sqrt[1-Sech[x]^2] -> Tanh[x]` on `x>0`, with the mirror sign
+    flips on `x<0` (`Sqrt[Sinh[x]^2] -> -Sinh[x]`); and the half-angle
+    `Sqrt[(Cosh[x]+1)/2] -> Cosh[x/2]`;
+  - **imaginary-period phase** — the hyperbolic functions have an imaginary
+    period, so `Sinh[x + 2 n Pi I] -> Sinh[x]`, `Tanh[x + n Pi I] -> Tanh[x]`,
+    `Cosh[n Pi I] -> (-1)^n` for a symbolic integer `n` (a real multiple of `Pi`
+    is correctly *not* a period). These, with the complex-component and
+    inverse-hyperbolic cases above, form the assumed-hyperbolic stress corpus
+    (`tests/test_hyp_assume_simplify.c`), the sibling of the assumed-trig corpus.
   - `Abs[z]^2` / `Re` / `Im` via `ComplexExpand` when the variables are real;
   - inverse-function **addition** identities on a region, e.g.
     `ArcTan[x]+ArcTan[y]-ArcTan[(x+y)/(1-x y)] -> 0` on `-1<x<1 && -1<y<1`, and the

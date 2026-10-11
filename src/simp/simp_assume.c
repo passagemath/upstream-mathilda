@@ -565,6 +565,14 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
          * from sign alone, so fall back to nonneg here. */
         /* Cosh[real] >= 1 > 0. */
         if (h == SYM_Cosh && n == 1 && prov_re(ctx, a[0])) return true;
+        /* Sech[real] in (0, 1] > 0. */
+        if (h == SYM_Sech && n == 1 && prov_re(ctx, a[0])) return true;
+        /* The odd hyperbolics are strictly sign-preserving in a real argument:
+         * sign(Sinh[u]) = sign(Tanh[u]) = sign(Coth[u]) = sign(Csch[u]) = sign(u).
+         * So each is > 0 exactly when the argument is provably > 0 (which already
+         * forces the argument real, keeping Coth/Csch away from their u=0 pole). */
+        if ((h == SYM_Sinh || h == SYM_Tanh || h == SYM_Coth || h == SYM_Csch) &&
+            n == 1 && prov_pos(ctx, a[0])) return true;
         /* Gamma[x] > 0 for x > 0; n! > 0 for n >= 0 (so nested real/positive
          * proofs through a Gamma/Factorial denominator go through). */
         if (h == SYM_Gamma && n == 1 && prov_pos(ctx, a[0])) return true;
@@ -629,6 +637,19 @@ bool prov_neg(const AssumeCtx* ctx, const Expr* x) {
     if (ctx) {
         for (size_t i = 0; i < ctx->count; i++)
             if (fact_in_domain(ctx->facts[i], x, "NegativeIntegers")) return true;
+    }
+    /* The odd hyperbolics are strictly sign-preserving in a real argument, so
+     * Sinh[u]/Tanh[u]/Coth[u]/Csch[u] < 0 exactly when u is provably < 0 (which
+     * forces u real and, for Coth/Csch, away from the u=0 pole). Mirrors the
+     * positive case in prov_pos. */
+    if (x->type == EXPR_FUNCTION &&
+        x->data.function.head &&
+        x->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = x->data.function.head->data.symbol.name;
+        size_t n = x->data.function.arg_count;
+        Expr** a = x->data.function.args;
+        if ((h == SYM_Sinh || h == SYM_Tanh || h == SYM_Coth || h == SYM_Csch) &&
+            n == 1 && prov_neg(ctx, a[0])) return true;
     }
     /* Times: even number of negatives among factors, with the rest positive,
      * gives positive (not negative). For "negative" we need an odd number of
@@ -717,6 +738,12 @@ static bool expr_mentions_symbol(const Expr* e, const char* name) {
 bool prov_re(const AssumeCtx* ctx, const Expr* x) {
     if (!x) return false;
     if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT || x->type == EXPR_REAL) return true;
+    /* A Rational literal (Rational[p, q], how 1/2 etc. are stored) is real.
+     * Without this a rational coefficient poisons all_real, e.g. prov_re[x/2]
+     * fails on the 1/2 factor even when x is real. */
+    if (x->type == EXPR_FUNCTION && x->data.function.head &&
+        x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol.name == SYM_Rational) return true;
     if (prov_int(ctx, x)) return true;
     if (x->type == EXPR_SYMBOL) {
         if (is_real_constant_symbol(x->data.symbol.name)) return true;

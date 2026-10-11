@@ -358,6 +358,79 @@ static Expr* trig_pi_shift_symbolic(const AssumeCtx* ctx, const char* h,
     return hcall;
 }
 
+/* If `term` is (integer)*Pi*I, return its integer coefficient m as a fresh Expr
+ * (caller owns); else NULL. Computed as m = term/(Pi I) (evaluated). A real
+ * integer-Pi term k*Pi yields the imaginary quotient -k I, which prov_int
+ * rejects, so only a genuine imaginary multiple of Pi is accepted. */
+static Expr* pi_i_integer_coeff(const Expr* term, const AssumeCtx* ctx) {
+    if (!sr_mentions_pi(term)) return NULL;
+    Expr* deninv = eval_and_free(parse_expression("1/(Pi*I)"));  /* = -I/Pi */
+    if (!deninv) return NULL;
+    Expr* m = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                  (Expr*[]){ expr_copy((Expr*)term), deninv }, 2));
+    if (sr_mentions_pi(m)) { expr_free(m); return NULL; }  /* not linear in Pi */
+    if (prov_int(ctx, m)) return m;  /* rejects the imaginary -k I of a real k*Pi */
+    expr_free(m);
+    return NULL;
+}
+
+/* Reduce H[t + m Pi I] for a hyperbolic head H, m a provable integer. The real
+ * hyperbolic functions have an IMAGINARY period: Sinh/Cosh/Sech/Csch period
+ * 2 Pi I and flip sign with the parity of m (Sinh[u + m Pi I] = (-1)^m Sinh[u]);
+ * Tanh/Coth period Pi I (no sign). The circular I-bridge already peels a bare
+ * Sinh[n Pi I] -> I Sin[n Pi]; this handles the shifted argument t + m Pi I with
+ * a symbolic integer m that the bridge leaves alone. Returns a fresh Expr on
+ * success, NULL if there is no integer-Pi-I part or the parity is undetermined. */
+static Expr* hyp_pi_i_shift_symbolic(const AssumeCtx* ctx, const char* h,
+                                     const Expr* arg) {
+    bool is_tanh_coth = (strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0);
+    bool is_sign_flipping = (strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
+                             strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0);
+    if (!is_tanh_coth && !is_sign_flipping) return NULL;
+
+    const Expr* single = arg;
+    size_t nt; const Expr* const* terms;
+    if (sr_head(arg, "Plus")) {
+        nt = arg->data.function.arg_count;
+        terms = (const Expr* const*)arg->data.function.args;
+    } else { nt = 1; terms = &single; }
+
+    Expr** mco = (Expr**)malloc(nt * sizeof(Expr*)); size_t nm = 0;
+    Expr** theta = (Expr**)malloc(nt * sizeof(Expr*)); size_t nth = 0;
+    for (size_t i = 0; i < nt; i++) {
+        Expr* m = pi_i_integer_coeff(terms[i], ctx);
+        if (m) mco[nm++] = m;
+        else theta[nth++] = expr_copy((Expr*)terms[i]);
+    }
+    if (nm == 0) {
+        for (size_t i = 0; i < nth; i++) expr_free(theta[i]);
+        free(mco); free(theta);
+        return NULL;
+    }
+
+    Expr* M = (nm == 1) ? mco[0]
+            : expr_new_function(expr_new_symbol(SYM_Plus), mco, nm);
+    free(mco);
+    M = eval_and_free(M);
+    int parity = is_tanh_coth ? 0 : pi_parity(ctx, M);
+    expr_free(M);
+    if (parity < 0) {
+        for (size_t i = 0; i < nth; i++) expr_free(theta[i]);
+        free(theta);
+        return NULL;
+    }
+
+    Expr* th = (nth == 0) ? expr_new_integer(0)
+             : (nth == 1) ? theta[0]
+             : expr_new_function(expr_new_symbol(SYM_Plus), theta, nth);
+    free(theta);
+    Expr* hcall = expr_new_function(expr_new_symbol(h), (Expr*[]){ th }, 1);
+    if (parity == 1)
+        return expr_new_function(expr_new_symbol(SYM_Times),
+                   (Expr*[]){ expr_new_integer(-1), hcall }, 2);
+    return hcall;
+}
+
 /* ----------------------------------------------------------------------- */
 /* Inverse-trig-of-trig adjacent-branch reduction: ArcSin[Sin[x]] -> Pi - x, */
 /* ArcTan[Tan[x]] -> x - Pi, ArcCos[Cos[x]] -> x (sub-interval) and the like, */
@@ -552,6 +625,16 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
             if (out) { expr_free(node); *changed = 1; return out; }
         }
 
+        /* Imaginary-period shift for the hyperbolic family: Sinh[t + 2 n Pi I]
+         * -> Sinh[t], Tanh[t + n Pi I] -> Tanh[t], etc. (period 2 Pi I for
+         * Sinh/Cosh/Sech/Csch, Pi I for Tanh/Coth). */
+        if ((strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
+             strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0 ||
+             strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0) && ctx) {
+            Expr* out = hyp_pi_i_shift_symbolic(ctx, h, a0);
+            if (out) { expr_free(node); *changed = 1; return out; }
+        }
+
         /* Integer-valued roundings of a provably-integer argument. */
         if ((strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
              strcmp(h, "Round") == 0 || strcmp(h, "IntegerPart") == 0) &&
@@ -734,17 +817,27 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * their real inverses), so ArcSinh[Sinh[e]] = ArcTanh[Tanh[e]] = e for
          * real e.  Cosh is even with ArcCosh[Cosh[e]] = |e|, so = e for e >= 0,
          * -e for e <= 0.  Each gate is an EXISTING prover; no new machinery. */
+        /* Sinh/Tanh and their reciprocals Csch/Coth are odd bijections of the
+         * reals (Csch/Coth on R\{0}), so Arc[.][.[e]] = e for real e. */
         if ((strcmp(h, "ArcSinh") == 0 && sr_head(a0, "Sinh") &&
              a0->data.function.arg_count == 1) ||
             (strcmp(h, "ArcTanh") == 0 && sr_head(a0, "Tanh") &&
+             a0->data.function.arg_count == 1) ||
+            (strcmp(h, "ArcCsch") == 0 && sr_head(a0, "Csch") &&
+             a0->data.function.arg_count == 1) ||
+            (strcmp(h, "ArcCoth") == 0 && sr_head(a0, "Coth") &&
              a0->data.function.arg_count == 1)) {
             const Expr* inner = a0->data.function.args[0];
             if (prov_re(ctx, inner)) {
                 Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out;
             }
         }
-        if (strcmp(h, "ArcCosh") == 0 && sr_head(a0, "Cosh") &&
-            a0->data.function.arg_count == 1) {
+        /* Cosh is even with ArcCosh range [0,inf); Sech is even with ArcSech
+         * range [0,inf).  So Arc[.][.[e]] = |e| = e for e >= 0, -e for e <= 0. */
+        if ((strcmp(h, "ArcCosh") == 0 && sr_head(a0, "Cosh") &&
+             a0->data.function.arg_count == 1) ||
+            (strcmp(h, "ArcSech") == 0 && sr_head(a0, "Sech") &&
+             a0->data.function.arg_count == 1)) {
             const Expr* inner = a0->data.function.args[0];
             if (assume_known_nonneg(ctx, inner)) {
                 Expr* out = expr_copy((Expr*)inner); expr_free(node); *changed = 1; return out;

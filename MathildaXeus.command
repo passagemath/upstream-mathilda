@@ -79,23 +79,25 @@ CMAKE="$ENV_PREFIX/bin/cmake"
 [ -x "$CMAKE" ] || CMAKE=cmake
 echo "Using environment: $ENV_PREFIX"
 
-# --- Build + install the kernel if its kernelspec is missing ---------------
-# The kernelspec, not the binary, is the source of truth: `jupyter` launches the
-# kernel through it. (Re)build when absent; the Mathilda makefile builds
-# libmathilda.a with its own GCC toolchain, independent of this env's compiler.
-if ! JUPYTER_PATH="$ENV_PREFIX/share/jupyter" "$JUPYTER" kernelspec list 2>/dev/null | grep -q "xmathilda"; then
-    echo "The Mathilda (xmathilda) kernel is not installed in this environment."
-    echo "Building and installing it now — the first build takes a few minutes."
-    echo
+# --- Build + install the kernel from the current source --------------------
+# Run on EVERY launch, so the kernel is always the latest Mathilda. The kernel
+# embeds the evaluator statically (libmathilda.a), so an install that only
+# happened when the kernelspec was missing froze it at whatever version was
+# current that day while the REPL moved on. Every step is incremental: the
+# makefile rebuilds only changed objects, CMake relinks only when the archive
+# changed, and the install skips files that are up to date — so an up-to-date
+# tree costs a few seconds. The first build takes a few minutes.
+echo "Building the Mathilda (xmathilda) kernel from $ROOT ..."
+if [ ! -f "$ROOT/kernel/build/CMakeCache.txt" ]; then
     "$CMAKE" -S "$ROOT/kernel" -B "$ROOT/kernel/build" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_PREFIX_PATH="$ENV_PREFIX" \
         -DCMAKE_INSTALL_PREFIX="$ENV_PREFIX" \
         -DCMAKE_INSTALL_RPATH="$ENV_PREFIX/lib"
-    "$CMAKE" --build "$ROOT/kernel/build" -j
-    "$CMAKE" --install "$ROOT/kernel/build"
-    echo
 fi
+"$CMAKE" --build "$ROOT/kernel/build" -j
+"$CMAKE" --install "$ROOT/kernel/build" --prefix "$ENV_PREFIX"
+echo
 
 echo "Opening JupyterLab — pick the \"Mathilda\" kernel for a new notebook."
 exec "$JUPYTER" lab

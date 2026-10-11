@@ -865,8 +865,26 @@ Expr* builtin_plus(Expr* res) {
         if (groups[j].coeff->type == EXPR_INTEGER && groups[j].coeff->data.integer == 1) {
             final_args[idx++] = expr_copy(groups[j].base);
         } else {
-            Expr* t_args[] = {expr_copy(groups[j].coeff), expr_copy(groups[j].base)};
-            final_args[idx++] = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+            /* coeff * base. get_coeff_base split `2 a b` into 2 and Times[a, b],
+             * so the base is very often itself a Times: splice its factors in
+             * rather than nest, or the result is the non-canonical
+             * Times[2, Times[a, b]] under a Flat head. The base's factors are
+             * already canonically ordered and the numeric coefficient sorts
+             * first, so prepending keeps the canonical order. */
+            const Expr* base = groups[j].base;
+            if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
+                && base->data.function.head->data.symbol.name == SYM_Times) {
+                size_t nb = base->data.function.arg_count;
+                Expr** t_args = malloc(sizeof(Expr*) * (nb + 1));
+                t_args[0] = expr_copy(groups[j].coeff);
+                for (size_t k = 0; k < nb; k++)
+                    t_args[k + 1] = expr_copy(base->data.function.args[k]);
+                final_args[idx++] = expr_new_function(expr_new_symbol(SYM_Times), t_args, nb + 1);
+                free(t_args);
+            } else {
+                Expr* t_args[] = {expr_copy(groups[j].coeff), expr_copy(groups[j].base)};
+                final_args[idx++] = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+            }
         }
     }
 

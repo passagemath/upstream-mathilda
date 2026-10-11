@@ -53,15 +53,20 @@ endif()
 # points. Built by the Mathilda makefile with its own GCC toolchain — which is
 # independent of this CMake project's C++ compiler (they meet only at the C
 # ABI, which is portable).
+#
+# The target ALWAYS runs `make`: the makefile, not CMake, knows libmathilda.a's
+# real prerequisites (every .o and, via -MMD, every header), and is a no-op when
+# the archive is current. An add_custom_command(OUTPUT …) with no DEPENDS would
+# build the archive once and then never again — the kernel silently embedded a
+# weeks-old evaluator while the REPL moved on. xmathilda links the archive by
+# full path, so CMake relinks it whenever make rewrites the file.
 set(MATHILDA_LIB "${MATHILDA_ROOT}/libmathilda.a")
-add_custom_command(
-    OUTPUT "${MATHILDA_LIB}"
-    COMMAND ${CMAKE_COMMAND} -E echo "Building libmathilda.a via the Mathilda makefile..."
+add_custom_target(mathilda_lib
     COMMAND make -C "${MATHILDA_ROOT}" libmathilda.a ${MATHILDA_MAKE_FLAGS}
+    BYPRODUCTS "${MATHILDA_LIB}"
     WORKING_DIRECTORY "${MATHILDA_ROOT}"
-    COMMENT "make libmathilda.a"
+    COMMENT "make libmathilda.a (incremental)"
     VERBATIM)
-add_custom_target(mathilda_lib DEPENDS "${MATHILDA_LIB}")
 
 # --- Transitive C dependencies of libmathilda.a ----------------------------
 # Which of these are actually referenced depends on the USE_* flags the archive

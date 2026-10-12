@@ -1082,9 +1082,9 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
  * redundant full second numericalization pass at each MPFR rung, the dominant
  * cost on large (tens-of-thousands-of-leaves) antiderivative round-trips.
  * Pass a negative value to compute the scale at this rung's precision. */
-static ZeroTestResult evaluate_rung(const Expr* e, long bits,
-                                    double* out_mag, double* out_scale,
-                                    double in_scale, bool* out_overflow) {
+static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
+                                         double* out_mag, double* out_scale,
+                                         double in_scale, bool* out_overflow) {
     *out_mag = 0.0;
     if (out_scale) *out_scale = 1.0;
     if (out_overflow) *out_overflow = false;
@@ -1145,6 +1145,25 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     double tol = nonzero_threshold(scale, bits);
     if (mag > tol) return ZERO_TEST_FALSE;
     return ZERO_TEST_TRUE;
+}
+
+/* Public rung evaluator: brackets the per-sample numeric evaluation in the
+ * arithmetic-warning mute.  Every sample PossibleZeroQ draws flows through here,
+ * and a sample landing on a pole of the probed expression forms 1/0 -- a
+ * Power::infy that is pure sampling noise: the pole is classified decisively
+ * FALSE from the Infinity value in the core above, never from the message.
+ * Muting leaves the verdict bit-identical while stopping the leak from reaching
+ * the user or (worse) being noted by an enclosing Check[], which would otherwise
+ * read a successful probe as a failure.  Single-exit wrapper so the push/pop pair
+ * holds across the core's several early returns. */
+static ZeroTestResult evaluate_rung(const Expr* e, long bits,
+                                    double* out_mag, double* out_scale,
+                                    double in_scale, bool* out_overflow) {
+    arith_warnings_mute_push();
+    ZeroTestResult r = evaluate_rung_core(e, bits, out_mag, out_scale,
+                                          in_scale, out_overflow);
+    arith_warnings_mute_pop();
+    return r;
 }
 
 /* Huge-scale deep-cancellation decision (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).

@@ -199,7 +199,13 @@ int intsimp_numeric_sign(Expr* e) {
     if (!e) return 0;
     Expr* call = expr_new_function(expr_new_symbol(SYM_N),
         (Expr*[]){expr_copy(e)}, 1);
+    /* N[e] can land on a pole (1/0); this is a sign/branch probe whose value is
+     * discarded but for its sign, so mute the Power::infy -- it is noise, and it
+     * must not be seen by an enclosing Check[].  Covers the six intrat.c sign
+     * fallbacks that funnel through here. */
+    arith_warnings_mute_push();
     Expr* r = evaluate(call);
+    arith_warnings_mute_pop();
     expr_free(call);
     int sign = 0;
     if (r) {
@@ -1007,7 +1013,12 @@ static Expr* it_recombine_algebraic(Expr* alg) {
 static bool it_num_real(const Expr* e, double* out) {
     Expr* call = expr_new_function(expr_new_symbol(SYM_N),
                                    (Expr*[]){ expr_copy((Expr*)e) }, 1);
+    /* N[e] of a probe point may hit a pole -> ComplexInfinity (the docstring
+     * above expects this and returns false); mute the Power::infy it emits so a
+     * branch probe does not leak or trip an enclosing Check[]. */
+    arith_warnings_mute_push();
     Expr* r = eval_and_free(call);
+    arith_warnings_mute_pop();
     bool ok = false;
     if (r) {
         if (r->type == EXPR_REAL)         { *out = r->data.real;            ok = true; }

@@ -298,6 +298,12 @@ static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
     /* Pin free parameters (e.g. the k in R = x(1-x)(1-k^2 x)) so the check is a
      * decisive single-variable numeric test rather than a symbolic one. */
     Expr* dd = expr_copy(diff);
+    /* The parameter pinning and |D[result,x]-f| sampling below substitute fixed
+     * rationals into the difference; a sample landing on a pole of result or f
+     * forms 1/0.  That Power::infy is verification noise (the sample is skipped
+     * or rejected), so mute it -- it must neither leak nor be seen by an
+     * enclosing Check[] as a spurious failure. */
+    arith_warnings_mute_push();
     {
         Expr* vars = eval_take(mk_fn1("Variables", expr_copy(diff)));
         if (vars && head_is(vars, SYM_List)) {
@@ -313,7 +319,7 @@ static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
         if (vars) expr_free(vars);
     }
     expr_free(diff);
-    if (!dd) return false;
+    if (!dd) { arith_warnings_mute_pop(); return false; }
 
     static const long pn[8] = { 17, 23, 31, 29, 37, 41, 19, 43 };
     static const long pd[8] = {  5,  7,  9, 11, 10, 12,  6,  8 };
@@ -333,6 +339,7 @@ static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
         }
     }
     expr_free(tol_lo); expr_free(tol_hi); expr_free(dd);
+    arith_warnings_mute_pop();
     return good >= 2 && !bad;
 }
 
@@ -359,6 +366,10 @@ static bool sample_clearly_nonzero(Expr* e, Expr* x) {
     Expr* tol_lo = make_rational(1, 1000000L);          /* 1e-6 : above noise floor */
     Expr* tol_hi = mk_int(1000000000L);                 /* 1e9  : reject pole blow-ups */
     bool nonzero = false;
+    /* A sample landing on a pole of some f_j numericalises to Infinity; that
+     * Power::infy is noise (the point is skipped by the finite/bounded gate
+     * below), so mute the sampling loop. */
+    arith_warnings_mute_push();
     for (int i = 0; i < 8 && !nonzero; i++) {
         Expr* pt  = make_rational(pn[i], pd[i]);
         Expr* at  = subst_eval(expr_copy(e), x, pt);   /* consumes pt */
@@ -377,6 +388,7 @@ static bool sample_clearly_nonzero(Expr* e, Expr* x) {
             expr_free(mag);
         }
     }
+    arith_warnings_mute_pop();
     expr_free(tol_lo); expr_free(tol_hi);
     return nonzero;
 }
@@ -579,7 +591,11 @@ static bool contains_inexact(const Expr* e) {
  * c*(-1)^(p/q), return that exact monomial form; else NULL.  Borrows b, var. */
 static Expr* monomialize_root_of_unity(Expr* b, Expr* var) {
     if (!expr_free_of(b, var)) return NULL;
+    /* N[b] of a constant can still numericalise an Abs/Arg of a near-pole form;
+     * mute the probe's arithmetic warnings (the gate below is exact). */
+    arith_warnings_mute_push();
     Expr* nb = eval_take(mk_fn1("N", expr_copy(b)));
+    arith_warnings_mute_pop();
     if (!nb) return NULL;
     /* This denesting is valid ONLY for a genuine numeric cyclotomic constant.
      * With a symbolic PARAMETER present (e.g. the k in R = x(1-x)(1-k^2 x)) the
@@ -810,7 +826,11 @@ static long involution_score(Expr* S, Expr* t) {
         if (!fps[i]) continue;
         Expr* d = denest_const_radicals(fps[i], t);
         Expr* f = d ? d : fps[i];
+        /* N[Im[fixed point]] can land on a pole of the fixed-point expression;
+         * that Power::infy is real-vs-complex screening noise, so mute it. */
+        arith_warnings_mute_push();
         Expr* im  = eval_take(mk_fn2("N", mk_fn1("Im", expr_copy(f)), mk_int(20)));
+        arith_warnings_mute_pop();
         Expr* big = im ? eval_take(mk_fn2("Greater", mk_fn1("Abs", im),
                                    make_rational(1, 1000000000L))) : NULL;
         if (big && expr_is_true(big)) score += 1000000;   /* non-real: penalise */
@@ -2223,6 +2243,9 @@ static bool radical_sign_negative(Expr* cand, Expr* g, Expr* x) {
                          mk_inv(mk_sqrt_expr(expr_copy(g))));
     Expr* half = make_rational(1, 2);
     bool neg = false;
+    /* Sampling cand/Sqrt[g] at fixed rationals: a point on a pole of g or cand
+     * forms 1/0; that Power::infy is branch-selection noise, so mute the loop. */
+    arith_warnings_mute_push();
     for (int i = 0; i < 6; i++) {
         Expr* pt = make_rational(pn[i], pd[i]);
         Expr* at = subst_eval(expr_copy(ratio), x, pt);   /* consumes pt */
@@ -2240,6 +2263,7 @@ static bool radical_sign_negative(Expr* cand, Expr* g, Expr* x) {
             expr_free(big); expr_free(re);
         }
     }
+    arith_warnings_mute_pop();
     expr_free(half); expr_free(ratio);
     return neg;
 }
@@ -2346,6 +2370,9 @@ static int numeric_sign_ratio(Expr* a, Expr* b, Expr* x) {
     static const long pd[6] = {  5,  7,  9, 10,  6,  8 };
     Expr* eps = make_rational(1, 1000000L);
     int sign = 0;
+    /* Sampling a/b at fixed rationals: a point on a pole forms 1/0; that
+     * Power::infy is sign-selection noise, so mute the sampling loop. */
+    arith_warnings_mute_push();
     for (int i = 0; i < 6 && sign == 0; i++) {
         Expr* at = subst_eval(expr_copy(ratio), x, make_rational(pn[i], pd[i]));
         if (!at) continue;
@@ -2367,6 +2394,7 @@ static int numeric_sign_ratio(Expr* a, Expr* b, Expr* x) {
         if (dp) expr_free(dp);
         if (dm) expr_free(dm);
     }
+    arith_warnings_mute_pop();
     expr_free(eps); expr_free(ratio);
     return sign;
 }

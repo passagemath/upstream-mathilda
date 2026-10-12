@@ -301,7 +301,11 @@ typedef enum { LIM_FINITE, LIM_POSINF, LIM_NEGINF, LIM_BAIL } LimKind;
 
 /* Numeric sign of a real constant c: -1, 0, +1, or 2 (cannot decide). */
 static int const_sign(Expr* c) {
+    /* N[c] of a constant can hit a pole/division-by-zero; the sign is used only
+     * for limit/branch classification, so mute the probe's arithmetic warning. */
+    arith_warnings_mute_push();
     Expr* n = eval_take(mk_fn1("N", expr_copy(c)));
+    arith_warnings_mute_pop();
     int r = 2;
     if (n) {
         if (n->type == EXPR_INTEGER)

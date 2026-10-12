@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -218,11 +219,43 @@ static void test_substitution_option(void) {
         "Integrate");
 }
 
+/* Regression (2026-10-12, v0.362): the numeric verification probe on this path
+ * (PossibleZeroQ diff-back, whose sampler lives in src/zero_test.c) samples the
+ * candidate antiderivative at real points that can land on a pole of Coth,
+ * forming 1/0.  The resulting Power::infy must be muted AT THE PROBE -- it is
+ * sampling noise.  Crucially it must not merely be silenced but not *noted*:
+ * a noted firing makes an enclosing Check[] read this SUCCESSFUL integral as a
+ * failure (Check[Integrate[1/Sqrt[Coth[x]], x], MARKER] returned MARKER before
+ * the fix).  Assert the fired-count is unchanged across the evaluation and that
+ * the integral actually closed. */
+static void test_coth_no_infy_leak(void) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* parsed = parse_expression("Integrate[1/Sqrt[Coth[x]], x]");
+    Expr* result = evaluate(parsed);
+    expr_free(parsed);
+    ASSERT(result != NULL);
+    /* It closes to an antiderivative, not an unevaluated Integrate[...]. */
+    ASSERT_MSG(!(result->type == EXPR_FUNCTION
+                 && result->data.function.head
+                 && result->data.function.head->type == EXPR_SYMBOL
+                 && strcmp(result->data.function.head->data.symbol.name,
+                           "Integrate") == 0),
+               "Integrate[1/Sqrt[Coth[x]], x] should close to an antiderivative");
+    /* No diagnostic was noted: the internal pole sample is fully muted, so an
+     * enclosing Check[] stays clean (the correctness surface, not just stderr). */
+    ASSERT_MSG(mth_msg_fired_count() == fired0,
+               "Integrate[1/Sqrt[Coth[x]], x] noted a Power::infy from an "
+               "internal probe (an enclosing Check[] would see a spurious "
+               "failure)");
+    expr_free(result);
+}
+
 void test_integrate_derivdivides(void) {
     symtab_init();
     core_init();
 
     TEST(test_automatic_direct);
+    TEST(test_coth_no_infy_leak);
     TEST(test_explicit_eliminate);
     TEST(test_radical_substitution);
     TEST(test_radical_substitution_cot);

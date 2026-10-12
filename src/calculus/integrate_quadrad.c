@@ -367,16 +367,21 @@ static int qr_sign_probe(Expr* e) {
     if (!vars || !head_is(vars, SYM_List)) { if (vars) expr_free(vars); return 0; }
     static const int64_t pr[] = { 2, 3, 5, 7, 11, 13, 17, 19 };
     Expr* subd = expr_copy(e);
+    /* Substituting fixed rationals and numericalising can land on a pole (1/0);
+     * the sign guess is cosmetic (ArcTanh vs ArcTan both differentiate back to
+     * the same integrand), so that Power::infy is noise -- mute it. */
+    arith_warnings_mute_push();
     for (size_t i = 0; i < vars->data.function.arg_count && subd; i++) {
         Expr* rule = mk_fn2("Rule", expr_copy(vars->data.function.args[i]),
                                     make_rational(pr[i % 8], pr[(i + 3) % 8]));
         subd = eval_take(internal_replace_all((Expr*[]){ subd, rule }, 2));
     }
     expr_free(vars);
-    if (!subd) return 0;
+    if (!subd) { arith_warnings_mute_pop(); return 0; }
     Expr* nn = eval_take(mk_fn2("N", subd, mk_int(30)));
     int r = nn ? expr_numeric_sign(nn) : 0;
     if (nn) expr_free(nn);
+    arith_warnings_mute_pop();
     return r;
 }
 

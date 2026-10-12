@@ -4468,3 +4468,28 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   The 120 s suite alarm silently truncates both runs under load.
 - **A cascade-ordering "backstop" that returns a reduction (F(y,y')==C) pre-empts a later
   full solution** — check what the slots behind a new backstop would have answered.
+
+## Integrate leaked `Power::infy` from PossibleZeroQ's sampler (2026-10-12, v0.362)
+- **An internal numeric probe that leaks `Power::infy` is a `Check[]` wrong-answer, not
+  stderr noise.** `Integrate[1/Sqrt[Coth[x]], x]` printed two `Power::infy` and returned
+  the right antiderivative — but `Check[Integrate[…], MARKER]` returned `MARKER` because
+  the leak was *noted*. The mute that fixes it is `arith_warnings_mute_push/pop`
+  (`g_arith_warnings_muted`), which suppresses BEFORE `mth_msg_note_fired()`; a plain
+  `mth_msg_suppress_push` (Quiet depth) only hides the print and still corrupts `Check`.
+- **Fix the SHARED probe at its root, not each caller.** The leak was `PossibleZeroQ`'s
+  Schwartz–Zippel sampler (`evaluate_rung`, `src/zero_test.c`) running un-muted — a bare
+  `PossibleZeroQ[1/x]` leaked too. One wrap there fixed `differentiates_back`, Goursat's
+  `is_zero`, Simplify, DSolve, Limit and direct user calls. The user's steer ("the numeric
+  probes should be PossibleZeroQ; have we hacked around it?") is the diagnostic: the
+  hack-around is a BESPOKE `N[…]` probe; the proper probe just forgot to mute. I had
+  initially planned to wrap each caller — wrong altitude.
+- **Localise A-vs-B with black-box signal when you can't instrument** (plan mode forbade a
+  rebuild): a stable leak COUNT across 15 runs ⇒ deterministic probe (not random sampler);
+  a radical integrand that realifies ArcTanh WITHOUT leaking ruled out the realify probe.
+  Both pointed at the deterministic PZQ sampler before a single wrap was written.
+- **Single-exit wrapper for a mute across a function with many early returns**: rename the
+  body `fn_core`, make `fn` do `push; r = fn_core(...); pop; return r;`. No per-return
+  pop to forget.
+- **Always keep a genuine-signal control in the verification**: `1/0`, `1/(x-x)` must
+  still warn and still be caught by `Check` after the fix — proves the mute is scoped to
+  the probe, not blanket. See memory [[feedback-internal-numeric-probe-must-mute-arith-warnings]].

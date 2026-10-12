@@ -57,6 +57,7 @@ Expr* builtin_level(Expr* res);
 Expr* builtin_depth(Expr* res);
 Expr* builtin_leafcount(Expr* res);
 Expr* builtin_bytecount(Expr* res);
+Expr* builtin_hash(Expr* res);
 Expr* builtin_information(Expr* res);
 Expr* builtin_evaluate(Expr* res);
 Expr* builtin_chop(Expr* res);

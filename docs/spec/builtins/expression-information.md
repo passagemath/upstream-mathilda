@@ -1304,6 +1304,47 @@ Gives the number of bytes used internally by Mathilda to store the expression.
 - Counts the payload of leaf atoms that own out-of-node storage: `EXPR_BIGINT` (GMP limbs), `EXPR_NDARRAY` (the `dims[]` array plus the flat data buffer, sized by element count and dtype width), and `EXPR_MPFR` (significand storage, scaling with precision). For an `NDArray`, the buffer dominates, so `ByteCount` scales with the number of elements and the dtype's bytes-per-element.
 
 
+## Hash
+Gives an integer hash code for an expression.
+- `Hash[expr]`
+- `Hash[expr, type]`
+- `Hash[expr, type, "format"]`
+
+**Features**:
+- `Protected` (not `Listable`: `Hash[{1, 2, 3}]` hashes the whole list, not element-wise).
+- The argument is evaluated first, so `Hash[1 + 1]` equals `Hash[2]`.
+- Only the default `"Expression"` hash `type` is implemented: the 64-bit FNV-1a structural
+  hash computed from `expr`'s internal representation. Like Mathematica's, this value is
+  **implementation-defined** — it may differ between computer systems and between versions of
+  Mathilda — so treat it as a stable key within one build, not a portable digest. Other hash
+  types (`"SHA256"`, `{"SHA", b}`, `"MD5"`, `"CRC32"`, …) are left unevaluated for now.
+- The result is a non-negative integer, returned as a bigint when it exceeds `2^63 - 1`.
+- `Hash[expr, "Expression", "format"]` renders the same hash in a string `"format"`:
+  - `"Integer"` (default) — the integer hash.
+  - `"DecimalString"` — the unsigned value in base 10.
+  - `"HexString"` — 16 lowercase hex digits, zero-padded, big-endian.
+  - `"HexStringLittleEndian"` — the same eight bytes in little-endian order.
+  - `"Base36String"` — the unsigned value in base 36 (digits `0-9`, `a-z`).
+  Unsupported formats (`"ByteArray"`, `"Base64Encoding"`, …) are left unevaluated.
+
+```mathematica
+In[1]:= Hash[1 + 1] == Hash[2]
+Out[1]= True
+
+In[2]:= Head[Hash[{1, 2, 3}]]
+Out[2]= Integer
+
+In[3]:= StringLength[Hash["abc", "Expression", "HexString"]]
+Out[3]= 16
+
+In[4]:= FromDigits[Hash[5, "Expression", "HexString"], 16] == Hash[5]
+Out[4]= True
+
+In[5]:= Hash[x, "SHA256"]
+Out[5]= Hash[x, SHA256]
+```
+
+
 ## MemoryInUse
 Gives the number of bytes of memory currently resident for the Mathilda process.
 - `MemoryInUse[]`

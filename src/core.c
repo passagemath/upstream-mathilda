@@ -129,6 +129,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <float.h>
+#include <inttypes.h>  /* PRIu64 / PRIx64 for Hash string formats */
 #include <gmp.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -676,6 +677,8 @@ void core_init(void) {
     symtab_get_def("LeafCount")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ByteCount", builtin_bytecount);
     symtab_get_def("ByteCount")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Hash", builtin_hash);
+    symtab_get_def("Hash")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MatchQ", builtin_matchq);
     symtab_add_builtin("CompoundExpression", builtin_compoundexpression);
     symtab_add_builtin("NumberQ", builtin_numberq);
@@ -3655,6 +3658,101 @@ static int64_t byte_count_internal(Expr* e) {
 Expr* builtin_bytecount(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     return expr_new_integer(byte_count_internal(res->data.function.args[0]));
+}
+
+/* ----------------------------------------------------------------------- *
+ * Hash[expr] / Hash[expr, type] / Hash[expr, type, format]
+ *
+ * This first cut implements the default "Expression" hash type only: the
+ * 64-bit FNV-1a structural hash computed by expr_hash() over the internal
+ * tree of the (already evaluated) argument.  As in Mathematica the value is
+ * implementation-defined -- it may differ between systems and versions -- so
+ * callers must treat it as a stable key within a build, not a portable digest.
+ * Unsupported hash types (SHA*, MD*, CRC*, ...) and formats that need a
+ * ByteArray type are deliberately left unevaluated for now.
+ * ----------------------------------------------------------------------- */
+
+/* Surface a uint64 hash as a Mathilda integer: a plain EXPR_INTEGER when it
+ * fits the signed int64 range, otherwise an exact bigint (the hash is an
+ * unsigned 64-bit value, so its high bit being set overflows int64). */
+static Expr* hash_make_integer(uint64_t h) {
+    if (h <= (uint64_t)INT64_MAX) return expr_new_integer((int64_t)h);
+    mpz_t t;
+    mpz_init(t);
+    /* Import the native 64-bit word directly -- portable regardless of the
+     * platform's `unsigned long` width or byte order. */
+    mpz_import(t, 1, 1, sizeof(uint64_t), 0, 0, &h);
+    Expr* e = expr_bigint_normalize(expr_new_bigint_from_mpz(t));
+    mpz_clear(t);
+    return e;
+}
+
+/* Render a uint64 hash in a string format.  Returns a freshly malloc'd,
+ * NUL-terminated string the caller must free(), or NULL for an unsupported
+ * format (the builtin then stays unevaluated). */
+static char* hash_format(uint64_t h, const char* fmt) {
+    char* out = NULL;
+    if (strcmp(fmt, "DecimalString") == 0) {
+        out = (char*)malloc(21);                 /* up to 20 digits + NUL */
+        if (out) snprintf(out, 21, "%" PRIu64, h);
+    } else if (strcmp(fmt, "HexString") == 0) {
+        out = (char*)malloc(17);                 /* 16 hex digits + NUL */
+        if (out) snprintf(out, 17, "%016" PRIx64, h);   /* big-endian numeric */
+    } else if (strcmp(fmt, "HexStringLittleEndian") == 0) {
+        out = (char*)malloc(17);
+        if (out) {
+            /* The eight bytes of h in little-endian order (least-significant
+             * byte first), each as two lowercase hex digits. */
+            for (int i = 0; i < 8; i++) {
+                unsigned byte = (unsigned)((h >> (8 * i)) & 0xFFu);
+                snprintf(out + 2 * i, 3, "%02x", byte);
+            }
+        }
+    } else if (strcmp(fmt, "Base36String") == 0) {
+        /* Minimal lowercase base-36 (digits 0-9a-z), as IntegerString[h, 36]. */
+        static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+        char tmp[14];                            /* ceil(64/log2(36)) = 13 + NUL */
+        int pos = 14;
+        tmp[--pos] = '\0';
+        if (h == 0) {
+            tmp[--pos] = '0';
+        } else {
+            while (h > 0) { tmp[--pos] = digits[h % 36]; h /= 36; }
+        }
+        size_t len = (size_t)(14 - pos);
+        out = (char*)malloc(len);
+        if (out) memcpy(out, tmp + pos, len);
+    }
+    return out;  /* NULL for "Integer", "ByteArray", "Base64Encoding", unknown */
+}
+
+Expr* builtin_hash(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;       /* stay symbolic, no message */
+
+    uint64_t h = expr_hash(res->data.function.args[0]);  /* borrows the arg */
+
+    /* Hash[expr] -- default type "Expression", default format "Integer". */
+    if (argc == 1) return hash_make_integer(h);
+
+    /* A type was given: only the string "Expression" is supported for now. */
+    Expr* type = res->data.function.args[1];
+    if (type->type != EXPR_STRING || strcmp(type->data.string, "Expression") != 0)
+        return NULL;
+
+    if (argc == 2) return hash_make_integer(h);
+
+    /* A format was given. */
+    Expr* fmt = res->data.function.args[2];
+    if (fmt->type != EXPR_STRING) return NULL;
+    if (strcmp(fmt->data.string, "Integer") == 0) return hash_make_integer(h);
+
+    char* str = hash_format(h, fmt->data.string);
+    if (!str) return NULL;                        /* unsupported format */
+    Expr* out = expr_new_string(str);             /* copies str */
+    free(str);
+    return out;
 }
 
 static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr*** results, size_t* count, size_t* cap) {

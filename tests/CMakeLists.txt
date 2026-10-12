@@ -1285,6 +1285,10 @@ add_executable(coprimeq_tests test_coprimeq.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(coprimeq_tests PRIVATE ../src)
 add_test(NAME coprimeq_tests COMMAND coprimeq_tests)
 
+add_executable(hash_tests test_hash.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(hash_tests PRIVATE ../src)
+add_test(NAME hash_tests COMMAND hash_tests)
+
 add_executable(exponent_tests test_exponent.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(exponent_tests PRIVATE ../src)
 add_test(NAME exponent_tests COMMAND exponent_tests)

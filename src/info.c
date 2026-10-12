@@ -4548,6 +4548,14 @@ void info_init(void) {
         "Element[{x1, ..., xN}, dom] and Element[x1 | ... | xN, dom] are shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.");
     symtab_set_docstring("LeafCount", "LeafCount[expr] gives the total number of indivisible subexpressions in expr.");
     symtab_set_docstring("ByteCount", "ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.");
+    symtab_set_docstring("Hash",
+        "Hash[expr] gives an integer hash code for expr (the \"Expression\" hash).\n"
+        "Hash[expr, type] gives the hash of the given type; only \"Expression\" is supported.\n"
+        "Hash[expr, type, \"format\"] gives the code in the given format.\n"
+        "The \"Expression\" hash is computed from the internal representation of expr and may\n"
+        "vary between computer systems and between versions of Mathilda.\n"
+        "Supported formats: \"Integer\" (default), \"DecimalString\", \"HexString\",\n"
+        "\"HexStringLittleEndian\", \"Base36String\". Unsupported hash types or formats stay unevaluated.");
     symtab_set_docstring("Level",
         "Level[expr, levelspec]\n"
         "\tgives a list of all subexpressions of expr on levels specified by levelspec.\n"

@@ -1001,10 +1001,38 @@ Out[3]= {a, b, b, b, c}
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
 - In the notebook front end, `InputForm` (and `FullForm`, `TeXForm`, `NumberForm`) suppresses
-  typesetting and shows the printed text as code. Typesetting *is* StandardForm, so it has no
-  second notation to render these in; the kernel sends no LaTeX for a result carrying one of
-  these heads, anywhere in the tree. `HoldForm` is the exception — it is transparent to both
-  printers and its argument typesets as usual.
+  typesetting and shows the printed text as code. Typesetting offers only the two typeset
+  notations (`StandardForm`, `TraditionalForm`), so it has nothing to render these in; the kernel
+  sends no LaTeX for a result carrying one of these heads, anywhere in the tree. `HoldForm` is the
+  exception — it is transparent to both printers and its argument typesets as usual.
+
+## StandardForm
+- `StandardForm[expr]` displays `expr` in Mathilda's own typeset notation: the language's names
+  with brackets (`Sin[x]`, `Log[x]`, `Abs[x]`, `BesselJ[0, x]`), with fractions, powers, `Sqrt`
+  radicals, sums and integrals still two-dimensional.
+- It is the notebook's **default output form**, set in Arial. Every symbol is upright; `Pi` is
+  π, `Infinity` ∞, and the constants `E` and `I` are the double-struck ⅇ and ⅈ (an integral's
+  differential is ⅆ), so they stay distinct from variables named `e` and `i`. Other symbols print
+  as their names: `Alpha` is the symbol Alpha, not α (that is `\[Alpha]`); `EulerGamma` and
+  `C[1]` print as written.
+- Operators are spelled as in the language: `x == 1`, `a && b`, `a || b`, `!a`, `a === b`,
+  `a =!= b`, `a -> b`, `a :> b`, with ≠, ≤, ≥ for `!=`, `<=`, `>=`. A rational power stays a
+  power: `x^(1/3)` is x with superscript 1/3, not a surd.
+- `StandardForm` is a display wrapper (attributes `{Protected}`): inside `TraditionalForm[...]` it
+  switches the notation back for its argument; as text it prints as `expr` itself (it is kept
+  under `InputForm`, so the result still re-reads).
+
+## TraditionalForm
+- `TraditionalForm[expr]` displays `expr` in textbook notation: `sin(x)`, `ln(x)`, `e^x`,
+  `x = 1`, `a ∧ b`, n-th roots as surds, `C[1]` as c₁ and Greek-named symbols as Greek letters.
+  This is the notation the notebook used for every result before `StandardForm` became the
+  default; it is set in KaTeX's math fonts.
+- A display wrapper (attributes `{Protected}`): an outermost `TraditionalForm[...]` makes the
+  notebook show the result in TraditionalForm; nested, it switches the notation for that
+  subexpression only (`{Sin[x], TraditionalForm[Cos[x]]}`). As text it prints as `expr` itself,
+  except under `InputForm`.
+- Any typeset result can also be switched in place with the notebook's right-click *Convert To*
+  menu (StandardForm, TraditionalForm, InputForm, FullForm, TeXForm, MathML).
 
 ## NumberForm
 - `NumberForm[expr, n]` prints the approximate real numbers in `expr` to `n`-digit precision.

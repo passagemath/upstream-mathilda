@@ -410,6 +410,13 @@ static void print_standard(Expr* e, int parent_prec) {
         else if (head == SYM_HoldForm && e->data.function.arg_count == 1) {
             print_standard(e->data.function.args[0], parent_prec);
         }
+        /* TraditionalForm/StandardForm only pick a TYPESET notation (see
+         * print_latex.c); as text they are invisible, like HoldForm -- except
+         * under InputForm, which must keep them so the result re-reads. */
+        else if ((head == SYM_TraditionalForm || head == SYM_StandardForm)
+                 && e->data.function.arg_count == 1 && g_inputform_depth == 0) {
+            print_standard(e->data.function.args[0], parent_prec);
+        }
         else if (head == SYM_NumberForm && e->data.function.arg_count >= 1
                  && g_inputform_depth == 0) {
             /* Install the formatting context and render the wrapped expression;
@@ -1177,6 +1184,14 @@ Expr* builtin_inputform(Expr* res) {
 Expr* builtin_texform(Expr* res) {
     (void)res;
     return NULL; // Unevaluated wrapper; rendering happens in print_standard
+}
+
+/* TraditionalForm[expr] / StandardForm[expr]: inert display wrappers. They
+ * choose the notation the NOTEBOOK typesets their subtree in (print_latex.c);
+ * the plain-text printer renders straight through them. */
+Expr* builtin_display_form(Expr* res) {
+    (void)res;
+    return NULL;
 }
 
 /*

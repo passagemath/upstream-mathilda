@@ -31,6 +31,7 @@ Expr* builtin_print(Expr* res);
 Expr* builtin_fullform(Expr* res);
 Expr* builtin_inputform(Expr* res);
 Expr* builtin_texform(Expr* res);
+Expr* builtin_display_form(Expr* res);
 
 
 #endif // PRINT_H

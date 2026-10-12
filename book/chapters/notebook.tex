@@ -481,13 +481,21 @@ common cases in the light theme.
 
 \subsection{Expressions}
 
-An \mcode{expr} message carries both the plain text and the \LaTeX{} form.
-The notebook prefers the \LaTeX{} and renders it with KaTeX, so
-\mcode{Sum[1/k\textasciicircum{}2, \{k, 1, Infinity\}]} is shown as a fraction times
-\(\pi^2\), and a series shows its \(O[x]^8\) term with a real superscript. The
-\LaTeX{} comes from the kernel's own \emph{StandardForm} serialiser, the
-routine \texttt{expr\_to\_latex}, so the notebook does no conversion of its
-own.
+An \mcode{expr} message carries the plain text and two \LaTeX{} forms, one
+for each typeset notation\index{notebook!StandardForm and TraditionalForm}.
+\emph{StandardForm}, the default, keeps Mathilda's own names: \mcode{Sin[x]},
+\mcode{Log[x]}, \mcode{x == 1}, with the constants \mcode{E} and \mcode{I}
+written double-struck, as Mathematica writes them, every symbol upright, and
+the whole set in Arial. \emph{TraditionalForm} is
+textbook notation in the math fonts: \(\sin(x)\), \(\ln(x)\), \(x=1\). Both are
+two-dimensional, so \mcode{Sum[1/k\textasciicircum{}2, \{k, 1, Infinity\}]} is
+shown as a fraction times \(\pi^2\), and a series shows its \(O[x]^8\) term
+with a real superscript. The notebook renders both with KaTeX, and both come
+from the kernel's own serialiser, \texttt{expr\_to\_latex\_form}, so the
+notebook does no conversion of its own. Right-clicking a result switches it
+between the two (and to InputForm, FullForm, \TeX{} or MathML); wrapping it
+in \B{TraditionalForm} or \B{StandardForm} chooses the notation from the
+input.
 
 Long results are handled differently. KaTeX cannot break a formula across
 lines, so a result with more than four commas, or more than 200 characters

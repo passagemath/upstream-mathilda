@@ -2,6 +2,7 @@
   import type { OutputItem } from './notebook';
   import katex from 'katex';
   import 'katex/dist/katex.min.css';
+  import './katexSetup';   /* ⅇ ⅈ ⅆ for StandardForm */
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
   import { plainOutput } from './properties';
@@ -18,18 +19,24 @@
   let overflows: Record<number, boolean> = {};
 
   /* ---- "Convert To" on an output expression (right-click) ----
-     An `expr` result carries both `text` (InputForm) and `latex` (StandardForm,
-     which is also the TeXForm source). The right-click menu switches how the
-     result is DISPLAYED, in place, Mathematica-style:
-       StandardForm → KaTeX of `latex` (default)
-       InputForm    → the `text` payload
-       TeXForm      → the `latex` source as text (or kernel TeXForm if no latex)
-       MathML       → KaTeX's MathML output for `latex`
-       FullForm     → fetched from the kernel (FullForm[...]); no client source
-     FullForm/TeXForm are fetched with evalOnce (no cell history), cached per item. */
-  type ExprForm = 'standard' | 'input' | 'fullform' | 'texform' | 'mathml';
+     An `expr` result carries `text` (InputForm), `latex` (TraditionalForm, which
+     is also the TeXForm source) and `slatex` (StandardForm). The right-click menu
+     switches how the result is DISPLAYED, in place, Mathematica-style:
+       StandardForm    → KaTeX of `slatex`, set in Arial (default)
+       TraditionalForm → KaTeX of `latex`, in KaTeX's own math fonts
+       InputForm       → the `text` payload
+       TeXForm         → the `latex` source as text (or kernel TeXForm if no latex)
+       MathML          → KaTeX's MathML output for `latex`
+       FullForm        → fetched from the kernel (FullForm[...]); no client source
+     FullForm/TeXForm are fetched with evalOnce (no cell history), cached per item.
+
+     With no `slatex` StandardForm shows `latex` instead, in the TraditionalForm
+     fonts: the kernel leaves it out for a result wrapped in TraditionalForm[...],
+     which asked for that notation outright. */
+  type ExprForm = 'standard' | 'traditional' | 'input' | 'fullform' | 'texform' | 'mathml';
   const CONVERT_FORMS: { id: ExprForm; label: string }[] = [
-    { id: 'standard', label: 'StandardForm (2D)' },
+    { id: 'standard',    label: 'StandardForm (2D)' },
+    { id: 'traditional', label: 'TraditionalForm' },
     { id: 'input',    label: 'InputForm' },
     { id: 'fullform', label: 'FullForm' },
     { id: 'texform',  label: 'TeXForm' },
@@ -63,7 +70,7 @@
   /* Populate formCache[idx][form] for a non-trivial form, fetching from the
      kernel only when there is no client-side source. */
   async function ensureFormData(idx: number, form: ExprForm) {
-    if (form === 'standard' || form === 'input') return;      // rendered directly
+    if (form === 'standard' || form === 'traditional' || form === 'input') return;  // rendered directly
     if (formCache[idx]?.[form] !== undefined) return;         // already have it
     const item = items[idx];
     if (!item || item.kind !== 'expr') return;
@@ -238,8 +245,10 @@
   }
 
   /* `forcePlain` is set by measureExprWidth when the typeset form turned out to be wider than the
-     card. See the note there for why the measurement, not a longer string heuristic, is what decides. */
-  function renderOutput(text: string, latex?: string, forcePlain = false): string {
+     card. See the note there for why the measurement, not a longer string heuristic, is what decides.
+     `standard` marks `latex` as StandardForm LaTeX, which is set in Arial (the .out-sf wrapper);
+     TraditionalForm keeps KaTeX's own math fonts. */
+  function renderOutput(text: string, latex?: string, forcePlain = false, standard = false): string {
     // Long lists: always use wrapping code regardless of latex field.
     // KaTeX renders math spans without line-breaking, so even \{1,2,...\}
     // produces a single wide unbreakable line.
@@ -247,10 +256,11 @@
       const wrapped = text.replace(/,\s+/g, ', ');
       return `<code class="out-code-wrap">${esc(wrapped)}</code>`;
     }
-    // Short expressions: prefer LaTeX from the kernel (StandardForm)
+    // Short expressions: prefer LaTeX from the kernel
     if (latex && latex.length > 0) {
       try {
-        return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+        const html = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+        return standard ? `<span class="out-sf">${html}</span>` : html;
       } catch { /* fall through */ }
     }
     /* No `latex` field means the kernel is telling us this payload has no typeset form -- it is
@@ -661,14 +671,16 @@
       {#if item.kind === 'expr'}
         {@const base = exprForm[idx] ?? 'standard'}
         <!-- A teletype scheme forbids 2D math: redirect the typeset forms
-             (StandardForm, MathML) to 1D InputForm, but leave an explicit 1D
+             (StandardForm, TraditionalForm, MathML) to 1D InputForm, but leave an explicit 1D
              choice (InputForm/FullForm/TeXForm) alone. -->
-        {@const form = $plainOutput && (base === 'standard' || base === 'mathml') ? 'input' : base}
+        {@const form = $plainOutput && (base === 'standard' || base === 'traditional' || base === 'mathml') ? 'input' : base}
         <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
           <div class="out-expr" title="Right-click to Convert To…"
                on:contextmenu={(e) => openConvertMenu(e, idx)}>
-            {#if form === 'standard'}
+            {#if form === 'standard' && item.slatex}
+              {@html renderOutput(item.text, item.slatex, wideExpr[idx], true)}
+            {:else if form === 'standard' || form === 'traditional'}
               {@html renderOutput(item.text, item.latex, wideExpr[idx])}
             {:else}
               {@const d = convDisplay(item, idx, form, formCache)}
@@ -922,6 +934,22 @@
     padding: 0.25rem 0;
     color: var(--out-text, #222);
     text-align: left;
+  }
+
+  /* StandardForm is set in Arial, as Mathematica's notebook sets it; TraditionalForm keeps
+     KaTeX's math fonts. Only the TEXT fonts are swapped -- the root, the italic/roman letter
+     classes and \text -- so the stretchy pieces KaTeX draws from its own Size fonts (tall
+     brackets, radicals, the integral sign) keep the metrics its layout was computed with.
+     Upright throughout: StandardForm does not italicise variables. KaTeX's 1.21em exists to
+     enlarge Computer Modern's small x-height; Arial's is larger, so it needs less. */
+  :global(.out-sf .katex) { font-size: 1.1em; }
+  :global(.out-sf .katex),
+  :global(.out-sf .katex .mathnormal),
+  :global(.out-sf .katex .mathit),
+  :global(.out-sf .katex .mathrm),
+  :global(.out-sf .katex .textrm) {
+    font-family: Arial, Helvetica, sans-serif;
+    font-style: normal;
   }
 
   /* Long list/sequence outputs rendered as wrapping code */

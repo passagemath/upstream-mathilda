@@ -58,7 +58,9 @@ export function headingTag(type: CellType): 'h1' | 'h2' | 'h3' | null {
 export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
-  | { kind: 'expr';   text: string; latex?: string }  // latex = StandardForm LaTeX from kernel
+  /* latex = TraditionalForm LaTeX, slatex = StandardForm LaTeX (the default
+     display), both from the kernel; either may be absent (see print_latex.h). */
+  | { kind: 'expr';   text: string; latex?: string; slatex?: string }
   | { kind: 'usage';  text: string; symbol?: string }  // ?sym help text: preformatted, never math
   | { kind: 'expected'; text: string }                // reference-page example: the
                                                       // recorded, verified result,

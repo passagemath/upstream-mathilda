@@ -628,6 +628,8 @@ extern const char* SYM_TargetFunctions;
 extern const char* SYM_Tanh;
 extern const char* SYM_TargetStructure;
 extern const char* SYM_TeXForm;
+extern const char* SYM_TraditionalForm;
+extern const char* SYM_StandardForm;
 extern const char* SYM_Temporary;
 extern const char* SYM_Terms;
 extern const char* SYM_Thread;

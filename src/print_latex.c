@@ -1,16 +1,32 @@
 /*
- * print_latex.c — StandardForm-style LaTeX serialisation of Mathilda Expr* trees.
+ * print_latex.c — typeset (KaTeX) LaTeX serialisation of Mathilda Expr* trees.
  *
- * Converts an expression to a KaTeX-compatible LaTeX string.
+ * Converts an expression to a KaTeX-compatible LaTeX string in one of two
+ * notations, mirroring the two typeset forms of a Mathematica notebook:
+ *
+ *   TraditionalForm  textbook notation: \sin(x), \ln(x), |x|, e^{x}, x = 1,
+ *                    a \land b, Greek names as letters. The notebook's
+ *                    original (and the CLI-independent TeXForm-like) look.
+ *   StandardForm     the language's own names, typeset: Sin[x], Log[x],
+ *                    Abs[x], ⅇ^x, x == 1, a && b. Fractions, powers, radicals
+ *                    and lists are still two-dimensional; only the NAMES and
+ *                    the operator spellings stop being textbook ones. Every
+ *                    symbol is upright (\mathrm), as Mathematica sets it; the
+ *                    notebook sets this form in Arial.
+ *
  * Handles: fractions (via Times/Power/-1 and Rational), roots, integer/real
  * powers, Greek symbols, trig/log/exp functions, sums, products, integrals,
  * limits, lists, and complex numbers.
  *
  * Design:
- *   - expr_to_latex() is the public entry point.
+ *   - expr_to_latex_form() is the public entry point; expr_to_latex() is its
+ *     TraditionalForm shorthand.
  *   - to_latex_prec(buf, e, ctx_prec) is the recursive workhorse; ctx_prec
  *     controls when to add parentheses.
- *   - A growing-string LBuf avoids repeated reallocation.
+ *   - A growing-string LBuf avoids repeated reallocation, and carries the
+ *     current notation (`std`), so the TraditionalForm[...] / StandardForm[...]
+ *     wrappers can switch it for a subtree without threading a parameter
+ *     through every renderer.
  */
 
 #include "print_latex.h"
@@ -28,10 +44,13 @@
  * Growing string buffer
  * ======================================================================== */
 
-typedef struct { char* s; size_t len, cap; } LBuf;
+typedef struct {
+    char* s; size_t len, cap;
+    int std;          /* 1 = StandardForm notation, 0 = TraditionalForm */
+} LBuf;
 
 static void lb_init(LBuf* b) {
-    b->cap = 512; b->len = 0;
+    b->cap = 512; b->len = 0; b->std = 0;
     b->s = malloc(b->cap);
     if (b->s) b->s[0] = '\0';
 }
@@ -100,28 +119,41 @@ static int head_is(const Expr* e, const char* sym) {
  * two in step is why the operators and spellings here match it exactly.
  * ======================================================================== */
 
-typedef struct { const char* sym; const char* tex; int prec; } InfixTeX;
+/* `tex` is the TraditionalForm spelling, `stex` the StandardForm one. They
+ * differ only where textbook notation and the language disagree: Equal is `=`
+ * in a textbook but `==` in Mathilda (where `=` is Set), the logical
+ * connectives are \land/\lor against && and ||, SameQ is \equiv against ===.
+ * The StandardForm spellings are \mathrel so KaTeX spaces them as one
+ * relation rather than as a run of separate `=` signs. Unequal is the single
+ * character ≠ rather than \neq: KaTeX builds \neq by overlaying a slash from
+ * its own font on `=`, and in StandardForm's Arial that slash is missing. */
+typedef struct { const char* sym; const char* tex; const char* stex; int prec; } InfixTeX;
 
 static const InfixTeX INFIX_MAP[] = {
-    {"Set",          "=",             PREC_SET},
-    {"SetDelayed",   ":=",            PREC_SET},
-    {"Rule",         "\\to ",         PREC_RULE},
+    {"Set",          "=",             "=",                  PREC_SET},
+    {"SetDelayed",   ":=",            ":=",                 PREC_SET},
+    {"Rule",         "\\to ",         "\\to ",              PREC_RULE},
     /* `:\to`, not `\to`: a delayed rule is a different object from an immediate
      * one, and rendering both the same way makes two different results
      * indistinguishable on screen. Mirrors SetDelayed's `:=`. */
-    {"RuleDelayed",  ":\\to ",        PREC_RULE},
-    {"Or",           "\\lor ",        PREC_OR},
-    {"And",          "\\land ",       PREC_AND},
-    {"Equal",        "=",             PREC_REL},
-    {"Unequal",      "\\neq ",        PREC_REL},
-    {"Less",         "<",             PREC_REL},
-    {"Greater",      ">",             PREC_REL},
-    {"LessEqual",    "\\leq ",        PREC_REL},
-    {"GreaterEqual", "\\geq ",        PREC_REL},
-    {"SameQ",        "\\equiv ",      PREC_REL},
-    {"UnsameQ",      "\\not\\equiv ", PREC_REL},
-    {NULL, NULL, 0}
+    {"RuleDelayed",  ":\\to ",        ":\\to ",             PREC_RULE},
+    {"Or",           "\\lor ",        "\\mathrel{||}",      PREC_OR},
+    {"And",          "\\land ",       "\\mathrel{\\&\\&}",  PREC_AND},
+    {"Equal",        "=",             "\\mathrel{==}",      PREC_REL},
+    {"Unequal",      "\\neq ",        "\\mathrel{\\char\"2260}", PREC_REL},
+    {"Less",         "<",             "<",                  PREC_REL},
+    {"Greater",      ">",             ">",                  PREC_REL},
+    {"LessEqual",    "\\leq ",        "\\leq ",             PREC_REL},
+    {"GreaterEqual", "\\geq ",        "\\geq ",             PREC_REL},
+    {"SameQ",        "\\equiv ",      "\\mathrel{===}",     PREC_REL},
+    {"UnsameQ",      "\\not\\equiv ", "\\mathrel{=!=}",     PREC_REL},
+    {NULL, NULL, NULL, 0}
 };
+
+/* The spelling of an infix operator in the buffer's current notation. */
+static const char* infix_tex(const LBuf* b, const InfixTeX* op) {
+    return b->std ? op->stex : op->tex;
+}
 
 static const InfixTeX* find_infix(const char* name) {
     for (int i = 0; INFIX_MAP[i].sym; i++)
@@ -187,6 +219,45 @@ static const char* sym_latex(const char* name) {
     for (int i = 0; SYM_MAP[i].sym; i++)
         if (strcmp(name, SYM_MAP[i].sym) == 0) return SYM_MAP[i].latex;
     return name;
+}
+
+/* StandardForm symbols: the few with a dedicated glyph in Mathematica's
+ * StandardForm. Everything else is its own NAME — `Alpha` is a symbol called
+ * Alpha, not the letter alpha (that is `\[Alpha]`, which already arrives here
+ * as the UTF-8 letter), and EulerGamma, GoldenRatio, Catalan print as words.
+ * E and I are the double-struck ⅇ (U+2147) and ⅈ (U+2148), which is how
+ * StandardForm keeps the constants distinct from a variable called e or i. */
+static const SymTeX STD_SYM_MAP[] = {
+    {"Pi",       "\\pi"},
+    {"E",        "\xe2\x85\x87"},
+    {"I",        "\xe2\x85\x88"},
+    {"Infinity", "\\infty"},
+    {"Degree",   "\\degree"},
+    {NULL, NULL}
+};
+
+/* Emit a symbol name upright, escaping the characters KaTeX would read as
+ * markup: `$` (as in $Version or a Module-renamed x$123) and the context mark
+ * '`' (a grave accent in math mode). */
+static void lb_cat_mathrm_name(LBuf* b, const char* name) {
+    lb_cat(b, "\\mathrm{");
+    for (const char* p = name; *p; p++) {
+        if (*p == '$')       lb_cat(b, "\\$");
+        else if (*p == '`')  lb_cat(b, "\\text{`}");
+        else { char c[2] = { *p, 0 }; lb_cat(b, c); }
+    }
+    lb_cat(b, "}");
+}
+
+/* A symbol in the buffer's current notation. */
+static void render_symbol(LBuf* b, const char* name) {
+    if (!b->std) { lb_cat(b, sym_latex(name)); return; }
+    for (int i = 0; STD_SYM_MAP[i].sym; i++)
+        if (strcmp(name, STD_SYM_MAP[i].sym) == 0) {
+            lb_cat(b, STD_SYM_MAP[i].latex);
+            return;
+        }
+    lb_cat_mathrm_name(b, name);
 }
 
 /* =========================================================================
@@ -395,7 +466,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
     if (e->type == EXPR_SYMBOL) {
-        lb_cat(b, sym_latex(e->data.symbol.name));
+        render_symbol(b, e->data.symbol.name);
         return;
     }
     if (e->type == EXPR_STRING) {
@@ -442,6 +513,18 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
+    /* ---- TraditionalForm[x] / StandardForm[x] → x, in that notation ----
+     * Display wrappers: invisible themselves, they switch the notation for
+     * their subtree only, so `{Sin[x], TraditionalForm[Sin[x]]}` typesets as
+     * {Sin[x], sin(x)} in StandardForm. Restored on the way out. */
+    if ((hname == SYM_TraditionalForm || hname == SYM_StandardForm) && argc == 1) {
+        int saved = b->std;
+        b->std = (hname == SYM_StandardForm);
+        to_latex_prec(b, args[0], ctx_prec);
+        b->std = saved;
+        return;
+    }
+
     /* ---- SeriesData[...] → a0 + a1 (x-x0) + ... + O[x-x0]^n ----
      * SeriesData is an inert head that must display as the sum it represents,
      * not as the literal 6-argument container. The plain printer (print.c)
@@ -473,7 +556,8 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         to_latex_prec(b, args[0], PREC_ADD);
         lb_cat(b, "+");
         to_latex_prec(b, args[1], PREC_MUL);
-        lb_cat(b, "i");
+        if (b->std) lb_cat(b, "\\,");
+        render_symbol(b, "I");
         return;
     }
 
@@ -481,7 +565,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
      * integration, matching Mathematica's TeXForm (c_1, c_2, ...) and the
      * CLI TeX renderer (print.c). A single-character subscript stays bare;
      * anything longer is braced so LaTeX groups the whole subscript. */
-    if (strcmp(hname, "C") == 0 && argc == 1) {
+    if (!b->std && strcmp(hname, "C") == 0 && argc == 1) {
         const Expr* sub = args[0];
         int bare = (sub->type == EXPR_INTEGER
                     && sub->data.integer >= 0 && sub->data.integer <= 9)
@@ -500,7 +584,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         const InfixTeX* op = find_infix(hname);
         if (op && argc >= 2) {
             for (size_t i = 0; i < argc; i++) {
-                if (i) lb_cat(b, op->tex);
+                if (i) lb_cat(b, infix_tex(b, op));
                 to_latex_operand(b, args[i], op->prec + 1);
             }
             return;
@@ -509,7 +593,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
 
     /* ---- Not[a] → \neg a ---- */
     if (hname == SYM_Not && argc == 1) {
-        lb_cat(b, "\\neg ");
+        lb_cat(b, b->std ? "!" : "\\neg ");
         to_latex_operand(b, args[0], PREC_NOT + 1);
         return;
     }
@@ -528,7 +612,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
                     ? find_infix(args[i]->data.symbol.name) : NULL;
                 /* An unrecognised relation is still better spelled out than
                    dropped, which would invert the meaning of the chain. */
-                lb_cat(b, rel ? rel->tex : "\\,?\\,");
+                lb_cat(b, rel ? infix_tex(b, rel) : "\\,?\\,");
             }
         }
         return;
@@ -569,7 +653,9 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
                     lb_cat(b, "}");
                     return;
                 }
-                /* n-th root */
+                /* n-th root. StandardForm has no surd: x^(1/3) stays a
+                 * power, as Mathematica shows it; only Sqrt is a radical. */
+                if (b->std) goto general_power;
                 lb_cat(b, "\\sqrt[");
                 to_latex_prec(b, q, PREC_ATOM);
                 lb_cat(b, "]{");
@@ -580,7 +666,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
 
         /* Power[E, x] → e^{x} */
-        if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
+        if (!b->std && base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E) {
             lb_cat(b, "e^{");
             to_latex_prec(b, exp, PREC_ATOM);
             lb_cat(b, "}");
@@ -588,6 +674,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         }
 
         /* General Power[base, exp] → base^{exp} */
+    general_power:
         to_latex_maybe_paren(b, base, PREC_POW + 1); /* base needs parens if lower prec */
         lb_cat(b, "^{");
         to_latex_prec(b, exp, PREC_ATOM);
@@ -650,7 +737,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     /* ---- Binomial[n, k] ---- */
-    if (strcmp(hname, "Binomial") == 0 && argc == 2) {
+    if (!b->std && strcmp(hname, "Binomial") == 0 && argc == 2) {
         lb_cat(b, "\\binom{");
         to_latex_prec(b, args[0], PREC_ATOM);
         lb_cat(b, "}{");
@@ -699,19 +786,19 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
             to_latex_prec(b, iter->data.function.args[2], PREC_ATOM);
             lb_cat(b, "} ");
             to_latex_prec(b, args[0], PREC_MUL);
-            lb_cat(b, "\\,d");
+            lb_cat(b, b->std ? "\\,\xe2\x85\x86" : "\\,d");   /* StandardForm: ⅆ */
             to_latex_prec(b, iter->data.function.args[0], PREC_ATOM);
         } else {
             lb_cat(b, "\\int ");
             to_latex_prec(b, args[0], PREC_MUL);
-            lb_cat(b, "\\,d");
+            lb_cat(b, b->std ? "\\,\xe2\x85\x86" : "\\,d");   /* StandardForm: ⅆ */
             to_latex_prec(b, args[1], PREC_ATOM);
         }
         return;
     }
 
     /* ---- D[f, x] → f' or \frac{d}{dx} f ---- */
-    if (hname == SYM_D && argc == 2) {
+    if (!b->std && hname == SYM_D && argc == 2) {
         lb_cat(b, "\\frac{d}{d");
         to_latex_prec(b, args[1], PREC_ATOM);
         lb_cat(b, "}\\left(");
@@ -737,7 +824,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     }
 
     /* ---- Log[b, x] → \log_b x ---- */
-    if (hname == SYM_Log && argc == 2) {
+    if (!b->std && hname == SYM_Log && argc == 2) {
         lb_cat(b, "\\log_{");
         to_latex_prec(b, args[0], PREC_ATOM);
         lb_cat(b, "}\\left(");
@@ -746,8 +833,10 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         return;
     }
 
-    /* ---- Named functions: sin, cos, sqrt, ... ---- */
-    if (head->type == EXPR_SYMBOL) {
+    /* ---- Named functions: sin, cos, sqrt, ... ----
+     * TraditionalForm only: StandardForm keeps the Mathilda name, so these
+     * reach the generic Name[args] arm below (Sqrt was handled above). */
+    if (!b->std && head->type == EXPR_SYMBOL) {
         const FuncTeX* ft = find_func(hname);
         if (ft) {
             if (strcmp(ft->latex_cmd, "\\sqrt") == 0 && argc == 1) {
@@ -776,13 +865,21 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
          * render properly rather than dumping the plain re-parseable form (which
          * would show straight quotes, e.g. Key["a"]). */
         if (e->type == EXPR_FUNCTION && head && head->type == EXPR_SYMBOL) {
-            lb_cat(b, sym_latex(head->data.symbol.name));
-            lb_cat(b, "[");
+            /* StandardForm: an upright name and brackets that grow with the
+             * arguments (Sin[1/2] must not clip its fraction), as in
+             * Mathematica. The head is always a NAME here, so a head that
+             * happens to be a constant (E[x]) is still spelled out. */
+            if (b->std) lb_cat_mathrm_name(b, head->data.symbol.name);
+            else        lb_cat(b, sym_latex(head->data.symbol.name));
+            /* Braced so KaTeX sees an ordinary atom: a bare \left...\right
+             * is an "inner" one, which it sets a thin space away from the
+             * name (`Sin [x]`). */
+            lb_cat(b, b->std ? "{\\left[" : "[");
             for (size_t i = 0; i < argc; i++) {
                 if (i) lb_cat(b, ", ");
                 to_latex_prec(b, args[i], 0);
             }
-            lb_cat(b, "]");
+            lb_cat(b, b->std ? "\\right]}" : "]");
             return;
         }
         /* Non-symbol head or atom: fall back to the plain string form. */
@@ -1061,17 +1158,31 @@ static int has_print_directive(const Expr* e) {
  * Public entry point
  * ======================================================================== */
 
-char* expr_to_latex(const Expr* e) {
-    if (has_print_directive(e)) {
-        char* none = malloc(1);          /* "": no typeset form — use the text */
-        if (none) none[0] = '\0';
-        return none;
-    }
+static char* empty_latex(void) {
+    char* none = malloc(1);              /* "": no typeset form of this kind */
+    if (none) none[0] = '\0';
+    return none;
+}
+
+char* expr_to_latex_form(const Expr* e, LatexForm form) {
+    if (has_print_directive(e)) return empty_latex();   /* use the text */
+
+    /* An outermost TraditionalForm[...] asks for that notation OUTRIGHT, so
+     * there is no StandardForm rendering of it to offer: the consumer shows
+     * the TraditionalForm LaTeX instead (and in that form's font). */
+    if (form == LATEX_FORM_STANDARD && head_is(e, SYM_TraditionalForm)
+        && e->data.function.arg_count == 1)
+        return empty_latex();
 
     LBuf b;
     lb_init(&b);
     if (!b.s) return NULL;
+    b.std = (form == LATEX_FORM_STANDARD);
     to_latex_prec(&b, e, 0);
     if (!b.s) return NULL;
     return b.s;  /* caller frees */
+}
+
+char* expr_to_latex(const Expr* e) {
+    return expr_to_latex_form(e, LATEX_FORM_TRADITIONAL);
 }

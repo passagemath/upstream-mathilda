@@ -158,6 +158,99 @@ void test_operator_latex() {
     expr_free(f);
 }
 
+void test_standardform_latex() {
+    /* StandardForm is the notebook's default display: Mathilda's own names
+     * typeset (Sin[x], not \sin(x)), upright symbols, the language's operator
+     * spellings (==, &&), and E/I as the double-struck ⅇ/ⅈ. Fractions, powers
+     * and Sqrt stay two-dimensional. TraditionalForm (expr_to_latex) must be
+     * untouched by any of it -- test_operator_latex pins that side.
+     *
+     * Parsed, not evaluated, except where noted, so the printer is what is
+     * under test. */
+    static const struct { const char* in; const char* tex; } cases[] = {
+        {"Sin[x]",        "\\mathrm{Sin}{\\left[\\mathrm{x}\\right]}"},
+        {"Log[2, z]",     "\\mathrm{Log}{\\left[2, \\mathrm{z}\\right]}"},
+        {"Abs[q]",        "\\mathrm{Abs}{\\left[\\mathrm{q}\\right]}"},
+        {"E^x",           "\xe2\x85\x87^{\\mathrm{x}}"},
+        {"Sqrt[y]",       "\\sqrt{\\mathrm{y}}"},
+        {"x^(1/3)",       "\\mathrm{x}^{\\frac{1}{3}}"},   /* no surd */
+        {"x == 1",        "\\mathrm{x}\\mathrel{==}1"},
+        {"a && b || c",   "\\mathrm{a}\\mathrel{\\&\\&}\\mathrm{b}\\mathrel{||}\\mathrm{c}"},
+        {"!a",            "!\\mathrm{a}"},
+        {"a === b",       "\\mathrm{a}\\mathrel{===}\\mathrm{b}"},
+        {"a -> b",        "\\mathrm{a}\\to \\mathrm{b}"},
+        {"Alpha",         "\\mathrm{Alpha}"},     /* a NAME, not the letter */
+        {"Pi",            "\\pi"},
+        {"C[1]",          "\\mathrm{C}{\\left[1\\right]}"},
+        {"$Version",      "\\mathrm{\\$Version}"},
+        {"Binomial[n, k]","\\mathrm{Binomial}{\\left[\\mathrm{n}, \\mathrm{k}\\right]}"},
+        /* The display wrappers switch notation for their subtree only. */
+        {"{Sin[x], TraditionalForm[Cos[x]]}",
+         "\\{\\mathrm{Sin}{\\left[\\mathrm{x}\\right]}, \\cos\\left(x\\right)\\}"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        char* tex = expr_to_latex_form(e, LATEX_FORM_STANDARD);
+        if (!tex || strcmp(tex, cases[i].tex) != 0)
+            printf("  %s -> \"%s\", expected \"%s\"\n",
+                   cases[i].in, tex ? tex : "(null)", cases[i].tex);
+        ASSERT(tex && strcmp(tex, cases[i].tex) == 0);
+        free(tex);
+        expr_free(e);
+    }
+
+    /* Complex numbers carry ⅈ (evaluated: Complex[3, 4] is an atom-like head). */
+    Expr* c_in = parse_expression("3 + 4 I");
+    Expr* c = evaluate(c_in);   /* evaluate borrows its argument */
+    expr_free(c_in);
+    char* ctex = expr_to_latex_form(c, LATEX_FORM_STANDARD);
+    ASSERT(ctex && strcmp(ctex, "3+4\\,\xe2\x85\x88") == 0);
+    free(ctex);
+    expr_free(c);
+
+    /* An outermost TraditionalForm asks for that notation outright: there is
+     * no StandardForm rendering ("" -- the consumer shows the Traditional one),
+     * while the TraditionalForm LaTeX is the wrapped expression's. */
+    Expr* t = parse_expression("TraditionalForm[Sin[x]]");
+    char* st = expr_to_latex_form(t, LATEX_FORM_STANDARD);
+    char* tt = expr_to_latex(t);
+    ASSERT(st && st[0] == '\0');
+    ASSERT(tt && strcmp(tt, "\\sin\\left(x\\right)") == 0);
+    free(st); free(tt);
+    expr_free(t);
+
+    /* ...and StandardForm inside TraditionalForm switches back. */
+    Expr* s = parse_expression("StandardForm[Sin[x]]");
+    char* ts = expr_to_latex(s);
+    ASSERT(ts && strcmp(ts, "\\mathrm{Sin}{\\left[\\mathrm{x}\\right]}") == 0);
+    free(ts);
+    expr_free(s);
+
+    /* A printer directive still has no typeset form in either notation. */
+    Expr* d = parse_expression("InputForm[Sin[x]]");
+    char* dt = expr_to_latex_form(d, LATEX_FORM_STANDARD);
+    ASSERT(dt && dt[0] == '\0');
+    free(dt);
+    expr_free(d);
+
+    /* As text the display wrappers are invisible -- except under InputForm. */
+    Expr* p_in = parse_expression("TraditionalForm[Sin[x]^2]");
+    Expr* p = evaluate(p_in);   /* evaluate borrows its argument */
+    expr_free(p_in);
+    char* ps = expr_to_string(p);
+    ASSERT(ps && strcmp(ps, "Sin[x]^2") == 0);
+    free(ps);
+    expr_free(p);
+    Expr* q_in = parse_expression("InputForm[Hold[StandardForm[x]]]");
+    Expr* q = evaluate(q_in);   /* evaluate borrows its argument */
+    expr_free(q_in);
+    char* qs = expr_to_string(q);
+    ASSERT(qs && strcmp(qs, "Hold[StandardForm[x]]") == 0);
+    free(qs);
+    expr_free(q);
+}
+
 void test_printer_directive_has_no_latex() {
     /* InputForm, FullForm, TeXForm and NumberForm ask the printer for a
      * notation that is NOT StandardForm, and typesetting has only StandardForm
@@ -269,6 +362,7 @@ int main() {
     TEST(test_series_latex);
     TEST(test_operator_latex);
     TEST(test_printer_directive_has_no_latex);
+    TEST(test_standardform_latex);
     TEST(test_texform_fraction_parenthesisation);
 
     printf("All print tests passed!\n");

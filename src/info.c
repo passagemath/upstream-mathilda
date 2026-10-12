@@ -4008,6 +4008,19 @@ void info_init(void) {
         "\toperator syntax (a + b, not Plus[a, b]) and explicit string quotes.\n"
         "Like FullForm, InputForm is a printer wrapper: it is consumed during\n"
         "output and does not appear in the printed result.");
+    symtab_set_docstring("TraditionalForm",
+        "TraditionalForm[expr]\n"
+        "\tdisplays expr in textbook notation: sin(x), log(x), |x|, e^x, x = 1.\n"
+        "TraditionalForm is a display wrapper: the notebook typesets its argument\n"
+        "in that notation (in the math font); as text it prints as expr itself.\n"
+        "TraditionalForm can be nested to switch notation for one subexpression.");
+    symtab_set_docstring("StandardForm",
+        "StandardForm[expr]\n"
+        "\tdisplays expr in Mathilda's own typeset notation: Sin[x], Log[x],\n"
+        "\tAbs[x], with 2D fractions, powers and radicals.\n"
+        "StandardForm is the notebook's default output form, set in Arial. As a\n"
+        "display wrapper it switches the notation back inside TraditionalForm[...];\n"
+        "as text it prints as expr itself.");
     symtab_set_docstring("TeXForm",
         "TeXForm[expr]\n"
         "\tprints as a TeX version of expr.\n"

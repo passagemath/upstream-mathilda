@@ -621,6 +621,8 @@ const char* SYM_TargetFunctions = NULL;
 const char* SYM_Tanh = NULL;
 const char* SYM_TargetStructure = NULL;
 const char* SYM_TeXForm = NULL;
+const char* SYM_TraditionalForm = NULL;
+const char* SYM_StandardForm = NULL;
 const char* SYM_Temporary = NULL;
 const char* SYM_Terms = NULL;
 const char* SYM_Thread = NULL;
@@ -1621,6 +1623,8 @@ void sym_names_init(void) {
     SYM_Tanh                       = intern_symbol("Tanh");
     SYM_TargetStructure            = intern_symbol("TargetStructure");
     SYM_TeXForm                    = intern_symbol("TeXForm");
+    SYM_TraditionalForm            = intern_symbol("TraditionalForm");
+    SYM_StandardForm               = intern_symbol("StandardForm");
     SYM_Temporary                  = intern_symbol("Temporary");
     SYM_Terms                      = intern_symbol("Terms");
     SYM_Thread                     = intern_symbol("Thread");

@@ -161,7 +161,11 @@ for (const sel of ['out-error', 'out-expected', 'out-stream', 'out-message']) {
 ok('.out-error no longer scrolls horizontally', !/overflow-x:\s*auto/.test(rule('out-error')),
    rule('out-error'));
 ok('a typeset expression too wide for the card falls back to wrapping code',
-   /renderOutput\(item\.text, item\.latex, wideExpr\[idx\]\)/.test(outSrc), 'not wired');
+   /renderOutput\(item\.text, item\.latex, wideExpr\[idx\]\)/.test(outSrc)
+   && /renderOutput\(item\.text, item\.slatex, wideExpr\[idx\], true\)/.test(outSrc), 'not wired');
+ok('StandardForm (slatex) is the default display, set in Arial',
+   /form === 'standard' && item\.slatex/.test(outSrc)
+   && /\.out-sf \.katex[^{]*\{[^}]*font-family:\s*Arial/.test(outSrc), 'not wired');
 ok('the width fallback is measured, not guessed from string length',
    /scrollWidth > w \+ 1/.test(outSrc), 'not measured');
 ok('kernel text is escaped before reaching {@html}',

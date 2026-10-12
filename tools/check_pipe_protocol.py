@@ -182,6 +182,9 @@ def main():
     def latex(msgs):
         return [m.get("latex") for m in msgs if m["type"] == "expr"]
 
+    def slatex(msgs):
+        return [m.get("slatex") for m in msgs if m["type"] == "expr"]
+
     by_id, raw, err = session([
         {"id": 1, "expr": "a -> b", "cell": True},
         {"id": 2, "expr": "a :> b", "cell": True},
@@ -235,6 +238,36 @@ def main():
     # directive must not cost an ordinary result its LaTeX.
     check("latex: the undirected result still typesets",
           latex(by_id.get(6, [])) not in ([None], []), by_id.get(6))
+    for i in (1, 2, 3, 4, 5):
+        check(f"slatex: directive {i} sends no StandardForm latex either",
+              slatex(by_id.get(i, [])) == [None], by_id.get(i))
+
+    # ---- StandardForm: the notebook's default display ------------------------
+    #
+    # `latex` is TraditionalForm (sin(x)); `slatex` is StandardForm, Mathilda's own
+    # names typeset (Sin[x]). An outermost TraditionalForm[...] sends no `slatex`,
+    # so the front end shows the TraditionalForm rendering it asked for, in that
+    # form's fonts; StandardForm[...] switches the notation back.
+    by_id, raw, err = session([
+        {"id": 1, "expr": "Sin[x] + E^x", "cell": True},
+        {"id": 2, "expr": "TraditionalForm[Sin[x]]", "cell": True},
+        {"id": 3, "expr": "StandardForm[Sin[x]]", "cell": True},
+        {"id": 4, "expr": "x == 1 && y", "cell": True},
+    ])
+    check("slatex: StandardForm keeps the Mathilda names; latex stays traditional",
+          slatex(by_id.get(1, [])) == ["\u2147^{\\mathrm{x}}+\\mathrm{Sin}{\\left[\\mathrm{x}\\right]}"]
+          and latex(by_id.get(1, [])) == ["e^{x}+\\sin\\left(x\\right)"],
+          by_id.get(1))
+    check("slatex: an outer TraditionalForm sends latex only",
+          slatex(by_id.get(2, [])) == [None]
+          and latex(by_id.get(2, [])) == ["\\sin\\left(x\\right)"]
+          and payloads(by_id.get(2, [])) == ["Sin[x]"], by_id.get(2))
+    check("slatex: StandardForm[...] is StandardForm in both fields",
+          slatex(by_id.get(3, [])) == latex(by_id.get(3, []))
+          == ["\\mathrm{Sin}{\\left[\\mathrm{x}\\right]}"], by_id.get(3))
+    check("slatex: StandardForm spells the operators as the language does",
+          slatex(by_id.get(4, [])) == ["\\mathrm{x}\\mathrel{==}1\\mathrel{\\&\\&}\\mathrm{y}"],
+          by_id.get(4))
 
     # ---- request reader: length and escapes ---------------------------------
     big = "Length[{" + ",".join(["1"] * 20000) + "}]"          # ~40 KB, past the old 10 KB buffer

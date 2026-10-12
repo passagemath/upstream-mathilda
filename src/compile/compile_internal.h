@@ -728,6 +728,17 @@ bool nd_norm2_encode(const Expr* p, CompileType ta, double* imm_r);
  * Defined in compile.c; called by both emit_node and infer_type so the two
  * passes agree on which Norm calls become scalar bodies. */
 Expr* norm_try_expand(const Expr* e);
+
+/* Chop[arr, rest...] / Clip[arr, rest...] over a rank-1 array lower by mapping
+ * the SCALAR lowering over the buffer: Map[Function[H[Slot[1], rest...]], arr].
+ * The array answer is then the scalar one applied elementwise, bit for bit, and
+ * every argument form (Chop's delta, Clip's bound list) rides the scalar arm
+ * with no new machinery.  Built here and used by BOTH emit_mathfn and infer_type
+ * so the two passes accept the array form on exactly the same inputs -- the Map
+ * lowering's own source-elem == result-elem gate is the single decision.
+ * Returns the Map node (caller owns and frees it), NULL on allocation failure. */
+Expr* build_map_scalar_over_array(const char* h, Expr* const* A, size_t na);
+
 const NdFn2Spec* nd_fn2_lookup(const char* h, size_t na);
 CompileType      nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb);
 

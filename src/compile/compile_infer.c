@@ -40,6 +40,20 @@ static bool infer_arr_unary(Ctx* c, const char* head, CompileType ta,
     *out = CT_ARRAY(er, CT_RANK(ta));
     return true;
 }
+
+/* Rank-1 array form of a hand-lowered elementwise head (Chop/Clip): infer the
+ * type of the synthesised Map[Function[H[#, rest...]], arr], so this pass accepts
+ * the array form on exactly the inputs the emitter does (both route through the
+ * same Map lowering). */
+static bool infer_elem_over_array(Ctx* c, const char* h,
+                                  Expr* const* A, size_t na, CompileType* out) {
+    Expr* m = build_map_scalar_over_array(h, A, na);
+    if (!m) return false;
+    bool r = infer_type(c, m, out);
+    expr_free(m);
+    return r;
+}
+
 bool fp_opts(Expr* const* A, size_t na, size_t start,
                     const Expr** max_out, const Expr** same_out);
 
@@ -328,17 +342,25 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
         IT(0, ta);
-        if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        /* A rank-1 array maps the scalar lowering over the buffer (see emit). */
+        if (CT_IS_ARRAY(ta))
+            return CT_RANK(ta) == 1 ? infer_elem_over_array(c, h, A, na, out) : false;
+        if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
         if (na == 2 && A[1]->type != EXPR_REAL && A[1]->type != EXPR_INTEGER) return false;
         *out = ta;   /* CT_INT -> identity; CT_REAL -> Real */
         return true;
     }
     if (strcmp(h, "Clip") == 0 && na == 1) {          /* default bounds {-1, 1} */
         IT(0, ta);
-        if (CT_IS_ARRAY(ta) || ta == CT_BOOL || ta == CT_COMPLEX) return false;
+        if (CT_IS_ARRAY(ta))
+            return CT_RANK(ta) == 1 ? infer_elem_over_array(c, h, A, na, out) : false;
+        if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
         *out = CT_REAL; return true;
     }
     if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
+        /* A rank-1 array first arg maps the scalar lowering over the buffer. */
+        { CompileType ta0; if (infer_type(c, A[0], &ta0) && CT_IS_ARRAY(ta0))
+            return CT_RANK(ta0) == 1 ? infer_elem_over_array(c, h, A, na, out) : false; }
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
             || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0

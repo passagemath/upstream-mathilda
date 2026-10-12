@@ -246,16 +246,6 @@ looking for the entry point to delegate to.
 |---|---|
 | `LerchPhi` | an n-ary kernel is registered, but neither the scalar nor the array form lowers. The only head on the list that is missing *both*. |
 
-## 11. Elementwise clamp / threshold
-
-Numeric → numeric, with a machine answer, needing an elementwise opcode over the
-buffer — the same kind of lowering the sign predicates await.
-
-| head | note |
-|---|---|
-| `Chop` | the SCALAR form already lowers (`Compiled -> True`); the array form does not — an elementwise "replace \|x\| < tol with 0" over the buffer. |
-| `Clip` | neither form lowers — an elementwise clamp against a `{lo, hi}` spec (two scalar operands), at scalar and array shape. |
-
 ---
 
 ## What is deliberately NOT here

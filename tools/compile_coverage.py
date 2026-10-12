@@ -339,11 +339,6 @@ BASELINE = {
     # (A_STORE_B).  No such lowering yet: they moved here from EXEMPT because the
     # dtype that blocked them is no longer missing, only the lowering is.
     "Positive", "Negative", "NonNegative", "NonPositive",
-    # Elementwise numeric->numeric with a machine answer but no (full) lowering.
-    # Chop's SCALAR form already compiles; its array form, and both Clip forms
-    # (a clamp against a {lo, hi} spec), want an elementwise opcode over the
-    # buffer -- the same kind of lowering the sign predicates above await.
-    "Chop", "Clip",
     # Boole: the CONVERSE bridge, a bool array -> an int64 one.  Joined pack.c's
     # AWARE with the NDT_BOOL work; a compiled array form (bool -> A_STORE_I) is
     # possible but likewise undone.  Its real call shape is Boole[boolArray],

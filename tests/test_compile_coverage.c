@@ -70,6 +70,10 @@ static const Gap KNOWN_GAPS[] = {
     { "QuotientRemainder",    "returns a list, not one machine number" },
     /* (c) no machine kernel ON PURPOSE, because the correct machine answer is
      * not a real number over the range callers actually use. */
+    /* (d) special functions with a numeric fast path but no Compile[] lowering
+     * yet -- a genuine gap to close later, not a deliberate exclusion. */
+    { "ExpIntegralE",         "special function; no Compile[] lowering yet" },
+    { "StruveH",              "special function; no Compile[] lowering yet" },
 };
 static const size_t NGAPS = sizeof KNOWN_GAPS / sizeof KNOWN_GAPS[0];
 

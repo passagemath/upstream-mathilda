@@ -11,8 +11,22 @@
 #include <stdlib.h>
 #include <math.h>
 
+/* Rank-1 array form of a hand-lowered elementwise head (Chop/Clip): emit the
+ * synthesised Map[Function[H[#, rest...]], arr].  The Map lowering applies the
+ * scalar arm to each element, so the array answer is the scalar one elementwise,
+ * bit for bit, and every argument form rides the scalar arm.  Returns 1/-1. */
+static int emit_map_over_array(Ctx* c, const char* h, const Expr* e,
+                               Expr* const* A, size_t na, Val* out) {
+    Expr* m = build_map_scalar_over_array(h, A, na);
+    if (!m) { c->ok = false; return -1; }
+    bool r = emit(c, m, out);
+    if (!r && c->bail_node && expr_subtree_of(m, c->bail_node)) c->bail_node = (Expr*)e;
+    expr_free(m);
+    return r ? 1 : -1;
+}
+
 int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out) {
-    (void)e; Slot imm;
+    Slot imm;
     /* elementary unary math */
     uint16_t op_r, op_c;
     if (na == 1 && unary_math(h, &op_r, &op_c)) return emit_unary_math(c, h, A[0], op_r, op_c, out);
@@ -252,8 +266,13 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
     }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
         CompileType tx;
-        if (!infer_type(c, A[0], &tx) || CT_IS_ARRAY(tx) || tx == CT_BOOL
-            || tx == CT_COMPLEX) { c->ok = false; return -1; }
+        if (!infer_type(c, A[0], &tx)) { c->ok = false; return -1; }
+        /* A rank-1 array maps the scalar lowering over the buffer. */
+        if (CT_IS_ARRAY(tx)) {
+            if (CT_RANK(tx) != 1) { c->ok = false; return -1; }
+            return emit_map_over_array(c, h, e, A, na, out);
+        }
+        if (tx == CT_BOOL || tx == CT_COMPLEX) { c->ok = false; return -1; }
         /* delta must be a compile-time real/integer literal (default 1e-10). */
         double delta = 1.0e-10;
         if (na == 2) {
@@ -285,8 +304,12 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
          * below with the bounds synthesised. Real result (the machine 1. where
          * the interpreter's exact-bound scalar gives the Integer 1). */
         CompileType tx;
-        if (!infer_type(c, A[0], &tx) || CT_IS_ARRAY(tx) || tx == CT_BOOL
-            || tx == CT_COMPLEX) { c->ok = false; return -1; }
+        if (!infer_type(c, A[0], &tx)) { c->ok = false; return -1; }
+        if (CT_IS_ARRAY(tx)) {
+            if (CT_RANK(tx) != 1) { c->ok = false; return -1; }
+            return emit_map_over_array(c, h, e, A, na, out);
+        }
+        if (tx == CT_BOOL || tx == CT_COMPLEX) { c->ok = false; return -1; }
         Val x; if (!emit(c, A[0], &x)) return -1;
         coerce(c, &x, CT_REAL);
         if (!c->ok) return -1;
@@ -299,6 +322,12 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         return c->ok ? 1 : -1;
     }
     if ((strcmp(h, "Clip") == 0 || strcmp(h, "Rescale") == 0) && na == 2) {
+        /* A rank-1 array first arg maps the scalar lowering over the buffer. */
+        { CompileType ta0;
+          if (infer_type(c, A[0], &ta0) && CT_IS_ARRAY(ta0)) {
+              if (CT_RANK(ta0) != 1) { c->ok = false; return -1; }
+              return emit_map_over_array(c, h, e, A, na, out);
+          } }
         const Expr* bnd = A[1];
         if (bnd->type != EXPR_FUNCTION || bnd->data.function.head->type != EXPR_SYMBOL
             || strcmp(bnd->data.function.head->data.symbol.name, "List") != 0

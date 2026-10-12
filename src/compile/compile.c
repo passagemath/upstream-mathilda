@@ -1793,6 +1793,34 @@ void emit_nonzero_guard(Ctx* c, int reg) {
 static Expr* norm_abs_own(Expr* e) {   /* consumes e -> Abs[e] */
     return expr_new_function(expr_new_symbol(SYM_Abs), &e, 1);
 }
+/* See the header: synthesise Map[Function[H[Slot[1], rest...]], arr] so the
+ * array form of an elementwise hand-lowered head (Chop / Clip) reuses the
+ * scalar lowering per element.  The Function is the FN_SLOTS (`#`) form, which
+ * the Map lowering applies through emit_apply with no named parameter to
+ * collide with the body's bounds/delta.  Children are owned copies; the whole
+ * tree is freed by the caller after it emits/infers it. */
+Expr* build_map_scalar_over_array(const char* h, Expr* const* A, size_t na) {
+    if (na < 1) return NULL;
+    /* Slot[1]  (i.e. #) */
+    Expr* one  = expr_new_integer(1);
+    Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), &one, 1);
+    if (!slot) { expr_free(one); return NULL; }
+    /* H[Slot[1], rest...] */
+    Expr** bargs = (Expr**)malloc(na * sizeof(Expr*));
+    if (!bargs) { expr_free(slot); return NULL; }
+    bargs[0] = slot;
+    for (size_t i = 1; i < na; i++) bargs[i] = expr_copy(A[i]);
+    Expr* body = expr_new_function(expr_new_symbol(h), bargs, na);
+    free(bargs);
+    if (!body) return NULL;
+    /* Function[body]  (the #-slot pure function  body&) */
+    Expr* func = expr_new_function(expr_new_symbol(SYM_Function), &body, 1);
+    if (!func) { expr_free(body); return NULL; }
+    /* Map[func, arr] */
+    Expr* margs[2] = { func, expr_copy(A[0]) };
+    return expr_new_function(expr_new_symbol(SYM_Map), margs, 2);
+}
+
 Expr* norm_try_expand(const Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
         || e->data.function.head->data.symbol.name != SYM_Norm) return NULL;

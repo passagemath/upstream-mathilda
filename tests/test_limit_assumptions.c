@@ -111,6 +111,157 @@ static void test_real_base_vs_abs_magnitude(void) {
                    "ComplexInfinity", 0);
 }
 
+/* --- Locked assumed-limit stress corpus (50 cases across 7 gap groups).
+ *     Each is asserted as Simplify[limit - expected] === 0, which is robust to
+ *     the printed form of a symbolic result. Case #37 uses the corrected
+ *     exponent x^(a-1) (the as-written x^(1-a) form tends to 0, also checked in
+ *     the guards). --- */
+static void test_assumed_limit_stress(void) {
+    /* 1-10: exponential / logarithmic asymptotics */
+    assert_eval_eq("Simplify[(Limit[Exp[a x], x -> Infinity, Assumptions -> a < 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[a x], x -> -Infinity, Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a Log[x], x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a Log[x], x -> Infinity, Assumptions -> a < 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[a x]/x^b, x -> Infinity, Assumptions -> a < 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^b/Exp[a x], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a, x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a, x -> Infinity, Assumptions -> a < 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(1 + a/x)^x, x -> Infinity, Assumptions -> Element[a, Reals]]) - Exp[a]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Log[x^a + 1]/Log[x], x -> Infinity, Assumptions -> a > 0]) - a]", "0", 0);
+    /* 11-20: rational / algebraic branch constraints */
+    assert_eval_eq("Simplify[(Limit[Sqrt[x^2 + a x] - x, x -> Infinity, Assumptions -> Element[a, Reals]]) - a/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[a x^2 + b]/x, x -> Infinity, Assumptions -> a > 0]) - Sqrt[a]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[a x^2 + b]/x, x -> -Infinity, Assumptions -> a > 0]) - (-Sqrt[a])]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/x, x -> 0, Assumptions -> a > 0 && b > 0]) - Log[a/b]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(x^a - 1)/(x^b - 1), x -> 1, Assumptions -> b != 0 && Element[a, Reals]]) - a/b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[x] (Sqrt[x + a] - Sqrt[x]), x -> Infinity, Assumptions -> Element[a, Reals]]) - a/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[1/(x^a + 1), x -> Infinity, Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[1/(x^a + 1), x -> Infinity, Assumptions -> a < 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(x + a)^(x + b)/x^(x + b), x -> Infinity, Assumptions -> Element[a, Reals] && Element[b, Reals]]) - Exp[a]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[((x + a)/(x - a))^x, x -> Infinity, Assumptions -> Element[a, Reals]]) - Exp[2 a]]", "0", 0);
+    /* 21-30: trigonometric / oscillatory parameters */
+    assert_eval_eq("Simplify[(Limit[Sin[a x]/x, x -> 0, Assumptions -> Element[a, Reals]]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(1 - Cos[a x])/x^2, x -> 0, Assumptions -> Element[a, Reals]]) - a^2/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a Sin[1/x], x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sin[x]/x^a, x -> Infinity, Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[-a x] Sin[b x], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x Sin[a/x], x -> Infinity, Assumptions -> Element[a, Reals]]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Cos[a/Sqrt[x]]^x, x -> Infinity, Assumptions -> Element[a, Reals]]) - Exp[-a^2/2]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(Sin[a x] - Sin[b x])/x, x -> 0, Assumptions -> Element[a, Reals] && Element[b, Reals]]) - (a - b)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[ArcTan[a x], x -> Infinity, Assumptions -> a > 0]) - Pi/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[ArcTan[a x], x -> Infinity, Assumptions -> a < 0]) - (-Pi/2)]", "0", 0);
+    /* 31-40: special functions and complex-domain mapping */
+    assert_eval_eq("Simplify[(Limit[Gamma[x + a]/(x^a Gamma[x]), x -> Infinity, Assumptions -> Element[a, Reals]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[BesselJ[a, x]/x^a, x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - 1/(2^a Gamma[a + 1])]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[-w t], t -> Infinity, Assumptions -> Re[w] > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[I w t], t -> Infinity, Assumptions -> Im[w] > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Erfc[a x], x -> Infinity, Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Erfc[a x], x -> Infinity, Assumptions -> a < 0]) - 2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^(a - 1) Zeta[a, x], x -> Infinity, Assumptions -> a > 1]) - 1/(a - 1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Erf[a x], x -> Infinity, Assumptions -> a > 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Erf[a x], x -> Infinity, Assumptions -> a < 0]) - (-1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x a^x, x -> Infinity, Assumptions -> 0 < a < 1]) - 0]", "0", 0);
+    /* 41-50: directional, piecewise, step-function discontinuities */
+    assert_eval_eq("Simplify[(Limit[Abs[x - a]/(x - a), x -> a, Direction -> \"FromAbove\", Assumptions -> Element[a, Reals]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Abs[x - a]/(x - a), x -> a, Direction -> \"FromBelow\", Assumptions -> Element[a, Reals]]) - (-1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[FractionalPart[x], x -> a, Direction -> \"FromBelow\", Assumptions -> Element[a, Integers]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[FractionalPart[x], x -> a, Direction -> \"FromAbove\", Assumptions -> Element[a, Integers]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Floor[x], x -> a, Direction -> \"FromBelow\", Assumptions -> Element[a, Integers]]) - (a - 1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Floor[x], x -> a, Direction -> \"FromAbove\", Assumptions -> Element[a, Integers]]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Tanh[a x], x -> Infinity, Assumptions -> a > 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Tanh[a x], x -> Infinity, Assumptions -> a < 0]) - (-1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[1/(1 + Exp[-a x]), x -> Infinity, Assumptions -> a > 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[1/(1 + Exp[-a x]), x -> Infinity, Assumptions -> a < 0]) - 0]", "0", 0);
+}
+
+/* --- Held-out generality corpus (a second, harder 50-case stress set, to
+ *     confirm the fixes are algorithmic, not overfit). The 46 asserted below
+ *     pass; four are deliberately omitted: #9 and #49 have incorrect expected
+ *     values in the source set (the a x^2 cancels -> Infinity; and the x -> -Inf
+ *     surd limit is -a, not a -- Mathilda is right), and #13 (needs oracle
+ *     transitivity c>a>0 => c>0) and #50 (a deep Stirling-class tower) remain
+ *     open. Asserted as Simplify[limit - expected] === 0. --- */
+static void test_assumed_limit_stress2(void) {
+    assert_eval_eq("Simplify[(Limit[Exp[a x] x^b, x -> Infinity, Assumptions -> a < 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[a x] x^b, x -> -Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Log[1 + a x]/(b x), x -> 0, Assumptions -> b != 0 && Element[a, Reals]]) - a/b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Log[x^a + y^a]/Log[x], x -> Infinity, Assumptions -> a > 0 && y > 0]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Log[x^a + y^a]/Log[x], x -> Infinity, Assumptions -> a < 0 && y > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x ((1 + a/x)^b - 1), x -> Infinity, Assumptions -> Element[a, Reals] && Element[b, Reals]]) - a b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/(c^x - d^x), x -> 0, Assumptions -> a > 0 && b > 0 && c > 0 && d > 0 && c != d]) - Log[a/b]/Log[c/d]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(x^a - y^a)/(x - y), x -> y, Assumptions -> y > 0 && Element[a, Reals]]) - a y^(a - 1)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[a x^2 + b x + c]/Exp[a x^2 + d x + e], x -> -Infinity, Assumptions -> a > 0 && b > d]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sin[a x + b]/(a x + b), x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sin[a x]/Sin[b x], x -> 0, Assumptions -> b != 0 && Element[a, Reals]]) - a/b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a Sin[b/x^a], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[-a x] Sin[b x + c], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals] && Element[c, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[-a x] Cos[b x + c], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals] && Element[c, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sin[a x]^2/x^2, x -> 0, Assumptions -> Element[a, Reals]]) - a^2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(1 - Cos[a x])/(1 - Cos[b x]), x -> 0, Assumptions -> b != 0 && Element[a, Reals]]) - a^2/b^2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[ArcTan[a x]/ArcTan[b x], x -> 0, Assumptions -> b != 0 && Element[a, Reals]]) - a/b]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x (ArcTan[a x] - Pi/2), x -> Infinity, Assumptions -> a > 0]) - (-1/a)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[I a x]/x, x -> Infinity, Assumptions -> Element[a, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Exp[I a x]/x, x -> Infinity, Assumptions -> Im[a] > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Log[x + I a] - Log[x - I a], x -> Infinity, Assumptions -> a > 0]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x (Log[x + I a] - Log[x - I a]), x -> Infinity, Assumptions -> a > 0]) - 2 I a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[(x + I a)/(x - I a), x -> Infinity, Assumptions -> Element[a, Reals]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x ((x + I a)/(x - I a) - 1), x -> Infinity, Assumptions -> Element[a, Reals]]) - 2 I a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Abs[x + I a] - x, x -> Infinity, Assumptions -> Element[a, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x (Abs[x + I a] - x), x -> Infinity, Assumptions -> Element[a, Reals]]) - a^2/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[x + I a] - Sqrt[x], x -> Infinity, Assumptions -> Element[a, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[x] (Sqrt[x + I a] - Sqrt[x]), x -> Infinity, Assumptions -> Element[a, Reals]]) - I a/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Gamma[a x + b]/(Exp[-a x] (a x)^(a x + b - 1/2)), x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - Sqrt[2 Pi]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[BesselJ[a, x]/x^a, x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - 1/(2^a Gamma[1 + a])]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[BesselY[a, x] x^a, x -> 0, Direction -> \"FromAbove\", Assumptions -> a > 0]) - (-(2^a Gamma[a])/Pi)]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[BesselI[a, x]/Exp[x], x -> Infinity, Assumptions -> Element[a, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[x] BesselI[a, x]/Exp[x], x -> Infinity, Assumptions -> Element[a, Reals]]) - 1/Sqrt[2 Pi]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[BesselK[a, x] Exp[x], x -> Infinity, Assumptions -> Element[a, Reals]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sqrt[x] BesselK[a, x] Exp[x], x -> Infinity, Assumptions -> Element[a, Reals]]) - Sqrt[Pi/2]]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^a Erfc[x] Exp[x^2], x -> Infinity, Assumptions -> a < 1]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x Erfc[a x] Exp[a^2 x^2], x -> Infinity, Assumptions -> a > 0]) - 1/(a Sqrt[Pi])]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^(2 - 2 a) Exp[x^2] Gamma[a, x^2], x -> Infinity, Assumptions -> Element[a, Reals]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Sin[a Pi + x]/x, x -> 0, Assumptions -> Element[a, Integers]]) - (-1)^a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Cos[a Pi + x] - (-1)^a Cos[x], x -> 0, Assumptions -> Element[a, Integers]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[FractionalPart[a x]/x, x -> Infinity, Assumptions -> Element[a, Integers]]) - 0]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Mod[a, x], x -> Infinity, Assumptions -> a > 0]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Floor[x/a] a/x, x -> Infinity, Assumptions -> a > 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[Floor[a x]/(a x), x -> Infinity, Assumptions -> a < 0]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x Floor[a/x], x -> 0, Assumptions -> Element[a, Reals]]) - a]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x Ceiling[a/x], x -> 0, Assumptions -> Element[a, Reals]]) - a]", "0", 0);
+}
+
+/* --- Guards: the new layers must NOT over-fire, and the Gamma rewrite must not
+ *     hang (it rewrites to a pure power so no Gamma[x] tower reaches Series). --- */
+static void test_assumed_limit_guards(void) {
+    /* Leading-term folds must not fire where an enclosing factor amplifies the
+     * dropped sub-leading term. */
+    assert_eval_eq("Simplify[(Limit[x (Log[x + I a] - Log[x - I a]), x -> Infinity, Assumptions -> a > 0]) - 2 I a]", "0", 0);
+    /* The finite-limit Log fold must not recurse into a Power tower (stack
+     * overflow): this must return Infinity, not crash. */
+    assert_eval_eq("Limit[x/Log[x^(Log[x]^(2/Log[x]))], x -> Infinity]", "Infinity", 0);
+    /* Floor[x] - x oscillates: the step-asymptotic layer must not fold it to 0. */
+    assert_eval_eq("Head[Limit[Floor[x] - x, x -> Infinity]]", "Limit", 0);
+    /* Sub-leading special-function probes: the asymptotic rewrites carry a
+     * second term, so subtracting the leading term recovers the next order
+     * (NOT 0). These are the Zeta / incomplete-Gamma leading-term traps. */
+    assert_eval_eq("Simplify[(Limit[x^s (Zeta[s, x] - 1/((s - 1) x^(s - 1))), x -> Infinity, Assumptions -> s > 1]) - 1/2]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x (Gamma[a, x]/(x^(a - 1) Exp[-x]) - 1), x -> Infinity, Assumptions -> Element[a, Reals]]) - (a - 1)]", "0", 0);
+    /* ...while the leading-order cases those rewrites also serve still hold. */
+    assert_eval_eq("Simplify[(Limit[x^(2 - 2 a) Exp[x^2] Gamma[a, x^2], x -> Infinity, Assumptions -> Element[a, Reals]]) - 1]", "0", 0);
+    assert_eval_eq("Simplify[(Limit[x^(a - 1) Zeta[a, x], x -> Infinity, Assumptions -> a > 1]) - 1/(a - 1)]", "0", 0);
+    /* Product dominance needs an assumption: no assumption -> unevaluated. */
+    assert_eval_eq("Head[Limit[x^a Log[x], x -> 0, Direction -> \"FromAbove\"]]", "Limit", 0);
+    /* Exp-decay layer needs a complex-part fact: none -> unevaluated. */
+    assert_eval_eq("Head[Limit[Exp[-w t], t -> Infinity]]", "Limit", 0);
+    /* Step function: two-sided and non-integer points stay unevaluated. */
+    assert_eval_eq("Head[Limit[Floor[x], x -> 3]]", "Limit", 0);
+    assert_eval_eq("Head[Limit[Floor[x], x -> 5/2, Direction -> \"FromAbove\"]]", "Limit", 0);
+    /* Gamma firewall: bare Gamma[x] does not hang (and is correct). */
+    assert_eval_eq("Limit[Gamma[x], x -> Infinity]", "Infinity", 0);
+    /* As-written #37 (x^(1-a) Zeta) tends to 0, not 1/(a-1). */
+    assert_eval_eq("Simplify[Limit[x^(1 - a) Zeta[a, x], x -> Infinity, Assumptions -> a > 1]]", "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -122,6 +273,9 @@ int main(void) {
     TEST(test_passthrough_no_assumption);
     TEST(test_wiring_ambient_and_option);
     TEST(test_real_base_vs_abs_magnitude);
+    TEST(test_assumed_limit_stress);
+    TEST(test_assumed_limit_stress2);
+    TEST(test_assumed_limit_guards);
 
     printf("All limit_assumptions tests passed!\n");
     return 0;

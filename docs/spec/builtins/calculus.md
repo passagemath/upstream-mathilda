@@ -480,8 +480,60 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
     (`Limit[x^n/x^m, x -> Infinity, Assumptions -> n > m] = Infinity`), and a
     function of one divergent parametric monomial `x^a` (`a > 0`) is closed by
     the substitution `t = x^a` (`Limit[x^a/(x^a + 1), x -> Infinity,
-    Assumptions -> a > 0] = 1`), which also feeds the bounded envelope
-    (`Limit[Sin[x]/x^p, x -> Infinity, Assumptions -> p > 0] = 0`).
+    Assumptions -> a > 0] = 1`) — and its mirror at `a < 0`, where `x^a -> 0`
+    (`Limit[1/(x^a + 1), x -> Infinity, Assumptions -> a < 0] = 1`) — which also
+    feeds the bounded envelope (`Limit[Sin[x]/x^p, x -> Infinity,
+    Assumptions -> p > 0] = 0`).
+  - **product dominance** — a `Times` whose growth ordering the facts pin folds
+    to `0`: a power beating a logarithm (`Limit[x^a Log[x], x -> 0,
+    Direction -> "FromAbove", Assumptions -> a > 0] = 0`), a geometric decay
+    beating a polynomial (`Limit[x a^x, x -> Infinity, Assumptions -> 0 < a < 1]
+    = 0`), or a vanishing factor times a bounded oscillation
+    (`Limit[x^a Sin[1/x], x -> 0, Direction -> "FromAbove", Assumptions ->
+    a > 0] = 0`). A genuinely indeterminate `0 * Infinity` is left to Gruntz.
+  - **symbolic-power log asymptotics** — `Limit[Log[x^a + 1]/Log[x],
+    x -> Infinity, Assumptions -> a > 0] = a` (the dominant `x^a` summand is
+    recognised under the assumption even when the integer-degree classifier
+    cannot see the symbolic exponent).
+  - **exponential decay by complex part** — `Limit[E^(c t), t -> Infinity]` is
+    `0` when the oracle proves `Re[c] < 0`: `Limit[Exp[-w t], t -> Infinity,
+    Assumptions -> Re[w] > 0] = 0` and `Limit[Exp[I w t], t -> Infinity,
+    Assumptions -> Im[w] > 0] = 0`.
+  - **step functions one-sided at an integer** — for `Floor`, `Ceiling`,
+    `Round`, `IntegerPart`, `FractionalPart` at an integer point (a literal, or
+    a symbolic `a` with `Element[a, Integers]`): `Limit[Floor[x], x -> a,
+    Direction -> "FromBelow", Assumptions -> Element[a, Integers]] = a - 1`
+    (`FromAbove -> a`), `Limit[FractionalPart[x], x -> a, Direction ->
+    "FromBelow", ...] = 1` (`FromAbove -> 0`). Two-sided or non-integer points
+    stay unevaluated.
+  - **special-function leading asymptotics** — a Gamma ratio
+    (`Limit[Gamma[x + a]/(x^a Gamma[x]), x -> Infinity] = 1`, rewritten to a
+    pure power so no Gamma tower reaches `Series`), the Hurwitz zeta
+    (`Limit[x^(a - 1) Zeta[a, x], x -> Infinity, Assumptions -> a > 1] =
+    1/(a - 1)`), and the small-argument BesselJ
+    (`Limit[BesselJ[a, x]/x^a, x -> 0, Direction -> "FromAbove",
+    Assumptions -> a > 0] = 1/(2^a Gamma[a + 1])`).
+  - **step functions away from an integer** — Floor/Ceiling/Round/IntegerPart in
+    a product whose other factors vanish use `H[g] ~ g` as `g -> +-Infinity`
+    (`Limit[x Floor[a/x], x -> 0] = a`, `Limit[Floor[t]/t, t -> Infinity] = 1`);
+    a bounded `FractionalPart` times a vanishing factor goes to 0; and
+    `Limit[Mod[a, x], x -> Infinity] = a` for `a >= 0`. (`Floor[x] - x`, which
+    oscillates, is correctly left unevaluated.)
+  - **vanishing-argument linearization** — `H[g] ~ g` for `g -> 0` and H in the
+    Sin/Tan/Sinh/Tanh/ArcSin/ArcTan/ArcSinh/ArcTanh family
+    (`Limit[x^a Sin[b/x^a], x -> Infinity] = b`); a late fallback, so an exact
+    Series expansion always wins first.
+  - **exponential decay by an ordering fact** — the decay rate is the exponent's
+    slope, and a real rate whose sign is an ordering fact decides decay
+    (`Limit[E^(a x^2 + b x)/E^(a x^2 + d x), x -> -Infinity, b > d] = 0`).
+  - **Abs of a complex argument** folds to the modulus before the limit
+    (`Limit[Abs[x + I a] - x, x -> Infinity] = 0`,
+    `Limit[x (Abs[x + I a] - x), x -> Infinity] = a^2/2`), and the integrand is
+    `Refine`d under the assumptions up front, so `Limit[Sin[a Pi + x]/x, x -> 0,
+    Assumptions -> Element[a, Integers]] = (-1)^a`.
+  - **further special-function asymptotics** — Erfc, the incomplete `Gamma[s, z]`,
+    small-argument `BesselY`, and the full Stirling `Gamma[z]` (rewritten to an
+    explicit power/exp form, never routed through `Series`).
   - domain facts imply signs (`Element[n, PositiveIntegers]` gives `n > 0`), and
     the pre-existing `Assumptions -> Abs[B] R c` power dispatch (`|B| < 1 -> 0`,
     `|B| > 1 -> ComplexInfinity`, `|B| == 1 -> Indeterminate`) is unchanged.

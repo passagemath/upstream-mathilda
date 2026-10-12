@@ -869,6 +869,25 @@ static int exponent_sign_ctx(Expr* e, const AssumeCtx* ctx) {
             if (assume_known_gt_expr(ctx, a1, mag0)) return +1;
             if (assume_known_gt_expr(ctx, mag0, a1)) return -1;
         }
+        /* Affine A + k with k a numeric literal: sign from A vs -k.
+         * (a - 1 is negative under a < 1; a + 1 positive under a > -1.) */
+        {
+            Expr* A = NULL; Expr* kexpr = NULL;
+            bool lit0 = a0->type == EXPR_INTEGER || a0->type == EXPR_BIGINT ||
+                        a0->type == EXPR_REAL || head_is(a0, SYM_Rational);
+            bool lit1 = a1->type == EXPR_INTEGER || a1->type == EXPR_BIGINT ||
+                        a1->type == EXPR_REAL || head_is(a1, SYM_Rational);
+            if (lit1 && !lit0) { A = a0; kexpr = a1; }
+            else if (lit0 && !lit1) { A = a1; kexpr = a0; }
+            if (A) {
+                Expr* thr = simp(mk_neg(expr_copy(kexpr)));   /* -k */
+                int r = 0;
+                if (assume_known_gt(ctx, A, thr)) r = +1;
+                else if (assume_known_lt(ctx, A, thr)) r = -1;
+                expr_free(thr);
+                if (r) return r;
+            }
+        }
     }
     return 0;
 }
@@ -2067,31 +2086,61 @@ static Expr* layer_log_merge(Expr* f, LimitCtx* ctx) {
 /* its Taylor series `small + ...`. Handles the iterated-log shapes that  */
 /* the generic Series / L'Hospital layers can't peel.                     */
 /* ---------------------------------------------------------------------- */
-static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
-    if (!is_infinity_sym(ctx->point)) return NULL;
-    if (!head_is(f, SYM_Log) || f->data.function.arg_count != 1) return NULL;
-    Expr* inner = f->data.function.args[0];
+/* One-level rewrite of a Log[sum] at +Infinity with a unique dominant summand:
+ *   Log[dom + rest] = Log[dom] + Log[1 + rest/dom].
+ * The dominant summand is found either by the integer growth_exponent
+ * classifier, or -- when that is inconclusive (a symbolic power x^a) -- by an
+ * assumption-aware rule: a single summand Power[x, a] (or x) with
+ * exponent_sign_ctx(a) > 0, with every other summand free of x. Returns the
+ * rewritten expression (owned) or NULL; does NOT recurse. */
+static Expr* log_sum_rewrite(Expr* logexpr, LimitCtx* ctx) {
+    if (!head_is(logexpr, SYM_Log) || logexpr->data.function.arg_count != 1) return NULL;
+    Expr* inner = logexpr->data.function.args[0];
     if (!head_is(inner, SYM_Plus)) return NULL;
     size_t n = inner->data.function.arg_count;
     if (n < 2) return NULL;
 
-    /* Find the unique dominant summand by growth_exponent. */
-    int64_t max_g = 0;
     int max_idx = -1;
-    int max_count = 0;
-    bool unknown_seen = false;
+
+    /* Integer growth classifier (original behaviour). */
+    int64_t max_g = 0; int max_count = 0; bool unknown_seen = false;
     for (size_t i = 0; i < n; i++) {
         int64_t g = growth_exponent_upper(inner->data.function.args[i], ctx->x);
         if (g == LIMIT_UNKNOWN_GROWTH) { unknown_seen = true; break; }
         if (max_idx < 0 || g > max_g) { max_g = g; max_idx = (int)i; max_count = 1; }
         else if (g == max_g) max_count++;
     }
-    if (unknown_seen || max_count != 1 || max_g <= 0) return NULL;
+    bool integer_dom = (!unknown_seen && max_count == 1 && max_g > 0);
 
-    /* Build rest = Plus of the other summands; then the rewrite
-     * Log[dom + rest] = Log[dom] + Log[1 + rest/dom]. Recurse via the
-     * outer dispatcher so Log-of-finite, Series, etc. can fold the
-     * Log[1 + rest/dom] term (which goes to 0). */
+    if (!integer_dom) {
+        /* Assumption-aware: a single positive-power summand x^a (a>0 known),
+         * all other summands free of x. */
+        max_idx = -1;
+        if (!ctx->assume) return NULL;
+        for (size_t i = 0; i < n; i++) {
+            Expr* si = inner->data.function.args[i];
+            Expr* aexp = NULL;
+            if (expr_eq(si, ctx->x)) aexp = mk_int(1);
+            else if (head_is(si, SYM_Power) && si->data.function.arg_count == 2 &&
+                     expr_eq(si->data.function.args[0], ctx->x) &&
+                     free_of(si->data.function.args[1], ctx->x))
+                aexp = expr_copy(si->data.function.args[1]);
+            if (aexp) {
+                int ps = exponent_sign_ctx(aexp, ctx->assume);
+                expr_free(aexp);
+                if (ps > 0) {
+                    if (max_idx >= 0) return NULL;   /* two positive powers: ambiguous */
+                    max_idx = (int)i;
+                }
+            }
+        }
+        if (max_idx < 0) return NULL;
+        for (size_t i = 0; i < n; i++) {
+            if ((int)i == max_idx) continue;
+            if (!free_of(inner->data.function.args[i], ctx->x)) return NULL;
+        }
+    }
+
     Expr* dom = expr_copy(inner->data.function.args[max_idx]);
     size_t rc = n - 1;
     Expr** rest_args = calloc(rc, sizeof(Expr*));
@@ -2108,8 +2157,13 @@ static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
                               mk_fn2("Power", expr_copy(dom), mk_int(-1))));
     Expr* log1p = mk_fn1("Log", mk_fn2("Plus", mk_int(1), ratio));
     Expr* log_dom = mk_fn1("Log", dom);
-    Expr* rewritten = simp(mk_fn2("Plus", log_dom, log1p));
+    return simp(mk_fn2("Plus", log_dom, log1p));
+}
 
+static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* rewritten = log_sum_rewrite(f, ctx);
+    if (!rewritten) return NULL;
     LimitCtx sub = *ctx; sub.depth += 1;
     Expr* r = compute_limit(rewritten, &sub);
     expr_free(rewritten);
@@ -2122,23 +2176,64 @@ static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
  * the termwise layer pick up the asymptotic cancellation produces the
  * iterated-log limits. This is called from the top dispatcher before
  * the generic Series layer. */
+/* Rewrite every Log[sum]-with-a-dominant-summand subterm of e via
+ * log_sum_rewrite (not recursing into the rewritten form). Sets *changed. */
+static Expr* rewrite_log_sums(Expr* e, LimitCtx* ctx, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
+        Expr* rw = log_sum_rewrite(e, ctx);
+        if (rw) { *changed = true; return rw; }
+        /* Log[g] with g a SUM that -> a finite nonzero constant -> Log[that
+         * constant], so a buried Log[x^a + y^a] (a<0: -> Log[y^a]) folds and
+         * Log[.]/Log[x] -> 0. Gated to a Plus argument: computing the inner
+         * limit of a Power tower (Log[x^(...)]) here is both pointless and a
+         * deep recursion that overflows the stack on log-tower inputs. */
+        Expr* g = e->data.function.args[0];
+        if (head_is(g, SYM_Plus) && expr_contains(g, ctx->x)) {
+            LimitCtx sub = *ctx; sub.depth += 1;
+            Expr* gc = expr_copy(g);
+            Expr* lg = compute_limit(gc, &sub); expr_free(gc);
+            if (lg && !is_divergent(lg) && !is_lit_zero(lg) &&
+                !expr_contains(lg, ctx->x)) {
+                Expr* logL = simp(mk_fn1("Log", lg));   /* consumes lg */
+                /* Only fold when Log[L] != 0 (L != 1). When L == 1 the Log -> 0,
+                 * and dropping it loses a sub-leading term that an enclosing
+                 * factor can amplify (x Log[1 + c/x] -> c, not 0). */
+                if (!is_lit_zero(logL)) { *changed = true; return logL; }
+                expr_free(logL);
+            } else if (lg) expr_free(lg);
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* head = rewrite_log_sums(e->data.function.head, ctx, changed);
+    Expr** args = (Expr**)malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        args[i] = rewrite_log_sums(e->data.function.args[i], ctx, changed);
+    Expr* r = expr_new_function(head, args, n);
+    free(args);
+    return r;
+}
+
 static Expr* layer_gruntz_iterated_log(Expr* f, LimitCtx* ctx) {
     if (!is_infinity_sym(ctx->point)) return NULL;
-    if (!head_is(f, SYM_Times) && !head_is(f, SYM_Log)) return NULL;
 
-    /* Walk f and apply the Log[sum] rewrite to every eligible Log[sum]
-     * subexpression. ReplaceAll-style traversal driven by
-     * layer_log_sum_gruntz can't be expressed directly, so we emulate
-     * a one-level rewrite by computing the limit of the transformed
-     * expression: if any rewrite fires and the result is determinate,
-     * we win; otherwise we bail. */
-    /* Simpler: only attempt when f has the specific shape Log[sum]
-     * multiplied by something free-of-x, or Log[sum] directly. */
+    /* Direct Log[sum]. */
     if (head_is(f, SYM_Log)) {
         Expr* r = layer_log_sum_gruntz(f, ctx);
         if (r) return r;
     }
-    return NULL;
+
+    /* Subterm pass: rewrite Log[sum] subexpressions anywhere in f (reaches a
+     * Log[x^a+1] buried in a quotient like Log[x^a+1]/Log[x]). Expand so the
+     * Times * Plus distributes into a termwise-summable Plus, then recurse. */
+    bool changed = false;
+    Expr* rw = rewrite_log_sums(f, ctx, &changed);
+    if (!changed) { expr_free(rw); return NULL; }
+    Expr* ex = simp(mk_fn1("Expand", rw));
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(ex, &sub);
+    expr_free(ex);
+    return r;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -2595,6 +2690,509 @@ static Expr* layer_atom_substitute(Expr* f, LimitCtx* ctx) {
     return result;
 }
 
+/* Collect the distinct non-constant symbols of `e` (variable leaves, never a
+ * function head) into the growable array `*arr`. Known numeric constants
+ * (E, Pi, EulerGamma, ...) are excluded so they are treated as real by
+ * ComplexExpand. Used by free_symbol_list for layer_exp_decay_re. */
+static void collect_vars(Expr* e, Expr*** arr, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (nm == SYM_Pi || nm == SYM_E || nm == SYM_EulerGamma ||
+            nm == SYM_GoldenRatio || nm == SYM_Catalan || nm == SYM_Degree)
+            return;
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq((*arr)[i], e)) return;   /* dedup */
+        if (*n == *cap) {
+            *cap = *cap ? *cap * 2 : 4;
+            *arr = (Expr**)realloc(*arr, *cap * sizeof(Expr*));
+        }
+        (*arr)[(*n)++] = expr_copy(e);
+        return;
+    }
+    if (e->type == EXPR_FUNCTION) {
+        /* Skip the head (Times/Plus/Re/Complex/...); only operands are vars. */
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            collect_vars(e->data.function.args[i], arr, n, cap);
+    }
+}
+
+/* Build List[v1, v2, ...] of the distinct non-constant symbols of `e`. */
+static Expr* free_symbol_list(Expr* e) {
+    Expr** arr = NULL; size_t n = 0, cap = 0;
+    collect_vars(e, &arr, &n, &cap);
+    Expr* list = expr_new_function(mk_sym("List"), arr, n);
+    free(arr);   /* expr_new_function copies the pointer array; it owns elements */
+    return list;
+}
+
+/* Group D -- exponential decay governed by the real part of the rate.
+ *
+ * For f = E^(c x) with c free of the limit variable x and x -> +/-Infinity, the
+ * magnitude is |E^(c x)| = E^(Re[c] x), so the limit is 0 exactly when
+ * Re[c] * (direction of x) < 0. This closes the parametric shapes
+ *   Limit[E^(-w t), t -> Infinity, Re[w] > 0] = 0
+ *   Limit[E^(I w t), t -> Infinity, Im[w] > 0] = 0
+ * uniformly: forming Re[c] with the rate's free symbols declared complex
+ * (ComplexExpand) turns -w into -Re[w] and I w into -Im[w], which the existing
+ * literal_sign_ctx oracle signs because the assumption fact Re[w] > 0 / Im[w] > 0
+ * is matched structurally. Assumption-gated; returns NULL on any uncertainty
+ * (unknown sign, nonlinear exponent, pure-imaginary rate), so the legacy path
+ * is untouched. */
+static Expr* layer_exp_decay_re(Expr* f, LimitCtx* ctx) {
+    if (!ctx->assume) return NULL;
+
+    int at_pos;                                  /* +1 at +Infinity, -1 at -Infinity */
+    if (is_infinity_sym(ctx->point))      at_pos = +1;
+    else if (is_neg_infinity(ctx->point)) at_pos = -1;
+    else return NULL;
+
+    if (!head_is(f, SYM_Power) || f->data.function.arg_count != 2) return NULL;
+    Expr* base = f->data.function.args[0];
+    if (!is_sym(base, "E")) return NULL;
+    Expr* arg = f->data.function.args[1];
+
+    /* rate c = slope = d(arg)/dx; free of x iff the exponent is linear in x (a
+     * constant intercept is harmless -- it is a bounded factor Exp[intercept]). */
+    Expr* c = simp(mk_fn2("D", expr_copy(arg), expr_copy(ctx->x)));
+    if (!c || expr_contains(c, ctx->x)) { if (c) expr_free(c); return NULL; }
+
+    /* s = sign of Re[c] via ComplexExpand[Re[c]] + literal_sign_ctx (reads the
+     * complex-part facts Re[w]>0, Im[w]>0). */
+    Expr* vars = free_symbol_list(c);
+    Expr* re_c = simp(mk_fn2("ComplexExpand", mk_fn1("Re", expr_copy(c)), vars));
+    int s = literal_sign_ctx(re_c, ctx->assume);
+    expr_free(re_c);
+    int s_adj = (at_pos < 0) ? -s : s;           /* at -Infinity, decay iff Re[c] > 0 */
+
+    if (s_adj < 0) { expr_free(c); return mk_int(0); }   /* decay */
+    if (s_adj > 0) {                                     /* growth */
+        Expr* vars2 = free_symbol_list(c);
+        Expr* im_c = simp(mk_fn2("ComplexExpand", mk_fn1("Im", expr_copy(c)), vars2));
+        bool im_zero = (im_c && im_c->type == EXPR_INTEGER && im_c->data.integer == 0);
+        expr_free(im_c);
+        expr_free(c);
+        /* Real rate -> E of a real argument diverging to +Infinity is +Infinity;
+         * a nonzero imaginary part makes the phase spin -> ComplexInfinity. */
+        return im_zero ? mk_sym("Infinity") : mk_sym("ComplexInfinity");
+    }
+
+    /* Undecided by the Re-part facts: a real rate whose sign is an ORDERING fact
+     * (b > d) is caught by exponent_sign_ctx. Use it ONLY for a decay verdict
+     * (-> 0, sound for any phase); growth needs the real/complex distinction
+     * this path cannot make, so abstain and let the ordinary layers decide. */
+    int sf = exponent_sign_ctx(c, ctx->assume);
+    int sf_adj = (at_pos < 0) ? -sf : sf;
+    expr_free(c);
+    return (sf_adj < 0) ? mk_int(0) : NULL;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Group A -- dominant-factor products (assumption-gated).                 */
+/*                                                                         */
+/* Three sound, shape-gated arms for a Times whose growth ordering the      */
+/* assumptions pin. Each concludes 0 only when a proven ordering makes one  */
+/* factor dominate; a genuinely indeterminate 0*Infinity is left to Gruntz. */
+/* ---------------------------------------------------------------------- */
+
+/* True iff every occurrence of x in e is as the argument of Log[x] -- i.e. e
+ * is a poly-logarithmic factor (products/powers of Log[x] and x-free consts).
+ * Detected by substituting Log[x] -> dummy and checking x is then gone. */
+static bool only_via_log(Expr* e, Expr* x) {
+    Expr* L    = mk_sym("$DP_Log$");
+    Expr* logx = mk_fn1("Log", expr_copy(x));
+    Expr* s    = subst_eval(e, logx, L);
+    bool ok = s && !expr_contains(s, x);
+    if (s) expr_free(s);
+    expr_free(logx); expr_free(L);
+    return ok;
+}
+
+/* True iff x occurs in e only polynomially: x, Power[x, m] (m free of x), an
+ * x-free constant, or a Times of those. Such a factor is beaten by any
+ * exponential decay. */
+static bool only_poly_in_x(Expr* e, Expr* x) {
+    if (free_of(e, x)) return true;
+    if (expr_eq(e, x)) return true;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2)
+        return expr_eq(e->data.function.args[0], x) &&
+               free_of(e->data.function.args[1], x);
+    if (head_is(e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!only_poly_in_x(e->data.function.args[i], x)) return false;
+        return true;
+    }
+    return false;
+}
+
+/* Arm 2 (#3, #4): x^p * (poly-log in x) * const -> 0. A power whose sign is
+ * pinned so x^p -> 0 (p > 0 at 0+, p < 0 at +Infinity) beats any power of
+ * Log[x]: |x^p| |Log x|^k -> 0. Only at 0+ (FromAbove) or +Infinity, where the
+ * factors are real. */
+static Expr* dp_power_beats_log(Expr* f, LimitCtx* ctx) {
+    bool at0   = is_lit_zero(ctx->point) && ctx->dir == LIMIT_DIR_FROMABOVE;
+    bool atinf = is_infinity_sym(ctx->point);
+    if (!at0 && !atinf) return NULL;
+
+    Expr* pexp = NULL;          /* net exponent of x (owned) */
+    bool have_log = false;
+    for (size_t i = 0; i < f->data.function.arg_count; i++) {
+        Expr* fi = f->data.function.args[i];
+        if (expr_eq(fi, ctx->x)) {
+            pexp = pexp ? simp(mk_fn2("Plus", pexp, mk_int(1))) : mk_int(1);
+        } else if (head_is(fi, SYM_Power) && fi->data.function.arg_count == 2 &&
+                   expr_eq(fi->data.function.args[0], ctx->x) &&
+                   free_of(fi->data.function.args[1], ctx->x)) {
+            Expr* e = expr_copy(fi->data.function.args[1]);
+            pexp = pexp ? simp(mk_fn2("Plus", pexp, e)) : e;
+        } else if (free_of(fi, ctx->x)) {
+            /* x-free constant: harmless */
+        } else if (only_via_log(fi, ctx->x)) {
+            have_log = true;
+        } else {
+            if (pexp) expr_free(pexp);
+            return NULL;        /* some other x-dependence: not this shape */
+        }
+    }
+    if (!pexp) return NULL;
+    if (!have_log) { expr_free(pexp); return NULL; }   /* pure power: handled elsewhere */
+    int ps = exponent_sign_ctx(pexp, ctx->assume);
+    expr_free(pexp);
+    bool vanish = (at0 && ps > 0) || (atinf && ps < 0);
+    return vanish ? mk_int(0) : NULL;
+}
+
+/* Arm 3 (#40): (polynomial in x) * a^x -> 0 when the exponential part decays.
+ * Exponential decay beats any polynomial, so x^m E^(c x) -> 0 whenever the
+ * E^(c x) part -> 0. Abstains if a companion factor is neither polynomial nor
+ * an exponential (a second transcendental shape is Gruntz territory). */
+static Expr* dp_exp_beats_poly(Expr* f, LimitCtx* ctx) {
+    if (!(is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point))) return NULL;
+
+    Expr* expprod = NULL;       /* product of exponential factors (owned) */
+    for (size_t i = 0; i < f->data.function.arg_count; i++) {
+        Expr* fi = f->data.function.args[i];
+        bool is_exp = head_is(fi, SYM_Power) && fi->data.function.arg_count == 2 &&
+                      free_of(fi->data.function.args[0], ctx->x) &&
+                      !free_of(fi->data.function.args[1], ctx->x);
+        if (is_exp) {
+            expprod = expprod ? mk_times(expprod, expr_copy(fi)) : expr_copy(fi);
+        } else if (only_poly_in_x(fi, ctx->x)) {
+            /* polynomial companion: dominated by the decay */
+        } else {
+            if (expprod) expr_free(expprod);
+            return NULL;
+        }
+    }
+    if (!expprod) return NULL;
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* le = compute_limit(expprod, &sub);
+    expr_free(expprod);
+    bool decays = le && is_lit_zero(le);
+    if (le) expr_free(le);
+    return decays ? mk_int(0) : NULL;
+}
+
+/* A factor that is bounded by a constant for ALL x (so a vanishing co-factor
+ * squeezes the product to 0): an x-free constant, or a globally bounded call
+ * (Sin, Cos, Tanh, ArcTan, ArcCot of any argument). Deliberately narrow and
+ * SOUND -- unlike magnitude_upper_bound, which is a lower bound for negative
+ * powers and would wrongly call (x^b-1)^(-1) bounded. */
+static bool is_globally_bounded_factor(Expr* fi, Expr* x) {
+    if (free_of(fi, x)) return true;
+    return head_is(fi, SYM_Sin) || head_is(fi, SYM_Cos) ||
+           head_is(fi, SYM_Tanh) || head_is(fi, SYM_ArcTan) ||
+           head_is(fi, SYM_ArcCot);
+}
+
+/* Arm 1 (#23): vanishing * bounded -> 0 by the squeeze. Requires at least one
+ * factor whose limit is a literal 0, and every other factor to be globally
+ * bounded (constant or a bounded oscillation like Sin[1/x]). */
+static Expr* dp_vanishing_times_bounded(Expr* f, LimitCtx* ctx) {
+    int n_vanish = 0;
+    for (size_t i = 0; i < f->data.function.arg_count; i++) {
+        Expr* fi = f->data.function.args[i];
+        Expr* fic = expr_copy(fi);
+        LimitCtx sub = *ctx; sub.depth += 1;
+        Expr* li = compute_limit(fic, &sub);
+        expr_free(fic);
+        bool vanish = li && is_lit_zero(li);
+        if (li) expr_free(li);
+        if (vanish) { n_vanish++; continue; }
+        if (!is_globally_bounded_factor(fi, ctx->x)) return NULL;
+    }
+    return n_vanish >= 1 ? mk_int(0) : NULL;
+}
+
+/* Dispatcher: assumption-gated, Times-only; tries the three arms in order. */
+static Expr* layer_dominant_product(Expr* f, LimitCtx* ctx) {
+    if (!ctx->assume) return NULL;
+    if (!head_is(f, SYM_Times)) return NULL;
+    Expr* r;
+    if ((r = dp_power_beats_log(f, ctx)))        return r;
+    if ((r = dp_exp_beats_poly(f, ctx)))         return r;
+    if ((r = dp_vanishing_times_bounded(f, ctx))) return r;
+    return NULL;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Groups E & F -- special-function leading asymptotics (limit-layer        */
+/* rewrites, NOT series hooks: the symbolic exponents x^a, x^(1-a),         */
+/* (x/2)^a cannot live in a SeriesData, and a Gamma series hook would       */
+/* reintroduce the documented tower hang). Each rewrites a special-function */
+/* shape to its leading term (free of the special function) and recurses.   */
+/* Dropping sub-leading corrections is sound for a limit: they are strictly */
+/* lower order, so they either vanish or cancel to a lower-order tail that  */
+/* still vanishes. */
+/* ---------------------------------------------------------------------- */
+
+/* head is symbol `nm` with the given arg count (argc < 0: any). */
+static bool head_name_is(Expr* e, const char* nm, int argc) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           strcmp(e->data.function.head->data.symbol.name, nm) == 0 &&
+           (argc < 0 || (int)e->data.function.arg_count == argc);
+}
+
+/* First subterm of `e` with head `nm`/`argc` that contains x. */
+static Expr* find_fn_subterm(Expr* e, const char* nm, int argc, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_name_is(e, nm, argc) && expr_contains(e, x)) return e;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = find_fn_subterm(e->data.function.args[i], nm, argc, x);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* #31: Gamma[A]/Gamma[B] ~ x^(A-B) as x->+Infinity (A-B free of x). Replaces
+ * the Gamma numerator/denominator pair inside a Times by Power[x, A-B]. */
+static Expr* sfa_gamma_ratio(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    if (!head_is(f, SYM_Times)) return NULL;
+    int num = -1, den = -1;
+    size_t n = f->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* fi = f->data.function.args[i];
+        if (num < 0 && head_name_is(fi, "Gamma", 1) && expr_contains(fi, ctx->x)) {
+            num = (int)i; continue;
+        }
+        if (den < 0 && head_is(fi, SYM_Power) && fi->data.function.arg_count == 2 &&
+            head_name_is(fi->data.function.args[0], "Gamma", 1) &&
+            fi->data.function.args[1]->type == EXPR_INTEGER &&
+            fi->data.function.args[1]->data.integer == -1 &&
+            expr_contains(fi->data.function.args[0], ctx->x)) {
+            den = (int)i; continue;
+        }
+    }
+    if (num < 0 || den < 0) return NULL;
+    Expr* A = f->data.function.args[num]->data.function.args[0];
+    Expr* B = f->data.function.args[den]->data.function.args[0]->data.function.args[0];
+    Expr* shift = simp(mk_fn2("Plus", expr_copy(A), mk_neg(expr_copy(B))));
+    if (expr_contains(shift, ctx->x)) { expr_free(shift); return NULL; }
+
+    Expr** args = (Expr**)malloc(n * sizeof(Expr*));   /* n-2 kept + 1 new <= n */
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        if ((int)i == num || (int)i == den) continue;
+        args[k++] = expr_copy(f->data.function.args[i]);
+    }
+    args[k++] = simp(mk_fn2("Power", expr_copy(ctx->x), shift));
+    Expr* f2 = simp(expr_new_function(mk_sym("Times"), args, k));
+    free(args);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #37: Hurwitz Zeta[s, q] ~ q^(1-s)/(s-1) + q^(-s)/2 as q->+Infinity (s free of
+ * x, q the 2nd arg containing x). TWO terms: the q^(-s)/2 term is needed when an
+ * expression subtracts the leading q^(1-s)/(s-1) to probe the next order
+ * (x^s (Zeta[s,x] - 1/((s-1) x^(s-1))) -> 1/2). */
+static Expr* sfa_zeta(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* z = find_fn_subterm(f, "Zeta", 2, ctx->x);
+    if (!z) return NULL;
+    Expr* s = z->data.function.args[0];
+    Expr* q = z->data.function.args[1];
+    if (!free_of(s, ctx->x) || free_of(q, ctx->x)) return NULL;
+    Expr* term1 = mk_fn2("Times",
+        mk_fn2("Power", expr_copy(q),
+               simp(mk_fn2("Plus", mk_int(1), mk_neg(expr_copy(s))))),
+        mk_fn2("Power", simp(mk_fn2("Plus", expr_copy(s), mk_int(-1))), mk_int(-1)));
+    Expr* term2 = mk_fn2("Times",
+        mk_fn2("Power", expr_copy(q), mk_neg(expr_copy(s))),
+        mk_fn2("Power", mk_int(2), mk_int(-1)));
+    Expr* repl = simp(mk_fn2("Plus", term1, term2));
+    Expr* f2 = subst_eval(f, z, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #32: BesselJ[nu, z] ~ (z/2)^nu / Gamma[nu+1] as z->0 (nu free of x and
+ * provably positive, z the 2nd arg -> 0 from above). */
+static Expr* sfa_bessel(Expr* f, LimitCtx* ctx) {
+    if (!is_lit_zero(ctx->point) || ctx->dir != LIMIT_DIR_FROMABOVE) return NULL;
+    Expr* bj = find_fn_subterm(f, "BesselJ", 2, ctx->x);
+    if (!bj) return NULL;
+    Expr* nu = bj->data.function.args[0];
+    Expr* z  = bj->data.function.args[1];
+    if (!free_of(nu, ctx->x) || free_of(z, ctx->x)) return NULL;
+    bool nu_pos = (nu->type == EXPR_INTEGER && nu->data.integer > 0) ||
+                  (ctx->assume && assume_known_positive(ctx->assume, nu));
+    if (!nu_pos) return NULL;
+    /* (z/2)^nu / Gamma[nu+1], written pre-distributed as z^nu * 2^(-nu) * ...
+     * (valid since z -> 0 from above, z > 0) so the z^nu factor combines with a
+     * companion z^(-nu) by exponent addition rather than relying on the
+     * symbolic-exponent power rule (x/2)^a = x^a 2^(-a), which does not fire. */
+    Expr* repl = simp(mk_fn2("Times",
+        mk_fn2("Times",
+            mk_fn2("Power", expr_copy(z), expr_copy(nu)),
+            mk_fn2("Power", mk_int(2), mk_neg(expr_copy(nu)))),
+        mk_fn2("Power", mk_fn1("Gamma", mk_fn2("Plus", expr_copy(nu), mk_int(1))),
+               mk_int(-1))));
+    Expr* f2 = subst_eval(f, bj, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #38/#39: Erfc[z] ~ Exp[-z^2]/(z Sqrt[Pi]) as z -> +Infinity. */
+static Expr* sfa_erfc(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* e = find_fn_subterm(f, "Erfc", 1, ctx->x);
+    if (!e) return NULL;
+    Expr* z = e->data.function.args[0];
+    LimitCtx s = *ctx; s.depth += 1;
+    Expr* zc = expr_copy(z);
+    Expr* lz = compute_limit(zc, &s); expr_free(zc);
+    bool zpos = lz && is_infinity_sym(lz);
+    if (lz) expr_free(lz);
+    if (!zpos) return NULL;
+    Expr* repl = simp(mk_fn2("Times",
+        mk_fn2("Times",
+            mk_fn1("Exp", mk_neg(mk_fn2("Power", expr_copy(z), mk_int(2)))),
+            mk_fn2("Power", expr_copy(z), mk_int(-1))),
+        mk_fn2("Power", mk_sym("Pi"),
+               mk_fn2("Times", mk_int(-1), mk_fn2("Power", mk_int(2), mk_int(-1))))));
+    Expr* f2 = subst_eval(f, e, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #40: incomplete Gamma[s, z] ~ z^(s-1) Exp[-z] as z -> +Infinity. */
+static Expr* sfa_incomplete_gamma(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* e = find_fn_subterm(f, "Gamma", 2, ctx->x);
+    if (!e) return NULL;
+    Expr* s = e->data.function.args[0];
+    Expr* z = e->data.function.args[1];
+    if (!free_of(s, ctx->x) || free_of(z, ctx->x)) return NULL;
+    LimitCtx sl = *ctx; sl.depth += 1;
+    Expr* zc = expr_copy(z);
+    Expr* lz = compute_limit(zc, &sl); expr_free(zc);
+    bool zpos = lz && is_infinity_sym(lz);
+    if (lz) expr_free(lz);
+    if (!zpos) return NULL;
+    /* z^(s-1) Exp[-z] (1 + (s-1)/z): the leading factor z^(s-1) Exp[-z] is kept
+     * intact (so cases where it survives, like x^(2-2a) Exp[x^2] Gamma[a,x^2]->1,
+     * still fold cleanly), and the (1 + (s-1)/z) correction supplies the
+     * sub-leading term a probe needs (x (Gamma[a,x]/(x^(a-1) Exp[-x]) - 1) -> a-1). */
+    Expr* repl = simp(mk_fn2("Times",
+        mk_fn2("Times",
+            mk_fn2("Power", expr_copy(z), simp(mk_fn2("Plus", expr_copy(s), mk_int(-1)))),
+            mk_fn1("Exp", mk_neg(expr_copy(z)))),
+        mk_fn2("Plus", mk_int(1),
+               mk_fn2("Times", simp(mk_fn2("Plus", expr_copy(s), mk_int(-1))),
+                      mk_fn2("Power", expr_copy(z), mk_int(-1))))));
+    Expr* f2 = subst_eval(f, e, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #33: BesselY[nu, z] ~ -(Gamma[nu]/Pi) (2/z)^nu as z -> 0+ (nu > 0). Written
+ * pre-distributed (z^(-nu) 2^nu) so a companion z^nu cancels by exponent sum. */
+static Expr* sfa_bessely(Expr* f, LimitCtx* ctx) {
+    if (!is_lit_zero(ctx->point) || ctx->dir != LIMIT_DIR_FROMABOVE) return NULL;
+    Expr* e = find_fn_subterm(f, "BesselY", 2, ctx->x);
+    if (!e) return NULL;
+    Expr* nu = e->data.function.args[0];
+    Expr* z  = e->data.function.args[1];
+    if (!free_of(nu, ctx->x) || free_of(z, ctx->x)) return NULL;
+    bool nu_pos = (nu->type == EXPR_INTEGER && nu->data.integer > 0) ||
+                  (ctx->assume && assume_known_positive(ctx->assume, nu));
+    if (!nu_pos) return NULL;
+    /* -(Gamma[nu]/Pi) * 2^nu * z^(-nu) */
+    Expr* repl = simp(mk_fn2("Times",
+        mk_fn2("Times",
+            mk_neg(mk_fn2("Times", mk_fn1("Gamma", expr_copy(nu)),
+                          mk_fn2("Power", mk_sym("Pi"), mk_int(-1)))),
+            mk_fn2("Power", mk_int(2), expr_copy(nu))),
+        mk_fn2("Power", expr_copy(z), mk_neg(expr_copy(nu)))));
+    Expr* f2 = subst_eval(f, e, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* #31: Stirling Gamma[z] ~ Sqrt[2 Pi] z^(z - 1/2) Exp[-z] as z -> +Infinity.
+ * Runs after the ratio arm (which cancels Gamma[A]/Gamma[B] without a tower).
+ * Replaces Gamma by an explicit power/exp form that the f^g log-reduction layer
+ * resolves -- Series is never applied to Gamma, so the documented tower hang
+ * is not reached. */
+static Expr* sfa_gamma_stirling(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* e = find_fn_subterm(f, "Gamma", 1, ctx->x);
+    if (!e) return NULL;
+    Expr* z = e->data.function.args[0];
+    LimitCtx sl = *ctx; sl.depth += 1;
+    Expr* zc = expr_copy(z);
+    Expr* lz = compute_limit(zc, &sl); expr_free(zc);
+    bool zpos = lz && is_infinity_sym(lz);
+    if (lz) expr_free(lz);
+    if (!zpos) return NULL;
+    Expr* halfneg = mk_fn2("Times", mk_int(-1), mk_fn2("Power", mk_int(2), mk_int(-1)));
+    Expr* repl = simp(mk_fn2("Times",
+        mk_fn2("Times",
+            mk_fn2("Power", mk_fn2("Times", mk_int(2), mk_sym("Pi")),
+                   mk_fn2("Power", mk_int(2), mk_int(-1))),          /* (2 Pi)^(1/2) */
+            mk_fn2("Power", expr_copy(z),
+                   simp(mk_fn2("Plus", expr_copy(z), halfneg)))),    /* z^(z - 1/2) */
+        mk_fn1("Exp", mk_neg(expr_copy(z)))));
+    Expr* f2 = subst_eval(f, e, repl);
+    expr_free(repl);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+static Expr* layer_special_fn_asymptotic(Expr* f, LimitCtx* ctx) {
+    Expr* r;
+    if ((r = sfa_gamma_ratio(f, ctx)))       return r;
+    if ((r = sfa_gamma_stirling(f, ctx)))    return r;
+    if ((r = sfa_zeta(f, ctx)))              return r;
+    if ((r = sfa_bessel(f, ctx)))            return r;
+    if ((r = sfa_erfc(f, ctx)))              return r;
+    if ((r = sfa_incomplete_gamma(f, ctx)))  return r;
+    if ((r = sfa_bessely(f, ctx)))           return r;
+    return NULL;
+}
+
 /* Find a Power[x, a] atom -- x in the base, a free of x and provably positive
  * under the assumptions, so x^a -> +Infinity. The mirror of find_mrv_power
  * (which wants x in the exponent). */
@@ -2614,31 +3212,75 @@ static Expr* find_positive_param_power(Expr* e, Expr* x, const AssumeCtx* assume
     return NULL;
 }
 
-/* Limit at x -> +Infinity of a function built from a single divergent
- * parametric monomial x^a (a > 0 known): substitute t = x^a, which -> +Infinity,
- * and recurse -- x^a/(x^a + 1) -> t/(t + 1) -> 1. The substitution is a valid
- * change of variable because x^a is increasing to +Infinity for a > 0; it is
- * sound only when x occurs nowhere outside the atom, which is exactly the
+/* Mirror of find_positive_param_power for a *vanishing* monomial: Power[x, a]
+ * with a free of x and provably negative under the assumptions, so x^a -> 0+
+ * as x -> +Infinity. */
+static Expr* find_negative_param_power(Expr* e, Expr* x, const AssumeCtx* assume) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        if (expr_eq(base, x) && free_of(exp, x) &&
+            assume_known_negative(assume, exp))
+            return e;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = find_negative_param_power(e->data.function.args[i], x, assume);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* Limit at x -> +Infinity of a function built from a single parametric monomial
+ * x^a whose sign is pinned by the assumptions. Two sound change-of-variable arms:
+ *   a > 0 known: x^a -> +Infinity. Substitute t = x^a -> Infinity, recurse --
+ *                x^a/(x^a + 1) -> t/(t + 1) -> 1.
+ *   a < 0 known: x^a -> 0+.        Substitute t = x^a -> 0 (from above), recurse
+ *                -- 1/(x^a + 1) -> 1/(t + 1) -> 1.
+ * Each substitution is a valid change of variable because x^a is strictly
+ * monotone (increasing for a > 0, decreasing to 0+ for a < 0) on x -> +Infinity;
+ * it is sound only when x occurs nowhere outside the atom, which is exactly the
  * condition that the substituted body is free of x. Assumption-gated, so it is
  * inert on the legacy (no-assumption) path. */
 static Expr* layer_param_monomial_substitute(Expr* f, LimitCtx* ctx) {
     if (!ctx->assume) return NULL;
     if (!is_infinity_sym(ctx->point)) return NULL;
-    Expr* atom = find_positive_param_power(f, ctx->x, ctx->assume);
-    if (!atom) return NULL;
 
-    Expr* u_sym = mk_sym("$LimitAtomU$");
-    Expr* f_sub = subst_eval(f, atom, u_sym);
-    if (!f_sub || expr_contains(f_sub, ctx->x)) {
-        if (f_sub) expr_free(f_sub);
-        expr_free(u_sym);
-        return NULL;
+    /* Positive arm: x^a -> +Infinity (a > 0). */
+    Expr* atom = find_positive_param_power(f, ctx->x, ctx->assume);
+    if (atom) {
+        Expr* u_sym = mk_sym("$LimitAtomU$");
+        Expr* f_sub = subst_eval(f, atom, u_sym);
+        if (!f_sub || expr_contains(f_sub, ctx->x)) {
+            if (f_sub) expr_free(f_sub);
+            expr_free(u_sym);
+            return NULL;
+        }
+        Expr* inf = mk_sym("Infinity");
+        LimitCtx sub = { u_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth + 1, ctx->method, ctx->assume };
+        Expr* result = compute_limit(f_sub, &sub);
+        expr_free(f_sub); expr_free(u_sym); expr_free(inf);
+        return result;
     }
-    Expr* inf = mk_sym("Infinity");
-    LimitCtx sub = { u_sym, inf, LIMIT_DIR_TWOSIDED, ctx->depth + 1, ctx->method, ctx->assume };
-    Expr* result = compute_limit(f_sub, &sub);
-    expr_free(f_sub); expr_free(u_sym); expr_free(inf);
-    return result;
+
+    /* Negative arm: x^a -> 0+ (a < 0). */
+    Expr* natom = find_negative_param_power(f, ctx->x, ctx->assume);
+    if (natom) {
+        Expr* u_sym = mk_sym("$LimitAtomU$");
+        Expr* f_sub = subst_eval(f, natom, u_sym);
+        if (!f_sub || expr_contains(f_sub, ctx->x)) {
+            if (f_sub) expr_free(f_sub);
+            expr_free(u_sym);
+            return NULL;
+        }
+        Expr* zero = mk_int(0);
+        LimitCtx sub = { u_sym, zero, LIMIT_DIR_FROMABOVE, ctx->depth + 1, ctx->method, ctx->assume };
+        Expr* result = compute_limit(f_sub, &sub);
+        expr_free(f_sub); expr_free(u_sym); expr_free(zero);
+        return result;
+    }
+
+    return NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -3069,9 +3711,230 @@ static Expr* layer_oscillatory(Expr* f, LimitCtx* ctx) {
 /* ---------------------------------------------------------------------- */
 /* Top-level dispatch                                                      */
 /* ---------------------------------------------------------------------- */
+/* Group G -- one-sided limit of a step function at an integer point.
+ *
+ * Floor/Ceiling/Round/IntegerPart/FractionalPart are on the discontinuous-head
+ * list, so compute_limit's opaque-head gate otherwise refuses them outright
+ * (even for a literal-integer point) and continuous substitution would silently
+ * pick one side of the jump. This handler, run before both gates, resolves
+ * H[g] when the inner one-sided limit m = lim g is an integer (literal, or
+ * assume_known_integer for a symbolic point a in Integers) and g approaches m
+ * from a determinable side. Jump table (approaching integer m):
+ *     Floor:          below m-1, above m
+ *     Ceiling:        below m,   above m+1
+ *     Round:          m          (continuous at integers)
+ *     FractionalPart: below 1,   above 0
+ *     IntegerPart:    like Floor for m>0, like Ceiling for m<0, 0 at m==0
+ * One-sided only; a non-integer m, undeterminable side, or unknown-sign m (for
+ * IntegerPart) all abstain -> NULL (today's unevaluated result preserved). */
+static Expr* try_step_function_onesided(Expr* f, LimitCtx* ctx) {
+    if (ctx->dir != LIMIT_DIR_FROMABOVE && ctx->dir != LIMIT_DIR_FROMBELOW)
+        return NULL;
+    if (!f || f->type != EXPR_FUNCTION) return NULL;
+    if (f->data.function.head->type != EXPR_SYMBOL) return NULL;
+    if (f->data.function.arg_count != 1) return NULL;
+    const char* hn = f->data.function.head->data.symbol.name;
+    bool is_floor = strcmp(hn, "Floor") == 0;
+    bool is_ceil  = strcmp(hn, "Ceiling") == 0;
+    bool is_round = strcmp(hn, "Round") == 0;
+    bool is_frac  = strcmp(hn, "FractionalPart") == 0;
+    bool is_ipart = strcmp(hn, "IntegerPart") == 0;
+    if (!(is_floor || is_ceil || is_round || is_frac || is_ipart)) return NULL;
+
+    Expr* g = f->data.function.args[0];
+    if (!expr_contains(g, ctx->x)) return NULL;   /* constant arg: nothing to do */
+
+    /* Inner one-sided limit m of g; must be an integer (literal or assumed). */
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* gc = expr_copy(g);
+    Expr* m = compute_limit(gc, &sub);
+    expr_free(gc);                       /* compute_limit does not take ownership */
+    if (!m) return NULL;
+    bool m_int = (m->type == EXPR_INTEGER) || (m->type == EXPR_BIGINT) ||
+                 (ctx->assume && assume_known_integer(ctx->assume, m));
+    if (!m_int || expr_contains(m, ctx->x)) { expr_free(m); return NULL; }
+
+    /* Side at which g approaches m (sign of g - m near the point). */
+    Expr* gm = simp(mk_fn2("Plus", expr_copy(g), mk_neg(expr_copy(m))));
+    int side = sign_near_point(gm, ctx);
+    expr_free(gm);
+    if (side == 0) { expr_free(m); return NULL; }
+    bool from_below = (side < 0);
+
+    if (is_round) return m;                         /* continuous at integers */
+    if (is_frac) { expr_free(m); return from_below ? mk_int(1) : mk_int(0); }
+    if (is_floor)
+        return from_below ? simp(mk_fn2("Plus", m, mk_int(-1))) : m;
+    if (is_ceil)
+        return from_below ? m : simp(mk_fn2("Plus", m, mk_int(1)));
+    /* IntegerPart truncates toward zero: the jump depends on sign(m). */
+    if (m->type == EXPR_INTEGER && m->data.integer == 0) { expr_free(m); return mk_int(0); }
+    int sm = literal_sign_ctx(m, ctx->assume);
+    if (sm > 0) return from_below ? simp(mk_fn2("Plus", m, mk_int(-1))) : m;
+    if (sm < 0) return from_below ? m : simp(mk_fn2("Plus", m, mk_int(1)));
+    expr_free(m);
+    return NULL;                                    /* unknown-sign m: abstain */
+}
+
+/* `f` is a Times with exactly one Floor/Ceiling/Round/IntegerPart[g] factor
+ * whose argument g -> +/-Infinity, and the product of the OTHER factors -> 0.
+ * Then the O(1) step error washes out and H[g] ~ g: replace it and recurse.
+ * (Floor[x/a] a/x -> 1, x Floor[a/x] -> a, Floor[a x]/(a x) -> 1.) The rest->0
+ * gate is what keeps `Floor[x] - x` — which oscillates — from folding to 0. */
+static Expr* try_step_asymptotic(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Times)) return NULL;
+    size_t n = f->data.function.arg_count;
+    int idx = -1;
+    for (size_t i = 0; i < n; i++) {
+        Expr* fi = f->data.function.args[i];
+        if ((head_name_is(fi, "Floor", 1) || head_name_is(fi, "Ceiling", 1) ||
+             head_name_is(fi, "Round", 1) || head_name_is(fi, "IntegerPart", 1)) &&
+            expr_contains(fi, ctx->x)) {
+            if (idx >= 0) return NULL;      /* more than one: bail */
+            idx = (int)i;
+        }
+    }
+    if (idx < 0) return NULL;
+    Expr* g = f->data.function.args[idx]->data.function.args[0];
+
+    LimitCtx s1 = *ctx; s1.depth += 1;
+    Expr* gc = expr_copy(g);
+    Expr* lg = compute_limit(gc, &s1); expr_free(gc);
+    /* g -> infinite magnitude in any direction (incl. ComplexInfinity for a
+     * two-sided a/x): |Floor[g] - g| < 1, and the rest->0 gate below makes that
+     * bounded error vanish regardless of direction. Indeterminate is excluded. */
+    bool ginf = lg && (is_infinity_sym(lg) || is_neg_infinity(lg) ||
+                       is_complex_infinity(lg) || is_directed_infinity(lg));
+    if (lg) expr_free(lg);
+    if (!ginf) return NULL;
+
+    Expr* rest = mk_int(1);
+    for (size_t i = 0; i < n; i++)
+        if ((int)i != idx) rest = mk_times(rest, expr_copy(f->data.function.args[i]));
+    rest = simp(rest);
+    LimitCtx s2 = *ctx; s2.depth += 1;
+    Expr* rc = expr_copy(rest);
+    Expr* lr = compute_limit(rc, &s2); expr_free(rc); expr_free(rest);
+    bool rzero = lr && is_lit_zero(lr);
+    if (lr) expr_free(lr);
+    if (!rzero) return NULL;
+
+    Expr* f2 = subst_eval(f, f->data.function.args[idx], g);
+    LimitCtx s3 = *ctx; s3.depth += 1;
+    Expr* r = compute_limit(f2, &s3);
+    expr_free(f2);
+    return r;
+}
+
+/* `f` is a Times with a FractionalPart[g] factor (bounded in [0,1)) and the
+ * product of the other factors -> 0; the whole product -> 0. */
+static Expr* try_bounded_opaque_vanishing(Expr* f, LimitCtx* ctx) {
+    if (!head_is(f, SYM_Times)) return NULL;
+    size_t n = f->data.function.arg_count;
+    int idx = -1;
+    for (size_t i = 0; i < n; i++) {
+        Expr* fi = f->data.function.args[i];
+        if (head_name_is(fi, "FractionalPart", 1) && expr_contains(fi, ctx->x)) {
+            if (idx >= 0) return NULL;
+            idx = (int)i;
+        }
+    }
+    if (idx < 0) return NULL;
+    Expr* rest = mk_int(1);
+    for (size_t i = 0; i < n; i++)
+        if ((int)i != idx) rest = mk_times(rest, expr_copy(f->data.function.args[i]));
+    rest = simp(rest);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* rc = expr_copy(rest);
+    Expr* lr = compute_limit(rc, &sub); expr_free(rc); expr_free(rest);
+    bool rzero = lr && is_lit_zero(lr);
+    if (lr) expr_free(lr);
+    return rzero ? mk_int(0) : NULL;
+}
+
+/* Mod[a, x] with a free of x and provably >= 0, at x -> +Infinity: for x > a
+ * (eventually true) a mod x = a, so the limit is a. */
+static Expr* try_mod_at_infinity(Expr* f, LimitCtx* ctx) {
+    if (!is_infinity_sym(ctx->point)) return NULL;
+    Expr* m = find_fn_subterm(f, "Mod", 2, ctx->x);
+    if (!m) return NULL;
+    Expr* a = m->data.function.args[0];
+    Expr* mod = m->data.function.args[1];
+    if (!free_of(a, ctx->x) || !expr_eq(mod, ctx->x)) return NULL;
+    bool a_nonneg = literal_sign(a) > 0 ||
+                    (a->type == EXPR_INTEGER && a->data.integer == 0) ||
+                    (ctx->assume && assume_known_nonneg(ctx->assume, a));
+    if (!a_nonneg) return NULL;
+    Expr* f2 = subst_eval(f, m, a);
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
+/* Heads h with h(u) ~ u as u -> 0 (leading Taylor coefficient 1). */
+static bool is_linearizable_head(Expr* e) {
+    return head_name_is(e, "Sin", 1) || head_name_is(e, "Tan", 1) ||
+           head_name_is(e, "Sinh", 1) || head_name_is(e, "Tanh", 1) ||
+           head_name_is(e, "ArcSin", 1) || head_name_is(e, "ArcTan", 1) ||
+           head_name_is(e, "ArcSinh", 1) || head_name_is(e, "ArcTanh", 1);
+}
+
+/* First subterm H[g] with H in the ~identity family and g -> 0 (g contains x). */
+static Expr* find_linearizable(Expr* e, LimitCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (is_linearizable_head(e) && expr_contains(e->data.function.args[0], ctx->x)) {
+        Expr* g = e->data.function.args[0];
+        LimitCtx sub = *ctx; sub.depth += 1;
+        Expr* gc = expr_copy(g);
+        Expr* lg = compute_limit(gc, &sub); expr_free(gc);
+        bool zero = lg && is_lit_zero(lg);
+        if (lg) expr_free(lg);
+        if (zero) return e;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = find_linearizable(e->data.function.args[i], ctx);
+        if (r) return r;
+    }
+    return NULL;
+}
+
+/* Small-argument linearization: replace an H[g] (H ~ identity at 0) whose
+ * argument g -> 0 by its leading term g, then recurse. Closes shapes with a
+ * SYMBOLIC vanishing argument that Series cannot expand (x^a Sin[b/x^a] -> b,
+ * x^a Sin[b/x^c] -> 0 for c > a). A LATE fallback: placed after Series /
+ * L'Hospital so it never pre-empts an exact expansion (and so an adversarial
+ * sub-leading probe like (Sin[x]-x)/x^3 is resolved by Series first, not here).
+ * Dropping the O(g^3) tail is sound for the limit -- it vanishes relative to
+ * the leading term. */
+static Expr* layer_small_arg_linearize(Expr* f, LimitCtx* ctx) {
+    Expr* h = find_linearizable(f, ctx);
+    if (!h) return NULL;
+    Expr* f2 = subst_eval(f, h, h->data.function.args[0]);
+    if (!f2 || expr_eq(f2, f)) { if (f2) expr_free(f2); return NULL; }
+    LimitCtx sub = *ctx; sub.depth += 1;
+    Expr* r = compute_limit(f2, &sub);
+    expr_free(f2);
+    return r;
+}
+
 static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
     if (ctx->depth >= LIMIT_MAX_DEPTH) return NULL;
     ctx->depth++;
+
+    /* Opaque-head limits that must precede the opaque-head gate (which rejects
+     * Floor/Ceiling/FractionalPart/Mod outright) and continuous substitution:
+     *  - one-sided step function at an integer point;
+     *  - Floor/Ceiling asymptotic in a product whose other factors vanish;
+     *  - FractionalPart (bounded) times a vanishing factor;
+     *  - Mod[a, x] -> a at +Infinity. */
+    {
+        Expr* sg = try_step_function_onesided(f_in, ctx);
+        if (!sg) sg = try_step_asymptotic(f_in, ctx);
+        if (!sg) sg = try_bounded_opaque_vanishing(f_in, ctx);
+        if (!sg) sg = try_mod_at_infinity(f_in, ctx);
+        if (sg) { ctx->depth--; return sg; }
+    }
 
     /* Refuse early if f applies an undefined/opaque head to anything
      * involving the limit variable. Without a continuity assumption we
@@ -3151,6 +4014,15 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * 0^n for x^n at x -> 0. Inert (NULL) when no assumption is present. */
     TRY(LIMIT_M_SUBSTITUTION, layer_param_power(f, ctx));
 
+    /* Special-function leading asymptotics (Gamma ratio -> x^a, Hurwitz Zeta,
+     * small-argument BesselJ). Must run before continuous substitution, which
+     * would otherwise substitute the point into e.g. BesselJ[a,x]/x^a and
+     * return the husk BesselJ[a,0] 0^(-a). Also the Gamma firewall: the ratio
+     * becomes a pure power, so no Gamma[x] tower ever reaches Series/Gruntz.
+     * Shape-gated (Gamma ratio / Hurwitz Zeta at +Infinity, BesselJ at 0+);
+     * inert on every other shape. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_special_fn_asymptotic(f, ctx));
+
     /* Layer 1: structural fast paths, including continuous substitution. */
     TRY(LIMIT_M_SUBSTITUTION, layer1_fast_paths(f, ctx));
 
@@ -3162,6 +4034,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
     /* f[g(x)] at +/-Infinity via the head's own value there (Erf, Tanh,
      * ArcTan, Exp, Gamma, ...). Generalises the old ArcTan/ArcCot rule. */
     TRY(LIMIT_M_ASYMPTOTIC, layer_compose_at_infinity(f, ctx));
+
+    /* Exponential decay/growth governed by Re[rate] under a complex-part
+     * assumption (E^(-w t), Re[w] > 0 -> 0; E^(I w t), Im[w] > 0 -> 0). Runs
+     * after compose-at-infinity (which cannot see through the symbolic rate)
+     * and before the analytic layers. Assumption-gated; inert otherwise. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_exp_decay_re(f, ctx));
 
     /* Layer 3: rational function short-cut (P(x)/Q(x) classical forms). */
     TRY(LIMIT_M_RATIONAL, layer3_rational(f, ctx));
@@ -3190,6 +4068,14 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * so we try to squeeze to 0 first. Gating is enforced inside the
      * layer (currently only fires at +Infinity). */
     TRY(LIMIT_M_BOUNDED, layer_bounded_envelope(f, ctx));
+
+    /* Assumption-pinned product dominance (x^p Log[x] -> 0, x a^x -> 0 for
+     * 0<a<1, x^a Sin[1/x] -> 0). Runs after the established squeeze (so its
+     * passing cases are not re-attributed) and before oscillatory/series,
+     * because a vanishing*bounded product genuinely -> 0 even when the bounded
+     * factor oscillates, and Series cannot read Sin[1/x] at 0 or symbolic x^a.
+     * Assumption-gated; inert otherwise. */
+    TRY(LIMIT_M_BOUNDED, layer_dominant_product(f, ctx));
 
     /* Max/Min of a bounded oscillation vs a dominating definite limit
      * (Max[Sin[x], 2] -> 2). The mrv engine's dominance test can't order a
@@ -3236,6 +4122,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
     /* Function of a single divergent parametric monomial x^a (a > 0), e.g.
      * x^a/(x^a + 1) -> 1, via the t = x^a substitution. Assumption-gated. */
     TRY(LIMIT_M_SUBSTITUTION, layer_param_monomial_substitute(f, ctx));
+
+    /* Late fallback: linearize H[g] ~ g for a vanishing argument g -> 0 (H in
+     * the Sin/Tan/Sinh/ArcTan/... ~identity family). Reaches symbolic shapes
+     * Series cannot expand (x^a Sin[b/x^a] -> b). After Series/L'Hospital so it
+     * never overrides an exact expansion. */
+    TRY(LIMIT_M_ASYMPTOTIC, layer_small_arg_linearize(f, ctx));
 
     /* Constant-factor linearity: Limit[c f, x->a] = c Limit[f, x->a]. Runs
      * late so it only rescues shapes the analytic layers left unresolved
@@ -4069,6 +4961,62 @@ static Expr* conjugate_imaginary(Expr* e) {
     return simp(ra);
 }
 
+/* True iff e contains an explicit Complex[] (the imaginary unit I is
+ * Complex[0, 1]). */
+static bool contains_complex_atom(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Complex", -1)) return true;
+    if (contains_complex_atom(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_complex_atom(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Replace each Abs[z] whose argument is complex-valued (contains Complex[]) by
+ * ComplexExpand[Abs[z], {}] = Sqrt[Re[z]^2 + Im[z]^2], so Abs[x + I a] folds to
+ * Sqrt[x^2 + a^2] before the limit sees it (otherwise the modulus is dropped). */
+static Expr* rewrite_abs_complex(Expr* e, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (head_name_is(e, "Abs", 1) && contains_complex_atom(e->data.function.args[0])) {
+        *changed = true;
+        return simp(mk_fn2("ComplexExpand", mk_fn1("Abs", expr_copy(e->data.function.args[0])),
+                           expr_new_function(mk_sym("List"), NULL, 0)));
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* head = rewrite_abs_complex(e->data.function.head, changed);
+    Expr** args = (Expr**)malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        args[i] = rewrite_abs_complex(e->data.function.args[i], changed);
+    Expr* r = expr_new_function(head, args, n);
+    free(args);
+    return r;
+}
+
+/* Preprocess the integrand once at the top level: fold Abs-of-complex, then
+ * Refine under the effective assumptions (so e.g. Sin[a Pi + x] with
+ * a in Integers reduces to (-1)^a Sin[x] before the cascade). Always returns an
+ * owned expression (a copy when nothing changed); the caller frees it. */
+static Expr* limit_preprocess(Expr* f, Expr** opts, size_t nopts) {
+    bool changed = false;
+    Expr* cur = rewrite_abs_complex(f, &changed);
+
+    Expr* opt = find_assumptions_opt(opts, nopts);     /* borrowed */
+    Expr* assum = NULL;
+    if (opt && !is_sym(opt, "Automatic")) {
+        assum = expr_copy(opt);
+    } else {
+        Expr* amb = read_dollar_assumptions();          /* owned; True when unset */
+        if (amb && !is_sym(amb, "True") && !is_sym(amb, "Automatic")) assum = amb;
+        else if (amb) expr_free(amb);
+    }
+    if (assum) {
+        Expr* refined = simp(mk_fn2("Refine", expr_copy(cur), assum)); /* consumes assum */
+        if (refined && !expr_eq(refined, cur)) { expr_free(cur); cur = refined; }
+        else if (refined) expr_free(refined);
+    }
+    return cur;
+}
+
 static Expr* builtin_limit_impl(Expr* res) {
     /* Contract: the evaluator frees `res` on a non-NULL return (see
      * src/eval.c); we must not free it ourselves. Return NULL to leave
@@ -4133,6 +5081,12 @@ static Expr* builtin_limit_impl(Expr* res) {
      * cascade via LimitCtx.assume; freed at the single cleanup exit below. */
     AssumeCtx* actx = limit_effective_assumptions(opts, nopts);
     Expr* out = NULL;
+
+    /* Preprocess the integrand once (Abs-of-complex fold + assumption Refine).
+     * `f` henceforth points at the owned preprocessed form; the original
+     * args[0] is untouched (the evaluator frees res). f_pre is freed at cleanup. */
+    Expr* f_pre = limit_preprocess(f, opts, nopts);
+    f = f_pre;
 
     /* Abs[B] R c option form -> 0 / ComplexInfinity / Indeterminate. This one
      * reads the raw option (not the AssumeCtx) and stays a pre-pass; the ctx-
@@ -4220,6 +5174,7 @@ static Expr* builtin_limit_impl(Expr* res) {
 
 cleanup:
     assume_ctx_free(actx);
+    expr_free(f_pre);
     return out;
 }
 

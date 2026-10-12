@@ -182,8 +182,35 @@ def main():
     def latex(msgs):
         return [m.get("latex") for m in msgs if m["type"] == "expr"]
 
+    def untag(tex):
+        """slatex with its \\htmlData{mp=K}{...} selection tags removed."""
+        if tex is None:
+            return None
+        out, i, marker, closers = [], 0, "\\htmlData{mp=", []
+        depth = 0
+        while i < len(tex):
+            if tex.startswith(marker, i):
+                j = tex.index("}{", i) + 2      # skip `\htmlData{mp=K}{`
+                closers.append(depth)
+                i = j
+                continue
+            c = tex[i]
+            if c == "\\" and i + 1 < len(tex):          # escaped char: copy both
+                out.append(tex[i:i + 2]); i += 2; continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                if closers and closers[-1] == depth:      # a tag's closing brace
+                    closers.pop(); i += 1; continue
+                depth -= 1
+            out.append(c); i += 1
+        return "".join(out)
+
     def slatex(msgs):
-        return [m.get("slatex") for m in msgs if m["type"] == "expr"]
+        return [untag(m.get("slatex")) for m in msgs if m["type"] == "expr"]
+
+    def sparts(msgs):
+        return [m.get("sparts") for m in msgs if m["type"] == "expr"]
 
     by_id, raw, err = session([
         {"id": 1, "expr": "a -> b", "cell": True},
@@ -268,6 +295,34 @@ def main():
     check("slatex: StandardForm spells the operators as the language does",
           slatex(by_id.get(4, [])) == ["\\mathrm{x}\\mathrel{==}1\\mathrel{\\&\\&}\\mathrm{y}"],
           by_id.get(4))
+
+    # ---- StandardForm is selectable --------------------------------------------
+    #
+    # Every subexpression of `slatex` is tagged \htmlData{mp=K}{...}, and sparts[K]
+    # is its InputForm, which is what the notebook copies when a reader selects
+    # part of a result. sparts[0] is the whole result, so it must equal the payload.
+    by_id, raw, err = session([
+        {"id": 1, "expr": "(1 + x)/Sqrt[2 + y] + Sin[a b]", "cell": True},
+        {"id": 2, "expr": "TraditionalForm[Sin[x]]", "cell": True},
+        {"id": 3, "expr": "Range[5000]", "cell": True},
+    ])
+    parts = (sparts(by_id.get(1, [])) or [None])[0] or []
+    raw_s = next((m.get("slatex") for m in by_id.get(1, []) if m["type"] == "expr"), "") or ""
+    check("sparts: the whole result is part 0, equal to the payload",
+          parts[:1] == payloads(by_id.get(1, [])), by_id.get(1))
+    check("sparts: every subexpression is a part, as re-readable input text",
+          {"Sin[a b]", "a b", "(1 + x)/Sqrt[2 + y]", "1 + x", "Sqrt[2 + y]", "2 + y", "x", "y"}
+          <= set(parts), parts)
+    check("sparts: one tag per part, numbered in order",
+          raw_s.count("\\htmlData{mp=") == len(parts)
+          and all(f"\\htmlData{{mp={k}}}{{" in raw_s for k in range(len(parts))), raw_s)
+    check("sparts: no parts for an outer TraditionalForm (nothing selectable is sent)",
+          sparts(by_id.get(2, [])) == [None], by_id.get(2))
+    check("sparts: a result past the budget is sent untagged, without parts",
+          sparts(by_id.get(3, [])) == [None]
+          and "htmlData" not in (next((m.get("slatex") for m in by_id.get(3, [])
+                                       if m["type"] == "expr"), "") or ""),
+          str(by_id.get(3))[:300])
 
     # ---- request reader: length and escapes ---------------------------------
     big = "Length[{" + ",".join(["1"] * 20000) + "}]"          # ~40 KB, past the old 10 KB buffer

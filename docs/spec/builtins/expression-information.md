@@ -1018,6 +1018,15 @@ Out[3]= {a, b, b, b, c}
 - Operators are spelled as in the language: `x == 1`, `a && b`, `a || b`, `!a`, `a === b`,
   `a =!= b`, `a -> b`, `a :> b`, with ≠, ≤, ≥ for `!=`, `<=`, `>=`. A rational power stays a
   power: `x^(1/3)` is x with superscript 1/3, not a surd.
+- **Selectable output.** Part of a StandardForm result can be selected and reused as input:
+  clicking selects the innermost subexpression under the pointer, clicking inside the selection
+  widens it to the enclosing subexpression, and a drag selects the smallest subexpression covering
+  it. Cmd/Ctrl+C (or *Copy Selection as Input* on the right-click menu) copies its InputForm —
+  e.g. `Sqrt[2 + y]` out of `(1 + x)/Sqrt[2 + y]` — ready to paste into an input cell. The kernel
+  makes this possible by tagging every subexpression of the StandardForm LaTeX with
+  `\htmlData{mp=K}` and sending each one's InputForm alongside (`sparts` in the pipe protocol); a
+  very large result (over 4096 subexpressions or 256 KB of part text) is sent untagged and is not
+  selectable.
 - `StandardForm` is a display wrapper (attributes `{Protected}`): inside `TraditionalForm[...]` it
   switches the notation back for its argument; as text it prints as `expr` itself (it is kept
   under `InputForm`, so the result still re-reads).

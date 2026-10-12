@@ -163,6 +163,10 @@ ok('.out-error no longer scrolls horizontally', !/overflow-x:\s*auto/.test(rule(
 ok('a typeset expression too wide for the card falls back to wrapping code',
    /renderOutput\(item\.text, item\.latex, wideExpr\[idx\]\)/.test(outSrc)
    && /renderOutput\(item\.text, item\.slatex, wideExpr\[idx\], true\)/.test(outSrc), 'not wired');
+ok('StandardForm output is selectable: mathSelect gets the kernel sparts',
+   /use:mathSelect=\{\{[\s\S]*?item\.sparts/.test(outSrc), 'not wired');
+ok('KaTeX trusts ONLY \\htmlData (the selection tags), nothing that can link or script',
+   /trust:\s*\(ctx[^)]*\)\s*=>\s*ctx\.command === '\\\\htmlData'/.test(outSrc), 'trust widened or missing');
 ok('StandardForm (slatex) is the default display, set in Arial',
    /form === 'standard' && item\.slatex/.test(outSrc)
    && /\.out-sf \.katex[^{]*\{[^}]*font-family:\s*Arial/.test(outSrc), 'not wired');

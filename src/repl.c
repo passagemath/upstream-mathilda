@@ -424,7 +424,10 @@ void repl_loop(void) {
  *   {"id": N, "type": "expr",  "payload": "2", "latex": "2", "slatex": "2"}
  *     latex  = TraditionalForm LaTeX, slatex = StandardForm LaTeX (the
  *     notebook's default display); either is absent when it has no typeset
- *     form (print_latex.h), and slatex alone for an outer TraditionalForm[...]
+ *     form (print_latex.h), and slatex alone for an outer TraditionalForm[...].
+ *     slatex is the SELECTABLE form: its subexpressions carry
+ *     \htmlData{mp=K}, and "sparts": [...] holds each one's InputForm text
+ *     (sparts[K]; absent when the result is too large to tag).
  *   {"id": N, "type": "error", "message": "Parse error: ..."}
  *   ... (usage / names / image / plot, see pipe_eval_statement)
  *   {"id": N, "type": "done", "memory": BYTES}               -- always last
@@ -622,6 +625,27 @@ static char* pipe_json_field(const char* key, const char* value) {
     int k = snprintf(out, n, ",\"%s\":\"", key);
     json_escape(value, out + k, vlen);
     strcat(out, "\"");
+    return out;
+}
+
+/* `,"key":["<escaped>", ...]` for an optional array of JSON strings, or NULL
+ * when it is empty (the field is then left out). Caller frees. */
+static char* pipe_json_str_array(const char* key, char* const* items, size_t n) {
+    if (n == 0) return NULL;
+    size_t cap = strlen(key) + 8;
+    for (size_t i = 0; i < n; i++) cap += strlen(items[i]) * 6 + 8;
+    char* out = malloc(cap);
+    if (!out) return NULL;
+    size_t k = (size_t)snprintf(out, cap, ",\"%s\":[", key);
+    for (size_t i = 0; i < n; i++) {
+        if (i) out[k++] = ',';
+        out[k++] = '"';
+        json_escape(items[i], out + k, cap - k);
+        k += strlen(out + k);
+        out[k++] = '"';
+    }
+    out[k++] = ']';
+    out[k] = '\0';
     return out;
 }
 
@@ -1088,12 +1112,14 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
 
     char* result_str = expr_to_string(evaluated);
     char* latex_raw  = expr_to_latex(evaluated);   /* must be before expr_free */
-    char* slatex_raw = expr_to_latex_form(evaluated, LATEX_FORM_STANDARD);
+    LatexParts sparts;
+    char* slatex_raw = expr_to_latex_selectable(evaluated, &sparts);
     expr_free(evaluated);
 
     if (!result_str) {
         free(latex_raw);
         free(slatex_raw);
+        latex_parts_free(&sparts);
         char buf[128];
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
@@ -1107,6 +1133,7 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
         free(result_str);
         free(latex_raw);
         free(slatex_raw);
+        latex_parts_free(&sparts);
         char buf[128];
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
@@ -1119,22 +1146,28 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
     /* latex_raw was produced above (before expr_free) — now escape it */
     char* latex_esc  = pipe_json_field("latex", latex_raw);
     char* slatex_esc = pipe_json_field("slatex", slatex_raw);
+    char* sparts_esc = slatex_esc
+        ? pipe_json_str_array("sparts", sparts.text, sparts.count) : NULL;
     free(latex_raw);
     free(slatex_raw);
+    latex_parts_free(&sparts);
 
     size_t line_len = escaped_len + (latex_esc ? strlen(latex_esc) : 0)
-                    + (slatex_esc ? strlen(slatex_esc) : 0) + 128;
+                    + (slatex_esc ? strlen(slatex_esc) : 0)
+                    + (sparts_esc ? strlen(sparts_esc) : 0) + 128;
     char* json_line = malloc(line_len);
     if (json_line) {
         snprintf(json_line, line_len,
-                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"%s%s}",
-                 id, escaped, latex_esc ? latex_esc : "", slatex_esc ? slatex_esc : "");
+                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"%s%s%s}",
+                 id, escaped, latex_esc ? latex_esc : "", slatex_esc ? slatex_esc : "",
+                 sparts_esc ? sparts_esc : "");
         pipe_emit(json_line);
         free(json_line);
     }
     free(escaped);
     free(latex_esc);
     free(slatex_esc);
+    free(sparts_esc);
 }
 
 /* Evaluate one request, then send "done".

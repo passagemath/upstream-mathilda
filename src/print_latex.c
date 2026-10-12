@@ -47,10 +47,18 @@
 typedef struct {
     char* s; size_t len, cap;
     int std;          /* 1 = StandardForm notation, 0 = TraditionalForm */
+    /* Selectable output (expr_to_latex_selectable): when `annot` is set every
+     * rendered subexpression is wrapped in \htmlData{mp=K}{...} and its
+     * InputForm text is recorded as parts[K]. `overflow` is raised when the
+     * budget below is exceeded, and the caller re-renders without parts. */
+    int annot, overflow;
+    char** parts; size_t nparts, cap_parts, parts_bytes;
 } LBuf;
 
 static void lb_init(LBuf* b) {
     b->cap = 512; b->len = 0; b->std = 0;
+    b->annot = 0; b->overflow = 0;
+    b->parts = NULL; b->nparts = b->cap_parts = b->parts_bytes = 0;
     b->s = malloc(b->cap);
     if (b->s) b->s[0] = '\0';
 }
@@ -337,6 +345,33 @@ static void render_denom_factor(LBuf* b, const Expr* pow_expr) {
     /* pow_expr is Power[base, neg_exp] */
     const Expr* base = pow_expr->data.function.args[0];
     const Expr* nexp = pow_expr->data.function.args[1];
+
+    /* StandardForm renders the reciprocal Power[base, -neg_exp] as an
+     * expression in its own right, so it is one selectable subexpression --
+     * Sqrt[2 + y] in 1/Sqrt[2 + y], x^2 in 1/x^2 -- and is drawn by the Power
+     * arm exactly as a numerator factor would be. (Power[x, -1] is just x, which
+     * the base render below already makes selectable.) The temporary borrows
+     * `base`: its slot is NULLed before the wrapper is freed. */
+    if (b->std && !(nexp->type == EXPR_INTEGER && nexp->data.integer == -1)) {
+        Expr* pos = NULL;
+        if (nexp->type == EXPR_INTEGER && nexp->data.integer != INT64_MIN) {
+            pos = expr_new_integer(-nexp->data.integer);
+        } else if (head_is(nexp, SYM_Rational) && nexp->data.function.arg_count == 2
+                   && nexp->data.function.args[0]->type == EXPR_INTEGER
+                   && nexp->data.function.args[0]->data.integer != INT64_MIN) {
+            Expr* r[2] = { expr_new_integer(-nexp->data.function.args[0]->data.integer),
+                           expr_copy(nexp->data.function.args[1]) };
+            pos = expr_new_function(expr_new_symbol(SYM_Rational), r, 2);
+        }
+        if (pos) {
+            Expr* pa[2] = { (Expr*)base, pos };
+            Expr* recip = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
+            to_latex_prec(b, recip, PREC_MUL + 1);
+            recip->data.function.args[0] = NULL;
+            expr_free(recip);
+            return;
+        }
+    }
     /* Power[x, -1/2] is 1/Sqrt[x]: render the root, as the numerator side
      * does, rather than x^{\frac{1}{2}}. */
     if (head_is(nexp, SYM_Rational) && nexp->data.function.arg_count == 2 &&
@@ -438,7 +473,78 @@ static void to_latex_packed(LBuf* b, const Expr* a, int level, size_t* idx) {
     lb_cat(b, "\\}");
 }
 
+/* =========================================================================
+ * Selectable output: subexpression tagging
+ *
+ * A notebook reader selects PART of a typeset result and pastes it into a new
+ * input. Typeset HTML has no usable text for that (KaTeX's spans are glyphs,
+ * positioned), so the selectable StandardForm tags every subexpression it
+ * renders with \htmlData{mp=K}{...} -- a data-mp="K" attribute on the span
+ * KaTeX builds for it, which leaves layout and spacing untouched -- and records
+ * the subexpression's InputForm as parts[K]. The front end maps a click or a
+ * drag to the innermost tagged span and copies parts[K].
+ *
+ * Text per node makes the parts O(size x depth) in the worst case, so it is
+ * budgeted: past PARTS_MAX nodes or PARTS_BYTES_MAX bytes the render is
+ * abandoned and redone untagged (the result is then simply not selectable,
+ * which costs nothing for the long outputs the notebook shows as text anyway).
+ * ======================================================================== */
+
+#define PARTS_MAX        4096
+#define PARTS_BYTES_MAX  (256u * 1024u)
+
+/* Record e's InputForm text; returns its index, or -1 when over budget. */
+static long lb_add_part(LBuf* b, const Expr* e) {
+    if (b->overflow) return -1;
+    if (b->nparts >= PARTS_MAX) { b->overflow = 1; return -1; }
+    char* t = expr_to_string((Expr*)e);   /* const cast: does not modify */
+    if (!t) { b->overflow = 1; return -1; }
+    b->parts_bytes += strlen(t);
+    if (b->parts_bytes > PARTS_BYTES_MAX) { free(t); b->overflow = 1; return -1; }
+    if (b->nparts == b->cap_parts) {
+        size_t nc = b->cap_parts ? 2 * b->cap_parts : 32;
+        char** np = realloc(b->parts, nc * sizeof(char*));
+        if (!np) { free(t); b->overflow = 1; return -1; }
+        b->parts = np; b->cap_parts = nc;
+    }
+    b->parts[b->nparts] = t;
+    return (long)b->nparts++;
+}
+
+/* Node count of e, stopping as soon as it passes `cap` (a dense buffer counts
+ * its elements). Lets an obviously over-budget result skip tagging up front,
+ * before paying to print its full text as part 0. */
+static size_t count_nodes_capped(const Expr* e, size_t cap) {
+    if (!e) return 0;
+    if (e->type == EXPR_NDARRAY) {
+        size_t n = 1;
+        for (int i = 0; i < e->data.ndarray.rank && n <= cap; i++)
+            n *= (size_t)e->data.ndarray.dims[i];
+        return n + 1;
+    }
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t n = 1 + count_nodes_capped(e->data.function.head, cap);
+    for (size_t i = 0; i < e->data.function.arg_count && n <= cap; i++)
+        n += count_nodes_capped(e->data.function.args[i], cap - n + 1);
+    return n;
+}
+
+static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec);
+
+/* Every recursive render goes through here, so tagging covers every node the
+ * renderers visit -- including the display temporaries some build (the
+ * positive part of a subtracted term, a packed-array element), whose text is
+ * then exactly what is on screen. */
 static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
+    if (!b->annot || !b->s || !e) { to_latex_node(b, e, ctx_prec); return; }
+    long k = lb_add_part(b, e);
+    if (k < 0) { to_latex_node(b, e, ctx_prec); return; }
+    lb_catf(b, "\\htmlData{mp=%ld}{", k);
+    to_latex_node(b, e, ctx_prec);
+    lb_cat(b, "}");
+}
+
+static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
     if (!b->s || !e) return;
 
     /* ---- Atoms ---- */
@@ -570,6 +676,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         int bare = (sub->type == EXPR_INTEGER
                     && sub->data.integer >= 0 && sub->data.integer <= 9)
                 || (sub->type == EXPR_SYMBOL && strlen(sub->data.symbol.name) == 1);
+        if (b->annot) bare = 0;   /* c_\htmlData{..}{1} is not a subscript */
         lb_cat(b, "c_");
         if (!bare) lb_cat(b, "{");
         to_latex_prec(b, sub, PREC_ATOM);
@@ -648,8 +755,10 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
             const Expr* q = exp->data.function.args[1];
             if (p->type == EXPR_INTEGER && p->data.integer == 1) {
                 if (q->type == EXPR_INTEGER && q->data.integer == 2) {
+                    /* The radical groups its body: no brackets inside it
+                     * (Sqrt[1 + x] is √(1+x) drawn as a radical, not √((1+x))). */
                     lb_cat(b, "\\sqrt{");
-                    to_latex_prec(b, base, PREC_ATOM);
+                    to_latex_prec(b, base, 0);
                     lb_cat(b, "}");
                     return;
                 }
@@ -659,7 +768,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
                 lb_cat(b, "\\sqrt[");
                 to_latex_prec(b, q, PREC_ATOM);
                 lb_cat(b, "]{");
-                to_latex_prec(b, base, PREC_ATOM);
+                to_latex_prec(b, base, 0);
                 lb_cat(b, "}");
                 return;
             }
@@ -685,7 +794,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
     /* ---- Sqrt[x] ---- */
     if (hname == SYM_Sqrt && argc == 1) {
         lb_cat(b, "\\sqrt{");
-        to_latex_prec(b, args[0], PREC_ATOM);
+        to_latex_prec(b, args[0], 0);
         lb_cat(b, "}");
         return;
     }
@@ -841,7 +950,7 @@ static void to_latex_prec(LBuf* b, const Expr* e, int ctx_prec) {
         if (ft) {
             if (strcmp(ft->latex_cmd, "\\sqrt") == 0 && argc == 1) {
                 lb_cat(b, "\\sqrt{");
-                to_latex_prec(b, args[0], PREC_ATOM);
+                to_latex_prec(b, args[0], 0);
                 lb_cat(b, "}");
                 return;
             }
@@ -1185,4 +1294,40 @@ char* expr_to_latex_form(const Expr* e, LatexForm form) {
 
 char* expr_to_latex(const Expr* e) {
     return expr_to_latex_form(e, LATEX_FORM_TRADITIONAL);
+}
+
+void latex_parts_free(LatexParts* p) {
+    if (!p) return;
+    for (size_t i = 0; i < p->count; i++) free(p->text[i]);
+    free(p->text);
+    p->text = NULL;
+    p->count = 0;
+}
+
+char* expr_to_latex_selectable(const Expr* e, LatexParts* parts) {
+    parts->text = NULL;
+    parts->count = 0;
+    if (has_print_directive(e)
+        || (head_is(e, SYM_TraditionalForm) && e->data.function.arg_count == 1))
+        return empty_latex();               /* as expr_to_latex_form(STANDARD) */
+
+    if (count_nodes_capped(e, PARTS_MAX) > PARTS_MAX)   /* plainly over budget */
+        return expr_to_latex_form(e, LATEX_FORM_STANDARD);
+
+    LBuf b;
+    lb_init(&b);
+    if (!b.s) return NULL;
+    b.std = 1;
+    b.annot = 1;
+    to_latex_prec(&b, e, 0);
+    if (b.s && !b.overflow) {
+        parts->text = b.parts;
+        parts->count = b.nparts;
+        return b.s;                         /* caller frees both */
+    }
+    /* Over budget (or out of memory): drop the parts, render untagged. */
+    LatexParts drop = { b.parts, b.nparts };
+    latex_parts_free(&drop);
+    free(b.s);
+    return expr_to_latex_form(e, LATEX_FORM_STANDARD);
 }

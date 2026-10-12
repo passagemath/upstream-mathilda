@@ -497,6 +497,17 @@ between the two (and to InputForm, FullForm, \TeX{} or MathML); wrapping it
 in \B{TraditionalForm} or \B{StandardForm} chooses the notation from the
 input.
 
+Part of a StandardForm result can be selected and reused as
+input\index{notebook!selecting output}. A click selects the innermost
+subexpression under the pointer, a further click inside the selection widens
+it to the enclosing subexpression, and a drag selects the smallest
+subexpression that covers it. Copying then gives that subexpression as input
+text: selecting the radical in \mcode{(1 + x)/Sqrt[2 + y]} copies
+\mcode{Sqrt[2 + y]}, ready to paste into a new cell. This works because the
+kernel tags every subexpression in the StandardForm \LaTeX{} and sends the
+input form of each alongside it, so the notebook never has to recover text from
+typeset glyphs.
+
 Long results are handled differently. KaTeX cannot break a formula across
 lines, so a result with more than four commas, or more than 200 characters
 of text, is shown as wrapping monospace text instead. The rule catches long

@@ -55,4 +55,20 @@ typedef enum { LATEX_FORM_TRADITIONAL = 0, LATEX_FORM_STANDARD = 1 } LatexForm;
  */
 char* expr_to_latex_form(const Expr* e, LatexForm form);
 
+/*
+ * Selectable StandardForm — what the notebook displays.
+ *
+ * As expr_to_latex_form(e, LATEX_FORM_STANDARD), but every rendered
+ * subexpression is wrapped in \htmlData{mp=K}{...} (KaTeX: a data-mp="K"
+ * attribute; needs `trust` for \htmlData) and parts->text[K] is that
+ * subexpression's InputForm text, so a reader can select part of a result and
+ * reuse it as input. parts->text[0] is the whole expression.
+ *
+ * Past a size budget the result is the plain untagged StandardForm with
+ * parts->count == 0. Caller frees the string and calls latex_parts_free.
+ */
+typedef struct { char** text; size_t count; } LatexParts;
+char* expr_to_latex_selectable(const Expr* e, LatexParts* parts);
+void  latex_parts_free(LatexParts* p);
+
 #endif /* MATHILDA_PRINT_LATEX_H */

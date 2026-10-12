@@ -152,6 +152,27 @@ static char* ffi_json_field(const char* key, const char* value) {
     return out;
 }
 
+/* `,"key":["<escaped>", ...]` for an optional array of JSON strings, or NULL
+ * when empty. Twin of repl.c's pipe_json_str_array. Caller frees. */
+static char* ffi_json_str_array(const char* key, char* const* items, size_t n) {
+    if (n == 0) return NULL;
+    size_t cap = strlen(key) + 8;
+    for (size_t i = 0; i < n; i++) cap += FFI_JSON_ESC_BOUND(strlen(items[i])) + 2;
+    char* out = malloc(cap);
+    if (!out) return NULL;
+    size_t k = (size_t)snprintf(out, cap, ",\"%s\":[", key);
+    for (size_t i = 0; i < n; i++) {
+        if (i) out[k++] = ',';
+        out[k++] = '"';
+        ffi_json_escape(items[i], out + k, cap - k);
+        k += strlen(out + k);
+        out[k++] = '"';
+    }
+    out[k++] = ']';
+    out[k] = '\0';
+    return out;
+}
+
 /* Empty-expr sentinel: a lone result with no renderable payload. */
 static char* ffi_empty_expr(void) {
     return ffi_strdup("{\"type\":\"expr\",\"payload\":\"\"}");
@@ -210,9 +231,10 @@ char* mathilda_ffi_eval_json(const char* input) {
 
     char* text   = expr_to_string(evaluated);
     char* latex  = expr_to_latex(evaluated);   /* must be produced before free */
-    char* slatex = expr_to_latex_form(evaluated, LATEX_FORM_STANDARD);
+    LatexParts sparts;
+    char* slatex = expr_to_latex_selectable(evaluated, &sparts);
     expr_free(evaluated);
-    if (!text) { free(latex); free(slatex); return ffi_empty_expr(); }
+    if (!text) { free(latex); free(slatex); latex_parts_free(&sparts); return ffi_empty_expr(); }
 
     size_t tlen = FFI_JSON_ESC_BOUND(strlen(text));
     char* tesc = malloc(tlen);
@@ -221,21 +243,24 @@ char* mathilda_ffi_eval_json(const char* input) {
 
     char* lfield = ffi_json_field("latex", latex);
     char* sfield = ffi_json_field("slatex", slatex);
+    char* pfield = sfield ? ffi_json_str_array("sparts", sparts.text, sparts.count) : NULL;
     free(latex);
     free(slatex);
+    latex_parts_free(&sparts);
 
     char* out = NULL;
     if (tesc) {
         size_t n = strlen(tesc) + (lfield ? strlen(lfield) : 0)
-                 + (sfield ? strlen(sfield) : 0) + 64;
+                 + (sfield ? strlen(sfield) : 0) + (pfield ? strlen(pfield) : 0) + 64;
         out = malloc(n);
         if (out)
-            snprintf(out, n, "{\"type\":\"expr\",\"payload\":\"%s\"%s%s}",
-                     tesc, lfield ? lfield : "", sfield ? sfield : "");
+            snprintf(out, n, "{\"type\":\"expr\",\"payload\":\"%s\"%s%s%s}",
+                     tesc, lfield ? lfield : "", sfield ? sfield : "", pfield ? pfield : "");
     }
     free(tesc);
     free(lfield);
     free(sfield);
+    free(pfield);
     return out ? out : ffi_empty_expr();
 }
 
@@ -636,12 +661,14 @@ static void ffi_eval_statement(const FfiSink* s, Expr* parsed, int id,
     /* Ordinary result: "expr" with plain payload and optional KaTeX latex. */
     char* result_str = expr_to_string(evaluated);
     char* latex_raw  = expr_to_latex(evaluated);   /* before expr_free */
-    char* slatex_raw = expr_to_latex_form(evaluated, LATEX_FORM_STANDARD);
+    LatexParts sparts;
+    char* slatex_raw = expr_to_latex_selectable(evaluated, &sparts);
     expr_free(evaluated);
 
     if (!result_str) {
         free(latex_raw);
         free(slatex_raw);
+        latex_parts_free(&sparts);
         char buf[128];
         snprintf(buf, sizeof(buf),
                  "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
@@ -650,28 +677,37 @@ static void ffi_eval_statement(const FfiSink* s, Expr* parsed, int id,
     }
     size_t escaped_len = FFI_JSON_ESC_BOUND(strlen(result_str));
     char* escaped = malloc(escaped_len);
-    if (!escaped) { free(result_str); free(latex_raw); free(slatex_raw); return; }
+    if (!escaped) {
+        free(result_str); free(latex_raw); free(slatex_raw); latex_parts_free(&sparts);
+        return;
+    }
     ffi_json_escape(result_str, escaped, escaped_len);
     free(result_str);
 
     char* latex_esc  = ffi_json_field("latex", latex_raw);
     char* slatex_esc = ffi_json_field("slatex", slatex_raw);
+    char* sparts_esc = slatex_esc
+        ? ffi_json_str_array("sparts", sparts.text, sparts.count) : NULL;
     free(latex_raw);
     free(slatex_raw);
+    latex_parts_free(&sparts);
 
     size_t line_len = escaped_len + (latex_esc ? strlen(latex_esc) : 0)
-                    + (slatex_esc ? strlen(slatex_esc) : 0) + 128;
+                    + (slatex_esc ? strlen(slatex_esc) : 0)
+                    + (sparts_esc ? strlen(sparts_esc) : 0) + 128;
     char* json_line = malloc(line_len);
     if (json_line) {
         snprintf(json_line, line_len,
-                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"%s%s}",
-                 id, escaped, latex_esc ? latex_esc : "", slatex_esc ? slatex_esc : "");
+                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"%s%s%s}",
+                 id, escaped, latex_esc ? latex_esc : "", slatex_esc ? slatex_esc : "",
+                 sparts_esc ? sparts_esc : "");
         ffi_cell_emit(s, json_line);
         free(json_line);
     }
     free(escaped);
     free(latex_esc);
     free(slatex_esc);
+    free(sparts_esc);
 }
 
 /* True if `s` holds only whitespace and (* ... *) comments (so trailing such

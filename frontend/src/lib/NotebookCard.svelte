@@ -587,7 +587,7 @@
 
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
-      case 'expr':   return { kind: 'expr', text: msg.payload, latex: msg.latex, slatex: msg.slatex };
+      case 'expr':   return { kind: 'expr', text: msg.payload, latex: msg.latex, slatex: msg.slatex, sparts: msg.sparts };
       /* Bookkeeping, not output: runCell reads it for the In[n] label. */
       case 'line':   return null;
       case 'usage':  return { kind: 'usage',  text: msg.payload,

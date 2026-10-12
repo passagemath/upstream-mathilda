@@ -251,6 +251,78 @@ void test_standardform_latex() {
     expr_free(q);
 }
 
+void test_selectable_standardform() {
+    /* The notebook's StandardForm is SELECTABLE: every rendered subexpression
+     * is wrapped in \htmlData{mp=K}{...} and parts.text[K] is its InputForm,
+     * which is what a reader copies after selecting part of a result. */
+    Expr* in = parse_expression("(1 + x)/Sqrt[2 + y] + Sin[a b]");
+    Expr* e = evaluate(in);              /* evaluate borrows its argument */
+    expr_free(in);
+    LatexParts parts;
+    char* tex = expr_to_latex_selectable(e, &parts);
+    ASSERT(tex != NULL);
+    ASSERT(parts.count > 0);
+
+    /* Part 0 is the whole result, and equals the plain text payload. */
+    char* whole = expr_to_string(e);
+    ASSERT(strcmp(parts.text[0], whole) == 0);
+    free(whole);
+
+    /* Every subexpression is a part -- including the reciprocal in the
+     * denominator, which is drawn as one radical and so must select as one. */
+    static const char* want[] = { "Sin[a b]", "a b", "(1 + x)/Sqrt[2 + y]",
+                                  "1 + x", "Sqrt[2 + y]", "2 + y", "x", "y" };
+    for (size_t w = 0; w < sizeof(want) / sizeof(want[0]); w++) {
+        int found = 0;
+        for (size_t k = 0; k < parts.count; k++)
+            if (strcmp(parts.text[k], want[w]) == 0) { found = 1; break; }
+        if (!found) printf("  missing part \"%s\"\n", want[w]);
+        ASSERT(found);
+    }
+
+    /* One tag per part, numbered 0..count-1. */
+    for (size_t k = 0; k < parts.count; k++) {
+        char tag[48];
+        snprintf(tag, sizeof(tag), "\\htmlData{mp=%zu}{", k);
+        ASSERT(strstr(tex, tag) != NULL);
+    }
+    ASSERT(strstr(tex, "\\htmlData{mp=" ) == tex);   /* the whole is outermost */
+    free(tex);
+    latex_parts_free(&parts);
+    ASSERT(parts.count == 0 && parts.text == NULL);
+
+    /* An outer TraditionalForm has no StandardForm, so nothing is selectable. */
+    Expr* t = parse_expression("TraditionalForm[Sin[x]]");
+    char* tt = expr_to_latex_selectable(t, &parts);
+    ASSERT(tt && tt[0] == '\0' && parts.count == 0);
+    free(tt);
+    expr_free(t);
+
+    /* Over budget: plain untagged StandardForm, no parts. */
+    Expr* big_in = parse_expression("Range[10000]");
+    Expr* big = evaluate(big_in);
+    expr_free(big_in);
+    char* bt = expr_to_latex_selectable(big, &parts);
+    ASSERT(bt && !strstr(bt, "htmlData") && parts.count == 0);
+    free(bt);
+    expr_free(big);
+    expr_free(e);
+}
+
+void test_radical_body_unbracketed() {
+    /* A radical groups its body: Sqrt[1 + x] is drawn as the radical over
+     * 1+x, never over a bracketed (1+x). Both notations. */
+    Expr* in = parse_expression("{Sqrt[1 + x], (1 + x)^(1/3)}");
+    Expr* e = evaluate(in);
+    expr_free(in);
+    char* tt = expr_to_latex(e);
+    ASSERT(tt && strcmp(tt, "\\{\\sqrt{1+x}, \\sqrt[3]{1+x}\\}") == 0);
+    char* st = expr_to_latex_form(e, LATEX_FORM_STANDARD);
+    ASSERT(st && strstr(st, "\\sqrt{1+\\mathrm{x}}") != NULL);
+    free(tt); free(st);
+    expr_free(e);
+}
+
 void test_printer_directive_has_no_latex() {
     /* InputForm, FullForm, TeXForm and NumberForm ask the printer for a
      * notation that is NOT StandardForm, and typesetting has only StandardForm
@@ -363,6 +435,8 @@ int main() {
     TEST(test_operator_latex);
     TEST(test_printer_directive_has_no_latex);
     TEST(test_standardform_latex);
+    TEST(test_selectable_standardform);
+    TEST(test_radical_body_unbracketed);
     TEST(test_texform_fraction_parenthesisation);
 
     printf("All print tests passed!\n");

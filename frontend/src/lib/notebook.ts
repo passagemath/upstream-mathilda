@@ -59,8 +59,9 @@ export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
   /* latex = TraditionalForm LaTeX, slatex = StandardForm LaTeX (the default
-     display), both from the kernel; either may be absent (see print_latex.h). */
-  | { kind: 'expr';   text: string; latex?: string; slatex?: string }
+     display), both from the kernel; either may be absent (see print_latex.h).
+     slatex is selectable: sparts[K] is the InputForm of its data-mp="K" span. */
+  | { kind: 'expr';   text: string; latex?: string; slatex?: string; sparts?: string[] }
   | { kind: 'usage';  text: string; symbol?: string }  // ?sym help text: preformatted, never math
   | { kind: 'expected'; text: string }                // reference-page example: the
                                                       // recorded, verified result,

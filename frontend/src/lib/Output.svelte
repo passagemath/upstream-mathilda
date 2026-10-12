@@ -3,6 +3,7 @@
   import katex from 'katex';
   import 'katex/dist/katex.min.css';
   import './katexSetup';   /* ⅇ ⅈ ⅆ for StandardForm */
+  import { mathSelect } from './mathSelect';
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
   import { plainOutput } from './properties';
@@ -43,6 +44,21 @@
     { id: 'mathml',   label: 'MathML' },
   ];
   let exprForm: Record<number, ExprForm> = {};
+  /* The InputForm of the subexpression selected in a StandardForm result (mathSelect.ts). */
+  let selText: Record<number, string | null> = {};
+  let copiedFlash: number | null = null;
+
+  /* Context-menu Copy: the selected subexpression, else the whole result, as input text. */
+  async function copyAsInput(idx: number) {
+    const item = items[idx];
+    convertMenu = null;
+    if (!item || item.kind !== 'expr') return;
+    try {
+      await navigator.clipboard.writeText(selText[idx] ?? item.text);
+      copiedFlash = idx;
+      setTimeout(() => { if (copiedFlash === idx) copiedFlash = null; }, 900);
+    } catch { /* clipboard unavailable: nothing sensible to fall back to */ }
+  }
   let formCache: Record<number, Partial<Record<ExprForm, string>>> = {};
   let convertMenu: { idx: number; x: number; y: number } | null = null;
 
@@ -244,6 +260,14 @@
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  /* StandardForm LaTeX is SELECTABLE: the kernel tags each subexpression with \htmlData{mp=K}, so
+     KaTeX must be trusted with that one command (data-* attributes only; nothing that can link,
+     style or script) and told not to warn that it is an HTML extension. */
+  const SELECTABLE_OPTS = {
+    trust: (ctx: { command: string }) => ctx.command === '\\htmlData',
+    strict: (code: string) => (code === 'htmlExtension' ? 'ignore' as const : 'warn' as const),
+  };
+
   /* `forcePlain` is set by measureExprWidth when the typeset form turned out to be wider than the
      card. See the note there for why the measurement, not a longer string heuristic, is what decides.
      `standard` marks `latex` as StandardForm LaTeX, which is set in Arial (the .out-sf wrapper);
@@ -259,7 +283,9 @@
     // Short expressions: prefer LaTeX from the kernel
     if (latex && latex.length > 0) {
       try {
-        const html = katex.renderToString(latex, { throwOnError: false, displayMode: false });
+        const html = katex.renderToString(latex, {
+          throwOnError: false, displayMode: false, ...(standard ? SELECTABLE_OPTS : {}),
+        });
         return standard ? `<span class="out-sf">${html}</span>` : html;
       } catch { /* fall through */ }
     }
@@ -676,7 +702,12 @@
         {@const form = $plainOutput && (base === 'standard' || base === 'traditional' || base === 'mathml') ? 'input' : base}
         <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-          <div class="out-expr" title="Right-click to Convert To…"
+          <div class="out-expr" title="Click to select a subexpression · right-click to Convert To…"
+               class:out-copied={copiedFlash === idx}
+               use:mathSelect={{
+                 parts: form === 'standard' && item.slatex && !wideExpr[idx] ? item.sparts : undefined,
+                 onSelect: (t) => { selText[idx] = t; },
+               }}
                on:contextmenu={(e) => openConvertMenu(e, idx)}>
             {#if form === 'standard' && item.slatex}
               {@html renderOutput(item.text, item.slatex, wideExpr[idx], true)}
@@ -830,6 +861,9 @@
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div class="convert-menu" style="left:{convertMenu.x}px; top:{convertMenu.y}px;"
        on:click|stopPropagation on:contextmenu|preventDefault|stopPropagation>
+    <button class="convert-item"
+            on:click={() => copyAsInput(mi)}>{selText[mi] ? 'Copy Selection as Input' : 'Copy as Input'}</button>
+    <div class="convert-sep"></div>
     <div class="convert-title">Convert To</div>
     {#each CONVERT_FORMS as f (f.id)}
       <button class="convert-item"
@@ -874,6 +908,8 @@
   }
   .convert-item:hover { background: var(--surface-2, rgba(255,255,255,0.06)); }
   .convert-item.active { color: var(--accent, #89b4fa); font-weight: 600; }
+
+  .convert-sep { height: 1px; margin: 3px 4px; background: var(--menu-border, rgba(255,255,255,0.12)); }
 
   .out-converting { color: var(--text-muted, #6c7086); font-style: italic; }
 
@@ -930,10 +966,26 @@
 
   /* Expression output — overflow handled by parent .out-collapsible */
   .out-expr {
+    position: relative;     /* anchors the selection highlight (mathSelect.ts) */
     font-size: 1.05em;
     padding: 0.25rem 0;
     color: var(--out-text, #222);
     text-align: left;
+  }
+  .out-expr:focus { outline: none; }
+
+  /* The selected subexpression: a box over it rather than a background on its (inline, one line
+     tall) span, so it covers a fraction or radical whole. Clicks pass through to the math. */
+  :global(.out-expr .mp-highlight) {
+    position: absolute;
+    pointer-events: none;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--accent, #89b4fa) 22%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #89b4fa) 55%, transparent);
+  }
+  .out-copied :global(.mp-highlight),
+  :global(.out-expr .mp-highlight.mp-flash) {
+    background: color-mix(in srgb, var(--accent, #89b4fa) 40%, transparent);
   }
 
   /* StandardForm is set in Arial, as Mathematica's notebook sets it; TraditionalForm keeps

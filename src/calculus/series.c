@@ -2744,6 +2744,33 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                 if (!r && inner->nmin < 0) {
                     SeriesObj* inv = so_inv(inner);
                     if (inv) { r = so_apply_arccot(inv); so_free(inv); }
+                    /* so_apply_arccot assumes the argument -> +Infinity and emits
+                     * +Pi/2. If the argument's leading coefficient is provably
+                     * negative (argument -> -Infinity), ArcTan limits to -Pi/2:
+                     * subtract Pi from the constant term. For a positive/unknown
+                     * leading coefficient this never fires, so the legacy answer
+                     * (and the numeric-coefficient path via odd_fold) is unchanged. */
+                    if (r && ctx->assume && inner->coef_count > 0) {
+                        Expr* lead = NULL;
+                        for (size_t li = 0; li < inner->coef_count; li++)
+                            if (!is_lit_zero(inner->coefs[li])) { lead = inner->coefs[li]; break; }
+                        bool neg = false;
+                        if (lead) {
+                            neg = assume_known_negative(ctx->assume, lead);
+                            if (!neg) {
+                                Expr* lt = mk_fn2("Less", expr_copy(lead), expr_new_integer(0));
+                                neg = (assume_reduce_entails(ctx->assume, lt) == 1);
+                                expr_free(lt);
+                            }
+                        }
+                        if (neg) {
+                            Expr* negpi = simp(mk_times(expr_new_integer(-1), mk_symbol("Pi")));
+                            SeriesObj* pis = so_from_constant(negpi, r->x, r->x0, r->order, r->den);
+                            expr_free(negpi);
+                            SeriesObj* r2 = so_add(r, pis);
+                            so_free(r); so_free(pis); r = r2;
+                        }
+                    }
                 }
             }
             else if (strcmp(head, "SinIntegral") == 0) {
@@ -3848,6 +3875,47 @@ static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
     free(sd);
 
     return mk_times(mk_fn1("Exp", expr_copy(x)), series);
+}
+
+/* Asymptotic expansion of the exponential integral of the first kind
+ * ExpIntegralE[1, x] = E_1(x) at x = Infinity (DLMF 6.12.1):
+ *
+ *   E_1(x) ~ E^(-x) * Sum_{k>=0} (-1)^k k! / x^(k+1)
+ *          = E^(-x) ( 1/x - 1/x^2 + 2/x^3 - 6/x^4 + ... ).
+ *
+ * The decaying E^(-x) is an essential factor kept symbolic, as for Ei; the
+ * bracket is a Laurent series in 1/x. Returns NULL unless f is exactly
+ * ExpIntegralE[1, x] in the expansion variable. */
+static Expr* try_series_expintegralE1_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "ExpIntegralE") || f->data.function.arg_count != 2)
+        return NULL;
+    Expr* ord = f->data.function.args[0];
+    if (!(ord->type == EXPR_INTEGER && ord->data.integer == 1)) return NULL;
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+
+    /* Coefficients (-1)^k k! for k = 0 .. n-1, at 1/x exponents 1 .. n. */
+    Expr** coefs = calloc((size_t)n, sizeof(Expr*));
+    for (int64_t k = 0; k < n; k++) {
+        Expr* fk = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        if (k & 1) fk = simp(mk_times(expr_new_integer(-1), fk));
+        coefs[k] = fk;
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, (size_t)n);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sd[1] = expr_new_integer(0);
+    sd[2] = coef_list;
+    sd[3] = expr_new_integer(1);
+    sd[4] = expr_new_integer(n + 1);
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+
+    Expr* negx = simp(mk_times(expr_new_integer(-1), expr_copy(x)));
+    return mk_times(mk_fn1("Exp", negx), series);
 }
 
 /* Asymptotic expansion of SinIntegral[x] at x = Infinity (DLMF 6.12.3):
@@ -5943,6 +6011,112 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * substitution would hand a pole to naive Taylor. Emit their known
      * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
     if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity) {
+        /* Parametric (scaled) argument: for a recognised head H applied to a
+         * homogeneous linear argument c*x (c free of x, sign known under the
+         * assumptions), the bare-x emitters below decline (they match only the
+         * bare variable). Handle the scaling here:
+         *  - Saturating heads Erf/Erfc/Tanh/FresnelS/FresnelC limit to a constant
+         *    as the argument -> +-Infinity; emit that constant by Sign[c]. (Only
+         *    for the scaled form -- bare H[x] still goes through its own emitter,
+         *    which keeps the exponential/oscillatory tail, so that path is
+         *    byte-for-byte unchanged.)
+         *  - Growth/decay heads ExpIntegralEi, ExpIntegralE[1,.] carry a full
+         *    asymptotic: expand the bare H[u] at +Infinity and substitute
+         *    u -> c*x. Only for c>0, the direction the bare kernel covers. */
+        if (f_eval->type == EXPR_FUNCTION &&
+            f_eval->data.function.head->type == EXPR_SYMBOL) {
+            const char* hh = f_eval->data.function.head->data.symbol.name;
+            size_t ac = f_eval->data.function.arg_count;
+            Expr* arg = NULL;
+            int kind = 0;  /* 1 = saturating constant, 2 = Ei-like, 3 = E_1 (2-arg) */
+            if (ac == 1) {
+                if (strcmp(hh, "Erf") == 0 || strcmp(hh, "Erfc") == 0 ||
+                    strcmp(hh, "Tanh") == 0 || strcmp(hh, "FresnelS") == 0 ||
+                    strcmp(hh, "FresnelC") == 0) kind = 1;
+                else if (strcmp(hh, "ExpIntegralEi") == 0) kind = 2;
+                else if (strcmp(hh, "ArcCosh") == 0 ||
+                         strcmp(hh, "ArcSinh") == 0) kind = 4;
+                if (kind) arg = f_eval->data.function.args[0];
+            } else if (ac == 2 && strcmp(hh, "ExpIntegralE") == 0 &&
+                       f_eval->data.function.args[0]->type == EXPR_INTEGER &&
+                       f_eval->data.function.args[0]->data.integer == 1) {
+                kind = 3; arg = f_eval->data.function.args[1];
+            }
+            if (kind && arg && !expr_free_of(arg, x) && !expr_eq(arg, x)) {
+                Expr* c = simp(mk_times(expr_copy(arg),
+                                        mk_power(expr_copy(x), expr_new_integer(-1))));
+                if (expr_free_of(c, x) && !is_lit_zero(c)) {
+                    int csign = 0;
+                    if      (assume_known_positive(assume, c)) csign = +1;
+                    else if (assume_known_negative(assume, c)) csign = -1;
+                    else if (assume) {
+                        Expr* gt = mk_fn2("Greater", expr_copy(c), expr_new_integer(0));
+                        Expr* lt = mk_fn2("Less",    expr_copy(c), expr_new_integer(0));
+                        if      (assume_reduce_entails(assume, gt) == 1) csign = +1;
+                        else if (assume_reduce_entails(assume, lt) == 1) csign = -1;
+                        expr_free(gt); expr_free(lt);
+                    }
+                    if (csign != 0 && kind == 1) {
+                        int64_t ord = leading_only ? 0 : n;
+                        Expr* lim = NULL;
+                        if (strcmp(hh, "Erf") == 0 || strcmp(hh, "Tanh") == 0)
+                            lim = expr_new_integer(csign > 0 ? 1 : -1);
+                        else if (strcmp(hh, "Erfc") == 0)
+                            lim = expr_new_integer(csign > 0 ? 0 : 2);
+                        else if (ord <= 0) /* Fresnel: 1/x oscillatory tail only drops at order 0 */
+                            lim = (csign > 0) ? make_rational(1, 2) : make_rational(-1, 2);
+                        if (lim) {
+                            expr_free(c); expr_free(f_eval); expr_free(x0_eval);
+                            return lim;
+                        }
+                    } else if (csign > 0 && (kind == 2 || kind == 3)) {
+                        Expr* u = mk_symbol("$SeriesScaleVar$");
+                        Expr* h_u = (kind == 3)
+                            ? mk_fn2("ExpIntegralE", expr_new_integer(1), expr_copy(u))
+                            : mk_fn1(hh, expr_copy(u));
+                        Expr* inf = mk_symbol("Infinity");
+                        Expr* G = do_series_single(h_u, u, inf, n, leading_only, assume);
+                        expr_free(h_u); expr_free(inf);
+                        if (G) {
+                            Expr* res = simp(replace_all_of(G, u, arg));
+                            expr_free(G); expr_free(u); expr_free(c);
+                            expr_free(f_eval); expr_free(x0_eval);
+                            return res;
+                        }
+                        expr_free(u);
+                    } else if (csign < 0 && kind == 4) {
+                        /* Argument -> -Infinity: pick the correct principal branch
+                         * via the reflection identities
+                         *   ArcCosh[c x] = I Pi + ArcCosh[-c x],
+                         *   ArcSinh[c x] = -ArcSinh[-c x],
+                         * where -c x -> +Infinity is the direction the generic
+                         * rewrite expands correctly (the direct a<0 path gives the
+                         * wrong branch: -I Pi for ArcCosh, Log[2 a x] for ArcSinh).
+                         * Expand the bare H[u] at +Infinity, then map u -> (-c) x.
+                         * A fresh u is essential: building H[-c x] directly would
+                         * let odd_fold re-negate ArcSinh and cancel the fix. */
+                        Expr* u = mk_symbol("$SeriesScaleVar$");
+                        Expr* h_u = mk_fn1(hh, expr_copy(u));
+                        Expr* inf = mk_symbol("Infinity");
+                        Expr* G = do_series_single(h_u, u, inf, n, leading_only, assume);
+                        expr_free(h_u); expr_free(inf);
+                        if (G) {
+                            Expr* negarg = simp(mk_times(expr_new_integer(-1), expr_copy(arg)));
+                            Expr* sub = simp(replace_all_of(G, u, negarg));
+                            expr_free(G); expr_free(negarg);
+                            Expr* res = (strcmp(hh, "ArcCosh") == 0)
+                                ? simp(mk_plus(mk_times(mk_symbol("I"), mk_symbol("Pi")), sub))
+                                : simp(mk_times(expr_new_integer(-1), sub));
+                            expr_free(u); expr_free(c);
+                            expr_free(f_eval); expr_free(x0_eval);
+                            return res;
+                        }
+                        expr_free(u);
+                    }
+                }
+                expr_free(c);
+            }
+        }
         /* ArcTan[x] -> Pi/2 - 1/x + ...: generic Taylor probes the
          * Indeterminate ArcTan[ComplexInfinity], so emit its series directly. */
         Expr* atn = try_series_arctan_at_infinity(f_eval, x, leading_only ? 1 : n);
@@ -5956,6 +6130,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei;
+        }
+        Expr* e1 = try_series_expintegralE1_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (e1) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return e1;
         }
         Expr* si = try_series_sinintegral_at_infinity(f_eval, x, leading_only ? 1 : n);
         if (si) {

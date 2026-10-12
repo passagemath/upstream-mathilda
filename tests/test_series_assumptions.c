@@ -181,6 +181,40 @@ static void test_expansion_at_neg_infinity(void) {
         "Times[Rational[1, 8], Power[a, -3], Power[b, 2]]], -1, 2, 1]");
 }
 
+/* Parametric (scaled) arguments at infinity: the sign of the leading coefficient
+ * selects the branch / direction. ArcTan coefficient sign; saturating heads
+ * (Tanh/Erf/Erfc/Fresnel) limit to a sign-dependent constant; Ei/E_1 carry the
+ * scaled asymptotic. */
+static void test_parametric_at_infinity(void) {
+    setup_full();
+    /* ArcTan[a x] honours the sign of a (and the direction) */
+    assert_fullform("Series[ArcTan[a x], {x, Infinity, 1}, Assumptions -> a < 0]",
+        "SeriesData[Power[x, -1], 0, List[Times[Rational[-1, 2], Pi], "
+        "Times[-1, Power[a, -1]]], 0, 2, 1]");                         /* -Pi/2 - 1/(a x) */
+    assert_fullform("Series[ArcTan[a x], {x, -Infinity, 1}, Assumptions -> a < 0]",
+        "SeriesData[Power[x, -1], 0, List[Times[Rational[1, 2], Pi], "
+        "Times[-1, Power[a, -1]]], 0, 2, 1]");                         /*  Pi/2 - 1/(a x) */
+    /* saturating heads -> sign-dependent constant limit */
+    assert_fullform("Series[Tanh[a x], {x, Infinity, 1}, Assumptions -> a > 0]", "1");
+    assert_fullform("Series[Tanh[a x], {x, Infinity, 1}, Assumptions -> a < 0]", "-1");
+    assert_fullform("Series[Erf[a x], {x, Infinity, 0}, Assumptions -> a > 0]", "1");
+    assert_fullform("Series[Erf[a x], {x, Infinity, 0}, Assumptions -> a < 0]", "-1");
+    assert_fullform("Series[Erfc[a x], {x, Infinity, 0}, Assumptions -> a > 0]", "0");
+    assert_fullform("Series[Erfc[a x], {x, Infinity, 0}, Assumptions -> a < 0]", "2");
+    assert_fullform("Series[FresnelS[a x], {x, Infinity, 0}, Assumptions -> a > 0]",
+        "Rational[1, 2]");
+    /* growth/decay scaled asymptotics */
+    assert_fullform("Series[ExpIntegralEi[a x], {x, Infinity, 1}, Assumptions -> a > 0]",
+        "SeriesData[Times[Power[a, -1], Power[x, -1]], 0, "
+        "List[Power[E, Times[a, x]]], 1, 2, 1]");                      /* E^(a x)/(a x) */
+    assert_fullform("Series[ExpIntegralE[1, a x], {x, Infinity, 1}, Assumptions -> a > 0]",
+        "SeriesData[Times[Power[a, -1], Power[x, -1]], 0, "
+        "List[Power[E, Times[-1, a, x]]], 1, 2, 1]");                  /* E^(-a x)/(a x) */
+    /* bare E_1 asymptotic (new emitter) */
+    assert_fullform("Series[ExpIntegralE[1, x], {x, Infinity, 1}]",
+        "Times[SeriesData[Power[x, -1], 0, List[1], 1, 2, 1], Power[E, Times[-1, x]]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -197,6 +231,7 @@ int main(void) {
     TEST(test_even_order_root_sign);
     TEST(test_sqrt_negative_branch);
     TEST(test_expansion_at_neg_infinity);
+    TEST(test_parametric_at_infinity);
 
     printf("All series assumptions tests passed!\n");
     return 0;

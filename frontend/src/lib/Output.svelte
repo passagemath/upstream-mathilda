@@ -6,14 +6,17 @@
   import { mathSelect } from './mathSelect';
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
-  import { outputFormat } from './properties';
+  import { outputFormat, cellZoom } from './properties';
 
   /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
   export let onOpenDoc: ((name: string) => void) | null = null;
   export let items: OutputItem[] = [];
 
   // Max height before output is collapsed with a "Show more" toggle
-  const MAX_HEIGHT = 180; // px
+  const MAX_HEIGHT_BASE = 180; // px at 100% zoom; .out-collapsible's max-height is the same
+  /* The clamp grows with View › Zoom, so a zoomed output collapses after the same amount of
+     content rather than sooner. */
+  $: MAX_HEIGHT = MAX_HEIGHT_BASE * $cellZoom;
 
   // Per-item expanded/overflow state
   let expanded: Record<number, boolean> = {};
@@ -932,7 +935,7 @@
   .out-collapsible {
     width: 100%;
     min-width: 0;
-    max-height: 180px;
+    max-height: calc(180px * var(--cell-zoom, 1));   /* View › Zoom: same number of lines */
     overflow-x: auto;
     overflow-y: hidden;
     /* Fade applied only when content actually overflows (via .overflowing class) */

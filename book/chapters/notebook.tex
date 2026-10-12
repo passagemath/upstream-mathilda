@@ -839,12 +839,19 @@ Evaluation & Evaluate Cell, Evaluate Notebook, Abort Evaluation, Restart Kernel
   & \texttt{Cmd+Return}, \texttt{Cmd+Shift+Return}, \texttt{Cmd+.}, \texttt{Cmd+Shift+R} \\
 Graphics & Plot, Image, Image3D and Graphics documentation & \\
 View & Toggle Dark Mode; Output Format (InputForm, StandardForm,
-  TraditionalForm); Autocomplete; Syntax Highlighting & \texttt{Cmd+Shift+T} \\
+  TraditionalForm); Zoom (50--200\%); Autocomplete; Syntax Highlighting
+  & \texttt{Cmd+Shift+T} \\
 \bottomrule
 \end{tabular}
 \caption{The native menu bar (desktop only).}
 \label{tab:nb-menus}
 \end{table}
+
+\emph{View \textgreater{} Zoom}\index{notebook!zoom} magnifies the text of every
+cell in every notebook --- input, output, text and headings, and the In/Out
+labels --- from 50\% to 200\% in steps of 10\%, leaving the toolbar and the
+cell controls at their usual size. It is separate from \texttt{Cmd+=} and
+\texttt{Cmd+-}, which scale the whole window, toolbar included.
 
 Each native item has an id, such as \mcode{cell.merge}. When you choose it,
 Rust emits an event named \mcode{menu:cell.merge}, and a dispatcher in

@@ -41,6 +41,8 @@ pub struct ViewMenu {
     pub schemes: Vec<(String, CheckMenuItem<tauri::Wry>)>,
     /// (output-format id, its menu item) for View > Output Format; exactly one checked.
     pub outputs: Vec<(String, CheckMenuItem<tauri::Wry>)>,
+    /// (zoom percentage, its menu item) for View > Zoom; exactly one checked.
+    pub zooms: Vec<(u32, CheckMenuItem<tauri::Wry>)>,
 }
 
 // Native menu bar is a desktop-only concept; iOS/Android have no app menu.
@@ -243,6 +245,32 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
     let output_format = Submenu::with_items(app, "Output Format", true, &[
         &out_input, &out_standard, &out_traditional,
     ])?;
+    // View > Zoom: the magnification of every cell's text (the webview's cellZoom store,
+    // properties.ts), 50% to 200% in 10% steps; 100% starts ticked. Spelled out one per line
+    // for check_menu_ids.py, like the schemes.
+    let zm_50  = CheckMenuItem::with_id(app, "zoom-50",  "50%",  true, false, None::<&str>)?;
+    let zm_60  = CheckMenuItem::with_id(app, "zoom-60",  "60%",  true, false, None::<&str>)?;
+    let zm_70  = CheckMenuItem::with_id(app, "zoom-70",  "70%",  true, false, None::<&str>)?;
+    let zm_80  = CheckMenuItem::with_id(app, "zoom-80",  "80%",  true, false, None::<&str>)?;
+    let zm_90  = CheckMenuItem::with_id(app, "zoom-90",  "90%",  true, false, None::<&str>)?;
+    let zm_100 = CheckMenuItem::with_id(app, "zoom-100", "100%", true, true,  None::<&str>)?;
+    let zm_110 = CheckMenuItem::with_id(app, "zoom-110", "110%", true, false, None::<&str>)?;
+    let zm_120 = CheckMenuItem::with_id(app, "zoom-120", "120%", true, false, None::<&str>)?;
+    let zm_130 = CheckMenuItem::with_id(app, "zoom-130", "130%", true, false, None::<&str>)?;
+    let zm_140 = CheckMenuItem::with_id(app, "zoom-140", "140%", true, false, None::<&str>)?;
+    let zm_150 = CheckMenuItem::with_id(app, "zoom-150", "150%", true, false, None::<&str>)?;
+    let zm_160 = CheckMenuItem::with_id(app, "zoom-160", "160%", true, false, None::<&str>)?;
+    let zm_170 = CheckMenuItem::with_id(app, "zoom-170", "170%", true, false, None::<&str>)?;
+    let zm_180 = CheckMenuItem::with_id(app, "zoom-180", "180%", true, false, None::<&str>)?;
+    let zm_190 = CheckMenuItem::with_id(app, "zoom-190", "190%", true, false, None::<&str>)?;
+    let zm_200 = CheckMenuItem::with_id(app, "zoom-200", "200%", true, false, None::<&str>)?;
+    let zoom = Submenu::with_items(app, "Zoom", true, &[
+        &zm_50, &zm_60, &zm_70, &zm_80, &zm_90,
+        &PredefinedMenuItem::separator(app)?,
+        &zm_100,
+        &PredefinedMenuItem::separator(app)?,
+        &zm_110, &zm_120, &zm_130, &zm_140, &zm_150, &zm_160, &zm_170, &zm_180, &zm_190, &zm_200,
+    ])?;
     let syntax = Submenu::with_items(app, "Syntax Highlighting", true, &[
         &sc_default, &sc_dracula, &sc_nord, &sc_monokai, &sc_sol_dark,
         &sc_sol_light, &sc_gruvbox, &sc_one_dark, &sc_tokyo, &sc_github,
@@ -259,6 +287,7 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
                                Some("CmdOrCtrl+Shift+T"))?,
             &PredefinedMenuItem::separator(app)?,
             &output_format,
+            &zoom,
             &PredefinedMenuItem::separator(app)?,
             &toggle_autocomplete,
             &syntax,
@@ -287,6 +316,24 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
             ("input".into(), out_input),
             ("standard".into(), out_standard),
             ("traditional".into(), out_traditional),
+        ],
+        zooms: vec![
+            (50, zm_50),
+            (60, zm_60),
+            (70, zm_70),
+            (80, zm_80),
+            (90, zm_90),
+            (100, zm_100),
+            (110, zm_110),
+            (120, zm_120),
+            (130, zm_130),
+            (140, zm_140),
+            (150, zm_150),
+            (160, zm_160),
+            (170, zm_170),
+            (180, zm_180),
+            (190, zm_190),
+            (200, zm_200),
         ],
     };
 

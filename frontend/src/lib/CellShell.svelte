@@ -22,7 +22,7 @@
   import RefPage from './RefPage.svelte';
   import { openRefpage } from './canvas';
   import type { Cell, CellType, OutputItem } from './notebook';
-  import { showExecLabels } from './properties';
+  import { showExecLabels, cellZoom } from './properties';
   import { renderProse } from './prose';
   /* Rendered prose can contain KaTeX, so this component owns the stylesheet.
      Output.svelte imports it too and Vite dedupes; relying on ANOTHER component's
@@ -210,7 +210,8 @@
             }
           }),
           EditorView.theme({
-            '&': { fontSize: '1rem', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
+            /* calc(): View › Zoom (--cell-zoom) scales the input text with the rest of the cell. */
+            '&': { fontSize: 'calc(1rem * var(--cell-zoom, 1))', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
             '.cm-scroller': { overflow: 'auto', minHeight: '1.8em' },
             '.cm-content': { padding: '6px 8px', textAlign: 'left', caretColor: '#89b4fa' },
             '.cm-focused': { outline: 'none' },
@@ -245,6 +246,10 @@
   }
 
   onDestroy(() => { view?.destroy(); unregisterHandle(cell.id); });
+
+  /* View › Zoom changes the editor's font size through CSS, which CodeMirror cannot see:
+     it caches line heights and character widths, so tell it to measure again. */
+  $: if (view && $cellZoom) view.requestMeasure();
 
   $: if (view && view.state.doc.toString() !== cell.source) {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: cell.source } });
@@ -580,6 +585,11 @@
   .cell-shell {
     position: relative;
     display: flex;
+    /* View › Zoom. Everything in a cell sized in em -- the input editor, the outputs, a
+       read-only CodeView -- follows this; the few cell TEXT rules sized in rem (text and
+       heading cells, the In/Out labels) multiply by the same variable below. The gutter's
+       controls (run button, type badge) are chrome and stay put. */
+    font-size: calc(1em * var(--cell-zoom, 1));   /* 1em: unchanged at 100% */
     flex-direction: row;
     border-top: 1px solid transparent;
     border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
@@ -616,7 +626,7 @@
   }
 
   .exec-label {
-    font-size: 0.58rem;
+    font-size: calc(0.58rem * var(--cell-zoom, 1));
     color: var(--text-muted, #585b70);
     font-family: 'SF Mono', monospace;
     white-space: nowrap;
@@ -786,7 +796,7 @@
 
   .prose-cell {
     padding: 6px 8px;
-    font-size: 0.95rem;
+    font-size: calc(0.95rem * var(--cell-zoom, 1));
     color: var(--text, #cdd6f4);
     min-height: 2em;
     outline: none;
@@ -825,7 +835,7 @@
      Section and subsection keep their exact previous values, so existing notebooks and every
      reference page look unchanged. */
   .heading-title {
-    font-size: 2.05rem;
+    font-size: calc(2.05rem * var(--cell-zoom, 1));
     font-weight: 800;
     color: var(--text-h, #cdd6f4);
     letter-spacing: -0.01em;
@@ -836,14 +846,14 @@
      the subordination, which is why it may sit above Chapter in the outline while being visually
      quieter than one. */
   .heading-subtitle {
-    font-size: 1.52rem;
+    font-size: calc(1.52rem * var(--cell-zoom, 1));
     font-weight: 400;
     color: var(--text-muted, #9399b2);
     line-height: 1.25;
     padding-top: 0;
   }
   .heading-chapter {
-    font-size: 1.68rem;
+    font-size: calc(1.68rem * var(--cell-zoom, 1));
     font-weight: 750;
     color: var(--text-h, #cdd6f4);
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);
@@ -851,7 +861,7 @@
     line-height: 1.2;
   }
   .heading-section {
-    font-size: 1.42rem;
+    font-size: calc(1.42rem * var(--cell-zoom, 1));
     font-weight: 700;
     color: var(--text-h, #cdd6f4);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -859,7 +869,7 @@
     line-height: 1.25;
   }
   .heading-subsection {
-    font-size: 1.14rem;
+    font-size: calc(1.14rem * var(--cell-zoom, 1));
     font-weight: 650;
     color: var(--text, #cdd6f4);
     letter-spacing: 0.01em;
@@ -869,7 +879,7 @@
   /* The narrowest margin in the ladder: 1.04rem against body prose at 0.98rem. It wins on weight
      and tracking rather than on size, because anything larger would crowd the subsection above it. */
   .heading-subsubsection {
-    font-size: 1.04rem;
+    font-size: calc(1.04rem * var(--cell-zoom, 1));
     font-weight: 600;
     color: var(--text, #cdd6f4);
     letter-spacing: 0.02em;
@@ -878,7 +888,7 @@
   }
 
   .out-label {
-    font-size: 0.58rem;
+    font-size: calc(0.58rem * var(--cell-zoom, 1));
     color: var(--text-muted, #585b70);
     font-family: 'SF Mono', monospace;
     white-space: nowrap;

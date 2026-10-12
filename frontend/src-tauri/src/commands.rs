@@ -40,11 +40,11 @@ pub fn cancel_quit(guard: State<'_, QuitGuard>) {
 
 /// Set the View-menu checkmarks from the webview's current state, called after a
 /// menu item toggles a store so the native checkmarks stay in step — including the
-/// radio behaviour of the colour-scheme and output-format groups (exactly one
-/// checked each). Desktop-only;
+/// radio behaviour of the colour-scheme, output-format and zoom groups (exactly
+/// one checked each). Desktop-only;
 /// a no-op elsewhere. See `ViewMenu` in lib.rs.
 #[tauri::command]
-pub fn sync_view_menu(app: tauri::AppHandle, autocomplete: bool, scheme: String, output: String) {
+pub fn sync_view_menu(app: tauri::AppHandle, autocomplete: bool, scheme: String, output: String, zoom: u32) {
     #[cfg(desktop)]
     {
         use tauri::Manager;
@@ -56,11 +56,14 @@ pub fn sync_view_menu(app: tauri::AppHandle, autocomplete: bool, scheme: String,
             for (id, item) in &vm.outputs {
                 let _ = item.set_checked(*id == output);
             }
+            for (pct, item) in &vm.zooms {
+                let _ = item.set_checked(*pct == zoom);
+            }
         }
     }
     #[cfg(not(desktop))]
     {
-        let _ = (app, autocomplete, scheme, output);
+        let _ = (app, autocomplete, scheme, output, zoom);
     }
 }
 

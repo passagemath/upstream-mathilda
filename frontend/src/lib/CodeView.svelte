@@ -10,6 +10,7 @@
 -->
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import { cellZoom } from './properties';
   import { EditorView, drawSelection } from '@codemirror/view';
   import { EditorState } from '@codemirror/state';
   import { mathildaHighlightExtension } from './mathildaLang';
@@ -51,6 +52,9 @@
   $: if (el && (!view || view.state.doc.toString() !== doc)) build();
 
   onDestroy(() => view?.destroy());
+
+  /* View › Zoom resizes this view's text through CSS; CodeMirror caches its metrics. */
+  $: if (view && $cellZoom) view.requestMeasure();
 </script>
 
 <div class="code-view" bind:this={el}></div>

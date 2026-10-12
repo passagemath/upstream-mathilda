@@ -15,7 +15,7 @@
   import PropertiesPanel from './lib/PropertiesPanel.svelte';
   import SearchBar from './lib/SearchBar.svelte';
   import { searchOpen } from './lib/search';
-  import { uiScale, colorScheme } from './lib/properties';
+  import { uiScale, colorScheme, cellZoom } from './lib/properties';
   import { applyColorScheme } from './lib/schemes';
   import { kernelStatus, dirty, markClean } from './lib/notebook';
   import { darkMode } from './lib/theme';
@@ -283,6 +283,8 @@
      A store rather than a local, so the properties panel can offer the SAME value
      the keyboard drives. Two independent scales would drift apart. */
   $: document.documentElement.style.fontSize = `${$uiScale * 16}px`;
+  /* View › Zoom: the cell styles multiply their font sizes by this (CellShell, Output). */
+  $: document.documentElement.style.setProperty('--cell-zoom', String($cellZoom));
 
   /* Syntax-highlighting colour scheme: set/clear the --cm-* vars on <html>
      (lib/schemes.ts). Same shape as the dark-mode class and the font-size above. */

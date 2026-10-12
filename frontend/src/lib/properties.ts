@@ -54,6 +54,18 @@ export const autocompleteEnabled = writable(true);
  *  palettes applied over it. App.svelte applies this; the panel chooses it. */
 export const colorScheme = writable('default');
 
+/** View › Zoom: the magnification of every cell's TEXT -- inputs, outputs, text and heading
+ *  cells, In/Out labels -- across all notebooks, as a factor (1 = 100%). Distinct from
+ *  `uiScale`, which scales the whole window (toolbar and panels too): this one leaves the
+ *  chrome alone, like a notebook's magnification. App.svelte publishes it as the CSS variable
+ *  --cell-zoom, which the cell styles multiply their font sizes by. Plain writable, no
+ *  persistence — same decision as the preferences above. */
+export const cellZoom = writable(1.0);
+
+/** The Zoom menu's choices: 50% to 200% in 10% steps. Integers (percent) so a menu id and a
+ *  comparison are exact; the factor is percent / 100. */
+export const CELL_ZOOM_PERCENTS = [50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200];
+
 /** The notation every expression result is displayed in (View › Output Format):
  *  'standard' — StandardForm, Mathilda's own names typeset, the default;
  *  'traditional' — TraditionalForm, textbook notation;

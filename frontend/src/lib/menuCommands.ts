@@ -23,7 +23,7 @@ import { splitCell, mergeCellDown, duplicateCell, deleteCell, convertCell,
          copyInputFromAbove } from './cellCommands';
 import { restart, abortEvaluation } from './kernelActions';
 import { darkMode } from './theme';
-import { autocompleteEnabled, colorScheme, outputFormat } from './properties';
+import { autocompleteEnabled, colorScheme, outputFormat, cellZoom } from './properties';
 import { invoke } from '@tauri-apps/api/core';
 import type { CellType } from './notebook';
 
@@ -70,6 +70,9 @@ export const MENU_IDS = [
   'toggle-autocomplete',
   /* View > Output Format: a radio group; the id minus its prefix is the outputFormat value. */
   'output-input', 'output-standard', 'output-traditional',
+  /* View > Zoom: a radio group; the number is the percentage (cellZoom = n / 100). */
+  'zoom-50', 'zoom-60', 'zoom-70', 'zoom-80', 'zoom-90', 'zoom-100', 'zoom-110', 'zoom-120',
+  'zoom-130', 'zoom-140', 'zoom-150', 'zoom-160', 'zoom-170', 'zoom-180', 'zoom-190', 'zoom-200',
   /* Colour schemes. Spelled out longhand (not generated from COLOR_SCHEMES) for
      the same reason as the recent-N pool: check_menu_ids.py reads this list as
      source text, and the ids must match the CheckMenuItems in lib.rs. The id
@@ -125,6 +128,7 @@ function syncViewMenu() {
     autocomplete: get(autocompleteEnabled),
     scheme: get(colorScheme),
     output: get(outputFormat),
+    zoom: Math.round(get(cellZoom) * 100),
   }).catch(() => {});
 }
 
@@ -234,6 +238,25 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     case 'output-input':       outputFormat.set('input');       syncViewMenu(); break;
     case 'output-standard':    outputFormat.set('standard');    syncViewMenu(); break;
     case 'output-traditional': outputFormat.set('traditional'); syncViewMenu(); break;
+    /* View > Zoom: a literal case per step (the gate reads them as text); the percentage is
+       the id minus its 'zoom-' prefix. */
+    case 'zoom-50':
+    case 'zoom-60':
+    case 'zoom-70':
+    case 'zoom-80':
+    case 'zoom-90':
+    case 'zoom-100':
+    case 'zoom-110':
+    case 'zoom-120':
+    case 'zoom-130':
+    case 'zoom-140':
+    case 'zoom-150':
+    case 'zoom-160':
+    case 'zoom-170':
+    case 'zoom-180':
+    case 'zoom-190':
+    case 'zoom-200':
+      cellZoom.set(Number(id.slice('zoom-'.length)) / 100); syncViewMenu(); break;
     /* Colour schemes: a literal case per scheme (not an `id.startsWith` test) so the gate
        sees each id handled; the scheme id is the menu id minus the 'scheme-'
        prefix. syncViewMenu then leaves exactly the chosen one ticked. */

@@ -172,6 +172,19 @@ ok('View > Output Format decides the form of every result not converted on its o
 ok('no colour scheme overrides the output form (teletype changes the face only)',
    /\{@const form = exprForm\[idx\] \?\? \$outputFormat\}/.test(outSrc)
    && !/plainOutput/.test(outSrc), 'a scheme still redirects the form');
+{
+  /* View > Zoom: the cell root and the input editor both read --cell-zoom (the editor's theme
+     sets its own font-size, so the root alone would leave the input text unzoomed), and App
+     publishes the variable from the cellZoom store. */
+  const shellSrc = readFileSync('src/lib/CellShell.svelte', 'utf8');
+  const appSrc = readFileSync('src/App.svelte', 'utf8');
+  ok('View > Zoom scales the cell root, the input editor and the text/heading cells',
+     /\.cell-shell \{[^}]*font-size: calc\(1em \* var\(--cell-zoom, 1\)\)/.test(shellSrc)
+     && /fontSize: 'calc\(1rem \* var\(--cell-zoom, 1\)\)'/.test(shellSrc)
+     && /\.heading-title \{[^}]*var\(--cell-zoom/.test(shellSrc)
+     && /\.prose-cell \{[^}]*var\(--cell-zoom/.test(shellSrc)
+     && /setProperty\('--cell-zoom', String\(\$cellZoom\)\)/.test(appSrc), 'not wired');
+}
 ok('StandardForm (slatex) is the default display, set in Arial',
    /form === 'standard' && item\.slatex/.test(outSrc)
    && /\.out-sf \.katex[^{]*\{[^}]*font-family:\s*Arial/.test(outSrc), 'not wired');

@@ -38,6 +38,9 @@
 #include "ndarray.h"
 #include "simp.h"          /* AssumeCtx + assume_known_* / apply_assumption_rules:
                             * assumption-aware sign-of-x and coefficient cleanup. */
+#include "simp_internal.h" /* assume_reduce_entails: deep sign of a compound
+                            * argument at the expansion point (Times, Plus, ...)
+                            * that the cheap prov_* layer deliberately skips. */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -311,6 +314,7 @@ typedef struct {
 
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx);
 static SeriesObj* so_from_seriesdata(Expr* sd);
+static int64_t so_first_nonzero_exp(SeriesObj* s, int64_t from_exp);
 
 static SeriesObj* so_alloc(Expr* x, Expr* x0, int64_t nmin, int64_t order, int64_t den) {
     SeriesObj* s = calloc(1, sizeof(SeriesObj));
@@ -2444,6 +2448,39 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             Expr* arg = e->data.function.args[0];
             bool argpos = assume_known_positive(ctx->assume, arg);
             bool argneg = assume_known_negative(ctx->assume, arg);
+            /* When the generic argument sign is undecidable in x (e.g. x - a is
+             * neither provably positive nor negative), resolve it by the sign of
+             * the argument AT the expansion point: Abs/Sign/UnitStep are locally
+             * smooth/constant wherever the argument is nonzero, so the whole
+             * neighbourhood series equals the resolved one when arg(x0) has a
+             * known nonzero sign. Only for the sign-branching heads, so an
+             * ordinary single-arg head under assumptions pays nothing. The probe
+             * mutes arithmetic warnings (a pole in our substitution is not the
+             * user's) and has_infinity rejects an argument that blows up at x0. */
+            bool sign_head = (strcmp(head, "Abs") == 0 ||
+                              strcmp(head, "Sign") == 0 ||
+                              strcmp(head, "UnitStep") == 0);
+            if (sign_head && !argpos && !argneg) {
+                arith_warnings_mute_push();
+                Expr* arg0 = eval_and_free(replace_all_of(arg, ctx->x, ctx->x0));
+                arith_warnings_mute_pop();
+                if (!has_infinity(arg0)) {
+                    if      (assume_known_positive(ctx->assume, arg0)) argpos = true;
+                    else if (assume_known_negative(ctx->assume, arg0)) argneg = true;
+                    else {
+                        /* The cheap prov_* layer does not sign a compound value
+                         * such as -a or a-b; the Reduce/CAD bridge does (it is
+                         * what Refine uses). Ask it for a strict sign at x0. */
+                        Expr* gt = mk_fn2("Greater", expr_copy(arg0), expr_new_integer(0));
+                        Expr* lt = mk_fn2("Less",    expr_copy(arg0), expr_new_integer(0));
+                        if      (assume_reduce_entails(ctx->assume, gt) == 1) argpos = true;
+                        else if (assume_reduce_entails(ctx->assume, lt) == 1) argneg = true;
+                        expr_free(gt);
+                        expr_free(lt);
+                    }
+                }
+                expr_free(arg0);
+            }
             if (strcmp(head, "Abs") == 0) {
                 if (argpos) return series_expand_nested(arg, ctx);
                 if (argneg) {
@@ -2530,8 +2567,42 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             if (base_has_x && !exp_has_x) {
                 SeriesObj* bs = series_expand_nested(base, ctx);
                 if (!bs) return NULL;
+                /* True leading exponent numerator: bs->nmin can sit below the
+                 * first non-zero coefficient (1-Cos[x] stores nmin=0, coefs
+                 * {0,0,1/2,...}), so read the first non-zero term, not nmin. */
+                int64_t lead_num = so_first_nonzero_exp(bs, bs->nmin);
+                int64_t bden = bs->den;
                 SeriesObj* r = so_pow_expr(bs, exp);
                 so_free(bs);
+                /* An even-order zero taken to a fractional power: so_pow_expr
+                 * factors the leading monomial c*x^bnmin and reduces (x^bnmin)^exp
+                 * to x^e, taking the principal + root. For real x < 0 the true
+                 * value is |x|^e, so when e is ODD the whole series is off by a
+                 * global -1 (e.g. Sqrt[1-Cos[x]] ~ |x|/Sqrt2 = -x/Sqrt2 for x<0).
+                 * Flip it. Guards: expansion at the origin (sign of x-x0 == sign
+                 * of x), integer-step leading (bden==1) even power, and x proven
+                 * negative. At the at_infinity remap ctx->x is the internal u,
+                 * never provably negative, so this never mis-fires there -- which
+                 * is why the sign is queried locally rather than via a ctx field.
+                 * x>0 / no-assumption leaves argpos/argneg false => byte-for-byte
+                 * legacy. Sqrt[x^2] is still intercepted earlier (the explicit
+                 * Power[Power[g,2],1/2] handler), so this is the hidden-square
+                 * generalisation only. */
+                if (r && ctx->assume && is_lit_zero(ctx->x0) &&
+                    bden == 1 && lead_num != INT64_MAX &&
+                    lead_num > 0 && (lead_num % 2 == 0) &&
+                    assume_known_negative(ctx->assume, ctx->x)) {
+                    int64_t p, q;
+                    if (is_rational(exp, &p, &q) && q != 0 &&
+                        (lead_num * p) % q == 0) {
+                        int64_t e = (lead_num * p) / q;
+                        if (e & 1) {
+                            SeriesObj* rn = so_neg(r);
+                            so_free(r);
+                            r = rn;
+                        }
+                    }
+                }
                 return r;
             }
             /* Exponent depends on x: rewrite as Exp[exp * Log[base]] and recurse. */
@@ -5778,6 +5849,22 @@ static Expr* try_series_productlog_at_infinity(Expr* f, Expr* x, int64_t n) {
  * borrowed `assume` context (NULL == legacy path) drives the sign of the
  * expansion variable (Log-branch selection at x = 0), the non-analytic
  * kernels (Abs/Sign/... of x), and the final-coefficient cleanup. */
+/* True iff e is the canonical form of -Infinity, Times[-1, Infinity] (a negative
+ * numeric coefficient times the Infinity symbol). Mirrors limit.c:is_neg_infinity
+ * so -Infinity expansion routes through the reflection path below. */
+static bool series_is_neg_infinity(Expr* e) {
+    if (!has_symbol_head(e, "Times") || e->data.function.arg_count != 2) return false;
+    Expr* a = e->data.function.args[0];
+    Expr* b = e->data.function.args[1];
+    bool a_inf = (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Infinity);
+    bool b_inf = (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity);
+    if (!a_inf && !b_inf) return false;
+    Expr* other = a_inf ? b : a;
+    if (other->type == EXPR_INTEGER && other->data.integer < 0) return true;
+    if (other->type == EXPR_REAL && other->data.real < 0.0) return true;
+    return false;
+}
+
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
                               const AssumeCtx* assume) {
     /* Sign of the expansion variable under the assumptions: -1 forces the
@@ -5803,6 +5890,52 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     if (expr_free_of(f_eval, x)) {
         expr_free(x0_eval);
         return f_eval;
+    }
+
+    /* Expansion at -Infinity by reflection: Series[f, {x, -Inf, n}] ==
+     * Series[f[x -> -x], {x, +Inf, n}] evaluated, then x -> -x. This reuses the
+     * whole +Infinity machinery (special-function asymptotics and the generic
+     * x -> 1/u path) verbatim, and -- because -Infinity never reaches the
+     * finite-x0 arithmetic -- avoids the spurious Infinity::indet warnings that
+     * path would spray. Placed before the SYM_Infinity handlers so the recursive
+     * call (which uses +Infinity) cannot re-enter this branch. An assumption on
+     * the expansion variable itself would also need reflecting; out of scope
+     * here (these cases assume only the parameters). */
+    if (series_is_neg_infinity(x0_eval)) {
+        Expr* neg_x = simp(mk_times(expr_new_integer(-1), expr_copy(x)));
+        Expr* f_refl = replace_all_of(f_eval, x, neg_x);
+        Expr* pos_inf = mk_symbol("Infinity");
+        Expr* H = do_series_single(f_refl, x, pos_inf, n, leading_only, assume);
+        expr_free(f_refl);
+        expr_free(pos_inf);
+        expr_free(f_eval);
+        expr_free(x0_eval);
+        Expr* out = NULL;
+        if (H) {
+            /* Coefficients of an at-infinity series are constant in x, so the
+             * reflection only flips odd-exponent terms. Keep the canonical
+             * +Infinity variable (1/x) and multiply coefficient i by
+             * (-1)^(nmin+i). Fall back to a structural x -> -x substitution for
+             * shapes that are not a plain integer-step SeriesData (a prefactor *
+             * SeriesData, or a Puiseux den > 1 asymptotic). */
+            SeriesObj* hs = is_series_data(H) ? so_from_seriesdata(H) : NULL;
+            if (hs && hs->den == 1) {
+                for (size_t i = 0; i < hs->coef_count; i++) {
+                    if ((hs->nmin + (int64_t)i) & 1) {
+                        so_set_coef(hs, i,
+                            simp(mk_times(expr_new_integer(-1),
+                                          expr_copy(hs->coefs[i]))));
+                    }
+                }
+                out = so_to_expr(hs);
+            } else {
+                out = replace_all_of(H, x, neg_x);
+            }
+            if (hs) so_free(hs);
+            expr_free(H);
+        }
+        expr_free(neg_x);
+        return out;
     }
 
     /* Special functions with essential singularities at Infinity (e.g.

@@ -1647,6 +1647,13 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> -Pi/2 + rest", x, x);
         /* Log[x] -> I Pi + Log[-x]  for x < 0 (principal branch). */
         SEP(); EMIT("Log[%s] :> I Pi + Log[-%s]", x, x);
+        /* Half-integer power of a negative real, principal branch:
+         *   x^(p/2) = (-1)^(p/2) (-x)^(p/2) = I^p (-x)^(p/2)  for x < 0.
+         * Covers Sqrt[x] -> I Sqrt[-x], 1/Sqrt[x] -> -I/Sqrt[-x],
+         * x^(3/2) -> -I (-x)^(3/2). The RHS base Times[-1,x] cannot re-match
+         * Power[x, _] and Power[I, p] folds to a concrete Complex, so it
+         * terminates. The multiplicative analogue of the Log rule above. */
+        SEP(); EMIT("Power[%s, Rational[p_, 2]] :> Power[I, p] Power[Times[-1, %s], Rational[p, 2]]", x, x);
     }
 
     /* Non-positive (x <= 0, but not proven strictly negative): Abs[x] -> -x,

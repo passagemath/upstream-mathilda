@@ -115,6 +115,72 @@ static void test_multivariate_forwarding(void) {
         "SeriesData[x, 0, List[SeriesData[y, 0, List[a, 1], 0, 2, 1], 1], 0, 2, 1]");
 }
 
+/* Abs[g] with g nonzero at the expansion point: the branch is fixed by the
+ * sign of g(x0) under the assumptions (the generic sign of x - a is undecidable
+ * in x). Needs the deep Reduce bridge, since the cheap prov_* layer does not
+ * sign a compound value like -a. The no-assumption path keeps the Derivative
+ * husk byte-for-byte. */
+static void test_abs_sign_at_point(void) {
+    setup_full();
+    assert_fullform("Series[Abs[x - a], {x, 0, 2}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[a, -1, 0], 0, 3, 1]");                      /* a - x */
+    assert_fullform("Series[Abs[x - a], {x, 0, 2}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[Times[-1, a], 1, 0], 0, 3, 1]");           /* x - a */
+    /* negative control: no assumption => legacy Derivative-of-Abs husk */
+    assert_fullform("Series[Abs[x - a], {x, 0, 2}]",
+        "SeriesData[x, 0, List[Abs[Times[-1, a]], Derivative[1][Abs][Times[-1, a]], "
+        "Times[Rational[1, 2], Derivative[2][Abs][Times[-1, a]]]], 0, 3, 1]");
+}
+
+/* Square root of an even-order zero: the leading monomial reduces as |x|^e, so
+ * an odd e flips the whole series sign for x < 0. The leading exponent sits
+ * above the stored nmin (1-Cos[x] has nmin=0, coefs {0,0,1/2,...}). x > 0 is
+ * the principal + root (unchanged). */
+static void test_even_order_root_sign(void) {
+    setup_full();
+    assert_fullform("Series[Sqrt[1 - Cos[x]], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[Power[2, Rational[-1, 2]], 0], 1, 3, 1]");       /* x/Sqrt2 */
+    assert_fullform("Series[Sqrt[1 - Cos[x]], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Times[-1, Power[2, Rational[-1, 2]]], 0], 1, 3, 1]"); /* -x/Sqrt2 */
+    assert_fullform("Series[Sqrt[x^4 + a x^2], {x, 0, 3}, Assumptions -> a > 0 && x > 0]",
+        "SeriesData[x, 0, List[Power[a, Rational[1, 2]], 0, "
+        "Times[Rational[1, 2], Power[a, Rational[-1, 2]]]], 1, 4, 1]");
+    assert_fullform("Series[Sqrt[x^4 + a x^2], {x, 0, 3}, Assumptions -> a > 0 && x < 0]",
+        "SeriesData[x, 0, List[Times[-1, Power[a, Rational[1, 2]]], 0, "
+        "Times[Rational[-1, 2], Power[a, Rational[-1, 2]]]], 1, 4, 1]");
+}
+
+/* Square root of a provably-negative quantity takes the imaginary principal
+ * branch Sqrt[a] -> I Sqrt[-a] (via the shared apply_assumption_rules). a > 0
+ * keeps the real branch. */
+static void test_sqrt_negative_branch(void) {
+    setup_full();
+    assert_fullform("Series[Sqrt[a - x], {x, 0, 1}, Assumptions -> a > 0]",
+        "SeriesData[x, 0, List[Power[a, Rational[1, 2]], "
+        "Times[Rational[-1, 2], Power[a, Rational[-1, 2]]]], 0, 2, 1]");
+    assert_fullform("Series[Sqrt[a - x], {x, 0, 1}, Assumptions -> a < 0]",
+        "SeriesData[x, 0, List[Times[Complex[0, 1], Power[Times[-1, a], Rational[1, 2]]], "
+        "Times[Complex[0, Rational[1, 2]], Power[Times[-1, a], Rational[-1, 2]]]], 0, 2, 1]");
+}
+
+/* Expansion at -Infinity by reflection: the result is the +Infinity twin with
+ * the odd-exponent terms flipped, in the canonical 1/x variable. */
+static void test_expansion_at_neg_infinity(void) {
+    setup_full();
+    /* +Infinity twin, for reference */
+    assert_fullform("Series[Sqrt[x^2 + a x], {x, Infinity, 1}, Assumptions -> Element[a, Reals]]",
+        "SeriesData[Power[x, -1], 0, List[1, Times[Rational[1, 2], a], "
+        "Times[Rational[-1, 8], Power[a, 2]]], -1, 2, 1]");
+    assert_fullform("Series[Sqrt[x^2 + a x], {x, -Infinity, 1}, Assumptions -> Element[a, Reals]]",
+        "SeriesData[Power[x, -1], 0, List[-1, Times[Rational[-1, 2], a], "
+        "Times[Rational[1, 8], Power[a, 2]]], -1, 2, 1]");
+    assert_fullform("Series[Sqrt[a^2 x^2 + b x], {x, -Infinity, 1}, "
+                    "Assumptions -> a > 0 && Element[b, Reals]]",
+        "SeriesData[Power[x, -1], 0, List[Times[-1, a], "
+        "Times[Rational[-1, 2], Power[a, -1], b], "
+        "Times[Rational[1, 8], Power[a, -3], Power[b, 2]]], -1, 2, 1]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -127,6 +193,10 @@ int main(void) {
     TEST(test_negative_controls);
     TEST(test_expansion_variable_sign);
     TEST(test_multivariate_forwarding);
+    TEST(test_abs_sign_at_point);
+    TEST(test_even_order_root_sign);
+    TEST(test_sqrt_negative_branch);
+    TEST(test_expansion_at_neg_infinity);
 
     printf("All series assumptions tests passed!\n");
     return 0;

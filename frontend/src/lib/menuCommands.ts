@@ -23,7 +23,7 @@ import { splitCell, mergeCellDown, duplicateCell, deleteCell, convertCell,
          copyInputFromAbove } from './cellCommands';
 import { restart, abortEvaluation } from './kernelActions';
 import { darkMode } from './theme';
-import { autocompleteEnabled, colorScheme } from './properties';
+import { autocompleteEnabled, colorScheme, outputFormat } from './properties';
 import { invoke } from '@tauri-apps/api/core';
 import type { CellType } from './notebook';
 
@@ -68,6 +68,8 @@ export const MENU_IDS = [
   'gfx-plot', 'gfx-image', 'gfx-image3d', 'gfx-graphics',
   'toggle-dark',
   'toggle-autocomplete',
+  /* View > Output Format: a radio group; the id minus its prefix is the outputFormat value. */
+  'output-input', 'output-standard', 'output-traditional',
   /* Colour schemes. Spelled out longhand (not generated from COLOR_SCHEMES) for
      the same reason as the recent-N pool: check_menu_ids.py reads this list as
      source text, and the ids must match the CheckMenuItems in lib.rs. The id
@@ -122,6 +124,7 @@ function syncViewMenu() {
   invoke('sync_view_menu', {
     autocomplete: get(autocompleteEnabled),
     scheme: get(colorScheme),
+    output: get(outputFormat),
   }).catch(() => {});
 }
 
@@ -226,6 +229,11 @@ export function runMenuCommand(id: string, hooks: MenuHooks) {
     /* ---- View ---- */
     case 'toggle-dark': darkMode.update(v => !v); break;
     case 'toggle-autocomplete': autocompleteEnabled.update(v => !v); syncViewMenu(); break;
+    /* View > Output Format: the form every result is displayed in (a radio group, like the
+       schemes; syncViewMenu leaves exactly the chosen one ticked). */
+    case 'output-input':       outputFormat.set('input');       syncViewMenu(); break;
+    case 'output-standard':    outputFormat.set('standard');    syncViewMenu(); break;
+    case 'output-traditional': outputFormat.set('traditional'); syncViewMenu(); break;
     /* Colour schemes: a literal case per scheme (not an `id.startsWith` test) so the gate
        sees each id handled; the scheme id is the menu id minus the 'scheme-'
        prefix. syncViewMenu then leaves exactly the chosen one ticked. */

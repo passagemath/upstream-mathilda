@@ -6,7 +6,7 @@
   import { mathSelect } from './mathSelect';
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
-  import { plainOutput } from './properties';
+  import { plainOutput, outputFormat } from './properties';
 
   /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
   export let onOpenDoc: ((name: string) => void) | null = null;
@@ -20,6 +20,8 @@
   let overflows: Record<number, boolean> = {};
 
   /* ---- "Convert To" on an output expression (right-click) ----
+     Every result is shown in the View › Output Format form ($outputFormat: InputForm,
+     StandardForm or TraditionalForm) until it is converted individually here.
      An `expr` result carries `text` (InputForm), `latex` (TraditionalForm, which
      is also the TeXForm source) and `slatex` (StandardForm). The right-click menu
      switches how the result is DISPLAYED, in place, Mathematica-style:
@@ -695,7 +697,8 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
-        {@const base = exprForm[idx] ?? 'standard'}
+        <!-- A result's own Convert To choice wins; otherwise View › Output Format decides. -->
+        {@const base = exprForm[idx] ?? $outputFormat}
         <!-- A teletype scheme forbids 2D math: redirect the typeset forms
              (StandardForm, TraditionalForm, MathML) to 1D InputForm, but leave an explicit 1D
              choice (InputForm/FullForm/TeXForm) alone. -->
@@ -867,7 +870,7 @@
     <div class="convert-title">Convert To</div>
     {#each CONVERT_FORMS as f (f.id)}
       <button class="convert-item"
-              class:active={(exprForm[mi] ?? 'standard') === f.id}
+              class:active={(exprForm[mi] ?? $outputFormat) === f.id}
               on:click={() => setForm(mi, f.id)}>{f.label}</button>
     {/each}
   </div>

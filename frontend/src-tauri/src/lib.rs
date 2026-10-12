@@ -39,6 +39,8 @@ pub struct ViewMenu {
     pub autocomplete: CheckMenuItem<tauri::Wry>,
     /// (colour-scheme id, its menu item); exactly one is checked at a time.
     pub schemes: Vec<(String, CheckMenuItem<tauri::Wry>)>,
+    /// (output-format id, its menu item) for View > Output Format; exactly one checked.
+    pub outputs: Vec<(String, CheckMenuItem<tauri::Wry>)>,
 }
 
 // Native menu bar is a desktop-only concept; iOS/Android have no app menu.
@@ -233,6 +235,14 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
     let sc_eighties  = CheckMenuItem::with_id(app, "scheme-eighties",        "80s (Brown/Orange)", true, false, None::<&str>)?;
     let sc_grayscale = CheckMenuItem::with_id(app, "scheme-grayscale",       "Grayscale",          true, false, None::<&str>)?;
     let sc_off       = CheckMenuItem::with_id(app, "scheme-off",             "Off (none)",         true, false, None::<&str>)?;
+    // View > Output Format: the notation every result is displayed in -- the webview's
+    // outputFormat store (properties.ts). StandardForm is the default, so it starts ticked.
+    let out_input       = CheckMenuItem::with_id(app, "output-input",       "InputForm",       true, false, None::<&str>)?;
+    let out_standard    = CheckMenuItem::with_id(app, "output-standard",    "StandardForm",    true, true,  None::<&str>)?;
+    let out_traditional = CheckMenuItem::with_id(app, "output-traditional", "TraditionalForm", true, false, None::<&str>)?;
+    let output_format = Submenu::with_items(app, "Output Format", true, &[
+        &out_input, &out_standard, &out_traditional,
+    ])?;
     let syntax = Submenu::with_items(app, "Syntax Highlighting", true, &[
         &sc_default, &sc_dracula, &sc_nord, &sc_monokai, &sc_sol_dark,
         &sc_sol_light, &sc_gruvbox, &sc_one_dark, &sc_tokyo, &sc_github,
@@ -247,6 +257,8 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
         &[
             &MenuItem::with_id(app, "toggle-dark", "Toggle Dark Mode", true,
                                Some("CmdOrCtrl+Shift+T"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &output_format,
             &PredefinedMenuItem::separator(app)?,
             &toggle_autocomplete,
             &syntax,
@@ -270,6 +282,11 @@ fn build_menu(app: &tauri::App) -> tauri::Result<(Menu<tauri::Wry>, RecentFiles,
             ("eighties".into(), sc_eighties),
             ("grayscale".into(), sc_grayscale),
             ("off".into(), sc_off),
+        ],
+        outputs: vec![
+            ("input".into(), out_input),
+            ("standard".into(), out_standard),
+            ("traditional".into(), out_traditional),
         ],
     };
 

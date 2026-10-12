@@ -55,6 +55,16 @@ export const autocompleteEnabled = writable(true);
  *  palettes applied over it. App.svelte applies this; the panel chooses it. */
 export const colorScheme = writable('default');
 
+/** The notation every expression result is displayed in (View › Output Format):
+ *  'standard' — StandardForm, Mathilda's own names typeset, the default;
+ *  'traditional' — TraditionalForm, textbook notation;
+ *  'input' — InputForm, 1D re-readable text.
+ *  A result switched with its own right-click Convert To keeps that choice; this is the
+ *  form of every result that has not been. Plain writable, no persistence — same decision
+ *  as the preferences above. */
+export type OutputFormat = 'input' | 'standard' | 'traditional';
+export const outputFormat = writable<OutputFormat>('standard');
+
 /** True when the active scheme is a teletype (mono) scheme — the signal
  *  Output.svelte uses to render expression output in 1D InputForm instead of 2D
  *  typeset math. Derived so it tracks colorScheme with no second source of truth;

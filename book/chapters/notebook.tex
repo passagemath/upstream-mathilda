@@ -495,7 +495,9 @@ from the kernel's own serialiser, \texttt{expr\_to\_latex\_form}, so the
 notebook does no conversion of its own. Right-clicking a result switches it
 between the two (and to InputForm, FullForm, \TeX{} or MathML); wrapping it
 in \B{TraditionalForm} or \B{StandardForm} chooses the notation from the
-input.
+input. \emph{View \textgreater{} Output Format}\index{notebook!output format}
+sets the form every result is shown in --- InputForm, StandardForm or
+TraditionalForm --- and a result converted on its own keeps its own choice.
 
 Part of a StandardForm result can be selected and reused as
 input\index{notebook!selecting output}. A click selects the innermost
@@ -836,7 +838,8 @@ Cell & Convert to Input, Text or Section; Divide, Merge, Duplicate, Delete;
 Evaluation & Evaluate Cell, Evaluate Notebook, Abort Evaluation, Restart Kernel
   & \texttt{Cmd+Return}, \texttt{Cmd+Shift+Return}, \texttt{Cmd+.}, \texttt{Cmd+Shift+R} \\
 Graphics & Plot, Image, Image3D and Graphics documentation & \\
-View & Toggle Dark Mode & \texttt{Cmd+Shift+T} \\
+View & Toggle Dark Mode; Output Format (InputForm, StandardForm,
+  TraditionalForm); Autocomplete; Syntax Highlighting & \texttt{Cmd+Shift+T} \\
 \bottomrule
 \end{tabular}
 \caption{The native menu bar (desktop only).}

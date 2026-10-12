@@ -1042,6 +1042,10 @@ Out[3]= {a, b, b, b, c}
   except under `InputForm`.
 - Any typeset result can also be switched in place with the notebook's right-click *Convert To*
   menu (StandardForm, TraditionalForm, InputForm, FullForm, TeXForm, MathML).
+- **View › Output Format** (InputForm, StandardForm, TraditionalForm) sets the form every result
+  in the notebook is displayed in; StandardForm is the default. A result switched with its own
+  *Convert To* keeps that choice. This is a display setting only: the kernel always sends all three
+  forms, so changing it re-displays existing results without re-evaluating anything.
 
 ## NumberForm
 - `NumberForm[expr, n]` prints the approximate real numbers in `expr` to `n`-digit precision.

@@ -4445,3 +4445,26 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   an entire-in-u integrand (e^{2u}/u^4) use ordinary `Residue`/`residue_compute`
   (the 1/w substitution would turn e^{2u} into the essential e^{2/w}). Try the
   ordinary residue first, fall back to the 1/w-Laurent form.
+
+## Nasser v0.354 DSolve report — "an automatic answer is a solution" (2026-10-12)
+- **A test residual built with the APPLIED-form rule is vacuous.** `(y'[x] + … ) /.
+  DSolve[…, y[x], x][[1]]` substitutes `y[x] -> body` but leaves `y'[x]`, so the residual
+  is genuinely nonzero — and `PossibleZeroQ` still said True because `C[1]` is never
+  sampled (unsampled residue → UNKNOWN → True). Thirty such checks in `test_dsolve.c`
+  were passing vacuously. RULE: a residual check substitutes the PURE-FUNCTION form
+  (`DSolve[…, y, x]`), and instantiates `C[k]` when the verdict must be decided.
+- **`PossibleZeroQ` does not sample `C[k]` (or any undefined-head application).**
+  `PossibleZeroQ[C[2] - 1]` is True. Abstracting atoms to symbols is the obvious fix but it
+  flips verdicts everywhere a C[k]-carrying identity holds only on part of the domain
+  (Solve corpus: 13 Log-branch `ConditionalExpression` answers; DSolve: the `Sqrt[(C e^x
+  -1)^2]` IVP branch, a Whittaker answer) — reverted; it needs its own campaign. Inside a
+  method, substitute plain symbols for C[k] yourself before a zero test you rely on.
+- **A sign/parameter walker that only recognises EXPR_SYMBOL is a wrong-answer source.**
+  `intsimp_sign_pos_assumption` gave `c[2]` sign 0, so `Integrate[1/(c[2]-u^2),u]` was 0.
+  When a "parameter" predicate is written, ask what it does with `C[2]`/`f[a]`.
+- **Run soft (non-fatal) variants of fail-fast suites to see the whole list**: compile the
+  test file with `ASSERT_MSG` redefined non-fatal and `alarm` neutralised
+  (`#define alarm(x) alarm(0)` after `<unistd.h>`), A/B against a HEAD worktree build.
+  The 120 s suite alarm silently truncates both runs under load.
+- **A cascade-ordering "backstop" that returns a reduction (F(y,y')==C) pre-empts a later
+  full solution** — check what the slots behind a new backstop would have answered.

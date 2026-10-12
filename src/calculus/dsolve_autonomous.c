@@ -33,7 +33,10 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
+#include "../parse.h"           /* parse_expression: stage-1 normalisation rules */
+#include "integrate.h"          /* g_integrate_quiet: silence the speculative quadrature */
 #include <stdlib.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <time.h>
 #include <math.h>
@@ -165,6 +168,71 @@ static bool ar_num_ok(const DSolveProblem* P, const Expr* pbody, int n) {
     return small >= 2 && big == 0;
 }
 
+/* Stage-1 normalisation.  The reduced first-order ODE in p(y) is typically solved
+ * through an exponential integrating factor, so p comes back spelled with
+ * E^(c (C[k] + d Log[y])) factors -- correct, but the Log under the exponent trips the
+ * stage-2 spin guard (so a quadrature that is elementary never gets tried) and leaves
+ * the printed answer unreadable.  Two exact rewrites:
+ *   1. split each exponent that carries a Log, E^(u1 + u2 + ...) -> E^u1 E^u2 ...,
+ *      after which E^(d Log[y]) evaluates to y^d; then combine each additive symbolic
+ *      exponent over a common denominator (y^(-8a^2/(4a+b) - 2ab/(4a+b)) -> y^(-2a));
+ *   2. absorb a stage-1 constant that occurs only as E^(alpha_i C[k]), with every
+ *      alpha_i a rational multiple of one alpha_0, into a renamed C[k]: the
+ *      substitution C[k] -> Log[C[k]]/alpha_0 (so E^(alpha_i C[k]) -> C[k]^(alpha_i/
+ *      alpha_0)), a reparametrisation of an arbitrary constant, so the solution
+ *      family is unchanged.
+ * `pbody` consumed; result owned. */
+static Expr* ar_normalise_stage1(Expr* pbody, int n) {
+    static const char* const nrm_src =
+        "Function[{e}, (e /. Power[E, s_] /; !FreeQ[s, Log] :> "
+        "With[{u = Expand[s]}, If[Head[u] === Plus, Times @@ (Power[E, #] & /@ List @@ u), "
+        "Power[E, u]]]) /. Power[b_, s_Plus] :> Power[b, Cancel[Together[s]]]]";
+    static const char* const absorb_src =
+        "Function[{t, c}, Module[{al = Union[Cases[t, Power[E, a_. c] :> a, {0, Infinity}]], a0}, "
+        "If[al === {} || !FreeQ[t /. Power[E, a_. c] :> 1, c], t, "
+        "a0 = First[al]; "
+        "If[And @@ (MatchQ[Together[#/a0], _Integer | _Rational] & /@ al), "
+        "t /. Power[E, a_. c] :> c^Together[a/a0], t]]]]";
+    if (!ds_contains(pbody, intern_symbol("E"))) return pbody;
+    Expr* nrm = parse_expression(nrm_src);
+    if (!nrm) return pbody;
+    pbody = eval_and_free(expr_new_function(nrm, (Expr*[]){ pbody }, 1));
+    for (int k = 2; k <= n; k++) {
+        Expr* absorb = parse_expression(absorb_src);
+        if (!absorb) break;
+        pbody = eval_and_free(expr_new_function(absorb, (Expr*[]){ pbody, ds_const(k) }, 2));
+    }
+    return pbody;
+}
+
+/* Stage-2 quadrature-spin guard: y'==p(y) is separable with quadrature
+ * Integrate[1/p,y], which SPINS uninterruptibly for a non-elementary integrand (a
+ * Log under a radical, or a y-denominator radical).  True when Integrate must not be
+ * attempted.  The order-2 forms that solve are untouched (rational p; constant-
+ * denominator radical; the elliptic quartic passes and fast-declines in stage 2). */
+static bool ar_quadrature_may_spin(const Expr* pbody, const char* Ysym) {
+    Expr* den = eval_and_free(ds_call1(SYM_Denominator,
+                    ds_call1(SYM_Together, expr_copy((Expr*)pbody))));
+    bool nonconst_denom = !ds_free_of(den, Ysym);
+    expr_free(den);
+    bool transc_radical = false;
+    if (!nonconst_denom && ds_has_radical_power(pbody)) {
+        /* A RADICAL over a transcendental function of y is the other non-elementary
+         * quadrature shape, and it slips past the denominator test (measured:
+         * Denominator[Together[Sqrt[E^-y (C + E^y (2y-2))]]] == 1, yet the stage-2
+         * sub-solve costs 90 s and returns an inert relation anyway).  The elliptic
+         * quartic the guard above protects has a POLYNOMIAL radicand, so it is
+         * untouched. */
+        static const char* const tf[] = { "Log", "Exp", "Sin", "Cos", "Tan",
+                                          "Sinh", "Cosh", "Tanh", "ArcTan" };
+        for (size_t i = 0; i < sizeof(tf) / sizeof(tf[0]) && !transc_radical; i++)
+            transc_radical = ds_has_head(pbody, intern_symbol(tf[i]));
+        /* E^y is Power[E, y], not an Exp head, so test the symbol itself. */
+        if (!transc_radical) transc_radical = ds_contains(pbody, intern_symbol("E"));
+    }
+    return nonconst_denom || transc_radical || ds_has_head(pbody, intern_symbol("Log"));
+}
+
 /* Shared stage-1 reduction (both try-fns): gate + missing-x pre-gate + solve-for-top
  * + autonomous check + the p=y'(y) derivative chain + solve the reduced order-(n-1)
  * ODE + freeze its constants C[1..n-1] -> C[2..n].  Returns pbody = p(y, C[2..n])
@@ -236,6 +304,7 @@ static Expr* ar_reduce(DSolveProblem* P, int* n_out) {
      * the elliptic stage-2 integrand needs -- see the M58 note). */
     int off = 1;
     pbody = dsolve_renumber_constants(pbody, n - 1, &off);
+    pbody = ar_normalise_stage1(pbody, n);
     if (ar_expired()) { expr_free(pbody); return NULL; }
     *n_out = n;
     return pbody;
@@ -354,37 +423,10 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
      * symbolic-parameter integrands the guard below would reject into elementary ones. */
     pbody = ar_fit_stage1(P, pbody, n, Ysym);
 
-    /* Stage-2 quadrature-spin guard: y'==p(y) is separable with quadrature
-     * Integrate[1/p,y], which SPINS uninterruptibly for a non-elementary integrand (a
-     * Log under a radical, or a y-denominator radical).  Decline here (fast) -- the
-     * IMPLICIT companion below picks these up and returns the inert first integral.
-     * The order-2 forms that solve are untouched (rational p; constant-denominator
-     * radical; the elliptic quartic passes and fast-declines in stage 2 as before). */
-    {
-        Expr* den = eval_and_free(ds_call1(SYM_Denominator,
-                        ds_call1(SYM_Together, expr_copy(pbody))));
-        bool nonconst_denom = !ds_free_of(den, Ysym);
-        expr_free(den);
-        bool transc_radical = false;
-        if (!nonconst_denom && ds_has_radical_power(pbody)) {
-            /* A RADICAL over a transcendental function of y is the other non-elementary
-             * quadrature shape, and it slips past the denominator test (measured:
-             * Denominator[Together[Sqrt[E^-y (C + E^y (2y-2))]]] == 1, yet the stage-2
-             * sub-solve costs 90 s and returns an inert relation anyway).  Decline fast;
-             * the implicit companion below returns the first integral.  The elliptic
-             * quartic the guard above protects has a POLYNOMIAL radicand, so it is
-             * untouched. */
-            static const char* const tf[] = { "Log", "Exp", "Sin", "Cos", "Tan",
-                                              "Sinh", "Cosh", "Tanh", "ArcTan" };
-            for (size_t i = 0; i < sizeof(tf) / sizeof(tf[0]) && !transc_radical; i++)
-                transc_radical = ds_has_head(pbody, intern_symbol(tf[i]));
-            /* E^y is Power[E, y], not an Exp head, so test the symbol itself. */
-            if (!transc_radical) transc_radical = ds_contains(pbody, intern_symbol("E"));
-        }
-        if (nonconst_denom || transc_radical
-            || ds_has_head(pbody, intern_symbol("Log"))) {
-            expr_free(pbody); ar_memo_add(memo_h); return NULL;
-        }
+    /* Decline fast on a quadrature that would spin -- the IMPLICIT companion below
+     * picks these up and returns the inert first integral. */
+    if (ar_quadrature_may_spin(pbody, Ysym)) {
+        expr_free(pbody); ar_memo_add(memo_h); return NULL;
     }
 
     bool fitted = (P->ncond > 0) && ds_free_of(pbody, intern_symbol("C"));
@@ -421,6 +463,41 @@ Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+/* The stage-2 quadrature Integrate[invp, Ysym], attempted under a short budget with
+ * nonelem messages muted (a decline here is expected, not news).  Returns the
+ * antiderivative (owned) only when it closed (no Integrate left) and its derivative
+ * re-checks against the integrand; otherwise NULL.  `invp` borrowed.  The re-check
+ * replaces the stage-1 constants C[2..n] by plain symbols first: the zero test
+ * samples symbols but not C[k] applications, so with them in place the identity
+ * would read as undecided and every closed form would be thrown away. */
+#define AR_QUAD_SECS 2
+static Expr* ar_try_quadrature(const Expr* invp, const char* Ysym, int n) {
+    Expr* call = ds_call2(SYM_Integrate, expr_copy((Expr*)invp), expr_new_symbol(Ysym));
+    Expr* g = expr_new_function(expr_new_symbol("TimeConstrained"),
+                  (Expr*[]){ call, expr_new_integer(AR_QUAD_SECS),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3);
+    g_integrate_quiet++;
+    Expr* F = eval_and_free(g);
+    g_integrate_quiet--;
+    if (!F || ds_has_head(F, SYM_Integrate)
+        || ds_contains(F, intern_symbol("$Aborted"))) {
+        if (F) expr_free(F);
+        return NULL;
+    }
+    Expr* chk = eval_and_free(ds_call2(SYM_Subtract,
+                    ds_d(expr_copy(F), expr_new_symbol(Ysym)), expr_copy((Expr*)invp)));
+    for (int k = 2; k <= n; k++) {
+        char nm[32];
+        snprintf(nm, sizeof nm, "DSolve`arK%d", k);
+        chk = ds_subst(chk, ds_const(k), expr_new_symbol(intern_symbol(nm)));
+    }
+    chk = eval_and_free(chk);
+    bool ok = ds_is_zero(chk);
+    expr_free(chk);
+    if (!ok) { expr_free(F); return NULL; }
+    return F;
+}
+
 /* Implicit companion (M59): where the explicit stage-2 quadrature is non-elementary,
  * return the first integral Integrate[1/p, y] - x == C[1] with the integral kept INERT
  * (Inactive[Integrate] -- dodges the uninterruptible Integrate cascade; verified by the
@@ -447,11 +524,17 @@ Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch) {
      * the more general statement, so the fitted p inherits it.) */
     pbody = ar_fit_stage1(P, pbody, n, Ysym);
 
-    /* G = Inactive[Integrate][1/pbody, Ysym] /. Ysym -> y[x]  -  x */
+    /* G = Integrate[1/pbody, Ysym] /. Ysym -> y[x]  -  x, with the quadrature done
+     * when it is elementary and safe to attempt, otherwise kept inert. */
+    bool may_spin = ar_quadrature_may_spin(pbody, Ysym);
     Expr* invp = eval_and_free(ds_call2(SYM_Power, pbody, expr_new_integer(-1)));  /* consumes pbody */
-    Expr* inactHead = expr_new_function(expr_new_symbol(SYM_Inactive),
-                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
-    Expr* integ = expr_new_function(inactHead, (Expr*[]){ invp, expr_new_symbol(Ysym) }, 2);
+    Expr* integ = NULL;
+    if (!may_spin) integ = ar_try_quadrature(invp, Ysym, n);
+    if (!integ) {
+        Expr* inactHead = expr_new_function(expr_new_symbol(SYM_Inactive),
+                              (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        integ = expr_new_function(inactHead, (Expr*[]){ invp, expr_new_symbol(Ysym) }, 2);
+    } else expr_free(invp);
     integ = ds_subst(integ, expr_new_symbol(Ysym), ds_make_funcapp(yname, 0, xvar));
     Expr* G = eval_and_free(ds_call2(SYM_Subtract, integ, expr_new_symbol(xvar)));
 

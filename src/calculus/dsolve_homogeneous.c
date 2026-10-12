@@ -16,6 +16,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../parse.h"
+#include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -155,10 +156,14 @@ Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch) {
     Expr* denom = eval_and_free(ds_call2(SYM_Subtract, Fv1, expr_new_symbol(vn)));
     if (ds_is_zero(denom)) { expr_free(denom); return NULL; }         /* y = C x, handled elsewhere */
 
-    /* Integrate[1/(F(v)-v), v] == Log[x] + C[1] */
+    /* Integrate[1/(F(v)-v), v] == Log[x] + C[1].  A non-elementary v-integral is
+     * an expected decline (the method simply does not apply), not a user-facing
+     * Integrate::nonelem -- muted exactly as Separable mutes its quadratures. */
+    g_integrate_quiet++;
     Expr* intV = ds_integrate(
         expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ denom, expr_new_integer(-1) }, 2),
         expr_new_symbol(vn));
+    g_integrate_quiet--;
     if (ds_has_head(intV, SYM_Integrate)) { expr_free(intV); return NULL; }
 
     /* Try the direct log-form inversion first; keep a copy of the antiderivative
@@ -245,9 +250,11 @@ Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(FY);
     Expr* denom = eval_and_free(ds_call2(SYM_Subtract, Fv1, expr_new_symbol(vn)));
     if (ds_is_zero(denom)) { expr_free(denom); return NULL; }
+    g_integrate_quiet++;                    /* speculative quadrature (see above) */
     Expr* intV = ds_integrate(
         expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ denom, expr_new_integer(-1) }, 2),
         expr_new_symbol(vn));
+    g_integrate_quiet--;
     if (ds_has_head(intV, SYM_Integrate)) { expr_free(intV); return NULL; }
 
     /* G = (intV /. v -> y[x]/x) - Log[x] */

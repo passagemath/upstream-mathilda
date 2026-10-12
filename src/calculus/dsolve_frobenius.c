@@ -1,10 +1,13 @@
 /*
  * dsolve_frobenius.c — DSolve`PowerSeries / DSolve`FrobeniusSeries.
  *
- * The always-available series fallback for a homogeneous second-order linear
- * ODE  y'' + P(x) y' + Q(x) y == 0, expanded about x0 = 0.  It is the last method
- * in the scalar cascade: it fires only when every closed-form method has
- * declined, and returns a truncated SeriesData solution.
+ * The series method for a homogeneous second-order linear ODE
+ * y'' + P(x) y' + Q(x) y == 0, expanded about x0 = 0, returning a truncated
+ * SeriesData solution.  It is OPT-IN: reached only through
+ * DSolve[..., Method -> "PowerSeries" | "FrobeniusSeries"] or the direct
+ * DSolve`PowerSeries / DSolve`FrobeniusSeries builtins, never from the automatic
+ * cascade (a truncated series is not a solution; Mathematica's DSolve never
+ * returns one).
  *
  * The point x0 = 0 is classified by the pole orders of P and Q there:
  *   - ordinary        (P, Q analytic)          -> two power series, y = C1 s1 + C2 s2
@@ -451,10 +454,10 @@ static bool is_rational_in(const Expr* e, const char* x) {
     return ok;
 }
 
-/* Cascade-only last resort: expand about a small ordinary point when x=0 is not
- * usable, so an AUTOMATIC DSolve of a linear ODE never returns unevaluated.  Kept
- * separate from dsolve_frobenius_try (and unregistered as a pinned method) so the
- * pinned DSolve`PowerSeries / `FrobeniusSeries keeps its "series about the origin,
+/* Method -> "PowerSeries" fallback: expand about a small ordinary point when x=0
+ * is not usable, so a requested series of a linear ODE is still produced.  Kept
+ * separate from dsolve_frobenius_try (and unregistered as a direct builtin) so
+ * DSolve`PowerSeries / `FrobeniusSeries keep their "series about the origin,
  * else decline" contract.  Reached only after dsolve_frobenius_try has declined
  * (x=0 irregular, or regular-singular but obstructed), i.e. x=0 is not ordinary.
  * Restricted to RATIONAL P,Q: for a rational-coefficient linear ODE the series

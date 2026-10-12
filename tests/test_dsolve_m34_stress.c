@@ -82,6 +82,21 @@ static void solved_ok(const char* eqn) {
     ASSERT_TRUE(buf);
 }
 
+/* A series family: the automatic cascade must return PROMPTLY (no hang) and never
+ * with a truncated series (the series fallback is opt-in), while the series still
+ * comes back when requested with Method -> "PowerSeries". */
+static void series_family_ok(const char* eqn) {
+    char buf[900];
+    snprintf(buf, sizeof(buf),
+        "With[{sol = TimeConstrained[DSolve[%s, y, x], 8, $Aborted]}, "
+        "sol =!= $Aborted && FreeQ[sol, SeriesData]]", eqn);
+    ASSERT_TRUE(buf);
+    snprintf(buf, sizeof(buf),
+        "With[{sol = TimeConstrained[DSolve[%s, y, x, Method -> \"PowerSeries\"], 8, $Aborted]}, "
+        "Head[sol] === List && Length[sol] >= 1]", eqn);
+    ASSERT_TRUE(buf);
+}
+
 /* Family A — variation of parameters, const-coeff basis {Cos,Sin}, NON-UC forcing.
  * The VoP answer of y''+y==Tan[x] etc. carries -Cos Log[Sec+Tan] whose residual
  * spins zero_test; the numeric-zero verify keeps it (1337/1341). */
@@ -108,31 +123,32 @@ static void t_m34_vop_varcoeff(void) {
 }
 
 /* Family C — cubic-coefficient Heun family (complex-conjugate poles) that Kovacic
- * declines to the Frobenius ordinary-point series (1392/1393). */
+ * declines promptly; the Frobenius ordinary-point series on request (1392/1393). */
 static void t_m34_cubic_series(void) {
     const char* a[] = { "1", "2", "8", "-1", "3" };
     for (int i = 0; i < 5; i++) {
         char eqn[160];
         snprintf(eqn, sizeof(eqn), "(x^3 + (%s)) y''[x] + 4 x y'[x] + y[x] == 0", a[i]);
-        solved_ok(eqn);
+        series_family_ok(eqn);
     }
 }
 
 /* Family D — 2nd-order EXACT operator y'' + p y' + p' y == (y' + p y)', whose first
- * integral y' + p y == C has a non-elementary quadrature, so it falls to the
- * Frobenius series (1384). */
+ * integral y' + p y == C has a non-elementary quadrature; the Frobenius series on
+ * request (1384). */
 static void t_m34_exact_series(void) {
     const char* p[] = { "Sin[x]", "x^2", "E^x", "Cos[x]" };
     for (int i = 0; i < 4; i++) {
         char eqn[220];
         snprintf(eqn, sizeof(eqn),
             "y''[x] + (%s) y'[x] + D[%s, x] y[x] == 0", p[i], p[i]);
-        solved_ok(eqn);
+        series_family_ok(eqn);
     }
 }
 
 /* Family E — transcendental-coefficient IVP at an ordinary IC point: the ONLY route
- * is a Taylor series about x0, FIT there (1385).  FreeQ[C] proves the ICs were met. */
+ * is a Taylor series about x0, FIT there (1385), on request (Method -> "PowerSeries").
+ * FreeQ[C] proves the ICs were met. */
 static void t_m34_icpoint_series(void) {
     struct { const char* a; const char* b; const char* c; } g[] = {
         { "3", "2", "0" }, { "1", "1", "1" }, { "2", "0", "1" }, { "5", "3", "-2" }
@@ -141,7 +157,8 @@ static void t_m34_icpoint_series(void) {
         char buf[420];
         snprintf(buf, sizeof(buf),
             "With[{sol = TimeConstrained[DSolve[{x^2 y''[x] + (x + 1) y'[x] + "
-            "(%s) Log[x] y[x] == 0, y[1] == %s, y'[1] == %s}, y, x], 8, $Aborted]}, "
+            "(%s) Log[x] y[x] == 0, y[1] == %s, y'[1] == %s}, y, x, Method -> \"PowerSeries\"], "
+            "8, $Aborted]}, "
             "Head[sol] === List && Length[sol] >= 1 && FreeQ[sol, C[_]]]",
             g[i].a, g[i].b, g[i].c);
         ASSERT_TRUE(buf);
@@ -162,12 +179,14 @@ static void t_m34_pinned(void) {
     /* 1381 — Bessel general solution singular at x=0 -> origin series IVP */
     ASSERT_TRUE("With[{sol = TimeConstrained[DSolve[{y''[x] + x^2 y[x] == 0, y[0] == 1, "
                 "y'[0] == 0}, y, x], 8, $Aborted]}, Head[sol] === List && FreeQ[sol, C[_]]]");
-    /* 1384 — 2nd-order exact -> Frobenius series IVP, fit at x=0 */
+    /* 1384 — 2nd-order exact -> Frobenius series IVP, fit at x=0 (on request) */
     ASSERT_TRUE("With[{sol = TimeConstrained[DSolve[{y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, "
-                "y[0] == 0, y'[0] == 1}, y, x], 8, $Aborted]}, Head[sol] === List && FreeQ[sol, C[_]]]");
-    /* 1385 — IC-point transcendental series */
+                "y[0] == 0, y'[0] == 1}, y, x, Method -> \"PowerSeries\"], 8, $Aborted]}, "
+                "Head[sol] === List && FreeQ[sol, C[_]]]");
+    /* 1385 — IC-point transcendental series (on request) */
     ASSERT_TRUE("With[{sol = TimeConstrained[DSolve[{x^2 y''[x] + (x + 1) y'[x] + 3 Log[x] y[x] == 0, "
-                "y[1] == 2, y'[1] == 0}, y, x], 8, $Aborted]}, Head[sol] === List && FreeQ[sol, C[_]]]");
+                "y[1] == 2, y'[1] == 0}, y, x, Method -> \"PowerSeries\"], 8, $Aborted]}, "
+                "Head[sol] === List && FreeQ[sol, C[_]]]");
     /* residue 1360 — forced Duffing: a bounded DECLINE, never a wrong answer */
     ASSERT_TRUE("With[{sol = TimeConstrained[DSolve[{u''[t] + u'[t] + u[t]^3/5 == Cos[t], "
                 "u[0] == 2, u'[0] == 0}, u, t], 8, $Aborted]}, "

@@ -304,7 +304,11 @@ static void t_m62_nonlinear_exact(void) {
     /* The LINEAR exact path is untouched: the two documented decline guards and one
      * documented solve. */
     ASSERT_TRUE("Head[DSolve[(x+1)^2 y''[x] + 3 (x+1) y'[x] + y[x] == x^2, y, x]] === List");
-    ASSERT_TRUE("MemberQ[DSolve[y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, y, x], SeriesData, Infinity, Heads -> True]");
+    /* ... and its series is still there on request (the automatic cascade no longer
+     * returns a truncated series) */
+    ASSERT_TRUE("MemberQ[DSolve[y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, y, x, Method -> \"PowerSeries\"], "
+                "SeriesData, Infinity, Heads -> True]");
+    ASSERT_TRUE("FreeQ[DSolve[y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, y, x], SeriesData]");
 }
 
 int main(void) {

@@ -74,6 +74,12 @@ void mth_msg_ifun_suppress_depth_load(int d);
  */
 void          mth_msg_note_fired(void);
 unsigned long mth_msg_fired_count(void);
+/* Roll the counter back to an earlier snapshot.  For an internal PROBE region
+ * whose diagnostics are sampling noise (a speculative sub-solve whose result the
+ * caller may discard): bracket it with mth_msg_suppress_push/pop and restore the
+ * pre-region count, so the noise is neither printed nor seen by Check[] -- the
+ * region-wide analogue of mth_message_gated's extra_mute.  Only ever lowers. */
+void          mth_msg_fired_restore(unsigned long n);
 
 /* ------------------------------------------------------------- The funnel */
 /*

@@ -2850,6 +2850,441 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     HEAD — unrelated.)
   - *Residue: none* (0 UNEVAL, 0 FAIL). v0.343→0.344.
 
+- **M68 — Nasser's v0.354 report: an automatic answer is a solution.** ✅ DONE (contract);
+  **backlog below is OPEN**. Nasser Abbasi reported seven deficiencies; all are fixed at the
+  contract level (v0.359 Integrate fix, v0.361 DSolve):
+  - `DSolve\`FrobeniusSeries` / `PowerSeries` (+ the shifted-ordinary-point fallback) and
+    `DSolve\`ReducibleFirstIntegral` left the automatic cascade (still reachable via `Method ->`);
+    a dispatcher backstop turns any automatic answer carrying `SeriesData` or a derivative of the
+    unknown into "unevaluated". Mathematica's DSolve returns neither shape.
+  - Autonomous reduction: stage-1 normalisation (`E^(c (C[k] + d Log y))` split, constants absorbed),
+    the implicit companion attempts the quadrature (2 s, derivative re-checked with C[k] → symbols).
+    `y^2 y'' == a` → elementary implicit closed form; the y'-carrying first integrals of
+    `z''+z^3==0`, `y y''==b+a y'^2`, `1+y'^2+2y y''==0`, `3(1-y)y y''==2(1-2y)y'^2` became inert
+    quadratures in x and y.
+  - Nested DSolve = muted probe region (no `Solve::nongen` / `Integrate::nonelem`, invisible to
+    `Check[]`); `DSolve\`Homogeneous` mutes its v-quadrature.
+  - `ds_free_of`: a numeric "free of x" that is not structurally so is confirmed at a moderate point
+    (the PZQ decay false positive let `Coth[v x]`, `E^(-t^2)`, `Cos[x]` pass as constants). This
+    removed **7 masked WRONG answers** the corpus had scored PASS (residuals −0.44 / 1.48).
+  - SeriesData display splices a product coefficient (`- 1/6 (…) x^3`, not `+ -1/6 (…)`).
+  - Integrate: an undefined-head parameter (`C[2]`, `c[2]`) zeroed the rational log part
+    (`Integrate[1/(c[2]-u^2),u]` was 0) — fixed in `intsimp.c`/`intrat.c`.
+  - **Corpus impact (same-machine A/B, HEAD vs new, every changed case re-classified on HEAD):**
+    366 PASS→UNEVAL = 337 series + 22 y'-first-integrals + 7 masked wrong answers; 15 UNEVAL→PASS;
+    **0 new FAIL**. Gate baselines raised by exactly the attributable delta (pre-existing drift in
+    §2.2.10/19/20/21/24/26/27/30/37 left visible).
+
+  **Newly unsolved — the work list.** Every DE below was a PASS only because a series, a first
+  integral, or a wrong answer was accepted. Each now needs a genuine closed form (Mathematica and
+  Maple solve them; the corpora list only such ODEs). Dominant families and what they need:
+  - **Regular-singular / Heun / Kummer-degenerate 2nd-order linear** (the bulk of §2.2.5, §2.2.14,
+    §2.2.19–21, §2.2.25, §2.2.27, §2.2.34, §2.2.36, §2.1.2 400–900): mostly Bessel / Kummer /
+    Whittaker / Gauss-₂F₁ / Heun forms after an exponential or power gauge and an affine change of
+    variable. Gaps found: the canonical Kummer row needs exact `P = b/x - 1, Q = -a/x`; the Whittaker
+    path declines integer `2μ` (needs the `HypergeometricU`/log partner, which needs `HypergeometricU`
+    numerics and `D` rules — both missing); `LaguerreL` of non-integer degree has no numerics.
+    E.g. Nasser item 1 `(3x-1)y''-(3x+2)y'+(6x-8)y==0` is Kummer `b = -1` after `y = e^{kx} w`,
+    `k = (1 ± I√7)/2`.
+  - **Exact 2nd-order operators with a non-elementary first-integral quadrature**
+    (`y''+p y'+p' y==0`, e.g. `p = Sin[x]`): need the inert-integral (Mathematica) form.
+  - **Autonomous / reducible nonlinear 2nd order** (the 22 first integrals): need the reduced
+    first-order solve to finish — elliptic (`JacobiSN`/`EllipticF`), `Hypergeometric2F1`
+    quadratures, and the `Integrate` gap on `k y/Sqrt[k y - k^2 y^2]` (Nasser item 5, cycloid).
+  - **`y' == E^(-t^2) + y^2`** (2349–2351, 2524–2526) and **3580**: no correct answer existed;
+    Mathematica solves the latter.
+  - Unit-test DEs now unevaluated (no closed form found): `x y''+3y'-y==0` (Bessel
+    `(C1 I_2(2√x) + C2 K_2(2√x))/x`), `y''+Sin[x] y==0`, `x^2 y''+6 Sin[x] y'+6y==0`,
+    `2x^2 y''+Sin[x] y'-Cos[x] y==0`, `(x^3+a) y''+4x y'+y==0` (also slow: >8 s before declining,
+    pre-existing), `(x^3+1) y''+x y'+y==0`, `y''+((x^10-1)/(x^12+1)) y==0`, the IVPs
+    `{y''+Sin[x] y'+Cos[x] y==0, y(0)=0, y'(0)=1}` and `{x^2 y''+(x+1)y'+3 Log[x] y==0, y(1)=2, y'(1)=0}`.
+  - Nasser item 2 `D[y'/y,x] + 2a Coth[y'/y] == 2a^2` (scale-invariant: `u = y'/y` reduces it to
+    `u' = 2a^2 - 2a Coth u`, then `Log y = ∫u du/G(u)`, non-elementary) — inert/parametric answer.
+  - Follow-ups outside DSolve: `PossibleZeroQ[C[2] - 1]` is True (C[k] never sampled; a fix flips
+    domain-restricted identities, see memory); the corpus harness accepted 7 wrong implicit answers
+    (implicit-verify hole).
+
+  - **337 — previously a truncated power/Frobenius series (now opt-in, `Method -> "PowerSeries"`).**
+
+    | Label | Equation | Maple class |
+    |---|---|---|
+    | `2.1.2-5` | `(3 x -1) y''[x]- (3 x +2) y'[x]+ (6 x -8) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-54` | `(c x^(2)+b x +a) y[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-55` | `(x^(4)+a1 x^(2)+a0) y[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-56` | `(a +b Cos[2 x]) y[x]+y''[x] == 0` | [_ellipsoidal] |
+    | `2.1.2-59` | `(a +b Sin[x]^(2)) y[x]+y''[x] == 0` | [_ellipsoidal] |
+    | `2.1.2-60` | `(a +b E^(x)+c E^(2 x)) y[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-61` | `(a +b Cosh[x]^(2)) y[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-62` | `(a +b Sinh[x]^(2)) y[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-63` | `(a +b Sin[x]^(2)) y[x]+y''[x] == 0` | [_ellipsoidal] |
+    | `2.1.2-69` | `c y[x]+ (b x +a) y'[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-70` | `(b1 x +a1) y[x]+ (b0 x +a0) y'[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-77` | `Csc[x]^(2) (2+Sin[x]^(2)) y[x]-Csc[2 x] y'[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-80` | `b y[x]+a Tanh[x] y'[x]+y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-84` | `(a +x) y[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-85` | `(E^(x^(2))-k^(2)) x^(3) y[x]-y'[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-89` | `(b2 x +b1) y[x]+a y'[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-90` | `n y[x]+ (1-x) y'[x]+y''[x] x == 0` | [_Laguerre] |
+    | `2.1.2-91` | `n y[x]+ (1+k -x) y'[x]+y''[x] x == 0` | [_Laguerre] |
+    | `2.1.2-92` | `b y[x]+ (a +x) y'[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-93` | `-a y[x]+ (c -x) y'[x]+y''[x] x == 0` | [_Laguerre] |
+    | `2.1.2-94` | `c y[x]+ (b x +a) y'[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-96` | `(b x +2 a) y[x]-2 (b x +a) y'[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-99` | `(b x +a) y[x]+y'[x]+2 y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-100` | `(b x +a) y[x]+8 y'[x]+16 y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-104` | `- (c x^(2)+b x +a) y[x]+y'[x] x +x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-105` | `- (-x^(4)+4 a x^(2)+n^(2)) y[x]+y'[x] x +x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-106` | `- (c^(2) x^(4)+b^(2) x^(2)+a^(2)) y[x]+y'[x] x +x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-110` | `x^(2) (b1 x^(2)+a1) y[x]+a x y'[x]+x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-113` | `-y[x]+x (x +3) y'[x]+x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-120` | `(b x^(2)+a) y[x]-y'[x] x + (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-123` | `-p (1+p) y[x]+2 y'[x] x + (x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-130` | `(c0 x^(2)+b0 x +a0) y[x]+a x y'[x]+ (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-132` | `(c^(2) x^(2)+b^(2)) y[x]-y'[x] x + (a^(2)-x^(2)) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-133` | `y[x]+2 y'[x]+ (1-x) x y''[x] == 0` | [_Jacobi] |
+    | `2.1.2-134` | `p (1+p) y[x]+ (1-2 x) y'[x]+ (1-x) x y''[x] == 0` | [_Jacobi] |
+    | `2.1.2-135` | `2 y[x]+ (1-x) y'[x]+ (1-x) x y''[x] == 0` | [_Jacobi] |
+    | `2.1.2-143` | `(b x +a) y[x]+ (1-2 x) y'[x]+2 (1-x) x y''[x] == 0` | [_Jacobi] |
+    | `2.1.2-150` | `c y[x]+b x y'[x]+ (a x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-152` | `-y[x]+2 y'[x] x +x^(3) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-157` | `c x y[x]+ (b x^(2)+a) y'[x]+x (x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-158` | `2 (1-b) x y[x]+ (b x^(2)+a) y'[x]+x (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-159` | `c x y[x]+ (a - (1+a) x^(2)) y'[x]+x (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-160` | `c x y[x]+ (b x^(2)+a) y'[x]+x (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-161` | `a2 x y[x]+ (b1 x^(2)+a1) y'[x]+x (x^(2)+a0) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-166` | `(b x +a) y[x]+2 (1-3 x) (1-x) y'[x]+4 (1-x) x y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-168` | `y[x]+x (x^(2)+1) y'[x]+x^(4) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-169` | `a (1+a) y[x]-2 x^(3) y'[x]+x^(2) (-x^(2)+1) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-173` | `(a4 x^(4)+a2 x^(2)+a0) y[x]-2 x (-x^(2)+1) y'[x]+ (-x^(2)+1)^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-174` | `(c2 x^(2)+b2 x +a2) y[x]+a1 x (-x^(2)+1) y'[x]+ (-x^(2)+1)^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-278` | `y''[x] x + (1-x) y'[x]+m y[x] == 0` | [_Laguerre] |
+    | `2.1.2-290` | `(-x^(2)+1) z''[x]+ (1-3 x) z'[x]+k z[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-298` | `y''[t]+(((t^(2)-1) y'[t])/(t))+((t^(2) y[t])/((1+E^(((t^(2))/(2))))^(2))) == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-435` | `y''[x]+ (a E^(2 x)+b E^(x)+c) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-436` | `y''[x]+ (a Cosh[x]^(2)+b) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-437` | `y''[x]+ (a Cos[2 x]+b) y[x] == 0` | [_ellipsoidal] |
+    | `2.1.2-438` | `y''[x]+ (a Cos[x]^(2)+b) y[x] == 0` | [_ellipsoidal] |
+    | `2.1.2-449` | `y''[x]+ (a x +b) y'[x]+ (c x +d) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-460` | `(a +x) y[x]+y''[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-461` | `y''[x] x +y'[x]+ (a +x) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-462` | `y''[x] x -y'[x]+x^(3) (E^(x^(2))-v^(2)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-463` | `y''[x] x + (x +b) y'[x]+a y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-464` | `y''[x] x + (x +a +b) y'[x]+a y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-465` | `y''[x] x -y'[x] x -a y[x] == 0` | [_Laguerre] |
+    | `2.1.2-466` | `y''[x] x + (b -x) y'[x]-a y[x] == 0` | [_Laguerre] |
+    | `2.1.2-467` | `y''[x] x -2 (-1+x) y'[x]-y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-468` | `y''[x] x - (3 x -2) y'[x]- (2 x -3) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-469` | `y''[x] x + (a x +b +n) y'[x]+n a y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-470` | `y''[x] x - (a +b) (x +1) y'[x]+a b x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-472` | `y''[x] x + (a x +b) y'[x]+ (c x +d) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-473` | `y''[x] x -2 (x^(2)-a) y'[x]+2 n x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-474` | `2 y''[x] x - (-1+x) y'[x]+a y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-476` | `4 y''[x] x - (a +x) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-477` | `4 y''[x] x +4 y[x]- (x +2) y[x]+l y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-478` | `4 y''[x] x +4 m y'[x]- (x -2 m -4 n) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-479` | `16 y''[x] x +8 y'[x]- (a +x) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-480` | `5 (a x +b) y''[x]+8 a y'[x]+c (a x +b)^((1)/(5)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-481` | `2 a x y''[x]+ (b x +a) y'[x]+c y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-482` | `2 a x y''[x]+ (b x +3 a) y'[x]+c y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-486` | `x^(2) y''[x]+2 y'[x] x + (l x^(2)+a x -n (n +1)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-491` | `-y[x]+x (x +3) y'[x]+x^(2) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-497` | `x^(2) y''[x]+ (x^(3)+1) x y'[x]-y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-505` | `(x^(2)+1) y''[x]+2 y'[x] x -v (v -1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-506` | `(x^(2)-1) y''[x]-v (v +1) y[x] == 0` | [_Gegenbauer] |
+    | `2.1.2-510` | `(x^(2)-1) y''[x]-2 y'[x] x - (v +2) (v -1) y[x] == 0` | [_Gegenbauer] |
+    | `2.1.2-514` | `(x^(2)-1) y''[x]+a x y'[x]+ (b x^(2)+c x +d) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-517` | `x (-1+x) y''[x]+ (2 x -1) y'[x]-v (v +1) y[x] == 0` | [_Jacobi] |
+    | `2.1.2-521` | `(-1+x) (x -2) y''[x]- (2 x -3) y'[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-522` | `2 x (-1+x) y''[x]+ (2 x -1) y'[x]+ (a x +b) y[x] == 0` | [_Jacobi] |
+    | `2.1.2-534` | `-y[x]+2 y'[x] x +x^(3) y''[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-535` | `x^(3) y''[x]- (x^(2)-1) y'[x]+y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-536` | `x (x^(2)+1) y''[x]+ (2 x^(2)+1) y'[x]-v (v +1) x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-537` | `x (x^(2)+1) y''[x]+ (2 (n +1) x^(2)+2 n +1) y'[x]- (v -n) (v +n +1) x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-538` | `x (x^(2)+1) y''[x]- (2 (n -1) x^(2)+2 n -1) y'[x]+ (v +n) (-v +n -1) x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-539` | `x (x^(2)-1) y''[x]+ (x^(2)-1) y'[x]-y[x] x == 0` | [[_elliptic, _class_II]] |
+    | `2.1.2-540` | `x (x^(2)-1) y''[x]+ (3 x^(2)-1) y'[x]+y[x] x == 0` | [[_elliptic, _class_I]] |
+    | `2.1.2-541` | `x (x^(2)-1) y''[x]+ (a x^(2)+b) y'[x]+c x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-551` | `y''[x] == -(((x^(2) a (1-a)-b (x +b)) y[x])/(x^(4)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-553` | `y''[x] == -((y'[x])/(x))-(((b x^(2)+a (x^(4)+1)) y[x])/(x^(4)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-554` | `y''[x] == -(((x^(2)+1) y'[x])/(x^(3)))-((y[x])/(x^(4)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-555` | `y''[x] == -(((2 x^(2)+1) y'[x])/(x (x^(2)+1)))-(((-v (v +1) x^(2)-n^(2)) y[x])/(x^(2) (x^(2)+1)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-556` | `y''[x] == -(((a x^(2)+a -1) y'[x])/(x (x^(2)+1)))-(((b x^(2)+c) y[x])/(x^(2) (x^(2)+1)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-557` | `y''[x] == -((2 x y'[x])/(x^(2)-1))-((v (v +1) y[x])/(x^(2) (x^(2)-1)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-558` | `y''[x] == -((2 x y'[x])/(x^(2)-1))+((v (v +1) y[x])/(x^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-559` | `y''[x] == -(((a x^(2)+a -2) y'[x])/(x (x^(2)-1)))-((b y[x])/(x^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-561` | `y''[x] == -((2 x y'[x])/(x^(2)+1))-(((a^(2) (x^(2)+1)^(2)-n (n +1) (x^(2)+1)+m^(2)) y[x])/((x^(2)+1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-562` | `y''[x] == -((a x y'[x])/(x^(2)+1))-((b y[x])/((x^(2)+1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-564` | `y''[x] == -((2 x y'[x])/(x^(2)-1))-((((x^(2)-1) (a x^(2)+b x +c)-k^(2)) y[x])/((x^(2)-1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-565` | `y''[x] == -((2 x y'[x])/(x^(2)-1))-(((-a^(2) (x^(2)-1)^(2)-n (n +1) (x^(2)-1)-m^(2)) y[x])/((x^(2)-1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-566` | `y''[x] == ((2 x (2 a -1) y'[x])/(x^(2)-1))-(((x^(2) (2 a (2 a -1)-v (v +1))+2 a +v (v +1)) y[x])/((x^(2)-1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-571` | `y''[x] == -((b x y'[x])/((x^(2)-1) a))-(((c x^(2)+d x +e) y[x])/(a (x^(2)-1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-573` | `y''[x] == -(((3 x^(2)-1) y'[x])/((x^(2)-1) x))-(((x^(2)-1- (2 v +1)^(2)) y[x])/((x^(2)-1)^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-577` | `y''[x] == ((y[x])/(E^(x)+1))` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]] |
+    | `2.1.2-578` | `y''[x] == -(((-a^(2) Sinh[x]^(2)-n (n -1)) y[x])/(Sinh[x]^(2)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-579` | `y''[x] == -((2 n Cosh[x] y'[x])/(Sinh[x]))- (-a^(2)+n^(2)) y[x]` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-590` | `y''[x] == -((4 Sin[3 x] y[x])/(Sin[x]^(3)))` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-618` | `x^(2) y'''[x]- (x^(4)-6 x) y''[x]- (2 x^(3)-6) y'[x]+2 x^(2) y[x] == 0` | [[_3rd_order, _with_linear_symmetries]] |
+    | `2.1.2-630` | `x^(6) y'''[x]+x^(2) y''[x]-2 y[x] == 0` | [[_3rd_order, _with_linear_symmetries]] |
+    | `2.1.2-638` | `y''''[x] x - (6 x^(2)+1) y'''[x]+12 x^(3) y''[x]- (9 x^(2)-7) x^(2) y'[x]+2 (x^(2)-3) x^(3) y[x] == 0` | [[_high_order, _with_linear_symmetries]] |
+    | `2.1.2-790` | `y''[x]- (a x^(2)+b x c) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-797` | `y''[x]+a x y'[x]+b x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-798` | `y''[x]+a x y'[x]+ (b x +c) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-800` | `y''[x]+ (a x +b) y'[x]+ (c x +d) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-801` | `y''[x]+ (a x +b) y'[x]+c ((a -c) x^(2)+b x +1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-806` | `y''[x] x +a y'[x]+ (b x +c) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-808` | `y''[x] x + (b -x) y'[x]-a y[x] == 0` | [_Laguerre] |
+    | `2.1.2-809` | `y''[x] x + (a x +b) y'[x]+c ((a -c) x +b) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-812` | `y''[x] x + (a b x^(2)+b -5) y'[x]+2 a^(2) (b -2) x^(3) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-813` | `y''[x] x + (a x^(2)+b x +2) y'[x]+ (c x^(2)+d x +b) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-831` | `(-x^(2)+1) y''[x]+n (n -1) y[x] == 0` | [_Gegenbauer] |
+    | `2.1.2-841` | `(a x^(2)+b) y''[x]+ (2 n +1) a x y'[x]+c y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-842` | `(-x^(2)+1) y''[x]-y'[x] x + (2 a x^(2)+b) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-848` | `2 x (-1+x) y''[x]+ (2 x -1) y'[x]+ (a x +b) y[x] == 0` | [_Jacobi] |
+    | `2.1.2-850` | `(a x^(2)+b x +c) y''[x]- (-k^(2)+x^(2)) y'[x]+ (k +x) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-851` | `(a x^(2)+b x +c) y''[x]+ (k^(3)+x^(3)) y'[x]- (k^(2)-x k +x^(2)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-853` | `x^(3) y''[x]+ (a x^(2)+b x) y'[x]+b y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-856` | `x^(3) y''[x]+ (a x^(3)+a b x -x^(2)+b) y'[x]+a^(2) b x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-857` | `x (x^(2)+a) y''[x]+ (b x^(2)+c) y'[x]+s x y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-860` | `(a x^(3)+b x^(2)+c x) y''[x]+ (alpha x^(2)+beta x +2 c) y'[x]+ (beta -2 b) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-869` | `a (x^(2)-1)^(2) y''[x]+b x (x^(2)-1) y'[x]+ (c x^(2)+d x +e) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-870` | `(x^(2)-1)^(2) y''[x]+2 x (x^(2)-1) y'[x]+ ((x^(2)-1) (a^(2) x^(2)-lam)-m^(2)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-871` | `(x^(2)+1)^(2) y''[x]+2 x (x^(2)+1) y'[x]+ ((x^(2)+1) (a^(2) x^(2)-lam)+m^(2)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-876` | `y''[x]+a (lam E^(lam x)-a E^(2 lam x)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-877` | `y''[x]- (a^(2) E^(2 x)+a (2 b +1) E^(x)+b^(2)) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-878` | `y''[x]- (a E^(2 lam x)+b E^(lam x)+c) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-891` | `4 x^(2) y''[x]+4 x^(3) y'[x]+ (x^(2)+1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-901` | `(t^(4)+t^(2)) x''[t]+2 t^(3) x'[t]+3 x[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-912` | `x^(2) y''[x]+x^(2) y'[x]+2 (1-x) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-921` | `y''[x]+x^(2) y'[x]-4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-922` | `y''[x]+x^(2) y'[x] == 4 y[x]` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-982` | `(5+2 x)^(2) y''[x]-6 (5-2 x) y'[x]+8 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-1050` | `(r^(2)+r) R''[r]+r R'[r]-n (n +1) R[r] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-1103` | `y''[t]+2 y'[t]+Sin[t] y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.1.2-1177` | `y''[x]+ (x^(4)+1) y[x] == 0` | [_Titchmarsh] |
+    | `2.1.2-1178` | `(x^(2)+1) y''[x]-y[x] == 0` | [[_Emden, _Fowler]] |
+    | `2.2.11-1072` | `(x^(2)+3) y''[x]-7 y'[x] x +16 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1089` | `(x^(2)-1) y''[x]+2 y'[x] x +2 y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1090` | `y''[x]+x^(2) y'[x]+x^(2) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1091` | `(x^(3)+1) y''[x]+x^(4) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1092` | `{y''[x]+y'[x] x + (2 x^(2)+1) y[x] == 0, y[0] == 1, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1094` | `Cos[x] y''[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.11-1095` | `y''[x] x +Sin[x] y'[x]+y[x] x == 0` | [_Lienard] |
+    | `2.2.14-1301` | `y''[t]+y'[t] t +E^(-t^(2)) y[t] == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]] |
+    | `2.2.14-1364` | `(1-x) y''[x]+y[x] == 0` | [[_Emden, _Fowler]] |
+    | `2.2.14-1365` | `(x^(2)+2) y''[x]-y'[x] x +4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1373` | `{(x^(2)+2) y''[x]-y'[x] x +4 y[x] == 0, y[0] == -1, y'[0] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1378` | `{(x^(2)+2) y''[x]-y'[x] x +4 y[x] == 0, y[0] == 1, y'[0] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1381` | `{y''[x]+x^(2) y[x] == 0, y[0] == 1, y'[0] == 0}` | [[_Emden, _Fowler]] |
+    | `2.2.14-1384` | `{y''[x]+Sin[x] y'[x]+Cos[x] y[x] == 0, y[0] == 0, y'[0] == 1}` | [[_2nd_order, _exact, _linear, _homogeneous]] |
+    | `2.2.14-1385` | `{x^(2) y''[x]+ (x +1) y'[x]+3 y[x] Log[x] == 0, y[1] == 2, y'[1] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1386` | `{y''[x]+x^(2) y'[x]+Sin[x] y[x] == 0, y[0] == a0, y'[0] == a1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1392` | `(x^(3)+1) y''[x]+4 y'[x] x +y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.14-1393` | `(x^(3)+1) y''[x]+4 y'[x] x +y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.17-1608` | `y'[x] == ((x^(2)+y[x]^(2))/(Sin[x]))` | [_Riccati] |
+    | `2.2.17-1674` | `x Log[x]^(2) y'[x] == -4 Log[x]^(2)+y[x] Log[x]+y[x]^(2)` | [[_1st_order, ‘_with_symmetry_[F(x),G(y)]‘], _Riccati] |
+    | `2.2.18-1751` | `4 x^(2) Sin[x] y''[x]-4 x (Sin[x]+Cos[x] x) y'[x]+ (2 Cos[x] x +3 Sin[x]) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.18-1752` | `(3 x -1) y''[x]- (3 x +2) y'[x]+ (6 x -8) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.18-1754` | `(2 x +1) y''[x]-2 (2 x^(2)-1) y'[x]-4 (x +1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.18-1781` | `4 x^(2) Sin[x] y''[x]-4 x (Sin[x]+Cos[x] x) y'[x]+ (2 Cos[x] x +3 Sin[x]) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1839` | `(x +2) y''[x]+y'[x] x +3 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1840` | `(3 x^(2)+1) y''[x]+3 x^(2) y'[x]-2 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1841` | `(2 x^(2)+1) y''[x]+ (2-3 x) y'[x]+4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1842` | `(x^(2)+1) y''[x]+ (-x +2) y'[x]+3 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1843` | `(3 x^(2)+1) y''[x]-2 y'[x] x +4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1846` | `{(-x +2) y''[x]+2 y[x] == 0, y[0] == a0, y'[0] == a1}` | [[_Emden, _Fowler]] |
+    | `2.2.19-1847` | `{(x +1) y''[x]+2 (-1+x)^(2) y'[x]+3 y[x] == 0, y[1] == a0, y'[1] == a1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1850` | `x^(2) (x +1) y''[x]-x (-x^(2)-6 x +1) y'[x]+ (x^(2)+6 x +1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1859` | `(x^(2)+1) y''[x]+2 y'[x] x +((y[x])/(4)) == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1864` | `{(x^(2)+1) y''[x]+y'[x] x +y[x] == 0, y[0] == 2, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]] |
+    | `2.2.19-1866` | `{(8 x^(2)+1) y''[x]+2 y[x] == 0, y[0] == 2, y'[0] == -1}` | [[_Emden, _Fowler]] |
+    | `2.2.19-1874` | `{(3 x^(2)-6 x +5) y''[x]+ (-1+x) y'[x]+12 y[x] == 0, y[1] == -1, y'[1] == 1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1875` | `{(4 x^(2)-24 x +37) y''[x]+y[x] == 0, y[3] == 4, y'[3] == -6}` | [[_Emden, _Fowler]] |
+    | `2.2.19-1882` | `(x^(3)+1) y''[x]+7 x^(2) y'[x]+9 y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1884` | `(-x^(3)+1) y''[x]+15 x^(2) y'[x]-36 y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1885` | `(2 x^(5)+1) y''[x]+14 x^(4) y'[x]+10 x^(3) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1888` | `(x^(8)+1) y''[x]-16 x^(7) y'[x]+72 x^(6) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1891` | `{(1+3 x) y''[x]+y'[x] x +2 y[x] == 0, y[0] == 2, y'[0] == -3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1894` | `{(3 x^(2)+x +1) y''[x]+ (2+15 x) y'[x]+12 y[x] == 0, y[0] == 0, y'[0] == 1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1895` | `{(x +2) y''[x]+ (x +1) y'[x]+3 y[x] == 0, y[0] == 4, y'[0] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.19-1897` | `{(x +4) y''[x]+ (x +2) y'[x]+2 y[x] == 0, y[0] == 2, y'[0] == 5}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1902` | `{x^(2)y''[x]-(6-7 x)y'[x]+8 y[x] == 0, y[1] == 1, y'[1] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1903` | `{(2 x^(2)+x+1)y''[x]+(1+7 x)y'[x]+2 y[x] == 0, y[1] == 1, y'[1] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1907` | `{(2 x+1)y''[x]-(1-2 x)y'[x]-(3-2 x)y[x] == 0, y[1] == 1, y'[1] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1908` | `{(5+2 x)y''[x]-y'[x]+(x+5)y[x] == 0, y[-2] == 2, y'[-2] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1909` | `{(x+4)y''[x]-(4+2 x)y'[x]+(6+x)y[x] == 0, y[-3] == 2, y'[-3] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1910` | `{(3 x+2)y''[x]-y'[x]x+2 y[x] x == 0, y[0] == -1, y'[0] == 2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1911` | `{(2 x+3)y''[x]+3 y'[x]-y[x] x == 0, y[-1] == 2, y'[-1] == -3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1912` | `{(2 x+3)y''[x]-3 y'[x]-(2+x)y[x] == 0, y[-2] == -2, y'[-2] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1913` | `{(10-2 x)y''[x]+(x+1)y[x] == 0, y[2] == 2, y'[2] == -4}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1914` | `{(7+x)y''[x]+(8+2 x)y'[x]+(x+5)y[x] == 0, y[-4] == 1, y'[-4] == 2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1915` | `{(6+4 x)y''[x]+(2 x+1)y[x] == 0, y[-1] == -1, y'[-1] == 2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1922` | `{y''[x]+2 y'[x]x+(2 x^(2)+3)y[x] == 0, y[0] == 1, y'[0] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1924` | `{y''[x]+5 y'[x]x-(-x^(2)+3)y[x] == 0, y[0] == 6, y'[0] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1925` | `{y''[x]-2 y'[x]x-(3 x^(2)+2)y[x] == 0, y[0] == 2, y'[0] == -5}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1926` | `{y''[x]+3 y'[x]x+(4 x^(2)+2)y[x] == 0, y[0] == 3, y'[0] == 6}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1928` | `{3 y''[x]+2 y'[x]x+(-x^(2)+4)y[x] == 0, y[0] == -2, y'[0] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1931` | `{(x+1)y''[x]+x^(2)y'[x]+(2 x+1)y[x] == 0, y[0] == -2, y'[0] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1932` | `{y''[x]+(x^(2)+2 x+1)y'[x]+2 y[x] == 0, y[0] == 2, y'[0] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1933` | `{(x^(2)+1)y''[x]+(x^(2)+2)y'[x]+y[x] x == 0, y[0] == -3, y'[0] == 5}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1934` | `{(x+1)y''[x]+(2 x^(2)-3 x+1)y'[x]-(x-4)y[x] == 0, y[1] == -2, y'[1] == 3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1935` | `{y''[x]+(3 x^(2)+12 x+13)y'[x]+(5+2 x)y[x] == 0, y[-2] == 2, y'[-2] == -3}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1936` | `{(3 x^(2)+2 x+1)y''[x]+(-x^(2)+2)y'[x]+(x+1)y[x] == 0, y[0] == 1, y'[0] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1937` | `{(x^(2)+4 x+3)y''[x]-(-x^(2)+4 x+5)y'[x]-(2+x)y[x] == 0, y[-2] == 2, y'[-2] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1938` | `{(x^(2)+2 x+1)y''[x]+(1-x)y[x] == 0, y[0] == 2, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1939` | `{(-2 x^(2)+x)y''[x]+(-x^(2)+3 x+1)y'[x]+(2+x)y[x] == 0, y[1] == 1, y'[1] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1940` | `{(2 x^(2)-11 x+16)y''[x]+(x^(2)-6 x+10)y'[x]-(-x+2)y[x] == 0, y[3] == 1, y'[3] == -2}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1943` | `x^(2)(-x^(2)+2)y''[x]-x(4 x^(2)+3)y'[x]+(2 x+2)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1944` | `2 x^(2)(x^(2)+x+1)y''[x]+x(5 x^(2)+3 x+3)y'[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1945` | `3 x^(2)y''[x]+2 x(-2 x^(2)+x+1)y'[x]+(-8 x^(2)+2 x)y[x] == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _linear, ‘_with_symmetry_[0,F(x)]‘]] |
+    | `2.2.20-1946` | `x^(2)(x^(2)+3 x+3)y''[x]+x(7 x^(2)+8 x+5)y'[x]-(-9 x^(2)-2 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1947` | `4 x^(2)y''[x]+x(4 x^(2)+2 x+7)y'[x]-(-7 x^(2)-4 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1950` | `8 x^(2)y''[x]-2 x(-x^(2)-4 x+3)y'[x]+(x^(2)+6 x+3)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1952` | `x(x^(2)+x+3)y''[x]+(-x^(2)+x+4)y'[x]+y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1953` | `10 x^(2)(2 x^(2)+x+1)y''[x]+x(66 x^(2)+13 x+13)y'[x]-(10 x^(2)+4 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1971` | `8 x^(2)y''[x]+x(x^(2)+2)y'[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1978` | `2 x^(2)(x^(2)+2)y''[x]+x(7 x^(2)+4)y'[x]-(-3 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1980` | `3 x^(2)(x^(2)+1)y''[x]+5 x(x^(2)+1)y'[x]-(-5 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.20-1982` | `x^(2)(x^(2)+2)y''[x]+x(x^(2)+3)y'[x]-y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2001` | `x^(2)y''[x]-x(5-x)y'[x]+(9-4 x)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2002` | `x^(2)y''[x]-x(1-x)y'[x]+(-x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2007` | `9 x^(2)y''[x]+3 x(-2 x^(2)+3 x+5)y'[x]+(-14 x^(2)+12 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2008` | `x^(2)y''[x]+x(x^(2)+x+1)y'[x]+x(-x+2)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2009` | `x^(2)(2 x+1)y''[x]+x(3 x^(2)+14 x+5)y'[x]+(12 x^(2)+18 x+4)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2010` | `4 x^(2)y''[x]+2 x(x^(2)+x+4)y'[x]+(3 x^(2)+5 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2011` | `16 x^(2)y''[x]+4 x(2 x^(2)+x+6)y'[x]+(18 x^(2)+5 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2012` | `9 x^(2)(x+1)y''[x]+3 x(-x^(2)+11 x+5)y'[x]+(-7 x^(2)+16 x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2017` | `25 x^(2)y''[x]+x(15+x)y'[x]+(x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2019` | `x^(2)(9+4 x)y''[x]+3 y'[x]x+(x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2020` | `x^(2)y''[x]-x(3-2 x)y'[x]+(3 x+4)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2026` | `x^(2)(4 x+1)y''[x]-x(1-4 x)y'[x]+(x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2027` | `x^(2)(x+1)y''[x]+x(2 x+1)y'[x]+y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2037` | `4 x^(2)(4 x^(2)+1)y''[x]+32 x^(3)y'[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2042` | `x^(2)(-2 x^(2)+1)y''[x]+x(-9 x^(2)+5)y'[x]+(-3 x^(2)+4)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2043` | `x^(2)(x^(2)+2)y''[x]+x(-x^(2)+14)y'[x]+2(x^(2)+9)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2044` | `x^(2)(x^(2)+1)y''[x]+x(7 x^(2)+3)y'[x]+(8 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2048` | `4 x^(2)(x+1)y''[x]+4 x^(2)y'[x]+(1-5 x)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2051` | `9 x^(2)y''[x]+3 x(-x^(2)+1)y'[x]+(7 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2053` | `4 x^(2)y''[x]+2 x(-x^(2)+4)y'[x]+(7 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2069` | `x(x+1)y''[x]+y'[x]x+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2091` | `x^(2)y''[x]+x(2 x^(2)+1)y'[x]-(-10 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2093` | `4 x^(2)y''[x]+2 x(x^(2)+8)y'[x]+(3 x^(2)+5)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2097` | `9 x^(2)y''[x]-3 x(2 x^(2)+11)y'[x]+(10 x^(2)+13)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.21-2099` | `x^(2)y''[x]+x(-3 x^(2)+1)y'[x]-4(-3 x^(2)+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.22-2104` | `x^(2)(2 x^(2)+1)y''[x]-x(x^(2)+3)y'[x]-2 y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.24-2346` | `{y'[t] == y[t]^(2)+Cos[t^(2)], y[0] == 0}` | [_Riccati] |
+    | `2.2.24-2347` | `{y'[t] == 1+y[t]+y[t]^(2)Cos[t], y[0] == 0}` | [_Riccati] |
+    | `2.2.25-2417` | `{y''[t]+t^(2)y[t] == 0, y[0] == 2, y'[0] == -1}` | [[_Emden, _Fowler]] |
+    | `2.2.25-2418` | `{y''[t]-t^(3)y[t] == 0, y[0] == 0, y'[0] == -2}` | [[_Emden, _Fowler]] |
+    | `2.2.25-2427` | `{y''[t]+y'[t]t+(E)^(t)y[t] == 0, y[0] == 1, y'[0] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2428` | `{y''[t]+y'[t]+(E)^(t)y[t] == 0, y[0] == 0, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2429` | `{y''[t]+y'[t]+(E)^(-t)y[t] == 0, y[0] == 3, y'[0] == 5}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2440` | `t(-2+t)^(2)y''[t]+y'[t]t+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2441` | `t(-2+t)^(2)y''[t]+y'[t]t+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2442` | `Sin[t]y''[t]+Cos[t]y'[t]+((y[t])/(t)) == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2443` | `((E)^(t)-1)y''[t]+(E)^(t)y'[t]+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2445` | `t^(3)y''[t]+Sin[t^(3)]y'[t]+t y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2448` | `2 t y''[t]+(1+t)y'[t]-2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2452` | `t^(3)y''[t]-y'[t]t-(t^(2)+((5)/(4)))y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2460` | `t y''[t]+y'[t]t+2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2461` | `t y''[t]+(-t^(2)+1)y'[t]+4 t y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.25-2464` | `t y''[t]+(1-t)y'[t]+lam y[t] == 0` | [_Laguerre] |
+    | `2.2.25-2465` | `2 Sin[t]y''[t]+(1-t)y'[t]-2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.26-2521` | `{y'[t] == y[t]^(2)+Cos[t]^(2), y[0] == 0}` | [_Riccati] |
+    | `2.2.26-2522` | `{y'[t] == 1+y[t]+y[t]^(2)Cos[t], y[0] == 0}` | [_Riccati] |
+    | `2.2.27-2615` | `{y''[t]+t^(2)y[t] == 0, y[0] == 2, y'[0] == -1}` | [[_Emden, _Fowler]] |
+    | `2.2.27-2616` | `{y''[t]-t^(3)y[t] == 0, y[0] == 0, y'[0] == -2}` | [[_Emden, _Fowler]] |
+    | `2.2.27-2624` | `{y''[t]+y'[t]t+(E)^(t)y[t] == 0, y[0] == 1, y'[0] == 0}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2625` | `{y''[t]+y'[t]+(E)^(t)y[t] == 0, y[0] == 0, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2626` | `{y''[t]+y'[t]+(E)^(-t)y[t] == 0, y[0] == 3, y'[0] == 5}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2637` | `t(-2+t)^(2)y''[t]+y'[t]t+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2638` | `t(-2+t)^(2)y''[t]+y'[t]t+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2639` | `Sin[t]y''[t]+Cos[t]y'[t]+((y[t])/(t)) == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2640` | `((E)^(t)-1)y''[t]+(E)^(t)y'[t]+y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2642` | `t^(3)y''[t]+Sin[t^(2)]y'[t]+t y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2645` | `2 t y''[t]+(1+t)y'[t]-2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2657` | `t y''[t]+y'[t]t+2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2658` | `t^(2)y''[t]+(-t^(2)+1)y'[t]+4 t y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.27-2661` | `t y''[t]+(1-t)y'[t]+lam y[t] == 0` | [_Laguerre] |
+    | `2.2.27-2663` | `2 Sin[t]y''[t]+(1-t)y'[t]-2 y[t] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3358` | `3 x^(2)y''[x]+(-x^(2)+5 x)y'[x]+(2 x^(2)-1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3360` | `4 x^(2)y''[x]-3(x^(2)+x)y'[x]+2 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3361` | `9 x^(2)y''[x]+9(-x^(2)+x)y'[x]+(x-1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3367` | `2 x^(2)y''[x]+x(x^(2)+1)y'[x]-(x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3370` | `x^(3)(x^(2)+3)y''[x]+5 x y'[x]-(x+1)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3371` | `2 x y''[x]-(x^(3)+1)y'[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3376` | `x^(2)y''[x]-x(3+2 x)y'[x]+4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3384` | `x^(2)y''[x]+x(x-7)y'[x]+(x+12)y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.34-3386` | `x^(2)y''[x]+x(-x^(2)+3)y'[x]-3 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.36-3507` | `z(1-z)y''[z]+(1-z)y'[z]+lam y[z] == 0` | [_Jacobi] |
+    | `2.2.36-3508` | `z y''[z]+(2 z-3)y'[z]+((4 y[z])/(z)) == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.36-3509` | `(z^(2)+5 z+6)y''[z]+2 y[z] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.36-3510` | `(z^(2)+5 z+7)y''[z]+2 y[z] == 0` | [[_Emden, _Fowler]] |
+    | `2.2.36-3512` | `z y''[z]+(1-z)y'[z]+lam y[z] == 0` | [_Laguerre] |
+    | `2.2.40-4000` | `x y''[x]-(x-1)y'[x]-y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-432` | `(x^(2)+3) y''[x]-7 y'[x] x +16 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-449` | `(x^(2)-1) y''[x]+2 y'[x] x +2 y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-450` | `y''[x]+x^(2) y'[x]+x^(2) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-451` | `(x^(3)+1) y''[x]+x^(4) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-452` | `{y''[x]+y'[x] x + (2 x^(2)+1) y[x] == 0, y[0] == 1, y'[0] == -1}` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-454` | `Cos[x] y''[x]+y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-455` | `y''[x] x +Sin[x] y'[x]+y[x] x == 0` | [_Lienard] |
+    | `2.2.5-457` | `y''[x] x + (-x^(3)+x) y'[x]+Sin[x] y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-458` | `y''[x] x +x^(2) y'[x]+ (E^(x)-1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-460` | `3 x^(3) y''[x]+2 x^(2) y'[x]+ (-x^(2)+1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-461` | `x (x +1) y''[x]+2 y'[x]+3 y[x] x == 0` | [[_Emden, _Fowler]] |
+    | `2.2.5-463` | `x^(2) y''[x]+6 Sin[x] y'[x]+6 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-464` | `(2 x^(3)+6 x^(2)) y''[x]+21 y'[x] x +9 (x^(2)-1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-465` | `(1-x) y''[x]+y'[x] x +x^(2) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-468` | `(x -2)^(3) y''[x]+3 (x -2)^(2) y'[x]+x^(3) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-469` | `(x^(2)-4) y''[x]+ (x -2) y'[x]+ (x +2) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-470` | `(x^(2)-9)^(2) y''[x]+ (x^(2)+9) y'[x]+ (x^(2)+4) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-472` | `x^(3) (1-x) y''[x]+ (3 x +2) y'[x]+y[x] x == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-488` | `2 x^(2) y''[x]+x (x +1) y'[x]- (2 x +1) y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.5-490` | `2 x^(2) y''[x]+Sin[x] y'[x]-Cos[x] y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.6-503` | `2 y''[x] x - (6+2 x) y'[x]+y[x] == 0` | [_Laguerre] |
+    | `2.2.6-508` | `x^(2) y''[x]+ (x^(2)-3 x) y'[x]+4 y[x] == 0` | [[_2nd_order, _with_linear_symmetries]] |
+    | `2.2.6-555` | `{t x''[t]+ (-2+t) x'[t]+x[t] == 0, x[0] == 0}` | [[_2nd_order, _exact, _linear, _homogeneous]] |
+    | `2.2.6-556` | `{t x''[t]+ (3 t -1) x'[t]+3 x[t] == 0, x[0] == 0}` | [[_2nd_order, _exact, _linear, _homogeneous]] |
+
+  - **22 — previously a first integral still carrying `y'` (now pinned-only, `Method -> "ReducibleFirstIntegral"`).**
+
+    | Label | Equation | Maple class |
+    |---|---|---|
+    | `2.1.2-186` | `y''[x] == a (b +c x +y[x]) (1+(y'[x])^(2))^((3)/(2))` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1]] |
+    | `2.1.2-193` | `x^(3) y''[x] == a (-y[x]+y'[x] x)^(2)` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-198` | `y[x] y''[x] == -y[x]^(2) x^(2)+Log[y[x]] y[x]^(2)+(y'[x])^(2)` | [[_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-202` | `(x -y[x]) y''[x] == (1+y'[x]) (1+(y'[x])^(2))` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1]] |
+    | `2.1.2-205` | `x y[x] y''[x] == - (1+y[x]) y'[x]+2 x (y'[x])^(2)` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-222` | `x^(2) y[x]^(2) y''[x] == (x^(2)+y[x]^(2)) (-y[x]+y'[x] x)` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-272` | `x y[x] y''[x]-2 x (y'[x])^(2)+ (1+y[x]) y'[x] == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-307` | `y''[x]+ (1-x) y'[x]+y[x]^(2) (y'[x])^(2) == 0` | [_Liouville, [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-309` | `y''[x]+ (x +3) y'[x]+ (3+y[x]^(2)) (y'[x])^(2) == 0` | [_Liouville, [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-668` | `y''[x] == 2 a (c +b x +y[x]) (1+(y'[x])^(2))^((3)/(2))` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1]] |
+    | `2.1.2-673` | `x^(3) y''[x]-a (-y[x]+y'[x] x)^(2) == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-682` | `(x -y[x]) y''[x]- (1+y'[x]) (1+(y'[x])^(2)) == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1]] |
+    | `2.1.2-686` | `x y[x] y''[x]-2 x (y'[x])^(2)+ (1+y[x]) y'[x] == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-696` | `(x^(2)+y[x]^(2)) y''[x]- (1+(y'[x])^(2)) (-y[x]+y'[x] x) == 0` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1], [_2nd_order, _reducible, _mu_y_y1]] |
+    | `2.1.2-897` | `y[x] y''[x]-(y'[x])^(2) == Log[y[x]] y[x]^(2)-y[x]^(2) x^(2)` | [[_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-959` | `n x^(3) y''[x] == (y[x]-y'[x] x)^(2)` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-1145` | `y[x] y''[x] == (y'[x])^(2)+15 y[x]^(2) Sqrt[x]` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_y_y1], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-1156` | `x^(2) (2 y[x] y''[x]-(y'[x])^(2)) == 1-2 y[x] y'[x] x` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1]] |
+    | `2.1.2-1157` | `x^(2) (y[x] y''[x]-(y'[x])^(2))+y[x] y'[x] x == (2 y'[x] x -3 y[x]) Sqrt[x^(3)]` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_xy]] |
+    | `2.1.2-1158` | `x^(4) ((y'[x])^(2)-2 y[x] y''[x]) == 4 y[x] y'[x] x^(3)+1` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1]] |
+    | `2.1.2-1169` | `x^(2) y[x] y''[x]+1 == x (1-y[x]) y'[x]` | [[_2nd_order, _with_linear_symmetries], [_2nd_order, _reducible, _mu_x_y1]] |
+    | `2.2.33-3247` | `x''[t] == ((k^(2))/(x[t]^(2)))` | [[_2nd_order, _missing_x], [_2nd_order, _reducible, _mu_x_y1]] |
+
+  - **7 — previously a WRONG closed form the harness passed (removed by the `ds_free_of` decay fix).**
+
+    | Label | Equation | Maple class |
+    |---|---|---|
+    | `2.2.24-2349` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[0] == 0}` | [_Riccati] |
+    | `2.2.24-2350` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[1] == 0}` | [_Riccati] |
+    | `2.2.24-2351` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[0] == 1}` | [_Riccati] |
+    | `2.2.26-2524` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[0] == 0}` | [_Riccati] |
+    | `2.2.26-2525` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[1] == 0}` | [_Riccati] |
+    | `2.2.26-2526` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[0] == 1}` | [_Riccati] |
+    | `2.2.36-3580` | `{y'[x] == ((Cos[x]-2 x y[x]^(2))/(2 x^(2)y[x])), y[Pi] == ((1)/(Pi))}` | [_Bernoulli] |
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

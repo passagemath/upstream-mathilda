@@ -53,6 +53,7 @@ void mth_msg_ifun_suppress_depth_load(int d) { g_ifun_suppress_depth = d; }
 static unsigned long g_msg_fired = 0;
 void          mth_msg_note_fired(void)  { g_msg_fired++; }
 unsigned long mth_msg_fired_count(void) { return g_msg_fired; }
+void          mth_msg_fired_restore(unsigned long n) { if (n < g_msg_fired) g_msg_fired = n; }
 
 /* ------------------------------------------------------------- The funnel */
 /* The single choke-point for user-facing diagnostics: note (always), then

@@ -52,13 +52,15 @@ static bool lang_true(const char* input) {
 }
 #define ASSERT_TRUE(input) ASSERT_MSG(lang_true(input), "expected True: %s", (input))
 
-/* Solve `eqn` (an ODE y''[x] == Phi with RHS `phi`) through the automatic cascade,
- * require the result to be a first integral {{ R == C[1] }} that contains y'[x],
+/* Solve `eqn` (an ODE y''[x] == Phi with RHS `phi`) with the pinned
+ * Method -> "ReducibleFirstIntegral" (a first integral still carries y', so the
+ * automatic cascade never returns one), require the result to be a first integral
+ * {{ R == C[1] }} that contains y'[x],
  * and require D[R,x] (with y''[x] -> Phi) to vanish numerically under `subs`. */
 static void fi_ok(const char* eqn, const char* phi, const char* subs) {
     char buf[3200];
     snprintf(buf, sizeof buf,
-        "With[{sol = DSolve[%s, y, x]}, "
+        "With[{sol = DSolve[%s, y, x, Method -> \"ReducibleFirstIntegral\"]}, "
         "Head[sol] === List && Length[sol] >= 1 && "
         "MatchQ[sol[[1, 1]], _Equal] && "
         "Not[FreeQ[sol[[1, 1, 1]], Derivative[1][y][x]]] && "

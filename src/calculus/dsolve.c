@@ -22,6 +22,7 @@
 #include "../attr.h"
 #include "../expr.h"
 #include "../arithmetic.h"
+#include "../message.h"         /* nested sub-solves run as a muted probe region */
 
 #include <stdlib.h>
 #include <string.h>
@@ -279,6 +280,41 @@ static void ds_fail_record(uint64_t heq, uint64_t hv, int method) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Automatic-answer contract                                          *
+ * ------------------------------------------------------------------ */
+/* True when e contains Derivative[...][f] for an unknown f of P. */
+static bool ds_has_unknown_derivative(const Expr* e, const DSolveProblem* P) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_FUNCTION && h->data.function.arg_count == 1
+        && h->data.function.head->type == EXPR_FUNCTION) {
+        const Expr* dh = h->data.function.head->data.function.head;
+        const Expr* f  = h->data.function.args[0];
+        if (dh->type == EXPR_SYMBOL && dh->data.symbol.name == SYM_Derivative
+            && f->type == EXPR_SYMBOL)
+            for (size_t i = 0; i < P->nfun; i++)
+                if (f->data.symbol.name == P->fun_names[i]) return true;
+    }
+    if (ds_has_unknown_derivative(h, P)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_unknown_derivative(e->data.function.args[i], P)) return true;
+    return false;
+}
+
+/* An AUTOMATIC DSolve returns only solutions.  A truncated SeriesData or a
+ * relation still carrying a derivative of the unknown (a reduction of order, e.g.
+ * a first integral F(y, y') == C[1]) is not one; those shapes are produced only by
+ * an explicitly pinned Method (PowerSeries / FrobeniusSeries / FirstOrderPowerSeries
+ * / ReducibleFirstIntegral).  This backstop can only turn such an answer into
+ * "unevaluated" -- it never substitutes a different answer, so it cannot mask a
+ * wrong one.  The cascade itself no longer runs those methods; this keeps any
+ * method that recurses into one, or a future slot, from breaking the contract. */
+static bool ds_automatic_answer_admissible(const Expr* result, const DSolveProblem* P) {
+    if (ds_has_head(result, SYM_SeriesData)) return false;
+    return !ds_has_unknown_derivative(result, P);
+}
+
+/* ------------------------------------------------------------------ *
  *  Dispatcher                                                         *
  * ------------------------------------------------------------------ */
 Expr* builtin_dsolve(Expr* res) {
@@ -296,6 +332,15 @@ Expr* builtin_dsolve(Expr* res) {
     if (method == DS_INVALID)              { dsolve_problem_free(&P); return NULL; }
     if (ds_fail_seen(heq, hv, (int)method)) { dsolve_problem_free(&P); return NULL; }
 
+    /* A NESTED DSolve is a method's speculative sub-solve (a reduction recursing on
+     * the reduced equation, a stage-2 quadrature, ...): its result may be discarded,
+     * so its diagnostics -- Solve::nongen from an inversion, Integrate::nonelem from
+     * a quadrature that does not close -- are probe noise, not user-facing events.
+     * Run it muted and roll back its message firings, so they are neither printed
+     * nor caught by an enclosing Check[]. */
+    bool nested_probe = g_dsolve_depth > 0;
+    unsigned long fired0 = mth_msg_fired_count();
+    if (nested_probe) mth_msg_suppress_push();
     g_dsolve_depth++;
     /* Every method attempt is speculative: probes and reductions legitimately
      * form 1/0 while classifying an equation that is not of their form.  Mute the
@@ -488,13 +533,11 @@ Expr* builtin_dsolve(Expr* res) {
              * cascade.  Runs after the 2nd-order specialists and before the series
              * fallback, mirroring how first-order Lie (below) sits before series. */
             if (!result) result = dsolve_run(&P, dsolve_lie2_try);
-            /* ReducibleFirstIntegral: reduction-of-order backstop for a nonlinear
-             * 2nd-order ODE whose integrating-factor first integral R(x,y,y')==C[1]
-             * is not elementarily solvable as a first-order ODE.  Runs AFTER the
-             * full-solution methods (ifactor-explicit, SecondOrderSymmetry) so a
-             * two-constant closed form always wins over the one-constant reduction
-             * (Cheb-Terrab & Roche 1999, Section 2.2; Maple's `_mu_x_y1` classes). */
-            if (!result) result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try);
+            /* ReducibleFirstIntegral is PINNED-ONLY (Method -> "ReducibleFirstIntegral"):
+             * its answer R(x,y,y') == C[1] still carries y', i.e. it is a reduction of
+             * order, not a solution, and Mathematica's DSolve never returns one.  From
+             * the automatic cascade it pre-empted the autonomous implicit companion
+             * below, which answers the same autonomous family in x and y alone. */
             /* AutonomousReduction implicit companion: an autonomous ODE whose reduced
              * separable quadrature Integrate[1/p,y] is non-elementary is returned as the
              * inert first integral Inactive[Integrate][1/p, y[x]] - x == C[1] (M59) --
@@ -539,12 +582,11 @@ Expr* builtin_dsolve(Expr* res) {
              * (y^2 y''' == y'^3), which owns that order-3 autonomous family.  Here it
              * can only turn a decline into an answer. */
             if (!result) result = dsolve_run(&P, dsolve_exactode_nl_try);
-            /* series fallback: always-available, so it runs last */
-            if (!result) result = dsolve_run(&P, dsolve_frobenius_try);
-            /* very last resort: if x=0 was an irregular/obstructed singular point,
-             * expand the series about a nearby ordinary point so a linear ODE with
-             * any ordinary point never returns unevaluated (auto-dispatch only). */
-            if (!result) result = dsolve_run(&P, dsolve_frobenius_shifted_try);
+            /* NB: the Frobenius / power-series methods are PINNED-ONLY (Method ->
+             * "FrobeniusSeries" / "PowerSeries"), like FirstOrderPowerSeries above: a
+             * truncated series is not a solution, so an ODE with no closed form stays
+             * unevaluated by default, as in Mathematica (whose series answers live in
+             * AsymptoticDSolveValue, never DSolve). */
             /* M61, absolutely last: a 2nd-order linear ODE with rational coefficients,
              * a singular point and polynomial forcing, whose Bessel/hypergeometric
              * homogeneous set makes the variation-of-parameters integrals non-elementary.
@@ -604,11 +646,24 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_IFACTOR:      result = dsolve_run(&P, dsolve_ifactor_try);      break;
         case DS_FIRSTINTEGRAL: result = dsolve_run_first_integral(&P, dsolve_ifactor_first_integral_try); break;
         case DS_FOPOWERSERIES: result = dsolve_run(&P, dsolve_first_order_series_try); break;
-        case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);    break;
+        case DS_FROBENIUS:    result = dsolve_run(&P, dsolve_frobenius_try);
+                              /* x=0 irregular/obstructed: expand about a nearby
+                               * ordinary point instead */
+                              if (!result) result = dsolve_run(&P, dsolve_frobenius_shifted_try);
+                              break;
         default: break;
     }
     arith_warnings_mute_pop();
     g_dsolve_depth--;
+    if (nested_probe) {
+        mth_msg_suppress_pop();
+        mth_msg_fired_restore(fired0);
+    }
+
+    if (result && method == DS_AUTOMATIC && !ds_automatic_answer_admissible(result, &P)) {
+        expr_free(result);
+        result = NULL;
+    }
 
     if (!result && g_dsolve_depth == 0) ds_fail_record(heq, hv, (int)method);
     dsolve_problem_free(&P);

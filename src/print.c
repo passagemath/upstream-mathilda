@@ -18,6 +18,7 @@
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include "graph_hyper.h"   /* hypergraph_is_valid, for Hypergraph[...] */
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
 #include <ctype.h>
 #include <stdbool.h>
@@ -1312,6 +1313,23 @@ static Expr* series_build_term(Expr* coef, Expr* power /* borrowed, may be NULL 
             return expr_new_function(expr_new_symbol(SYM_Times), targs, 1);
         }
         return expr_copy(power);
+    }
+
+    /* A product coefficient (e.g. Times[-1/6, 2 C[1] + 13 C[2]]) is spliced into
+     * one flat Times with the power: the Plus printer reads a summand's sign off
+     * its leading Times factor, so a nested Times[Times[-1/6, ...], x^3] would
+     * print as "+ -1/6 (...) x^3" instead of "- 1/6 (...) x^3". */
+    if (coef->type == EXPR_FUNCTION &&
+        coef->data.function.head->type == EXPR_SYMBOL &&
+        coef->data.function.head->data.symbol.name == SYM_Times) {
+        size_t n = coef->data.function.arg_count;
+        Expr** fargs = malloc((n + 1) * sizeof(Expr*));
+        if (!fargs) return NULL;
+        for (size_t i = 0; i < n; i++) fargs[i] = expr_copy(coef->data.function.args[i]);
+        fargs[n] = expr_copy(power);
+        Expr* t = expr_new_function(expr_new_symbol(SYM_Times), fargs, n + 1);
+        free(fargs);
+        return t;
     }
 
     Expr* args[2] = { expr_copy(coef), expr_copy(power) };

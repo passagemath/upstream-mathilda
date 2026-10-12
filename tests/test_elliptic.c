@@ -227,7 +227,7 @@ static void test_series_at_zero(void) {
     assert_eval("Series[EllipticK[m], {m, 0, 3}]",
                 "1/2 Pi + 1/8 Pi m + 9/128 Pi m^2 + 25/512 Pi m^3 + O[m]^4");
     assert_eval("Series[EllipticE[m], {m, 0, 3}]",
-                "1/2 Pi + -1/8 Pi m + -3/128 Pi m^2 + -5/512 Pi m^3 + O[m]^4");
+                "1/2 Pi - 1/8 Pi m - 3/128 Pi m^2 - 5/512 Pi m^3 + O[m]^4");
     /* the leading term alone, which used to come back unevaluated */
     assert_eval("Series[EllipticK[m], {m, 0, 1}]", "1/2 Pi + 1/8 Pi m + O[m]^2");
     /* composition through an inner series */
@@ -239,7 +239,7 @@ static void test_series_at_zero(void) {
     assert_eval("Series[EllipticF[phi, m], {phi, 0, 3}]",
                 "phi + 1/6 m phi^3 + O[phi]^4");
     assert_eval("Series[EllipticE[phi, m], {phi, 0, 3}]",
-                "phi + -1/6 m phi^3 + O[phi]^4");
+                "phi - 1/6 m phi^3 + O[phi]^4");
     /* the series really is the function: truncation agrees numerically */
     /* a five-term truncation at m = 1/10; the next term is (Pi/2)(3969/65536)
      * m^5 = 9.5*10^-7, so 10^-5 is the honest bound for this many terms */

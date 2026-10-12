@@ -271,40 +271,40 @@ static void t_euler_inhomogeneous_complex(void) {
 static void t_euler_regression_corpus(void) {
     /* In[2]: resonant power r=2 (Log[x] term) */
     check_true("PossibleZeroQ[(x^2 y''[x] - 2 y[x] - x^2) /. "
-               "DSolve[x^2 y''[x] - 2 y[x] == x^2, y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] - 2 y[x] == x^2, y, x][[1]]]");
     /* In[3]: non-resonant power forcing */
     check_true("PossibleZeroQ[(x^2 y''[x] - 2 x y'[x] + 2 y[x] - x^3) /. "
-               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^3, y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^3, y, x][[1]]]");
     /* In[4]: double resonance (repeated root r=2, forcing x^2) -> Log[x]^2 */
     check_true("PossibleZeroQ[(x^2 y''[x] - 3 x y'[x] + 4 y[x] - x^2) /. "
-               "DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^2, y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^2, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^2, y[x], x][[1]], "
                "Log[x]^2]]");
     /* In[5]: complex roots +-i, forcing 1/x */
     check_true("PossibleZeroQ[(x^2 y''[x] + x y'[x] + y[x] - 1/x) /. "
-               "DSolve[x^2 y''[x] + x y'[x] + y[x] == 1/x, y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] + x y'[x] + y[x] == 1/x, y, x][[1]]]");
     /* In[6]: complex roots, Log[x] forcing */
     check_true("PossibleZeroQ[(x^2 y''[x] + y[x] - Log[x]) /. "
-               "DSolve[x^2 y''[x] + y[x] == Log[x], y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] + y[x] == Log[x], y, x][[1]]]");
     /* In[7]: real roots, x^2 e^x forcing -> ExpIntegralEi (x-domain VoP) */
     check_true("PossibleZeroQ[(x^2 y''[x] - 2 x y'[x] + 2 y[x] - x^2 Exp[x]) /. "
-               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^2 Exp[x], y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^2 Exp[x], y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x^2 y''[x] - 2 x y'[x] + 2 y[x] == x^2 Exp[x], y[x], x][[1]], "
                "ExpIntegralEi]]");
     /* In[8]: shifted Euler, centre -1 */
     check_true("PossibleZeroQ[((x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] - x^2) /. "
-               "DSolve[(x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] == x^2, y[x], x][[1]]]");
+               "DSolve[(x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] == x^2, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[(x+1)^2 y''[x] - 3 (x+1) y'[x] + 3 y[x] == x^2, y[x], x][[1]], "
                "Log[1 + x]]]");
     /* In[9]: real roots, Sin[Log[x]] forcing */
     check_true("PossibleZeroQ[(x^2 y''[x] + 2 x y'[x] - 2 y[x] - Sin[Log[x]]) /. "
-               "DSolve[x^2 y''[x] + 2 x y'[x] - 2 y[x] == Sin[Log[x]], y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] + 2 x y'[x] - 2 y[x] == Sin[Log[x]], y, x][[1]]]");
     /* In[10]: real roots, resonant x Log[x] forcing */
     check_true("PossibleZeroQ[(x^2 y''[x] + x y'[x] - y[x] - x Log[x]) /. "
-               "DSolve[x^2 y''[x] + x y'[x] - y[x] == x Log[x], y[x], x][[1]]]");
+               "DSolve[x^2 y''[x] + x y'[x] - y[x] == x Log[x], y, x][[1]]]");
     /* In[11]: third-order Euler, x^4 forcing (three constants) */
     check_true("PossibleZeroQ[(x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] - x^4) /. "
-               "DSolve[x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == x^4, y[x], x][[1]]]");
+               "DSolve[x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == x^4, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x^3 y'''[x] - 3 x^2 y''[x] + 6 x y'[x] - 6 y[x] == x^4, y[x], x][[1]], "
                "C[3]]]");
 }
@@ -377,25 +377,25 @@ static void t_bessel_reducible(void) {
                "/. x -> 13/10]] < 1/1000000");
 }
 /* Hang guard: a high-degree rational potential must not drive Kovacic into an
- * unbounded Factor/Solve/Integrate; it declines fast to the series fallback.  If
- * the degree gate regresses this loops forever, so reaching the assertion at all
- * is the real test. */
+ * unbounded Factor/Solve/Integrate; it declines fast (no closed form: the call
+ * returns unevaluated -- the series fallback is opt-in).  If the degree gate
+ * regresses this loops forever, so reaching the assertion at all is the real test. */
 static void t_kovacic_highdegree_no_hang(void) {
-    check_form("Head[DSolve[y''[x] + ((x^10 - 1)/(x^12 + 1)) y[x] == 0, y[x], x]]", "List");
+    check_form("Head[DSolve[y''[x] + ((x^10 - 1)/(x^12 + 1)) y[x] == 0, y[x], x]]", "DSolve");
 }
 
 /* ---- hypergeometric recognizers: Kummer (1F1) / Gauss (2F1) ---- */
 static void t_hypergeometric_kummer(void) {
     /* x y'' + (3/2 - x) y' - 2 y == 0 -> Hypergeometric1F1[2, 3/2, x] basis */
     check_true("PossibleZeroQ[(x y''[x] + (3/2 - x) y'[x] - 2 y[x]) /. "
-               "DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x][[1]]]");
+               "DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x], "
                "HypergeometricPFQ]]");
 }
 static void t_hypergeometric_gauss(void) {
     /* x(1-x) y'' + (1/2 - 6 x) y' - 6 y == 0 -> Hypergeometric2F1[2, 3, 1/2, x] basis */
     check_true("PossibleZeroQ[(x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x]) /. "
-               "DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y[x], x][[1]]]");
+               "DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y, x][[1]]]");
     check_true("Not[FreeQ[DSolve[x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x] == 0, y[x], x], "
                "HypergeometricPFQ]]");
 }
@@ -620,15 +620,23 @@ static void t_m25_exact_erf(void) {
  * Sqrt[x] E^(x^2/2); its reduction-of-order second solution is non-elementary.
  * Kovacic's coincident-exponent path collapsed to the rank-deficient
  * (C[1]+C[2]) Sqrt[x] E^(x^2/2) -- it verifies but is not a general solution.
- * The new independence guard rejects a degenerate basis, so the cascade falls
- * through to Frobenius, which returns the correct two-parameter series. */
+ * The new independence guard rejects a degenerate basis.  The series fallback is
+ * now opt-in (Method -> "FrobeniusSeries"), so the automatic call must NOT ship the
+ * degenerate closed form -- it stays unevaluated -- while the pinned series is the
+ * correct two-parameter solution. */
 static void t_m25_kovacic_fundamental_set(void) {
-    /* a genuine two-parameter solution: the two basis solutions (coeffs of C[1],
-     * C[2]) are linearly independent -- their ratio is non-constant. */
-    check_true("With[{b = y[x] /. DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x][[1]]}, "
-               "!PossibleZeroQ[D[Normal[D[b, C[1]]]/Normal[D[b, C[2]]], x]]]");
-    /* it is a (Frobenius) series solution */
+    /* automatic: no rank-deficient (C[1]+C[2]) Sqrt[x] E^(x^2/2) answer -- either
+     * unevaluated or a genuine two-parameter (independent-basis) solution */
     check_true("With[{s = DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x]}, "
+               "Head[s] === DSolve || With[{b = y[x] /. s[[1]]}, "
+               "!PossibleZeroQ[D[D[b, C[1]]/D[b, C[2]], x] /. x -> 7/10]]]");
+    /* pinned series: the two basis solutions (coeffs of C[1], C[2]) are linearly
+     * independent -- their ratio is non-constant. */
+    check_true("With[{b = y[x] /. DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x, "
+               "Method -> \"FrobeniusSeries\"][[1]]}, "
+               "!PossibleZeroQ[D[Normal[D[b, C[1]]]/Normal[D[b, C[2]]], x]]]");
+    check_true("With[{s = DSolve[2 x y''[x]+(1-2 x^2) y'[x]-4 x y[x]==0, y, x, "
+               "Method -> \"FrobeniusSeries\"]}, "
                "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
 }
 
@@ -640,13 +648,18 @@ static void t_m25_kovacic_fundamental_set(void) {
  * Taylor-normalises xP and x^2 Q first, so an analytic transcendental coefficient
  * is handled and a verified Frobenius series is returned. */
 static void t_m25_transcendental_frobenius(void) {
-    /* both return a Frobenius series (they previously declined) */
-    check_true("With[{s = DSolve[x^2 y''[x]+6 Sin[x] y'[x]+6 y[x]==0, y, x]}, "
+    /* both return a Frobenius series when one is requested (they previously
+     * declined); the automatic cascade never returns a series */
+    check_true("With[{s = DSolve[x^2 y''[x]+6 Sin[x] y'[x]+6 y[x]==0, y, x, "
+               "Method -> \"FrobeniusSeries\"]}, "
                "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
-    check_true("With[{s = DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x]}, "
+    check_true("With[{s = DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x, "
+               "Method -> \"FrobeniusSeries\"]}, "
                "MatchQ[s, {{y -> _Function}}] && !FreeQ[s, SeriesData]]");
+    check_true("FreeQ[DSolve[x^2 y''[x]+6 Sin[x] y'[x]+6 y[x]==0, y, x], SeriesData]");
     /* correctness anchor: the 490 series back-substitutes to ~0 near x=0 */
-    check_true("With[{b = Normal[y[x] /. DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x][[1]]] "
+    check_true("With[{b = Normal[y[x] /. DSolve[2 x^2 y''[x]+Sin[x] y'[x]-Cos[x] y[x]==0, y, x, "
+               "Method -> \"FrobeniusSeries\"][[1]]] "
                "/. {C[1] -> 13/10, C[2] -> 7/10}}, "
                "Abs[N[(2 x^2 D[b, {x,2}] + Sin[x] D[b, x] - Cos[x] b) /. x -> 1/10, 30]] < 1/100000]");
 }
@@ -1223,9 +1236,9 @@ static void t_kovacic_legendre_auto_closed_form(void) {
 static void t_kovacic_case2_complex_pole_no_hang(void) {
     /* (x^3+1)y'' + x y' + y == 0: r has a complex-conjugate pole pair; no Liouvillian
      * solution.  Case 1c declines fast and the Case-2 guard skips the σ-solve that
-     * used to hang, so DSolve returns (a series) rather than spinning.  The test
-     * passing at all is the no-hang assertion. */
-    check_form("Head[DSolve[(x^3 + 1) y''[x] + x y'[x] + y[x] == 0, y, x]]", "List");
+     * used to hang, so DSolve returns (unevaluated -- the series fallback is opt-in)
+     * rather than spinning.  The test passing at all is the no-hang assertion. */
+    check_form("Head[DSolve[(x^3 + 1) y''[x] + x y'[x] + y[x] == 0, y, x]]", "DSolve");
 }
 
 /* ---- OperatorFactor: higher-order linear-operator factoring + DFactor ---- */
@@ -1286,9 +1299,13 @@ static void t_powerseries_ordinary(void) {
     check_series("DSolve`PowerSeries", "y''[x] + y[x] == 0", "D[b,{x,2}] + b");
 }
 static void t_powerseries_auto(void) {
-    /* auto cascade falls through to a series for an analytic-but-non-closed-form coeff */
-    check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x]]", "List");
-    check_series("DSolve", "y''[x] + Sin[x] y[x] == 0", "D[b,{x,2}] + Sin[x] b");
+    /* the automatic cascade never returns a truncated series: an analytic-but-non-
+     * closed-form coefficient stays unevaluated (Nasser's v0.354 report) ... */
+    check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x]]", "DSolve");
+    /* ... while Method -> "PowerSeries" still gives the series on request */
+    check_form("Head[DSolve[y''[x] + Sin[x] y[x] == 0, y, x, Method -> \"PowerSeries\"]]", "List");
+    check_true("PossibleZeroQ[Module[{b = y[x] /. DSolve[y''[x] + Sin[x] y[x] == 0, y, x, "
+               "Method -> \"PowerSeries\"][[1]]}, D[b,{x,2}] + Sin[x] b]]");
 }
 static void t_frobenius_regsing_distinct(void) {
     /* 4 x y'' + 2 y' + y == 0: regular singular, roots 0 & 1/2 (cos/sin of Sqrt[x]) */
@@ -2310,15 +2327,21 @@ static void t_m34_corpus_cases(void) {
     /* 1350 — forced Bessel operator, arbitrary g: inert-Integrate VoP integral form. */
     check_true("Head[TimeConstrained[DSolve[x^2 y''[x] + x y'[x] + (x^2 - 1/4) y[x] == g[x], "
                "y, x], 8, $Aborted]] === List");
-    /* 1384 — 2nd-order exact -> Frobenius series IVP, fit at x=0. */
-    check_true("FreeQ[TimeConstrained[DSolve[{y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, y[0] == 0, "
-               "y'[0] == 1}, y, x], 8, $Aborted], C[_]]");
-    /* 1385 — IC-point transcendental Taylor series. */
-    check_true("FreeQ[TimeConstrained[DSolve[{x^2 y''[x] + (x + 1) y'[x] + 3 Log[x] y[x] == 0, "
-               "y[1] == 2, y'[1] == 0}, y, x], 8, $Aborted], C[_]]");
-    /* 1392 — cubic-coefficient Heun: Kovacic declines the complex poles -> series. */
+    /* 1384 — 2nd-order exact -> Frobenius series IVP, fit at x=0 (series on request;
+     * MatchQ guards against a vacuous FreeQ on an unevaluated call). */
+    check_true("With[{s = TimeConstrained[DSolve[{y''[x] + Sin[x] y'[x] + Cos[x] y[x] == 0, "
+               "y[0] == 0, y'[0] == 1}, y, x, Method -> \"PowerSeries\"], 8, $Aborted]}, "
+               "MatchQ[s, {{_Rule}}] && FreeQ[s, C[_]]]");
+    /* 1385 — IC-point transcendental Taylor series (on request). */
+    check_true("With[{s = TimeConstrained[DSolve[{x^2 y''[x] + (x + 1) y'[x] + 3 Log[x] y[x] == 0, "
+               "y[1] == 2, y'[1] == 0}, y, x, Method -> \"PowerSeries\"], 8, $Aborted]}, "
+               "MatchQ[s, {{_Rule}}] && FreeQ[s, C[_]]]");
+    /* 1392 — cubic-coefficient Heun: Kovacic declines the complex poles promptly; the
+     * automatic call stays unevaluated and the series comes on request. */
     check_true("Head[TimeConstrained[DSolve[(x^3 + 1) y''[x] + 4 x y'[x] + y[x] == 0, y, x], "
-               "8, $Aborted]] === List");
+               "8, $Aborted]] === DSolve");
+    check_true("Head[TimeConstrained[DSolve[(x^3 + 1) y''[x] + 4 x y'[x] + y[x] == 0, y, x, "
+               "Method -> \"PowerSeries\"], 8, $Aborted]] === List");
 }
 
 /* M35 — DSolve`PiecewiseForcing (§2.2.15): linear IVPs with piecewise/step/Heaviside
@@ -2387,10 +2410,13 @@ static void t_m37_fractional_power_branch(void) {
     /* 1636: Bernoulli y^(3/2) IVP (solves to a verifiable implicit ArcCoth relation). */
     check_true("MatchQ[DSolve[{y'[x]-y[x] x==y[x]^(3/2) x, y[1]==4}, y, x], {{_Equal}} | {{_Rule}}]");
     /* 1622: cube-root general solution -> the real branch (1+x^3); the spurious complex
-     * twin is dropped, so every returned branch back-substitutes to zero for x>0. */
+     * twin is dropped, so every returned branch back-substitutes to zero for x>0.  The
+     * constant is instantiated (C[1] -> 7/10) so the check is decided: PossibleZeroQ
+     * does not sample a C[k] application, and an unsampled residue reads as True. */
     check_true("Module[{s = DSolve[y'[x]==3 x (-1+y[x])^(1/3), y, x]}, "
                "Head[s]===List && Length[s]>=1 && "
-               "AllTrue[s, PossibleZeroQ[((y'[x]-3 x (-1+y[x])^(1/3)) /. #[[1]]) /. x->3/2] &]]");
+               "AllTrue[s, PossibleZeroQ[((y'[x]-3 x (-1+y[x])^(1/3)) /. #[[1]]) /. "
+               "{x->3/2, C[1] -> 7/10}] &]]");
 }
 
 static void t_m37_abel_air(void) {
@@ -2498,13 +2524,13 @@ static void t_rischnorman_enum_cap_no_crash(void) {
  * back-substitution residual. */
 static void t_trig_coeff_linear_first_order(void) {
     check_true("PossibleZeroQ[(y'[x] + Tan[x] y[x] - 3 Cos[x]^2) /. "
-               "DSolve[y'[x] + Tan[x] y[x] == 3 Cos[x]^2, y[x], x][[1]]]");
+               "DSolve[y'[x] + Tan[x] y[x] == 3 Cos[x]^2, y, x][[1]]]");
     check_true("PossibleZeroQ[(y'[x] - Tan[x] y[x] - Cos[x]) /. "
-               "DSolve[y'[x] - Tan[x] y[x] == Cos[x], y[x], x][[1]]]");
+               "DSolve[y'[x] - Tan[x] y[x] == Cos[x], y, x][[1]]]");
     check_true("PossibleZeroQ[(y'[x] + Cot[x] y[x] - Csc[x]) /. "
-               "DSolve[y'[x] + Cot[x] y[x] == Csc[x], y[x], x][[1]]]");
+               "DSolve[y'[x] + Cot[x] y[x] == Csc[x], y, x][[1]]]");
     check_true("PossibleZeroQ[(y'[x] + Tanh[x] y[x] - 1) /. "
-               "DSolve[y'[x] + Tanh[x] y[x] == 1, y[x], x][[1]]]");
+               "DSolve[y'[x] + Tanh[x] y[x] == 1, y, x][[1]]]");
 }
 
 /* First-order ODEs linearizable by u = phi(y) (DSolve`Linearizable): reduce to
@@ -2512,8 +2538,11 @@ static void t_trig_coeff_linear_first_order(void) {
  * by back-substitution (y -> Function so y'[x] resolves). */
 static void t_linearizable_first_order(void) {
     /* Log-family -> linear in Log[y] */
+    /* C[1] instantiated so the check is decided: PossibleZeroQ does not sample a
+     * C[k] application (an unsampled residue reads as True), and with a plain symbol in
+     * its place the sampler's large draws put E^(E^x (C[1] + x)) beyond its ladder. */
     check_true("PossibleZeroQ[(y'[x] - y[x](Exp[x] + Log[y[x]])) /. "
-               "DSolve[y'[x] == y[x](Exp[x] + Log[y[x]]), y, x][[1]]]");
+               "DSolve[y'[x] == y[x](Exp[x] + Log[y[x]]), y, x][[1]] /. C[1] -> 1/3]");
     /* Exp-family -> linear in Exp[y] */
     check_true("PossibleZeroQ[(y'[x] - Exp[x - y[x]](Exp[x] - Exp[y[x]])) /. "
                "DSolve[y'[x] == Exp[x - y[x]](Exp[x] - Exp[y[x]]), y, x][[1]]]");
@@ -2582,21 +2611,21 @@ static void t_linear_coeff_normalization(void) {
 static void t_system_varcoeff(void) {
     /* scalar-factor A = (1/t) B */
     check_true("PossibleZeroQ[(t x'[t] + y[t]) /. "
-               "DSolve[{t x'[t]+y[t]==0, t y'[t]+x[t]==0}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{t x'[t]+y[t]==0, t y'[t]+x[t]==0}, {x,y}, t][[1]]]");
     /* scalar-factor with forcing */
     check_true("PossibleZeroQ[(t x'[t]+2 x[t]-2 y[t]-t) /. "
                "DSolve[{t x'[t]+2 x[t]-2 y[t]==t, t y'[t]+x[t]+5 y[t]==t^2}, "
-               "{x[t],y[t]}, t][[1]]]");
+               "{x,y}, t][[1]]]");
     /* commutative hyperbolic K0^2 = I */
     check_true("PossibleZeroQ[(x'[t]+x[t]-t y[t]) /. "
-               "DSolve[{x'[t]==-x[t]+t y[t], y'[t]==t x[t]-y[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==-x[t]+t y[t], y'[t]==t x[t]-y[t]}, {x,y}, t][[1]]]");
     /* commutative rotation K0^2 = -I */
     check_true("PossibleZeroQ[(x'[t]-x[t] Cos[t]+Sin[t] y[t]) /. "
                "DSolve[{x'[t]==x[t] Cos[t]-Sin[t] y[t], y'[t]==x[t] Sin[t]+y[t] Cos[t]}, "
-               "{x[t],y[t]}, t][[1]]]");
+               "{x,y}, t][[1]]]");
     /* commutative rotation with a = 1/t */
     check_true("PossibleZeroQ[(x'[t]-x[t]/t-y[t]) /. "
-               "DSolve[{x'[t]==x[t]/t+y[t], y'[t]==-x[t]+y[t]/t}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==x[t]/t+y[t], y'[t]==-x[t]+y[t]/t}, {x,y}, t][[1]]]");
 }
 
 /* 2-D autonomous (nonlinear) systems via the phase-plane reduction
@@ -2605,15 +2634,15 @@ static void t_system_varcoeff(void) {
 static void t_system_autonomous(void) {
     /* orbit y = C x -> exponential */
     check_true("PossibleZeroQ[(x'[t] - y[t]) /. "
-               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x,y}, t][[1]]]");
     check_true("PossibleZeroQ[(y'[t] - y[t]^2/x[t]) /. "
-               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==y[t], y'[t]==y[t]^2/x[t]}, {x,y}, t][[1]]]");
     /* orbit x y = C */
     check_true("PossibleZeroQ[(x'[t] + 1/y[t]) /. "
-               "DSolve[{x'[t]==-1/y[t], y'[t]==1/x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==-1/y[t], y'[t]==1/x[t]}, {x,y}, t][[1]]]");
     /* orbit y = C x, Sqrt reconstruction */
     check_true("PossibleZeroQ[(x'[t] - 1/y[t]) /. "
-               "DSolve[{x'[t]==1/y[t], y'[t]==1/x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x'[t]==1/y[t], y'[t]==1/x[t]}, {x,y}, t][[1]]]");
     /* radical orbit -> declines cleanly, no crash (returns unevaluated) */
     check_true("MatchQ[DSolve[{x'[t]==y[t]/(x[t]-y[t]), y'[t]==x[t]/(x[t]-y[t])}, "
                "{x[t],y[t]}, t], _DSolve | _List]");
@@ -2627,20 +2656,20 @@ static void t_system_autonomous(void) {
 static void t_system_higher_order(void) {
     /* pure 2nd order, x''=4y, y''=4x (spectrum +/-2, +/-2i) */
     check_true("PossibleZeroQ[(x''[t] - 4 y[t]) /. "
-               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x,y}, t][[1]]]");
     check_true("PossibleZeroQ[(y''[t] - 4 x[t]) /. "
-               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x[t],y[t]}, t][[1]]]");
+               "DSolve[{x''[t]==4 y[t], y''[t]==4 x[t]}, {x,y}, t][[1]]]");
     /* mixed order: x is 2nd order, y is 1st order */
     check_true("PossibleZeroQ[(x''[t]+x'[t]+y'[t]-2 y[t]) /. "
                "DSolve[{x''[t]+x'[t]+y'[t]-2 y[t]==0, x'[t]+x[t]-y'[t]==0}, "
-               "{x[t],y[t]}, t][[1]]]");
+               "{x,y}, t][[1]]]");
     check_true("PossibleZeroQ[(x'[t]+x[t]-y'[t]) /. "
                "DSolve[{x''[t]+x'[t]+y'[t]-2 y[t]==0, x'[t]+x[t]-y'[t]==0}, "
-               "{x[t],y[t]}, t][[1]]]");
+               "{x,y}, t][[1]]]");
     /* forced 2nd-order system (variation of parameters) */
     check_true("PossibleZeroQ[(x''[t]-4 y[t]-Exp[t]) /. "
                "DSolve[{x''[t]==4 y[t]+Exp[t], y''[t]==4 x[t]-Exp[t]}, "
-               "{x[t],y[t]}, t][[1]]]");
+               "{x,y}, t][[1]]]");
     /* the number of arbitrary constants equals the total order (2+2 = 4) */
     check_true("Length[Union[Cases[DSolve[{x''[t]==2 x[t]-3 y[t], "
                "y''[t]==x[t]-2 y[t]}, {x[t],y[t]}, t], C[_], Infinity]]] == 4");
@@ -2784,11 +2813,16 @@ static void t_m56_mu_xyp_caseD(void) {
                "/. {a -> 3/5, b -> 7/10, c -> 2/5, y[x] -> 9/10, Derivative[1][y][x] -> 7/5, x -> 6/5}), 20]] < 10^-6]");
 }
 
-/* Auto-dispatch: the automatic cascade emits the first integral (after the
- * full-solution methods decline the reducible ODE). */
+/* Auto-dispatch: a first integral still carries y'[x] -- a reduction of order, not
+ * a solution -- so the automatic cascade never returns one (Nasser's v0.354
+ * report); it is reached through Method -> "ReducibleFirstIntegral". */
 static void t_m56_auto_dispatch(void) {
     check_true("With[{s = DSolve[y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y, x]}, "
-               "Head[s] === List && Length[s] >= 1 && MatchQ[s[[1, 1]], _Equal]]");
+               "Head[s] === DSolve || FreeQ[s, Derivative]]");
+    check_true("With[{s = DSolve[y''[x] == (x^2 y[x] y'[x] + x y[x]^2)/y'[x], y, x, "
+               "Method -> \"ReducibleFirstIntegral\"]}, "
+               "Head[s] === List && Length[s] >= 1 && MatchQ[s[[1, 1]], _Equal] && "
+               "!FreeQ[s, Derivative[1][y][x]]]");
 }
 
 /* Gates: a LINEAR ODE and an IVP both decline the first-integral method
@@ -3015,9 +3049,11 @@ static void t_m61_elementary_particular_unchanged(void) {
                "Head[s] === List && FreeQ[s, Inactive]]");
     check_true("Module[{s = DSolve[x^2 y''[x] - 3 x y'[x] + 4 y[x] == x^3, y, x]}, "
                "Head[s] === List && FreeQ[s, Inactive]]");
-    /* a homogeneous equation must never acquire a particular */
+    /* a homogeneous equation must never acquire a particular (no closed form is
+     * found for this Bessel-type equation, so it stays unevaluated now that the
+     * series fallback is opt-in) */
     check_true("Module[{s = DSolve[x y''[x] + 3 y'[x] - y[x] == 0, y, x]}, "
-               "Head[s] === List && FreeQ[s, Inactive]]");
+               "Head[s] === DSolve || (Head[s] === List && FreeQ[s, Inactive])]");
 }
 
 /* The whole design rests on the FTC rule for the inert head and on Activate being
@@ -3051,10 +3087,18 @@ static void t_m61_autonomous_ivp_constant_fit(void) {
  * VARIABLE too and produced `Inactive[Integrate][1, 0]` -- a meaningless expression
  * that, once no free constant remained, looked like a solved answer. */
 static void t_m61_autonomous_implicit_definite_fit(void) {
-    check_true("Module[{s = DSolve[{y''[x] == y[x]^2, y[0] == 1, y'[0] == 0}, y, x]}, "
+    /* the quadrature Integrate[1/Sqrt[2/3 (y^3 - 1)], y] now closes (EllipticF), so the
+     * fitted relation is a closed form; an inert integral, when present, must be the
+     * definite one.  Verified intrinsically: G(x, y) == 0 gives y' = -G_x/G_y, and
+     * y'' = y' d(y')/dy must equal y^2; the condition y(0) == 1 must hold. */
+    check_true("Module[{s = DSolve[{y''[x] == y[x]^2, y[0] == 1, y'[0] == 0}, y, x], l, p}, "
                "Head[s] === List && FreeQ[s, C[_Integer]] && "
                "MatchQ[Cases[s, Inactive[Integrate][_, _], {0, Infinity}], "
-               "{Inactive[Integrate][_, {_, _, _}] ..}]]");
+               "{Inactive[Integrate][_, {_, _, _}] ...}] && "
+               "(!FreeQ[s, Inactive] || "
+               "(l = (s[[1, 1, 1]] - s[[1, 1, 2]]) /. y[x] -> Y; p = -D[l, x]/D[l, Y]; "
+               "Abs[N[(p D[p, Y] - Y^2) /. {Y -> 3/2, x -> 0}, 20]] < 10^-8 && "
+               "Abs[N[l /. {Y -> 1, x -> 0}, 20]] < 10^-8))]");
     /* the Leibniz rule for the inert definite head is what makes that verifiable */
     check_form("D[Inactive[Integrate][f[t], {t, a, x}], x]", "f[x]");
     check_form("D[Inactive[Integrate][f[t], {t, 0, y[x]}], x]",
@@ -3199,6 +3243,56 @@ static void t_m62_peel_slot_latency(void) {
     check_true("MatchQ[TimeConstrained[DSolve[y[x] y'''[x] == y'[x] y''[x], y, x], 3, $Aborted], "
                "{{Rule[y, _Function]}}]");
     check_true("TimeConstrained[DSolve[y[x]^2 y'''[x] == (y'[x])^3, y, x], 8, $Aborted] =!= $Aborted");
+}
+
+/* ---- Nasser's v0.354 report: an automatic DSolve returns only solutions ---- *
+ * (1) a linear ODE with no closed form found must not come back as a truncated
+ * power series; (2) a speculative sub-solve's Integrate::nonelem must not leak;
+ * (3-7) an autonomous 2nd-order ODE must not come back as a first integral still
+ * carrying y' -- the autonomous reduction finishes it to a relation in x and y
+ * alone (closed form when the quadrature is elementary, else inert).
+ *
+ * nasser_implicit_ok checks a {{G == C[1]}} answer intrinsically: G(x, y) == C[1]
+ * gives y' = p = -G_x/G_y (an inert Integrate[f, y] contributes f to G_y, by the
+ * FTC) and y'' = p dp/dy; the ODE residual `res` (in Y, p, pp) must vanish at a
+ * sample point.  Check[] must not fire: probe diagnostics are not user events. */
+static void nasser_implicit_ok(const char* ode, const char* res, const char* sample) {
+    char buf[1600];
+    snprintf(buf, sizeof(buf),
+        "With[{s = Check[DSolve[%s, y[x], x], $Failed]}, "
+        "MatchQ[s, {{_Equal}}] && FreeQ[s, Derivative] && FreeQ[s, SeriesData] && "
+        "Module[{l = s[[1, 1, 1]] /. y[x] -> Y, ly, p, pp}, "
+        "ly = D[l /. Inactive[Integrate][_, Y] :> 0, Y] + "
+        "Total[Cases[l, Inactive[Integrate][f_, Y] :> f, {0, Infinity}]]; "
+        "p = -D[l, x]/ly; pp = p D[p, Y]; "
+        "Abs[N[(%s) /. %s, 30]] < 10^-8]]", ode, res, sample);
+    check_true(buf);
+}
+static void t_nasser_no_series(void) {
+    check_true("Head[Check[DSolve[(3 x - 1) y''[x] - (3 x + 2) y'[x] + (6 x - 8) y[x] == 0, "
+               "y[x], x], $Failed]] === DSolve");
+}
+static void t_nasser_no_nonelem_leak(void) {
+    check_true("Head[Check[DSolve[D[y'[x]/y[x], x] + 2 a Coth[y'[x]/y[x]] == 2 a^2, "
+               "y[x], x], $Failed]] =!= $Failed");
+}
+static void t_nasser_autonomous_no_yprime(void) {
+    nasser_implicit_ok("y''[x] + y[x]^3 == 0",
+                       "pp + Y^3", "{Y -> 7/10, C[2] -> 13/10}");
+    nasser_implicit_ok("y[x] y''[x] == b + a y'[x]^2", "Y pp - b - a p^2",
+                       "{Y -> 7/10, C[2] -> 13/10, a -> 3/10, b -> 2/5}");
+    nasser_implicit_ok("1 + y'[x]^2 + 2 y[x] y''[x] == 0", "1 + p^2 + 2 Y pp",
+                       "{Y -> 7/10, C[2] -> 13/10}");
+    nasser_implicit_ok("y[x]^2 y''[x] == a", "Y^2 pp - a",
+                       "{Y -> 7/10, C[2] -> 13/10, a -> 3/10}");
+    nasser_implicit_ok("3 (1 - y[x]) y[x] y''[x] == 2 (1 - 2 y[x]) y'[x]^2",
+                       "3 (1 - Y) Y pp - 2 (1 - 2 Y) p^2", "{Y -> 7/10, C[2] -> 13/10}");
+}
+/* The SeriesData display splices a product coefficient into one flat Times, so a
+ * negative compound coefficient prints as " - " (not "+ -1/6 (...)"). */
+static void t_nasser_series_sign_display(void) {
+    check_true("StringFreeQ[ToString[DSolve[(3 x - 1) y''[x] - (3 x + 2) y'[x] + (6 x - 8) y[x] == 0, "
+               "y[x], x, Method -> \"PowerSeries\"]], \"+ -\"]");
 }
 
 int main(void) {
@@ -3469,6 +3563,10 @@ int main(void) {
     TEST(t_m56_mu_xyp_caseC);
     TEST(t_m56_mu_xyp_caseD);
     TEST(t_m56_auto_dispatch);
+    TEST(t_nasser_no_series);
+    TEST(t_nasser_no_nonelem_leak);
+    TEST(t_nasser_autonomous_no_yprime);
+    TEST(t_nasser_series_sign_display);
     TEST(t_m56_declines_linear_and_ivp);
     TEST(t_m57_solvablefory);
     TEST(t_m57_gates);

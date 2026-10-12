@@ -13,6 +13,7 @@
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../symtab.h"
+#include "../attr.h"            /* get_attributes: ds_free_of's moderate-point probe */
 #include "../eval.h"
 #include "../common.h"
 #include "../internal.h"
@@ -95,10 +96,85 @@ bool ds_is_structural_zero(const Expr* e) {
 }
 bool ds_has_head(const Expr* e, const char* head) { return ds_contains(e, head); }
 
+/* A symbol is a free parameter to sample unless it is a protected system symbol
+ * (E, Pi, I, Infinity, True, ...). */
+static bool dsfo_is_param_symbol(const char* nm) {
+    return !(get_attributes(nm) & ATTR_PROTECTED);
+}
+
+/* Collect the sample targets of e: free parameter symbols in argument position, and
+ * whole applications of an undefined head (C[1], f[x]) -- each an opaque value. */
+#define DSFO_CAP 24
+static void dsfo_collect(const Expr* e, Expr** atoms, int* n) {
+    if (!e || *n >= DSFO_CAP) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (!dsfo_is_param_symbol(e->data.symbol.name)) return;
+    } else if (e->type == EXPR_FUNCTION) {
+        const Expr* h = e->data.function.head;
+        bool opaque = false;
+        if (h && h->type == EXPR_SYMBOL) {
+            SymbolDef* def = symtab_lookup(h->data.symbol.name);
+            opaque = dsfo_is_param_symbol(h->data.symbol.name)
+                  && (!def || (!def->builtin_func && !def->down_values));
+        }
+        if (!opaque) {
+            if (h && h->type != EXPR_SYMBOL) dsfo_collect(h, atoms, n);
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                dsfo_collect(e->data.function.args[i], atoms, n);
+            return;
+        }
+    } else return;
+    for (int i = 0; i < *n; i++) if (expr_eq(atoms[i], (Expr*)e)) return;
+    atoms[(*n)++] = (Expr*)e;
+}
+
+/* True when e is CONFIDENTLY nonzero at one moderate exact-rational point (every
+ * parameter and opaque atom replaced by a distinct small rational, then N[]).
+ * A cross-check for a numeric "identically zero" verdict: the zero-test sampler's
+ * shrinkage ladder reads a DECAYING nonzero as zero (PossibleZeroQ[2 a v Csch[v x]^2]
+ * is True), while at a moderate point such an expression is plainly O(1).  Anything
+ * non-numeric, non-finite or tiny returns false (no confidence), so a genuine
+ * non-structural identity (Sin^2 + Cos^2 - 1) is never contradicted. */
+static bool ds_confidently_nonzero_at_moderate_point(const Expr* e) {
+    static const int num[] = { 3, 5, 2, 7, 4, 9, 6, 11, 8, 13, 10, 12 };
+    static const int den[] = { 7, 11, 9, 13, 15, 17, 19, 23, 29, 31, 37, 41 };
+    Expr* atoms[DSFO_CAP];
+    int n = 0;
+    dsfo_collect(e, atoms, &n);
+    Expr* t = expr_copy((Expr*)e);
+    for (int i = 0; i < n; i++) {
+        int k = i % 12;
+        Expr* val = expr_new_function(expr_new_symbol(SYM_Rational),
+                        (Expr*[]){ expr_new_integer(num[k] + (i / 12)),
+                                   expr_new_integer(den[k]) }, 2);
+        t = ds_subst(t, expr_copy(atoms[i]), val);
+    }
+    Expr* v = eval_and_free(ds_call1("N", t));
+    double re = 0.0, im = 0.0;
+    bool numeric = false;
+    if (v->type == EXPR_REAL) { re = v->data.real; numeric = true; }
+    else if (v->type == EXPR_INTEGER) { re = (double)v->data.integer; numeric = true; }
+    else if (head_is(v, SYM_Complex) && v->data.function.arg_count == 2
+             && v->data.function.args[0]->type == EXPR_REAL
+             && v->data.function.args[1]->type == EXPR_REAL) {
+        re = v->data.function.args[0]->data.real;
+        im = v->data.function.args[1]->data.real;
+        numeric = true;
+    }
+    expr_free(v);
+    if (!numeric || !isfinite(re) || !isfinite(im)) return false;
+    return sqrt(re * re + im * im) > 1e-8;
+}
+
 bool ds_free_of(const Expr* e, const char* var) {
     if (!ds_contains(e, var)) return true;                 /* cheap syntactic pass */
     Expr* d = ds_d(expr_copy((Expr*)e), expr_new_symbol(var));
     bool zero = ds_is_zero(d);
+    /* A numeric "zero" that is not a structural one may be the sampler's decay
+     * false positive (Coth[v x] passing as free of x because D == 2 a v Csch[v x]^2
+     * underflows at its large samples).  Confirm it at a moderate point. */
+    if (zero && !ds_is_structural_zero(d) && ds_confidently_nonzero_at_moderate_point(d))
+        zero = false;
     expr_free(d);
     return zero;
 }

@@ -4009,7 +4009,7 @@ endif()
 add_test(NAME dsolve_corpus_2_1_2_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 578)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 749)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
 # verifies the ODE residual AND every initial condition (M21).  Baseline 2
@@ -4054,7 +4054,7 @@ add_test(NAME dsolve_corpus_2_2_4_tests
 add_test(NAME dsolve_corpus_2_2_5_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_225.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 21)
 
 # Section 2.2.6 "Problems 501 to 600" (Table 2.29, Edwards & Penney 6th ed.): 100
 # ODEs -- 74 scalar (47 IVP) + 26 systems.  Dominated by forced linear
@@ -4070,7 +4070,7 @@ add_test(NAME dsolve_corpus_2_2_5_tests
 add_test(NAME dsolve_corpus_2_2_6_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
 
 # Section 2.2.7 "Problems 601 to 700" (Table 2.31): 100 ODEs -- 50 scalar (23 IVP;
 # elementary first-order: separable / quadrature / linear / homogeneous / Riccati) +
@@ -4171,7 +4171,7 @@ add_test(NAME dsolve_corpus_2_2_10_tests
 add_test(NAME dsolve_corpus_2_2_11_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2211.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Section 2.2.12 "Problems 1101 to 1200" (Edwards & Penney): 100 records --
 # 100 scalar first-order ODEs (38 IVP), 0 systems.  Elementary first-order
@@ -4230,7 +4230,7 @@ add_test(NAME dsolve_corpus_2_2_13_tests
 add_test(NAME dsolve_corpus_2_2_14_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2214.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
 
 # Section 2.2.15 (Problems 1401-1500, Boyce & DiPrima): 100 records, 18 IVP,
 # 61 systems (53 2x2 + 8 3x3 constant-coefficient linear).  Scalars: high-order
@@ -4276,7 +4276,7 @@ add_test(NAME dsolve_corpus_2_2_16_tests
 add_test(NAME dsolve_corpus_2_2_17_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2217.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 13)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.18 (Problems 1701-1800, Nasser Abbasi): 100 records, 14 IVP, 0
 # systems.  45 first-order / 55 second-order (no order >= 3).  Mixed: 25 2nd-order
@@ -4292,7 +4292,7 @@ add_test(NAME dsolve_corpus_2_2_17_tests
 add_test(NAME dsolve_corpus_2_2_18_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2218.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Section 2.2.19 (Problems 1801-1900, Nasser Abbasi): 100 records, 27 IVP, 0
 # systems.  Second-order-linear dominated: 3 Riccati, ~30 nonhomogeneous 2nd-order
@@ -4304,7 +4304,7 @@ add_test(NAME dsolve_corpus_2_2_18_tests
 add_test(NAME dsolve_corpus_2_2_19_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2219.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 25)
 
 # Section 2.2.20 (Problems 1901-2000, Nasser Abbasi): 100 records, 34 IVP, 0
 # systems.  ALL homogeneous 2nd-order linear with a regular singular point
@@ -4318,7 +4318,7 @@ add_test(NAME dsolve_corpus_2_2_19_tests
 add_test(NAME dsolve_corpus_2_2_20_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2220.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 42)
 
 # Section 2.2.21 (Problems 2001-2100, Nasser Abbasi): 100 records, 0 IVP, 0
 # systems.  ALL homogeneous 2nd-order linear regular-singular ("Series expansion
@@ -4328,7 +4328,7 @@ add_test(NAME dsolve_corpus_2_2_20_tests
 add_test(NAME dsolve_corpus_2_2_21_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2221.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 28)
 
 # Section 2.2.22 (Problems 2101-2200, Nasser Abbasi): 100 records, 19 IVP, 0
 # systems.  Dominated by higher-order (3rd-6th) constant-coefficient linear ODEs
@@ -4343,7 +4343,7 @@ add_test(NAME dsolve_corpus_2_2_21_tests
 add_test(NAME dsolve_corpus_2_2_22_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2222.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # Section 2.2.23 (Problems 2201-2300, Nasser Abbasi): 100 records, 17 IVP, 55
 # systems.  The first SYSTEMS-heavy section since 2.2.15: 45 scalar (higher-order
@@ -4382,7 +4382,7 @@ add_test(NAME dsolve_corpus_2_2_23_tests
 add_test(NAME dsolve_corpus_2_2_24_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2224.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
 
 # Section 2.2.25 (Problems 2401-2500, Nasser Abbasi): 100 records, 32 IVP, 0
 # systems.  Second-order-linear-heavy: constant-coefficient nonhomogeneous (incl.
@@ -4401,7 +4401,7 @@ add_test(NAME dsolve_corpus_2_2_24_tests
 add_test(NAME dsolve_corpus_2_2_25_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2225.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 19)
 
 # Section 2.2.26 (Problems 2501-2600, Nasser Abbasi): 100 records, 50 IVP, 0
 # systems.  A Braun-textbook section: a first-order-nonlinear-heavy front half
@@ -4421,7 +4421,7 @@ add_test(NAME dsolve_corpus_2_2_25_tests
 add_test(NAME dsolve_corpus_2_2_26_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
 
 # Section 2.2.27 (Problems 2601-2700, Nasser Abbasi): 100 records, 96 scalar
 # (39 IVP), 4 systems.  A 2nd-order-linear-heavy section: constant-coefficient
@@ -4433,7 +4433,7 @@ add_test(NAME dsolve_corpus_2_2_26_tests
 add_test(NAME dsolve_corpus_2_2_27_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2227.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 17)
 
 # Section 2.2.28 (Problems 2701-2800, Nasser Abbasi): 100 records, 18 scalar
 # (3 IVP), 82 systems -- a systems-heavy section: constant-coefficient linear
@@ -4567,7 +4567,7 @@ add_test(NAME dsolve_corpus_2_2_33_tests
 add_test(NAME dsolve_corpus_2_2_34_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2234.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 18)
 
 # 12000.org "Solving ODEs" section 2.2.35 (Problems 3401-3500).  M62: 100 records, all
 # scalar (31 IVP), 0 systems; Riley-Hobson-Bence, Robert H Martin 1983, Martin-Reissner
@@ -4627,7 +4627,7 @@ add_test(NAME dsolve_corpus_2_2_35_tests
 add_test(NAME dsolve_corpus_2_2_36_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2236.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # M64 (Problems 3601-3700, our section 2.2.37 = upstream 2.1.37).  Heavily
 # first-order (20 linear / 10 separable / 8 Bernoulli / the homogeneous-classA/

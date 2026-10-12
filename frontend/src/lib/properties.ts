@@ -14,8 +14,7 @@
 // preference -- an Open Recent that forgets on restart is not the feature at all.
 // No UI setting has followed it, and none should until they all can.
 
-import { writable, derived } from 'svelte/store';
-import { COLOR_SCHEMES } from './schemes';
+import { writable } from 'svelte/store';
 
 /** Whether the properties sidebar is showing. Toolbar's Sidebar group toggles it. */
 export const propertiesOpen = writable(false);
@@ -65,9 +64,3 @@ export const colorScheme = writable('default');
 export type OutputFormat = 'input' | 'standard' | 'traditional';
 export const outputFormat = writable<OutputFormat>('standard');
 
-/** True when the active scheme is a teletype (mono) scheme — the signal
- *  Output.svelte uses to render expression output in 1D InputForm instead of 2D
- *  typeset math. Derived so it tracks colorScheme with no second source of truth;
- *  the flag itself lives on the scheme in lib/schemes.ts. */
-export const plainOutput = derived(colorScheme, ($id) =>
-  !!COLOR_SCHEMES.find((s) => s.id === $id)?.mono);

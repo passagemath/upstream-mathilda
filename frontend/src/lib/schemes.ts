@@ -32,11 +32,11 @@ export interface ColorScheme {
   /** Render builtin names in bold (used by grayscale, where weight — not hue —
    *  distinguishes them). Drives --cm-builtin-weight; see mathildaLang.ts. */
   builtinBold?: boolean;
-  /** Teletype mode (the '60s scheme): a fixed-width Courier face across every
-   *  input and output surface, and 1D output (no 2D typeset math). Drives the
-   *  `data-teletype` attribute (applyColorScheme, below) that app.css hooks the
-   *  font onto, and the `plainOutput` store (properties.ts) that Output.svelte
-   *  reads to force InputForm. */
+  /** Teletype mode (the 60s/70s/80s schemes): a fixed-width Courier face across
+   *  every input and output surface. Drives the `data-teletype` attribute
+   *  (applyColorScheme, below) that app.css hooks the font onto. It changes the
+   *  face only: results keep the form View › Output Format chose (properties.ts
+   *  `outputFormat`), so a teletype scheme can still show typeset StandardForm. */
   mono?: boolean;
 }
 
@@ -171,9 +171,9 @@ export function applyColorScheme(id: string): void {
      otherwise so the highlighter's `var(--cm-builtin-weight, normal)` falls back. */
   if (scheme?.builtinBold) root.style.setProperty('--cm-builtin-weight', 'bold');
   else root.style.removeProperty('--cm-builtin-weight');
-  /* Teletype ('60s) mode: a data attribute app.css hooks the Courier font onto.
-     The 1D-output switch is the `plainOutput` store (properties.ts); the colours
-     are the all-ink --cm-* palette set above. */
+  /* Teletype mode: a data attribute app.css hooks the Courier font onto; the
+     colours are the all-ink --cm-* palette set above. The output FORM is not this
+     scheme's business -- it is View › Output Format's (`outputFormat`). */
   if (scheme?.mono) root.setAttribute('data-teletype', '');
   else root.removeAttribute('data-teletype');
 }

@@ -169,6 +169,9 @@ ok('KaTeX trusts ONLY \\htmlData (the selection tags), nothing that can link or 
    /trust:\s*\(ctx[^)]*\)\s*=>\s*ctx\.command === '\\\\htmlData'/.test(outSrc), 'trust widened or missing');
 ok('View > Output Format decides the form of every result not converted on its own',
    /exprForm\[idx\] \?\? \$outputFormat/.test(outSrc), 'not wired');
+ok('no colour scheme overrides the output form (teletype changes the face only)',
+   /\{@const form = exprForm\[idx\] \?\? \$outputFormat\}/.test(outSrc)
+   && !/plainOutput/.test(outSrc), 'a scheme still redirects the form');
 ok('StandardForm (slatex) is the default display, set in Arial',
    /form === 'standard' && item\.slatex/.test(outSrc)
    && /\.out-sf \.katex[^{]*\{[^}]*font-family:\s*Arial/.test(outSrc), 'not wired');

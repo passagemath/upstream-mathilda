@@ -6,7 +6,7 @@
   import { mathSelect } from './mathSelect';
   import { evalOnce } from './ipc';
   import CodeView from './CodeView.svelte';
-  import { plainOutput, outputFormat } from './properties';
+  import { outputFormat } from './properties';
 
   /* Opens a symbol's own reference page. Passed in so this stays a renderer. */
   export let onOpenDoc: ((name: string) => void) | null = null;
@@ -697,12 +697,10 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
-        <!-- A result's own Convert To choice wins; otherwise View › Output Format decides. -->
-        {@const base = exprForm[idx] ?? $outputFormat}
-        <!-- A teletype scheme forbids 2D math: redirect the typeset forms
-             (StandardForm, TraditionalForm, MathML) to 1D InputForm, but leave an explicit 1D
-             choice (InputForm/FullForm/TeXForm) alone. -->
-        {@const form = $plainOutput && (base === 'standard' || base === 'traditional' || base === 'mathml') ? 'input' : base}
+        <!-- A result's own Convert To choice wins; otherwise View › Output Format decides --
+             under every colour scheme, the teletype ones included (they change the face,
+             not the form). -->
+        {@const form = exprForm[idx] ?? $outputFormat}
         <div class="out-collapsible" use:measureOverflow={idx} use:measureExprWidth={idx}>
           <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
           <div class="out-expr" title="Click to select a subexpression · right-click to Convert To…"

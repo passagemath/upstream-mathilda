@@ -431,9 +431,10 @@ code {
    look flips with the dark-mode toggle. This block does the two things a --cm-*
    palette cannot: swap the face to fixed-width Courier across every input and
    output surface, and fold the one or two coloured diagnostics into the ink so
-   "everything is the one colour" holds. 1D output (no 2D KaTeX) is forced in
-   Output.svelte, gated on the plainOutput store. !important is needed because the
-   CodeMirror editor/CodeView set their font from a generated theme stylesheet. */
+   "everything is the one colour" holds. The output FORM is left to View › Output
+   Format: a typeset result stays typeset (KaTeX sets its own math fonts). !important
+   is needed because the CodeMirror editor/CodeView set their font from a generated
+   theme stylesheet. */
 html[data-teletype] .cm-editor,
 html[data-teletype] .cm-content,
 html[data-teletype] .code-view,

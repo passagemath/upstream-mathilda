@@ -68,6 +68,10 @@ Expr* integrate_raabe_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions)
  * = (-1)^n n!/m^(n+1) HurwitzZeta[n+1, c/m]  (c>0, m>=1, n>=1). */
 Expr* integrate_ratlog01_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* Half-Beta on [0,1]: Integrate[C x^(c-1)(1-x^2)^e Log[x]^i, {x,0,1}]
+ * = C (1/2)^(i+1) d^i/dA^i Beta[A, e+1]|_{A=c/2} (via t = x^2). */
+Expr* integrate_halfbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

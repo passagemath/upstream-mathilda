@@ -1375,6 +1375,10 @@ static Expr* integrate_definite(Expr* res) {
                 r = integrate_beta_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_euler_2f1_try(cur, x, a, b, assumptions);
+            /* Half-Beta: x^(c-1)(1-x^2)^e Log[x]^i on [0,1] (substitution t=x^2),
+             * the quadratic-radical shape the plain Beta stage cannot match. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_halfbeta_try(cur, x, a, b, assumptions);
             /* Sin^m Cos^n over a canonical trig interval ([0,Pi/2], [0,Pi], [0,2Pi]). */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
                 r = integrate_trigpower_try(cur, x, a, b, assumptions);

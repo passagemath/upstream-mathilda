@@ -260,6 +260,76 @@ static Expr* beta_gate(Expr* value, Expr* A, Expr* B, Expr* assumptions) {
     return eval_take(mk_fn2("ConditionalExpression", value, cs));
 }
 
+/* Structural test for the factor (1 - x^2). */
+static bool is_one_minus_xsq(const Expr* g, const Expr* x) {
+    if (!head_name_is(g, "Plus") || g->data.function.arg_count != 2) return false;
+    Expr* p = g->data.function.args[0];
+    Expr* q = g->data.function.args[1];
+    Expr* one = NULL; Expr* negxsq = NULL;
+    if (p->type == EXPR_INTEGER && p->data.integer == 1) { one = p; negxsq = q; }
+    else if (q->type == EXPR_INTEGER && q->data.integer == 1) { one = q; negxsq = p; }
+    if (!one) return false;
+    if (!head_name_is(negxsq, "Times") || negxsq->data.function.arg_count != 2) return false;
+    if (!(negxsq->data.function.args[0]->type == EXPR_INTEGER &&
+          negxsq->data.function.args[0]->data.integer == -1)) return false;
+    Expr* pw = negxsq->data.function.args[1];
+    return head_name_is(pw, "Power") && pw->data.function.arg_count == 2 &&
+           is_symbol(pw->data.function.args[0], x) &&
+           pw->data.function.args[1]->type == EXPR_INTEGER &&
+           pw->data.function.args[1]->data.integer == 2;
+}
+
+/* Half-Beta on [0,1]:  Integrate[C x^(c-1) (1-x^2)^e Log[x]^i, {x,0,1}]
+ *   = C (1/2)^(i+1) d^i/dA^i Beta[A, e+1]|_{A = c/2},
+ * the substitution t = x^2 (dt = 2x dx, Log[x] = (1/2)Log[t]).  Handles the
+ * quadratic radical/power (1-x^2)^e the ordinary Beta stage (which models only
+ * the linear 1-x) cannot.  Requires the (1-x^2) factor to be present (else it is
+ * a plain Beta, left to integrate_beta_try).  No Log[1-x^2] weight (that would
+ * add a B-parameter derivative).  Gated on the Beta strip A>0 && e+1>0. */
+Expr* integrate_halfbeta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+
+    Expr* aexp = mk_int(0); Expr* e = mk_int(0); Expr* C = mk_int(1);
+    long logi = 0; bool has_xsq = false; bool ok = true;
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* g = fac[i];
+        if (free_of_x(g, x)) { C = Times_(C, cp(g)); continue; }
+        if (is_symbol(g, x)) { aexp = Plus_(aexp, mk_int(1)); continue; }
+        if (is_one_minus_xsq(g, x)) { e = Plus_(e, mk_int(1)); has_xsq = true; continue; }
+        if (log_kind(g, x) == 1) { logi += 1; continue; }
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2) {
+            Expr* base = g->data.function.args[0];
+            Expr* ex   = g->data.function.args[1];
+            if (is_symbol(base, x) && free_of_x(ex, x)) { aexp = Plus_(aexp, cp(ex)); continue; }
+            if (is_one_minus_xsq(base, x) && free_of_x(ex, x)) { e = Plus_(e, cp(ex)); has_xsq = true; continue; }
+            if (log_kind(base, x) == 1 && ex->type == EXPR_INTEGER && ex->data.integer > 0) {
+                logi += (long) ex->data.integer; continue;
+            }
+        }
+        ok = false;
+    }
+    if (!ok || !has_xsq) { expr_free(aexp); expr_free(e); expr_free(C); return NULL; }
+
+    Expr* A = simp(Times_(Plus_(aexp, mk_int(1)), mk_fn2("Rational", mk_int(1), mk_int(2))));
+    Expr* B = simp(Plus_(e, mk_int(1)));
+    Expr* core = (logi == 0) ? Beta_(cp(A), cp(B)) : beta_param_deriv(cp(A), cp(B), logi, 0);
+    Expr* half = mk_fn2("Power", mk_int(2), mk_int(-(logi + 1)));
+    Expr* value = simp2(Times_(C, Times_(half, core)), assumptions);
+    if (!value || mentions_nonfinite(value)) {
+        if (value) expr_free(value);
+        expr_free(A); expr_free(B);
+        return NULL;
+    }
+    Expr* value2 = beta_gate(value, A, B, assumptions);
+    expr_free(A); expr_free(B);
+    return value2;
+}
+
 /* ---- Euler finite-interval -> Beta * Hypergeometric2F1 ------------------ */
 /* Integrate[x^(a-1) (1-x)^(b-1) (alpha + beta x)^e, {x,0,1}]
  *   = alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha],

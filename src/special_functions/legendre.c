@@ -55,6 +55,7 @@
 #include "attr.h"
 #include "eval.h"            /* eval_and_free */
 #include "expr.h"
+#include "ndarray.h"         /* is_ndarray: Horner fast path over a machine buffer */
 #include "numeric.h"         /* numeric_min_inexact_bits, get_approx_mpfr */
 #include "numeric_complex.h" /* ncpx toolkit */
 #include "symtab.h"
@@ -215,6 +216,38 @@ static void legendre_p_coeffs(unsigned long n, mpq_t* out) {
  * coefficients, and evaluate it once. Returns integer 0 if all coefficients
  * vanish. */
 static Expr* leg_poly_from_coeffs(mpq_t* c, size_t deg, const Expr* x) {
+    /* Machine buffer argument: evaluate by Horner (acc = acc*x + c[i]) instead
+     * of the monomial sum. The sum form evaluates each x^i as its own
+     * Power[buffer, i] -- a libm pow() per element PER TERM -- so an associated
+     * LegendreP[n, m, array] of degree ~n did O(n) full-buffer pow() passes and
+     * grew pathological with n (n=30 over 1e6 points did not finish). Horner is
+     * O(n) fused multiply-adds, no pow(), ~7x faster at degree 26 and ahead of
+     * SciPy's lpmv. Reuses the SAME rational coefficients, so the result matches
+     * the monomial form to rounding (~1e-15 relative). Restricted to a real /
+     * complex machine buffer: an exact int64 buffer keeps the monomial path so
+     * its exact-rational answer is unchanged, and a symbolic/scalar x keeps it
+     * so the symbolic result still prints as an expanded polynomial. */
+    if (is_ndarray(x)) {
+        NDType dt = x->data.ndarray.dtype;
+        if (dt != NDT_INT64 && dt != NDT_BOOL) {
+            /* Machine-DOUBLE coefficients: the ND Plus/Times fast paths accept a
+             * Real (or Integer) scalar but not a Rational, so a big-rational
+             * coefficient would fall off the buffer into per-element bignum
+             * arithmetic -- which is what made high degree explode in the first
+             * place. mpq_get_d is exactly the coercion the buffer arithmetic
+             * would apply anyway, so the answer is unchanged to rounding. */
+            Expr* acc = expr_new_real(mpq_get_d(c[deg]));   /* c[deg] */
+            for (size_t i = deg; i-- > 0; ) {               /* fold c[deg-1..0] */
+                Expr* mul = expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ acc, expr_copy((Expr*)x) }, 2);
+                Expr* add = expr_new_function(expr_new_symbol(SYM_Plus),
+                                (Expr*[]){ mul, expr_new_real(mpq_get_d(c[i])) }, 2);
+                acc = eval_and_free(add);
+            }
+            return acc;
+        }
+    }
+
     Expr** terms = (Expr**)malloc((deg + 1) * sizeof(Expr*));
     if (!terms) return NULL;
     size_t count = 0;
@@ -455,6 +488,30 @@ static Expr* legendre_assoc_type1(unsigned long n, unsigned long m,
     return eval_and_free(result);
 }
 
+/* Fill cc[0..n] (pre-zeroed) with the regularized-2F1 coefficients
+ *   cc[k] = (-n)_k (n+1)_k / ((k-m)! k!)   for m <= k <= n,   0 otherwise. */
+static void leg_2f1reg_coeffs(unsigned long n, unsigned long m, mpq_t* cc) {
+    mpz_t num, den, fk, fkm, jj;
+    mpz_inits(num, den, fk, fkm, jj, (mpz_ptr)0);
+    for (unsigned long k = m; k <= n; k++) {
+        /* num = (-n)_k (n+1)_k = prod_{j=0}^{k-1} (-n + j)(n + 1 + j) */
+        mpz_set_ui(num, 1);
+        for (unsigned long j = 0; j < k; j++) {
+            mpz_set_si(jj, -(long)n + (long)j);     /* -n + j */
+            mpz_mul(num, num, jj);
+            mpz_set_si(jj, (long)n + 1 + (long)j);  /* n + 1 + j */
+            mpz_mul(num, num, jj);
+        }
+        mpz_fac_ui(fkm, (unsigned long)(k - m));    /* den = (k-m)! * k! */
+        mpz_fac_ui(fk, (unsigned long)k);
+        mpz_mul(den, fkm, fk);
+        mpq_set_num(cc[k], num);
+        mpq_set_den(cc[k], den);
+        mpq_canonicalize(cc[k]);
+    }
+    mpz_clears(num, den, fk, fkm, jj, (mpz_ptr)0);
+}
+
 /* The regularized Gauss polynomial C(x) = 2F1Reg(-n, n+1, 1-m, (1-x)/2) for
  * integer n and integer m >= 0. The series terminates at k = n and its
  * regularized 1/Gamma(1-m+k) factor kills every term with k < m, leaving
@@ -463,6 +520,10 @@ static Expr* legendre_assoc_type1(unsigned long n, unsigned long m,
 static Expr* legendre_2f1reg_core(int64_t ord, unsigned long m, const Expr* x) {
     unsigned long n = leg_norm_order(ord);
     if (m > n) return expr_new_integer(0);
+
+    mpq_t* cc = leg_mpq_array_new(n + 1);         /* zero-initialised */
+    if (!cc) return NULL;
+    leg_2f1reg_coeffs(n, m, cc);
 
     /* w = (1 - x)/2 = Times[1/2, Plus[1, Times[-1, x]]] */
     Expr* w = expr_new_function(expr_new_symbol(SYM_Times),
@@ -474,34 +535,28 @@ static Expr* legendre_2f1reg_core(int64_t ord, unsigned long m, const Expr* x) {
                                                  expr_copy((Expr*)x) }, 2) }, 2)
                  }, 2);
 
+    /* Machine buffer: evaluate w once and run Horner through
+     * leg_poly_from_coeffs -- same pow()-per-term pathology as the type-1
+     * polynomial, same fix. The symbolic branch below is left byte-identical
+     * for every non-buffer argument, so symbolic output is unchanged. */
+    if (is_ndarray(x)) {
+        NDType dt = x->data.ndarray.dtype;
+        if (dt != NDT_INT64 && dt != NDT_BOOL) {
+            Expr* wnd = eval_and_free(w);          /* (1-x)/2 as a buffer */
+            Expr* out = leg_poly_from_coeffs(cc, n, wnd);
+            expr_free(wnd);
+            leg_mpq_array_free(cc, n + 1);
+            return out;
+        }
+    }
+
     Expr** terms = (Expr**)malloc((n + 1) * sizeof(Expr*));
-    if (!terms) { expr_free(w); return NULL; }
+    if (!terms) { expr_free(w); leg_mpq_array_free(cc, n + 1); return NULL; }
     size_t count = 0;
 
-    mpz_t num, den, fk, fkm, jj;
-    mpz_inits(num, den, fk, fkm, jj, (mpz_ptr)0);
-    mpq_t coeff; mpq_init(coeff);
-
     for (unsigned long k = m; k <= n; k++) {
-        /* num = (-n)_k (n+1)_k = prod_{j=0}^{k-1} (-n + j)(n + 1 + j) */
-        mpz_set_ui(num, 1);
-        for (unsigned long j = 0; j < k; j++) {
-            mpz_set_si(jj, -(long)n + (long)j);     /* -n + j */
-            mpz_mul(num, num, jj);
-            mpz_set_si(jj, (long)n + 1 + (long)j);  /* n + 1 + j */
-            mpz_mul(num, num, jj);
-        }
-        /* den = (k-m)! * k! */
-        mpz_fac_ui(fkm, (unsigned long)(k - m));
-        mpz_fac_ui(fk, (unsigned long)k);
-        mpz_mul(den, fkm, fk);
-
-        mpq_set_num(coeff, num);
-        mpq_set_den(coeff, den);
-        mpq_canonicalize(coeff);
-        if (mpq_sgn(coeff) == 0) continue;
-
-        Expr* cexpr = leg_expr_from_mpq(coeff);
+        if (mpq_sgn(cc[k]) == 0) continue;
+        Expr* cexpr = leg_expr_from_mpq(cc[k]);
         Expr* wk = expr_new_function(expr_new_symbol(SYM_Power),
                        (Expr*[]){ expr_copy(w),
                                   expr_new_integer((int64_t)k) }, 2);
@@ -509,8 +564,7 @@ static Expr* legendre_2f1reg_core(int64_t ord, unsigned long m, const Expr* x) {
                              (Expr*[]){ cexpr, wk }, 2);
     }
 
-    mpz_clears(num, den, fk, fkm, jj, (mpz_ptr)0);
-    mpq_clear(coeff);
+    leg_mpq_array_free(cc, n + 1);
     expr_free(w);
 
     Expr* sum;

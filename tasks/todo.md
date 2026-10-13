@@ -106,3 +106,27 @@ numpy 2.5.2; eval_laguerre/eval_genlaguerre), /Applications/Mathematica.app
 - [x] Audits: check-array-exactness PASS (352 probes, 0 MIXED, 0 no-result);
       check-nd-surfaces CLEAN (no disagreement, LaguerreL not flagged, now packs)
 - [ ] Release: commit (; v0.375), tag v0.375, push --follow-tags (AWAITING USER GO)
+
+## LEGENDRE P/Q STRESS TEST + FIX (2026-10-13) — v0.376
+Task 2 ("apply the same fix to LegendreP"). Investigation showed the gap was
+NOT identical to LaguerreL: LegendreP was already correct (matches scipy lpmv),
+packed, bit-identical across surfaces, and faster than scipy at low degree. Only
+HIGH degree was pathological: the associated/type-2/3 polynomial was evaluated as
+Sum cₖxᵏ over the buffer = O(n) pow() passes (n=30 over 1e6 did not finish).
+User chose the targeted perf fix.
+- [x] Root cause (profiled): NOT coeff type (bigint==double, both 82ms); it is
+      the per-term pow(). Horner form = 6.7x faster, ~1e-15 relative agreement.
+- [x] FIX: leg_poly_from_coeffs + legendre_2f1reg_core evaluate by Horner in
+      machine DOUBLE coeffs for a numeric (float/complex) buffer. (First attempt
+      used rational coeffs -> Plus[NDArray,Rational] falls off the buffer into
+      per-element bignum; n=30 still hung. Fixed to mpq_get_d.) int64/bool and
+      symbolic/scalar keep the monomial path -> symbolic output byte-identical.
+- [x] Perf (1e5): P3 n12 14.8->6.7ms; n30 >85s->10.6ms; n50 ->20.5ms. Beats
+      scipy lpmv at every degree (1.4-1.9x). Types 2/3: n30 ->15.4ms.
+- [x] Correctness unchanged (scipy lpmv match); symbolic output unchanged (type1
+      expanded poly, type2/3 branch forms); cross-surface ~bit-identical
+      (type1 ~7e-12, type2 0.0); complex OK.
+- [x] Tests PASS: legendre_tests, legendreq_tests, laguerre_l_tests.
+- [x] valgrind: definitely-lost 13,440 B/420 blk = identical baseline; 0 legendre frames.
+- [ ] Audits: check-array-exactness / check-nd-surfaces (running)
+- [ ] Release: version 0.376, commit, tag v0.376, push (after audits pass)

@@ -98,9 +98,32 @@ likely pre-existing TC async issue (memory: timeconstrained_async_malloc_lock).
 | v0.377 | Piecewise handler (`integrate_piecewise.c`) | 43–47 | DONE, shipped |
 | v0.378 | `Sin[r x]^k/x^m` negative frequency | 20 | DONE, shipped |
 | v0.379 | Refine radical reduction (products/quotients) + assumption-aware Integrate result | 37 | DONE |
+| v0.380 | Simplify trig periodicity shift `trig[Pi·n+r] → (-1)^n trig[r]` | 26 | DONE, shipped |
+| v0.381 | Real `ArcSin` antiderivative for `1/Sqrt[c−x²]` symbolic c (prerequisite for 27) | 27 (indef) | DONE, shipped |
 
-ASSUM pass-count: baseline 35/50 → **42/50** (no regression, 0 wrong answers).
-Remaining: 8, 9, 18, 26 (Simplify-form) + 27, 32, 38, 39 (integration gaps).
+ASSUM pass-count: baseline 35/50 → **43/50** (no regression, 0 wrong answers).
+Remaining 7 (8, 9, 18 WRONG; 27 UNEVAL; 32, 38, 39 ABORTED) — each needs COUPLED
+delicate changes; sharpened diagnoses below.
+- **27**: indefinite now gives `ArcSin[x/Sqrt[a²]]` (v0.381). The *definite* still
+  declines because Newton–Leibniz runs its **pole placement** (`nl_collect_poles`:
+  can't decide x=±a vs (0,a) without a>0 → undecidable → numeric scan fails on symbolic
+  a → decline) AND its **boundary limit** (`nl_limit`: `Limit[ArcSin[x/√a²], x→a]`
+  without a>0 → `ArcSin[a/√a²]`, unresolved) **without Assumptions**. Fix = thread
+  `Assumptions` into `integrate_newton_leibniz_try_pv` → both. `Limit[…, a>0]` already
+  gives Pi/2 and the driver-Refine already cleans `ArcSin[a/√a²]→Pi/2`, so the threading
+  alone closes it — but it is a core-FTC change with broad regression surface.
+Remaining 7 — each needs COUPLED delicate changes (no single-change closure):
+- **8, 9**: the value is already clean (`a/(a²+b²)`); blocked by a spurious `b>0` the
+  **OscillatoryPower / general Ramanujan Mellin strip** attaches (cos/sin even/odd in b →
+  valid all real b). Pinned `DiffUnderInt` returns it unconditioned. Fix = widen that
+  Mellin convergence strip (delicate: 51 ramanujan cases) OR make the osc/Mellin path
+  decline the `e^{-ax} trig(bx)` family so Automatic falls through to DiffUnderInt.
+- **18**: needs BOTH (a) ConditionalExpression discharge — `Refine[CE[v, (1+n)/2>0], n>-1]`
+  does NOT currently collapse to `v` even though entailed; AND (b) `Beta↔Gamma`
+  normalization (`FullSimplify` keeps the shorter `Beta` side; `FunctionExpand[Beta]` is
+  unimplemented) so `Beta[(1+n)/2,1/2]/2` equals the expected Gamma form.
+- **27** complex-log antiderivative not `ArcSin`; **32** log-rational complex-pole Mellin;
+  **38, 39** Poisson recognizer + radicand factoring + `Log[Abs]` composite-Simplify gap.
 
 ## Remaining 9 — precise root causes & fix recipes
 

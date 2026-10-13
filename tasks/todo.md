@@ -18,6 +18,13 @@ no uneval/abort/crash.
 - [ ] 1e. trig periodicity Csc/Sec/Sin/Cos[Pi(k+a)], integer k (26)
 
 ## Theme 2 — Genuine integration gaps
+- [x] 1e. trig periodicity Csc/Sec/Sin/Cos[Pi(k+a)] (26)  [DONE v0.380]
+- [x] 2b-partial. 1/Sqrt[c-x^2] symbolic -> ArcSin indefinite (27 prereq)  [DONE v0.381]
+- [ ] 2b-rest. thread Assumptions into Newton-Leibniz (pole-placement + boundary-limit) to close 27 definite
+- [ ] 2d. log-rational complex-pole Mellin: Log[x]/(x^2+a^2) (32)
+- [ ] 2e. Poisson recognizer + radicand factoring + Log[Abs] (38,39)
+- [ ] 1b. OscillatoryPower/Mellin strip: drop spurious b>0 for e^{-ax}trig(bx) (8,9)
+- [ ] 1d. ConditionalExpression discharge in Refine + Beta<->Gamma normalization (18)
 - [x] 2a. piecewise handler integrate_piecewise.c (43-47)  [DONE v0.377]
       New Integrate`Piecewise (Abs/Sign/HeavisideTheta/UnitStep/Min/Max/Piecewise);
       breakpoint split, assumption-aware branch select, recurse+sum. Internal Solve

@@ -5228,24 +5228,53 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
 static Expr* try_series_cosintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
     if (!has_symbol_head(f, "CosIntegral") || f->data.function.arg_count != 1)
         return NULL;
-    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    /* Accept CosIntegral[c x] for any c free of x (the argument must vanish
+     * linearly at x = 0).  Extract c = arg/x; a non-linear or non-pure-scaling
+     * argument (x^2, a + x, ...) leaves an x-dependent ratio and is declined.
+     * Ci(c x) = EulerGamma + Log[c x] + Sum_{m>=1} (-1)^m (c x)^(2m)/(2m (2m)!),
+     * so each x^(2m) coefficient carries the factor c^(2m) and the log leading
+     * term expands as Log[c] + Log[x]. */
+    Expr* arg = f->data.function.args[0];
+    Expr* c = NULL;
+    if (expr_eq(arg, x)) {
+        c = expr_new_integer(1);
+    } else {
+        Expr* ratio = eval_and_free(mk_times(expr_copy(arg),
+                                             mk_power(expr_copy(x), expr_new_integer(-1))));
+        if (ratio && expr_free_of(ratio, x)) {
+            c = ratio;
+        } else {
+            if (ratio) expr_free(ratio);
+            return NULL;
+        }
+    }
     if (n < 0) n = 0;
 
     size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
     Expr** coefs = calloc(ncoef, sizeof(Expr*));
-    Expr* logarg = (x_sign < 0)
-                 ? mk_times(expr_new_integer(-1), expr_copy(x))
-                 : expr_copy(x);
-    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
+    /* Leading term EulerGamma + Log[c x].  Split the constant Log[c] from the
+     * singular Log[x] (valid for the x -> 0+ series with c free of x) so that
+     * across a difference CosIntegral[a x] - CosIntegral[b x] the Log[x] terms
+     * cancel syntactically and the finite limit Log[a/b] survives. */
+    Expr* logx = (x_sign < 0)
+               ? mk_times(expr_new_integer(-1), expr_copy(x))
+               : expr_copy(x);
+    Expr* lead = mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logx));
+    if (!(c->type == EXPR_INTEGER && c->data.integer == 1))
+        lead = mk_plus(lead, mk_fn1("Log", expr_copy(c)));
+    coefs[0] = eval_and_free(lead);
     for (int64_t k = 1; k <= n; k++) {
         if (k % 2 != 0) { coefs[k] = expr_new_integer(0); continue; }
-        int64_t m = k / 2;                   /* x^(2m) coefficient (-1)^m/(2m (2m)!) */
+        int64_t m = k / 2;                   /* x^(2m) coefficient (-1)^m c^(2m)/(2m (2m)!) */
         Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
         Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
         Expr* recip = eval_and_free(mk_power(denom, expr_new_integer(-1)));
-        coefs[k] = (m % 2 == 0) ? recip
-                                : eval_and_free(mk_times(expr_new_integer(-1), recip));
+        Expr* base  = (m % 2 == 0) ? recip
+                                   : eval_and_free(mk_times(expr_new_integer(-1), recip));
+        Expr* cpow  = eval_and_free(mk_power(expr_copy(c), expr_new_integer(2 * m)));
+        coefs[k] = eval_and_free(mk_times(base, cpow));
     }
+    expr_free(c);
     Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
     free(coefs);
 

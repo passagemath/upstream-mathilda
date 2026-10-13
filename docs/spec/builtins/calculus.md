@@ -2247,7 +2247,12 @@ half is individually divergent) recognises `(f(a x)-f(b x))/x` and returns
 `(f(0⁺)-f(∞)) Log(b/a)` (`a,b>0`): the scale ratio is read structurally and the
 pairing verified by the exact identity `(t₁ /. x→ρx)+t₂ = 0`; the boundary values
 are the finite limits of `f`. So `∫₀^∞ (e^{-2x}-e^{-5x})/x dx = Log(5/2)` and
-`∫₀^∞ (ArcTan(5x)-ArcTan(2x))/x dx = (π/2) Log(5/2)`.
+`∫₀^∞ (ArcTan(5x)-ArcTan(2x))/x dx = (π/2) Log(5/2)`.  For a **bounded oscillatory**
+`f` whose ordinary limit at ∞ does not exist — `Cos[k x]`, `Sin[k x]` with `k`
+proved real and nonzero — the boundary value Frullani uses at ∞ is the **Cesàro
+mean, 0**, so `∫₀^∞ (Cos(a x)-Cos(b x))/x dx = Log(b/a)` (`a,b>0`).  This is gated
+to a single trig factor of a linear real argument, so `Cos[k x]²` (mean ½) and
+`Cosh` (`k` not provably real) are left to the ordinary cascade.
 
 Each application is **gated on its convergence strip** — checked by `Simplify`
 (numerically for a numeric `s`, or against the supplied `Assumptions` for a

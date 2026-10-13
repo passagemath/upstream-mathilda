@@ -1991,6 +1991,40 @@ static Expr* frullani_boundary(const Expr* t, const Expr* x, const Expr* point,
         return lim;
     }
 
+    /* Oscillatory mean at infinity.  A bounded trig term  C Cos[k x] / C Sin[k x]
+     * (k provably real and nonzero) has no ordinary limit at infinity, but its
+     * Cesaro mean is 0 -- the value the generalized Frullani theorem uses for a
+     * bounded f whose limit at infinity does not exist.  This closes
+     * Integrate[(Cos[a x] - Cos[b x])/x, {x,0,Inf}] = Log[b/a].  Gated to the
+     * infinity boundary (at 0 the ordinary limit, 1 or 0, is taken above) and to
+     * a single trig factor of a linear real argument, so Cos[k x]^2 (mean 1/2,
+     * head Power) and Cosh (k imaginary, sign not provable) do not match. */
+    if (point->type == EXPR_SYMBOL &&
+        strcmp(point->data.symbol.name, "Infinity") == 0) {
+        Expr* facs[32];
+        size_t nf = collect_factors((Expr*)t, facs, 32, 0);
+        Expr* F = NULL; bool many = false;
+        for (size_t i = 0; i < nf; i++) {
+            if (free_of_x_now(facs[i], x)) continue;
+            if (F) { many = true; break; }
+            F = facs[i];
+        }
+        if (!many && F && F->type == EXPR_FUNCTION && F->data.function.arg_count == 1 &&
+            (head_name_is(F, "Cos") || head_name_is(F, "Sin"))) {
+            Expr* k = frullani_scale(t, x);
+            if (k) {
+                bool real_nonzero = prove_true(Gt(cp(k), mk_int(0)), assumptions) ||
+                                    prove_true(Gt(Neg(cp(k)), mk_int(0)), assumptions);
+                expr_free(k);
+                if (real_nonzero) {
+                    expr_free(lim);
+                    expr_free(rule);
+                    return mk_int(0);
+                }
+            }
+        }
+    }
+
     /* Fallback: t = C E^g(x) with a single x-dependent factor. */
     Expr* facs[32];
     size_t nf = collect_factors((Expr*)t, facs, 32, 0);

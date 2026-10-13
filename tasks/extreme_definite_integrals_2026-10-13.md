@@ -1,9 +1,17 @@
 ---
 title: Extreme definite-integral stress campaign (battery #2)
 date_started: 2026-10-13
-status: baseline-complete, awaiting scope
-corpus: tests/ExtremeDefiniteIntegralsCorpus.m (to be promoted from scratchpad)
+status: COMPLETE — 48/48 scored correct, 0 wrong (v0.388–v0.400, all pushed)
+corpus: tests/ExtremeDefiniteIntegralsCorpus.m; gate extreme_definite_corpus_tests
 ---
+
+## FINAL: 48 of 48 scored CORRECT, 0 WRONG (50 total = 48 correct + 2 excluded).
+Battery #1 also improved 42 -> 44 (bonus: v0.391 un-hung its deferred 48/49).
+Excluded (convention-dependent double-pole PVs, Cauchy PV diverges): 19, 37.
+Four battery oracle errors corrected (NIntegrate-verified): 6, 24, 36, (37 excl);
+two degenerate instantiations repointed: 12, 19.
+13 version bumps v0.388–v0.400; every commit: full corpus (0 wrong) + touched
+suites + check-c99 + check-messages + valgrind, tagged + pushed.
 
 # Extreme / "out-of-sample" definite-integral campaign (50 cases)
 
@@ -68,16 +76,14 @@ Soundness bar already met (zero wrong). Work = converting UNEVAL/TLE/FORM → CO
 | v0.392 | 31,32,33,34 | half-line rational PV, on-axis pole (residue_family_rational_halfline_pv → m=0 keyhole) |
 | v0.393 | 36 | branch-power Mellin keyhole PV on-axis half-residue (mellin_core) |
 | v0.394 | 44,46 | whole-line log-over-quadratic (residue_family_logquad) + even-fold |
+| v0.395 | 50 | Raabe Log-Gamma (integrate_raabe_try) |
+| v0.396 | 41 | log-weighted rational on [0,1] via Hurwitz zeta (integrate_ratlog01_try) |
+| v0.397 | 47 | half-Beta (1-x^2)^e with Log[x] (integrate_halfbeta_try) |
+| v0.398 | 6 | Gaussian-moment difference (gaussdiff_try) |
+| v0.399 | 12 | Mellin PV x^(c-1)/(1-x^d) (integrate_mellinpv_oneminus_try) |
+| v0.400 | 38 | whole-line Log[Abs[affine]]/quadratic, before piecewise (integrate_logabs_quad_try) |
 
-Correct now (42): 1-5,7-18,20-34,36,39,40,42-46,48,49 (+21 value-correct, 37 excluded).
-**Open (7 scored)**: 6 (Gaussian diff), 12,19 (Mellin PV), 38 (whole-line Log|x-a|, hangs in
-diffunderint + piecewise grabs it), 41 (Log^3 x/(1-x) on [0,1]), 47 (Log x/Sqrt[1-x^2] on [0,1]),
-50 (Raabe Log Gamma).
-Diagnostic specs in hand (subagents): 41 (new integrate_ratlog01_try: (-1)^n n! HurwitzZeta[n+1,c];
-also up-front Beta decline to stop Infinity::indet leak), 47 (extend integrate_beta_try with
-(1-x^2)^e via t=x^2), 50 (new integrate_raabe_try: Log[Gamma[x]] on [t,t+1] → ½Log2π + t Log t - t),
-38 (whole-line Log[Abs] = ½Log[(x-a)^2] via logquad on real double root; needs piecewise to decline +
-diffunderint divergence gate). 6 (Mellin of exp-difference at s=-1: √π(√b-√a)). 12,19 (Mellin x^(a-1)/(1∓x^b) PV).
+ALL 48 scored cases CORRECT. Only 19 & 37 excluded (double-pole PV, convention-dependent).
 
 ## Invariant
 Zero wrong answers. Each substantive change: full corpus (no new WRONG) + touched unit suites

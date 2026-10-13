@@ -1,8 +1,14 @@
-# ACTIVE campaign: Extreme definite integrals — battery #2 (2026-10-13)
+# COMPLETE campaign: Extreme definite integrals — battery #2 (2026-10-13)
 
 Findings: `tasks/extreme_definite_integrals_2026-10-13.md`
-Scope (user): FULL — close all 24 open scored cases.
+Scope (user): FULL — close all 24 open scored cases.  **DONE: 48/48 scored correct, 0 wrong.**
 Baseline (v0.387, verified oracles): 26 CORRECT / 0 WRONG / 19 UNEVAL / 4 TLE / 1 EXCLUDED(37).
+Final (v0.400): 48 CORRECT / 0 WRONG / 0 UNEVAL / 0 TLE / 2 EXCLUDED (19, 37).
+Recognizers added v0.388–v0.400 (13 bumps): Frullani-cos+CosIntegral-series, hyperbolic-halfline
+table, Weber-Schafheitlin Bessel, keyhole-log symbolic-param hang fix (+battery#1 48/49),
+rational-halfline PV, branch-power Mellin PV, whole-line log-quad (+even-fold), Raabe Log-Gamma,
+ratlog01 Hurwitz-zeta, half-Beta (1-x^2)^e, Gaussian-moment difference, Mellin PV 1-x^d,
+whole-line Log[Abs]. Battery #1 bonus: 42 -> 44.
 Corpus `tests/ExtremeDefiniteIntegralsCorpus.m`; gate `extreme_definite_corpus_tests`;
 baseline driver (scratchpad) `run_extreme.sh`.
 4 corrected battery oracles: 6 (×2), 24 (wrong formula), 36 (sign), 37 (excluded).

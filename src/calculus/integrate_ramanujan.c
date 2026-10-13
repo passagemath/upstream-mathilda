@@ -2395,6 +2395,87 @@ Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpti
 /* -------------------------------------------------------------------------
  * Public entry point.
  * ---------------------------------------------------------------------- */
+/* Gaussian-moment combination on [0, Inf):
+ *   Integrate[x^k Sum_i C_i Exp[-p_i x^2], {x,0,Inf}]
+ *     = (1/2) Gamma[s/2] Sum_i C_i p_i^(-s/2),   s = k+1,  p_i > 0,
+ * the Mellin transform of a Gaussian (M[Exp[-p x^2]](s) = (1/2) p^(-s/2)
+ * Gamma[s/2]) summed over the terms, analytically continued.  A single term with
+ * s <= 0 diverges at 0; a difference such as (Exp[-a x^2]-Exp[-b x^2])/x^2
+ * converges because the lower-power coefficients cancel.  Gated: every
+ * divergent-at-0 power coefficient Sum_i C_i p_i^m  (m = 0 .. floor((-1-k)/2))
+ * must vanish, Gamma[s/2] must be finite (s not a non-positive even integer),
+ * and each p_i proved > 0.  Must be summed as a whole (the term-by-term Mellin
+ * path cannot see the cancellation). */
+static Expr* gaussdiff_try(Expr* f, const Expr* x, Expr* assumptions) {
+    Expr* g = ev1("Expand", cp((Expr*)f));
+    Expr** terms; size_t nt; Expr* tone[1];
+    if (head_name_is(g, "Plus")) { terms = g->data.function.args; nt = g->data.function.arg_count; }
+    else { tone[0] = g; terms = tone; nt = 1; }
+    if (nt < 1 || nt > 64) { expr_free(g); return NULL; }
+
+    Expr* Cs[64]; Expr* Ps[64]; size_t ns = 0;
+    long kcommon = 0; bool have_k = false, bad = false;
+    for (size_t ti = 0; ti < nt && !bad; ti++) {
+        Expr* facs[32];
+        size_t nf = collect_factors((Expr*)terms[ti], facs, 32, 0);
+        Expr* C = mk_int(1); Expr* expo = NULL; long k = 0; bool kbad = false;
+        for (size_t i = 0; i < nf; i++) {
+            Expr* fe = facs[i];
+            if (free_of_x_now(fe, x)) { C = Tms(C, cp(fe)); continue; }
+            Expr* ea = exp_exponent(fe);
+            if (ea && !expo) { expo = ea; continue; }
+            if (expr_eq(fe, (Expr*)x)) { k += 1; continue; }
+            if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+                expr_eq(fe->data.function.args[0], (Expr*)x) &&
+                fe->data.function.args[1]->type == EXPR_INTEGER) {
+                k += (long) fe->data.function.args[1]->data.integer; continue;
+            }
+            kbad = true; break;
+        }
+        if (kbad || !expo) { expr_free(C); bad = true; break; }
+        /* expo must be -p x^2 (x^2 coeff = -p, x^1 and x^0 coeffs 0). */
+        Expr* c2 = eval_take(mk_fn3("Coefficient", cp(expo), cp((Expr*)x), mk_int(2)));
+        Expr* c1 = eval_take(mk_fn3("Coefficient", cp(expo), cp((Expr*)x), mk_int(1)));
+        Expr* c0 = eval_take(mk_fn3("Coefficient", cp(expo), cp((Expr*)x), mk_int(0)));
+        bool shape = c1 && is_zero_now(c1) && c0 && is_zero_now(c0) &&
+                     c2 && !contains_symbol(c2, (Expr*)x);
+        if (c1) expr_free(c1);
+        if (c0) expr_free(c0);
+        if (!shape) { if (c2) expr_free(c2); expr_free(C); bad = true; break; }
+        Expr* p = simp(Neg(c2));                       /* p = -c2 */
+        if (!prove_true(Gt(cp(p), mk_int(0)), assumptions)) { expr_free(p); expr_free(C); bad = true; break; }
+        if (!have_k) { kcommon = k; have_k = true; }
+        else if (k != kcommon) { expr_free(p); expr_free(C); bad = true; break; }
+        Cs[ns] = C; Ps[ns] = p; ns++;
+    }
+    expr_free(g);
+    if (bad || ns < 1) { for (size_t i = 0; i < ns; i++) { expr_free(Cs[i]); expr_free(Ps[i]); } return NULL; }
+
+    long k = kcommon, s = k + 1;
+    bool ok = !(s <= 0 && (s % 2 == 0));               /* Gamma[s/2] finite */
+    long mmax = (k >= 0) ? -1 : (-1 - k) / 2;
+    for (long m = 0; m <= mmax && ok; m++) {
+        Expr* sum = mk_int(0);
+        for (size_t i = 0; i < ns; i++)
+            sum = Pls(sum, Tms(cp(Cs[i]), Pw(cp(Ps[i]), mk_int(m))));
+        Expr* sm = simp(sum);
+        if (!is_zero_now(sm)) ok = false;              /* divergent power survives */
+        expr_free(sm);
+    }
+    Expr* val = NULL;
+    if (ok) {
+        Expr* sum = mk_int(0);
+        for (size_t i = 0; i < ns; i++)
+            sum = Pls(sum, Tms(cp(Cs[i]), Pw(cp(Ps[i]), mk_fn2("Rational", mk_int(-s), mk_int(2)))));
+        val = Tms(mk_fn2("Rational", mk_int(1), mk_int(2)),
+                  Tms(mk_fn1("Gamma", mk_fn2("Rational", mk_int(s), mk_int(2))), sum));
+        val = assumptions ? eval_take(mk_fn2("Refine", simp(val), cp(assumptions))) : simp(val);
+    }
+    for (size_t i = 0; i < ns; i++) { expr_free(Cs[i]); expr_free(Ps[i]); }
+    if (val && (contains_symbol(val, x) || !is_finite_value(val))) { expr_free(val); val = NULL; }
+    return val;
+}
+
 Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
@@ -2405,6 +2486,11 @@ Expr* integrate_ramanujan_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * individually divergent, so the term-by-term Mellin path below cannot). */
     Expr* fru = frullani_try(f, x, assumptions);
     if (fru) return fru;
+
+    /* Gaussian-moment combination pre-pass: x^k Sum C_i Exp[-p_i x^2] (the
+     * difference converges where each Gaussian moment individually diverges). */
+    Expr* gd = gaussdiff_try(f, x, assumptions);
+    if (gd) return gd;
 
     /* Sin[r x]^k / x^m pre-pass (the ssp family): the constant TrigReduce term is
      * scaleless and the individual cos/sin terms straddle a Gamma pole, so this

@@ -2573,7 +2573,12 @@ symbolic-exponent contours:
   poles are classified at a `FindInstance` point, so `Integrate[x^a/(x²+2b x+c),
   {x,0,∞}, Assumptions -> -1 < a < 1 && c > b² && b > 0]` closes.  (A symbolic
   exponent is kept even when that representative point lands on an integer `s` —
-  the generic `Csc[π s]` form is the right generic-parameter answer.)
+  the generic `Csc[π s]` form is the right generic-parameter answer.)  Under
+  `PrincipalValue -> True` a **simple pole on the positive axis** is admitted as a
+  Cauchy PV half-residue — the indented contour averages the pole's two
+  keyhole-branch values `z₀^p` (arg 0) and `z₀^p e^{2πi p}` (arg 2π) — so
+  `∫₀^∞ √x/(x²−a²) dx = π/(2√a)` and `∫₀^∞ x^{1/3}/(x²−1) dx = π/(2√3)`; a
+  higher-order axis pole (divergent PV) declines.
 - **Keyhole with a logarithm on `(0, ∞)`** — `f = x^p (Log x)^m R(x)`, `R`
   rational, `m ≥ 1`.  Two complementary branches, by whether `x^p` jumps across
   the cut:

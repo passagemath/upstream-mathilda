@@ -1919,7 +1919,11 @@ static Expr* mellin_core(Expr* F, Expr* v) {
         Expr* z = roots.v[i];
         double zre, zim;
         if (!res_reim(z, &zre, &zim)) { bad = true; break; }        /* symbolic pole */
-        if (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL) { bad = true; break; } /* on (0,Inf) */
+        /* A pole on the positive axis (0, Inf) sits on the branch cut.  Without
+         * PrincipalValue the integral diverges -> decline; under PrincipalValue
+         * the indented contour gives its Cauchy PV. */
+        bool on_axis = (zim > -RES_TOL && zim < RES_TOL && zre > RES_TOL);
+        if (on_axis && !g_pv) { bad = true; break; }
         /* Simple iff Q'(z) != 0 (numeric z, dQ a polynomial -> numeric value). */
         Expr* dQz = dQ ? eval_take(mk_fn2("ReplaceAll", expr_copy(dQ),
                             mk_fn2("Rule", expr_copy(v), expr_copy(z)))) : NULL;
@@ -1927,8 +1931,24 @@ static Expr* mellin_core(Expr* F, Expr* v) {
         bool simple = dQz && res_reim(dQz, &dre, &dim) &&
                       (fabs(dre) > RES_TOL || fabs(dim) > RES_TOL);
         if (dQz) expr_free(dQz);
+        if (on_axis && !simple) { bad = true; break; }   /* higher-order axis pole: divergent PV */
         Expr* contrib;
-        if (simple) {
+        if (on_axis) {
+            /* Cauchy PV half-residue: the contour indents around z0 above and
+             * below the cut, so the pole contributes the AVERAGE of its two
+             * keyhole-branch values  z0^p (arg 0)  and  z0^p e^(2 pi i p)
+             * (arg 2 pi):  (1/2) Res(R,z0) z0^p (1 + e^(2 pi i p)). */
+            Expr* rr = residue_compute(R, v, z);
+            if (!rr) { bad = true; break; }
+            Expr* e2 = mk_fn1("Exp", mk_fn2("Times", mk_int(2),
+                           mk_fn2("Times", mk_sym(SYM_Pi),
+                               mk_fn2("Times", mk_sym(SYM_I), expr_copy(p)))));
+            Expr* avg = eval_take(mk_fn2("Times",
+                            mk_fn2("Power", mk_int(2), mk_int(-1)),
+                            mk_fn2("Times", mk_fn2("Power", expr_copy(z), expr_copy(p)),
+                                   mk_fn2("Plus", mk_int(1), e2))));
+            contrib = eval_take(mk_fn2("Times", avg, rr));
+        } else if (simple) {
             Expr* br = mellin_branch(z, p);
             Expr* rr = residue_compute(R, v, z);
             if (!br || !rr) { if (br) expr_free(br); if (rr) expr_free(rr); bad = true; break; }

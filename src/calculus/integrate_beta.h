@@ -64,6 +64,10 @@ Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assump
  * + t Log[t] - t for t >= 0 (so [0,1] gives (1/2)Log[2 Pi]). */
 Expr* integrate_raabe_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* Log-weighted rational on [0,1]: Integrate[x^(c-1) Log[x]^n/(1-x^m), {x,0,1}]
+ * = (-1)^n n!/m^(n+1) HurwitzZeta[n+1, c/m]  (c>0, m>=1, n>=1). */
+Expr* integrate_ratlog01_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

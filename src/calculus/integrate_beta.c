@@ -629,6 +629,92 @@ Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assump
     return assumptions ? simp2(res, assumptions) : simp(res);
 }
 
+/* Log-weighted rational on [0,1]:
+ *   Integrate[x^(c-1) Log[x]^n / (1 - x^m), {x,0,1}]
+ *     = (-1)^n n! / m^(n+1) * HurwitzZeta[n+1, c/m]   (c > 0, m >= 1, n >= 1).
+ * This is the l = 0 limit the Beta stage cannot represent (the n = 0 base
+ * integral diverges, so the value is not a k-derivative of a finite Beta;
+ * Beta[c, 0] = ComplexInfinity makes beta_param_deriv Indeterminate).  Running
+ * before the Beta stage both closes the family and avoids that spurious
+ * Infinity::indet. */
+Expr* integrate_ratlog01_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_INTEGER && b->data.integer == 1)) return NULL;
+
+    /* Strip Log[x]^n (n >= 1); collect the remaining factors. */
+    int n = 0;
+    Expr* restparts[32]; size_t nrest = 0;
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = fac[i];
+        if (head_name_is(fe, "Log") && fe->data.function.arg_count == 1 &&
+            expr_eq(fe->data.function.args[0], (Expr*)x)) { n += 1; continue; }
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+            head_name_is(fe->data.function.args[0], "Log") &&
+            fe->data.function.args[0]->data.function.arg_count == 1 &&
+            expr_eq(fe->data.function.args[0]->data.function.args[0], (Expr*)x) &&
+            fe->data.function.args[1]->type == EXPR_INTEGER &&
+            fe->data.function.args[1]->data.integer >= 1) {
+            n += (int) fe->data.function.args[1]->data.integer; continue;
+        }
+        if (nrest < 32) restparts[nrest++] = fe;
+    }
+    if (n < 1) return NULL;
+
+    Expr* rest;
+    if (nrest == 0) rest = mk_int(1);
+    else if (nrest == 1) rest = cp(restparts[0]);
+    else {
+        Expr** c2 = malloc(nrest * sizeof(Expr*));
+        for (size_t i = 0; i < nrest; i++) c2[i] = cp(restparts[i]);
+        rest = mk_fn("Times", c2, nrest);
+        free(c2);
+    }
+
+    /* rest should be C x^(c-1) / (1 - x^m).  Together normalizes the sign (e.g.
+     * 1/(1-x) -> -1/(-1+x)), so match den == D0 (1 - x^m) with D0 the (nonzero,
+     * x-free) constant term, folding D0 into C. */
+    Expr* tog = eval_take(mk_fn1("Together", rest));
+    Expr* num = eval_take(mk_fn1("Numerator", cp(tog)));
+    Expr* den = eval_take(mk_fn1("Denominator", tog));
+
+    Expr* mE = eval_take(mk_fn2("Exponent", cp(den), cp(x)));
+    long m = (mE && mE->type == EXPR_INTEGER) ? (long) mE->data.integer : 0;
+    if (mE) expr_free(mE);
+    Expr* D0 = coeff_(den, x, 0);                     /* constant term of den */
+    bool den_ok = m >= 1 && D0 && !contains_symbol(D0, x) &&
+        !(D0->type == EXPR_INTEGER && D0->data.integer == 0) &&
+        is_zero_simp_(mk_fn2("Plus", cp(den),
+            mk_fn2("Times", mk_int(-1),
+                mk_fn2("Times", cp(D0),
+                    mk_fn2("Plus", mk_int(1), mk_fn2("Times", mk_int(-1), Pow_(cp(x), mk_int(m))))))));
+
+    /* numC = num / D0 == C x^p, C free of x; c = p + 1. */
+    Expr* numC = den_ok ? eval_take(mk_fn2("Times", cp(num), Pow_(cp(D0), mk_int(-1)))) : NULL;
+    Expr* pE = numC ? eval_take(mk_fn2("Exponent", cp(numC), cp(x))) : NULL;
+    long p = (pE && pE->type == EXPR_INTEGER) ? (long) pE->data.integer : -1;
+    if (pE) expr_free(pE);
+    Expr* C = (p >= 0) ? eval_take(mk_fn2("Times", cp(numC), Pow_(cp(x), mk_int(-p)))) : NULL;
+    bool num_ok = p >= 0 && C && !contains_symbol(C, x) &&
+        is_zero_simp_(mk_fn2("Plus", cp(numC),
+            mk_fn2("Times", mk_int(-1), mk_fn2("Times", cp(C), Pow_(cp(x), mk_int(p))))));
+
+    expr_free(num); expr_free(den); if (D0) expr_free(D0); if (numC) expr_free(numC);
+    if (!den_ok || !num_ok) { if (C) expr_free(C); return NULL; }
+
+    /* value = C (-1)^n n! / m^(n+1) HurwitzZeta[n+1, (p+1)/m]. */
+    Expr* hz = mk_fn2("HurwitzZeta", mk_int(n + 1),
+                   mk_fn2("Times", mk_int(p + 1), Pow_(mk_int(m), mk_int(-1))));
+    Expr* val = mk_fn2("Times", C,
+                    mk_fn2("Times", (n % 2 == 0) ? mk_int(1) : mk_int(-1),
+                        mk_fn2("Times", mk_fn1("Factorial", mk_int(n)),
+                            mk_fn2("Times", Pow_(mk_int(m), mk_int(-(n + 1))), hz))));
+    return assumptions ? simp2(val, assumptions) : simp(val);
+}
+
 /* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}] = (1/2)Log[2 Pi] +
  * t Log[t] - t  for t >= 0 (the canonical [0,1] instance is (1/2)Log[2 Pi]).
  * The Gamma argument must be exactly the integration variable and the interval a

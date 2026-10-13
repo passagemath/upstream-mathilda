@@ -1366,6 +1366,11 @@ static Expr* integrate_definite(Expr* res) {
             /* Euler-Beta: x^(k-1)(1-x)^(l-1) [Log weights] on [0,1]; then the
              * Euler->Beta*2F1 generalization with one extra linear factor
              * (alpha+beta x)^e. */
+            /* Log-weighted rational x^(c-1) Log[x]^n/(1-x^m) on [0,1] -- the l=0
+             * limit the Beta stage cannot represent; runs first so it also
+             * avoids the spurious Beta[c,0]=ComplexInfinity Infinity::indet. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
+                r = integrate_ratlog01_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_beta_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))

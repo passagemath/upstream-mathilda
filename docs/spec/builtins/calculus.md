@@ -2604,6 +2604,16 @@ symbolic-exponent contours:
   fact continuous at `x = 1`).  A genuine axis pole (`z₀ ≠ 1`) needs
   `PrincipalValue -> True` and then returns the principal value, e.g.
   `∫₀^∞ Log[x]/(x²−4) dx = π²/8`; a higher-order axis pole (divergent PV) declines.
+  Under a symbolic parameter the keyhole close skips `ComplexExpand` (which
+  balloons on the symbolic pole through the `(Log z)^m` powers and sends
+  `Simplify` into exponential matcher backtracking) and takes the plain
+  `Simplify` under the assumptions instead.
+- **Pure rational principal value on `(0, ∞)`** — the same `m = 0` keyhole, under
+  `PrincipalValue -> True`, closes a rational `R(x)` with a simple positive-axis
+  pole: `Integrate[1/(x³−a³), {x,0,∞}, PrincipalValue -> True, Assumptions ->
+  a>0] = −π/(3√3 a²)`, `∫₀^∞ x²/(x⁴−a⁴) = π/(4a)`.  It runs before the even-fold,
+  so the even members route to the keyhole rather than the rational family's
+  divergence preemption.
 - **Finite interval `(-1, 1)` with the Chebyshev weight** — `Integrate[R(x) /
   Sqrt[1 - x^2], {x, -1, 1}]`, `R` rational: `x = Cos[t]` maps it to
   `(1/2) ∫₀^{2π} R(Cos t) dt`, evaluated by the unit-circle family.  It runs in

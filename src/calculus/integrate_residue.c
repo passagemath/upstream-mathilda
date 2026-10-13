@@ -2213,11 +2213,15 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
      * roots of unity the poles live at -- and the imaginary parts cancel; a
      * premature per-step Re[] or RootReduce instead buried the poles in Root
      * objects whose Arg never simplified, forcing a decline.  Under a SYMBOLIC
-     * parameter (g_inst): skip ComplexExpand, which on a symbolic pole
-     * (Sqrt[a^2], Arg[-Sqrt[a^2]], ...) balloons into a many-hundred-leaf flat
-     * sum that sends Simplify into exponential matcher backtracking (the case-35
-     * hang, Log[x]/(x^2-a^2) PV).  The plain Simplify under g_assume closes it --
-     * mirrors the sibling keyhole_log_general_a. */
+     * parameter (g_inst): skip ComplexExpand entirely.  ComplexExpand on a
+     * symbolic pole (Sqrt[a^2], Arg[-Sqrt[a^2]], the cube-root Arg[(-1)^(1/3) a],
+     * ...) either balloons into a many-hundred-leaf flat sum that sends Simplify
+     * into exponential matcher backtracking (the case-35 hang, Log[x]/(x^2-a^2)
+     * PV, and the Log^n/(a^2+x^2) family) or stalls on the cube-root Arg terms
+     * (the rational PV cases 31/32).  The plain Simplify under g_assume closes
+     * the even cases to the clean real value and leaves the odd cube-root cases
+     * in a correct but unreduced Arg form -- mirrors the sibling
+     * keyhole_log_general_a. */
     Expr* val = g_inst ? ev1("Simplify", ans)
                        : ev1("Simplify", ev1("ComplexExpand", ans));
     if (!val) return NULL;
@@ -2226,6 +2230,27 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
         expr_free(val); return NULL;
     }
     return val;
+}
+
+/* Cauchy principal value of a rational integrand on [0, Inf) with a simple pole
+ * on the positive real axis.  The ordinary even-fold rational family declares
+ * such a pole divergent (it is, as an ordinary integral); under PrincipalValue
+ * the m = 0 keyhole handles it directly -- the on-axis pole contributes the
+ * indented half-residue (the average of the two branch values Log z and
+ * Log z + 2 pi i), the off-axis poles their full keyhole contribution, and
+ * I_0 = -Sum closes it.  a0_keyhole_log(R, x, 0) does exactly this; delegating
+ * reuses its pole analysis (it declines a higher-order axis pole or a pole at 0).
+ * Runs before the even-fold so the even members (x^2/(x^4-a^4), ...) reach the
+ * keyhole instead of the rational family's divergence preemption.  Gated on g_pv
+ * so a non-PV rational is untouched. */
+static Expr* residue_family_rational_halfline_pv(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!g_pv || !is_zero_pos_infinity(a, b) || !f) return NULL;
+    Expr* P; Expr* Q;
+    if (!res_num_den(f, &P, &Q)) return NULL;
+    bool rat = res_polyq(P, x) && res_polyq(Q, x) && res_degree(Q, x) >= 1;
+    expr_free(P); expr_free(Q);
+    if (!rat) return NULL;
+    return a0_keyhole_log(f, x, 0);
 }
 
 /* Res[ z^a (Log z)^k R(z), z ] for a HIGHER-ORDER pole z (order >= 2), with the
@@ -3575,6 +3600,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
          * symmetry (exact), the keyhole/Mellin (branch-power / log) and sector
          * (1/(1+x^n)) families. */
         value = residue_family_hyperbolic_halfline(f, x, a, b);
+        if (!value) value = residue_family_rational_halfline_pv(f, x, a, b);
         if (!value) value = residue_half_line(f, x, a, b, diverges);
         if (!value) value = residue_family_mellin_log(f, x, a, b);
         if (!value) value = residue_family_mellin(f, x, a, b);

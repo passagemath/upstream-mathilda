@@ -74,6 +74,10 @@ Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
 Expr* integrate_mellinpv_oneminus_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                       bool principal_value, Expr* assumptions);
 
+/* Whole-line Integrate[C Log[Abs[al x + be]]/(E x^2 + D), {x,-Inf,Inf}]
+ * = (C/E)(Pi/p)(Log[Abs[al]] + (1/2)Log[r^2+p^2]), p=Sqrt[D/E], r=-be/al. */
+Expr* integrate_logabs_quad_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* `Integrate`RamanujanMasterTheorem[f, {x,0,Infinity}]` (optionally with
  * Assumptions -> ...) builtin.  Strict: returns NULL on any non-applicable
  * input. */

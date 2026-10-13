@@ -2541,7 +2541,12 @@ recognizers:
   (differentiate in the log parameter `A`, integrate the resulting rational).
   The log argument is monic in `x²` with no linear term.  So
   `∫₋∞^∞ Log[x²+a²]/(x²+b²) = (2π/b) Log(a+b)` and, via the even-fold,
-  `∫₀^∞ Log[1+x²]/(1+x²) = π Log 2`.
+  `∫₀^∞ Log[1+x²]/(1+x²) = π Log 2`.  The companion **`Log[Abs[affine]]` over a
+  quadratic** `∫₋∞^∞ C Log[Abs[α x+β]]/(E x²+D) = (C/E)(π/p)(Log|α| +
+  ½ Log(r²+p²))`, `p=√(D/E)`, `r=−β/α` (`Log|x−r| = Re Log(x−r)`), is a dedicated
+  recognizer that runs *before* the piecewise splitter — which would otherwise
+  cut at `x=r` into two half-infinite pieces that do not close — so
+  `∫₋∞^∞ Log|x−a|/(x²+b²) = π Log(a²+b²)/(2b)`.
 
 On the **half-line** `(0, ∞)` a closed-form **hyperbolic-kernel table** runs
 *first* (before the even-fold), covering

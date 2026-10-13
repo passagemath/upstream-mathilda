@@ -187,6 +187,14 @@ static bool prove_true(Expr* pred, Expr* as) {
     if (v) expr_free(v);
     return t;
 }
+/* Refine-based prover: discharges a nonlinear sign (b^2 > 0 from b > 0) that
+ * Simplify leaves as the bare predicate.  Consumes pred. */
+static bool prove_ref(Expr* pred, Expr* as) {
+    Expr* v = as ? ev2("Refine", pred, cp(as)) : ev1("Refine", pred);
+    bool t = v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "True") == 0;
+    if (v) expr_free(v);
+    return t;
+}
 
 /* D[e, x] (non-consuming inputs; owned result). */
 static Expr* dx(const Expr* e, const Expr* x) {
@@ -2316,6 +2324,109 @@ static Expr* ratlog_term(Expr* term, const Expr* x, const Expr* s, Expr* as) {
     Expr* contrib = Tms3(c, Pw(a, mk_fn2("Subtract", cp(s), cp(sp))), kernel);
     expr_free(sp);
     return contrib;
+}
+
+/* a == -Infinity (Times[-1, Infinity] or DirectedInfinity[-1]). */
+static bool is_neg_inf_r(const Expr* a) {
+    if (!a) return false;
+    if (head_name_is(a, "Times") && a->data.function.arg_count == 2 &&
+        a->data.function.args[0]->type == EXPR_INTEGER &&
+        a->data.function.args[0]->data.integer == -1 &&
+        is_pos_inf(a->data.function.args[1])) return true;
+    if (head_name_is(a, "DirectedInfinity") && a->data.function.arg_count == 1) {
+        Expr* d = a->data.function.args[0];
+        return d->type == EXPR_INTEGER && d->data.integer == -1;
+    }
+    return false;
+}
+
+/* Whole-line Log[Abs[affine]] over a quadratic denominator:
+ *   Integrate[C Log[Abs[al x + be]]/(E x^2 + D), {x,-Inf,Inf}]
+ *     = (C/E) (Pi/p) (Log[Abs[al]] + (1/2) Log[r^2 + p^2]),
+ *   p = Sqrt[D/E] > 0, r = -be/al real  (Log|x-r| = Re Log(x-r); closing in the
+ * upper half-plane, the pole at i p contributes Re Log(i p - r) =
+ * (1/2) Log(r^2 + p^2)).  Must run BEFORE the piecewise splitter, which would
+ * otherwise cut at x = r into two half-infinite pieces that grind in the
+ * parametric (DiffUnderInt) cascade.  Tightly gated (Log[Abs[affine]] numerator,
+ * pure-quadratic denominator with no real root), so every other integrand
+ * declines cheaply and reaches piecewise unchanged. */
+Expr* integrate_logabs_quad_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
+    if (!(is_neg_inf_r(a) && is_pos_inf(b))) return NULL;
+
+    Expr* facs[32]; size_t nf = collect_factors(f, facs, 32, 0);
+    Expr* C = mk_int(1); Expr* g = NULL;
+    Expr* rest[32]; size_t nrest = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = facs[i];
+        if (free_of_x_now(fe, x)) { C = Tms(C, cp(fe)); continue; }
+        if (!g && head_name_is(fe, "Log") && fe->data.function.arg_count == 1 &&
+            head_name_is(fe->data.function.args[0], "Abs") &&
+            fe->data.function.args[0]->data.function.arg_count == 1) {
+            g = fe->data.function.args[0]->data.function.args[0]; continue;
+        }
+        if (nrest < 32) rest[nrest++] = fe;
+    }
+    if (!g || !contains_symbol(g, x)) { expr_free(C); return NULL; }
+
+    /* g = al x + be (affine). */
+    Expr* al = eval_take(mk_fn3("Coefficient", cp(g), cp(x), mk_int(1)));
+    Expr* be = eval_take(mk_fn3("Coefficient", cp(g), cp(x), mk_int(0)));
+    Expr* affchk = simp(Pls(cp(g), Neg(Pls(Tms(cp(al), cp(x)), cp(be)))));
+    bool aff = al && !contains_symbol(al, x) && be && !contains_symbol(be, x) && is_zero_now(affchk);
+    expr_free(affchk);
+    if (!aff) { expr_free(C); if (al) expr_free(al); if (be) expr_free(be); return NULL; }
+
+    /* rest = C2 / (E x^2 + D). */
+    Expr* Rrest;
+    if (nrest == 0) {
+        Rrest = mk_int(1);
+    } else if (nrest == 1) {
+        Rrest = cp(rest[0]);
+    } else {
+        Rrest = cp(rest[0]);
+        for (size_t i = 1; i < nrest; i++) Rrest = Tms(Rrest, cp(rest[i]));
+    }
+    Expr* tog = ev1("Together", Rrest);
+    Expr* num = ev1("Numerator", cp(tog));
+    Expr* den = ev1("Denominator", tog);
+    Expr* qc2 = eval_take(mk_fn3("Coefficient", cp(den), cp(x), mk_int(2)));
+    Expr* qc1 = eval_take(mk_fn3("Coefficient", cp(den), cp(x), mk_int(1)));
+    Expr* qc0 = eval_take(mk_fn3("Coefficient", cp(den), cp(x), mk_int(0)));
+    Expr* denchk = simp(Pls(cp(den), Neg(Pls(Tms(cp(qc2), Pw(cp(x), mk_int(2))), cp(qc0)))));
+    bool qok = !contains_symbol(num, x) && qc1 && is_zero_now(qc1) &&
+               qc2 && !contains_symbol(qc2, x) && qc0 && !contains_symbol(qc0, x) &&
+               is_zero_now(denchk);
+    expr_free(denchk);
+    if (qc1) expr_free(qc1);
+    if (!qok) {
+        expr_free(C); expr_free(al); expr_free(be); expr_free(num); expr_free(den);
+        if (qc2) expr_free(qc2);
+        if (qc0) expr_free(qc0);
+        return NULL;
+    }
+    expr_free(den);
+
+    Expr* DoverE = simp(Tms(cp(qc0), Pw(cp(qc2), mk_int(-1))));         /* p^2 */
+    Expr* r      = simp(Tms(Neg(cp(be)), Pw(cp(al), mk_int(-1))));      /* -be/al */
+    /* Gates: D/E > 0 (no real denom root) and r real.  Refine discharges the
+     * nonlinear D/E > 0 (e.g. b^2 > 0 from b > 0) that Simplify leaves bare. */
+    bool ok = prove_ref(Gt(cp(DoverE), mk_int(0)), assumptions) &&
+              prove_ref(mk_fn2("Element", cp(r), mk_sym("Reals")), assumptions);
+    Expr* val = NULL;
+    if (ok) {
+        Expr* p = mk_fn1("Sqrt", cp(DoverE));
+        Expr* Cprime = Tms(cp(C), Tms(cp(num), Pw(cp(qc2), mk_int(-1))));   /* C num / E */
+        Expr* bracket = Pls(mk_fn1("Log", mk_fn1("Abs", cp(al))),
+                            Tms(mk_fn2("Rational", mk_int(1), mk_int(2)),
+                                mk_fn1("Log", Pls(Pw(cp(r), mk_int(2)), cp(DoverE)))));
+        val = Tms(Cprime, Tms(Tms(mk_sym("Pi"), Pw(p, mk_int(-1))), bracket));
+        val = assumptions ? simp2(val, assumptions) : simp(val);
+    }
+    expr_free(C); expr_free(al); expr_free(be); expr_free(num); expr_free(qc2); expr_free(qc0);
+    expr_free(DoverE); expr_free(r);
+    if (val && (contains_symbol(val, x) || !is_finite_value(val))) { expr_free(val); val = NULL; }
+    return val;
 }
 
 /* Match G = 1 - x^d (returns +1) or x^d - 1 (returns -1); sets *dexp = d (owned,

@@ -1315,6 +1315,11 @@ static Expr* integrate_definite(Expr* res) {
              * inputs and never override an existing result. */
             if (expr_eq(a, b)) r = expr_new_integer(0);
             if (!r) r = integrate_dirac_try(cur, x, a, b);
+            /* Whole-line Log[Abs[affine]]/(quadratic) -- taken BEFORE piecewise,
+             * which would otherwise split at the Abs breakpoint into two
+             * half-infinite pieces that grind in the parametric cascade. */
+            if (!r && mech == METHOD_AUTOMATIC)
+                r = integrate_logabs_quad_try(cur, x, a, b, assumptions);
             /* Piecewise integrands (Abs/Sign/HeavisideTheta/UnitStep/Min/Max/
              * Piecewise in x): split the interval at the interior breakpoints,
              * reduce each sub-interval to its single active branch, integrate,

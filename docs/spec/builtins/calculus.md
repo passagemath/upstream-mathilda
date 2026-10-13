@@ -1892,6 +1892,10 @@ monotonically down.
     `Integrate\`IntegralRepresentation[f, {x, 0, Infinity}]`. Families:
     `E^(-p x) BesselJ[nu, q x]` → Laplace-Bessel
     `(Sqrt[q^2+p^2]-p)^nu/(q^nu Sqrt[q^2+p^2])` (`p>0`);
+    `BesselJ[0, a x] {Cos,Sin}[b x]` → the Weber–Schafheitlin discontinuous
+    integral, a branch chosen by the proved ordering — `Cos`: `1/Sqrt[a^2-b^2]`
+    (`a>b>0`) or `0` (`b>a>0`); `Sin`: `0` (`a>b>0`) or `1/Sqrt[b^2-a^2]`
+    (`b>a>0`); undecided / `a==b` (divergent) declines;
     `E^(-A Cosh[x]) Cosh[n x]` → `BesselK[n, A]` (`A>0`);
     `x^(nu-1) E^(-A x - B/x)` → `2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]`
     (`A,B>0`; `nu` a half-integer gives an elementary form, e.g.

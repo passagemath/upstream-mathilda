@@ -17,6 +17,9 @@
  *                      = 2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]],       A>0,B>0.
  *   Airy             Integrate[Cos[p x^3 + q x], {x,0,Inf}]
  *                      = Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)],          p>0, q real.
+ *   Weber-Schafheitlin  Integrate[BesselJ[0, a x] {Cos,Sin}[b x], {x,0,Inf}]
+ *                      = 1/Sqrt[a^2-b^2] / 0 (Cos),  0 / 1/Sqrt[b^2-a^2] (Sin),
+ *                        the branch chosen by proving a>b>0 or b>a>0.
  *
  * Reachable via Method -> "IntegralRepresentation" and the explicit entry point
  *   Integrate`IntegralRepresentation[f, {x, 0, Infinity}]

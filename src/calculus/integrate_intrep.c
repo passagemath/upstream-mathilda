@@ -412,6 +412,63 @@ static Expr* rec_lerch_hurwitz(Expr* f, Expr* x, Expr* as) {
     return simp2(val, as);
 }
 
+/* ---- (6) Weber-Schafheitlin: BesselJ[0, a x] {Cos,Sin}[b x] ------------- *
+ * The discontinuous integrals
+ *   Int_0^Inf J0(a x) Cos(b x) dx = 1/Sqrt(a^2-b^2) (a>b),  0 (b>a)
+ *   Int_0^Inf J0(a x) Sin(b x) dx = 0 (a>b),  1/Sqrt(b^2-a^2) (b>a)
+ * The value is a branch selected by the a/b ordering, so the Assumptions must
+ * positively prove one ordering (a>b>0 or b>a>0); undecided (incl. a==b, which
+ * is divergent) declines.  Order nu=0 only. */
+static Expr* rec_bessel_cossin(Expr* f, Expr* x, Expr* as) {
+    Expr* fv[16]; size_t n = collect_factors(f, fv, 16);
+    Expr* C = mk_int(1);
+    Expr* barg = NULL;                 /* BesselJ[0, barg] */
+    Expr* targ = NULL; int is_cos = -1; /* Cos/Sin[targ]    */
+    for (size_t i = 0; i < n; i++) {
+        Expr* fac = fv[i];
+        if (free_of_x(fac, x)) { C = Times_(C, cp(fac)); continue; }
+        if (head_name_is(fac, "BesselJ") && fac->data.function.arg_count == 2 && !barg) {
+            Expr* nu = fac->data.function.args[0];
+            if (!(nu->type == EXPR_INTEGER && nu->data.integer == 0)) { expr_free(C); return NULL; }
+            barg = fac->data.function.args[1]; continue;
+        }
+        if ((head_name_is(fac, "Cos") || head_name_is(fac, "Sin")) &&
+            fac->data.function.arg_count == 1 && is_cos < 0) {
+            targ = fac->data.function.args[0]; is_cos = head_name_is(fac, "Cos") ? 1 : 0; continue;
+        }
+        expr_free(C); return NULL;      /* unrecognised x-factor */
+    }
+    if (!barg || is_cos < 0) { expr_free(C); return NULL; }
+    /* barg = a x, targ = b x (linear, no constant). */
+    Expr* av = coeff(barg, x, 1), *a0 = coeff(barg, x, 0);
+    Expr* bv = coeff(targ, x, 1), *b0 = coeff(targ, x, 0);
+    bool shape = is_zero_simp(cp(a0)) && is_zero_simp(cp(b0)) &&
+                 is_zero_simp(Plus_(cp(barg), Times_(mk_int(-1), Times_(cp(av), cp(x))))) &&
+                 is_zero_simp(Plus_(cp(targ), Times_(mk_int(-1), Times_(cp(bv), cp(x)))));
+    expr_free(a0); expr_free(b0);
+    if (!shape) { expr_free(C); expr_free(av); expr_free(bv); return NULL; }
+    /* Positively prove one ordering (never trust a False verdict). */
+    int rab = prove(mk_fn2("And", mk_fn2("Greater", cp(av), cp(bv)),
+                                  mk_fn2("Greater", cp(bv), mk_int(0))), as);  /* a>b>0 */
+    int rba = prove(mk_fn2("And", mk_fn2("Greater", cp(bv), cp(av)),
+                                  mk_fn2("Greater", cp(av), mk_int(0))), as);  /* b>a>0 */
+    Expr* form = NULL;
+    if (rab == 1) {                     /* a > b > 0 */
+        form = is_cos
+            ? Pow_(mk_fn1("Sqrt", Plus_(Pow_(cp(av), mk_int(2)),
+                     Times_(mk_int(-1), Pow_(cp(bv), mk_int(2))))), mk_int(-1))
+            : mk_int(0);
+    } else if (rba == 1) {              /* b > a > 0 */
+        form = is_cos
+            ? mk_int(0)
+            : Pow_(mk_fn1("Sqrt", Plus_(Pow_(cp(bv), mk_int(2)),
+                     Times_(mk_int(-1), Pow_(cp(av), mk_int(2))))), mk_int(-1));
+    }
+    expr_free(av); expr_free(bv);
+    if (!form) { expr_free(C); return NULL; }
+    return simp2(Times_(C, form), as);
+}
+
 /* ---- entry -------------------------------------------------------------- */
 
 Expr* integrate_intrep_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
@@ -421,6 +478,7 @@ Expr* integrate_intrep_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions
 
     Expr* v;
     if ((v = rec_laplace_bessel(f, x, assumptions))) return v;
+    if ((v = rec_bessel_cossin(f, x, assumptions)))  return v;
     if ((v = rec_besselk_cosh(f, x, assumptions)))   return v;
     if ((v = rec_besselk_exp(f, x, assumptions)))    return v;
     if ((v = rec_airy(f, x, assumptions)))           return v;
@@ -462,6 +520,8 @@ void integrate_intrep_init(void) {
         "Integrate`IntegralRepresentation[f, {x, 0, Infinity}] evaluates a "
         "half-line integral that is a classical integral representation of a "
         "special function: E^(-p x) BesselJ[nu, q x] -> Laplace-Bessel; "
+        "BesselJ[0, a x] {Cos,Sin}[b x] -> the Weber-Schafheitlin discontinuous "
+        "integral (1/Sqrt[a^2-b^2] or 1/Sqrt[b^2-a^2] or 0, by the a/b ordering); "
         "E^(-A Cosh[x]) Cosh[n x] -> BesselK[n, A]; x^(nu-1) E^(-A x - B/x) -> "
         "2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]; Cos[p x^3 + q x] -> "
         "Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]; x^(s-1) E^(-a x)/(1 - z E^(-x)) -> "

@@ -4757,6 +4757,19 @@ endif()
 add_test(NAME singular_definite_corpus_tests
          COMMAND singular_definite_corpus_tests ../SingularDefiniteIntegralsCorpus.m)
 
+# Second, harder definite-integral stress battery (Frullani, Mellin, hyperbolic,
+# Cauchy PV, polylog / Gamma-Zeta).  Same fork + per-case-timeout harness.
+add_executable(extreme_definite_corpus_tests test_extreme_definite_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(extreme_definite_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(extreme_definite_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(extreme_definite_corpus_tests build_ecm)
+else()
+    target_link_libraries(extreme_definite_corpus_tests gmp m)
+endif()
+add_test(NAME extreme_definite_corpus_tests
+         COMMAND extreme_definite_corpus_tests ../ExtremeDefiniteIntegralsCorpus.m)
+
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)
 if(USE_ECM)

@@ -1,9 +1,32 @@
-# Active campaign: Singular / FTC-boundary definite integrals (2026-10-13)
+# ACTIVE campaign: Extreme definite integrals — battery #2 (2026-10-13)
+
+Findings: `tasks/extreme_definite_integrals_2026-10-13.md`
+Scope (user): FULL — close all 24 open scored cases.
+Baseline (v0.387, verified oracles): 26 CORRECT / 0 WRONG / 19 UNEVAL / 4 TLE / 1 EXCLUDED(37).
+Corpus `tests/ExtremeDefiniteIntegralsCorpus.m`; gate `extreme_definite_corpus_tests`;
+baseline driver (scratchpad) `run_extreme.sh`.
+4 corrected battery oracles: 6 (×2), 24 (wrong formula), 36 (sign), 37 (excluded).
+2 repointed instantiations: 12 (a→1,b→3), 19 (a→1/3).
+
+## Phase 0 — corpus + committed gate  [DONE, contributor-facing, no bump]
+- [x] corpus (50 records, 4 corrected oracles, 2 repointed instantiations)
+- [x] committed fork-per-case gate (WRONG baseline 0; ConditionalExpression-strip; case-37 exclude)
+- [x] CMake registration; build + run verified EXIT=0 (26 correct / 0 wrong)
+
+## Phase 1+ — recognizers (correctness-first, additive clusters before PV-core)
+Clusters (see findings): Frullani-cos+Gaussian-diff (2,6); hyperbolic kernels (24,25,29,30);
+Bessel Weber-Schafheitlin (26,27,28); log half-line/Raabe (41,46,47,50); whole-line log (38,44);
+half-line rational PV on-axis pole (31,32,33,34); Mellin+log/√ PV (12,19,35,36); Fresnel form (21).
+
+---
+
+# PRIOR campaign (COMPLETE): Singular / FTC-boundary definite integrals (battery #1)
 
 Plan: `~/.claude/plans/pasted-content-id-a30c-this-50-expressi-dazzling-sunset.md`
 Findings: `tasks/singular_definite_integrals_2026-10-13.md`
 Scope (user): FULL — close all 50.
 Baseline (v0.381, corrected oracles): 20 CORRECT / 4 WRONG / 23 UNEVAL / 3 TIMEOUT.
+Final: 42/50 correct, 0 wrong (v0.382–v0.387, all pushed).
 Corpus `tests/SingularDefiniteIntegralsCorpus.m`; gate `singular_definite_corpus_tests`;
 driver `scratchpad/run_corpus.sh`.
 

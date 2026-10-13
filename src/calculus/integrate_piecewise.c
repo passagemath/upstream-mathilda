@@ -632,12 +632,15 @@ Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
         free(terms);
     }
     if (fn) expr_free(fn);
-    /* Clean up under the assumptions (a>0 etc. tidy the closed form). */
+    /* Clean up under the assumptions (a>0 etc. tidy the closed form).  Quiet: a
+     * piece boundary can carry a transient 0^(1-b)-style term (an endpoint value
+     * the Limit engine cannot resolve for a symbolic exponent) that raises
+     * Power::infy as Simplify folds it away; that is internal, not user-facing. */
     Expr* simp;
     if (assumptions)
-        simp = eval_take(mk_fn2("Simplify", sum, cp(assumptions)));
+        simp = eval_take(mk_fn1("Quiet", mk_fn2("Simplify", sum, cp(assumptions))));
     else
-        simp = eval_take(mk_fn1("Simplify", sum));
+        simp = eval_take(mk_fn1("Quiet", mk_fn1("Simplify", sum)));
     return simp;
 }
 

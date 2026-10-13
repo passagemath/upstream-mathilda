@@ -407,7 +407,18 @@ static void nl_add_zero_roots(Expr* g, Expr* x, Expr* a, Expr* b, PoleSet* s, Ex
     Expr* sols = eval_take(mk_fn1("Quiet",
                      mk_fn3("Solve", eq, expr_copy(x), mk_sym("Reals"))));
     if (!sols) { s->undecidable = true; return; }
-    if (!head_name_is(sols, "List")) { s->undecidable = true; expr_free(sols); return; }
+    if (!head_name_is(sols, "List")) {
+        /* Solve could not handle it (e.g. x^b == 0 for symbolic b).  A Power
+         * denominator base^exp vanishes exactly where its base does, so solve
+         * the base instead rather than failing undecidable. */
+        if (head_name_is(g, "Power") && g->data.function.arg_count == 2 &&
+            contains_symbol(g->data.function.args[0], x)) {
+            expr_free(sols);
+            nl_add_zero_roots(g->data.function.args[0], x, a, b, s, as);
+            return;
+        }
+        s->undecidable = true; expr_free(sols); return;
+    }
 
     for (size_t i = 0; i < sols->data.function.arg_count; i++) {
         Expr* val = nl_rule_rhs_for(sols->data.function.args[i], x);
@@ -553,15 +564,21 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     if (nl_is_infinite(target)) {
         out = nl_limit(F, x, target, NL_DIR_NONE, as);
     } else {
-        Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(F),
-                                     mk_fn2("Rule", expr_copy(x),
-                                            expr_copy(target))));
-        /* Under Assumptions, Refine the substituted boundary (ArcSin[a/Sqrt[a^2]]
-         * -> Pi/2 for a>0) so a symbolic endpoint closes without a Limit. */
-        if (sub && as && !nl_is_infinite(sub) && !nl_is_finite_closed(sub, x)) {
-            /* Quiet: an internal boundary-cleanup probe. */
+        /* Quiet: a direct boundary substitution can hit a Power::infy on a form
+         * like 0^(1-b) that the Refine/Limit below then resolves; it is an
+         * internal probe and must not surface from Integrate. */
+        Expr* sub = eval_take(mk_fn1("Quiet",
+                                 mk_fn2("ReplaceAll", expr_copy(F),
+                                        mk_fn2("Rule", expr_copy(x),
+                                               expr_copy(target)))));
+        /* Under Assumptions, Refine the substituted boundary so a symbolic
+         * endpoint closes cleanly: ArcSin[a/Sqrt[a^2]] -> Pi/2 for a>0, and a
+         * transient 0^(1-b) -> 0 for 0<b<1 (left unresolved it later leaks a
+         * Power::infy).  Refine of an already-clean value is a no-op.  Quiet: an
+         * internal boundary-cleanup probe. */
+        if (sub && as && !nl_is_infinite(sub) && !contains_symbol(sub, x)) {
             Expr* ref = eval_take(mk_fn1("Quiet", mk_fn2("Refine", sub, expr_copy(as))));  /* consumes sub */
-            sub = ref;
+            if (ref) sub = ref;
         }
         if (sub && nl_is_infinite(sub)) {
             /* Direct substitution lands on a bare directed infinity: F itself
@@ -789,11 +806,13 @@ static bool nl_realness_ok(Expr* pvval) {
     Expr** rules = NULL; size_t n = 0, cap = 0;
     nl_collect_vars(pvval, &rules, &n, &cap);
     Expr* subbed;
+    /* Quiet: instantiating at a sample can hit a transient Power::infy (e.g.
+     * 0^(1-b) -> 0^-1 at b=2); this is an internal probe. */
     if (n == 0) {
-        subbed = eval_take(mk_fn1("N", expr_copy(pvval)));
+        subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", expr_copy(pvval))));
     } else {
         Expr* rl = expr_new_function(mk_sym("List"), rules, n);  /* copies the array */
-        subbed = eval_take(mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(pvval), rl)));
+        subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(pvval), rl))));
     }
     free(rules);
     double v;
@@ -814,11 +833,12 @@ bool nl_numeric_is_complex(Expr* e) {
     Expr** rules = NULL; size_t n = 0, cap = 0;
     nl_collect_vars(e, &rules, &n, &cap);
     Expr* subbed;
+    /* Quiet: instantiating at a sample can hit a transient Power::infy; probe. */
     if (n == 0) {
-        subbed = eval_take(mk_fn1("N", expr_copy(e)));
+        subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", expr_copy(e))));
     } else {
         Expr* rl = expr_new_function(mk_sym("List"), rules, n);
-        subbed = eval_take(mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(e), rl)));
+        subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(e), rl))));
     }
     free(rules);
     bool is_cplx = false;
@@ -963,10 +983,13 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
             failed = true;
             break;
         }
+        /* Quiet: forming F(hi) - F(lo) can transiently evaluate a boundary term
+         * like 0^(1-b) that raises Power::infy before the telescoping sum /
+         * final Simplify resolves it; it is internal and must not surface. */
         arith_warnings_mute_push();
-        Expr* contrib = eval_take(mk_fn2("Plus", hi,
-                                         mk_fn2("Times", expr_new_integer(-1), lo)));
-        total = eval_take(mk_fn2("Plus", total, contrib));
+        Expr* contrib = eval_take(mk_fn1("Quiet", mk_fn2("Plus", hi,
+                                         mk_fn2("Times", expr_new_integer(-1), lo))));
+        total = eval_take(mk_fn1("Quiet", mk_fn2("Plus", total, contrib)));
         arith_warnings_mute_pop();
     }
 

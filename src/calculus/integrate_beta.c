@@ -517,6 +517,37 @@ static bool parse_definite(Expr* res, Expr** f, Expr** x, Expr** a, Expr** b,
     return true;
 }
 
+/* Log[Sin[x]] / Log[Cos[x]] over a canonical interval starting at 0.  The
+ * classical log-sine values:
+ *   Integrate[Log[Sin[x]], {x,0,Pi/2}] = Integrate[Log[Cos[x]], {x,0,Pi/2}]
+ *                                      = -(Pi/2) Log[2],
+ *   Integrate[Log[Sin[x]], {x,0,Pi}]   = -Pi Log[2].
+ * Log[Cos[x]] on [0,Pi] is complex (Cos < 0 on (Pi/2,Pi)), so it is declined.
+ * The trig argument must be exactly x (coefficient 1). */
+Expr* integrate_logtrig_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    (void)assumptions;
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    int kind = trig_interval(b);                 /* 1 = Pi/2, 2 = Pi, 4 = 2 Pi */
+    if (kind != 1 && kind != 2) return NULL;
+    if (!head_name_is(f, "Log") || f->data.function.arg_count != 1) return NULL;
+    Expr* g = f->data.function.args[0];
+    bool is_sin = head_name_is(g, "Sin");
+    bool is_cos = head_name_is(g, "Cos");
+    if ((!is_sin && !is_cos) || g->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(g->data.function.args[0], x)) return NULL;   /* argument exactly x */
+
+    /* -(Pi/2) Log[2] on [0, Pi/2] for both Sin and Cos. */
+    if (kind == 1)
+        return simp(mk_fn2("Times", mk_fn2("Rational", mk_int(-1), mk_int(2)),
+                           mk_fn2("Times", expr_new_symbol("Pi"), mk_fn1("Log", mk_int(2)))));
+    /* -Pi Log[2] on [0, Pi] for Sin; Cos is complex there -> decline. */
+    if (kind == 2 && is_sin)
+        return simp(mk_fn2("Times", mk_int(-1),
+                           mk_fn2("Times", expr_new_symbol("Pi"), mk_fn1("Log", mk_int(2)))));
+    return NULL;
+}
+
 Expr* builtin_integrate_beta(Expr* res) {
     Expr *f, *x, *a, *b, *as;
     if (!parse_definite(res, &f, &x, &a, &b, &as)) return NULL;

@@ -47,6 +47,11 @@ Expr* integrate_euler_2f1_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpti
 Expr* integrate_trigpower_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions);
 
+/* Log[Sin[x]] / Log[Cos[x]] over [0, Pi/2] (both -> -(Pi/2) Log 2) or
+ * [0, Pi] (Log[Sin] -> -Pi Log 2; Log[Cos] complex, declined).  The trig
+ * argument must be exactly x.  Borrowed args; returns fresh or NULL. */
+Expr* integrate_logtrig_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

@@ -1373,6 +1373,10 @@ static Expr* integrate_definite(Expr* res) {
             /* Sin^m Cos^n over a canonical trig interval ([0,Pi/2], [0,Pi], [0,2Pi]). */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_TRIG_POWER))
                 r = integrate_trigpower_try(cur, x, a, b, assumptions);
+            /* Log[Sin[x]] / Log[Cos[x]] over a canonical [0, Pi/2] or [0, Pi]
+             * interval (the classical log-sine values -(Pi/2)Log2 / -Pi Log2). */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = integrate_logtrig_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue does not own.  Under Automatic it runs

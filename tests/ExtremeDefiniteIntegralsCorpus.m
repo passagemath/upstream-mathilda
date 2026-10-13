@@ -27,6 +27,11 @@
  *              a regularization-convention-dependent value; the battery oracle
  *              -1/(4 a^2) matches no standard regularization.  This case is
  *              EXCLUDED from scoring in the runner (never WRONG, never CORRECT).
+ *   - Case 19  x^a/(1-x)^2 (PV)              = ALSO a double-pole "PV": the Cauchy
+ *              PV (symmetric deletion) diverges as 2A/eps, and the Hadamard finite
+ *              part is -Pi a Cot[Pi a] (verified by NIntegrate with the 2A/eps
+ *              subtraction), the OPPOSITE sign of the battery's +Pi a Cot[Pi a].
+ *              Convention-dependent -> EXCLUDED from scoring, like case 37.
  *
  * TWO INSTANTIATIONS were repointed off degenerate values where the expected
  * form collapses to 0 (which would let an eval-to-0 score a false CORRECT):

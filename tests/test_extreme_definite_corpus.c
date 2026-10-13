@@ -54,9 +54,15 @@ void core_init(void);
 
 extern char* expr_to_string(struct Expr*);
 
-/* 1-based corpus indices excluded from scoring (never CORRECT, never WRONG). */
+/* 1-based corpus indices excluded from scoring (never CORRECT, never WRONG).
+ * Both are double-pole "principal values": the Cauchy PV (symmetric deletion)
+ * diverges as 2A/eps, and the Hadamard finite part is regularization-dependent.
+ * Case 37: battery -1/(4a^2) matches no standard reg (our FP ~ -log2/8).
+ * Case 19: x^a/(1-x)^2 -- the verified Hadamard FP is -Pi a Cot[Pi a]
+ * (NIntegrate with the 2A/eps subtraction), the OPPOSITE sign of the battery's
+ * +Pi a Cot[Pi a]; the Cauchy PV itself diverges. */
 static int corpus_is_excluded(size_t one_based_index) {
-    return one_based_index == 37; /* double-pole Hadamard FP, convention-dependent */
+    return one_based_index == 37 || one_based_index == 19;
 }
 
 static bool expr_contains_head_named(const Expr* e, const char* name) {

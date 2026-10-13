@@ -2318,6 +2318,79 @@ static Expr* ratlog_term(Expr* term, const Expr* x, const Expr* s, Expr* as) {
     return contrib;
 }
 
+/* Match G = 1 - x^d (returns +1) or x^d - 1 (returns -1); sets *dexp = d (owned,
+ * free of x).  Returns 0 for 1 + x^d or any other shape. */
+static int match_one_minus_xpow(Expr* G, const Expr* x, Expr** dexp) {
+    if (!head_name_is(G, "Plus") || G->data.function.arg_count != 2) return 0;
+    Expr* t0 = G->data.function.args[0];
+    Expr* t1 = G->data.function.args[1];
+    Expr* cst = NULL; Expr* xterm = NULL;
+    if (t0->type == EXPR_INTEGER && (t0->data.integer == 1 || t0->data.integer == -1)) { cst = t0; xterm = t1; }
+    else if (t1->type == EXPR_INTEGER && (t1->data.integer == 1 || t1->data.integer == -1)) { cst = t1; xterm = t0; }
+    if (!cst) return 0;
+    long cval = (long) cst->data.integer;
+    int sign_x = 1; Expr* pw = xterm;
+    if (head_name_is(xterm, "Times") && xterm->data.function.arg_count == 2 &&
+        xterm->data.function.args[0]->type == EXPR_INTEGER &&
+        xterm->data.function.args[0]->data.integer == -1) {
+        sign_x = -1; pw = xterm->data.function.args[1];
+    }
+    if (!(head_name_is(pw, "Power") && pw->data.function.arg_count == 2 &&
+          expr_eq(pw->data.function.args[0], (Expr*)x))) return 0;
+    Expr* d = pw->data.function.args[1];
+    if (contains_symbol(d, x)) return 0;
+    if (cval == 1 && sign_x == -1) { *dexp = cp(d); return +1; }   /* 1 - x^d */
+    if (cval == -1 && sign_x == 1) { *dexp = cp(d); return -1; }   /* x^d - 1 */
+    return 0;                                                       /* 1 + x^d, etc. */
+}
+
+/* Cauchy principal value  Integrate[C x^(c-1)/(1 - x^d), {x,0,Inf}, PV]
+ *   = C (Pi/d) Cot[c Pi/d],   0 < Re c < d   (the on-axis pole at x=1 taken as a
+ * principal value).  The d-th-root-of-unity poles make the residue root-finder
+ * decline on a symbolic d, so this closed form (the reflection of the 1+x^d
+ * binomial Beta value) is matched directly.  A 1/(x^d - 1) denominator flips the
+ * sign.  Gated on PrincipalValue and the proved convergence strip 0 < c < d. */
+Expr* integrate_mellinpv_oneminus_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                                      bool principal_value, Expr* assumptions) {
+    if (!principal_value || !f || !x || x->type != EXPR_SYMBOL) return NULL;
+    if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;
+
+    Expr* facs[32]; size_t nf = collect_factors(f, facs, 32, 0);
+    Expr* C = mk_int(1); Expr* xexp = mk_int(0); Expr* dexp = NULL; int form = 0; bool bad = false;
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* fe = facs[i];
+        if (free_of_x_now(fe, x)) { C = Tms(C, cp(fe)); continue; }
+        if (expr_eq(fe, (Expr*)x)) { xexp = Pls(xexp, mk_int(1)); continue; }
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
+            Expr* base = fe->data.function.args[0];
+            Expr* ex   = fe->data.function.args[1];
+            if (expr_eq(base, (Expr*)x) && free_of_x_now(ex, x)) { xexp = Pls(xexp, cp(ex)); continue; }
+            if (!dexp && ex->type == EXPR_INTEGER && ex->data.integer == -1) {
+                int fm = match_one_minus_xpow(base, x, &dexp);
+                if (fm) { form = fm; continue; }
+            }
+        }
+        bad = true;
+    }
+    if (bad || !dexp || form == 0) { expr_free(C); expr_free(xexp); if (dexp) expr_free(dexp); return NULL; }
+
+    Expr* c = simp(Pls(xexp, mk_int(1)));                       /* c = (x-exponent) + 1 */
+    /* Convergence strip 0 < c < d.  Prove the orderings in the direct relational
+     * form (Simplify discharges `d > c` against `d > c > 0` but normalizes the
+     * subtractive `d - c > 0` to the undischarged `c < d`). */
+    bool conv = prove_true(Gt(cp(c), mk_int(0)), assumptions) &&
+                prove_true(Gt(cp(dexp), cp(c)), assumptions);   /* d > c */
+    if (!conv) { expr_free(C); expr_free(c); expr_free(dexp); return NULL; }
+
+    Expr* piOverD = Tms(mk_sym("Pi"), Pw(cp(dexp), mk_int(-1)));
+    Expr* cot = mk_fn1("Cot", Tms(cp(c), Tms(mk_sym("Pi"), Pw(cp(dexp), mk_int(-1)))));
+    Expr* val = Tms(cp(C), Tms(mk_int(form), Tms(piOverD, cot)));
+    expr_free(C); expr_free(c); expr_free(dexp);
+    val = assumptions ? simp2(val, assumptions) : simp(val);
+    if (val && (contains_symbol(val, x) || !is_finite_value(val))) { expr_free(val); val = NULL; }
+    return val;
+}
+
 Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;

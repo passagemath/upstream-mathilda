@@ -69,6 +69,11 @@ Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b,
 Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions);
 
+/* Cauchy principal value Integrate[C x^(c-1)/(1-x^d), {x,0,Inf}, PV]
+ * = C (Pi/d) Cot[c Pi/d], 0 < Re c < d. */
+Expr* integrate_mellinpv_oneminus_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                                      bool principal_value, Expr* assumptions);
+
 /* `Integrate`RamanujanMasterTheorem[f, {x,0,Infinity}]` (optionally with
  * Assumptions -> ...) builtin.  Strict: returns NULL on any non-applicable
  * input. */

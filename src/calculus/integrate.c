@@ -1403,6 +1403,10 @@ static Expr* integrate_definite(Expr* res) {
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_RAMANUJAN ||
                        mech == METHOD_OSC_POWER))
                 r = integrate_ramanujan_try(cur, x, a, b, assumptions);
+            /* Principal value of x^(c-1)/(1-x^d) (on-axis pole at x=1; the d-th
+             * roots of unity defeat the residue root-finder on a symbolic d). */
+            if (!r && !has_undef && principal_value && mech == METHOD_AUTOMATIC)
+                r = integrate_mellinpv_oneminus_try(cur, x, a, b, principal_value, assumptions);
             /* Integral-representation recognizer: a half-line integrand that IS a
              * classical integral representation of a special function
              * (Laplace-Bessel, Bessel-K, Airy) — no elementary antiderivative, so

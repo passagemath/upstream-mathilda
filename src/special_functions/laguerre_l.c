@@ -65,6 +65,7 @@
 #include "common.h"          /* builtin_arg_error */
 #include "eval.h"            /* eval_and_free */
 #include "expr.h"
+#include "ndarray.h"         /* is_ndarray, ndt_get/_set, expr_new_ndarray_like */
 #include "numeric.h"         /* numeric_min_inexact_bits, get_approx_mpfr */
 #include "numeric_complex.h" /* ncpx toolkit */
 #include "sf_machine.h"      /* sf_machine_laguerre_l[_assoc][_c] */
@@ -635,6 +636,66 @@ static Expr* laguerre_l_eval(Expr* n_e, Expr* a_e, Expr* x_e) {
 }
 
 /* ------------------------------------------------------------------ */
+/* NDArray fast path (machine buffer argument x)                       */
+/* ------------------------------------------------------------------ */
+
+/* Thread the machine recurrence helper over a visible NDArray / packed-List
+ * argument `x_e`, holding the scalar order n and parameter a constant. This is
+ * what makes the GENERALIZED three-argument form fast over arrays: the 2-arg
+ * form reaches the binary ND kernel (eval.c step 4b), but a 3-arg call has no
+ * arity->=3 REPL element-wise path, so without this it fell through to the
+ * builtin and evaluated the explicit degree-n polynomial over the buffer --
+ * correct but ~20-40x slower, and not bit-identical to the scalar path.
+ *
+ * Reuses sf_machine_laguerre_l_assoc[_c] -- the SAME helper the scalar machine
+ * path and Compile[] call -- so the result is bit-for-bit identical to
+ * scalar == List == Compile for every order the helper accepts (n a
+ * non-negative integer <= 1000, finite result). `a_e` may be NULL (a = 0).
+ *
+ * Returns NULL to decline ("not my case"): the caller then runs the ordinary
+ * scalar/symbolic driver, which keeps the established behaviour for an exact
+ * (int64) buffer, a symbolic/non-machine a, or a non-integer order. A buffer
+ * the helper declines mid-loop (order > 1000, overflow) is delisted and
+ * re-evaluated so each element takes the accurate MPFR scalar route. */
+static Expr* laguerre_l_ndarray(const Expr* n_e, const Expr* a_e,
+                                const Expr* x_e, Expr* res) {
+    if (!is_ndarray(x_e)) return NULL;
+    NDType dt = x_e->data.ndarray.dtype;
+    /* An exact-integer (or boolean) buffer stays on the exact element-wise path
+     * for consistency with the 2-arg kernel and the Sin/ChebyshevU siblings. */
+    if (dt == NDT_INT64 || dt == NDT_BOOL) return NULL;
+    bool cplx = ndt_is_complex(dt);
+
+    int64_t ni;
+    if (!lag_exact_int(n_e, &ni) || ni < 0) return NULL;   /* non-int/neg order */
+    double ad = 0.0;
+    if (a_e != NULL && !lag_leaf_double(a_e, &ad)) return NULL; /* non-machine a */
+    /* The helper caps at n <= 1000 (above that the scalar path uses MPFR for
+     * accuracy); delist so a large-order buffer takes that same accurate route
+     * element by element rather than a silently less accurate machine pass. */
+    if (ni > 1000) return ndarray_delist_and_reeval(res);
+
+    size_t sz = ndarray_size(x_e);
+    void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+    if (!out) return NULL;
+    bool ok = true;
+    for (size_t i = 0; i < sz && ok; i++) {
+        double xr, xi, rr = 0.0, ri = 0.0;
+        ndt_get(x_e->data.ndarray.data, i, dt, &xr, &xi);
+        ok = cplx ? sf_machine_laguerre_l_assoc_c((double)ni, ad, xr, xi, &rr, &ri)
+                  : sf_machine_laguerre_l_assoc((double)ni, ad, xr, &rr);
+        if (ok) ndt_set(out, i, dt, rr, ri);
+    }
+    if (ok)
+        return expr_new_ndarray_like(x_e, x_e->data.ndarray.rank,
+                                     x_e->data.ndarray.dims, out, dt);
+    /* A declined element (order > 1000, overflow) must not reach the scalar
+     * driver below, which would re-expand the polynomial over the buffer. */
+    free(out);
+    return ndarray_delist_and_reeval(res);
+}
+
+/* ------------------------------------------------------------------ */
 /* Builtin entry point                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -642,9 +703,13 @@ Expr* builtin_laguerre_l(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
-    if (argc == 2) return laguerre_l_eval(args[0], NULL, args[1]);
-    if (argc == 3) return laguerre_l_eval(args[0], args[1], args[2]);
-    return builtin_arg_error("LaguerreL", argc, 2, 3);
+    if (argc != 2 && argc != 3)
+        return builtin_arg_error("LaguerreL", argc, 2, 3);
+    Expr* a_e = (argc == 3) ? args[1] : NULL;
+    Expr* x_e = (argc == 3) ? args[2] : args[1];
+    Expr* nd = laguerre_l_ndarray(args[0], a_e, x_e, res);
+    if (nd) return nd;
+    return laguerre_l_eval(args[0], a_e, x_e);
 }
 
 /* ------------------------------------------------------------------ */

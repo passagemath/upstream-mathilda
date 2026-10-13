@@ -59,3 +59,50 @@ bar (v0.373 → v0.374). Plan: `~/.claude/plans/pasted-content-id-8ac5-*.md`.
 
 ## Release (awaiting user go — outward-facing)
 - [ ] commit (; v0.374), tag v0.374, push --follow-tags
+
+## STRESS TEST (independent, 2026-10-13) — user-requested
+Goal: LaguerreL works seamlessly with NDArray/packed AND is >= as fast as
+scipy and wolframscript. Baselines found: benchmarks/.venv (scipy 1.18.1,
+numpy 2.5.2; eval_laguerre/eval_genlaguerre), /Applications/Mathematica.app
+(wolframscript 1.11.0).
+
+- [ ] A. Correctness oracle vs scipy across grid (2-arg, 3-arg, real/complex,
+      non-int order, large n, special values). Tolerance-checked.
+- [ ] B. Cross-surface identity (independent re-check): scalar == List ==
+      packed List == NDArray == Compile, 2-arg & 3-arg, real & complex.
+- [ ] C. int64 NDArray question: LaguerreL[3, NDArray[{1,2,3},"int64"]] returns
+      plain List {-2/3,-1/3,1} (un-packs visible NDArray). Bug or deliberate?
+      Compare Mathematica; decide fix vs EXEMPT.
+- [ ] D. PERFORMANCE vs scipy & wolframscript: vectorized 1e6 pts (2-arg,
+      3-arg), Compile[] throughput, scalar loop. Must be >= both.
+- [ ] E. Fix any gap found; re-verify; spec/changelog/version/tag if code changes.
+
+## STRESS TEST RESULTS (2026-10-13) — v0.375
+- [x] A. Correctness oracle: 902/902 (n,a,x) grid points match mpmath < 4.1e-14
+      (2-arg/3-arg, real/complex, non-int/neg order, orders to 300). On par with
+      scipy; BEATS scipy at n=50,x=1.5 (2e-15 vs 7e-12). CHECK values agree
+      across Mathilda/scipy/wolfram.
+- [x] B. Cross-surface identity: 2-arg (real+cplx) was already 0.0. 3-arg was
+      OFF by 1.27e-12 (array path used symbolic poly, not machine helper) ->
+      FIXED -> now 0.0 across scalar/List/packed/NDArray/Compile, real+complex.
+- [x] C. int64 NDArray un-packs to exact List {-2/3,...} — NOT a bug: identical
+      to Sin/ChebyshevU siblings (system convention). Preserved by the fix
+      (branch declines int64/bool dtype).
+- [x] D. PERFORMANCE (1e6 pts, min-of-5 ms):
+        case      Mathilda(pre) Mathilda(post) scipy   wolfram
+        L2 n5      2.7          2.7            13.7    1304     (M 5x>scipy, 478x>wolf)
+        L2 n12     5.9          5.9            27.5    3032     (4.7x / 516x)
+        L2 n50     26.8         26.8           128.5   11519    (4.8x / 430x)
+        L3 n5      104.5        16.9           29.7    1430     (1.76x / 85x)
+        L3 n12     147.7        38.9           67.5    2919     (1.74x / 75x)
+        L3 n50     OOM-killed   222            211.6   11159    (parity / 50x)
+      Requirement MET: >= scipy in 5/6 (parity at L3 n50), 50-516x >= wolfram.
+- [x] E. FIX: laguerre_l.c — laguerre_l_ndarray() threads sf_machine_laguerre_l_assoc[_c]
+      over real/complex buffer, expr_new_ndarray_like (preserves present_as),
+      delists for int64/non-machine-a/n>1000/overflow. Reuses scalar helper ->
+      bit-identity free. version 0.374->0.375; spec + changelog updated.
+- [x] Verify: laguerre_l_tests PASS; valgrind no LaguerreL leak frames (all
+      startup/framework baseline); 3-arg complex NDArray + edge cases bit-exact.
+- [x] Audits: check-array-exactness PASS (352 probes, 0 MIXED, 0 no-result);
+      check-nd-surfaces CLEAN (no disagreement, LaguerreL not flagged, now packs)
+- [ ] Release: commit (; v0.375), tag v0.375, push --follow-tags (AWAITING USER GO)

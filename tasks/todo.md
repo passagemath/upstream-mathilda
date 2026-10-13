@@ -1,48 +1,55 @@
-# Assumption-Dependent Definite-Integral Stress Campaign (2026-10-13)
+# Active campaign: Singular / FTC-boundary definite integrals (2026-10-13)
 
-Plan: `~/.claude/plans/let-s-thoroughly-test-the-wild-harbor.md`
-Findings: `tasks/assumed_definite_integrals_2026-10-13.md`
-Baseline (v0.376, per-case isolated): ASSUM 35 PASS / 5 WRONG / 6 UNEVAL / 4 ABORTED.
-40/50 values correct; 0 true wrong answers. Target: all 50 ASSUM-PASS, clean forms,
-no uneval/abort/crash.
+Plan: `~/.claude/plans/pasted-content-id-a30c-this-50-expressi-dazzling-sunset.md`
+Findings: `tasks/singular_definite_integrals_2026-10-13.md`
+Scope (user): FULL — close all 50.
+Baseline (v0.381, corrected oracles): 20 CORRECT / 4 WRONG / 23 UNEVAL / 3 TIMEOUT.
+Corpus `tests/SingularDefiniteIntegralsCorpus.m`; gate `singular_definite_corpus_tests`;
+driver `scratchpad/run_corpus.sh`.
 
-## Phase 0 — Diagnostic battery  [DONE]
-- [x] per-case isolated harness (alldefs.m); both ASSUM + LITERAL metrics
-- [x] categorise all 50; findings file written
+## Phase 0 — corpus + harness  [DONE, contributor-facing, no version bump]
+- [x] corpus file (50 records, corrected oracles 15,41)
+- [x] committed fork-per-case gate (WRONG baseline 5, ratchets down)
+- [x] CMake registration + build/run verified (EXIT=0)
+- [x] fast one-process-per-case driver
 
-## Theme 1 — Result cleanliness under Assumptions (Mathematica parity)
-- [x] 1a. driver post-Refine: integrate_definite -> Refine[r, assumptions] (gated) [v0.379]
-- [x] 1c. nested-radical Sqrt[1+p/q] pull-out under positivity [v0.379, refine.c sqrt_extract] (fixes 37)
-- [ ] 1b. ConditionalExpression discharge + drop spurious b>0 from Fourier stage (8,9)
-- [ ] 1d. Beta[x,y] -> Gamma normalization (18)
-- [ ] 1e. trig periodicity Csc/Sec/Sin/Cos[Pi(k+a)], integer k (26)
+## Phase 1 — soundness (eliminate the wrong answers)  [WRONG 5 → 0, v0.382, verifying/release]
+- [x] 1a. √(perfect square)→Abs normalization + periodic breakpoints (18) — piecewise
+- [x] 1b. Tan/Cot interior-pole detection (trig heads) + periodic enum → PV=0 / non-PV idiv (24,25)
+- [x] 1c. reflect nonpositive sub-interval x→-x (6,14); dispatcher rejects x-leaking result (12 sound UNEVAL)
+- [ ] 1d. 48/49 `Log^n x/(a^2+x^2)` half-line hang — DEFERRED (pre-existing residue loop on
+      symbolic param; Ramanujan solves it instantly → needs ordering/early-decline fix)
+- [x] N-L defensive nets: radical-branch-hazard crosscheck; complex-value→idiv; Quiet pole-solve
+- [x] committed gate WRONG baseline 5 → 0 (assert-empty); corpus 24 correct / 24 uneval / 2 timeout
+- [x] regression: 16 integration/limit/refine suites green; check-messages, check-c99 pass
+- [x] docs: changelog v0.382 + calculus.md (piecewise, N-L pole detection, continuity guard); version bump
 
-## Theme 2 — Genuine integration gaps
-- [x] 1e. trig periodicity Csc/Sec/Sin/Cos[Pi(k+a)] (26)  [DONE v0.380]
-- [x] 2b-partial. 1/Sqrt[c-x^2] symbolic -> ArcSin indefinite (27 prereq)  [DONE v0.381]
-- [ ] 2b-rest. thread Assumptions into Newton-Leibniz (pole-placement + boundary-limit) to close 27 definite
-- [ ] 2d. log-rational complex-pole Mellin: Log[x]/(x^2+a^2) (32)
-- [ ] 2e. Poisson recognizer + radicand factoring + Log[Abs] (38,39)
-- [ ] 1b. OscillatoryPower/Mellin strip: drop spurious b>0 for e^{-ax}trig(bx) (8,9)
-- [ ] 1d. ConditionalExpression discharge in Refine + Beta<->Gamma normalization (18)
-- [x] 2a. piecewise handler integrate_piecewise.c (43-47)  [DONE v0.377]
-      New Integrate`Piecewise (Abs/Sign/HeavisideTheta/UnitStep/Min/Max/Piecewise);
-      breakpoint split, assumption-aware branch select, recurse+sum. Internal Solve
-      Quiet-wrapped. ASSUM 35->40 PASS. Edge cases verified (bp-outside, 2-bp,
-      product, undecidable declines). check-c99 + check-messages PASS. No regression:
-      ramanujan/beta/intrep/newton_leibniz/symmetry suites clean; no existing integrate
-      test uses branch heads. RELEASE (commit/tag v0.377) AWAITING USER GO.
-- [ ] 2b. improper endpoint / ArcSin: 1/Sqrt[a^2-x^2] on [0,a] (27)
-- [ ] 2c. sign reflection: Sin[a x]/x, a<0 (20)
-- [ ] 2d. log-rational half-line: Log[x]/(x^2+a^2) (32)
-- [ ] 2e. Poisson log on [0,Pi] (38,39)
+## Phase 2 — structural keystones
+- [x] 2a. assumption-aware Newton–Leibniz (unlocks 4,40 + more) [v0.383]
+      `assumptions` threaded into `_try_pv`; `nl_classify_symbolic` (Refine-proved interior/
+      exterior for symbolic root/bound); boundary Limit+Refine under assumptions; internal
+      Refine probes Quiet-wrapped. Corpus 24→31 correct, 0 wrong; 17 suites green.
+- [~] 2b. PrincipalValue symbolic bounds — DONE for concrete-pole cases 21,22,27,28,29
+      (+24,25 from P1). `nl_principal_value` accepts symbolic bounds (local odd-order probe +
+      assumption-aware boundary eval); numeric realness gate rejects a spurious complex PV;
+      diffunderint skipped under PV; driver Refine guarded against INTRODUCING complexity
+      (was stripping a realness-protecting Re[...]). Corpus 31→36 correct, 0 wrong.
+      STILL OPEN: 23,26 (symbolic pole x=a — needs symbolic-pole PV placement); 30 (whole-line
+      PV, residue indented contour). The symmetry-idiv-leak under PV (25) remains cosmetic.
 
-## Theme 3 — Robustness
-- [ ] characterise the TimeConstrained-accumulation segfault (likely pre-existing)
+## Phase 3 — additive recognizers
+- [ ] 3a. Log[Sin]/Log[Cos] (9,10)
+- [ ] 3b. Poisson log Log[1-2a Cos x+a^2] (36,37)
+- [ ] 3c. reciprocal u=1/x on [a,Inf) (41,42,43)
+- [ ] 3d. King-reflection x Sin x/(1+Cos^2) (35)
+- [ ] 3e. (a^2-x^2)^s on [0,a] (4,5,11,40,16) — may be subsumed by 2a
+- [ ] 3f. Tan^2/Sin^2 over a period, suppress Solve::ifun (38,39)
 
-## Verification / release (per change)
-- [ ] re-run full battery (both metrics, per-case) after each change — no regression
-- [ ] tests/AssumedDefiniteIntegralsCorpus.m + runner (model test_crc_corpus.c)
-- [ ] touched unit suites; check-messages; check-c99; valgrind new C handlers
-- [ ] docs/spec + weekly changelog; version bump + tag per substantive commit
-- [ ] update findings file + tasks/lessons.md on corrections
+## Phase 4 — form cleanup
+- [ ] 4a. Beta[k,1]→1/k, Beta[1,k]→1/k, PolyGamma weight (1,2,3)
+- [ ] 4b. Sqrt[(1-a^2)^2] reduction under assumptions (33,34)
+
+## Release
+- Local work + verify + version bump per substantive change; commit/tag/push AWAIT USER GO.
+- Each change: full corpus (no new WRONG), touched unit suites, check-messages, check-c99,
+  valgrind new C; docs/spec/builtins/calculus.md + changelog/2026-10-12.md.

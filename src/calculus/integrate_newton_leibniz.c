@@ -242,6 +242,40 @@ static NLClass nl_classify(double rv, Expr* a, Expr* b) {
     return between ? NL_INTERIOR : NL_EXTERIOR;
 }
 
+/* True iff Refine[pred, as] proves `pred` to the symbol True.  Consumes pred.
+ * Quiet: an internal classification probe; a Solve::nongen note from a
+ * parametric inequality must not surface from Integrate. */
+static bool nl_refine_true(Expr* pred, Expr* as) {
+    Expr* inner = as ? mk_fn2("Refine", pred, expr_copy(as)) : mk_fn1("Refine", pred);
+    Expr* r = eval_take(mk_fn1("Quiet", inner));
+    bool t = r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0;
+    if (r) expr_free(r);
+    return t;
+}
+
+/* Assumption-aware classification of a (possibly symbolic) root EXPRESSION `val`
+ * against the endpoints a, b, used when a numeric decision is impossible (a
+ * symbolic root like x = a, or a symbolic bound) and Assumptions are supplied.
+ * INTERIOR iff provably strictly between a and b (either orientation); EXTERIOR
+ * iff provably at-or-outside an endpoint (so an integration endpoint x = a is
+ * EXTERIOR, not a split point); otherwise UNKNOWN. */
+static NLClass nl_classify_symbolic(Expr* val, Expr* a, Expr* b, Expr* as) {
+    if (!as) return NL_UNKNOWN;
+    Expr* in = mk_fn2("Or",
+        mk_fn2("And", mk_fn2("Less", expr_copy(a), expr_copy(val)),
+                      mk_fn2("Less", expr_copy(val), expr_copy(b))),
+        mk_fn2("And", mk_fn2("Less", expr_copy(b), expr_copy(val)),
+                      mk_fn2("Less", expr_copy(val), expr_copy(a))));
+    if (nl_refine_true(in, as)) return NL_INTERIOR;
+    Expr* ext = mk_fn2("Or",
+        mk_fn2("And", mk_fn2("LessEqual", expr_copy(val), expr_copy(a)),
+                      mk_fn2("LessEqual", expr_copy(val), expr_copy(b))),
+        mk_fn2("And", mk_fn2("GreaterEqual", expr_copy(val), expr_copy(a)),
+                      mk_fn2("GreaterEqual", expr_copy(val), expr_copy(b))));
+    if (nl_refine_true(ext, as)) return NL_EXTERIOR;
+    return NL_UNKNOWN;
+}
+
 /* -------------------------------------------------------------------------
  * Interior-pole detection.
  * ---------------------------------------------------------------------- */
@@ -306,45 +340,148 @@ static Expr* nl_rule_rhs_for(Expr* el, const Expr* x) {
     return NULL;
 }
 
-/* Collect the interior real poles of `expr` (as a function of `x`) into `s`.
- * A pole is a real root of Denominator[Together[expr]] lying strictly in
- * (a, b).  Sets s->undecidable if a pole exists whose classification cannot
- * be decided. */
-static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s) {
-    Expr* tog = eval_take(mk_fn1("Together", expr_copy(expr)));
-    if (!tog) return;
-    Expr* den = eval_take(mk_fn1("Denominator", tog));   /* tog consumed */
-    if (!den) return;
-
-    if (!contains_symbol(den, x)) { expr_free(den); return; }  /* no poles */
-
-    /* Solve[den == 0, x, Reals] -- restrict to real roots up front. */
-    Expr* eq    = mk_fn2("Equal", den, expr_new_integer(0));   /* den consumed */
-    Expr* solve = mk_fn3("Solve", eq, expr_copy(x), mk_sym("Reals"));
-    Expr* sols  = eval_take(solve);
-    if (!sols) { s->undecidable = true; return; }
-
-    if (!head_name_is(sols, "List")) {   /* unevaluated Solve / condition */
-        s->undecidable = true;
-        expr_free(sols);
-        return;
+/* The integer-constrained parameter of a Solve condition, e.g. C[1] in
+ * Element[C[1], Integers] (recursing through And/Or).  Borrowed; NULL if none. */
+static const Expr* nl_integer_param_of(const Expr* cond) {
+    if (!cond || cond->type != EXPR_FUNCTION) return NULL;
+    if (head_name_is(cond, "Element") && cond->data.function.arg_count == 2) {
+        Expr* dom = cond->data.function.args[1];
+        if (dom->type == EXPR_SYMBOL && strcmp(dom->data.symbol.name, "Integers") == 0)
+            return cond->data.function.args[0];
     }
+    for (size_t i = 0; i < cond->data.function.arg_count; i++) {
+        const Expr* p = nl_integer_param_of(cond->data.function.args[i]);
+        if (p) return p;
+    }
+    return NULL;
+}
+
+/* ReplaceAll[body, param -> val], evaluated.  Consumes val. */
+static Expr* nl_subst_param(const Expr* body, const Expr* param, Expr* val) {
+    return eval_take(mk_fn2("ReplaceAll", expr_copy((Expr*)body),
+                            mk_fn2("Rule", expr_copy((Expr*)param), val)));
+}
+
+/* A trig pole solves as a periodic family ConditionalExpression[body(C),
+ * Element[C, Integers]] that nl_numeric cannot localize.  Enumerate its concrete
+ * members strictly inside (a, b) -- needs numeric bounds and a numeric period --
+ * and insert each as an interior pole.  Sets undecidable when it cannot. */
+static void nl_enum_periodic_pole(const Expr* body, const Expr* param,
+                                  Expr* a, Expr* b, PoleSet* s) {
+    double av, bv;
+    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) { s->undecidable = true; return; }
+    if (bv < av) { double t = av; av = bv; bv = t; }
+
+    Expr* base = nl_subst_param(body, param, expr_new_integer(0));
+    Expr* b1   = nl_subst_param(body, param, expr_new_integer(1));
+    double basev, b1v;
+    bool okb = base && nl_numeric(base, &basev) == 1;
+    bool ok1 = b1   && nl_numeric(b1, &b1v) == 1;
+    if (base) expr_free(base);
+    if (b1) expr_free(b1);
+    if (!okb || !ok1) { s->undecidable = true; return; }
+
+    double period = b1v - basev;
+    if (fabs(period) < 1e-12) return;
+    double k0 = (av - basev) / period, k1 = (bv - basev) / period;
+    double klo = floor(fmin(k0, k1)) - 1.0, khi = ceil(fmax(k0, k1)) + 1.0;
+    if (khi - klo > 100000.0) { s->undecidable = true; return; }
+    for (long k = (long)klo; k <= (long)khi; k++) {
+        double pt = basev + period * (double)k;
+        if (pt <= av + 1e-9 || pt >= bv - 1e-9) continue;        /* strict interior */
+        Expr* member = nl_subst_param(body, param, expr_new_integer((int64_t)k));
+        double mv;
+        if (member && nl_numeric(member, &mv) == 1) poleset_insert(s, member, mv);
+        else if (member) expr_free(member);
+    }
+}
+
+/* Solve[g == 0, x, Reals] and add every real root strictly interior to (a, b)
+ * to `s` (a concrete root directly, a periodic ConditionalExpression family via
+ * nl_enum_periodic_pole).  `g` is borrowed. */
+static void nl_add_zero_roots(Expr* g, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr* as) {
+    if (!g || !contains_symbol(g, x)) return;
+    Expr* eq   = mk_fn2("Equal", expr_copy(g), expr_new_integer(0));
+    /* Quiet: Solve is an internal pole probe; its Solve::ifun note on a
+     * transcendental denominator (Cos[x] == 0) must not surface from Integrate. */
+    Expr* sols = eval_take(mk_fn1("Quiet",
+                     mk_fn3("Solve", eq, expr_copy(x), mk_sym("Reals"))));
+    if (!sols) { s->undecidable = true; return; }
+    if (!head_name_is(sols, "List")) { s->undecidable = true; expr_free(sols); return; }
 
     for (size_t i = 0; i < sols->data.function.arg_count; i++) {
         Expr* val = nl_rule_rhs_for(sols->data.function.args[i], x);
         if (!val) { s->undecidable = true; continue; }
 
-        double rv;
-        int rk = nl_numeric(val, &rv);
-        if (rk == 0) { s->undecidable = true; continue; }  /* symbolic root */
-        if (rk != 1) continue;                             /* infinite root: skip */
+        /* Periodic trig root family (Cos[x] == 0 -> Pi/2 + C[1] Pi): enumerate
+         * its concrete interior members rather than failing undecidable. */
+        if (head_name_is(val, "ConditionalExpression") &&
+            val->data.function.arg_count == 2) {
+            const Expr* param = nl_integer_param_of(val->data.function.args[1]);
+            Expr* body = val->data.function.args[0];
+            if (param && !contains_symbol(body, x))
+                nl_enum_periodic_pole(body, param, a, b, s);
+            else
+                s->undecidable = true;
+            continue;
+        }
 
-        NLClass cls = nl_classify(rv, a, b);
-        if (cls == NL_INTERIOR)      poleset_insert(s, expr_copy(val), rv);
-        else if (cls == NL_UNKNOWN)  s->undecidable = true;
+        double rv = 0.0;
+        int rk = nl_numeric(val, &rv);
+        if (rk == 2 || rk == 3) continue;                  /* infinite root: skip */
+
+        /* Classify numerically when possible; fall back to an assumption-aware
+         * symbolic comparison for a symbolic root (x = a) or symbolic bound. */
+        NLClass cls = (rk == 1) ? nl_classify(rv, a, b) : NL_UNKNOWN;
+        if (cls == NL_UNKNOWN) cls = nl_classify_symbolic(val, a, b, as);
+
+        if (cls == NL_INTERIOR) {
+            if (rk == 1) poleset_insert(s, expr_copy(val), rv);
+            else         s->undecidable = true;  /* symbolic interior root: cannot place */
+        } else if (cls == NL_UNKNOWN) {
+            s->undecidable = true;
+        }
         /* NL_EXTERIOR: ignore */
     }
     expr_free(sols);
+}
+
+/* Poles contributed by trig heads that are secretly ratios: Tan[u] and Sec[u]
+ * blow up where Cos[u] == 0, Cot[u] and Csc[u] where Sin[u] == 0.  These are
+ * invisible to Denominator[Together[.]] because the evaluator keeps (and
+ * re-canonicalizes Sin/Cos back to) the atomic head, so they must be collected
+ * directly from the head.  Walks `e` for such heads with an x-dependent
+ * argument. */
+static void nl_collect_trig_poles(Expr* e, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr* as) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.arg_count == 1 && contains_symbol(e->data.function.args[0], x)) {
+        Expr* u = e->data.function.args[0];
+        if (head_name_is(e, "Tan") || head_name_is(e, "Sec")) {
+            Expr* den = mk_fn1("Cos", expr_copy(u));
+            nl_add_zero_roots(den, x, a, b, s, as);
+            expr_free(den);
+        } else if (head_name_is(e, "Cot") || head_name_is(e, "Csc")) {
+            Expr* den = mk_fn1("Sin", expr_copy(u));
+            nl_add_zero_roots(den, x, a, b, s, as);
+            expr_free(den);
+        }
+    }
+    nl_collect_trig_poles(e->data.function.head, x, a, b, s, as);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nl_collect_trig_poles(e->data.function.args[i], x, a, b, s, as);
+}
+
+/* Collect the interior real poles of `expr` (as a function of `x`) into `s`:
+ * the real roots of Denominator[Together[expr]] plus the Cos/Sin zeros under any
+ * Tan/Cot/Sec/Csc head, all lying strictly in (a, b).  Sets s->undecidable if a
+ * pole exists whose classification cannot be decided. */
+static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr* as) {
+    Expr* tog = eval_take(mk_fn1("Together", expr_copy(expr)));
+    if (tog) {
+        Expr* den = eval_take(mk_fn1("Denominator", tog));   /* tog consumed */
+        if (den) { nl_add_zero_roots(den, x, a, b, s, as); expr_free(den); }
+    }
+    nl_collect_trig_poles(expr, x, a, b, s, as);
 }
 
 /* -------------------------------------------------------------------------
@@ -384,33 +521,48 @@ static bool nl_is_finite_closed(Expr* v, const Expr* x) {
     return true;
 }
 
-/* Limit[F, x -> target, Direction -> dir]. */
-static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir) {
+/* Limit[F, x -> target, Direction -> dir, Assumptions -> as]. */
+static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     Expr* rule = mk_fn2("Rule", expr_copy(x), expr_copy(target));
     Expr* call;
-    if (dir == NL_DIR_NONE) {
+    if (dir == NL_DIR_NONE && !as) {
         call = mk_fn2("Limit", expr_copy(F), rule);
     } else {
-        Expr* d = mk_fn2("Rule", mk_sym("Direction"),
-                         expr_new_string(dir == NL_DIR_ABOVE ? "FromAbove"
-                                                             : "FromBelow"));
-        call = mk_fn3("Limit", expr_copy(F), rule, d);
+        /* Build the trailing options: Direction (if directed) and Assumptions. */
+        Expr** opts = malloc(3 * sizeof(Expr*));
+        size_t no = 0;
+        opts[no++] = expr_copy(F);
+        opts[no++] = rule;
+        if (dir != NL_DIR_NONE)
+            opts[no++] = mk_fn2("Rule", mk_sym("Direction"),
+                             expr_new_string(dir == NL_DIR_ABOVE ? "FromAbove" : "FromBelow"));
+        if (as)
+            opts[no++] = mk_fn2("Rule", mk_sym("Assumptions"), expr_copy(as));
+        call = expr_new_function(mk_sym("Limit"), opts, no);
+        free(opts);
     }
     return eval_take(call);
 }
 
 /* Evaluate F at `target`, approaching per `dir`.  Uses direct substitution
- * at ordinary finite points and the Limit engine at infinite / singular
- * points (or when substitution is itself singular). */
-static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
+ * (Refine'd under `as`) at ordinary finite points and the Limit engine at
+ * infinite / singular points (or when substitution is itself singular). */
+static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     arith_warnings_mute_push();
     Expr* out;
     if (nl_is_infinite(target)) {
-        out = nl_limit(F, x, target, NL_DIR_NONE);
+        out = nl_limit(F, x, target, NL_DIR_NONE, as);
     } else {
         Expr* sub = eval_take(mk_fn2("ReplaceAll", expr_copy(F),
                                      mk_fn2("Rule", expr_copy(x),
                                             expr_copy(target))));
+        /* Under Assumptions, Refine the substituted boundary (ArcSin[a/Sqrt[a^2]]
+         * -> Pi/2 for a>0) so a symbolic endpoint closes without a Limit. */
+        if (sub && as && !nl_is_infinite(sub) && !nl_is_finite_closed(sub, x)) {
+            /* Quiet: an internal boundary-cleanup probe. */
+            Expr* ref = eval_take(mk_fn1("Quiet", mk_fn2("Refine", sub, expr_copy(as))));  /* consumes sub */
+            sub = ref;
+        }
         if (sub && nl_is_infinite(sub)) {
             /* Direct substitution lands on a bare directed infinity: F itself
              * blows up at this interior finite point (e.g. F = -ArcTanh[x] at
@@ -423,7 +575,7 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir) {
             out = sub;
         } else {
             if (sub) expr_free(sub);
-            out = nl_limit(F, x, target, dir);
+            out = nl_limit(F, x, target, dir, as);
         }
     }
     arith_warnings_mute_pop();
@@ -516,6 +668,70 @@ static int nl_denominator_interior_root_scan(Expr* f, Expr* x, Expr* a, Expr* b)
     return result;
 }
 
+/* True if exponent `e` denotes a non-integer power (a radical): a Rational with
+ * denominator != 1, or a non-integer real.  A radical's real branch can kink or
+ * jump where its radicand vanishes, which is the hazard the scan below looks
+ * for. */
+static bool nl_is_fractional_exponent(const Expr* e) {
+    int64_t n, d;
+    if (is_rational((Expr*)e, &n, &d)) return d != 1 && d != -1;
+    if (e->type == EXPR_REAL) {
+        double v = e->data.real;
+        return fabs(v - nearbyint(v)) > 1e-12;
+    }
+    return false;
+}
+
+/* Grid-scan `g` over (av, bv) for an interior real zero (sign change across a
+ * subinterval, or a near-tangency at an interior node).  Samples where g is not
+ * a finite real are skipped (they break the running sign but are not evidence of
+ * a zero). */
+static bool nl_expr_interior_zero(Expr* g, const Expr* x, double av, double bv) {
+    if (bv < av) { double t = av; av = bv; bv = t; }
+    const int N = 256;
+    double span = bv - av;
+    double prev = 0.0; bool have_prev = false;
+    for (int i = 0; i <= N; i++) {
+        double xv = av + span * ((double)i / (double)N);
+        double gv;
+        if (nl_eval_num_at(g, (Expr*)x, xv, &gv) != 1) { have_prev = false; continue; }
+        bool interior = (i != 0 && i != N);
+        if (interior && fabs(gv) < 1e-9) return true;          /* tangency */
+        if (have_prev && prev * gv < 0.0) return true;          /* sign change */
+        prev = gv; have_prev = true;
+    }
+    return false;
+}
+
+/* Recursive walk: does `e` contain a fractional-power node Power[g, p] (p a
+ * non-integer) whose radicand g vanishes strictly inside (av, bv)? */
+static bool nl_radical_hazard_walk(Expr* e, const Expr* x, double av, double bv) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* expo = e->data.function.args[1];
+        if (nl_is_fractional_exponent(expo) && contains_symbol(base, x) &&
+            nl_expr_interior_zero(base, x, av, bv))
+            return true;
+    }
+    if (nl_radical_hazard_walk(e->data.function.head, x, av, bv)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_radical_hazard_walk(e->data.function.args[i], x, av, bv)) return true;
+    return false;
+}
+
+/* True when the antiderivative F carries a radical whose radicand vanishes
+ * inside the integration interval: the real branch of such a radical (e.g.
+ * Sqrt[1 - Cos[2x]] = Sqrt[2] Abs[Sin x], which touches 0 at x = Pi) can kink or
+ * flip sign there, so a single-branch F(b) - F(a) is unsafe and must be
+ * numerically cross-checked.  Needs finite numeric bounds to scan; returns false
+ * for symbolic bounds (which the caller's own undecidable-pole path covers). */
+static bool nl_find_radical_hazard(Expr* F, const Expr* x, Expr* a, Expr* b) {
+    double av, bv;
+    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) return false;
+    return nl_radical_hazard_walk(F, x, av, bv);
+}
+
 /* -------------------------------------------------------------------------
  * Core Newton-Leibniz driver.
  * ---------------------------------------------------------------------- */
@@ -528,43 +744,158 @@ static int nl_denominator_interior_root_scan(Expr* f, Expr* x, Expr* a, Expr* b)
  * finite real principal value.  Returns NULL when the gate fails or the value is
  * not a finite real. */
 static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
-                                PoleSet* poles) {
+                                PoleSet* poles, Expr* as);
+
+/* A known analytic constant that must NOT be instantiated when probing realness. */
+static bool nl_is_const_name(const char* n) {
+    static const char* const C[] = { "Pi", "E", "I", "EulerGamma", "Infinity",
+        "Degree", "GoldenRatio", "Catalan", "ComplexInfinity", "Indeterminate",
+        "Glaisher", "Khinchin" };
+    for (size_t i = 0; i < sizeof C / sizeof *C; i++)
+        if (strcmp(n, C[i]) == 0) return true;
+    return false;
+}
+
+/* Collect `s -> 2` rules for each distinct non-constant LEAF variable symbol of
+ * `e`.  A symbol in head position (Plus, Log, CosIntegral, ...) is a function
+ * name, not a variable, so the head is recursed into only when it is itself a
+ * function -- a bare-symbol head is skipped. */
+static void nl_collect_vars(const Expr* e, Expr*** rules, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (nl_is_const_name(e->data.symbol.name)) return;
+        for (size_t i = 0; i < *n; i++)
+            if (strcmp((*rules)[i]->data.function.args[0]->data.symbol.name,
+                       e->data.symbol.name) == 0) return;
+        if (*n == *cap) { *cap = *cap ? *cap * 2 : 4;
+                          *rules = realloc(*rules, *cap * sizeof(Expr*)); }
+        (*rules)[(*n)++] = mk_fn2("Rule", expr_copy((Expr*)e), expr_new_integer(2));
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head && e->data.function.head->type == EXPR_FUNCTION)
+        nl_collect_vars(e->data.function.head, rules, n, cap);   /* a computed head */
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        nl_collect_vars(e->data.function.args[i], rules, n, cap);
+}
+
+/* A principal value computed as Re[F(b)-F(a)] is trustworthy only if it is in
+ * fact real: instantiate every non-constant free variable at a sample value and
+ * confirm N[.] is a finite real.  Catches the case where Re[] failed to strip a
+ * branch-cut's imaginary residue because a special function (CosIntegral[-a]) is
+ * treated as real symbolically but evaluates complex -- better to decline
+ * (idiv) than return a spurious complex principal value. */
+static bool nl_realness_ok(Expr* pvval) {
+    Expr** rules = NULL; size_t n = 0, cap = 0;
+    nl_collect_vars(pvval, &rules, &n, &cap);
+    Expr* subbed;
+    if (n == 0) {
+        subbed = eval_take(mk_fn1("N", expr_copy(pvval)));
+    } else {
+        Expr* rl = expr_new_function(mk_sym("List"), rules, n);  /* copies the array */
+        subbed = eval_take(mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(pvval), rl)));
+    }
+    free(rules);
+    double v;
+    bool ok = subbed && nl_numeric(subbed, &v) == 1;   /* finite real only */
+    if (subbed) expr_free(subbed);
+    return ok;
+}
+
+/* True iff `e`, with its free variables instantiated at a sample value, N[.]'s
+ * to a finite complex number with a nonzero imaginary part.  This catches a
+ * value that is provably complex even when the symbolic Im[.] cannot see it
+ * (CosIntegral[-a] is treated as real symbolically but evaluates complex).  A
+ * non-numericizing (genuinely symbolic) real result returns false -- it is NOT
+ * flagged, so a legitimate symbolic answer is never rejected.  Exposed as
+ * integrate_result_is_complex() so the dispatcher's Refine cleanup can avoid
+ * INTRODUCING complexity (stripping a Re that was protecting realness). */
+bool nl_numeric_is_complex(Expr* e) {
+    Expr** rules = NULL; size_t n = 0, cap = 0;
+    nl_collect_vars(e, &rules, &n, &cap);
+    Expr* subbed;
+    if (n == 0) {
+        subbed = eval_take(mk_fn1("N", expr_copy(e)));
+    } else {
+        Expr* rl = expr_new_function(mk_sym("List"), rules, n);
+        subbed = eval_take(mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(e), rl)));
+    }
+    free(rules);
+    bool is_cplx = false;
+    if (subbed) {
+        Expr* re = NULL; Expr* im = NULL;
+        if (is_complex(subbed, &re, &im)) {
+            double iv;
+            is_cplx = nl_real_double(im, &iv) && fabs(iv) > 1e-9;
+        }
+        expr_free(subbed);
+    }
+    return is_cplx;
+}
+
+static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
+                                PoleSet* poles, Expr* as) {
+    /* Numeric bounds let the odd-order gate size its probe delta from the
+     * interval; symbolic bounds (with Assumptions) are allowed too -- the gate
+     * is a LOCAL sign-flip test at each (concrete-valued) interior pole, so it
+     * only needs a small probe delta, and the endpoint values come from the
+     * assumption-aware boundary evaluation below. */
     double av, bv;
-    if (nl_numeric(a, &av) != 1 || nl_numeric(b, &bv) != 1) return NULL;
-    if (bv < av) { double t = av; av = bv; bv = t; }
+    int ak = nl_numeric(a, &av), bk = nl_numeric(b, &bv);
+    bool num_bounds = (ak == 1 && bk == 1);
+    if (num_bounds && bv < av) { double t = av; av = bv; bv = t; }
+    if (!num_bounds && !as) return NULL;   /* symbolic bounds need assumptions */
 
     /* Odd-order gate: sign of f must flip across every interior pole. */
     for (size_t i = 0; i < poles->n; i++) {
         double pv = poles->vals[i];
-        /* delta = a small fraction of the distance to the nearest breakpoint. */
-        double near = fmin(pv - av, bv - pv);
+        double near_other = HUGE_VAL;
         for (size_t j = 0; j < poles->n; j++)
-            if (j != i) near = fmin(near, fabs(pv - poles->vals[j]));
-        if (!(near > 0.0)) return NULL;
-        double delta = near * 1e-3;
+            if (j != i) near_other = fmin(near_other, fabs(pv - poles->vals[j]));
+        double near = num_bounds ? fmin(fmin(pv - av, bv - pv), near_other) : near_other;
+        if (num_bounds && !(near > 0.0)) return NULL;
+        /* delta: a small fraction of the nearest feature, capped at 1e-3 so a
+         * symbolic-bound single pole (near == HUGE_VAL) still gets a tight probe. */
+        double delta = (near > 0.0 && near < HUGE_VAL) ? fmin(near * 1e-3, 1e-3) : 1e-3;
         double fl, fr;
         if (nl_eval_num_at(f, x, pv - delta, &fl) != 1) return NULL;
         if (nl_eval_num_at(f, x, pv + delta, &fr) != 1) return NULL;
         if (fl == 0.0 || fr == 0.0 || fl * fr > 0.0) return NULL;   /* even order / flat */
     }
 
-    Expr* Fa = nl_eval_at(F, x, a, NL_DIR_ABOVE);
-    Expr* Fb = nl_eval_at(F, x, b, NL_DIR_BELOW);
+    Expr* Fa = nl_eval_at(F, x, a, NL_DIR_ABOVE, as);
+    Expr* Fb = nl_eval_at(F, x, b, NL_DIR_BELOW, as);
     if (!Fa || !Fb) { if (Fa) expr_free(Fa); if (Fb) expr_free(Fb); return NULL; }
 
     Expr* diff = mk_fn2("Plus", Fb, mk_fn2("Times", expr_new_integer(-1), Fa));
-    Expr* pvval = eval_take(mk_fn1("Simplify", mk_fn1("Re", diff)));
-    if (!nl_is_finite_closed(pvval, x)) { if (pvval) expr_free(pvval); return NULL; }
-    return pvval;
+    /* Re removes the pole branch-cut's I*Pi residue; Simplify under the
+     * assumptions resolves Log[-a] = Log[a] + I Pi for a symbolic bound. */
+    Expr* pvval = eval_take(as ? mk_fn1("Quiet", mk_fn2("Simplify",
+                                        mk_fn1("Re", expr_copy(diff)), expr_copy(as)))
+                               : mk_fn1("Simplify", mk_fn1("Re", expr_copy(diff))));
+    if (pvval && nl_is_finite_closed(pvval, x) && nl_realness_ok(pvval)) {
+        expr_free(diff);
+        return pvval;   /* genuinely real (0, Log[b/a], 2 SinhIntegral[a], ...) */
+    }
+    if (pvval) expr_free(pvval);
+    /* Simplify under the assumptions can wrongly STRIP the Re from a term it
+     * treats as real but that evaluates complex (CosIntegral[-a]), leaving a
+     * spurious complex value.  Fall back to the literal Re[F(b)-F(a)], which
+     * forces the real part; accept it only if it is a real finite closed form. */
+    Expr* pvre = eval_take(mk_fn1("Re", diff));   /* consumes diff */
+    if (pvre && nl_is_finite_closed(pvre, x) && nl_realness_ok(pvre)) return pvre;
+    if (pvre) expr_free(pvre);
+    return NULL;
 }
 
 Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                    const char* method) {
-    return integrate_newton_leibniz_try_pv(f, x, a, b, method, false);
+    return integrate_newton_leibniz_try_pv(f, x, a, b, method, false, NULL);
 }
 
 Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
-                                      const char* method, bool principal_value) {
+                                      const char* method, bool principal_value,
+                                      Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
 
     /* 1. Antiderivative via the indefinite cascade. */
@@ -586,7 +917,7 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * Cos[x/2] inside a Weierstrass ArcTan[Tan[x/2]]), which are not
      * discontinuities of F -- that is handled by the continuity guard below. */
     PoleSet poles; poleset_init(&poles);
-    nl_collect_poles(f, x, a, b, &poles);
+    nl_collect_poles(f, x, a, b, &poles, assumptions);
     bool force_validate = false;
     if (poles.undecidable) {
         /* Solve could not place the poles symbolically.  Try to settle it
@@ -607,7 +938,7 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * diverge.  With no interior pole the ordinary FTC path below already gives
      * the correct value, so PV falls through to it. */
     if (principal_value && poles.n > 0) {
-        Expr* pv = nl_principal_value(F, f, x, a, b, &poles);
+        Expr* pv = nl_principal_value(F, f, x, a, b, &poles, assumptions);
         poleset_free(&poles);
         expr_free(F);
         if (!pv) integrate_emit_idiv(f, a, b);   /* even-order pole: no PV */
@@ -624,8 +955,8 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
     Expr* total = expr_new_integer(0);
     bool failed = false;
     for (size_t i = 0; i + 1 < nbp && !failed; i++) {
-        Expr* lo = nl_eval_at(F, x, bp[i],     NL_DIR_ABOVE);
-        Expr* hi = nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW);
+        Expr* lo = nl_eval_at(F, x, bp[i],     NL_DIR_ABOVE, assumptions);
+        Expr* hi = nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW, assumptions);
         if (!lo || !hi) {
             if (lo) expr_free(lo);
             if (hi) expr_free(hi);
@@ -642,10 +973,12 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
     free(bp);
     poleset_free(&poles);
 
-    /* Capture F's continuity-risk fingerprint before releasing it: a step head
-     * or an inverse-trig node over a pole-bearing trig head means F could carry
-     * an uncorrected branch jump and must be cross-checked. */
-    bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x);
+    /* Capture F's continuity-risk fingerprint before releasing it: a step head,
+     * an inverse-trig node over a pole-bearing trig head, or a radical whose
+     * radicand vanishes inside (a,b) all mean F could carry an uncorrected
+     * branch jump and must be cross-checked. */
+    bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x)
+                      || nl_find_radical_hazard(F, x, a, b);
     expr_free(F);
 
     if (failed || !total) { if (total) expr_free(total); return NULL; }
@@ -665,6 +998,20 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
     if (contains_head(total, "Limit") || contains_head(total, "Integrate") ||
         head_name_is(total, "Interval") || contains_symbol(total, x) ||
         nl_contains_singular(total)) {
+        expr_free(total);
+        return NULL;
+    }
+
+    /* 4b'. A real-looking integrand over a real interval cannot have a complex
+     * definite value: a nonzero imaginary part means the antiderivative crossed
+     * a branch cut at an interior singularity the pole scan missed (e.g. Tan
+     * with its pole hidden inside the atomic head gives -Log[Cos] -> -I Pi, or
+     * an odd integrand telescoping to CosIntegral[a]-CosIntegral[-a] = -I Pi),
+     * so the integral actually diverges (or needs a principal value).  Tested
+     * NUMERICALLY (symbolic Im[.] cannot see the CosIntegral branch); emit idiv
+     * and decline rather than return the complex artifact. */
+    if (!contains_head(f, "Complex") && nl_numeric_is_complex(total)) {
+        integrate_emit_idiv(f, a, b);
         expr_free(total);
         return NULL;
     }
@@ -718,7 +1065,7 @@ Expr* builtin_integrate_singular_points(Expr* res) {
     if (!nl_parse_spec(res->data.function.args[1], &x, &a, &b)) return NULL;
 
     PoleSet poles; poleset_init(&poles);
-    nl_collect_poles(expr, x, a, b, &poles);
+    nl_collect_poles(expr, x, a, b, &poles, NULL);
     /* The detector returns only the confirmed interior poles; the
      * undecidable flag is what makes the *integrator* bail, not this. */
 

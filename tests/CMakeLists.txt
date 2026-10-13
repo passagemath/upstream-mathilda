@@ -4740,6 +4740,23 @@ endif()
 add_test(NAME crc_corpus_tests
          COMMAND crc_corpus_tests ../CRCIntegralsCorpus.m)
 
+# Singular / FTC-boundary definite-integral stress corpus.  Loads
+# SingularDefiniteIntegralsCorpus.m (50 {Hold[integral], Hold[expected],
+# {param->val}} records) held, forks per case, and verifies each by
+# N[(result - expected) /. instantiation] ~ 0.  Fails only above
+# SINGULAR_DEFINITE WRONG baseline (see the runner), so it doubles as the
+# progress dashboard for the singular definite-integral campaign.
+add_executable(singular_definite_corpus_tests test_singular_definite_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(singular_definite_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(singular_definite_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(singular_definite_corpus_tests build_ecm)
+else()
+    target_link_libraries(singular_definite_corpus_tests gmp m)
+endif()
+add_test(NAME singular_definite_corpus_tests
+         COMMAND singular_definite_corpus_tests ../SingularDefiniteIntegralsCorpus.m)
+
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)
 if(USE_ECM)

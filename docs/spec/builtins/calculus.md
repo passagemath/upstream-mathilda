@@ -1923,6 +1923,15 @@ monotonically down.
     `Integrate[Abs[x - a], {x, 0, 2a}, Assumptions -> a > 0] -> a^2`,
     `Integrate[Min[x, a], {x, 0, 2a}, Assumptions -> a > 0] -> 3 a^2/2`,
     `Integrate[HeavisideTheta[a - x], {x, 0, Infinity}, Assumptions -> a > 0] -> a`.
+    Two refinements extend its reach: a **perfect-square radical** is first
+    normalized to its `Abs` form under a real integration variable
+    (`Sqrt[1 - Cos[2x]] -> Sqrt[2] Abs[Sin x]`, so `∫₀^{2π} Sqrt[1-Cos[2x]] dx =
+    4 Sqrt[2]`); and a breakpoint `Solve` returns as a **periodic family**
+    (`ConditionalExpression[Pi + 2 C[1] Pi, …]`) is enumerated to its concrete
+    members inside the interval, so `∫₀^{2π} Abs[Sin x] dx = 4` splits at the
+    interior `x = π`. A sub-interval proved to lie in `x <= 0` is integrated under
+    the reflection `x -> -x`, keeping a resolved `Abs` branch real
+    (`∫_{-1}^{1} Sign[x] Abs[x]^a dx = 0`, not a complex `(-1)^(1+a)` artifact).
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the
@@ -2317,8 +2326,13 @@ exposed explicitly as `Integrate\`NewtonLeibniz[f, {x, xmin, xmax}]` and as
    — never assigned a wrong value.
 2. Locate the real poles of the **integrand** `f` strictly inside
    `(xmin, xmax)` via `Integrate\`SingularPoints` (roots of
-   `Denominator[Together[f]]`).  A continuous `f` has an antiderivative that is
-   pole-free where `f` is, so only `f`'s own poles bound the segments.
+   `Denominator[Together[f]]`, **plus** the `Cos[u] == 0` / `Sin[u] == 0` zeros
+   under any `Tan`/`Cot`/`Sec`/`Csc` head — these are invisible to
+   `Denominator[Together[·]]` because the evaluator keeps the atomic trig head and
+   re-canonicalizes `Sin/Cos` back to it, so `Tan[x]` has denominator `1`). A
+   pole family that `Solve` returns periodically (`Pi/2 + C[1] Pi`) is enumerated
+   to its concrete interior members. A continuous `f` has an antiderivative that
+   is pole-free where `f` is, so only `f`'s own poles bound the segments.
 3. Split `[xmin, xmax]` at those poles and form the telescoping sum
    `Σ (F(p_{i+1}⁻) − F(p_i⁺))`, evaluating each boundary through the `Limit`
    engine: a plain limit at infinite endpoints, a one-sided limit
@@ -2350,10 +2364,13 @@ With no interior pole the option is a no-op. Examples: `∫₋₁¹ dx/x = 0`,
 cancelled by an accompanying `Floor` step — so `F(b) − F(a)` by direct
 substitution is the correct value with no interior split.  To stay correct when
 an antiderivative could instead carry a genuine *uncorrected* branch jump, a
-result built from a step head (`Floor`, `Sign`, …) or an inverse-trig node over
-a pole-bearing trig head is accepted only when a numeric `NIntegrate`
-cross-check agrees; otherwise the integral is left unevaluated rather than
-risking a wrong value.
+result built from a step head (`Floor`, `Sign`, …), an inverse-trig node over
+a pole-bearing trig head, or a **radical whose radicand vanishes inside the
+interval** (the real branch can kink there) is accepted only when a numeric
+`NIntegrate` cross-check agrees; otherwise the integral is left unevaluated
+rather than risking a wrong value. As a final net, a real-looking integrand
+whose folded value has a **provably-nonzero imaginary part** is treated as a
+branch-crossing artifact (`Integrate::idiv`), never returned as a complex number.
 
 **Examples**:
 ```mathematica

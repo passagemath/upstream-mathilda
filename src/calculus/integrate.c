@@ -1401,7 +1401,7 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
                 mech != METHOD_PIECEWISE)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
-                                                    principal_value);
+                                                    principal_value, assumptions);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
              * under Automatic these are pre-passes inside Ramanujan; the pinned
              * methods route directly here. */
@@ -1411,9 +1411,20 @@ static Expr* integrate_definite(Expr* res) {
                 r = integrate_ratlogpow_try(cur, x, a, b, assumptions);
             /* Differentiation under the integral sign: last resort under
              * Automatic (parameter-dependent improper/periodic integrals that
-             * residue and FTC cannot close), or the pinned mechanism. */
-            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
+             * residue and FTC cannot close), or the pinned mechanism.  Skipped
+             * under PrincipalValue: if the PV-capable stages (residue, N-L)
+             * already declined, this ordinary-integral method would compute a
+             * value ACROSS the interior pole (a divergent / complex artifact),
+             * so a PV request that they cannot close is left unevaluated. */
+            if (!r && !has_undef && !principal_value &&
+                (mech == METHOD_AUTOMATIC || mech == METHOD_DIFF_UNDER_INT))
                 r = integrate_diffunderint_try(cur, x, a, b, assumptions);
+            /* A real-axis definite integral must evaluate to a value free of
+             * its integration variable: a result still containing x is a leaked
+             * antiderivative (a stage returned F(x) instead of F(b)-F(a)), which
+             * is always wrong -- discard it and leave the integral unevaluated
+             * rather than return an expression in the dummy variable. */
+            if (r && depends_on_var(r, x)) { expr_free(r); r = NULL; }
         }
         expr_free(cur);
         if (!r) return NULL;
@@ -1430,7 +1441,15 @@ static Expr* integrate_definite(Expr* res) {
             (Expr*[]){ expr_copy(cur), expr_copy(assumptions) }, 2);
         Expr* refined = evaluate(call);
         expr_free(call);
-        if (refined) { expr_free(cur); cur = refined; }
+        /* Keep the refinement unless it INTRODUCED a complex value -- Refine can
+         * strip a Re[] that was protecting realness (Re[CosIntegral[a] -
+         * CosIntegral[-a]] = 0 -> the complex CosIntegral[a] - CosIntegral[-a]),
+         * which would turn a correct real principal value into a wrong one. */
+        if (refined) {
+            if (nl_numeric_is_complex(refined) && !nl_numeric_is_complex(cur))
+                expr_free(refined);                 /* reject: refinement went complex */
+            else { expr_free(cur); cur = refined; }
+        }
     }
     return cur;
 }

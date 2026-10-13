@@ -50,9 +50,23 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
  * one-sided divergences cancel), in which case PV = Re[F(b) - F(a)] with the
  * real-branch antiderivative.  An even-order interior pole has no principal
  * value and yields NULL (Integrate::idiv).  With no interior pole this is just
- * the ordinary definite integral. */
+ * the ordinary definite integral.
+ *
+ * `assumptions` (may be NULL) is threaded into pole classification (so a
+ * symbolic root like x = a against a symbolic bound is decided by Refine rather
+ * than failing undecidable) and into the boundary evaluation (Limit and a Refine
+ * of the substituted endpoint), which is what lets a symbolic-endpoint integral
+ * such as Integrate[1/Sqrt[a^2-x^2], {x,0,a}, Assumptions -> a>0] close. */
 Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
-                                      const char* method, bool principal_value);
+                                      const char* method, bool principal_value,
+                                      Expr* assumptions);
+
+/* True iff `e`, with its free variables instantiated at a sample value, N[.]'s
+ * to a finite complex number with a nonzero imaginary part.  A non-numericizing
+ * (genuinely symbolic) or real result returns false.  Used by the definite
+ * dispatcher so a Refine cleanup does not turn a real result (e.g.
+ * Re[CosIntegral[a]-CosIntegral[-a]]) into a spurious complex one. */
+bool nl_numeric_is_complex(Expr* e);
 
 /* Emit the Mathematica-style `Integrate::idiv: Integral of <f> does not
  * converge on {<a>, <b>}.` warning to stderr.  Shared so other definite

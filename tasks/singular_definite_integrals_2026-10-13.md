@@ -90,6 +90,13 @@ Known PRE-EXISTING soundness hole (not a corpus case, not a regression): `Sqrt[2
 [0,2π] → 0 (Simplify can't crack the x/2 half-angle; radicand zero only at endpoints so the
 N-L radical-hazard net does not fire).
 
+## STATE after Phase 3 batch (v0.382–v0.387, all pushed to main) — corpus 42/50, 0 wrong
+Closed so far: all 5 original wrong answers; 4, 40, 41, 42, 43 (2a); 21, 22, 24, 25, 27, 28, 29
+(2b PV); 9, 10 (log-sine); 11, 12 (Power-base pole + symbolic exponent); 36, 37 (Poisson log);
+35 (King reflection). **Open 8**: 16 (CubeRoot odd — needs CubeRoot machinery), 23/26 (PV with a
+symbolic pole x=a), 30 (whole-line PV, residue indented contour), 38/39 (Tan²/Sin² over a period,
+Solve::ifun), 48/49 (pre-existing residue hang; Ramanujan solves instantly).
+
 ## Phase 2 complete (v0.383 + v0.384) — corpus 36/50 correct, 0 wrong
 
 **2a (v0.383) assumption-aware Newton–Leibniz** — `assumptions` threaded into pole

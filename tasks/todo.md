@@ -43,13 +43,16 @@ driver `scratchpad/run_corpus.sh`.
 - [x] 12. symbolic |x|^-b — N-L solves the base of a Power denominator when Solve[x^b==0]
       is undecidable; transient 0^(1-b) Quiet-gated in the probes [v0.385]
 - [x] 3e-partial. (a^2-x^2)^s via 2a: 4,5,11(no — 11 still uneval),40 closed
-- [ ] 3b. Poisson log Log[1-2a Cos x+a^2] (36,37)
-- [ ] 3d. King-reflection x Sin x/(1+Cos^2) (35)
-- [ ] 3f. Tan^2/Sin^2 over a period, suppress Solve::ifun (38,39)
-- [ ] 16. 1/CubeRoot[x] odd — needs CubeRoot[-x]=-CubeRoot[x] + indefinite ∫ (CubeRoot machinery)
-- [ ] 11. 1/Sqrt[Abs[x]] on [-a,a] — piecewise reflect + Sqrt endpoint (recheck)
-- [ ] hard PV: 23,26 (symbolic pole x=a), 30 (whole-line indented contour)
-- [ ] 48,49 residue hang (pre-existing)
+- [x] 3b. Poisson log Log[1-2a Cos x+a^2] (36,37) — integrate_poissonlog_try [v0.386]
+- [x] 3d. King-reflection x Sin x/(1+Cos^2) (35) — integrate_kingreflect_try [v0.387]
+- [x] 11. 1/Sqrt[Abs[x]] on [-a,a] — free from the Power-base pole fix [v0.385]
+- [ ] 3f. Tan^2/Sin^2 over a period, suppress Solve::ifun (38,39) — OPEN
+- [ ] 16. 1/CubeRoot[x] odd — needs CubeRoot[-x]=-CubeRoot[x] + indefinite ∫ (CubeRoot machinery) — OPEN
+- [ ] hard PV: 23,26 (symbolic pole x=a), 30 (whole-line indented contour) — OPEN
+- [ ] 48,49 residue hang (pre-existing; Ramanujan solves instantly) — OPEN
+
+## STATE: corpus 42/50 correct, 0 wrong (v0.382–v0.387 all committed+pushed to main).
+Open 8: 16, 23, 26, 30, 38, 39 (uneval) + 48, 49 (residue hang).
 
 ## Phase 4 — form cleanup
 - [ ] 4a. Beta[k,1]→1/k, Beta[1,k]→1/k, PolyGamma weight (1,2,3)

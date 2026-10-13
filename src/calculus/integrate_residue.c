@@ -2212,8 +2212,14 @@ static Expr* a0_keyhole_log(Expr* R, Expr* v, int m) {
      * ComplexExpand collapses those arg terms -- now that Arg reduces on the
      * roots of unity the poles live at -- and the imaginary parts cancel; a
      * premature per-step Re[] or RootReduce instead buried the poles in Root
-     * objects whose Arg never simplified, forcing a decline. */
-    Expr* val = ev1("Simplify", ev1("ComplexExpand", ans));
+     * objects whose Arg never simplified, forcing a decline.  Under a SYMBOLIC
+     * parameter (g_inst): skip ComplexExpand, which on a symbolic pole
+     * (Sqrt[a^2], Arg[-Sqrt[a^2]], ...) balloons into a many-hundred-leaf flat
+     * sum that sends Simplify into exponential matcher backtracking (the case-35
+     * hang, Log[x]/(x^2-a^2) PV).  The plain Simplify under g_assume closes it --
+     * mirrors the sibling keyhole_log_general_a. */
+    Expr* val = g_inst ? ev1("Simplify", ans)
+                       : ev1("Simplify", ev1("ComplexExpand", ans));
     if (!val) return NULL;
     double vv, re, im;
     if (!(res_is_real_scalar(val, v, &vv) || res_is_finite_scalar(val, v, &re, &im))) {

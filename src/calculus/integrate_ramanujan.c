@@ -2179,8 +2179,21 @@ Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
 
     Expr* r = linear_coeff(rarg, x);
     if (!r) { expr_free(Cc); return NULL; }
-    /* Need r > 0 for c^(-s) to be real/well-defined. */
-    if (!prove_pos(r, assumptions)) { expr_free(Cc); expr_free(r); return NULL; }
+    /* A positive harmonic frequency is required for the closed form c^(m-1)
+     * (= c^(-s)) to carry the magnitude correctly.  A proven-NEGATIVE frequency
+     * is handled by analytic continuation: with F(r) the formula the code below
+     * computes, Sin oddness gives I(r) = (-1)^k I(|r|) and the per-harmonic
+     * c^(m-1) scaling gives F(|r|) = (-1)^(m-1) F(r), so
+     *   I(r) = (-1)^(k+m-1) F(r)   for r < 0.
+     * (So Sin[a x]/x on [0, Inf) is Pi/2 for a > 0 and -Pi/2 for a < 0.) */
+    long freq_sign = 1;
+    if (!prove_pos(r, assumptions)) {
+        Expr* negr = Neg(cp(r));
+        bool neg = prove_pos(negr, assumptions);
+        expr_free(negr);
+        if (!neg) { expr_free(Cc); expr_free(r); return NULL; }
+        if ((k + m - 1) % 2 != 0) freq_sign = -1;
+    }
     expr_free(r);
 
     Expr* sExpr = mk_int(1 - m);                       /* s = 1 - m */
@@ -2205,7 +2218,7 @@ Expr* integrate_sinpowmono_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
     expr_free(G); expr_free(sExpr);
     if (!good) { expr_free(total); expr_free(Cc); return NULL; }
 
-    Expr* value = fullsimp2(Tms(Cc, total), assumptions);
+    Expr* value = fullsimp2(Tms(mk_int(freq_sign), Tms(Cc, total)), assumptions);
     if (!value || !is_finite_value(value) || contains_symbol(value, x)) {
         if (value) expr_free(value);
         return NULL;

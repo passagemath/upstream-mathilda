@@ -58,6 +58,27 @@ Soundness bar already met (zero wrong). Work = converting UNEVAL/TLE/FORM → CO
   `log(1+x²)/(1+x²)→π log2`; `log x/√(1−x²)→−(π log2)/2`; `log Γ(x)` on [0,1]→`log(2π)/2` (Raabe).
 - **Fresnel whole-line form** (21): ConditionalExpression strip + `√(I a)` branch reduction.
 
+## PROGRESS (live) — extreme 42/50 correct, 0 wrong; battery #1 44/50 (bonus)
+| Version | Cases closed | Mechanism |
+|---|---|---|
+| v0.388 | 2 | Frullani cosine (Cesàro mean at ∞) + scaled-arg CosIntegral series |
+| v0.389 | 24,25,29,30 | half-line hyperbolic-kernel table (residue_family_hyperbolic_halfline); fixed 2 hangs |
+| v0.390 | 26,27,28 | Weber-Schafheitlin Bessel (rec_bessel_cossin in intrep) |
+| v0.391 | 35 **+ battery#1 48,49** | a0_keyhole_log symbolic-param guard (un-hung the keyhole-log grind) |
+| v0.392 | 31,32,33,34 | half-line rational PV, on-axis pole (residue_family_rational_halfline_pv → m=0 keyhole) |
+| v0.393 | 36 | branch-power Mellin keyhole PV on-axis half-residue (mellin_core) |
+| v0.394 | 44,46 | whole-line log-over-quadratic (residue_family_logquad) + even-fold |
+
+Correct now (42): 1-5,7-18,20-34,36,39,40,42-46,48,49 (+21 value-correct, 37 excluded).
+**Open (7 scored)**: 6 (Gaussian diff), 12,19 (Mellin PV), 38 (whole-line Log|x-a|, hangs in
+diffunderint + piecewise grabs it), 41 (Log^3 x/(1-x) on [0,1]), 47 (Log x/Sqrt[1-x^2] on [0,1]),
+50 (Raabe Log Gamma).
+Diagnostic specs in hand (subagents): 41 (new integrate_ratlog01_try: (-1)^n n! HurwitzZeta[n+1,c];
+also up-front Beta decline to stop Infinity::indet leak), 47 (extend integrate_beta_try with
+(1-x^2)^e via t=x^2), 50 (new integrate_raabe_try: Log[Gamma[x]] on [t,t+1] → ½Log2π + t Log t - t),
+38 (whole-line Log[Abs] = ½Log[(x-a)^2] via logquad on real double root; needs piecewise to decline +
+diffunderint divergence gate). 6 (Mellin of exp-difference at s=-1: √π(√b-√a)). 12,19 (Mellin x^(a-1)/(1∓x^b) PV).
+
 ## Invariant
 Zero wrong answers. Each substantive change: full corpus (no new WRONG) + touched unit suites
 + check-messages + check-c99 + valgrind new C; version bump + git tag + changelog + docs.

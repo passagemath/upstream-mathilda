@@ -686,6 +686,24 @@ static Expr* qr_core(Expr* f, Expr* x) {
     if (!a || !b || !c) goto done;
     if (is_int_zero(b) && is_int_zero(c)) goto done;   /* degenerate Sqrt[a x^2] */
 
+    /* --- Narrow real-form recognizer: k/Sqrt[c - x^2] (c free of x) ->
+     * k ArcSin[x/Sqrt[c]].  The general path below drives this symbolic form
+     * (a = -1, b = 0, c symbolic) through the Euler substitution, which emits a
+     * complex Log antiderivative; the ArcSin form is the standard real one (and
+     * matches the CRC table).  Restricted to the exact a = -1, b = 0 shape with
+     * an x-free numerator, so nothing else is diverted. --- */
+    if (is_int_zero(b) && expr_free_of(c, x) &&
+        a->type == EXPR_INTEGER && a->data.integer == -1) {
+        Expr* k = eval_take(mk_fn2("Times", expr_copy(f), mk_sqrt(expr_copy(rad))));
+        if (k && expr_free_of(k, x)) {
+            result = eval_take(mk_fn2("Times", k,
+                mk_fn1("ArcSin", mk_fn2("Times", expr_copy(x),
+                    mk_inv(mk_sqrt(expr_copy(c)))))));
+            goto done;
+        }
+        if (k) expr_free(k);
+    }
+
     /* --- Preferred closed-form path (ArcTan/ArcTanh/ArcSinh/ArcSin/Log). ---
      * Emits clean antiderivatives directly; falls through to the Euler
      * substitution below when it cannot fully decompose the integrand. */

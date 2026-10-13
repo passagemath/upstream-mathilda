@@ -2536,6 +2536,12 @@ recognizers:
   pole of `1/x²` is halved to a simple one by `Cos[a x] − Cos[b x] = O(x²)`),
   while a single `Cos[a x]/x²` (no cancellation, genuine double pole) correctly
   **declines** as divergent.
+- **Log-over-quadratic on `(-∞, ∞)`** — `f = C Log[A + x²]/(E x² + D)`, `A > 0`,
+  `D/E > 0`: the Feynman-parameter value `C (2π/√(D/E)) Log[√A + √(D/E)]`
+  (differentiate in the log parameter `A`, integrate the resulting rational).
+  The log argument is monic in `x²` with no linear term.  So
+  `∫₋∞^∞ Log[x²+a²]/(x²+b²) = (2π/b) Log(a+b)` and, via the even-fold,
+  `∫₀^∞ Log[1+x²]/(1+x²) = π Log 2`.
 
 On the **half-line** `(0, ∞)` a closed-form **hyperbolic-kernel table** runs
 *first* (before the even-fold), covering

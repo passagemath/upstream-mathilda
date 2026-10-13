@@ -3563,6 +3563,98 @@ static Expr* residue_family_mellin_barnes(Expr* f, Expr* s, double c, int orient
     return value;
 }
 
+/* Whole-line log-over-quadratic:  Integrate[C Log[A + x^2]/(D + x^2), {x,-Inf,
+ * Inf}] = C (2 Pi / Sqrt[D]) Log[Sqrt[A] + Sqrt[D]]  for A, D > 0  (Gradshteyn-
+ * Ryzhik 4.296; via Feynman differentiation w.r.t. the log parameter:
+ * d/dA I = C Int 1/((A+x^2)(D+x^2)) = C Pi/(Sqrt[A] Sqrt[D](Sqrt[A]+Sqrt[D])),
+ * integrated in Sqrt[A]).  The log argument must be monic in x^2 and the
+ * denominator a quadratic with no linear term; a leading denominator coefficient
+ * folds into C.  The even-fold half-line path reaches this through
+ * residue_half_line, so it also closes Integrate[Log[1+x^2]/(1+x^2),{x,0,Inf}]
+ * = Pi Log[2].  (A real root of the log argument -- Log[Abs[x-a]] -- is a
+ * separate case handled upstream, not here.) */
+static Expr* residue_family_logquad(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_neg_pos_infinity(a, b) || !f) return NULL;
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+
+    Expr* logarg = NULL;                 /* g in a sole Log[g] factor */
+    Expr* rest[32]; size_t nrest = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fe = fac[i];
+        if (!logarg && head_name_is(fe, "Log") && fe->data.function.arg_count == 1) {
+            logarg = fe->data.function.args[0]; continue;
+        }
+        if (nrest < 32) rest[nrest++] = fe;
+    }
+    if (!logarg || !contains_symbol(logarg, x)) return NULL;
+
+    /* Log argument must be A + x^2 (monic, no linear term), A > 0. */
+    Expr* gc2 = poly_coeff(logarg, x, 2);
+    Expr* gc1 = poly_coeff(logarg, x, 1);
+    Expr* gc0 = poly_coeff(logarg, x, 0);
+    bool gmonic = gc2 && gc2->type == EXPR_INTEGER && gc2->data.integer == 1 &&
+                  gc1 && gc1->type == EXPR_INTEGER && gc1->data.integer == 0 &&
+                  gc0 && !contains_symbol(gc0, x);
+    if (gc1) expr_free(gc1);
+    if (gc2) expr_free(gc2);
+    if (!gmonic) { if (gc0) expr_free(gc0); return NULL; }
+    Expr* A = gc0;                        /* a^2 */
+
+    /* The rest must be C / (E x^2 + D): numerator x-free, denominator a quadratic
+     * with no linear term. */
+    Expr* Rrest;
+    if (nrest == 0) Rrest = mk_int(1);
+    else if (nrest == 1) Rrest = expr_copy(rest[0]);
+    else {
+        Expr** cps = malloc(nrest * sizeof(Expr*));
+        for (size_t i = 0; i < nrest; i++) cps[i] = expr_copy(rest[i]);
+        Rrest = expr_new_function(mk_sym("Times"), cps, nrest);
+        free(cps);
+    }
+    Expr* P; Expr* Q;
+    if (!res_num_den(Rrest, &P, &Q)) { expr_free(Rrest); expr_free(A); return NULL; }
+    expr_free(Rrest);
+    Expr* qc2 = poly_coeff(Q, x, 2);
+    Expr* qc1 = poly_coeff(Q, x, 1);
+    Expr* qc0 = poly_coeff(Q, x, 0);
+    bool qok = res_polyq(P, x) && !contains_symbol(P, x) &&
+               qc2 && !contains_symbol(qc2, x) &&
+               qc1 && qc1->type == EXPR_INTEGER && qc1->data.integer == 0 &&
+               qc0 && !contains_symbol(qc0, x) && contains_symbol(Q, x);
+    expr_free(Q); if (qc1) expr_free(qc1);
+    if (!qok) { expr_free(P); if (qc2) expr_free(qc2); if (qc0) expr_free(qc0); expr_free(A); return NULL; }
+
+    /* b^2 = qc0/qc2 ; C_eff = P/qc2 ; a = Sqrt[A], b = Sqrt[b^2]. */
+    Expr* b2   = eval_take(mk_fn2("Times", expr_copy(qc0), mk_fn2("Power", expr_copy(qc2), mk_int(-1))));
+    Expr* Ceff = eval_take(mk_fn2("Times", P, mk_fn2("Power", expr_copy(qc2), mk_int(-1))));  /* consumes P */
+    expr_free(qc2); expr_free(qc0);
+
+    /* Require A > 0 and b^2 > 0 (so a = Sqrt[A], b = Sqrt[b^2] are real positive). */
+    Expr* Ac = expr_copy(A); bool Apos = res_region_pos(Ac); expr_free(Ac);
+    Expr* b2c = expr_copy(b2); bool bpos = res_region_pos(b2c); expr_free(b2c);
+    if (!Apos || !bpos) { expr_free(A); expr_free(b2); expr_free(Ceff); return NULL; }
+
+    Expr* aroot = mk_fn1("Sqrt", A);          /* consumes A */
+    Expr* broot = mk_fn1("Sqrt", b2);         /* consumes b2 */
+    /* value = Ceff (2 Pi / broot) Log[aroot + broot]. */
+    Expr* val = eval_take(mk_fn2("Times", Ceff,
+                    mk_fn2("Times",
+                        mk_fn2("Times", mk_int(2), mk_fn2("Times", mk_sym(SYM_Pi),
+                               mk_fn2("Power", expr_copy(broot), mk_int(-1)))),
+                        mk_fn1("Log", mk_fn2("Plus", aroot, broot)))));
+    if (!val) return NULL;
+    Expr* out = g_inst ? ev1("Simplify", val) : ev1("Simplify", ev1("ComplexExpand", val));
+    if (!out) return NULL;
+    double vv, re, im;
+    if (contains_symbol(out, x) ||
+        !(res_is_real_scalar(out, x, &vv) || res_is_finite_scalar(out, x, &re, &im))) {
+        expr_free(out); return NULL;
+    }
+    return out;
+}
+
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
                             Expr* assumptions, bool* diverges,
                             bool principal_value) {
@@ -3608,6 +3700,7 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
          * (rectangular-contour) family, else rational. */
         value = residue_family_gaussian(f, x, a, b);
         if (!value) value = residue_family_fourier(f, x, a, b);
+        if (!value) value = residue_family_logquad(f, x, a, b);
         if (!value) value = residue_family_fourier_sum(f, x, a, b);
         if (!value) value = residue_family_rectangular(f, x, a, b);
         if (!value) value = residue_family_hyperbolic_strip(f, x, a, b);

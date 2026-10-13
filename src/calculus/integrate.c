@@ -43,6 +43,7 @@
 #include "integrate_linarg.h"
 #include "integrate_newton_leibniz.h"
 #include "integrate_symmetry.h"
+#include "integrate_piecewise.h"
 #include "integrate_beta.h"
 #include "integrate_line.h"
 #include "integrate_residue.h"
@@ -1000,6 +1001,7 @@ typedef enum {
     METHOD_OSC_POWER,        /* definite-only: Cos/Sin[b x^n] on [0,Inf) */
     METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INTEGRAL_REP,     /* definite-only: special-function integral reps (half-line) */
+    METHOD_PIECEWISE,        /* definite-only: Abs/Sign/Heaviside/UnitStep/Min/Max/Piecewise */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -1035,6 +1037,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
         return METHOD_RAMANUJAN;
     if (strcmp(s, "IntegralRepresentation") == 0) return METHOD_INTEGRAL_REP;
+    if (strcmp(s, "Piecewise") == 0) return METHOD_PIECEWISE;
     return METHOD_INVALID;
 }
 
@@ -1132,7 +1135,7 @@ static bool definite_parse_method(Expr* opt, const char** name,
         m == METHOD_SYMMETRY || m == METHOD_BETA ||
         m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
         m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG ||
-        m == METHOD_INTEGRAL_REP) return true;
+        m == METHOD_INTEGRAL_REP || m == METHOD_PIECEWISE) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -1312,6 +1315,14 @@ static Expr* integrate_definite(Expr* res) {
              * inputs and never override an existing result. */
             if (expr_eq(a, b)) r = expr_new_integer(0);
             if (!r) r = integrate_dirac_try(cur, x, a, b);
+            /* Piecewise integrands (Abs/Sign/HeavisideTheta/UnitStep/Min/Max/
+             * Piecewise in x): split the interval at the interior breakpoints,
+             * reduce each sub-interval to its single active branch, integrate,
+             * and sum.  Runs early -- ahead of residue/FTC, none of which model
+             * a branch switch -- and declines cheaply (no target head) for every
+             * other integrand. */
+            if (!r && (mech == METHOD_AUTOMATIC || mech == METHOD_PIECEWISE))
+                r = integrate_piecewise_try(cur, x, a, b, assumptions);
             /* An integrand carrying an arbitrary/undefined function cannot be
              * closed by the improper/parametric methods; under Automatic they
              * are skipped for it (they churn for seconds before declining),
@@ -1387,7 +1398,8 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RAMANUJAN && mech != METHOD_SYMMETRY &&
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
-                mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP)
+                mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
+                mech != METHOD_PIECEWISE)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
@@ -2080,6 +2092,7 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_OSC_POWER:
         case METHOD_RATIONAL_LOG:
         case METHOD_INTEGRAL_REP:
+        case METHOD_PIECEWISE:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
              * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem" /
@@ -2271,6 +2284,10 @@ void integrate_init(void) {
     /* Origin-symmetry reduction: Integrate`Symmetry (odd -> 0, even -> 2 half).
      * Tried first in the definite dispatch. */
     integrate_symmetry_init();
+
+    /* Piecewise integrands: Integrate`Piecewise (Abs/Sign/HeavisideTheta/
+     * UnitStep/Min/Max/Piecewise); split at interior breakpoints. */
+    integrate_piecewise_init();
 
     /* Euler-Beta reductions: Integrate`Beta ([0,1]) and Integrate`TrigPower
      * (Sin^m Cos^n over a canonical trig interval). */

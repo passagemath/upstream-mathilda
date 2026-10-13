@@ -697,6 +697,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_logbyparts.c
     ../src/calculus/integrate_newton_leibniz.c
     ../src/calculus/integrate_symmetry.c
+    ../src/calculus/integrate_piecewise.c
     ../src/calculus/integrate_beta.c
     ../src/calculus/integrate_line.c
     ../src/calculus/integrate_residue.c

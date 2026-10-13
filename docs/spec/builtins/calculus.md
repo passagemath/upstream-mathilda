@@ -1906,6 +1906,23 @@ monotonically down.
     finite-interval generalization `x^(a-1)(1-x)^(b-1)(alpha+beta x)^e` on `[0,1]`
     → `alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha]` runs under the
     `"Beta"` mechanism — e.g. `x^(a-1)(1-x)^(b-1)/(x+c)^(a+b)` on `[0,1]`.)
+  - `"Piecewise"` — a piecewise integrand built from `Abs`, `Sign`,
+    `HeavisideTheta`, `UnitStep`, `Min`, `Max`, or `Piecewise` whose arguments
+    depend on `x` (`Integrate\`Piecewise[f, {x, a, b}]`). It collects the
+    breakpoints where a branch switches (root of the `Abs`/`Sign`/step argument,
+    `u == v` for `Min`/`Max`, a `Piecewise` condition boundary), keeps the ones
+    strictly interior to `(a, b)` — decided assumption-aware with `Refine` — and
+    sorts them; on each sub-interval the integrand reduces to its single active
+    branch (chosen by a *proved* sign of each governing argument at an interior
+    test point), integrates that with the ordinary cascade, and sums. A branch
+    is taken only when its governing inequality is proved under the assumptions,
+    so an undecidable breakpoint position or branch sign leaves the integral
+    unevaluated. Under Automatic it runs early — right after the `DiracDelta`
+    sifting, ahead of residue/FTC (none of which model a branch switch) — and
+    declines cheaply (no branch-defining head) for every other integrand. E.g.
+    `Integrate[Abs[x - a], {x, 0, 2a}, Assumptions -> a > 0] -> a^2`,
+    `Integrate[Min[x, a], {x, 0, 2a}, Assumptions -> a > 0] -> 3 a^2/2`,
+    `Integrate[HeavisideTheta[a - x], {x, 0, Infinity}, Assumptions -> a > 0] -> a`.
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the

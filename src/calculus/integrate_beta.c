@@ -588,6 +588,47 @@ Expr* integrate_poissonlog_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
     return assumptions ? simp2(res, assumptions) : simp(res);
 }
 
+/* King's-property reflection: for f = x g(x) on [0,c] with g invariant under
+ * x -> c - x, f(x) + f(c-x) = c g(x), so Integrate[x g, {x,0,c}] =
+ * (c/2) Integrate[g, {x,0,c}].  E.g. Integrate[x Sin[x]/(1+Cos[x]^2), {x,0,Pi}]
+ * = (Pi/2) Integrate[Sin[x]/(1+Cos[x]^2), {x,0,Pi}] = (Pi/2)(Pi/2) = Pi^2/4. */
+Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    /* Cheap gate: f must be a product with an explicit bare x factor (f = x g). */
+    if (!head_name_is(f, "Times")) return NULL;
+    bool has_x = false;
+    for (size_t i = 0; i < f->data.function.arg_count; i++)
+        if (expr_eq(f->data.function.args[i], (Expr*)x)) { has_x = true; break; }
+    if (!has_x) return NULL;
+
+    Expr* g = eval_take(mk_fn1("Cancel", mk_fn2("Times", cp(f), Pow_(cp(x), mk_int(-1)))));
+    if (!g || !contains_symbol(g, x)) { if (g) expr_free(g); return NULL; }
+
+    /* g must be invariant under x -> b - x. */
+    Expr* refl = eval_take(mk_fn2("ReplaceAll", cp(g),
+                     mk_fn2("Rule", cp(x),
+                            mk_fn2("Plus", cp(b), mk_fn2("Times", mk_int(-1), cp(x))))));
+    bool invariant = is_zero_simp_(mk_fn2("Plus", refl,
+                                   mk_fn2("Times", mk_int(-1), cp(g))));   /* consumes */
+    if (!invariant) { expr_free(g); return NULL; }
+
+    /* I = (b/2) Integrate[g, {x,0,b}]. */
+    Expr* spec = mk_fn3b("List", cp(x), mk_int(0), cp(b));
+    Expr* inner = assumptions
+        ? eval_take(mk_fn3b("Integrate", cp(g), spec,
+                            mk_fn2("Rule", expr_new_symbol("Assumptions"), cp(assumptions))))
+        : eval_take(mk_fn2("Integrate", cp(g), spec));
+    expr_free(g);
+    if (!inner || head_name_is(inner, "Integrate") || contains_symbol(inner, x)) {
+        if (inner) expr_free(inner);
+        return NULL;
+    }
+    Expr* res = mk_fn2("Times",
+                       mk_fn2("Times", cp(b), mk_fn2("Rational", mk_int(1), mk_int(2))), inner);
+    return assumptions ? simp2(res, assumptions) : simp(res);
+}
+
 Expr* builtin_integrate_beta(Expr* res) {
     Expr *f, *x, *a, *b, *as;
     if (!parse_definite(res, &f, &x, &a, &b, &as)) return NULL;

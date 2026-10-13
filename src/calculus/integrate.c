@@ -1380,6 +1380,10 @@ static Expr* integrate_definite(Expr* res) {
             /* Poisson log integral Integrate[Log[A + B Cos[x]], {x,0,Pi}]. */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_poissonlog_try(cur, x, a, b, assumptions);
+            /* King's-property reflection: Integrate[x g(x), {x,0,c}] with g
+             * invariant under x -> c-x (e.g. x Sin[x]/(1+Cos[x]^2) on [0,Pi]). */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = integrate_kingreflect_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue does not own.  Under Automatic it runs

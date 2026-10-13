@@ -200,6 +200,60 @@ static bool trig_pi_canon_one(const char* head_in, int64_t n, int64_t d,
     return true;
 }
 
+/* True iff `t` is an integer multiple of Pi (bare Pi -> 1); sets *k. */
+static bool trig_pi_int_term(const Expr* t, int64_t* k) {
+    if (t->type == EXPR_SYMBOL && t->data.symbol.name == SYM_Pi) { *k = 1; return true; }
+    if (t->type == EXPR_FUNCTION &&
+        t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Times &&
+        t->data.function.arg_count == 2) {
+        const Expr* a0 = t->data.function.args[0];
+        const Expr* a1 = t->data.function.args[1];
+        const Expr* ci = NULL;
+        if (a0->type == EXPR_SYMBOL && a0->data.symbol.name == SYM_Pi) ci = a1;
+        else if (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Pi) ci = a0;
+        if (ci && ci->type == EXPR_INTEGER) { *k = ci->data.integer; return true; }
+    }
+    return false;
+}
+
+/* Expand `arg`; if its additive terms contain a nonzero integer multiple of Pi,
+ * set *n_out to the total integer and *rest_out to an owned remainder, so
+ * arg == Pi*n + rest.  This drives the periodicity shift trig[Pi*n + rest] ->
+ * (-1)^n trig[rest] (period Pi for Tan/Cot) for a SYMBOLIC rest, which the
+ * rational-multiple canonicaliser above does not reach. */
+static bool trig_pi_integer_shift(const Expr* arg, int64_t* n_out, Expr** rest_out) {
+    Expr* ex = eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                   (Expr*[]){ expr_copy((Expr*)arg) }, 1));
+    if (!ex) return false;
+    const Expr* one[1];
+    Expr* const* terms;
+    size_t nt;
+    if (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL &&
+        ex->data.function.head->data.symbol.name == SYM_Plus) {
+        terms = ex->data.function.args; nt = ex->data.function.arg_count;
+    } else { one[0] = ex; terms = (Expr* const*)one; nt = 1; }
+    int64_t n = 0;
+    Expr** rest = malloc((nt ? nt : 1) * sizeof(Expr*)); size_t nr = 0;
+    for (size_t i = 0; i < nt; i++) {
+        int64_t k;
+        if (trig_pi_int_term(terms[i], &k)) n += k;
+        else rest[nr++] = expr_copy(terms[i]);
+    }
+    if (n == 0) {
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(rest); expr_free(ex); return false;
+    }
+    Expr* r;
+    if (nr == 0)      r = expr_new_integer(0);
+    else if (nr == 1) r = rest[0];
+    else              r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), rest, nr));
+    free(rest);
+    *n_out = n; *rest_out = r;
+    expr_free(ex);
+    return true;
+}
+
 /* Walk `e`, applying trig_pi_canon_one at every Sin/Cos/Tan/Cot/Sec/Csc
  * call whose argument is a rational multiple of Pi.  Returns a freshly
  * owned, evaluated tree (always non-NULL).  Idempotent on the canonical
@@ -234,6 +288,21 @@ static Expr* simp_trig_pi_canon_walk(const Expr* e) {
                         return eval_and_free(neg);
                     }
                     return call_eval;
+                }
+            } else {
+                /* Symbolic argument with an integer-Pi additive part:
+                 * trig[Pi*n + rest] -> (-1)^n trig[rest] (period Pi for Tan/Cot),
+                 * e.g. Csc[Pi(1+a)] -> -Csc[Pi a]. */
+                int64_t ns; Expr* rest;
+                if (trig_pi_integer_shift(e->data.function.args[0], &ns, &rest)) {
+                    bool period_pi = (h == SYM_Tan || h == SYM_Cot);
+                    bool flip = !period_pi && ((ns % 2) != 0);
+                    Expr* call = eval_and_free(expr_new_function(
+                        expr_new_symbol(h), (Expr*[]){ rest }, 1));
+                    if (flip)
+                        call = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(-1), call }, 2));
+                    return call;
                 }
             }
         }

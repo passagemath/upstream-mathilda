@@ -1842,6 +1842,95 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- LaguerreL[N, Z]:
+         *   d/dZ L_N(Z) = -LaguerreL[N-1, 1, Z]  (the generalized Laguerre).
+         *   d/dN L_N(Z) = Derivative[1,0][LaguerreL][N,Z]  (no elementary form).
+         * Enables D[] and, via it, the generic Interval threading in eval.c. */
+        if (h == SYM_LaguerreL && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -LaguerreL[N-1, 1, Z] */
+                Expr* lg = expr_new_function(mk_sym("LaguerreL"),
+                              (Expr*[]){ mk_fn2("Plus", expr_copy(N), mk_int(-1)),
+                                         mk_int(1), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", mk_neg(lg), dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("LaguerreL"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- LaguerreL[N, A, Z] (generalized):
+         *   d/dZ L_N^A(Z) = -LaguerreL[N-1, A+1, Z].
+         *   d/dN, d/dA have no elementary form (kept inert via Derivative). */
+        if (h == SYM_LaguerreL && n == 3) {
+            Expr* N = args[0];
+            Expr* A = args[1];
+            Expr* Z = args[2];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -LaguerreL[N-1, A+1, Z] */
+                Expr* lg = expr_new_function(mk_sym("LaguerreL"),
+                              (Expr*[]){ mk_fn2("Plus", expr_copy(N), mk_int(-1)),
+                                         mk_fn2("Plus", expr_copy(A), mk_int(1)),
+                                         expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", mk_neg(lg), dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("LaguerreL"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(A), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (!is_lit_zero(dA)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("LaguerreL"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(A), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
         /* --- ExpIntegralE[N, Z]: d/dZ E_N(Z) = -E_(N-1)(Z) (DLMF 8.19.13);
          *     d/dN has no elementary form (kept inert via Derivative[1,0]). */
         if (h == SYM_ExpIntegralE && n == 2) {

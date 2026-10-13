@@ -390,6 +390,7 @@ set(COMMON_SRC
     ../src/special_functions/chebyshev_common.c
     ../src/special_functions/chebyshev_t.c
     ../src/special_functions/chebyshev_u.c
+    ../src/special_functions/laguerre_l.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
     ../src/special_functions/bessel.c
@@ -3578,6 +3579,10 @@ add_test(NAME chebyshev_t_tests COMMAND chebyshev_t_tests)
 add_executable(chebyshev_u_tests test_chebyshev_u.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(chebyshev_u_tests PRIVATE ../src)
 add_test(NAME chebyshev_u_tests COMMAND chebyshev_u_tests)
+
+add_executable(laguerre_l_tests test_laguerre_l.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(laguerre_l_tests PRIVATE ../src)
+add_test(NAME laguerre_l_tests COMMAND laguerre_l_tests)
 
 add_executable(airyai_tests test_airyai.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(airyai_tests PRIVATE ../src)

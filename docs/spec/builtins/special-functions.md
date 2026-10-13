@@ -1871,6 +1871,68 @@ In[2]:= Table[ChebyshevU[n, Pi/2], {n, 0, 3}]
 Out[2]= {1, Pi, -1 + Pi^2, -2 Pi + Pi^3}
 ```
 
+## LaguerreL
+
+`LaguerreL[n, x]` gives the Laguerre polynomial `L_n(x)`; `LaguerreL[n, a, x]`
+gives the generalized Laguerre polynomial `L_n^(a)(x)`, with `LaguerreL[n, x] ==
+LaguerreL[n, 0, x]`. They are orthogonal with weight `x^a e^-x` and satisfy
+`x y'' + (a + 1 - x) y' + n y = 0`.
+
+- **Exact polynomial.** A non-negative integer order `n` produces the explicit
+  degree-`n` polynomial in `x`. For a numeric (or absent) parameter `a` the
+  coefficients are exact rationals, built from the three-term recurrence `L_0 =
+  1`, `L_1 = 1 + a - x`, `(k+1) L_{k+1} = (2k+1+a-x) L_k - (k+a) L_{k-1}`; for a
+  symbolic `a` the polynomial in `a` and `x` is built from the sum form and
+  expanded. For example `LaguerreL[5, x] = 1 - 5 x + 5 x² - 5/3 x³ + 5/24 x⁴ -
+  1/120 x⁵`, `LaguerreL[2, a, x] = 1 + 3/2 a + 1/2 a² - 2 x - a x + 1/2 x²`, and
+  `LaguerreL[2, 3] = -1/2`.
+- **Numerics.** For an integer order with an inexact argument the value comes
+  from the *stable* recurrence, not from substituting into the explicit
+  polynomial — so `LaguerreL[100, 0, N[5, 20]] = 1.4555271625328812607` rather
+  than the catastrophically-cancelled `1.4557…` that the expanded polynomial
+  gives. A non-integer or complex order with an inexact argument evaluates
+  through the entire confluent-hypergeometric form `LaguerreL[n, a, x] =
+  Binomial[n+a, n] Hypergeometric1F1[-n, a+1, x]` (a single expression that
+  covers the whole plane, since `L_n` is entire in `x`). All paths run at
+  machine or arbitrary (MPFR) precision, real or complex: `LaguerreL[6., 5] =
+  -2.09028`, `LaguerreL[6. - I, 5] = -2.76039 - 2.46853 I`, `LaguerreL[3, .51,
+  .87] = -0.396576`, `LaguerreL[2.5, 1.3, 8 + I] = 8.50391 + 0.576867 I`, and
+  `N[LaguerreL[2/5, 1/3, 8/7], 50]` is accurate to 50 digits.
+- **Special values.** `LaguerreL[0, x] = 1` and `LaguerreL[n, 0] = Binomial[n+a,
+  n]` (so `LaguerreL[n, 0] = 1` for the ordinary polynomial).
+- **Derivative.** `D[LaguerreL[n, x], x] = -LaguerreL[n-1, 1, x]` and
+  `D[LaguerreL[n, a, x], x] = -LaguerreL[n-1, a+1, x]`, which also lets the
+  generic `NumericFunction` interval threading handle `Interval[]` arguments.
+- **Listable.** `LaguerreL[3, {1, 2, 3}] = {-2/3, -1/3, 1}`.
+- **Performance (machine reals and complexes).** For the two-argument
+  `LaguerreL[n, x]` at an integer order with a machine-precision argument the
+  recurrence runs in hardware `double` / `double`-complex — the same kernel used
+  by the NDArray fast path and `Compile[]`, so a scalar call is bit-identical to
+  its packed, NDArray and compiled forms. A packed **complex** buffer stays on
+  the buffer (the ND kernel has a complex arm). The generalized three-argument
+  form evaluates its scalar machine case through the same helper and lowers in
+  `Compile[]` at scalar shape; an arbitrary-precision argument, a large degree,
+  or an overflow falls back to the stable MPFR recurrence unchanged.
+
+An exact non-integer order with an exact/symbolic argument (e.g. `LaguerreL[1/2,
+x]`) stays symbolic; symbolic `Series` / `SeriesCoefficient`, the Series
+expansion at infinity, and the three-argument array `Compile[]` lowering are
+deferred.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= LaguerreL[7, x]
+Out[1]= 1 - 7 x + 21/2 x^2 - 35/6 x^3 + 35/24 x^4 - 7/40 x^5 + 7/720 x^6 - 1/5040 x^7
+
+In[2]:= Table[LaguerreL[n, a, x], {n, 0, 3}, {a, 0, 1}]
+Out[2]= {{1, 1}, {1 - x, 2 - x}, {1 - 2 x + 1/2 x^2, 3 - 3 x + 1/2 x^2},
+        {1 - 3 x + 3/2 x^2 - 1/6 x^3, 4 - 6 x + 2 x^2 - 1/6 x^3}}
+
+In[3]:= LaguerreL[100, 0, N[5, 20]]
+Out[3]= 1.4555271625328812607
+```
+
 ## LegendreP
 
 `LegendreP[n, x]` gives the Legendre polynomial / function `P_n(x)`;

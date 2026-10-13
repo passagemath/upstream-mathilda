@@ -54,6 +54,18 @@ bool sf_machine_chebyshev_u(double n, double x, double* out);   /* ChebyshevU, i
  * Same contract/regime as the real helper; result in (*rr, *ri). */
 bool sf_machine_chebyshev_u_c(double n, double xre, double xim,
                               double* rr, double* ri);
+/* LaguerreL: the generalized Laguerre polynomial L_n^(a)(x) for a non-negative
+ * integer degree n, by the stable forward recurrence (a = 0 is the ordinary
+ * L_n(x)). Declines (returns false) for a non-integer/negative/large n or a
+ * non-finite result, so the caller falls back to the MPFR / symbolic path. */
+bool sf_machine_laguerre_l_assoc(double n, double a, double x, double* out);
+bool sf_machine_laguerre_l(double n, double x, double* out);    /* a = 0 */
+/* LaguerreL with a machine COMPLEX argument x = xre + i*xim (order n and
+ * parameter a are real); result in (*rr, *ri). */
+bool sf_machine_laguerre_l_assoc_c(double n, double a, double xre, double xim,
+                                   double* rr, double* ri);
+bool sf_machine_laguerre_l_c(double n, double xre, double xim,
+                             double* rr, double* ri);
 bool sf_machine_airy_ai(double x, double* out);        /* AiryAi */
 bool sf_machine_airy_bi(double x, double* out);        /* AiryBi */
 bool sf_machine_airy_ai_prime(double x, double* out);  /* AiryAiPrime */

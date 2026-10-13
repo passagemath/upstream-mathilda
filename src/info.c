@@ -1174,6 +1174,20 @@ void info_init(void) {
         "(MPFR) precision, real or complex. Special values include U_n(0) =\n"
         "Cos[n Pi/2] and U_n(1) = n + 1. D[ChebyshevU[n,x],x] is supported.\n"
         "Listable.");
+    symtab_set_docstring("LaguerreL",
+        "LaguerreL[n, x]\n"
+        "\tgives the Laguerre polynomial L_n(x).\n"
+        "LaguerreL[n, a, x] gives the generalized Laguerre polynomial L_n^a(x)\n"
+        "(with LaguerreL[n, x] == LaguerreL[n, 0, x]). A non-negative integer n\n"
+        "yields the explicit polynomial (exact for an exact argument, and via a\n"
+        "stable recurrence for an inexact one -- the recurrence avoids the\n"
+        "cancellation that corrupts the polynomial form for large n); a\n"
+        "non-integer or complex order with an inexact argument evaluates\n"
+        "numerically at machine or arbitrary (MPFR) precision, real or complex,\n"
+        "through the confluent-hypergeometric form Binomial[n+a,n]\n"
+        "Hypergeometric1F1[-n, a+1, x]. Special values include L_n(0) =\n"
+        "Binomial[n+a, n]. D[LaguerreL[n,x],x] = -LaguerreL[n-1,1,x] and\n"
+        "D[LaguerreL[n,a,x],x] = -LaguerreL[n-1,a+1,x]. Listable.");
     symtab_set_docstring("LegendreQ",
         "LegendreQ[n, x]\n"
         "\tgives the Legendre function of the second kind Q_n(x).\n"

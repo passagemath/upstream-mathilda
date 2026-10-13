@@ -729,6 +729,23 @@ static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false };
 
+/* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
+ * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
+ * polynomial degree n) must be a real integer, but the argument `b` = x may be
+ * complex, so a packed/visible complex buffer computes on the buffer. Same
+ * raw-double helpers as the scalar dispatch, so the surfaces agree bit-for-bit.
+ * (The generalized LaguerreL[n, a, x] uses the 3-arg N-ary kernel below.) */
+static bool ndk_LaguerreL_c(double are, double aim, double bre, double bim,
+                            double* ore, double* oim) {
+    if (aim != 0.0) return false;                 /* order must be a real integer */
+    if (bim == 0.0) {                              /* real argument */
+        double v; if (!sf_machine_laguerre_l(are, bre, &v)) return false;
+        *ore = v; *oim = 0.0; return true;
+    }
+    return sf_machine_laguerre_l_c(are, bre, bim, ore, oim);   /* complex argument */
+}
+static const NDBinaryKernel NDKB_LaguerreL = { ndk_LaguerreL_c, true, NULL, NULL, false };
+
 /* N-ary kernels: arity >= 3, which the unary/binary descriptors cannot express.
  * Consumed by the Compile[] VM; the NDArray element-wise path still degrades for
  * these heads, since "one array plus broadcast scalars" is a different question. */
@@ -750,6 +767,14 @@ static bool ndk_Hyper2F1_n(const double* re, const double* im, size_t n,
     double v; if (!sf_machine_hyper2f1(re[0], re[1], re[2], re[3], &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* Generalized LaguerreL[n, a, x]: re[0] = n, re[1] = a, re[2] = x. Real only
+ * (the Compile VM consumes it); a complex argument falls to the interpreter. */
+static bool ndk_LaguerreL_n(const double* re, const double* im, size_t n,
+                            double* rr, double* ri) {
+    if (n != 3 || im[0] || im[1] || im[2]) return false;
+    double v; if (!sf_machine_laguerre_l_assoc(re[0], re[1], re[2], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
 /* PFQ arrives already flattened by the compiler's lowering: re[0] carries p, so
  * q is whatever is left after the p upper parameters and the final z. */
 static bool ndk_HypergeometricPFQ_n(const double* re, const double* im, size_t n,
@@ -767,6 +792,7 @@ static const NDNaryKernel NDKN_HypergeometricPFQ = { ndk_HypergeometricPFQ_n, 0,
 static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
+static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false };
@@ -837,6 +863,7 @@ void ndkernels_init(void) {
     REG_B(LegendreQ,   NDKB_LegendreQ);
     REG_B(ChebyshevT,  NDKB_ChebyshevT);
     REG_B(ChebyshevU,  NDKB_ChebyshevU);
+    REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);
@@ -845,5 +872,6 @@ void ndkernels_init(void) {
     REG_B(Hypergeometric0F1, NDKB_Hypergeometric0F1);
     REG_N(LerchPhi); REG_N(Hypergeometric1F1); REG_N(Hypergeometric2F1);
     REG_N(HypergeometricPFQ);
+    REG_N(LaguerreL);   /* generalized LaguerreL[n, a, x] for Compile[] */
 
 }

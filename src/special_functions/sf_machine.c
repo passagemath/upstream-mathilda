@@ -671,6 +671,66 @@ bool sf_machine_chebyshev_u_c(double n, double xre, double xim,
     return isfinite(u1r) && isfinite(u1i);
 }
 
+/* LaguerreL[n, a, x] for a non-negative integer degree n, by the stable forward
+ * recurrence  L_0 = 1,  L_1 = 1 + a - x,
+ *   (k+1) L_{k+1} = (2k+1+a-x) L_k - (k+a) L_{k-1}
+ * (a = 0 recovers the ordinary Laguerre polynomial). Evaluating the recurrence
+ * rather than substituting into the explicit polynomial avoids the catastrophic
+ * cancellation that ruins the polynomial form for large n. Declines for a
+ * non-integer/negative/large degree or a non-finite result, matching how
+ * sf_machine_chebyshev_u declines. */
+bool sf_machine_laguerre_l_assoc(double n, double a, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    double l0 = 1.0;                       /* L_0 = 1        */
+    if (N == 0) { *out = l0; return true; }
+    double l1 = 1.0 + a - x;               /* L_1 = 1 + a - x */
+    if (N == 1) { *out = l1; return isfinite(l1); }
+    for (int k = 1; k < N; k++) {
+        double lk = ((2.0 * k + 1.0 + a - x) * l1 - ((double)k + a) * l0)
+                    / (double)(k + 1);
+        l0 = l1; l1 = lk;
+    }
+    *out = l1;
+    return isfinite(l1);
+}
+
+bool sf_machine_laguerre_l(double n, double x, double* out) {
+    return sf_machine_laguerre_l_assoc(n, 0.0, x, out);
+}
+
+/* LaguerreL[n, a, x] with a machine COMPLEX argument x = xre + i*xim (order n
+ * and parameter a stay real), by the same recurrence carried in two doubles
+ * (manual re/im, no <complex.h> -- C99-portable). */
+bool sf_machine_laguerre_l_assoc_c(double n, double a, double xre, double xim,
+                                   double* rr, double* ri) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    double l0r = 1.0, l0i = 0.0;                   /* L_0 = 1         */
+    if (N == 0) { *rr = l0r; *ri = l0i; return true; }
+    double l1r = 1.0 + a - xre, l1i = -xim;        /* L_1 = 1 + a - x */
+    if (N == 1) { *rr = l1r; *ri = l1i; return isfinite(l1r) && isfinite(l1i); }
+    for (int k = 1; k < N; k++) {
+        /* c = (2k+1+a) - x  (complex);  num = c*L_k - (k+a)*L_{k-1} */
+        double cr = 2.0 * k + 1.0 + a - xre, ci = -xim;
+        double pr = cr * l1r - ci * l1i;
+        double pi = cr * l1i + ci * l1r;
+        double ka = (double)k + a;
+        double inv = 1.0 / (double)(k + 1);
+        double lkr = (pr - ka * l0r) * inv;
+        double lki = (pi - ka * l0i) * inv;
+        l0r = l1r; l0i = l1i;
+        l1r = lkr; l1i = lki;
+    }
+    *rr = l1r; *ri = l1i;
+    return isfinite(l1r) && isfinite(l1i);
+}
+
+bool sf_machine_laguerre_l_c(double n, double xre, double xim,
+                             double* rr, double* ri) {
+    return sf_machine_laguerre_l_assoc_c(n, 0.0, xre, xim, rr, ri);
+}
+
 /* LegendreQ[n, x] for a non-negative integer degree on the cut |x| < 1, by the
  * same three-term recurrence as P_n but seeded Q_0 = atanh(x), Q_1 = x atanh(x)
  * - 1.  Declines (returns false) for a non-integer/negative/large degree and for

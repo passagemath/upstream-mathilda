@@ -2533,7 +2533,19 @@ recognizers:
   while a single `Cos[a x]/x²` (no cancellation, genuine double pole) correctly
   **declines** as divergent.
 
-A one-line **half-line** add-on covers even integrands:
+On the **half-line** `(0, ∞)` a closed-form **hyperbolic-kernel table** runs
+*first* (before the even-fold), covering
+`∫₀^∞ C x^k {1, Sin[p x], Cos[p x]} {Sech, Csch}[q x]^n dx` for `q > 0` (and `p`
+real on the trig arms): the five Gradshteyn–Ryzhik members
+`Cos[p x]/Cosh[q x] → (π/2q) Sech[pπ/2q]`,
+`Sin[p x]/Sinh[q x] → (π/2q) Tanh[pπ/2q]`,
+`x Sin[p x]/Cosh[q x]² → (π/2q²) Csch[pπ/2q](pπ/2q Coth[pπ/2q] − 1)`,
+`x/Sinh[q x] → π²/4q²`, `x²/Sinh[q x]² → π²/6q³`.  Only these exact tuples match
+(other shapes decline and fall through); running first is what prevents the
+Sinh/Csch members from otherwise hanging in the antiderivative search or the
+symbolic-parameter keyhole path.
+
+A one-line **half-line** add-on then covers even integrands:
 `∫₀^∞ f = ½ ∫₋∞^∞ f`.  Three further recognizers handle branch-cut and
 symbolic-exponent contours:
 

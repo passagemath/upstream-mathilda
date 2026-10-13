@@ -2766,6 +2766,187 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
     return val;
 }
 
+/* Prove e is real: a real numeric literal, a provably-signed quantity (>0 or
+ * <0 implies real), or Refine[Element[e, Reals], assumptions] == True.  Borrows
+ * e; sound (a false result only declines). */
+static bool res_prove_real(Expr* e) {
+    if (!e) return false;
+    double d;
+    if (res_real_double(e, &d)) return true;
+    Expr* c1 = expr_copy(e); bool p = res_region_pos(c1); expr_free(c1);
+    if (p) return true;
+    Expr* c2 = expr_copy(e); bool n = res_region_neg(c2); expr_free(c2);
+    if (n) return true;
+    if (!g_assume) return false;
+    Expr* q = eval_take(mk_fn2("Refine",
+                  mk_fn2("Element", expr_copy(e), mk_sym("Reals")),
+                  expr_copy(g_assume)));
+    bool ok = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+    if (q) expr_free(q);
+    return ok;
+}
+
+/* Match a reciprocal-hyperbolic factor  Sech[q x]^n / Csch[q x]^n  (also stored
+ * as Cosh[q x]^(-n) / Sinh[q x]^(-n)), n >= 1, argument exactly q x (q x-free,
+ * no constant offset).  On success sets *scale=q (owned), *n_out=n,
+ * *is_cosh=1 for Cosh/Sech else 0.  Mirrors match_cosh_power_factor. */
+static bool match_hyp_recip_factor(Expr* fe, Expr* x, Expr** scale_out,
+                                   int* n_out, int* is_cosh_out) {
+    Expr* u = NULL; int n = 0, is_cosh = -1;
+    if (fe->type == EXPR_FUNCTION && fe->data.function.arg_count == 1 &&
+        (head_name_is(fe, "Sech") || head_name_is(fe, "Csch"))) {
+        u = fe->data.function.args[0]; n = 1; is_cosh = head_name_is(fe, "Sech") ? 1 : 0;
+    } else if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+               fe->data.function.args[1]->type == EXPR_INTEGER) {
+        long k = (long) fe->data.function.args[1]->data.integer;
+        Expr* base = fe->data.function.args[0];
+        if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 1) {
+            if ((head_name_is(base, "Sech") || head_name_is(base, "Csch")) && k >= 1) {
+                u = base->data.function.args[0]; n = (int) k;
+                is_cosh = head_name_is(base, "Sech") ? 1 : 0;
+            } else if ((head_name_is(base, "Cosh") || head_name_is(base, "Sinh")) && k <= -1) {
+                u = base->data.function.args[0]; n = (int) (-k);
+                is_cosh = head_name_is(base, "Cosh") ? 1 : 0;
+            }
+        }
+    }
+    if (!u || n < 1 || is_cosh < 0) return false;
+    Expr* c1 = poly_coeff(u, x, 1);
+    Expr* c0 = poly_coeff(u, x, 0);
+    bool ok = c1 && !contains_symbol(c1, x) &&
+              c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
+    if (c0) expr_free(c0);
+    if (ok) { *scale_out = c1; *n_out = n; *is_cosh_out = is_cosh; return true; }
+    if (c1) expr_free(c1);
+    return false;
+}
+
+/* Half-line closed-form table for
+ *   Integrate[C x^k {1,Sin[p x],Cos[p x]} {Sech,Csch}[q x]^n, {x,0,Infinity}]
+ * with q > 0 (and p real for the trig arms).  The five Gradshteyn-Ryzhik entries
+ * (each derivable term-by-term from the geometric expansions
+ *   1/cosh(qx)=2 Sum (-1)^m e^{-(2m+1)qx},  1/sinh(qx)=2 Sum e^{-(2m+1)qx},
+ *   1/cosh^2=4 Sum (-1)^{m+1} m e^{-2mqx},  1/sinh^2=4 Sum m e^{-2mqx}
+ * against the Laplace integrals of x^k {sin,cos}(p x) e^{-c x}; the derivation
+ * justifies the table, it is not evaluated at run time).  Placed as the FIRST
+ * half-line family, before the even-fold residue_half_line reduction: the Sinh
+ * family is otherwise unrecognised and falls through either to a non-terminating
+ * elementary-antiderivative search (x Sin/Cosh^2) or to the symbolic-parameter
+ * keyhole-log grind (x/Sinh), both of which hang.
+ *
+ *   cos(p x)/cosh(q x)        = (Pi/2q) sech(pPi/2q)
+ *   sin(p x)/sinh(q x)        = (Pi/2q) tanh(pPi/2q)
+ *   x sin(p x)/cosh(q x)^2    = (Pi/2q^2) csch(pPi/2q)(pPi/2q coth(pPi/2q) - 1)
+ *   x/sinh(q x)               = Pi^2/(4 q^2)
+ *   x^2/sinh(q x)^2           = Pi^2/(6 q^3)
+ */
+static Expr* residue_family_hyperbolic_halfline(Expr* f, Expr* x, Expr* a, Expr* b) {
+    if (!is_zero_pos_infinity(a, b) || !f || f->type != EXPR_FUNCTION) return NULL;
+
+    Expr** fac; size_t nf; Expr* one[1];
+    if (head_name_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+    else { one[0] = f; fac = one; nf = 1; }
+
+    Expr* C = mk_int(1);       /* x-free constant cofactor */
+    Expr* hb = NULL;           /* hyperbolic scale q      */
+    int n = 0, is_cosh = -1;   /* 1/cosh^n or 1/sinh^n    */
+    Expr* tb = NULL;           /* trig scale p            */
+    int trig_cos = -1;         /* 1 Cos, 0 Sin, -1 none   */
+    int kpow = 0;              /* power of x              */
+    bool bad = false;
+
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* fe = fac[i];
+        if (!contains_symbol(fe, x)) { C = eval_take(mk_fn2("Times", C, expr_copy(fe))); continue; }
+        /* hyperbolic reciprocal */
+        if (!hb) {
+            Expr* sc = NULL; int nn = 0, ic = -1;
+            if (match_hyp_recip_factor(fe, x, &sc, &nn, &ic)) { hb = sc; n = nn; is_cosh = ic; continue; }
+        }
+        /* trig numerator */
+        if (trig_cos < 0 && fe->type == EXPR_FUNCTION && fe->data.function.arg_count == 1 &&
+            (head_name_is(fe, "Cos") || head_name_is(fe, "Sin"))) {
+            Expr* u = fe->data.function.args[0];
+            Expr* c1 = poly_coeff(u, x, 1);
+            Expr* c0 = poly_coeff(u, x, 0);
+            bool lin = c1 && !contains_symbol(c1, x) &&
+                       c0 && c0->type == EXPR_INTEGER && c0->data.integer == 0;
+            if (c0) expr_free(c0);
+            if (lin) { tb = c1; trig_cos = head_name_is(fe, "Cos") ? 1 : 0; continue; }
+            if (c1) expr_free(c1);
+        }
+        /* power of x */
+        if (expr_eq(fe, x)) { kpow += 1; continue; }
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2 &&
+            expr_eq(fe->data.function.args[0], x) &&
+            fe->data.function.args[1]->type == EXPR_INTEGER &&
+            fe->data.function.args[1]->data.integer >= 1 &&
+            fe->data.function.args[1]->data.integer <= 2) {
+            kpow += (int) fe->data.function.args[1]->data.integer; continue;
+        }
+        bad = true;               /* an unrecognised x-dependent factor */
+    }
+
+    Expr* result = NULL;
+    if (!bad && hb && n >= 1) {
+        /* q > 0 required for every entry; p real for the trig arms. */
+        Expr* hbc = expr_copy(hb);
+        bool q_pos = res_region_pos(hbc);
+        expr_free(hbc);
+        bool p_real = (trig_cos < 0) ? true : res_prove_real(tb);
+        if (q_pos && p_real) {
+            /* t = p Pi / (2 q) for the trig arms */
+            Expr* t = NULL;
+            if (trig_cos >= 0)
+                t = eval_take(mk_fn2("Times", expr_copy(tb),
+                        mk_fn2("Times", mk_sym(SYM_Pi),
+                               mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(hb)),
+                                      mk_int(-1)))));
+            Expr* form = NULL;
+            if (is_cosh == 1 && n == 1 && trig_cos == 1 && kpow == 0) {
+                /* (Pi/2q) Sech[t] */
+                form = eval_take(mk_fn2("Times",
+                           mk_fn2("Times", mk_sym(SYM_Pi),
+                                  mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(hb)), mk_int(-1))),
+                           mk_fn1("Sech", expr_copy(t))));
+            } else if (is_cosh == 0 && n == 1 && trig_cos == 0 && kpow == 0) {
+                /* (Pi/2q) Tanh[t] */
+                form = eval_take(mk_fn2("Times",
+                           mk_fn2("Times", mk_sym(SYM_Pi),
+                                  mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(hb)), mk_int(-1))),
+                           mk_fn1("Tanh", expr_copy(t))));
+            } else if (is_cosh == 1 && n == 2 && trig_cos == 0 && kpow == 1) {
+                /* (Pi/2q^2) Csch[t] (t Coth[t] - 1) */
+                Expr* pref = mk_fn2("Times", mk_sym(SYM_Pi),
+                                 mk_fn2("Power", mk_fn2("Times", mk_int(2),
+                                        mk_fn2("Power", expr_copy(hb), mk_int(2))), mk_int(-1)));
+                Expr* bracket = mk_fn2("Plus",
+                                    mk_fn2("Times", expr_copy(t), mk_fn1("Coth", expr_copy(t))),
+                                    mk_int(-1));
+                form = eval_take(mk_fn2("Times", pref,
+                           mk_fn2("Times", mk_fn1("Csch", expr_copy(t)), bracket)));
+            } else if (is_cosh == 0 && n == 1 && trig_cos < 0 && kpow == 1) {
+                /* Pi^2/(4 q^2) */
+                form = eval_take(mk_fn2("Times", mk_fn2("Power", mk_sym(SYM_Pi), mk_int(2)),
+                           mk_fn2("Power", mk_fn2("Times", mk_int(4),
+                                  mk_fn2("Power", expr_copy(hb), mk_int(2))), mk_int(-1))));
+            } else if (is_cosh == 0 && n == 2 && trig_cos < 0 && kpow == 2) {
+                /* Pi^2/(6 q^3) */
+                form = eval_take(mk_fn2("Times", mk_fn2("Power", mk_sym(SYM_Pi), mk_int(2)),
+                           mk_fn2("Power", mk_fn2("Times", mk_int(6),
+                                  mk_fn2("Power", expr_copy(hb), mk_int(3))), mk_int(-1))));
+            }
+            if (t) expr_free(t);
+            if (form) result = eval_take(mk_fn2("Times", expr_copy(C), form));
+        }
+    }
+    expr_free(C);
+    if (hb) expr_free(hb);
+    if (tb) expr_free(tb);
+    if (result && contains_symbol(result, x)) { expr_free(result); result = NULL; }
+    return result;
+}
+
 static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
     /* Must be an exponential of x (a genuine Gaussian candidate) -- cheaply
@@ -3381,9 +3562,14 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_hyperbolic_strip(f, x, a, b);
         if (!value) value = residue_family_rational(f, x, a, b, diverges);
     } else if (is_zero_pos_infinity(a, b)) {
-        /* Half-line [0,Inf): even symmetry first (exact), then the keyhole/Mellin
-         * (branch-power / log) and sector (1/(1+x^n)) families. */
-        value = residue_half_line(f, x, a, b, diverges);
+        /* Half-line [0,Inf): the hyperbolic-kernel table FIRST -- the Sinh/Csch
+         * members are otherwise unrecognised and fall through to a
+         * non-terminating antiderivative search (x Sin/Cosh^2) or the symbolic-
+         * parameter keyhole-log grind (x/Sinh), both of which hang.  Then even
+         * symmetry (exact), the keyhole/Mellin (branch-power / log) and sector
+         * (1/(1+x^n)) families. */
+        value = residue_family_hyperbolic_halfline(f, x, a, b);
+        if (!value) value = residue_half_line(f, x, a, b, diverges);
         if (!value) value = residue_family_mellin_log(f, x, a, b);
         if (!value) value = residue_family_mellin(f, x, a, b);
         if (!value) value = residue_family_sector(f, x, a, b);

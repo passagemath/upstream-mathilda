@@ -91,9 +91,48 @@ Four independent Simplify gaps, each confirmed un-closed by FullSimplify-under-a
 **Theme 3 — Robustness.** TimeConstrained-accumulation segfault: characterise;
 likely pre-existing TC async issue (memory: timeconstrained_async_malloc_lock).
 
+## Progress (live)
+
+| Version | Fix | Cases | Status |
+|---|---|---|---|
+| v0.377 | Piecewise handler (`integrate_piecewise.c`) | 43–47 | DONE, shipped |
+| v0.378 | `Sin[r x]^k/x^m` negative frequency | 20 | DONE, shipped |
+| v0.379 | Refine radical reduction (products/quotients) + assumption-aware Integrate result | 37 | DONE |
+
+ASSUM pass-count: baseline 35/50 → **42/50** (no regression, 0 wrong answers).
+Remaining: 8, 9, 18, 26 (Simplify-form) + 27, 32, 38, 39 (integration gaps).
+
+## Remaining 9 — precise root causes & fix recipes
+
+**Keystone (unblocks 37, and 38/39 after their recognizer): assumption-aware radical
+reduction in `src/refine.c` `deep_positivity_walk`.** The block at `refine.c:479`
+already does `Sqrt[p^2] -> ±p` via the CAD-backed `deep_sign`; extend it to a
+**product/quotient of squared factors**: `Sqrt[Times[.., base^(2k), ..]] ->
+|base|^k Sqrt[remainder]` (and `Together` a `Plus` radicand first to expose a
+denominator, so `Sqrt[1+b^2/a^2] = Sqrt[(a^2+b^2)/a^2] -> Sqrt[a^2+b^2]/a`). Each
+pulled `|base|` is `deep_sign`-resolved, so it stays sound. **RISK: shared Refine
+surface (Simplify / integration gates / zero-tests / Solve) — do with a full
+refine+simplify+zero_test+integrate suite run, revert on any regression.** Gate the
+new path to `Times`/`Plus` radicands so the trusted single-square path is untouched.
+
+| # | Integrand | Root cause | Recipe |
+|---|---|---|---|
+| 37 | `e^{-ax}J0(bx)` | `Sqrt[1+b^2/a^2]` not reduced | the keystone radical fix (quotient case) |
+| 8,9 | `e^{-ax}cos/sin(bx)` | residue stage attaches a **spurious `b>0`** to the ConditionalExpression (the value holds for all real b) + the same nested radical | fix the Fourier/Laplace-of-exp·trig stage to condition only on `Re[a]>0` (drop `b>0`); then keystone radical + ConditionalExpression discharge |
+| 18 | `sin(x)^n` [0,π/2] | `Beta`↔`Gamma`: FullSimplify keeps `Beta` on one side, `Gamma` on the other, so the difference doesn't cancel | register the reverse `Gamma[a]Gamma[b]/Gamma[a+b] -> Beta[a,b]` transform (or have `integrate_beta`/`trigpower` return the Gamma form) so both sides normalise alike |
+| 26 | `x^a/(1+x^2)` | `Csc[π(1+a)]` periodicity not applied by Simplify | add a trig-periodicity shift `Csc/Sec/Sin/Cos[π(k+a)]`, integer k, to the trig-Pi simp pass (`src/simp/simp_trig_pi.c`) |
+| 27 | `1/√(a²−x²)` [0,a] | indefinite integral returns a **complex-log** antiderivative, not `ArcSin[x/a]`; N–L can't resolve its boundary limits at the singular endpoint x=a (numeric case works; `Limit[ArcSin[x/a],x→a]` works) | either emit the real `ArcSin` antiderivative for `(a²−x²)^(−1/2)`, or add a Beta recognizer for `(a²−x²)^s` on [0,a] (`x=a t` → `a^{2s+1}/2 · B(1/2,s+1)`) |
+| 32 | `log(x)/(x²+a²)` | `ratlogpow` only covers R with **negative-real-axis** poles; `1/(x²+a²)` has complex poles ±ia | extend the Mellin `∫₀^∞ x^{s-1}/(x²+a²) dx = (π/2) a^{s−2}/sin(πs/2)`, then d/ds at s=1 for the log weight |
+| 38,39 | Poisson `log(a²−2ab cos x+b²)` [0,π] | no recognizer | new recognizer: `∫₀^π log(A+B cos x) dx = π log((A+√(A²−B²))/2)` for `A≥|B|`, A,B free of x; **needs the keystone radical fix** to render `√((a+b)²(a−b)²)` as `(a+b)(a−b)` so the result verifies to `2π log(max(a,b))` |
+
 ## Soundness
-Zero true wrong answers at baseline. Every fix must preserve that; re-run the full
-battery (both metrics, per-case isolated) after each change — no regression allowed.
+Zero true wrong answers at baseline AND after both shipped fixes. Every fix must
+preserve that; re-run the full battery (both metrics, per-case isolated) after each
+change — no regression allowed. The remaining 9 are all **correct-value or additive**:
+the 5 Simplify-blocked cases already return the right value (they fail only the
+form-match), and the 4 integration cases currently abort/uneval (an additive
+recognizer cannot regress a passing case). So no outstanding wrong answer exists; the
+risk to manage is a shared-Refine/Simplify change silently breaking an unrelated path.
 
 ## Verification artifacts
 - `scratchpad/alldefs.m` (reusable 50-case driver) → promote to

@@ -414,6 +414,78 @@ static int deep_sign(const Expr* p, const Expr* Aconj, RefineBudget* b) {
     return 0;
 }
 
+/* Extract perfect-square factors from a Sqrt radicand under proved signs:
+ *   Sqrt[Product base_i^(2 k_i) * R] -> (Product |base_i|^k_i) * Sqrt[R],
+ * each |base_i| resolved by deep_sign.  A Plus radicand is Together'd first so a
+ * denominator is exposed (1 + b^2/a^2 -> (a^2+b^2)/a^2 -> Sqrt[a^2+b^2]/a).
+ * Returns an owned rewritten tree, or NULL when nothing is extractable.  Sound:
+ * every pulled |base|^k is non-negative, matching Sqrt's principal branch. */
+static Expr* sqrt_extract(const Expr* rad, const Expr* Aconj, RefineBudget* b) {
+    Expr* together = NULL;
+    const Expr* work = rad;
+    if (head_is(rad, "Plus")) {
+        together = eval_and_free(expr_new_function(expr_new_symbol("Together"),
+                      (Expr*[]){ expr_copy((Expr*)rad) }, 1));
+        if (together) work = together;
+    }
+    const Expr* one[1];
+    Expr* const* fs;
+    size_t nf;
+    if (head_is(work, "Times")) {
+        fs = work->data.function.args; nf = work->data.function.arg_count;
+    } else { one[0] = work; fs = (Expr* const*)one; nf = 1; }
+
+    Expr** pulled = (Expr**)calloc(nf ? nf : 1, sizeof(Expr*)); size_t np = 0;
+    Expr** rem    = (Expr**)calloc(nf ? nf : 1, sizeof(Expr*)); size_t nr = 0;
+    int any = 0;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* f = fs[i];
+        if (head_is(f, "Power") && f->data.function.arg_count == 2 &&
+            f->data.function.args[1]->type == EXPR_INTEGER &&
+            (f->data.function.args[1]->data.integer % 2) == 0 &&
+            budget_ok(b)) {
+            const Expr* base = f->data.function.args[0];
+            long k = f->data.function.args[1]->data.integer / 2;
+            int s = deep_sign(base, Aconj, b);
+            if (s != 0) {
+                Expr* absb = (s > 0)
+                    ? expr_copy((Expr*)base)
+                    : expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)base) }, 2);
+                pulled[np++] = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ absb, expr_new_integer(k) }, 2);
+                any = 1;
+                continue;
+            }
+        }
+        rem[nr++] = expr_copy((Expr*)f);
+    }
+    if (together) expr_free(together);
+    if (!any) {
+        for (size_t i = 0; i < np; i++) expr_free(pulled[i]);
+        for (size_t i = 0; i < nr; i++) expr_free(rem[i]);
+        free(pulled); free(rem);
+        return NULL;
+    }
+    Expr* pulled_prod = (np == 1) ? pulled[0]
+        : expr_new_function(expr_new_symbol(SYM_Times), pulled, np);
+    Expr* out;
+    if (nr == 0) {
+        out = pulled_prod;                       /* Sqrt[1] = 1 */
+    } else {
+        Expr* rem_prod = (nr == 1) ? rem[0]
+            : expr_new_function(expr_new_symbol(SYM_Times), rem, nr);
+        Expr* half = expr_new_function(expr_new_symbol(SYM_Rational),
+              (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2);
+        Expr* sq = expr_new_function(expr_new_symbol(SYM_Power),
+              (Expr*[]){ rem_prod, half }, 2);
+        out = expr_new_function(expr_new_symbol(SYM_Times),
+              (Expr*[]){ pulled_prod, sq }, 2);
+    }
+    free(pulled); free(rem);
+    return eval_and_free(out);                   /* tidy Times[1,..], Power[x,1] */
+}
+
 /* Bottom-up walk resolving Sign[p], Abs[p] and Sqrt[p^2] for polynomial p whose
  * sign the fast prover could not settle. Returns an owned rebuilt tree; sets
  * *changed when any node was rewritten. */
@@ -490,6 +562,36 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
                           (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)base) }, 2);
                 expr_free(rebuilt);
                 return out;
+            }
+        }
+    }
+    /* General radicand under a `^(1/2)` or `^(-1/2)` power: a product of squared
+     * factors, or a quotient whose denominator is a perfect square
+     * (Sqrt[(a^2+b^2)/a^2] -> Sqrt[a^2+b^2]/a, and 1/Sqrt[...] = ^(-1/2) too, so
+     * 1/(a Sqrt[1+b^2/a^2]) -> 1/Sqrt[a^2+b^2]).  Only for a Times/Plus radicand,
+     * so the single-square path above is untouched. */
+    {
+        int half = 0;                       /* +1 for ^(1/2), -1 for ^(-1/2) */
+        const Expr* grad = NULL;
+        if (head_is(rebuilt, "Power") && rebuilt->data.function.arg_count == 2) {
+            const Expr* ex = rebuilt->data.function.args[1];
+            if (ex->type == EXPR_FUNCTION && head_is(ex, "Rational") &&
+                ex->data.function.arg_count == 2 &&
+                ex->data.function.args[1]->type == EXPR_INTEGER &&
+                ex->data.function.args[1]->data.integer == 2 &&
+                ex->data.function.args[0]->type == EXPR_INTEGER) {
+                long pnum = ex->data.function.args[0]->data.integer;
+                if (pnum == 1)  { half = 1;  grad = rebuilt->data.function.args[0]; }
+                if (pnum == -1) { half = -1; grad = rebuilt->data.function.args[0]; }
+            }
+        }
+        if (grad && (head_is(grad, "Times") || head_is(grad, "Plus"))) {
+            Expr* ext = sqrt_extract(grad, Aconj, b);
+            if (ext) {
+                if (half < 0)
+                    ext = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ ext, expr_new_integer(-1) }, 2));
+                *changed = 1; expr_free(rebuilt); return ext;
             }
         }
     }

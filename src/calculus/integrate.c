@@ -1419,6 +1419,19 @@ static Expr* integrate_definite(Expr* res) {
         if (!r) return NULL;
         cur = r;
     }
+    /* Assumption-aware result cleanup.  When the call carried an explicit
+     * Assumptions option, Refine the folded result so a definite integral
+     * returns the reduced closed form a method stage left equal-but-unsimplified
+     * (Sqrt[(a^2+b^2)/a^2] -> Sqrt[a^2+b^2]/a, Sqrt[p^2] -> p, Abs/Sign under a
+     * proved sign, ...).  Gated on `assumptions`, so no assumption-free call
+     * changes form.  On any failure the original result is kept. */
+    if (cur && assumptions) {
+        Expr* call = expr_new_function(expr_new_symbol("Refine"),
+            (Expr*[]){ expr_copy(cur), expr_copy(assumptions) }, 2);
+        Expr* refined = evaluate(call);
+        expr_free(call);
+        if (refined) { expr_free(cur); cur = refined; }
+    }
     return cur;
 }
 

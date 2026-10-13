@@ -11,10 +11,10 @@ no uneval/abort/crash.
 - [x] categorise all 50; findings file written
 
 ## Theme 1 — Result cleanliness under Assumptions (Mathematica parity)
-- [ ] 1a. driver post-simplify: integrate_definite -> Simplify[r, assumptions] (gated). Fixes 12-17,10,31,48,49
-- [ ] 1b. ConditionalExpression discharge under entailed assumptions (8,9,18)
-- [ ] 1c. nested-radical Sqrt[1+p/q] pull-out under positivity (8,9,37)
-- [ ] 1d. Beta[x,y] -> Gamma expansion (18)
+- [x] 1a. driver post-Refine: integrate_definite -> Refine[r, assumptions] (gated) [v0.379]
+- [x] 1c. nested-radical Sqrt[1+p/q] pull-out under positivity [v0.379, refine.c sqrt_extract] (fixes 37)
+- [ ] 1b. ConditionalExpression discharge + drop spurious b>0 from Fourier stage (8,9)
+- [ ] 1d. Beta[x,y] -> Gamma normalization (18)
 - [ ] 1e. trig periodicity Csc/Sec/Sin/Cos[Pi(k+a)], integer k (26)
 
 ## Theme 2 — Genuine integration gaps

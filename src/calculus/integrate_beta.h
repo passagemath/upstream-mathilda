@@ -60,6 +60,10 @@ Expr* integrate_poissonlog_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
  * under x -> c-x:  = (c/2) Integrate[g, {x,0,c}].  Borrowed args. */
 Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}] = (1/2)Log[2 Pi]
+ * + t Log[t] - t for t >= 0 (so [0,1] gives (1/2)Log[2 Pi]). */
+Expr* integrate_raabe_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

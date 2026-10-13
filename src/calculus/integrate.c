@@ -1384,6 +1384,9 @@ static Expr* integrate_definite(Expr* res) {
              * invariant under x -> c-x (e.g. x Sin[x]/(1+Cos[x]^2) on [0,Pi]). */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_kingreflect_try(cur, x, a, b, assumptions);
+            /* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}]. */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = integrate_raabe_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue does not own.  Under Automatic it runs

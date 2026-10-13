@@ -629,6 +629,40 @@ Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assump
     return assumptions ? simp2(res, assumptions) : simp(res);
 }
 
+/* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}] = (1/2)Log[2 Pi] +
+ * t Log[t] - t  for t >= 0 (the canonical [0,1] instance is (1/2)Log[2 Pi]).
+ * The Gamma argument must be exactly the integration variable and the interval a
+ * unit interval [t, t+1] with t >= 0; t = 0 is returned directly (the t Log t
+ * term is the removable 0 limit). */
+Expr* integrate_raabe_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!head_name_is(f, "Log") || f->data.function.arg_count != 1) return NULL;
+    Expr* g = f->data.function.args[0];
+    if (!head_name_is(g, "Gamma") || g->data.function.arg_count != 1) return NULL;
+    if (!expr_eq(g->data.function.args[0], (Expr*)x)) return NULL;
+    /* Unit interval: b - a == 1. */
+    if (!is_zero_simp_(mk_fn2("Plus", cp(b),
+             mk_fn2("Plus", mk_fn2("Times", mk_int(-1), cp(a)), mk_int(-1)))))
+        return NULL;
+    Expr* half_log2pi = mk_fn2("Times", mk_fn2("Rational", mk_int(1), mk_int(2)),
+                            mk_fn1("Log", mk_fn2("Times", mk_int(2), expr_new_symbol("Pi"))));
+    /* t = 0: the canonical value. */
+    if (a->type == EXPR_INTEGER && a->data.integer == 0) return simp(half_log2pi);
+    /* t > 0: require it proved (numeric or under assumptions). */
+    bool t_pos = (a->type == EXPR_INTEGER && a->data.integer > 0) ||
+                 (a->type == EXPR_REAL && a->data.real > 0.0);
+    if (!t_pos && assumptions) {
+        Expr* q = eval_take(mk_fn2("Refine", mk_fn2("Greater", cp(a), mk_int(0)), cp(assumptions)));
+        t_pos = q && q->type == EXPR_SYMBOL && strcmp(q->data.symbol.name, "True") == 0;
+        if (q) expr_free(q);
+    }
+    if (!t_pos) { expr_free(half_log2pi); return NULL; }
+    Expr* val = mk_fn2("Plus", half_log2pi,
+                    mk_fn2("Plus", mk_fn2("Times", cp(a), mk_fn1("Log", cp(a))),
+                           mk_fn2("Times", mk_int(-1), cp(a))));
+    return assumptions ? simp2(val, assumptions) : simp(val);
+}
+
 Expr* builtin_integrate_beta(Expr* res) {
     Expr *f, *x, *a, *b, *as;
     if (!parse_definite(res, &f, &x, &a, &b, &as)) return NULL;

@@ -52,6 +52,10 @@ Expr* integrate_trigpower_try(Expr* f, Expr* x, Expr* a, Expr* b,
  * argument must be exactly x.  Borrowed args; returns fresh or NULL. */
 Expr* integrate_logtrig_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
 
+/* Poisson log integral Integrate[Log[A + B Cos[x]], {x,0,Pi}] =
+ * Pi Log[(A + Sqrt[A^2-B^2])/2] (A>0, A>=|B|; A,B free of x).  Borrowed args. */
+Expr* integrate_poissonlog_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);
+
 /* Explicit builtins.  Strict: NULL on any non-applicable input. */
 Expr* builtin_integrate_beta(Expr* res);
 Expr* builtin_integrate_trigpower(Expr* res);

@@ -548,6 +548,46 @@ Expr* integrate_logtrig_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumption
     return NULL;
 }
 
+/* Poisson log integral over [0, Pi]:
+ *   Integrate[Log[A + B Cos[x]], {x,0,Pi}] = Pi Log[(A + Sqrt[A^2 - B^2])/2],
+ * valid for A > 0 and A >= |B| (otherwise Log[A + B Cos x] goes negative).  A, B
+ * free of x.  E.g. Log[1 - 2a Cos x + a^2] = Log[(1+a^2) + (-2a) Cos x] gives 0
+ * for 0<a<1 and 2 Pi Log[a] for a>1. */
+Expr* integrate_poissonlog_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (trig_interval(b) != 2) return NULL;                 /* [0, Pi] only */
+    if (!head_name_is(f, "Log") || f->data.function.arg_count != 1) return NULL;
+    Expr* g = f->data.function.args[0];
+    if (!contains_symbol(g, x)) return NULL;
+
+    /* g must be exactly A + B Cos[x], with A, B free of x. */
+    Expr* cosx = mk_fn1("Cos", cp(x));
+    Expr* A = coeff_(g, cosx, 0);
+    Expr* B = coeff_(g, cosx, 1);
+    Expr* recon = mk_fn2("Plus", cp(A), mk_fn2("Times", cp(B), cp(cosx)));
+    Expr* diff  = mk_fn2("Plus", cp(g), mk_fn2("Times", mk_int(-1), recon));
+    bool ok_form = is_zero_simp_(diff) &&                   /* consumes diff */
+                   !contains_symbol(A, x) && !contains_symbol(B, x);
+    expr_free(cosx);
+    if (!ok_form) { expr_free(A); expr_free(B); return NULL; }
+
+    /* Soundness: A > 0 and A^2 >= B^2 (A >= |B|) must be proved. */
+    bool gate = prove_ref(mk_fn2("Greater", cp(A), mk_int(0)), assumptions) &&
+                prove_ref(mk_fn2("GreaterEqual", Pow_(cp(A), mk_int(2)),
+                                  Pow_(cp(B), mk_int(2))), assumptions);
+    if (!gate) { expr_free(A); expr_free(B); return NULL; }
+
+    Expr* disc = mk_fn2("Plus", Pow_(cp(A), mk_int(2)),
+                        mk_fn2("Times", mk_int(-1), Pow_(cp(B), mk_int(2))));
+    Expr* root = Pow_(disc, mk_fn2("Rational", mk_int(1), mk_int(2)));   /* consumes disc */
+    Expr* inner = mk_fn2("Times", mk_fn2("Plus", cp(A), root),
+                         mk_fn2("Rational", mk_int(1), mk_int(2)));
+    Expr* res = mk_fn2("Times", expr_new_symbol("Pi"), mk_fn1("Log", inner));
+    expr_free(A); expr_free(B);
+    return assumptions ? simp2(res, assumptions) : simp(res);
+}
+
 Expr* builtin_integrate_beta(Expr* res) {
     Expr *f, *x, *a, *b, *as;
     if (!parse_definite(res, &f, &x, &a, &b, &as)) return NULL;

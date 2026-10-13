@@ -1377,6 +1377,9 @@ static Expr* integrate_definite(Expr* res) {
              * interval (the classical log-sine values -(Pi/2)Log2 / -Pi Log2). */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_logtrig_try(cur, x, a, b, assumptions);
+            /* Poisson log integral Integrate[Log[A + B Cos[x]], {x,0,Pi}]. */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = integrate_poissonlog_try(cur, x, a, b, assumptions);
             /* Mellin / Ramanujan Master Theorem: half-line ∫₀^∞ x^(s-1) f(x) dx
              * of a transcendental f (Gaussian moments, Gamma/Bessel/trig
              * transforms) that residue does not own.  Under Automatic it runs

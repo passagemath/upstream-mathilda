@@ -64,7 +64,7 @@ size_t pack_min_elements(void) {
  * representation choice may never make.
  * -------------------------------------------------------------------------- */
 
-typedef enum { PK_NONE = 0, PK_INT, PK_REAL, PK_BOOL } PackClass;
+typedef enum { PK_NONE = 0, PK_INT, PK_REAL, PK_BOOL, PK_COMPLEX } PackClass;
 
 static PackClass leaf_class(const Expr* e) {
     if (!e) return PK_NONE;
@@ -77,15 +77,25 @@ static PackClass leaf_class(const Expr* e) {
     if (e->type == EXPR_SYMBOL &&
         (e->data.symbol.name == SYM_True || e->data.symbol.name == SYM_False))
         return PK_BOOL;
+    /* A machine Complex leaf -- Complex[re, im] with two machine-Real components
+     * -- packs into a complex64 buffer. Restricted to Real components, not an
+     * exact Gaussian integer like Complex[1, 2]: widening its integer parts to
+     * doubles is the same exact->inexact head change auto-packing must never make
+     * (1 vs 1.), and contagion already promotes a machine complex to Real/Real,
+     * so Real/Real is the only shape RandomComplex and complex arithmetic yield.
+     * Round-trip is automatic with NO materialisation fold: the evaluator folds
+     * Complex[x, 0.]->Real before any list is built, so an all-Complex list has
+     * no im==0 element to misrepresent as Complex[re, 0] on the way back. */
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex &&
+        e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_REAL &&
+        e->data.function.args[1]->type == EXPR_REAL)
+        return PK_COMPLEX;
     /* Everything else declines, and each for a reason:
      *   BigInt / Rational / MPFR  no machine representation
-     *   Complex                   materialises as Complex[re, im] even when
-     *                             im is 0, which the evaluator never produces
-     *                             (it folds to a Real) -- so a packed complex
-     *                             list would not round-trip. Explicit
-     *                             NDArray[..., DataType -> "complex64"] still
-     *                             works; packing it is a follow-up that needs
-     *                             a presentation-aware zero-imaginary fold.
+     *   exact Gaussian Complex     exact->inexact if packed (see above)
      *   other symbols / expressions  not machine values at all */
     return PK_NONE;
 }
@@ -103,7 +113,12 @@ static bool pack_fold_class(PackClass* cls, PackClass c, bool coerce) {
     if (c == PK_NONE) return false;                  /* not a machine leaf */
     if (*cls == PK_NONE) { *cls = c; return true; }  /* first element sets it */
     if (*cls == c) return true;
-    if (coerce && *cls != PK_BOOL && c != PK_BOOL) { *cls = PK_REAL; return true; }
+    if (coerce && *cls != PK_BOOL && c != PK_BOOL) {
+        /* explicit ToNDArray widening: a Complex anywhere pulls the whole list
+         * to complex (the reals store with im=0); otherwise Int/Real -> Real. */
+        *cls = (*cls == PK_COMPLEX || c == PK_COMPLEX) ? PK_COMPLEX : PK_REAL;
+        return true;
+    }
     return false;                                    /* incompatible mix */
 }
 
@@ -124,7 +139,8 @@ static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls,
         int rank = e->data.ndarray.rank;
         if (rank > maxrank) return -1;
         PackClass c = (e->data.ndarray.dtype == NDT_BOOL)  ? PK_BOOL
-                    : (e->data.ndarray.dtype == NDT_INT64) ? PK_INT : PK_REAL;
+                    : (e->data.ndarray.dtype == NDT_INT64) ? PK_INT
+                    : ndt_is_complex(e->data.ndarray.dtype) ? PK_COMPLEX : PK_REAL;
         if (!pack_fold_class(cls, c, coerce)) return -1;  /* incompatible mix */
         for (int i = 0; i < rank; i++) dims[i] = e->data.ndarray.dims[i];
         return rank;
@@ -150,6 +166,22 @@ static int pack_sniff(const Expr* e, int64_t* dims, int maxrank, PackClass* cls,
     dims[0] = (int64_t)len;
     for (int j = 0; j < sub_rank; j++) dims[j + 1] = sub[j];
     return sub_rank + 1;
+}
+
+/* Decode a packable leaf into (re, im) for a complex buffer: a Complex[re, im]
+ * literal, or a bare machine Real/Integer (im = 0, the widening ToNDArray path). */
+static void pack_complex_parts(const Expr* e, double* re, double* im) {
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex) {
+        const Expr* a = e->data.function.args[0];
+        const Expr* b = e->data.function.args[1];
+        *re = (a->type == EXPR_INTEGER) ? (double)a->data.integer : a->data.real;
+        *im = (b->type == EXPR_INTEGER) ? (double)b->data.integer : b->data.real;
+        return;
+    }
+    *re = (e->type == EXPR_INTEGER) ? (double)e->data.integer : e->data.real;
+    *im = 0.0;
 }
 
 /* Second pass: write the leaves into the buffer in row-major order. The shape
@@ -188,6 +220,11 @@ static void pack_flatten(const Expr* e, void* buf, NDType dt, size_t* k) {
     if (dt == NDT_BOOL)
         ndt_set_i(buf, (*k)++, dt, e->data.symbol.name == SYM_True ? 1 : 0);
     else if (dt == NDT_INT64) ndt_set_i(buf, (*k)++, dt, e->data.integer);
+    else if (ndt_is_complex(dt)) {
+        double re, im;
+        pack_complex_parts(e, &re, &im);
+        ndt_set(buf, (*k)++, dt, re, im);
+    }
     else ndt_set(buf, (*k)++, dt,
                  (e->type == EXPR_INTEGER) ? (double)e->data.integer : e->data.real,
                  0.0);
@@ -207,17 +244,19 @@ static Expr* pack_build(const Expr* list, size_t min_elems,
     for (int i = 0; i < rank; i++) n *= (size_t)dims[i];
     if (n < min_elems) return NULL;      /* declined before any allocation */
 
-    NDType dt = (cls == PK_BOOL) ? NDT_BOOL
-              : (cls == PK_INT)  ? NDT_INT64 : NDT_FLOAT64;
+    NDType dt = (cls == PK_BOOL)    ? NDT_BOOL
+              : (cls == PK_INT)     ? NDT_INT64
+              : (cls == PK_COMPLEX) ? NDT_COMPLEX64 : NDT_FLOAT64;
     if (have_want) {
-        /* An explicit DataType may WIDEN an exact list to a float buffer -- the
-         * user asked for that -- but never the reverse: rounding Reals into an
-         * int64 buffer would change values, not just storage. A bool buffer is
-         * neither a widening nor a narrowing of a number, so it is only legal
-         * over an all-True/False list (and, conversely, a True/False list only
-         * packs to bool). */
+        /* An explicit DataType may WIDEN a list -- an exact list to a float
+         * buffer, or any numeric list to a complex buffer (reals store with
+         * im=0) -- because the user asked for that; but never the reverse:
+         * rounding Reals into an int64 buffer would change values, not just
+         * storage. A bool buffer is neither a widening nor a narrowing of a
+         * number, so it is only legal over an all-True/False list (and,
+         * conversely, a True/False list only packs to bool -- the check below
+         * also rejects a bool list asked to go complex). */
         if (want == NDT_INT64 && cls != PK_INT) return NULL;
-        if (ndt_is_complex(want)) return NULL;   /* see leaf_class */
         if ((want == NDT_BOOL) != (cls == PK_BOOL)) return NULL;
         dt = want;
     }

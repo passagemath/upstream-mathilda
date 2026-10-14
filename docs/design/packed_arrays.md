@@ -4,9 +4,11 @@ How an ordinary `List` comes to be stored as a dense buffer without anything
 being able to tell, and what that costs. User-facing behaviour is in
 [`../spec/builtins/packed-arrays.md`](../spec/builtins/packed-arrays.md).
 
-Status: automatic packing is on and it crosses the `Compile[]` boundary (§7). §6
-lists what remains — complex packing and the remaining int64 fast paths, both
-optimisations rather than correctness items. §8 records the six wrong answers
+Status: automatic packing is on and it crosses the `Compile[]` boundary (§7).
+Real, integer, boolean and (since v0.402) **complex** lists all pack. §6 lists
+what remains — the remaining int64 fast paths and an explicit-path complex
+widening, both optimisations rather than correctness items. §8 records the six
+wrong answers
 that switching it on exposed, because each says something about where the
 abstraction leaks.
 
@@ -264,10 +266,19 @@ session that never packs pays one predictable load rather than an argument scan.
    buffer, `=abort` aborts at the first so a debugger shows the caller, and
    `nd_int64_lossy_hit` is a stable breakpoint target. Find them by running, not
    by reading.
-2. **Complex packing.** Declined for now: a complex element with a zero
-   imaginary part materialises as `Complex[re, 0.]`, which the evaluator never
-   produces (it folds to a `Real`), so a packed complex list would not
-   round-trip. Needs a presentation-aware fold in the element builder.
+2. **Complex packing.** ~~Declined~~ **Done (v0.402).** A list whose every
+   element is a `Complex[re, im]` with two machine-`Real` components packs to
+   `NDT_COMPLEX64` (`leaf_class` grew a `PK_COMPLEX` class). The feared
+   round-trip problem does not arise, and needs *no* presentation-aware fold:
+   the evaluator folds `Complex[x, 0.] -> Real` *before* any list is built, so an
+   all-`Complex` list can only contain genuinely-complex (`im != 0`) elements —
+   there is no `Complex[re, 0]` to misrepresent on the way back — and a mixed
+   `{Complex, Real}` list is heterogeneous, so it declines (as Wolfram's own
+   packer does). An exact Gaussian integer `Complex[1, 2]` also declines, for the
+   same `exact -> inexact` reason `{1, 2.5}` does. `RandomComplex` fills a complex
+   buffer directly (§D5). Remaining: a presentation-aware widening of a mixed
+   `{Complex, Real}` list on the *explicit* `ToNDArray[_, "complex64"]` path (the
+   substrate supports it; auto-packing deliberately does not).
 3. **`bench_pack.c`.** The numbers in the changelog were measured by hand at the
    REPL; they are not yet gated on the `bench_eval` normalized-baseline pattern.
 4. **A visible-surface decision, deliberately deferred.**

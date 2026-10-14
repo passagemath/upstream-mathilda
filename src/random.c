@@ -1413,9 +1413,34 @@ static Expr* randomcomplex_machine(Expr* res, size_t effective_argc) {
         /* effective_argc == 2 */
         Expr* dim_arg = res->data.function.args[1];
 
+        /* A genuinely-complex rectangle (imaginary range not identically zero)
+         * fills a packed complex64 buffer directly, just as RandomReal fills a
+         * float64 one: the values are machine complex by construction, so there
+         * is nothing to decide per element, and the common HermiteH[n, cArray]
+         * / Sin[cArray] workflow then runs on the buffer instead of threading
+         * boxed. The re-then-im draw order matches random_complex_range, so a
+         * seeded stream is unchanged. A degenerate zero-imaginary range keeps the
+         * old Real-valued List path (make_complex folds im=0 back to a Real). */
+        bool complex_valued = (im_min != 0.0 || im_max != 0.0);
+
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
             /* Flat list of n values */
             size_t n = (size_t)dim_arg->data.integer;
+            if (complex_valued) {
+                void* vbuf = NULL;
+                int64_t n64 = (int64_t)n;
+                Expr* packed = ndbuild_open(1, &n64, NDT_COMPLEX64, &vbuf);
+                if (packed) {
+                    for (size_t i = 0; i < n; i++) {
+                        double u1 = random_uniform_01();
+                        double u2 = random_uniform_01();
+                        ndt_set(vbuf, i, NDT_COMPLEX64,
+                                re_min + u1 * (re_max - re_min),
+                                im_min + u2 * (im_max - im_min));
+                    }
+                    return packed;
+                }
+            }
             Expr** elems = malloc(sizeof(Expr*) * n);
             if (!elems) return NULL;
             for (size_t i = 0; i < n; i++) {
@@ -1430,10 +1455,33 @@ static Expr* randomcomplex_machine(Expr* res, size_t effective_argc) {
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
             dim_arg->data.function.head->data.symbol.name == SYM_List) {
             /* Multi-dimensional array */
-            for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
+            size_t rank = dim_arg->data.function.arg_count;
+            for (size_t i = 0; i < rank; i++) {
                 Expr* d = dim_arg->data.function.args[i];
                 if (d->type != EXPR_INTEGER || d->data.integer < 0) {
                     return NULL;
+                }
+            }
+            if (complex_valued && rank >= 1 && rank < NDARRAY_MAX_RANK) {
+                int64_t dims[NDARRAY_MAX_RANK];
+                int64_t total = 1;
+                for (size_t i = 0; i < rank; i++) {
+                    dims[i] = dim_arg->data.function.args[i]->data.integer;
+                    total *= dims[i];
+                }
+                void* vbuf = NULL;
+                Expr* packed = ndbuild_open((int)rank, dims, NDT_COMPLEX64, &vbuf);
+                if (packed) {
+                    /* Row-major fill order matches random_complex_array's leaf
+                     * visitation, so a seeded stream gives the same array. */
+                    for (int64_t i = 0; i < total; i++) {
+                        double u1 = random_uniform_01();
+                        double u2 = random_uniform_01();
+                        ndt_set(vbuf, (size_t)i, NDT_COMPLEX64,
+                                re_min + u1 * (re_max - re_min),
+                                im_min + u2 * (im_max - im_min));
+                    }
+                    return packed;
                 }
             }
             Expr* result = random_complex_array(re_min, re_max, im_min, im_max,

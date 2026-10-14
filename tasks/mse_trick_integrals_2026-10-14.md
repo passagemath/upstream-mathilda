@@ -1,12 +1,12 @@
 ---
 title: MSE "simple techniques" definite-integral campaign
-status: A+B DONE (ship together as v0.404); C = narrow stage in progress (v0.405)
+status: COMPLETE — A+B (v0.404), C narrow stage (v0.405)
 started: 2026-10-14
 baseline: 17/23 CORRECT, 6 UNEVALUATED, 0 WRONG (v0.402, commit 30964d9)
-now: corpus 14/15 CORRECT, 0 WRONG, 1 UNEVALUATED (case 13 = Method C, deferred)
-corpus: tests/MseTrickIntegralsCorpus.m; gate mse_trick_corpus_tests (WRONG==0, CORRECT>=14)
+now: corpus 15/15 CORRECT, 0 WRONG (all three missing general methods landed)
+corpus: tests/MseTrickIntegralsCorpus.m; gate mse_trick_corpus_tests (WRONG==0, CORRECT>=15)
 plan: ~/.claude/plans/we-should-look-at-enumerated-lark.md
-git: NOT committed yet (version.h bumped to 0.404; awaiting user go-ahead to commit+tag v0.403/v0.404)
+git: A+B committed+tagged v0.404 (e548b0ea); C (v0.405) commit pending
 ---
 
 ## Outcome
@@ -17,18 +17,22 @@ git: NOT committed yet (version.h bumped to 0.404; awaiting user go-ahead to com
 - **A. General King reflection (v0.404)** — DONE. `src/calculus/integrate_king.{c,h}`.
   Closes #1 (π/4) and the whole 1/(1+Tan^s) family. Numeric-only, midpoint-constant
   + numeric screen + NIntegrate backstop.
-- **C. Feynman on a present parameter (#13)** — DEFERRED, root-caused + chain-validated,
-  but BLOCKED by two things:
-  1. **Gamma-simplification gap**: the inner integral J = ∫₀¹ x^a dx comes back as
-     `Beta[1+a,1]`, and neither `Simplify` nor `FunctionExpand` reduces `Beta[1+a,1]`
-     / `Gamma[1+a]/Gamma[2+a]` to `1/(1+a)`, so the integrate-back `∫ J da` cannot
-     close. A general parameter-Feynman needs this Gamma-ratio reduction first.
-  2. **Crash-prone territory**: parametric integrands on [0,1] can run ~10 s in the
-     diffunderint cascade and trip a PRE-EXISTING latent crash (see below).
-  Path forward (needs re-plan with user): either (a) teach Simplify the Gamma
-  recurrence `Gamma[n+a] = (n-1+a) Gamma[n-1+a]` (broad, separate effort), or (b) a
-  narrow bounded stage that computes the x^p-monomial inner integral directly as
-  1/(p+1) (closes #13 but not "fully general").
+- **C. Feynman on a present parameter (#13) — DONE (v0.405, narrow stage)**.
+  `src/calculus/integrate_feynparam.{c,h}`, `Integrate\`FeynmanParameter`. Closes
+  the Frullani-log family `∫₀¹ (Σ cᵢ x^{eᵢ})/Log[x] = Σ cᵢ Log[eᵢ+1]` (needs
+  `Σcᵢ=0`, each `eᵢ+1>0`): `(x^a-1)/Log[x] → Log[a+1]`,
+  `(x^a-x^b)/Log[x] → Log[(a+1)/(b+1)]`, `(2x^4-x-1)/Log[x] → Log[25/2]`.
+  **Side-steps the two blockers below** by computing the inner x-power integral
+  directly as `1/(e+1)` (no `Beta`/`Gamma` form → no reduction needed) and doing no
+  long re-entrant `Integrate` (stays out of the crash territory). Correct-by-
+  construction + NIntegrate backstop; declines `1/Log[x]` (divergent) and non-power
+  integrands. Not "fully general" Feynman — the two items below remain true and
+  would be needed for the unrestricted method:
+  1. **Gamma-simplification gap** ([[project_gamma_ratio_simplification_gap]]):
+     `Simplify`/`FunctionExpand` do not reduce `Beta[1+a,1]` / `Gamma[1+a]/Gamma[2+a]`
+     to `1/(1+a)`, so a general integrate-back over the parameter cannot close.
+  2. **Crash-prone territory** ([[project_parametric_integrate_stage_crash_gate]]):
+     heavy parametric runs trip a PRE-EXISTING latent crash (see below).
 
 ## PRE-EXISTING latent crash found (NOT introduced here; worked around)
 

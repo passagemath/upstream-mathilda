@@ -53,6 +53,7 @@
 #include "integrate_intrep.h"
 #include "integrate_series.h"
 #include "integrate_king.h"
+#include "integrate_feynparam.h"
 #include "intrat.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
@@ -1006,6 +1007,7 @@ typedef enum {
     METHOD_PIECEWISE,        /* definite-only: Abs/Sign/Heaviside/UnitStep/Min/Max/Piecewise */
     METHOD_SERIES,           /* definite-only: series term-by-term on [0,1] (R(x) Log[x]^k) */
     METHOD_KING,             /* definite-only: general King reflection x -> a+b-x */
+    METHOD_FEYNMAN_PARAM,    /* definite-only: parameter/Frullani-log (Sum c x^e)/Log[x] on [0,1] */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -1045,6 +1047,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "SeriesExpansion") == 0 || strcmp(s, "SeriesTermByTerm") == 0)
         return METHOD_SERIES;
     if (strcmp(s, "King") == 0 || strcmp(s, "Reflection") == 0) return METHOD_KING;
+    if (strcmp(s, "FeynmanParameter") == 0) return METHOD_FEYNMAN_PARAM;
     return METHOD_INVALID;
 }
 
@@ -1394,6 +1397,15 @@ static Expr* integrate_definite(Expr* res) {
              * non-matches instantly and the value is NIntegrate-cross-checked. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_SERIES))
                 r = integrate_series_try(cur, x, a, b, assumptions);
+            /* Parameter / Frullani-logarithm family on [0,1]:
+             * (Sum c_i x^(e_i))/Log[x] -> Sum c_i Log[e_i+1] (Sum c_i = 0),
+             * i.e. differentiation under the integral sign w.r.t. the exponent
+             * with the inner x-power integral taken directly as 1/(e+1).  Cheap
+             * structural gate (needs a 1/Log[x] weight); closes e.g.
+             * (x^a-1)/Log[x] -> Log[a+1] that the FTC/Beta cascade leaves
+             * unevaluated.  Correct-by-construction + NIntegrate-cross-checked. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_FEYNMAN_PARAM))
+                r = integrate_feynparam_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_beta_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
@@ -1458,7 +1470,7 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
                 mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
-                mech != METHOD_KING)
+                mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value, assumptions);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
@@ -2186,6 +2198,7 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_PIECEWISE:
         case METHOD_SERIES:
         case METHOD_KING:
+        case METHOD_FEYNMAN_PARAM:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
              * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem" /
@@ -2402,6 +2415,7 @@ void integrate_init(void) {
     integrate_intrep_init();
     integrate_series_init();
     integrate_king_init();
+    integrate_feynparam_init();
 
     /* Recursive transcendental Risch integrator:
      * Integrate`RischTranscendental.  Correct by construction. */

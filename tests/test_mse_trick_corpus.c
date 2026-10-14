@@ -280,9 +280,9 @@ int main(int argc, char** argv) {
     /* CORRECT floor ratchets UP as each method lands.  v0.404: the series
      * term-by-term stage closes cases 1-7 and keeps regressions 8-10; the
      * general King reflection stage closes case 11; case 12 and the negative
-     * controls 14-15 already pass -> 14 correct.  Case 13 (Feynman-parameter) is
-     * still UNEVALUATED; raise this to 15 when the Method C stage lands. */
-    const int CORPUS_CORRECT_BASELINE = 14;
+     * controls 14-15 already pass.  v0.405: the parameter/Frullani-log stage
+     * closes case 13 -> all 15 correct. */
+    const int CORPUS_CORRECT_BASELINE = 15;
     if (correct < CORPUS_CORRECT_BASELINE) {
         fprintf(stderr,
             "FAIL: only %d case(s) CORRECT (below baseline %d) -- a regression "

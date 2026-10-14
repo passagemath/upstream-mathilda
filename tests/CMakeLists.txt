@@ -708,6 +708,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_intrep.c
     ../src/calculus/integrate_series.c
     ../src/calculus/integrate_king.c
+    ../src/calculus/integrate_feynparam.c
     ../src/calculus/intrat.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c

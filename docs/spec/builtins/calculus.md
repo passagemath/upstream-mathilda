@@ -1962,6 +1962,16 @@ monotonically down.
     declines, so no wrong answer). It is numeric-only: a parametric integrand is out
     of scope. Complements the `x·g(x)`, `g`-invariant reflection already in the
     `"Beta"` file. Under Automatic it runs before Newton-Leibniz.
+  - `"FeynmanParameter"` — the parameter / Frullani-logarithm family on `[0,1]`
+    (`Integrate\`FeynmanParameter[f, {x, 0, 1}]`), i.e. differentiation under the
+    integral sign w.r.t. the exponent:
+    `Integrate[(Σ cᵢ x^{eᵢ})/Log[x], {x,0,1}] = Σ cᵢ Log[eᵢ+1]`, valid when
+    `Σ cᵢ = 0` (so the `1/Log[x]` singularity at `x=1` is integrable) and each
+    `eᵢ+1 > 0` (proved from Assumptions). The inner `x`-power integral is taken
+    directly as `1/(e+1)`. E.g. `(x^a-1)/Log[x] → Log[a+1]` (`a>-1`),
+    `(x^a-x^b)/Log[x] → Log[(a+1)/(b+1)]`. Numerically cross-checked against
+    `NIntegrate`; `1/Log[x]` (coefficient sum `≠ 0`, divergent) declines. Under
+    Automatic it runs in the pre-FTC `[0,1]` block.
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the

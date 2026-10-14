@@ -56,6 +56,7 @@
 
 #include "integrate_derivdivides.h"
 
+#include "mtime.h"   /* mth_mono_seconds */
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
@@ -365,10 +366,7 @@ static Expr* dd_eval_bounded(Expr* call) {
 }
 
 static double dd_mono_seconds(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-    return (double)clock() / (double)CLOCKS_PER_SEC;
+    return mth_mono_seconds();   /* portable monotonic clock; see src/mtime.c */
 }
 
 /* Armed ONCE per top-level evaluation, keyed on eval_toplevel_id().

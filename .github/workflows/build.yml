@@ -1,4 +1,4 @@
-name: Linux build
+name: Build (Linux + Windows)
 
 # Mathilda is developed on macOS but shipped to Linux users, and the two
 # platforms disagree about what `-std=c99` means. glibc hides every POSIX
@@ -176,5 +176,73 @@ jobs:
           # N[Pi, 50] must degrade gracefully to machine precision, not crash.
           echo "$out" | grep -q '"payload":"3.14159"' || {
             echo "::error::no-MPFR N[Pi, 50] did not fall back to machine precision"
+            exit 1
+          }
+
+  # Mathilda is packaged for native Windows via MSYS2/MinGW (passagemath PR
+  # #2966). That is not a Cygwin POSIX layer, so the POSIX-only surface a
+  # developer never thinks about — the TimeConstrained SIGPROF/setitimer engine,
+  # getrusage, lstat, setenv — simply is not there, and an unguarded use breaks
+  # only this build (v0.387 did). `make check-c99` now flags that class source-
+  # side, but the authoritative gate is this real UCRT64 compile. We build the
+  # kernel with the optional subsystems off (the documented minimal Windows
+  # line) but keep MPFR on, since mpfr is a standard MSYS2 package.
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (UCRT64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gmp
+            mingw-w64-ucrt-x86_64-mpfr
+            mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Report toolchain
+        run: |
+          uname -s
+          make print-cc
+
+      # The minimal native-Windows build documented in docs/building.md: the
+      # pkg-config-autodetected subsystems (FLINT/LAPACK/raylib/PCRE2/FFTW) and
+      # ECM are off; readline and threads are force-disabled on Windows by the
+      # makefile. MPFR stays ON (installed above). Emits Mathilda.exe.
+      - name: Build
+        run: |
+          make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
+                   USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+
+      # Speak the NDJSON sidecar protocol (piped stdin), as on Linux. The
+      # TimeConstrained line is the point of this job: Windows has no SIGPROF
+      # async layer, so the budget is enforced purely by the cooperative
+      # deadline (src/mtime.c + the evaluator poll). MaxMemoryUsed exercises the
+      # GetProcessMemoryInfo path that replaced getrusage.
+      - name: Smoke test
+        run: |
+          out=$(printf '%s\n' \
+            '{"id": 1, "expr": "2 + 3"}' \
+            '{"id": 2, "expr": "TimeConstrained[While[True, Null], 0.3]"}' \
+            '{"id": 3, "expr": "MaxMemoryUsed[] > 0"}' \
+            '{"type": "quit"}' | ./Mathilda.exe)
+          echo "$out"
+          echo "$out" | grep -q '"payload":"5"' || {
+            echo "::error::Windows build did not evaluate 2 + 3"
+            exit 1
+          }
+          echo "$out" | grep -q '"payload":"\$Aborted"' || {
+            echo "::error::TimeConstrained did not abort via the cooperative deadline on Windows"
+            exit 1
+          }
+          echo "$out" | grep -q '"payload":"True"' || {
+            echo "::error::MaxMemoryUsed[] (GetProcessMemoryInfo) did not return a positive value"
             exit 1
           }

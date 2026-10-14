@@ -568,6 +568,20 @@ the baselines only after an *intended* performance change.
   `CFLAGS` additionally promotes the diagnostics GCC 14 made errors
   (`-Werror=incompatible-pointer-types`, `-int-conversion`, `-implicit-int`), so
   the CI build gates on them whichever GCC the runner ships.
+- **Native Windows (MSYS2/MinGW UCRT64).** A fourth portability axis, same shape
+  as the glibc one: Mathilda is packaged for native Windows (not a Cygwin POSIX
+  layer), so a POSIX symbol macOS/Linux have but MinGW lacks — `setitimer`,
+  `getrusage`, `lstat`, `setenv`, the `sigaction`/`sigsetjmp` `TimeConstrained`
+  layer — breaks only the Windows build when used unguarded (passagemath PR
+  #2966, v0.387). Put such a use behind `#ifndef _WIN32` with a Windows path (or
+  a `#define` alias) in the matching `#ifdef _WIN32`. All wall/monotonic clocks
+  and `Pause` route through `src/mtime.c` (`mth_mono_seconds` /
+  `mth_wall_seconds` / `mth_sleep_seconds`), which carries the single
+  `QueryPerformanceCounter`/`Sleep` seam; do not reach for `clock_gettime`
+  directly. `make check-c99`'s MinGW scan flags the class source-side, and the
+  MSYS2/UCRT64 leg of the CI workflow is the authoritative real compile.
+  `TimeConstrained` on Windows is cooperative-only (no async SIGPROF); threads
+  are off. See `docs/building.md` (§Windows).
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
 - **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
   tree.

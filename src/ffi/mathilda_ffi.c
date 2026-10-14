@@ -55,11 +55,20 @@ static char* ffi_strdup(const char* s) {
 void mathilda_ffi_set_home(const char* dir) {
     if (!dir || !*dir) return;
     /* Prefer the process environment so mathilda_resolve_internal() (which
-     * reads $MATHILDA_HOME) picks it up as its first candidate. setenv is
-     * available on iOS/Android/macOS/Linux; keep a copy for diagnostics. */
+     * reads $MATHILDA_HOME) picks it up as its first candidate; keep a copy for
+     * diagnostics.  setenv is POSIX (iOS/Android/macOS/Linux); native Windows
+     * (MinGW) has only the CRT _putenv, which takes a "NAME=value" string. */
     strncpy(g_home, dir, sizeof(g_home) - 1);
     g_home[sizeof(g_home) - 1] = '\0';
+#ifdef _WIN32
+    {
+        char kv[sizeof(g_home) + 16];
+        snprintf(kv, sizeof(kv), "MATHILDA_HOME=%s", g_home);
+        _putenv(kv);
+    }
+#else
     setenv("MATHILDA_HOME", g_home, 1);
+#endif
 }
 
 void mathilda_ffi_init(void) {

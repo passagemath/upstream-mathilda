@@ -546,6 +546,7 @@ set(COMMON_SRC
     ../src/parfrac.c
     ../src/contfrac.c
     ../src/datetime.c
+    ../src/mtime.c
     ../src/linalg/linalg.c
     ../src/linalg/util.c
     ../src/linalg/dot.c

@@ -45,7 +45,7 @@
 #  ifndef _DARWIN_C_SOURCE
 #  define _DARWIN_C_SOURCE
 #  endif
-#else
+#elif !defined(_WIN32)
 #  ifndef _DEFAULT_SOURCE
 #  define _DEFAULT_SOURCE
 #  endif
@@ -57,13 +57,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/resource.h>
+#if !defined(_WIN32)
+#include <sys/resource.h>   /* getrusage -- POSIX, absent on native Windows */
+#endif
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
 #endif
 #if defined(__linux__)
 #include <unistd.h>
+#endif
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>          /* GetProcessMemoryInfo; link -lpsapi on Windows */
 #endif
 
 #include "expr.h"
@@ -98,6 +104,14 @@ bool meminfo_current(uint64_t* bytes) {
     *bytes = (uint64_t)resident * (uint64_t)page;
     return true;
 
+#elif defined(_WIN32)
+    /* Current resident set == working set, in bytes. */
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return false;
+    *bytes = (uint64_t)pmc.WorkingSetSize;
+    return true;
+
 #else
     /* No portable way to ask. Declining is the honest answer; a zero would read as "no
      * memory in use", which is worse than no answer at all. */
@@ -108,6 +122,16 @@ bool meminfo_current(uint64_t* bytes) {
 
 bool meminfo_peak(uint64_t* bytes) {
     if (!bytes) return false;
+
+#if defined(_WIN32)
+    /* No getrusage on native Windows; the peak working set is the direct
+     * equivalent of ru_maxrss, already in bytes. */
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return false;
+    *bytes = (uint64_t)pmc.PeakWorkingSetSize;
+    return true;
+#else
     struct rusage ru;
     if (getrusage(RUSAGE_SELF, &ru) != 0) return false;
 
@@ -117,6 +141,7 @@ bool meminfo_peak(uint64_t* bytes) {
     *bytes = (uint64_t)ru.ru_maxrss * (uint64_t)1024; /* Linux: kilobytes */
 #endif
     return true;
+#endif
 }
 
 /* MemoryInUse[] -- current resident bytes.

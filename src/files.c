@@ -52,6 +52,13 @@
 #define HOST_SEP '/'
 #endif
 
+/* Native Windows (MinGW) has no lstat.  FileExistsQ uses lstat so a dangling
+ * symlink still counts as "exists"; on Windows there is no POSIX symlink to
+ * distinguish, so stat is the exact equivalent. */
+#ifdef _WIN32
+#define lstat stat
+#endif
+
 /* Emit a Wolfram-style diagnostic ("Head::tag: text") unless Quiet is active.
  * The firing is always noted so Check[] sees it. Mirrors dt_msg in
  * src/datetime.c. */

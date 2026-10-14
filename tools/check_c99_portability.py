@@ -46,6 +46,15 @@ Note that a compile flag cannot catch this one on the development machine: on
 Darwin the two types coincide, so there is nothing for the compiler to object
 to. A source-level rule is the only thing that fails locally.
 
+A fourth check covers native Windows (MinGW UCRT64), a separate axis with the
+same shape: a POSIX symbol macOS/Linux have but MinGW lacks (`setitimer`,
+`getrusage`, `lstat`, `setenv`, the `sigaction`/`sigsetjmp` timeout layer, ...),
+used without an `_WIN32` guard, compiles for every developer and breaks only the
+MSYS2 package build (passagemath PR #2966, Mathilda v0.387). `MINGW_MISSING_*`
+lists those symbols; a use is accepted inside an `_WIN32` conditional or given a
+Windows alias via `#define` there. The authoritative gate is the MSYS2 CI leg,
+which compiles; this is the cheap local tripwire.
+
 Run via `make check-c99`; it exits nonzero and names every offending file.
 
 Scope
@@ -160,6 +169,55 @@ CALL_RE = {
     sym: re.compile(r"(?<![\w.])(?<!->)\b" + sym + r"\s*\(")
     for sym in FUNCTIONS
 }
+
+# ---------------------------------------------------------------------------
+# Check 2b: symbols absent on native Windows (MinGW UCRT64)
+# ---------------------------------------------------------------------------
+#
+# A different portability axis with the same failure shape as the glibc one: a
+# POSIX symbol that macOS/Linux have and native MinGW (no Cygwin layer) does
+# NOT, used UNCONDITIONALLY, compiles fine for every developer and breaks only
+# the Windows package build (passagemath PR #2966: v0.387 failed on MinGW for
+# exactly this). The real gate is the MSYS2 CI leg, which actually compiles;
+# this is the cheap local tripwire that fails in seconds instead.
+#
+# A use is accepted when it sits inside a preprocessor conditional that mentions
+# `_WIN32` (either the `#ifndef _WIN32` non-Windows branch, or the Windows
+# branch of an `#ifdef _WIN32 ... #else`), or when the symbol is given a Windows
+# alias via `#define <sym> ...` inside such a conditional (e.g. files.c's
+# `#define lstat stat`). Timing/sleep/clock calls go through src/mtime.c and are
+# deliberately NOT listed here. `_WIN32` is a compiler builtin, defined before
+# any include, so no feature-test ordering applies.
+MINGW_MISSING_FUNCS = (
+    # <signal.h>/<sys/time.h> async layer -- the TimeConstrained engine.
+    "setitimer", "getitimer", "sigaction", "sigemptyset", "sigaddset",
+    "sigsetjmp", "siglongjmp",
+    # <sys/resource.h>
+    "getrusage",
+    # <sys/stat.h>: lstat has no Windows symlink notion (alias to stat).
+    "lstat",
+    # <stdlib.h>: MinGW has only _putenv.
+    "setenv", "unsetenv",
+    # <unistd.h>/<sys/wait.h> process control (none in-tree today; future-proof).
+    "fork", "execvp", "waitpid",
+)
+
+MINGW_MISSING_HEADERS = (
+    "sys/resource.h", "sys/wait.h", "sys/ioctl.h", "termios.h",
+    "dlfcn.h", "pwd.h",
+)
+
+# Deliberate unguarded uses, path -> set of symbols, each with a one-line reason.
+# Empty today, so the MinGW check is assert-empty; a genuine exception is added
+# here with its justification rather than weakening the scan.
+MINGW_EXEMPT = {}
+
+MINGW_CALL_RE = {
+    sym: re.compile(r"(?<![\w.])(?<!->)\b" + sym + r"\s*\(")
+    for sym in MINGW_MISSING_FUNCS
+}
+CPP_DIRECTIVE_RE = re.compile(r"^\s*#\s*(\w+)(.*)$")
+CPP_DEFINE_RE = re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)")
 
 # ---------------------------------------------------------------------------
 # Check 3: the `long long` checked-integer family outside src/compile/
@@ -345,6 +403,55 @@ def scan_functions(text):
     return unguarded, late
 
 
+def win32_aware_lines(text):
+    """Classify each line for the MinGW scan.
+
+    Returns (aware, win32_defines): `aware` is the set of line indices that sit
+    inside at least one preprocessor conditional whose `#if`/`#ifdef`/`#ifndef`
+    (or any `#elif`) controller mentions `_WIN32`; `win32_defines` is the set of
+    names given a `#define` on such a line (a Windows alias, e.g.
+    `#define lstat stat`). A symbol used on an `aware` line, or present in
+    `win32_defines`, has been made Windows-aware.
+    """
+    aware, win32_defines = set(), set()
+    stack = []  # one bool per open conditional: does its controller name _WIN32?
+    for idx, line in enumerate(text.splitlines()):
+        m = CPP_DIRECTIVE_RE.match(line)
+        directive, rest = (m.group(1), m.group(2)) if m else (None, "")
+        if directive in ("if", "ifdef", "ifndef"):
+            stack.append("_WIN32" in rest)
+        elif directive == "elif" and stack:
+            stack[-1] = stack[-1] or ("_WIN32" in rest)
+        elif directive == "endif" and stack:
+            stack.pop()
+        if any(stack):
+            aware.add(idx)
+            dm = CPP_DEFINE_RE.match(line)
+            if dm:
+                win32_defines.add(dm.group(1))
+    return aware, win32_defines
+
+
+def scan_mingw(text):
+    """Return the sorted MinGW-missing symbols used unguarded by `_WIN32`."""
+    aware, win32_defines = win32_aware_lines(text)
+    lines = text.splitlines()
+    offenders = set()
+    for idx, line in enumerate(lines):
+        if idx in aware:
+            continue
+        for sym in MINGW_MISSING_FUNCS:
+            if sym in win32_defines or sym in offenders:
+                continue
+            if MINGW_CALL_RE[sym].search(line) and not declares_locally(text, sym):
+                offenders.add(sym)
+        if INCLUDE_RE.match(line):
+            for hdr in MINGW_MISSING_HEADERS:
+                if hdr in line:
+                    offenders.add(hdr)
+    return sorted(offenders)
+
+
 def scan_wide_int_family(text):
     """Return the sorted `long long` checked-int helpers called in `text`."""
     return sorted(sym for sym in WIDE_INT_FAMILY if WIDE_INT_RE[sym].search(text))
@@ -376,6 +483,7 @@ def main():
     const_offenders, func_offenders, late_offenders = [], [], []
     wide_offenders = []
     stream_offenders = []
+    mingw_offenders = []
 
     for path in source_files(repo_root):
         raw = read(repo_root, path)
@@ -405,8 +513,13 @@ def main():
             if streams:
                 stream_offenders.append((path, streams))
 
+            mingw = [s for s in scan_mingw(text)
+                     if s not in MINGW_EXEMPT.get(path, ())]
+            if mingw:
+                mingw_offenders.append((path, mingw))
+
     if not (const_offenders or func_offenders or late_offenders
-            or wide_offenders or stream_offenders):
+            or wide_offenders or stream_offenders or mingw_offenders):
         return 0
 
     if const_offenders:
@@ -479,9 +592,22 @@ def main():
             sys.stderr.write("  %s  (%s)\n" % (path, ", ".join(syms)))
         sys.stderr.write("\n")
 
+    if mingw_offenders:
+        sys.stderr.write(
+            "error: symbol absent on native Windows (MinGW UCRT64) used without\n"
+            "       an `_WIN32` guard. It compiles on macOS/Linux and breaks the\n"
+            "       MSYS2/MinGW package build (passagemath PR #2966). Put the use\n"
+            "       behind `#ifndef _WIN32` (POSIX branch) with a Windows path or\n"
+            "       alias in the matching `#ifdef _WIN32`; route clocks/sleep\n"
+            "       through src/mtime.c:\n\n"
+        )
+        for path, syms in mingw_offenders:
+            sys.stderr.write("  %s  (%s)\n" % (path, ", ".join(syms)))
+        sys.stderr.write("\n")
+
     total = len(set(p for p, _ in
                     const_offenders + func_offenders + late_offenders
-                    + wide_offenders + stream_offenders))
+                    + wide_offenders + stream_offenders + mingw_offenders))
     sys.stderr.write("%d file(s) affected.\n" % total)
     return 1
 

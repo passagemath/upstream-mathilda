@@ -129,6 +129,14 @@ endif
 
 LDFLAGS = $(READLINE_LIBS) $(THREAD_LIBS) -L/usr/local/lib -lgmp -lm
 
+# Native Windows (MinGW): MemoryInUse[] / MaxMemoryUsed[] use GetProcessMemoryInfo
+# from psapi.  kernel32 (QueryPerformanceCounter / GetSystemTimePreciseAsFileTime
+# / Sleep, used by src/mtime.c) is linked by the MinGW driver automatically;
+# psapi is not, so add it explicitly.
+ifeq ($(BUILD_PLATFORM),Windows)
+  LDFLAGS += -lpsapi
+endif
+
 # macOS: reserve maximum Mach-O header padding so the baked-in absolute dylib
 # install names (/usr/local/opt/.../libgmp.10.dylib, …) can later be rewritten
 # to LONGER relocatable paths (@loader_path/../../.dylibs/…) by install_name_tool
@@ -196,7 +204,10 @@ endif
 # Accuracy/SetPrecision/SetAccuracy, and `3.98`50` precision literals.
 # Disable with `USE_MPFR=0` to build without the MPFR dependency; the
 # machine-precision path continues to work with a runtime warning on the
-# unsupported operations.
+# unsupported operations.  MPFR is default-ON and has no autodetect/degrade
+# (unlike FLINT/LAPACK/...), so on native Windows install the package first
+# (`pacman -S mingw-w64-ucrt-x86_64-mpfr`) or build with USE_MPFR=0 -- otherwise
+# the link fails on -lmpfr.  See docs/building.md (§Windows).
 ifeq ($(USE_MPFR), 1)
 CFLAGS  += -DUSE_MPFR
 LDFLAGS += -lmpfr
@@ -397,7 +408,14 @@ FFI_OBJ = $(patsubst %.c,%.o,$(wildcard $(SRC_DIR)/ffi/*.c))
 # .d lists the headers its .o #includes, so editing a header (e.g. version.h)
 # rebuilds every object that includes it. Pulled in via `-include` at the bottom.
 DEP = $(OBJ:.o=.d)
+# MinGW GCC appends .exe to an extension-less -o target, so the produced file is
+# Mathilda.exe; naming TARGET to match keeps the rule's timestamp honest (no
+# perpetual relink) and gives scripts a deterministic path.
+ifeq ($(BUILD_PLATFORM),Windows)
+TARGET = Mathilda.exe
+else
 TARGET = Mathilda
+endif
 
 TEST_BINARIES = eval_tests expr_tests parse_tests test_ld test_ops test_pattern list_tests stats_tests expand_tests
 TEST_DIR = tests

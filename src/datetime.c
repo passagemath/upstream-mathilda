@@ -16,6 +16,7 @@
 #include "numeric.h"
 #include "message.h"
 #include "print.h"
+#include "mtime.h"   /* mth_mono_seconds / mth_wall_seconds / mth_sleep_seconds */
 #include <time.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -52,12 +53,10 @@ static void dt_msg(const char* fmt, ...) {
  * change during a long evaluation cannot produce a negative interval.
  */
 static double dt_wall_seconds(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-    /* No monotonic clock: fall back to CPU time, which is at least a duration.
-     * Over-reports threaded work, exactly as Timing[] does. */
-    return (double)clock() / (double)CLOCKS_PER_SEC;
+    /* Portable monotonic seconds (mtime.c).  It applies the same
+     * CLOCK_MONOTONIC -> CPU-time fallback this function used to inline, and on
+     * native Windows uses QueryPerformanceCounter. */
+    return mth_mono_seconds();
 }
 
 /* Wall-clock reading captured at datetime_init(), i.e. kernel start-up. It is
@@ -583,6 +582,15 @@ static int64_t current_year(void) {
 static Expr* datelist_now(void) {
     time_t secs;
     long   nsec = 0;
+#if defined(_WIN32)
+    /* No clock_gettime on native Windows; the shim's wall clock gives sub-second
+     * resolution (~0.5 us in double precision, ample for a calendar field). */
+    double w = mth_wall_seconds();
+    secs = (time_t)w;
+    nsec = (long)((w - (double)secs) * 1e9);
+    if (nsec < 0) nsec = 0;
+    if (nsec > 999999999L) nsec = 999999999L;
+#else
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
         secs = ts.tv_sec;
@@ -591,6 +599,7 @@ static Expr* datelist_now(void) {
         secs = time(NULL);
         if (secs == (time_t)-1) return NULL;
     }
+#endif
     struct tm lt;
     struct tm* lp = localtime(&secs);
     if (!lp) return NULL;
@@ -908,12 +917,13 @@ static int pause_seconds(const Expr* e, double* out) {
 /*
  * Pause[n] blocks for at least n seconds of wall-clock time, then returns Null.
  *
- * It sleeps with nanosleep, which consumes no CPU, so the elapsed time is
- * counted by the wall clocks (AbsoluteTiming, SessionTime) but is invisible to
- * the CPU clocks (Timing, TimeUsed) -- no special-casing is needed; the two
- * clock sources do it for free.  nanosleep can return early on a signal, so we
- * resume with the reported remainder until the full duration has elapsed,
- * honouring the "at least n seconds" contract.
+ * It sleeps via the portable timing shim (nanosleep on POSIX, Sleep on native
+ * Windows), which consumes no CPU, so the elapsed time is counted by the wall
+ * clocks (AbsoluteTiming, SessionTime) but is invisible to the CPU clocks
+ * (Timing, TimeUsed) -- no special-casing is needed; the two clock sources do
+ * it for free.  On POSIX a signal can cut the sleep short, so the shim resumes
+ * with the reported remainder until the full duration has elapsed, honouring
+ * the "at least n seconds" contract.
  */
 Expr* builtin_pause(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
@@ -927,16 +937,7 @@ Expr* builtin_pause(Expr* res) {
     }
 
     if (seconds > 0.0 && isfinite(seconds)) {
-        double whole = floor(seconds);
-        long   nsec  = (long)((seconds - whole) * 1e9);
-        if (nsec < 0)         nsec = 0;
-        if (nsec > 999999999L) nsec = 999999999L;
-
-        struct timespec req = { (time_t)whole, nsec };
-        struct timespec rem;
-        while (nanosleep(&req, &rem) != 0 && errno == EINTR) {
-            req = rem;
-        }
+        mth_sleep_seconds(seconds);
     }
 
     /* seconds <= 0 (or non-finite) means no wait, matching Pause[0]. */

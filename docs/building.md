@@ -108,14 +108,20 @@ Rust/MSVC toolchain.
 
 1. Install [MSYS2](https://www.msys2.org/) (default path `C:\msys64`).
 
-2. In the **MSYS2 MinGW64** shell, install the C toolchain and GMP:
+2. In the **MSYS2 MinGW64** shell, install the C toolchain, GMP and MPFR:
    ```bash
    pacman -S --noconfirm \
      mingw-w64-x86_64-gcc \
      mingw-w64-x86_64-gmp \
+     mingw-w64-x86_64-mpfr \
      mingw-w64-x86_64-make \
      mingw-w64-x86_64-pkg-config
    ```
+   MPFR is on by default (`USE_MPFR=1`) and, unlike the pkg-config-autodetected
+   libraries, has no graceful-degrade — so it must be installed, or you must
+   pass `USE_MPFR=0`, otherwise the link fails on `-lmpfr`. (On the **UCRT64**
+   environment, substitute the `mingw-w64-ucrt-x86_64-` package prefix; this is
+   what the CI Windows job uses.)
 
 3. Install [Rust for Windows](https://rustup.rs/) using the
    `x86_64-pc-windows-msvc` host (the default Windows installer selects this).
@@ -141,10 +147,21 @@ Rust/MSVC toolchain.
 make USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 USE_LAPACK=0 -j4
 ```
 
-Readline is not available on Windows. The `NO_READLINE` flag is set
-automatically when `BUILD_PLATFORM` is detected as Windows, or explicitly by
-passing `USE_READLINE=0`. Pipe mode (used by the Tauri frontend) does not
-require readline.
+This produces `Mathilda.exe`. Readline is not available on Windows: the
+`NO_READLINE` flag is set automatically when `BUILD_PLATFORM` is detected as
+Windows, or explicitly by passing `USE_READLINE=0`. Pipe mode (used by the Tauri
+frontend) does not require readline.
+
+**Platform degradations on Windows.** Native MinGW has no POSIX signals, so
+`TimeConstrained[expr, t]` runs *cooperative-only*: it enforces the budget
+through the evaluator loop (and the deadline polls in heavy kernels), exactly
+like the WSL-1 path, but cannot forcibly interrupt a single long-running C
+builtin that never returns to the loop. POSIX threads are off (`USE_THREADS=0`),
+so the parallel NDArray kernels run serially. These match the readline and
+output-capture omissions — the kernel is otherwise fully functional. Timing
+(`AbsoluteTiming`, `SessionTime`), `Pause`, and memory reporting (`MemoryInUse`,
+`MaxMemoryUsed`) all work, via `QueryPerformanceCounter` / `Sleep` /
+`GetProcessMemoryInfo` in `src/mtime.c` and `src/meminfo.c`.
 
 ### Install the sidecar and package the app
 

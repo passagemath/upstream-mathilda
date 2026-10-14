@@ -28,6 +28,7 @@
 #endif
 
 #include "integrate.h"
+#include "mtime.h"   /* mth_mono_seconds */
 #include "integrate_interp.h"
 #include "integrate_unknown.h"
 #include "integrate_derivdivides.h"
@@ -1623,10 +1624,7 @@ static double ip_mono_seconds(void);
 static double intg_mono_seconds(void) { return ip_mono_seconds(); }
 
 static double ip_mono_seconds(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-    return (double)clock() / (double)CLOCKS_PER_SEC;
+    return mth_mono_seconds();   /* portable monotonic clock; see src/mtime.c */
 }
 
 static void ip_flush_inflight(void);

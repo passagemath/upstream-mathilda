@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "mtime.h"   /* mth_mono_seconds */
 #include <gmp.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -83,10 +84,7 @@ double simp_debug_elapsed_ms(clock_t t0) {
  * to CPU clock() if the syscall is unavailable. Modelled on
  * dt_wall_seconds() in datetime.c. */
 double simp_mono_seconds(void) {
-    struct timespec ts;
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0)
-        return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
-    return (double)clock() / (double)CLOCKS_PER_SEC;  /* fallback */
+    return mth_mono_seconds();   /* portable monotonic clock; see src/mtime.c */
 }
 
 void simp_debug_log(const char* xform, const Expr* in,

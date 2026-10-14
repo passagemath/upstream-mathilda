@@ -671,6 +671,53 @@ bool sf_machine_chebyshev_u_c(double n, double xre, double xim,
     return isfinite(u1r) && isfinite(u1i);
 }
 
+/* HermiteH[n, x] (physicists') for a non-negative integer degree, by the
+ * three-term recurrence H_0 = 1, H_1 = 2x, H_k = 2x H_{k-1} - 2(k-1) H_{k-2} --
+ * stable upward for this polynomial family. A non-integer, negative, or very
+ * large degree is left to the MPFR / symbolic path, matching how
+ * sf_machine_chebyshev_u declines. */
+bool sf_machine_hermite_h(double n, double x, double* out) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *out = 1.0; return true; }
+    double h0 = 1.0, h1 = 2.0 * x;
+    if (N == 1) { *out = h1; return isfinite(h1); }
+    for (int k = 2; k <= N; k++) {
+        double hk = 2.0 * x * h1 - 2.0 * (double)(k - 1) * h0;
+        h0 = h1; h1 = hk;
+    }
+    *out = h1;
+    return isfinite(h1);
+}
+
+/* HermiteH[n, x] for a non-negative integer degree with a machine COMPLEX
+ * argument x = xre + i*xim, by the same three-term recurrence carried in two
+ * doubles (manual re/im, no <complex.h> -- C99-portable). Declines for a
+ * non-integer/negative/large degree or a non-finite result, mirroring the real
+ * helper so the ND kernel and the scalar dispatch fall back to the MPFR path
+ * exactly where the real path would. */
+bool sf_machine_hermite_h_c(double n, double xre, double xim,
+                            double* rr, double* ri) {
+    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
+    int N = (int)n;
+    if (N == 0) { *rr = 1.0; *ri = 0.0; return true; }
+    double h1r = 2.0 * xre, h1i = 2.0 * xim;        /* H_1 = 2x */
+    if (N == 1) { *rr = h1r; *ri = h1i; return isfinite(h1r) && isfinite(h1i); }
+    double h0r = 1.0, h0i = 0.0;                     /* H_0 = 1  */
+    const double tr = 2.0 * xre, ti = 2.0 * xim;     /* 2x */
+    for (int k = 2; k <= N; k++) {
+        /* hk = 2x*h1 - 2(k-1)*h0  (complex multiply, then subtract) */
+        double pr = tr * h1r - ti * h1i;
+        double pi = tr * h1i + ti * h1r;
+        double f = 2.0 * (double)(k - 1);
+        double hkr = pr - f * h0r, hki = pi - f * h0i;
+        h0r = h1r; h0i = h1i;
+        h1r = hkr; h1i = hki;
+    }
+    *rr = h1r; *ri = h1i;
+    return isfinite(h1r) && isfinite(h1i);
+}
+
 /* LaguerreL[n, a, x] for a non-negative integer degree n, by the stable forward
  * recurrence  L_0 = 1,  L_1 = 1 + a - x,
  *   (k+1) L_{k+1} = (2k+1+a-x) L_k - (k+a) L_{k-1}

@@ -729,6 +729,22 @@ static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
 }
 static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false };
 
+/* HermiteH[n, x] (physicists'). Hand-written rather than via NDK_BIN2 because it
+ * carries a machine COMPLEX arm: the order `a` must be a real integer, but the
+ * argument `b` = x may be complex, so a packed/visible complex buffer computes
+ * on the buffer. Same raw-double helpers as the scalar dispatch, so the surfaces
+ * agree bit-for-bit. */
+static bool ndk_HermiteH_c(double are, double aim, double bre, double bim,
+                           double* ore, double* oim) {
+    if (aim != 0.0) return false;                 /* order must be a real integer */
+    if (bim == 0.0) {                              /* real argument */
+        double v; if (!sf_machine_hermite_h(are, bre, &v)) return false;
+        *ore = v; *oim = 0.0; return true;
+    }
+    return sf_machine_hermite_h_c(are, bre, bim, ore, oim);   /* complex argument */
+}
+static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false };
+
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
  * polynomial degree n) must be a real integer, but the argument `b` = x may be
@@ -864,6 +880,7 @@ void ndkernels_init(void) {
     REG_B(ChebyshevT,  NDKB_ChebyshevT);
     REG_B(ChebyshevU,  NDKB_ChebyshevU);
     REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */
+    REG_B(HermiteH,    NDKB_HermiteH);    /* HermiteH[n, x] (array x) */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);

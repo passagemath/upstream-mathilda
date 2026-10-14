@@ -1842,6 +1842,46 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- HermiteH[N, Z]:
+         *   d/dZ H_N(Z) = 2 N HermiteH[N-1, Z].
+         *   d/dN H_N(Z) = Derivative[1,0][HermiteH][N,Z]  (no elementary form).
+         * Enables D[], the generic Interval threading in eval.c, and -- via the
+         * Taylor-via-D path in series.c -- the finite-point Series expansion. */
+        if (h == SYM_HermiteH && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* 2 N HermiteH[N-1, Z] */
+                Expr* hNm1 = mk_fn2("HermiteH",
+                                mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* dHdZ = expr_new_function(mk_sym("Times"),
+                                (Expr*[]){ mk_int(2), expr_copy(N), hNm1 }, 3);
+                terms[nt++] = mk_fn2("Times", dHdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("HermiteH"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- LaguerreL[N, Z]:
          *   d/dZ L_N(Z) = -LaguerreL[N-1, 1, Z]  (the generalized Laguerre).
          *   d/dN L_N(Z) = Derivative[1,0][LaguerreL][N,Z]  (no elementary form).

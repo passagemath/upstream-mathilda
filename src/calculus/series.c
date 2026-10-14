@@ -4973,6 +4973,73 @@ static Expr* try_series_besselj_at_infinity(Expr* f, Expr* x, int64_t n) {
     return result;
 }
 
+/* Asymptotic expansion of HermiteH[nu, x] (physicists') at x = Infinity:
+ *
+ *   H_nu(x) ~ (2x)^nu 2F0(-nu/2, (1-nu)/2; ; -1/x^2)
+ *           = (2x)^nu Sum_{j>=0} c_j x^{-2j},
+ *     c_j = (-1)^j (-nu/2)_j ((1-nu)/2)_j / j!.
+ *
+ * The coefficients are rational in nu (via Pochhammer), so this covers symbolic
+ * order, matching Mathematica's Series[HermiteH[n,x],{x,Infinity,k}]. The result
+ * is the symbolic prefactor (2x)^nu times a SeriesData in 1/x carrying only the
+ * even powers:
+ *   (2 x)^nu SeriesData[1/x, 0, {c_0, 0, c_1, 0, ...}, 0, nmax, 1].
+ * Returns NULL unless f is exactly HermiteH[nu, x] in the expansion variable.
+ *
+ * Only the algebraic (2x)^nu branch is produced; the subdominant e^(x^2) term of
+ * the full two-sided asymptotics (recessive on the positive real axis) is not. */
+static Expr* try_series_hermiteh_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 0) n = 0;
+    if (!has_symbol_head(f, "HermiteH") || f->data.function.arg_count != 2)
+        return NULL;
+    Expr* nu = f->data.function.args[0];
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+
+    int64_t J = n / 2;                          /* keep c_0..c_J (powers x^{-2j}) */
+
+    /* Pochhammer bases a = -nu/2, b = (1-nu)/2. */
+    Expr* aPoch = simp(mk_times(make_rational(-1, 2), expr_copy(nu)));
+    Expr* bPoch = simp(mk_times(make_rational(1, 2),
+                        mk_plus(expr_new_integer(1),
+                                mk_times(expr_new_integer(-1), expr_copy(nu)))));
+
+    /* SeriesData coefficient list: index 2j carries c_j, odd indices 0. */
+    size_t ncoef = (size_t)(2 * J + 1);
+    Expr** coef = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coef[i] = expr_new_integer(0);
+    for (int64_t j = 0; j <= J; j++) {
+        /* c_j = (-1)^j Pochhammer[a, j] Pochhammer[b, j] / j! */
+        Expr* pa = expr_new_function(mk_symbol("Pochhammer"),
+                       (Expr*[]){ expr_copy(aPoch), expr_new_integer(j) }, 2);
+        Expr* pb = expr_new_function(mk_symbol("Pochhammer"),
+                       (Expr*[]){ expr_copy(bPoch), expr_new_integer(j) }, 2);
+        Expr* fac = mk_fn1("Factorial", expr_new_integer(j));
+        Expr* c = mk_times(expr_new_integer((j % 2 == 0) ? 1 : -1),
+                           mk_times(mk_times(pa, pb),
+                                    mk_power(fac, expr_new_integer(-1))));
+        expr_free(coef[(size_t)(2 * j)]);
+        coef[(size_t)(2 * j)] = simp(c);
+    }
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));   /* 1/x        */
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), coef, ncoef);
+    sd[3] = expr_new_integer(0);                            /* nmin = 0           */
+    sd[4] = expr_new_integer(2 * J + 2);                    /* O at next even power */
+    sd[5] = expr_new_integer(1);                            /* den  = 1           */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(coef);
+
+    /* prefactor (2 x)^nu */
+    Expr* pref = mk_power(mk_times(expr_new_integer(2), expr_copy(x)), expr_copy(nu));
+    Expr* result = mk_times(pref, series);
+
+    expr_free(aPoch);
+    expr_free(bPoch);
+    return result;
+}
+
 /* Asymptotic expansion of BesselY[nu, x] at x = Infinity (DLMF 10.17.4):
  *
  *   Y_nu(x) ~ sqrt(2/(pi x)) [ sin(w0) P(1/x) + cos(w0) Q(1/x) ],
@@ -6250,6 +6317,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return by;
         }
+        Expr* hh = try_series_hermiteh_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (hh) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return hh;
+        }
         /* Error functions at Infinity: DLMF 7.12.1 asymptotic expansions,
          * each an Exp[±x^2] essential singularity times a Laurent series. */
         Expr* erf = try_series_erf_at_infinity(f_eval, x, leading_only ? 1 : n);
@@ -6859,6 +6932,81 @@ Expr* builtin_seriescoefficient(Expr* res) {
                                  (Expr*[]){ val, cond }, 2);
                 Expr* pairs = expr_new_function(mk_symbol("List"),
                                   (Expr*[]){ pair }, 1);
+                Expr* pw = expr_new_function(mk_symbol("Piecewise"),
+                               (Expr*[]){ pairs, expr_new_integer(0) }, 2);
+                return eval_and_free(pw);
+            }
+        }
+    }
+
+    /* General term SeriesCoefficient[HermiteH[nu, x], {x, 0, m}], symbolic m:
+     *   even m=2j:  2^nu Sqrt[Pi] Pochhammer[-nu/2, j]
+     *                 / (Pochhammer[1/2, j] j! Gamma[(1-nu)/2])
+     *   odd  m=2j+1: -2^(nu+1) Sqrt[Pi] Pochhammer[(1-nu)/2, j]
+     *                 / (Pochhammer[3/2, j] j! Gamma[-nu/2])
+     * with j = m/2 resp. (m-1)/2 and j! = Gamma[j+1], as a Piecewise on Mod[m,2]
+     * (the x0=1 holonomic form in Mathematica's docs is not produced). */
+    {
+        Expr* f0  = res->data.function.args[0];
+        Expr* sp0 = res->data.function.args[1];
+        if (has_symbol_head(f0, "HermiteH") && f0->data.function.arg_count == 2 &&
+            sp0->type == EXPR_FUNCTION && has_symbol_head(sp0, "List") &&
+            sp0->data.function.arg_count == 3) {
+            Expr* nu  = f0->data.function.args[0];
+            Expr* xv  = sp0->data.function.args[0];
+            Expr* x0v = sp0->data.function.args[1];
+            Expr* mv  = sp0->data.function.args[2];
+            if (expr_eq(f0->data.function.args[1], xv) &&
+                is_lit_zero(x0v) && mv->type == EXPR_SYMBOL) {
+                Expr* sqrtpi = mk_power(mk_symbol("Pi"), make_rational(1, 2));
+                /* (1-nu)/2 helper builder is inlined twice below. */
+                /* Even branch, j = m/2. */
+                Expr* jE = mk_times(make_rational(1, 2), expr_copy(mv));
+                Expr* evNum = mk_times(mk_power(expr_new_integer(2), expr_copy(nu)),
+                    mk_times(expr_copy(sqrtpi),
+                        expr_new_function(mk_symbol("Pochhammer"),
+                            (Expr*[]){ mk_times(make_rational(-1, 2), expr_copy(nu)),
+                                       expr_copy(jE) }, 2)));
+                Expr* evDen = mk_times(
+                    expr_new_function(mk_symbol("Pochhammer"),
+                        (Expr*[]){ make_rational(1, 2), expr_copy(jE) }, 2),
+                    mk_times(mk_fn1("Gamma", mk_plus(expr_copy(jE), expr_new_integer(1))),
+                             mk_fn1("Gamma", mk_times(make_rational(1, 2),
+                                 mk_plus(expr_new_integer(1),
+                                     mk_times(expr_new_integer(-1), expr_copy(nu)))))));
+                Expr* evVal = mk_times(evNum, mk_power(evDen, expr_new_integer(-1)));
+                Expr* evCond = mk_fn2("Equal",
+                    mk_fn2("Mod", expr_copy(mv), expr_new_integer(2)), expr_new_integer(0));
+                expr_free(jE);
+                /* Odd branch, j = (m-1)/2. */
+                Expr* jO = mk_times(make_rational(1, 2),
+                    mk_plus(expr_copy(mv), expr_new_integer(-1)));
+                Expr* odNum = mk_times(
+                    mk_times(expr_new_integer(-1),
+                        mk_power(expr_new_integer(2),
+                            mk_plus(expr_copy(nu), expr_new_integer(1)))),
+                    mk_times(expr_copy(sqrtpi),
+                        expr_new_function(mk_symbol("Pochhammer"),
+                            (Expr*[]){ mk_times(make_rational(1, 2),
+                                           mk_plus(expr_new_integer(1),
+                                               mk_times(expr_new_integer(-1), expr_copy(nu)))),
+                                       expr_copy(jO) }, 2)));
+                Expr* odDen = mk_times(
+                    expr_new_function(mk_symbol("Pochhammer"),
+                        (Expr*[]){ make_rational(3, 2), expr_copy(jO) }, 2),
+                    mk_times(mk_fn1("Gamma", mk_plus(expr_copy(jO), expr_new_integer(1))),
+                             mk_fn1("Gamma", mk_times(make_rational(-1, 2), expr_copy(nu)))));
+                Expr* odVal = mk_times(odNum, mk_power(odDen, expr_new_integer(-1)));
+                Expr* odCond = mk_fn2("Equal",
+                    mk_fn2("Mod", expr_copy(mv), expr_new_integer(2)), expr_new_integer(1));
+                expr_free(jO);
+                expr_free(sqrtpi);
+                Expr* pairE = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ evVal, evCond }, 2);
+                Expr* pairO = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ odVal, odCond }, 2);
+                Expr* pairs = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ pairE, pairO }, 2);
                 Expr* pw = expr_new_function(mk_symbol("Piecewise"),
                                (Expr*[]){ pairs, expr_new_integer(0) }, 2);
                 return eval_and_free(pw);

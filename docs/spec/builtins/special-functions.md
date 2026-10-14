@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, and the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, and the physicists' Hermite polynomials `HermiteH`.
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -1938,6 +1938,74 @@ Out[2]= {{1, 1}, {1 - x, 2 - x}, {1 - 2 x + 1/2 x^2, 3 - 3 x + 1/2 x^2},
 
 In[3]:= LaguerreL[100, 0, N[5, 20]]
 Out[3]= 1.4555271625328812607
+```
+
+## HermiteH
+
+`HermiteH[n, x]` gives the physicists' Hermite polynomial `H_n(x)`. They are
+orthogonal on `(-∞, ∞)` with weight `e^(-x²)` and satisfy `y'' - 2x y' + 2n y =
+0`.
+
+- **Exact polynomial.** A non-negative integer order `n` produces the explicit
+  degree-`n` polynomial in `x`, with exact integer coefficients from FLINT's
+  `fmpz_poly_hermite_h` (or, without FLINT, the three-term recurrence `H_0 = 1`,
+  `H_1 = 2x`, `H_k = 2x H_{k-1} - 2(k-1) H_{k-2}`). For example `HermiteH[10, x] =
+  -30240 + 302400 x² - 403200 x⁴ + 161280 x⁶ - 23040 x⁸ + 1024 x¹⁰` and
+  `HermiteH[7, x] = -1680 x + 3360 x³ - 1344 x⁵ + 128 x⁷`.
+- **Numerics.** For an integer order with an inexact argument the value comes
+  from the *stable* recurrence, not from substituting into the explicit
+  polynomial — so `HermiteH[100, N[5, 16]] = 8.19319371305915×10⁹⁸` rather than
+  the catastrophically-cancelled `0.×10¹⁰⁴` the expanded polynomial gives. A
+  non-integer, complex, or negative order with an inexact argument evaluates
+  through the entire confluent-hypergeometric form `H_n(z) = 2^n Sqrt[Pi]
+  (Hypergeometric1F1[-n/2, 1/2, z²]/Gamma[(1-n)/2] - 2z
+  Hypergeometric1F1[(1-n)/2, 3/2, z²]/Gamma[-n/2])`, evaluated with a
+  cancellation guard scaled to `Re(z²)` so a large real argument keeps its
+  digits. All paths run at machine or arbitrary (MPFR) precision, real or
+  complex: `HermiteH[3., 5] = 940.`, `HermiteH[3. - 4.583 I, 5] = -731.082 +
+  940.003 I`, `HermiteH[0.71, 0.87] = 1.55872`, `HermiteH[5.3 + I, .8 + I] =
+  4.81841 + 157.49 I`, and `N[HermiteH[2/3, 8/7], 50]` is accurate to 50 digits.
+- **Special values.** `HermiteH[0, x] = 1` and `HermiteH[n, 0] = 2^n
+  Sqrt[Pi]/Gamma[(1-n)/2]` (so `HermiteH[1, 0] = 0`, `HermiteH[10, 0] = -30240`).
+- **Derivative.** `D[HermiteH[n, z], z] = 2 n HermiteH[n-1, z]`, which also lets
+  the generic `NumericFunction` interval threading handle `Interval[]` arguments.
+- **Series.** The Taylor expansion at a finite point follows from the derivative
+  rule, e.g. `Series[HermiteH[n, x], {x, x0, 2}] = HermiteH[n, x0] + 2 n
+  HermiteH[-1+n, x0] (x-x0) + 2 n (-1+n) HermiteH[-2+n, x0] (x-x0)² + O[x-x0]³`.
+  At Infinity the algebraic asymptotic series is produced, `Series[HermiteH[n,
+  x], {x, Infinity, 2}] = (2x)^n (1 + ¼ n (1-n) (1/x)² + O[1/x]⁴)` (the
+  subdominant `e^(x²)` branch is not included). `SeriesCoefficient` gives the
+  general `x⁰`-expansion term as a `Piecewise` on the parity of the index.
+- **Listable.** `HermiteH[3, {1, 2, 3}] = {-4, 40, 180}`.
+- **Performance (machine reals and complexes).** At an integer order with a
+  machine-precision argument the recurrence runs in hardware `double` /
+  `double`-complex — the same kernel used by the NDArray fast path and
+  `Compile[]`, so a scalar call is bit-identical to its packed, NDArray and
+  compiled forms, and a packed **complex** buffer stays on the buffer (the ND
+  kernel has a complex arm). An exact (`"int64"`) buffer, an arbitrary-precision
+  argument, a large degree (`n > 1000`), or an overflow falls back to the stable
+  exact / MPFR recurrence unchanged.
+
+A non-integer order with an exact/symbolic argument (e.g. `HermiteH[1/2, x]`),
+and a negative-integer order with an exact argument, stay symbolic. The
+symbolic-index `SeriesCoefficient` is given at `x0 = 0` (the `x0 = 1` holonomic
+form in Mathematica's docs is not produced), and the subdominant exponential
+branch of the Infinity asymptotics is not included.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= HermiteH[10, x]
+Out[1]= -30240 + 302400 x^2 - 403200 x^4 + 161280 x^6 - 23040 x^8 + 1024 x^10
+
+In[2]:= Table[HermiteH[10, x], {x, 1, 5}]
+Out[2]= {8224, 200416, -3093984, 125984224, 3275529760}
+
+In[3]:= HermiteH[100, N[5, 16]]
+Out[3]= 8.19319371305915*10^98
+
+In[4]:= D[HermiteH[n, z], z]
+Out[4]= 2 n HermiteH[-1 + n, z]
 ```
 
 ## LegendreP

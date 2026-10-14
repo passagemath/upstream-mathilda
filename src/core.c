@@ -52,6 +52,7 @@
 #include "chebyshev_t.h"
 #include "chebyshev_u.h"
 #include "laguerre_l.h"
+#include "hermite_h.h"
 #include "airyai.h"
 #include "airybi.h"
 #include "bessel.h"
@@ -822,6 +823,7 @@ void core_init(void) {
     chebyshev_t_init();
     chebyshev_u_init();
     laguerre_l_init();
+    hermite_h_init();
     airyai_init();
     airybi_init();
     bessel_init();

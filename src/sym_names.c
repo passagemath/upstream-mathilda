@@ -265,6 +265,7 @@ const char* SYM_HankelMatrix = NULL;
 const char* SYM_HarmonicNumber = NULL;
 const char* SYM_Hash = NULL;
 const char* SYM_Heads = NULL;
+const char* SYM_HermiteH = NULL;
 const char* SYM_Hypergeometric0F1 = NULL;
 const char* SYM_Hypergeometric1F1 = NULL;
 const char* SYM_Hypergeometric2F1 = NULL;
@@ -1266,6 +1267,7 @@ void sym_names_init(void) {
     SYM_HarmonicNumber             = intern_symbol("HarmonicNumber");
     SYM_Hash                       = intern_symbol("Hash");
     SYM_Heads                      = intern_symbol("Heads");
+    SYM_HermiteH                   = intern_symbol("HermiteH");
     SYM_Hypergeometric0F1          = intern_symbol("Hypergeometric0F1");
     SYM_Hypergeometric1F1          = intern_symbol("Hypergeometric1F1");
     SYM_Hypergeometric2F1          = intern_symbol("Hypergeometric2F1");

@@ -274,6 +274,7 @@ extern const char* SYM_HankelMatrix;
 extern const char* SYM_HarmonicNumber;
 extern const char* SYM_Hash;
 extern const char* SYM_Heads;
+extern const char* SYM_HermiteH;
 extern const char* SYM_Hypergeometric0F1;
 extern const char* SYM_Hypergeometric1F1;
 extern const char* SYM_Hypergeometric2F1;

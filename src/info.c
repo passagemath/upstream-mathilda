@@ -1188,6 +1188,20 @@ void info_init(void) {
         "Hypergeometric1F1[-n, a+1, x]. Special values include L_n(0) =\n"
         "Binomial[n+a, n]. D[LaguerreL[n,x],x] = -LaguerreL[n-1,1,x] and\n"
         "D[LaguerreL[n,a,x],x] = -LaguerreL[n-1,a+1,x]. Listable.");
+    symtab_set_docstring("HermiteH",
+        "HermiteH[n, x]\n"
+        "\tgives the physicists' Hermite polynomial H_n(x).\n"
+        "A non-negative integer n yields the explicit polynomial (exact for an\n"
+        "exact x, and via a stable recurrence for an inexact x -- the recurrence\n"
+        "avoids the cancellation that corrupts the polynomial form for large n,\n"
+        "e.g. HermiteH[100, N[5,16]]); a non-integer, complex, or negative order\n"
+        "with an inexact argument evaluates numerically at machine or arbitrary\n"
+        "(MPFR) precision, real or complex, through the confluent-hypergeometric\n"
+        "form 2^n Sqrt[Pi] (Hypergeometric1F1[-n/2, 1/2, x^2]/Gamma[(1-n)/2] -\n"
+        "2 x Hypergeometric1F1[(1-n)/2, 3/2, x^2]/Gamma[-n/2]). The special value\n"
+        "H_n(0) = 2^n Sqrt[Pi]/Gamma[(1-n)/2]. D[HermiteH[n,x],x] =\n"
+        "2 n HermiteH[n-1,x]; Series (including at Infinity) and SeriesCoefficient\n"
+        "are supported. Listable.");
     symtab_set_docstring("LegendreQ",
         "LegendreQ[n, x]\n"
         "\tgives the Legendre function of the second kind Q_n(x).\n"

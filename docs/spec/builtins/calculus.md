@@ -1936,6 +1936,32 @@ monotonically down.
     interior `x = π`. A sub-interval proved to lie in `x <= 0` is integrated under
     the reflection `x -> -x`, keeping a resolved `Abs` branch real
     (`∫_{-1}^{1} Sign[x] Abs[x]^a dx = 0`, not a complex `(-1)^(1+a)` artifact).
+  - `"SeriesExpansion"` (alias `"SeriesTermByTerm"`) — a log-weighted rational
+    integral `R(x) Log[x]^k` (`k >= 1`) on `[0,1]` with a root-of-unity
+    denominator `1 ± x^d` (`Integrate\`SeriesExpansion[f, {x, 0, 1}]`). Expands the
+    geometric series `1/(1 ∓ x^d) = Σ (±1)^n x^{dn}`, integrates term-by-term with
+    the exact identity `∫₀¹ x^m Log[x]^k dx = (-1)^k k!/(m+1)^(k+1)`, and resums
+    each residue class with `Sum[]` (→ `Catalan`, `DirichletBeta`, `Zeta`). The
+    general coefficient is produced by exact cyclotomic divisibility, not inferred
+    from samples, and the value is cross-checked against `NIntegrate`. It is the
+    alternating sibling of the `"Beta"`-family `integrate_ratlog01_try` (which owns
+    the `1 - x^m` HurwitzZeta case and runs first); this closes the `1 + x^d`
+    alternating case. E.g. `Integrate[Log[x]/(1+x^2), {x,0,1}] = -Catalan`,
+    `Integrate[Log[x]^2/(1+x^2), {x,0,1}] = Pi^3/16`,
+    `Integrate[Log[x]^2/(1+x), {x,0,1}] = (3/2) Zeta[3]`. Under Automatic it runs in
+    the pre-FTC `[0,1]` block (these integrands have non-elementary PolyLog
+    antiderivatives).
+  - `"King"` (alias `"Reflection"`) — the general King reflection `x -> a+b-x` on a
+    finite interval (`Integrate\`King[f, {x, a, b}]`):
+    `Integrate[f,{x,a,b}] = (1/2) Integrate[f(x)+f(a+b-x),{x,a,b}]`, and when the
+    reflected sum `f(x)+f(a+b-x)` is a constant `c` the value is `c (b-a)/2`. Closes
+    e.g. `Integrate[1/(1+Tan[x]^Sqrt[2]), {x,0,Pi/2}] = Pi/4` — and the whole
+    `1/(1+Tan[x]^s)` family for any real `s` — which has no elementary
+    antiderivative. The constant is read at the midpoint, screened numerically, and
+    cross-checked against `NIntegrate` (a mis-detected constancy fails the check and
+    declines, so no wrong answer). It is numeric-only: a parametric integrand is out
+    of scope. Complements the `x·g(x)`, `g`-invariant reflection already in the
+    `"Beta"` file. Under Automatic it runs before Newton-Leibniz.
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the

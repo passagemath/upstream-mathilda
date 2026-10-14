@@ -706,6 +706,8 @@ set(COMMON_SRC
     ../src/calculus/integrate_diffunderint.c
     ../src/calculus/integrate_ramanujan.c
     ../src/calculus/integrate_intrep.c
+    ../src/calculus/integrate_series.c
+    ../src/calculus/integrate_king.c
     ../src/calculus/intrat.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
@@ -4774,6 +4776,20 @@ else()
 endif()
 add_test(NAME extreme_definite_corpus_tests
          COMMAND extreme_definite_corpus_tests ../ExtremeDefiniteIntegralsCorpus.m)
+
+# MSE "simple techniques" definite-integral campaign (General King reflection;
+# series term-by-term on [0,1]; Feynman on a present parameter).  Same fork +
+# per-case-timeout harness; gates WRONG == 0 and a ratcheting CORRECT floor.
+add_executable(mse_trick_corpus_tests test_mse_trick_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mse_trick_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(mse_trick_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(mse_trick_corpus_tests build_ecm)
+else()
+    target_link_libraries(mse_trick_corpus_tests gmp m)
+endif()
+add_test(NAME mse_trick_corpus_tests
+         COMMAND mse_trick_corpus_tests ../MseTrickIntegralsCorpus.m)
 
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)

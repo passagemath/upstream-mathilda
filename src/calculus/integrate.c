@@ -51,6 +51,8 @@
 #include "integrate_diffunderint.h"
 #include "integrate_ramanujan.h"
 #include "integrate_intrep.h"
+#include "integrate_series.h"
+#include "integrate_king.h"
 #include "intrat.h"
 #include "integrate_risch_transcendental.h"
 #include "risch_canonical.h"
@@ -1002,6 +1004,8 @@ typedef enum {
     METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INTEGRAL_REP,     /* definite-only: special-function integral reps (half-line) */
     METHOD_PIECEWISE,        /* definite-only: Abs/Sign/Heaviside/UnitStep/Min/Max/Piecewise */
+    METHOD_SERIES,           /* definite-only: series term-by-term on [0,1] (R(x) Log[x]^k) */
+    METHOD_KING,             /* definite-only: general King reflection x -> a+b-x */
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -1038,6 +1042,9 @@ static IntegrateMethod method_from_string(const char* s) {
         return METHOD_RAMANUJAN;
     if (strcmp(s, "IntegralRepresentation") == 0) return METHOD_INTEGRAL_REP;
     if (strcmp(s, "Piecewise") == 0) return METHOD_PIECEWISE;
+    if (strcmp(s, "SeriesExpansion") == 0 || strcmp(s, "SeriesTermByTerm") == 0)
+        return METHOD_SERIES;
+    if (strcmp(s, "King") == 0 || strcmp(s, "Reflection") == 0) return METHOD_KING;
     return METHOD_INVALID;
 }
 
@@ -1376,6 +1383,17 @@ static Expr* integrate_definite(Expr* res) {
              * avoids the spurious Beta[c,0]=ComplexInfinity Infinity::indet. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_ratlog01_try(cur, x, a, b, assumptions);
+            /* Series term-by-term on [0,1]: R(x) Log[x]^k over a root-of-unity
+             * denominator 1 +/- x^d.  The alternating (1 + x^d) sibling of
+             * ratlog01 above (which owns the 1 - x^m HurwitzZeta case): expand
+             * the geometric series, integrate term-by-term, resum with Sum[]
+             * (-> Catalan / DirichletBeta / Zeta).  Runs in the pre-FTC [0,1]
+             * block -- these integrands have non-elementary (PolyLog)
+             * antiderivatives, so letting Newton-Leibniz grind them would only
+             * emit a spurious Integrate::nonelem; the cyclotomic probe declines
+             * non-matches instantly and the value is NIntegrate-cross-checked. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_SERIES))
+                r = integrate_series_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
                 r = integrate_beta_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_BETA))
@@ -1398,6 +1416,14 @@ static Expr* integrate_definite(Expr* res) {
              * invariant under x -> c-x (e.g. x Sin[x]/(1+Cos[x]^2) on [0,Pi]). */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_kingreflect_try(cur, x, a, b, assumptions);
+            /* General King reflection x -> a+b-x: when f(x)+f(a+b-x) collapses
+             * to a constant c (e.g. 1/(1+Tan[x]^Sqrt[2]) on [0,Pi/2], c=1) the
+             * value is c (b-a)/2.  Runs before FTC so these no-elementary-
+             * antiderivative integrands are closed without a spurious
+             * Integrate::nonelem; constancy is numerically screened and the
+             * value NIntegrate-cross-checked, so a mis-detection declines. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_KING))
+                r = integrate_king_try(cur, x, a, b, assumptions);
             /* Raabe's integral: Integrate[Log[Gamma[x]], {x, t, t+1}]. */
             if (!r && !has_undef && mech == METHOD_AUTOMATIC)
                 r = integrate_raabe_try(cur, x, a, b, assumptions);
@@ -1431,7 +1457,8 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
-                mech != METHOD_PIECEWISE)
+                mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
+                mech != METHOD_KING)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
                                                     principal_value, assumptions);
             /* Sin[r x]^k / x^m half-line (ssp) and R(x) Log[x]^n (log*rat):
@@ -2157,6 +2184,8 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_RATIONAL_LOG:
         case METHOD_INTEGRAL_REP:
         case METHOD_PIECEWISE:
+        case METHOD_SERIES:
+        case METHOD_KING:
             /* Definite-only mechanisms.  Meaningless on the indefinite form
              * Integrate[f, x, Method -> "NewtonLeibniz" / "LineIntegral" /
              * "Residue" / "DiffUnderInt" / "RamanujanMasterTheorem" /
@@ -2371,6 +2400,8 @@ void integrate_init(void) {
     integrate_diffunderint_init();
     integrate_ramanujan_init();
     integrate_intrep_init();
+    integrate_series_init();
+    integrate_king_init();
 
     /* Recursive transcendental Risch integrator:
      * Integrate`RischTranscendental.  Correct by construction. */

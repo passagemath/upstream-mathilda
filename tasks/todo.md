@@ -39,8 +39,14 @@ version bump + git tag.
 - [x] gate baseline 7; STATUS/README/PLAN/changelog; version 0.413→0.414; check-c99/messages green
 - [x] commit + tag v0.414
 
-## Block 4 — §2.2.44 (4301–4400), M72
-- [ ] (same pipeline)
+## Block 4 — §2.2.44 (4301–4400), M72, v0.415 ✅
+- [x] Fetch + convert → DE_examples_2244.m (100 scalar/2 IVP; 29 sympy=False); indvar green
+- [x] Baseline 91/100 (9 non-PASS; one = 4369 non-interruptible HANG)
+- [x] Root cause: 4369 (trivial linear ODE) needs ∫Sin²/(1+Cos) — a NON-monomial rational trig that thrashes Linearity (M71 monomial guard missed it)
+- [x] General fix: generalize guard to is_rational_trig_in_x (Weierstrass domain); 4369 hang → 0s PASS → 92/100
+- [x] integrate+risch ctest 100%; A/B §2230/35/36/37 identical non-PASS; §2.2.43 still 7; 3461 still PASS
+- [x] gate baseline 8; STATUS/README/PLAN/changelog; version 0.414→0.415; c99/messages green
+- [x] commit + tag v0.415
 
 ## Block 5 — §2.2.45 (4401–4500), M73
 - [ ] (same pipeline)

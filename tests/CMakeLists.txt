@@ -4777,6 +4777,26 @@ add_test(NAME dsolve_corpus_2_2_43_tests
                  ../../DSolve_test_status/DE_examples_2243.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
+# Section 2.2.44 "Problems 4301 to 4400" (Nasser Abbasi; upstream Ch2.S1.SS44.htm).
+# 100 scalar (2 IVP), 0 systems; first-order NONLINEAR dominated (separable,
+# homogeneous class A/C/G, Abel 2nd-type, dAlembert, 1st-order linear symmetries;
+# 29 sympy=False -- the hardest section).  Baseline 91/100 -> 92/100 (M72):
+# a first-order LINEAR ODE (4369, (1+Cos[x]) y' == Sin[x](...)) HUNG past the 8 s
+# wall (non-interruptibly) -- its integrating-factor particular needs
+# Integrate[Sin^2/(1+Cos), x], a rational-trig integrand that thrashed in the
+# Integrate Linearity stage (TrigReduce can't clear the 1+Cos denominator) while
+# Weierstrass closes it in ~0.001 s.  M71's monomial-only guard did not catch this
+# NON-monomial rational trig; M72 generalises it (is_rational_trig_in_x: any
+# rational function of trig kernels of x -- Weierstrass's exact domain -- while an
+# Exp/Log/parameter body is still left to Linearity, so §2.2.35-3461 stays PASS).
+# Residue 8: 4388-4391 (nonlinear parametric 1st-order, sympy=False, no method),
+# 4333 (solvable-for-x), 4353 (rational), 4386 (quadrature), 4392 (homog class G).
+# Baseline argv3 = 8.
+add_test(NAME dsolve_corpus_2_2_44_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2244.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

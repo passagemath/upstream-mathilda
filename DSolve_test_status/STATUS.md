@@ -2296,6 +2296,50 @@ Full per-case results: `reports/2.2.43.tsv`; bucketed report: `reports/2.2.43.md
 
 ---
 
+## Section 2.2.44 — "Problems 4301 to 4400" (Nasser Abbasi)
+
+Corpus: `DE_examples_2244.m` — 100 records, **100 scalar (2 IVP), 0 systems**
+(upstream §2.1.44, `Ch2.S1.SS44.htm`). First-order **nonlinear** dominated:
+separable, homogeneous class A/C/G, Abel 2nd-type, dAlembert, 1st-order linear
+symmetries, Riccati; **29 `sympy=False`** — the hardest section of the five.
+`make check-corpus-indvar` green. `ctest -R dsolve_corpus_2_2_44_tests` · gate
+baseline **8**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-15 (M72 baseline) | 91 / 100 | 91.0% | 9 | 0 FAIL, 0 crash. One gap (4369) was a non-interruptible HANG, the rest honest declines. |
+| 2026-10-15 (**M72**) | **92 / 100** | **92.0%** | **8** | **0 FAIL, 0 crash.** One general `Integrate` fix (below) removes the 4369 hang. Gate baseline **8**. |
+
+**M72 fix — the trig-rational Linearity guard generalised from monomials to any
+rational-trig-in-x** (`src/calculus/integrate.c`, extends the M71 fix). `4369`
+(`(1+Cos[x]) y' == Sin[x](Sin[x] + Sin[x] Cos[x] − y)`) is a trivial first-order
+LINEAR ODE — `q` collapses to `Sin²x`, `μ = 1/(1+Cos x)`, answer
+`(1+Cos x)(C + x − Sin x)` — yet it **hung past the 8 s wall** (and, outside the
+corpus fork, non-interruptibly past `TimeConstrained`). The integrating-factor
+particular needs `∫ Sin²/(1+Cos) dx`, a rational-trig integrand that thrashes in
+the Linearity stage exactly as `∫Sec·Tan²` did (M71) — `TrigReduce` cannot clear
+the `1+Cos` denominator — while Weierstrass closes it in ~0.001 s. M71's guard only
+caught a pure `Sin^a Cos^b` *monomial*, and `Sin²/(1+Cos)` is not a monomial, so it
+still thrashed. M72 replaces `is_trig_power_monomial` with `is_rational_trig_in_x`:
+an integrand built only from numbers, constants, trig kernels of `x`, and
+`+ * ^(int)` — **Weierstrass's exact domain** — is declined by Linearity and closed
+by Weierstrass. The structural check still excludes the `Exp`/`Log`/bare-parameter
+bodies (`Y² E^(Log[1+2 Y Tan[x]]+…)`, §2.2.35-3461) that only Linearity closes, so
+the M71 regression guard holds. Cold `DSolve\`LinearFirstOrder[4369]` hang →
+**0.0 s PASS**; integrate + Risch unit suite 100% green (33/33); A/B vs v0.411 on
+§2.2.30 / §2.2.35 / §2.2.36 / §2.2.37 shows identical non-PASS sets (no regression);
+§2.2.43 unchanged at 7.
+
+Residue 8, all honest declines (0 FAIL): `4388`–`4391` (nonlinear parametric
+first-order — `y = 2x y' + y² y'³`, `y'³ + y² = x y y'`, `2x y' − y = y' Log[y y']`,
+`y = x y' − x² y'³` — all `sympy=False`, no Mathilda method), `4333`
+(`y = _G(x, y')` solvable-for-x), `4353` (rational non-exact), `4386`
+(`x = y' Sqrt[1+y'²]` quadrature), `4392` (homogeneous class G).
+
+Full per-case results: `reports/2.2.44.tsv`; bucketed report: `reports/2.2.44.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

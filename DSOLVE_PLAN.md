@@ -3385,6 +3385,37 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     `4244` (homogeneous class D), `4252` (Abel 2nd-type class B), `4298` (exact with
     `Sin[x/y]`, cold latency over the 8 s wall). v0.413 → 0.414.
 
+- **M72 — §2.2.44 corpus (Problems 4301–4400, Nasser Abbasi) + the trig-rational
+  Linearity guard generalised from monomials to any rational-trig-in-x.** ✅ DONE.
+  New corpus `DE_examples_2244.m` (upstream §2.1.44, 100 records — **100 scalar, 2
+  IVP, 0 systems**; `make check-corpus-indvar` green); new gate
+  `dsolve_corpus_2_2_44_tests` at baseline **8**; report
+  `DSolve_test_status/reports/2.2.44.md`. First-order **nonlinear** dominated (29
+  `sympy=False`, the hardest of the five). Baseline **91/100 → 92/100, 0 FAIL, 0
+  crash**.
+  - **One general fix, in `Integrate`** (`src/calculus/integrate.c`, extends M71).
+    `4369` (`(1+Cos[x]) y' == Sin[x](Sin[x]+Sin[x]Cos[x]−y)`) is a trivial
+    first-order LINEAR ODE (`q → Sin²x`, `μ = 1/(1+Cos x)`, answer
+    `(1+Cos x)(C + x − Sin x)`), yet it **hung past the 8 s wall** — and outside the
+    corpus fork, non-interruptibly past `TimeConstrained`. Its integrating-factor
+    particular needs `∫ Sin²/(1+Cos) dx`, a rational-trig integrand that thrashes in
+    the Linearity stage just like `∫Sec·Tan²` (M71): `TrigReduce` cannot clear the
+    `1+Cos` denominator, while Weierstrass closes it in ~0.001 s. M71's guard only
+    caught a pure `Sin^a Cos^b` *monomial*; `Sin²/(1+Cos)` is not one. M72 replaces
+    `is_trig_power_monomial` with `is_rational_trig_in_x` — an integrand built only
+    from numbers, constants, trig kernels of `x`, and `+`/`*`/integer-power, i.e.
+    Weierstrass's exact domain — so the whole rational-trig family is declined by
+    Linearity and closed by Weierstrass. The structural check still excludes the
+    `Exp`/`Log`/bare-parameter bodies (`Y² E^(Log[1+2 Y Tan[x]]+…)`, §2.2.35-3461)
+    that only Linearity closes, so the M71 regression guard holds. Cold
+    `DSolve\`LinearFirstOrder[4369]` hang → 0.0 s PASS; integrate + Risch unit suite
+    100% green (33/33); A/B vs v0.411 on §2.2.30/35/36/37 shows identical non-PASS
+    sets (no regression); §2.2.43 unchanged at 7.
+  - *Residue 8 (all honest, 0 FAIL):* `4388`–`4391` (nonlinear parametric
+    first-order, `sympy=False` — no Mathilda method), `4333` (`y = _G(x, y')`
+    solvable-for-x), `4353` (rational non-exact), `4386` (`x = y' Sqrt[1+y'²]`
+    quadrature), `4392` (homogeneous class G). v0.414 → 0.415.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

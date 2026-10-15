@@ -66,6 +66,11 @@ serializer is compiled regardless; only the on-screen/GL raster paths drop).
 On Linux, if `libmathilda.a` was built against reference LAPACK, pass its link
 libraries: `-DMATHILDA_EXTRA_LIBS="lapacke;lapack;blas;gfortran"`.
 
+The exact transitive link line of an *installed* kernel is recorded in its
+pkg-config file (`make install`, issue #88): `pkg-config --static --libs mathilda`
+prints it, which is what `MATHILDA_EXTRA_LIBS` otherwise approximates via
+`find_library`.
+
 ## Use
 
 ```bash

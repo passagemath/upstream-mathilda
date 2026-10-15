@@ -13,6 +13,26 @@
 #ifndef MATHILDA_FFI_H
 #define MATHILDA_FFI_H
 
+/* MATHILDA_FFI_API marks the ONLY symbols the shared libmathilda exports.
+ * The kernel is compiled -fvisibility=hidden (see the makefile), so every
+ * internal name stays private to the library; these entry points are re-opened
+ * here. On Windows the DLL exports exactly the dllexport-marked functions
+ * (MinGW's export-all is switched off by the first dllexport); the library's
+ * own translation unit defines MATHILDA_FFI_BUILDING before including this
+ * header. A consumer — static or shared, any platform — needs no macro: the
+ * MinGW import library resolves the plain declarations. */
+#if defined(_WIN32)
+#  if defined(MATHILDA_FFI_BUILDING)
+#    define MATHILDA_FFI_API __declspec(dllexport)
+#  else
+#    define MATHILDA_FFI_API
+#  endif
+#elif defined(__GNUC__) && __GNUC__ >= 4
+#  define MATHILDA_FFI_API __attribute__((visibility("default")))
+#else
+#  define MATHILDA_FFI_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,13 +44,13 @@ extern "C" {
  * The `init.m` tree is located via mathilda_resolve_internal(); on a bundled
  * app set the MATHILDA_HOME environment variable to the directory containing
  * the `internal/` tree before calling this (see mathilda_ffi_set_home). */
-void mathilda_ffi_init(void);
+MATHILDA_FFI_API void mathilda_ffi_init(void);
 
 /* Point the loader at the bundled `internal/` module tree. Equivalent to
  * setting the MATHILDA_HOME environment variable, but callable from hosts that
  * cannot easily set the process environment before init. `dir` is copied.
  * Call BEFORE mathilda_ffi_init(). No-op if `dir` is NULL/empty. */
-void mathilda_ffi_set_home(const char* dir);
+MATHILDA_FFI_API void mathilda_ffi_set_home(const char* dir);
 
 /* Parse, evaluate to a fixed point, and format `input` as Mathilda output
  * (the same text the REPL prints after `Out[n]= `). Returns a newly allocated,
@@ -39,12 +59,12 @@ void mathilda_ffi_set_home(const char* dir);
  * "$Failed (parse error)" and expressions that evaluate to nothing yield "".
  *
  * Calls mathilda_ffi_init() implicitly if the kernel is not yet initialized. */
-char* mathilda_ffi_eval(const char* input);
+MATHILDA_FFI_API char* mathilda_ffi_eval(const char* input);
 
 /* Like mathilda_ffi_eval, but formats the result as a LaTeX string suitable
  * for a math renderer (KaTeX/MathJax). Returns caller-owned memory; free with
  * mathilda_ffi_free(). Never returns NULL. */
-char* mathilda_ffi_eval_latex(const char* input);
+MATHILDA_FFI_API char* mathilda_ffi_eval_latex(const char* input);
 
 /* Parse and evaluate `input` ONCE, returning a single JSON object describing
  * the result — the mobile counterpart to the sidecar's per-line NDJSON (see
@@ -60,7 +80,7 @@ char* mathilda_ffi_eval_latex(const char* input);
  *   {"type":"expr","payload":""}                         evaluated to nothing
  *
  * Caller-owned memory; free with mathilda_ffi_free(). Never returns NULL. */
-char* mathilda_ffi_eval_json(const char* input);
+MATHILDA_FFI_API char* mathilda_ffi_eval_json(const char* input);
 
 /* --- Notebook-cell evaluation and editor services ------------------------
  *
@@ -93,25 +113,26 @@ typedef void (*mathilda_ffi_sink)(void* ctx, const char* json_line);
  * as in mathilda_ffi_eval_json (Graphics -> "plot", Image -> "image", ?name ->
  * "usage"/"names", otherwise "expr" with an optional "latex"). Implicitly
  * initializes the kernel; not reentrant (serialize calls — see file header). */
-void mathilda_ffi_eval_cell(const char* code, int id, int cell,
-                            mathilda_ffi_sink sink, void* ctx);
+MATHILDA_FFI_API void mathilda_ffi_eval_cell(const char* code, int id,
+                                             int cell, mathilda_ffi_sink sink,
+                                             void* ctx);
 
 /* 1 if `code` forms a complete expression (every (), [], {} closed, no open
  * "..." string or (* ... *) comment), 0 otherwise. Drives a console/notebook
  * continuation prompt — the same rule the REPL's smart-Return uses. */
-int mathilda_ffi_is_complete(const char* code);
+MATHILDA_FFI_API int mathilda_ffi_is_complete(const char* code);
 
 /* A JSON array (as a string) of defined symbol names beginning with `prefix`,
  * sorted, for tab completion — e.g. prefix "Sin" -> "[\"Sin\",\"Sinh\",
  * \"SinIntegral\"]". Caller-owned; free with mathilda_ffi_free(). Never NULL
  * ("[]" when nothing matches). A NULL/empty prefix lists every symbol. */
-char* mathilda_ffi_complete(const char* prefix);
+MATHILDA_FFI_API char* mathilda_ffi_complete(const char* prefix);
 
 /* Release a string returned by mathilda_ffi_eval / _eval_latex. NULL-safe. */
-void mathilda_ffi_free(char* s);
+MATHILDA_FFI_API void mathilda_ffi_free(char* s);
 
 /* Version string of the linked kernel (static storage; do not free). */
-const char* mathilda_ffi_version(void);
+MATHILDA_FFI_API const char* mathilda_ffi_version(void);
 
 #ifdef __cplusplus
 }

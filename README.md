@@ -263,6 +263,10 @@ The two lines above install
 |------|-------|
 | the `Mathilda` executable | `$(PREFIX)/bin/Mathilda` |
 | the runtime `.m` module tree | `$(PREFIX)/share/mathilda/internal/` |
+| the embedding C API header | `$(PREFIX)/include/mathilda_ffi.h` |
+| the static kernel library | `$(PREFIX)/lib/libmathilda.a` |
+| the shared kernel library | `$(PREFIX)/lib/libmathilda.so.0` + `libmathilda.so` (macOS: `libmathilda.0.dylib` + `libmathilda.dylib`; Windows: `bin/libmathilda.dll` + `lib/libmathilda.dll.a`) |
+| the pkg-config file | `$(PREFIX)/lib/pkgconfig/mathilda.pc` |
 
 The binary locates its modules **relative to its own path**
 (`<bindir>/../share/mathilda/internal/`), so the install is **relocatable** and
@@ -272,12 +276,39 @@ standard GNU variables are honoured for packaging:
 ```bash
 make install DESTDIR=/tmp/stage PREFIX=/usr    # staged install (Debian, SageMath, …)
 make install prefix=/opt/mathilda              # or override bindir=/… datadir=/… directly
-make uninstall PREFIX=/usr/local               # remove both binary and module tree
+make uninstall PREFIX=/usr/local               # remove everything `make install` put there
 ```
 
 Because resolution is exe-relative, `DESTDIR` staging bakes in no absolute path:
 build once, install into a staging root, and the packaged binary finds its modules
 wherever the package is finally unpacked.
+
+#### Embedding the kernel (C API, libraries, pkg-config)
+
+The kernel can run **in-process** in another program (a Python/Cython extension,
+a Jupyter kernel, a mobile app) through the small C API in
+[`src/ffi/mathilda_ffi.h`](src/ffi/mathilda_ffi.h): `mathilda_ffi_init`,
+`mathilda_ffi_eval` / `_eval_latex` / `_eval_json` / `_eval_cell`,
+`mathilda_ffi_free`, and a few editor helpers. `make install` ships that header
+and both libraries (`make lib` builds them in the tree without installing):
+
+* **Shared library.** It dynamically exports *only* the `mathilda_ffi_*` API (the
+  kernel is compiled `-fvisibility=hidden`), so none of its internal names enter
+  the host process. It finds its module tree relative to **its own** location
+  (`<libdir>/../share/mathilda/internal/`), so a host linked with `-lmathilda`
+  needs no `MATHILDA_HOME`.
+* **Static library.** Compiled position-independent, so it can be linked into a
+  shared object such as a Python extension module. A static consumer has to link
+  the libraries the kernel was built against, and has to point the kernel at its
+  module tree. `mathilda.pc` records both:
+
+```bash
+pkg-config --cflags --libs mathilda           # shared:  -I…/include -L…/lib -lmathilda
+pkg-config --static --libs mathilda           # static:  … plus GMP/MPFR/FLINT/… as detected
+pkg-config --variable=internaldir mathilda    # pass to mathilda_ffi_set_home() (static use)
+```
+
+`make check-install` installs into a scratch prefix and checks all of the above.
 
 #### How the binary finds its modules
 
@@ -288,6 +319,9 @@ deploy however suits you:
    `internal` directory: `MATHILDA_HOME=/opt/app/share/mathilda/internal ./Mathilda`.
 2. **`<exe>/src/internal/`** — running straight from a build tree (the repo root).
 3. **`<exe>/../share/mathilda/internal/`** — the FHS layout `make install` creates.
+   The same path is also tried relative to the *shared library* holding the
+   kernel (`<libdir>/../share/…`), so an installed `libmathilda` loaded into any
+   host program finds its modules too.
 4. **compile-time `-DMATHILDA_PREFIX`** — `<prefix>/share/mathilda/internal/`,
    baked in when you build with `make PREFIX=…`; a fallback for environments where
    the executable's own path can't be determined.

@@ -189,6 +189,36 @@ make USE_ECM=0 USE_READLINE=0 -j4
 ./Mathilda.exe
 ```
 
+### Embedding library (libmathilda)
+
+The same objects, minus `repl.o`, also build an in-process kernel behind the C
+API in `src/ffi/mathilda_ffi.h`:
+
+```bash
+make lib                     # libmathilda.a + the shared library, in the tree
+make install prefix=/opt/m   # also installs include/mathilda_ffi.h, lib/libmathilda.*,
+                             #   lib/pkgconfig/mathilda.pc
+make check-install           # install to a scratch prefix and link C hosts against it
+```
+
+| Platform | Shared library | Notes |
+|----------|----------------|-------|
+| Linux    | `libmathilda.so.0` (soname) + `libmathilda.so` | linked `-Wl,--no-undefined` |
+| macOS    | `libmathilda.0.dylib` + `libmathilda.dylib` | `@rpath` id in the tree; `make install` rewrites it to the absolute path and re-signs |
+| Windows  | `libmathilda.dll` + import lib `libmathilda.dll.a` | DLL goes to `bin/` |
+
+The trailing `0` is `SHLIB_ABI` in the makefile. It tracks the C ABI of
+`mathilda_ffi.h`, not `$VersionNumber`, so bump it only for an incompatible change
+to that header. Every object is compiled `-fPIC -fvisibility=hidden` (except on
+Windows). That lets the static archive link into a Python extension module, and
+it limits the shared library's exports to the `MATHILDA_FFI_API` functions. On
+Windows the `__declspec(dllexport)` in the header does the same job.
+
+A static consumer gets its link line from `pkg-config --static --libs mathilda`
+(the dependencies detected at build time). It also has to call
+`mathilda_ffi_set_home()` with `pkg-config --variable=internaldir mathilda`. The
+shared library finds its module tree relative to its own location.
+
 ---
 
 ## Dev Mode (all platforms)

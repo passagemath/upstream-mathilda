@@ -133,6 +133,15 @@ jobs:
       - name: Pipe protocol (make check-pipe-protocol)
         run: make check-pipe-protocol
 
+      # Issue #88: `make install` ships the embedding API (mathilda_ffi.h,
+      # libmathilda.a, libmathilda.so.0, mathilda.pc). Installs into a scratch
+      # prefix and links C hosts against it from the installed files only:
+      # shared (which must find its module tree itself — no MATHILDA_HOME),
+      # static via `pkg-config --static`, the archive inside a shared object
+      # (the Cython case — fails without -fPIC), and exports == mathilda_ffi_*.
+      - name: Installed embedding API (make check-install)
+        run: make -j"$(nproc)" check-install
+
   # MPFR is on by default (USE_MPFR=1) and arbitrary-precision reals (EXPR_MPFR)
   # are used across ~130 files, so the `make USE_MPFR=0` graceful-degrade config
   # rots easily: a new unguarded EXPR_MPFR case or *_dispatch_mpfr branch builds
@@ -220,6 +229,27 @@ jobs:
         run: |
           make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
                    USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+
+      # Issue #88: the embedding libraries. The DLL must export exactly the
+      # mathilda_ffi_* API — the dllexport in mathilda_ffi.h switches off
+      # MinGW's export-all, so any other exported name means that broke.
+      - name: Build libraries (make lib)
+        run: |
+          make -j4 lib USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
+                   USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+          ls -l libmathilda.a libmathilda.dll libmathilda.dll.a
+          exports=$(objdump -p libmathilda.dll \
+            | sed -n '/\[Ordinal\/Name Pointer\] Table/,/^$/p' \
+            | grep -oE '\] [A-Za-z_][A-Za-z0-9_]*' | sed 's/^\] //')
+          echo "$exports"
+          echo "$exports" | grep -q '^mathilda_ffi_eval$' || {
+            echo "::error::libmathilda.dll does not export mathilda_ffi_eval"
+            exit 1
+          }
+          if echo "$exports" | grep -v '^mathilda_ffi_' | grep -q .; then
+            echo "::error::libmathilda.dll exports non-API symbols"
+            exit 1
+          fi
 
       # Speak the NDJSON sidecar protocol (piped stdin), as on Linux. The
       # TimeConstrained line is the point of this job: Windows has no SIGPROF

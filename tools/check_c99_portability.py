@@ -161,6 +161,8 @@ FUNCTIONS = {
     "localtime_r": _P199506, "gmtime_r": _P199506,
     "gettimeofday": _P1, "mkdir": _P1,
     "opendir": _P1, "readdir": _P1, "closedir": _P1,
+    # <dlfcn.h> -- dladdr/Dl_info are GNU extensions on glibc.
+    "dladdr": _GNU_ONLY,
 }
 
 # A call, but not `p->jn(...)` / `s.jn(...)` -- a struct member of that name is
@@ -200,6 +202,8 @@ MINGW_MISSING_FUNCS = (
     "setenv", "unsetenv",
     # <unistd.h>/<sys/wait.h> process control (none in-tree today; future-proof).
     "fork", "execvp", "waitpid",
+    # <dlfcn.h>: MinGW has no dladdr (GetModuleHandleExA instead).
+    "dladdr",
 )
 
 MINGW_MISSING_HEADERS = (

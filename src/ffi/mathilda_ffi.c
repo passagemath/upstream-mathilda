@@ -12,6 +12,10 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+/* This translation unit IS the library side of mathilda_ffi.h: on Windows the
+ * header then marks the API __declspec(dllexport), so the DLL exports exactly
+ * these entry points (see MATHILDA_FFI_API). */
+#define MATHILDA_FFI_BUILDING
 #include "ffi/mathilda_ffi.h"
 
 #include <stdlib.h>

@@ -404,6 +404,8 @@ make check-compile-coverage  # does every numeric fast path also COMPILE?
 make check-image-packing     # does every image head hand back a packed buffer?
 make check-fastpath-sweep    # measured: is each head really on the buffer?
 make check-corpus-indvar     # does every DSolve corpus record ask the book's question?
+make lib                     # libmathilda.a + shared libmathilda (embedding C API)
+make check-install           # does the INSTALLED header/libs/.pc embed the kernel?
 ```
 
 `make check-corpus-indvar` runs `tools/check_corpus_indvar.py` over the

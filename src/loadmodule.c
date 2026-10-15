@@ -8,12 +8,15 @@
  *
  * Path resolution (mathilda_resolve_internal) is deliberately CWD-independent:
  * a relocated or installed binary must still find its bundled src/internal
- * tree. On glibc, readlink("/proc/self/exe") needs the POSIX feature-test
- * macro to be visible under -std=c99; define it before any system header.
+ * tree — and so must an installed shared libmathilda loaded into some other
+ * program (a Python extension, a Jupyter kernel), which is located through
+ * dladdr. On glibc, readlink("/proc/self/exe") needs the POSIX feature-test
+ * macro and dladdr/Dl_info need _GNU_SOURCE to be visible under -std=c99;
+ * define it before any system header.
  */
 
-#if defined(__linux__) && !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200112L
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
 #endif
 
 #include "loadmodule.h"
@@ -35,7 +38,10 @@
 #include <mach-o/dyld.h>     /* _NSGetExecutablePath */
 #include <stdint.h>          /* uint32_t */
 #elif defined(_WIN32)
-#include <windows.h>         /* GetModuleFileNameA */
+#include <windows.h>         /* GetModuleFileNameA, GetModuleHandleExA */
+#endif
+#if !defined(_WIN32) && (defined(__linux__) || defined(__APPLE__))
+#include <dlfcn.h>           /* dladdr (lm_self_dir) */
 #endif
 
 /* Longest module path we build; comfortably above any real filesystem path. */
@@ -111,6 +117,17 @@ static void lm_mark_loaded(const char* relpath) {
 static char lm_base[LM_PATH_MAX];
 static int  lm_base_known = 0;
 
+/* Trim the file path `path` (modified in place) to its directory, keeping the
+ * trailing '/', and copy that into `buf`. Returns 1 on success. */
+static int lm_dir_of(char* path, char* buf, size_t bufsz) {
+    char* slash = strrchr(path, '/');
+    if (!slash) return 0;
+    slash[1] = '\0';
+    if (strlen(path) >= bufsz) return 0;
+    memcpy(buf, path, strlen(path) + 1);
+    return 1;
+}
+
 /* Write the directory containing the running executable (with a trailing '/')
  * into `buf`. Returns 1 on success, 0 where unsupported or on error. Purely a
  * hint for resolution; callers fall back to $MATHILDA_HOME and the CWD ladder
@@ -138,13 +155,42 @@ static int lm_exe_dir(char* buf, size_t bufsz) {
     return 0;
 #endif
 
-    /* Trim to the directory: keep everything up to and including the last '/'. */
-    char* slash = strrchr(path, '/');
-    if (!slash) return 0;
-    slash[1] = '\0';
-    if (strlen(path) >= bufsz) return 0;
-    memcpy(buf, path, strlen(path) + 1);
-    return 1;
+    return lm_dir_of(path, buf, bufsz);
+}
+
+/* Write the directory of the loaded image that contains THIS code (with a
+ * trailing '/') into `buf`. For the Mathilda executable that is the executable
+ * itself; for an installed shared libmathilda it is <prefix>/lib/, whatever
+ * program loaded it — which is what lets the library find
+ * <prefix>/share/mathilda/internal/ with no $MATHILDA_HOME. Statically linked
+ * into some other image it names that image, and the lookup simply misses.
+ * Returns 1 on success, 0 where unsupported or on error. */
+static int lm_self_dir(char* buf, size_t bufsz) {
+    char path[LM_PATH_MAX];
+    path[0] = '\0';
+
+#if !defined(_WIN32) && (defined(__linux__) || defined(__APPLE__))
+    Dl_info info;
+    if (!dladdr((void*)&mathilda_resolve_internal, &info) || !info.dli_fname)
+        return 0;
+    if (strlen(info.dli_fname) >= sizeof(path)) return 0;
+    memcpy(path, info.dli_fname, strlen(info.dli_fname) + 1);
+#elif defined(_WIN32)
+    HMODULE mod = NULL;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            (LPCSTR)(void*)&mathilda_resolve_internal, &mod))
+        return 0;
+    DWORD n = GetModuleFileNameA(mod, path, (DWORD)sizeof(path));
+    if (n == 0 || n >= sizeof(path)) return 0;
+    path[n] = '\0';
+    for (char* p = path; *p; p++) if (*p == '\\') *p = '/';
+#else
+    (void)path;
+    return 0;
+#endif
+
+    return lm_dir_of(path, buf, bufsz);
 }
 
 /* Try base directory `base` (which must end with '/'): if <base><relpath> is a
@@ -196,6 +242,7 @@ int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz) {
     /* 2..3. Relative to the executable itself, so a binary that carries its
      * source tree (or an installed share/ layout) works from any CWD. */
     char exedir[LM_PATH_MAX];
+    exedir[0] = '\0';
     if (lm_exe_dir(exedir, sizeof(exedir))) {
         /* binary sits in the repo root: <exe>/src/internal/ */
         if ((size_t)snprintf(cand, sizeof(cand), "%ssrc/internal/", exedir)
@@ -205,6 +252,20 @@ int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz) {
         /* installed layout: <prefix>/bin/<exe>, data at <prefix>/share/... */
         if ((size_t)snprintf(cand, sizeof(cand),
                              "%s../share/mathilda/internal/", exedir)
+                < sizeof(cand)
+                && lm_try_base(cand, relpath, out, outsz))
+            return 1;
+    }
+
+    /* 3b. Relative to the image holding this code: an installed shared
+     * libmathilda at <prefix>/lib/ finds <prefix>/share/mathilda/internal/
+     * from inside any host program (issue #88). Identical to step 3 when the
+     * code lives in the executable, so only retry when the directory differs. */
+    char selfdir[LM_PATH_MAX];
+    if (lm_self_dir(selfdir, sizeof(selfdir))
+            && strcmp(selfdir, exedir) != 0) {
+        if ((size_t)snprintf(cand, sizeof(cand),
+                             "%s../share/mathilda/internal/", selfdir)
                 < sizeof(cand)
                 && lm_try_base(cand, relpath, out, outsz))
             return 1;

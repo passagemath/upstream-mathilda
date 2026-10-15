@@ -28,6 +28,7 @@
 #include <flint/acb.h>
 #include <flint/acb_dirichlet.h>
 #include <flint/acb_elliptic.h>
+#include <flint/acb_hypgeom.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr -> acb  (numeric scalars only)                                */
@@ -337,6 +338,17 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Tricomi confluent hypergeometric U                                 */
+/* ------------------------------------------------------------------ */
+/* acb_hypgeom_u has the (res, a, b, z, prec) shape nb_fn3 expects, so this is a
+ * straight pass-through: FLINT places the z^(1-b) branch cut on the principal
+ * branch (-infinity..0), matching Mathematica, and the precision ladder bounds
+ * the whole ball. */
+Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
+    return nb_eval3(a, b, z, acb_hypgeom_u);
+}
+
+/* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
 
@@ -413,6 +425,9 @@ Expr* flint_num_elliptic_e_inc(const Expr* phi, const Expr* m) { (void)phi; (voi
 Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m) { (void)n; (void)m; return NULL; }
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
     (void)n; (void)phi; (void)m; return NULL;
+}
+Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
+    (void)a; (void)b; (void)z; return NULL;
 }
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 

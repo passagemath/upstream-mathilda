@@ -87,6 +87,15 @@ bool sf_machine_hyper1f1(double a, double b, double z, double* out);        /* 1
  * non-positive-integer pole, an un-summable 1F1, or a non-finite result, so the
  * caller falls to the MPFR / symbolic 1F1 template. */
 bool sf_machine_whittaker_m(double k, double m, double z, double* out);     /* WhittakerM */
+/* HypergeometricU U(a,b,z), the Tricomi confluent hypergeometric function, real
+ * machine path for z > 0. Three regimes, each self-checking: a large-z asymptotic
+ * series (which also captures the exactly-terminating cases), the integer-b
+ * confluent-limit log-series (DLMF 13.2.9, the one regime where the connection
+ * formula degenerates), and the non-integer-b Kummer connection to two 1F1's.
+ * Declines (false) for z <= 0 (the z^(1-b) term leaves the real axis), a sum lost
+ * to cancellation, a Gamma/digamma pole, or a non-finite result, so the caller
+ * falls to the FLINT acb_hypgeom_u bridge / symbolic template. */
+bool sf_machine_hyperu(double a, double b, double z, double* out);          /* HypergeometricU */
 bool sf_machine_hyper2f1(double a, double b, double c, double z, double* out); /* 2F1 */
 bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
                     double z, double* out);                    /* HypergeometricPFQ */

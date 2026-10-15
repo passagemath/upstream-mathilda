@@ -1309,6 +1309,148 @@ bool sf_machine_whittaker_m(double k, double m, double z, double* out) {
     return true;
 }
 
+/* ---- HypergeometricU U(a,b,z) (Tricomi), real machine path for z > 0 -------- */
+
+/* Regime 1 -- the asymptotic series U(a,b,z) ~ z^(-a) 2F0(a, a-b+1; ; -1/z),
+ * summed to its least term. The series is divergent (asymptotic), so acceptance
+ * is MEASURED, not assumed: we stop when a term exceeds its predecessor and keep
+ * the result only when that least term is negligible against the partial sum.
+ * Terminating cases (a or a-b+1 a non-positive integer) drive the next term to
+ * exactly 0 and are returned exactly here. */
+static bool hyperu_asymptotic(double a, double b, double z, double* out) {
+    if (!(z > 0.0)) return false;
+    double a2 = a - b + 1.0;
+    double term = 1.0, sum = 1.0, last = 1.0;
+    for (int k = 0; k < 400; k++) {
+        double next = term * (a + k) * (a2 + k) / (k + 1.0) * (-1.0 / z);
+        double an = fabs(next);
+        if (!isfinite(next)) return false;
+        if (next == 0.0) {                      /* series terminated: exact */
+            double v = pow(z, -a) * sum;
+            if (!isfinite(v)) return false;
+            *out = v; return true;
+        }
+        if (an > last) {                        /* least term reached -> truncate */
+            if (!(last <= fabs(sum) * 1.0e-13)) return false;
+            double v = pow(z, -a) * sum;
+            if (!isfinite(v)) return false;
+            *out = v; return true;
+        }
+        sum += next;
+        term = next;
+        last = an;
+        if (an <= fabs(sum) * 1.0e-16) {        /* numerically converged */
+            double v = pow(z, -a) * sum;
+            if (!isfinite(v)) return false;
+            *out = v; return true;
+        }
+    }
+    return false;                               /* never reached the least term */
+}
+
+/* 1/Gamma(x), finite everywhere: 0 at the non-positive-integer poles of Gamma,
+ * where libm tgamma returns a NaN/Inf that would otherwise poison the sum. */
+static double hyperu_rgamma(double x) {
+    if (x <= 0.0 && x == floor(x)) return 0.0;
+    return 1.0 / tgamma(x);
+}
+
+/* Regime 3 -- the Kummer connection formula for NON-integer b:
+ *   U = Gamma(1-b)/Gamma(a-b+1) 1F1(a,b,z)
+ *     + Gamma(b-1)/Gamma(a)     z^(1-b) 1F1(a-b+1, 2-b, z).
+ * A difference of two growing terms, so a cancellation guard declines (-> FLINT)
+ * when the terms dwarf their sum. */
+static bool hyperu_connection(double a, double b, double z, double* out) {
+    if (!(z > 0.0)) return false;
+    double m1, m2;
+    if (!sf_machine_hyper1f1(a, b, z, &m1)) return false;
+    if (!sf_machine_hyper1f1(a - b + 1.0, 2.0 - b, z, &m2)) return false;
+    double g1 = tgamma(1.0 - b) * hyperu_rgamma(a - b + 1.0);   /* = G(1-b)/G(a-b+1) */
+    double g2 = tgamma(b - 1.0) * hyperu_rgamma(a);             /* = G(b-1)/G(a)     */
+    double t1 = g1 * m1;
+    double t2 = g2 * pow(z, 1.0 - b) * m2;
+    double v = t1 + t2;
+    if (!isfinite(v)) return false;
+    if (fabs(t1) + fabs(t2) > fabs(v) * 1.0e13) return false;   /* cancellation */
+    *out = v;
+    return true;
+}
+
+/* Regime 2 -- INTEGER b = n+1 (n >= 0), the confluent limit DLMF 13.2.9:
+ *   U(a,n+1,z) = (-1)^(n+1)/(n! Gamma(a-n)) *
+ *                  sum_{k>=0} (a)_k/((n+1)_k k!) z^k
+ *                             [ln z + psi(a+k) - psi(k+1) - psi(n+k+1)]
+ *              + (n-1)!/Gamma(a) z^(-n)
+ *                  sum_{k=0}^{n-1} (a-n)_k/((1-n)_k k!) z^k         (empty for n=0).
+ * The 1/Gamma factors vanish on the terminating sub-cases (a or a-n a non-positive
+ * integer), so those collapse to the finite polynomial correctly. */
+static bool hyperu_integer_b(double a, int n, double z, double* out) {
+    double finite = 0.0;
+    if (n >= 1) {
+        double rga = hyperu_rgamma(a);                   /* 1/Gamma(a) (0 at a pole) */
+        if (rga != 0.0) {
+            double sum = 1.0, term = 1.0;                /* k = 0 term */
+            for (int k = 1; k <= n - 1; k++) {
+                /* term_k/term_{k-1} = (a-n+k-1)/(k-n) * z/k */
+                term *= (a - n + (k - 1)) * z / ((double)(k - n) * (double)k);
+                sum += term;
+            }
+            finite = tgamma((double)n) * rga * pow(z, -(double)n) * sum;  /* (n-1)! */
+        }
+    }
+    double logpart = 0.0, peak = fabs(finite);
+    double rgan = hyperu_rgamma(a - (double)n);          /* 1/Gamma(a-n) */
+    if (rgan != 0.0) {
+        double lnz = log(z);
+        double pref = ((n & 1) ? 1.0 : -1.0) / tgamma((double)n + 1.0) * rgan;
+        double term = 1.0, sum = 0.0;                    /* (a)_0/((n+1)_0) z^0/0! = 1 */
+        for (int k = 0; k < 200000; k++) {
+            double pa, pk, pnk;
+            if (!sf_machine_digamma(a + k, &pa)) return false;
+            if (!sf_machine_digamma((double)(k + 1), &pk)) return false;
+            if (!sf_machine_digamma((double)(n + k + 1), &pnk)) return false;
+            double add = term * (lnz + pa - pk - pnk);
+            sum += add;
+            if (fabs(add * pref) > peak) peak = fabs(add * pref);
+            if (fabs(add) < fabs(sum) * EI_EPS && k > 2) break;
+            /* term_{k+1} = term_k * (a+k)/(n+1+k) * z/(k+1) */
+            term *= (a + k) / (double)(n + 1 + k) * z / (double)(k + 1);
+            if (!isfinite(term)) return false;
+            if (term == 0.0) break;                      /* (a)_k terminated it */
+        }
+        logpart = pref * sum;
+    }
+    double v = finite + logpart;
+    if (!isfinite(v)) return false;
+    /* Cancellation guard: this is a growing-term (1F1-like) series at large z, and
+     * the finite and log parts can nearly cancel. When the largest contribution
+     * dwarfs the result the double has thrown most of its digits away -- DECLINE
+     * (as sf_machine_pfq does) so the caller takes the rigorous FLINT path rather
+     * than return a confidently wrong value. ~1e6 keeps roughly 10 good digits. */
+    if (peak > fabs(v) * 1.0e6) return false;
+    *out = v;
+    return true;
+}
+
+bool sf_machine_hyperu(double a, double b, double z, double* out) {
+    if (!(z > 0.0)) return false;                        /* branch cut -> complex */
+    /* 1. large-z asymptotic (and every exactly-terminating case). */
+    if (hyperu_asymptotic(a, b, z, out)) return true;
+    /* 2/3. integer vs non-integer b. */
+    double rb = floor(b + 0.5);
+    if (fabs(b - rb) < 1.0e-9) {                         /* b at an integer */
+        if (rb >= 1.0)
+            return hyperu_integer_b(a, (int)rb - 1, z, out);
+        /* b <= 0 integer: fold up by U(a,b,z) = z^(1-b) U(a-b+1, 2-b, z). */
+        double v;
+        if (!sf_machine_hyperu(a - b + 1.0, 2.0 - b, z, &v)) return false;
+        double r = pow(z, 1.0 - b) * v;
+        if (!isfinite(r)) return false;
+        *out = r; return true;
+    }
+    return hyperu_connection(a, b, z, out);              /* 3. non-integer b */
+}
+
 /* 2F1(a, b; c; z), |z| < 1 by the defining series.  Outside the disc the
  * function needs a connection formula and may be complex, so the kernel
  * declines and the MPFR path answers. */

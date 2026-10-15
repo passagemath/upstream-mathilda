@@ -55,6 +55,13 @@ Expr* flint_num_elliptic_pi(const Expr* n, const Expr* m);              /* Ellip
 Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi,
                                 const Expr* m);                          /* EllipticPi[n,phi,m] */
 
+/* HypergeometricU[a, b, z] -- the Tricomi confluent hypergeometric U, via FLINT's
+ * rigorous acb_hypgeom_u (correct rounding, full complex plane, standard branch
+ * cut on z from -infinity to 0, integer b handled natively). Used for the MPFR /
+ * complex / z<=0 numerics of HypergeometricU and (through the confluent template)
+ * WhittakerW. */
+Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

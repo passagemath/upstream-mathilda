@@ -338,6 +338,9 @@ BASELINE = {
     # but the SHAPES table below tops out at two scalar args, so the tool cannot
     # construct a probe for it -- reported-not-enforced, exactly like LerchPhi.
     "WhittakerM",
+    # HypergeometricU[a, b, z]: same as WhittakerM -- a machine N-ary kernel that
+    # compiles via OP_KERNN, but the SHAPES probe cannot build a 3-scalar call.
+    "HypergeometricU",
     # The elementwise sign predicates.  Now that NDT_BOOL exists (§13 gap C.1
     # closed) they produce a packed bool array, so a compiled ARRAY form is
     # finally possible — an elementwise compare-to-zero writing CT_BOOL elements

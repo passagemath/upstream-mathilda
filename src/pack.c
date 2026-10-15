@@ -861,6 +861,10 @@ static void pack_mark_aware_heads(void) {
          * in its own right by the List path. */
         "HypergeometricPFQ", "Hypergeometric0F1",
         "Hypergeometric1F1", "Hypergeometric2F1",
+        /* HypergeometricU[a, b, z] holds the buffer z; its builtin threads
+         * sf_machine_hyperu over the buffer. Not int64_ok: the series runs in
+         * double. */
+        "HypergeometricU",
         /* WhittakerM[k, m, z] holds the buffer z (the gate fires at the head, and
          * its builtin threads sf_machine_whittaker_m over the buffer directly).
          * Not int64_ok: the 1F1 series runs in double. */

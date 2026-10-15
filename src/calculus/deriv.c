@@ -1653,6 +1653,64 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- HypergeometricU[A, B, Z]: chain rule on the argument Z (DLMF 13.3.22,
+         *   d/dz U(a,b,z) = -a U(a+1, b+1, z)).
+         *   d/dA, d/dB have no elementary form -> inert
+         *     Derivative[1,0,0][HypergeometricU][A,B,Z] / Derivative[0,1,0][...].
+         * Zero-derivative arms are dropped, so D[HypergeometricU[a,b,z],z] keeps
+         * only the dZ term. */
+        if (h == SYM_HypergeometricU && n == 3) {
+            Expr* A = args[0];
+            Expr* B = args[1];
+            Expr* Z = args[2];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dB = deriv_of(B, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -A U(A+1, B+1, Z) */
+                Expr* u1 = expr_new_function(mk_sym("HypergeometricU"),
+                              (Expr*[]){ mk_fn2("Plus", mk_int(1), expr_copy(A)),
+                                         mk_fn2("Plus", mk_int(1), expr_copy(B)),
+                                         expr_copy(Z) }, 3);
+                Expr* dUdZ = mk_fn2("Times", mk_neg(expr_copy(A)), u1);
+                terms[nt++] = mk_fn2("Times", dUdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dA)) {
+                /* Derivative[1,0,0][HypergeometricU][A,B,Z] * dA */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("HypergeometricU"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(A), expr_copy(B), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (!is_lit_zero(dB)) {
+                /* Derivative[0,1,0][HypergeometricU][A,B,Z] * dB */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("HypergeometricU"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(A), expr_copy(B), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dB);
+            } else {
+                expr_free(dB);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            if (nt == 2) return mk_fn2("Plus", terms[0], terms[1]);
+            return expr_new_function(mk_sym("Plus"), terms, 3);
+        }
+
         /* --- WhittakerM[K, M, Z]: chain rule on the argument Z (DLMF 13.4.27,
          *   z M' = (z/2 - k) M + (k + m + 1/2) M_{k+1,m}):
          *   d/dZ M_{k,m}(Z) = (1/2 - k/Z) M_{k,m}(Z) + ((1/2+k+m)/Z) M_{k+1,m}(Z).

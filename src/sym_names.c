@@ -271,6 +271,7 @@ const char* SYM_Hypergeometric1F1 = NULL;
 const char* SYM_Hypergeometric2F1 = NULL;
 const char* SYM_HypergeometricPFQ = NULL;
 const char* SYM_HypergeometricPFQRegularized = NULL;
+const char* SYM_HypergeometricU = NULL;
 const char* SYM_WhittakerM = NULL;
 const char* SYM_HeavisideTheta = NULL;
 const char* SYM_HermitianMatrixQ = NULL;
@@ -1274,6 +1275,7 @@ void sym_names_init(void) {
     SYM_Hypergeometric2F1          = intern_symbol("Hypergeometric2F1");
     SYM_HypergeometricPFQ          = intern_symbol("HypergeometricPFQ");
     SYM_HypergeometricPFQRegularized = intern_symbol("HypergeometricPFQRegularized");
+    SYM_HypergeometricU            = intern_symbol("HypergeometricU");
     SYM_WhittakerM                 = intern_symbol("WhittakerM");
     SYM_HeavisideTheta             = intern_symbol("HeavisideTheta");
     SYM_HermitianMatrixQ           = intern_symbol("HermitianMatrixQ");

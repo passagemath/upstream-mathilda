@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, and the Whittaker function `WhittakerM`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, and the Whittaker function `WhittakerM`.
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -883,6 +883,46 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
 Out[1]= -Log[1 - z]/z
+```
+
+## HypergeometricU
+
+`HypergeometricU[a, b, z]` is the Tricomi confluent hypergeometric function
+`U(a, b, z)`, the second (recessive) solution of the confluent equation
+`z w'' + (b - z) w' - a w = 0`. It has a branch cut in `z` running from `-∞` to
+`0` (from the `z^(1-b)` term in its connection to `Hypergeometric1F1`).
+
+- **Exact reductions.** `HypergeometricU[0, b, z] = 1` and
+  `HypergeometricU[a, a+1, z] = z^(-a)` (so `HypergeometricU[1, 2, z] = 1/z`,
+  `HypergeometricU[2, 3, 4] = 1/16`).
+- **Numerics.** With at least one inexact argument the value is computed at
+  machine or arbitrary (MPFR) precision, real or complex:
+  `HypergeometricU[1.5, 7, 4.5] = 0.554931`,
+  `N[HypergeometricU[3/2, 7, 9/2], 25]` to 25 digits,
+  `HypergeometricU[3 - I, 2 I, 3.0]` complex. A real machine-precision argument
+  with `z > 0` uses a hardware-`double` kernel (the asymptotic series for large
+  `z`, the DLMF 13.2.9 confluent-limit log-series for integer `b`, and the Kummer
+  two-`₁F₁` connection for non-integer `b`); a complex or arbitrary-precision
+  argument, or `z ≤ 0`, uses FLINT's rigorous `acb_hypgeom_u` (correct rounding,
+  standard branch cut, integer `b` handled natively).
+- **Derivative.** `D[HypergeometricU[a, b, z], z] = -a HypergeometricU[a+1, b+1, z]`
+  (DLMF 13.3.22); `d/da` and `d/db` stay as inert `Derivative[...]`.
+- **Performance (machine reals).** A real machine argument with `z > 0` shares a
+  hardware-`double` kernel bit-for-bit with the NDArray / packed fast path and
+  `Compile[]`.
+- **Listable.** `HypergeometricU[1, 2, {2., 4., 5.}] = {0.5, 0.25, 0.2}`.
+
+The general (two-branch) Series at the origin and `FunctionExpand` are not
+produced (`U` is not analytic at `0`), matching the confluent siblings.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= HypergeometricU[1, 2, z]
+Out[1]= 1/z
+
+In[2]:= HypergeometricU[1.5, 7, 4.5]
+Out[2]= 0.554931
 ```
 
 ## Zeta

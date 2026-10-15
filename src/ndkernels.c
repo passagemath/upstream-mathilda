@@ -799,6 +799,13 @@ static bool ndk_WhittakerM_n(const double* re, const double* im, size_t n,
     double v; if (!sf_machine_whittaker_m(re[0], re[1], re[2], &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* HypergeometricU[a, b, z]: re[0] = a, re[1] = b, re[2] = z. Real only. */
+static bool ndk_HypergeometricU_n(const double* re, const double* im, size_t n,
+                                  double* rr, double* ri) {
+    if (n != 3 || im[0] || im[1] || im[2]) return false;
+    double v; if (!sf_machine_hyperu(re[0], re[1], re[2], &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
 /* PFQ arrives already flattened by the compiler's lowering: re[0] carries p, so
  * q is whatever is left after the p upper parameters and the final z. */
 static bool ndk_HypergeometricPFQ_n(const double* re, const double* im, size_t n,
@@ -818,6 +825,7 @@ static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true }
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
 static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true };
+static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false };
@@ -900,5 +908,6 @@ void ndkernels_init(void) {
     REG_N(HypergeometricPFQ);
     REG_N(LaguerreL);   /* generalized LaguerreL[n, a, x] for Compile[] */
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
+    REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */
 
 }

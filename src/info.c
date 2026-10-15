@@ -1202,6 +1202,16 @@ void info_init(void) {
         "H_n(0) = 2^n Sqrt[Pi]/Gamma[(1-n)/2]. D[HermiteH[n,x],x] =\n"
         "2 n HermiteH[n-1,x]; Series (including at Infinity) and SeriesCoefficient\n"
         "are supported. Listable.");
+    symtab_set_docstring("HypergeometricU",
+        "HypergeometricU[a, b, z]\n"
+        "\tgives the Tricomi confluent hypergeometric function U(a, b, z).\n"
+        "The second solution of z w'' + (b-z) w' - a w = 0, with a branch cut on z\n"
+        "from -Infinity to 0. With an inexact argument it evaluates numerically at\n"
+        "machine or arbitrary (MPFR) precision, real or complex: a real machine\n"
+        "argument uses a shared double kernel (also driving the NDArray/packed fast\n"
+        "path and Compile[]); MPFR/complex/z<=0 use FLINT's rigorous acb_hypgeom_u.\n"
+        "Exact reductions U(0,b,z) = 1 and U(a,a+1,z) = z^(-a).\n"
+        "D[HypergeometricU[a,b,z],z] = -a HypergeometricU[a+1,b+1,z]. Listable.");
     symtab_set_docstring("WhittakerM",
         "WhittakerM[k, m, z]\n"
         "\tgives the Whittaker function M_{k,m}(z).\n"

@@ -2240,6 +2240,62 @@ Full per-case results: `reports/2.2.42.tsv`; bucketed report: `reports/2.2.42.md
 
 ---
 
+## Section 2.2.43 — "Problems 4201 to 4300" (Nasser Abbasi)
+
+Corpus: `DE_examples_2243.m` — 100 records, **100 scalar (15 IVP), 0 systems**
+(upstream §2.1.43, `Ch2.S1.SS43.htm`). First-order dominated: 30 separable, 18
+linear, 6 exact, plus Abel 2nd-type / Bernoulli / Riccati / homogeneous class
+A/C/D/G. 20 `sympy=False`. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_43_tests` · gate baseline **7**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-15 (M71 baseline) | 92 / 100 | 92.0% | 8 | 0 FAIL, 0 crash. Dominant gap a 5-case first-order `_linear` cluster whose integrating-factor integrals are non-trivial (trig-rational / radical). |
+| 2026-10-15 (**M71**) | **93 / 100** | **93.0%** | **7** | **0 FAIL, 0 crash.** One general `Integrate` fix (below). Gate baseline **7**. |
+
+**M71 fix — trig-rational integrating-factor integral no longer spins in the
+Linearity stage** (`src/calculus/integrate.c`). `4201`
+(`Cot[x] y' + y == Tan[x]`) normalises to `y' + Tan[x] y == Tan[x]²`, integrating
+factor `μ = Sec[x]`, and its particular needs `∫ Sec[x] Tan[x]² dx` (≡
+`∫ Sin²/Cos³`). That integral **timed out ~12 s COLD** — not in the ODE layer but
+in `Integrate` itself: the Linearity stage (`try_linearity`, stage 09) takes a
+trig integrand, applies `Expand[TrigReduce[·]]`, and integrates the terms
+recursively; `TrigReduce` **cannot clear a trig denominator**, so the term-by-term
+recursion re-enters the same rational-trig form and thrashes. The Weierstrass /
+Jeffrey–Rich stage (11) is the correct, deterministic closer for a rational-trig
+integrand and does it in **~0.03 s** — but Linearity (9) preempts it. (The
+earlier "fast" readings were a memo artifact: `∫Sin²/Cos³` warmed by a prior
+related integral in the same process hid the cold spin.)
+
+The fix adds `trig_in_denominator()` + `is_trig_power_monomial()` and gates the
+Linearity *trig* branch to **decline** an integrand that is a **pure trig-power
+monomial** (`Sin^a Cos^b` — a product of `Sin/Cos/Tan/Cot/Sec/Csc` powers and a
+numeric constant, nothing else) carrying a trig *denominator* (a
+`Sec`/`Csc`/`Cot`/`Tan` kernel, or a negative-power `Sin`/`Cos`), so it falls
+through to Weierstrass. The monomial restriction is load-bearing: an integrand
+that merely *contains* a trig denominator inside a larger `Exp`/`Log`/parameter
+body — e.g. an integrating-factor body `Y² E^(Log[1+2 Y Tan[x]] + …)` that
+Linearity legitimately closes and Weierstrass does not — is **not** a monomial and
+is left to Linearity (this is what a first, over-broad guard wrongly diverted,
+regressing §2.2.35-3461 — now correct). The genuine trig-*polynomial* cases the
+branch exists for (`Cos[x]²`, `Cos[x](3 Sin[x] + K)`, `Sin[2x] + Sin[3x]`) are
+untouched (denominator-free). `∫Sec·Tan²` cold **12 s → 2.5 s** (closes), and
+`DSolve\`LinearFirstOrder[Cot[x] y' + y == Tan[x]]` now PASSes. The whole
+integrate + Risch unit suite (33 ctest targets) stays **100% green**; an A/B vs
+v0.411 on the first-order-heavy sections (§2.2.30 / §2.2.35 / §2.2.37) shows no
+regression (§2.2.35-3461 verified PASS on both binaries, and 3497 is a
+pre-existing cold-latency flutter, PASS on both).
+
+Residue 7: `4205`/`4207` (`Cos`/`Sin`-leading linear → a **mixed-argument**
+`Tan[x/2] Cos[x]` integral that Weierstrass declines and `ParallelMixedTower`
+spins 5–9 s on — a harder, separate case), `4210`/`4211` (radical integrating
+factor `Sqrt[(x+a)(x+b)]`), `4244` (homogeneous class D), `4252` (Abel 2nd-type
+class B), `4298` (exact with `Sin[x/y]`, cold latency over the 8 s wall).
+
+Full per-case results: `reports/2.2.43.tsv`; bucketed report: `reports/2.2.43.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

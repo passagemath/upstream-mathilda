@@ -3349,6 +3349,42 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     declines the degenerate dependent second solution (same class as the Whittaker
     `2μ ∈ ℤ` case). v0.412 → 0.413.
 
+- **M71 — §2.2.43 corpus (Problems 4201–4300, Nasser Abbasi) + trig-rational
+  integrating-factor integral no longer spins in the Linearity stage.** ✅ DONE.
+  New corpus `DE_examples_2243.m` (upstream §2.1.43, 100 records — **100 scalar, 15
+  IVP, 0 systems**; `make check-corpus-indvar` green); new gate
+  `dsolve_corpus_2_2_43_tests` at baseline **7**; report
+  `DSolve_test_status/reports/2.2.43.md`. First-order dominated (30 separable, 18
+  linear, 6 exact, Abel/Bernoulli/Riccati/homogeneous; 20 `sympy=False`). Baseline
+  **92/100 → 93/100, 0 FAIL, 0 crash**.
+  - **One general fix, in `Integrate`** (`src/calculus/integrate.c`). `4201`
+    (`Cot[x] y' + y == Tan[x]`) needs `∫ Sec[x] Tan[x]² dx` (≡ `∫Sin²/Cos³`) for its
+    integrating-factor particular; that integral **timed out ~12 s COLD** in the
+    Linearity stage (`try_linearity`, stage 09), which `Expand[TrigReduce]`-expands
+    a trig integrand and integrates the terms recursively — but `TrigReduce` cannot
+    clear a trig denominator, so the recursion re-enters the same rational-trig form
+    and thrashes. The Weierstrass/Jeffrey–Rich stage (11) closes a rational-trig
+    integrand deterministically in ~0.03 s but Linearity (9) preempts it. The fix
+    adds `trig_in_denominator()` + `is_trig_power_monomial()` and gates the
+    Linearity *trig* branch to decline a **pure `Sin^a Cos^b` monomial** (product of
+    trig powers + a numeric constant, nothing else) that carries a trig denominator
+    (`Sec`/`Csc`/`Cot`/`Tan`, or a negative `Sin`/`Cos` power), so it falls through
+    to Weierstrass; trig *polynomials* (denominator-free) stay untouched. The
+    monomial restriction matters: a first over-broad guard (any integrand
+    *containing* a trig denominator) regressed §2.2.35-3461, whose integrating-factor
+    body `Y² E^(Log[1+2 Y Tan[x]] + …)` Linearity closes and Weierstrass does not —
+    that body is not a monomial, so the narrowed guard leaves it to Linearity. Cold
+    `∫Sec·Tan²` 12 s → 2.5 s; the integrate + Risch unit suite (33 ctest targets)
+    stays 100% green; A/B vs v0.411 on §2.2.30 / §2.2.35 / §2.2.37 shows no
+    regression (3461 PASS on both; 3497 a pre-existing cold-latency flutter, PASS on
+    both). (The earlier "fast" readings were a memo artifact — a prior related
+    integral in the same process warmed `∫Sin²/Cos³` and hid the cold spin.)
+  - *Residue 7:* `4205`/`4207` (`Cos`/`Sin`-leading linear → a mixed-argument
+    `Tan[x/2] Cos[x]` integral Weierstrass declines and `ParallelMixedTower` spins
+    5–9 s on — a harder, separate case), `4210`/`4211` (radical integrating factor),
+    `4244` (homogeneous class D), `4252` (Abel 2nd-type class B), `4298` (exact with
+    `Sin[x/y]`, cold latency over the 8 s wall). v0.413 → 0.414.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

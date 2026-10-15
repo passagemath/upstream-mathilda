@@ -440,12 +440,94 @@ static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* A circular-trig kernel sits in a DENOMINATOR of `e`: a Sec/Csc/Cot/Tan kernel
+ * (each an implicit reciprocal of Cos/Sin), or a Sin/Cos kernel raised to a
+ * negative numeric power.  That is exactly the rational-trig domain the
+ * Weierstrass (Jeffrey-Rich) stage closes directly and fast, and TrigReduce
+ * CANNOT clear a trig denominator -- so the Expand[TrigReduce] linearity branch
+ * below must not pre-expand such an integrand: its term-by-term recursion
+ * re-enters the same rational-trig form and spins (the cold Integrate[Sec[x]
+ * Tan[x]^2, x] / `y' + Tan[x] y == q` 12 s hang, closed in 0.03 s by Weierstrass
+ * once linearity declines).  Only ever consulted when trig_all_in_x already
+ * holds, so every kernel here is a kernel in x. */
+static bool trig_in_denominator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && e->data.function.arg_count == 1) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Sec || n == SYM_Csc || n == SYM_Cot || n == SYM_Tan) return true;
+    }
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL) {
+            const char* bn = base->data.function.head->data.symbol.name;
+            if ((bn == SYM_Sin || bn == SYM_Cos)
+                && ((ex->type == EXPR_INTEGER && ex->data.integer < 0)
+                    || (ex->type == EXPR_REAL && ex->data.real < 0.0))) return true;
+        }
+    }
+    if (trig_in_denominator(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (trig_in_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* One allowed factor of a PURE trig-power monomial: a numeric constant, a single
+ * circular-trig kernel Sin/Cos/Tan/Cot/Sec/Csc[arg], or an integer power of one.
+ * Anything else (Exp, Log, a non-trig symbol such as a parameter, a non-integer
+ * power) disqualifies the whole product. */
+static bool trig_monomial_factor(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* n = h->data.symbol.name;
+    if (n == SYM_Rational) return true;                                   /* numeric coeff */
+    if (e->data.function.arg_count == 1
+        && (n == SYM_Sin || n == SYM_Cos || n == SYM_Tan ||
+            n == SYM_Cot || n == SYM_Sec || n == SYM_Csc)) return true;
+    if (n == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* b  = e->data.function.args[0];
+        const Expr* ex = e->data.function.args[1];
+        if (ex->type == EXPR_INTEGER && b->type == EXPR_FUNCTION
+            && b->data.function.head->type == EXPR_SYMBOL
+            && b->data.function.arg_count == 1) {
+            const char* bn = b->data.function.head->data.symbol.name;
+            if (bn == SYM_Sin || bn == SYM_Cos || bn == SYM_Tan ||
+                bn == SYM_Cot || bn == SYM_Sec || bn == SYM_Csc) return true;
+        }
+    }
+    return false;
+}
+
+/* `f` is a pure product of circular-trig powers (times an optional numeric
+ * constant) and nothing else -- e.g. Sec[x] Tan[x]^2, 3 Sin[x]^2 Cos[x]^(-3) -- a
+ * single trig power counting too.  This is exactly the Sin^a Cos^b monomial family
+ * whose Linearity TrigReduce-expansion thrashes while Weierstrass closes it
+ * directly; an integrand that merely CONTAINS a trig denominator inside a larger
+ * Exp/Log/parameter structure (an integrating-factor body like
+ * Y^2 E^(Log[1+2 Y Tan[x]] + ...)) is NOT a monomial and is left to Linearity,
+ * which legitimately closes it (and Weierstrass does not). */
+static bool is_trig_power_monomial(const Expr* f) {
+    if (trig_monomial_factor(f)) return true;
+    if (head_is((Expr*)f, SYM_Times)) {
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (!trig_monomial_factor(f->data.function.args[i])) return false;
+        return true;
+    }
+    return false;
+}
+
 static Expr* try_linearity(Expr* f, Expr* x) {
     Expr* target = NULL;                 /* a Plus we own (or borrow from f) */
     Expr* owned  = NULL;                 /* non-NULL when we built `target` */
     if (head_is(f, SYM_Plus) && f->data.function.arg_count >= 2) {
         target = f;
     } else if (integrand_has_trig(f) && trig_all_in_x(f, x)
+               && !(is_trig_power_monomial(f) && trig_in_denominator(f))
                && node_count_capped(f, 256) < 256) {
         Expr* tr = apply1_eval("TrigReduce", f);
         Expr* g  = tr ? apply1_eval("Expand", tr) : NULL;

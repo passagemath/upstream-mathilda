@@ -29,8 +29,15 @@ version bump + git tag.
 - [x] gate baseline 1; STATUS/README/PLAN/changelog; version 0.412→0.413
 - [x] commit + tag v0.413
 
-## Block 3 — §2.2.43 (4201–4300), M71
-- [ ] (same pipeline)
+## Block 3 — §2.2.43 (4201–4300), M71, v0.414 ✅
+- [x] Fetch + convert → DE_examples_2243.m (100 scalar/15 IVP); indvar green
+- [x] Baseline 92/100 (8 non-PASS; dominant = 5-case first-order _linear cluster)
+- [x] Root cause: ∫Sec·Tan² (≡Sin²/Cos³) spins 12s COLD in Integrate Linearity stage (TrigReduce can't clear trig denom)
+- [x] General fix: Linearity declines a pure Sin^a Cos^b monomial w/ trig denom → Weierstrass closes (0.03s). integrate.c → 93/100
+- [x] Caught + fixed own over-broad-guard regression (§2.2.35-3461); narrowed to pure monomials
+- [x] integrate+risch ctest 100% (33/33); A/B §2230/35/37 no regression; 3497 pre-existing flaky
+- [x] gate baseline 7; STATUS/README/PLAN/changelog; version 0.413→0.414; check-c99/messages green
+- [x] commit + tag v0.414
 
 ## Block 4 — §2.2.44 (4301–4400), M72
 - [ ] (same pipeline)

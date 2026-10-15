@@ -4757,6 +4757,26 @@ add_test(NAME dsolve_corpus_2_2_42_tests
                  ../../DSolve_test_status/DE_examples_2242.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
+# Section 2.2.43 "Problems 4201 to 4300" (Nasser Abbasi; upstream Ch2.S1.SS43.htm).
+# 100 scalar (15 IVP), 0 systems; first-order dominated (30 separable, 18 linear,
+# 6 exact, Abel/Bernoulli/Riccati/homogeneous).  Baseline 92/100 -> 93/100 (M71):
+# a trig-rational integrating-factor integral (4201, mu q = Sec[x] Tan[x]^2 ==
+# Sin^2/Cos^3) timed out ~12 s COLD in the Integrate Linearity stage, which
+# Expand[TrigReduce]-expands and recurses on a form TrigReduce cannot clear; the
+# Linearity trig branch now declines a pure Sin^a Cos^b monomial carrying a trig
+# denominator (Sec/Csc/Cot/Tan or negative Sin/Cos power), so the Weierstrass stage
+# closes it directly in ~0.03 s (integrate.c:try_linearity + is_trig_power_monomial
+# + trig_in_denominator; the monomial gate keeps an Exp/Log integrating-factor body
+# that only Linearity closes untouched).  Residue
+# 7: 4205/4207 (Cos/Sin-leading linear -> mixed-argument Tan[x/2] Cos[x] integral
+# that reaches ParallelMixedTower, >8 s), 4210 (radical integrating factor), 4211,
+# 4244 (homogeneous class D), 4252 (Abel 2nd type class B), 4298 (exact, cold
+# latency).  Baseline argv3 = 7.
+add_test(NAME dsolve_corpus_2_2_43_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2243.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

@@ -189,7 +189,12 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
 
     /* Does the result track machine precision? Yes iff some argument is inexact
      * and every inexact argument is machine (<= 53 bits); an exact Integer/Rational
-     * imposes no precision (so HypergeometricU[0.6, 1/3, 1/7.] is machine). */
+     * imposes no precision (so HypergeometricU[0.6, 1/3, 1/7.] is machine).
+     * numeric_min_inexact_bits lives under USE_MPFR (like every other caller --
+     * fourier.c, erfi.c, convolutions.c guard their calls the same way); without
+     * MPFR there is no FLINT/arb path to demote below, so machine_prec is moot and
+     * the machine double kernel above is the only numeric route. */
+#ifdef USE_MPFR
     long gov = 0;
     {
         long bits[3] = { numeric_min_inexact_bits(a_e),
@@ -199,6 +204,9 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
             if (bits[i] > 0 && (gov == 0 || bits[i] < gov)) gov = bits[i];
     }
     bool machine_prec = (gov > 0 && gov <= 53);
+#else
+    bool machine_prec = false;
+#endif
 
     /* Machine real fast path: a, b, z all machine reals. Shares sf_machine_hyperu
      * with the NDArray kernel and the Compile[] VM, so the answer is bit-identical.

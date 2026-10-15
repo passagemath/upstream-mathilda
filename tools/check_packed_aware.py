@@ -45,6 +45,19 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "StandardForm": "inert display wrapper -- StandardForm and TraditionalForm "
+    "both register builtin_display_form (src/core.c), which returns NULL and has "
+    "NO evaluation-time NDArray path. The EXPR_NDARRAY the audit attributes here "
+    "lives in the plain-text/TeX PRINTER (print_standard/print_tex), not in a "
+    "fast path, so there is no buffer for the gate to protect, and it must NOT go "
+    "on AWARE. The attribution is a boundary artifact of the Expr*-only FN_DEF "
+    "scan: builtin_display_form's span absorbs the adjacent series_extract_negative "
+    "helper, whose negate_bigint() call the scan has itself mis-marked (its span "
+    "in turn absorbs a later EXPR_NDARRAY).",
+    "TraditionalForm": "as StandardForm -- its twin, the same builtin_display_form. "
+    "Only one surfaces at a time because builtin_registry maps the shared C "
+    "function to whichever head registers last; both are exempt so a registration "
+    "reorder cannot flip which one the audit reports.",
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
     "a plain List, which is what keeps the gate an O(argc) top-level scan",
     "NDArray": "the packing constructor itself: its is_ndarray(arg) branch makes "

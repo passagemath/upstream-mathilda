@@ -202,7 +202,10 @@ static bool lag_leaf_double(const Expr* e, double* out) {
 }
 
 /* If `x_e` is a machine real, or a Complex of machine real/integer parts, fill
- * (*xr, *xi) and set *real; decline anything carrying MPFR/BigInt. */
+ * (*xr, *xi) and set *real; decline anything carrying MPFR/BigInt.
+ * Only the MPFR numeric path below calls this, so its definition is guarded to
+ * match -- otherwise it is an unused static under USE_MPFR=0 (-Werror). */
+#ifdef USE_MPFR
 static bool lag_machine_xy(const Expr* x_e, double* xr, double* xi, bool* real) {
     if (x_e && x_e->type == EXPR_REAL) {
         *xr = x_e->data.real; *xi = 0.0; *real = true; return true;
@@ -218,6 +221,7 @@ static bool lag_machine_xy(const Expr* x_e, double* xr, double* xi, bool* real) 
     }
     return false;
 }
+#endif /* USE_MPFR */
 
 #ifdef USE_MPFR
 /* True iff the numeric result Expr `e` actually collapsed to a number. */

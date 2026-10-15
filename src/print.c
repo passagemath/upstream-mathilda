@@ -1096,33 +1096,78 @@ void expr_print(Expr* e) {
     printf("\n");
 }
 
+/* ---------------------------------------------------------------------------
+ * Portable capture of the print sink into a heap string.
+ *
+ * expr_to_string & friends print into an in-memory FILE* and hand back the
+ * bytes.  POSIX gives us open_memstream for exactly this; MinGW/UCRT (the
+ * native Windows target) ships neither open_memstream nor fmemopen, so there we
+ * route the sink through a temp FILE and read it back on finish.  String
+ * rendering is a per-result operation, not an inner numeric loop, so the Windows
+ * disk round-trip is acceptable -- the packed/NDArray hot paths never touch it.
+ *
+ * str_capture_open() returns a FILE* to push as the sink (NULL on failure);
+ * str_capture_finish() closes it and returns a freshly malloc'd, NUL-terminated
+ * string the caller frees (NULL on failure).
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    FILE*  f;
+#ifndef _WIN32
+    char*  buf;
+    size_t len;
+#endif
+} StrCapture;
+
+static FILE* str_capture_open(StrCapture* c) {
+#ifdef _WIN32
+    c->f = tmpfile();
+#else
+    c->buf = NULL;
+    c->len = 0;
+    c->f = open_memstream(&c->buf, &c->len);
+#endif
+    return c->f;
+}
+
+static char* str_capture_finish(StrCapture* c) {
+#ifdef _WIN32
+    if (fflush(c->f) != 0) { fclose(c->f); return NULL; }
+    long n = ftell(c->f);
+    if (n < 0) { fclose(c->f); return NULL; }
+    rewind(c->f);
+    char* buf = malloc((size_t)n + 1);
+    if (!buf) { fclose(c->f); return NULL; }
+    size_t got = fread(buf, 1, (size_t)n, c->f);
+    buf[got] = '\0';
+    fclose(c->f);
+    return buf;
+#else
+    fclose(c->f);          /* flushes; finalises buf/len, NUL-terminated */
+    return c->buf;
+#endif
+}
+
 char* expr_to_string(Expr* e) {
     // Print to a memory buffer by diverting the print sink to it.
-    char* buffer = NULL;
-    size_t len;
-    FILE* stream = open_memstream(&buffer, &len);
-    if (!stream) return NULL;
+    StrCapture c;
+    if (!str_capture_open(&c)) return NULL;
 
-    FILE* prev = mth_out_push(stream);
+    FILE* prev = mth_out_push(c.f);
     print_standard(e, 0);
     mth_out_pop(prev);
-    fclose(stream);
 
-    return buffer;
+    return str_capture_finish(&c);
 }
 
 char* expr_to_string_fullform(Expr* e) {
-    char* buffer = NULL;
-    size_t len;
-    FILE* stream = open_memstream(&buffer, &len);
-    if (!stream) return NULL;
+    StrCapture c;
+    if (!str_capture_open(&c)) return NULL;
 
-    FILE* prev = mth_out_push(stream);
+    FILE* prev = mth_out_push(c.f);
     expr_print_fullform(e);
     mth_out_pop(prev);
-    fclose(stream);
 
-    return buffer;
+    return str_capture_finish(&c);
 }
 
 /* Render `e` (the result of a NumberForm NumberFormat function) to a heap
@@ -1130,12 +1175,10 @@ char* expr_to_string_fullform(Expr* e) {
  * NumberForm context is suspended so already-formatted mantissa/exponent
  * strings are not re-processed. Caller frees. */
 char* numberform_format_result_to_string(const Expr* e) {
-    char* buffer = NULL;
-    size_t len;
-    FILE* stream = open_memstream(&buffer, &len);
-    if (!stream) return NULL;
+    StrCapture c;
+    if (!str_capture_open(&c)) return NULL;
 
-    FILE* prev = mth_out_push(stream);
+    FILE* prev = mth_out_push(c.f);
 
     const NumberFormCtx* saved_ctx = g_numberform_ctx;
     bool saved_of = g_print_output_form;
@@ -1147,9 +1190,8 @@ char* numberform_format_result_to_string(const Expr* e) {
     g_print_output_form = saved_of;
     g_numberform_ctx = saved_ctx;
     mth_out_pop(prev);
-    fclose(stream);
 
-    return buffer;
+    return str_capture_finish(&c);
 }
 
 #include "symtab.h"

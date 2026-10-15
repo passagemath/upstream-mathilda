@@ -204,6 +204,10 @@ MINGW_MISSING_FUNCS = (
     "fork", "execvp", "waitpid",
     # <dlfcn.h>: MinGW has no dladdr (GetModuleHandleExA instead).
     "dladdr",
+    # <stdio.h>: MinGW/UCRT ship neither POSIX memory stream. Their absence is
+    # how an unguarded open_memstream in src/print.c broke only build-windows
+    # (v0.419); route capture through `#ifndef _WIN32` with a tmpfile() fallback.
+    "open_memstream", "fmemopen",
 )
 
 MINGW_MISSING_HEADERS = (

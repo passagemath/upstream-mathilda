@@ -681,6 +681,41 @@ void test_parse_headless_bracket() {
     }
 }
 
+/* Empty argument / element slots are Null, as in Mathematica: `f[,x]` is
+ * f[Null, x] (the leading comma used to be swallowed, giving f[x]), and
+ * `f[x,]` / `f[x,,y]` used to be syntax errors. `f[]` / `{}` stay empty. */
+void test_parse_empty_slots_are_null() {
+    struct { const char* input; const char* fullform; } tests[] = {
+        {"f[,x]",   "f[Null, x]"},
+        {"f[x,]",   "f[x, Null]"},
+        {"f[x,,y]", "f[x, Null, y]"},
+        {"f[,]",    "f[Null, Null]"},
+        {"f[]",     "f[]"},
+        {"f[ ]",    "f[]"},
+        {"{,1}",    "List[Null, 1]"},
+        {"{1,}",    "List[1, Null]"},
+        {"{a,,b}",  "List[a, Null, b]"},
+        {"{}",      "List[]"},
+    };
+    for (size_t i = 0; i < sizeof(tests)/sizeof(tests[0]); i++) {
+        Expr* e = parse_expression(tests[i].input);
+        ASSERT_MSG(e != NULL, "parse failed for '%s'", tests[i].input);
+        char* got = expr_to_string_fullform(e);
+        ASSERT_MSG(strcmp(got, tests[i].fullform) == 0,
+                   "'%s': expected %s, got %s", tests[i].input,
+                   tests[i].fullform, got);
+        free(got);
+        expr_free(e);
+    }
+    /* A missing closer is still a syntax error. */
+    const char* bad[] = { "f[x y", "{1, 2", "f[x,", "{," };
+    for (size_t i = 0; i < sizeof(bad)/sizeof(bad[0]); i++) {
+        Expr* e = parse_expression(bad[i]);
+        ASSERT_MSG(e == NULL, "expected syntax error for '%s'", bad[i]);
+        if (e) expr_free(e);
+    }
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -711,6 +746,7 @@ int main() {
     TEST(test_unparenthesised_chains_still_chain);
     TEST(test_long_string_literal_not_truncated);
     TEST(test_parse_headless_bracket);
+    TEST(test_parse_empty_slots_are_null);
 
     printf("\nAll parser tests passed!\n");
     return 0;

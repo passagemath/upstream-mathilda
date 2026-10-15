@@ -769,39 +769,59 @@ static Expr* parse_string(ParserState* s) {
 /* ------------------- Compound Expressions ------------------- */
 
 // Parses lists: {1,2,3}
+/* Parses the comma-separated elements of `{...}` / `f[...]` up to (not past)
+ * the closing character `close`; the opening bracket has been consumed.
+ * Mathematica's rule for empty slots: an element omitted between, before or
+ * after a comma is Null -- `f[,x]` is f[Null, x], `f[x,]` is f[x, Null],
+ * `{a,,b}` is {a, Null, b} -- while an empty pair `f[]` has no elements.
+ * Returns a malloc'd array (count in *out_count) with s->pos on `close`, or
+ * NULL on a syntax error with every parsed element freed. A missing closer
+ * is reported here, once, as "Expected '<close>' to close <what>"; a failure
+ * inside an element has already been reported by the inner parse. */
+static Expr** parse_sequence(ParserState* s, char close, const char* what,
+                             size_t* out_count) {
+    size_t cap = 16, count = 0;
+    Expr** elems = malloc(cap * sizeof(Expr*));
+
+    skip_whitespace(s);
+    if (*s->pos != close) {
+        for (;;) {
+            skip_whitespace(s);
+            Expr* e;
+            if (*s->pos == ',' || *s->pos == close) {
+                e = expr_new_symbol(SYM_Null);          /* empty slot */
+            } else {
+                e = parse_expression_state(s);
+                if (!e) goto fail;
+                skip_whitespace(s);
+            }
+            if (count >= cap) {
+                cap *= 2;
+                elems = realloc(elems, cap * sizeof(Expr*));
+            }
+            elems[count++] = e;
+
+            if (*s->pos == ',') { s->pos++; continue; }
+            if (*s->pos == close) break;
+            fprintf(stderr, "Expected '%c' to close %s\n", close, what);
+            goto fail;                                  /* junk or EOF */
+        }
+    }
+    *out_count = count;
+    return elems;
+
+fail:
+    while (count--) expr_free(elems[count]);
+    free(elems);
+    return NULL;
+}
+
 static Expr* parse_list(ParserState* s) {
     s->pos++;  // Skip '{'
     s->bracket_depth++;
-    /* Dynamic buffer: lists may have arbitrarily many elements (e.g. the
-     * trigsimp rule lists exceed 60 entries). Grow as needed rather than
-     * relying on a fixed stack-allocated array. */
-    size_t cap = 16;
-    Expr** elements = malloc(cap * sizeof(Expr*));
     size_t count = 0;
-
-    while (*s->pos && *s->pos != '}') {
-        skip_whitespace(s);
-        if (*s->pos == ',') s->pos++;
-
-        Expr* elem = parse_expression_state(s);
-        if (!elem) {
-            while (count--) expr_free(elements[count]);
-            free(elements);
-            return NULL;
-        }
-        if (count >= cap) {
-            cap *= 2;
-            elements = realloc(elements, cap * sizeof(Expr*));
-        }
-        elements[count++] = elem;
-    }
-
-    if (*s->pos != '}') {
-        fprintf(stderr, "Expected '}' to close list\n");
-        while (count--) expr_free(elements[count]);
-        free(elements);
-        return NULL;
-    }
+    Expr** elements = parse_sequence(s, '}', "list", &count);
+    if (!elements) return NULL;
     s->pos++;  // Skip '}'
     s->bracket_depth--;
 
@@ -862,34 +882,10 @@ static Expr* parse_association(ParserState* s) {
 static Expr* parse_function(ParserState* s, Expr* head) {
     s->pos++;  // Skip '['
     s->bracket_depth++;
-    /* Dynamic buffer: function calls may have arbitrarily many args. */
-    size_t cap = 16;
-    Expr** args = malloc(cap * sizeof(Expr*));
     size_t count = 0;
-
-    while (*s->pos && *s->pos != ']') {
-        skip_whitespace(s);
-        if (*s->pos == ',') s->pos++;
-
-        Expr* arg = parse_expression_state(s);
-        if (!arg) {
-            while (count--) expr_free(args[count]);
-            free(args);
-            expr_free(head);  /* we own the head; the caller drops it on NULL */
-            return NULL;
-        }
-        if (count >= cap) {
-            cap *= 2;
-            args = realloc(args, cap * sizeof(Expr*));
-        }
-        args[count++] = arg;
-    }
-
-    if (*s->pos != ']') {
-        fprintf(stderr, "Expected ']' to close function\n");
-        while (count--) expr_free(args[count]);
-        free(args);
-        expr_free(head);
+    Expr** args = parse_sequence(s, ']', "function", &count);
+    if (!args) {
+        expr_free(head);  /* we own the head; the caller drops it on NULL */
         return NULL;
     }
     s->pos++;  // Skip ']'

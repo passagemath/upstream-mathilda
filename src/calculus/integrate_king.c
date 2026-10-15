@@ -119,6 +119,36 @@ static bool king_crosscheck_ok(Expr* f, Expr* x, Expr* a, Expr* b, Expr* V) {
 
 /* ---- the method --------------------------------------------------------- */
 
+/* A pole of the integrand strictly inside the finite interval (a,b): King's
+ * identity ∫f = c(b-a)/2 assumes the integral CONVERGES, but a non-integrable
+ * interior pole makes it diverge even when f+f̃ collapses to a constant (1/x on
+ * [-1,1]: f+f̃ = 0 -> c = 0, and the symmetric NIntegrate backstop also averages to
+ * ~0, so neither catches it).  Decline on any interior zero of the denominator of
+ * Together[f] -- within King's parameter-free numeric scope such a zero is a genuine
+ * pole.  Samples the open interval (a zero on a sample, or a sign change). */
+static bool king_interior_pole(Expr* f, Expr* x, Expr* a, Expr* b) {
+    Expr* T = eval_take(mk_fn1("Together", cp(f)));
+    if (!T) return false;
+    Expr* den = eval_take(mk_fn1("Denominator", T));          /* T consumed */
+    if (!den) return false;
+    if (!contains_symbol(den, x)) { expr_free(den); return false; }
+    const int N = 256;
+    bool pole = false, have = false; double prev = 0.0;
+    for (int i = 1; i < N && !pole; i++) {
+        Expr* pt = Plus_(cp(a), Times_(Plus_(cp(b), Times_(mk_int(-1), cp(a))),
+                                       Rat_((long)i, (long)N)));
+        double v;
+        int ok = real_double_at(den, x, pt, &v);
+        expr_free(pt);
+        if (!ok) { have = false; continue; }                 /* non-numeric sample */
+        if (v == 0.0) pole = true;
+        else if (have && ((prev < 0.0) != (v < 0.0))) pole = true;   /* odd-order pole */
+        prev = v; have = true;
+    }
+    expr_free(den);
+    return pole;
+}
+
 Expr* integrate_king_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!contains_symbol(f, x)) return NULL;
@@ -129,6 +159,9 @@ Expr* integrate_king_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) 
     double av, bv;
     if (!real_double(a, &av) || !real_double(b, &bv)) return NULL;
     if (!(fabs(bv - av) > 1e-12)) return NULL;
+
+    /* Decline a non-integrable interior pole (the ordinary integral diverges). */
+    if (king_interior_pole(f, x, a, b)) return NULL;
 
     /* Numeric-domain precondition.  King is an inherently NUMERIC method (it
      * screens constancy and cross-checks against NIntegrate), so it can only

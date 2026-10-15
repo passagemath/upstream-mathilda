@@ -146,58 +146,93 @@ static bool interval_is_symmetric(const Expr* a, const Expr* b, bool* infinite) 
 }
 
 /* Evaluate the half integral Integrate[f, {x, 0, c}] (carrying assumptions if
- * present), returning the evaluated value (possibly unevaluated). */
+ * present), returning the evaluated value (possibly unevaluated).  When
+ * principal_value is set the half carries PrincipalValue -> True: the reduction of
+ * a PV whole-line integral must take its half as a principal value too, e.g.
+ * Integrate[Cos[x]/(x^2-a^2), {x,-Inf,Inf}, PV] = 2 PV Integrate[..., {x,0,Inf}]
+ * (the interior pole at x=a would otherwise make the ordinary half diverge). */
 static Expr* half_integral(const Expr* f, const Expr* x, const Expr* c,
-                           const Expr* assumptions) {
+                           const Expr* assumptions, bool principal_value) {
     Expr* spec = expr_new_function(
         expr_new_symbol("List"),
         (Expr*[]){ cp(x), expr_new_integer(0), cp(c) }, 3);
-    Expr* call;
-    if (assumptions) {
-        Expr* as = mk_fn2("Rule", expr_new_symbol("Assumptions"), cp(assumptions));
-        call = expr_new_function(expr_new_symbol("Integrate"),
-                                 (Expr*[]){ cp(f), spec, as }, 3);
-    } else {
-        call = expr_new_function(expr_new_symbol("Integrate"),
-                                 (Expr*[]){ cp(f), spec }, 2);
-    }
+    Expr* opts[4];
+    size_t no = 0;
+    opts[no++] = cp((Expr*)f);
+    opts[no++] = spec;
+    if (principal_value)
+        opts[no++] = mk_fn2("Rule", expr_new_symbol("PrincipalValue"),
+                            expr_new_symbol("True"));
+    if (assumptions)
+        opts[no++] = mk_fn2("Rule", expr_new_symbol("Assumptions"), cp(assumptions));
+    Expr* call = expr_new_function(expr_new_symbol("Integrate"), opts, no);
     return eval_take(call);
 }
 
 /* ---- core --------------------------------------------------------------- */
 
+/* True if f has a non-integrable singularity at the symmetry center x = 0:
+ * Limit[x f, x -> 0] is nonzero or infinite (a pole of order >= 1).  Both the
+ * odd -> 0 and the even -> 2*half reductions require integrability at the center;
+ * with a genuine pole there the ordinary integral over [-c, c] DIVERGES and only a
+ * Cauchy principal value exists, so symmetry must decline (e.g. 1/x, 1/x^3).  An
+ * integrable / removable center (Limit 0) or an undecided limit is not a pole. */
+static bool pole_at_center(const Expr* f, const Expr* x) {
+    Expr* g = mk_fn2("Times", cp((Expr*)x), cp((Expr*)f));
+    Expr* lim = eval_take(mk_fn2("Limit", g,
+                     mk_fn2("Rule", cp((Expr*)x), expr_new_integer(0))));
+    if (!lim) return false;
+    bool pole = false;
+    if (mentions_nonfinite(lim)) {
+        pole = true;                                       /* order > 1 pole */
+    } else if (!contains_symbol(lim, x)) {                 /* a decided finite value */
+        pole = !((lim->type == EXPR_INTEGER && lim->data.integer == 0) ||
+                 (lim->type == EXPR_REAL && lim->data.real == 0.0));
+    }
+    expr_free(lim);
+    return pole;
+}
+
 Expr* integrate_symmetry_try(Expr* f, Expr* x, Expr* a, Expr* b,
-                             Expr* assumptions) {
+                             Expr* assumptions, bool principal_value) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!contains_symbol(f, x)) return NULL;
 
     bool infinite = false;
     if (!interval_is_symmetric(a, b, &infinite)) return NULL;
 
+    /* A pole at the center makes the ordinary (non-PV) integral diverge: decline
+     * so it is left unevaluated rather than reduced to a spurious 0 / 2*half.
+     * (A principal-value request routes through the N-L PV path instead.) */
+    if (pole_at_center(f, x)) return NULL;
+
     Expr* fr = reflect(f, x);
     if (!fr) return NULL;
 
-    /* Odd: f + f(-x) == 0.  Result is 0 provided the half converges. */
+    /* Odd: f + f(-x) == 0.  Result is 0 provided the half converges (the half
+     * carries PrincipalValue when the whole-line integral is a PV). */
     Expr* odd_sum = mk_fn2("Plus", cp(f), cp(fr));
     bool is_odd = proves_zero(odd_sum);
     if (is_odd) {
         expr_free(fr);
-        Expr* half = half_integral(f, x, b, assumptions);
+        Expr* half = half_integral(f, x, b, assumptions, principal_value);
         bool fin = is_finite_value(half, x);
         if (half) expr_free(half);
         if (fin) return expr_new_integer(0);
         return NULL;   /* half diverges / unknown: not our call to make */
     }
 
-    /* Even: f - f(-x) == 0.  Reduce to 2 Integrate[f, {x, 0, c}].  This runs
-     * only after residue has declined, so its clean closed forms are preserved;
-     * here it mainly unlocks the half-line Ramanujan/Mellin path for a
-     * non-rational even integrand (e.g. a Gaussian on the whole line). */
+    /* Even: f - f(-x) == 0.  Reduce to 2 Integrate[f, {x, 0, c}] (as a principal
+     * value when the whole-line integral is one -- the half's interior pole then
+     * does not spuriously diverge).  This runs only after residue has declined, so
+     * its clean closed forms are preserved; it mainly unlocks the half-line
+     * Ramanujan/Mellin path for a non-rational even integrand, and the PV even
+     * reduction Integrate[Cos[x]/(x^2-a^2),{x,-Inf,Inf},PV] = 2 PV half. */
     (void)infinite;
     Expr* even_diff = mk_fn2("Plus", cp(f), mk_fn2("Times", expr_new_integer(-1), fr));
     bool is_even = proves_zero(even_diff);
     if (is_even) {
-        Expr* half = half_integral(f, x, b, assumptions);
+        Expr* half = half_integral(f, x, b, assumptions, principal_value);
         if (is_finite_value(half, x))
             return simplify_take(mk_fn2("Times", expr_new_integer(2), half));
         if (half) expr_free(half);
@@ -224,6 +259,7 @@ Expr* builtin_integrate_symmetry(Expr* res) {
     if (x->type != EXPR_SYMBOL) return NULL;
 
     Expr* assumptions = NULL;
+    bool principal_value = false;
     for (size_t t = 2; t < argc; t++) {
         Expr* opt = res->data.function.args[t];
         if (opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2 &&
@@ -236,10 +272,17 @@ Expr* builtin_integrate_symmetry(Expr* res) {
                 assumptions = opt->data.function.args[1];
                 continue;
             }
+            if (lhs->type == EXPR_SYMBOL &&
+                strcmp(lhs->data.symbol.name, "PrincipalValue") == 0) {
+                Expr* rhs = opt->data.function.args[1];
+                principal_value = (rhs->type == EXPR_SYMBOL &&
+                                   rhs->data.symbol.name == SYM_True);
+                continue;
+            }
         }
         return NULL;
     }
-    return integrate_symmetry_try(f, x, a, b, assumptions);
+    return integrate_symmetry_try(f, x, a, b, assumptions, principal_value);
 }
 
 void integrate_symmetry_init(void) {

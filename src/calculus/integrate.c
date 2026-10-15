@@ -1366,7 +1366,7 @@ static Expr* integrate_definite(Expr* res) {
              * once the half converges, so a divergent principal value is never
              * reported as 0, and NULL always falls through unchanged. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_SYMMETRY))
-                r = integrate_symmetry_try(cur, x, a, b, assumptions);
+                r = integrate_symmetry_try(cur, x, a, b, assumptions, principal_value);
             /* Deterministic, correct-by-construction transform reductions run
              * BEFORE the Newton-Leibniz FTC search (confidence-first ordering,
              * the rule the Weierstrass and Symmetry placements already follow):

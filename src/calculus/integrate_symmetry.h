@@ -37,7 +37,7 @@
  * integral did not close to a finite value).
  */
 Expr* integrate_symmetry_try(Expr* f, Expr* x, Expr* a, Expr* b,
-                             Expr* assumptions);
+                             Expr* assumptions, bool principal_value);
 
 /* `Integrate`Symmetry[f, {x, a, b}]` builtin.  Strict: NULL on any
  * non-applicable input. */

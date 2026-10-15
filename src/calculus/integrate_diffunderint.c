@@ -2673,6 +2673,45 @@ static Expr* stage_reverse_feynman(const Expr* f, const Expr* x, const Expr* a,
     return NULL;
 }
 
+/* A pole of the integrand strictly inside a FINITE interval (a,b): the ordinary
+ * (non-principal-value) integral then diverges.  diffunderint is only reached with
+ * PrincipalValue off (the cascade gates it so), and the PV-capable stages already
+ * had their chance, so an interior pole here means the integral has no ordinary
+ * value -> decline, rather than let a finite-domain closer integrate the (even)
+ * antiderivative ACROSS the pole and return a spurious 0 (e.g. 1/x, 1/x^3 on
+ * [-1,1]).  Mirrors whole_line_divergent_pole but samples the OPEN interval: a zero
+ * of the denominator that lands on a sample, or a sign change (an odd-order pole)
+ * between samples.  Only fires for finite numeric endpoints with a parameter-free,
+ * x-dependent denominator; a boundary zero (endpoint) is excluded. */
+static bool finite_interior_pole(const Expr* f, const Expr* x,
+                                 const Expr* a, const Expr* b) {
+    double av, bv;
+    if (!numeric_double((Expr*)a, &av) || !numeric_double((Expr*)b, &bv)) return false;
+    if (!(av < bv)) return false;
+    Expr* T = ev1("Together", expr_copy((Expr*)f));
+    if (!T) return false;
+    Expr* den = ev1("Denominator", T);                /* consumes T */
+    if (!den) return false;
+    if (!contains_symbol(den, x)) { expr_free(den); return false; }
+    ParamBound pb[4];
+    if (collect_params(den, x, pb, 4, 0) > 0) { expr_free(den); return false; }
+    const int N = 256;
+    bool pole = false, have_prev = false; double prev = 0.0;
+    for (int i = 1; i < N && !pole; i++) {
+        double xi = av + (bv - av) * (double)i / (double)N;   /* strictly interior */
+        Expr* at = eval_take(mk_fn2("ReplaceAll", expr_copy(den),
+                       mk_fn2("Rule", expr_copy((Expr*)x), expr_new_real(xi))));
+        double v; bool got = at && numeric_double(at, &v);
+        if (at) expr_free(at);
+        if (!got) { have_prev = false; continue; }
+        if (v == 0.0) { pole = true; break; }
+        if (have_prev && ((prev < 0.0) != (v < 0.0))) pole = true;   /* odd-order pole */
+        prev = v; have_prev = true;
+    }
+    expr_free(den);
+    return pole;
+}
+
 Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                  Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
@@ -2682,6 +2721,11 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * escalation.  Only the pure two-sided-infinite case; half-line / finite
      * integrals keep their behaviour (a boundary singularity is not interior). */
     if (is_neg_inf(a) && is_pos_inf(b) && whole_line_divergent_pole(f, x))
+        return NULL;
+    /* Non-integrable pole strictly inside a finite interval: the ordinary integral
+     * diverges (PV is off here) -- decline instead of returning a spurious value
+     * from integrating the antiderivative across the pole. */
+    if (finite_interior_pole(f, x, a, b))
         return NULL;
     /* Gaussian integrands (Exp[-p x^2], ...) are now handled: the half-line inner
      * integrals go only to the closed-form families (never the general engine,

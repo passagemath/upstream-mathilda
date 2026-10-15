@@ -913,6 +913,34 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
     return integrate_newton_leibniz_try_pv(f, x, a, b, method, false, NULL);
 }
 
+/* True if the integrand f has a NON-INTEGRABLE singularity at the finite point pt:
+ * Limit[(x - pt) f, x -> pt] is nonzero or infinite (a pole of order >= 1).  A
+ * removable or integrable singularity (continuous f, Log, x^(-p) with p<1) gives
+ * the limit 0.  The test is on the integrand itself (not on the antiderivative's
+ * boundary limit, which a nested evaluation context can mis-return as finite), so
+ * it is context-independent.  An undecided limit (x survives / Indeterminate) is
+ * treated as integrable -- never force a divergence that isn't proven. */
+static bool nl_nonintegrable_at(Expr* f, Expr* x, Expr* pt, Expr* as) {
+    Expr* shift = mk_fn2("Plus", expr_copy(x),
+                      mk_fn2("Times", expr_new_integer(-1), expr_copy(pt)));
+    Expr* g = mk_fn2("Times", shift, expr_copy(f));
+    Expr* lim = nl_limit(g, x, pt, NL_DIR_NONE, as);   /* borrows g */
+    expr_free(g);
+    if (!lim) return false;
+    bool nonint = false;
+    if (nl_is_infinite(lim)) {
+        nonint = true;                                  /* order > 1 pole */
+    } else if (nl_is_finite_closed(lim, x)) {
+        double v;
+        bool is_zero = (lim->type == EXPR_INTEGER && lim->data.integer == 0) ||
+                       (lim->type == EXPR_REAL && lim->data.real == 0.0) ||
+                       (nl_numeric(lim, &v) == 1 && v == 0.0);
+        nonint = !is_zero;                              /* nonzero finite -> simple pole */
+    }
+    expr_free(lim);
+    return nonint;
+}
+
 Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
                                       const char* method, bool principal_value,
                                       Expr* assumptions) {
@@ -963,6 +991,38 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
         expr_free(F);
         if (!pv) integrate_emit_idiv(f, a, b);   /* even-order pole: no PV */
         return pv;
+    }
+
+    /* 2c. Ordinary (non-principal-value) integral with interior poles: a genuine
+     * non-integrable interior pole makes it DIVERGE.  The telescoping sum below
+     * would silently return the Cauchy principal value -- an odd-order pole's two
+     * infinite one-sided limits of F cancel (e.g. Integrate[1/x, {x,-1,1}] -> 0),
+     * which is only correct under PrincipalValue -> True.  Detect divergence: if F
+     * has a non-finite one-sided limit at any interior pole, emit idiv and decline.
+     * A removable / integrable singularity keeps F finite there and falls through
+     * to the FTC sum unchanged. */
+    if (!principal_value) {
+        bool divergent = false;
+        /* Interior poles: a genuine non-integrable one makes the ordinary integral
+         * diverge; the telescoping sum below would otherwise silently return the
+         * Cauchy principal value (an odd pole's infinities cancel -> 0). */
+        for (size_t i = 0; i < poles.n && !divergent; i++)
+            if (nl_nonintegrable_at(f, x, poles.pts[i], assumptions)) divergent = true;
+        /* Finite endpoints: a non-integrable boundary pole (1/x on [0,1]) also
+         * diverges.  The telescoping's boundary limit can be mis-returned as finite
+         * in a nested context (e.g. the symmetry reduction of 1/x on [-1,1] via the
+         * half Integrate[1/x,{x,0,1}]), so test the integrand directly. */
+        double ev;
+        if (!divergent && nl_numeric(a, &ev) == 1 &&
+            nl_nonintegrable_at(f, x, a, assumptions)) divergent = true;
+        if (!divergent && nl_numeric(b, &ev) == 1 &&
+            nl_nonintegrable_at(f, x, b, assumptions)) divergent = true;
+        if (divergent) {
+            poleset_free(&poles);
+            expr_free(F);
+            integrate_emit_idiv(f, a, b);
+            return NULL;
+        }
     }
 
     /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */

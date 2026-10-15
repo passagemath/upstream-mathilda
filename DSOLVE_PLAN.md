@@ -3320,6 +3320,35 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     2nd solution, multi-pole Heun, growth-at-∞ parabolic-cylinder kin), + Emden–
     Fowler 4010, Abel-2nd-type 4078, exponential-symmetry 4077. v0.411 → 0.412.
 
+- **M70 — §2.2.42 corpus (Problems 4101–4200, Nasser Abbasi) + coupled-leading-form
+  first-order linear system.** ✅ DONE. New corpus `DE_examples_2242.m` (upstream
+  §2.1.42, 100 records — **88 scalar, 20 IVP, 12 systems**; `make
+  check-corpus-indvar` green); new gate `dsolve_corpus_2_2_42_tests` at baseline
+  **1**; report `DSolve_test_status/reports/2.2.42.md`. Mixed higher-order
+  constant-coefficient linear + first-order linear + 13 regular-singular + a
+  reducible-μ block + 12 small linear systems. Baseline **98/100 → 99/100, 0 FAIL,
+  0 crash** (the const-coeff + systems + VoP stack and the M69 Whittaker recogniser
+  carry the bulk).
+  - **One general fix, in the system substrate** (`dsolve_linsys.c`). `4175` —
+    `{2 y1' + y2' − 4 y1 − y2 == E^x, y1' + 3 y1 + y2 == 0}` — is a plain
+    constant-coefficient linear system, but the first equation carries **two**
+    leading derivatives, so the leading matrix `L = [[2,1],[1,0]]` is non-diagonal.
+    `dsolve_linsys_extract_Ab` solved each equation for its *unique* leading
+    derivative and declined a two-derivative equation; every system method shares
+    that extractor, so all declined. The fix adds a **leading-matrix `LinearSolve`
+    fallback** (`linsys_extract_Ab_coupled`), reached only when the per-equation
+    solve fails: build `L[e][j] = ∂(eq_e)/∂y_j'` and `c[e] = eq_e|_{y'=0}`, then
+    `y' == LinearSolve[L, −c]` → `Y' == A Y + b`, into the existing
+    Jordan→`e^{Ax}`→VoP assembler. Declines a singular `L` (DAE leading form) and a
+    nonlinear system (the `A = ∂Y'/∂Y` linearity gate). Fires only on a
+    per-equation decline, so every passing system takes the identical old path —
+    **A/B vs v0.411 on §2.2.23 / §2.2.29 / §2.2.39 / §2.2.40 confirms no
+    regression**; back-substitution verified.
+  - *Residue 1:* `4183` (`y'' − 3 y'/(x(1−x)) + 2 y/(x(1−x)) == 0`), a Gauss `₂F₁`
+    / Jacobi equation with canonical `c = −3` (negative integer) — `SpecialFunctionForm`
+    declines the degenerate dependent second solution (same class as the Whittaker
+    `2μ ∈ ℤ` case). v0.412 → 0.413.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

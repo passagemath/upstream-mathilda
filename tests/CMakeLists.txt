@@ -4743,6 +4743,20 @@ add_test(NAME dsolve_corpus_2_2_41_tests
                  ../../DSolve_test_status/DE_examples_2241.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 25)
 
+# Section 2.2.42 "Problems 4101 to 4200" (Nasser Abbasi; upstream Ch2.S1.SS42.htm).
+# 88 scalar (20 IVP) + 12 systems; mixed higher-order constant-coefficient linear,
+# first-order linear, regular-singular 2nd-order, and small linear systems.
+# Baseline 98/100 -> 99/100 (M70): a first-order linear system in COUPLED leading
+# form (two y' in one equation, 4175) now solves -- dsolve_linsys_extract_Ab gained
+# a leading-matrix LinearSolve fallback (dsolve_linsys.c) reached only when the
+# per-equation solve declines, so passing systems are untouched.  Residue 1: 4183
+# (Jacobi / Gauss 2F1 with integer c = -3, a degenerate dependent second solution).
+# Baseline argv3 = 1.
+add_test(NAME dsolve_corpus_2_2_42_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2242.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

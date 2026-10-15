@@ -209,6 +209,107 @@ Expr* dsolve_linsys_matexp(Expr* S, Expr* J, Expr* t, size_t n) {
 }
 
 /* Extract Y' == A Y + b from the parsed square system.  See dsolve_linsys.h. */
+/* Fallback extractor for a COUPLED leading form: an equation may carry more than
+ * one leading derivative (e.g. `2 y1' + y2' - ... == f`), so the "one derivative
+ * per equation" solve in dsolve_linsys_extract_Ab below declines.  Build the full
+ * n x n leading matrix L (L[e][j] = d(eq_e)/d(y_j')) and the constant part c
+ * (eq_e with every y'=0); the derivative vector is y' == LinearSolve[L, -c], which
+ * reproduces the per-equation 1/coeff division when L is diagonal and additionally
+ * handles a non-diagonal L.  Declines a singular L (a differential-algebraic
+ * leading form) and, via the same A = dY'/dY linearity gate, a nonlinear system.
+ * Only reached when the per-equation path failed, so it can only ADD solutions.
+ * A may depend on x (a variable leading coeff); the constant-A decision stays the
+ * caller's, exactly as for the per-equation path. */
+static bool linsys_extract_Ab_coupled(DSolveProblem* P, Expr** Aout, Expr** bout, bool* b_zero_out) {
+    size_t n = P->nfun;
+    const char* xvar = P->ind_names[0];
+    if (P->neq != n) return false;
+    for (size_t i = 0; i < n; i++) if (P->max_order[i] != 1) return false;
+
+    const char** Dn = malloc(n * sizeof(char*));
+    const char** Yn = malloc(n * sizeof(char*));
+    for (size_t j = 0; j < n; j++) {
+        char b1[40], b2[40];
+        snprintf(b1, sizeof(b1), "DSolve`sysD%zu", j); Dn[j] = intern_symbol(b1);
+        snprintf(b2, sizeof(b2), "DSolve`sysY%zu", j); Yn[j] = intern_symbol(b2);
+    }
+    Expr** ralg = malloc(n * sizeof(Expr*));
+    for (size_t e = 0; e < n; e++) {
+        Expr* r = expr_copy(P->eq_residuals[e]);
+        for (size_t j = 0; j < n; j++)
+            r = ds_subst(r, ds_make_funcapp(P->fun_names[j], 1, xvar), expr_new_symbol(Dn[j]));
+        for (size_t j = 0; j < n; j++)
+            r = ds_subst(r, ds_make_funcapp(P->fun_names[j], 0, xvar), expr_new_symbol(Yn[j]));
+        ralg[e] = r;
+    }
+
+    bool ok = true;
+    Expr** Lrows = malloc(n * sizeof(Expr*));   /* leading-matrix rows   */
+    Expr** cneg  = malloc(n * sizeof(Expr*));   /* -(eq|_{y'=0}) column  */
+    for (size_t e = 0; e < n; e++) { Lrows[e] = NULL; cneg[e] = NULL; }
+    for (size_t e = 0; e < n && ok; e++) {
+        Expr** cols = malloc(n * sizeof(Expr*));
+        for (size_t j = 0; j < n; j++) {
+            Expr* d = ds_d(expr_copy(ralg[e]), expr_new_symbol(Dn[j]));   /* coeff of y_j' */
+            /* linear in the derivatives (coeff free of every y_k') and in the
+             * dependent vars (coeff free of every y_k) */
+            for (size_t k = 0; k < n; k++) if (!ds_free_of(d, Dn[k])) ok = false;
+            for (size_t k = 0; k < n; k++) if (!ds_free_of(d, Yn[k])) ok = false;
+            cols[j] = d;
+        }
+        Lrows[e] = expr_new_function(expr_new_symbol(SYM_List), cols, n);   /* adopts cols */
+        free(cols);
+        Expr* r0 = expr_copy(ralg[e]);
+        for (size_t j = 0; j < n; j++) r0 = ds_subst(r0, expr_new_symbol(Dn[j]), expr_new_integer(0));
+        cneg[e] = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), r0));
+    }
+    for (size_t e = 0; e < n; e++) expr_free(ralg[e]);
+    free(ralg);
+
+    Expr* Amat = NULL; Expr* bvec = NULL; bool b_zero = true;
+    if (ok) {
+        Expr* Lmat = expr_new_function(expr_new_symbol(SYM_List), Lrows, n);  /* adopts Lrows[] */
+        Expr* cvec = expr_new_function(expr_new_symbol(SYM_List), cneg, n);   /* adopts cneg[]  */
+        free(Lrows); free(cneg); Lrows = NULL; cneg = NULL;
+        Expr* det = eval_and_free(ds_call1("Det", expr_copy(Lmat)));
+        if (ds_is_zero(det)) ok = false;    /* singular leading matrix -> DAE, decline */
+        expr_free(det);
+        Expr* Dvec = ok ? ds_delist(eval_and_free(ds_call2("LinearSolve",
+                              expr_copy(Lmat), expr_copy(cvec)))) : NULL;
+        expr_free(Lmat); expr_free(cvec);
+        if (!Dvec || !head_is(Dvec, SYM_List)
+            || Dvec->data.function.arg_count != n) { ok = false; if (Dvec) expr_free(Dvec); Dvec = NULL; }
+        if (Dvec) {
+            Expr** rows = malloc(n * sizeof(Expr*));
+            Expr** bs   = malloc(n * sizeof(Expr*));
+            for (size_t i = 0; i < n; i++) {
+                Expr* Di = Dvec->data.function.args[i];     /* y_i' as a function of Y (and x) */
+                Expr** cols = malloc(n * sizeof(Expr*));
+                for (size_t j = 0; j < n; j++) cols[j] = ds_d(expr_copy(Di), expr_new_symbol(Yn[j]));
+                rows[i] = expr_new_function(expr_new_symbol(SYM_List), cols, n);
+                free(cols);
+                Expr* bi = expr_copy(Di);
+                for (size_t j = 0; j < n; j++) bi = ds_subst(bi, expr_new_symbol(Yn[j]), expr_new_integer(0));
+                if (!ds_is_zero(bi)) b_zero = false;
+                bs[i] = bi;
+            }
+            Amat = expr_new_function(expr_new_symbol(SYM_List), rows, n); free(rows);
+            bvec = expr_new_function(expr_new_symbol(SYM_List), bs, n); free(bs);
+            expr_free(Dvec);
+        }
+    }
+    if (Lrows) { for (size_t e = 0; e < n; e++) if (Lrows[e]) expr_free(Lrows[e]); free(Lrows); }
+    if (cneg)  { for (size_t e = 0; e < n; e++) if (cneg[e])  expr_free(cneg[e]);  free(cneg);  }
+    /* linearity gate: A = dY'/dY free of every Y_j */
+    if (ok && Amat)
+        for (size_t j = 0; j < n && ok; j++)
+            if (!ds_free_of(Amat, Yn[j])) ok = false;
+    free(Dn); free(Yn);
+    if (!ok) { if (Amat) expr_free(Amat); if (bvec) expr_free(bvec); return false; }
+    *Aout = Amat; *bout = bvec; *b_zero_out = b_zero;
+    return true;
+}
+
 bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* b_zero_out) {
     size_t n = P->nfun;
     const char* xvar = P->ind_names[0];
@@ -297,7 +398,13 @@ bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* 
     for (size_t k = 0; k < n; k++) if (RHS[k]) expr_free(RHS[k]);
     free(RHS); free(Dn); free(Yn);
 
-    if (!ok) { if (Amat) expr_free(Amat); if (bvec) expr_free(bvec); return false; }
+    if (!ok) {
+        if (Amat) expr_free(Amat);
+        if (bvec) expr_free(bvec);
+        /* The per-equation solve declined (most often a coupled leading form:
+         * two y' in one equation).  Try the full leading-matrix LinearSolve. */
+        return linsys_extract_Ab_coupled(P, Aout, bout, b_zero_out);
+    }
     *Aout = Amat; *bout = bvec; *b_zero_out = b_zero;
     return true;
 }

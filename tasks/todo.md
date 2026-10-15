@@ -21,8 +21,13 @@ version bump + git tag.
 - [x] gates: §2.2.41 ctest 25≤25 PASS; check-c99 rc=0; check-messages OK; dsolve_tests aborts on PRE-EXISTING exact-ODE test (byte-identical HEAD, not mine)
 - [x] commit + tag v0.412
 
-## Block 2 — §2.2.42 (4101–4200), M70
-- [ ] (same pipeline)
+## Block 2 — §2.2.42 (4101–4200), M70, v0.413 ✅
+- [x] Fetch + convert → DE_examples_2242.m (88 scalar/20 IVP, 12 systems); indvar green
+- [x] Baseline 98/100 (2 non-PASS: 4175 coupled system, 4183 integer-c Jacobi)
+- [x] General fix: coupled leading-matrix LinearSolve fallback in dsolve_linsys_extract_Ab → 99/100
+- [x] A/B systems-heavy (§2223/2229/2239/2240): 0 regress, 0 FAIL; valgrind no new leaks (baseline-identical)
+- [x] gate baseline 1; STATUS/README/PLAN/changelog; version 0.412→0.413
+- [x] commit + tag v0.413
 
 ## Block 3 — §2.2.43 (4201–4300), M71
 - [ ] (same pipeline)

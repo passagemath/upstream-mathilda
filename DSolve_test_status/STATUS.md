@@ -2195,6 +2195,51 @@ Full per-case results: `reports/2.2.41.tsv`; bucketed report: `reports/2.2.41.md
 
 ---
 
+## Section 2.2.42 — "Problems 4101 to 4200" (Nasser Abbasi)
+
+Corpus: `DE_examples_2242.m` — 100 records, **88 scalar (20 IVP) + 12 systems**
+(upstream §2.1.42, `Ch2.S1.SS42.htm`). Mixed: higher-order (2nd/3rd/high)
+constant-coefficient linear (homogeneous + nonhomogeneous), first-order linear,
+13 regular-singular 2nd-order `_with_linear_symmetries`, a 13-case
+reducible-μ block, separable/quadrature, and 12 small constant-coefficient linear
+systems. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_42_tests` · gate baseline **1**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-15 (M70 baseline) | 98 / 100 | 98.0% | 2 | 0 FAIL, 0 crash. The const-coeff linear + systems + VoP stack (and the M69 Whittaker recogniser) solve the bulk out of the box. |
+| 2026-10-15 (**M70**) | **99 / 100** | **99.0%** | **1** | **0 FAIL, 0 crash.** One general fix (below): a first-order linear system in coupled leading form now solves. Gate baseline **1**. |
+
+**M70 fix — first-order linear system in COUPLED leading form**
+(`src/calculus/dsolve_linsys.c`). `4175` —
+`{2 y1' + y2' − 4 y1 − y2 == E^x, y1' + 3 y1 + y2 == 0}` — is an ordinary
+constant-coefficient linear system, but the first equation carries **two** leading
+derivatives (`2 y1' + y2'`), so the leading matrix `L = [[2,1],[1,0]]` is not
+diagonal. `dsolve_linsys_extract_Ab` solved each equation for its *unique* leading
+derivative and declined a two-derivative equation, so every system method
+(`SystemReduce` is gated to higher-order; `LinearFirstOrderSystem` /
+`LinearSystemVarCoeff` / `LinearSystemCommutative` all share this extractor)
+declined. The fix adds a **leading-matrix `LinearSolve` fallback**
+(`linsys_extract_Ab_coupled`), reached *only* when the per-equation solve fails: it
+builds the full `L[e][j] = ∂(eq_e)/∂y_j'` and constant `c[e] = eq_e|_{y'=0}`, then
+`y' == LinearSolve[L, −c]` gives `Y' == A Y + b`, routed to the existing
+Jordan→`e^{Ax}`→variation-of-parameters assembler. Declines a singular `L` (a
+differential-algebraic leading form) and, via the same `A = ∂Y'/∂Y` linearity gate,
+a nonlinear system. Because it fires only on a per-equation-path decline, every
+currently-passing system takes the identical old path — no regression (A/B vs
+v0.411 on §2.2.23 / §2.2.29 / §2.2.39 / §2.2.40 confirmed). Back-substitution
+verified.
+
+Residue 1: `4183` (`y'' − 3 y'/(x(1−x)) + 2 y/(x(1−x)) == 0`) — a Gauss `₂F₁` /
+Jacobi equation whose canonical parameter `c = −3` is a **negative integer**, so
+`SpecialFunctionForm` declines (the degenerate dependent second solution, the same
+class as the Whittaker `2μ ∈ ℤ` case; needs a Jacobi-polynomial + second-kind
+partner — future).
+
+Full per-case results: `reports/2.2.42.tsv`; bucketed report: `reports/2.2.42.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

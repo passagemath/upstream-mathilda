@@ -4502,3 +4502,25 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   change → parser test binaries + a regression unit test + a valgrind run on the error
   path. Full suite only when valid-input parse/eval/print behaviour changes. See memory
   [[scope-tests-to-change]].
+
+## 2026-10-15 — The next 500 of Nasser's corpus (§2.2.41–§2.2.45, M69–M73, v0.412–0.416)
+- **Warm-memo hid a cold Integrate spin (×3)**: `∫Sec·Tan²` read 0.00 s because a prior
+  related integral in the same process had memoised it; it is 12 s COLD. Measure a suspect
+  integral FIRST in a fresh process (or trust the fork-per-case corpus runner, which is cold
+  per case). Memory [[feedback_integrate_warm_memo_hides_cold_spin]].
+- **User hint reframed the diagnosis**: told that `Integrate[Sec·Tan², Method->"RischTranscendental"]`
+  closes in 1.8 s. The integral was not slow — the Integrate Linearity stage (stage 9)
+  thrashed a trig-rational (TrigReduce can't clear a trig denominator) *before* the cascade
+  reached Weierstrass (stage 11, ~0.03 s). Fix = gate Linearity off for a rational-trig-of-x.
+- **An over-broad guard regressed a sibling; narrowed it**: gating Linearity off for "any
+  integrand containing a trig denominator" broke §2.2.35-3461 (an `Exp/Log/parameter` body
+  only Linearity closes). Narrowed to a pure `Sin^a Cos^b` monomial (v0.414), then to a true
+  rational-trig-of-x excluding Exp/Log/params (v0.415). Always A/B the fix on sibling sections.
+- **A new recursive cascade method must be top-level-only**: `DSolve`InverseOrientation`
+  (reciprocal x(y) solve) recurses the whole engine; firing it inside a nested
+  change-of-variable sub-solve added its latency and tipped a 6 s solve (§2.2.44-4323) over the
+  8 s wall. Gate `g_dsolve_depth <= 1`, run last, verify-gate, and add an env killswitch for A/B.
+- **g_dsolve_depth leaks on TimeConstrained abort**: a DSolve aborted mid-cascade skips the
+  `g_dsolve_depth--`, so a later case in the SAME process sees elevated depth (a top-level-only
+  method then wrongly declines). Harmless in the fork-per-case runner; a REPL confound. Confirm
+  a single-process anomaly by re-running the case ALONE in a fresh process.

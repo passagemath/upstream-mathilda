@@ -1361,20 +1361,34 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
              * gated by sf_num_ok below. */
             if (!base && leaf_count_internal(negr, true) <= 50)
                 base = specialform_power_potential(negr, xvar);
-            /* NOTE: the confluent Whittaker recogniser is deliberately NOT run in this
-             * normal-form pre-pass (P != 0).  The recovery factor mu = Exp[-Int P/2]
-             * shares the finite-pole base (x - x0) with the Whittaker z^(1/2+-mu)
-             * factors, so the composed mu*base stacks two symbolic-radical powers of the
-             * same base; verifying / differentiating that (here, in dsolve_run, or in
-             * the numeric HypergeometricPFQ evaluation of a multi-parameter form) can
-             * drive the evaluator into $IterationLimit and starve the Frobenius fallback
-             * that otherwise solves these as a series -> a regression.  Whittaker is run
-             * only on the y'-free (P == 0) surface below, where there is no recovery
-             * factor and no stacking.  The P != 0 confluent family (corpus 97/101/104
-             * and kin) is future work pending an evaluator-robustness fix. */
+            /* Confluent (Whittaker / Kummer 1F1) finite-pole normal form, NOW ENABLED
+             * in the P != 0 pre-pass.  An earlier revision disabled it here for two
+             * reasons, both since resolved:
+             *   (1) The recovery factor mu = Exp[-Int P/2] carries (x - x0)^a and the
+             *       Whittaker factor carries (c (x - x0))^(1/2 +- mu) -- a DIFFERENT
+             *       base (the scale c is inside), so the composed mu*base stacked two
+             *       symbolic-radical powers that the evaluator could thrash merging.
+             *       PowerExpand[cand] below pulls c out so the two powers share the base
+             *       (x - x0) and collapse to a single exponent (4067: (5x)^(5/4)/x^(5/4)
+             *       -> 5 5^(1/4) ...; 4009: x^(-1/2) (x)^(1/2+Sqrt7) -> x^Sqrt7).
+             *   (2) It was said to "starve the Frobenius series fallback" -- but M68
+             *       demoted a SeriesData answer out of the automatic cascade, so that
+             *       fallback no longer yields an accepted automatic result; a verified
+             *       Whittaker closed form can now only turn an UNEVAL into a PASS.
+             * specialform_whittaker_basis already self-verifies (whittaker_num_ok) and
+             * declines the degenerate 2 mu in Z case (dependent / singular 1F1), and the
+             * composed form is gated again by sf_num_ok -- so a mis-read pole/scale can
+             * only decline, never emit a wrong closed form. */
+            bool whit = false;
+            if (!base && leaf_count_internal(negr, true) <= 50) {
+                base = specialform_whittaker_basis(negr, xvar);
+                if (base) whit = true;
+            }
             expr_free(negr);
             if (base) {
                 Expr* cand = eval_and_free(ds_call2(SYM_Times, mu, base));  /* mu (C[1] z0 + C[2] z1) */
+                if (whit)   /* merge the stacked (x - x0) radicals: see (1) above */
+                    cand = eval_and_free(ds_call1("PowerExpand", cand));
                 if (sf_num_ok(P, cand, xvar, P->fun_names[0])) general = cand;
                 else expr_free(cand);
             } else {

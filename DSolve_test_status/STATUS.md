@@ -2139,6 +2139,62 @@ Full per-case results: `reports/2.2.40.tsv`; bucketed report: `reports/2.2.40.md
 
 ---
 
+## Section 2.2.41 — "Problems 4001 to 4100" (Nasser Abbasi)
+
+Corpus: `DE_examples_2241.m` — 100 records, **100 scalar (6 IVP), 0 systems**.
+Converted with `tools/latex_ode_to_mathilda.py` (upstream §2.1.41,
+`Ch2.S1.SS41.htm`; the internal `2.2.41` name is kept for continuity — see
+`README.md`). **Second-order-linear dominated**: 59 `_2nd_linear`, of which 56 are
+regular-singular `_with_linear_symmetries` (Bessel / confluent-hypergeometric /
+Heun), plus 8 Emden–Fowler, 4 Liénard, a 3-case reducible-μ block, and a
+first-order tail (Abel 2nd-type, homogeneous class C, Bernoulli, Riccati,
+Clairaut, dAlembert). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_41_tests` · gate baseline **25**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-15 (M69 baseline) | 71 / 100 | 71.0% | 29 | 0 FAIL, 0 crash. Dominant gap the regular-singular 2nd-order-linear bucket (M68 open backlog). |
+| 2026-10-15 (**M69**) | **75 / 100** | **75.0%** | **25** | **0 FAIL, 0 crash.** One general fix (below): the confluent (Whittaker) finite-pole recogniser now fires on a y'-carrying equation. Gate baseline **25**. |
+
+**M69 fix — confluent (Whittaker / Kummer ₁F₁) finite-pole recogniser enabled in
+the Liouville normal-form pre-pass** (`src/calculus/dsolve_specialform.c`). A
+regular-singular 2nd-order linear ODE `y'' + P y' + Q y == 0` whose y'-free normal
+form `z'' = r z` has `r = A + B/(x−x₀) + C/(x−x₀)²` (single finite double pole, a
+rank-1 irregular point at ∞ with `A = r(∞) ≠ 0`) is a **Whittaker equation** —
+`κ = B/(2√−A·(−1))`, `μ = √(¼−(−C))`, argument `z = 2√A (x−x₀)` — and the
+`specialform_whittaker_basis` recogniser already emitted the two solutions in the
+**verifiable** `Hypergeometric1F1` form (not the inert `WhittakerM/W` head), with a
+numeric self-verify. That recogniser was reachable only when the original equation
+already had `P == 0`. The normal-form pre-pass (which kills a y' term) called only
+the Airy/Bessel rows, so e.g. `x²y'' + x(1−x)y' − 7y == 0` (`r = 27/(4x²) − 1/(2x)
++ ¼`, κ=½, μ=√7) declined.
+
+The pre-pass had **deliberately** excluded Whittaker for two reasons, both now
+resolved: (1) the recovery factor `μ_r = Exp[−∫P/2]` carries `(x−x₀)^a` while the
+Whittaker factor carries `(c(x−x₀))^(½±μ)` — a *different* base (the scale `c` is
+inside) — so the composed `μ_r · base` stacked two symbolic-radical powers the
+evaluator could thrash merging; **`PowerExpand` on the composed candidate** pulls
+`c` out so the powers share the base `(x−x₀)` and collapse to one exponent (4067:
+`(5x)^(5/4)/x^(5/4) → 5·5^(1/4)·₁F₁`; 4009: `x^(−1/2)·x^(1/2+√7) → x^√7`). (2) It
+was said to "starve the Frobenius series fallback" — but **M68 demoted a
+`SeriesData` answer out of the automatic cascade**, so that fallback no longer
+yields an accepted automatic result; a verified Whittaker closed form can now only
+turn an UNEVAL into a PASS. The recogniser declines the degenerate `2μ ∈ ℤ` case
+(dependent / singular ₁F₁ lower parameter), self-verifies against the reduced
+equation, and the composed form is gated again by `sf_num_ok` — so a mis-read
+pole/scale can only decline, never emit a wrong closed form.
+
+*Measured, all back-substitution verified:* 4009 → `x^√7 ₁F₁[√7, 1+2√7, x]` (+ the
+`x^(−√7)` partner); 4018, 4019, 4067 likewise. Residue 25: 22 `_2nd_linear` —
+degenerate-`2μ` confluent (needs the `WhittakerW`/`HypergeometricU` 2nd solution,
+inert here), multi-pole Heun (4006/4008 — two+ finite poles), and
+growth-at-∞ (`r(∞) = ±∞`, parabolic-cylinder kin) — plus Emden–Fowler 4010,
+Abel-2nd-type 4078, exponential-symmetry 4077.
+
+Full per-case results: `reports/2.2.41.tsv`; bucketed report: `reports/2.2.41.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

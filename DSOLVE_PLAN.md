@@ -3285,6 +3285,41 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     | `2.2.26-2526` | `{y'[t] == (E)^(-t^(2))+y[t]^(2), y[0] == 1}` | [_Riccati] |
     | `2.2.36-3580` | `{y'[x] == ((Cos[x]-2 x y[x]^(2))/(2 x^(2)y[x])), y[Pi] == ((1)/(Pi))}` | [_Bernoulli] |
 
+- **M69 — §2.2.41 corpus (Problems 4001–4100, Nasser Abbasi) + confluent-Whittaker
+  recogniser in the normal-form pre-pass.** ✅ DONE. The first of the "next 500".
+  New corpus `DE_examples_2241.m` (upstream §2.1.41, 100 records — **100 scalar, 6
+  IVP, 0 systems**; `make check-corpus-indvar` green); new gate
+  `dsolve_corpus_2_2_41_tests` at baseline **25**; report
+  `DSolve_test_status/reports/2.2.41.md`. **Second-order-linear dominated**: 59
+  `_2nd_linear` (56 regular-singular `_with_linear_symmetries`) + 8 Emden–Fowler +
+  4 Liénard + a first-order tail. Baseline **71/100 → 75/100, 0 FAIL, 0 crash**.
+  - **One general fix, in `DSolve\`SpecialFunctionForm`** (`dsolve_specialform.c`).
+    A regular-singular 2nd-order linear ODE whose y'-free normal form `z'' = r z`
+    has `r = A + B/(x−x₀) + C/(x−x₀)²` (single finite double pole + rank-1 irregular
+    point at ∞, `A = r(∞) ≠ 0`) is a **Whittaker equation**; the existing
+    `specialform_whittaker_basis` already emits the two solutions in the
+    **verifiable `Hypergeometric1F1`** form (κ = B/c, μ = √(¼−C₀), z = 2√A (x−x₀);
+    `WhittakerM[κ,μ,z] = e^{−z/2} z^{½+μ} ₁F₁[½+μ−κ, 1+2μ, z]`) with a numeric
+    self-verify, and declines the degenerate `2μ ∈ ℤ` case. But it was reachable
+    only when the *original* equation already had `P == 0`; the Liouville
+    normal-form pre-pass (which kills a y' term for a `P ≠ 0` equation) called only
+    the Airy/Bessel rows. The fix runs `specialform_whittaker_basis` in the pre-pass
+    too. The two historical objections are discharged: (1) the recovery factor
+    `μ_r = Exp[−∫P/2]` and the Whittaker `(c(x−x₀))^{½±μ}` factor stacked two
+    radical powers of a *different* base — **`PowerExpand` on the composed candidate**
+    pulls the scale `c` out so they collapse to one `(x−x₀)` exponent; (2) it used
+    to "starve the Frobenius series fallback", but M68 demoted a `SeriesData` answer
+    out of the automatic cascade, so that is now a no-op. Double-gated (the
+    recogniser's `whittaker_num_ok` on the reduced equation, then `sf_num_ok` on the
+    composed form) — a mis-read pole/scale can only decline, never emit wrong.
+  - *Measured, back-substitution verified:* 4009 (`x²y''+x(1−x)y'−7y==0`, κ=½, μ=√7)
+    → `x^√7 ₁F₁[√7,1+2√7,x]` + the `x^{−√7}` partner; 4018, 4019, 4067 (scale c=5,
+    `PowerExpand`-merged) likewise. **A/B against a HEAD binary**: §2.2.19/20/21/34/
+    36/38 unchanged (no regression from the pre-pass change). Residue 25: 22
+    `_2nd_linear` (degenerate-`2μ` confluent → inert `WhittakerW`/`HypergeometricU`
+    2nd solution, multi-pole Heun, growth-at-∞ parabolic-cylinder kin), + Emden–
+    Fowler 4010, Abel-2nd-type 4078, exponential-symmetry 4077. v0.411 → 0.412.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

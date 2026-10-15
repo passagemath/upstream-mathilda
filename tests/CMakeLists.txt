@@ -4726,6 +4726,23 @@ add_test(NAME dsolve_corpus_2_2_40_tests
                  ../../DSolve_test_status/DE_examples_2240.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 0)
 
+# Section 2.2.41 "Problems 4001 to 4100" (Nasser Abbasi; upstream Ch2.S1.SS41.htm).
+# 100 scalar (6 IVP), 0 systems; 2nd-order-linear dominated (59 _2nd_linear, incl.
+# 56 regular-singular _with_linear_symmetries), + Emden-Fowler / Abel / Lienard /
+# first-order tail.  Baseline 71/100 -> 75/100 (M69): the confluent (Whittaker /
+# Kummer 1F1) finite-pole normal form is now recognised on a y'-carrying (P != 0)
+# equation too -- the recovery-factor radical stacking that disabled it in the
+# normal-form pre-pass is merged by PowerExpand, and the Frobenius-series fallback
+# it used to starve is no longer an accepted automatic answer (M68).  Closes 4009 /
+# 4018 / 4019 / 4067 (2 mu not an integer -> two independent 1F1 solutions, back-
+# substitution verified).  Residue 25: 22 _2nd_linear (degenerate-2mu confluent,
+# multi-pole Heun, growth-at-infinity), + Emden-Fowler 4010, Abel 4078, 4077.
+# Baseline argv3 = 25.
+add_test(NAME dsolve_corpus_2_2_41_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2241.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 25)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

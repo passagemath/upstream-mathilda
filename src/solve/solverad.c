@@ -723,7 +723,9 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
     expr_free(candidates);
     expr_free(e_orig);
 
-    return mk_list(good, kept);
+    Expr* res_list = mk_list(good, kept);   /* adopts good's contents, not the array */
+    free(good);                             /* the container buffer (free(NULL) safe when nc==0) */
+    return res_list;
 }
 
 /* ------------------------------------------------------------------ *

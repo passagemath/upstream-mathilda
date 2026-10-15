@@ -3416,6 +3416,45 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     solvable-for-x), `4353` (rational non-exact), `4386` (`x = y' Sqrt[1+y'²]`
     quadrature), `4392` (homogeneous class G). v0.414 → 0.415.
 
+- **M73 — §2.2.45 corpus (Problems 4401–4500, Nasser Abbasi) + new
+  `DSolve\`InverseOrientation` method (reciprocal-ODE / x(y) orientation).** ✅ DONE.
+  The last of the "next 500". New corpus `DE_examples_2245.m` (upstream §2.1.45, 100
+  records — **100 scalar, 0 IVP, 0 systems**; `make check-corpus-indvar` green); new
+  gate `dsolve_corpus_2_2_45_tests` at baseline **6**; report
+  `DSolve_test_status/reports/2.2.45.md`. First-order nonlinear (homogeneous class
+  A/C/G, Abel 2nd-type, dAlembert, Chini, symmetries) + a few 2nd-order; 17
+  `sympy=False`. Baseline **93/100 → 94/100, 0 FAIL, 0 crash**.
+  - **One general fix — a new method, `DSolve\`InverseOrientation`**
+    (`src/calculus/dsolve_inverse.c`). A first-order ODE that no specialist solves
+    in the y(x) orientation is often trivial in x(y): its reciprocal
+    `dx/dy == 1/F` is a class the cascade already handles. `4408`
+    (`y' == 1/(x y + x³ y³)`) inverts to `x'[y] == x y + x³ y³`, a Bernoulli in
+    x(y). The method solves for y', builds the swapped + reciprocated inverse ODE,
+    recurses the cascade, isolates the constant (`Solve[x == h, C[1]] → Φ(x, y)`),
+    and returns `Φ(x, y) == C[1]`, verified by the implicit-function rule against
+    the ORIGINAL y' (`dsolve_run_implicit`) — a mis-inversion can only fail verify
+    and be dropped. Guards: **top-level only** (`g_dsolve_depth <= 1` — firing in a
+    nested change-of-variable sub-solve added its recursion latency and tipped
+    §2.2.44-4323, a 6 s nonlinear-exact solve, over the 8 s wall), run **last** among
+    the first-order backstops, re-entry flag, **message-suppressed** probe (its
+    `Solve::nongen` must not leak through `Quiet`/`Check`), and a `MATHILDA_NO_INVERSE`
+    killswitch. Killswitch A/B (fork-isolated, §2.2.30/43/44/45/2237): only §2.2.45
+    −1 (4408), 0 FAIL, no regression.
+  - **Bonus leak fix** (`src/solve/solverad.c`). The method's internal
+    `Solve[x == h, C[1]]` on a radical `h` exposed a pre-existing leak:
+    `solve_radicals_equality` returned `mk_list(good, kept)` without freeing the
+    `good` container buffer (contents adopted by the List, array leaked — 8 B per
+    radical Solve). `valgrind DSolve[4408]` back to the fixed startup baseline.
+  - *Residue 6, all honest (0 FAIL):* `4401`/`4405`/`4417` (nonlinear first-order
+    with symmetries, `sympy=False`), `4432` (Chini), `4435` (2nd-order missing-x,
+    non-elementary reduced quadrature — the protective `ar_quadrature_may_spin`
+    guard declines it in auto; pinned `DSolve\`AutonomousReduction` returns the inert
+    form), `4438` (`y'(x − Log y') == 1`, solved by the pinned-only
+    `DSolve\`SolvableForX`, held out of the auto cascade by its slow-verify policy).
+    v0.415 → 0.416.
+  - **The next 500 complete (M69–M73):** §2.2.41–§2.2.45, problems 4001–4500, now
+    gated. Per-section: 75, 99, 93, 92, 94 / 100.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

@@ -2340,6 +2340,63 @@ Full per-case results: `reports/2.2.44.tsv`; bucketed report: `reports/2.2.44.md
 
 ---
 
+## Section 2.2.45 — "Problems 4401 to 4500" (Nasser Abbasi)
+
+Corpus: `DE_examples_2245.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.45, `Ch2.S1.SS45.htm`). First-order nonlinear (homogeneous class
+A/C/G, Abel 2nd-type, dAlembert, Chini, 1st-order symmetries) + a few 2nd-order
+reducibles; 17 `sympy=False`. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_45_tests` · gate baseline **6**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-15 (M73 baseline) | 93 / 100 | 93.0% | 7 | 0 FAIL, 0 crash. |
+| 2026-10-15 (**M73**) | **94 / 100** | **94.0%** | **6** | **0 FAIL, 0 crash.** New inverse-orientation method (below). Gate baseline **6**. |
+
+**M73 fix — a new `DSolve\`InverseOrientation` method** (`src/calculus/dsolve_inverse.c`).
+A first-order ODE `y' == F(x, y)` that no specialist solves in the y(x)
+orientation is often trivial in the x(y) orientation: its reciprocal
+`dx/dy == 1/F`, read with x the dependent function of y, is a class the cascade
+already handles. `4408` (`y' == 1/(x y + x³ y³)`) inverts to `x'[y] == x y + x³ y³`,
+a **Bernoulli in x(y)**. The method solves for y', builds the swapped+reciprocated
+inverse ODE, **recurses the cascade** on it (TimeConstrained), and turns an
+explicit `x[y] == h(y, C[1])` into a first integral by isolating the constant
+(`Solve[x == h, C[1]] → C[1] == Φ(x, y)`); the relation `Φ(x, y) == C[1]` is the
+implicit solution in the original orientation, **verified by the substrate's
+implicit-function rule against the original y'** (`dsolve_run_implicit`) — so a
+mis-inversion can only fail that verify and be dropped, never emit a wrong answer.
+
+Guards (the method recurses the whole engine): **top-level only**
+(`g_dsolve_depth <= 1` — letting it fire inside a nested change-of-variable
+sub-solve added its recursion latency to a case another method already answers;
+§2.2.44-4323 solves in 6 s via nonlinear exactness but, with the inverse firing in
+its `u = x − y` sub-solve, timed out at 8 s), run **absolutely last** among the
+first-order deterministic backstops (after the nonlinear-exactness jet peel), a
+re-entry flag (no inverse-inside-inverse), its speculative `DSolve`/`Solve` run in
+a **message-suppressed** region (the probe's `Solve::nongen` must not leak through
+`Quiet[]` / flip `Check[]`), and a `MATHILDA_NO_INVERSE` A/B killswitch. Killswitch
+A/B (fork-isolated) on §2.2.30/43/44/45/2237: only change is §2.2.45 −1 (4408),
+0 FAIL, no regression (§2.2.44 held at 8).
+
+**Bonus leak fix.** The method's internal `Solve[x == h, C[1]]` on a radical `h`
+exposed a pre-existing leak in the Solve subsystem — `solverad.c`'s
+`solve_radicals_equality` returned `mk_list(good, kept)` without freeing the `good`
+container array (contents adopted by the List, buffer leaked, 8 B per radical
+Solve). Fixed; `valgrind` on `DSolve[4408]` is back to the fixed startup baseline
+(13,440 B / 420 blocks, all macOS framework/ObjC init).
+
+Residue 6, all honest (0 FAIL): `4401`/`4405`/`4417` (nonlinear first-order with
+symmetries, `sympy=False`), `4432` (Chini), `4435` (2nd-order missing-x whose
+reduced quadrature is non-elementary — declined by the protective
+`ar_quadrature_may_spin` guard, pinned `DSolve\`AutonomousReduction` returns the
+inert form), `4438` (`y'(x − Log y') == 1`, solved by the pinned-only
+`DSolve\`SolvableForX`, kept out of the automatic cascade by its slow-verify
+policy).
+
+Full per-case results: `reports/2.2.45.tsv`; bucketed report: `reports/2.2.45.md`.
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

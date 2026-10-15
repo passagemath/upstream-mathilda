@@ -48,8 +48,25 @@ version bump + git tag.
 - [x] gate baseline 8; STATUS/README/PLAN/changelog; version 0.414→0.415; c99/messages green
 - [x] commit + tag v0.415
 
-## Block 5 — §2.2.45 (4401–4500), M73
-- [ ] (same pipeline)
+## Block 5 — §2.2.45 (4401–4500), M73, v0.416 ✅
+- [x] Fetch + convert → DE_examples_2245.m (100 scalar/0 IVP; 17 sympy=False); indvar green
+- [x] Baseline 93/100 (7 non-PASS; heterogeneous hard/gated gaps)
+- [x] General fix: NEW DSolve`InverseOrientation method (reciprocal dx/dy==1/F, recurse, implicit first integral) → 4408, 94/100
+- [x] Caught+fixed own latency regression (4323 via nested recursion) → gated top-level-only; killswitch A/B 0 regression
+- [x] Bonus: fixed pre-existing solverad.c container-array leak (valgrind back to baseline)
+- [x] gate baseline 6; STATUS/README/PLAN/changelog/calculus.md; version 0.415→0.416; c99/messages green
+- [x] commit + tag v0.416
 
-## Review
-(to be filled at the end)
+## Review — the next 500 (§2.2.41–§2.2.45, M69–M73, v0.412–v0.416)
+All five 100-problem blocks (problems 4001–4500) landed as gated corpus sections,
+each with a general root-cause fix, 0 FAIL, 0 crash, A/B-confirmed no regression:
+- §2.2.41 (M69, v0.412): 71→75. Confluent-Whittaker recogniser in the normal-form pre-pass (1F1 closed forms for y'-carrying regular-singular 2nd-order linear).
+- §2.2.42 (M70, v0.413): 98→99. Coupled leading-form first-order linear SYSTEM (leading-matrix LinearSolve fallback).
+- §2.2.43 (M71, v0.414): 92→93. Trig-rational ∫Sin^a/Cos^b monomial no longer spins in the Integrate Linearity stage (→ Weierstrass).
+- §2.2.44 (M72, v0.415): 91→92. Generalised that guard to any rational-trig-of-x (removes a non-interruptible hang; 4369).
+- §2.2.45 (M73, v0.416): 93→94. New DSolve`InverseOrientation (x(y) reciprocal) + a Solve-subsystem leak fix.
+Each general fix validated: integrate+risch ctest 100% (33/33) for the Integrate
+changes; killswitch / HEAD A/B for the DSolve changes; valgrind clean; all prior
+gates held (the pre-existing M68 drift in older §2.2.x and the pre-existing
+dsolve_tests exact-ODE abort were confirmed HEAD-identical, not introduced here).
+5 git tags pushed (v0.412–v0.416).

@@ -769,6 +769,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_ifactor.c
     ../src/calculus/dsolve_changevar.c
     ../src/calculus/dsolve_solvefor.c
+    ../src/calculus/dsolve_inverse.c
     ../src/calculus/dsolve_ratsol2.c
     ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c
@@ -4796,6 +4797,21 @@ add_test(NAME dsolve_corpus_2_2_44_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2244.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+
+# Section 2.2.45 "Problems 4401 to 4500" (Nasser Abbasi; upstream Ch2.S1.SS45.htm).
+# 100 scalar (0 IVP), 0 systems; first-order nonlinear + a few 2nd-order, 17
+# sympy=False.  Baseline 93/100 -> 94/100 (M73): a new INVERSE-ORIENTATION method
+# (DSolve`InverseOrientation, dsolve_inverse.c) solves the reciprocal ODE
+# dx/dy == 1/F for x(y) and maps the implicit first integral back -- 4408
+# (y'==1/(x y + x^3 y^3)) inverts to a Bernoulli in x(y).  Top-level-only +
+# verify-gated + re-entry guarded; MATHILDA_NO_INVERSE disables it for A/B.
+# Residue 6: 4401/4405/4417 (nonlinear 1st-order with symmetries), 4432 (Chini),
+# 4435 (2nd-order missing-x, non-elementary quadrature -- protected spin guard),
+# 4438 (SolvableForX, pinned-only by the slow-verify policy).  Baseline argv3 = 6.
+add_test(NAME dsolve_corpus_2_2_45_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2245.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -162,6 +162,8 @@ extern Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_sepreduced_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_inverse_try(DSolveProblem* P, size_t* nbranch);
+extern void dsolve_inverse_init(void);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
@@ -582,6 +584,17 @@ Expr* builtin_dsolve(Expr* res) {
              * (y^2 y''' == y'^3), which owns that order-3 autonomous family.  Here it
              * can only turn a decline into an answer. */
             if (!result) result = dsolve_run(&P, dsolve_exactode_nl_try);
+            /* Inverse orientation: solve the reciprocal ODE dx/dy == 1/F for x(y)
+             * (Bernoulli / linear / separable in x(y)) and map the implicit first
+             * integral back.  It RECURSES the whole engine and so runs ABSOLUTELY
+             * LAST among the first-order deterministic backstops — after the
+             * nonlinear-exactness jet peel above — so a case that method already
+             * answers (e.g. §2.2.44-4323, a 6 s nonlinear-exact solve) never pays
+             * the inverse's recursion latency.  Verify-gated by dsolve_run_implicit,
+             * re-entry guarded so the inner solve cannot invert again, and
+             * MATHILDA_NO_INVERSE disables it for A/B.  Reaches the x(y)-only classes
+             * (§2.2.45-4408 Bernoulli-in-x). */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_inverse_try);
             /* NB: the Frobenius / power-series methods are PINNED-ONLY (Method ->
              * "FrobeniusSeries" / "PowerSeries"), like FirstOrderPowerSeries above: a
              * truncated series is not a solution, so an ODE with no closed form stays
@@ -703,6 +716,7 @@ void dsolve_init(void) {
     dsolve_clairaut_init();
     dsolve_lagrange_init();
     dsolve_solvefor_init();
+    dsolve_inverse_init();
     dsolve_undetcoeff_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();

@@ -15,10 +15,11 @@
 
 #include "expr.h"
 
-/* Builtin entry point. Takes ownership of `res` per the builtin contract. */
+/* Builtin entry points. Take ownership of `res` per the builtin contract. */
 Expr* builtin_whittaker_m(Expr* res);
+Expr* builtin_whittaker_w(Expr* res);
 
-/* Register WhittakerM and its attributes. Called from core_init(). */
+/* Register WhittakerM / WhittakerW and their attributes. Called from core_init(). */
 void whittaker_init(void);
 
 #endif /* MATHILDA_WHITTAKER_H */

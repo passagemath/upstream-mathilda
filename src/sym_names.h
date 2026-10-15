@@ -282,6 +282,7 @@ extern const char* SYM_HypergeometricPFQ;
 extern const char* SYM_HypergeometricPFQRegularized;
 extern const char* SYM_HypergeometricU;
 extern const char* SYM_WhittakerM;
+extern const char* SYM_WhittakerW;
 extern const char* SYM_HeavisideTheta;
 extern const char* SYM_HermitianMatrixQ;
 extern const char* SYM_Hessian;

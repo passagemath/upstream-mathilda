@@ -1451,6 +1451,22 @@ bool sf_machine_hyperu(double a, double b, double z, double* out) {
     return hyperu_connection(a, b, z, out);              /* 3. non-integer b */
 }
 
+/* WhittakerW W_{k,m}(z) = e^(-z/2) z^(m+1/2) U(m-k+1/2, 2m+1, z).
+ * W_{k,m} = W_{k,-m}, so fold m -> |m| (b = 2|m|+1 >= 1). Mirrors
+ * sf_machine_whittaker_m with U in place of 1F1; shared with the NDArray kernel
+ * and the Compile VM (ndk_WhittakerW_n). Declines (z <= 0, cancellation, pole,
+ * overflow) are relayed from sf_machine_hyperu / the final isfinite check. */
+bool sf_machine_whittaker_w(double k, double m, double z, double* out) {
+    if (!(z > 0.0)) return false;              /* z <= 0 (and NaN) -> complex / template */
+    double am = fabs(m);                       /* even in m: fold so b = 2|m|+1 >= 1 */
+    double u;
+    if (!sf_machine_hyperu(am - k + 0.5, 2.0 * am + 1.0, z, &u)) return false;
+    double v = exp(-0.5 * z) * pow(z, am + 0.5) * u;
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
 /* 2F1(a, b; c; z), |z| < 1 by the defining series.  Outside the disc the
  * function needs a connection formula and may be complex, so the kernel
  * declines and the MPFR path answers. */

@@ -1,5 +1,6 @@
-/* Tests for WhittakerM[k, m, z], the Whittaker M function
- *   M_{k,m}(z) = e^(-z/2) z^(m+1/2) Hypergeometric1F1[m-k+1/2, 2m+1, z].
+/* Tests for WhittakerM[k, m, z] and WhittakerW[k, m, z], the Whittaker functions
+ *   M_{k,m}(z) = e^(-z/2) z^(m+1/2) Hypergeometric1F1[m-k+1/2, 2m+1, z],
+ *   W_{k,m}(z) = e^(-z/2) z^(m+1/2) HypergeometricU[m-k+1/2, 2m+1, z].
  *
  * Covers: the z = 0 special value and symbolic/exact passthrough; machine- and
  * arbitrary-precision (MPFR) real numerics; complex parameters and argument;
@@ -198,6 +199,112 @@ void test_whittaker_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "WhittakerM not Protected");
 }
 
+/* ===================== WhittakerW =================================== */
+/* W_{k,m}(z) = e^(-z/2) z^(m+1/2) HypergeometricU[m-k+1/2, 2m+1, z].
+ * Numeric reference values from mpmath (mp.whitw), an independent source. */
+
+void test_whittaker_w_special() {
+    /* Values at z == 0 by the leading exponent 1/2 - |Re m|. */
+    assert_eval_eq("WhittakerW[0, 0, 0]", "0", 0);              /* |Re m| < 1/2 */
+    assert_eval_eq("WhittakerW[2, 0.5, 0]", "0", 0);           /* m=1/2 -> 1/Gamma[-1] = 0 */
+    assert_eval_eq("WhittakerW[0, 1, 0]", "ComplexInfinity", 0);/* |Re m| > 1/2 */
+    assert_eval_eq("WhittakerW[k, 1/2, 0]", "1/Gamma[1 - k]", 0);
+    /* Symbolic / all-exact arguments stay symbolic. */
+    assert_eval_eq("WhittakerW[2, 3, x]", "WhittakerW[2, 3, x]", 0);
+    assert_eval_eq("WhittakerW[2, 3, 4]", "WhittakerW[2, 3, 4]", 0);
+}
+
+void test_whittaker_w_machine_real() {
+    assert_close("WhittakerW[2, 3, 4.5]", 11.306294801893110, 1e-6);
+    assert_close("WhittakerW[6, 4, 1.7]", 1740.546241809134, 1e-3);
+    /* non-integer b = 2m+1 (Kummer connection regime), machine precision. */
+    assert_close("WhittakerW[0.3, 0.4, 0.55]", 0.717440169793, 1e-9);
+}
+
+void test_whittaker_w_arbitrary() {
+    /* N[W[3/5,1/3,1/7],30]; mpmath to 30 digits, first ~28 rounding-stable. */
+    assert_eval_startswith("N[WhittakerW[3/5, 1/3, 1/7], 30]",
+        "0.3970969447006262740475282170");
+    /* A 19-digit literal raises the working precision above machine; the output
+     * tracks it (non-integer b, mpmath-confirmed). */
+    assert_eval_startswith("WhittakerW[2, 1.2222222222222222222, 1]",
+        "-0.242289411116497");
+}
+
+void test_whittaker_w_complex() {
+    /* N[W[1/5, 2 - I, 2]] = 0.314759 - 1.27345 I. */
+    assert_close("Re[N[WhittakerW[1/5, 2 - I, 2]]]", 0.3147585139, 1e-5);
+    assert_close("Im[N[WhittakerW[1/5, 2 - I, 2]]]", -1.273446047, 1e-5);
+    /* Complex k and MPFR z (45-digit), mpmath-confirmed. */
+    assert_eval_startswith("Re[WhittakerW[2 - 5 I, 3, 4.5`45]]",
+        "-283.2166670975702708743866");
+    assert_eval_startswith("Im[WhittakerW[2 - 5 I, 3, 4.5`45]]",
+        "-399.7625181886174290903785");
+}
+
+void test_whittaker_w_listable() {
+    assert_eval_eq("WhittakerW[k, m, {a, b}]",
+                   "{WhittakerW[k, m, a], WhittakerW[k, m, b]}", 0);
+    assert_eval_eq("WhittakerW[k, m, {}]", "{}", 0);
+    assert_close("WhittakerW[2, 3, {1.5, 2.5, 3.5}][[1]]", 86.38286431, 1e-3);
+    assert_close("WhittakerW[2, 3, {1.5, 2.5, 3.5}][[3]]", 17.99204277, 1e-4);
+}
+
+void test_whittaker_w_ndarray() {
+    assert_close("WhittakerW[2, 3, NDArray[{1.5, 2.5, 3.5}]][[2]]", 32.87672353, 1e-4);
+    /* a large numeric list auto-packs; the packed fast path shares the machine
+     * helper, so an element matches the scalar path bit-closely. */
+    assert_close("WhittakerW[2, 3, N[Range[60]/13]][[7]]",
+                 eval_real("WhittakerW[2, 3, N[7/13]]"), 1e-12);
+    assert_close("WhittakerW[2, 3, N[Range[60]/13]][[40]]",
+                 eval_real("WhittakerW[2, 3, N[40/13]]"), 1e-12);
+}
+
+void test_whittaker_w_compile() {
+    assert_eval_eq(
+        "CompileDiagnostics[{{x, _Real}, {y, _Real}, {z, _Real}}, "
+        "WhittakerW[x, y, z]][[1]]", "\"Compiled\" -> True", 0);
+    assert_close(
+        "Compile[{{x, _Real}, {y, _Real}, {z, _Real}}, WhittakerW[x, y, z]][2., 3., 4.5]",
+        11.306294801893110, 1e-6);
+}
+
+void test_whittaker_w_derivative() {
+    assert_eval_eq("D[WhittakerW[k, m, z], z]",
+        "-WhittakerW[1 + k, m, z]/z + (1/2 - k/z) WhittakerW[k, m, z]", 0);
+    assert_eval_eq("D[WhittakerW[k, m, z], k]",
+                   "Derivative[1, 0, 0][WhittakerW][k, m, z]", 0);
+    assert_eval_eq("D[WhittakerW[k, m, z], m]",
+                   "Derivative[0, 1, 0][WhittakerW][k, m, z]", 0);
+    assert_eval_eq("D[WhittakerW[k, m, y], z]", "0", 0);
+}
+
+void test_whittaker_w_series() {
+    /* Terminating case (a = m-k+1/2 = -1): origin Puiseux collapses to a Taylor. */
+    assert_eval_eq("Series[WhittakerW[2, 1/2, x], {x, 0, 6}]",
+        "-2 x + 2 x^2 - 3/4 x^3 + 1/6 x^4 - 5/192 x^5 + 1/320 x^6 + O[x]^7", 0);
+    /* Terminating case at Infinity -> the exact elementary closed form. */
+    assert_eval_eq("Series[WhittakerW[2, 1/2, x], {x, Infinity, 5}]",
+                   "-x (2 - x) E^(-1/2 x)", 0);
+    /* Non-terminating / symbolic stays symbolic (deferred). */
+    assert_eval_eq("Series[WhittakerW[1/3, 1/2, x], {x, Infinity, 3}]",
+                   "Series[WhittakerW[1/3, 1/2, x], {x, Infinity, 3}]", 0);
+}
+
+void test_whittaker_w_argcount() {
+    assert_eval_eq("WhittakerW[]", "WhittakerW[]", 0);
+    assert_eval_eq("WhittakerW[1, 2]", "WhittakerW[1, 2]", 0);
+    assert_eval_eq("WhittakerW[1, 2, 3, 4]", "WhittakerW[1, 2, 3, 4]", 0);
+}
+
+void test_whittaker_w_attributes() {
+    SymbolDef* d = symtab_get_def("WhittakerW");
+    ASSERT_MSG(d != NULL, "WhittakerW not registered");
+    ASSERT_MSG((d->attributes & ATTR_LISTABLE) != 0, "WhittakerW not Listable");
+    ASSERT_MSG((d->attributes & ATTR_NUMERICFUNCTION) != 0, "WhittakerW not NumericFunction");
+    ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "WhittakerW not Protected");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -216,6 +323,18 @@ int main() {
     TEST(test_whittaker_argcount);
     TEST(test_whittaker_attributes);
 
-    printf("All WhittakerM tests passed.\n");
+    TEST(test_whittaker_w_special);
+    TEST(test_whittaker_w_machine_real);
+    TEST(test_whittaker_w_arbitrary);
+    TEST(test_whittaker_w_complex);
+    TEST(test_whittaker_w_listable);
+    TEST(test_whittaker_w_ndarray);
+    TEST(test_whittaker_w_compile);
+    TEST(test_whittaker_w_derivative);
+    TEST(test_whittaker_w_series);
+    TEST(test_whittaker_w_argcount);
+    TEST(test_whittaker_w_attributes);
+
+    printf("All WhittakerM / WhittakerW tests passed.\n");
     return 0;
 }

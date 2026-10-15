@@ -286,6 +286,131 @@ static Expr* whittaker_m_ndarray(const Expr* k_e, const Expr* m_e,
     return ndarray_delist_and_reeval(res);
 }
 
+/* ================================================================== */
+/* WhittakerW: W_{k,m}(z) = e^(-z/2) z^(m+1/2) HypergeometricU[m-k+1/2, 2m+1, z]. */
+/* ================================================================== */
+
+/* True iff `e` is a real number (not a Complex[..] with a non-zero imaginary
+ * part). A bare Integer/Real/Rational is real; Complex[re, 0] is real too. */
+static bool whit_is_real_number(const Expr* e) {
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im)) {
+        double imd;
+        return whit_real_number_double(im, &imd) && imd == 0.0;
+    }
+    return true;
+}
+
+/* Build e^(-z/2) z^(m+1/2) HypergeometricU[m-k+1/2, 2m+1, z] and evaluate it, so
+ * WhittakerW inherits HypergeometricU's machine + MPFR, real + complex numerics
+ * (exactly as whittaker_m_numeric_hyp rides Hypergeometric1F1). Returns NULL if
+ * the result did not collapse to a number. */
+static Expr* whittaker_w_numeric_hyp(const Expr* k_e, const Expr* m_e, const Expr* z_e) {
+    Expr* a = mk_fn3("Plus",
+                     expr_copy((Expr*)m_e),
+                     mk_fn2("Times", expr_new_integer(-1), expr_copy((Expr*)k_e)),
+                     mk_half());                                  /* m - k + 1/2 */
+    Expr* b = mk_fn2("Plus",
+                     mk_fn2("Times", expr_new_integer(2), expr_copy((Expr*)m_e)),
+                     expr_new_integer(1));                        /* 2 m + 1 */
+    Expr* u = mk_fn3("HypergeometricU", a, b, expr_copy((Expr*)z_e));
+    Expr* expfac = mk_fn1("Exp", mk_fn2("Times", mk_neg_half(), expr_copy((Expr*)z_e)));
+    Expr* zpow = mk_fn2("Power", expr_copy((Expr*)z_e),
+                        mk_fn2("Plus", expr_copy((Expr*)m_e), mk_half()));
+    Expr* prod = mk_fn3("Times", expfac, zpow, u);
+    Expr* out = eval_and_free(prod);
+    if (out && whit_is_number(out)) return out;
+    expr_free(out);
+    return NULL;
+}
+
+static Expr* whittaker_w_eval(Expr* k_e, Expr* m_e, Expr* z_e) {
+    /* Special values at z == 0 (exact Integer 0 only; a Real 0.0 flows through).
+     * W near 0 has two Puiseux branches z^(1/2 +- m), so the leading exponent is
+     * 1/2 - |Re m|: for |Re m| < 1/2 it vanishes, for |Re m| > 1/2 it blows up,
+     * and at |Re m| = 1/2 (m = +-1/2, real) it is the finite 1/Gamma[1-k]. */
+    if (z_e && z_e->type == EXPR_INTEGER && z_e->data.integer == 0) {
+        double rem;
+        if (whit_real_part_double(m_e, &rem)) {
+            double am = fabs(rem);
+            if (am < 0.5) return expr_new_integer(0);
+            if (am > 0.5) return expr_new_symbol("ComplexInfinity");
+            /* |Re m| == 1/2: finite 1/Gamma[1-k] only for a real m = +-1/2. */
+            if (whit_is_real_number(m_e))
+                return eval_and_free(
+                    mk_fn2("Power",
+                           mk_fn1("Gamma",
+                                  mk_fn2("Plus", expr_new_integer(1),
+                                         mk_fn2("Times", expr_new_integer(-1),
+                                                expr_copy(k_e)))),
+                           expr_new_integer(-1)));
+            /* complex m on the boundary: no limit -> stay symbolic */
+        }
+        /* symbolic m: stay symbolic */
+    }
+
+    /* Numericise only when some argument is inexact; otherwise stay symbolic. */
+    if (!(whit_is_inexact(k_e) || whit_is_inexact(m_e) || whit_is_inexact(z_e)))
+        return NULL;
+
+    /* Machine real fast path: shares sf_machine_whittaker_w with the NDArray kernel
+     * and the Compile[] VM (bit-identical). Declines (z <= 0, pole, cancellation,
+     * overflow) -> the HypergeometricU template below. */
+    {
+        double kd, md, zd;
+        if (whit_leaf_double(k_e, &kd) && whit_leaf_double(m_e, &md) &&
+            whit_leaf_double(z_e, &zd)) {
+            double v;
+            if (sf_machine_whittaker_w(kd, md, zd, &v))
+                return expr_new_real(v);
+        }
+    }
+
+    Expr* out = whittaker_w_numeric_hyp(k_e, m_e, z_e);
+    if (out) return out;
+    return NULL;                               /* stay symbolic */
+}
+
+/* Thread sf_machine_whittaker_w over a visible NDArray / packed-List z (scalar
+ * k, m), mirroring whittaker_m_ndarray. Once z IS an NDArray this must not return
+ * NULL. */
+static Expr* whittaker_w_ndarray(const Expr* k_e, const Expr* m_e,
+                                 const Expr* z_e, Expr* res) {
+    if (!is_ndarray(z_e)) return NULL;
+    NDType dt = z_e->data.ndarray.dtype;
+    double kd, md;
+    if (dt == NDT_INT64 || dt == NDT_BOOL || ndt_is_complex(dt) ||
+        !whit_leaf_double(k_e, &kd) || !whit_leaf_double(m_e, &md))
+        return ndarray_delist_and_reeval(res);
+
+    size_t sz = ndarray_size(z_e);
+    void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
+    if (!out) return ndarray_delist_and_reeval(res);
+    bool ok = true;
+    for (size_t i = 0; i < sz && ok; i++) {
+        double xr, xi, v = 0.0;
+        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
+        ok = sf_machine_whittaker_w(kd, md, xr, &v);
+        if (ok) ndt_set(out, i, dt, v, 0.0);
+    }
+    if (ok)
+        return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
+                                     z_e->data.ndarray.dims, out, dt);
+    free(out);
+    return ndarray_delist_and_reeval(res);
+}
+
+Expr* builtin_whittaker_w(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+    if (argc != 3)
+        return builtin_arg_error("WhittakerW", argc, 3, 3);
+    Expr* nd = whittaker_w_ndarray(args[0], args[1], args[2], res);
+    if (nd) return nd;
+    return whittaker_w_eval(args[0], args[1], args[2]);
+}
+
 /* ------------------------------------------------------------------ */
 /* Builtin entry point                                                 */
 /* ------------------------------------------------------------------ */
@@ -309,5 +434,8 @@ void whittaker_init(void) {
     symtab_add_builtin("WhittakerM", builtin_whittaker_m);
     symtab_get_def("WhittakerM")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
-    /* Docstring lives in info.c (info_init). */
+    symtab_add_builtin("WhittakerW", builtin_whittaker_w);
+    symtab_get_def("WhittakerW")->attributes |=
+        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
+    /* Docstrings live in info.c (info_init). */
 }

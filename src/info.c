@@ -1225,6 +1225,19 @@ void info_init(void) {
         "((1/2+k+m)/z) WhittakerM[k+1,m,z]. Series at the origin (the z^(1/2+m)\n"
         "Puiseux form) is supported; Series at Infinity only for the terminating\n"
         "(elementary) case. Listable.");
+    symtab_set_docstring("WhittakerW",
+        "WhittakerW[k, m, z]\n"
+        "\tgives the Whittaker function W_{k,m}(z).\n"
+        "Related to the Tricomi confluent hypergeometric function by\n"
+        "W_{k,m}(z) = E^(-z/2) z^(m+1/2) HypergeometricU[m-k+1/2, 2m+1, z]. With an\n"
+        "inexact argument it evaluates numerically at machine or arbitrary (MPFR)\n"
+        "precision, real or complex, through that confluent form; a real machine\n"
+        "argument uses a shared double kernel that also drives the NDArray/packed\n"
+        "fast path and Compile[]. Values at z = 0: 0 for |Re m| < 1/2,\n"
+        "1/Gamma[1-k] for m = +-1/2, ComplexInfinity for |Re m| > 1/2.\n"
+        "D[WhittakerW[k,m,z],z] = (1/2-k/z) WhittakerW[k,m,z] - WhittakerW[1+k,m,z]/z.\n"
+        "Series (origin and Infinity) for the terminating (elementary) case via\n"
+        "LaguerreL. Listable.");
     symtab_set_docstring("LegendreQ",
         "LegendreQ[n, x]\n"
         "\tgives the Legendre function of the second kind Q_n(x).\n"

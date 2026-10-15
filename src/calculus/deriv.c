@@ -1782,6 +1782,70 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return expr_new_function(mk_sym("Plus"), terms, 3);
         }
 
+        /* --- WhittakerW[K, M, Z]: chain rule on the argument Z (DLMF 13.14.31,
+         *   d/dz W_{k,m}(z) = (1/2 - k/z) W_{k,m}(z) - (1/z) W_{k+1,m}(z)).
+         *   d/dK, d/dM have no elementary form -> inert
+         *     Derivative[1,0,0][WhittakerW][K,M,Z] / Derivative[0,1,0][...]. */
+        if (h == SYM_WhittakerW && n == 3) {
+            Expr* K = args[0];
+            Expr* M = args[1];
+            Expr* Z = args[2];
+            Expr* dK = deriv_of(K, x, nonconsts);
+            Expr* dM = deriv_of(M, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                Expr* invZ = mk_fn2("Power", expr_copy(Z), mk_int(-1));   /* 1/Z */
+                /* (1/2 - k/Z) W_{k,m}(Z) */
+                Expr* c0 = mk_fn2("Plus",
+                              mk_fn2("Rational", mk_int(1), mk_int(2)),
+                              mk_neg(mk_fn2("Times", expr_copy(K), expr_copy(invZ))));
+                Expr* wkm = expr_new_function(mk_sym("WhittakerW"),
+                              (Expr*[]){ expr_copy(K), expr_copy(M), expr_copy(Z) }, 3);
+                Expr* t0 = mk_fn2("Times", c0, wkm);
+                /* -(1/Z) W_{k+1,m}(Z) */
+                Expr* wk1 = expr_new_function(mk_sym("WhittakerW"),
+                              (Expr*[]){ mk_fn2("Plus", mk_int(1), expr_copy(K)),
+                                         expr_copy(M), expr_copy(Z) }, 3);
+                Expr* t1 = mk_fn2("Times", mk_neg(invZ), wk1);   /* original invZ adopted */
+                Expr* dWdZ = mk_fn2("Plus", t0, t1);
+                terms[nt++] = mk_fn2("Times", dWdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dK)) {
+                /* Derivative[1,0,0][WhittakerW][K,M,Z] * dK */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("WhittakerW"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(K), expr_copy(M), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dK);
+            } else {
+                expr_free(dK);
+            }
+
+            if (!is_lit_zero(dM)) {
+                /* Derivative[0,1,0][WhittakerW][K,M,Z] * dM */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("WhittakerW"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(K), expr_copy(M), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dM);
+            } else {
+                expr_free(dM);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            if (nt == 2) return mk_fn2("Plus", terms[0], terms[1]);
+            return expr_new_function(mk_sym("Plus"), terms, 3);
+        }
+
         /* --- LegendreQ[N, Z]: chain rule on the argument only.
          *   d/dZ Q_N(Z) = ((-1-N) Z Q_N(Z) + (1+N) Q_{N+1}(Z)) / (Z^2 - 1).
          *   d/dN Q_N(Z) = Derivative[1,0][LegendreQ][N,Z]  (no elementary form).

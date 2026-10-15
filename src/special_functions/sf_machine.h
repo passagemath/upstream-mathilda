@@ -96,6 +96,11 @@ bool sf_machine_whittaker_m(double k, double m, double z, double* out);     /* W
  * to cancellation, a Gamma/digamma pole, or a non-finite result, so the caller
  * falls to the FLINT acb_hypgeom_u bridge / symbolic template. */
 bool sf_machine_hyperu(double a, double b, double z, double* out);          /* HypergeometricU */
+/* WhittakerW W_{k,m}(z) = e^(-z/2) z^(m+1/2) U(m-k+1/2, 2m+1, z), real path.
+ * W is even in m, so m is folded to |m| (forcing b = 2|m|+1 >= 1). Same decline
+ * contract as sf_machine_hyperu / sf_machine_whittaker_m; shared bit-for-bit with
+ * the NDArray kernel, the Compile VM (ndk_WhittakerW_n) and the scalar fast path. */
+bool sf_machine_whittaker_w(double k, double m, double z, double* out);     /* WhittakerW */
 bool sf_machine_hyper2f1(double a, double b, double c, double z, double* out); /* 2F1 */
 bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
                     double z, double* out);                    /* HypergeometricPFQ */

@@ -869,6 +869,9 @@ static void pack_mark_aware_heads(void) {
          * its builtin threads sf_machine_whittaker_m over the buffer directly).
          * Not int64_ok: the 1F1 series runs in double. */
         "WhittakerM",
+        /* WhittakerW[k, m, z]: same shape, threads sf_machine_whittaker_w over the
+         * buffer z. Not int64_ok: the U series runs in double. */
+        "WhittakerW",
         /* ArrayPlot reads its data table straight off the buffer via
          * na_load_matrix (src/graphics/arrayplot.c, the same loader Fit and
          * DesignMatrix use above) when given an EXPR_NDARRAY, so the gate

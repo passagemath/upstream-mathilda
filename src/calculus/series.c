@@ -78,6 +78,33 @@ static Expr* mk_power(Expr* a, Expr* b) { return mk_fn2("Power", a, b); }
  * evaluate() does NOT consume its argument, so free `e` after. */
 static Expr* simp(Expr* e) { return eval_and_free(e); }
 
+/* WhittakerW terminates to an elementary closed form exactly when
+ * a = m-k+1/2 is a non-positive integer -n (n >= 0): then
+ *   U(-n, 2m+1, z) = (-1)^n n! LaguerreL[n, 2m, z],
+ * so W_{k,m}(z) = e^(-z/2) z^(m+1/2) (-1)^n n! LaguerreL[n, 2m, z]. Returns that
+ * expression (UNEVALUATED -- the caller evaluates/expands it), or NULL when W is
+ * not terminating. K, M, Z are borrowed. */
+static Expr* whittakerw_terminating_closed(Expr* K, Expr* M, Expr* Z) {
+    Expr* a = simp(mk_plus(mk_plus(expr_copy(M),
+                   mk_times(expr_new_integer(-1), expr_copy(K))),
+                   make_rational(1, 2)));
+    if (!(a && a->type == EXPR_INTEGER && a->data.integer <= 0)) {
+        expr_free(a);
+        return NULL;
+    }
+    int64_t n = -a->data.integer;
+    expr_free(a);
+    Expr* expfac = mk_fn1("Exp", mk_times(make_rational(-1, 2), expr_copy(Z)));
+    Expr* zpow   = mk_power(expr_copy(Z), mk_plus(expr_copy(M), make_rational(1, 2)));
+    Expr* coef   = mk_times(mk_power(expr_new_integer(-1), expr_new_integer(n)),
+                            mk_fn1("Factorial", expr_new_integer(n)));
+    Expr* lag_args[3] = { expr_new_integer(n),
+                          mk_times(expr_new_integer(2), expr_copy(M)),
+                          expr_copy(Z) };
+    Expr* lag = mk_fn(mk_symbol("LaguerreL"), lag_args, 3);
+    return mk_times(mk_times(mk_times(expfac, zpow), coef), lag);
+}
+
 static bool is_lit_zero(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) return e->data.integer == 0;
@@ -6092,6 +6119,25 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         f_eval = eval_and_free(closed);
     }
 
+    /* WhittakerW at the origin: U is NOT analytic at 0 (a two-branch
+     * z^(1/2 +- m) / log structure), so unlike WhittakerM only the TERMINATING
+     * case is reachable here -- when a = m-k+1/2 is a non-positive integer, W is
+     * e^(-z/2) z^(m+1/2) times an (analytic) LaguerreL polynomial, which the
+     * prefactor-peel + Taylor machinery expands. The general (non-terminating)
+     * origin series is deferred (stays symbolic). */
+    if (has_symbol_head(f_eval, "WhittakerW") &&
+        f_eval->data.function.arg_count == 3 && is_lit_zero(x0_eval) &&
+        expr_free_of(f_eval->data.function.args[0], x) &&
+        expr_free_of(f_eval->data.function.args[1], x)) {
+        Expr* closed = whittakerw_terminating_closed(f_eval->data.function.args[0],
+                                                     f_eval->data.function.args[1],
+                                                     f_eval->data.function.args[2]);
+        if (closed) {
+            expr_free(f_eval);
+            f_eval = eval_and_free(closed);
+        }
+    }
+
     /* Expansion at -Infinity by reflection: Series[f, {x, -Inf, n}] ==
      * Series[f[x -> -x], {x, +Inf, n}] evaluated, then x -> -x. This reuses the
      * whole +Infinity machinery (special-function asymptotics and the generic
@@ -6183,6 +6229,25 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
                 return out;
             }
             expr_free(hyp_ev);   /* non-terminating: fall through, stays symbolic */
+        }
+
+        /* WhittakerW at +Infinity: the same terminating-only reduction. W is the
+         * recessive solution, so it reduces to e^(-z/2) z^(m+1/2) (-1)^n n!
+         * LaguerreL[n, 2m, z] exactly when a = m-k+1/2 = -n; return that (its
+         * Normal is itself). The general asymptotic is deferred. */
+        if (has_symbol_head(f_eval, "WhittakerW") &&
+            f_eval->data.function.arg_count == 3 &&
+            expr_free_of(f_eval->data.function.args[0], x) &&
+            expr_free_of(f_eval->data.function.args[1], x) &&
+            expr_eq(f_eval->data.function.args[2], x)) {
+            Expr* closed = whittakerw_terminating_closed(f_eval->data.function.args[0],
+                                                         f_eval->data.function.args[1],
+                                                         f_eval->data.function.args[2]);
+            if (closed) {
+                Expr* out = simp(closed);
+                expr_free(f_eval); expr_free(x0_eval);
+                return out;
+            }
         }
 
         /* Parametric (scaled) argument: for a recognised head H applied to a

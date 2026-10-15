@@ -1,0 +1,221 @@
+/* Tests for WhittakerM[k, m, z], the Whittaker M function
+ *   M_{k,m}(z) = e^(-z/2) z^(m+1/2) Hypergeometric1F1[m-k+1/2, 2m+1, z].
+ *
+ * Covers: the z = 0 special value and symbolic/exact passthrough; machine- and
+ * arbitrary-precision (MPFR) real numerics; complex parameters and argument;
+ * list threading; the NDArray / packed-array fast path (agreement with the
+ * scalar path); Compile[]; the derivative rule; Series at the origin (concrete
+ * and symbolic m, integer and half-integer leading power) and the terminating
+ * case at Infinity; SeriesCoefficient; argument-count diagnostics; attributes.
+ */
+
+#include "eval.h"
+#include "parse.h"
+#include "expr.h"
+#include "symtab.h"
+#include "attr.h"
+#include "core.h"
+#include "print.h"
+#include "test_utils.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
+
+/* ---- numeric helpers ------------------------------------------------- */
+
+static double eval_real(const char* input) {
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    ASSERT_MSG(r->type == EXPR_REAL, "%s: expected a Real result", input);
+    double v = r->data.real;
+    expr_free(r);
+    return v;
+}
+
+static void assert_close(const char* input, double expected, double tol) {
+    double v = eval_real(input);
+    ASSERT_MSG(fabs(v - expected) <= tol,
+               "%s: expected %.12g, got %.12g", input, expected, v);
+}
+
+/* ---- special values and passthrough --------------------------------- */
+
+void test_whittaker_special() {
+    /* M_{k,m}(0) = 0 for Re(m) > -1/2 (leading power z^(m+1/2)). */
+    assert_eval_eq("WhittakerM[1, 1, 0]", "0", 0);
+    assert_eval_eq("WhittakerM[0, 0, 0]", "0", 0);
+    assert_eval_eq("WhittakerM[2, 0.5, 0]", "0", 0);
+    /* Symbolic / all-exact arguments stay symbolic (no expansion). */
+    assert_eval_eq("WhittakerM[2, 3, x]", "WhittakerM[2, 3, x]", 0);
+    assert_eval_eq("WhittakerM[2, 3, 4]", "WhittakerM[2, 3, 4]", 0);
+    /* Symbolic m with z == 0 is left alone (sign of Re(m) unknown). */
+    assert_eval_eq("WhittakerM[k, m, 0]", "WhittakerM[k, m, 0]", 0);
+}
+
+/* ---- machine real numerics ------------------------------------------ */
+
+void test_whittaker_machine_real() {
+    assert_close("WhittakerM[2, 3, 4.5]", 68.9670344349435886, 1e-6);
+    assert_close("WhittakerM[2, 3, 1.7]", 4.07202, 1e-4);
+    /* Rational parameters with an inexact argument. */
+    assert_close("WhittakerM[2, 1/3, 0.5]", 0.286592, 1e-5);
+}
+
+/* ---- arbitrary precision (MPFR) ------------------------------------- */
+
+void test_whittaker_arbitrary() {
+    /* N[WhittakerM[2,1/3,1/7],100] -- first ~60 digits are rounding-stable. */
+    assert_eval_startswith("N[WhittakerM[2, 1/3, 1/7], 100]",
+        "0.16564977190667829031036482807198710437606805187130125676351652");
+    /* Precision tracks the input. */
+    assert_eval_startswith("WhittakerM[2, 1/3, 1/7`40]", "0.1656497719066782903103648");
+}
+
+/* ---- complex parameters and argument -------------------------------- */
+
+void test_whittaker_complex() {
+    /* N[WhittakerM[4/5, 2 - I, 2]] = 3.27958 - 3.25602 I. */
+    assert_close("Re[N[WhittakerM[4/5, 2 - I, 2]]]", 3.27958, 1e-4);
+    assert_close("Im[N[WhittakerM[4/5, 2 - I, 2]]]", -3.25602, 1e-4);
+    /* WhittakerM[2, 3 - I, 4.5] = -18.2886 - 74.6279 I. */
+    assert_close("Re[WhittakerM[2, 3 - I, 4.5]]", -18.2886002968, 1e-3);
+    assert_close("Im[WhittakerM[2, 3 - I, 4.5]]", -74.6278856690, 1e-3);
+    /* A negative real argument lands off the real axis (z^(m+1/2) branch cut). */
+    assert_close("Re[WhittakerM[2, 3, -1.5]]", 0.0, 1e-10);
+}
+
+/* ---- list threading (Listable) -------------------------------------- */
+
+void test_whittaker_listable() {
+    assert_eval_eq("WhittakerM[k, m, {a, b}]",
+                   "{WhittakerM[k, m, a], WhittakerM[k, m, b]}", 0);
+    assert_eval_eq("WhittakerM[k, m, {}]", "{}", 0);
+    assert_close("WhittakerM[2, 3, {1.5, 2.5, 3.5}][[1]]", 2.76149, 1e-4);
+    assert_close("WhittakerM[2, 3, {1.5, 2.5, 3.5}][[2]]", 13.0096, 1e-3);
+    assert_close("WhittakerM[2, 3, {1.5, 2.5, 3.5}][[3]]", 34.2394, 1e-3);
+}
+
+/* ---- NDArray / packed surface agreement ----------------------------- */
+
+void test_whittaker_ndarray() {
+    /* Visible NDArray: element-wise, agreeing with the scalar path. */
+    assert_close("WhittakerM[2, 3, NDArray[{1.5, 2.5, 3.5}]][[2]]", 13.0096, 1e-3);
+    /* A large numeric list auto-packs; the packed fast path shares the machine
+     * helper with the scalar path, so an element must match bit-closely. */
+    assert_close("WhittakerM[2, 3, N[Range[60]/13]][[7]]",
+                 eval_real("WhittakerM[2, 3, N[7/13]]"), 1e-12);
+    assert_close("WhittakerM[2, 3, N[Range[60]/13]][[40]]",
+                 eval_real("WhittakerM[2, 3, N[40/13]]"), 1e-12);
+}
+
+/* ---- Compile[] ------------------------------------------------------ */
+
+void test_whittaker_compile() {
+    /* Scalar form lowers (OP_KERNN via the N-ary machine kernel). */
+    assert_eval_eq(
+        "CompileDiagnostics[{{x, _Real}, {y, _Real}, {z, _Real}}, "
+        "WhittakerM[x, y, z]][[1]]", "\"Compiled\" -> True", 0);
+    /* The compiled function runs and agrees with the scalar path. */
+    assert_close(
+        "Compile[{{x, _Real}, {y, _Real}, {z, _Real}}, WhittakerM[x, y, z]][2., 3., 4.5]",
+        68.9670344349435886, 1e-6);
+}
+
+/* ---- derivative ----------------------------------------------------- */
+
+void test_whittaker_derivative() {
+    assert_eval_eq("D[WhittakerM[k, m, z], z]",
+        "((1/2 + k + m) WhittakerM[1 + k, m, z])/z + "
+        "(1/2 - k/z) WhittakerM[k, m, z]", 0);
+    /* No elementary form for d/dk, d/dm -> inert Derivative. */
+    assert_eval_eq("D[WhittakerM[k, m, z], k]",
+                   "Derivative[1, 0, 0][WhittakerM][k, m, z]", 0);
+    assert_eval_eq("D[WhittakerM[k, m, z], m]",
+                   "Derivative[0, 1, 0][WhittakerM][k, m, z]", 0);
+    /* No z-dependence -> 0. */
+    assert_eval_eq("D[WhittakerM[k, m, y], z]", "0", 0);
+}
+
+/* ---- Series at the origin ------------------------------------------- */
+
+void test_whittaker_series_zero() {
+    /* Concrete m = 1/2: integer leading power. */
+    assert_eval_eq("Series[WhittakerM[2, 1/2, x], {x, 0, 6}]",
+        "x - x^2 + 3/8 x^3 - 1/12 x^4 + 5/384 x^5 - 1/640 x^6 + O[x]^7", 0);
+    /* Concrete m = 1: half-integer (Puiseux) leading power. */
+    assert_eval_eq("Series[WhittakerM[3, 1, x], {x, 0, 5}]",
+        "x^(3/2) - x^(5/2) + 13/32 x^(7/2) - 47/480 x^(9/2) + O[x]^(11/2)", 0);
+    /* Symbolic m: the z^(1/2+m) prefactor form. */
+    assert_eval_startswith("Series[WhittakerM[k, m, x], {x, 0, 4}]",
+        "x^(1/2 + m) (1 + ");
+}
+
+/* ---- Series at Infinity (terminating case only) --------------------- */
+
+void test_whittaker_series_infinity() {
+    /* a = m-k+1/2 = -1 is a non-positive integer -> elementary closed form. */
+    assert_eval_eq("Series[WhittakerM[2, 1/2, x], {x, Infinity, 5}]",
+                   "x E^(-1/2 x) (1 - 1/2 x)", 0);
+    /* a = 0 -> M_{1/2,0}(x) = Sqrt[x] E^(-x/2). */
+    assert_eval_eq("Series[WhittakerM[1/2, 0, x], {x, Infinity, 3}]",
+                   "Sqrt[x] E^(-1/2 x)", 0);
+    /* Non-terminating / symbolic: no asymptotic machinery -> stays symbolic. */
+    assert_eval_eq("Series[WhittakerM[1/3, 1/2, x], {x, Infinity, 3}]",
+                   "Series[WhittakerM[1/3, 1/2, x], {x, Infinity, 3}]", 0);
+}
+
+/* ---- SeriesCoefficient ---------------------------------------------- */
+
+void test_whittaker_seriescoefficient() {
+    assert_eval_eq("SeriesCoefficient[WhittakerM[2, 1/2, x], {x, 0, 1}]", "1", 0);
+    assert_eval_eq("SeriesCoefficient[WhittakerM[2, 1/2, x], {x, 0, 2}]", "-1", 0);
+    assert_eval_eq("SeriesCoefficient[WhittakerM[2, 1/2, x], {x, 0, 3}]", "3/8", 0);
+}
+
+/* ---- argument count ------------------------------------------------- */
+
+void test_whittaker_argcount() {
+    assert_eval_eq("WhittakerM[]", "WhittakerM[]", 0);
+    assert_eval_eq("WhittakerM[1, 2]", "WhittakerM[1, 2]", 0);
+    assert_eval_eq("WhittakerM[1, 2, 3, 4]", "WhittakerM[1, 2, 3, 4]", 0);
+}
+
+/* ---- attributes ----------------------------------------------------- */
+
+void test_whittaker_attributes() {
+    SymbolDef* d = symtab_get_def("WhittakerM");
+    ASSERT_MSG(d != NULL, "WhittakerM not registered");
+    ASSERT_MSG((d->attributes & ATTR_LISTABLE) != 0, "WhittakerM not Listable");
+    ASSERT_MSG((d->attributes & ATTR_NUMERICFUNCTION) != 0, "WhittakerM not NumericFunction");
+    ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "WhittakerM not Protected");
+}
+
+int main() {
+    symtab_init();
+    core_init();
+
+    TEST(test_whittaker_special);
+    TEST(test_whittaker_machine_real);
+    TEST(test_whittaker_arbitrary);
+    TEST(test_whittaker_complex);
+    TEST(test_whittaker_listable);
+    TEST(test_whittaker_ndarray);
+    TEST(test_whittaker_compile);
+    TEST(test_whittaker_derivative);
+    TEST(test_whittaker_series_zero);
+    TEST(test_whittaker_series_infinity);
+    TEST(test_whittaker_seriescoefficient);
+    TEST(test_whittaker_argcount);
+    TEST(test_whittaker_attributes);
+
+    printf("All WhittakerM tests passed.\n");
+    return 0;
+}

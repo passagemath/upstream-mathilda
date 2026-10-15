@@ -82,6 +82,11 @@ bool sf_machine_bessel_k(double nu, double x, double* out);     /* BesselK, x > 
 bool sf_machine_polylog(double s, double x, double* out);       /* PolyLog, |x| <= 1 */
 bool sf_machine_lerchphi(double z, double s, double a, double* out);        /* LerchPhi */
 bool sf_machine_hyper1f1(double a, double b, double z, double* out);        /* 1F1 */
+/* WhittakerM M_{k,m}(z) = e^(-z/2) z^(m+1/2) 1F1(m-k+1/2; 2m+1; z), real path.
+ * Declines (false) for z <= 0 (the z^(m+1/2) branch cut -> complex), the 2m+1
+ * non-positive-integer pole, an un-summable 1F1, or a non-finite result, so the
+ * caller falls to the MPFR / symbolic 1F1 template. */
+bool sf_machine_whittaker_m(double k, double m, double z, double* out);     /* WhittakerM */
 bool sf_machine_hyper2f1(double a, double b, double c, double z, double* out); /* 2F1 */
 bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
                     double z, double* out);                    /* HypergeometricPFQ */

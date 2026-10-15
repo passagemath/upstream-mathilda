@@ -6056,6 +6056,42 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         return f_eval;
     }
 
+    /* WhittakerM at the origin has a branch point (leading power z^(m+1/2)), so
+     * the generic Taylor-via-D path bails. Rewrite it to its confluent closed
+     * form Exp[-z/2] z^(m+1/2) Hypergeometric1F1[m-k+1/2, 2m+1, z] and let the
+     * ordinary machinery expand it: the symbolic-power-prefactor pass
+     * (try_factor_power_prefactor) peels z^(m+1/2) -- yielding the
+     * x^(1/2+m)(1 + ... + O[x]^N) Puiseux form for symbolic m, or a plain
+     * SeriesData for a concrete m that makes the exponent an integer -- and
+     * Exp / 1F1 (analytic at 0) expand through series_taylor_via_D. Fires only
+     * when the expansion variable enters WhittakerM through its THIRD argument
+     * (z) and the point is the origin. */
+    if (has_symbol_head(f_eval, "WhittakerM") &&
+        f_eval->data.function.arg_count == 3 && is_lit_zero(x0_eval) &&
+        expr_free_of(f_eval->data.function.args[0], x) &&
+        expr_free_of(f_eval->data.function.args[1], x)) {
+        Expr* K = f_eval->data.function.args[0];
+        Expr* M = f_eval->data.function.args[1];
+        Expr* Z = f_eval->data.function.args[2];
+        Expr* a = mk_plus(mk_plus(expr_copy(M),
+                          mk_times(expr_new_integer(-1), expr_copy(K))),
+                          mk_fn2("Rational", expr_new_integer(1), expr_new_integer(2)));
+        Expr* b = mk_plus(mk_times(expr_new_integer(2), expr_copy(M)),
+                          expr_new_integer(1));
+        Expr* hyp_args[3] = { a, b, expr_copy(Z) };
+        Expr* hyp = mk_fn(mk_symbol("Hypergeometric1F1"), hyp_args, 3);
+        Expr* expfac = mk_fn1("Exp",
+                          mk_times(mk_fn2("Rational", expr_new_integer(-1),
+                                          expr_new_integer(2)), expr_copy(Z)));
+        Expr* zpow = mk_power(expr_copy(Z),
+                          mk_plus(expr_copy(M),
+                                  mk_fn2("Rational", expr_new_integer(1),
+                                         expr_new_integer(2))));
+        Expr* closed = mk_times(mk_times(expfac, zpow), hyp);
+        expr_free(f_eval);
+        f_eval = eval_and_free(closed);
+    }
+
     /* Expansion at -Infinity by reflection: Series[f, {x, -Inf, n}] ==
      * Series[f[x -> -x], {x, +Inf, n}] evaluated, then x -> -x. This reuses the
      * whole +Infinity machinery (special-function asymptotics and the generic
@@ -6107,6 +6143,48 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * substitution would hand a pole to naive Taylor. Emit their known
      * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
     if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity) {
+        /* WhittakerM at +Infinity: only the terminating/elementary case has a
+         * closed form reachable here. When a = m-k+1/2 is a non-positive integer
+         * the 1F1 reduces to a polynomial and M_{k,m}(z) = e^(-z/2) z^(m+1/2) *
+         * poly(z) exactly, so return that (its Normal is itself). The general
+         * asymptotic is a two-scale Stokes transseries with no machinery here, so
+         * a non-terminating / symbolic case falls through and stays unevaluated. */
+        if (has_symbol_head(f_eval, "WhittakerM") &&
+            f_eval->data.function.arg_count == 3 &&
+            expr_free_of(f_eval->data.function.args[0], x) &&
+            expr_free_of(f_eval->data.function.args[1], x) &&
+            expr_eq(f_eval->data.function.args[2], x)) {
+            Expr* K = f_eval->data.function.args[0];
+            Expr* M = f_eval->data.function.args[1];
+            Expr* Z = f_eval->data.function.args[2];
+            Expr* a = mk_plus(mk_plus(expr_copy(M),
+                              mk_times(expr_new_integer(-1), expr_copy(K))),
+                              make_rational(1, 2));
+            Expr* b = mk_plus(mk_times(expr_new_integer(2), expr_copy(M)),
+                              expr_new_integer(1));
+            Expr* hyp_args[3] = { a, b, expr_copy(Z) };
+            Expr* hyp_ev = eval_and_free(mk_fn(mk_symbol("Hypergeometric1F1"),
+                                               hyp_args, 3));
+            /* Terminating iff the 1F1 collapsed to a polynomial, i.e. the result
+             * carries neither the 1F1 head nor the HypergeometricPFQ head it
+             * canonicalises to. A residual PFQ means a NON-terminating closed
+             * form -- returning that would be FunctionExpand, not a series. */
+            Expr* sym1 = mk_symbol("Hypergeometric1F1");
+            Expr* sym2 = mk_symbol("HypergeometricPFQ");
+            bool terminating = expr_free_of(hyp_ev, sym1) && expr_free_of(hyp_ev, sym2);
+            expr_free(sym1); expr_free(sym2);
+            if (terminating) {
+                Expr* expfac = mk_fn1("Exp",
+                                  mk_times(make_rational(-1, 2), expr_copy(Z)));
+                Expr* zpow = mk_power(expr_copy(Z),
+                                  mk_plus(expr_copy(M), make_rational(1, 2)));
+                Expr* out = simp(mk_times(mk_times(expfac, zpow), hyp_ev));
+                expr_free(f_eval); expr_free(x0_eval);
+                return out;
+            }
+            expr_free(hyp_ev);   /* non-terminating: fall through, stays symbolic */
+        }
+
         /* Parametric (scaled) argument: for a recognised head H applied to a
          * homogeneous linear argument c*x (c free of x, sign known under the
          * assumptions), the bare-x emitters below decline (they match only the

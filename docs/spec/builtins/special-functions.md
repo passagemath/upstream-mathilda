@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, and the physicists' Hermite polynomials `HermiteH`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, and the Whittaker function `WhittakerM`.
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -2006,6 +2006,58 @@ Out[3]= 8.19319371305915*10^98
 
 In[4]:= D[HermiteH[n, z], z]
 Out[4]= 2 n HermiteH[-1 + n, z]
+```
+
+## WhittakerM
+
+`WhittakerM[k, m, z]` gives the Whittaker function `M_{k,m}(z)`, a solution of
+Whittaker's equation `y'' + (-1/4 + k/z + (1/4 - m²)/z²) y = 0`. It is related to
+the Kummer confluent hypergeometric function by `M_{k,m}(z) = e^(-z/2) z^(m+1/2)
+Hypergeometric1F1[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
+
+- **Numerics.** With at least one inexact argument the value is computed through
+  the confluent form at machine or arbitrary (MPFR) precision, real or complex:
+  `WhittakerM[2, 3, 4.5] = 68.967`, `N[WhittakerM[2, 1/3, 1/7], 100]` is accurate
+  to 100 digits, `N[WhittakerM[4/5, 2 - I, 2]] = 3.27958 - 3.25602 I`, and
+  `WhittakerM[2, 3 - I, 4.5] = -18.2886 - 74.6279 I`. A negative or complex `z`
+  returns the complex value off the `z^(m+1/2)` branch cut.
+- **Special value.** `M_{k,m}(0) = 0` for `Re(m) > -1/2` (the leading power is
+  `z^(m+1/2)`), so `WhittakerM[1, 1, 0] = 0` and `WhittakerM[0, 0, 0] = 0`.
+- **Derivative.** `D[WhittakerM[k, m, z], z] = (1/2 - k/z) WhittakerM[k, m, z] +
+  ((1/2 + k + m)/z) WhittakerM[k+1, m, z]` (DLMF 13.4.27); `d/dk` and `d/dm` have
+  no elementary form and stay as inert `Derivative[1,0,0][WhittakerM][...]` /
+  `Derivative[0,1,0][...]`.
+- **Series.** At the origin the `z^(1/2+m)` Puiseux form is produced for both a
+  concrete and a symbolic `m`, e.g. `Series[WhittakerM[2, 1/2, x], {x, 0, 6}] = x
+  - x² + 3/8 x³ - 1/12 x⁴ + 5/384 x⁵ - 1/640 x⁶ + O[x]⁷` and
+  `Series[WhittakerM[k, m, x], {x, 0, 4}] = x^(1/2+m) (1 + ... + O[x]⁵)`. At
+  Infinity only the *terminating* (elementary) case — `m-k+1/2` a non-positive
+  integer — is produced, as the exact closed form, e.g.
+  `Series[WhittakerM[2, 1/2, x], {x, Infinity, 5}] = x E^(-x/2) (1 - x/2)`;
+  `SeriesCoefficient` at the origin follows for a concrete `m`.
+- **Listable.** `WhittakerM[2, 3, {1.5, 2.5, 3.5}] = {2.76149, 13.0096, 34.2394}`.
+- **Performance (machine reals).** A real machine-precision argument uses a
+  hardware-`double` kernel shared bit-for-bit with the NDArray / packed fast path
+  and `Compile[]` (`CompileDiagnostics[{{x,_Real},{y,_Real},{z,_Real}},
+  WhittakerM[x,y,z]]` reports `Compiled -> True`). A complex or arbitrary-precision
+  argument, or `z ≤ 0`, falls back to the confluent-form evaluator.
+
+The general (non-terminating) asymptotic at Infinity — a two-scale Stokes
+transseries — is not produced, `FunctionExpand` is not yet available, and the
+generic `Interval[]` threading declines (the derivative is self-referential), so
+`WhittakerM` over an `Interval[]` stays symbolic.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= WhittakerM[2, 3, 4.5]
+Out[1]= 68.967
+
+In[2]:= D[WhittakerM[k, m, z], z]
+Out[2]= ((1/2 + k + m) WhittakerM[1 + k, m, z])/z + (1/2 - k/z) WhittakerM[k, m, z]
+
+In[3]:= Series[WhittakerM[2, 1/2, x], {x, 0, 6}]
+Out[3]= x - x^2 + 3/8 x^3 - 1/12 x^4 + 5/384 x^5 - 1/640 x^6 + O[x]^7
 ```
 
 ## LegendreP

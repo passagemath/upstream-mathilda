@@ -1202,6 +1202,19 @@ void info_init(void) {
         "H_n(0) = 2^n Sqrt[Pi]/Gamma[(1-n)/2]. D[HermiteH[n,x],x] =\n"
         "2 n HermiteH[n-1,x]; Series (including at Infinity) and SeriesCoefficient\n"
         "are supported. Listable.");
+    symtab_set_docstring("WhittakerM",
+        "WhittakerM[k, m, z]\n"
+        "\tgives the Whittaker function M_{k,m}(z).\n"
+        "Related to the Kummer confluent hypergeometric function by\n"
+        "M_{k,m}(z) = E^(-z/2) z^(m+1/2) Hypergeometric1F1[m-k+1/2, 2m+1, z]. With\n"
+        "an inexact argument it evaluates numerically at machine or arbitrary\n"
+        "(MPFR) precision, real or complex, through that confluent form; a real\n"
+        "machine argument uses a shared double kernel that also drives the\n"
+        "NDArray/packed fast path and Compile[]. Special value: M_{k,m}(0) = 0 for\n"
+        "Re(m) > -1/2. D[WhittakerM[k,m,z],z] = (1/2-k/z) WhittakerM[k,m,z] +\n"
+        "((1/2+k+m)/z) WhittakerM[k+1,m,z]. Series at the origin (the z^(1/2+m)\n"
+        "Puiseux form) is supported; Series at Infinity only for the terminating\n"
+        "(elementary) case. Listable.");
     symtab_set_docstring("LegendreQ",
         "LegendreQ[n, x]\n"
         "\tgives the Legendre function of the second kind Q_n(x).\n"

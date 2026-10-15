@@ -392,6 +392,7 @@ set(COMMON_SRC
     ../src/special_functions/chebyshev_u.c
     ../src/special_functions/laguerre_l.c
     ../src/special_functions/hermite_h.c
+    ../src/special_functions/whittaker.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
     ../src/special_functions/bessel.c
@@ -3603,6 +3604,10 @@ add_test(NAME laguerre_l_tests COMMAND laguerre_l_tests)
 add_executable(hermite_h_tests test_hermite_h.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hermite_h_tests PRIVATE ../src)
 add_test(NAME hermite_h_tests COMMAND hermite_h_tests)
+
+add_executable(whittaker_tests test_whittaker.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(whittaker_tests PRIVATE ../src)
+add_test(NAME whittaker_tests COMMAND whittaker_tests)
 
 add_executable(airyai_tests test_airyai.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(airyai_tests PRIVATE ../src)

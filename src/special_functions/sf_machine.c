@@ -1287,6 +1287,28 @@ bool sf_machine_hyper1f1(double a, double b, double z, double* out) {
     return sf_machine_pfq(&a, 1, &b, 1, z, out);
 }
 
+/* WhittakerM M_{k,m}(z) = e^(-z/2) z^(m+1/2) 1F1(m-k+1/2; 2m+1; z).
+ *
+ * Real machine path. Declines (returns false) for z <= 0 (the z^(m+1/2) prefactor
+ * has a branch cut along the negative real axis and the value is generally
+ * complex -- handled by the scalar/MPFR 1F1 template instead), and relays the
+ * 1F1 kernel's own declines (the 2m+1 = non-positive-integer pole, and bad
+ * ascending-series cancellation at large z). A single growing PRODUCT, so no
+ * cancellation beyond 1F1's own: pow overflow / exp underflow are caught by the
+ * final isfinite check. Shared bit-for-bit with the NDArray kernel and Compile VM
+ * (ndkernels.c ndk_WhittakerM_n) and the scalar machine fast path. */
+bool sf_machine_whittaker_m(double k, double m, double z, double* out) {
+    if (!(z > 0.0)) return false;              /* z <= 0 (and NaN) -> complex / template */
+    double a = m - k + 0.5;
+    double b = 2.0 * m + 1.0;
+    double h;
+    if (!sf_machine_hyper1f1(a, b, z, &h)) return false;   /* pole & cancellation declined inside */
+    double v = exp(-0.5 * z) * pow(z, m + 0.5) * h;
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
 /* 2F1(a, b; c; z), |z| < 1 by the defining series.  Outside the disc the
  * function needs a connection formula and may be complex, so the kernel
  * declines and the MPFR path answers. */

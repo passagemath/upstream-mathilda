@@ -861,6 +861,10 @@ static void pack_mark_aware_heads(void) {
          * in its own right by the List path. */
         "HypergeometricPFQ", "Hypergeometric0F1",
         "Hypergeometric1F1", "Hypergeometric2F1",
+        /* WhittakerM[k, m, z] holds the buffer z (the gate fires at the head, and
+         * its builtin threads sf_machine_whittaker_m over the buffer directly).
+         * Not int64_ok: the 1F1 series runs in double. */
+        "WhittakerM",
         /* ArrayPlot reads its data table straight off the buffer via
          * na_load_matrix (src/graphics/arrayplot.c, the same loader Fit and
          * DesignMatrix use above) when given an EXPR_NDARRAY, so the gate

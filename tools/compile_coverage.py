@@ -333,6 +333,11 @@ BASELINE = {
     "MoebiusMu", "EulerPhi", "DivisorSigma", "PowerMod",
     # Ternary/n-ary special function with a machine kernel and no lowering.
     "LerchPhi",
+    # WhittakerM[k, m, z]: has a machine N-ary kernel and genuinely compiles via
+    # the generic OP_KERNN path (verify with a 3-scalar-arg CompileDiagnostics),
+    # but the SHAPES table below tops out at two scalar args, so the tool cannot
+    # construct a probe for it -- reported-not-enforced, exactly like LerchPhi.
+    "WhittakerM",
     # The elementwise sign predicates.  Now that NDT_BOOL exists (§13 gap C.1
     # closed) they produce a packed bool array, so a compiled ARRAY form is
     # finally possible — an elementwise compare-to-zero writing CT_BOOL elements

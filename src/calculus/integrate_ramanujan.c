@@ -2455,6 +2455,108 @@ static int match_one_minus_xpow(Expr* G, const Expr* x, Expr** dexp) {
     return 0;                                                       /* 1 + x^d, etc. */
 }
 
+/* Like match_one_minus_xpow but also matches 1 + x^d (returns +2) and a bare
+ * denominator x (d = 1, written without an explicit Power).  Codes:
+ *   +1  1 - x^d   (on-axis pole, PV)
+ *   -1  x^d - 1   (on-axis pole, PV)
+ *   +2  1 + x^d   (poles off the positive axis, convergent -- no PV) */
+static int match_pm1_xpow(Expr* G, const Expr* x, Expr** dexp) {
+    if (!head_name_is(G, "Plus") || G->data.function.arg_count != 2) return 0;
+    Expr* t0 = G->data.function.args[0];
+    Expr* t1 = G->data.function.args[1];
+    Expr* cst = NULL; Expr* xterm = NULL;
+    if (t0->type == EXPR_INTEGER && (t0->data.integer == 1 || t0->data.integer == -1)) { cst = t0; xterm = t1; }
+    else if (t1->type == EXPR_INTEGER && (t1->data.integer == 1 || t1->data.integer == -1)) { cst = t1; xterm = t0; }
+    if (!cst) return 0;
+    long cval = (long) cst->data.integer;
+    int sign_x = 1; Expr* pw = xterm;
+    if (head_name_is(xterm, "Times") && xterm->data.function.arg_count == 2 &&
+        xterm->data.function.args[0]->type == EXPR_INTEGER &&
+        xterm->data.function.args[0]->data.integer == -1) {
+        sign_x = -1; pw = xterm->data.function.args[1];
+    }
+    Expr* d = NULL;
+    if (expr_eq(pw, (Expr*)x)) d = mk_int(1);                        /* bare x -> d = 1 */
+    else if (head_name_is(pw, "Power") && pw->data.function.arg_count == 2 &&
+             expr_eq(pw->data.function.args[0], (Expr*)x) &&
+             !contains_symbol(pw->data.function.args[1], x)) d = cp(pw->data.function.args[1]);
+    if (!d) return 0;
+    if (cval == 1 && sign_x == -1) { *dexp = d; return +1; }         /* 1 - x^d */
+    if (cval == -1 && sign_x == 1) { *dexp = d; return -1; }         /* x^d - 1 */
+    if (cval == 1 && sign_x == 1)  { *dexp = d; return +2; }         /* 1 + x^d */
+    expr_free(d);
+    return 0;
+}
+
+/* Log-weighted Mellin  Integrate[C x^(c-1) Log[x]^k / D, {x,0,Inf}], k >= 1,
+ * D in {1 - x^d, x^d - 1, 1 + x^d}.  The base Mellin M(s) = Integrate[C x^(s-1)/D]:
+ *   1 - x^d :  C (Pi/d) Cot[s Pi/d]   (PV; on-axis pole at x = 1)
+ *   x^d - 1 : -C (Pi/d) Cot[s Pi/d]   (PV)
+ *   1 + x^d :  C (Pi/d) Csc[s Pi/d]   (convergent; poles off the positive axis)
+ * and  Integrate[... Log[x]^k ...] = d^k/ds^k M(s) |_{s=c}  (differentiating the
+ * Mellin weight x^(s-1) under the integral).  The on-axis (Cot) forms require
+ * PrincipalValue; the 1 + x^d (Csc) form does not.  Strip 0 < c < d.  k >= 1 keeps
+ * this disjoint from the k = 0 Mellin handlers (mellinpv_oneminus, Ramanujan). */
+Expr* integrate_mellin_logpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                                  bool principal_value, Expr* assumptions) {
+    if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
+    if (!is_zero_expr(a) || !is_pos_inf(b)) return NULL;
+
+    Expr* facs[32]; size_t nf = collect_factors(f, facs, 32, 0);
+    Expr* C = mk_int(1); Expr* xexp = mk_int(0); Expr* dexp = NULL;
+    int form = 0; long k = 0; bool bad = false;
+    for (size_t i = 0; i < nf && !bad; i++) {
+        Expr* fe = facs[i];
+        if (free_of_x_now(fe, x)) { C = Tms(C, cp(fe)); continue; }
+        if (expr_eq(fe, (Expr*)x)) { xexp = Pls(xexp, mk_int(1)); continue; }
+        if (head_name_is(fe, "Log") && fe->data.function.arg_count == 1 &&
+            expr_eq(fe->data.function.args[0], (Expr*)x)) { k += 1; continue; }
+        if (head_name_is(fe, "Power") && fe->data.function.arg_count == 2) {
+            Expr* base = fe->data.function.args[0];
+            Expr* ex   = fe->data.function.args[1];
+            if (expr_eq(base, (Expr*)x) && free_of_x_now(ex, x)) { xexp = Pls(xexp, cp(ex)); continue; }
+            if (head_name_is(base, "Log") && base->data.function.arg_count == 1 &&
+                expr_eq(base->data.function.args[0], (Expr*)x) &&
+                ex->type == EXPR_INTEGER && ex->data.integer >= 1) { k += ex->data.integer; continue; }
+            if (!dexp && ex->type == EXPR_INTEGER && ex->data.integer == -1) {
+                int fm = match_pm1_xpow(base, x, &dexp);
+                if (fm) { form = fm; continue; }
+            }
+        }
+        bad = true;
+    }
+    if (bad || !dexp || form == 0 || k < 1) {
+        expr_free(C); expr_free(xexp); if (dexp) expr_free(dexp); return NULL;
+    }
+    bool needs_pv = (form == 1 || form == -1);          /* on-axis pole -> PV only */
+    if (needs_pv && !principal_value) { expr_free(C); expr_free(xexp); expr_free(dexp); return NULL; }
+
+    Expr* c = simp(Pls(xexp, mk_int(1)));               /* c = (x-exponent) + 1 */
+    bool conv = prove_true(Gt(cp(c), mk_int(0)), assumptions) &&
+                prove_true(Gt(cp(dexp), cp(c)), assumptions);   /* 0 < c < d */
+    if (!conv) { expr_free(C); expr_free(c); expr_free(dexp); return NULL; }
+
+    /* base M(s) = C sgn (Pi/d) {Cot|Csc}[s Pi/d] */
+    Expr* s = mk_sym("Integrate`ML`s");
+    Expr* arg = Tms(cp(s), Tms(mk_sym("Pi"), Pw(cp(dexp), mk_int(-1))));
+    Expr* basefn = (form == 2) ? mk_fn1("Csc", arg) : mk_fn1("Cot", arg);
+    int sgn = (form == -1) ? -1 : 1;
+    Expr* piOverD = Tms(mk_sym("Pi"), Pw(cp(dexp), mk_int(-1)));
+    Expr* M = Tms(cp(C), Tms(mk_int(sgn), Tms(piOverD, basefn)));
+    expr_free(C); expr_free(dexp);
+
+    /* d^k/ds^k M(s), then s -> c. */
+    Expr* Mk = eval_take(mk_fn2("D", M, mk_fn2("List", cp(s), mk_int(k))));  /* consumes M */
+    Expr* at = Mk ? eval_take(mk_fn2("ReplaceAll", Mk,
+                        mk_fn2("Rule", cp(s), cp(c)))) : NULL;
+    expr_free(s); expr_free(c);
+    if (!at) return NULL;
+    Expr* val = assumptions ? simp2(at, assumptions) : simp(at);
+    if (val && (contains_symbol(val, x) || contains_symbol_name(val, "Integrate`ML`s") ||
+                !is_finite_value(val))) { expr_free(val); val = NULL; }
+    return val;
+}
+
 /* Cauchy principal value  Integrate[C x^(c-1)/(1 - x^d), {x,0,Inf}, PV]
  *   = C (Pi/d) Cot[c Pi/d],   0 < Re c < d   (the on-axis pole at x=1 taken as a
  * principal value).  The d-th-root-of-unity poles make the residue root-finder

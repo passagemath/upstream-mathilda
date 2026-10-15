@@ -735,6 +735,21 @@ static bool match_kernel(Expr* e, Expr* x, KernelKind* kind, double* a) {
     return true;
 }
 
+/* True if e contains a free parameter -- any symbol other than the integration
+ * variable x (the head operator symbols Times/Plus/Cos/... are skipped).  Used to
+ * tell a numeric kernel frequency / pole location (Cos[2 x], the pole x=3) from a
+ * symbolic one (Cos[a x], the pole x=b). */
+static bool res_has_param(const Expr* e, const Expr* x) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name != x->data.symbol.name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_FUNCTION
+        && res_has_param(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (res_has_param(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
 
@@ -783,6 +798,11 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
      * Using the exact u (not the numeric freq) keeps residues exact. */
     Expr* kernel = factors[kidx];   /* borrowed: original Cos/Sin/Exp/Power[E,.] factor */
     Expr* u = kernel_arg(kernel);   /* args[0] for Cos/Sin/Exp; the exponent for Power[E,.] */
+    /* A NUMERIC kernel frequency (Cos[x], Exp[I x]) feeds the series-based residue
+     * engine a numeric exponent, which it mishandles at a SYMBOLIC pole (the
+     * negated pole's e^{i z0} collapses to 1).  Symbolic frequency is exact, so we
+     * only decline the PV half-residue for numeric-frequency + symbolic-pole. */
+    bool freq_numeric = !res_has_param(u, x);
     Expr* expo = (kind == KERN_EXP) ? expr_copy(u)
                                     : mk_fn2("Times", mk_sym(SYM_I), expr_copy(u));
     Expr* g = eval_take(mk_fn2("Times", expr_copy(R), mk_fn1("Exp", expo)));
@@ -796,6 +816,8 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!solve_roots(Q, x, &roots)) { expr_free(Q); expr_free(g); return NULL; }
 
     bool bad = false;
+    bool axis_removable = false;   /* a real pole where the kernel vanishes (Sin[x]/x) */
+    bool axis_pv = false;          /* a genuine real pole admitted only via PrincipalValue */
     for (size_t i = 0; i < roots.n && !bad; i++) {
         double re, im;
         if (!res_reim(roots.v[i], &re, &im)) { bad = true; break; }
@@ -804,20 +826,42 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
         bool other    = up ? (im < -RES_TOL * mag) : (im > RES_TOL * mag);
         if (enclosed) ev_push(&keep, expr_copy(roots.v[i]));
         else if (other) { /* opposite half-plane: not enclosed */ }
-        else {   /* real axis: valid only as a removable singularity of f */
-            /* A real pole of R gives an integrable f = R.K only when it is simple
-             * AND the kernel vanishes there (e.g. Sin[x]/x at 0); the half residue
-             * then equals the indented-contour contribution.  Otherwise f has a
-             * genuine axis pole and the ordinary integral diverges -> bail.  The
-             * a<0 (lower-plane) closure is not handled for on-axis poles. */
-            if (!up ||
-                !res_simple_root(Q, x, roots.v[i]) ||
-                !res_kernel_vanishes_at(kernel, x, roots.v[i])) { bad = true; break; }
+        else {   /* real axis */
+            /* A real pole of R gives an integrable f = R.K when it is simple AND the
+             * kernel vanishes there (e.g. Sin[x]/x at 0); the half residue then
+             * equals the indented-contour contribution.  Under PrincipalValue the
+             * kernel need NOT vanish: a simple genuine axis pole contributes the
+             * Cauchy principal value as the indented half-residue (the weight-1 term
+             * below), exactly as for a removable pole.  R has real coefficients, so
+             * R(x) is real on the axis and PV[R.Cos]=Re(PV[R.e^{iax}]),
+             * PV[R.Sin]=Im(...), so the Re/Im split below carries the PV through.
+             * The pole must be SIMPLE either way (a double axis pole makes the Cauchy
+             * PV diverge as 2A/eps).  For PV both closures are valid: the half-residue
+             * is oriented by `sign` (J = Pi I sign S) below, so the lower-plane case
+             * (Exp[-I a x], freq<0) is -iPi.Res and the upper case +iPi.Res.  The
+             * non-PV removable case stays upper-plane-only (its original scope). */
+            if (!res_simple_root(Q, x, roots.v[i])) { bad = true; break; }
+            bool vanishes = res_kernel_vanishes_at(kernel, x, roots.v[i]);
+            if (up && vanishes)      axis_removable = true;   /* removable, either plane scope */
+            else if (g_pv) {
+                /* Decline the residue-engine's broken numeric-freq + symbolic-pole
+                 * combination; it falls through to a handler that closes it. */
+                if (freq_numeric && res_has_param(roots.v[i], x)) { bad = true; break; }
+                axis_pv = true;                                /* genuine PV axis pole */
+            }
+            else { bad = true; break; }
             ev_push(&realp, expr_copy(roots.v[i]));
         }
     }
     ev_free(&roots);
     expr_free(Q);
+    /* A removable axis pole mixed with a genuine PV axis pole makes the Cos/Sin
+     * Re/Im assembly below unreliable (the removable half-residue of the lifted
+     * Exp integrand is purely imaginary and contaminates the Re/Im split): decline
+     * the mix for the trig kernels so the result is UNEVALUATED rather than wrong.
+     * The pure-PV case (only genuine axis poles) and the pure-removable case are
+     * both sound; the Exp kernel takes J directly and needs no Re/Im split. */
+    if (!bad && axis_removable && axis_pv && kind != KERN_EXP) bad = true;
     if (bad || keep.n + realp.n == 0) {
         expr_free(g); ev_free(&keep); ev_free(&realp); return NULL;
     }
@@ -1915,6 +1959,7 @@ static Expr* mellin_core(Expr* F, Expr* v) {
      * reserved for exactly the poles that need it. */
     Expr* Sigma = mk_int(0);
     bool bad = false;
+    bool axis_pv_used = false;   /* an on-axis Cauchy PV half-residue was taken */
     for (size_t i = 0; i < roots.n && !bad; i++) {
         Expr* z = roots.v[i];
         double zre, zim;
@@ -1934,6 +1979,7 @@ static Expr* mellin_core(Expr* F, Expr* v) {
         if (on_axis && !simple) { bad = true; break; }   /* higher-order axis pole: divergent PV */
         Expr* contrib;
         if (on_axis) {
+            axis_pv_used = true;
             /* Cauchy PV half-residue: the contour indents around z0 above and
              * below the cut, so the pole contributes the AVERAGE of its two
              * keyhole-branch values  z0^p (arg 0)  and  z0^p e^(2 pi i p)
@@ -1986,6 +2032,17 @@ static Expr* mellin_core(Expr* F, Expr* v) {
         value = alg ? ev1("Simplify", mk_fn2("Times", mk_sym(SYM_Pi), alg)) : NULL;
     }
     if (!value) return NULL;
+
+    /* A Cauchy PV of a real-exponent, real-coefficient integrand is REAL, but the
+     * on-axis half-residue's (1 + e^(2 pi i p)) average can leave an uncancelled
+     * imaginary part that Simplify does not discharge for a scaled pole z0 = b != 1
+     * (e.g. x^(a-1)/(x^2-b^2) PV picks up a spurious +i (Pi/2) b^(a-2)).  The exact
+     * value is the real part, so project it.  A no-op when the form is already real
+     * (the b = 1 cases), and only applied when an on-axis PV was actually taken. */
+    if (axis_pv_used) {
+        Expr* reval = ev1("Simplify", ev1("ComplexExpand", mk_fn1("Re", expr_copy(value))));
+        if (reval) { expr_free(value); value = reval; }
+    }
 
     double vv, re, im;
     bool ok = res_is_real_scalar(value, v, &vv) || res_is_finite_scalar(value, v, &re, &im);
@@ -2056,6 +2113,14 @@ static bool mellin_log_split(Expr* F, Expr* v, Expr** p_out, int* m_out, Expr** 
     }
     if (m == 0) { if (p) expr_free(p); ev_free(&rest); return false; }  /* no log: not us */
     if (!p) p = mk_int(0);
+    /* A SYMBOLIC exponent (x^(a-1), a a free parameter) is not this family's job:
+     * the fold v^p R becomes non-rational in p and the contour value blows up to
+     * ComplexInfinity -- the Mellin x^(c-1) Log^m / (1 +/- x^d) handler
+     * (integrate_mellin_logpow_try) owns that and is correct for symbolic c.  A
+     * CONCRETE non-integer p (e.g. Sqrt[x], p = 1/2) is fine: the keyhole-log's
+     * mellin_branch path handles the fractional power, so only reject a p that
+     * carries a free parameter, not every non-integer. */
+    if (res_has_param(p, v)) { expr_free(p); ev_free(&rest); return false; }
 
     Expr* R;
     if (rest.n == 0) R = mk_int(1);

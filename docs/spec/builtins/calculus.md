@@ -2665,7 +2665,29 @@ symbolic-exponent contours:
   pole: `Integrate[1/(x³−a³), {x,0,∞}, PrincipalValue -> True, Assumptions ->
   a>0] = −π/(3√3 a²)`, `∫₀^∞ x²/(x⁴−a⁴) = π/(4a)`.  It runs before the even-fold,
   so the even members route to the keyhole rather than the rational family's
-  divergence preemption.
+  divergence preemption.  A scaled positive-axis pole (`z₀ = b ≠ 1`) is handled
+  too: the `(1 + e^{2πip})` branch average can leave a spurious imaginary part that
+  `Simplify` does not discharge for symbolic `b`, so a real-integrand on-axis PV is
+  projected onto its (provably real) real part — `∫₀^∞ x^(a−1)/(x²−b²) PV =
+  −(π/(2b^{2−a})) Cot[πa/2]`.
+- **Whole-line oscillatory principal value** — `Integrate[R(x){Cos,Sin,Exp[I a x]},
+  {x,−∞,∞}, PrincipalValue -> True]` with `R` rational and a **simple genuine**
+  pole on the real axis.  Closing in the half-plane Jordan's lemma selects (`a > 0`
+  upper, `a < 0` lower), the axis pole contributes the indented half-residue
+  `±iπ·Res` oriented by the closure: `∫ Exp[I a x]/(x−b) dx = iπ e^{iab}`,
+  `∫ Exp[I a x]/(x²−b²) = −π Sin[ab]/b`, `∫ x Exp[I a x]/(x²−b²) = iπ Cos[ab]`;
+  `R·Cos`/`R·Sin` take the real/imaginary part (`R` real on the axis), and the
+  even members fold to the half-line — `∫₀^∞ Cos[a x]/(x²−b²) PV = −π Sin[ab]/(2b)`,
+  `∫₀^∞ x Sin[a x]/(x²−b²) PV = π Cos[ab]/2`.  A removable pole mixed with a genuine
+  PV pole declines (the Re/Im split is unreliable there), as does a double axis pole
+  (divergent PV).
+- **Log-weighted Mellin on `(0, ∞)`** — `Integrate[x^(c−1) Log[x]^k/(1 ∓ x^d), {x,
+  0,∞}]`, `k ≥ 1`: the `k`-th derivative in the Mellin exponent of the base value
+  (`(π/d)Cot[cπ/d]` for `1 − x^d`, taken as a principal value; `(π/d)Csc[cπ/d]` for
+  the convergent `1 + x^d`), evaluated at `s = c` — `∫₀^∞ Log[x] x^(a−1)/(x+1) =
+  −π² Csc[πa] Cot[πa]`, `∫₀^∞ Log[x]² x^(a−1)/(x+1) = π³ Csc[πa]³ (1 + Cos[πa]²)`,
+  `∫₀^∞ Log[x] x^(a−1)/(x−1) PV = π² Csc[πa]²`.  The strip `0 < c < d` is proved
+  against the assumptions.
 - **Finite interval `(-1, 1)` with the Chebyshev weight** — `Integrate[R(x) /
   Sqrt[1 - x^2], {x, -1, 1}]`, `R` rational: `x = Cos[t]` maps it to
   `(1/2) ∫₀^{2π} R(Cos t) dt`, evaluated by the unit-circle family.  It runs in

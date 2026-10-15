@@ -1382,6 +1382,12 @@ static Expr* integrate_definite(Expr* res) {
             /* Euler-Beta: x^(k-1)(1-x)^(l-1) [Log weights] on [0,1]; then the
              * Euler->Beta*2F1 generalization with one extra linear factor
              * (alpha+beta x)^e. */
+            /* Half-line x^(c-1) Log[x]^k / (1 +/- x^d): d^k/ds^k of the base Csc/Cot
+             * Mellin at s = c.  Tightly gated to [0,Inf) and that exact shape.  Runs
+             * after residue (its convergence prover needs the assumption context
+             * residue sets up) but before the [0,1] Beta/series block. */
+            if (!r && !has_undef && mech == METHOD_AUTOMATIC)
+                r = integrate_mellin_logpow_try(cur, x, a, b, principal_value, assumptions);
             /* Log-weighted rational x^(c-1) Log[x]^n/(1-x^m) on [0,1] -- the l=0
              * limit the Beta stage cannot represent; runs first so it also
              * avoids the spurious Beta[c,0]=ComplexInfinity Infinity::indet. */

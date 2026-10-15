@@ -4793,6 +4793,20 @@ endif()
 add_test(NAME mse_trick_corpus_tests
          COMMAND mse_trick_corpus_tests ../MseTrickIntegralsCorpus.m)
 
+# Cauchy principal-value definite-integral stress battery (fractional branch cuts
+# over real poles, log branch cuts, trig/oscillatory poles, higher-order poles).
+# Same fork + per-case-timeout harness; WRONG baseline ratchets 4 -> 0.
+add_executable(principal_value_corpus_tests test_principal_value_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(principal_value_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(principal_value_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(principal_value_corpus_tests build_ecm)
+else()
+    target_link_libraries(principal_value_corpus_tests gmp m)
+endif()
+add_test(NAME principal_value_corpus_tests
+         COMMAND principal_value_corpus_tests ../PrincipalValueIntegralsCorpus.m)
+
 add_executable(readwrite_tests test_readwrite.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readwrite_tests PRIVATE ../src)
 if(USE_ECM)

@@ -74,6 +74,12 @@ Expr* integrate_ratlogpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
 Expr* integrate_mellinpv_oneminus_try(Expr* f, Expr* x, Expr* a, Expr* b,
                                       bool principal_value, Expr* assumptions);
 
+/* Log-weighted Mellin Integrate[C x^(c-1) Log[x]^k / (1 +/- x^d), {x,0,Inf}],
+ * k >= 1 = d^k/ds^k of the base (Cot / Csc) Mellin at s = c.  The on-axis (Cot)
+ * forms need PrincipalValue; the 1 + x^d (Csc) form does not. */
+Expr* integrate_mellin_logpow_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                                  bool principal_value, Expr* assumptions);
+
 /* Whole-line Integrate[C Log[Abs[al x + be]]/(E x^2 + D), {x,-Inf,Inf}]
  * = (C/E)(Pi/p)(Log[Abs[al]] + (1/2)Log[r^2+p^2]), p=Sqrt[D/E], r=-be/al. */
 Expr* integrate_logabs_quad_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions);

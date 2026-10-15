@@ -660,6 +660,27 @@ void test_long_string_literal_not_truncated() {
     printf("PASS: long string literals and symbol names are not truncated\n");
 }
 
+/* A '[' with no head in front of it is a syntax error. It used to parse to
+ * an EXPR_FUNCTION with a NULL head, and `f[x,[x]]` then segfaulted in
+ * evaluate_step. Part (`g[[x]]`) and curried calls (`f[x][y]`) are
+ * postfix on a real head and must be unaffected. */
+void test_parse_headless_bracket() {
+    const char* bad[] = { "f[x,[x]]", "[x]", "{[x]}", "x + [y]", "a; [y]" };
+    for (size_t i = 0; i < sizeof(bad)/sizeof(bad[0]); i++) {
+        Expr* e = parse_expression(bad[i]);
+        ASSERT_MSG(e == NULL, "expected syntax error for '%s'", bad[i]);
+        if (e) expr_free(e);
+    }
+    const char* good[] = { "g[[x]]", "f[x][y]", "f[x, Sqrt[x]]" };
+    for (size_t i = 0; i < sizeof(good)/sizeof(good[0]); i++) {
+        Expr* e = parse_expression(good[i]);
+        ASSERT_MSG(e != NULL && e->type == EXPR_FUNCTION
+                   && e->data.function.head != NULL,
+                   "expected a headed function for '%s'", good[i]);
+        expr_free(e);
+    }
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -689,6 +710,7 @@ int main() {
     TEST(test_parentheses_break_comparison_chains);
     TEST(test_unparenthesised_chains_still_chain);
     TEST(test_long_string_literal_not_truncated);
+    TEST(test_parse_headless_bracket);
 
     printf("\nAll parser tests passed!\n");
     return 0;

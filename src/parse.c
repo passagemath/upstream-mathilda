@@ -875,6 +875,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
         if (!arg) {
             while (count--) expr_free(args[count]);
             free(args);
+            expr_free(head);  /* we own the head; the caller drops it on NULL */
             return NULL;
         }
         if (count >= cap) {
@@ -888,6 +889,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
         fprintf(stderr, "Expected ']' to close function\n");
         while (count--) expr_free(args[count]);
         free(args);
+        expr_free(head);
         return NULL;
     }
     s->pos++;  // Skip ']'
@@ -1176,7 +1178,13 @@ static Expr* parse_primary(ParserState* s) {
     switch (*s->pos) {
         case '"': return parse_string(s);
         case '{': return parse_list(s);
-        case '[': return parse_function(s, NULL);  // Anonymous function
+        /* A bare '[' cannot start an expression: there is no head to apply.
+         * Mathematica reports `f[x,[x]]` as a syntax error, and so do we.
+         * (This used to build an EXPR_FUNCTION with a NULL head, which the
+         * evaluator then dereferenced -- a segfault.) `g[[x]]` (Part) and
+         * `f[x]` never reach here: both are consumed as postfix operators on
+         * an already-parsed head. */
+        case '[': return NULL;
         case '(': {
             s->pos++;
             s->bracket_depth++;
@@ -1744,7 +1752,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         
         Expr* right = parse_expression_prec(s, next_min_prec);
         if (!right) {
-            if (op_def.type == OP_COMPOUND) {
+            skip_whitespace(s);
+            if (op_def.type == OP_COMPOUND && *s->pos != '[') {
+                /* `a;` -- the omitted last statement is an implicit Null.
+                 * A bare '[' here (`a; [y]`) is a syntax error, not an
+                 * implicit Null followed by a call on the compound. */
                 right = expr_new_symbol(SYM_Null);
             } else {
                 expr_free(left);

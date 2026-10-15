@@ -4493,3 +4493,12 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 - **Always keep a genuine-signal control in the verification**: `1/0`, `1/(x-x)` must
   still warn and still be caught by `Check` after the fix — proves the mute is scoped to
   the probe, not blanket. See memory [[feedback-internal-numeric-probe-must-mute-arith-warnings]].
+
+## 2026-10-15 — Parser segfault `f[x,[x]]` (issue #89): over-scoped verification
+- **Mistake**: ran the full ctest suite for a parser change that only rejects invalid
+  input, then spent ~30 min A/B-ing pre-existing `dsolve_corpus` failures (they fail
+  identically on HEAD).
+- **Rule**: scope verification to what the change can reach. An error-path-only parser
+  change → parser test binaries + a regression unit test + a valgrind run on the error
+  path. Full suite only when valid-input parse/eval/print behaviour changes. See memory
+  [[scope-tests-to-change]].

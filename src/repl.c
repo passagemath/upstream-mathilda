@@ -720,7 +720,11 @@ static void pipe_emit_line(int id, int line) {
     pipe_emit(buf);
 }
 
-/* {"id":N,"type":<kind>,"<field>":"<escaped text>"} for `len` bytes of `text`. */
+/* {"id":N,"type":<kind>,"<field>":"<escaped text>"} for `len` bytes of `text`.
+ * Only reached from the fd-redirect capture path (pipe_emit_messages /
+ * pipe_capture_end), which is itself #ifndef _WIN32; guarded to match so the
+ * MinGW build does not see it as an unused static function (-Werror). */
+#ifndef _WIN32
 static void pipe_emit_text(int id, const char* kind, const char* field,
                            const char* text, size_t len) {
     char* raw = malloc(len + 1);
@@ -740,6 +744,7 @@ static void pipe_emit_text(int id, const char* kind, const char* field,
     free(esc);
     free(raw);
 }
+#endif /* !_WIN32 */
 
 /* ---------------------------------------------------------------------
  * Capturing Print output and messages during one statement.

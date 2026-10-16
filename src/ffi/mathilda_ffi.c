@@ -369,7 +369,11 @@ static void ffi_emit_line(const FfiSink* s, int id, int line) {
     ffi_cell_emit(s, buf);
 }
 
-/* {"id":N,"type":<kind>,"<field>":"<escaped>"} for `len` bytes of `text`. */
+/* {"id":N,"type":<kind>,"<field>":"<escaped>"} for `len` bytes of `text`.
+ * Only reached from the fd-redirect capture path (ffi_emit_messages /
+ * ffi_capture_end), which is itself #ifndef _WIN32; guarded to match so the
+ * MinGW `make lib` build does not see it as an unused static (-Werror). */
+#ifndef _WIN32
 static void ffi_emit_text(const FfiSink* s, int id, const char* kind,
                           const char* field, const char* text, size_t len) {
     char* raw = malloc(len + 1);
@@ -389,6 +393,7 @@ static void ffi_emit_text(const FfiSink* s, int id, const char* kind,
     free(esc);
     free(raw);
 }
+#endif /* !_WIN32 */
 
 static void ffi_emit_parse_error(const FfiSink* s, const char* input, int id) {
     size_t esc_cap = FFI_JSON_ESC_BOUND(strlen(input));

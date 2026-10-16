@@ -2350,7 +2350,33 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
     crosses `sin²t = 1/n`. It is not a real principal value — `Π(3/2 | 1/2)` is
     `−0.456720313453 − 2.72069904635 i`, mpmath and Arb agreeing — so the machine
     kernel declines there and Arb answers.
-- **Machine kernels.** `EllipticK`, `EllipticE` (both arities) and `EllipticF`
+- **Complete integrals at machine precision** (`src/special_functions/sf_machine_ellk.c`).
+  One kernel per (function, real | complex), called by the scalar builtin, the
+  packed/NDArray element-wise path and `Compile[]` alike, so all five surfaces
+  (scalar, List, packed, NDArray, Compile) agree bit for bit.
+  - *Real `m < 1`*: Cephes' form (Moshier's `ellpk`/`ellpe`; the structure of
+    A&S 17.3.34/17.3.36) `K = P(t) − log(t) Q(t)`, `E = P(t) − t log(t) Q(t)`,
+    `t = 1 − m`, with degree-10 `P`, `Q` **re-fitted** for Mathilda by
+    `tools/sf_accuracy/fit_ellk.py` (linear relative-error minimax by Lawson
+    IRLS in mpmath, points down to `t = 10⁻³⁰⁰`; fit error ≤ 1.2·10⁻¹⁸).
+    `m < 0` by `K(m) = K(m/(m−1))/√(1−m)`, `E(m) = √(1−m) E(m/(m−1))`
+    (DLMF 19.7.5), i.e. the same polynomials at `t' = 1/t`. Accuracy vs mpmath:
+    max 1.7 ulp (`K`), 1.3 ulp (`E`) on `[0, 0.95]`; ≤ 2.4 ulp on `[−50, 1)`.
+  - *Complex `m`*: the AGM, `K = π/(2 M(1, √(1−m)))`,
+    `E = K (1 − Σ 2ⁿ⁻¹ cₙ²)` (DLMF 19.8.5–6), in raw `double` re/im with the
+    "right choice" of square root at each step (Cox 1984), which gives the
+    principal branch with the cut on `[1, ∞)`; on the cut the value is the limit
+    from below (`EllipticK[2.] = 1.31103 − 1.31103 I`, as Mathematica and
+    mpmath). Max 3.4 ulp (`K`), 3.9 ulp (`E`) on `|Re m|, |Im m| ≤ 0.9`; ≤ 4.7
+    ulp on `|Re m|, |Im m| ≤ 20`.
+  - A machine **complex** argument, and a machine **real** `m > 1`, now return
+    a machine `Complex`; they used to go through Arb and come back as 53-bit
+    `EXPR_MPFR` numbers. The pole `K(1)` and `|m| > 10³⁰⁰` decline to the
+    exact/Arb path.
+  - Cost (net, per call): `EllipticK[0.6]` 0.19 → 0.12 µs, `EllipticE[0.6]`
+    0.24 → 0.12 µs; complex 6.7 → 0.37 µs (`K`) and 19.9 → 0.36 µs (`E`).
+    10⁶-element buffer: `K` 12.5 → 4.0 ms, `E` 18.5 → 3.3 ms (SciPy 16.7 / 16.5).
+- **Machine kernels (incomplete).** `EllipticE[φ, m]` and `EllipticF`
   carry `double` kernels built on Carlson's symmetric forms `R_F` and `R_D`, used
   by the packed/NDArray element-wise paths. They cover the real principal domain
   and **decline** outside it (`m > 1`, or `1 − m sin²φ < 0`), which abandons the

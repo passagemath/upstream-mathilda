@@ -35,6 +35,7 @@
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_expint.h"
+#include "special_functions/sf_machine_ellk.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -549,8 +550,12 @@ static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
  * delist fallback keeps the NDArray surface correct there and for arity 3. */
 static bool ndk_EllipticK_r(double m, double* o) { return elliptic_machine_k(m, o); }
 static bool ndk_EllipticE_r(double m, double* o) { return elliptic_machine_e_complete(m, o); }
-static const NDUnaryKernel NDKU_EllipticK = { NULL, ndk_EllipticK_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_EllipticE = { NULL, ndk_EllipticE_r, true, false, NULL, NULL, false };
+/* Complex arms (sf_machine_ellk.c, complex AGM): the same kernels the scalar
+ * EllipticK[z] / EllipticE[z] call for a machine-complex z. A REAL buffer keeps
+ * real_closed: its real arm declines m > 1 (complex value), which abandons the
+ * buffer to the List path, whose scalar call then takes the complex kernel. */
+static const NDUnaryKernel NDKU_EllipticK = { sf_machine_ellk_k_c, ndk_EllipticK_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_EllipticE = { sf_machine_ellk_e_c, ndk_EllipticE_r, true, false, NULL, NULL, false };
 
 static bool ndk_EllipticF_c(double pre, double pim, double mre, double mim,
                             double* rr, double* ri) {

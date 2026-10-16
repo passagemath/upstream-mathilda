@@ -240,87 +240,7 @@ bool sf_machine_erfi(double x, double* out) {
     return isfinite(*out);
 }
 
-/* Lambert W, principal branch.  Halley's iteration converges cubically, so a
- * decent starting guess reaches machine precision in a handful of steps.
- *
- * THE STARTING GUESS IS THE WHOLE ALGORITHM, and the asymptotic form used to be
- * applied outside its domain. `l1 - l2 + l2/l1` with l1 = log x, l2 = log l1 is
- * the x -> infinity expansion; it needs l1 comfortably above 1. Taking it for
- * every x >= 1 makes l2/l1 blow up as l1 -> 0, and at x = 1 exactly it is
- * log(0)/0 = NaN. Halley cannot recover from a guess that far out -- each step
- * moves w by about 2 while the guess is O(-1/(x-1)) -- so 60 iterations ended
- * somewhere arbitrary and the function returned it:
- *
- *     ProductLog[1.01]  gave  -338.392   (the answer is 0.5707)
- *     ProductLog[1.001] gave  -6784.78
- *
- * A WRONG ANSWER, not a slow one, and reachable from ordinary code:
- * Compile[{x}, ProductLog[x]] and every packed-array ProductLog use this
- * kernel. (The interpreter's scalar path was right, because it goes to MPFR --
- * which is also why the defect survived: the two paths disagreed and only the
- * fast one was wrong.) Found by the coverage sweep's C.3 row, which flagged
- * ProductLog as 28 us/element: the array kernel was failing on ~one element in
- * 10^5 and abandoning the whole buffer to the MPFR path.
- *
- * log(1 + x) is the guess for the band the asymptotic form cannot serve. It is
- * an upper bound on W for x >= 0 and tight (W(1) = 0.5671 against log 2 =
- * 0.6931), so Halley converges in three or four steps across it. */
-bool sf_machine_productlog(double x, double* out) {
-    const double INV_E = 0.36787944117144232160;
-    if (x < -INV_E) return false;                     /* complex below the branch point */
-    if (x == 0.0) { *out = 0.0; return true; }
-    if (x == -INV_E) { *out = -1.0; return true; }
-
-    double w;
-    if (x < -0.3) {                                   /* series about the branch point */
-        double p = sqrt(2.0 * (M_E * x + 1.0));
-        w = -1.0 + p - p * p / 3.0 + 11.0 * p * p * p / 72.0;
-    } else if (x < 1.0) {
-        w = x * (1.0 - x + 1.5 * x * x);
-    } else {
-        double l1 = log(x);
-        if (l1 > 1.0) {                               /* x > e: asymptotic is valid */
-            double l2 = log(l1);
-            w = l1 - l2 + l2 / l1;
-        } else {                                      /* 1 <= x <= e */
-            w = log(1.0 + x);
-        }
-    }
-    for (int i = 0; i < 60; i++) {
-        double e = exp(w), we = w * e, f = we - x;
-        double denom = e * (w + 1.0) - (w + 2.0) * f / (2.0 * w + 2.0);
-        if (denom == 0.0) break;
-        double dw = f / denom;
-        w -= dw;
-        if (fabs(dw) <= EI_EPS * (fabs(w) + 1.0)) break;
-    }
-    if (!isfinite(w)) return false;
-
-    /* VERIFY, then answer. "Halley converges" is a claim about the starting
-     * guess, and the bug above is what it costs to take that claim on trust: an
-     * iteration that stops early, stalls, or lands on the wrong branch returns a
-     * finite number that is not W(x). Checking the defining equation costs one
-     * log or one exp against ~4 Halley steps, and a `false` here is not an error
-     * -- it is the kernel contract's "no usable value", which degrades the
-     * caller to the correctly-rounded MPFR path.
-     *
-     * w + log w == log x for w > 0, rather than w e^w == x, because w e^w
-     * overflows for large x (W(10^300) is 685 and exp(685) is infinity) while
-     * the log form stays bounded. w < 0 only for x < 0, where |w| <= 1 and the
-     * direct form is both safe and sharper. */
-    double resid, scale;
-    if (w > 0.0) {
-        resid = fabs((w + log(w)) - log(x));
-        scale = fabs(log(x)) + 1.0;
-    } else {
-        resid = fabs(w * exp(w) - x);
-        scale = fabs(x) + 1e-300;
-    }
-    if (resid > 1e-9 * scale) return false;
-
-    *out = w;
-    return true;
-}
+/* ProductLog (Lambert W) lives in sf_machine_plog.c with its complex twin. */
 
 /* Fresnel C and S, in the pi/2 convention Mathematica uses:
  *   C(x) = int_0^x cos(pi t^2 / 2) dt,  S(x) = int_0^x sin(pi t^2 / 2) dt.
@@ -797,27 +717,7 @@ bool sf_machine_laguerre_l_c(double n, double xre, double xim,
     return sf_machine_laguerre_l_assoc_c(n, 0.0, xre, xim, rr, ri);
 }
 
-/* LegendreQ[n, x] for a non-negative integer degree on the cut |x| < 1, by the
- * same three-term recurrence as P_n but seeded Q_0 = atanh(x), Q_1 = x atanh(x)
- * - 1.  Declines (returns false) for a non-integer/negative/large degree and for
- * |x| >= 1 (where Q_n is complex-valued), leaving the symbolic/MPFR closed form
- * to answer -- mirroring how the LegendreP kernel declines outside its regime. */
-bool sf_machine_legendre_q(double n, double x, double* out) {
-    if (n != floor(n) || n < 0.0 || n > 1000.0) return false;
-    if (!(x > -1.0 && x < 1.0)) return false;   /* also rejects NaN */
-    int N = (int)n;
-    double q0 = atanh(x);
-    if (N == 0) { *out = q0; return isfinite(q0); }
-    double q1 = x * q0 - 1.0;
-    if (N == 1) { *out = q1; return isfinite(q1); }
-    double qm1 = q0, qk = q1;
-    for (int k = 2; k <= N; k++) {
-        double q = ((2.0 * k - 1.0) * x * qk - (k - 1.0) * qm1) / (double)k;
-        qm1 = qk; qk = q;
-    }
-    *out = qk;
-    return isfinite(qk);
-}
+/* LegendreQ (sf_machine_legendre_q) lives in sf_machine_plog.c with its complex twin. */
 
 /* ---- Airy ---------------------------------------------------------------
  * Ai, Bi and their derivatives from the ascending series

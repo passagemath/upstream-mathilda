@@ -552,6 +552,13 @@ P("hyper2f1", "special", "Hypergeometric2F1[0.5, 0.5, 1.5, v*0.5]",
   "sp.hyp2f1(0.5, 0.5, 1.5, v*0.5)")
 P("hyper1f1", "special", "Hypergeometric1F1[0.5, 1.5, v]",
   "sp.hyp1f1(0.5, 1.5, v)")
+# Whittaker: SciPy has no native head, so compose exactly as the kernel does
+# (M via 1F1, W via U). k=2, m=3 -> a=m-k+1/2=1.5, b=2m+1=7 (integer b, so W
+# exercises the hyperu_integer_b log series -- the digamma-recurrence path).
+P("whittakerm", "special", "WhittakerM[2., 3., p]",
+  "np.exp(-p/2.0)*p**3.5*sp.hyp1f1(1.5, 7.0, p)")
+P("whittakerw", "special", "WhittakerW[2., 3., p]",
+  "np.exp(-p/2.0)*p**3.5*sp.hyperu(1.5, 7.0, p)")
 P("gammaregularized", "special", "GammaRegularized[2., p]",
   "sp.gammaincc(2.0, p)")
 P("betaregularized", "special", "BetaRegularized[v, 2., 3.]",

@@ -1404,19 +1404,28 @@ static bool hyperu_integer_b(double a, int n, double z, double* out) {
         double lnz = log(z);
         double pref = ((n & 1) ? 1.0 : -1.0) / tgamma((double)n + 1.0) * rgan;
         double term = 1.0, sum = 0.0;                    /* (a)_0/((n+1)_0) z^0/0! = 1 */
+        /* The three digammas advance by the recurrence psi(x+1) = psi(x) + 1/x,
+         * so seed each ONCE and step it by one division per term instead of a
+         * full sf_machine_digamma call (a shift loop + log + 7-term asymptotic)
+         * three times per term -- the dominant cost of this log series. The
+         * asymptotic branch has already peeled off every terminating case, so a
+         * is never a non-positive integer here and a+k never crosses a pole. */
+        double pa, pk, pnk;
+        if (!sf_machine_digamma(a, &pa)) return false;           /* psi(a)     */
+        if (!sf_machine_digamma(1.0, &pk)) return false;         /* psi(1)     */
+        if (!sf_machine_digamma((double)(n + 1), &pnk)) return false; /* psi(n+1) */
         for (int k = 0; k < 200000; k++) {
-            double pa, pk, pnk;
-            if (!sf_machine_digamma(a + k, &pa)) return false;
-            if (!sf_machine_digamma((double)(k + 1), &pk)) return false;
-            if (!sf_machine_digamma((double)(n + k + 1), &pnk)) return false;
             double add = term * (lnz + pa - pk - pnk);
             sum += add;
             if (fabs(add * pref) > peak) peak = fabs(add * pref);
             if (fabs(add) < fabs(sum) * EI_EPS && k > 2) break;
-            /* term_{k+1} = term_k * (a+k)/(n+1+k) * z/(k+1) */
+            /* advance to k+1: term and the three digammas by their recurrences */
             term *= (a + k) / (double)(n + 1 + k) * z / (double)(k + 1);
             if (!isfinite(term)) return false;
             if (term == 0.0) break;                      /* (a)_k terminated it */
+            pa  += 1.0 / (a + (double)k);                /* psi(a+k+1)         */
+            pk  += 1.0 / (double)(k + 1);                /* psi(k+2)           */
+            pnk += 1.0 / (double)(n + k + 1);            /* psi(n+k+2)         */
         }
         logpart = pref * sum;
     }

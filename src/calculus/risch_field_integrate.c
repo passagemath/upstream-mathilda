@@ -264,7 +264,7 @@ Expr* rt_log_tower_case(Expr* f, Expr* x) {
                 free(vl);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_eval2("SolveAlways", eqn, varlist);
+                sol = rt_solve_always_quiet(eqn, varlist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -379,7 +379,7 @@ static Expr* rt_tower_solve(Expr* Q, Expr** syms, size_t nsym,
         free(vl);
         Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
             (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-        sol = rt_eval2("SolveAlways", eqn, varlist);
+        sol = rt_solve_always_quiet(eqn, varlist);
     }
     if (sol && sol->type == EXPR_FUNCTION
         && sol->data.function.head->type == EXPR_SYMBOL

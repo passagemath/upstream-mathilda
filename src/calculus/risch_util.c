@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "sym_intern.h"
 #include "simp_trigexp_zero.h"
+#include "message.h"           /* rt_solve_always_quiet: a probe */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -115,6 +116,23 @@ Expr* rt_eval2(const char* head, Expr* a, Expr* b) {
 }
 Expr* rt_eval3(const char* head, Expr* a, Expr* b, Expr* c) {
     return rt_eval_call(head, (Expr*[]){ a, b, c }, 3);
+}
+
+/* SolveAlways[eqn, vars] for an undetermined-coefficient ANSATZ.  Every Risch /
+ * Cherry / Knowles caller uses SolveAlways as a speculative search -- an
+ * inconsistent or underdetermined coefficient system just means "this ansatz does
+ * not fit" and the caller declines -- so the Solve::nsdim / Solve::svars it may
+ * raise is probe noise, not a user diagnostic.  Run it in a suppressed region and
+ * roll the fired-count back, so the noise neither prints nor flips an enclosing
+ * Check[] (Simplify[1/(E^Cos[x](c + Integrate[E^-Cos[x], x]))] leaked
+ * Solve::nsdim from an exp-tower ansatz).  Arguments consumed. */
+Expr* rt_solve_always_quiet(Expr* eqn, Expr* vars) {
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
+    Expr* r = rt_eval_call("SolveAlways", (Expr*[]){ eqn, vars }, 2);
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired);
+    return r;
 }
 
 /* Given a commensurability class of x-dependent exponents `ws[0..nw-1]` (every

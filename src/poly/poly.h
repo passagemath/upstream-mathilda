@@ -99,6 +99,12 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
 Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
 char* poly_make_fresh_gen(Expr* e);
 
+/* True when `e` binds or differentiates in a variable (an unevaluated Integrate/D/
+ * Sum/Product/Limit/Series/Dt, a Function, an Inactive[op][...] form, a Hold
+ * wrapper): an opaque atom to every kernel -> generator substitution, which is
+ * unsound inside it (Integrate[1/g, x] == x/g for a generator symbol g). */
+bool  poly_is_binding_operator(const Expr* e);
+
 void poly_init(void);
 
 #endif /* POLY_H */

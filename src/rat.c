@@ -2068,8 +2068,24 @@ static bool rat_contains_i(const Expr* e) {
  * t = I for a well-defined fraction).  Declines (NULL) when I is absent, when the
  * image still carries an algebraic atom (a genuine Q(i, √d) tower, left to the
  * extension path), or when the plain-Q reduction declines. */
+/* True if an imaginary unit occurs INSIDE a variable-binding operator
+ * (poly_is_binding_operator: an unevaluated Integrate, Sum, D, ...).  The Gaussian
+ * rewrite below is a whole-tree ReplaceAll, so it would re-evaluate such an
+ * operator with I -> t in its body -- Integrate re-runs its whole cascade on the
+ * TrigToExp'd integrand (an exp-tower Risch search) only for the result to be
+ * discarded, since the I would come back.  Decline instead. */
+static bool rat_i_inside_binder(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (poly_is_binding_operator(e)) return rat_contains_i(e);
+    if (rat_i_inside_binder(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_i_inside_binder(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* rat_gaussian_reduce(const Expr* arg, Expr* (*reduce)(const Expr*)) {
     if (!rat_contains_i(arg)) return NULL;
+    if (rat_i_inside_binder(arg)) return NULL;
     Expr* t = expr_new_symbol("Rat$gaussI");
     /* The imaginary unit is stored as Complex[0, 1] (and a+b I as Complex[a, b]),
      * NOT as the symbol I, so a bare `I -> t` rule never matches. Substitute the

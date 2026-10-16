@@ -406,7 +406,7 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                 (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
             Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                 (Expr*[]){ residual, expr_new_integer(0) }, 2);
-            Expr* sol = rt_eval2("SolveAlways", eqn, varlist);
+            Expr* sol = rt_solve_always_quiet(eqn, varlist);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
                 && sol->data.function.head->data.symbol.name == intern_symbol("List")
@@ -788,7 +788,7 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_eval2("SolveAlways", eqn, varlist);
+                sol = rt_solve_always_quiet(eqn, varlist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -1040,7 +1040,7 @@ Expr* rt_hyperexp_case(Expr* f, Expr* x) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_eval2("SolveAlways", eqn, varlist);
+                sol = rt_solve_always_quiet(eqn, varlist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL

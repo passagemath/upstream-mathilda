@@ -24,6 +24,8 @@ Expr* rt_eval_call(const char* head, Expr** args, size_t n);  /* adopts args ele
 Expr* rt_eval_own(Expr* e);                                   /* frees e, returns eval */
 Expr* rt_eval1(const char* head, Expr* a);
 Expr* rt_eval2(const char* head, Expr* a, Expr* b);
+/* SolveAlways[eqn, vars] as a quiet probe (no print, invisible to Check); args consumed. */
+Expr* rt_solve_always_quiet(Expr* eqn, Expr* vars);
 Expr* rt_eval3(const char* head, Expr* a, Expr* b, Expr* c);
 Expr* rt_template(const char* tmpl, const char** names, Expr** vals, size_t n);
 

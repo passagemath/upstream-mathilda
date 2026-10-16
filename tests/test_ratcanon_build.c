@@ -6,8 +6,9 @@
  *   - structure: generator counts and kinds;
  *   - relations: every algebraic gen's relation vanishes at its kernel, every
  *     transcendental gen has no relation;
- *   - independence: commensurate exponentials collapse to one fundamental,
- *     Log[x^2] expands to Log[x];
+ *   - independence: commensurate exponentials collapse to one fundamental, while
+ *     Log[x^2] and Log[x] stay DISTINCT generators (Log[x^2] == 2 Log[x] is false
+ *     for x < 0, so Together/Cancel must not identify them);
  *   - round-trip: substituting the generators back reproduces the input value.
  */
 #include "expr.h"
@@ -127,8 +128,10 @@ static void test_independence(void) {
     gens("1/(E^x-1)+1/(E^(3x)-1)", 0, 1);
     /* distinct exp bases stay independent */
     gens("E^x + E^y", 0, 2);
-    /* Log[x^2] expands to Log[x] (one gen) */
-    gens("1/(1+Log[x^2])+1/Log[x]", 0, 1);
+    /* Log[x^2] is NOT rewritten to 2 Log[x] (false off the positive reals): two gens */
+    gens("1/(1+Log[x^2])+1/Log[x]", 0, 2);
+    /* Log[-w] is NOT split into I Pi + Log[w] (wrong sign of I Pi when w < 0) */
+    gens("Log[-(-c - u)] + 1/Log[-c - u]", 0, 2);
 }
 
 static void test_relations(void) {

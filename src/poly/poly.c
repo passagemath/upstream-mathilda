@@ -713,6 +713,36 @@ static bool atom_is_one(Expr* e) {
     return e && e->type == EXPR_INTEGER && e->data.integer == 1;
 }
 
+/* True when `e` is an operator that BINDS or DIFFERENTIATES in a variable --
+ * an unevaluated Integrate/D/Sum/Limit/Series/..., a pure Function, an
+ * Inactive[op][...] form, or a Hold wrapper.  Such a node is an OPAQUE ATOM to the
+ * kernel map: its value is not a function of the kernels it contains, so the
+ * kernel -> generator substitution is unsound inside it.  Substituting E^Cos[x]
+ * -> $g inside Integrate[E^(-Cos[x]), x] and re-evaluating gave Integrate[1/$g, x]
+ * == x/$g, so Together[E^Cos[x] Integrate[E^(-Cos[x]), x]] returned x (and Cancel,
+ * Factor, Simplify with it -- a wrong answer that surfaced as a mangled DSolve
+ * Riccati solution, §2.2.47-4661).  The same substitution hazard exists for the
+ * radical/exponential generator (poly_subst_radical_to_gen), so
+ * poly_is_opaque_kernel_head below includes these heads too. */
+bool poly_is_binding_operator(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_FUNCTION)               /* Inactive[Integrate][f, x] */
+        return h->data.function.head->type == EXPR_SYMBOL
+            && h->data.function.head->data.symbol.name == SYM_Inactive;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    if (hn == SYM_Integrate || hn == SYM_D || hn == SYM_Sum || hn == SYM_Product ||
+        hn == SYM_NIntegrate || hn == SYM_NSum || hn == SYM_NProduct ||
+        hn == SYM_Function || hn == SYM_Table || hn == SYM_Do ||
+        hn == SYM_Module || hn == SYM_With || hn == SYM_Block ||
+        hn == SYM_Hold || hn == SYM_HoldForm || hn == SYM_HoldComplete ||
+        hn == SYM_Unevaluated || hn == SYM_Inactive || hn == SYM_DSolve)
+        return true;
+    return strcmp(hn, "Dt") == 0 || strcmp(hn, "Limit") == 0 ||
+           strcmp(hn, "Series") == 0;
+}
+
 /* Opaque analytic-kernel heads: Log / (inverse) circular & hyperbolic. A radical
  * inside such a kernel's argument (e.g. Log[.../Sqrt[3]]) is part of that opaque
  * generator of the outer rational function, NOT a free algebraic generator — so
@@ -722,6 +752,7 @@ static bool atom_is_one(Expr* e) {
  * GCD explodes (the Together[Log[...]/Sqrt[3]] hang from the Risch LogToReal
  * reconstruction). */
 static bool poly_is_opaque_kernel_head(const Expr* e) {
+    if (poly_is_binding_operator(e)) return true;  /* Integrate/D/Sum/... (above) */
     if (!e || e->type != EXPR_FUNCTION ||
         e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;

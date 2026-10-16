@@ -232,7 +232,7 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
         Expr* eqn = expr_new_function(mk_sym("Equal"), (Expr*[]){ rnum, mk_int(0) }, 2);
         Expr* vl = expr_new_function(mk_sym("List"),
             (Expr*[]){ expr_copy(t), expr_copy(x) }, 2);
-        sol = rt_eval2("SolveAlways", eqn, vl);
+        sol = rt_solve_always_quiet(eqn, vl);
     }
 
     /* 5. Assemble and PowerExpand-verify. */

@@ -12,8 +12,9 @@
 #include "sym_names.h"
 #include "arithmetic.h"
 #include "flint_bridge.h"
-#include "risch_tower.h"    /* rt_expand_logs, rt_expand_exp_sums */
+#include "risch_tower.h"    /* rt_expand_exp_sums */
 #include "rat_internal.h"   /* extract_num_den */
+#include "poly.h"           /* poly_is_binding_operator */
 #include "expand.h"         /* expr_expand */
 #include "core.h"
 #include <string.h>
@@ -246,6 +247,7 @@ static char* rcp_fresh(Builder* b) {
  * fold w's rational coeff into the gcd of its base's fundamental. */
 static void rcp_collect_exps(const Expr* e, Builder* b) {
     if (!e || e->type != EXPR_FUNCTION) return;
+    if (poly_is_binding_operator(e)) return;
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
         e->data.function.arg_count == 2 &&
@@ -289,6 +291,7 @@ static void rcp_rad_note(Builder* b, const Expr* r, int64_t q) {
 /* Pass 1 (radicals): collect the fundamental root Q = lcm(roots) per radicand. */
 static void rcp_collect_rads(const Expr* e, Builder* b) {
     if (!e || e->type != EXPR_FUNCTION) return;
+    if (poly_is_binding_operator(e)) return;
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
         const char* hn = h->data.symbol.name;
@@ -374,6 +377,7 @@ static Expr* rcp_radical_relation(const char* sym, int64_t deg, const Expr* radi
 static Expr* rcp_build_forward(const Expr* e, Builder* b) {
     if (!e) return NULL;
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (poly_is_binding_operator(e)) return expr_copy((Expr*)e);
     RatCanonForm* f = b->f;
     const Expr* h = e->data.function.head;
     size_t ac = e->data.function.arg_count;
@@ -498,14 +502,18 @@ RatCanonForm* rat_canon_build(const Expr* e) {
     if (!f) return NULL;
     Builder b; memset(&b, 0, sizeof b); b.f = f;
 
-    /* Pre-normalize: expose atomic kernels (Log[ab]->Log a+Log b, split E^(a+b)).
-     * rt_expand_logs / rt_expand_exp_sums BORROW their argument (return a fresh
-     * tree, do not free the input), so free each intermediate explicitly. */
-    Expr* c0 = expr_copy((Expr*)e);
-    Expr* mid = rt_expand_logs(c0);
-    expr_free(c0);
-    Expr* pre = rt_expand_exp_sums(mid);
-    expr_free(mid);
+    /* Pre-normalize: split E^(a+b) into E^a E^b so commensurate exponentials share
+     * one fundamental generator (exact).  rt_expand_exp_sums BORROWS its argument.
+     *
+     * Logs are NOT expanded.  The Risch-tower rt_expand_logs (Log[a b] -> Log[a] +
+     * Log[b], Log[b^p] -> p Log[b]) is value-changing off the principal branch, and
+     * Together/Cancel -- the only users of this canonicaliser -- must return an
+     * EQUAL expression: it turned Log[x^2] into 2 Log[x] (wrong for x < 0) and
+     * Log[-(-c - u)] into I Pi + Log[-c - u] (wrong wherever c + u > 0), which an
+     * integration through Together carried into a wrong antiderivative and a wrong
+     * DSolve answer (§2.1.2-934).  Each Log[...] stays one opaque generator,
+     * exactly as Mathematica's Together treats it. */
+    Expr* pre = rt_expand_exp_sums((Expr*)e);
 
     rcp_collect_exps(pre, &b);
     rcp_collect_rads(pre, &b);

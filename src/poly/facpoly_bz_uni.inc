@@ -385,18 +385,33 @@ static int64_t z_gcd(int64_t a, int64_t b) {
     return a;
 }
 
+/* Exact division a / b over Z[x] in machine integers; NULL when b does not divide
+ * a exactly -- or when the int64 arithmetic would OVERFLOW, a zero leading divisor
+ * coefficient, or INT64_MIN / -1.  Those used to be unchecked: a wrapped
+ * coeff * b[i] corrupted the remainder, and the next `%` trapped (SIGFPE) on a
+ * divisor/dividend pair the wrap produced -- a hard crash of the whole kernel in
+ * Factor on a five-variable polynomial with 12-digit coefficients (reached from
+ * DSolve`AutonomousReduction on §2.1.2-268).  Declining is sound for the caller, a
+ * trial-division recombination: a skipped candidate leaves a coarser, still-exact
+ * factorisation. */
 static UPoly* upoly_div_exact_z(UPoly* a, UPoly* b) {
+    int64_t lb = b->c[b->deg];
+    if (lb == 0) return NULL;
     UPoly* q = upoly_new(a->deg >= b->deg ? a->deg - b->deg : 0);
     UPoly* r = upoly_copy(a);
     while (r->deg >= b->deg && !(r->deg == 0 && r->c[0] == 0)) {
         int d = r->deg - b->deg;
-        if (r->c[r->deg] % b->c[b->deg] != 0) {
+        if ((lb == -1 && r->c[r->deg] == INT64_MIN) || r->c[r->deg] % lb != 0) {
             upoly_free(q); upoly_free(r); return NULL;
         }
-        int64_t coeff = r->c[r->deg] / b->c[b->deg];
+        int64_t coeff = r->c[r->deg] / lb;
         q->c[d] = coeff;
         for (int i = 0; i <= b->deg; i++) {
-            r->c[i + d] -= coeff * b->c[i];
+            int64_t prod, diff;
+            if (ci_mul_i64(coeff, b->c[i], &prod) || ci_sub_i64(r->c[i + d], prod, &diff)) {
+                upoly_free(q); upoly_free(r); return NULL;      /* int64 overflow */
+            }
+            r->c[i + d] = diff;
         }
         upoly_trim(r);
     }

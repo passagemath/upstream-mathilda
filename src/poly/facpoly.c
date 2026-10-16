@@ -16,12 +16,14 @@
 #include "sym_names.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "checked_int.h"      /* ci_mul_i64 / ci_sub_i64: upoly_div_exact_z */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
 #include <math.h>
 #include <limits.h>
+#include <stdint.h>
 #include <gmp.h>
 
 /* facpoly.c is split into a set of .inc fragments included into this single

@@ -381,7 +381,7 @@ Expr* knowles_erf_liouvillian(Expr* f, Expr* x) {
         Expr* varlist = expr_new_function(mk_sym("List"), vl, T.n + 1);
         free(vl);
         Expr* eqn = expr_new_function(mk_sym("Equal"), (Expr*[]){ rnum, mk_int(0) }, 2);
-        sol = rt_eval2("SolveAlways", eqn, varlist);
+        sol = rt_solve_always_quiet(eqn, varlist);
     }
 
     /* 7. Assemble the answer, back-substitute tower vars -> kernels, diff-back verify. */

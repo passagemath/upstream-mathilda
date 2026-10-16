@@ -37,6 +37,7 @@
  *     Simplify blow up — e.g. the complex-root inhomogeneous x^2 y'' + y == x^2.
  */
 #include "dsolve_common.h"
+#include "../parse.h"
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
@@ -157,6 +158,15 @@ static Expr* euler_transform_solve(const Expr* indicial, const char* rv, int n,
     Expr* xoft = eval_and_free(ds_call2(SYM_Plus, expr_copy((Expr*)bshift),
                      ds_call1("Exp", expr_new_symbol(tvar))));
     Expr* RHS = ds_subst(expr_copy((Expr*)g), expr_new_symbol(xvar), xoft);
+    /* Log[E^u] -> u.  A forcing in Log[x] (Cos[Log[x]], §2.2.33-3234) arrives as
+     * Cos[Log[E^t]]; t is the REAL Euler variable, so Log[E^(c t)] == c t exactly,
+     * but no general simplifier may assume that (it is false for complex u), and
+     * left unreduced the constant-coefficient variation of parameters integrates
+     * Cos[Log[E^t]] E^(-t) far more slowly (1 s -> >25 s). */
+    {
+        Expr* rule = parse_expression("Log[E^DSolve`elu_] :> DSolve`elu");
+        if (rule) RHS = eval_and_free(ds_call2("ReplaceAll", RHS, rule));
+    }
     Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
                     (Expr*[]){ LHS, RHS }, 2);
     Expr* call = expr_new_function(expr_new_symbol(SYM_DSolve),

@@ -304,7 +304,70 @@ static Expr* try_chebychev(Expr* f, Expr* x) {
  * the poles of Tan[x/2].  Runs ahead of Risch-Norman so genuine rational-trig
  * integrands get the real, continuous antiderivative rather than pmint's
  * complex-logarithm form. */
+/* c Sec[x]^n / c Csc[x]^n, n >= 3 an integer, c free of x: the reduction formula
+ *     Integrate[Sec^n] = Sec^(n-2) Tan/(n-1) + (n-2)/(n-1) Integrate[Sec^(n-2)]
+ *     Integrate[Csc^n] = -Csc^(n-2) Cot/(n-1) + (n-2)/(n-1) Integrate[Csc^(n-2)]
+ * recursing down to Integrate[Sec] / Integrate[Sec^2] (and Csc), which close.
+ * These were the one trig-power family the automatic cascade could not do: a POSITIVE
+ * power of a reciprocal kernel carries no explicit negative exponent, so the
+ * Weierstrass gate (kernel in a denominator) passed it on and DerivativeDivides spun
+ * past any budget -- Integrate[Sec[x]^4, x] hung, and with it the Bernoulli
+ * y' == (Tan[x] + Sec[x] y^3) y of §2.2.48-4702.  Every Tan/Cot power and mixed
+ * Sec^m Tan^k product already closed instantly and is not matched here. */
+static Expr* try_reciprocal_trig_power(Expr* f, Expr* x) {
+    if (x->type != EXPR_SYMBOL) return NULL;
+    Expr* coeff = expr_new_integer(1);
+    const Expr* kp = NULL;                       /* the single Power[Sec|Csc[x], n] */
+    size_t nf = head_is(f, SYM_Times) ? f->data.function.arg_count : 1;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* fi = head_is(f, SYM_Times) ? f->data.function.args[i] : f;
+        if (!depends_on_var(fi, x)) {
+            coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ coeff, expr_copy(fi) }, 2));
+        } else if (!kp) kp = fi;
+        else { expr_free(coeff); return NULL; }
+    }
+    if (!kp || !head_is((Expr*)kp, SYM_Power) || kp->data.function.arg_count != 2) {
+        expr_free(coeff); return NULL;
+    }
+    const Expr* k = kp->data.function.args[0];
+    const Expr* ne = kp->data.function.args[1];
+    if (ne->type != EXPR_INTEGER || ne->data.integer < 3 || k->type != EXPR_FUNCTION
+        || k->data.function.arg_count != 1 || !expr_eq(k->data.function.args[0], x)
+        || k->data.function.head->type != EXPR_SYMBOL) { expr_free(coeff); return NULL; }
+    const char* kh = k->data.function.head->data.symbol.name;
+    if (kh != SYM_Sec && kh != SYM_Csc) { expr_free(coeff); return NULL; }
+    int64_t n = ne->data.integer;
+    bool sec = (kh == SYM_Sec);
+    /* Sec^(n-2) Tan / (n-1)   or   -Csc^(n-2) Cot / (n-1) */
+    Expr* kpow = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_copy((Expr*)k), expr_new_integer(n - 2) }, 2);
+    Expr* partner = expr_new_function(expr_new_symbol(sec ? SYM_Tan : SYM_Cot),
+                        (Expr*[]){ expr_copy(x) }, 1);
+    Expr* lead = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                     expr_new_function(expr_new_symbol(SYM_Rational),
+                         (Expr*[]){ expr_new_integer(sec ? 1 : -1), expr_new_integer(n - 1) }, 2),
+                     kpow, partner }, 3);
+    /* (n-2)/(n-1) Integrate[K^(n-2), x] -- must close (it bottoms out at n = 1, 2) */
+    Expr* sub = eval_and_free(expr_new_function(expr_new_symbol(SYM_Integrate), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy((Expr*)k), expr_new_integer(n - 2) }, 2),
+                    expr_copy(x) }, 2));
+    if (!sub || result_contains_head(sub, SYM_Integrate)) {
+        if (sub) expr_free(sub);
+        expr_free(lead); expr_free(coeff); return NULL;
+    }
+    Expr* rest = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                     expr_new_function(expr_new_symbol(SYM_Rational),
+                         (Expr*[]){ expr_new_integer(n - 2), expr_new_integer(n - 1) }, 2),
+                     sub }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+               coeff, expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ lead, rest }, 2) }, 2));
+}
+
 static Expr* try_weierstrass(Expr* f, Expr* x) {
+    Expr* r = try_reciprocal_trig_power(f, x);
+    if (r) return r;
     return integrate_jeffrey_try(f, x);
 }
 

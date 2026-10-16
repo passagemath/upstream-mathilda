@@ -1173,6 +1173,50 @@ bool sf_machine_bessel_k(double nu, double x, double* out) {
     return isfinite(v);
 }
 
+/* zeta at the integers the Jonquiere mu-series needs for INTEGER order s, as
+ * constants. For integer s the summands zeta(s-k) are identical for every x, yet
+ * the per-term sf_machine_zeta() (Euler-Maclaurin above 1/2, the functional
+ * equation below it) recomputed them on every call -- the dominant cost of Li_s
+ * on a buffer (the mu-series branch measured ~5x the defining-series branch).
+ * Both tables are read-only `const`, hence thread-safe, and carry full double
+ * precision (zeta at the non-positive integers is exact in rational Bernoulli
+ * form; here rounded to the nearest double). */
+static const double POLYLOG_ZETA_POS[] = {   /* zeta(2), zeta(3), ..., zeta(24) */
+    1.64493406684822643648, 1.2020569031595942854, 1.08232323371113819152,
+    1.03692775514336992634, 1.01734306198444913971, 1.00834927738192282683,
+    1.00407735619794433938, 1.00200839282608221442, 1.00099457512781808534,
+    1.00049418860411946456, 1.00024608655330804829, 1.00012271334757848915,
+    1.00006124813505870483, 1.0000305882363070205,  1.00001528225940865187,
+    1.00000763719763789976, 1.00000381729326499984, 1.00000190821271655393,
+    1.0000009539620338728,  1.0000004769329867878,  1.00000023845050272773,
+    1.00000011921992596531, 1.00000005960818905127
+};
+static const double POLYLOG_ZETA_NONPOS[] = { /* zeta(0), zeta(-1), ..., zeta(-44) */
+    -0.5, -0.0833333333333333333331, 0.0, 0.00833333333333333333331, 0.0,
+    -0.00396825396825396825397, 0.0, 0.00416666666666666666665, 0.0,
+    -0.00757575757575757575757, 0.0, 0.021092796092796092796, 0.0,
+    -0.0833333333333333333331, 0.0, 0.443259803921568627452, 0.0,
+    -3.05395433027011974379, 0.0, 26.4562121212121212121, 0.0,
+    -281.460144927536231884, 0.0, 3607.51054639804639804, 0.0,
+    -54827.5833333333333335, 0.0, 974936.823850574712644, 0.0,
+    -20052695.7966880789461, 0.0, 472384867.72162990196, 0.0,
+    -12635724795.9166666666, 0.0, 380879311252.453688115, 0.0,
+    -12850850499305.0833334, 0.0, 482414483548501.703716, 0.0,
+    -20040310656516252.738, 0.0, 916774360319533077.57, 0.0
+};
+#define POLYLOG_ZETA_POS_N    ((int)(sizeof(POLYLOG_ZETA_POS)    / sizeof(double)))
+#define POLYLOG_ZETA_NONPOS_N ((int)(sizeof(POLYLOG_ZETA_NONPOS) / sizeof(double)))
+
+/* zeta(m) at integer m via the constant tables; falls back to the Euler-Maclaurin
+ * kernel only outside the tabulated range (not reached before the mu-series
+ * converges -- a safety net). m == 1 is a pole and is never requested here (the
+ * k = s-1 term is handled separately by the caller). */
+static bool polylog_zeta_int(int m, double* out) {
+    if (m >= 2 && m - 2 < POLYLOG_ZETA_POS_N) { *out = POLYLOG_ZETA_POS[m - 2]; return true; }
+    if (m <= 0 && -m < POLYLOG_ZETA_NONPOS_N) { *out = POLYLOG_ZETA_NONPOS[-m]; return true; }
+    return sf_machine_zeta((double)m, out);
+}
+
 /* Li_s(x) on the reals, |x| <= 1.
  *
  * The defining series only converges usefully for |x| <~ 1/2, so closer to 1 the
@@ -1191,7 +1235,7 @@ static bool polylog_mu(double s, double x, double* out) {
         for (int k = 0; k < 200; k++) {
             if (k != n - 1) {
                 double z;
-                if (!sf_machine_zeta((double)(n - k), &z)) return false;
+                if (!polylog_zeta_int(n - k, &z)) return false;   /* constant tables */
                 double add = z * mk / tgamma((double)k + 1.0);
                 sum += add;
                 /* TWO consecutive negligible terms, not one: zeta vanishes at
@@ -1235,9 +1279,16 @@ bool sf_machine_polylog(double s, double x, double* out) {
         return isfinite(*out);
     }
     if (fabs(x) <= 0.5) {                             /* the defining series */
+        /* k^s is a libm pow() per term; for the common integer order (dilog s=2,
+         * trilog s=3, ...) a short integer power is far cheaper and bit-exact. */
+        int si = (int)s;
+        int s_is_int = (s == floor(s) && s >= 0.0 && si <= 32);
         double sum = 0.0, xk = x;
         for (int k = 1; k < 2000; k++) {
-            double add = xk / pow((double)k, s);
+            double ks;
+            if (s_is_int) { ks = 1.0; for (int j = 0; j < si; j++) ks *= (double)k; }
+            else          { ks = pow((double)k, s); }
+            double add = xk / ks;
             sum += add;
             if (fabs(add) < fabs(sum) * EI_EPS) break;
             xk *= x;

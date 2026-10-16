@@ -16,6 +16,52 @@ else
   BUILD_PLATFORM := Windows
 endif
 
+# Homebrew prefix (issue #90). Mathilda's optional dependencies (readline,
+# gmp-ecm, flint, raylib, pcre2, fftw, ...) are typically installed via Homebrew
+# on macOS, whose keg layout sits outside the default compiler / pkg-config
+# search paths; the probes below add the prefix's include/lib/pkgconfig dirs so a
+# plain `make` finds them. Rather than hardcode /opt/homebrew (the Apple-Silicon
+# default, wrong on Intel and on a custom prefix), resolve HOMEBREW once:
+#
+#   1. An explicit HOMEBREW=... (command line or environment) always wins. This
+#      is also the documented opt-out: HOMEBREW= (empty) or HOMEBREW=/nonexisting
+#      makes every $(wildcard $(HOMEBREW)/...) guard below miss, disabling all
+#      Homebrew discovery.
+#   2. Otherwise `brew --prefix` if a brew is on PATH — this handles the
+#      Apple-Silicon /opt/homebrew, the Intel /usr/local, a Linuxbrew prefix, and
+#      any custom install uniformly.
+#   3. Otherwise, on macOS only, the first conventional prefix that exists.
+#
+# Only the explicit-override case ($(origin) test) skips auto-detection, so the
+# two opt-out spellings in (1) are honoured verbatim.
+ifeq ($(origin HOMEBREW),undefined)
+  HOMEBREW := $(shell brew --prefix 2>/dev/null)
+  ifeq ($(strip $(HOMEBREW)),)
+    ifeq ($(BUILD_PLATFORM),Darwin)
+      HOMEBREW := $(firstword $(wildcard /opt/homebrew /usr/local))
+    endif
+  endif
+endif
+
+# Homebrew-derived search paths, each added only if it actually exists under the
+# resolved prefix. All empty when HOMEBREW is empty/absent (opt-out, Linux
+# without Linuxbrew, Windows), so the consumers below collapse to the
+# no-Homebrew behaviour.
+HOMEBREW_CFLAGS  :=
+HOMEBREW_LDFLAGS :=
+HOMEBREW_PC_PATH :=
+ifneq ($(strip $(HOMEBREW)),)
+  ifneq ($(wildcard $(HOMEBREW)/include),)
+    HOMEBREW_CFLAGS := -I$(HOMEBREW)/include
+  endif
+  ifneq ($(wildcard $(HOMEBREW)/lib),)
+    HOMEBREW_LDFLAGS := -L$(HOMEBREW)/lib
+  endif
+  ifneq ($(wildcard $(HOMEBREW)/lib/pkgconfig),)
+    HOMEBREW_PC_PATH := $(HOMEBREW)/lib/pkgconfig
+  endif
+endif
+
 # Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim: on
 # macOS the plain `gcc` is a symlink to Apple clang, and LLVM both miscompiles some
 # of our -std=c99 paths and hides the glibc portability class the Linux CI gates on.
@@ -102,9 +148,12 @@ else
   # build falls back to the shim (single-line editing only). Linux resolves GNU
   # Readline through -lreadline already, so this probe is Darwin-only.
   ifeq ($(BUILD_PLATFORM),Darwin)
-    READLINE_PREFIX := $(shell for p in $$(brew --prefix readline 2>/dev/null) /opt/homebrew/opt/readline /usr/local/opt/readline; do \
-                                 [ -f "$$p/include/readline/readline.h" ] && { echo $$p; break; }; \
-                               done)
+    # Keg-only: Homebrew symlinks readline at $(HOMEBREW)/opt/readline, so the
+    # resolved prefix locates it without a second `brew` call. An empty /
+    # non-existent HOMEBREW (the opt-out) finds nothing and falls back to the
+    # libedit shim (single-line editing only).
+    READLINE_PREFIX := $(patsubst %/include/readline/readline.h,%,\
+                         $(wildcard $(HOMEBREW)/opt/readline/include/readline/readline.h))
     ifneq ($(READLINE_PREFIX),)
       CFLAGS        += -I$(READLINE_PREFIX)/include
       READLINE_LIBS := -L$(READLINE_PREFIX)/lib -lreadline
@@ -207,8 +256,8 @@ endif
 # the default linker path, so -lecm resolves without an explicit -L there.
 ifeq ($(USE_ECM), 1)
   ECM_PROBE := $(shell printf '\#include <stdio.h>\n\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
-    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include -I/opt/homebrew/include \
-      -L/usr/local/lib -L/opt/homebrew/lib -lecm -lgmp 2>/dev/null && echo y; \
+    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include $(HOMEBREW_CFLAGS) \
+      -L/usr/local/lib $(HOMEBREW_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
     rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
   ifeq ($(ECM_PROBE), y)
     LDFLAGS += -lecm
@@ -236,23 +285,22 @@ CFLAGS  += -DUSE_MPFR
 LDFLAGS += -lmpfr
 endif
 
-ifneq ($(wildcard /opt/homebrew/include),)
-CFLAGS += -I/opt/homebrew/include
-endif
-
-ifneq ($(wildcard /opt/homebrew/lib),)
-LDFLAGS += -L/opt/homebrew/lib
-endif
+# Homebrew include/lib dirs (resolved above; empty when HOMEBREW is opted out or
+# absent). /usr/local is already on CFLAGS/LDFLAGS unconditionally, so on an
+# Intel-prefix install these may duplicate it harmlessly.
+CFLAGS  += $(HOMEBREW_CFLAGS)
+LDFLAGS += $(HOMEBREW_LDFLAGS)
 
 # pkg-config wrapper. On macOS, Homebrew installs its .pc files outside the
 # search path used by a MacPorts/system pkg-config, so `pkg-config --exists
 # raylib` (below) fails on a stock shell even when raylib is installed. Prepend
-# the Homebrew prefixes (Apple-Silicon + Intel) on Darwin so plain `make`
-# detects raylib — and graphics is built by default — without a manual
-# PKG_CONFIG_PATH override. Harmless on Linux (the directories simply don't
-# exist) and respects any PKG_CONFIG_PATH the user already exported.
-ifeq ($(BUILD_PLATFORM),Darwin)
-  PKG_CONFIG = PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$$PKG_CONFIG_PATH" pkg-config
+# the resolved Homebrew prefix's pkgconfig dir (HOMEBREW_PC_PATH, computed above)
+# so plain `make` detects raylib — and graphics is built by default — without a
+# manual PKG_CONFIG_PATH override. Empty when Homebrew is opted out or absent
+# (Linux, Windows), so this collapses to plain pkg-config there; respects any
+# PKG_CONFIG_PATH the user already exported.
+ifneq ($(HOMEBREW_PC_PATH),)
+  PKG_CONFIG = PKG_CONFIG_PATH="$(HOMEBREW_PC_PATH):$$PKG_CONFIG_PATH" pkg-config
 else
   PKG_CONFIG = pkg-config
 endif

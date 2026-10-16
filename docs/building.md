@@ -242,6 +242,10 @@ cargo tauri dev
 | `USE_READLINE=0` | `1` | Disable GNU Readline (required on Windows; auto-detected) |
 | `USE_GRAPHICS=0` | `1` | Disable Raylib 2D graphics engine |
 | `USE_LAPACK=0` | `1` | Disable BLAS/LAPACK linear-algebra kernels |
+| `HOMEBREW=<prefix>` | auto (`brew --prefix`) | Homebrew prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths for the optional dependencies above. Auto-detected with `brew --prefix`, so the Apple-Silicon `/opt/homebrew`, the Intel `/usr/local`, a Linuxbrew prefix, and any custom install all work without editing the makefile. Pass it explicitly to force a prefix, or **opt out of all Homebrew discovery** with `HOMEBREW=` (empty) or `HOMEBREW=/nonexisting`. Honoured identically by the makefile and the CMake test build. |
+
+`HOMEBREW` is read from the command line or the environment (`make HOMEBREW=/opt/homebrew`,
+`export HOMEBREW=`); the CMake test build also accepts `-DHOMEBREW=...`.
 
 ---
 

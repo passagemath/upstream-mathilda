@@ -100,19 +100,45 @@ if(USE_LAPACK)
     endif()
 endif()
 
+# Homebrew prefix discovery (issue #90), mirroring the makefile. An explicit
+# HOMEBREW — cache (-DHOMEBREW=...) or environment — always wins and is the
+# opt-out: HOMEBREW= (empty) or HOMEBREW=/nonexisting makes the EXISTS guards
+# below skip, disabling all Homebrew discovery. Otherwise auto-detect via
+# `brew --prefix` (Apple-Silicon /opt/homebrew, Intel /usr/local, Linuxbrew, or
+# a custom prefix — uniformly), falling back to the conventional macOS prefixes.
+if(DEFINED HOMEBREW)
+    # cache / -D override (possibly empty) wins as-is
+elseif(DEFINED ENV{HOMEBREW})
+    set(HOMEBREW "$ENV{HOMEBREW}")
+else()
+    execute_process(COMMAND brew --prefix
+                    OUTPUT_VARIABLE HOMEBREW OUTPUT_STRIP_TRAILING_WHITESPACE
+                    ERROR_QUIET)
+    if(NOT HOMEBREW AND APPLE)
+        foreach(_p "/opt/homebrew" "/usr/local")
+            if(EXISTS "${_p}")
+                set(HOMEBREW "${_p}")
+                break()
+            endif()
+        endforeach()
+    endif()
+endif()
+
+# On macOS, Homebrew installs its .pc files outside the search path used by a
+# MacPorts/system pkg-config, so the pkg_check_modules probes below fail on a
+# stock shell even when the library is installed. Prepend the resolved Homebrew
+# prefix's pkgconfig dir once, so raylib / flint / pcre2 / fftw are all detected
+# by default — matching the makefile. Empty/absent HOMEBREW (opt-out, Linux,
+# Windows) leaves PKG_CONFIG_PATH untouched.
+if(HOMEBREW AND EXISTS "${HOMEBREW}/lib/pkgconfig")
+    set(ENV{PKG_CONFIG_PATH} "${HOMEBREW}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+endif()
+
 # Raylib autodetection for the graphics engine.  Mirrors the makefile's
 # pkg-config probe; degrades to USE_GRAPHICS=OFF (sampling.c and the
 # symbolic Graphics[]/Plot[] construction path are still fully testable —
 # only render.c/label_font.c, which need a live display, are excluded).
 if(USE_GRAPHICS)
-    # On macOS, Homebrew installs its .pc files outside the search path used by
-    # a MacPorts/system pkg-config, so the probe below fails on a stock shell
-    # even when raylib is installed. Prepend the Homebrew prefixes (Apple-
-    # Silicon + Intel) so graphics is detected by default, matching the makefile.
-    if(APPLE)
-        set(ENV{PKG_CONFIG_PATH}
-            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(RAYLIB QUIET raylib)
@@ -158,10 +184,6 @@ endif()
 # graceful degrade: when absent, flint_bridge.c compiles to stubs and the
 # flint_bridge_tests binary skips itself at runtime.
 if(USE_FLINT)
-    if(APPLE)
-        set(ENV{PKG_CONFIG_PATH}
-            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(FLINT QUIET flint>=3.0)
@@ -183,10 +205,6 @@ endif()
 # graceful degrade: when absent, the regex engine wrapper compiles to stubs and
 # the regex string builtins warn and stay unevaluated at runtime.
 if(USE_REGEX)
-    if(APPLE)
-        set(ENV{PKG_CONFIG_PATH}
-            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(PCRE2 QUIET libpcre2-8)
@@ -208,10 +226,6 @@ endif()
 # absent, the Fourier machine path compiles to a naive O(n^2) DFT fallback.
 option(USE_FFTW "Use FFTW for the machine-precision Fourier transform" ON)
 if(USE_FFTW)
-    if(APPLE)
-        set(ENV{PKG_CONFIG_PATH}
-            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
-    endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(FFTW QUIET fftw3)
@@ -254,19 +268,19 @@ include_directories(../src/graph)
 include_directories(../src/strings)
 include_directories(../src/strings/regex)
 include_directories(../src/solve)
-if(EXISTS "/opt/homebrew/include")
-    include_directories(/opt/homebrew/include)
+if(HOMEBREW AND EXISTS "${HOMEBREW}/include")
+    include_directories(${HOMEBREW}/include)
 endif()
 link_directories(/usr/local/lib)
-if(EXISTS "/opt/homebrew/lib")
-    link_directories(/opt/homebrew/lib)
+if(HOMEBREW AND EXISTS "${HOMEBREW}/lib")
+    link_directories(${HOMEBREW}/lib)
 endif()
 
 # GMP-ECM is a system library (brew install gmp-ecm / apt install libecm-dev),
 # no longer vendored. Detect the public header + shared lib and link -lecm.
 if(USE_ECM)
-    find_path(ECM_INCLUDE_DIR ecm.h PATHS /usr/local/include /opt/homebrew/include)
-    find_library(ECM_LIBRARY NAMES ecm PATHS /usr/local/lib /opt/homebrew/lib)
+    find_path(ECM_INCLUDE_DIR ecm.h PATHS /usr/local/include ${HOMEBREW}/include)
+    find_library(ECM_LIBRARY NAMES ecm PATHS /usr/local/lib ${HOMEBREW}/lib)
     if(ECM_INCLUDE_DIR AND ECM_LIBRARY)
         include_directories(${ECM_INCLUDE_DIR})
         set(ECM_LIB ${ECM_LIBRARY})

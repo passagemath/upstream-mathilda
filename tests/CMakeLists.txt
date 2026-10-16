@@ -386,6 +386,7 @@ set(COMMON_SRC
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
+    ../src/special_functions/sf_machine_plog.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/sf_machine_ellk.c
     ../src/special_functions/inverfc.c
@@ -5159,3 +5160,11 @@ else()
     target_link_libraries(ratcanon_reduce_tests gmp m)
 endif()
 add_test(NAME ratcanon_reduce_tests COMMAND ratcanon_reduce_tests)
+
+add_executable(productlog_machine_tests test_productlog_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(productlog_machine_tests PRIVATE ../src)
+add_test(NAME productlog_machine_tests COMMAND productlog_machine_tests)
+
+add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(legendre_machine_tests PRIVATE ../src)
+add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)

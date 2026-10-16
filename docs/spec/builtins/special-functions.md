@@ -1816,16 +1816,31 @@ through a single complex-MPFR Halley core built on the shared `ncpx` toolkit
   `Table[ProductLog[k, 2.3], {k, -2, 2}]` spans the five lowest branches.
   Precision tracks the input: `N[ProductLog[1/3], 100]` and `ProductLog[7/3\`100]`
   are accurate to 100 digits.
-- **The machine kernel.** A separate double-precision Halley core
-  (`sf_machine_productlog`) serves `Compile[]` and the packed-array path, where
-  the MPFR core would cost ~30 µs per element. Its region split is the same
-  idea, with one correction the MPFR core does not need: the asymptotic seed is
-  taken only where `Log z > 1`, because `L2/L1` diverges as `L1 → 0` and is
-  `Log[0]/0` at `z = 1` exactly. `1 ≤ z ≤ e` seeds from `Log[1 + z]` instead.
-  The kernel then **verifies** `w + Log w = Log z` before answering (the log
-  form, since `w e^w` overflows for large `z`) and declines when the residual is
-  not small, which degrades the caller to the MPFR core rather than returning an
-  unconverged iterate.
+- **The machine kernel.** A machine-precision argument (`ProductLog[x]`,
+  `ProductLog[0, x]` with a machine real or complex `x`) never reaches the MPFR
+  core: the scalar builtin, the packed/`NDArray` path and `Compile[]` (real and
+  complex) all call the same double kernels in
+  `src/special_functions/sf_machine_plog.c`, so they agree bit-for-bit
+  (~4 ulp max, ~0.3 ulp median against mpmath). `sf_machine_productlog` (real
+  `x ≥ -1/e`) seeds Halley by region — `x(1 - x + 3/2 x²)` below 1, `Log[1 + x]`
+  on `[1, e]`, `L1 - L2 + L2/L1` above `e` (only where `Log x > 1`; `L2/L1`
+  diverges as `L1 → 0`) — and **verifies** `w + Log w = Log x` before answering.
+  `sf_machine_productlog_c` (complex, principal branch) seeds with the Padé
+  `z(3 + 6z + z²)/(3 + 9z + 5z²)` near the origin or the asymptotic form
+  elsewhere, iterates Halley in re/im doubles, then checks `w + Log w = Log z`
+  (mod 2πi) and that `w` lies in W₀'s range (`|Im w| < π`, right of the curve
+  `-v cot v + i v`). **Near the branch point** (`|e z + 1| < 1/2`) both kernels
+  run Halley in `u = w + 1` on `g(u) - e(z + 1/e)` with
+  `g(u) = (u - 1)e^u + 1` summed from its Maclaurin series, and form
+  `z + 1/e` with `1/e` split into a double head and tail: the textbook residual
+  `w e^w - z` is the difference of two numbers ≈ `-1/e` and is pure rounding
+  there. The split also decides the real/complex boundary correctly — the
+  double nearest `-1/e` lies *below* it, so `ProductLog[-0.36787944117144233]`
+  is `-1. + 8.22×10⁻⁹ I`, as the MPFR core says. A real `x < -1/e` returns the
+  complex principal value (the upper side of the cut); a branch `k ≠ 0`, a
+  failed verification or a non-finite value falls through to the MPFR core.
+  Exact special values (`-1/E`, `-Pi/2`) are matched only for a `Times[...]`
+  argument, so a numeric call builds no candidate expressions.
 - **Derivative.** `D[ProductLog[z], z] = ProductLog[z]/(z (1 + ProductLog[z]))`;
   the two-argument form differentiates the same way in the argument `z`.
 - **Series at 0.** `Series[ProductLog[x], {x, 0, n}]` gives the closed-form
@@ -2226,6 +2241,14 @@ default `1`).
   or `(1+x)^(m/2) (-1+x)^(-m/2)` (type 3): `LegendreP[2, 1, 2, z]` and
   `LegendreP[2, 1, 3, z]` give the corresponding branch forms.
 - **Listable.** `LegendreP[{1, 2, 3}, x] = {x, -1/2 + 3/2 x², -3/2 x + 5/2 x³}`.
+- **Machine numerics (integer degree).** `LegendreP[n, x]` with an
+  integer-valued `n` (exact, or a machine real like `3.`; negative `n` via
+  `P_{-n-1} = P_n`) and a machine real or complex `x` is evaluated by the
+  three-term recurrence in double / double-complex
+  (`sf_machine_legendre_p_c`, `src/special_functions/sf_machine_plog.c`), the
+  same helper the `NDArray` kernel and `Compile[]` call, so all five surfaces
+  agree bit-for-bit; the exact polynomial is not built for a machine argument.
+  (`LegendreP[n, 1]` with an exact 1 stays the exact `1`.)
 - **Performance over machine arrays.** When the argument is a packed-List or
   `NDArray` of machine reals/complexes, the associated and type-2/3 polynomials
   are evaluated by Horner in machine `double` rather than as a sum of monomials:
@@ -2280,6 +2303,18 @@ default `1`).
   `LegendreQ[3/2, 2]`) stays symbolic and numericalizes only under `N`; at an
   exact zero it gives the special value
   `Q_v(0) = -(√π/2) Sin[v π/2] Gamma[(v+1)/2] / Gamma[v/2+1]`.
+- **Machine numerics (integer degree).** `LegendreQ[n, x]` with an integer
+  `n ≥ 0` and a machine real or complex `x` is evaluated in double /
+  double-complex (`sf_machine_legendre_q`, `sf_machine_legendre_q_c` in
+  `src/special_functions/sf_machine_plog.c`, shared with the `NDArray` kernel
+  and `Compile[]`) by Christoffel's form `Q_n = P_n Q_0 - W_{n-1}`, `P_n` and
+  `W_{n-1}` both run up the three-term recurrence (`W_{-1} = 0`, `W_0 = 1`) —
+  running the recurrence on `Q` itself seeds it with `Q_1 = x Q_0 - 1`, which
+  cancels near `|x| ≈ 0.8`. `Q_0` is the closed form's `L(x)` evaluated without
+  cancellation (`Re = log1p(4x/((1-x)² + y²))/4`, `Im = (arg(1+x) - arg(1-x))/2`,
+  Kahan 1987) and with the closed form's branch: on the real axis beyond `±1`,
+  `Log[1 - x] = log(x - 1) + iπ` (x > 1), so `LegendreQ[2, 1.5] =
+  0.063567 - 4.51604 I`. `x = ±1` declines to the exact path (`Indeterminate`).
 - **Associated functions (type 1).** For integer `n ≥ 0` and integer `m ≥ 0`,
   `(-1)^m (1-x²)^(m/2) d^m/dx^m Q_n(x)`. Because `Q_n` is not a polynomial, these
   carry `ArcTanh`/`Log` terms, e.g. `LegendreQ[3, 1, x]` and `LegendreQ[2, 2,

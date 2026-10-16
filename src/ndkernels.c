@@ -36,6 +36,7 @@
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_expint.h"
 #include "special_functions/sf_machine_ellk.h"
+#include "special_functions/sf_machine_plog.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -630,7 +631,7 @@ static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x,
 static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
 static bool ndk_LucasL_r(double x, double* o)        { return sf_machine_lucasl(x, o); }
 static const NDUnaryKernel NDKU_Erfi           = { NULL, ndk_Erfi_r,           true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_ProductLog     = { NULL, ndk_ProductLog_r,     true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_ProductLog     = { sf_machine_productlog_c, ndk_ProductLog_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelC       = { NULL, ndk_FresnelC_r,       true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelS       = { NULL, ndk_FresnelS_r,       true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_PolyGamma      = { NULL, ndk_PolyGamma_r,      true, false, NULL, NULL, false };
@@ -674,17 +675,21 @@ static bool ndk_Binomial_c(double nre, double nim, double kre, double kim,
     double v; if (!sf_machine_binomial(nre, kre, &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* LegendreP / LegendreQ: the shared real + complex helpers of
+ * sf_machine_plog.c (the scalar builtins call the same ones).  Registered
+ * real_closed, so a REAL element whose value leaves the real axis -- LegendreQ
+ * at a real |x| > 1 -- must DECLINE here rather than have its imaginary part
+ * dropped; the List path then answers it (complex) exactly as the scalar does. */
 static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_legendre_p(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0) return false;
+    return sf_machine_legendre_p_c(nre, xre, xim, rr, ri);
 }
 static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_legendre_q(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0) return false;
+    if (xim == 0.0 && !(xre > -1.0 && xre < 1.0)) return false;
+    return sf_machine_legendre_q_c(nre, xre, xim, rr, ri);
 }
 static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };

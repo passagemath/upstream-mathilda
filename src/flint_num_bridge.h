@@ -33,6 +33,7 @@ Expr* flint_num_airy_ai(const Expr* z);                    /* AiryAi[z]         
 Expr* flint_num_airy_ai_prime(const Expr* z);              /* AiryAiPrime[z]     */
 Expr* flint_num_airy_bi(const Expr* z);                    /* AiryBi[z]          */
 Expr* flint_num_airy_bi_prime(const Expr* z);              /* AiryBiPrime[z]     */
+Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a); /* LerchPhi[z,s,a] */
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a);   /* StieltjesGamma[n,a]*/
 
 /* The Legendre elliptic integrals, in the PARAMETER convention m = k^2 that

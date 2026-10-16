@@ -284,6 +284,10 @@ Expr* flint_num_airy_ai_prime(const Expr* z) { return nb_eval1(z, nb_airy_aip); 
 Expr* flint_num_airy_bi(const Expr* z)       { return nb_eval1(z, nb_airy_bi);  }
 Expr* flint_num_airy_bi_prime(const Expr* z) { return nb_eval1(z, nb_airy_bip); }
 
+Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) {
+    return nb_eval3(z, s, a, acb_dirichlet_lerch_phi);  /* (res, z, s, a, prec) */
+}
+
 /* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. The fmpz
  * order does not fit the nb_fn* shapes, so this one climbs the ladder by hand.
  * `a` governs the precision; the default a = 1 is exact, hence the 53-bit floor. */
@@ -439,6 +443,7 @@ Expr* flint_num_airy_ai(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_ai_prime(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi_prime(const Expr* z) { (void)z; return NULL; }
+Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) { (void)z; (void)s; (void)a; return NULL; }
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; return NULL; }
 Expr* flint_num_elliptic_k(const Expr* m) { (void)m; return NULL; }
 Expr* flint_num_elliptic_e(const Expr* m) { (void)m; return NULL; }

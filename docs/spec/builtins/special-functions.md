@@ -1188,7 +1188,11 @@ series, ~250× faster per call; a single `NDArray`/packed argument is threaded o
 that kernel and returns a packed result (`LerchPhi` is on `pack.c`'s `AWARE` list),
 and anything it declines (`|z| ≥ 1`, non-positive-integer `a`, complex, high
 precision) falls through to the accurate MPFR path. A visible `NDArray` is never
-left unevaluated.
+left unevaluated. At **arbitrary precision** in the convergent region `|z| ≤ 1`
+(default convention) evaluation routes through arb's `acb_dirichlet_lerch_phi`
+(`flint_num_lerchphi`), ~15× faster than the MPFR series and ~12× faster than
+Mathematica; `|z| > 1` keeps the Erdélyi continuation and `IncludeSingularTerm`
+keeps the series.
 
 - **Exact reductions** (built symbolically, so they also numericalize through the
   reused kernels):

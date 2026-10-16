@@ -49,6 +49,7 @@
 #include "symtab.h"
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval, ndt_get/_set */
 #include "sf_machine.h" /* sf_machine_lerchphi (shared double kernel) */
+#include "flint_num_bridge.h" /* flint_num_lerchphi (arb acb_dirichlet_lerch_phi) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -686,9 +687,19 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
         bool diverges = mpfr_cmp_d(zmag, 1.0 + 1e-12) > 0;
         mpfr_clear(zmag);
         if (!diverges) {
-            int code = lp_series_cx(&res, &Z, &sc, &ac, include_singular, wp);
-            if (code == LP_OK)            out = lp_result(res.re, res.im, out_prec, real_only);
-            else if (code == LP_SINGULAR) out = expr_new_symbol(SYM_ComplexInfinity);
+            /* Arbitrary precision, default convention: arb's acb_dirichlet_lerch_phi
+             * (arg order z, s, a matches) is faster than the hand-rolled complex
+             * series. |z| <= 1 here, so there is no branch-cut placement issue; a
+             * decline falls through to the series. */
+            Expr* fv = (out_prec > 53 && !include_singular)
+                       ? flint_num_lerchphi(z, s, a) : NULL;
+            if (fv) {
+                out = fv;
+            } else {
+                int code = lp_series_cx(&res, &Z, &sc, &ac, include_singular, wp);
+                if (code == LP_OK)            out = lp_result(res.re, res.im, out_prec, real_only);
+                else if (code == LP_SINGULAR) out = expr_new_symbol(SYM_ComplexInfinity);
+            }
         } else {
             /* |z| > 1: try the Lerch/Erdelyi analytic continuation, valid for
              * s not a positive integer, a not a non-positive integer, z off the

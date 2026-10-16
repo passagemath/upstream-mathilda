@@ -66,6 +66,7 @@
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
 #include "symtab.h"
+#include "flint_num_bridge.h" /* flint_num_airy_ai[_prime] (arb acb_hypgeom_airy) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -644,9 +645,13 @@ static Expr* airyai_one_arg(Expr* arg) {
     if (arg->type == EXPR_REAL)
         return ai_eval_real(arg, 53, false);
 
-    /* 3. Arbitrary-precision real. */
-    if (arg->type == EXPR_MPFR)
+    /* 3. Arbitrary-precision real -- arb's acb_hypgeom_airy (entire, no branch
+     * cut) is far faster than the hand-rolled MPFR core. Declines fall through. */
+    if (arg->type == EXPR_MPFR) {
+        Expr* v = flint_num_airy_ai(arg);
+        if (v) return v;
         return ai_eval_real(arg, mpfr_get_prec(arg->data.mpfr), false);
+    }
 
     /* 4. Complex argument (Complex[..] with an inexact part). */
     {
@@ -654,6 +659,10 @@ static Expr* airyai_one_arg(Expr* arg) {
         if (is_complex(arg, &re, &im) && (ai_is_inexact(re) || ai_is_inexact(im))) {
             long bits = numeric_min_inexact_bits(arg);
             mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            if (out_prec > 53) {          /* arbitrary precision -> arb */
+                Expr* v = flint_num_airy_ai(arg);
+                if (v) return v;
+            }
             Expr* out = ai_eval_complex(re, im, out_prec, false);
             if (out) return out;
         }
@@ -683,9 +692,12 @@ static Expr* airyaiprime_one_arg(Expr* arg) {
     if (arg->type == EXPR_REAL)
         return ai_eval_real(arg, 53, true);
 
-    /* 3. Arbitrary-precision real. */
-    if (arg->type == EXPR_MPFR)
+    /* 3. Arbitrary-precision real -- via arb (entire, no branch cut). */
+    if (arg->type == EXPR_MPFR) {
+        Expr* v = flint_num_airy_ai_prime(arg);
+        if (v) return v;
         return ai_eval_real(arg, mpfr_get_prec(arg->data.mpfr), true);
+    }
 
     /* 4. Complex argument (Complex[..] with an inexact part). */
     {
@@ -693,6 +705,10 @@ static Expr* airyaiprime_one_arg(Expr* arg) {
         if (is_complex(arg, &re, &im) && (ai_is_inexact(re) || ai_is_inexact(im))) {
             long bits = numeric_min_inexact_bits(arg);
             mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            if (out_prec > 53) {          /* arbitrary precision -> arb */
+                Expr* v = flint_num_airy_ai_prime(arg);
+                if (v) return v;
+            }
             Expr* out = ai_eval_complex(re, im, out_prec, true);
             if (out) return out;
         }

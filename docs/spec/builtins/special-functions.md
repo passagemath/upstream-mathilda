@@ -1270,8 +1270,11 @@ returns Ai(z) and Ai′(z) together).
   `AiryAi[Infinity] = AiryAi[-Infinity] = 0`. Other exact arguments (e.g.
   `AiryAi[2]`) stay unevaluated and numericalize only under `N`.
 - **Numerics.** With an inexact argument, machine- and arbitrary-precision
-  (MPFR) real and complex inputs evaluate numerically. The unified core routes
-  on `r = |z|` and the requested precision `P`:
+  (MPFR) real and complex inputs evaluate numerically. At **arbitrary precision**
+  all four Airy heads route through arb's `acb_hypgeom_airy` (`flint_num_airy_*`),
+  ~9× faster than the MPFR core and faster than Mathematica (Airy is entire, so
+  arb's values match directly); machine `double` keeps the unified `acx` core,
+  which routes on `r = |z|` and the requested precision `P`:
   - a **Maclaurin series** for small/moderate `r` (recurrence
     `a_n = a_{n-3}/(n(n-1))` from Ai″ = z Ai, with `(2/3) r^{3/2}/ln2` guard bits
     to absorb the partial-sum cancellation), and

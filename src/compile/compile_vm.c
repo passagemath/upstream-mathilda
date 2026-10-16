@@ -855,6 +855,12 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed);
  * the same map from the same starting index. */
 #define VM_STACK_SLOTS 512
 
+/* par_chunk and its ParCtx are reached only from vm_par_run's
+ * #ifdef MATHILDA_THREADS branch; guarded to match so the threadless build
+ * (e.g. MinGW/Windows, where USE_THREADS is forced off) does not see an unused
+ * static (-Werror=unused-function). VM_STACK_SLOTS stays outside — it is used
+ * by the serial VM frames too. */
+#ifdef MATHILDA_THREADS
 typedef struct { const ParLoop* pl; const Slot* parent; } ParCtx;
 
 static bool par_chunk(void* vctx, size_t lo, size_t hi) {
@@ -883,6 +889,7 @@ static bool par_chunk(void* vctx, size_t lo, size_t hi) {
     free(heap);
     return !failed;
 }
+#endif /* MATHILDA_THREADS */
 
 static bool vm_par_run(const ParLoop* pl, Slot* R) {
 #ifdef MATHILDA_THREADS

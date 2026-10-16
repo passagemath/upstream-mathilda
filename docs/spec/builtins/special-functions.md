@@ -499,6 +499,10 @@ inputs.
 - Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
   precision: `FresnelC[1.8] = 0.333633`, `FresnelS[1.8] = 0.450939`,
   `N[FresnelC[2], 50] = 0.48825340607534075450022350335726103768836715450922`.
+  On the real machine/packed path the `|x| > 1.5` Lentz continued fraction is
+  carried in real/imag pairs (not C99 `double _Complex`, which compiles each
+  complex divide to libgcc's slow `__divdc3`); the values are unchanged to ≤1 ulp
+  and the branch is ~1.9× faster, taking `FresnelC[v]` over 10⁶ to ~59 ms.
 - Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
   105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0.488253 I`.
 - Derivatives: `D[FresnelC[z], z] = Cos[π z²/2]`, `D[FresnelS[z], z] =

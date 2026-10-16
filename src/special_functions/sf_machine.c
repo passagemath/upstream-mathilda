@@ -346,25 +346,44 @@ static void frenel_double(double x, double* c, double* s) {
         }
         *s = sums; *c = sumc;
     } else {
+        /* Lentz's continued fraction for the complex error function, carried in
+         * real/imag pairs rather than `double _Complex`: each `1/z` here would
+         * otherwise compile to libgcc's __divdc3 (Annex-G infinity-safe complex
+         * divide), which dominated this branch (~13x the power-series branch).
+         * The CF intermediates stay O(1)..O(n^2) for the x>1.5 range, so the plain
+         * reciprocal z* / |z|^2 is safe, and the values are unchanged to ~1 ulp. */
         double pix2 = M_PI * ax * ax;
-        double _Complex b = 1.0 - pix2 * I;
-        double _Complex cc = 1.0 / EI_FPMIN;
-        double _Complex d = 1.0 / b;
-        double _Complex h = d;
+        double br = 1.0, bi = -pix2;            /* b  = 1 - i pix2        */
+        double cr = 1.0 / EI_FPMIN, ci = 0.0;   /* cc = 1/FPMIN           */
+        double den = br * br + bi * bi;
+        double dr = br / den, di = -bi / den;   /* d  = 1/b               */
+        double hr = dr, hi = di;                /* h  = d                 */
         int n = -1;
         for (int k = 2; k <= 400; k++) {
             n += 2;
             double a = -(double)n * (double)(n + 1);
-            b += 4.0;
-            d = 1.0 / (a * d + b);
-            cc = b + a / cc;
-            double _Complex del = cc * d;
-            h *= del;
-            if (fabs(creal(del) - 1.0) + fabs(cimag(del)) < EI_EPS) break;
+            br += 4.0;                           /* b += 4 (real part)     */
+            double tr = a * dr + br, ti = a * di + bi;   /* a*d + b        */
+            den = tr * tr + ti * ti;
+            dr = tr / den; di = -ti / den;       /* d = 1/(a*d + b)        */
+            double cden = cr * cr + ci * ci;     /* cc = b + a/cc          */
+            cr = br + a * cr / cden;
+            ci = bi - a * ci / cden;
+            double delr = cr * dr - ci * di;     /* del = cc * d           */
+            double deli = cr * di + ci * dr;
+            double nhr = hr * delr - hi * deli;  /* h *= del               */
+            hi = hr * deli + hi * delr;
+            hr = nhr;
+            if (fabs(delr - 1.0) + fabs(deli) < EI_EPS) break;
         }
-        h = (ax - ax * I) * h;
-        double _Complex cs = (0.5 + 0.5 * I) * (1.0 - (cos(0.5 * pix2) + sin(0.5 * pix2) * I) * h);
-        *c = creal(cs); *s = cimag(cs);
+        double thr = ax * hr + ax * hi;          /* h = (ax - i ax) * h    */
+        double thi = ax * hi - ax * hr;
+        double cg = cos(0.5 * pix2), sg = sin(0.5 * pix2);
+        double pr = cg * thr - sg * thi;         /* (cos + i sin) * h      */
+        double pimag = cg * thi + sg * thr;
+        double ur = 1.0 - pr, ui = -pimag;       /* 1 - (...)              */
+        *c = 0.5 * (ur - ui);                    /* (1/2 + i/2)(ur + i ui) */
+        *s = 0.5 * (ur + ui);
     }
     if (x < 0.0) { *c = -(*c); *s = -(*s); }
 }

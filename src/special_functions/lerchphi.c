@@ -47,7 +47,8 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
-#include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
+#include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval, ndt_get/_set */
+#include "sf_machine.h" /* sf_machine_lerchphi (shared double kernel) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -105,6 +106,17 @@ static bool lp_exact_int(const Expr* e, long* out) {
 static bool lp_is_int(const Expr* e, long v) {
     long n;
     return lp_exact_int(e, &n) && n == v;
+}
+
+/* Strict machine-real leaf -> double, for the machine fast path only: a Real or
+ * exact (machine) Integer. Declines EXPR_MPFR / BigInt / Rational / complex /
+ * symbolic so an arbitrary-precision or non-real argument still takes the MPFR
+ * path. Mirrors whit_leaf_double. */
+static bool lp_leaf_double(const Expr* e, double* out) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -778,15 +790,27 @@ static Expr* lerchphi_single(Expr* z, Expr* s, Expr* a, bool include_singular) {
         if (r) return r;
     }
 
-#ifdef USE_MPFR
     /* Numeric: at least one inexact operand. */
     if (lp_has_inexact(z) || lp_has_inexact(s) || lp_has_inexact(a)) {
+        /* Machine fast path: all three real machine leaves, default convention.
+         * Uses the shared double kernel sf_machine_lerchphi (also the NDArray /
+         * Compile kernel) -- ~650x faster than the MPFR series per call. Declines
+         * (|z| >= 1, a a non-positive integer, overflow) fall through to the
+         * accurate MPFR path below. The MPFR-free build keeps only this path. */
+        {
+            double zd, sd, ad, v;
+            if (!include_singular &&
+                lp_leaf_double(z, &zd) && lp_leaf_double(s, &sd) &&
+                lp_leaf_double(a, &ad) && sf_machine_lerchphi(zd, sd, ad, &v))
+                return expr_new_real(v);
+        }
+#ifdef USE_MPFR
         Expr* out = lp_numeric(z, s, a, include_singular);
         if (out) return out;
-    }
 #else
-    (void)include_singular;
+        (void)include_singular;
 #endif
+    }
 
     return NULL; /* leave symbolic */
 }
@@ -830,20 +854,49 @@ static bool lp_as_option(Expr* opt, const char** name, Expr** val) {
     return false;
 }
 
+/* Thread sf_machine_lerchphi over a single NDArray argument (the other two are
+ * machine-real scalars), mirroring whittaker_w_ndarray. Returns a packed result,
+ * or NULL to let the caller delist: more than one array arg, an int64/bool/complex
+ * buffer, a non-machine scalar, non-default options, or any declined element. */
+static Expr* lerchphi_ndarray(const Expr* z, const Expr* s, const Expr* a,
+                              bool doubly_infinite, bool include_singular) {
+    if (doubly_infinite || include_singular) return NULL;
+    const Expr* arg[3] = { z, s, a };
+    int ai = -1, ncount = 0;
+    for (int i = 0; i < 3; i++) if (is_ndarray(arg[i])) { ai = i; ncount++; }
+    if (ncount != 1) return NULL;
+    const Expr* nd = arg[ai];
+    NDType dt = nd->data.ndarray.dtype;
+    if (dt == NDT_INT64 || dt == NDT_BOOL || ndt_is_complex(dt)) return NULL;
+    double sc[3] = { 0.0, 0.0, 0.0 };
+    for (int i = 0; i < 3; i++)
+        if (i != ai && !lp_leaf_double(arg[i], &sc[i])) return NULL;
+    size_t n = ndarray_size(nd);
+    void* out = malloc(ndt_elem_size(dt) * (n ? n : 1));
+    if (!out) return NULL;
+    bool ok = true;
+    for (size_t k = 0; k < n && ok; k++) {
+        double xr, xi, v = 0.0;
+        ndt_get(nd->data.ndarray.data, k, dt, &xr, &xi);
+        double zz = (ai == 0) ? xr : sc[0];
+        double ss = (ai == 1) ? xr : sc[1];
+        double aa = (ai == 2) ? xr : sc[2];
+        ok = sf_machine_lerchphi(zz, ss, aa, &v);
+        if (ok) ndt_set(out, k, dt, v, 0.0);
+    }
+    if (ok)
+        return expr_new_ndarray_like(nd, nd->data.ndarray.rank,
+                                     nd->data.ndarray.dims, out, dt);
+    free(out);   /* a declined element -> caller delists for the accurate route */
+    return NULL;
+}
+
 Expr* builtin_lerchphi(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
     if (argc < 3) return lp_emit_argrx(argc);
-
-    /* A visible NDArray in any of the three slots must not fall through
-     * unevaluated (the transparency gate leaves visible NDArrays alone, and
-     * LerchPhi's only ND kernel is the N-ary Compile kernel, not an element-wise
-     * one). Rebuild the call with each NDArray arg delisted and re-evaluate, so
-     * Listable threads every element through the accurate scalar path. */
-    if (is_ndarray(args[0]) || is_ndarray(args[1]) || is_ndarray(args[2]))
-        return ndarray_delist_and_reeval(res);
 
     bool doubly_infinite = false, include_singular = false;
     Expr* last_bad = NULL;
@@ -856,6 +909,16 @@ Expr* builtin_lerchphi(Expr* res) {
         else                                       last_bad = args[i];
     }
     if (last_bad) return lp_emit_nonopt(last_bad, res);
+
+    /* An NDArray (or packed buffer) in any slot: thread the double kernel over it
+     * (fast path), else delist and re-evaluate so Listable threads each element
+     * through the accurate scalar path -- never leave a visible NDArray inert. */
+    if (is_ndarray(args[0]) || is_ndarray(args[1]) || is_ndarray(args[2])) {
+        Expr* nd = lerchphi_ndarray(args[0], args[1], args[2],
+                                    doubly_infinite, include_singular);
+        if (nd) return nd;
+        return ndarray_delist_and_reeval(res);
+    }
 
     return lerchphi_core(args[0], args[1], args[2], doubly_infinite, include_singular);
 }

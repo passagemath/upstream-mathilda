@@ -1175,9 +1175,13 @@ Out[2]= 1.29971
 `LerchPhi` is the common generalization of `Zeta`, `HurwitzZeta` and `PolyLog`:
 `LerchPhi[1, s, a] = Zeta[s, a]` and `z LerchPhi[z, s, 1] = PolyLog[s, z]`.
 Implemented in `src/special_functions/lerchphi.c`, registered via
-`lerchphi_init()` in `core_init()`. `Listable`; a visible `NDArray` (or packed
-List) in any of the three slots is delisted and threaded element-wise through the
-accurate scalar path (`LerchPhi` is on `pack.c`'s `AWARE` list), rather than being
+`lerchphi_init()` in `core_init()`. `Listable`. On the machine path (all real
+machine arguments, default convention) it uses the shared `double` kernel
+`sf_machine_lerchphi` — the same helper the Compile VM uses — rather than the MPFR
+series, ~250× faster per call; a single `NDArray`/packed argument is threaded over
+that kernel and returns a packed result (`LerchPhi` is on `pack.c`'s `AWARE` list),
+and anything it declines (`|z| ≥ 1`, non-positive-integer `a`, complex, high
+precision) falls through to the accurate MPFR path. A visible `NDArray` is never
 left unevaluated.
 
 - **Exact reductions** (built symbolically, so they also numericalize through the

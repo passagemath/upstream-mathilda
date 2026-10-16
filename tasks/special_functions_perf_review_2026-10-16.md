@@ -39,39 +39,45 @@ Chebyshev T/U, HermiteH, LaguerreL, LegendreQ, AiryAiPrime/BiPrime, InverseErfc,
 Sinc, Fibonacci, LucasL, LerchPhi. All agree with SciPy/numpy (0 value mismatches);
 almost all are faster than the baseline.
 
-## MPFR / arbitrary precision (50 digits) — HEADLINE FINDING
+## MPFR / arbitrary precision (50 digits) — CORRECTED + resolved (v0.428–v0.432)
 
-All values agree to 15+ digits across Mathilda / mpmath / wolframscript (correctness
-is solid). **But wolframscript is 3×–890× FASTER than Mathilda at 50 digits on every
-function tested:**
+**Correction.** This section first reported "wolframscript 3×–890× FASTER" — that
+was a **measurement artifact**. The harness warmed up then timed the *same*
+arguments, and Mathematica memoizes `N[expr, prec]`, so the timed pass measured
+cache hits (~3µs), not computation. Re-measured **cache-safe** (distinct argument
+per call, single timed pass; confirmed with `ClearSystemCache[]`), Mathematica's
+real 50-digit times are 0.06–2.2 ms/call, and Mathilda was already faster on most
+heads. Four heads were genuinely slower — closed by routing their transcendental
+series through FLINT/arb (v0.428–v0.432).
 
-| 50-digit, ms/call | Mathilda | wolframscript | mpmath |
-|---|---|---|---|
-| Gamma | 0.035 | 0.003 | 0.028 |
-| Erf | 0.019 | 0.003 | 0.031 |
-| Zeta | 0.69 | 0.0035 | 0.53 |
-| PolyLog | 4.10 | 0.0046 | 1.94 |
-| LerchPhi | 2.90 | 0.010 | 47.9 |
-| HypergeometricU | 0.28 | 0.012 | 4.50 |
-| EllipticK | 0.009 | 0.003 | 0.029 |
-| BesselJ | 0.040 | 0.004 | 0.024 |
-| AiryAi | 0.21 | 0.003 | 0.13 |
-| FresnelC | 0.037 | 0.009 | 0.073 |
+**Final cache-safe standing (50 digits, ms/call; a broad 28-head sweep):** Mathilda
+is **faster than Mathematica on every head measured.** Representative:
 
-Mathilda is competitive with / faster than **mpmath** on several (LerchPhi 16×,
-HypergeometricU 16×, Erf/EllipticK/FresnelC 1.6–3×), but trails wolframscript
-everywhere. Mathilda's per-call time tracks the function (Gamma 35µs vs PolyLog
-4ms) while wolframscript's is a near-flat ~3–12µs — i.e. the cost is Mathilda's
-per-function MPFR series/evaluation, not a fixed per-call overhead, and the
-transcendental series heads (PolyLog, LerchPhi, Zeta, HypergeometricU, AiryAi) are
-the worst. This **reverses** the narrower impression from the Whittaker review
-(where wolframscript's own `WhittakerW` happened to be slow); on the bread-and-butter
-heads wolframscript's arbitrary-precision kernels are dramatically faster.
+| head | Mathilda | wolfram | speedup | | head | Mathilda | wolfram | speedup |
+|---|---|---|---|---|---|---|---|---|
+| Gamma | 0.037 | 0.090 | 2.4× | | PolyLog | 0.027 | 0.747 | **28×** |
+| Erf | 0.019 | 0.202 | 10.6× | | LerchPhi | 0.156 | 2.236 | 14× |
+| Zeta | 0.098 | 0.435 | 4.4× | | Hyp2F1 | 0.422 | 0.723 | 1.7× |
+| HurwitzZeta | 0.106 | 0.312 | 2.9× | | Hyp1F1 | 0.115 | 0.899 | 7.8× |
+| PolyGamma | 0.102 | 0.341 | 3.3× | | HypergeometricU | 0.269 | 2.176 | 8.1× |
+| EllipticK | 0.008 | 0.024 | 3.0× | | BesselJ | 0.037 | 0.101 | 2.7× |
+| AiryAi | 0.014 | 0.065 | 4.6× | | FresnelC | 0.037 | 0.454 | 12× |
+| SinIntegral | 0.015 | 0.393 | 27× | | Beta | 0.096 | 0.338 | 3.5× |
 
-**This is a broad gap across dozens of functions — out of scope for this pass.**
-Recommended as a dedicated follow-up campaign (profile: per-call MPFR context/alloc
-overhead vs series efficiency; candidates: cache MPFR scratch, raise FLINT/arb use
-beyond elliptic+HypergeometricU, tune series term counts at low precision).
+**What changed (arb routing via the `flint_num_*` bridge):** Zeta → `acb_dirichlet_zeta`
+(v0.428); PolyLog real −1<z<1 → `acb_polylog` (v0.429, ~45×); AiryAi/Bi(+primes) →
+`acb_hypgeom_airy` (v0.430, ~9×); LerchPhi |z|≤1 → `acb_dirichlet_lerch_phi` (v0.431,
+~15×); HurwitzZeta → `acb_dirichlet_hurwitz` (v0.432, ~10×). Each keeps the machine
+`double` path and branch-cut/pole/exact handling; accuracy exact vs 30 digits;
+valgrind-clean (no Mathilda-code leaks). The feared central-`numeric.c` per-call
+overhead rewrite was **not needed** — Mathematica carries comparable per-call cost.
+
+**Lesson:** benchmark a CAS that memoizes with **distinct arguments per timed call**
+(or `ClearSystemCache[]`); a warm-up + same-args timed pass measures cache hits.
+
+**Residual (not speed):** `StruveH` does not numericalize at arbitrary precision
+(`N[StruveH[1,1.3],50]` stays symbolic) — a coverage gap (FLINT has no Struve
+kernel), tracked separately.
 
 ## Correctness fixes
 - **LerchPhi (v0.426)**: a visible `NDArray` in any slot was left **unevaluated**

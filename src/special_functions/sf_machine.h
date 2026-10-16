@@ -104,6 +104,15 @@ bool sf_machine_whittaker_w(double k, double m, double z, double* out);     /* W
 bool sf_machine_hyper2f1(double a, double b, double c, double z, double* out); /* 2F1 */
 bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
                     double z, double* out);                    /* HypergeometricPFQ */
+/* StruveH H_nu(z), real machine path. Two regimes, each self-checking: the
+ * convergent 1F2-form series (small/moderate |z|, where the double cancellation
+ * budget holds) and the Y_nu + K_nu asymptotic (large |z|). Declines (false) in
+ * the uniform regime (moderate |z| with large |nu|), for a nu at/past the
+ * 1/Gamma(nu+3/2) pole (nu <= -3/2 half/odd), a negative base with non-integer
+ * nu+1 (complex), a series lost to cancellation, or a non-finite result, so the
+ * caller falls to the FLINT arb bridge. Shared bit-for-bit with the NDArray
+ * kernel (ndk_StruveH_c) and the Compile VM. */
+bool sf_machine_struve_h(double nu, double z, double* out);    /* StruveH */
 
 /* Already-existing double algorithms in inverf.c / inverfc.c, exposed so the
  * same two consumers can use them rather than degrading. */

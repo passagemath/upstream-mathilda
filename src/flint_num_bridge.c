@@ -370,6 +370,82 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Struve function H_nu(z)                                            */
+/* ------------------------------------------------------------------ */
+/* FLINT/arb has no Struve kernel, so compose it from the regularized generalized
+ * hypergeometric (DLMF 11.2.1):
+ *
+ *     H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4)
+ *
+ * The regularized 1F2 (acb_hypgeom_pfq with regularized = 1) folds the 1/Gamma
+ * factors into the series, so the whole expression is entire in nu -- no pole to
+ * dodge at nu = -3/2, -5/2, ... -- and acb_hypgeom_pfq bounds the (convergent)
+ * series rigorously. The convergent series loses ~1.44*|z| bits to cancellation;
+ * flint_num_struveh folds that allowance into the starting working precision. */
+static void nb_struve_h(acb_t res, const acb_t nu, const acb_t z, slong prec) {
+    acb_struct a[1], b[2];
+    acb_t w, zh, t;
+    acb_init(&a[0]); acb_init(&b[0]); acb_init(&b[1]);
+    acb_init(w); acb_init(zh); acb_init(t);
+
+    acb_one(&a[0]);                        /* upper parameter {1}            */
+    acb_set_d(&b[0], 1.5);                 /* lower parameter 3/2 (exact)    */
+    acb_add(&b[1], nu, &b[0], prec);       /* lower parameter nu + 3/2       */
+
+    acb_mul(w, z, z, prec);                /* z^2                            */
+    acb_mul_2exp_si(w, w, -2);             /* z^2 / 4                        */
+    acb_neg(w, w);                         /* -z^2 / 4                       */
+
+    acb_hypgeom_pfq(res, a, 1, b, 2, w, 1 /* regularized */, prec);
+
+    acb_mul_2exp_si(zh, z, -1);            /* z/2                            */
+    acb_add_si(t, nu, 1, prec);            /* nu + 1                         */
+    acb_pow(zh, zh, t, prec);              /* (z/2)^(nu+1), principal branch */
+    acb_mul(res, res, zh, prec);
+
+    acb_clear(&a[0]); acb_clear(&b[0]); acb_clear(&b[1]);
+    acb_clear(w); acb_clear(zh); acb_clear(t);
+}
+
+Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
+    const Expr* args[2] = { nu, z };
+    slong outb = pick_out_bits(args, 2);
+
+    /* Cancellation allowance: read |z| once at a cheap precision and add ~1.45
+     * bits per unit of |z| to the starting working precision, so a large |z| is
+     * resolved in the first attempt rather than by repeated doubling. This is a
+     * precision heuristic only -- the ladder (nb_should_retry / nb_emit_bits)
+     * remains the rigorous backstop, so a wrong estimate costs time, not digits. */
+    slong cancel = 0;
+    {
+        acb_t Z0; acb_init(Z0);
+        if (expr_to_acb(z, Z0, 53)) {
+            arb_t m; arb_init(m);
+            acb_abs(m, Z0, 53);
+            double za = arf_get_d(arb_midref(m), ARF_RND_UP);
+            if (za > 0.0 && za < 1e18) cancel = (slong)(1.45 * za) + 8;
+            arb_clear(m);
+        }
+        acb_clear(Z0);
+    }
+
+    acb_t NU, Z, R;
+    acb_init(NU); acb_init(Z); acb_init(R);
+    Expr* out = NULL;
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (outb + NB_GUARD + cancel) << attempt;
+        if (!expr_to_acb(nu, NU, wp) || !expr_to_acb(z, Z, wp)) break;
+        nb_struve_h(R, NU, Z, wp);
+        if (nb_should_retry(R, outb, attempt)) continue;
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    acb_clear(NU); acb_clear(Z); acb_clear(R);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
 
@@ -456,6 +532,7 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi, const Expr* m) {
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }
+Expr* flint_num_struveh(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 
 #endif

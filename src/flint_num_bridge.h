@@ -68,6 +68,15 @@ Expr* flint_num_elliptic_pi_inc(const Expr* n, const Expr* phi,
  * WhittakerW. */
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
 
+/* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
+ * kernel, so this is composed from the rigorous regularized generalized
+ * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The
+ * regularized form folds the 1/Gamma factors into the sum, so it is entire in
+ * nu (no poles) and valid over the whole complex plane. A cancellation
+ * allowance (~1.44*|z| bits) is pre-added to the working precision so a large
+ * |z| gets its bits up front rather than by blind doubling. */
+Expr* flint_num_struveh(const Expr* nu, const Expr* z);     /* StruveH[nu, z]    */
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

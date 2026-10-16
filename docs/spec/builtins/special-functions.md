@@ -296,9 +296,24 @@ the principal value (the average of the two sides) is returned.
 
 **Features**:
 - Exact value: `StruveH[nu, 0] = 0` for a real ν > −1.
-- Numeric: a numeric order ν with an inexact z evaluates through the ₁F₂
-  representation (`StruveH[0, 1.5] = 0.736723`, matching the integral
-  representation (2/π)∫₀^(π/2) sin(z cos θ) dθ).
+- **Arbitrary precision** (`N[StruveH[ν, z], p]` with an exact or MPFR argument):
+  the rigorous FLINT/arb kernel `H_ν(z) = (z/2)^(ν+1) · ₁F̃₂(1; 3/2, ν+3/2; −z²/4)`
+  (the *regularized* ₁F₂, so it is entire in ν — no pole to dodge — and valid for
+  all ν over the whole complex plane). The working precision carries a
+  cancellation allowance (~1.44·|z| bits) so a large |z| is resolved without
+  blind doubling; the ball ladder renders only correct digits. Example:
+  `N[StruveH[1, 13/10], 50] = 0.32012314597642023952394039617728160520311127053816`
+  (matches mpmath).
+- **Machine precision**: a fast real `double` kernel — the convergent ₁F₂-form
+  series for small/moderate |z|, the `Y_ν + K_ν` asymptotic (DLMF 11.6.1 +
+  10.17.4) for large |z| — shared bit-for-bit with the packed/NDArray kernel and
+  `Compile[]` (`StruveH[0, 1.5] = 0.736723`, matching the integral representation
+  (2/π)∫₀^(π/2) sin(z cos θ) dθ). Accurate to the double floor everywhere; in the
+  narrow transition band z ∈ [~17, ~24] (small ν) both elementary series are
+  intrinsically ill-conditioned and the result degrades to ~1e-9 absolute (as it
+  does for every double implementation, scipy included) — the arb path above
+  gives full precision there. Complex or out-of-domain machine arguments fall
+  back to the symbolic ₁F₂.
 - Mellin transform: `∫₀^∞ x^(s-1) StruveH[0, a x] dx =
   π 2^(s-1) a^(-s)/(Cos(πs/2) Γ(1−s/2)²)`, closed by `Method -> "Mellin"` through
   the ₁F₂ reduction.

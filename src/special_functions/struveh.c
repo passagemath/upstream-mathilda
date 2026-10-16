@@ -24,6 +24,8 @@
 #include "sym_names.h"
 #include "common.h"
 #include "numeric.h"
+#include "flint_num_bridge.h"   /* flint_num_struveh (arb, arbitrary precision) */
+#include "sf_machine.h"         /* sf_machine_struve_h (shared double kernel)   */
 
 #include <stdbool.h>
 
@@ -60,6 +62,10 @@ static Expr* struveh_numeric(const Expr* nu, const Expr* z) {
     return NULL;
 }
 
+/* True when e carries an inexact (machine Real / MPFR, or Complex of those)
+ * component -- i.e. N[] has been applied. */
+static bool sh_inexact(const Expr* e) { return numeric_min_inexact_bits(e) > 0; }
+
 Expr* builtin_struveh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* nu = res->data.function.args[0];
@@ -71,12 +77,40 @@ Expr* builtin_struveh(Expr* res) {
         if (common_machine_real_value(nu, &nuv) && nuv > -1.0) return mk_int(0);
     }
 
-    /* Numeric: a numeric order nu and an inexact (N-triggered) real z. */
-    if (z->type == EXPR_REAL) {
-        double nuv;
-        if (common_machine_real_value(nu, &nuv)) {
-            Expr* v = struveh_numeric(nu, z);
+    /* Numeric path: at least one inexact argument, both concrete numbers. */
+    if ((sh_inexact(nu) || sh_inexact(z)) &&
+        expr_is_numeric_quantity(nu) && expr_is_numeric_quantity(z)) {
+        /* Target precision: the min inexact-bit count over the arguments
+         * (an exact arg imposes no constraint), floored implicitly at 53. */
+        long bnu = numeric_min_inexact_bits(nu);
+        long bz  = numeric_min_inexact_bits(z);
+        long outb = bnu;
+        if (bz > 0 && (outb == 0 || bz < outb)) outb = bz;
+
+        if (outb > 53) {
+            /* Arbitrary precision: the rigorous arb kernel (all nu, all C).
+             * On a genuine decline (non-finite) leave it symbolic rather than
+             * silently downgrade to machine precision. */
+            Expr* v = flint_num_struveh(nu, z);
             if (v) return v;
+        } else {
+            /* Machine precision: the shared double kernel for real nu, z.
+             * Bit-identical to the NDArray / Compile surfaces. */
+            double nuv, zv;
+            if (common_machine_real_value(nu, &nuv) &&
+                common_machine_real_value(z, &zv)) {
+                double h;
+                if (sf_machine_struve_h(nuv, zv, &h)) return expr_new_real(h);
+            }
+            /* Kernel declined (the hard middle band, or a complex argument):
+             * fall back to the symbolic 1F2 template for a real z. */
+            if (z->type == EXPR_REAL) {
+                double nuv2;
+                if (common_machine_real_value(nu, &nuv2)) {
+                    Expr* v = struveh_numeric(nu, z);
+                    if (v) return v;
+                }
+            }
         }
     }
     return NULL;

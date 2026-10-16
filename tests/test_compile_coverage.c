@@ -73,7 +73,6 @@ static const Gap KNOWN_GAPS[] = {
     /* (d) special functions with a numeric fast path but no Compile[] lowering
      * yet -- a genuine gap to close later, not a deliberate exclusion. */
     { "ExpIntegralE",         "special function; no Compile[] lowering yet" },
-    { "StruveH",              "special function; no Compile[] lowering yet" },
 };
 static const size_t NGAPS = sizeof KNOWN_GAPS / sizeof KNOWN_GAPS[0];
 

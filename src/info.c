@@ -951,8 +951,11 @@ void info_init(void) {
         "\tgives the Struve function H_nu(z), the particular solution of the\n"
         "\tinhomogeneous Bessel equation with forcing (z/2)^(nu+1).\n"
         "H_nu(z) = (z/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) 1F2(1; 3/2, nu+3/2; -z^2/4).\n"
-        "StruveH[nu, 0] = 0 for Re nu > -1; numeric nu with an inexact z evaluate\n"
-        "through the 1F2 representation. Listable.");
+        "StruveH[nu, 0] = 0 for Re nu > -1. Numericizes to arbitrary precision via\n"
+        "FLINT/arb (the regularized 1F2, rigorous, all nu and complex z), and at\n"
+        "machine precision via a fast real double kernel (convergent series /\n"
+        "Y_nu+K_nu asymptotic) that also serves the packed/NDArray and Compile[]\n"
+        "paths. Listable.");
     symtab_set_docstring("SinIntegral",
         "SinIntegral[z]\n"
         "\tgives the sine integral Si(z) = Integral_0^z Sin[t]/t dt.\n"

@@ -77,7 +77,14 @@ overhead rewrite was **not needed** — Mathematica carries comparable per-call 
 
 **Residual (not speed):** `StruveH` does not numericalize at arbitrary precision
 (`N[StruveH[1,1.3],50]` stays symbolic) — a coverage gap (FLINT has no Struve
-kernel), tracked separately.
+kernel), tracked separately. **RESOLVED v0.433**: composed a native arb kernel
+`flint_num_struveh` from the regularized ₁F₂ (`acb_hypgeom_pfq`×`acb_pow`), plus a
+complete machine surface (`sf_machine_struve_h` double kernel → scalar / packed /
+NDArray / `Compile[]`). Exact vs mpmath to 50 digits; see
+`docs/spec/changelog/2026-10-12.md`. Cache-safe speed (distinct args): faster than
+BOTH references on every axis — machine vec 27 ns/elt vs scipy 5251 (193×) / WL
+376413 (~13800×); machine scalar 0.57 µs vs scipy 6.47 (11×) / WL 371 (~650×);
+arb 50-digit 0.022 ms vs WL 0.79 (37×) / mpmath 0.16 (7.5×).
 
 ## Correctness fixes
 - **LerchPhi (v0.426)**: a visible `NDArray` in any slot was left **unevaluated**

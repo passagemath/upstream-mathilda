@@ -1620,3 +1620,118 @@ bool sf_series_usable(double peak, double result) {
     if (!(result > 0.0)) return false;              /* total cancellation */
     return peak <= result * SF_SERIES_MAX_LOSS;
 }
+
+/* ------------------------------------------------------------------ */
+/*  StruveH H_nu(z) -- real machine path                               */
+/* ------------------------------------------------------------------ */
+/* H_nu(z) = (z/2)^(nu+1) sum_{k>=0} (-1)^k (z/2)^(2k)/(Gamma(k+3/2)Gamma(k+nu+3/2))
+ *
+ * Two elementary regimes, each returning both a value and a PREDICTED relative
+ * error, so the dispatcher can pick the more accurate at every z rather than
+ * declining in a "hard band":
+ *   - the convergent 1F2-form series (DLMF 11.2.1). Accurate for small/moderate
+ *     |z|; its error is the measured cancellation maxterm/|sum| * eps.
+ *   - the large-|z| asymptotic H_nu = Y_nu + K_nu (DLMF 11.6.1 + 10.17.4), each
+ *     an optimally-truncated divergent series whose error is the size of its
+ *     smallest (first omitted) term.
+ * The two error curves cross near z ~ 12 (nu small), where double precision
+ * bottoms out at ~2e-11 -- the intrinsic floor there (scipy's struve loses
+ * accuracy in the same band), so the kernel returns the best double answer and
+ * declines ONLY when even the better regime is worse than STRUVE_ACCEPT: the
+ * large-nu uniform regime, a Gamma(nu+3/2) pole, a complex (z<0, non-integer
+ * nu+1) prefactor, or a non-finite result. The caller then falls to the rigorous
+ * arb bridge. Shared bit-for-bit with the NDArray kernel and the Compile VM. */
+
+#define STRUVE_ACCEPT 1.0e-7   /* decline if even the better regime exceeds this */
+
+/* The convergent 1F2-form series. Sets *val and the predicted relative error
+ * *relerr (cancellation). Returns false only for a Gamma pole, a complex
+ * prefactor, non-convergence, or a non-finite result. */
+static bool struve_series(double nu, double z, double* val, double* relerr) {
+    double g = tgamma(nu + 1.5);
+    if (!isfinite(g) || g == 0.0) return false;        /* nu+3/2 at a Gamma pole */
+    double w = 0.25 * z * z;                            /* (z/2)^2 >= 0           */
+    double hump = 0.5 * fabs(z);                         /* term peak ~ |z|/2      */
+    double t = (2.0 / sqrt(M_PI)) / g;                  /* t_0 = 1/(G(3/2)G(nu+3/2)) */
+    double sum = t, maxabs = fabs(t);
+    int k;
+    for (k = 1; k < 8000; k++) {
+        double denom = (k + 0.5) * (k + nu + 0.5);
+        if (denom == 0.0) return false;                 /* nu a negative half-int */
+        t *= -w / denom;
+        sum += t;
+        double at = fabs(t);
+        if (at > maxabs) maxabs = at;
+        if (at <= fabs(sum) * 1.0e-18 && (double)k > hump) break;   /* converged */
+    }
+    if (k >= 8000) return false;                        /* did not converge       */
+    double pref = pow(0.5 * z, nu + 1.0);               /* NaN if z<0 & nu+1 non-int */
+    double v = pref * sum;
+    if (!isfinite(v)) return false;
+    *val = v;
+    *relerr = (fabs(sum) > 0.0) ? (maxabs / fabs(sum)) * DBL_EPSILON : 1.0;
+    return true;
+}
+
+/* The large-|z| asymptotic H_nu(z) = Y_nu(z) + K_nu(z), z > 0.
+ *   Y_nu : Hankel asymptotic (DLMF 10.17.4), omega = z - (nu/2 + 1/4) pi.
+ *   K_nu : H_nu - Y_nu asymptotic (DLMF 11.6.1); for a half-integer nu >= 1/2 the
+ *          (nu+1/2-k) factor hits zero and the series terminates exactly.
+ * Both are summed to optimal truncation (smallest term). Sets *val and the
+ * predicted relative error *relerr (combined truncation floor / |H|). */
+static bool struve_asymp(double nu, double z, double* val, double* relerr) {
+    if (!(z > 0.0)) return false;
+
+    double mu = 4.0 * nu * nu;
+    double omega = z - (0.5 * nu + 0.25) * M_PI;
+    double a = 1.0, invzk = 1.0, P = 1.0, Q = 0.0;      /* k=0 adds a_0 to P      */
+    double yfloor = 1.0, prevy = 1.0;
+    for (int k = 1; k < 400; k++) {
+        a *= (mu - (double)(2 * k - 1) * (2 * k - 1)) / ((double)k * 8.0);
+        invzk /= z;
+        double tk = a * invzk, atk = fabs(tk);          /* a_k / z^k              */
+        if (atk > prevy) break;                         /* divergent: smallest term */
+        prevy = atk; yfloor = atk;
+        int m = k / 2;
+        double sgn = (m % 2 == 0) ? 1.0 : -1.0;         /* (-1)^floor(k/2)        */
+        if (k % 2 == 0) P += sgn * tk;                  /* even k -> P            */
+        else            Q += sgn * tk;                  /* odd k  -> Q            */
+    }
+    double scale = sqrt(2.0 / (M_PI * z));
+    double Y = scale * (sin(omega) * P + cos(omega) * Q);
+
+    double w = 0.25 * z * z;
+    double gk = tgamma(nu + 0.5);
+    double term = sqrt(M_PI) * pow(0.5 * z, nu - 1.0) / gk;   /* term_0: 0 if gk=+inf */
+    if (!isfinite(term)) return false;                  /* nu+1/2 a negative-int pole */
+    double Ksum = term, kfloor = fabs(term), prevk = fabs(term);
+    for (int k = 1; k < 400; k++) {
+        term *= (k - 0.5) * (nu + 0.5 - k) / w;
+        if (term == 0.0) { kfloor = 0.0; break; }       /* terminated (half-int nu) */
+        double at = fabs(term);
+        if (at > prevk) break;                          /* divergent: smallest term */
+        prevk = at; kfloor = at;
+        Ksum += term;
+    }
+    double K = Ksum / M_PI;
+
+    double H = Y + K;
+    if (!isfinite(H)) return false;
+    double abserr = scale * yfloor + kfloor / M_PI;     /* each floor in its scale */
+    *val = H;
+    *relerr = (fabs(H) > 0.0) ? abserr / fabs(H) : abserr;
+    return true;
+}
+
+bool sf_machine_struve_h(double nu, double z, double* out) {
+    if (z == 0.0) { *out = 0.0; return nu > -1.0; }
+
+    double cv, ce; bool cok = struve_series(nu, z, &cv, &ce);
+    double av, ae; bool aok = struve_asymp(nu, z, &av, &ae);
+
+    /* Prefer the regime with the smaller predicted error; accept only if that
+     * error clears the budget (otherwise the arb bridge answers). */
+    if (cok && (!aok || ce <= ae)) { *out = cv; return isfinite(cv) && ce < STRUVE_ACCEPT; }
+    if (aok)                       { *out = av; return isfinite(av) && ae < STRUVE_ACCEPT; }
+    return false;
+}

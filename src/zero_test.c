@@ -12,7 +12,7 @@
  *             ladder the tiny*huge catastrophic cancellation of a same-base
  *             exponential product split across summands (a Gaussian * Erf residual
  *             of an exact-ODE integrating-factor solution otherwise hangs the
- *             ladder — POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).
+ *             ladder).
  *
  *   Stage 0 — O(1) structural shortcuts: literal Integer/Real/BigInt/MPFR
  *             zero, Complex[0, 0], List of zeros, unbound symbol, …
@@ -39,8 +39,6 @@
  *             The draw stream is seeded deterministically from the input's
  *             structural hash, so the verdict is a pure function of the input
  *             (no run-to-run flakiness) and the user's RNG stream is untouched.
- *
- * See ZERO_RECOGNISE_PLAN.md for design notes and references.
  */
 #include "zero_test.h"
 
@@ -387,7 +385,7 @@ static bool exp_exponent_is_nonlinear(const Expr* f) {
  * and the E^(+g) that appears from differentiating Erf[-I x/Sqrt2] land in
  * DIFFERENT summands, so the Times like-base collector never combines them to
  * E^0 = 1, and every Schwartz-Zippel sample numericalises as a catastrophic
- * cancellation (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).  Deliberately distinct from
+ * cancellation.  Deliberately distinct from
  * expr_has_symbolic_exponent, which matches a VARIABLE base (x^(1-c)) and
  * EXCLUDES the constant-base case; and gated on nonlinearity so an affine E^x
  * (representable, ladder-friendly) does not needlessly trip ExpandAll. */
@@ -914,7 +912,7 @@ static double nonzero_threshold(double scale, long p_bits) {
 #define ZT_OBVIOUS_NONZERO_BITS 12
 
 /* Operand scale above which a machine-precision "obvious non-zero" is NO LONGER
- * trusted directly (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).  When the operands are
+ * trusted directly.  When the operands are
  * astronomically large, a (1 - near-1) subtraction inside Tanh/Cosh/... loses
  * far more than the 52-bit mantissa, so the rung-0 residual of a genuine
  * cancellation ZERO can be a large fraction of scale (ratio well above the 2^-12
@@ -997,7 +995,7 @@ static bool is_pure_numeric(const Expr* e) {
  * is a NUMERIC FUNCTION (ATTR_NUMERICFUNCTION) applied to such residues. The
  * live case is N[PolyLog[2, z]] for z beyond its numeric window (|z| >~ 300):
  * the dilogarithm engine DECLINES and hands back the unevaluated head
- * PolyLog[2.0, z] (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4 — Gamma, the original
+ * PolyLog[2.0, z] (Gamma, the original
  * example, no longer declines: it returns a finite extended-range value whose
  * magnitude overflows a double and is already re-drawn by the IEEE-overflow
  * path). Such a residue is a numeric coordinate the evaluator CAN compute at a
@@ -1107,8 +1105,8 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
          * function evaluated on numeric arguments that merely ran out of its
          * numeric window (N[PolyLog[2, z]] -> PolyLog[2.0, z] for large |z|), it
          * is re-drawable just like an IEEE overflow: flag it so the Stage-3 shell
-         * ladder shrinks the sample to a resolvable point
-         * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4). A genuinely symbolic residue (an
+         * ladder shrinks the sample to a resolvable point.
+         * A genuinely symbolic residue (an
          * undefined head) is NOT flagged and aborts the test to UNKNOWN as
          * before. */
         bool redraw = residue_is_numeric_decline(z);
@@ -1166,7 +1164,7 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     return r;
 }
 
-/* Huge-scale deep-cancellation decision (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).
+/* Huge-scale deep-cancellation decision.
  * Reached only when the operand scale is huge (>= 2^ZT_HUGE_SCALE_BITS) AND the
  * rung-0 residual tripped the obvious-non-zero gate — a situation machine
  * precision CANNOT adjudicate, because a genuine cancellation zero and a genuine
@@ -2135,7 +2133,7 @@ static ZeroTestResult zt_decide_core(const Expr* e) {
  * then run the staged decision procedure on the normalised expression.  The
  * normalisation is value-preserving, so the verdict is unchanged; it only spares
  * the numeric ladder the tiny*huge cancellation of a same-base exponential
- * product split across summands (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1). */
+ * product split across summands. */
 ZeroTestResult zero_test_decide(const Expr* e) {
     Expr* norm = zt_normalize_exp_kernels(e);
     ZeroTestResult r = zt_decide_core(norm ? norm : e);

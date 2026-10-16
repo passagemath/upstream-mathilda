@@ -603,7 +603,7 @@ static void t_m52_symbolic_complex_root(void) {
  * y'+x y==C[2] whose integrating-factor solution carries Erf[-I x/Sqrt[2]].  The
  * closed form was produced correctly, but dsolve_verify_body's zero_test spun on
  * the Gaussian x Erf residual (E^(-x^2/2) . E^(x^2/2) products that never combine
- * defeat the numeric precision ladder, POSSIBLE_ZEROQ_IMPROVEMENTS.md #1), so the
+ * defeat the numeric precision ladder), so the
  * whole solve timed out.  The verify now ExpandAll-normalises an Erf/Erfi residual
  * first, so the exact closed form returns.  (PZQ in this test likewise ExpandAlls
  * to sidestep the same standing zero_test limitation.) */

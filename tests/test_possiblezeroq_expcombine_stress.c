@@ -2,7 +2,7 @@
  * test_possiblezeroq_expcombine_stress.c
  *
  * Stress corpus for the exponential-combining normalisation (Stage 0.5 of
- * src/zero_test.c) added for POSSIBLE_ZEROQ_IMPROVEMENTS.md #1.
+ * src/zero_test.c).
  *
  * The failure mode: a Gaussian x Erf/Erfi residual whose same-base
  * exponentials (E^(-g) from the solution, E^(+g) from differentiating the

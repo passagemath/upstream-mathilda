@@ -22,8 +22,6 @@
  *   Stage 3  — Schwartz–Zippel probabilistic identity test: substitute
  *              free symbols with random rationals (drawn from Q[i]) and
  *              recurse into Stage 2. Requires k=4 independent confirmations.
- *
- * See ZERO_RECOGNISE_PLAN.md for the full design rationale and literature.
  */
 #ifndef MATHILDA_ZERO_TEST_H
 #define MATHILDA_ZERO_TEST_H

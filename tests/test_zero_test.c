@@ -893,7 +893,7 @@ static void test_flint_fuzz_kernel_differential(void) {
 /* ============================================================== */
 /*  16. Exponential-combining normalisation (Stage 0.5)           */
 /*                                                                */
-/*  POSSIBLE_ZEROQ_IMPROVEMENTS.md #1: a Gaussian x Erf residual  */
+/*  A Gaussian x Erf residual                                    */
 /*  whose same-base exponentials (E^(-x^2/2) from the solution,   */
 /*  E^(x^2/2) from differentiating Erf[-I x/Sqrt2]) sit in        */
 /*  SEPARATE summands never combined to E^0, so every             */
@@ -1011,7 +1011,7 @@ static void test_nonzero_cert_assuming(void) {
 }
 
 /* Group 18 — overflow-robust Schwartz-Zippel sampler
- * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #2, wide dynamic range).  A Plus of widely-
+ * (wide dynamic range).  A Plus of widely-
  * separated exponentials is not covered by the Stage-0b certificate and reaches
  * the sampler.  At a sample where a symbol-dependent exponent is large, E over-
  * flows to IEEE +/-Inf; the old sampler ABORTED on the first such UNKNOWN and
@@ -1049,7 +1049,7 @@ static void test_overflow_unimplemented_head_unchanged(void) {
 }
 
 /* Group 19 — numeric-function-head magnitude-decline re-draw
- * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #4).  A numeric special function can DECLINE
+ * A numeric special function can DECLINE
  * past its numeric window and return its own unevaluated head on numeric args
  * (the live case is N[PolyLog[2, z]] for |z| >~ 300 -> PolyLog[2.0, z]).  That is
  * a numeric coordinate the evaluator could compute at a smaller argument, not a
@@ -1087,7 +1087,7 @@ static void test_decline_undefined_head_unchanged(void) {
 }
 
 /* Group 20 — huge-scale deep-cancellation false-negative
- * (POSSIBLE_ZEROQ_IMPROVEMENTS.md #5).  An identically-zero expression whose two
+ * An identically-zero expression whose two
  * terms are astronomically large (Cosh[x]^(2k) and (1 - Tanh[x]^2)^(-k) are
  * equal since 1 - Tanh^2 = Sech^2 = 1/Cosh^2) defeats the machine-precision
  * screen: the (1 - near-1) subtraction inside Tanh loses far more than the

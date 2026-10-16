@@ -106,7 +106,7 @@ Pipeline (early exit at any stage that yields a definite verdict):
             ladder the tiny*huge catastrophic cancellation of a same-base
             exponential product split across summands (a Gaussian * Erf residual
             of an exact-ODE integrating-factor solution otherwise hangs the
-            ladder — POSSIBLE_ZEROQ_IMPROVEMENTS.md #1).
+            ladder).
 
   Stage 0 — O(1) structural shortcuts: literal Integer/Real/BigInt/MPFR
             zero, Complex[0, 0], List of zeros, unbound symbol, …
@@ -134,8 +134,6 @@ Pipeline (early exit at any stage that yields a definite verdict):
             structural hash, so the verdict is a pure function of the input
             (no run-to-run flakiness) and the user's RNG stream is untouched.
 ```
-
-See ZERO_RECOGNISE_PLAN.md for design notes and references.
 
 ## Implementation notes
 

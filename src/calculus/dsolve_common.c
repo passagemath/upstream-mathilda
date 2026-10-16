@@ -965,7 +965,7 @@ static bool dsolve_verify_body(const DSolveProblem* P, const Expr* body) {
          * summands, never combined to E^0, and numericalised as tiny*huge, so the
          * ladder climbed to 1000 bits on every sample and effectively hung).
          * zero_test_decide now performs the exponential-combining ExpandAll
-         * normalisation itself (POSSIBLE_ZEROQ_IMPROVEMENTS.md #1), so no
+         * normalisation itself, so no
          * Erf-gated pre-pass or FALSE-path re-check is needed here. */
         /* Fast KEEP when the residual is NUMERICALLY zero: zero_test's precision
          * ladder can spin for >8 s on a residual that is zero but carries Log/

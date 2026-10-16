@@ -1018,7 +1018,7 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     like -1,-2 are fine). The `heavy → Expand` gate (already used for complex-spectrum and
     large bodies) now also covers **any** exponential body, so a real-exponential body never
     reaches `Simplify`; the result is back-substitution-verified regardless. +2 systems
-    (636, 650). Documented in `POSSIBLE_ZEROQ_IMPROVEMENTS.md`.
+    (636, 650). Documented in `SIMPLIFY_IMPROVEMENTS.md`.
   - **Solve periodicity-index collision (`solveinv.c` + `dsolve_common.c`).** `y'=2x Sec[y]`
     shipped a WRONG general solution (masked as UNEVAL by leaked→UNFIT): `DSolve\`Separable`
     feeds Solve an equation already carrying the integration constant `C[1]`, and the

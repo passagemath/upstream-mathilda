@@ -47,6 +47,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -835,6 +836,14 @@ Expr* builtin_lerchphi(Expr* res) {
     Expr** args = res->data.function.args;
 
     if (argc < 3) return lp_emit_argrx(argc);
+
+    /* A visible NDArray in any of the three slots must not fall through
+     * unevaluated (the transparency gate leaves visible NDArrays alone, and
+     * LerchPhi's only ND kernel is the N-ary Compile kernel, not an element-wise
+     * one). Rebuild the call with each NDArray arg delisted and re-evaluate, so
+     * Listable threads every element through the accurate scalar path. */
+    if (is_ndarray(args[0]) || is_ndarray(args[1]) || is_ndarray(args[2]))
+        return ndarray_delist_and_reeval(res);
 
     bool doubly_infinite = false, include_singular = false;
     Expr* last_bad = NULL;

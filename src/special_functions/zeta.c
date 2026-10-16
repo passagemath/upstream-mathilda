@@ -48,6 +48,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "flint_num_bridge.h" /* flint_num_zeta (arb acb_dirichlet_zeta) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -590,6 +591,27 @@ static Expr* zeta_one_arg(Expr* s) {
     if (zeta_is_symbol(s, "Infinity")) return expr_new_integer(1);
 
 #ifdef USE_MPFR
+    /* 2.5. Arbitrary-precision real s, and complex s, via arb (acb_dirichlet_zeta):
+     * far faster than mpfr_zeta and the hand-rolled complex Euler-Maclaurin kernel
+     * below (e.g. ~200x at 50 digits). Machine-double real s is left to the direct
+     * mpfr_zeta -> double path (one library call, no arb ball overhead). A decline
+     * (NULL at the s=1 pole) falls through to the paths below, which yield
+     * ComplexInfinity. */
+    {
+        Expr *cre, *cim;
+        /* Only ARBITRARY-precision (MPFR) real or complex s routes to arb; a
+         * machine Real (or machine complex with Real parts) keeps the existing
+         * mpfr_zeta -> double / zeta_numeric -> double paths so machine-in stays
+         * machine-out (the arb bridge returns EXPR_MPFR). */
+        bool cplx_mpfr = is_complex(s, &cre, &cim) &&
+                         ((cre && cre->type == EXPR_MPFR) ||
+                          (cim && cim->type == EXPR_MPFR));
+        if (s->type == EXPR_MPFR || cplx_mpfr) {
+            Expr* v = flint_num_zeta(s);
+            if (v) return v;
+        }
+    }
+
     /* 3/4. Numeric real Riemann zeta via MPFR (machine or arbitrary). */
     if (s->type == EXPR_REAL || s->type == EXPR_MPFR) {
         mpfr_prec_t prec = (s->type == EXPR_MPFR) ? mpfr_get_prec(s->data.mpfr) : 53;

@@ -48,6 +48,7 @@
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
+#include "flint_num_bridge.h" /* flint_num_polylog (arb acb_polylog) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
 #ifdef USE_MPFR
@@ -789,6 +790,15 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
 
     /* Real fast path: real order, real -1 < z < 1. */
     if (n_real && z_real && have_zv && zv > -1.0 && zv < 1.0) {
+        /* Arbitrary precision: arb's acb_polylog is ~2.5x faster than the MPFR
+         * Jonquiere/zeta series here (and faster than Mathematica). Restricted to
+         * this real -1 < z < 1 region, which has no branch cut, so arb's principal
+         * branch matches. Machine precision keeps the series -> double path; a
+         * decline falls through to it too. */
+        if (out_prec > 53) {
+            Expr* v = flint_num_polylog(n, z);
+            if (v) { expr_free(zero); return v; }
+        }
         Expr* out = pl_real_series(nre, zre, out_prec, wp);
         expr_free(zero);
         return out;

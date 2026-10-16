@@ -267,6 +267,10 @@ Expr* flint_num_polygamma(const Expr* n, const Expr* z) {
     return nb_eval2(n, z, acb_polygamma);
 }
 
+Expr* flint_num_polylog(const Expr* s, const Expr* z) {
+    return nb_eval2(s, z, acb_polylog);   /* acb_polylog(w, s, z, prec) */
+}
+
 /* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. The fmpz
  * order does not fit the nb_fn* shapes, so this one climbs the ladder by hand.
  * `a` governs the precision; the default a = 1 is exact, hence the 53-bit floor. */
@@ -417,6 +421,7 @@ void flint_num_bridge_init(void) {
 Expr* flint_num_zeta(const Expr* s) { (void)s; return NULL; }
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; return NULL; }
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) { (void)n; (void)z; return NULL; }
+Expr* flint_num_polylog(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; return NULL; }
 Expr* flint_num_elliptic_k(const Expr* m) { (void)m; return NULL; }
 Expr* flint_num_elliptic_e(const Expr* m) { (void)m; return NULL; }

@@ -238,9 +238,16 @@ jobs:
           make -j4 lib USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
                    USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
           ls -l libmathilda.a libmathilda.dll libmathilda.dll.a
+          # The DLL's authoritative export list is objdump -p's
+          # "[Ordinal/Name Pointer] Table". Each entry is
+          #   \t[   N] +base[   M]  HINT  symbolname
+          # so the symbol is the LAST field of every line carrying "+base[".
+          # (An earlier grep expected "] symbolname" directly and matched only
+          # the header word "Table" — this step had never run in CI before the
+          # compile was fixed, so the stale parser went unnoticed.)
           exports=$(objdump -p libmathilda.dll \
             | sed -n '/\[Ordinal\/Name Pointer\] Table/,/^$/p' \
-            | grep -oE '\] [A-Za-z_][A-Za-z0-9_]*' | sed 's/^\] //')
+            | awk '/[+]base\[/ {print $NF}')
           echo "$exports"
           echo "$exports" | grep -q '^mathilda_ffi_eval$' || {
             echo "::error::libmathilda.dll does not export mathilda_ffi_eval"

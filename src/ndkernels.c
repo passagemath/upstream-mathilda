@@ -34,6 +34,7 @@
 #include "elliptic.h"
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
+#include "special_functions/sf_machine_expint.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -583,13 +584,12 @@ static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
 }
 static const NDNaryKernel NDKN_EllipticPi = { ndk_EllipticPiInc_n, 3, true };
 
-/* Exponential-integral family and friends.  These modules compute in MPFR and
- * round at the end, so there was no double path to reuse — the kernels in
- * sf_machine.c are written for exactly this.  All are registered
- * real-closed with a `real` function only: the function DECLINES (returns
- * false) for an argument whose true value is complex or infinite, which is the
- * engine's standing contract, and a complex argument has no `cplx` to call so
- * it falls back to the interpreter. */
+/* Exponential-integral family and friends.  The kernels (sf_machine_expint.c)
+ * are the ones the scalar builtins call, so the surfaces agree bit for bit.
+ * All are registered real-closed: the `real` function DECLINES (returns false)
+ * for an argument whose true value is complex or infinite (Ci/Chi/li of a
+ * negative argument, the poles), which abandons the buffer to the List path;
+ * a complex buffer goes through the `cplx` kernel. */
 static bool ndk_ExpIntegralEi_r(double x, double* o) { return sf_machine_ei(x, o); }
 static bool ndk_LogIntegral_r(double x, double* o)   { return sf_machine_li(x, o); }
 static bool ndk_SinIntegral_r(double x, double* o)   { return sf_machine_si(x, o); }
@@ -685,6 +685,17 @@ static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NU
 static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false };
+
+/* ExpIntegralE[n, x]: integer order n >= 0, real x > 0 (sf_machine_expint.c,
+ * the kernel the scalar builtin calls). A complex or out-of-domain element
+ * declines, so the List path answers it (symbolic, as the interpreter does). */
+static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
+                               double* rr, double* ri) {
+    if (nim != 0.0 || xim != 0.0) return false;
+    double v; if (!sf_machine_expn(nre, xre, &v)) return false;
+    *rr = v; *ri = 0.0; return true;
+}
+static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -904,6 +915,7 @@ void ndkernels_init(void) {
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
     REG_B(LegendreQ,   NDKB_LegendreQ);
+    REG_B(ExpIntegralE, NDKB_ExpIntegralE);
     REG_B(ChebyshevT,  NDKB_ChebyshevT);
     REG_B(ChebyshevU,  NDKB_ChebyshevU);
     REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */

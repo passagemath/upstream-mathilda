@@ -30,8 +30,9 @@
 #include "expintegralei.h"
 #include "sym_names.h"
 
-#include <complex.h>
-#include "sf_machine.h"   /* sf_series_usable — the cancellation budget */
+#include "sf_machine.h"          /* sf_machine_ei: the real machine kernel */
+#include "sf_machine_expint.h"   /* sf_machine_ei_c: the complex machine kernel */
+#include "sf_scalar.h"           /* the shared machine-scalar gate */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -137,76 +138,11 @@ static Expr* ei_make_i_pi(int s) {
         (Expr*[]){ imag, expr_new_symbol(SYM_Pi) }, 2));
 }
 
-#ifndef USE_MPFR
-/* ------------------------------------------------------------------ */
-/* Machine-precision fallback paths (USE_MPFR=0 builds)               */
-/* ------------------------------------------------------------------ */
-
-/* Ei(x) for a machine real x != 0. Convergent series for moderate |x|,
- * asymptotic series for large |x|. Returns false if the result is not
- * finite (the caller then leaves the call symbolic). */
-static bool ei_machine_real(double x, double* out) {
-    double ax = fabs(x);
-    double v;
-    if (ax <= 45.0) {
-        double sum = 0.0, p = 1.0;
-        for (int k = 1; k <= 100000; k++) {
-            p *= x / k;                  /* p = x^k/k!   */
-            double term = p / k;         /* x^k/(k k!)   */
-            sum += term;
-            if ((double)k > ax && fabs(term) <= 1e-18 * fabs(sum)) break;
-        }
-        v = EI_EULER_GAMMA + log(ax) + sum;
-    } else {
-        double s = 1.0, t = 1.0;
-        for (int k = 1; k <= (int)ax; k++) {
-            t *= (double)k / x;          /* k!/x^k */
-            if (fabs(t) <= 1e-18 * fabs(s)) break;
-            if (k > 5 && fabs(t) >= 1e3 * fabs(s)) break;  /* asymptotic blow-up */
-            s += t;
-        }
-        v = exp(x) / x * s;
-    }
-    if (!isfinite(v)) return false;
-    *out = v;
-    return true;
-}
-
-#endif /* !USE_MPFR */
-
-/* Ei(z) for a machine double-complex z via the convergent series. */
-static bool ei_machine_complex(double complex z, double complex* out, double* peak_out) {
-    double peak_ = 0.0;
-    double zabs = cabs(z);
-    double complex s = 0.0, p = 1.0;
-    for (int k = 1; k <= 200000; k++) {
-        p *= z / (double)k;              /* z^k/k!     */
-        double complex term = p / (double)k;
-        s += term;
-        { double m_ = cabs(term); if (m_ > peak_) peak_ = m_; }
-        if ((double)k > zabs && cabs(term) <= 1e-17 * cabs(s)) break;
-    }
-    double complex val = EI_EULER_GAMMA + clog(z) + s;   /* clog: principal */
-    if (!isfinite(creal(val)) || !isfinite(cimag(val))) return false;
-    *out = val;
-    if (peak_out) *peak_out = peak_;
-    return true;
-}
-
-/* ExpIntegralEi in the shared machine-kernel ABI, for the Compile[] engine and the NDArray
- * element-wise path.  Wraps the series above rather than duplicating it, so the
- * cancellation gate and the branch of clog are the same ones the interpreter
- * uses when it has no MPFR. */
+/* ExpIntegralEi in the shared machine-kernel ABI, for the Compile[] engine and the
+ * NDArray element-wise path: the same double-complex kernel the scalar builtin
+ * uses (sf_machine_expint.c), so every surface computes the same bits. */
 bool expintegralei_machine_complex(double are, double aim, double* ore, double* oim) {
-    double complex r; double peak = 0.0;
-    if (!ei_machine_complex(are + aim * I, &r, &peak)) return false;
-    /* The gate lives HERE, not in the series: this path has somewhere to fall
-     * back to (the MPFR implementation), so declining costs only speed.  The
-     * interpreter's own no-MPFR path has no fallback, and for it an answer good
-     * to eight digits beats no answer at all. */
-    if (!sf_series_usable(peak, cabs(r))) return false;
-    *ore = creal(r); *oim = cimag(r);
-    return true;
+    return sf_machine_ei_c(are, aim, ore, oim);
 }
 
 #ifdef USE_MPFR
@@ -639,7 +575,7 @@ static Expr* ei_one_arg(Expr* arg) {
         if (ei_to_double(arg, &x)) {
             if (x == 0.0) return ei_make_neg_infinity();
             double v;
-            if (ei_machine_real(x, &v)) return expr_new_real(v);
+            if (sf_machine_ei(x, &v)) return expr_new_real(v);
         }
         return NULL;
 #endif
@@ -673,15 +609,10 @@ static Expr* ei_one_arg(Expr* arg) {
             Expr* out = ei_mpfr_complex(re, im, out_prec, force_mpfr);
             if (out) return out;
 #else
-            double rr, ii;
-            if (ei_to_double(re, &rr) && ei_to_double(im, &ii)) {
-                double complex v;
-                if (ei_machine_complex(rr + ii * I, &v, NULL)) {
-                    if (cimag(v) == 0.0) return expr_new_real(creal(v));
-                    return make_complex(expr_new_real(creal(v)),
-                                        expr_new_real(cimag(v)));
-                }
-            }
+            double rr, ii, vr, vi;
+            if (ei_to_double(re, &rr) && ei_to_double(im, &ii) &&
+                sf_machine_ei_c(rr, ii, &vr, &vi))
+                return sf_machine_complex_result(vr, vi);
 #endif
         }
     }
@@ -705,7 +636,21 @@ Expr* builtin_expintegralei(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return numeric_promote_result_if_degenerate(ei_one_arg(args[0]), res);
+    if (argc == 1) {
+        /* Machine-precision call: the double kernel, ahead of the special-value
+         * ladder (CLAUDE.md: the scalar path reuses the ND/Compile helper). A
+         * decline (pole, overflow, underflow) falls through to the MPFR path. */
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_machine_ei(ma.re[0], &vr)) return expr_new_real(vr);
+            } else if (sf_machine_ei_c(ma.re[0], ma.im[0], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+        return numeric_promote_result_if_degenerate(ei_one_arg(args[0]), res);
+    }
     return ei_emit_argx(argc);
 }
 

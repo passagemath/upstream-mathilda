@@ -6,9 +6,10 @@
  * kind of argument takes the cheapest route:
  *
  *   exact special values     ->  0, +-Pi/2, +-I Infinity, Indeterminate
- *   machine real             ->  MPFR series/asymptotic at 53 bits
- *   arbitrary real           ->  the same, at the input precision
- *   complex (any precision)  ->  the ncpx series/asymptotic with guard bits
+ *   machine real / complex   ->  the double kernels in sf_machine_expint.c
+ *                                (shared with NDArray and Compile[])
+ *   arbitrary real           ->  MPFR series/asymptotic at the input precision
+ *   arbitrary complex        ->  the ncpx series/asymptotic with guard bits
  *   everything else          ->  stays symbolic (return NULL)
  *
  * The convergent Maclaurin series (DLMF 6.6.5) is
@@ -33,8 +34,9 @@
 #include "sinintegral.h"
 #include "sym_names.h"
 
-#include <complex.h>
-#include "sf_machine.h"   /* sf_series_usable — the cancellation budget */
+#include "sf_machine.h"          /* sf_machine_si: the real machine kernel */
+#include "sf_machine_expint.h"   /* sf_machine_si_c: the complex machine kernel */
+#include "sf_scalar.h"           /* the shared machine-scalar gate */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -152,79 +154,11 @@ static bool si_is_neg_leading_times(const Expr* e) {
     return false;
 }
 
-#ifndef USE_MPFR
-/* ------------------------------------------------------------------ */
-/* Machine-precision fallback paths (USE_MPFR=0 builds)               */
-/* ------------------------------------------------------------------ */
-
-/* Si(x) for a machine real x via the convergent series (x may be any sign). */
-static bool si_machine_real(double x, double* out) {
-    double ax = fabs(x);
-    double v;
-    if (ax <= 40.0) {
-        double term = ax, sum = ax, x2 = ax * ax;
-        for (int k = 1; k <= 100000; k++) {
-            term *= -x2 * (2 * k - 1) / ((double)(2 * k) * (2 * k + 1) * (2 * k + 1));
-            sum += term;
-            if ((double)(2 * k) > ax && fabs(term) <= 1e-18 * (fabs(sum) + 1.0)) break;
-        }
-        v = sum;
-    } else {
-        double f = 1.0 / ax, g = 1.0 / (ax * ax), x2 = ax * ax;
-        double tf = f, tg = g, pf = f, pg = g;
-        for (int k = 1; k <= (int)ax; k++) {
-            tf *= -(double)(2 * k) * (2 * k - 1) / x2;
-            if (fabs(tf) >= fabs(pf)) break;
-            f += tf; pf = tf;
-        }
-        for (int k = 1; k <= (int)ax; k++) {
-            tg *= -(double)(2 * k + 1) * (2 * k) / x2;
-            if (fabs(tg) >= fabs(pg)) break;
-            g += tg; pg = tg;
-        }
-        v = M_PI_2 - cos(ax) * f - sin(ax) * g;
-    }
-    if (!isfinite(v)) return false;
-    *out = (x < 0.0) ? -v : v;
-    return true;
-}
-
-#endif /* !USE_MPFR */
-
-/* Si(z) for a machine double-complex z via the convergent series. */
-static bool si_machine_complex(double complex z, double complex* out, double* peak_out) {
-    double peak_ = 0.0;
-    double complex w = (creal(z) < 0.0) ? -z : z;
-    double zabs = cabs(w);
-    double complex term = w, sum = w, w2 = w * w;
-    for (int k = 1; k <= 200000; k++) {
-        term *= -w2 * (double)(2 * k - 1)
-                / ((double)(2 * k) * (2 * k + 1) * (2 * k + 1));
-        sum += term;
-        { double m_ = cabs(term); if (m_ > peak_) peak_ = m_; }
-        if ((double)(2 * k) > zabs && cabs(term) <= 1e-17 * (cabs(sum) + 1.0)) break;
-    }
-    double complex v = (creal(z) < 0.0) ? -sum : sum;
-    if (!isfinite(creal(v)) || !isfinite(cimag(v))) return false;
-    *out = v;
-    if (peak_out) *peak_out = peak_;
-    return true;
-}
-
-/* SinIntegral in the shared machine-kernel ABI, for the Compile[] engine and the NDArray
- * element-wise path.  Wraps the series above rather than duplicating it, so the
- * cancellation gate and the branch of clog are the same ones the interpreter
- * uses when it has no MPFR. */
+/* SinIntegral in the shared machine-kernel ABI, for the Compile[] engine and
+ * the NDArray element-wise path: the same double-complex kernel the scalar
+ * builtin uses (sf_machine_expint.c), so every surface computes the same bits. */
 bool sinintegral_machine_complex(double are, double aim, double* ore, double* oim) {
-    double complex r; double peak = 0.0;
-    if (!si_machine_complex(are + aim * I, &r, &peak)) return false;
-    /* The gate lives HERE, not in the series: this path has somewhere to fall
-     * back to (the MPFR implementation), so declining costs only speed.  The
-     * interpreter's own no-MPFR path has no fallback, and for it an answer good
-     * to eight digits beats no answer at all. */
-    if (!sf_series_usable(peak, cabs(r))) return false;
-    *ore = creal(r); *oim = cimag(r);
-    return true;
+    return sf_machine_si_c(are, aim, ore, oim);
 }
 
 #ifdef USE_MPFR
@@ -563,7 +497,7 @@ static Expr* si_one_arg(Expr* arg) {
         return si_mpfr_real(arg, 53);
 #else
         double x = arg->data.real, v;
-        if (si_machine_real(x, &v)) return expr_new_real(v);
+        if (sf_machine_si(x, &v)) return expr_new_real(v);
         return NULL;
 #endif
     }
@@ -584,15 +518,10 @@ static Expr* si_one_arg(Expr* arg) {
             Expr* out = si_mpfr_complex(re, im, out_prec);
             if (out) return out;
 #else
-            double rr, ii;
-            if (si_to_double(re, &rr) && si_to_double(im, &ii)) {
-                double complex v;
-                if (si_machine_complex(rr + ii * I, &v, NULL)) {
-                    if (cimag(v) == 0.0) return expr_new_real(creal(v));
-                    return make_complex(expr_new_real(creal(v)),
-                                        expr_new_real(cimag(v)));
-                }
-            }
+            double rr, ii, vr, vi;
+            if (si_to_double(re, &rr) && si_to_double(im, &ii) &&
+                sf_machine_si_c(rr, ii, &vr, &vi))
+                return sf_machine_complex_result(vr, vi);
 #endif
         }
     }
@@ -623,7 +552,21 @@ Expr* builtin_sinintegral(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return si_one_arg(args[0]);
+    if (argc == 1) {
+        /* Machine-precision call: the double kernel, ahead of the special-value
+         * ladder (CLAUDE.md: the scalar path reuses the ND/Compile helper). A
+         * decline falls through to the MPFR path unchanged. */
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_machine_si(ma.re[0], &vr)) return expr_new_real(vr);
+            } else if (sf_machine_si_c(ma.re[0], ma.im[0], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+        return si_one_arg(args[0]);
+    }
     return si_emit_argx(argc);
 }
 

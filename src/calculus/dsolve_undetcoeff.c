@@ -114,6 +114,46 @@ static bool uc_cand_solves(const Expr* cand, Expr** a, int n, const char* xvar,
     return z;
 }
 
+/* True iff u is affine in x (D[u, x] free of x). */
+static bool uc_affine(const Expr* u, const char* xvar) {
+    Expr* du = ds_d(expr_copy((Expr*)u), expr_new_symbol(xvar));
+    bool ok = ds_free_of(du, xvar);
+    expr_free(du);
+    return ok;
+}
+
+/* Structural UC-term screen: T is a product of x-free factors, nonnegative integer
+ * powers of x, Exp[affine in x], and Cos/Sin[affine in x] -- the only shapes the
+ * ansatz below can match.  Anything else (E^(2x)/(1+E^x)^2 of §2.2.46-4506, Log[x],
+ * Sqrt[x]) declines HERE, before the ansatz Solve and Simplify-based residual check
+ * -- which on a non-UC term only ever end in a decline, but could take >15 s getting
+ * there, starving the variation-of-parameters method that runs next and closes the
+ * equation instantly. */
+static bool uc_is_uc_term(const Expr* T, const char* xvar) {
+    if (ds_free_of(T, xvar)) return true;
+    if (T->type == EXPR_SYMBOL) return T->data.symbol.name == xvar;
+    if (T->type != EXPR_FUNCTION || T->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = T->data.function.head->data.symbol.name;
+    size_t n = T->data.function.arg_count;
+    if (h == SYM_Times) {
+        for (size_t i = 0; i < n; i++)
+            if (!uc_is_uc_term(T->data.function.args[i], xvar)) return false;
+        return true;
+    }
+    if (h == SYM_Power && n == 2) {
+        const Expr* b = T->data.function.args[0];
+        const Expr* e = T->data.function.args[1];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == xvar)
+            return e->type == EXPR_INTEGER && e->data.integer >= 0;
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E)
+            return uc_affine(e, xvar);
+        return false;
+    }
+    if ((h == SYM_Cos || h == SYM_Sin) && n == 1)
+        return uc_affine(T->data.function.args[0], xvar);
+    return false;
+}
+
 /* Particular solution for a single UC term T (in xvar), given the constant
  * coefficients a[0..n].  Returns owned y_p or NULL if T is not UC / not solvable. */
 static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
@@ -304,6 +344,8 @@ Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch) {
 
         Expr* yp = expr_new_integer(0);
         bool all_ok = true;
+        for (size_t t = 0; t < nterms && all_ok; t++)          /* screen every term first */
+            if (!uc_is_uc_term(terms[t], xvar)) all_ok = false;
         for (size_t t = 0; t < nterms && all_ok; t++) {
             Expr* ypt = uc_particular(terms[t], a, n, xvar);
             if (!ypt) all_ok = false;

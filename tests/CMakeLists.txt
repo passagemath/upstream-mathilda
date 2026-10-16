@@ -4841,6 +4841,81 @@ add_test(NAME dsolve_corpus_2_2_45_tests
                  ../../DSolve_test_status/DE_examples_2245.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
 
+# Section 2.2.46 "Problems 4501 to 4600" (Nasser Abbasi; upstream Ch2.S1.SS46.htm).
+# 45 scalar (19 IVP) + 55 linear systems.  Baseline 89/100 -> 94/100 (M74-M78 batch): shared fixes -- Riccati
+# particular-solution route, inert non-elementary integrating factor (linear /
+# Bernoulli), ExactODE inert first integrals, scaled/degenerate Kummer with
+# HypergeometricU, structural separable split + branch-validity check, UC screen,
+# Sec/Csc reduction in Integrate, system VoP trig second pass, and the Together /
+# Cancel kernel-substitution + Log-expansion wrong-answer fixes.
+# Residue 6: 4590 (Gegenbauer, degenerate 2F1), 4594 (Mathieu --
+# no MathieuC head), 4558/4559/4560 (UnitStep-forced systems), 4581 (3x3 forced system,
+# >8 s).  Baseline argv3 = 6.
+add_test(NAME dsolve_corpus_2_2_46_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2246.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 6)
+
+# Section 2.2.47 "Problems 4601 to 4700" (Nasser Abbasi; upstream Ch2.S1.SS47.htm).
+# 100 scalar, first-order linear/Riccati/Abel dominated.  Baseline 83/100 -> 89/100: shared fixes -- Riccati
+# particular-solution route, inert non-elementary integrating factor (linear /
+# Bernoulli), ExactODE inert first integrals, scaled/degenerate Kummer with
+# HypergeometricU, structural separable split + branch-validity check, UC screen,
+# Sec/Csc reduction in Integrate, system VoP trig second pass, and the Together /
+# Cancel kernel-substitution + Log-expansion wrong-answer fixes.
+# Residue 11: 4662/4673/4675/4682/4688 (Riccati, no particular in the candidate
+# family / arbitrary coefficients), 4686 (Integrate[Sec] radical integrating factor),
+# 4690-4692 (Abel), 4622/4623 (non-elementary quadrature, latency).  Baseline argv3 = 11.
+add_test(NAME dsolve_corpus_2_2_47_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2247.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
+
+# Section 2.2.48 "Problems 4701 to 4800" (Nasser Abbasi; upstream Ch2.S1.SS48.htm).
+# 100 scalar, first-order nonlinear.  Baseline 76/100 -> 85/100: shared fixes -- Riccati
+# particular-solution route, inert non-elementary integrating factor (linear /
+# Bernoulli), ExactODE inert first integrals, scaled/degenerate Kummer with
+# HypergeometricU, structural separable split + branch-validity check, UC screen,
+# Sec/Csc reduction in Integrate, system VoP trig second pass, and the Together /
+# Cancel kernel-substitution + Log-expansion wrong-answer fixes.
+# Residue 15: Riccati with symbolic exponents (4778/4788/4789/4790), Chini
+# (4703/4705/4709), dAlembert/class-C/G radical (4730/4745-4748), 4733, 4738, 4784.
+# +1 headroom for 4744 (PASS alone, ~11.5 s end-to-end -- faster than HEAD's 14.3 s --
+# but load-sensitive under ctest -j).  Baseline argv3 = 16.
+add_test(NAME dsolve_corpus_2_2_48_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2248.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 16)
+
+# Section 2.2.49 "Problems 4801 to 4900" (Nasser Abbasi; upstream Ch2.S1.SS49.htm).
+# 100 scalar, first-order nonlinear.  Baseline 85/100 -> 88/100: shared fixes -- Riccati
+# particular-solution route, inert non-elementary integrating factor (linear /
+# Bernoulli), ExactODE inert first integrals, scaled/degenerate Kummer with
+# HypergeometricU, structural separable split + branch-validity check, UC screen,
+# Sec/Csc reduction in Integrate, system VoP trig second pass, and the Together /
+# Cancel kernel-substitution + Log-expansion wrong-answer fixes.
+# Residue 12: first-order with symmetries (4808/4809/4817/4832), 4820 (y=G(x,y')),
+# Riccati (4851/4861/4884), Abel (4887/4888), 4802 (Bernoulli, symbolic exponent k),
+# 4892 (linear, ArcTanh integrating factor).  Baseline argv3 = 12.
+add_test(NAME dsolve_corpus_2_2_49_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2249.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 12)
+
+# Section 2.2.50 "Problems 4901 to 5000" (Nasser Abbasi; upstream Ch2.S1.SS50.htm).
+# 100 scalar, rational first-order.  Baseline 90/100 -> 92/100 (4929 a 5 s latency flutterer): shared fixes -- Riccati
+# particular-solution route, inert non-elementary integrating factor (linear /
+# Bernoulli), ExactODE inert first integrals, scaled/degenerate Kummer with
+# HypergeometricU, structural separable split + branch-validity check, UC screen,
+# Sec/Csc reduction in Integrate, system VoP trig second pass, and the Together /
+# Cancel kernel-substitution + Log-expansion wrong-answer fixes.
+# Residue 8: Riccati (4919/4958/4986/5000), Abel (4922/4966), 4994 (symmetry),
+# 4929.  Baseline argv3 = 8.
+add_test(NAME dsolve_corpus_2_2_50_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2250.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
 # each output by SAMPLING (grid equivalence + witness) via the

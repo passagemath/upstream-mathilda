@@ -8,6 +8,7 @@
  * verify-by-back-substitution policy, but keeps everything symbolic.
  */
 #include "dsolve_common.h"
+#include "../core.h"          /* leaf_count_internal */
 #include "dsolve.h"          /* g_dsolve_depth */
 
 #include "../sym_names.h"
@@ -877,9 +878,17 @@ bool ds_inert_vop_verified(const DSolveProblem* P, const Expr* body) {
  * method's verifiable (often implicit) form. */
 static bool ds_branch_corpus_verifiable(const DSolveProblem* P, const Expr* body) {
     if (P->nfun != 1 || P->max_order[0] != 1) return true;   /* first-order scalar only */
-    if (!ds_has_radical_power(body)) return true;            /* only a radical can hide a
-                                                             * spurious principal-root /
-                                                             * pole-crossing branch */
+    /* Only a radical can hide a spurious principal-root / pole-crossing branch --
+     * in the BODY, or in the EQUATION: inverting ArcSin[y] == t^2/2 + C for
+     * y' == t Sqrt[1 - y^2] gives the radical-free y == Sin[t^2/2 + C], which is
+     * on the wrong branch of the square root wherever Cos[t^2/2 + C] < 0 (with
+     * y(0) == 1 it fits C == Pi/2, i.e. Cos[t^2/2], y' of the wrong sign for t > 0:
+     * a wrong answer, §2.2.24-2360/§2.2.26-2536).  Dropping it lets the implicit
+     * first integral, valid on every branch, answer instead. */
+    bool eq_radical = false;
+    for (size_t e = 0; e < P->neq && !eq_radical; e++)
+        if (ds_has_radical_power(P->eq_residuals[e])) eq_radical = true;
+    if (!ds_has_radical_power(body) && !eq_radical) return true;
     const char* yname = P->fun_names[0];
     const char* xvar  = P->ind_names[0];
     for (size_t e = 0; e < P->neq; e++) {
@@ -3085,6 +3094,21 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
     if (!mu) { expr_free(Qcoef); return NULL; }
     g_integrate_quiet++;
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
+    /* Hand Integrate the CANCELLED integrand when cancellation genuinely shrinks it.
+     * mu q routinely carries a factor common to numerator and denominator that the
+     * evaluator leaves expanded -- (x^2+1) y' == 1 + x^2 - y ArcCot[x] gives
+     * mu q == E^(-ArcCot[x]^2/2)/(1+x^2) + x^2 E^(-ArcCot[x]^2/2)/(1+x^2), i.e. just
+     * E^(-ArcCot[x]^2/2) (§2.2.50-4924) -- and every Integrate stage then works on
+     * (and, when the integral is non-elementary, fails on) the bloated form: 4 s
+     * against 1 s.  Gated on a STRICT leaf-count drop, so an integrand that Together
+     * merely recombines into one fraction keeps its current form and every
+     * already-closing integral sees the identical input. */
+    {
+        Expr* tog = eval_and_free(ds_call1("Together", expr_copy(integrand)));
+        if (tog && leaf_count_internal(tog, true) < leaf_count_internal(integrand, true)) {
+            expr_free(integrand); integrand = tog;
+        } else if (tog) expr_free(tog);
+    }
     Expr* Qint = ds_integrate(integrand, expr_new_symbol(xvar));
     g_integrate_quiet--;
     /* When ∫mu q dx is NON-elementary, Qint is a still-unevaluated Integrate[...].
@@ -3101,6 +3125,48 @@ Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
         expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ mu, expr_new_integer(-1) }, 2)
     }, 2));
     return body;
+}
+
+/* As dsolve_linear_factor_solve, but a NON-elementary integrating-factor exponent
+ * no longer declines: the general solution of v' + P v == Q is
+ *
+ *     v = E^(-I1) (C[1] + I2),   I1 = Inactive[Integrate][P, x],
+ *                                I2 = Inactive[Integrate][E^I1 Q, x],
+ *
+ * exact by construction (D applies the fundamental theorem to an Inactive
+ * integral: v' = -P v + Q) and the form Mathematica returns for y' == f[x] y +
+ * g[x] (§2.2.47-4651), which no method solved before.  INACTIVE, not a bare
+ * Integrate: an unevaluated Integrate re-runs the whole integration cascade (11-45 s
+ * on a non-elementary integrand, uninterruptibly) every time the body is
+ * re-evaluated.  Every case the elementary solver closes is returned by it
+ * unchanged (same cost, same form); this only replaces its NULL.  For a GENERAL
+ * solution only -- an indefinite inert integral cannot be evaluated at an initial
+ * point, so callers with point conditions keep the declining solver.  Pcoef and
+ * Qcoef are consumed. */
+Expr* dsolve_linear_factor_solve_inert(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
+    Expr* body = dsolve_linear_factor_solve(expr_copy(Pcoef), expr_copy(Qcoef), xvar);
+    if (body) { expr_free(Pcoef); expr_free(Qcoef); return body; }
+    /* Integrate the sign-normalised exponent: E^(-Inactive[Integrate][-g, x]) prints
+     * as E^Inactive[Integrate][g, x] when -P is the simpler of the two (y' == g y). */
+    Expr* negP = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(Pcoef)));
+    bool flip = leaf_count_internal(negP, true) < leaf_count_internal(Pcoef, true);
+    Expr* I1 = ds_inactivate_integrate(expr_new_function(expr_new_symbol(SYM_Integrate),
+                   (Expr*[]){ flip ? negP : Pcoef, expr_new_symbol(xvar) }, 2));
+    if (flip) { expr_free(Pcoef); I1 = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), I1)); }
+    else expr_free(negP);
+    Expr* mu = eval_and_free(ds_call1("Exp", I1));
+    Expr* num;
+    if (ds_is_structural_zero(Qcoef)) {
+        expr_free(Qcoef);
+        num = ds_const(1);
+    } else {
+        Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef));
+        Expr* I2 = ds_inactivate_integrate(expr_new_function(expr_new_symbol(SYM_Integrate),
+                       (Expr*[]){ integrand, expr_new_symbol(xvar) }, 2));
+        num = eval_and_free(ds_call2(SYM_Plus, ds_const(1), I2));
+    }
+    return eval_and_free(ds_call2(SYM_Times, num,
+               expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ mu, expr_new_integer(-1) }, 2)));
 }
 
 /* Causal (definite-convolution) variant, for a DISTRIBUTIONAL / impulse forcing q:

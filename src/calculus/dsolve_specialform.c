@@ -9,8 +9,10 @@
  *                                                   u = A^(1/3)(x + B/A)
  *   Bessel          P = 1/x,    Q = 1 - v^2/x^2 ->  BesselJ[v, x], BesselY[v, x]
  *   modified Bessel P = 1/x,    Q = -1 - v^2/x^2 -> BesselI[v, x], BesselK[v, x]
- *   Kummer (1F1)    P = b/x-1,  Q = -a/x        ->  Hypergeometric1F1[a,b,x],
- *                                                   x^(1-b) 1F1[a-b+1, 2-b, x]
+ *   Kummer (1F1)    P = b/x-s,  Q = -a s/x      ->  Hypergeometric1F1[a,b,s x],
+ *                                                   (s x)^(1-b) 1F1[a-b+1, 2-b, s x]
+ *                                                   (integer b: HypergeometricU[a,b,s x]
+ *                                                   replaces the dependent one)
  *   Gauss (2F1)     W = x(1-x), Q = -a b/W,
  *                   P = (c-(a+b+1)x)/W          ->  Hypergeometric2F1[a,b,c,x],
  *                                                   x^(1-c) 2F1[a-c+1,b-c+1,2-c,x]
@@ -41,6 +43,11 @@
 #include "../core.h"
 #include <stdlib.h>
 #include <math.h>
+
+/* base^-1 (unevaluated); base consumed. */
+static Expr* powneg1_sf(Expr* base) {
+    return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
+}
 
 /* C[1] b0 + C[2] b1 ; b0,b1 consumed */
 static Expr* combo(Expr* b0, Expr* b1) {
@@ -1150,39 +1157,61 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(Pdiff);
     }
 
-    /* ---- Kummer (confluent hypergeometric 1F1): P == b/x - 1, Q == -a/x ----
-     * y = C[1] 1F1[a,b,x] + C[2] x^(1-b) 1F1[a-b+1, 2-b, x].  Read a,b directly:
-     * x(P+1) free of x is b, -x Q free of x is a.  The second basis needs b not
-     * an integer (else 2-b is a non-positive integer -> singular pFq lower
-     * parameter); an integer b declines to the Frobenius fallback. */
+    /* ---- Kummer (confluent hypergeometric), scaled: P == b/x - s, Q == -a s/x ----
+     * i.e. z y'' + (b - z) y' - a y == 0 in z = s x.  x P == b - s x is affine in x
+     * (b its value at x = 0, s = -its slope) and x Q == -a s is free of x.  Basis:
+     *   b not an integer:  1F1[a, b, z],              z^(1-b) 1F1[a-b+1, 2-b, z]
+     *   b integer >= 1:    1F1[a, b, z],              HypergeometricU[a, b, z]
+     *   b integer <= 0:    z^(1-b) 1F1[a-b+1, 2-b, z], HypergeometricU[a, b, z]
+     * The integer case is the DEGENERATE one -- the two 1F1 solutions coincide (or
+     * one has a singular lower parameter) -- and Tricomi's U is the independent
+     * second solution for every b, exactly Mathematica's basis (Laguerre
+     * x y'' + (1-x) y' + k y == 0, §2.2.46-4597, is b == 1).  The scale s reaches
+     * x y'' - 2x y' - y == 0 (s == 2, §2.2.47-4603).  b must be a NUMBER: a symbolic
+     * exponent z^(1-b) makes the verify residual a symbolic-power + pFq sum on which
+     * zero_test hangs; a stays free (symbolic). */
     if (!general) {
-        Expr* kb = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar),
-                       ds_call2(SYM_Plus, expr_copy(Pc), expr_new_integer(1))));   /* b */
-        if (ds_free_of(kb, xvar)) {
-            Expr* ka = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
-                           ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc))));  /* a */
-            if (ds_free_of(ka, xvar)) {
+        Expr* xP = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Pc)));
+        Expr* slope = ds_d(expr_copy(xP), expr_new_symbol(xvar));
+        if (ds_free_of(slope, xvar) && !ds_is_zero(slope)) {
+            Expr* ks = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(slope)));  /* s */
+            Expr* kb = ds_simplify(ds_subst(expr_copy(xP), expr_new_symbol(xvar), expr_new_integer(0)));  /* b */
+            Expr* xQ = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc)));
+            if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && specialform_is_number(kb)) {
+                Expr* ka = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
+                               ds_call2(SYM_Times, expr_copy(xQ), powneg1_sf(expr_copy(ks)))));  /* a */
                 Expr* iq = eval_and_free(ds_call1("IntegerQ", expr_copy(kb)));
                 bool bint = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
                 expr_free(iq);
-                if (specialform_is_number(kb) && !bint) {
-                    Expr* b0 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
-                                   (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_new_symbol(xvar) }, 3));
-                    Expr* xpow = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(xvar),
-                                     ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(kb))));  /* x^(1-b) */
+                bool bpos = bint && kb->type == EXPR_INTEGER && kb->data.integer >= 1;
+                Expr* z = eval_and_free(ds_call2(SYM_Times, expr_copy(ks), expr_new_symbol(xvar)));
+                /* M = 1F1[a, b, z];  Mbar = z^(1-b) 1F1[a-b+1, 2-b, z];  U = U[a, b, z] */
+                Expr* M = NULL;
+                if (!bint || bpos)
+                    M = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
+                            (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+                Expr* Mbar = NULL;
+                if (!bpos) {
+                    Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy(z),
+                                     ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(kb))));
                     Expr* a2 = eval_and_free(ds_call2(SYM_Plus,
-                                   ds_call2(SYM_Subtract, expr_copy(ka), expr_copy(kb)),
-                                   expr_new_integer(1)));                          /* a-b+1 */
-                    Expr* b2 = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(2), expr_copy(kb)));  /* 2-b */
+                                   ds_call2(SYM_Subtract, expr_copy(ka), expr_copy(kb)), expr_new_integer(1)));
+                    Expr* b2 = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(2), expr_copy(kb)));
                     Expr* h2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
-                                   (Expr*[]){ a2, b2, expr_new_symbol(xvar) }, 3));
-                    Expr* b1 = eval_and_free(ds_call2(SYM_Times, xpow, h2));
-                    general = combo(b0, b1);
+                                   (Expr*[]){ a2, b2, expr_copy(z) }, 3));
+                    Mbar = eval_and_free(ds_call2(SYM_Times, zpow, h2));
                 }
+                if (!bint) general = combo(M, Mbar);
+                else {
+                    Expr* U = eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricU),
+                                  (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+                    general = combo(bpos ? M : Mbar, U);
+                }
+                expr_free(z); expr_free(ka);
             }
-            expr_free(ka);
+            expr_free(ks); expr_free(kb); expr_free(xQ);
         }
-        expr_free(kb);
+        expr_free(slope); expr_free(xP);
     }
 
     /* ---- Gauss (hypergeometric 2F1) on the canonical interval W = x(1-x) ---- */
@@ -1500,8 +1529,8 @@ void dsolve_specialform_init(void) {
         "two-term y'' + (a x^(2c) + b x^(c-1)) y == 0 (-> Coulomb/Whittaker -> "
         "Hypergeometric1F1), "
         "Bessel / modified Bessel (x^2 y'' + x y' +- (x^2 -+ v^2) y == 0), Kummer "
-        "confluent hypergeometric (x y'' + (b - x) y' - a y == 0 -> "
-        "Hypergeometric1F1), and Gauss hypergeometric "
+        "confluent hypergeometric (x y'' + (b - s x) y' - a s y == 0 -> "
+        "Hypergeometric1F1[a, b, s x], with HypergeometricU for integer b), and Gauss hypergeometric "
         "(x(1-x) y'' + (c - (a+b+1) x) y' - a b y == 0 -> Hypergeometric2F1), ordinary "
         "Legendre, and the trigonometric Pöschl-Teller potential "
         "(y'' == (a + p(p-1) Csc^2 x + q(q-1) Sec^2 x) y -> Hypergeometric2F1, "

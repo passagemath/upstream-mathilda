@@ -766,7 +766,7 @@
   {"2.1.2-753", y'[x] == lam ArcSin[x]^(n) (y[x]-a x^(m)-b)^(2)+a m x^(m -1), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
   {"2.1.2-754", y'[x] == lam ArcCos[x]^(n) (y[x]-a x^(m)-b)^(2)+a m x^(m -1), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
   {"2.1.2-755", y'[x] == lam ArcTan[x]^(n) (y[x]-a x^(m)-b)^(2)+a m x^(m -1), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
-  {"2.1.2-756", y'[x] == lam arccot[x]^(n) (y[x]-a x^(m)-b)^(2)+a m x^(m -1), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
+  {"2.1.2-756", y'[x] == lam ArcCot[x]^(n) (y[x]-a x^(m)-b)^(2)+a m x^(m -1), y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
   {"2.1.2-757", y'[x] x == f[x] (y[x]+a Log[x])^(2)-a, y, x, "[[_1st_order, ‘_with_symmetry_[F(x),G(x)]‘], _Riccati]", False},
   {"2.1.2-758", y'[x] == ((y[x]^(2) f'[x])/(g[x]))-((g'[x])/(f[x])), y, x, "[_Riccati]", False},
   {"2.1.2-759", y[x] y'[x]-y[x] == -((2 x)/(9))+A +((B)/(Sqrt[x])), y, x, "[_rational, [_Abel, ‘2nd type‘, ‘class B‘]]", False},

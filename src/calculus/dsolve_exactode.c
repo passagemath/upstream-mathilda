@@ -197,6 +197,74 @@ static const char* const ds_exfic_names[DS_EXFIC_NEST_MAX] = {
 };
 static int ds_exfic_nest = 0;
 
+/* True iff e is a 2-argument indefinite integral, active `Integrate[f, v]` or
+ * `Inactive[Integrate][f, v]`. */
+static bool ex_is_indef_integral(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count != 2) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) return h->data.symbol.name == SYM_Integrate;
+    return h->type == EXPR_FUNCTION && head_is((Expr*)h, SYM_Inactive)
+        && h->data.function.arg_count == 1
+        && h->data.function.args[0]->type == EXPR_SYMBOL
+        && h->data.function.args[0]->data.symbol.name == SYM_Integrate;
+}
+
+/* Pull the first-integral constant `fic` out of every inert integral of the reduced
+ * sub-solve's body, WITHOUT evaluating anything: each `Integrate[f, v]` whose
+ * integrand mentions fic is rebuilt as
+ *
+ *     Integrate[h0, v] + fic Integrate[h1, v],      f == h0 + fic h1,
+ *
+ * which is exact because the reduced equation M[y] == G + fic is linear in fic, so
+ * every quadrature its solver emits is affine in fic (checked here, not assumed:
+ * h1 = D[f, fic] must be free of fic and f - h0 - fic h1 must vanish
+ * structurally).  This is what lets the fic -> C[k] rename run afterwards: no C[k]
+ * ever lands INSIDE an integrand, so the re-evaluation cannot reach the
+ * DiffUnderInt escalation that a C[_] head triggers (the hang that once made this
+ * path decline every inert body).  Returns an owned, UNEVALUATED copy, or NULL when
+ * some integrand is not affine in fic (the caller then declines as before). */
+static Expr* ex_split_fic_integrals(const Expr* e, const char* fic) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (ex_is_indef_integral(e)) {
+        const Expr* f = e->data.function.args[0];
+        if (!ds_contains(f, fic)) return expr_copy((Expr*)e);
+        Expr* h1 = ds_d(expr_copy((Expr*)f), expr_new_symbol(fic));
+        Expr* h0 = ds_subst(expr_copy((Expr*)f), expr_new_symbol(fic), expr_new_integer(0));
+        bool ok = !ds_contains(h1, fic) && !ds_contains(h0, fic);
+        if (ok) {
+            Expr* rest = eval_and_free(ds_call2(SYM_Subtract, expr_copy((Expr*)f),
+                ds_call2(SYM_Plus, expr_copy(h0),
+                    ds_call2(SYM_Times, expr_new_symbol(fic), expr_copy(h1)))));
+            ok = ds_is_structural_zero(rest);
+            expr_free(rest);
+        }
+        if (!ok) { expr_free(h0); expr_free(h1); return NULL; }
+        const Expr* v = e->data.function.args[1];
+        Expr* i1 = expr_new_function(expr_copy(e->data.function.head),
+                                     (Expr*[]){ h1, expr_copy((Expr*)v) }, 2);
+        Expr* t1 = ds_call2(SYM_Times, expr_new_symbol(fic), i1);
+        if (ds_is_structural_zero(h0)) { expr_free(h0); return t1; }
+        Expr* i0 = expr_new_function(expr_copy(e->data.function.head),
+                                     (Expr*[]){ h0, expr_copy((Expr*)v) }, 2);
+        return ds_call2(SYM_Plus, i0, t1);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr* head = ex_split_fic_integrals(e->data.function.head, fic);
+    if (!head) return NULL;
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        args[i] = ex_split_fic_integrals(e->data.function.args[i], fic);
+        if (!args[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(args[j]);
+            free(args); expr_free(head);
+            return NULL;
+        }
+    }
+    Expr* out = expr_new_function(head, args, n);
+    free(args);
+    return out;
+}
+
 /* mode: 1 = linear coefficient-matching only, 2 = nonlinear jet peel only, 3 = both
  * (the pinned builtin).  The two paths occupy DIFFERENT cascade slots -- see the
  * wrappers at the bottom of this file for why. */
@@ -323,16 +391,23 @@ static Expr** exactode_core(DSolveProblem* P, size_t* nbranch, int mode) {
             Expr* r = eval_and_free(call);
             ds_exfic_nest--;
             body = extract_applied(r, yname);
-            /* A reduced sub-solve that leaves an unevaluated Integrate is not a
-             * usable closed form: the first-order linear engine returns the inert
-             * integrating-factor quadrature quickly (Integrate[exFIC E^(-Cos[x]),x]
-             * for y''+Sin[x]y'+Cos[x]y==0, §2.2.14-1384; Integrate[x^(-3/2)E^(-x^2/2),x]
-             * for 2x y''+(1-2x^2)y'-4x y==0).  Decline BEFORE the exFIC->C[k] rename:
-             * that rename re-evaluates the body, and renaming exFIC->C[2] INSIDE the
-             * inert Integrate would re-trigger the very C[2]-DiffUnderInt hang the
-             * plain symbol avoided.  Declining sends the cascade to the Frobenius
-             * series (which fits the ICs at the ordinary point x=0). */
-            if (body && ds_has_head(body, SYM_Integrate)) { expr_free(body); body = NULL; }
+            /* A reduced sub-solve may leave an inert quadrature: the first-order
+             * linear engine returns the integrating-factor integral unevaluated when
+             * it is non-elementary (Integrate[exFIC E^(-Cos[x]),x] for
+             * y''+Sin[x]y'+Cos[x]y==0, §2.2.14-1384 / §2.2.46-4595), and that IS the
+             * general solution -- Mathematica answers E^Cos[x](C[2] + C[1]
+             * Integrate[E^-Cos[x], x]).  Renaming exFIC->C[k] INSIDE the inert
+             * integral would re-trigger the C[_]-DiffUnderInt hang the plain symbol
+             * avoided, so first split exFIC out of every integrand
+             * (ex_split_fic_integrals) and decline only if some integrand is not
+             * affine in it.  (This path used to decline every inert body, to leave
+             * the equation to the Frobenius series; M68 took series answers out of
+             * the automatic cascade, so that decline had become a bare UNEVAL.) */
+            if (body && ds_has_head(body, SYM_Integrate)) {
+                Expr* split = ex_split_fic_integrals(body, intern_symbol(fic));
+                expr_free(body);
+                body = split;
+            }
             if (body)
                 body = ds_subst(body, expr_new_symbol(fic),
                                 ds_const(ex_max_const(body) + 1));
@@ -386,5 +461,6 @@ void dsolve_exactode_init(void) {
         "DSolve`ExactODE[eqn, y, x] solves a linear ODE of order >= 2 whose left "
         "side is a total derivative d/dx(M[y]) (an exact equation): it integrates "
         "once to the first integral M[y] == Integrate[g, x] + C[k] and recurses "
-        "into the scalar solver.");
+        "into the scalar solver (a non-elementary quadrature of the reduced equation "
+        "is kept as an inert Integrate).");
 }

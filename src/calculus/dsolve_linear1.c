@@ -89,8 +89,11 @@ Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch) {
             expr_free(p); expr_free(q); return NULL;
         }
     } else {
-        /* y' + p y == q  ->  integrating-factor solve (p, q consumed) */
-        body = dsolve_linear_factor_solve(p, q, xvar);
+        /* y' + p y == q  ->  integrating-factor solve (p, q consumed).  A general
+         * solution keeps a non-elementary integrating factor as an inert integral
+         * (y' == f[x] y + g[x]); an IVP needs a closed form to fit at x0. */
+        body = (P->ncond == 0) ? dsolve_linear_factor_solve_inert(p, q, xvar)
+                               : dsolve_linear_factor_solve(p, q, xvar);
     }
     if (!body) return NULL;
 
@@ -109,5 +112,7 @@ void dsolve_linear1_init(void) {
     symtab_get_def("DSolve`LinearFirstOrder")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`LinearFirstOrder",
         "DSolve`LinearFirstOrder[eqn, y, x] solves y'[x] + p(x) y[x] == q(x) via "
-        "the integrating factor Exp[Integrate[p, x]].");
+        "the integrating factor Exp[Integrate[p, x]]; for a general solution a "
+        "non-elementary Integrate[p, x] (e.g. y' == f[x] y + g[x]) is kept as "
+        "Inactive[Integrate].");
 }

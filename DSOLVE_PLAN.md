@@ -3455,6 +3455,47 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
   - **The next 500 complete (M69–M73):** §2.2.41–§2.2.45, problems 4001–4500, now
     gated. Per-section: 75, 99, 93, 92, 94 / 100.
 
+- **M74–M78 — §2.2.46–§2.2.50 corpus (Problems 4501–5000, Nasser Abbasi), one batch.**
+  ✅ DONE. New corpora `DE_examples_2246.m` … `DE_examples_2250.m` (upstream §2.1.46–50;
+  §2.2.46 has 55 linear systems, the rest are scalar first-order dominated); `make
+  check-corpus-indvar` green; gates `dsolve_corpus_2_2_{46..50}_tests` at **6 / 11 / 16 /
+  12 / 8**; reports `DSolve_test_status/reports/2.2.4{6..9}.md`, `2.2.50.md`. Baseline
+  89 / 83 / 76 / 85 / 90 → **94 / 89 / 85 / 88 / 92** (423 → **448/500**), 0 FAIL, 0 crash.
+  Done as one batch rather than five milestones because the fixes are shared across
+  sections. Per-record A/B against a HEAD (v0.433) binary on all 46 older sections:
+  **0 lost, +41** (4609 → 4650 PASS).
+  - **Core CAS fixes (v0.434).** (1) `Together`/`Cancel`/`Factor` substituted kernel
+    generators *inside* unevaluated integrals and other binding operators
+    (`Together[E^Cos[x] Integrate[E^-Cos[x], x]] → x`) — `poly_is_binding_operator`
+    makes them opaque in `ratcanon.c`, `poly.c` and the Gaussian rewrite in `rat.c`;
+    (2) the canonicaliser expanded logs (`Log[x²] → 2Log[x]`, `Log[-w] → iπ + Log[w]`) —
+    removed; Euler's `x = E^t` substitution reduces `Log[E^u] → u` itself (u real);
+    (3) `Factor` SIGFPE from unchecked int64 overflow in `upoly_div_exact_z`;
+    (4) `Integrate[Sec[x]^n]`/`Csc^n`, n ≥ 3, reduction formula (was a DerivativeDivides
+    spin); (5) the Risch/Cherry/Knowles `SolveAlways` ansatz probes run quiet.
+  - **DSolve (v0.435).** Inert non-elementary integrating factor for general solutions
+    (`dsolve_linear_factor_solve_inert`: linear, Bernoulli, Riccati v-equation);
+    Riccati particular-solution search before linearisation (`y_p == 0` when `q0 == 0`,
+    skipped when the coefficients carry a generated `C[k]`); ExactODE keeps inert
+    first-integral quadratures (splits the first-integral constant out of each integrand
+    before the `C[k]` rename); scaled Kummer `P = b/x − s` with `HypergeometricU` for
+    integer `b`; separable structural split + "inversion removes a root ⇒ keep only if
+    valid for every sampled constant"; first-order radical-*equation* branch check in
+    `ds_branch_corpus_verifiable`; UC-term screen in UndeterminedCoefficients; system VoP
+    trig rewrite as a second pass (`dsolve_linsys_solve_trig`); cancelled `μq` integrand
+    in the linear solver; converter `\operatorname{arccot}` → `ArcCot`.
+  - **Latent wrong answers exposed and fixed on the way**: §2.2.24-2360/§2.2.26-2536
+    (branch-invalid explicit `Sin` inversion of an IVP — FAIL once the cleaner split
+    reached it), §2.1.2-934 (wrong system answer from the Log expansion, scored as UNEVAL
+    by the harness). Lessons: `tasks/lessons.md` (2026-10-17).
+  - *Residue 52* (0 FAIL), by class: Riccati without an inspectable particular /
+    symbolic exponents (~15), Abel (7), Chini (3), first-order symmetry classes (6),
+    dAlembert/class-G radicals (5), forced systems with UnitStep / 3×3 (4), Mathieu and
+    degenerate-Gegenbauer (2), and individual quadrature/latency cases.
+  - **Pre-existing**: ten older gates (§2.2.8/.10/.19/.20/.21/.26/.30/.33/.37/.40) are red
+    on HEAD v0.433 already (drift since M73); this batch is equal or better on each and
+    turns §2.2.27/.38/.44 green. Not rebaselined — needs its own investigation.
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

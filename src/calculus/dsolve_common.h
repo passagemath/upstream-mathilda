@@ -199,6 +199,12 @@ Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char*
  * elementary.  Pcoef and Qcoef are consumed. */
 Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar);
 
+/* As above, but for a GENERAL solution (no point conditions): a non-elementary
+ * Integrate[Pcoef, x] yields the inert form E^-I1 (C[1] + Inactive[Integrate][E^I1
+ * Qcoef, x]) with I1 = Inactive[Integrate][Pcoef, x] instead of NULL.  Elementary
+ * cases are byte-identical to dsolve_linear_factor_solve.  Args consumed. */
+Expr* dsolve_linear_factor_solve_inert(Expr* Pcoef, Expr* Qcoef, const char* xvar);
+
 /* Causal (definite-convolution) variant for a distributional / impulse forcing:
  * y = mu^-1 (C[1] + Integrate[mu(s) Qcoef(s), {s, 0, x}]).  The definite integral
  * sifts a DiracDelta Qcoef to a HeavisideTheta where the indefinite form above

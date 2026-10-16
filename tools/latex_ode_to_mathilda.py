@@ -41,7 +41,14 @@ ARBFUN = set('fgh')                 # conventional arbitrary-function letters
 INDVAR_PREF = ['x', 't', 'z', 's', 'r', 'u', 'v']
 # \operatorname{Name} heads that map to a Mathilda builtin under a different name.
 # Maple's Heaviside is Mathilda's UnitStep (Mathilda has no HeavisideTheta head).
-OPNAME_RENAME = {'Heaviside': 'UnitStep'}
+# LaTeX has no `\arccot`/`\arcsec`/... macros, so upstream spells those inverse
+# functions as `\operatorname{arccot}` -- lowercase, which would otherwise pass
+# through as an unknown head `arccot[x]` (§2.2.50-4924, §2.1.2-756).
+OPNAME_RENAME = {'Heaviside': 'UnitStep',
+                 'arccot': 'ArcCot', 'arcsec': 'ArcSec', 'arccsc': 'ArcCsc',
+                 'arcsinh': 'ArcSinh', 'arccosh': 'ArcCosh', 'arctanh': 'ArcTanh',
+                 'arccoth': 'ArcCoth', 'arcsech': 'ArcSech', 'arccsch': 'ArcCsch',
+                 'csch': 'Csch', 'sech': 'Sech', 'coth': 'Coth'}
 # A variable NAME for symbol detection is either a single letter (+digits) or a
 # Greek-letter macro (`\theta`), which the detection layer must treat as one atomic
 # variable — the dependent function of a `\theta'` ODE (§2.2.30-2984) or the

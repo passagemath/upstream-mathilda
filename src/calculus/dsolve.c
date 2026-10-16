@@ -380,6 +380,7 @@ Expr* builtin_dsolve(Expr* res) {
          * (that is LinearFirstOrderSystem below). */
         if (!result) result = dsolve_run_system(&P, dsolve_sys_reduce_solve);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve);
+        if (!result) result = dsolve_run_system(&P, dsolve_linsys_solve_trig);
         if (!result) result = dsolve_run_system(&P, dsolve_linsys_varcoeff_solve);
         /* 2x2 commutative variable-coeff class A == a(t)I + b(t)K0 (rotation/
          * decay), via Phi == Exp[∫a] Exp[(∫b)K0]; after the scalar-factor solver. */

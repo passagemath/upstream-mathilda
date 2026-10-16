@@ -4524,3 +4524,35 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   `g_dsolve_depth--`, so a later case in the SAME process sees elevated depth (a top-level-only
   method then wrongly declines). Harmless in the fork-per-case runner; a REPL confound. Confirm
   a single-process anomaly by re-running the case ALONE in a fresh process.
+
+## 2026-10-17 — The next 500 (§2.2.46–§2.2.50, problems 4501–5000)
+- **A cleaner intermediate can EXPOSE a latent wrong answer elsewhere (×3).** The
+  structural separable split (no sampled `Csc[4]` constants) let `Solve` invert
+  `ArcSin[y] == t^2/2 + C` explicitly — a branch-invalid `y == Sin[..]` that was a FAIL
+  on two IVPs; HEAD only "passed" because its sampling artefacts made `Solve` fail.
+  Likewise it routed §2.1.2-934 into an Integrate whose input went through `Together`,
+  exposing that `Together`/`Cancel` rewrote `Log[x^2] -> 2 Log[x]` and
+  `Log[-w] -> I Pi + Log[w]` (value-changing), and §2.1.2-268 into a pre-existing
+  `Factor` SIGFPE (unchecked int64 overflow in `upoly_div_exact_z`). Every one of these
+  was invisible until a fix changed the path. ALWAYS full per-record A/B vs a HEAD
+  binary after a general fix — gate totals hid all of them (net +33 with 8 losses).
+- **The corpus harness reads a wrong general solution as UNEVAL, not FAIL** (a BAD
+  residual with C[k] left is "UNFIT"). §2.1.2-934's y-component was numerically WRONG
+  yet scored U. When a record flips P→U after a change, check the residual by hand —
+  it may be a wrong answer, not a decline.
+- **`ds_has_radical_power` counts `E^Y` and symbolic exponents** — not a root test.
+  A gate meant for "√ in h(Y)" must test `Sqrt`/`u^(p/q)` explicitly (it declined every
+  exponential separable, §2.1.2-934).
+- **Prefer a decision that is checked, not structural, for branch validity.** "Inversion
+  removed the radical ⇒ branch-only" was wrong for `ArcSinh` (Sinh is valid on every
+  branch, §2.2.33-3257). Sampling the constant at several values through the numeric
+  reject filter decides it per equation.
+- **A second-pass method preserves HEAD byte-identically.** The system VoP trig rewrite
+  helped 4550/4575 but broke 1439 (verify could not discharge Log[1+Tan^2]). Running
+  the original assembly first and the rewrite only as a fallback pass keeps every
+  previously-closing system unchanged.
+- **Probe each changed record ALONE before calling it flutter.** 268/712 looked like
+  8 s-wall flutter (7 s solves) but were deterministic crashes in the fork.
+- **A nested sub-solve can carry C[k] in its coefficients** (ReducibleFirstIntegral's
+  `y' == C[1] y + y^2`); a method that mints its own C[1] must not run there, and a
+  particular-solution search must prefer y_p == 0 when q0 == 0 (Bernoulli form).

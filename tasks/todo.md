@@ -70,3 +70,32 @@ changes; killswitch / HEAD A/B for the DSolve changes; valgrind clean; all prior
 gates held (the pre-existing M68 drift in older §2.2.x and the pre-existing
 dsolve_tests exact-ODE abort were confirmed HEAD-identical, not introduced here).
 5 git tags pushed (v0.412–v0.416).
+
+---
+
+# DSolve — the next 500 (§2.2.46–§2.2.50, Problems 4501–5000, M74–M78)
+
+Plan: `~/.claude/plans/let-s-continue-our-implementation-twinkling-reef.md`. Executed as ONE
+batch (fixes are shared across sections) in two commits: core CAS fixes (v0.434) + DSolve
+batch with the five corpora and gates (v0.435).
+
+- [x] Fetch + convert all five (§2.2.46 has 55 systems); indvar green; spot-audit →
+      converter fix `\operatorname{arccot}` → ArcCot (4924, §2.1.2-756)
+- [x] Baseline 89/83/76/85/90 = 423/500, 0 FAIL
+- [x] General fixes (see DSOLVE_PLAN M74–M78): Together/Cancel binder + Log semantics,
+      Factor SIGFPE, ∫Secⁿ, quiet Risch probes, inert integrating factor, Riccati
+      particular, ExactODE inert, Kummer U, separable split + branch check, UC screen,
+      system trig 2nd pass
+- [x] Full per-record A/B vs HEAD (51 sections) → found + fixed 8 regressions incl. 2 FAIL,
+      1 wrong-as-UNEVAL, 2 crashes; final: 0 lost, +41 old; new 94/89/85/88/92 = 448/500
+- [x] Unit suite: only pre-existing HEAD failures; ratcanon test updated; c99/messages green
+- [x] Gates 6/11/16/12/8; reports; STATUS/README/PLAN/changelog/calculus.md/algebra.md
+- [x] valgrind on the new paths
+- [x] commit + tag v0.434, v0.435
+
+## Review — next 500 (§2.2.46–50)
+423 → 448 / 500, 0 FAIL, 0 crash; older sections +41 with zero per-record losses. The
+biggest wins were not DSolve methods but core correctness: Together/Cancel were silently
+value-changing (binder substitution, Log expansion), Factor could crash the kernel, and
+∫Secⁿ hung. Ten older gates are red on HEAD already (drift since M73) — flagged, not
+rebaselined.

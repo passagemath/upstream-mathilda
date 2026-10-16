@@ -78,9 +78,40 @@ static bool sep_find_split(DSolveProblem* P, Expr** g_out, Expr** h_out,
     Expr* yx = ds_make_funcapp(yname, 0, xvar);
     Expr* FY = ds_subst(F, yx, expr_new_symbol(Yname));   /* consumes F, yx */
 
+    Expr* g = NULL; Expr* h = NULL;
+
+    /* STRUCTURAL split first: when F is literally a product whose every factor is
+     * free of x or free of Y, g = the Y-free factors and h = the x-free ones, with
+     * no sampling.  The sampled split below reconstructs g = F(x, Y0) and
+     * h = F(X0, Y)/F(X0, Y0), which leaves the sample's trig values as unreduced
+     * constants -- y' + Sin[2x] Csc[2y] == 0 (§2.2.48-4725) splits into
+     * -Sin[2x] Csc[4] and Sin[4] Csc[2Y], the Csc[4] Sin[4] never cancels, and the
+     * explicit Solve inversion of the resulting relation fails.  The structural
+     * split gives the clean -Sin[2x] and Csc[2Y].  (A factor depending on both
+     * variables leaves it to the sampling search, unchanged.) */
+    {
+        size_t nf = head_is(FY, SYM_Times) ? FY->data.function.arg_count : 1;
+        Expr** gx = malloc(nf * sizeof(Expr*)); size_t ngx = 0;
+        Expr** hy = malloc(nf * sizeof(Expr*)); size_t nhy = 0;
+        bool ok = true;
+        for (size_t i = 0; i < nf && ok; i++) {
+            Expr* fi = head_is(FY, SYM_Times) ? FY->data.function.args[i] : FY;
+            if (!ds_contains(fi, Yname)) gx[ngx++] = expr_copy(fi);
+            else if (!ds_contains(fi, xvar)) hy[nhy++] = expr_copy(fi);
+            else ok = false;
+        }
+        if (ok && ngx > 0 && nhy > 0) {
+            g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gx, ngx));
+            h = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), hy, nhy));
+        } else {
+            for (size_t i = 0; i < ngx; i++) expr_free(gx[i]);
+            for (size_t i = 0; i < nhy; i++) expr_free(hy[i]);
+        }
+        free(gx); free(hy);
+    }
+
     static const int samples[] = { 2, 3, 5, 7, -2, -3 };
     size_t nsamp = sizeof(samples) / sizeof(samples[0]);
-    Expr* g = NULL; Expr* h = NULL;
     for (size_t ai = 0; ai < nsamp && !g; ai++) {
         for (size_t bi = 0; bi < nsamp && !g; bi++) {
             int X0 = samples[ai], Y0 = samples[bi];
@@ -266,10 +297,40 @@ static bool sep_noninvertible_logsum(const Expr* lhsInt) {
     return n >= 3;
 }
 
+/* True iff e carries a genuine ROOT -- Sqrt[u] or u^(p/q) with q > 1 and u not a
+ * number.  (ds_has_radical_power also counts E^Y and symbolic exponents, which are
+ * single-valued: inverting E^Y == Log[t] + C to Y == Log[Log[t] + C] is exact.) */
+static bool sep_has_root(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && e->data.function.arg_count == 2
+        && h->data.symbol.name == SYM_Power) {
+        const Expr* b  = e->data.function.args[0];
+        const Expr* ex = e->data.function.args[1];
+        bool numbase = b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || b->type == EXPR_REAL;
+        if (!numbase && head_is((Expr*)ex, SYM_Rational)) return true;
+    }
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Sqrt) return true;
+    if (sep_has_root(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (sep_has_root(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar = P->ind_names[0];
     Expr* g = NULL; Expr* h = NULL; const char* Yname = NULL;
     if (!sep_find_split(P, &g, &h, &Yname)) return NULL;
+
+    /* A RADICAL in h(Y) whose explicit inversion removes it (y' x == Sqrt[1 - y^2]
+     * -> ArcSin[y] == Log[x] + C -> y == Sin[Log[x] + C]) can yield a form valid on
+     * ONE branch of the root only -- there y' == Cos[..]/x while the equation demands
+     * |Cos[..]|/x.  Such an explicit form is dropped (test below) so the implicit
+     * first integral (ArcSin[y] - Log[x] == C), valid on every branch, answers.  (A
+     * body that still carries the radical keeps the existing per-branch numeric
+     * check.)  Measured: §2.2.12-1134, §2.2.35-3412, §2.2.24-2360/§2.2.26-2536,
+     * where the explicit IVP branch was a wrong answer. */
+    bool h_radical = sep_has_root(h);
 
     Expr* lhsInt = NULL; Expr* rhsInt = NULL;
     if (!sep_integrals(g, h, Yname, xvar, &lhsInt, &rhsInt, true)) return NULL;
@@ -318,6 +379,31 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
                     (ds_has_radical_power(bodies[i]) && !ds_branch_num_ok(P, bodies[i]));
         if (drop) { expr_free(bodies[i]); bodies[i] = NULL; }
         else bodies[keep++] = bodies[i];
+    }
+    if (keep > 0 && h_radical) {
+        bool any_radical_body = false;
+        for (size_t i = 0; i < keep; i++)
+            if (sep_has_root(bodies[i])) any_radical_body = true;
+        /* The inversion removed the radical: keep the explicit form only if it is
+         * valid on EVERY branch, i.e. its residual vanishes for every value of the
+         * constant -- sampled at a spread of C[1] values through the numeric reject
+         * filter.  Sinh[x + C] for p' == Sqrt[1 + p^2] passes (Cosh is never
+         * negative; §2.2.33-3257 needs the explicit p); Sin[Log[x] + C] fails at
+         * any C putting Cos negative on the grid, and defers to the implicit form. */
+        if (!any_radical_body) {
+            static const double cs[] = { 0.37, 1.9, 2.8, -1.4 };
+            bool global = true;
+            for (size_t i = 0; i < keep && global; i++)
+                for (size_t k = 0; k < sizeof(cs) / sizeof(cs[0]) && global; k++) {
+                    Expr* bc = ds_subst(expr_copy(bodies[i]), ds_const(1), expr_new_real(cs[k]));
+                    if (!ds_branch_num_ok(P, bc)) global = false;
+                    expr_free(bc);
+                }
+            if (!global) {
+                for (size_t i = 0; i < keep; i++) expr_free(bodies[i]);
+                keep = 0;
+            }
+        }
     }
     if (keep == 0) { free(bodies); return NULL; }
     *nbranch = keep;

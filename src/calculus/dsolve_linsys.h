@@ -48,6 +48,10 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
 /* The two system solvers (DSolveSysFn).  Forward-declared here so dsolve.c and the
  * variable-coefficient file can reach them without ad-hoc externs. */
 Expr** dsolve_linsys_solve(DSolveProblem* P);
+/* Second pass: as dsolve_linsys_solve with complex-exponential VoP integrands
+ * rewritten to real trig (Sec/Csc forcing over complex eigenvalues); NULL unless
+ * that rewrite applied.  Run only after dsolve_linsys_solve declines. */
+Expr** dsolve_linsys_solve_trig(DSolveProblem* P);
 Expr** dsolve_linsys_varcoeff_solve(DSolveProblem* P);
 
 #endif /* MATHILDA_DSOLVE_LINSYS_H */

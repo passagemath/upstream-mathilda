@@ -33,6 +33,7 @@
  */
 #include "dsolve_linsys.h"
 #include "dsolve_common.h"
+#include "../core.h"          /* leaf_count_internal */
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
@@ -409,6 +410,18 @@ bool dsolve_linsys_extract_Ab(DSolveProblem* P, Expr** Aout, Expr** bout, bool* 
     return true;
 }
 
+/* Second-pass mode (dsolve_linsys_solve_trig): rewrite a complex-exponential VoP
+ * integrand to real trig when that is a genuine cancellation, and carry Log-bearing
+ * antiderivatives past the ComplexExpand tidy.  OFF on the first pass, so every
+ * system the original assembly closes keeps its exact answer -- the trig form of a
+ * Csc/Sec forcing gives Log[1 + Tan^2] antiderivatives whose residual the system
+ * verify cannot discharge in time (§2.2.15-1439 closes only in exponential form),
+ * while for (E^(-I t) + E^(I t))/2 Sec[t] == 1 it is the exponential form that fails
+ * (§2.2.46-4550/4575).  `fired` records whether the rewrite ever applied, so the
+ * second pass declines instead of repeating the first. */
+static bool g_ls_trig_pass  = false;
+static bool g_ls_trig_fired = false;
+
 /* Y = tidy( e^{M t} . (C + Integrate[e^{-M t} b, x]) ).  See dsolve_linsys.h. */
 Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                               Expr* b, bool b_zero, size_t n) {
@@ -428,6 +441,15 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
             /* rhs = {C[1..n]} (+ variation of parameters if forced) */
             Expr** rc = malloc(n * sizeof(Expr*));
             for (size_t i = 0; i < n; i++) rc[i] = ds_const((int)i + 1);
+            /* Real (I-free) Log-bearing antiderivatives ride through the Dot + tidy as opaque
+             * placeholders and are substituted back after it: the tidy's
+             * ComplexExpand assumes every symbol real but splits a Log of a
+             * possibly-negative argument, turning -Integrate[Tan[t]] == Log[Cos[t]]
+             * into 1/2 Log[Cos[t]^2] + I Arg[Cos[t]] -- equal, and unreadable.  Log-free
+             * antiderivatives (polynomial / exponential / trig) still go through the
+             * tidy, so every previously-closing system keeps its exact form. */
+            Expr** anti_real = calloc(n, sizeof(Expr*));
+            const char** anti_sym = calloc(n, sizeof(char*));
             bool force_ok = true;
             if (!b_zero) {
                 /* Abstract every NON-rational eigenvalue on J's diagonal to a
@@ -493,6 +515,26 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                          * symbols (DSolve`sysEv_k), not real exponentials — so the
                          * widely-separated-decay-rate Simplify hang does not apply. */
                         if (nev > 0) ig = eval_and_free(ds_call1("Simplify", ig));
+                        /* A complex-eigenvalue fundamental matrix leaves e^{+-i t} in
+                         * the integrand even when the product with a TRIG forcing is
+                         * real and simple: (E^(-I t) + E^(I t))/2 Sec[t] is just 1
+                         * (§2.2.46-4550/4575).  Integrated in exponential form it comes
+                         * back as a branch-shifted complex Log pair that the assembled
+                         * answer cannot be tidied from, so the system declined.  Rewrite
+                         * to trig first, keeping it only when that removes I and STRICTLY
+                         * shrinks the integrand (a genuine cancellation, as there): a
+                         * same-size trig rewrite of Csc/Sec forcing over a non-unit
+                         * frequency integrates far slower than the exponential form
+                         * (§2.2.15-1439: 2 s -> >20 s), and a pure-exponential
+                         * integrand (polynomial / e^{a t} forcing) is left as before. */
+                        if (g_ls_trig_pass && (ds_contains(ig, SYM_Complex) || ds_contains(ig, SYM_I))) {
+                            Expr* tr = eval_and_free(ds_call1(SYM_Together,
+                                           eval_and_free(ds_call1("ExpToTrig", expr_copy(ig)))));
+                            if (!ds_contains(tr, SYM_Complex) && !ds_contains(tr, SYM_I)
+                                && leaf_count_internal(tr, true) < leaf_count_internal(ig, true)) {
+                                expr_free(ig); ig = tr; g_ls_trig_fired = true;
+                            } else expr_free(tr);
+                        }
                         Expr* anti = ds_integrate(ig, expr_new_symbol(xvar));
                         if (ds_has_head(anti, SYM_Integrate)) { expr_free(anti); force_ok = false; }
                         else {
@@ -500,6 +542,14 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                             for (size_t k = 0; k < nev; k++)
                                 anti = ds_subst(anti, expr_new_symbol(evn[k]),
                                                       expr_copy(evval[k]));
+                            if (g_ls_trig_pass && ds_contains(anti, SYM_Log)   /* only what CE splits */
+                                && !ds_contains(anti, SYM_Complex) && !ds_contains(anti, SYM_I)) {
+                                char nm[48];
+                                snprintf(nm, sizeof(nm), "DSolve`sysF%zu", i);
+                                anti_sym[i] = intern_symbol(nm);
+                                anti_real[i] = anti;
+                                anti = expr_new_symbol(anti_sym[i]);
+                            }
                             rc[i] = add(rc[i], anti);
                         }
                     }
@@ -516,14 +566,21 @@ Expr** dsolve_linsys_assemble(Expr* M, Expr* t, const char* xvar,
                 Expr* Yvec = ds_delist(eval_and_free(ds_call2(SYM_Dot, expr_copy(Phi), rhs)));
                 if (head_is(Yvec, SYM_List) && Yvec->data.function.arg_count == n) {
                     Y = malloc(n * sizeof(Expr*));
-                    for (size_t i = 0; i < n; i++)
+                    for (size_t i = 0; i < n; i++) {
                         Y[i] = dsolve_linsys_tidy(expr_copy(Yvec->data.function.args[i]));
+                        for (size_t k = 0; k < n; k++)
+                            if (anti_real[k])
+                                Y[i] = ds_subst(Y[i], expr_new_symbol(anti_sym[k]),
+                                                expr_copy(anti_real[k]));
+                    }
                 }
                 expr_free(Yvec);
             } else {
                 for (size_t i = 0; i < n; i++) expr_free(rc[i]);
                 free(rc);
             }
+            for (size_t i = 0; i < n; i++) if (anti_real[i]) expr_free(anti_real[i]);
+            free(anti_real); free((void*)anti_sym);
             expr_free(Phi);
         }
     }
@@ -553,6 +610,23 @@ Expr** dsolve_linsys_solve(DSolveProblem* P) {
     expr_free(t);
     expr_free(A); expr_free(b);
     return Y;   /* NULL on decline */
+}
+
+/* Second pass after dsolve_linsys_solve declines (see g_ls_trig_pass): the same
+ * assembly with the trig rewrite of complex-exponential VoP integrands enabled.
+ * Returns NULL unless the rewrite actually fired, so it never repeats the first
+ * pass's work as an answer. */
+Expr** dsolve_linsys_solve_trig(DSolveProblem* P) {
+    g_ls_trig_pass = true;
+    g_ls_trig_fired = false;
+    Expr** Y = dsolve_linsys_solve(P);
+    g_ls_trig_pass = false;
+    if (Y && !g_ls_trig_fired) {
+        for (size_t i = 0; i < P->nfun; i++) expr_free(Y[i]);
+        free(Y);
+        return NULL;
+    }
+    return Y;
 }
 
 static Expr* builtin_dsolve_linsys(Expr* res) {

@@ -201,7 +201,9 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
                      ev3(SYM_Times, expr_new_integer(-1), expr_copy(omn), A)));  /* consumes A */
     Expr* Qcoef = eval_and_free(ds_call1("Cancel",
                      eval_and_free(ds_call2(SYM_Times, expr_copy(omn), B))));     /* consumes B */
-    Expr* v = dsolve_linear_factor_solve(Pcoef, Qcoef, xvar);               /* consumes both */
+    Expr* v = (P->ncond == 0)                                                /* consumes both */
+        ? dsolve_linear_factor_solve_inert(Pcoef, Qcoef, xvar)   /* general: inert I.F. ok */
+        : dsolve_linear_factor_solve(Pcoef, Qcoef, xvar);
     if (!v) { expr_free(omn); expr_free(nexp); return NULL; }
 
     /* y = v^(1/(1-n)).  When (1-n) is an EVEN integer the inverse y = v^(1/(1-n))

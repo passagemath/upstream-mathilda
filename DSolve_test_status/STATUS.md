@@ -2397,6 +2397,126 @@ Full per-case results: `reports/2.2.45.tsv`; bucketed report: `reports/2.2.45.md
 
 ---
 
+## Section 2.2.46 — "Problems 4501 to 4600" (Nasser Abbasi)
+
+Corpus: `DE_examples_2246.m` — 100 records, **45 scalar (19 IVP), 55 systems**
+(upstream §2.1.46, `Ch2.S1.SS46.htm`). Second-order linear + 55 small linear systems (forcing by Sec/Csc/UnitStep/exponentials). `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_46_tests` · gate baseline **6**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-16 (M74 baseline) | 89 / 100 | 89.0% | 11 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M74–M78**) | **94 / 100** | **94.0%** | **6** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+
+Residue: 4558/4559/4560 (UnitStep-forced systems), 4581 (3×3 forced system, >8 s), 4590 (Gegenbauer, degenerate ₂F₁), 4594 (Mathieu — no `MathieuC` head).
+Full per-case results: `reports/2.2.46.tsv`; bucketed report: `reports/2.2.46.md`.
+
+---
+
+## Section 2.2.47 — "Problems 4601 to 4700" (Nasser Abbasi)
+
+Corpus: `DE_examples_2247.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.47, `Ch2.S1.SS47.htm`). First-order linear / Riccati / Abel, many with arbitrary functions `f, g, h`. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_47_tests` · gate baseline **11**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-16 (M74 baseline) | 83 / 100 | 83.0% | 17 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M74–M78**) | **89 / 100** | **89.0%** | **11** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+
+Residue: Riccati with no candidate particular (4662/4673/4675/4682/4688), 4686 (`∫Sec` radical integrating factor), Abel 4690–4692, 4622/4623 (non-elementary quadrature, latency).
+Full per-case results: `reports/2.2.47.tsv`; bucketed report: `reports/2.2.47.md`.
+
+---
+
+## Section 2.2.48 — "Problems 4701 to 4800" (Nasser Abbasi)
+
+Corpus: `DE_examples_2248.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.48, `Ch2.S1.SS48.htm`). First-order nonlinear: Bernoulli, Chini, dAlembert, class G, Riccati. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_48_tests` · gate baseline **16**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-16 (M74 baseline) | 76 / 100 | 76.0% | 24 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M74–M78**) | **85 / 100** | **85.0%** | **15** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+
+Residue: Chini 4703/4705/4709, Riccati with symbolic exponents 4778/4788/4789/4790, dAlembert/class-C/G radical 4730/4745–4748, 4733, 4738, 4784 (gate +1 for the load-sensitive 4744).
+Full per-case results: `reports/2.2.48.tsv`; bucketed report: `reports/2.2.48.md`.
+
+---
+
+## Section 2.2.49 — "Problems 4801 to 4900" (Nasser Abbasi)
+
+Corpus: `DE_examples_2249.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.49, `Ch2.S1.SS49.htm`). First-order nonlinear: symmetries, Riccati, Abel, radical separable. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_49_tests` · gate baseline **12**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-16 (M74 baseline) | 85 / 100 | 85.0% | 15 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M74–M78**) | **88 / 100** | **88.0%** | **12** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+
+Residue: symmetries 4808/4809/4817/4832, 4820, Riccati 4851/4861/4884, Abel 4887/4888, 4802 (symbolic exponent), 4892.
+Full per-case results: `reports/2.2.49.tsv`; bucketed report: `reports/2.2.49.md`.
+
+---
+
+## Section 2.2.50 — "Problems 4901 to 5000" (Nasser Abbasi)
+
+Corpus: `DE_examples_2250.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.50, `Ch2.S1.SS50.htm`). Rational first-order: Riccati, Abel, homogeneous class D. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_50_tests` · gate baseline **8**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-16 (M74 baseline) | 90 / 100 | 90.0% | 10 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M74–M78**) | **92 / 100** | **92.0%** | **8** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+
+Residue: Riccati 4919/4958/4986/5000, Abel 4922/4966, 4994 (symmetry), 4929 (5 s latency flutterer).
+Full per-case results: `reports/2.2.50.tsv`; bucketed report: `reports/2.2.50.md`.
+
+---
+
+## The §2.2.46–§2.2.50 batch (M74–M78, v0.434–v0.435) — what fixed what
+
+Five sections, Problems 4501–5000: **423/500 → 448/500, 0 FAIL, 0 crash**; per-record
+A/B against a HEAD binary on all 46 older sections: **0 records lost, +41 gained**
+(4609 → 4650). Every fix is general; the records below are the ones that motivated it.
+
+- **Together / Cancel / Factor wrong answers (core).** Kernel → generator substitution
+  descended into unevaluated integrals (`Together[E^Cos[x] Integrate[E^-Cos[x],x]] → x`),
+  and the canonicaliser expanded logs (`Log[x^2] → 2 Log[x]`, `Log[-w] → I Pi + Log[w]`);
+  both value-changing. Binding operators are now opaque atoms
+  (`poly_is_binding_operator`), logs are never expanded. Surfaced via 4661 and §2.1.2-934.
+- **`Factor` SIGFPE** — unchecked int64 overflow in `upoly_div_exact_z` crashed the
+  kernel on a 5-variable polynomial (§2.1.2-268/712 were crashes, not timeouts).
+- **`Integrate[Sec[x]^n]` / `Csc^n` (n ≥ 3) hung** — reduction formula (4702).
+- **Risch/Cherry/Knowles `SolveAlways` ansatz probes** no longer leak `Solve::nsdim`.
+- **Inert non-elementary integrating factor** (general solution): `y' == f[x] y + g[x]`
+  and Bernoulli with arbitrary coefficients (4651, 4704, 4742).
+- **Riccati particular solution by inspection** (`c x^k`, `c f[x]`, `c` trig kernel):
+  4653, 4663, 4743, 4793, 4795, 4880, 4953, 4991 (4658/4661 via ExactODE below).
+- **ExactODE returns inert quadratures** instead of declining to a removed series
+  fallback (4595, and the Riccati u-equations of 4658/4661).
+- **Kummer, scaled and degenerate**: `HypergeometricU` second solution for integer `b`
+  (4597, 4603).
+- **Separable**: structural split (4725) + an explicit inversion that removes a root is
+  kept only when valid for every constant (fixes two pre-existing-path wrong answers,
+  §2.2.24-2360/§2.2.26-2536).
+- **Undetermined coefficients** screens non-UC forcing up front (4506: >15 s → instant).
+- **Linear systems**: a second VoP pass rewriting complex exponentials to trig for
+  `Sec`/`Csc` forcing (4550, 4575).
+- **Linear first order**: cancelled integrand (4924: 11.7 s → 1.9 s); converter maps
+  `\operatorname{arccot}` → `ArcCot` (4924 and §2.1.2-756).
+
+**Pre-existing red gates (not from this batch).** On HEAD (v0.433) ten older gates are
+already over baseline — §2.2.8, .10, .19, .20, .21, .26, .30, .33, .37, .40 — the drift
+accumulated since M73 (the v0.417–v0.433 special-function work). This batch is equal or
+better on every one and turns §2.2.27/.38/.44 green; the remaining ten need their own
+investigation (left for the user to decide).
+
+---
+
 ## Wave history
 
 - **M15 (2026-09-06)** — infrastructure: converter (`tools/latex_ode_to_mathilda.py`),

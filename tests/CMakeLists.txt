@@ -3646,6 +3646,10 @@ target_include_directories(besseli_tests PRIVATE ../src)
 add_executable(bessely_tests test_bessely.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(bessely_tests PRIVATE ../src)
 
+add_executable(struveh_tests test_struveh.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(struveh_tests PRIVATE ../src)
+add_test(NAME struveh_tests COMMAND struveh_tests)
+
 add_executable(loggamma_tests test_loggamma.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(loggamma_tests PRIVATE ../src)
 

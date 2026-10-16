@@ -195,6 +195,47 @@ brew install gmp-ecm
 LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
 **Accelerate** framework.
 
+**Windows (MSYS2):**
+
+Mathilda builds as a native Windows executable (`Mathilda.exe`) with the MSYS2
+GCC toolchain — no WSL or Cygwin needed.
+
+1. Install [MSYS2](https://www.msys2.org/) (default location `C:\msys64`).
+2. Open the **MSYS2 UCRT64** shell from the Start menu and install the toolchain
+   and required libraries:
+
+   ```bash
+   pacman -Syu                        # update MSYS2 first (may ask you to reopen the shell)
+   pacman -S --needed \
+     git make \
+     mingw-w64-ucrt-x86_64-gcc \
+     mingw-w64-ucrt-x86_64-gmp \
+     mingw-w64-ucrt-x86_64-mpfr \
+     mingw-w64-ucrt-x86_64-pkgconf
+
+   # Optional: CMake, only needed to build the test suite
+   pacman -S --needed mingw-w64-ucrt-x86_64-cmake
+   ```
+
+   This is the configuration the Windows CI job builds and smoke-tests on every
+   push. The older **MINGW64** environment works too: open the *MSYS2 MinGW64*
+   shell instead and use the `mingw-w64-x86_64-` package prefix.
+
+MPFR is on by default and, unlike the auto-detected backends, does not degrade
+gracefully: install it as above, or build with `USE_MPFR=0`.
+
+Some features are reduced on Windows:
+
+* **GNU Readline** isn't available under MinGW, so it's compiled out
+  automatically. The REPL still works, without line editing, history, or
+  multi-line continuation.
+* **Threads** are off (`USE_THREADS=0`), so the packed-array kernels run on a
+  single core.
+* **`TimeConstrained`** is cooperative only. The evaluator loop enforces the
+  time limit, but it can't interrupt a single long-running C builtin.
+* **Optional backends** (FLINT, LAPACK, ECM, FFTW, PCRE2, Raylib) are switched
+  off in the recommended build below, because CI doesn't test them on Windows.
+
 ### Building Mathilda
 
 The `makefile` auto-discovers `src/*.c`, configures and compiles internal dependencies, then links the main executable (`-std=c99 -O3`).
@@ -215,6 +256,17 @@ The `makefile` auto-discovers `src/*.c`, configures and compiles internal depend
    ```
    To build a leaner binary, disable optional backends, e.g.
    `make -j$(nproc) USE_LAPACK=0 USE_MPFR=0`.
+
+   **On Windows**, run the build from the MSYS2 UCRT64 shell with the same
+   flags the CI job uses:
+   ```bash
+   make -j4 USE_ECM=0 USE_READLINE=0 USE_GRAPHICS=0 \
+            USE_LAPACK=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
+   ./Mathilda.exe
+   ```
+   To launch `Mathilda.exe` from PowerShell or CMD rather than the MSYS2 shell,
+   add `C:\msys64\ucrt64\bin` to your Windows `PATH` (or copy the DLLs it
+   needs next to the executable). See *Shared libraries* below.
 3. Start the interactive REPL:
    ```bash
    ./Mathilda
@@ -359,10 +411,11 @@ otool -L ./Mathilda   # macOS
   `-dev`/`-devel` headers are only needed to build; the target needs just the
   runtime `.so`/`.dylib`. Apple's Accelerate framework (LAPACK/BLAS) ships with
   macOS, so nothing extra is required there.
-* **Windows (MSYS2 / MinGW64):** the build produces `Mathilda.exe`; place the
-  MinGW64 DLLs it depends on (GMP, …) either beside the executable or on `PATH`
-  (`C:\msys64\mingw64\bin`). Readline is unavailable on Windows and is compiled
-  out automatically. See [`docs/building.md`](docs/building.md) for the full
+* **Windows (MSYS2 UCRT64 / MinGW64):** the build produces `Mathilda.exe`. Put
+  the DLLs it depends on (GMP, MPFR, the GCC runtime, …) either beside the
+  executable or on `PATH` (`C:\msys64\ucrt64\bin`, or `C:\msys64\mingw64\bin`
+  for a MinGW64 build). `ldd ./Mathilda.exe` in the MSYS2 shell lists them.
+  Readline is unavailable on Windows and is compiled out automatically. See [`docs/building.md`](docs/building.md) for the full
   Windows toolchain and packaging (the Tauri desktop app bundles the sidecar and
   its DLLs for you).
 

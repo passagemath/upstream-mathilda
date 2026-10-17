@@ -100,9 +100,13 @@ static void test_numeric_mpfr(void) {
 }
 
 static void test_convergence_gate(void) {
-    /* p == q+1 with |z| >= 1 : not summed directly (stays unevaluated). */
-    assert_eval_eq("HypergeometricPFQ[{10,10},{50},2.]",
-                   "HypergeometricPFQ[{10, 10}, {50}, 2.0]", 0);
+    /* p == q+1 with |z| >= 1 : not summed directly (stays unevaluated)... */
+    assert_eval_eq("HypergeometricPFQ[{1,2,3},{4,5},2.]",
+                   "HypergeometricPFQ[{1, 2, 3}, {4, 5}, 2.0]", 0);
+    /* ...except 2F1, which is continued analytically to the whole plane; on
+     * the cut z > 1 it is the limit from below (mpmath:
+     * -1705.757331635544 - 356.7499860560238 I). */
+    assert_eval_startswith("HypergeometricPFQ[{10,10},{50},2.]", "-1705.76 - 356.75");
     /* p == q+1 with |z| < 1 : converges. */
     assert_eval_startswith("HypergeometricPFQ[{1,2},{3},0.5]", "1.54518");
 }

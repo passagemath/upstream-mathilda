@@ -1370,8 +1370,8 @@ void info_init(void) {
         "Sum (prod_i Pochhammer[a_i, k] / prod_j Pochhammer[b_j, k]) z^k / k!.\n"
         "Common upper/lower parameters cancel; a non-positive integer upper\n"
         "parameter terminates the series to a polynomial. Evaluates to machine,\n"
-        "arbitrary-precision (MPFR), and complex numbers by direct summation in\n"
-        "the convergent regime (p<=q for all z; p==q+1 for |z|<1).");
+        "arbitrary-precision (MPFR), and complex numbers in the convergent regime\n"
+        "(p<=q for all z; p==q+1 for |z|<1), and for 2F1 in the whole plane.");
 
     symtab_set_docstring("Hypergeometric0F1",
         "Hypergeometric0F1[b, z]\n"
@@ -1386,7 +1386,8 @@ void info_init(void) {
     symtab_set_docstring("Hypergeometric2F1",
         "Hypergeometric2F1[a, b, c, z]\n"
         "\tis the Gauss hypergeometric 2F1, equal to "
-        "HypergeometricPFQ[{a, b}, {c}, z].");
+        "HypergeometricPFQ[{a, b}, {c}, z]; continued analytically to the whole\n"
+        "plane, with the cut z > 1 taking the limit from below.");
 
     // Structural Manipulation
     symtab_set_docstring("List",

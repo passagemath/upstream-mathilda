@@ -319,7 +319,15 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             if (!infer_type(c, lb->data.function.args[j], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
         }
         IT(2, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false;
-        *out = CT_REAL; return true;
+        /* Complex anywhere -> the kernel's complex arm (OP_KERNN_C). */
+        bool cx = (ta == CT_COMPLEX);
+        for (size_t i = 0; i < np && !cx; i++) {
+            CompileType t; infer_type(c, la->data.function.args[i], &t); cx = (t == CT_COMPLEX);
+        }
+        for (size_t j = 0; j < nq && !cx; j++) {
+            CompileType t; infer_type(c, lb->data.function.args[j], &t); cx = (t == CT_COMPLEX);
+        }
+        *out = cx ? CT_COMPLEX : CT_REAL; return true;
     }
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
         /* One array argument is the kernel's business, not the product-of-

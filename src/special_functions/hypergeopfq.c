@@ -30,6 +30,8 @@
 #include "hypergeopfq.h"
 #include "ndarray.h"
 #include "sf_machine.h"    /* NDArray buffer path for the elementwise argument */
+#include "sf_machine_hyper.h" /* complex twins of the machine kernels */
+#include "sf_scalar.h"     /* sf_machine_scalar_args, sf_machine_leaf */
 #include "symtab.h"
 #include "attr.h"
 #include "eval.h"
@@ -689,6 +691,131 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Machine-precision fast path (scalar and buffer)                    */
+/* ------------------------------------------------------------------ */
+
+#define HG_MAXPARAMS 16
+
+/* One argument as a machine (re, im) pair: a machine-scalar leaf (Real,
+ * Integer, BigInt, Rational) or Complex[] of two such. *inexact is OR-ed. */
+static bool hg_leaf(const Expr* e, double* re, double* im, bool* inexact, bool* cplx) {
+    bool ix = false;
+    if (sf_machine_leaf(e, re, &ix)) { *im = 0.0; *inexact |= ix; return true; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex &&
+        e->data.function.arg_count == 2) {
+        bool ia = false, ib = false;
+        if (!sf_machine_leaf(e->data.function.args[0], re, &ia) ||
+            !sf_machine_leaf(e->data.function.args[1], im, &ib)) return false;
+        *inexact |= (ia || ib);
+        *cplx = true;
+        return true;
+    }
+    return false;
+}
+
+typedef struct {
+    size_t p, q;
+    double ar[HG_MAXPARAMS], ai[HG_MAXPARAMS], br[HG_MAXPARAMS], bi[HG_MAXPARAMS];
+    bool inexact, cplx;
+} HgParams;
+
+static bool hg_params(const Expr* a, const Expr* b, HgParams* hp) {
+    hp->p = a->data.function.arg_count;
+    hp->q = b->data.function.arg_count;
+    if (hp->p > HG_MAXPARAMS || hp->q > HG_MAXPARAMS) return false;
+    hp->inexact = false; hp->cplx = false;
+    for (size_t i = 0; i < hp->p; i++)
+        if (!hg_leaf(a->data.function.args[i], &hp->ar[i], &hp->ai[i],
+                     &hp->inexact, &hp->cplx)) return false;
+    for (size_t j = 0; j < hp->q; j++)
+        if (!hg_leaf(b->data.function.args[j], &hp->br[j], &hp->bi[j],
+                     &hp->inexact, &hp->cplx)) return false;
+    return true;
+}
+
+/* Evaluate one point. Real parameters and a real z use the real kernel; for
+ * 2F1 on its cut (real z > 1) the value is complex and comes from the complex
+ * kernel as the limit from below (zi = -0), the Mathematica / mpmath branch.
+ * *is_c reports whether the result is complex. */
+static bool hg_point(const HgParams* hp, double zr, double zi, bool zc,
+                     double* rr, double* ri, bool* is_c) {
+    if (!hp->cplx && !zc) {
+        *is_c = false; *ri = 0.0;
+        if (sf_machine_pfq(hp->ar, hp->p, hp->br, hp->q, zr, rr)) return true;
+        if (hp->p == 2 && hp->q == 1 && zr > 1.0) {
+            *is_c = true;
+            return sf_machine_pfq_c(hp->ar, hp->ai, 2, hp->br, hp->bi, 1, zr, -0.0, rr, ri);
+        }
+        return false;
+    }
+    *is_c = true;
+    return sf_machine_pfq_c(hp->ar, hp->ai, hp->p, hp->br, hp->bi, hp->q, zr, zi, rr, ri);
+}
+
+/* The scalar machine gate: every parameter and z a machine-scalar leaf, at
+ * least one of them a machine Real. NULL when the call is not machine
+ * precision or the kernel declined (the caller's exact / MPFR route answers). */
+static Expr* hg_machine_pfq(const Expr* a, const Expr* b, const Expr* z) {
+    HgParams hp;
+    if (!hg_params(a, b, &hp)) return NULL;
+    double zr, zi; bool zc = false;
+    if (!hg_leaf(z, &zr, &zi, &hp.inexact, &zc)) return NULL;
+    if (!hp.inexact) return NULL;                 /* exact call stays exact */
+    double rr, ri; bool is_c;
+    if (!hg_point(&hp, zr, zi, zc, &rr, &ri, &is_c)) return NULL;
+    return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
+}
+
+/* The buffer path: z an NDArray / packed List, parameters as above. Returns
+ * NULL when the buffer or a parameter is not a machine case, or any element
+ * declines. The output dtype is the input's, widened to complex when the
+ * parameters are complex or a 2F1 element lies on the cut. */
+static Expr* hg_pfq_ndarray(const Expr* a, const Expr* b, const Expr* z) {
+    NDType zdt = z->data.ndarray.dtype;
+    if (zdt == NDT_INT64) return NULL;            /* exact data: element-wise */
+    HgParams hp;
+    if (!hg_params(a, b, &hp)) return NULL;
+    bool zc = ndt_is_complex(zdt);
+    size_t sz = ndarray_size(z);
+    /* The common case -- real parameters over a float64 buffer -- goes straight
+     * through the vector driver, which hoists the parameter work (2F1
+     * coefficient tables) out of the loop and is bit-identical to the scalar
+     * kernel. A partial run (some element declined, or a 2F1 element on the
+     * cut, whose value is complex) falls to the general loop below. */
+    if (!hp.cplx && zdt == NDT_FLOAT64) {
+        double* out = malloc(sizeof(double) * (sz ? sz : 1));
+        if (!out) return NULL;
+        size_t done = sf_machine_pfq_vec(hp.ar, hp.p, hp.br, hp.q,
+                                         (const double*)z->data.ndarray.data, out, sz);
+        if (done == sz)
+            return expr_new_ndarray_like(z, z->data.ndarray.rank, z->data.ndarray.dims,
+                                         out, NDT_FLOAT64);
+        free(out);
+    }
+    /* Compute into a complex scratch buffer; narrow to real at the end when
+     * nothing came back complex. */
+    double* buf = malloc(sizeof(double) * 2 * (sz ? sz : 1));
+    if (!buf) return NULL;
+    bool any_c = zc || hp.cplx;
+    for (size_t i = 0; i < sz; i++) {
+        double xr, xi, rr, ri; bool is_c;
+        ndt_get(z->data.ndarray.data, i, zdt, &xr, &xi);
+        if (!hg_point(&hp, xr, xi, zc, &rr, &ri, &is_c)) { free(buf); return NULL; }
+        buf[2 * i] = rr; buf[2 * i + 1] = ri;
+        any_c |= is_c;
+    }
+    NDType odt = any_c ? (zdt == NDT_FLOAT32 || zdt == NDT_COMPLEX32 ? NDT_COMPLEX32
+                                                                      : NDT_COMPLEX64)
+                       : zdt;
+    void* out = malloc(ndt_elem_size(odt) * (sz ? sz : 1));
+    if (!out) { free(buf); return NULL; }
+    for (size_t i = 0; i < sz; i++) ndt_set(out, i, odt, buf[2 * i], buf[2 * i + 1]);
+    free(buf);
+    return expr_new_ndarray_like(z, z->data.ndarray.rank, z->data.ndarray.dims, out, odt);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Entry point                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -699,56 +826,23 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
     Expr* z = res->data.function.args[2];
     if (!is_list(a) || !is_list(b)) return NULL;
 
-    /* (1b) A machine buffer as the argument: map the double series over it.
+    /* (1b) A machine buffer as the argument: map the machine kernel over it.
      *
-     * This is what Hypergeometric1F1[a, b, arr] and Hypergeometric2F1[...] turn
-     * into -- both rewrite to PFQ before anything else sees them -- so without
-     * it a visible NDArray came back unevaluated and a packed List was
-     * materialised into one Expr per element, each going round the evaluator.
+     * This is what Hypergeometric0F1/1F1/2F1[..., arr] turn into -- they
+     * rewrite to PFQ when the argument is a buffer -- so without it a visible
+     * NDArray came back unevaluated and a packed List was materialised into one
+     * Expr per element, each going round the evaluator (1.2-2.6 s per 10^6).
      *
-     * EVERY PARAMETER MUST BE INEXACT, and that restriction is the correctness
-     * argument rather than a convenience. Steps (3)-(6) below are not slower
-     * routes to the same number: try_cancel, try_terminate and try_reduce
-     * answer with EXACT or CLOSED FORMS -- 2F1[1, 1, 2, z] is -Log[1-z]/z, and
-     * a terminating upper parameter gives a polynomial -- and those fire on
-     * exact parameters. A Real parameter cannot match them, so the series
-     * really is what the scalar path would have computed. Anything else, and
-     * any element the kernel declines, falls through to the code below
-     * unchanged. */
+     * Parameters may be exact (Integer / Rational) or machine Real, real or
+     * complex: a machine-real buffer element makes every element call a
+     * machine-precision call, and the scalar builtin answers such a call from
+     * the SAME kernel (hg_machine_pfq, ahead of every exact rewrite), so
+     * the two surfaces agree bit-for-bit. An int64 buffer is exact data and an
+     * MPFR parameter makes the call arbitrary-precision: both take the
+     * element-wise route, as does any element the kernel declines. */
     if (is_ndarray(z)) {
-        NDType zdt = z->data.ndarray.dtype;
-        size_t p = a->data.function.arg_count, q = b->data.function.arg_count;
-        /* An exact-integer buffer has no place here: the series is computed in
-         * double, and Hypergeometric1F1[0.5, 1.5, {1, 2, 3}] over the List path
-         * evaluates each exact argument in its own right. Complex likewise --
-         * sf_machine_pfq is real-valued. Both degrade below. */
-        bool all_real = (zdt != NDT_INT64) && !ndt_is_complex(zdt);
-        for (size_t i = 0; i < p && all_real; i++)
-            if (a->data.function.args[i]->type != EXPR_REAL) all_real = false;
-        for (size_t i = 0; i < q && all_real; i++)
-            if (b->data.function.args[i]->type != EXPR_REAL) all_real = false;
-        if (all_real) {
-            double* pa = malloc(sizeof(double) * (p ? p : 1));
-            double* pb = malloc(sizeof(double) * (q ? q : 1));
-            if (pa && pb) {
-                for (size_t i = 0; i < p; i++) pa[i] = a->data.function.args[i]->data.real;
-                for (size_t i = 0; i < q; i++) pb[i] = b->data.function.args[i]->data.real;
-                NDType dt = zdt;
-                size_t sz = ndarray_size(z);
-                void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
-                bool ok = (out != NULL);
-                for (size_t i = 0; i < sz && ok; i++) {
-                    double zr, zi, v;
-                    ndt_get(z->data.ndarray.data, i, dt, &zr, &zi);
-                    ok = sf_machine_pfq(pa, p, pb, q, zr, &v);
-                    if (ok) ndt_set(out, i, dt, v, 0.0);
-                }
-                free(pa); free(pb);
-                if (ok) return expr_new_ndarray_like(z, z->data.ndarray.rank,
-                                                     z->data.ndarray.dims, out, dt);
-                free(out);
-            } else { free(pa); free(pb); }
-        }
+        Expr* r = hg_pfq_ndarray(a, b, z);
+        if (r) return r;
         /* Declined: the buffer must not reach the scalar steps below, which
          * test z for Integer/Real and would leave the call unevaluated. */
         return ndarray_delist_and_reeval(res);
@@ -764,6 +858,14 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
         Expr* lst = expr_new_function(expr_new_symbol(SYM_List), out, n);
         free(out);
         return lst;
+    }
+
+    /* (2b) Machine-precision call: the raw-double kernel, before any of the
+     * exact rewrites below (which would re-evaluate a whole expression tree
+     * per call, and would not match the buffer/Compile surfaces bit-for-bit). */
+    {
+        Expr* m = hg_machine_pfq(a, b, z);
+        if (m) return m;
     }
 
     /* (3) Generic parameter cancellation. */
@@ -804,8 +906,33 @@ static Expr* list1(Expr* x) {
     return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(x) }, 1);
 }
 
+/* The machine gate for the fixed-arity heads: all arguments machine-scalar
+ * leaves (sf_machine_scalar_args), at least one a machine Real. The same
+ * kernels as HypergeometricPFQ's gate (sf_machine_pfq dispatches these shapes
+ * to them), so every spelling agrees bit-for-bit with the buffer and Compile
+ * surfaces. */
+static Expr* hg_machine_head(Expr* res, size_t p, size_t q) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma)) return NULL;
+    HgParams hp;
+    hp.p = p; hp.q = q; hp.inexact = true; hp.cplx = false;
+    size_t k = 0;
+    for (size_t i = 0; i < p; i++, k++) {
+        hp.ar[i] = ma.re[k]; hp.ai[i] = ma.im[k]; hp.cplx |= ma.is_complex[k];
+    }
+    for (size_t j = 0; j < q; j++, k++) {
+        hp.br[j] = ma.re[k]; hp.bi[j] = ma.im[k]; hp.cplx |= ma.is_complex[k];
+    }
+    double rr, ri; bool is_c;
+    if (!hg_point(&hp, ma.re[k], ma.im[k], ma.is_complex[k], &rr, &ri, &is_c))
+        return NULL;
+    return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
+}
+
 Expr* builtin_hypergeometric_0f1(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* m = hg_machine_head(res, 0, 1);
+    if (m) return m;
     Expr* b = res->data.function.args[0];
     Expr* z = res->data.function.args[1];
     Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
@@ -814,6 +941,8 @@ Expr* builtin_hypergeometric_0f1(Expr* res) {
 
 Expr* builtin_hypergeometric_1f1(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* m = hg_machine_head(res, 1, 1);
+    if (m) return m;
     Expr* a = res->data.function.args[0];
     Expr* b = res->data.function.args[1];
     Expr* z = res->data.function.args[2];
@@ -822,6 +951,8 @@ Expr* builtin_hypergeometric_1f1(Expr* res) {
 
 Expr* builtin_hypergeometric_2f1(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    Expr* m = hg_machine_head(res, 2, 1);
+    if (m) return m;
     Expr* a = res->data.function.args[0];
     Expr* b = res->data.function.args[1];
     Expr* cc = res->data.function.args[2];
@@ -840,15 +971,17 @@ void hypergeopfq_init(void) {
     symtab_get_def("HypergeometricPFQ")->attributes |=
         ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
+    /* The fixed-arity heads are Listable, as in Mathematica (HypergeometricPFQ
+     * is not: its first two arguments ARE lists). */
     symtab_add_builtin("Hypergeometric0F1", builtin_hypergeometric_0f1);
     symtab_get_def("Hypergeometric0F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
     symtab_add_builtin("Hypergeometric1F1", builtin_hypergeometric_1f1);
     symtab_get_def("Hypergeometric1F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
     symtab_add_builtin("Hypergeometric2F1", builtin_hypergeometric_2f1);
     symtab_get_def("Hypergeometric2F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 }

@@ -8,11 +8,14 @@
  * (mirroring Hypergeometric1F1 / WhittakerM):
  *
  *   U(0, b, z) = 1,  U(a, a+1, z) = z^(-a)   -> exact (symbolic or numeric).
- *   a, b, z all machine reals              -> the shared double helper
- *                                             sf_machine_hyperu (bit-for-bit with
- *                                             the NDArray buffer loop below and the
- *                                             Compile[] VM). Declines (z <= 0,
- *                                             cancellation, pole) -> FLINT.
+ *   machine-precision call (a, b exact or  -> the shared double helpers
+ *   machine real; z machine real/complex)     sf_machine_hyperu (real z > 0) /
+ *                                             sf_machine_hyperu_c (complex z, or
+ *                                             real z < 0 on the principal branch),
+ *                                             bit-for-bit with the NDArray buffer
+ *                                             loop and the Compile[] VM; checked
+ *                                             BEFORE the exact reductions below.
+ *                                             Declines -> FLINT.
  *   some inexact argument                  -> FLINT's rigorous acb_hypgeom_u via
  *                                             flint_num_hypergeometric_u (MPFR,
  *                                             complex, z <= 0). Kept iff it
@@ -43,6 +46,8 @@
 #include "ndarray.h"         /* is_ndarray, ndt_get/_set, expr_new_ndarray_like, ... */
 #include "numeric.h"         /* numeric_min_inexact_bits */
 #include "sf_machine.h"      /* sf_machine_hyperu */
+#include "sf_machine_hyper.h" /* sf_machine_hyperu_c */
+#include "sf_scalar.h"       /* sf_machine_scalar_args, sf_machine_leaf */
 #include "symtab.h"
 
 #ifdef USE_MPFR
@@ -98,15 +103,6 @@ static bool hu_is_number(const Expr* e) {
             if (!hu_is_number(e->data.function.args[i])) return false;
         return true;
     }
-    return false;
-}
-
-/* Machine-double value of a real/integer leaf only (declines MPFR/BigInt/complex);
- * gates the fast paths, exactly like whittaker.c's whit_leaf_double. */
-static bool hu_leaf_double(const Expr* e, double* out) {
-    if (!e) return false;
-    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
-    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     return false;
 }
 
@@ -208,19 +204,6 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
     bool machine_prec = false;
 #endif
 
-    /* Machine real fast path: a, b, z all machine reals. Shares sf_machine_hyperu
-     * with the NDArray kernel and the Compile[] VM, so the answer is bit-identical.
-     * Declines (z <= 0, pole, cancellation) -> the FLINT path below. */
-    {
-        double ad, bd, zd;
-        if (hu_leaf_double(a_e, &ad) && hu_leaf_double(b_e, &bd) &&
-            hu_leaf_double(z_e, &zd)) {
-            double v;
-            if (sf_machine_hyperu(ad, bd, zd, &v))
-                return expr_new_real(v);
-        }
-    }
-
     /* Rigorous FLINT path (MPFR precision, complex args, z <= 0, or a machine case
      * the double kernel declined). A machine-precision input must come back
      * machine-precision, so demote the FLINT result in that case. */
@@ -233,36 +216,84 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
 /* NDArray fast path (machine buffer argument z)                       */
 /* ------------------------------------------------------------------ */
 
-/* Thread sf_machine_hyperu -- the SAME helper the scalar machine path and
- * Compile[] use -- over a visible NDArray / packed-List z, holding the scalar
- * parameters a and b constant. Once z IS an NDArray this must NOT return NULL
+/* One point: real a, b; z real or complex. A real z < 0 is on the branch cut
+ * (the z^(1-b) term): the real kernel declines and the complex kernel answers on
+ * the principal branch, arg z = +pi. */
+static bool hu_point(double a, double b, double zr, double zi, bool zc,
+                     double* rr, double* ri, bool* is_c) {
+    if (!zc) {
+        *is_c = false; *ri = 0.0;
+        if (sf_machine_hyperu(a, b, zr, rr)) return true;
+        if (!(zr < 0.0)) return false;
+        zi = 0.0;
+    }
+    *is_c = true;
+    return sf_machine_hyperu_c(a, b, zr, zi, rr, ri);
+}
+
+/* The scalar machine gate, ahead of the exact reductions: a, b, z machine-scalar
+ * leaves (exact Integer / Rational or machine Real; z possibly Complex), at
+ * least one machine Real. U(0,b,z) = 1 and U(a,a+1,z) = z^-a are the
+ * terminating cases of the kernel's asymptotic series, so they come out of the
+ * kernel exactly as from the reductions -- without building and evaluating
+ * b - a - 1 on every call. */
+static Expr* hu_machine(Expr* res) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 3) return NULL;
+    if (ma.is_complex[0] || ma.is_complex[1]) return NULL;
+    double rr, ri; bool is_c;
+    if (!hu_point(ma.re[0], ma.re[1], ma.re[2], ma.im[2], ma.is_complex[2], &rr, &ri, &is_c))
+        return NULL;
+    return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
+}
+
+/* Thread the same kernels over a visible NDArray / packed-List z, holding a and
+ * b (exact or machine) constant. Once z IS an NDArray this must NOT return NULL
  * (the scalar driver cannot consume a buffer): it returns a packed result or
- * ndarray_delist_and_reeval(res) so each element takes the accurate scalar route.
- * Mirrors whittaker_m_ndarray. */
+ * ndarray_delist_and_reeval(res) so each element takes the accurate scalar route. */
 static Expr* hypergeometricu_ndarray(const Expr* a_e, const Expr* b_e,
                                      const Expr* z_e, Expr* res) {
     if (!is_ndarray(z_e)) return NULL;             /* scalar driver handles */
     NDType dt = z_e->data.ndarray.dtype;
-    double ad, bd;
-    if (dt == NDT_INT64 || dt == NDT_BOOL || ndt_is_complex(dt) ||
-        !hu_leaf_double(a_e, &ad) || !hu_leaf_double(b_e, &bd))
+    double ad, bd; bool ixa = false, ixb = false;
+    if (dt == NDT_INT64 || dt == NDT_BOOL ||
+        !sf_machine_leaf(a_e, &ad, &ixa) || !sf_machine_leaf(b_e, &bd, &ixb))
         return ndarray_delist_and_reeval(res);
-
+    bool zc = ndt_is_complex(dt);
     size_t sz = ndarray_size(z_e);
-    void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
-    if (!out) return ndarray_delist_and_reeval(res);
-    bool ok = true;
-    for (size_t i = 0; i < sz && ok; i++) {
-        double xr, xi, v = 0.0;
-        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
-        ok = sf_machine_hyperu(ad, bd, xr, &v);
-        if (ok) ndt_set(out, i, dt, v, 0.0);
+    if (dt == NDT_FLOAT64) {                       /* the common case: real in, real out */
+        const double* x = (const double*)z_e->data.ndarray.data;
+        double* o = malloc(sizeof(double) * (sz ? sz : 1));
+        if (!o) return ndarray_delist_and_reeval(res);
+        size_t i = 0;
+        for (; i < sz; i++) if (!sf_machine_hyperu(ad, bd, x[i], &o[i])) break;
+        if (i == sz)
+            return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
+                                         z_e->data.ndarray.dims, o, NDT_FLOAT64);
+        free(o);                                   /* a cut / declined point: general loop */
     }
-    if (ok)
-        return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
-                                     z_e->data.ndarray.dims, out, dt);
-    free(out);
-    return ndarray_delist_and_reeval(res);
+    double* buf = malloc(sizeof(double) * 2 * (sz ? sz : 1));
+    if (!buf) return ndarray_delist_and_reeval(res);
+    bool any_c = zc;
+    for (size_t i = 0; i < sz; i++) {
+        double xr, xi, rr, ri; bool is_c;
+        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
+        if (!hu_point(ad, bd, xr, xi, zc, &rr, &ri, &is_c)) {
+            free(buf);
+            return ndarray_delist_and_reeval(res);
+        }
+        buf[2 * i] = rr; buf[2 * i + 1] = ri;
+        any_c |= is_c;
+    }
+    NDType odt = any_c ? (dt == NDT_FLOAT32 || dt == NDT_COMPLEX32 ? NDT_COMPLEX32
+                                                                    : NDT_COMPLEX64)
+                       : dt;
+    void* out = malloc(ndt_elem_size(odt) * (sz ? sz : 1));
+    if (!out) { free(buf); return ndarray_delist_and_reeval(res); }
+    for (size_t i = 0; i < sz; i++) ndt_set(out, i, odt, buf[2 * i], buf[2 * i + 1]);
+    free(buf);
+    return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank, z_e->data.ndarray.dims,
+                                 out, odt);
 }
 
 /* ------------------------------------------------------------------ */
@@ -277,6 +308,8 @@ Expr* builtin_hypergeometric_u(Expr* res) {
         return builtin_arg_error("HypergeometricU", argc, 3, 3);
     Expr* nd = hypergeometricu_ndarray(args[0], args[1], args[2], res);
     if (nd) return nd;
+    Expr* m = hu_machine(res);
+    if (m) return m;
     return hypergeometricu_eval(args[0], args[1], args[2]);
 }
 

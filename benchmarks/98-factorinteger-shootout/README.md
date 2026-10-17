@@ -6,6 +6,10 @@ Measures Mathilda's `FactorInteger` against Mathematica (`wolframscript`), PARI/
 engine's answer is verified independently (the product equals n, and every base passes
 `sympy.isprime`).
 
+This is a standalone study, like `97-special-functions`. It is **not** part of the weekly
+`benchmarks/run_all.py` gap gate: the folder is listed in `run_all.py`'s `STANDALONE` set,
+so `make bench-gap` skips it, and it runs on its own driver.
+
     python3.11 gen_corpus.py                       # writes corpus.json (seeded)
     cc -O2 -o drivers/flint_factor drivers/flint_factor.c $(pkg-config --cflags --libs flint)
     python3.11 run.py --tag <name> [--engines mathilda,pari,...] [--groups qs,ecm] [--timeout 120]

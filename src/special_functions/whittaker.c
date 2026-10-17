@@ -6,12 +6,14 @@
  * (mirroring the LaguerreL / HermiteH confluent-hypergeometric design):
  *
  *   z == 0 (exact), Re(m) > -1/2   ->  exact 0 (M_{k,m} ~ z^(m+1/2) near 0).
- *   k, m, z all machine reals      ->  the shared double helper
- *                                        sf_machine_whittaker_m
- *                                      (bit-for-bit with the NDArray element-wise
- *                                       buffer loop below and the Compile[] VM).
- *                                      Declines (z <= 0, 2m+1 pole, 1F1
- *                                       cancellation, overflow) -> template.
+ *   machine-precision call         ->  the shared double helpers
+ *   (k, m exact or machine real;         sf_machine_whittaker_m (real z > 0) /
+ *    z machine real or complex)          sf_machine_whittaker_m_c (complex z, or
+ *                                        real z < 0 on the principal branch),
+ *                                      bit-for-bit with the NDArray element-wise
+ *                                      buffer loop and the Compile[] VM.
+ *                                      Declines (2m+1 pole, cancellation,
+ *                                       overflow) -> template.
  *   some inexact argument          ->  the confluent-hypergeometric form built as
  *                                        e^(-z/2) z^(m+1/2) Hypergeometric1F1[...],
  *                                      evaluated so it inherits 1F1's machine +
@@ -52,6 +54,8 @@
 #include "expr.h"
 #include "ndarray.h"         /* is_ndarray, ndt_get/_set, expr_new_ndarray_like, ... */
 #include "sf_machine.h"      /* sf_machine_whittaker_m */
+#include "sf_machine_hyper.h" /* complex twins */
+#include "sf_scalar.h"       /* sf_machine_scalar_args, sf_machine_leaf */
 #include "symtab.h"
 
 #ifdef USE_MPFR
@@ -123,14 +127,6 @@ static bool whit_is_number(const Expr* e) {
     return false;
 }
 
-/* Machine-double value of a real/integer leaf (declines MPFR/BigInt/complex). */
-static bool whit_leaf_double(const Expr* e, double* out) {
-    if (!e) return false;
-    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
-    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
-    return false;
-}
-
 /* Value of a real numeric leaf as a double (Integer/Real/BigInt/MPFR/Rational). */
 static bool whit_real_number_double(const Expr* e, double* out) {
     if (!e) return false;
@@ -199,6 +195,93 @@ static Expr* whittaker_m_numeric_hyp(const Expr* k_e, const Expr* m_e, const Exp
 }
 
 /* ------------------------------------------------------------------ */
+/* Machine-precision fast path (shared by the scalar and buffer paths) */
+/* ------------------------------------------------------------------ */
+
+typedef bool (*WhitReal)(double, double, double, double*);
+typedef bool (*WhitCplx)(double, double, double, double, double*, double*);
+
+/* One point: real k, m; z real or complex. A real z <= 0 is on the branch cut
+ * of z^(m+1/2): the real kernel declines and the complex one answers on the
+ * principal branch (arg z = +pi), as Mathematica does. */
+static bool whit_point(WhitReal fr, WhitCplx fc, double k, double m,
+                       double zr, double zi, bool zc,
+                       double* rr, double* ri, bool* is_c) {
+    if (!zc) {
+        *is_c = false; *ri = 0.0;
+        if (fr(k, m, zr, rr)) return true;
+        if (!(zr < 0.0)) return false;
+        zi = 0.0;
+    }
+    *is_c = true;
+    return fc(k, m, zr, zi, rr, ri);
+}
+
+/* The scalar gate: k, m, z machine-scalar leaves (Integer / Rational / machine
+ * Real, z possibly Complex), at least one machine Real, k and m real. Shares
+ * the kernels with the buffer path below and the Compile[] VM. */
+static Expr* whit_machine(Expr* res, WhitReal fr, WhitCplx fc) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 3) return NULL;
+    if (ma.is_complex[0] || ma.is_complex[1]) return NULL;
+    double rr, ri; bool is_c;
+    if (!whit_point(fr, fc, ma.re[0], ma.re[1], ma.re[2], ma.im[2], ma.is_complex[2],
+                    &rr, &ri, &is_c)) return NULL;
+    return is_c ? sf_machine_complex_result(rr, ri) : expr_new_real(rr);
+}
+
+/* The buffer path: thread the same kernels over a visible NDArray / packed List
+ * z, k and m held constant (exact or machine). Once z IS an NDArray this must
+ * not return NULL -- the scalar driver cannot consume a buffer -- so anything it
+ * cannot do (an int64 buffer, an MPFR or complex k/m, a declined element) is
+ * handed to ndarray_delist_and_reeval, where each element takes the accurate
+ * scalar route. */
+static Expr* whit_ndarray(WhitReal fr, WhitCplx fc, const Expr* k_e, const Expr* m_e,
+                          const Expr* z_e, Expr* res) {
+    if (!is_ndarray(z_e)) return NULL;             /* scalar driver handles */
+    NDType dt = z_e->data.ndarray.dtype;
+    double kd, md; bool ixk = false, ixm = false;
+    if (dt == NDT_INT64 || dt == NDT_BOOL ||
+        !sf_machine_leaf(k_e, &kd, &ixk) || !sf_machine_leaf(m_e, &md, &ixm))
+        return ndarray_delist_and_reeval(res);
+    bool zc = ndt_is_complex(dt);
+    size_t sz = ndarray_size(z_e);
+    if (dt == NDT_FLOAT64) {                       /* the common case: real in, real out */
+        const double* x = (const double*)z_e->data.ndarray.data;
+        double* o = malloc(sizeof(double) * (sz ? sz : 1));
+        if (!o) return ndarray_delist_and_reeval(res);
+        size_t i = 0;
+        for (; i < sz; i++) if (!fr(kd, md, x[i], &o[i])) break;
+        if (i == sz)
+            return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
+                                         z_e->data.ndarray.dims, o, NDT_FLOAT64);
+        free(o);                                   /* a cut / declined point: general loop */
+    }
+    double* buf = malloc(sizeof(double) * 2 * (sz ? sz : 1));
+    if (!buf) return ndarray_delist_and_reeval(res);
+    bool any_c = zc;
+    for (size_t i = 0; i < sz; i++) {
+        double xr, xi, rr, ri; bool is_c;
+        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
+        if (!whit_point(fr, fc, kd, md, xr, xi, zc, &rr, &ri, &is_c)) {
+            free(buf);
+            return ndarray_delist_and_reeval(res);
+        }
+        buf[2 * i] = rr; buf[2 * i + 1] = ri;
+        any_c |= is_c;
+    }
+    NDType odt = any_c ? (dt == NDT_FLOAT32 || dt == NDT_COMPLEX32 ? NDT_COMPLEX32
+                                                                    : NDT_COMPLEX64)
+                       : dt;
+    void* out = malloc(ndt_elem_size(odt) * (sz ? sz : 1));
+    if (!out) { free(buf); return ndarray_delist_and_reeval(res); }
+    for (size_t i = 0; i < sz; i++) ndt_set(out, i, odt, buf[2 * i], buf[2 * i + 1]);
+    free(buf);
+    return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank, z_e->data.ndarray.dims,
+                                 out, odt);
+}
+
+/* ------------------------------------------------------------------ */
 /* Scalar driver                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -217,73 +300,11 @@ static Expr* whittaker_m_eval(Expr* k_e, Expr* m_e, Expr* z_e) {
     if (!(whit_is_inexact(k_e) || whit_is_inexact(m_e) || whit_is_inexact(z_e)))
         return NULL;
 
-    /* Machine real fast path: k, m, z all machine reals (precision <= 53). Shares
-     * sf_machine_whittaker_m with the NDArray kernel and the Compile[] VM, so the
-     * answer is bit-identical. Declines (z <= 0, pole, cancellation, overflow) ->
-     * the MPFR / complex template below. */
-    {
-        double kd, md, zd;
-        if (whit_leaf_double(k_e, &kd) && whit_leaf_double(m_e, &md) &&
-            whit_leaf_double(z_e, &zd)) {
-            double v;
-            if (sf_machine_whittaker_m(kd, md, zd, &v))
-                return expr_new_real(v);
-        }
-    }
-
     /* General confluent-hypergeometric template (MPFR precision, complex args,
      * z <= 0, exact-rational k/m with an inexact z). */
     Expr* out = whittaker_m_numeric_hyp(k_e, m_e, z_e);
     if (out) return out;
     return NULL;                               /* stay symbolic */
-}
-
-/* ------------------------------------------------------------------ */
-/* NDArray fast path (machine buffer argument z)                       */
-/* ------------------------------------------------------------------ */
-
-/* Thread sf_machine_whittaker_m -- the SAME helper the scalar machine path and
- * Compile[] use -- over a visible NDArray / packed-List argument `z_e`, holding
- * the scalar parameters k and m constant. This is what makes WhittakerM fast
- * over arrays: a 3-arg call has no arity>=3 REPL element-wise kernel, so without
- * this the buffer would be materialised into boxed Exprs and threaded one scalar
- * at a time.
- *
- * Because the scalar driver (whittaker_m_eval) cannot consume a buffer, once
- * `z_e` IS an NDArray this must NOT return NULL -- it returns a packed result or
- * ndarray_delist_and_reeval(res) (which rebuilds the call with the buffer turned
- * into a nested List and re-evaluates, so Listable threads each element through
- * the accurate scalar / complex route). Declines mid-loop (z <= 0, pole,
- * overflow) take that same delist route so every element is computed correctly.
- */
-static Expr* whittaker_m_ndarray(const Expr* k_e, const Expr* m_e,
-                                 const Expr* z_e, Expr* res) {
-    if (!is_ndarray(z_e)) return NULL;             /* scalar driver handles */
-    NDType dt = z_e->data.ndarray.dtype;
-    double kd, md;
-    /* Real float buffer + machine real k, m only; everything else (int64/bool
-     * buffer, complex buffer, non-machine k/m) takes the per-element route. */
-    if (dt == NDT_INT64 || dt == NDT_BOOL || ndt_is_complex(dt) ||
-        !whit_leaf_double(k_e, &kd) || !whit_leaf_double(m_e, &md))
-        return ndarray_delist_and_reeval(res);
-
-    size_t sz = ndarray_size(z_e);
-    void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
-    if (!out) return ndarray_delist_and_reeval(res);
-    bool ok = true;
-    for (size_t i = 0; i < sz && ok; i++) {
-        double xr, xi, v = 0.0;
-        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
-        ok = sf_machine_whittaker_m(kd, md, xr, &v);
-        if (ok) ndt_set(out, i, dt, v, 0.0);
-    }
-    if (ok)
-        return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
-                                     z_e->data.ndarray.dims, out, dt);
-    /* A declined element must not reach the scalar driver, which cannot consume
-     * the buffer; delist so each element takes the accurate scalar route. */
-    free(out);
-    return ndarray_delist_and_reeval(res);
 }
 
 /* ================================================================== */
@@ -353,51 +374,9 @@ static Expr* whittaker_w_eval(Expr* k_e, Expr* m_e, Expr* z_e) {
     if (!(whit_is_inexact(k_e) || whit_is_inexact(m_e) || whit_is_inexact(z_e)))
         return NULL;
 
-    /* Machine real fast path: shares sf_machine_whittaker_w with the NDArray kernel
-     * and the Compile[] VM (bit-identical). Declines (z <= 0, pole, cancellation,
-     * overflow) -> the HypergeometricU template below. */
-    {
-        double kd, md, zd;
-        if (whit_leaf_double(k_e, &kd) && whit_leaf_double(m_e, &md) &&
-            whit_leaf_double(z_e, &zd)) {
-            double v;
-            if (sf_machine_whittaker_w(kd, md, zd, &v))
-                return expr_new_real(v);
-        }
-    }
-
     Expr* out = whittaker_w_numeric_hyp(k_e, m_e, z_e);
     if (out) return out;
     return NULL;                               /* stay symbolic */
-}
-
-/* Thread sf_machine_whittaker_w over a visible NDArray / packed-List z (scalar
- * k, m), mirroring whittaker_m_ndarray. Once z IS an NDArray this must not return
- * NULL. */
-static Expr* whittaker_w_ndarray(const Expr* k_e, const Expr* m_e,
-                                 const Expr* z_e, Expr* res) {
-    if (!is_ndarray(z_e)) return NULL;
-    NDType dt = z_e->data.ndarray.dtype;
-    double kd, md;
-    if (dt == NDT_INT64 || dt == NDT_BOOL || ndt_is_complex(dt) ||
-        !whit_leaf_double(k_e, &kd) || !whit_leaf_double(m_e, &md))
-        return ndarray_delist_and_reeval(res);
-
-    size_t sz = ndarray_size(z_e);
-    void* out = malloc(ndt_elem_size(dt) * (sz ? sz : 1));
-    if (!out) return ndarray_delist_and_reeval(res);
-    bool ok = true;
-    for (size_t i = 0; i < sz && ok; i++) {
-        double xr, xi, v = 0.0;
-        ndt_get(z_e->data.ndarray.data, i, dt, &xr, &xi);
-        ok = sf_machine_whittaker_w(kd, md, xr, &v);
-        if (ok) ndt_set(out, i, dt, v, 0.0);
-    }
-    if (ok)
-        return expr_new_ndarray_like(z_e, z_e->data.ndarray.rank,
-                                     z_e->data.ndarray.dims, out, dt);
-    free(out);
-    return ndarray_delist_and_reeval(res);
 }
 
 Expr* builtin_whittaker_w(Expr* res) {
@@ -406,8 +385,11 @@ Expr* builtin_whittaker_w(Expr* res) {
     Expr** args = res->data.function.args;
     if (argc != 3)
         return builtin_arg_error("WhittakerW", argc, 3, 3);
-    Expr* nd = whittaker_w_ndarray(args[0], args[1], args[2], res);
+    Expr* nd = whit_ndarray(sf_machine_whittaker_w, sf_machine_whittaker_w_c,
+                            args[0], args[1], args[2], res);
     if (nd) return nd;
+    Expr* m = whit_machine(res, sf_machine_whittaker_w, sf_machine_whittaker_w_c);
+    if (m) return m;
     return whittaker_w_eval(args[0], args[1], args[2]);
 }
 
@@ -421,8 +403,11 @@ Expr* builtin_whittaker_m(Expr* res) {
     Expr** args = res->data.function.args;
     if (argc != 3)
         return builtin_arg_error("WhittakerM", argc, 3, 3);
-    Expr* nd = whittaker_m_ndarray(args[0], args[1], args[2], res);
+    Expr* nd = whit_ndarray(sf_machine_whittaker_m, sf_machine_whittaker_m_c,
+                            args[0], args[1], args[2], res);
     if (nd) return nd;
+    Expr* m = whit_machine(res, sf_machine_whittaker_m, sf_machine_whittaker_m_c);
+    if (m) return m;
     return whittaker_m_eval(args[0], args[1], args[2]);
 }
 

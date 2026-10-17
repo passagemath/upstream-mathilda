@@ -386,6 +386,7 @@ set(COMMON_SRC
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
+    ../src/special_functions/sf_machine_hyper.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -3646,6 +3647,10 @@ target_include_directories(besseli_tests PRIVATE ../src)
 
 add_executable(bessely_tests test_bessely.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(bessely_tests PRIVATE ../src)
+
+add_executable(sf_machine_hyper_tests test_sf_machine_hyper.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sf_machine_hyper_tests PRIVATE ../src)
+add_test(NAME sf_machine_hyper_tests COMMAND sf_machine_hyper_tests)
 
 add_executable(struveh_tests test_struveh.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(struveh_tests PRIVATE ../src)

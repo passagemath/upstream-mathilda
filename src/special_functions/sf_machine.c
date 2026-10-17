@@ -7,6 +7,7 @@
  * by tests/test_sf_machine.c rather than asserted here.
  */
 #include "sf_machine.h"
+#include "sf_machine_hyper.h"   /* sf_machine_hyperu_quad */
 
 #include <math.h>
 #include <complex.h>
@@ -1065,13 +1066,7 @@ bool sf_machine_bessel_i(double nu, double x, double* out) {
     return isfinite(*out);
 }
 
-/* 0F1(;a;z) = sum z^k / ((a)_k k!) — entire, so the series is the whole story. */
-bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
-                    double z, double* out);   /* defined below */
-
-bool sf_machine_hyper0f1(double a, double z, double* out) {
-    return sf_machine_pfq(NULL, 0, &a, 1, z, out);
-}
+/* 0F1, 1F1, 2F1 and pFq live in sf_machine_hyper.c. */
 
 /* QPochhammer[a, q] = prod_{k>=0} (1 - a q^k), convergent for |q| < 1. */
 bool sf_machine_qpochhammer(double a, double q, double* out) {
@@ -1348,15 +1343,6 @@ bool sf_machine_lerchphi(double z, double s, double a, double* out) {
     return isfinite(sum);
 }
 
-/* 1F1(a; b; z).  For z very negative the direct series alternates and loses
- * everything to cancellation, so Kummer's transformation moves it to +z. */
-bool sf_machine_hyper1f1(double a, double b, double z, double* out) {
-    /* One implementation, not two: pFq is what the evaluator actually reaches
-     * (Hypergeometric1F1 canonicalises to HypergeometricPFQ), and keeping a
-     * second copy here meant a fix to one silently missed the other. */
-    return sf_machine_pfq(&a, 1, &b, 1, z, out);
-}
-
 /* WhittakerM M_{k,m}(z) = e^(-z/2) z^(m+1/2) 1F1(m-k+1/2; 2m+1; z).
  *
  * Real machine path. Declines (returns false) for z <= 0 (the z^(m+1/2) prefactor
@@ -1373,7 +1359,8 @@ bool sf_machine_whittaker_m(double k, double m, double z, double* out) {
     double b = 2.0 * m + 1.0;
     double h;
     if (!sf_machine_hyper1f1(a, b, z, &h)) return false;   /* pole & cancellation declined inside */
-    double v = exp(-0.5 * z) * pow(z, m + 0.5) * h;
+    double e = m + 0.5;
+    double v = exp(-0.5 * z) * (e == 1.0 ? z : pow(z, e)) * h;
     if (!isfinite(v)) return false;
     *out = v;
     return true;
@@ -1387,30 +1374,47 @@ bool sf_machine_whittaker_m(double k, double m, double z, double* out) {
  * the result only when that least term is negligible against the partial sum.
  * Terminating cases (a or a-b+1 a non-positive integer) drive the next term to
  * exactly 0 and are returned exactly here. */
+/* z^-a; a = 1 and 2 by division (<= 1 ulp, like pow, and far cheaper -- U(1,2,z)
+ * = 1/z is the common terminating case). */
+static double hyperu_zpow(double z, double a) {
+    if (a == 1.0) return 1.0 / z;
+    if (a == 2.0) return 1.0 / (z * z);
+    return pow(z, -a);
+}
+
 static bool hyperu_asymptotic(double a, double b, double z, double* out) {
     if (!(z > 0.0)) return false;
     double a2 = a - b + 1.0;
-    double term = 1.0, sum = 1.0, last = 1.0;
+    /* Compensated (TwoSum) summation: the series alternates and runs to ~z
+     * terms before its least one. Each ratio divides by -z itself rather than
+     * multiplying by a once-rounded -1/z, whose error would repeat in every
+     * term (a systematic k*u/2 drift). */
+    double term = 1.0, sum = 1.0, comp = 0.0, last = 1.0;
     for (int k = 0; k < 400; k++) {
-        double next = term * (a + k) * (a2 + k) / (k + 1.0) * (-1.0 / z);
+        double next = term * ((a + k) * (a2 + k)) / ((k + 1.0) * -z);
         double an = fabs(next);
         if (!isfinite(next)) return false;
         if (next == 0.0) {                      /* series terminated: exact */
-            double v = pow(z, -a) * sum;
+            double v = hyperu_zpow(z, a) * (sum + comp);
             if (!isfinite(v)) return false;
             *out = v; return true;
         }
         if (an > last) {                        /* least term reached -> truncate */
-            if (!(last <= fabs(sum) * 1.0e-13)) return false;
-            double v = pow(z, -a) * sum;
+            /* The least term IS the truncation error: accept it only below
+             * half an ulp of the sum (it allowed 1e-13, ~450 ulp, which put
+             * U(7/10, 13/10, 28.5) 334 ulp off). */
+            if (!(last <= fabs(sum) * 5.5511151231257827e-17)) return false;
+            double v = hyperu_zpow(z, a) * (sum + comp);
             if (!isfinite(v)) return false;
             *out = v; return true;
         }
-        sum += next;
+        double s2 = sum + next, bb = s2 - sum;
+        comp += (sum - (s2 - bb)) + (next - bb);
+        sum = s2;
         term = next;
         last = an;
         if (an <= fabs(sum) * 1.0e-16) {        /* numerically converged */
-            double v = pow(z, -a) * sum;
+            double v = hyperu_zpow(z, a) * (sum + comp);
             if (!isfinite(v)) return false;
             *out = v; return true;
         }
@@ -1441,7 +1445,11 @@ static bool hyperu_connection(double a, double b, double z, double* out) {
     double t2 = g2 * pow(z, 1.0 - b) * m2;
     double v = t1 + t2;
     if (!isfinite(v)) return false;
-    if (fabs(t1) + fabs(t2) > fabs(v) * 1.0e13) return false;   /* cancellation */
+    /* Cancellation guard: the two terms' rounding is amplified by
+     * (|t1|+|t2|)/|v|. This used to allow 1e13 -- U(5.5, 0.3, 3) came back
+     * 1.5e-10 off, U(1.3, 5.5, 10) 60 ulp off -- so decline beyond a factor of 4
+     * and let the rigorous FLINT path answer. */
+    if (fabs(t1) + fabs(t2) > fabs(v) * 4.0) return false;
     *out = v;
     return true;
 }
@@ -1484,10 +1492,14 @@ static bool hyperu_integer_b(double a, int n, double z, double* out) {
         if (!sf_machine_digamma(a, &pa)) return false;           /* psi(a)     */
         if (!sf_machine_digamma(1.0, &pk)) return false;         /* psi(1)     */
         if (!sf_machine_digamma((double)(n + 1), &pnk)) return false; /* psi(n+1) */
+        /* The bracket ln z + psi(a+k) - psi(k+1) - psi(n+k+1) is itself a
+         * difference: its rounding is ~u (|ln z| + |psi|s), not u |bracket|, so
+         * the condition measure accumulates |term| times that scale. */
+        double scale = 0.0;
         for (int k = 0; k < 200000; k++) {
             double add = term * (lnz + pa - pk - pnk);
             sum += add;
-            if (fabs(add * pref) > peak) peak = fabs(add * pref);
+            scale += fabs(term) * (fabs(lnz) + fabs(pa) + fabs(pk) + fabs(pnk));
             if (fabs(add) < fabs(sum) * EI_EPS && k > 2) break;
             /* advance to k+1: term and the three digammas by their recurrences */
             term *= (a + k) / (double)(n + 1 + k) * z / (double)(k + 1);
@@ -1498,6 +1510,7 @@ static bool hyperu_integer_b(double a, int n, double z, double* out) {
             pnk += 1.0 / (double)(n + k + 1);            /* psi(n+k+2)         */
         }
         logpart = pref * sum;
+        if (fabs(pref) * scale > peak) peak = fabs(pref) * scale;
     }
     double v = finite + logpart;
     if (!isfinite(v)) return false;
@@ -1505,8 +1518,9 @@ static bool hyperu_integer_b(double a, int n, double z, double* out) {
      * the finite and log parts can nearly cancel. When the largest contribution
      * dwarfs the result the double has thrown most of its digits away -- DECLINE
      * (as sf_machine_pfq does) so the caller takes the rigorous FLINT path rather
-     * than return a confidently wrong value. ~1e6 keeps roughly 10 good digits. */
-    if (peak > fabs(v) * 1.0e6) return false;
+     * than return a confidently wrong value. (It allowed 1e6 -- ~10 good
+     * digits -- which is not a machine-precision answer.) */
+    if (peak > fabs(v) * 4.0) return false;
     *out = v;
     return true;
 }
@@ -1518,16 +1532,30 @@ bool sf_machine_hyperu(double a, double b, double z, double* out) {
     /* 2/3. integer vs non-integer b. */
     double rb = floor(b + 0.5);
     if (fabs(b - rb) < 1.0e-9) {                         /* b at an integer */
-        if (rb >= 1.0)
-            return hyperu_integer_b(a, (int)rb - 1, z, out);
-        /* b <= 0 integer: fold up by U(a,b,z) = z^(1-b) U(a-b+1, 2-b, z). */
+        if (rb >= 1.0) {
+            if (hyperu_integer_b(a, (int)rb - 1, z, out)) return true;
+        } else {
+            /* b <= 0 integer: fold up by U(a,b,z) = z^(1-b) U(a-b+1, 2-b, z). */
+            double v;
+            if (!sf_machine_hyperu(a - b + 1.0, 2.0 - b, z, &v)) return false;
+            double r = pow(z, 1.0 - b) * v;
+            if (!isfinite(r)) return false;
+            *out = r; return true;
+        }
+    } else if (hyperu_connection(a, b, z, out)) {        /* 3. non-integer b */
+        return true;
+    }
+    /* 4. moderate z, where the series above cancel: the integral (a > 0), or
+     *    for a <= 0 its Kummer image U = z^(1-b) U(a-b+1, 2-b, z). */
+    if (a > 0.0) return sf_machine_hyperu_quad(a, b, z, out);
+    if (a - b + 1.0 > 0.0) {
         double v;
-        if (!sf_machine_hyperu(a - b + 1.0, 2.0 - b, z, &v)) return false;
+        if (!sf_machine_hyperu_quad(a - b + 1.0, 2.0 - b, z, &v)) return false;
         double r = pow(z, 1.0 - b) * v;
         if (!isfinite(r)) return false;
         *out = r; return true;
     }
-    return hyperu_connection(a, b, z, out);              /* 3. non-integer b */
+    return false;
 }
 
 /* WhittakerW W_{k,m}(z) = e^(-z/2) z^(m+1/2) U(m-k+1/2, 2m+1, z).
@@ -1540,70 +1568,14 @@ bool sf_machine_whittaker_w(double k, double m, double z, double* out) {
     double am = fabs(m);                       /* even in m: fold so b = 2|m|+1 >= 1 */
     double u;
     if (!sf_machine_hyperu(am - k + 0.5, 2.0 * am + 1.0, z, &u)) return false;
-    double v = exp(-0.5 * z) * pow(z, am + 0.5) * u;
+    double e = am + 0.5;
+    double v = exp(-0.5 * z) * (e == 1.0 ? z : pow(z, e)) * u;
     if (!isfinite(v)) return false;
     *out = v;
     return true;
 }
 
-/* 2F1(a, b; c; z), |z| < 1 by the defining series.  Outside the disc the
- * function needs a connection formula and may be complex, so the kernel
- * declines and the MPFR path answers. */
-bool sf_machine_hyper2f1(double a, double b, double cc, double z, double* out) {
-    double ab[2] = { a, b };
-    return sf_machine_pfq(ab, 2, &cc, 1, z, out);
-}
-
-/* pFq({a1..ap}, {b1..bq}, z) = sum_k prod (a_i)_k / prod (b_j)_k * z^k / k!.
- *
- * This is the head that actually matters: the evaluator canonicalises
- * Hypergeometric0F1, 1F1 and 2F1 all into HypergeometricPFQ before anything
- * downstream sees them.
- *
- * Convergence is decided by p against q: p <= q is entire, p = q+1 needs
- * |z| < 1, and p > q+1 diverges — the last is declined rather than truncated. */
-bool sf_machine_pfq(const double* a, size_t p, const double* b, size_t q,
-                    double z, double* out) {
-    for (size_t j = 0; j < q; j++)
-        if (b[j] <= 0.0 && b[j] == floor(b[j])) return false;   /* (b)_k hits zero */
-    if (p > q + 1) return false;
-    if (p == q + 1 && !(fabs(z) < 1.0)) return false;
-
-    /* 1F1 at ANY negative z: the raw series alternates with terms larger than
-     * the sum, so Kummer's transformation moves it to +z where every term is
-     * positive and nothing cancels.  The condition b - a > 0 is what guarantees
-     * the transformed series is positive-term; without the transform the answer
-     * was wrong in the second decimal place at z = -40, and still 5e-9 at -20. */
-    if (p == 1 && q == 1 && z < 0.0 && (b[0] - a[0]) > 0.0) {
-        double ba = b[0] - a[0], v;
-        if (!sf_machine_pfq(&ba, 1, b, 1, -z, &v)) return false;
-        *out = exp(z) * v;
-        return isfinite(*out);
-    }
-
-    double maxterm = 1.0;
-    double term = 1.0, sum = 1.0;
-    for (int k = 0; k < 200000; k++) {
-        double num = 1.0, den = 1.0;
-        for (size_t i = 0; i < p; i++) num *= (a[i] + k);
-        for (size_t j = 0; j < q; j++) den *= (b[j] + k);
-        if (den == 0.0) return false;
-        term *= num * z / (den * (k + 1.0));
-        if (term == 0.0) break;                 /* an upper parameter terminated it */
-        sum += term;
-        if (fabs(term) > maxterm) maxterm = fabs(term);
-        if (!isfinite(term)) return false;
-        if (fabs(term) < fabs(sum) * EI_EPS) break;
-    }
-    /* Cancellation guard: if the largest term dwarfed the result, the sum has
-     * lost most of its digits and the kernel must DECLINE rather than hand back
-     * a confidently wrong number — the MPFR path carries enough precision. */
-    if (maxterm > fabs(sum) * 1.0e13) return false;
-    *out = sum;
-    return isfinite(sum);
-}
-
-/* The ascending series above converges everywhere, but it is not USABLE
+/* An ascending (power) series converges everywhere, but it is not USABLE
  * everywhere: wherever the value is small compared with the terms that build it
  * (which is most of the plane once |z| is large), the sum is a difference of
  * quantities far bigger than itself and the double has already thrown the answer

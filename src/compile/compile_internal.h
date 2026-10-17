@@ -330,6 +330,9 @@ enum {
     X(A_NDFN, K_ARANGE)                                                     \
     /* strip-mined (tile) forms — one opcode, VBLOCK elements */           \
     X(CALL, K_CALL)   X(KERNN, K_NARY)                                     \
+    /* KERNN over machine-COMPLEX operands and result (re, im from the z    \
+     * member) -- the same n-ary kernel, its complex arm. */               \
+    X(KERNN_C, K_NARY)                                                     \
     X(VSETLEN, K_ASTORE)                                                   \
     X(VLOAD_R, K_BIN)   X(VLOAD_C, K_BIN)                                  \
     X(VSTORE_R, K_ASTORE) X(VSTORE_C, K_ASTORE)                            \

@@ -1229,10 +1229,13 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         if (!d || !d->ndarray_nary_kernel) return false;
         const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
         if (!k->cplx || k->nargs != na) return false;
+        bool cx = false;    /* any complex operand: the complex arm, OP_KERNN_C */
         for (size_t i = 0; i < na; i++) {
             CompileType t;
             if (!infer_type(c, A[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+            cx |= (t == CT_COMPLEX);
         }
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
         int base = alloc_temp(c);
         for (size_t i = 1; i < na; i++) (void)alloc_temp(c);
         int after = c->temp_top;
@@ -1240,7 +1243,7 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         for (size_t i = 0; i < na && c->ok; i++) {
             Val v;
             if (!emit(c, A[i], &v)) return false;
-            coerce(c, &v, CT_REAL);
+            coerce(c, &v, et);
             if (!c->ok) return false;
             ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
             c->temp_top = after;
@@ -1248,8 +1251,8 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         if (!c->ok) return false;
         c->temp_top = (base - c->nlocals) + 1;
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
-        ins_f(c, OP_KERNN, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, kp);
-        out->reg = base; out->tmp = true; out->type = CT_REAL;
+        ins_f(c, cx ? OP_KERNN_C : OP_KERNN, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = et;
         return c->ok;
     }
     if (na == 2) {

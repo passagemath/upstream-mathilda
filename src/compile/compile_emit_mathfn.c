@@ -183,11 +183,14 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         for (size_t i = 0; i < np; i++) parts[total++] = la->data.function.args[i];
         for (size_t j = 0; j < nq; j++) parts[total++] = lb->data.function.args[j];
         parts[total++] = A[2];
+        bool cx = false;    /* any complex operand: the complex arm, OP_KERNN_C */
         for (size_t i = 0; i < total; i++) {
             CompileType t;
             if (!infer_type(c, parts[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL)
                 { c->ok = false; return -1; }
+            cx |= (t == CT_COMPLEX);
         }
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
 
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_nary_kernel) { c->ok = false; return -1; }
@@ -198,12 +201,13 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         int base = alloc_temp(c);                     /* slot 0 holds p */
         for (size_t i = 0; i < total; i++) (void)alloc_temp(c);
         int after = c->temp_top;
-        Slot pk; memset(&pk, 0, sizeof pk); pk.r = (double)np;
+        Slot pk; memset(&pk, 0, sizeof pk);
+        if (cx) pk.z = (double)np; else pk.r = (double)np;
         ins(c, OP_CONST, (uint32_t)base, 0, 0, pk);
         for (size_t i = 0; i < total && c->ok; i++) {
             Val v;
             if (!emit(c, parts[i], &v)) return -1;
-            coerce(c, &v, CT_REAL);
+            coerce(c, &v, et);
             if (!c->ok) return -1;
             ins(c, OP_MOVE, (uint32_t)(base + 1 + (int)i), (uint32_t)v.reg, 0, z);
             c->temp_top = after;
@@ -211,8 +215,9 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         if (!c->ok) return -1;
         c->temp_top = (base - c->nlocals) + 1;
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
-        ins_f(c, OP_KERNN, (uint16_t)(total + 1), (uint32_t)base, (uint32_t)base, 0, kp);
-        out->reg = base; out->tmp = true; out->type = CT_REAL;
+        ins_f(c, cx ? OP_KERNN_C : OP_KERNN, (uint16_t)(total + 1), (uint32_t)base,
+              (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = et;
         return c->ok ? 1 : -1;
     }
 

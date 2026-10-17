@@ -42,6 +42,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -113,6 +115,11 @@ static Expr* iee_neg_infinity(void) {
  * it directly instead of sitting on a degrade sentinel. */
 double inverf_double(double x) {
     if (x == 0.0) return 0.0;
+    {   /* the piecewise-polynomial kernel; Winitzki + Newton only for what it
+         * declines (the poles, which the MPFR seed can round onto) */
+        double v;
+        if (sf_inverse_erf_r(x, &v)) return v;
+    }
     const double a = 0.147;                 /* Winitzki's tuned constant */
     double ln = log(1.0 - x * x);           /* < 0 for |x| < 1 */
     double t  = 2.0 / (M_PI * a) + ln / 2.0;
@@ -274,6 +281,16 @@ Expr* builtin_inverf(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    /* Machine-scalar fast path: the kernel the NDArray / packed / Compile
+     * surfaces share. It declines +-1 (the exact infinities below) and
+     * |s| > 1 (symbolic below). */
+    if (argc == 1) {
+        SFMachineArgs ma;
+        double v;
+        if (sf_machine_scalar_args(res, &ma) && !ma.any_complex &&
+            sf_inverse_erf_r(ma.re[0], &v))
+            return expr_new_real(v);
+    }
     if (argc == 1) return inverf_one_arg(args[0]);
     if (argc == 2) return inverf_two_arg(args[0], args[1]);
     return inverf_emit_argt(argc);

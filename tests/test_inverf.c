@@ -172,6 +172,19 @@ void test_inverf_arity() {
     assert_eval_eq("InverseErf[1, 2, 3, 4, 5]", "InverseErf[1, 2, 3, 4, 5]", 0);
 }
 
+/* The machine-precision value comes from the shared raw-double kernel
+ * (sf_machine_error.c) on every surface: scalar == unpacked List == packed
+ * List == NDArray == Compile (scalar and rank-1), bit for bit. */
+void test_inverseerf_machine_surfaces() {
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[1]; RandomReal[{-0.99999, 0.99999}, 200]), sc, cf, cfa}, sc = InverseErf /@ xs;"
+        " cf = Compile[{{x, _Real}}, InverseErf[x]]; cfa = Compile[{{v, _Real, 1}}, InverseErf[v]];"
+        " {Max[Abs[sc - InverseErf[FromPackedArray[xs]]]], Max[Abs[sc - InverseErf[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[InverseErf[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -185,6 +198,8 @@ int main() {
     TEST(test_inverf_listable);
     TEST(test_inverf_attributes);
     TEST(test_inverf_arity);
+
+    TEST(test_inverseerf_machine_surfaces);
 
     printf("All InverseErf tests passed.\n");
     return 0;

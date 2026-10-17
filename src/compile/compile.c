@@ -863,7 +863,16 @@ bool emit_unary_math(Ctx* c, const char* head, const Expr* arg,
     Val a; if (!emit(c, arg, &a)) return false;
     if (CT_IS_ARRAY(a.type)) return emit_arr_unary(c, head, a, out);
     if (a.type == CT_COMPLEX) {
-        if (!op_c) { c->ok = false; return false; }
+        if (!op_c) {
+            /* No complex opcode (Erf, Erfc): the head's registered machine
+             * kernel carries the complex arm, so call it the way try_kernel
+             * would rather than bailing the whole body. */
+            SymbolDef* d = symtab_lookup(head);
+            const NDUnaryKernel* k = d ? (const NDUnaryKernel*)d->ndarray_unary_kernel : NULL;
+            if (!k || !k->cplx) { c->ok = false; return false; }
+            *out = kern_unop(c, OP_KERN_CC, a, CT_COMPLEX, (const void*)k->cplx);
+            return c->ok;
+        }
         *out = unop(c, op_c, a, CT_COMPLEX); return c->ok;
     }
     coerce(c, &a, CT_REAL);

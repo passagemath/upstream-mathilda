@@ -387,6 +387,7 @@ set(COMMON_SRC
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
     ../src/special_functions/sf_scalar.c
+    ../src/special_functions/sf_machine_error.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
@@ -3546,6 +3547,13 @@ target_include_directories(fresnels_tests PRIVATE ../src)
 
 add_executable(sinc_tests test_sinc.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sinc_tests PRIVATE ../src)
+
+# Machine kernels of the error-function family (sf_machine_error.c): spot
+# values vs mpmath across every regime boundary, declines, and the five-surface
+# bit match (scalar / List / packed / NDArray / Compile).
+add_executable(sf_machine_error_tests test_sf_machine_error.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sf_machine_error_tests PRIVATE ../src)
+add_test(NAME sf_machine_error_tests COMMAND sf_machine_error_tests)
 
 add_executable(positive_tests test_positive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(positive_tests PRIVATE ../src)

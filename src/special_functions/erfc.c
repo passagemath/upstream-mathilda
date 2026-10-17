@@ -48,6 +48,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -427,6 +429,15 @@ Expr* builtin_erfc(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    /* Machine-scalar fast path (see builtin_erf); a decline falls through. */
+    if (argc == 1) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) { if (sf_erfc_r(ma.re[0], &vr)) return expr_new_real(vr); }
+            else if (sf_erfc_c(ma.re[0], ma.im[0], &vr, &vi)) return sf_machine_complex_result(vr, vi);
+        }
+    }
     if (argc == 1 && is_interval(args[0])) {
         Expr* r = interval_apply_function("Erfc", args[0]); if (r) return r;
     }

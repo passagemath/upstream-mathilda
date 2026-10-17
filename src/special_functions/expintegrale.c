@@ -5,7 +5,11 @@
  * Layered evaluation (each argument kind takes the cheapest correct route):
  *   E_0(z) = e^(-z)/z                      exact, any z
  *   E_n(0) = 1/(n-1),  integer n >= 2      exact
- *   integer n >= 1, inexact real x > 0     machine E_n via CF (x>1) / series (x<1)
+ *   integer n >= 0, machine real x > 0     sf_machine_expn (sf_machine_expint.c):
+ *                                          recurrence/series (x <= 1) / continued
+ *                                          fraction (x > 1)
+ *   integer n >= 0, machine complex z      sf_machine_expn_c (and real x < 0,
+ *   (or real x < 0)                        whose value is complex)
  *   everything else                        stays symbolic (return NULL)
  *
  * The derivative rule d/dz E_n(z) = -E_(n-1)(z) (with the base E_0 above) lives
@@ -23,8 +27,10 @@
 #include "common.h"
 
 #include <math.h>
-#include <float.h>
 #include <stdbool.h>
+
+#include "sf_machine_expint.h"   /* sf_machine_expn */
+#include "sf_scalar.h"           /* the shared machine-scalar gate */
 
 /* Small expr builders (local, matching the deriv.c idiom). */
 static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
@@ -35,57 +41,36 @@ static Expr* mk_fn2(const char* name, Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol(name), (Expr*[]){ a, b }, 2);
 }
 
-/* E_n(x) for integer n >= 0 and real x > 0, by the standard continued-fraction
- * (x > 1) / power-series (0 < x <= 1) split.  Returns false outside that domain
- * (x <= 0, which is on/left of the branch point, is deferred to stay symbolic).
- * Verified against NIntegrate in the unit tests, not by a recalled constant. */
+/* E_n(x) for an integer n >= 0 and real x > 0: the shared machine kernel
+ * (sf_machine_expint.c), the same one the NDArray kernel and Compile[] call.
+ * Returns false (defer) outside that domain. */
 bool expintegrale_machine(long n, double x, double* out) {
-    static const double EULER_GAMMA = 0.5772156649015328606065;
-    const double FPMIN = DBL_MIN / DBL_EPSILON;
-    const int    MAXIT = 400;
-    const double EPS   = 10.0 * DBL_EPSILON;
-    if (n < 0 || x <= 0.0) return false;
-    if (n == 0) { *out = exp(-x) / x; return true; }
-    long nm1 = n - 1;
-    if (x > 1.0) {                              /* Lentz continued fraction */
-        double b = x + (double)n;
-        double c = 1.0 / FPMIN;
-        double d = 1.0 / b;
-        double h = d;
-        for (int i = 1; i <= MAXIT; i++) {
-            double a = -(double)i * (double)(nm1 + i);
-            b += 2.0;
-            d = 1.0 / (a * d + b);
-            c = b + a / c;
-            double del = c * d;
-            h *= del;
-            if (fabs(del - 1.0) <= EPS) { *out = h * exp(-x); return true; }
-        }
-        return false;
-    } else {                                    /* power series */
-        double ans = (nm1 != 0) ? 1.0 / (double)nm1 : -log(x) - EULER_GAMMA;
-        double fact = 1.0;
-        for (int i = 1; i <= MAXIT; i++) {
-            fact *= -x / (double)i;
-            double del;
-            if (i != nm1) {
-                del = -fact / (double)(i - nm1);
-            } else {
-                double psi = -EULER_GAMMA;
-                for (long ii = 1; ii <= nm1; ii++) psi += 1.0 / (double)ii;
-                del = fact * (-log(x) + psi);
-            }
-            ans += del;
-            if (fabs(del) < fabs(ans) * EPS) { *out = ans; return true; }
-        }
-        return false;
-    }
+    return sf_machine_expn((double)n, x, out);
 }
 
 Expr* builtin_expintegrale(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* n = res->data.function.args[0];
     Expr* z = res->data.function.args[1];
+
+    /* Machine-precision call with an integer order (exact, or a machine real
+     * that is integer-valued) and a real x > 0: the double kernel, before any
+     * expression building. Anything else falls through unchanged. */
+    {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma) && !ma.is_complex[0]) {
+            double v, vi;
+            if (!ma.is_complex[1]) {
+                if (sf_machine_expn(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+                /* x < 0: E_n is complex there (the upper side of the cut) */
+                if (ma.re[1] < 0.0 &&
+                    sf_machine_expn_c(ma.re[0], ma.re[1], 0.0, &v, &vi))
+                    return sf_machine_complex_result(v, vi);
+            } else if (sf_machine_expn_c(ma.re[0], ma.re[1], ma.im[1], &v, &vi)) {
+                return sf_machine_complex_result(v, vi);
+            }
+        }
+    }
 
     /* E_0(z) = e^(-z)/z  (exact; the derivative base case). */
     if (n->type == EXPR_INTEGER && n->data.integer == 0)

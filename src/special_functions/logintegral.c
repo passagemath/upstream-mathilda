@@ -16,7 +16,10 @@
  * Evaluation is layered so each kind of argument takes the cheapest route:
  *
  *   exact special values     ->  0, -Infinity, Infinity, Indeterminate
- *   numeric (inexact) z       ->  evaluate ExpIntegralEi[Log[z]]
+ *   machine real / complex z ->  the double kernels sf_machine_li(_c)
+ *                                (sf_machine_expint.c, shared with NDArray
+ *                                and Compile[]), no expression is built
+ *   arbitrary-precision z    ->  evaluate ExpIntegralEi[Log[z]]
  *   everything else           ->  stays symbolic (return NULL)
  *
  * Exact non-special numbers (e.g. LogIntegral[2], LogIntegral[1/2]) stay
@@ -32,9 +35,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <complex.h>
 #include <math.h>
 #include "expintegralei.h"
+#include "sf_machine.h"          /* sf_machine_li: the real machine kernel */
+#include "sf_machine_expint.h"   /* sf_machine_li_c: the complex machine kernel */
+#include "sf_scalar.h"           /* the shared machine-scalar gate */
 #include "arithmetic.h"   /* is_complex, make_complex */
 #include "attr.h"
 #include "eval.h"         /* eval_and_free */
@@ -135,7 +140,24 @@ Expr* builtin_logintegral(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return li_one_arg(args[0]);
+    if (argc == 1) {
+        /* Machine-precision call: the double kernel, ahead of the special-value
+         * ladder and without building ExpIntegralEi[Log[z]]. A decline (z = 0,
+         * the pole at 1, overflow) falls through to the path below unchanged. */
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_machine_li(ma.re[0], &vr)) return expr_new_real(vr);
+                /* x < 0: li is complex there (Ei of log|x| + i Pi). */
+                if (ma.re[0] < 0.0 && sf_machine_li_c(ma.re[0], 0.0, &vr, &vi))
+                    return sf_machine_complex_result(vr, vi);
+            } else if (sf_machine_li_c(ma.re[0], ma.im[0], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+        return li_one_arg(args[0]);
+    }
     return li_emit_argx(argc);
 }
 
@@ -150,17 +172,11 @@ void logintegral_init(void) {
     /* Docstring lives in info.c (info_init). */
 }
 
-/* li(z) = Ei(Log z) for a machine complex z, in the shared kernel ABI.
- *
- * The same identity the symbolic path uses, so the branch is the same one: a
- * PRINCIPAL log, which puts the cut on the negative real axis and makes
- * li[-1.] complex (Ei(i Pi)), exactly as the interpreter returns.  Declines
- * wherever Ei does — including z = 1, where Log z = 0 and li has its pole, and
- * z = 0, where the interpreter answers Indeterminate rather than a number. */
+/* li(z) for a machine complex z, in the shared kernel ABI (NDArray and
+ * Compile[]): the same kernel the scalar builtin uses. li(z) = Ei(Log z) with
+ * the PRINCIPAL log, which puts the cut on the negative real axis and makes
+ * li[-1.] complex (Ei(i Pi)), exactly as the interpreter returns. Declines at
+ * z = 0 (the interpreter answers Indeterminate) and at the pole z = 1. */
 bool logintegral_machine_complex(double are, double aim, double* ore, double* oim) {
-    if (are == 0.0 && aim == 0.0) return false;            /* Indeterminate */
-    if (are == 1.0 && aim == 0.0) return false;            /* pole */
-    double complex lz = clog(are + aim * I);
-    if (!isfinite(creal(lz)) || !isfinite(cimag(lz))) return false;
-    return expintegralei_machine_complex(creal(lz), cimag(lz), ore, oim);
+    return sf_machine_li_c(are, aim, ore, oim);
 }

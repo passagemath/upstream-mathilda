@@ -2884,27 +2884,27 @@ int main(void) {
         compiled_free(p); expr_free(b);
     }
 
-    /* The cancellation gate on the exponential-integral family.  The ascending
-     * series converges everywhere but is only USABLE where the terms do not
-     * dwarf the value they sum to; past that the kernel must DECLINE so the MPFR
-     * path answers, and a test is the only thing standing between "declines" and
-     * "returns eight correct digits and calls it a fast path".
-     *
-     * Both directions matter.  Inside the budget it must NOT decline (or the
-     * fast path silently is not one); outside it, it must. */
+    /* The exponential-integral family's complex kernels (sf_machine_expint.c).
+     * The old kernels summed the ascending series everywhere and had to DECLINE
+     * where its terms dwarfed the value (|z| ~ 50 lost every digit), so this
+     * test used to check both directions of that cancellation gate. The kernels
+     * now switch method instead -- the series only where it cannot cancel, the
+     * backward continued fraction or the asymptotic expansion elsewhere -- so
+     * every point must ANSWER, and answer correctly: a fast path that returns
+     * eight good digits is the failure this test exists to catch.
+     * References: mpmath at 25 digits. */
     {
         const char* inm[1] = { intern_symbol("x") };
         const CompileType CC1[1] = { CT_COMPLEX };
-        static const struct { const char* body; double re, im; bool want; } G[] = {
-            /* comfortably inside: must answer */
-            { "CosIntegral[x]",   2.0,  1.0, true  },
-            { "SinIntegral[x]",   3.0, -2.0, true  },
-            { "ExpIntegralEi[x]", 4.0,  2.0, true  },
-            { "CoshIntegral[x]",  1.0,  3.0, true  },
-            { "LogIntegral[x]",   3.0,  1.0, true  },
-            /* far outside: the series has thrown the answer away, so decline */
-            { "CosIntegral[x]",  40.0, 30.0, false },
-            { "SinIntegral[x]",  40.0, 30.0, false },
+        static const struct { const char* body; double re, im, vr, vi; } G[] = {
+            { "CosIntegral[x]",   2.0,  1.0, 0.0, 0.0 },
+            { "SinIntegral[x]",   3.0, -2.0, 0.0, 0.0 },
+            { "ExpIntegralEi[x]", 4.0,  2.0, 0.0, 0.0 },
+            { "CoshIntegral[x]",  1.0,  3.0, 0.0, 0.0 },
+            { "LogIntegral[x]",   3.0,  1.0, 0.0, 0.0 },
+            /* far out, where the old series kept no digits at all */
+            { "CosIntegral[x]",  40.0, 30.0, 22942006924.038547387, -105671146310.03512303 },
+            { "SinIntegral[x]",  40.0, 30.0, 105671146311.60591935,  22942006924.038547387 },
         };
         int bad = 0, n = (int)(sizeof G / sizeof G[0]);
         for (int i = 0; i < n; i++) {
@@ -2914,15 +2914,21 @@ int main(void) {
             CompileValue av, out;
             av.type = CT_COMPLEX; av.v.z = G[i].re + G[i].im * I;
             bool got = compiled_eval(p, &av, &out);
-            if (got != G[i].want) {
-                printf("      %s at %g%+gI: %s, expected %s\n", G[i].body, G[i].re, G[i].im,
-                       got ? "answered" : "declined", G[i].want ? "answer" : "decline");
+            if (!got) {
+                printf("      %s at %g%+gI: declined, expected an answer\n", G[i].body, G[i].re, G[i].im);
                 bad++;
+            } else if (G[i].vr != 0.0 || G[i].vi != 0.0) {
+                double dr = creal(out.v.z) - G[i].vr, di = cimag(out.v.z) - G[i].vi;
+                double rel = sqrt(dr * dr + di * di) / sqrt(G[i].vr * G[i].vr + G[i].vi * G[i].vi);
+                if (rel > 1e-14) {
+                    printf("      %s at %g%+gI: relative error %.2e\n", G[i].body, G[i].re, G[i].im, rel);
+                    bad++;
+                }
             }
             compiled_free(p); expr_free(b);
         }
-        if (bad) { printf("FAIL: %-30s %d/%d wrong\n", "expint cancellation gate", bad, n); failures++; }
-        else printf("ok:   %-30s %d points, both directions\n", "expint cancellation gate", n);
+        if (bad) { printf("FAIL: %-30s %d/%d wrong\n", "expint complex kernels", bad, n); failures++; }
+        else printf("ok:   %-30s %d points, all answer\n", "expint complex kernels", n);
     }
 
     /* ================= RESULT HEAD, NOT JUST RESULT VALUE =================

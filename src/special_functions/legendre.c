@@ -60,6 +60,8 @@
 #include "numeric_complex.h" /* ncpx toolkit */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_machine_plog.h"  /* sf_machine_legendre_p_c / _q_c */
+#include "sf_scalar.h"        /* sf_machine_scalar_args */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -981,10 +983,36 @@ static Expr* legendre_emit_argb(size_t argc) {
     return NULL;
 }
 
+/* Machine-precision LegendreP[n, x] / LegendreQ[n, x] for an integer-valued
+ * degree: the shared double helpers of sf_machine_plog.c (real recurrence on
+ * the real line, complex recurrence off it), bit-identical to the NDArray
+ * kernels and Compile[].  Runs BEFORE the exact-coefficient polynomial /
+ * closed-form expression builders, which a machine argument never needs.
+ * NULL = declined (non-integer degree, Q at x = +-1, overflow, a complex
+ * degree): the caller's exact/MPFR path answers unchanged. */
+static Expr* legendre_machine(Expr* res, bool is_q) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 2 || ma.is_complex[0]) return NULL;
+    /* P_n(1) = 1 and the Q_n(1) pole stay with the exact rules. */
+    if (leg_is_int_one(res->data.function.args[1])) return NULL;
+    double rr, ri;
+    bool ok = is_q ? sf_machine_legendre_q_c(ma.re[0], ma.re[1], ma.im[1], &rr, &ri)
+                   : sf_machine_legendre_p_c(ma.re[0], ma.re[1], ma.im[1], &rr, &ri);
+    if (!ok) return NULL;
+    /* A real x answers Real unless the value left the real axis (Q, |x| > 1). */
+    if (!ma.is_complex[1] && ri == 0.0) return expr_new_real(rr);
+    return sf_machine_complex_result(rr, ri);
+}
+
 Expr* builtin_legendre_p(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+
+    if (argc == 2) {
+        Expr* m = legendre_machine(res, false);
+        if (m) return m;
+    }
 
     if (argc == 2) return legendre_two_arg(args[0], args[1]);
     if (argc == 3) return legendre_assoc(args[0], args[1], 1, args[2]);
@@ -1007,6 +1035,11 @@ Expr* builtin_legendre_q(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+
+    if (argc == 2) {
+        Expr* m = legendre_machine(res, true);
+        if (m) return m;
+    }
 
     if (argc == 2) return legendre_q_two_arg(args[0], args[1]);
     if (argc == 3) return legendre_q_assoc(args[0], args[1], 1, args[2]);

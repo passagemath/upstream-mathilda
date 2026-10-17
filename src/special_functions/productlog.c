@@ -51,6 +51,9 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_machine.h"       /* sf_machine_productlog */
+#include "sf_machine_plog.h"  /* sf_machine_productlog_c */
+#include "sf_scalar.h"        /* sf_machine_scalar_args */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -388,8 +391,14 @@ static Expr* productlog_eval(long k, Expr* z) {
     if (k == 0 && pl_is_symbol(z, "E"))
         return expr_new_integer(1);
 
+    /* The two closed forms below are both Times[...] expressions (-1/E is
+     * Times[-1, Power[E, -1]], -Pi/2 is Times[Rational[-1, 2], Pi]); only such an
+     * argument can match, so nothing is built for any other one. */
+    bool z_times = z->type == EXPR_FUNCTION && z->data.function.head->type == EXPR_SYMBOL
+                   && z->data.function.head->data.symbol.name == SYM_Times;
+
     /* --- ProductLog[-1/E] = -1 (branches 0 and -1 meet at the branch point). --- */
-    if (k == 0 || k == -1) {
+    if (z_times && (k == 0 || k == -1)) {
         Expr* cand = pl_make_neg_inv_e();
         bool match = expr_eq(cand, z);
         expr_free(cand);
@@ -397,7 +406,7 @@ static Expr* productlog_eval(long k, Expr* z) {
     }
 
     /* --- ProductLog[-Pi/2] = I Pi/2 (principal branch). --- */
-    if (k == 0) {
+    if (z_times && k == 0) {
         Expr* cand = pl_make_neg_half_pi();
         bool match = expr_eq(cand, z);
         expr_free(cand);
@@ -428,9 +437,38 @@ static Expr* productlog_emit_argt(size_t argc) {
     return NULL;
 }
 
+/* Machine-precision W0: the shared double kernels (sf_machine_plog.c), the
+ * same ones the NDArray element-wise path and Compile[] call, so all surfaces
+ * agree bit-for-bit.  A real x >= -1/e answers Real; a real x below -1/e, or a
+ * machine complex z, answers Complex.  NULL = declined (non-finite, a failed
+ * verification, a branch k != 0): the caller falls through to the MPFR core. */
+static Expr* productlog_machine(Expr* res) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma)) return NULL;
+    if (ma.n == 2) {                                  /* ProductLog[k, z]: k = 0 only */
+        const Expr* k = res->data.function.args[0];
+        if (k->type != EXPR_INTEGER || k->data.integer != 0) return NULL;
+    }
+    int j = ma.n - 1;
+    double wr, wi;
+    if (!ma.is_complex[j]) {
+        double w;
+        if (sf_machine_productlog(ma.re[j], &w)) return expr_new_real(w);
+        if (!(ma.re[j] < 0.0)) return NULL;
+    }
+    if (sf_machine_productlog_c(ma.re[j], ma.im[j], &wr, &wi))
+        return sf_machine_complex_result(wr, wi);
+    return NULL;
+}
+
 Expr* builtin_productlog(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+
+    if (argc == 1 || argc == 2) {
+        Expr* m = productlog_machine(res);
+        if (m) return m;
+    }
 
     if (argc == 1)
         return productlog_eval(0, res->data.function.args[0]);

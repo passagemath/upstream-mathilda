@@ -35,6 +35,9 @@
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_gamma.h"
+#include "special_functions/sf_machine_expint.h"
+#include "special_functions/sf_machine_ellk.h"
+#include "special_functions/sf_machine_plog.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -548,8 +551,12 @@ static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
  * delist fallback keeps the NDArray surface correct there and for arity 3. */
 static bool ndk_EllipticK_r(double m, double* o) { return elliptic_machine_k(m, o); }
 static bool ndk_EllipticE_r(double m, double* o) { return elliptic_machine_e_complete(m, o); }
-static const NDUnaryKernel NDKU_EllipticK = { NULL, ndk_EllipticK_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_EllipticE = { NULL, ndk_EllipticE_r, true, false, NULL, NULL, false };
+/* Complex arms (sf_machine_ellk.c, complex AGM): the same kernels the scalar
+ * EllipticK[z] / EllipticE[z] call for a machine-complex z. A REAL buffer keeps
+ * real_closed: its real arm declines m > 1 (complex value), which abandons the
+ * buffer to the List path, whose scalar call then takes the complex kernel. */
+static const NDUnaryKernel NDKU_EllipticK = { sf_machine_ellk_k_c, ndk_EllipticK_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_EllipticE = { sf_machine_ellk_e_c, ndk_EllipticE_r, true, false, NULL, NULL, false };
 
 static bool ndk_EllipticF_c(double pre, double pim, double mre, double mim,
                             double* rr, double* ri) {
@@ -583,13 +590,12 @@ static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
 }
 static const NDNaryKernel NDKN_EllipticPi = { ndk_EllipticPiInc_n, 3, true };
 
-/* Exponential-integral family and friends.  These modules compute in MPFR and
- * round at the end, so there was no double path to reuse — the kernels in
- * sf_machine.c are written for exactly this.  All are registered
- * real-closed with a `real` function only: the function DECLINES (returns
- * false) for an argument whose true value is complex or infinite, which is the
- * engine's standing contract, and a complex argument has no `cplx` to call so
- * it falls back to the interpreter. */
+/* Exponential-integral family and friends.  The kernels (sf_machine_expint.c)
+ * are the ones the scalar builtins call, so the surfaces agree bit for bit.
+ * All are registered real-closed: the `real` function DECLINES (returns false)
+ * for an argument whose true value is complex or infinite (Ci/Chi/li of a
+ * negative argument, the poles), which abandons the buffer to the List path;
+ * a complex buffer goes through the `cplx` kernel. */
 static bool ndk_ExpIntegralEi_r(double x, double* o) { return sf_machine_ei(x, o); }
 static bool ndk_LogIntegral_r(double x, double* o)   { return sf_machine_li(x, o); }
 static bool ndk_SinIntegral_r(double x, double* o)   { return sf_machine_si(x, o); }
@@ -628,7 +634,7 @@ static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x,
 static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
 static bool ndk_LucasL_r(double x, double* o)        { return sf_machine_lucasl(x, o); }
 static const NDUnaryKernel NDKU_Erfi           = { NULL, ndk_Erfi_r,           true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_ProductLog     = { NULL, ndk_ProductLog_r,     true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_ProductLog     = { sf_machine_productlog_c, ndk_ProductLog_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelC       = { NULL, ndk_FresnelC_r,       true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelS       = { NULL, ndk_FresnelS_r,       true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_PolyGamma      = { ndk_PolyGamma_u, ndk_PolyGamma_r, true, false, NULL, NULL, false };
@@ -671,22 +677,49 @@ static bool ndk_Binomial_c(double nre, double nim, double kre, double kim,
     double v; if (!sf_machine_binomial(nre, kre, &v)) return false;
     *rr = v; *ri = 0.0; return true;
 }
+/* LegendreP / LegendreQ: the shared real + complex helpers of
+ * sf_machine_plog.c (the scalar builtins call the same ones).  Registered
+ * real_closed, so a REAL element whose value leaves the real axis -- LegendreQ
+ * at a real |x| > 1 -- must DECLINE here rather than have its imaginary part
+ * dropped; the List path then answers it (complex) exactly as the scalar does. */
 static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_legendre_p(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0) return false;
+    if (xim == 0.0 && nre >= 0.0) {          /* the real hot path, one call deep */
+        if (!sf_machine_legendre_p(nre, xre, rr)) return false;
+        *ri = 0.0; return true;
+    }
+    return sf_machine_legendre_p_c(nre, xre, xim, rr, ri);
 }
 static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_legendre_q(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0) return false;
+    if (xim == 0.0) {
+        if (!sf_machine_legendre_q(nre, xre, rr)) return false;   /* |x| >= 1 declines */
+        *ri = 0.0; return true;
+    }
+    return sf_machine_legendre_q_c(nre, xre, xim, rr, ri);
 }
 static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false };
+
+/* ExpIntegralE[n, z]: integer order n >= 0 (sf_machine_expint.c, the kernels
+ * the scalar builtin calls). Real x > 0 stays real; complex z, and real x < 0
+ * (complex-valued), go through the complex kernel. Registered real-closed, so a
+ * real buffer holding an x < 0 abandons to the List path, which answers it. */
+static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
+                               double* rr, double* ri) {
+    if (nim != 0.0) return false;
+    if (xim == 0.0) {
+        double v;
+        if (sf_machine_expn(nre, xre, &v)) { *rr = v; *ri = 0.0; return true; }
+        if (xre >= 0.0) return false;            /* x = 0: exact 1/(n-1) or pole */
+    }
+    return sf_machine_expn_c(nre, xre, xim, rr, ri);
+}
+static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -906,6 +939,7 @@ void ndkernels_init(void) {
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);
     REG_B(LegendreQ,   NDKB_LegendreQ);
+    REG_B(ExpIntegralE, NDKB_ExpIntegralE);
     REG_B(ChebyshevT,  NDKB_ChebyshevT);
     REG_B(ChebyshevU,  NDKB_ChebyshevU);
     REG_B(LaguerreL,   NDKB_LaguerreL);   /* LaguerreL[n, x] (array x) */

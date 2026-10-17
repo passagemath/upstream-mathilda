@@ -387,7 +387,10 @@ set(COMMON_SRC
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
     ../src/special_functions/sf_machine_gamma.c
+    ../src/special_functions/sf_machine_plog.c
     ../src/special_functions/sf_scalar.c
+    ../src/special_functions/sf_machine_ellk.c
+    ../src/special_functions/sf_machine_expint.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
@@ -3659,6 +3662,14 @@ add_executable(struveh_tests test_struveh.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(struveh_tests PRIVATE ../src)
 add_test(NAME struveh_tests COMMAND struveh_tests)
 
+add_executable(elliptic_machine_tests test_elliptic_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(elliptic_machine_tests PRIVATE ../src)
+add_test(NAME elliptic_machine_tests COMMAND elliptic_machine_tests)
+
+add_executable(expint_machine_tests test_expint_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(expint_machine_tests PRIVATE ../src)
+add_test(NAME expint_machine_tests COMMAND expint_machine_tests)
+
 add_executable(loggamma_tests test_loggamma.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(loggamma_tests PRIVATE ../src)
 
@@ -5162,3 +5173,11 @@ else()
     target_link_libraries(ratcanon_reduce_tests gmp m)
 endif()
 add_test(NAME ratcanon_reduce_tests COMMAND ratcanon_reduce_tests)
+
+add_executable(productlog_machine_tests test_productlog_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(productlog_machine_tests PRIVATE ../src)
+add_test(NAME productlog_machine_tests COMMAND productlog_machine_tests)
+
+add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(legendre_machine_tests PRIVATE ../src)
+add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)

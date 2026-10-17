@@ -53,8 +53,9 @@
 #include "coshintegral.h"
 #include "sym_names.h"
 
-#include <complex.h>
-#include "sf_machine.h"   /* sf_series_usable — the cancellation budget */
+#include "sf_machine.h"          /* sf_machine_chi: the real machine kernel */
+#include "sf_machine_expint.h"   /* sf_machine_chi_c: the complex machine kernel */
+#include "sf_scalar.h"           /* the shared machine-scalar gate */
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -165,87 +166,11 @@ static Expr* chi_make_directed_imag_half_pi(int s) {
         (Expr*[]){ imag, make_rational(1, 2), expr_new_symbol(SYM_Pi) }, 3));
 }
 
-#ifndef USE_MPFR
-/* ------------------------------------------------------------------ */
-/* Machine-precision fallback paths (USE_MPFR=0 builds)               */
-/* ------------------------------------------------------------------ */
-
-/* Chi(a) for a machine real a > 0 via convergent series / asymptotic. */
-static bool chi_machine_pos(double a, double* out) {
-    double v;
-    if (a <= 40.0) {
-        double a2 = a * a, term = a2 / 4.0, sum = a2 / 4.0;     /* k = 1 term */
-        for (int k = 2; k <= 100000; k++) {
-            term *= a2 * (double)(k - 1)
-                    / ((double)k * (2 * k) * (2 * k - 1));
-            sum += term;
-            if ((double)(2 * k) > a && fabs(term) <= 1e-18 * (fabs(sum) + 1.0)) break;
-        }
-        v = CHI_EULER_GAMMA + log(a) + sum;
-    } else {
-        double f = 1.0 / a, g = 1.0 / (a * a), a2 = a * a;
-        double tf = f, tg = g, pf = f, pg = g;
-        for (int k = 1; k <= (int)a; k++) {
-            tf *= (double)(2 * k) * (2 * k - 1) / a2;
-            if (fabs(tf) >= fabs(pf)) break;
-            f += tf; pf = tf;
-        }
-        for (int k = 1; k <= (int)a; k++) {
-            tg *= (double)(2 * k + 1) * (2 * k) / a2;
-            if (fabs(tg) >= fabs(pg)) break;
-            g += tg; pg = tg;
-        }
-        v = sinh(a) * f + cosh(a) * g;
-    }
-    if (!isfinite(v)) return false;
-    *out = v;
-    return true;
-}
-
-/* Chi(x) for a machine real x != 0. For x < 0 the from-above branch value is
- * Chi(|x|) + i Pi, so (*im) carries Pi. */
-static bool chi_machine_real(double x, double* re, double* im) {
-    double v;
-    if (!chi_machine_pos(fabs(x), &v)) return false;
-    *re = v;
-    *im = (x < 0.0) ? M_PI : 0.0;
-    return true;
-}
-
-#endif /* !USE_MPFR */
-
-/* Chi(z) for a machine double-complex z via the convergent series. */
-static bool chi_machine_complex(double complex z, double complex* out, double* peak_out) {
-    double peak_ = 0.0;
-    double complex z2 = z * z, term = z2 / 4.0, sum = z2 / 4.0;   /* k = 1 term */
-    double zabs = cabs(z);
-    for (int k = 2; k <= 200000; k++) {
-        term *= z2 * (double)(k - 1) / ((double)k * (2 * k) * (2 * k - 1));
-        sum += term;
-        { double m_ = cabs(term); if (m_ > peak_) peak_ = m_; }
-        if ((double)(2 * k) > zabs && cabs(term) <= 1e-17 * (cabs(sum) + 1.0)) break;
-    }
-    double complex v = CHI_EULER_GAMMA + clog(z) + sum;   /* clog: principal */
-    if (!isfinite(creal(v)) || !isfinite(cimag(v))) return false;
-    *out = v;
-    if (peak_out) *peak_out = peak_;
-    return true;
-}
-
-/* CoshIntegral in the shared machine-kernel ABI, for the Compile[] engine and the NDArray
- * element-wise path.  Wraps the series above rather than duplicating it, so the
- * cancellation gate and the branch of clog are the same ones the interpreter
- * uses when it has no MPFR. */
+/* CoshIntegral in the shared machine-kernel ABI, for the Compile[] engine and the
+ * NDArray element-wise path: the same double-complex kernel the scalar builtin
+ * uses (sf_machine_expint.c), so every surface computes the same bits. */
 bool coshintegral_machine_complex(double are, double aim, double* ore, double* oim) {
-    double complex r; double peak = 0.0;
-    if (!chi_machine_complex(are + aim * I, &r, &peak)) return false;
-    /* The gate lives HERE, not in the series: this path has somewhere to fall
-     * back to (the MPFR implementation), so declining costs only speed.  The
-     * interpreter's own no-MPFR path has no fallback, and for it an answer good
-     * to eight digits beats no answer at all. */
-    if (!sf_series_usable(peak, cabs(r))) return false;
-    *ore = creal(r); *oim = cimag(r);
-    return true;
+    return sf_machine_chi_c(are, aim, ore, oim);
 }
 
 #ifdef USE_MPFR
@@ -644,10 +569,8 @@ static Expr* chi_one_arg(Expr* arg) {
         double x = arg->data.real;
         if (x == 0.0) return chi_make_neg_infinity();
         double rr, ii;
-        if (chi_machine_real(x, &rr, &ii)) {
-            if (ii == 0.0) return expr_new_real(rr);
-            return make_complex(expr_new_real(rr), expr_new_real(ii));
-        }
+        if (sf_machine_chi(x, &rr)) return expr_new_real(rr);
+        if (sf_machine_chi_c(x, 0.0, &rr, &ii)) return sf_machine_complex_result(rr, ii);
         return NULL;
 #endif
     }
@@ -668,15 +591,10 @@ static Expr* chi_one_arg(Expr* arg) {
             Expr* out = chi_mpfr_complex(re, im, out_prec);
             if (out) return out;
 #else
-            double rr, ii;
-            if (chi_to_double(re, &rr) && chi_to_double(im, &ii)) {
-                double complex v;
-                if (chi_machine_complex(rr + ii * I, &v, NULL)) {
-                    if (cimag(v) == 0.0) return expr_new_real(creal(v));
-                    return make_complex(expr_new_real(creal(v)),
-                                        expr_new_real(cimag(v)));
-                }
-            }
+            double rr, ii, vr, vi;
+            if (chi_to_double(re, &rr) && chi_to_double(im, &ii) &&
+                sf_machine_chi_c(rr, ii, &vr, &vi))
+                return sf_machine_complex_result(vr, vi);
 #endif
         }
     }
@@ -698,7 +616,23 @@ Expr* builtin_coshintegral(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 1) return chi_one_arg(args[0]);
+    if (argc == 1) {
+        /* Machine-precision call: the double kernel, ahead of the special-value
+         * ladder (CLAUDE.md: the scalar path reuses the ND/Compile helper). A
+         * decline (pole, overflow, underflow) falls through to the MPFR path. */
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_machine_chi(ma.re[0], &vr)) return expr_new_real(vr);
+                /* x < 0: the value is complex (the upper side of the cut). */
+                if (sf_machine_chi_c(ma.re[0], 0.0, &vr, &vi)) return sf_machine_complex_result(vr, vi);
+            } else if (sf_machine_chi_c(ma.re[0], ma.im[0], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+        return chi_one_arg(args[0]);
+    }
     return chi_emit_argx(argc);
 }
 

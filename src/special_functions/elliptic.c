@@ -59,6 +59,8 @@
 #include "eval.h"              /* eval_and_free */
 #include "expr.h"
 #include "flint_num_bridge.h"  /* flint_num_elliptic_* */
+#include "sf_machine_ellk.h"    /* complete K / E machine kernels */
+#include "sf_scalar.h"          /* sf_machine_scalar_args */
 #include "message.h"           /* mth_message: the Quiet/Check funnel */
 #include "ndarray.h"           /* is_ndarray, ndarray_delist_and_reeval */
 #include "numeric.h"           /* arg_is_inexact */
@@ -296,20 +298,17 @@ static bool carlson_rj(double x, double y, double z, double p, double* out) {
     return true;
 }
 
+/* The COMPLETE integrals no longer duplicate: K(m) and E(m) come from the
+ * polynomial-with-logarithm kernels in sf_machine_ellk.c (Cephes' form, our own
+ * fit), about 3x cheaper than R_F / R_F+R_D and ~1 ulp. These two names stay
+ * as the entry points the incomplete forms (quasi-period), the NDArray kernels
+ * and the scalar builtins call, so every surface shares one kernel. */
 bool elliptic_machine_k(double m, double* out) {
-    if (!(m < 1.0)) return false;                /* m = 1 is a pole, m > 1 complex */
-    return carlson_rf(0.0, 1.0 - m, 1.0, out);
+    return sf_machine_ellk_k(m, out);            /* declines m >= 1 */
 }
 
 bool elliptic_machine_e_complete(double m, double* out) {
-    if (m == 1.0) { *out = 1.0; return true; }
-    if (!(m < 1.0)) return false;
-    double rf, rd;
-    if (!carlson_rf_rd(0.0, 1.0 - m, 1.0, &rf, &rd)) return false;
-    double r = rf - (m / 3.0) * rd;
-    if (!isfinite(r)) return false;
-    *out = r;
-    return true;
+    return sf_machine_ellk_e(m, out);            /* E(1) = 1; declines m > 1 */
 }
 
 /* The incomplete forms on the principal strip |Re phi| <= Pi/2, extended by the
@@ -649,6 +648,29 @@ static Expr* ell_odd_in_phi(const char* head, Expr* const* args, size_t n, size_
 /*  EllipticK[m]                                                       */
 /* ------------------------------------------------------------------ */
 
+/* The machine-scalar fast path for the COMPLETE integrals: a machine real or
+ * machine complex m goes straight to the double kernels in sf_machine_ellk.c,
+ * the same ones the NDArray / Compile[] surfaces call, so all five surfaces
+ * agree bit for bit. A real m > 1 has a complex value (on the cut, the limit
+ * from below: K(2.) = 1.31103 - 1.31103 I) and takes the complex kernel, so a
+ * machine argument always yields a MACHINE answer -- the Arb path it used to
+ * reach returned 53-bit MPFR numbers for complex input. NULL = the kernel
+ * declined (pole, overflow): fall through to the exact/Arb path unchanged. */
+static Expr* ell_complete_machine(const Expr* res, bool want_e) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 1) return NULL;
+    double re = ma.re[0], im = ma.im[0], v, vr, vi;
+    if (!ma.any_complex) {
+        if (want_e ? sf_machine_ellk_e(re, &v) : sf_machine_ellk_k(re, &v))
+            return expr_new_real(v);
+        im = 0.0;                                /* m > 1: complex value */
+    }
+    if (want_e ? sf_machine_ellk_e_c(re, im, &vr, &vi)
+               : sf_machine_ellk_k_c(re, im, &vr, &vi))
+        return sf_machine_complex_result(vr, vi);
+    return NULL;
+}
+
 Expr* builtin_elliptick(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
         return builtin_arg_error("EllipticK",
@@ -659,6 +681,7 @@ Expr* builtin_elliptick(Expr* res) {
      * there and the bridge turns that into NULL, which would leave
      * EllipticK[1.] unevaluated rather than ComplexInfinity. */
     if (ell_is_one(m))  return expr_new_symbol(SYM_ComplexInfinity);
+    { Expr* r = ell_complete_machine(res, false); if (r) return r; }
     if (ell_is_zero(m) && !arg_is_inexact(m)) return ell_half_pi();   /* K[0] = Pi/2 */
     /* K(m) ~ (Pi - I Log[16 m]) / (2 Sqrt[m]) for large m, so the magnitude
      * vanishes: K[Infinity] = 0. */
@@ -772,7 +795,11 @@ static Expr* elliptice_incomplete(Expr* phi, Expr* m) {
 Expr* builtin_elliptice(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc == 1) return elliptice_complete(res->data.function.args[0]);
+    if (argc == 1) {
+        Expr* r = ell_complete_machine(res, true);
+        if (r) return r;
+        return elliptice_complete(res->data.function.args[0]);
+    }
     if (argc == 2) return elliptice_incomplete(res->data.function.args[0],
                                                res->data.function.args[1]);
     return ell_argt("EllipticE", argc, 1, 2);

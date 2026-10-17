@@ -499,7 +499,10 @@ static bool fresnel_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec,
     int sgn = (red < 0.0) ? -1 : 1;             /* fold to Re >= 0 (C,S odd) */
     double zabs = sqrt(red * red + imd * imd);
 
-    /* Partial sums peak ~e^((Pi/2)|z|^2); add that many guard bits. */
+    /* Partial sums peak ~e^((Pi/2)|z|^2); add that many guard bits -- unless
+     * that is beyond any MPFR precision (the cast used to wrap and trip MPFR's
+     * precision assertion, aborting the process): then decline. */
+    if (!(zabs * zabs < 1e9)) return false;
     long guard = 64 + (long)(M_PI_2 * zabs * zabs / M_LN2);
     mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
 

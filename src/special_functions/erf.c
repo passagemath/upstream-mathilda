@@ -353,6 +353,10 @@ static Expr* erf_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
     (void)erf_to_double(im, &imd);
     /* Guard bits absorb the ~e^|z|^2 partial-sum cancellation exactly. */
     double z2abs = red * red + imd * imd;
+    /* |z|^2/ln2 guard bits: past ~1e9 that is beyond any MPFR precision
+     * (the cast used to wrap and trip MPFR's precision assertion, aborting
+     * the process); leave such a call unevaluated instead. */
+    if (!(z2abs < 1e9)) return NULL;
     long guard = 64 + (long)(z2abs / M_LN2);
     mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
 

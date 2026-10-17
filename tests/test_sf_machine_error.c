@@ -263,6 +263,11 @@ void test_kernel_declines() {
     assert_eval_eq("InverseErfc[2.]", "-Infinity", 0);
     assert_eval_eq("InverseErf[1.5]", "InverseErf[1.5]", 0);
     assert_eval_startswith("Erfi[27.]", "8.33752");           /* MPFR, beyond double range */
+    /* |z|^2 beyond any MPFR guard precision: unevaluated, not an MPFR abort. */
+    assert_eval_eq("Head[Erf[1.*^300 + 1.*^300 I]]", "Erf", 0);
+    /* huge |z| next to the real axis stays on the machine axis series */
+    assert_eval_startswith("Im[FresnelC[1.*^10 + 1.*^-10 I]]", "3.67608");
+    assert_eval_startswith("Re[FresnelC[1.*^-8 + 3.*^7 I]]", "1.15476");
 }
 
 /* scalar == unpacked List == packed List == NDArray == Compile (scalar and

@@ -998,12 +998,18 @@ static void fresnel_axis_real(double x, double y, double* cre, double* cim,
     fresnel_cs_r(x, &C0, &S0);
     dd_mul(x, x, &t, &tl);
     sincos_halfpi_dd(t, tl, &sp, &cp);       /* phi = cp + i sp */
-    double qmr = 0.0, qmi = 0.0, qr = 1.0, qi = 0.0;   /* q_{n-1}, q_n */
-    double T = y, a_re = 0.0, a_im = 0.0, b_re = 0.0, b_im = 0.0;
-    for (int n = 0; n < 60; n++) {
-        double A = cp * qr - sp * qi;         /* Re(phi q_n) */
-        double B = cp * qi + sp * qr;         /* Im(phi q_n) */
-        double tA = A * T, tB = B * T;
+    /* Carried scaled, p_n = q_n y^n / n!, so neither q_n ~ (pi x)^n nor y^n
+     * can overflow or underflow on the way to a modest product:
+     *   p_0 = 1,  p_1 = i pi x y,  p_{n+1} = i pi (x y p_n + y^2 p_{n-1})/(n+1),
+     * and the n-th term is phi p_n (iy)/(n+1) * i^n. */
+    double xy = x * y, y2 = y * y;
+    double pmr = 0.0, pmi = 0.0, pr = 1.0, pi_ = 0.0;   /* p_{n-1}, p_n */
+    double a_re = 0.0, a_im = 0.0, b_re = 0.0, b_im = 0.0;
+    for (int n = 0; n < 90; n++) {
+        double A = cp * pr - sp * pi_;        /* Re(phi p_n) */
+        double B = cp * pi_ + sp * pr;        /* Im(phi p_n) */
+        double f = y / (n + 1);
+        double tA = A * f, tB = B * f;
         switch (n & 3) {                      /* i^{n+1} */
             case 0: a_im += tA; b_im += tB; break;
             case 1: a_re -= tA; b_re -= tB; break;
@@ -1012,11 +1018,10 @@ static void fresnel_axis_real(double x, double y, double* cre, double* cim,
         }
         if (n > 2 && fabs(tA) + fabs(tB) <
             1e-19 * (fabs(a_re) + fabs(a_im) + fabs(b_re) + fabs(b_im))) break;
-        /* q_{n+1} = i pi (x q_n + n q_{n-1}) */
-        double ur = x * qr + n * qmr, ui = x * qi + n * qmi;
-        qmr = qr; qmi = qi;
-        qr = -M_PI * ui; qi = M_PI * ur;
-        T *= y / (n + 2);
+        double ur = xy * pr + y2 * pmr, ui = xy * pi_ + y2 * pmi;
+        pmr = pr; pmi = pi_;
+        pr  = -M_PI * ui / (n + 1);
+        pi_ =  M_PI * ur / (n + 1);
     }
     *cre = C0 + a_re; *cim = a_im;
     *sre = S0 + b_re; *sim = b_im;
@@ -1045,7 +1050,11 @@ static bool fresnel_cs_c(double x, double y,
         *sim = qr * z3i + qi * z3r;
         return true;
     }
-    if (M_PI * fabs(x * y) < FRESNEL_AXIS) {
+    /* Next to an axis; and, for a huge |z| close to one (where the rotated
+     * erf arguments leave every kernel's range), wherever the series still
+     * converges in a modest number of terms. */
+    if (M_PI * fabs(x * y) < FRESNEL_AXIS ||
+        (x * x + y * y > 400.0 && M_PI * fabs(x * y) < 8.0)) {
         if (fabs(y) <= fabs(x)) {
             fresnel_axis_real(x, y, cre, cim, sre, sim);
         } else {

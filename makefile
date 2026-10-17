@@ -254,11 +254,18 @@ endif
 # so without this the probe fails to COMPILE on Linux and ECM is wrongly reported
 # "not detected" even when libecm-dev is installed. The multiarch lib dir is on
 # the default linker path, so -lecm resolves without an explicit -L there.
+# The '#' of each #include is written as printf's octal escape \043, NOT as
+# make's \#: GNU Make 3.81 strips the backslash of \# inside a function call
+# but Make >= 4.3 keeps it, so the probe source began `\#include` and failed to
+# compile on every current Linux distro (issue #93). Make leaves \043 alone and
+# printf turns it into '#' under any make. The $$$$ (the shell's PID) keeps
+# concurrent builds from clobbering each other's probe files.
 ifeq ($(USE_ECM), 1)
-  ECM_PROBE := $(shell printf '\#include <stdio.h>\n\#include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > /tmp/mathilda_ecmprobe.c 2>/dev/null && \
-    $(CC) /tmp/mathilda_ecmprobe.c -o /tmp/mathilda_ecmprobe -I/usr/include -I/usr/local/include $(HOMEBREW_CFLAGS) \
+  ECM_PROBE := $(shell f=/tmp/mathilda_ecmprobe_$$$$; \
+    printf '\043include <stdio.h>\n\043include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > $$f.c 2>/dev/null && \
+    $(CC) $$f.c -o $$f -I/usr/include -I/usr/local/include $(HOMEBREW_CFLAGS) \
       -L/usr/local/lib $(HOMEBREW_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
-    rm -f /tmp/mathilda_ecmprobe.c /tmp/mathilda_ecmprobe)
+    rm -f $$f.c $$f)
   ifeq ($(ECM_PROBE), y)
     LDFLAGS += -lecm
   else
@@ -313,10 +320,32 @@ endif
 #   3. /usr/include/lapacke.h or /usr/local/include/lapacke.h
 #                          -> link -llapacke -llapack -lblas.
 #   4. nothing found       -> warn and override USE_LAPACK := 0.
+# The BLAS provider is found by a LINK PROBE, not assumed: Mathilda calls
+# cblas_* directly, and which library exports them varies by distro -- the
+# reference libblas on Debian/Ubuntu, libopenblas, a separate libcblas, or
+# FlexiBLAS on Fedora/RHEL, whose netlib libblas.so has no CBLAS at all, so the
+# old blind `-lblas` failed there with "undefined reference to cblas_ddot ...
+# DSO missing from command line" (issues #94, #97). lapack_blas_probe links a
+# '#'-free program calling cblas_ddot + dgetrf_ against the LAPACK libs plus
+# each candidate in turn and prints the first that links ("ok:" when the LAPACK
+# libs already carry CBLAS); empty means nothing linked, and the old -lblas
+# default is kept so the final link reports the real error.
 # When USE_LAPACK is off, machine-precision linalg falls back to the
 # MPFR / symbolic path with a one-time runtime warning.  This matches
 # the existing USE_MPFR=0 / USE_ECM=0 graceful-degrade policy so that
 # `git clone && make` always succeeds, no matter the host environment.
+LAPACK_BLAS_CANDIDATES := -lflexiblas -lopenblas -lcblas -lblas '-lcblas -lblas'
+lapack_blas_probe = $(shell f=/tmp/mathilda_blasprobe_$$$$; \
+    printf '%s\n' 'double cblas_ddot(int, const double*, int, const double*, int);' \
+      'void dgetrf_(int*, int*, double*, int*, int*, int*);' \
+      'int main(void){double a = 2; int n = 1, p, i; dgetrf_(&n, &n, &a, &n, &p, &i); return cblas_ddot(1, &a, 1, &a, 1) < 0;}' \
+      > $$f.c 2>/dev/null && \
+    for b in '' $(LAPACK_BLAS_CANDIDATES); do \
+      $(CC) $$f.c -o $$f $(1) $$b 2>/dev/null && { echo "ok:$$b"; break; }; \
+    done; rm -f $$f.c $$f)
+# $(call lapack_with_blas,<lapack libs>) -> those libs plus the BLAS provider.
+lapack_with_blas = $(1) $(if $(LAPACK_BLAS_FOUND),$(patsubst ok:%,%,$(LAPACK_BLAS_FOUND)),-lblas)
+
 ifeq ($(USE_LAPACK), 1)
   ifeq ($(BUILD_PLATFORM),Darwin)
     # Apple's vecLib/vBasicOps.h headers (pulled in by Accelerate.h) pass typed
@@ -335,22 +364,20 @@ ifeq ($(USE_LAPACK), 1)
     # LAPACK routines (dgeev_, zgesv_, dgesdd_, ...) and cblas_* (cblas_dgemm,
     # cblas_ddot) DIRECTLY — it uses no LAPACKE C wrappers — so a pkg-config-only
     # link fails on Ubuntu with hundreds of undefined references even though the
-    # headers resolve fine. Append the transitive -llapack + a BLAS provider
-    # (once each), after -llapacke so ld's left-to-right resolution keeps each
-    # provider behind its consumer. Homebrew's .pc and the Accelerate path never
-    # hit this; the /usr/include tier below already spells the trio out. Same
-    # fixup idiom as the FLINT block and the CI EXTRA_LIBS="-llapack -lblas".
+    # headers resolve fine. Append the transitive -llapack + the probed BLAS
+    # provider (once each), after -llapacke so ld's left-to-right resolution
+    # keeps each provider behind its consumer. Homebrew's .pc and the Accelerate
+    # path never hit this. Same fixup idiom as the FLINT block.
     LAPACKE_LIBS := $(shell pkg-config --libs lapacke)
     ifeq ($(filter -llapack,$(LAPACKE_LIBS)),)
       LAPACKE_LIBS += -llapack
     endif
-    ifeq ($(filter -lblas -lopenblas -lcblas,$(LAPACKE_LIBS)),)
-      LAPACKE_LIBS += -lblas
-    endif
-    LDFLAGS += $(LAPACKE_LIBS)
+    LAPACK_BLAS_FOUND := $(call lapack_blas_probe,$(LAPACKE_LIBS))
+    LDFLAGS += $(call lapack_with_blas,$(LAPACKE_LIBS))
   else ifneq ($(wildcard /usr/include/lapacke.h)$(wildcard /usr/local/include/lapacke.h),)
     CFLAGS  += -DUSE_LAPACK
-    LDFLAGS += -llapacke -llapack -lblas
+    LAPACK_BLAS_FOUND := $(call lapack_blas_probe,-L/usr/local/lib -llapacke -llapack)
+    LDFLAGS += $(call lapack_with_blas,-llapacke -llapack)
   else
     $(warning LAPACK/LAPACKE not detected; building with USE_LAPACK=0)
     $(warning   Ubuntu/Debian:  sudo apt install liblapacke-dev libopenblas-dev)

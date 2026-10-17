@@ -167,7 +167,8 @@ sudo apt install cmake
 ```
 
 On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
-`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel`/`openblas-devel`,
+`flint-devel` (≥ 3.0), `gmp-ecm-devel`, `lapack-devel` + `lapacke-devel` (BLAS via
+FlexiBLAS, detected automatically),
 `fftw-devel`, `pcre2-devel`, plus `cmake`.
 
 > **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that

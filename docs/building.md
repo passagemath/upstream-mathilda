@@ -275,6 +275,20 @@ If you pass `USE_MPFR=1` (the default), MPFR must be installed. The makefile
 links `-lmpfr` automatically when `USE_MPFR=1`. Omit it by passing
 `USE_MPFR=0` (disables arbitrary-precision numerics with a runtime warning).
 
+**`undefined reference to symbol 'cblas_ddot'` / `DSO missing from command line`**
+Mathilda calls CBLAS (`cblas_*`) directly, and which library exports it varies:
+reference `libblas` (Debian/Ubuntu), `libopenblas`, a separate `libcblas`, or
+FlexiBLAS (Fedora/RHEL, whose netlib `libblas.so` carries no CBLAS). The makefile
+link-probes `-lflexiblas`, `-lopenblas`, `-lcblas`, `-lblas` in turn and uses the
+first that links. If your BLAS lives somewhere else, name it explicitly:
+`make EXTRA_LIBS="-lmyblas"`, or build without it: `make USE_LAPACK=0`.
+
+**"GMP-ECM not detected" although it is installed**
+Fixed for GNU Make ≥ 4.3 (issue #93; the probe source used to start with a
+literal `\#include`). If it persists, check that `ecm.h` and `libecm` are on the
+default compiler paths (`gcc -lecm -lgmp` on a one-line program that includes
+`<stdio.h>` and `<ecm.h>`), or pass them via `CFLAGS`/`LDFLAGS`.
+
 **FLINT not detected / builds without the accelerated paths**
 Mathilda needs **FLINT ≥ 3.0** — the release that merged ANTIC, Arb, and Calcium
 into FLINT and added the generic-ring `gr` layer. Everything Mathilda accelerates

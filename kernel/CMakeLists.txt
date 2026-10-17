@@ -81,7 +81,8 @@ foreach(_name gmp mpfr flint pcre2-8 fftw3 ecm readline raylib)
 endforeach()
 if(APPLE)
     # LAPACK/BLAS via Accelerate; CoreGraphics/CoreFoundation for the raylib
-    # offscreen path. On Linux use -DMATHILDA_EXTRA_LIBS="lapacke;lapack;blas;gfortran".
+    # offscreen path. On Linux use -DMATHILDA_EXTRA_LIBS="lapacke;lapack;blas;gfortran"
+    # (Fedora/RHEL: "lapacke;lapack;flexiblas", whose libblas has no CBLAS).
     list(APPEND _mth_libs "-framework Accelerate"
                           "-framework CoreGraphics"
                           "-framework CoreFoundation")

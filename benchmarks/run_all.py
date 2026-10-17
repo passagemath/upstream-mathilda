@@ -99,13 +99,26 @@ PRETTY = {"mathilda": "Mathilda", "wolfram": "Mathematica", "python": "Python"}
 
 EXP_RE = re.compile(r"^(\d{2})-(.+)$")
 
+# Standalone studies shelved under an NN-slug name for ordering but which are
+# NOT run_all .m/.py harness pairs: they drive their own multi-engine sweep and
+# emit a self-contained write-up (LaTeX/PDF), not the BENCH/CHECK/REQUIRE line
+# protocol this job joins by case label. bench-gap skips them -- otherwise it
+# would run a data module (e.g. registry.py) as an experiment half and report a
+# phantom, unpaired experiment.
+STANDALONE = {"97-special-functions"}
+
 
 def discover(only=None):
-    """Every benchmarks/NN-slug/ folder holding at least one .m or .py."""
+    """Every benchmarks/NN-slug/ folder holding at least one .m or .py.
+
+    Excludes STANDALONE studies, which carry an NN- name for shelving order but
+    are not harness .m/.py pairs (they run their own sweep and write a PDF)."""
     out = []
     for name in sorted(os.listdir(BENCH)):
         m = EXP_RE.match(name)
         if not m:
+            continue
+        if name in STANDALONE:
             continue
         d = os.path.join(BENCH, name)
         if not os.path.isdir(d):

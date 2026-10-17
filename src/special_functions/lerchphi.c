@@ -73,14 +73,16 @@
 /* Small predicates / coercions                                        */
 /* ------------------------------------------------------------------ */
 
-/* These inexactness predicates are consulted only on the MPFR numeric path, so
- * they are compiled with MPFR only; otherwise unused (-Werror=unused-function). */
-#ifdef USE_MPFR
+/* Inexactness predicates. They gate both the machine fast path and the MPFR
+ * path, so they are compiled in every build; only the EXPR_MPFR leaf type is
+ * MPFR-only. */
 /* True if `e` is an inexact numeric leaf (Real or MPFR). */
 static bool lp_is_inexact(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return true;
+#endif
     return false;
 }
 
@@ -92,7 +94,6 @@ static bool lp_has_inexact(Expr* e) {
     if (is_complex(e, &re, &im)) return lp_is_inexact(re) || lp_is_inexact(im);
     return false;
 }
-#endif
 
 /* Extract an exact machine integer from `e` (Integer, or BigInt fitting a
  * signed long). Inexact reals do NOT count. */

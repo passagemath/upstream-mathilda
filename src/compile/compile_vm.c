@@ -23,9 +23,9 @@
 #include "../linalg/ndlinalg.h"  /* ndla_norm — V_NORM delegate */
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
+#include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
-#include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #endif
 #include <math.h>
 #include <complex.h>

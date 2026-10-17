@@ -24,6 +24,7 @@
 #include "sym_names.h"
 #include "common.h"
 #include "numeric.h"
+#include "arithmetic.h"         /* is_complex */
 #include "flint_num_bridge.h"   /* flint_num_struveh (arb, arbitrary precision) */
 #include "sf_machine.h"         /* sf_machine_struve_h (shared double kernel)   */
 
@@ -62,9 +63,22 @@ static Expr* struveh_numeric(const Expr* nu, const Expr* z) {
     return NULL;
 }
 
-/* True when e carries an inexact (machine Real / MPFR, or Complex of those)
- * component -- i.e. N[] has been applied. */
-static bool sh_inexact(const Expr* e) { return numeric_min_inexact_bits(e) > 0; }
+/* Minimum precision (bits) of e's inexact components (machine Real / MPFR,
+ * or Complex of those); 0 when e is exact, i.e. N[] has not been applied. */
+static long sh_inexact_bits(const Expr* e) {
+#ifdef USE_MPFR
+    return numeric_min_inexact_bits(e);
+#else
+    /* numeric_min_inexact_bits is MPFR-only; without MPFR the only inexact
+     * leaf is a machine Real (53 bits), possibly inside Complex[...]. */
+    Expr *re, *im;
+    if (e && e->type == EXPR_REAL) return 53;
+    if (e && is_complex((Expr*)e, &re, &im)
+            && (re->type == EXPR_REAL || im->type == EXPR_REAL)) return 53;
+    return 0;
+#endif
+}
+static bool sh_inexact(const Expr* e) { return sh_inexact_bits(e) > 0; }
 
 Expr* builtin_struveh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
@@ -82,8 +96,8 @@ Expr* builtin_struveh(Expr* res) {
         expr_is_numeric_quantity(nu) && expr_is_numeric_quantity(z)) {
         /* Target precision: the min inexact-bit count over the arguments
          * (an exact arg imposes no constraint), floored implicitly at 53. */
-        long bnu = numeric_min_inexact_bits(nu);
-        long bz  = numeric_min_inexact_bits(z);
+        long bnu = sh_inexact_bits(nu);
+        long bz  = sh_inexact_bits(z);
         long outb = bnu;
         if (bz > 0 && (outb == 0 || bz < outb)) outb = bz;
 

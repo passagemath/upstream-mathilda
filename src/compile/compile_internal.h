@@ -96,6 +96,11 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_NARY    dst = kernel(a .. a+flags-1)   — same operand range as K_CALL but
  *             PURE: a machine kernel has no side effects, so it may be CSE'd
  *             and removed when dead
+ *   K_NARYV   tile dst = kernel(a .. a+flags-1, tile b) element-wise — the
+ *             strip-mined form of K_NARY for a kernel whose LAST operand is the
+ *             only array-valued one (MeijerG's z): `flags` scalar registers
+ *             starting at `a` are broadcast, the tile in `b` supplies the last
+ *             operand. Pure, reads the range AND b
  *   K_ALOAD   dst = a[b], a READ of array memory.  Shaped exactly like K_BIN but
  *             deliberately NOT pure: it was pure while the only writer was
  *             fusion, which stores solely into a fresh result buffer, but once
@@ -110,7 +115,7 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
 enum {
     K_CONST, K_MOVE, K_UN, K_BIN, K_BINK, K_POWI, K_KERN1, K_KERN2,
     K_INC, K_JMP, K_JZ, K_LOOP, K_RET, K_ARR, K_ASTORE, K_VACC, K_CALL,
-    K_NARY, K_APAR, K_AIDX, K_ARANGE, K_ALOAD, K_NOP
+    K_NARY, K_APAR, K_AIDX, K_ARANGE, K_ALOAD, K_NARYV, K_NOP
 };
 
 /* ------------------------------------------------------------------ *
@@ -135,6 +140,11 @@ enum {
  * consult the live length, and they are pinned inside the loop anyway because
  * they read the loop index. */
 #define VBLOCK 64
+
+/* Most operands an n-ary kernel instruction (KERNN / KERNN_C / VKERNN_*)
+ * carries. MeijerG flattens [shape, r, a_1..a_p, b_1..b_q, z] into one run,
+ * so this bounds p + q + 3. */
+#define KERNN_MAX_OPERANDS 24
 
 /* Application cap for an iteration with no user-supplied bound (FixedPoint,
  * NestWhile).  MUST equal ITER_SAFETY_CAP in src/funcprog.c:2062: on reaching
@@ -357,6 +367,7 @@ enum {
     X(VKERN_RR, K_KERN1)  X(VKERN_R2R, K_KERN1) X(VKERN_RC, K_KERN1)       \
     X(VKERN_CC, K_KERN1)  X(VKERN_CR, K_KERN1)                             \
     X(VKERN2_RR, K_KERN2) X(VKERN2_RC, K_KERN2) X(VKERN2_CC, K_KERN2)      \
+    X(VKERNN_R, K_NARYV)  X(VKERNN_C, K_NARYV)                             \
     /* Arbitrary-precision managed scalars — opt-in (WorkingPrecision -> n /   \
      * "BigIntegers" -> True; see docs/design/compile-arbitrary-precision.md).  \
      * A managed register's Slot holds a POINTER to its per-call container      \

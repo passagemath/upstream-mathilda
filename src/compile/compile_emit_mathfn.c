@@ -7,6 +7,7 @@
 #include "../symtab.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
+#include "../special_functions/sf_machine_meijerg.h" /* SF_MG_MAXP, sf_mg_shape_code */
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -176,9 +177,9 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
             || strcmp(lb->data.function.head->data.symbol.name, "List") != 0)
             { c->ok = false; return -1; }
         size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
-        if (np + nq + 2 > 8) { c->ok = false; return -1; }   /* KERNN operand cap */
+        if (np + nq + 2 > KERNN_MAX_OPERANDS) { c->ok = false; return -1; }   /* KERNN operand cap */
 
-        const Expr* parts[8];
+        const Expr* parts[KERNN_MAX_OPERANDS];
         size_t total = 0;
         for (size_t i = 0; i < np; i++) parts[total++] = la->data.function.args[i];
         for (size_t j = 0; j < nq; j++) parts[total++] = lb->data.function.args[j];
@@ -216,6 +217,116 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         c->temp_top = (base - c->nlocals) + 1;
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
         ins_f(c, cx ? OP_KERNN_C : OP_KERNN, (uint16_t)(total + 1), (uint32_t)base,
+              (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = et;
+        return c->ok ? 1 : -1;
+    }
+
+    /* MeijerG[{{a..},{a..}}, {{b..},{b..}}, z(, r)] -- the four parameter
+     * Lists are destructured and flattened, behind a shape code and r, into the
+     * run the n-ary kernel reads (sf_mg_eval_flat's layout):
+     *     [n + 64 p + 4096 m, r, a_1..a_p, b_1..b_q, z].
+     * Inside a strip-mined loop z is a TILE (MeijerG threads over z only, so it
+     * is the one operand that may be array-valued): the run then stops before z
+     * and VKERNN_* reads z from the tile, the parameters broadcast. */
+    if (strcmp(h, "MeijerG") == 0 && (na == 3 || na == 4)) {
+        const Expr* g[4];
+        for (int s = 0; s < 2; s++) {
+            const Expr* L = A[s];
+            if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+                || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+                || L->data.function.arg_count != 2) { c->ok = false; return -1; }
+            for (int t = 0; t < 2; t++) {
+                const Expr* I2 = L->data.function.args[t];
+                if (I2->type != EXPR_FUNCTION || I2->data.function.head->type != EXPR_SYMBOL
+                    || strcmp(I2->data.function.head->data.symbol.name, "List") != 0)
+                    { c->ok = false; return -1; }
+                g[2 * s + t] = I2;
+            }
+        }
+        size_t n = g[0]->data.function.arg_count, p = n + g[1]->data.function.arg_count;
+        size_t m = g[2]->data.function.arg_count, q = m + g[3]->data.function.arg_count;
+        if (p > SF_MG_MAXP || q > SF_MG_MAXP || p + q + 3 > KERNN_MAX_OPERANDS)
+            { c->ok = false; return -1; }
+        const Expr* parts[KERNN_MAX_OPERANDS];
+        size_t np = 0;
+        for (int s = 0; s < 4; s++)
+            for (size_t i = 0; i < g[s]->data.function.arg_count; i++)
+                parts[np++] = g[s]->data.function.args[i];
+        bool cx = false;
+        for (size_t i = 0; i < np; i++) {
+            CompileType t;
+            if (!infer_type(c, parts[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL)
+                { c->ok = false; return -1; }
+            cx |= (t == CT_COMPLEX);
+        }
+        if (na == 4) {
+            CompileType tr;
+            if (!infer_type(c, A[3], &tr) || CT_IS_ARRAY(tr) || tr == CT_BOOL || tr == CT_COMPLEX)
+                { c->ok = false; return -1; }
+        }
+        CompileType tz;
+        if (!infer_type(c, A[2], &tz) || CT_IS_ARRAY(tz) || tz == CT_BOOL) { c->ok = false; return -1; }
+        cx |= (tz == CT_COMPLEX);
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
+
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_nary_kernel) { c->ok = false; return -1; }
+        const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+        if (!k->cplx) { c->ok = false; return -1; }
+
+        /* The scalar run: shape code, r, then the parameters; z appended below
+         * when it is a scalar. */
+        size_t nrun = np + 2;
+        Slot z0; memset(&z0, 0, sizeof z0);
+        int base = alloc_temp(c);
+        for (size_t i = 1; i < nrun + 1; i++) (void)alloc_temp(c);   /* + z's slot */
+        int after = c->temp_top;
+        Slot ks; memset(&ks, 0, sizeof ks);
+        double code = sf_mg_shape_code(n, p, m);
+        if (cx) ks.z = code; else ks.r = code;
+        ins(c, OP_CONST, (uint32_t)base, 0, 0, ks);
+        if (na == 4) {
+            Val v;
+            if (!emit(c, A[3], &v)) return -1;
+            if (val_is_tile(v)) { c->ok = false; return -1; }
+            coerce(c, &v, et);
+            if (!c->ok) return -1;
+            ins(c, OP_MOVE, (uint32_t)(base + 1), (uint32_t)v.reg, 0, z0);
+            c->temp_top = after;
+        } else {
+            Slot one; memset(&one, 0, sizeof one);
+            if (cx) one.z = 1.0; else one.r = 1.0;
+            ins(c, OP_CONST, (uint32_t)(base + 1), 0, 0, one);
+        }
+        for (size_t i = 0; i < np && c->ok; i++) {
+            Val v;
+            if (!emit(c, parts[i], &v)) return -1;
+            if (val_is_tile(v)) { c->ok = false; return -1; }   /* parameters broadcast only */
+            coerce(c, &v, et);
+            if (!c->ok) return -1;
+            ins(c, OP_MOVE, (uint32_t)(base + 2 + (int)i), (uint32_t)v.reg, 0, z0);
+            c->temp_top = after;
+        }
+        if (!c->ok) return -1;
+        Val vz;
+        if (!emit(c, A[2], &vz)) return -1;
+        Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        if (val_is_tile(vz)) {
+            coerce(c, &vz, et);
+            if (!c->ok) return -1;
+            int dst = alloc_tile(c);
+            ins_f(c, cx ? OP_VKERNN_C : OP_VKERNN_R, (uint16_t)nrun, (uint32_t)dst,
+                  (uint32_t)base, (uint32_t)vz.reg, kp);
+            c->temp_top = (base - c->nlocals);
+            out->reg = dst; out->tmp = true; out->type = et;
+            return c->ok ? 1 : -1;
+        }
+        coerce(c, &vz, et);
+        if (!c->ok) return -1;
+        ins(c, OP_MOVE, (uint32_t)(base + (int)nrun), (uint32_t)vz.reg, 0, z0);
+        c->temp_top = (base - c->nlocals) + 1;
+        ins_f(c, cx ? OP_KERNN_C : OP_KERNN, (uint16_t)(nrun + 1), (uint32_t)base,
               (uint32_t)base, 0, kp);
         out->reg = base; out->tmp = true; out->type = et;
         return c->ok ? 1 : -1;

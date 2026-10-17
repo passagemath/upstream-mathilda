@@ -950,6 +950,69 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", num, mk_fn2("Power", den, mk_int(-1)));
         }
 
+        /* --- MeijerG[{{a..},{a'..}}, {{b..},{b'..}}, z(, r)]: derivative w.r.t.
+         * z (parameters free of x), times D[z, x]:
+         *   3 args: MeijerG[{{-1, a-1..},{a'-1..}}, {{b-1..},{0, b'-1..}}, z]
+         *           (Mathematica's form: z d/dz G = G^{m,n+1}_{p+1,q+1} with the
+         *           extra 0 / 1 pair, then z^-1 G(a; b) = G(a-1; b-1));
+         *   4 args: (1/(r z)) MeijerG[{{0, a..},{a'..}}, {{b..},{1, b'..}}, z, r],
+         *           since z d/dz z^-s = -s z^-s and -s = (1/r)(-r s) is the ratio
+         *           Gamma(1-0-rs)/Gamma(1-1-rs). */
+        if (h == SYM_MeijerG && (n == 3 || n == 4)
+            && expr_free_of(args[0], x) && expr_free_of(args[1], x)
+            && (n == 3 || expr_free_of(args[3], x))) {
+            const Expr* g[4];
+            bool shape = true;
+            for (int s2 = 0; s2 < 2 && shape; s2++) {
+                const Expr* L = args[s2];
+                if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+                    || L->data.function.head->data.symbol.name != SYM_List
+                    || L->data.function.arg_count != 2) { shape = false; break; }
+                for (int t = 0; t < 2; t++) {
+                    const Expr* G = L->data.function.args[t];
+                    if (G->type != EXPR_FUNCTION || G->data.function.head->type != EXPR_SYMBOL
+                        || G->data.function.head->data.symbol.name != SYM_List) { shape = false; break; }
+                    g[2 * s2 + t] = G;
+                }
+            }
+            if (shape) {
+                Expr* z  = args[2];
+                Expr* dz = deriv_of(z, x, nonconsts);
+                if (is_lit_zero(dz)) { expr_free(dz); return mk_int(0); }
+                long shift = (n == 3) ? -1 : 0;
+                /* group k gets an extra leading (k == 0) or trailing-first (k == 3)
+                 * element: -1 / 0 (3 args) or 0 / 1 (4 args). */
+                Expr* grp[4];
+                for (int k = 0; k < 4; k++) {
+                    size_t len = g[k]->data.function.arg_count;
+                    bool extra = (k == 0 || k == 3);
+                    Expr** it = malloc(sizeof(Expr*) * (len + 1));
+                    size_t w = 0;
+                    if (extra) it[w++] = mk_int(k == 0 ? (n == 3 ? -1 : 0) : (n == 3 ? 0 : 1));
+                    for (size_t i = 0; i < len; i++) {
+                        Expr* e = expr_copy(g[k]->data.function.args[i]);
+                        it[w++] = shift ? mk_fn2("Plus", e, mk_int(shift)) : e;
+                    }
+                    grp[k] = expr_new_function(mk_sym("List"), it, w);
+                    free(it);
+                }
+                Expr* al = mk_fn2("List", grp[0], grp[1]);
+                Expr* bl = mk_fn2("List", grp[2], grp[3]);
+                Expr* G;
+                if (n == 3) {
+                    G = expr_new_function(mk_sym("MeijerG"),
+                            (Expr*[]){ al, bl, expr_copy(z) }, 3);
+                } else {
+                    G = expr_new_function(mk_sym("MeijerG"),
+                            (Expr*[]){ al, bl, expr_copy(z), expr_copy(args[3]) }, 4);
+                    G = mk_fn2("Times", G,
+                            mk_fn2("Power", mk_fn2("Times", expr_copy(args[3]), expr_copy(z)),
+                                   mk_int(-1)));
+                }
+                return mk_fn2("Times", G, dz);
+            }
+        }
+
         /* --- HypergeometricPFQ[{a..}, {b..}, z]: derivative w.r.t. z is
          *   (prod a_i / prod b_j) pFq[{a_i+1}, {b_j+1}, z], times D[z, x].
          * Only the z-derivative is handled here; if the parameter lists

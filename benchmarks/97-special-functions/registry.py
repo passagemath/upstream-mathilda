@@ -264,6 +264,27 @@ NUMERIC: list[SF] = [
        ((0.5, 8.0),), ((0.5, 4.0, -2.0, 2.0),),
        note="k=1, m=1/2; Python is mpmath", pylib="mpmath"),
 
+    # MeijerG: no scipy and no numeric Maxima G-function, so the Python column is
+    # mpmath (meijerg) and Maxima is absent. Three shapes: a two-term p < q
+    # Slater sum, a p == q function (both sides of the unit circle, where the
+    # expansion switches from z to 1/z), and the documented log case of
+    # integer-spaced b's (mpmath and Mathilda both perturb; Mathematica too).
+    SF("MeijerG", "Hypergeometric", 1, "MeijerG[{{{{1/3}}, {{1/4}}}}, {{{{1/5, 1/6}}, {{1/7}}}}, {0}]", None,
+       (lambda z: mp.meijerg([[mp.mpf(1) / 3], [mp.mpf(1) / 4]],
+                             [[mp.mpf(1) / 5, mp.mpf(1) / 6], [mp.mpf(1) / 7]], z)), None, False, ALL,
+       ((0.3, 6.0),), ((0.5, 4.0, -3.0, 3.0),),
+       note="G^{2,1}_{2,3}; Python is mpmath (scipy has none); Maxima has no numeric G",
+       pylib="mpmath"),
+    SF("MeijerG22", "Hypergeometric", 1, "MeijerG[{{{{1/3, 1/2}}, {{}}}}, {{{{1/5, 1/7}}, {{}}}}, {0}]", None,
+       (lambda z: mp.meijerg([[mp.mpf(1) / 3, mp.mpf(1) / 2], []],
+                             [[mp.mpf(1) / 5, mp.mpf(1) / 7], []], z)), None, False, ALL,
+       ((0.2, 4.0),), ((0.3, 3.0, -2.0, 2.0),),
+       note="G^{2,2}_{2,2}: expansion in z inside |z| = 1, in 1/z outside", pylib="mpmath"),
+    SF("MeijerGlog", "Hypergeometric", 1, "MeijerG[{{{{}}, {{2}}}}, {{{{1/2, 3/2}}, {{}}}}, {0}]", None,
+       (lambda z: mp.meijerg([[], [2]], [[mp.mpf(1) / 2, mp.mpf(3) / 2], []], z)), None, False, ALL,
+       ((0.3, 6.0),), ((0.5, 4.0, -3.0, 3.0),),
+       note="log case: b's an integer apart (the documented example)", pylib="mpmath"),
+
     # ---- Misc -----------------------------------------------------------------------
     SF("Sinc", "Misc", 1, "Sinc[{0}]", "sin({0})/({0})",
        _sinc_mp, _sinc_sc, True, ALL, ((0.2, 10.0),), ((0.5, 5.0, -3.0, 3.0),),

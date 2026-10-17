@@ -24,6 +24,7 @@
  */
 
 #include "series.h"
+#include "../special_functions/meijer_g.h" /* meijerg_series_terms */
 #include "../sparsearray.h"
 #include "../message.h"    /* mth_message: the Quiet[]/Check[] funnel for Series::ivar. */
 #include "../print.h"      /* expr_to_string, to name the offending variable. */
@@ -973,7 +974,17 @@ static SeriesObj* so_pow_expr(SeriesObj* s_in, Expr* alpha) {
         int64_t g = gcd_i64(abs_i64(out_p), abs_i64(out_q));
         if (g) { out_p /= g; out_q /= g; }
         if (out_q < 0) { out_q = -out_q; out_p = -out_p; }
-        SeriesObj* r = so_alloc(s->x, s->x0, out_p, s->order, out_q);
+        /* The O-term: s = a0 x^(nmin/den) (1 + O(x^((order-nmin)/den))), so
+         * s^alpha carries the SAME relative error past its new leading power,
+         * O-exponent out_p/out_q + (order - nmin)/den. Both have to be put on
+         * one denominator; reusing s->order as a count of 1/out_q steps (as
+         * this did) put x^(1/6) at O[x]^(25/6) for any requested order, and was
+         * right for out_q = 2 only because the pad happens to make 25/2 the
+         * target. */
+        int64_t D = lcm_i64(out_q, s->den);
+        int64_t nmin_D = out_p * (D / out_q);
+        int64_t order_D = nmin_D + (s->order - nmin) * (D / s->den);
+        SeriesObj* r = so_alloc(s->x, s->x0, nmin_D, order_D, D);
         if (r->coef_count > 0) so_set_coef(r, 0, a0_pow);
         else expr_free(a0_pow);
         so_free(s);
@@ -6056,6 +6067,63 @@ static bool series_is_neg_infinity(Expr* e) {
     return false;
 }
 
+/* Find the first MeijerG (or BesselK, via K_nu(y) = (1/2) G^{2,0}_{0,2}(y^2/4 |
+ * nu/2, -nu/2)) node of f that expands at the point -- at the origin its
+ * argument must vanish there (p <= q), at +Infinity it must be the variable
+ * itself (p >= q) -- and return its truncated Slater expansion (owned; *node
+ * receives the borrowed node). BesselK[<integer>, x] itself is left to the
+ * dedicated DLMF 10.31.1 hook. NULL when there is none. */
+static Expr* meijerg_series_find(const Expr* f, Expr* x, bool at0, const Expr** node, int64_t order) {
+    if (!f || f->type != EXPR_FUNCTION) return NULL;
+    size_t na = f->data.function.arg_count;
+    Expr* mg = NULL; Expr* scale = NULL; Expr* zarg = NULL;
+    if (has_symbol_head((Expr*)f, "MeijerG") && (na == 3 || na == 4) &&
+        expr_free_of(f->data.function.args[0], x) && expr_free_of(f->data.function.args[1], x) &&
+        (na == 3 || expr_free_of(f->data.function.args[3], x))) {
+        zarg = f->data.function.args[2];
+        if (at0 ? !expr_free_of(zarg, x) : expr_eq(zarg, x)) mg = expr_copy((Expr*)f);
+    } else if (at0 && has_symbol_head((Expr*)f, "BesselK") && na == 2 &&
+               expr_free_of(f->data.function.args[0], x) &&
+               !expr_free_of(f->data.function.args[1], x) &&
+               !(f->data.function.args[0]->type == EXPR_INTEGER &&
+                 expr_eq(f->data.function.args[1], x))) {
+        Expr* Y = f->data.function.args[1];
+        Expr* nu = f->data.function.args[0];
+        Expr* bl = mk_fn2("List",
+                          mk_fn2("List", eval_and_free(mk_times(make_rational(1, 2), expr_copy(nu))),
+                                         eval_and_free(mk_times(make_rational(-1, 2), expr_copy(nu)))),
+                          mk_fn(mk_symbol("List"), NULL, 0));
+        Expr* al = mk_fn2("List", mk_fn(mk_symbol("List"), NULL, 0), mk_fn(mk_symbol("List"), NULL, 0));
+        Expr* w = eval_and_free(mk_times(make_rational(1, 4), mk_power(expr_copy(Y), expr_new_integer(2))));
+        Expr* margs[3] = { al, bl, w };
+        mg = mk_fn(mk_symbol("MeijerG"), margs, 3);      /* NOT evaluated: it would reduce back */
+        scale = make_rational(1, 2);
+        zarg = Y;
+    }
+    if (mg && at0) {
+        /* The argument must vanish at the origin. */
+        Expr* zero = expr_new_integer(0);
+        Expr* z0 = eval_and_free(replace_all_of(zarg, x, zero));
+        bool vanishes = is_lit_zero(z0);
+        expr_free(z0); expr_free(zero);
+        if (!vanishes) { expr_free(mg); expr_free(scale); mg = NULL; scale = NULL; }
+    }
+    if (mg) {
+        Expr* E = meijerg_series_terms(mg, !at0, (long)order);
+        expr_free(mg);
+        if (E) {
+            *node = f;
+            return scale ? eval_and_free(mk_times(scale, E)) : E;
+        }
+        expr_free(scale);
+    }
+    for (size_t i = 0; i < na; i++) {
+        Expr* r = meijerg_series_find(f->data.function.args[i], x, at0, node, order);
+        if (r) return r;
+    }
+    return NULL;
+}
+
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
                               const AssumeCtx* assume) {
     /* Sign of the expansion variable under the assumptions: -1 forces the
@@ -6182,6 +6250,35 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         }
         expr_free(neg_x);
         return out;
+    }
+
+    /* MeijerG at the origin (p <= q) or at +Infinity (p >= q): rewrite it to its
+     * truncated Slater expansion -- a finite sum of z^(b_h + k) (powers of 1/z at
+     * Infinity), with Log[z] / PolyGamma terms in the log case of integer-spaced
+     * parameters -- and let the ordinary machinery (the symbolic-power-prefactor
+     * peel, as for WhittakerM) expand that. BesselK, which a G^{2,0}_{0,2}
+     * reduces to, has a log branch at the origin for every integer order; when
+     * the dedicated integer-order hook below does not apply (an argument other
+     * than the bare variable, e.g. BesselK[1, 2 Sqrt[z]]), route it through the
+     * same expansion via K_nu(y) = (1/2) G^{2,0}_{0,2}(y^2/4 | nu/2, -nu/2). */
+    {
+        bool at0 = is_lit_zero(x0_eval);
+        bool atinf = x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol.name == SYM_Infinity;
+        if (at0 || atinf) {
+            /* Expand every MeijerG / BesselK node of f in place (a product such
+             * as 2 z^(a+1/2) BesselK[1, 2 Sqrt[z]] is the common shape: it is
+             * what a G^{2,0}_{0,2} reduces to). At most a few rounds: each
+             * replacement removes one node. */
+            for (int round = 0; round < 4; round++) {
+                const Expr* node = NULL;
+                Expr* E = meijerg_series_find(f_eval, x, at0, &node, (n < 0 ? 0 : n) + 1);
+                if (!E) break;
+                Expr* nf = eval_and_free(replace_all_of(f_eval, (Expr*)node, E));
+                expr_free(E);
+                expr_free(f_eval);
+                f_eval = nf;
+            }
+        }
     }
 
     /* Special functions with essential singularities at Infinity (e.g.

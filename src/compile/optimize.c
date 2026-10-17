@@ -52,7 +52,7 @@ typedef struct {
  * rather than the usual fixed fields.  Liveness and DCE walk the run by hand. */
 static bool op_reads_range(unsigned op) {
     unsigned k = compile_op_kind[op];
-    return k == K_CALL || k == K_NARY || k == K_ARANGE;
+    return k == K_CALL || k == K_NARY || k == K_ARANGE || k == K_NARYV;
 }
 
 static OpDesc op_desc(unsigned op) {
@@ -101,6 +101,8 @@ static OpDesc op_desc(unsigned op) {
         /* Same range-of-operands shape as a call, but a machine kernel is pure:
          * it may be common-subexpression-eliminated and dropped when dead. */
         case K_NARY:   o.wd = 1;                            o.pure = 1; break;
+        /* Its strip-mined twin also reads the tile in `b`. */
+        case K_NARYV:  o.wd = 1;                       o.rb = 1; o.pure = 1; break;
         /* Strip-mined reduction step: accumulates into dst, so it READS dst as
          * well as writing it — which is also what keeps LICM from hoisting it
          * out of the tile loop. */
@@ -495,7 +497,8 @@ static bool pass_vn(Opt* o, bool* progress) {
                 && compile_op_kind[c->op] != K_MOVE
                 /* value numbering keys on a and b only, which cannot describe
                  * an operand RANGE — so an n-ary kernel is never CSE'd here. */
-                && compile_op_kind[c->op] != K_NARY) {
+                && compile_op_kind[c->op] != K_NARY
+                && compile_op_kind[c->op] != K_NARYV) {
                 bool found = false;
                 for (size_t v = 0; v < nvn; v++) {
                     VNEntry* e = &vn[v];

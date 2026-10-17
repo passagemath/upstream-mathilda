@@ -309,7 +309,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             || lb->type != EXPR_FUNCTION || lb->data.function.head->type != EXPR_SYMBOL
             || strcmp(lb->data.function.head->data.symbol.name, "List") != 0) return false;
         size_t np = la->data.function.arg_count, nq = lb->data.function.arg_count;
-        if (np + nq + 2 > 8) return false;
+        if (np + nq + 2 > KERNN_MAX_OPERANDS) return false;
         for (size_t i = 0; i < np; i++) {
             CompileType t;
             if (!infer_type(c, la->data.function.args[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
@@ -328,6 +328,48 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             CompileType t; infer_type(c, lb->data.function.args[j], &t); cx = (t == CT_COMPLEX);
         }
         *out = cx ? CT_COMPLEX : CT_REAL; return true;
+    }
+    /* MeijerG: parameter Lists of scalars, z scalar -- or a real/complex ARRAY,
+     * over which MeijerG threads (the fused loop then feeds z as a tile; see
+     * the emitter). Complex anywhere -> complex. */
+    if (strcmp(h, "MeijerG") == 0 && (na == 3 || na == 4)) {
+        size_t cnt = 0;
+        bool cx = false;
+        for (int s = 0; s < 2; s++) {
+            const Expr* L = A[s];
+            if (L->type != EXPR_FUNCTION || L->data.function.head->type != EXPR_SYMBOL
+                || strcmp(L->data.function.head->data.symbol.name, "List") != 0
+                || L->data.function.arg_count != 2) return false;
+            for (int t = 0; t < 2; t++) {
+                const Expr* G = L->data.function.args[t];
+                if (G->type != EXPR_FUNCTION || G->data.function.head->type != EXPR_SYMBOL
+                    || strcmp(G->data.function.head->data.symbol.name, "List") != 0) return false;
+                for (size_t i = 0; i < G->data.function.arg_count; i++) {
+                    CompileType ty;
+                    if (!infer_type(c, G->data.function.args[i], &ty) || CT_IS_ARRAY(ty)
+                        || ty == CT_BOOL) return false;
+                    cx |= (ty == CT_COMPLEX);
+                    cnt++;
+                }
+            }
+        }
+        if (cnt + 3 > KERNN_MAX_OPERANDS) return false;
+        if (na == 4) {
+            CompileType tr;
+            if (!infer_type(c, A[3], &tr) || CT_IS_ARRAY(tr) || tr == CT_BOOL || tr == CT_COMPLEX)
+                return false;
+        }
+        CompileType tz;
+        IT(2, tz);
+        if (tz == CT_BOOL) return false;
+        if (CT_IS_ARRAY(tz)) {
+            CompileType ez = CT_ELEM(tz);
+            if (ez == CT_BOOL) return false;
+            *out = CT_ARRAY((cx || ez == CT_COMPLEX) ? CT_COMPLEX : CT_REAL, CT_RANK(tz));
+            return true;
+        }
+        *out = (cx || tz == CT_COMPLEX) ? CT_COMPLEX : CT_REAL;
+        return true;
     }
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
         /* One array argument is the kernel's business, not the product-of-

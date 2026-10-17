@@ -42,6 +42,7 @@
 #include "special_functions/sf_machine_hyper.h"  /* complex hypergeometric-family kernels */
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include "special_functions/sf_machine_bessel.h"
+#include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -914,6 +915,15 @@ static bool ndk_HypergeometricPFQ_n(const double* re, const double* im, size_t n
     *rr = v; *ri = 0.0; return true;
 }
 static const NDNaryKernel NDKN_HypergeometricPFQ = { ndk_HypergeometricPFQ_n, 0, true };
+/* MeijerG arrives flattened by the compiler's lowering in the layout
+ * sf_mg_eval_flat documents: [shape code, r, a_1..a_p, b_1..b_q, z]. The
+ * helper is the one behind the scalar builtin and the buffer path (it falls
+ * back to arb internally on a declined point, so it never answers NaN). */
+static bool ndk_MeijerG_n(const double* re, const double* im, size_t n,
+                          double* rr, double* ri) {
+    return sf_mg_eval_flat(re, im, n, rr, ri);
+}
+static const NDNaryKernel NDKN_MeijerG = { ndk_MeijerG_n, 0, true };
 static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
@@ -1003,6 +1013,7 @@ void ndkernels_init(void) {
     REG_B(Hypergeometric0F1, NDKB_Hypergeometric0F1);
     REG_N(LerchPhi); REG_N(Hypergeometric1F1); REG_N(Hypergeometric2F1);
     REG_N(HypergeometricPFQ);
+    REG_N(MeijerG);     /* MeijerG[{{..},{..}}, {{..},{..}}, z(, r)] for Compile[] */
     REG_N(LaguerreL);   /* generalized LaguerreL[n, a, x] for Compile[] */
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
     REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */

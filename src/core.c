@@ -1042,6 +1042,10 @@ void core_init(void) {
     product_init();
     void hypergeopfq_init(void);
     hypergeopfq_init();
+    void meijer_g_init(void);
+    meijer_g_init();
+    void functionexpand_init(void);
+    functionexpand_init();
     void zero_test_init(void);
     zero_test_init();
     void graphics_init(void);
@@ -2561,6 +2565,23 @@ Expr* builtin_stringq(Expr* res) {
     return expr_new_symbol(arg->type == EXPR_STRING ? SYM_True : SYM_False);
 }
 
+static bool is_numeric_quantity(Expr* e);
+
+/* An argument of a NumericFunction head that keeps the call numeric: a numeric
+ * quantity, or a List (nested to any depth) of them -- the parameter lists of
+ * HypergeometricPFQ / MeijerG, as in Mathematica, where
+ * NumericQ[HypergeometricPFQ[{1, 2}, {3}, 1/2]] is True although NumericQ[{1, 2}]
+ * is not. */
+static bool is_numeric_argument(Expr* e) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!is_numeric_argument(e->data.function.args[i])) return false;
+        return true;
+    }
+    return is_numeric_quantity(e);
+}
+
 static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
 #ifdef USE_MPFR
@@ -2594,7 +2615,7 @@ static bool is_numeric_quantity(Expr* e) {
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
                 for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                    if (!is_numeric_quantity(e->data.function.args[i])) return false;
+                    if (!is_numeric_argument(e->data.function.args[i])) return false;
                 }
                 return true;
             }

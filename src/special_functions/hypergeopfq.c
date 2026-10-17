@@ -39,6 +39,7 @@
 #include "sym_names.h"
 #include "arithmetic.h"   /* is_rational, is_complex, make_complex */
 #include "numeric.h"      /* numeric_combined_bits, get_approx_mpfr, ... */
+#include "flint_num_bridge.h" /* flint_num_hyp2f1: the arbitrary-precision 2F1 */
 #ifdef USE_MPFR
 #include "numeric_complex.h"
 #include <mpfr.h>
@@ -662,6 +663,14 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
             if (bj > 0 && (gov == 0 || bj < gov)) gov = bj;
         }
         if (gov > 53) {
+            /* 2F1 inside the unit disc: arb's transformation-based kernel,
+             * not the direct series, whose term count blows up as |z| -> 1
+             * (the convergence gate above has already excluded |z| >= 1). */
+            if (p == 2 && q == 1) {
+                result = flint_num_hyp2f1(a->data.function.args[0], a->data.function.args[1],
+                                          b->data.function.args[0], z);
+                if (result) { free(ac); free(bc); return result; }
+            }
             result = hgpfq_mpfr_sum(z, a, b, p, q, gov);
             free(ac); free(bc);
             return result;

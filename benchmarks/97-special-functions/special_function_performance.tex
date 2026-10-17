@@ -205,6 +205,26 @@ buffer argument. Accuracy rose with speed: the agreement table is at or above it
 values, and every kernel was gated against mpmath (median $\lesssim 1$ ulp) before it was
 wired.
 
+\paragraph{MeijerG (v0.445).} Three rows cover the Meijer $G$-function: a two-term
+$G^{2,1}_{2,3}$ (\mcode{MeijerG}), a $G^{2,2}_{2,2}$ whose Slater expansion switches from
+$z$ to $1/z$ at the unit circle (\mcode{MeijerG22}), and the documented log case of
+integer-spaced $b$'s (\mcode{MeijerGlog}). SciPy has no $G$-function and Maxima no numeric
+one, so the Python column is mpmath's \mcode{meijerg} and Maxima is absent. Mathilda is the
+fastest engine in all nine cells: against mpmath $35\times$, $134\times$ and $3.3\times$
+(machine real), $42\times$, $234\times$, $4.3\times$ (complex) and $2.9\times$,
+$2.1\times$, $5.2\times$ (50 digits), and Mathematica is slower still in every cell
+($11$--$670\times$). The machine path is one Slater plan per parameter set (the
+$z$-independent $\pi/\sin$ and $\Gamma$ products) and one pFq kernel call per term; a log
+case or a cancelling sum is handed to the arb engine, which perturbs the colliding $b$'s
+and checks two perturbation sizes against each other. The 50-digit
+\mcode{MeijerG22} cell first came out level with mpmath ($2.03$ vs $2.07$\,ms) because
+$N$ of the exactly reduced $_2F_1$ pair summed each series directly; routing
+arbitrary-precision \mcode{Hypergeometric2F1} through arb's transformation-based kernel
+fixed that, and took the \mcode{Hypergeometric2F1} AP cell from $0.62$ to $0.10$\,ms
+($3.8\times$ ahead of mpmath). The hypergeometric family and MeijerG rows were re-run at
+v0.445 and merged with the v0.444 run of the other heads
+(\mcode{results/2026-10-17-final-v0445.json}).
+
 \paragraph{Notes on the flagged disagreements.}
 The recurring genuine differences are: Maxima's \mcode{expintegral\_chi} returns a value
 with a spurious $i\pi$ imaginary part on the positive real axis (a branch convention);

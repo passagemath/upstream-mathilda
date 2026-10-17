@@ -77,6 +77,31 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z);
  * |z| gets its bits up front rather than by blind doubling. */
 Expr* flint_num_struveh(const Expr* nu, const Expr* z);     /* StruveH[nu, z]    */
 
+/* Hypergeometric2F1[a, b, c, z] at arbitrary precision (acb_hypgeom_2f1, with
+ * its transformations near z = 1). Used by HypergeometricPFQ's MPFR path. */
+Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z);
+
+/* MeijerG[{{a_1..a_n},{a_n+1..a_p}}, {{b_1..b_m},{b_m+1..b_q}}, z, r] via
+ * Slater's theorem over arb's regularized pFq (the dual expansion in 1/w for
+ * p > q or p == q, |w| > 1; w = z^(1/r)), with the log case (integer-differing
+ * b's) handled by perturbation. `a` holds a_1..a_p, `b` b_1..b_q; `r` may be
+ * NULL (r = 1). The output precision is the minimum inexact precision of the
+ * arguments (machine floor). NULL for non-numeric input, z = 0, a value that
+ * does not exist, or p == q >= 3 with |w| = 1 (no continuation implemented). */
+Expr* flint_num_meijerg(const Expr* const* a, size_t n, size_t p,
+                        const Expr* const* b, size_t m, size_t q,
+                        const Expr* z, const Expr* r);
+
+/* The same engine on machine inputs, rounded to double: the fallback behind
+ * src/special_functions/sf_machine_meijerg.c when the machine Slater sum
+ * declines (log case, cancellation), so every machine surface still answers.
+ * ai / bi may be NULL. *is_c is false when the imaginary part is exactly zero.
+ * Returns false without FLINT or when the value does not exist. */
+bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
+                     const double* br, const double* bi, size_t m, size_t q,
+                     double r, double zr, double zi,
+                     double* rr, double* ri, bool* is_c);
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

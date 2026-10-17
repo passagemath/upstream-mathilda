@@ -307,7 +307,7 @@ static ImmKind imm_kind(uint16_t op) {
         default: break;
     }
     switch (compile_op_kind[op]) {
-        case K_KERN1: case K_KERN2: case K_NARY: return IMM_KERNEL;
+        case K_KERN1: case K_KERN2: case K_NARY: case K_NARYV: return IMM_KERNEL;
         case K_POWI:  case K_INC:   case K_LOOP: return IMM_INT;
         case K_BINK: return bink_const_is_real(op_name[op]) ? IMM_REAL : IMM_INT;
         default: break;
@@ -336,7 +336,7 @@ static CompileType const_type(const CompiledProgram* p, size_t at, bool* dead) {
         const Instr* c = &p->code[j];
         unsigned k = compile_op_kind[c->op];
 
-        if (k == K_CALL || k == K_NARY || k == K_ARANGE) {
+        if (k == K_CALL || k == K_NARY || k == K_ARANGE || k == K_NARYV) {
             if (d >= c->a && d < c->a + c->flags) {
                 *dead = false;
                 if (c->op == OP_CALL) {
@@ -557,7 +557,7 @@ static void render_operands(DBuf* b, const CompiledProgram* p, size_t i, ProgLis
             db_catf(b, "%s, ", rd);
             render_imm(b, p, i, L);
             break;
-        case K_CALL: case K_NARY: case K_ARANGE: {
+        case K_CALL: case K_NARY: case K_ARANGE: case K_NARYV: {
             db_catf(b, "%s, [", rd);
             for (unsigned j = 0; j < c->flags; j++) {
                 char r[24]; reg_name(p, c->a + j, r, sizeof r);
@@ -567,6 +567,7 @@ static void render_operands(DBuf* b, const CompiledProgram* p, size_t i, ProgLis
             /* A_PART reads the source array through `b`, outside the range. */
             if (c->op == OP_A_PART) db_catf(b, ", %s", rb);
             if (c->op == OP_A_PARTSET) db_catf(b, ", %s", rb);
+            if (k == K_NARYV) db_catf(b, ", %s", rb);
             db_cat(b, "  ");
             render_imm(b, p, i, L);
             break;
@@ -667,14 +668,15 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
         case K_ALOAD: db_catf(b, "%s = %s[%s]", rd, ra, rb); return;
         case K_VACC:  db_catf(b, "%s += total(%s)", rd, ra); return;
 
-        case K_KERN1: case K_KERN2: case K_NARY: {
+        case K_KERN1: case K_KERN2: case K_NARY: case K_NARYV: {
             const char* fn = kernel_name(c->imm.p);
             db_catf(b, "%s = %s[", rd, fn ? fn : "kernel");
-            if (k == K_NARY) {
+            if (k == K_NARY || k == K_NARYV) {
                 for (unsigned j = 0; j < c->flags; j++) {
                     char r[24]; reg_name(p, c->a + j, r, sizeof r);
                     db_catf(b, "%s%s", j ? ", " : "", r);
                 }
+                if (k == K_NARYV) db_catf(b, ", %s", rb);
             } else if (k == K_KERN2) {
                 db_catf(b, "%s, %s", ra, rb);
             } else {

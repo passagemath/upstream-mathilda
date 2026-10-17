@@ -390,6 +390,9 @@ set(COMMON_SRC
     ../src/special_functions/sf_machine_plog.c
     ../src/special_functions/sf_machine_zeta.c
     ../src/special_functions/sf_machine_hyper.c
+    ../src/special_functions/sf_machine_meijerg.c
+    ../src/special_functions/meijer_g.c
+    ../src/special_functions/functionexpand.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/sf_machine_ellk.c
     ../src/special_functions/sf_machine_expint.c
@@ -3675,6 +3678,10 @@ target_include_directories(besseli_tests PRIVATE ../src)
 
 add_executable(bessely_tests test_bessely.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(bessely_tests PRIVATE ../src)
+
+add_executable(meijerg_tests test_meijerg.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(meijerg_tests PRIVATE ../src)
+add_test(NAME meijerg_tests COMMAND meijerg_tests)
 
 add_executable(sf_machine_hyper_tests test_sf_machine_hyper.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sf_machine_hyper_tests PRIVATE ../src)

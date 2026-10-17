@@ -1389,6 +1389,31 @@ void info_init(void) {
         "HypergeometricPFQ[{a, b}, {c}, z]; continued analytically to the whole\n"
         "plane, with the cut z > 1 taking the limit from below.");
 
+    symtab_set_docstring("MeijerG",
+        "MeijerG[{{a1, ..., an}, {an+1, ..., ap}}, {{b1, ..., bm}, {bm+1, ..., bq}}, z]\n"
+        "\tis the Meijer G-function G^{m,n}_{p,q}(z | a; b), the Mellin-Barnes integral\n"
+        "(1/(2 Pi I)) Int prod_{j<=m} Gamma[bj+s] prod_{j<=n} Gamma[1-aj-s] /\n"
+        "(prod_{j>n} Gamma[aj+s] prod_{j>m} Gamma[1-bj-s]) z^-s ds.\n"
+        "MeijerG[alist, blist, z, r] is the generalized form, s -> r s with a factor r\n"
+        "(equal to MeijerG[alist, blist, z^(1/r)] on the principal branch).\n"
+        "Parameters are sorted within each group. Simple cases reduce automatically\n"
+        "to Exp, powers, Bessel functions, HypergeometricU, EllipticK/E and\n"
+        "HypergeometricPFQ (Slater's theorem); z = 0 gives 0, a finite value or\n"
+        "ComplexInfinity. Evaluates to machine, arbitrary-precision and complex\n"
+        "numbers (output precision = lowest input precision), including the log\n"
+        "case of integer-spaced parameters; threads over a list or packed/NDArray\n"
+        "z and compiles. Inconsistent parameters (m = n = 0, or ak - bj a positive\n"
+        "integer for k <= n, j <= m) give MeijerG::hdiv.");
+
+    symtab_set_docstring("FunctionExpand",
+        "FunctionExpand[expr]\n"
+        "\texpands special functions in expr into simpler ones. Currently each\n"
+        "MeijerG is rewritten to its Slater expansion: a sum of HypergeometricPFQ\n"
+        "terms in z (p <= q) or 1/z (p > q), with classical functions (Exp, powers,\n"
+        "Bessel, EllipticK/E) where a term has one. The log case (parameters an\n"
+        "integer apart) and p == q with m + n == p are left unchanged.\n"
+        "FunctionExpand[expr, assum] accepts assumptions (not yet used).");
+
     // Structural Manipulation
     symtab_set_docstring("List",
         "{e1, e2, ...} or List[e1, e2, ...]\n"

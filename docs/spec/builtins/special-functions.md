@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, and the Whittaker functions `WhittakerM` and `WhittakerW`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -1154,6 +1154,10 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
   `-0.929749 - 1.00531 I` (it used to stay unevaluated, as did every real
   `z < -1` and every complex `|z| ≥ 1`).
 - Scalar 0.3 µs (real), 1.7 µs (complex); 10^6 packed elements 0.14 s.
+- **Arbitrary precision** (`|z| < 1`) goes through arb's transformation-based
+  `acb_hypgeom_2f1` rather than the direct series, whose term count grows like
+  `1/(1-|z|)`: `N[Hypergeometric2F1[1/3, 1/2, 1/5, 99/100], 50]` dropped from
+  ~60 ms to under 1 ms.
 
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
@@ -2580,7 +2584,7 @@ Hypergeometric1F1[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
   Arbitrary precision falls back to the confluent-form evaluator.
 
 The general (non-terminating) asymptotic at Infinity — a two-scale Stokes
-transseries — is not produced, `FunctionExpand` is not yet available, and the
+transseries — is not produced, `FunctionExpand` does not yet expand it, and the
 generic `Interval[]` threading declines (the derivative is self-referential), so
 `WhittakerM` over an `Interval[]` stays symbolic.
 
@@ -2648,6 +2652,126 @@ Out[2]= -WhittakerW[1 + k, m, z]/z + (1/2 - k/z) WhittakerW[k, m, z]
 
 In[3]:= WhittakerW[k, 1/2, 0]
 Out[3]= 1/Gamma[1 - k]
+```
+
+## MeijerG
+
+`MeijerG[{{a1, …, an}, {an+1, …, ap}}, {{b1, …, bm}, {bm+1, …, bq}}, z]` is the
+Meijer G-function `G^{m,n}_{p,q}(z | a; b)`, the Mellin–Barnes integral
+
+    (1/2πi) ∫ Γ(b1+s)…Γ(bm+s) Γ(1-a1-s)…Γ(1-an-s)
+              / (Γ(an+1+s)…Γ(ap+s) Γ(1-bm+1-s)…Γ(1-bq-s)) z^-s ds.
+
+`MeijerG[alist, blist, z, r]` is the generalized form (`s → r s`, times `r`); on
+the principal branch it equals `MeijerG[alist, blist, z^(1/r)]`, which is how
+every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
+
+- **Canonical form.** The parameters are sorted within each of the four groups
+  (`MeijerG[{{1},{2}},{{2/3,1/5},{4}},z]` → `MeijerG[{{1},{2}},{{1/5,2/3},{4}},z]`),
+  as in Mathematica.
+- **Consistency.** `m = n = 0`, or a pole collision `a_k − b_j ∈ ℤ⁺` (`k ≤ n`,
+  `j ≤ m`, exact or inexact), gives `MeijerG::hdiv` and stays unevaluated — unless
+  a Gamma pair cancels: for `b_j − a_k = N ∈ ℤ≥0` with `j ≤ m`, `k > n`,
+  `Γ(b_j+s)/Γ(a_k+s) = (−1)^N Γ(1−a_k−s)/Γ(1−b_j−s)`, so the two move groups
+  (Mathematica's rewrite: `MeijerG[{{31,4},{2,3}},{{5,3/2},{1/10}},3]` →
+  `−MeijerG[{{2,4,31},{3}},{{3/2},{1/10,5}},3]`). A wrong argument count gives
+  `hdiv` then `argt`. All messages route through `Quiet`/`Check`.
+- **Automatic reduction** (Slater's theorem, calibrated against Mathematica 14):
+  `G^{2,0}_{0,2}` → `2 z^((b+c)/2) BesselK[b−c, 2√z]`; `G^{2,1}_{1,2}` →
+  `Γ(1−a+b) Γ(1−a+c) z^b HypergeometricU[1−a+b, 1+b−c, z]`; any one-term
+  Slater expansion (`m = 1`, `p ≤ q`, or the dual `n = 1`, `p ≥ q`); and a
+  two-term one whose pFq is a 0F1, 1F1 or 2F1 with the exponents not an integer
+  apart. Each pFq is rewritten to `Exp`, a power, `BesselJ`/`BesselI`,
+  `1F1(u; 2u)` → `BesselI`, `EllipticK`/`EllipticE`, or left as a
+  `HypergeometricPFQ` divided by the `Gamma`s of its regularized lower
+  parameters. For `p = q` the reduction needs `m + n > p` (otherwise the
+  expansions in `z` and `1/z` are not continuations of each other) and, for a
+  numeric `z`, uses the expansion that converges there. Everything else — e.g.
+  two 2F2 terms, or the log case — stays `MeijerG`.
+- **z = 0.** `p > q`: `ComplexInfinity` when `n = 1`, else unevaluated; `p ≤ q`:
+  `0` when every `Re b_h > 0` (`h ≤ m`), the coefficient when one `b_h = 0`,
+  `ComplexInfinity` when some `Re b_h < 0` (with a non-zero coefficient). This
+  answers a few cases Mathematica leaves unevaluated or returns as `Indeterminate`
+  (`MeijerG[{{},{}},{{1/2,1/3},{}},0]` is `0`).
+- **Numerics.** Machine (real and complex) through `sf_machine_meijerg.c`: the
+  Slater sum in `w = z^(1/r)` (`p < q`, or `p = q` with `|w| < 1`) or in `1/w`
+  (`p > q`, or `|w| > 1`), with the regularized pFq of every term from the shared
+  hypergeometric kernels and the `z`-independent coefficients
+  `∏ π/sin(π(b_j−b_h)) ∏Γ(1+b_h−a_j)/∏Γ(a_j−b_h)` precomputed once per parameter
+  set. It declines — and the same point is re-evaluated in arb and rounded — for
+  the **log case** (two of `b1…bm` an integer apart), for more than 6 bits of
+  cancellation between terms, or when a term kernel declines, so a machine answer
+  is always within a few ulp (25 Mathematica references agree to ≤ 6×10⁻¹⁵).
+  Arbitrary precision (`N`, or any MPFR argument) uses arb throughout: regularized
+  `acb_hypgeom_pfq` terms, the log case by perturbing `b_j → b_j + (j+1)ε` and
+  comparing two `ε` until they agree to the target, `p = q = 2` at `z = 1` (where
+  each 2F1 term diverges but `G` does not) by the Gauss regular parts. The output
+  precision is the lowest input precision; a machine Real anywhere gives a
+  machine answer.
+- **Buffers and Compile.** A packed List / NDArray `z` is evaluated in one pass
+  with the plan built once (`nd_parallel_for`), bit-for-bit equal to the scalar
+  path; `Compile[]` lowers MeijerG at scalar and rank-1 `z`, real and complex
+  (`OP_KERNN` / the strip-mined `OP_VKERNN_*`), and a real-typed compiled call
+  whose value is complex (`z < 0`) falls back to the interpreter rather than
+  dropping the imaginary part. `CompileDiagnostics[{{v,_Real,1}}, MeijerG[{{1/3},{}},{{1/2},{1}},v]]`
+  reports `Compiled -> True`.
+- **Derivative.** `D[MeijerG[{{a},{a'}},{{b},{b'}},z],z] =
+  MeijerG[{{−1, a−1},{a'−1}},{{b−1},{0, b'−1}},z]` (Mathematica's form); for the
+  generalized form `(1/(r z)) MeijerG[{{0,a},{a'}},{{b},{1,b'}},z,r]`.
+- **Series.** At 0 (`p ≤ q`) and at `Infinity` (`p ≥ q`) from the truncated Slater
+  expansion, including the log case (exact Laurent expansion in `ε` of every
+  Gamma factor, giving `Log[z]`, `EulerGamma` and `PolyGamma` terms):
+  `Series[MeijerG[{{},{}},{{a,a+1},{}},z],{z,0,1}] = z^a (1 + (−1 + 2 EulerGamma +
+  Log[z]) z + O[z]²)` (via the `BesselK` it reduces to). At a regular point,
+  Taylor via `D`.
+- **Performance.** Scalar machine calls 9.5–16 µs (the log case 0.46 ms, through
+  arb); 10^6 packed elements 0.29 s; 50 digits 0.24–1.5 ms; 1000 digits 27 ms.
+  The fastest engine in every MR / C / AP cell of the special-functions shootout
+  (mpmath 2–234x slower, Mathematica 14 11–670x).
+- **Threads** over a List in its third argument; not `Listable`.
+
+Gaps: the general-term `SeriesCoefficient` at `x = 1`; the exponential (Stokes)
+asymptotics at `Infinity` for `p < q`; `p = q ≥ 3` exactly on `|w| = 1` (no
+continuation; stays unevaluated); `Hypergeometric*Regularized` heads do not exist,
+so reduced forms carry `HypergeometricPFQ[…]/Gamma[…]` instead.
+
+Attributes: `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= N[MeijerG[{{},{2}},{{1/2,3/2},{}},3],50]
+Out[1]= 0.041591159875396983670330390749778758626529715159039
+
+In[2]:= MeijerG[{{},{}},{{v},{-v}},z]
+Out[2]= BesselJ[2 v, 2 Sqrt[z]]
+
+In[3]:= MeijerG[{{1/2},{}},{{0},{0}},x]
+Out[3]= Sqrt[Pi] BesselI[0, 1/2 x] E^(-1/2 x)
+
+In[4]:= MeijerG[{{3+I},{2.}},{{2/3,1/5},{4}},3]
+Out[4]= -0.664578 - 3.02966 I
+
+In[5]:= MeijerG[{{1/3},{}},{{1/2},{1}},{0.1, 0.3, 0.5},1/2]
+Out[5]= {0.0511285, 0.126112, 0.133903}
+
+In[6]:= D[MeijerG[{{a1,a2},{a3,a4}},{{v},{-v}},z],z]
+Out[6]= MeijerG[{{-1, -1 + a1, -1 + a2}, {-1 + a3, -1 + a4}}, {{-1 + v}, {0, -1 - v}}, z]
+```
+
+## FunctionExpand
+
+`FunctionExpand[expr]` (and `FunctionExpand[expr, assum]`, the assumptions
+accepted but not yet used) expands special functions in `expr` into simpler
+ones. The first and so far only rule rewrites each `MeijerG` into its Slater
+expansion — a sum of `HypergeometricPFQ` terms in `z` (`p ≤ q`) or `1/z`
+(`p > q`), each in a classical form where it has one. A `MeijerG` without such an
+expansion (the log case; `p = q` with `m + n = p`) and every other expression are
+returned unchanged; a packed / NDArray buffer passes straight through.
+
+Attributes: `Protected`.
+
+```mathematica
+In[1]:= FunctionExpand[MeijerG[{{1/2,1},{3,4}},{{1/5},{}},z]]
+Out[1]= 1/12 Gamma[1/5] Sqrt[Pi] HypergeometricPFQ[{1/5}, {1/2, 3, 4}, 1/z] - (256 Gamma[7/10] HypergeometricPFQ[{7/10}, {3/2, 7/2, 9/2}, 1/z])/(1575 Sqrt[Pi] Sqrt[z])
 ```
 
 ## LegendreP

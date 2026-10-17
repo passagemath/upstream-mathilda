@@ -402,6 +402,10 @@ static Expr* algnum_times_combine(Expr** args, size_t n) {
     return eval_and_free(result);
 }
 
+/* >0 while the radical-fusion pass probes whether a fused Power would split
+ * back apart (see there). Single-threaded like the evaluator itself. */
+static int g_radical_fusion_probe = 0;
+
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -1006,7 +1010,6 @@ Expr* builtin_times(Expr* res) {
                        groups[j].base->data.integer) == 1) {
                 continue;
             }
-
             size_t pri = i_primary ? i : j;
             size_t sec = i_primary ? j : i;
 
@@ -1025,6 +1028,26 @@ Expr* builtin_times(Expr* res) {
             if (!is_positive_numeric_expr(new_base)) {
                 expr_free(new_base);
                 continue;
+            }
+            /* A fusion that Power would immediately undo is a cycle, not a
+             * simplification: Power[b, e] splits a rational base carrying a
+             * perfect power (b = 50/32487^2 -> 50^(1/3) / 32487^(2/3)) back into
+             * the very factors this pass fused, and Times fuses them again --
+             * 2^(1/3) 5^(2/3) 32487^(-2/3) recursed to $RecursionLimit. Fuse
+             * only when the fused Power stays one Power (or a number). */
+            if (k != 1 && k != -1) {
+                /* Inside the probe the |k| > 1 fusion is off (the probe's own
+                 * Times must not re-enter this test, which is the cycle). */
+                if (g_radical_fusion_probe) { expr_free(new_base); continue; }
+                g_radical_fusion_probe++;
+                Expr* probe = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(new_base), expr_copy(groups[pri].exponent) }, 2));
+                g_radical_fusion_probe--;
+                bool splits = probe && probe->type == EXPR_FUNCTION &&
+                              probe->data.function.head->type == EXPR_SYMBOL &&
+                              probe->data.function.head->data.symbol.name == SYM_Times;
+                expr_free(probe);
+                if (splits) { expr_free(new_base); continue; }
             }
             Expr* new_exp = expr_copy(groups[pri].exponent);
 
@@ -1077,7 +1100,10 @@ Expr* builtin_times(Expr* res) {
           (num_prod->data.integer == 0 ||
            num_prod->data.integer == 1 ||
            num_prod->data.integer == -1))) {
-        int64_t en_sa, ed_sa;
+        /* Zero-initialised: when the exponent is not rational is_rational
+         * leaves them unset, and en_sa is still read below (valgrind:
+         * 2 z^((b + c)/2), whose exponent is symbolic). */
+        int64_t en_sa = 0, ed_sa = 0;
         bool eps_ok = is_rational(groups[0].exponent, &en_sa, &ed_sa) &&
                        (en_sa == -1 || en_sa == 1) && ed_sa == 2;
         /* eps=+1 gating for c * Sqrt[Rational[a, b]]:

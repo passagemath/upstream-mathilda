@@ -101,6 +101,20 @@ SHAPES = [
     ("f_z_v", "array",  "{{v, _Real, 1}}",                 "%s[#1 + #2 &, 0., v]"),
 ]
 
+# Heads whose real call shape no generic template can spell -- literal
+# parameter LISTS around the numeric argument -- get their own probes, so the
+# tool enforces their lowering instead of carrying them in BASELINE.
+HEAD_SHAPES = {
+    "MeijerG": [
+        ("mg_s",  "scalar", "{{x, _Real}}",
+         "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]"),
+        ("mg_sr", "scalar", "{{x, _Real}}",
+         "MeijerG[{{1/3}, {}}, {{1/2}, {1}}, x, 1/2]"),
+        ("mg_v",  "array",  "{{v, _Real, 1}}",
+         "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, v]"),
+    ],
+}
+
 FAMILIES = ["scalar", "array"]
 
 PROBE = """
@@ -240,7 +254,8 @@ EXEMPT = {
     "CharacteristicPolynomial": "returns a symbolic Plus in x, not a machine array",
     "PositiveDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "NegativeDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
-    "HypergeometricPFQ": "parameter LISTS, not machine arrays",
+    "HypergeometricPFQ": "parameter LISTS, not machine arrays (the scalar form with "
+                         "literal Lists does lower, via OP_KERNN; the array form does not)",
     "Hypergeometric0F1": "rewrites to HypergeometricPFQ",
     "Hypergeometric1F1": "rewrites to HypergeometricPFQ",
     "Hypergeometric2F1": "rewrites to HypergeometricPFQ",
@@ -379,6 +394,8 @@ def main():
 
     items = [(f"{h}/{sid}", spec, tmpl % h)
              for h in inv for sid, fam, spec, tmpl in SHAPES]
+    items += [(f"{h}/{sid}", spec, body)
+              for h in inv for sid, fam, spec, body in HEAD_SHAPES.get(h, [])]
     sys.stderr.write(f"asking CompileDiagnostics {len(items)} questions "
                      f"over {len(inv)} heads\n")
     got = run(items)
@@ -387,7 +404,7 @@ def main():
     for h, v in sorted(inv.items()):
         fam_ok = {f: False for f in FAMILIES}
         reasons = {}
-        for sid, fam, spec, tmpl in SHAPES:
+        for sid, fam, spec, tmpl in SHAPES + HEAD_SHAPES.get(h, []):
             r = got.get(f"{h}/{sid}")
             if not r:
                 continue

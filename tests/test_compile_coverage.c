@@ -91,6 +91,7 @@ static const Probe PROBES[] = {
     { "Clip",              "Clip[x, {1., 3.}]" },
     { "Rescale",           "Rescale[x, {0., 4.}]" },
     { "HypergeometricPFQ", "HypergeometricPFQ[{1.5}, {2.5}, x]" },
+    { "MeijerG", "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]" },
 };
 static const char* probe_for(const char* nm) {
     for (size_t i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)

@@ -280,6 +280,8 @@ extern const char* SYM_Hypergeometric1F1;
 extern const char* SYM_Hypergeometric2F1;
 extern const char* SYM_HypergeometricPFQ;
 extern const char* SYM_HypergeometricPFQRegularized;
+extern const char* SYM_MeijerG;
+extern const char* SYM_FunctionExpand;
 extern const char* SYM_HypergeometricU;
 extern const char* SYM_WhittakerM;
 extern const char* SYM_WhittakerW;

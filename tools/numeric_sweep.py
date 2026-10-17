@@ -620,6 +620,9 @@ P("lucasl_real", "special", "LucasL[p]",
   "(1.618033988749894848)**p + np.cos(np.pi*p)*(1.618033988749894848)**(-p)")
 P("lerchphi", "special", "LerchPhi[0.5, 2., p]",
   "np.sum([0.5**k/(k+p)**2.0 for k in range(80)], axis=0)")
+# MeijerG: one Slater term, G^{1,1}_{1,2} = G(3/4)/G(1/2) z^(1/4) 1F1(3/4; 1/2; -z).
+P("meijerg", "special", "MeijerG[{{0.5}, {}}, {{0.25}, {0.75}}, p]",
+  "sp.gamma(0.75)/sp.gamma(0.5)*p**0.25*sp.hyp1f1(0.75, 0.5, -p)")
 
 # --- integer / number theory over int64 arrays -------------------------------
 P("gcd_arr", "integer", "GCD[cv, 1234]", "np.gcd(cv, 1234)")

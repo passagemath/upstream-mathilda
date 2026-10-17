@@ -158,7 +158,7 @@ static bool reg_is_tile(int r);
 /* The tile opcodes occupy one contiguous run of OPLIST, from VSETLEN to the last
  * kernel form.  Used only by the safety net below. */
 static bool is_tile_op(uint16_t op) {
-    return op >= OP_VSETLEN && op <= OP_VKERN2_CC;
+    return op >= OP_VSETLEN && op <= OP_VKERNN_C;
 }
 
 void ins_f(Ctx* c, uint16_t op, uint16_t flags,
@@ -1414,6 +1414,14 @@ int fuse_listable(Ctx* c, const Expr* e) {
     if (!any) return 0;                       /* scalar subtree: unconstrained */
     if (e->data.function.head->type != EXPR_SYMBOL) return -1;
     const char* h = e->data.function.head->data.symbol.name;
+    /* MeijerG is not Listable (its parameters ARE lists) but threads over z,
+     * its third argument: fusible when z is the only array-valued argument. */
+    if (strcmp(h, "MeijerG") == 0
+        && (e->data.function.arg_count == 3 || e->data.function.arg_count == 4)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (i != 2 && fuse_listable(c, e->data.function.args[i]) != 0) return -1;
+        return 1;
+    }
     if (!(get_attributes(h) & ATTR_LISTABLE)) return -1;
 
     /* Being Listable is necessary but not sufficient when BOTH operands are

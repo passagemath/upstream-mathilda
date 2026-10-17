@@ -157,7 +157,7 @@ NUMERIC = {
     "AiryAi", "AiryBi", "AiryAiPrime", "AiryBiPrime",
     "Zeta", "HurwitzZeta", "LerchPhi", "PolyLog", "StieltjesGamma",
     "Hypergeometric0F1", "Hypergeometric1F1", "Hypergeometric2F1",
-    "HypergeometricPFQ", "QPochhammer",
+    "HypergeometricPFQ", "MeijerG", "QPochhammer",
     "LegendreP", "LegendreQ", "ChebyshevT", "ChebyshevU",
     "HermiteH", "LaguerreL", "GegenbauerC", "JacobiP",
     "SphericalHarmonicY", "SphericalBesselJ", "SphericalBesselY",

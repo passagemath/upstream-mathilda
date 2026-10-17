@@ -446,6 +446,369 @@ Expr* flint_num_struveh(const Expr* nu, const Expr* z) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Meijer G-function                                                  */
+/* ------------------------------------------------------------------ */
+/* FLINT/arb has no Meijer G kernel; it is assembled from Slater's theorem
+ * (see src/special_functions/sf_machine_meijerg.h for the formulas):
+ *
+ *   G = sum_{h<=m} C_h w^{b_h} pFq~(1+b_h-a; 1+b_h-b_{!=h}; (-1)^{p-m-n} w),
+ *   C_h = prod_{j<=m,j!=h} pi/sin(pi(b_j-b_h)) prod_{j<=n} Gamma(1+b_h-a_j)
+ *                                              / prod_{j>n} Gamma(a_j-b_h),
+ *
+ * with w = exp(log z / r), the REGULARIZED pFq (acb's `regularized = 1`, so a
+ * non-positive-integer lower parameter needs no special case), and the dual
+ * G^{n,m}_{q,p}(1-b; 1-a; 1/w) for p > q or p == q, |w| > 1.
+ *
+ * The log case -- two of b_1..b_m an integer apart, where the pi/sin factors
+ * have poles that cancel between terms -- is evaluated by perturbation (the
+ * technique mpmath's hypercomb uses): b_j += (j+1) eps with eps = 2^-E,
+ * E = target + MG_EPS_GUARD, at a working precision raised by (m-1) E so the
+ * cancellation of the O(eps^-(m-1)) poles is absorbed. The perturbation error
+ * is O(eps), below the target by construction.
+ *
+ * The working precision climbs until arb certifies `outb` relative bits (the
+ * nb_* ladder rules), with a step sized from the measured shortfall rather than
+ * blind doubling, since the dominant loss -- cancellation between Slater terms
+ * that grow like exp(c |w|^(1/(q-p))) while G decays -- is predictable from it. */
+
+#define MG_EPS_GUARD 24
+#define MG_MAX_ATTEMPTS 16
+
+/* The inputs, either as Exprs (the MPFR / exact-via-N path) or as doubles (the
+ * machine fallback); reloaded at each working precision because a Rational is
+ * rounded at the precision it is loaded at. */
+typedef struct {
+    size_t n, p, m, q;
+    const Expr* const* a;  const Expr* const* b;  const Expr* z;  const Expr* r;
+    const double *ar, *ai, *br, *bi; double r_d, zr, zi;
+} MgSrc;
+
+static int mg_load(const MgSrc* s, acb_ptr A, acb_ptr B, acb_t logw, slong wp) {
+    acb_t z, r;
+    acb_init(z); acb_init(r);
+    int ok = 1;
+    if (s->a) {
+        for (size_t j = 0; j < s->p && ok; j++) ok = expr_to_acb(s->a[j], A + j, wp);
+        for (size_t j = 0; j < s->q && ok; j++) ok = expr_to_acb(s->b[j], B + j, wp);
+        if (ok) ok = expr_to_acb(s->z, z, wp);
+        if (ok) { if (s->r) ok = expr_to_acb(s->r, r, wp); else acb_one(r); }
+    } else {
+        for (size_t j = 0; j < s->p; j++)
+            acb_set_d_d(A + j, s->ar[j], s->ai ? s->ai[j] : 0.0);
+        for (size_t j = 0; j < s->q; j++)
+            acb_set_d_d(B + j, s->br[j], s->bi ? s->bi[j] : 0.0);
+        acb_set_d_d(z, s->zr, s->zi == 0.0 ? 0.0 : s->zi);
+        acb_set_d(r, s->r_d);
+    }
+    if (ok && (acb_is_zero(z) || acb_contains_zero(r))) ok = 0;
+    if (ok) {
+        acb_log(logw, z, wp);      /* principal: arg(-x) = +pi for exact real z < 0 */
+        acb_div(logw, logw, r, wp);
+    }
+    acb_clear(z); acb_clear(r);
+    return ok;
+}
+
+/* The regularized pFq of one Slater term, dispatched to arb's specialised
+ * kernels where they exist (0F1, 1F1 and 2F1 carry asymptotic expansions and
+ * analytic continuation that the generic summation does not). */
+static void mg_pfq_reg(acb_t res, acb_srcptr u, slong pu, acb_srcptr l, slong ql,
+                       const acb_t x, slong wp) {
+    if (pu == 0 && ql == 0) { acb_exp(res, x, wp); return; }
+    if (pu == 1 && ql == 0) {               /* (1 - x)^(-u) */
+        acb_t t, e; acb_init(t); acb_init(e);
+        acb_sub_si(t, x, 1, wp); acb_neg(t, t);
+        acb_neg(e, u);
+        acb_pow(res, t, e, wp);
+        acb_clear(t); acb_clear(e);
+        return;
+    }
+    if (pu == 0 && ql == 1) { acb_hypgeom_0f1(res, l, x, 1, wp); return; }
+    if (pu == 1 && ql == 1) { acb_hypgeom_m(res, u, l, x, 1, wp); return; }
+    if (pu == 2 && ql == 1) {
+        acb_hypgeom_2f1(res, u, u + 1, l, x, ACB_HYPGEOM_2F1_REGULARIZED, wp);
+        return;
+    }
+    acb_hypgeom_pfq(res, u, pu, l, ql, x, 1, wp);
+}
+
+/* One Slater sum for G^{m,n}_{p,q}(A; B; w) at log w, working precision wp. */
+static void mg_slater(acb_t res, acb_srcptr A, size_t n, size_t p,
+                      acb_srcptr B, size_t m, size_t q, const acb_t logw, slong wp) {
+    acb_zero(res);
+    if (m == 0) return;
+    acb_ptr u = _acb_vec_init((slong)(p ? p : 1));
+    acb_ptr l = _acb_vec_init((slong)(q ? q : 1));
+    acb_t C, t, x, pi, w, sing;
+    acb_init(C); acb_init(t); acb_init(x); acb_init(pi); acb_init(w); acb_init(sing);
+    acb_const_pi(pi, wp);
+    acb_exp(w, logw, wp);
+    if (((long)p - (long)m - (long)n) % 2 != 0) acb_neg(x, w); else acb_set(x, w);
+    for (size_t h = 0; h < m; h++) {
+        acb_one(C);
+        for (size_t j = 0; j < m; j++) {
+            if (j == h) continue;
+            acb_sub(t, B + j, B + h, wp);
+            acb_sin_pi(t, t, wp);
+            acb_div(C, C, t, wp);
+            acb_mul(C, C, pi, wp);
+        }
+        for (size_t j = 0; j < p; j++) {
+            acb_sub(t, B + h, A + j, wp);
+            if (j < n) { acb_add_si(t, t, 1, wp); acb_gamma(t, t, wp); }
+            else       { acb_neg(t, t); acb_rgamma(t, t, wp); }
+            acb_mul(C, C, t, wp);
+        }
+        for (size_t k = 0; k < p; k++) {
+            acb_sub(u + k, B + h, A + k, wp);
+            acb_add_si(u + k, u + k, 1, wp);
+        }
+        size_t nl = 0;
+        for (size_t j = 0; j < q; j++) {
+            if (j == h) continue;
+            acb_sub(l + nl, B + h, B + j, wp);
+            acb_add_si(l + nl, l + nl, 1, wp);
+            nl++;
+        }
+        mg_pfq_reg(t, u, (slong)p, l, (slong)nl, x, wp);
+        if (!acb_is_finite(t) && p == 2 && nl == 1 && arb_contains_si(acb_realref(x), 1) && arb_contains_zero(acb_imagref(x))) {
+            /* x = 1 for a 2F1 term (|w| = 1, p == q == 2): with Re(c-a-b) < 0
+             * every term diverges like (1-x)^(c-a-b), but c-a-b = sum a - sum b
+             * - 1 is the SAME for every term, so the divergent parts cancel when
+             * G is finite there and G(1) is the sum of the regular parts,
+             *   2F1~(a,b;c;1-) -> Gamma(c-a-b) / (Gamma(c-a) Gamma(c-b)).
+             * The singular coefficients Gamma(a+b-c)/(Gamma(a)Gamma(b)) are
+             * summed alongside (into `sing`) and checked to cancel. */
+            acb_t s1, s2;
+            acb_init(s1); acb_init(s2);
+            acb_sub(s1, l, u, wp); acb_sub(s1, s1, u + 1, wp);      /* c-a-b */
+            acb_gamma(t, s1, wp);
+            acb_sub(s2, l, u, wp); acb_rgamma(s2, s2, wp); acb_mul(t, t, s2, wp);
+            acb_sub(s2, l, u + 1, wp); acb_rgamma(s2, s2, wp); acb_mul(t, t, s2, wp);
+            acb_neg(s1, s1); acb_gamma(s1, s1, wp);                  /* G(a+b-c) */
+            acb_rgamma(s2, u, wp); acb_mul(s1, s1, s2, wp);
+            acb_rgamma(s2, u + 1, wp); acb_mul(s1, s1, s2, wp);
+            acb_mul(s1, s1, C, wp);
+            acb_mul(s2, B + h, logw, wp); acb_exp(s2, s2, wp);
+            acb_mul(s1, s1, s2, wp);
+            acb_add(sing, sing, s1, wp);
+            acb_clear(s1); acb_clear(s2);
+        }
+        acb_mul(C, C, t, wp);
+        acb_mul(t, B + h, logw, wp);
+        acb_exp(t, t, wp);
+        acb_mul(C, C, t, wp);
+        acb_add(res, res, C, wp);
+    }
+    /* The x = 1 regular-part route is only right when the divergent parts
+     * cancel: a sum of singular coefficients that is not (within its own
+     * error ball) zero is a genuine singularity of G. */
+    if (!acb_is_zero(sing)) {
+        arb_t ms, mr; arb_init(ms); arb_init(mr);
+        acb_abs(ms, sing, 64); acb_abs(mr, res, 64);
+        if (!acb_contains_zero(sing) &&
+            !(arf_cmpabs_2exp_si(arb_midref(ms), arf_abs_bound_lt_2exp_si(arb_midref(mr)) - wp / 2) < 0))
+            acb_indeterminate(res);
+        arb_clear(ms); arb_clear(mr);
+    }
+    acb_clear(C); acb_clear(t); acb_clear(x); acb_clear(pi); acb_clear(w); acb_clear(sing);
+    _acb_vec_clear(u, (slong)(p ? p : 1));
+    _acb_vec_clear(l, (slong)(q ? q : 1));
+}
+
+/* One evaluation at working precision wp, with the log-case perturbation
+ * eps = 2^-E (E ignored when there is no log case). *logc reports whether the
+ * log case applies. Returns 0 when the inputs do not load or no expansion
+ * applies (p == q >= 3 with |w| = 1). */
+static int mg_eval_at(const MgSrc* s, slong wp, slong E, acb_t res, int* logc) {
+    size_t p = s->p, q = s->q, mx = (p > q ? p : q) + 1;
+    acb_ptr A = _acb_vec_init((slong)mx), B = _acb_vec_init((slong)mx);
+    acb_ptr A2 = _acb_vec_init((slong)mx), B2 = _acb_vec_init((slong)mx);
+    acb_t logw, t, eps;
+    acb_init(logw); acb_init(t); acb_init(eps);
+    int ok = 0;
+    *logc = 0;
+    if (!mg_load(s, A, B, logw, wp)) goto out;
+    /* Which expansion: by p vs q, and by |w| when p == q. */
+    int dual;
+    if (p < q) dual = 0;
+    else if (p > q) dual = 1;
+    else if (arb_is_negative(acb_realref(logw))) dual = 0;
+    else if (arb_is_positive(acb_realref(logw))) dual = 1;
+    else {
+        if (p > 2) goto out;      /* |w| ~ 1, pF(p-1) with p >= 3: no continuation */
+        dual = 0;
+    }
+    size_t n2, p2, m2, q2;
+    if (!dual) {
+        n2 = s->n; p2 = p; m2 = s->m; q2 = q;
+        for (size_t j = 0; j < p; j++) acb_set(A2 + j, A + j);
+        for (size_t j = 0; j < q; j++) acb_set(B2 + j, B + j);
+    } else {
+        n2 = s->m; p2 = q; m2 = s->n; q2 = p;
+        for (size_t j = 0; j < q; j++) { acb_neg(A2 + j, B + j); acb_add_si(A2 + j, A2 + j, 1, wp); }
+        for (size_t j = 0; j < p; j++) { acb_neg(B2 + j, A + j); acb_add_si(B2 + j, B2 + j, 1, wp); }
+        acb_neg(logw, logw);
+    }
+    /* Log case: integer-differing b's among the first m2. */
+    for (size_t h = 0; h < m2 && !*logc; h++)
+        for (size_t j = h + 1; j < m2 && !*logc; j++) {
+            acb_sub(t, B2 + j, B2 + h, wp);
+            if (acb_contains_int(t)) *logc = 1;
+        }
+    slong wpe = wp;
+    if (*logc) {
+        /* (m2 - 1) E absorbs the cancelling eps^-(m2-1) poles of the pi/sin
+         * factors; a further 2 E covers a lower parameter 1 + b_h - b_j that was
+         * an exact non-positive integer and is now eps away from one (the
+         * regularized pFq is continuous there, but arb evaluates it as
+         * pFq / Gamma(l) with ~E bits cancelling). */
+        wpe = wp + (slong)(m2 + 1) * E;
+        acb_one(eps); acb_mul_2exp_si(eps, eps, -E);
+        for (size_t j = 0; j < m2; j++) {
+            acb_mul_si(t, eps, (slong)(j + 1), wpe);
+            acb_add(B2 + j, B2 + j, t, wpe);
+        }
+    }
+    mg_slater(res, A2, n2, p2, B2, m2, q2, logw, wpe);
+    ok = 1;
+out:
+    acb_clear(logw); acb_clear(t); acb_clear(eps);
+    _acb_vec_clear(A, (slong)mx); _acb_vec_clear(B, (slong)mx);
+    _acb_vec_clear(A2, (slong)mx); _acb_vec_clear(B2, (slong)mx);
+    return ok;
+}
+
+/* The ladder. Returns 1 with `res` holding a ball certified to `outb` relative
+ * bits (or containing zero, or the best reached), 0 when the value does not
+ * exist or the inputs are not numeric.
+ *
+ * In the log case arb's ball does NOT cover the perturbation error, which is
+ * O(eps |dG/db|) and can dwarf a small G (MeijerG[{{2,4,31},{3}},{{1.5},
+ * {0.1,5}},3] = 1.25e-28 is a sum of terms ~1e-12). So two perturbations are
+ * compared, eps and eps 2^-D: their difference estimates the error of the
+ * second, and E grows by the measured shortfall until they agree to outb bits. */
+static int mg_run(const MgSrc* s, slong outb, acb_t res) {
+    acb_t R2, d;
+    acb_init(R2); acb_init(d);
+    int ok = 0, logc = 0, blowups = 0;
+    slong wp = outb + NB_GUARD;
+    slong E = outb + MG_EPS_GUARD;
+    for (int attempt = 0; attempt < MG_MAX_ATTEMPTS; attempt++) {
+        if (!mg_eval_at(s, wp, E, res, &logc)) break;
+        if (!acb_is_finite(res)) {
+            /* A genuine pole stays one; a ball that merely blew up (Gamma near
+             * a pole at low precision) is retried at higher precision. */
+            if (++blowups > 2) break;
+            wp *= 2;
+            continue;
+        }
+        if (acb_is_zero(res)) { ok = 1; break; }
+        /* First the ball: arb's own error bound must reach the target. */
+        slong acc = acb_contains_zero(res) ? -wp : acb_rel_accuracy_bits(res);
+        if (acc < outb + 4) {
+            ok = 1;                      /* best so far, if attempts run out */
+            slong step = outb + 4 - acc;
+            wp += (step < 32 ? 32 : step) + wp / 4;
+            continue;
+        }
+        ok = 1;
+        if (!logc) break;
+        /* Then the perturbation (log case): compare eps and eps 2^-D. */
+        slong D = outb / 2 + 32;
+        if (!mg_eval_at(s, wp, E + D, R2, &logc) || !acb_is_finite(R2)) break;
+        slong acc2 = acb_contains_zero(R2) ? -wp : acb_rel_accuracy_bits(R2);
+        acb_sub(d, res, R2, wp);
+        acb_swap(res, R2);
+        if (acc2 < outb + 4) { wp += outb + 4 - acc2 + 32; continue; }
+        arb_t ad, ar; arb_init(ad); arb_init(ar);
+        acb_abs(ad, d, 64); acb_abs(ar, res, 64);
+        double lad = arf_get_d(arb_midref(ad), ARF_RND_UP);
+        double lar = arf_get_d(arb_midref(ar), ARF_RND_DOWN);
+        arb_clear(ad); arb_clear(ar);
+        if (!(lad > 0) || !(lar > 0)) break;          /* identical: converged */
+        double agree = log2(lar / lad);               /* bits of the eps result */
+        if (agree + (double)D >= (double)outb + 4) break;
+        E += (slong)((double)outb + 8 - agree);       /* error is O(eps) */
+    }
+    acb_clear(R2); acb_clear(d);
+    return ok;
+}
+
+/* Gauss 2F1(a, b; c; z) at arbitrary precision: acb_hypgeom_2f1, which applies
+ * the linear-fractional transformations (z -> 1-z, 1/z, z/(z-1), ...) that a
+ * direct series lacks -- the MPFR series HypergeometricPFQ used before needs
+ * O(1/(1-|z|)) terms, so 2F1 at |z| = 0.99 cost ~60 ms at 50 digits. Same
+ * precision ladder as the other kernels; NULL for non-numeric input, a pole
+ * (c a non-positive integer), or a non-finite value. */
+Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z) {
+    const Expr* args[4] = { a, b, c, z };
+    slong outb = pick_out_bits(args, 4);
+    acb_t A, B, C, Z, R;
+    acb_init(A); acb_init(B); acb_init(C); acb_init(Z); acb_init(R);
+    Expr* out = NULL;
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (outb + NB_GUARD) << attempt;
+        if (!expr_to_acb(a, A, wp) || !expr_to_acb(b, B, wp) ||
+            !expr_to_acb(c, C, wp) || !expr_to_acb(z, Z, wp)) break;
+        acb_hypgeom_2f1(R, A, B, C, Z, 0, wp);
+        if (nb_should_retry(R, outb, attempt)) continue;
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    acb_clear(A); acb_clear(B); acb_clear(C); acb_clear(Z); acb_clear(R);
+    return out;
+}
+
+Expr* flint_num_meijerg(const Expr* const* a, size_t n, size_t p,
+                        const Expr* const* b, size_t m, size_t q,
+                        const Expr* z, const Expr* r) {
+    if (n > p || m > q) return NULL;
+    long best = numeric_min_inexact_bits(z);
+    if (r) { long br = numeric_min_inexact_bits(r); if (br > 0 && (best == 0 || br < best)) best = br; }
+    for (size_t j = 0; j < p; j++) {
+        long bj = numeric_min_inexact_bits(a[j]);
+        if (bj > 0 && (best == 0 || bj < best)) best = bj;
+    }
+    for (size_t j = 0; j < q; j++) {
+        long bj = numeric_min_inexact_bits(b[j]);
+        if (bj > 0 && (best == 0 || bj < best)) best = bj;
+    }
+    if (best < 53) best = 53;
+    MgSrc s; memset(&s, 0, sizeof s);
+    s.n = n; s.p = p; s.m = m; s.q = q; s.a = a; s.b = b; s.z = z; s.r = r;
+    acb_t R; acb_init(R);
+    Expr* out = NULL;
+    if (mg_run(&s, (slong)best, R)) {
+        slong bits = nb_emit_bits(R, (slong)best);
+        if (bits > 0) out = acb_to_expr(R, bits);
+    }
+    acb_clear(R);
+    return out;
+}
+
+bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
+                     const double* br, const double* bi, size_t m, size_t q,
+                     double r, double zr, double zi,
+                     double* rr, double* ri, bool* is_c) {
+    if (n > p || m > q) return false;
+    MgSrc s; memset(&s, 0, sizeof s);
+    s.n = n; s.p = p; s.m = m; s.q = q;
+    s.ar = ar; s.ai = ai; s.br = br; s.bi = bi; s.r_d = r; s.zr = zr; s.zi = zi;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (mg_run(&s, 53, R)) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        *is_c = !arb_is_zero(acb_imagref(R));
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
 
@@ -533,6 +896,21 @@ Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {
     (void)a; (void)b; (void)z; return NULL;
 }
 Expr* flint_num_struveh(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
+Expr* flint_num_hyp2f1(const Expr* a, const Expr* b, const Expr* c, const Expr* z) {
+    (void)a; (void)b; (void)c; (void)z; return NULL;
+}
+Expr* flint_num_meijerg(const Expr* const* a, size_t n, size_t p,
+                        const Expr* const* b, size_t m, size_t q,
+                        const Expr* z, const Expr* r) {
+    (void)a; (void)n; (void)p; (void)b; (void)m; (void)q; (void)z; (void)r; return NULL;
+}
+bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
+                     const double* br, const double* bi, size_t m, size_t q,
+                     double r, double zr, double zi,
+                     double* rr, double* ri, bool* is_c) {
+    (void)ar; (void)ai; (void)n; (void)p; (void)br; (void)bi; (void)m; (void)q;
+    (void)r; (void)zr; (void)zi; (void)rr; (void)ri; (void)is_c; return false;
+}
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 
 #endif

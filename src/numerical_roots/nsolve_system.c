@@ -216,12 +216,14 @@ static bool build_mult_matrix(int var, const int* B, int d, int nvar,
     return ok;
 }
 
-/* Deterministic small pseudo-random coefficient stream (seeded). */
-static long nsys_rand(unsigned long* state) {
-    *state = *state * 6364136223846793005UL + 1442695040888963407UL;
+/* Deterministic small pseudo-random coefficient stream (seeded). A 64-bit
+ * LCG, so the state is uint64_t: `unsigned long` is only 32 bits on LLP64
+ * Windows, where the `>> 33` would overflow (issue #92). */
+static long nsys_rand(uint64_t* state) {
+    *state = *state * UINT64_C(6364136223846793005) + UINT64_C(1442695040888963407);
     /* small nonzero coefficient in [1, 9] with alternating sign */
-    long v = (long)((*state >> 33) % 9UL) + 1;
-    return ((*state >> 17) & 1UL) ? v : -v;
+    long v = (long)((*state >> 33) % 9u) + 1;
+    return ((*state >> 17) & 1u) ? v : -v;
 }
 
 Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
@@ -344,7 +346,7 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
     mpfr_prec_t wp = (mpfr_prec_t)(target_bits + guard);
 
     /* Generic linear form l = sum c_i x_i ; M_l = sum c_i M_{x_i} (real). */
-    unsigned long st = seed ? seed : 1234UL;
+    uint64_t st = seed ? (uint64_t)seed : 1234u;
     long* cform = (long*)malloc(sizeof(long) * (size_t)nvar);
     for (int i = 0; i < nvar; i++) cform[i] = nsys_rand(&st);
 

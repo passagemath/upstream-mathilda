@@ -32,6 +32,7 @@
 #include "glayout.h"
 #include "sym_names.h"
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -560,7 +561,9 @@ static int layout_stress(const Sub* s, double* xy) {
             double* alt = malloc(sizeof(double) * 2 * (size_t)n);
             double* cand = malloc(sizeof(double) * 2 * (size_t)n * (size_t)(nall + 1));
             double* st = malloc(sizeof(double) * (size_t)(nall + 1));
-            long* cr = malloc(sizeof(long) * (size_t)(nall + 1));
+            /* crossing counts, with 2^40 as "not computed": int64_t, since
+             * `long` is 32-bit on LLP64 Windows (issue #92) */
+            int64_t* cr = malloc(sizeof(int64_t) * (size_t)(nall + 1));
             int* order = malloc(sizeof(int) * (size_t)n);
             int* sc = malloc(sizeof(int) * 5 * (size_t)n);
             unsigned char* pin = malloc((size_t)n);
@@ -576,7 +579,7 @@ static int layout_stress(const Sub* s, double* xy) {
                         int len = shortest_cycle_through(s, v, order, sc, sc + n, sc + 2 * n, sc + 3 * n);
                         int raw = nstart + 1 + (k - ncirc);
                         if (len < 3) {
-                            st[k + 1] = st[raw] = 1e300; cr[k + 1] = cr[raw] = 1L << 40;
+                            st[k + 1] = st[raw] = 1e300; cr[k + 1] = cr[raw] = (int64_t)1 << 40;
                             continue;
                         }
                         tutte_start(s, order, len, alt, pin);
@@ -606,7 +609,7 @@ static int layout_stress(const Sub* s, double* xy) {
                  * (Tutte-derived) drawing may cost up to 2.5x the stress, but
                  * only when it removes many crossings (a dodecahedron's ten,
                  * not a cube's two -- the Necker cube is the textbook cube). */
-                long crbest = 1L << 40;
+                int64_t crbest = (int64_t)1 << 40;
                 for (int k = 0; k <= nall; k++)
                     if (st[k] <= best * (1 + 1e-9) && cr[k] < crbest) crbest = cr[k];
                 int planar_ok = crbest >= 4 && crbest * 6 >= s->m;

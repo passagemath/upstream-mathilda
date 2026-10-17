@@ -584,6 +584,11 @@ the baselines only after an *intended* performance change.
   MSYS2/UCRT64 leg of the CI workflow is the authoritative real compile.
   `TimeConstrained` on Windows is cooperative-only (no async SIGPROF); threads
   are off. See `docs/building.md` (§Windows).
+  Windows is also **LLP64**: `long` is 32 bits there, so `long` must never
+  stand in for a 64-bit type (`1L << 40`, `(long)d << 32`, a 64-bit LCG
+  constant spelled `...UL`) — use `int64_t`/`uint64_t` with
+  `INT64_C`/`UINT64_C`. Only the MinGW leg's `-Wshift-count-overflow` sees it
+  (issue #92); `make check-c99` flags the three spellings locally.
 - **Memory safety.** Trace ownership; valgrind regularly. See §4.
 - **GMP-ECM is a system dependency**, not vendored — do not re-add it to the
   tree.

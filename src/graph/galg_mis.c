@@ -480,15 +480,17 @@ static int gm_greedy(const GalgUG* u, const int* vs, int k, int* out, char* dead
     /* lazy binary min-heap of (deg, v) */
     long hc = (long)k + 1, hn = 0;
     for (int i = 0; i < k; i++) { int v = vs[i]; hc += u->off[v + 1] - u->off[v]; }
-    long* hk = malloc((size_t)hc * sizeof(long));
+    /* heap key = deg << 32 | v: needs 64 bits, not `long` (32-bit on LLP64
+     * Windows, issue #92) */
+    int64_t* hk = malloc((size_t)hc * sizeof(int64_t));
     if (!hk) return 0;
     for (int i = 0; i < k; i++) { int v = vs[i]; degw[v] = u->off[v + 1] - u->off[v]; dead[v] = 0; }
-#define GM_HPUSH(key) do { long x_ = (key), i_ = hn++; \
+#define GM_HPUSH(key) do { int64_t x_ = (key); long i_ = hn++; \
         while (i_ > 0 && hk[(i_ - 1) / 2] > x_) { hk[i_] = hk[(i_ - 1) / 2]; i_ = (i_ - 1) / 2; } \
         hk[i_] = x_; } while (0)
-    for (int i = 0; i < k; i++) GM_HPUSH(((long)degw[vs[i]] << 32) | vs[i]);
+    for (int i = 0; i < k; i++) GM_HPUSH(((int64_t)degw[vs[i]] << 32) | vs[i]);
     while (hn > 0) {
-        long top = hk[0], last = hk[--hn];
+        int64_t top = hk[0], last = hk[--hn];
         long i = 0;
         for (;;) {
             long c = 2 * i + 1;
@@ -498,7 +500,7 @@ static int gm_greedy(const GalgUG* u, const int* vs, int k, int* out, char* dead
             hk[i] = hk[c]; i = c;
         }
         if (hn > 0) hk[i] = last;
-        int v = (int)(top & 0xffffffffL), d = (int)(top >> 32);
+        int v = (int)(top & 0xffffffff), d = (int)(top >> 32);
         if (dead[v] || d != degw[v]) continue;
         out[cnt++] = v;
         dead[v] = 1;
@@ -508,7 +510,7 @@ static int gm_greedy(const GalgUG* u, const int* vs, int k, int* out, char* dead
             dead[x] = 1;
             for (int t = u->off[x]; t < u->off[x + 1]; t++) {
                 int y = u->adj[t];
-                if (!dead[y]) { degw[y]--; GM_HPUSH(((long)degw[y] << 32) | y); }
+                if (!dead[y]) { degw[y]--; GM_HPUSH(((int64_t)degw[y] << 32) | y); }
             }
         }
     }

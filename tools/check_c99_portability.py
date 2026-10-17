@@ -55,6 +55,13 @@ lists those symbols; a use is accepted inside an `_WIN32` conditional or given a
 Windows alias via `#define` there. The authoritative gate is the MSYS2 CI leg,
 which compiles; this is the cheap local tripwire.
 
+A fifth check covers the other Windows axis, the data model: native Windows is
+LLP64, so `long` is 32 bits there and 64 on macOS/Linux. Code that uses `long`
+as a 64-bit type (`1L << 40`, `(long)d << 32`, a 64-bit LCG constant written
+`...UL`) overflows only on Windows, where GCC's -Wshift-count-overflow is the
+sole symptom (issue #92). `LLP64_RE` flags those spellings; the fix is
+`int64_t`/`uint64_t` with `INT64_C`/`UINT64_C`.
+
 Run via `make check-c99`; it exits nonzero and names every offending file.
 
 Scope
@@ -224,6 +231,23 @@ MINGW_CALL_RE = {
     sym: re.compile(r"(?<![\w.])(?<!->)\b" + sym + r"\s*\(")
     for sym in MINGW_MISSING_FUNCS
 }
+# LLP64: `long` is 32 bits on native Windows (and 64 on macOS/Linux), so code
+# that treats it as a 64-bit type is silently wrong only there -- GCC's
+# -Wshift-count-overflow fires on the MinGW leg alone (issue #92). Flag the
+# three spellings that assumption takes: a `long` literal shifted by >= 32
+# (`1L << 40`), a `(long)` cast shifted by >= 32 (`(long)deg << 32`), and an
+# `unsigned long` literal too wide for 32 bits (a 64-bit LCG multiplier written
+# `...UL`). Use int64_t/uint64_t (with INT64_C/UINT64_C) instead. `long long`
+# (`LL`, `(long long)`) is at least 64 bits everywhere and is not flagged.
+_SHIFT_GE32 = r"<<\s*(?:3[2-9]|[4-6]\d)\b"
+LLP64_RE = (
+    ("`long` literal shifted by >= 32",
+     re.compile(r"\b\d+(?:[uU][lL]|[lL][uU]?)(?![lLuU\w])\s*" + _SHIFT_GE32)),
+    ("`(long)` cast shifted by >= 32",
+     re.compile(r"\(\s*(?:unsigned\s+)?long\s*\)[^;]*?" + _SHIFT_GE32)),
+    ("`unsigned long` literal wider than 32 bits",
+     re.compile(r"\b(?:0[xX][0-9a-fA-F]{9,}|\d{11,})(?:[uU][lL]|[lL][uU])(?![lL\w])")),
+)
 CPP_DIRECTIVE_RE = re.compile(r"^\s*#\s*(\w+)(.*)$")
 CPP_DEFINE_RE = re.compile(r"^\s*#\s*define\s+([A-Za-z_]\w*)")
 
@@ -460,6 +484,16 @@ def scan_mingw(text):
     return sorted(offenders)
 
 
+def scan_llp64(text):
+    """Return the sorted `(line, kind)` LLP64 `long`-is-64-bit uses in `text`."""
+    hits = set()
+    for idx, line in enumerate(text.splitlines()):
+        for kind, rx in LLP64_RE:
+            if rx.search(line):
+                hits.add((idx + 1, kind))
+    return sorted(hits)
+
+
 def scan_wide_int_family(text):
     """Return the sorted `long long` checked-int helpers called in `text`."""
     return sorted(sym for sym in WIDE_INT_FAMILY if WIDE_INT_RE[sym].search(text))
@@ -492,6 +526,7 @@ def main():
     wide_offenders = []
     stream_offenders = []
     mingw_offenders = []
+    llp64_offenders = []
 
     for path in source_files(repo_root):
         raw = read(repo_root, path)
@@ -526,8 +561,13 @@ def main():
             if mingw:
                 mingw_offenders.append((path, mingw))
 
+            llp64 = scan_llp64(text)
+            if llp64:
+                llp64_offenders.append((path, llp64))
+
     if not (const_offenders or func_offenders or late_offenders
-            or wide_offenders or stream_offenders or mingw_offenders):
+            or wide_offenders or stream_offenders or mingw_offenders
+            or llp64_offenders):
         return 0
 
     if const_offenders:
@@ -613,9 +653,23 @@ def main():
             sys.stderr.write("  %s  (%s)\n" % (path, ", ".join(syms)))
         sys.stderr.write("\n")
 
+    if llp64_offenders:
+        sys.stderr.write(
+            "error: `long` treated as a 64-bit type. It is 32 bits on native\n"
+            "       Windows (LLP64), so the shift overflows / the constant is\n"
+            "       truncated there while macOS and Linux compile it clean\n"
+            "       (issue #92). Use int64_t / uint64_t, with INT64_C/UINT64_C\n"
+            "       for literals:\n\n"
+        )
+        for path, hits in llp64_offenders:
+            for line, kind in hits:
+                sys.stderr.write("  %s:%d  %s\n" % (path, line, kind))
+        sys.stderr.write("\n")
+
     total = len(set(p for p, _ in
                     const_offenders + func_offenders + late_offenders
-                    + wide_offenders + stream_offenders + mingw_offenders))
+                    + wide_offenders + stream_offenders + mingw_offenders
+                    + llp64_offenders))
     sys.stderr.write("%d file(s) affected.\n" % total)
     return 1
 

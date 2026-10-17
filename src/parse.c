@@ -1083,7 +1083,11 @@ static OperatorDef get_operator(const char* pos) {
          * string) by the binary loop, not parsed as an expression. */
         def.type = OP_MESSAGENAME; def.prec = 8600; def.head_name = "MessageName"; def.len = 2;
     } else if (*pos == ':') {
-        def.type = OP_COLON; def.prec = 1900; def.right_assoc = 1; def.head_name = "Optional"; def.len = 1;
+        /* `:` is Pattern (sym:p) or Optional (p:v); which one -- and so its
+         * precedence -- depends on the LEFT operand, so the binary loop
+         * re-rates it once `left` is known (see the OP_COLON fix-up there).
+         * The value here is only the Pattern rating. */
+        def.type = OP_COLON; def.prec = 2200; def.right_assoc = 0; def.head_name = "Pattern"; def.len = 1;
     } else if (strncmp(pos, "=.", 2) == 0 && !isdigit((unsigned char)pos[2])) {
         /* Unset (postfix `lhs =.`). Guarded against `=.5` etc. (a real
          * literal on the RHS of Set) by requiring the char after `.` not be
@@ -1490,6 +1494,21 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         const char* tight_end = s->pos;
         skip_whitespace(s);
         OperatorDef op_def = get_operator(s->pos);
+
+        /* `:` precedence is context-dependent, mirroring Mathematica
+         * (Pattern 150 > Optional 140 > StringExpression 135 > Condition 130):
+         *   sym : p   Pattern  2200 -- above `~~` (2100), below `|` (2300) and
+         *                              `..` (2500), so `x:a|b`, `x:p..` bind
+         *                              into the pattern while `x:a ~~ b` and
+         *                              `a ~~ x:b` split at `~~`;
+         *   p : v     Optional 2150 -- below Pattern, so `x:_:1` is
+         *                              Optional[Pattern[x,_],1] and
+         *                              `a:b:c:d` is Optional[a:b, c:d].
+         * Both are left-associative (right operand at prec+1). */
+        if (op_def.type == OP_COLON && left->type != EXPR_SYMBOL) {
+            op_def.prec = 2150;
+            op_def.head_name = "Optional";
+        }
         
         // Handle implicit multiplication: if no explicit operator but another expression follows
         // (an association literal `<|...|>` begins with `<|`, which is not a
@@ -1807,12 +1826,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_REPLACEREPEATED) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), args, 2);
-        } else if (op_def.type == OP_ALTERNATIVES) {
-            Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol(SYM_Alternatives), args, 2);
-        } else if (op_def.type == OP_STRINGEXPRESSION) {
-            Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol(SYM_StringExpression), args, 2);
+        } else if (op_def.type == OP_ALTERNATIVES || op_def.type == OP_STRINGEXPRESSION) {
+            /* a | b | c and a ~~ b ~~ c parse n-ary, as in Mathematica, so a
+             * held pattern is Alternatives[a, b, c] rather than a nested pair. */
+            if (!extend_flat_head(left, op_def.head_name, right)) {
+                Expr* args[2] = { left, right };
+                left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
+            }
         } else if (op_def.type == OP_CONDITION) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_Condition), args, 2);
@@ -1875,7 +1895,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             else if (op_def.head_name &&
                 (strcmp(op_def.head_name, "Plus") == 0 ||
                  strcmp(op_def.head_name, "Times") == 0 ||
-                 strcmp(op_def.head_name, "NonCommutativeMultiply") == 0) &&
+                 strcmp(op_def.head_name, "NonCommutativeMultiply") == 0 ||
+                 strcmp(op_def.head_name, "StringJoin") == 0) &&
                 extend_flat_head(left, op_def.head_name, right)) {
                 /* left was extended in place */
             } else {

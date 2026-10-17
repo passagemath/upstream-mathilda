@@ -4088,7 +4088,7 @@ Expr* builtin_tostring(Expr* res) {
     if (argc < 1 || argc > 2) return NULL;
 
     Expr* expr = res->data.function.args[0];
-    const char* form_name = SYM_InputForm;
+    const char* form_name = SYM_OutputForm;     /* Mathematica's default */
 
     if (argc == 2) {
         Expr* form_arg = res->data.function.args[1];
@@ -4105,9 +4105,12 @@ Expr* builtin_tostring(Expr* res) {
         Expr* wrapper = expr_new_function(expr_new_symbol(SYM_TeXForm), inner, 1);
         str = expr_to_string(wrapper);
         expr_free(wrapper);
+    } else if (form_name == SYM_OutputForm) {
+        /* A string is its own OutputForm: no render, no quotes. */
+        if (expr->type == EXPR_STRING) return expr_copy(expr);
+        str = expr_to_string_outputform(expr);
     } else if (form_name == SYM_InputForm
-               || strcmp(form_name, "StandardForm") == 0
-               || strcmp(form_name, "OutputForm") == 0) {
+               || strcmp(form_name, "StandardForm") == 0) {
         str = expr_to_string(expr);
     } else {
         return NULL;

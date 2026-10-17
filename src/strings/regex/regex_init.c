@@ -50,6 +50,7 @@ void regex_init(void) {
 
     symtab_add_builtin("StringMatchQ", builtin_stringmatchq);
     symtab_get_def("StringMatchQ")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringMatchQ");
 
     symtab_add_builtin("StringCases", builtin_stringcases);
     symtab_get_def("StringCases")->attributes |= ATTR_PROTECTED;
@@ -83,6 +84,7 @@ void regex_init(void) {
 
     symtab_add_builtin("StringTrim", builtin_stringtrim);
     symtab_get_def("StringTrim")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringTrim");
 
     symtab_add_builtin("StringExtract", builtin_stringextract);
     symtab_get_def("StringExtract")->attributes |= ATTR_PROTECTED;
@@ -131,6 +133,16 @@ void regex_init(void) {
         "StartOfString\n\tA zero-width string pattern matching the start of the whole string.");
     register_inert("EndOfString",
         "EndOfString\n\tA zero-width string pattern matching the end of the whole string.");
+    register_inert("HexadecimalCharacter",
+        "HexadecimalCharacter\n\tA string pattern matching a hexadecimal digit 0-9, a-f, A-F.");
+    register_inert("PunctuationCharacter",
+        "PunctuationCharacter\n\tA string pattern matching a punctuation character.");
+    register_inert("StartOfLine",
+        "StartOfLine\n\tA zero-width string pattern matching the start of a line.");
+    register_inert("EndOfLine",
+        "EndOfLine\n\tA zero-width string pattern matching the end of a line.");
+    register_inert("WordBoundary",
+        "WordBoundary\n\tA zero-width string pattern matching a boundary between word and non-word characters.");
     register_inert("IgnoreCase", NULL);
     register_inert("Overlaps", NULL);
 

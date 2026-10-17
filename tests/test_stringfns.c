@@ -104,9 +104,12 @@ static void test_cases_ignorecase(void) {
 }
 
 static void test_cases_rule_with_options(void) {
-    /* $0 (whole match) under an overlapping scan. */
-    assert_eval_eq("StringCases[\"AAAA\", \"AA\" -> \"$0!\", Overlaps -> True]",
+    /* $0 (whole match) under an overlapping scan. $n is a template only for a
+     * RegularExpression pattern; for any other pattern "$0" is literal text. */
+    assert_eval_eq("StringCases[\"AAAA\", RegularExpression[\"AA\"] -> \"$0!\", Overlaps -> True]",
                    "{\"AA!\", \"AA!\", \"AA!\"}", 0);
+    assert_eval_eq("StringCases[\"AAAA\", \"AA\" -> \"$0!\", Overlaps -> True]",
+                   "{\"$0!\", \"$0!\", \"$0!\"}", 0);
     /* Numbered capture groups survive the shared capture pool. */
     assert_eval_eq("StringCases[\"a1b22\", "
                    "RegularExpression[\"([a-z])(\\\\d+)\"] -> \"$2$1\"]",
@@ -315,12 +318,12 @@ static void test_trim_pattern(void) {
     /* Multi-character alternative repeated at both ends: ("+" | "-") ... */
     assert_eval_eq("StringTrim[\"++++aaa bbb ccc----\", (\"+\" | \"-\") ...]",
                    "\"aaa bbb ccc\"", 0);
-    /* A literal single-character pattern is stripped to a fixed point. */
-    assert_eval_eq("StringTrim[\"xxabcxx\", \"x\"]", "\"abc\"", 0);
+    /* One match is removed at each end (Mathematica), not a fixed point. */
+    assert_eval_eq("StringTrim[\"xxabcxx\", \"x\"]", "\"xabcx\"", 0);
     /* Character-class Repeated strips digit runs from both ends. */
     assert_eval_eq("StringTrim[\"007bond007\", DigitCharacter ..]", "\"bond\"", 0);
     /* Interior matches are left untouched; only the ends are trimmed. */
-    assert_eval_eq("StringTrim[\"xxaxbxx\", \"x\"]", "\"axb\"", 0);
+    assert_eval_eq("StringTrim[\"xxaxbxx\", \"x\"]", "\"xaxbx\"", 0);
 }
 
 static void test_trim_regex_front_only(void) {
@@ -330,9 +333,10 @@ static void test_trim_regex_front_only(void) {
 }
 
 static void test_trim_thread(void) {
-    /* Threads over a list of strings; non-string elements pass through. */
+    /* Threads over a list of strings; a non-string element is an error
+     * (StringTrim::strse) and leaves the call unevaluated, as in Mathematica. */
     assert_eval_eq("StringTrim[{\"  a  \", \"  b  \"}]", "{\"a\", \"b\"}", 0);
-    assert_eval_eq("StringTrim[{\"  a  \", 5, x}]", "{\"a\", 5, x}", 0);
+    assert_eval_eq("StringTrim[{\"  a  \", 5, x}]", "StringTrim[{\"  a  \", 5, x}]", 0);
 }
 
 static void test_trim_unevaluated(void) {
@@ -423,6 +427,380 @@ static void test_extract_unevaluated(void) {
 
 #endif /* USE_REGEX */
 
+#ifdef USE_REGEX
+static void test_issue98_named_captures(void) {
+    /* Issue #98 and its family: pattern names bound into a rule RHS
+     * (StringCases / StringReplace / StringSplit); a non-string StringReplace
+     * value gives a StringExpression; $n templates only for RegularExpression.
+     * Expected values from Mathematica 14. */
+    assert_eval_eq("StringCases[\"abc123\", (x__ ~~ \"123\") :> x]",
+                   "{\"abc\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", a__ ~~ \"3\" :> {a}]",
+                   "{{\"abc12\"}}", 0);
+    assert_eval_eq("StringCases[\"xabc123\", \"x\" ~~ a__ ~~ \"123\" :> {a}]",
+                   "{{\"abc\"}}", 0);
+    assert_eval_eq("StringCases[\"abc123\", x_ ~~ \"123\" :> x]",
+                   "{\"c\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", a:LetterCharacter.. :> f[a]]",
+                   "{f[\"abc\"]}", 0);
+    assert_eval_eq("StringCases[\"abc123\", a:LetterCharacter.. :> 7]",
+                   "{7}", 0);
+    assert_eval_eq("StringCases[\"abc123\", a:LetterCharacter.. -> {a}]",
+                   "{{\"abc\"}}", 0);
+    assert_eval_eq("StringCases[\"a1b22c333\", x:DigitCharacter.. :> ToExpression[x]]",
+                   "{1, 22, 333}", 0);
+    assert_eval_eq("StringCases[\"a1b22c333\", x:DigitCharacter.. :> StringLength[x]]",
+                   "{1, 2, 3}", 0);
+    assert_eval_eq("StringReplace[\"abc123\", a__ ~~ \"123\" :> a <> \"!\"]",
+                   "\"abc!\"", 0);
+    assert_eval_eq("StringReplace[\"abc123\", x:DigitCharacter :> f[x]]",
+                   "\"abc\"~~f[\"1\"]~~f[\"2\"]~~f[\"3\"]", 0);
+    assert_eval_eq("StringReplace[\"abc123\", x:DigitCharacter :> ToExpression[x]]",
+                   "\"abc\"~~1~~2~~3", 0);
+    assert_eval_eq("StringReplace[\"abc\", \"b\" -> \"$0\"]",
+                   "\"a$0c\"", 0);
+    assert_eval_eq("StringReplace[\"abc\", RegularExpression[\"(b)\"] -> \"<$1>\"]",
+                   "\"a<b>c\"", 0);
+    assert_eval_eq("StringReplace[\"abc\", RegularExpression[\"b\"] -> \"$0$0\"]",
+                   "\"abbc\"", 0);
+    assert_eval_eq("StringCases[\"abc\", x_ ~~ \"c\" -> \"$1\"]",
+                   "{\"$1\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", RegularExpression[\"(.)c\"] -> \"$1\"]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", RegularExpression[\"(.)c\"] :> \"$1\"]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"ab\", (x:\"a\") | \"b\" :> {x}]",
+                   "{{\"a\"}, {\"\"}}", 0);
+    assert_eval_eq("StringCases[\"ab\", (x:\"a\") | (y:\"b\") :> {x, y}]",
+                   "{{\"a\", \"\"}, {\"\", \"b\"}}", 0);
+    assert_eval_eq("StringSplit[\"a-1b-2c\", \"-\" ~~ x:DigitCharacter :> x]",
+                   "{\"a\", \"1\", \"b\", \"2\", \"c\"}", 0);
+    assert_eval_eq("StringSplit[\"a-1b-2c\", \"-\" ~~ x:DigitCharacter :> f[x]]",
+                   "{\"a\", f[\"1\"], \"b\", f[\"2\"], \"c\"}", 0);
+    assert_eval_eq("StringSplit[\"a1b2c\", x:DigitCharacter :> ToExpression[x]]",
+                   "{\"a\", 1, \"b\", 2, \"c\"}", 0);
+    assert_eval_eq("StringCases[\"abc123def45\", x:LetterCharacter.. ~~ y:DigitCharacter.. :> {x, y}]",
+                   "{{\"abc\", \"123\"}, {\"def\", \"45\"}}", 0);
+    assert_eval_eq("StringReplace[\"aXbXc\", \"X\" :> f[1]]",
+                   "\"a\"~~f[1]~~\"b\"~~f[1]~~\"c\"", 0);
+    assert_eval_eq("StringCases[\"ab\", x_ :> {x}]",
+                   "{{\"a\"}, {\"b\"}}", 0);
+    assert_eval_eq("StringReplace[\"1\", \"1\" :> 5]",
+                   "StringExpression[5]", 0);
+    assert_eval_eq("StringReplace[\"a1\", \"1\" :> 5]",
+                   "\"a\"~~5", 0);
+    assert_eval_eq("StringReplace[\"1\", \"1\" :> \"x\"]",
+                   "\"x\"", 0);
+    assert_eval_eq("StringReplace[\"12\", x:DigitCharacter :> ToExpression[x]]",
+                   "1~~2", 0);
+    assert_eval_eq("StringReplace[\"ab\", \"a\" :> {1}]",
+                   "{1}~~\"b\"", 0);
+    assert_eval_eq("StringReplace[\"ab\", \"a\" :> \"\"]",
+                   "\"b\"", 0);
+    assert_eval_eq("StringReplace[\"ab\", \"a\" :> Sequence[]]",
+                   "\"b\"", 0);
+    assert_eval_eq("StringReplace[{\"a1\", \"b\"}, \"1\" :> 5]",
+                   "{\"a\"~~5, \"b\"}", 0);
+    assert_eval_eq("StringSplit[\"a1b\", \"1\" :> 5]",
+                   "{\"a\", 5, \"b\"}", 0);
+    assert_eval_eq("StringSplit[\"a1b\", x:\"1\" :> {x}]",
+                   "{\"a\", {\"1\"}, \"b\"}", 0);
+    assert_eval_eq("StringCases[\"a1b\", \"1\" :> Sequence[]]",
+                   "{}", 0);
+    assert_eval_eq("StringCases[\"a1b2\", x:DigitCharacter :> Sequence[x, x]]",
+                   "{\"1\", \"1\", \"2\", \"2\"}", 0);
+    assert_eval_eq("StringCases[\"ab\", x_ :> If[x == \"a\", 1, Nothing]]",
+                   "{1}", 0);
+}
+#endif
+
+#ifdef USE_REGEX
+static void test_string_pattern_language(void) {
+    /* The string-pattern language against Mathematica 14: repeated names
+     * (backreferences, also across | and inside ..), Shortest/Longest,
+     * Repeated[p, spec], Condition and PatternTest via callouts, blanks match
+     * newlines (RegularExpression keeps PCRE's .), line anchors, character
+     * classes, StringMatchQ wildcards * and @, StringTrim one match per end,
+     * IgnoreCase. */
+    assert_eval_eq("StringCases[\"ab\", (x:\"a\") | (x:\"b\") :> {x}]",
+                   "{{\"a\"}}", 0);
+    assert_eval_eq("StringMatchQ[\"aa\", (x:\"a\"|\"b\") ~~ x_]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"ab\", (x:\"a\"|\"b\") ~~ x_]",
+                   "False", 0);
+    assert_eval_eq("StringCases[\"aaabbc\", (x:LetterCharacter)..]",
+                   "{\"aaa\", \"bb\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"aaabbc\", (x:LetterCharacter).. :> x]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"aaabbc\", x:(LetterCharacter..)]",
+                   "{\"aaabbc\"}", 0);
+    assert_eval_eq("StringMatchQ[\"abab\", (x:\"ab\")..]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"abab\", x__ ~~ x__]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"abcabc\", x__ ~~ x__]",
+                   "True", 0);
+    assert_eval_eq("StringCases[\"abcabcx\", x__ ~~ x__ :> x]",
+                   "{\"abc\"}", 0);
+    assert_eval_eq("StringCases[\"aXbXc\", Shortest[\"a\" ~~ __ ~~ \"X\"]]",
+                   "{\"aXbX\"}", 0);
+    assert_eval_eq("StringCases[\"aXbXc\", \"a\" ~~ __ ~~ \"X\"]",
+                   "{\"aXbX\"}", 0);
+    assert_eval_eq("StringCases[\"aXbXc\", Longest[\"a\" ~~ __ ~~ \"X\"]]",
+                   "{\"aXbX\"}", 0);
+    assert_eval_eq("StringCases[\"<a><b>\", Shortest[\"<\" ~~ x__ ~~ \">\"] :> x]",
+                   "{\"a\", \"b\"}", 0);
+    assert_eval_eq("StringCases[\"aaaa\", Repeated[\"a\", 2]]",
+                   "{\"aa\", \"aa\"}", 0);
+    assert_eval_eq("StringCases[\"aaaaa\", Repeated[\"a\", {2, 3}]]",
+                   "{\"aaa\", \"aa\"}", 0);
+    assert_eval_eq("StringCases[\"aaaaa\", Repeated[\"a\", {2}]]",
+                   "{\"aa\", \"aa\"}", 0);
+    assert_eval_eq("StringCases[\"aaaaa\", RepeatedNull[\"a\", 2]]",
+                   "{\"aa\", \"aa\", \"a\", \"\"}", 0);
+    assert_eval_eq("StringCases[\"a1b22c333\", x:DigitCharacter.. /; StringLength[x] > 1]",
+                   "{\"22\", \"333\"}", 0);
+    assert_eval_eq("StringCases[\"a1b22c333\", (x:DigitCharacter.. /; StringLength[x] > 1) :> ToExpression[x]]",
+                   "{22, 333}", 0);
+    assert_eval_eq("StringCases[\"a1b22c333\", x:DigitCharacter.. :> ToExpression[x] /; StringLength[x] > 1]",
+                   "{1 /; StringLength[\"1\"] > 1, 22 /; StringLength[\"22\"] > 1, 333 /; StringLength[\"333\"] > 1}", 0);
+    assert_eval_eq("StringCases[\"abc123\", _?DigitQ]",
+                   "{\"1\", \"2\", \"3\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", __?DigitQ]",
+                   "{\"123\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", x_?(# == \"b\" &)]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", x_?(# == \"b\" &) :> x <> x]",
+                   "{\"bb\"}", 0);
+    assert_eval_eq("StringCases[\"abc123\", (x__?LetterQ) ~~ y__ :> {x, y}]",
+                   "{{\"abc\", \"123\"}}", 0);
+    assert_eval_eq("StringCases[\"aB3\", _?UpperCaseQ]",
+                   "{\"B\"}", 0);
+    assert_eval_eq("StringCases[\"aB3\", _?LowerCaseQ]",
+                   "{\"a\"}", 0);
+    assert_eval_eq("StringMatchQ[\"a\\nb\", ___]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"a\\nb\", \"a\" ~~ _ ~~ \"b\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"a\\nb\", RegularExpression[\"a.b\"]]",
+                   "False", 0);
+    assert_eval_eq("StringCases[\"ab\\ncd\", StartOfLine ~~ x_ :> x]",
+                   "{\"a\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"ab\\ncd\", x_ ~~ EndOfLine :> x]",
+                   "{\"b\", \"d\"}", 0);
+    assert_eval_eq("StringCases[\"one two\", WordBoundary ~~ x_ :> x]",
+                   "{\"o\", \" \", \"t\"}", 0);
+    assert_eval_eq("StringCases[\"abcxyz\", CharacterRange[\"a\", \"c\"]..]",
+                   "{\"abc\"}", 0);
+    assert_eval_eq("StringCases[\"0x1fZ\", HexadecimalCharacter..]",
+                   "{\"0\", \"1f\"}", 0);
+    assert_eval_eq("StringCases[\"a,b.c!\", PunctuationCharacter]",
+                   "{\",\", \".\", \"!\"}", 0);
+    assert_eval_eq("StringCases[\"x 1.5 -2 3e5 .7\", NumberString]",
+                   "{\"1.5\", \"-2\", \"3\", \"5\", \".7\"}", 0);
+    assert_eval_eq("StringCases[\"AbC\", \"b\", IgnoreCase -> True]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"a b\", Except[WhitespaceCharacter]..]",
+                   "{\"a\", \"b\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", Except[\"b\"]]",
+                   "{\"a\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", Except[\"b\", LetterCharacter]]",
+                   "{\"a\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"a1b2\", Except[DigitCharacter]..]",
+                   "{\"a\", \"b\"}", 0);
+    assert_eval_eq("StringCases[\"hello world\", WordCharacter..]",
+                   "{\"hello\", \"world\"}", 0);
+    assert_eval_eq("StringCases[\"a  b\\tc\", Whitespace]",
+                   "{\"  \", \"\\t\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", _ ~~ _]",
+                   "{\"ab\"}", 0);
+    assert_eval_eq("StringCases[\"abcd\", {\"ab\", \"bc\", \"cd\"}]",
+                   "{\"ab\", \"cd\"}", 0);
+    assert_eval_eq("StringCases[\"abcd\", \"ab\" | \"bc\" | \"cd\", Overlaps -> True]",
+                   "{\"ab\", \"bc\", \"cd\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", __, Overlaps -> All]",
+                   "{\"abc\", \"ab\", \"a\", \"bc\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringPosition[\"abcabc\", \"bc\"]",
+                   "{{2, 3}, {5, 6}}", 0);
+    assert_eval_eq("StringCount[\"aaaa\", \"aa\"]",
+                   "2", 0);
+    assert_eval_eq("StringCount[\"aaaa\", \"aa\", Overlaps -> True]",
+                   "3", 0);
+    assert_eval_eq("StringCases[\"The cat\", StartOfString ~~ x_ :> x]",
+                   "{\"T\"}", 0);
+    assert_eval_eq("StringCases[\"The cat\", x_ ~~ EndOfString :> x]",
+                   "{\"t\"}", 0);
+    assert_eval_eq("StringReplace[\"a.b\", \".\" -> \"!\"]",
+                   "\"a!b\"", 0);
+    assert_eval_eq("StringReplace[\"a+b\", \"+\" -> \"-\"]",
+                   "\"a-b\"", 0);
+    assert_eval_eq("StringCases[\"a(b)c\", \"(\" ~~ x_ ~~ \")\" :> x]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"x^2\", \"^\"]",
+                   "{\"^\"}", 0);
+    assert_eval_eq("StringCases[\"a\\\\b\", \"\\\\\"]",
+                   "{\"\\\\\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", Alternatives[]]",
+                   "{}", 0);
+    assert_eval_eq("StringCases[\"abc\", RegularExpression[\"(?i)B\"]]",
+                   "{\"b\"}", 0);
+    assert_eval_eq("StringCases[\"ABC\", RegularExpression[\"b\"], IgnoreCase -> True]",
+                   "{\"B\"}", 0);
+    assert_eval_eq("StringCases[\"aaa\", x:\"a\" ~~ y:\"a\" :> {x, y}]",
+                   "{{\"a\", \"a\"}}", 0);
+    assert_eval_eq("StringCases[\"abcd\", (x:\"a\"|\"c\") ~~ y_ :> x <> y]",
+                   "{\"ab\", \"cd\"}", 0);
+    assert_eval_eq("StringReplace[\"hello\", Shortest[x__] ~~ \"l\" :> x]",
+                   "\"helo\"", 0);
+    assert_eval_eq("StringCases[\"aa\", x_ ~~ x_ :> x]",
+                   "{\"a\"}", 0);
+    assert_eval_eq("StringCases[\"ab\", x_ ~~ x_ :> x]",
+                   "{}", 0);
+    assert_eval_eq("StringCases[\"abc\", (x_ ~~ y_) /; x != y :> x <> y]",
+                   "{\"ab\"}", 0);
+    assert_eval_eq("StringCases[\"aabc\", (x_ ~~ y_) /; x != y :> x <> y]",
+                   "{\"ab\"}", 0);
+    assert_eval_eq("StringCases[\"a1\", LetterCharacter ~~ DigitCharacter]",
+                   "{\"a1\"}", 0);
+    assert_eval_eq("StringCases[\"!\\\"#$%&'()*+,-./:;<=>?@[\\\\]^_`{|}~\", PunctuationCharacter]",
+                   "{\"!\", \"\\\"\", \"#\", \"$\", \"%\", \"&\", \"'\", \"(\", \")\", \"*\", \"+\", \",\", \"-\", \".\", \"/\", \":\", \";\", \"<\", \"=\", \">\", \"?\", \"@\", \"[\", \"\\\\\", \"]\", \"^\", \"_\", \"`\", \"{\", \"|\", \"}\", \"~\"}", 0);
+    assert_eval_eq("StringCases[\"a_b-c\", WordCharacter..]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"a b\\tc\\nd\", WhitespaceCharacter]",
+                   "{\" \", \"\\t\", \"\\n\"}", 0);
+    assert_eval_eq("StringCases[\"0123456789abcdefABCDEFgG\", HexadecimalCharacter..]",
+                   "{\"0123456789abcdefABCDEF\"}", 0);
+    assert_eval_eq("StringCases[\"+5 -.5 1. 007 1e3\", NumberString]",
+                   "{\"+5\", \"-.5\", \"1.\", \"007\", \"1\", \"3\"}", 0);
+    assert_eval_eq("StringCases[\"aaa\", \"\"]",
+                   "{\"\", \"\", \"\", \"\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", \"\" ~~ x_ :> x]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"ab\", x___ :> {x}]",
+                   "{{\"ab\"}, {\"\"}}", 0);
+    assert_eval_eq("StringCases[\"aab\", Shortest[x__] :> x]",
+                   "{\"a\", \"a\", \"b\"}", 0);
+    assert_eval_eq("StringCases[\"aabb\", Shortest[a__ ~~ b__] :> {a, b}]",
+                   "{{\"a\", \"a\"}, {\"b\", \"b\"}}", 0);
+    assert_eval_eq("StringCases[\"abc\", x:Repeated[_, {2}] :> x]",
+                   "{\"ab\"}", 0);
+    assert_eval_eq("StringCases[\"aaaa\", (x:\"a\") ~~ (x..) :> x]",
+                   "StringCases[\"aaaa\", x:\"a\"~~x.. :> x]", 0);
+    assert_eval_eq("StringCases[\"abcabc\", (x:(\"a\"|\"b\")) ~~ __ ~~ x :> x]",
+                   "StringCases[\"abcabc\", x:\"a\" | \"b\"~~__~~x :> x]", 0);
+    assert_eval_eq("StringCases[\"x1y22\", (l:LetterCharacter) ~~ (d:DigitCharacter..) /; StringLength[d] == 2 :> l]",
+                   "{\"y\"}", 0);
+    assert_eval_eq("StringCases[\"a1b2\", LetterCharacter ~~ d:DigitCharacter /; ToExpression[d] > 1]",
+                   "{\"b2\"}", 0);
+    assert_eval_eq("StringCases[\"abc\", Except[\"b\"]..]",
+                   "{\"a\", \"c\"}", 0);
+    assert_eval_eq("StringCases[\"one two  three\", Except[\" \"]..]",
+                   "{\"one\", \"two\", \"three\"}", 0);
+    assert_eval_eq("StringReplace[\"a\\nb\", _ -> \"x\"]",
+                   "\"xxx\"", 0);
+    assert_eval_eq("StringSplit[\"a\\nb\\nc\", \"\\n\"]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringSplit[\"a1b2c3\", DigitCharacter]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringSplit[\"a b  c\"]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringSplit[\" a b \", \" \", All]",
+                   "{\"\", \"a\", \"b\", \"\"}", 0);
+    assert_eval_eq("StringSplit[\"a,b;c\", {\",\", \";\"}]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringSplit[\"aXbxc\", \"x\", IgnoreCase -> True]",
+                   "{\"a\", \"b\", \"c\"}", 0);
+    assert_eval_eq("StringCount[\"abcabc\", \"a\" | \"b\"]",
+                   "4", 0);
+    assert_eval_eq("StringPosition[\"abcabc\", \"a\" | \"bc\"]",
+                   "{{1, 1}, {2, 3}, {4, 4}, {5, 6}}", 0);
+    assert_eval_eq("StringPosition[\"aaa\", \"aa\"]",
+                   "{{1, 2}, {2, 3}}", 0);
+    assert_eval_eq("StringPosition[\"aaa\", \"aa\", Overlaps -> False]",
+                   "{{1, 2}}", 0);
+    assert_eval_eq("StringPosition[\"abcabc\", \"bc\", 1]",
+                   "{{2, 3}}", 0);
+    assert_eval_eq("StringMatchQ[\"abc\", \"a*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"abc\", \"a@\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"ABC\", \"abc\", IgnoreCase -> True]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[{\"a1\", \"b\"}, LetterCharacter ~~ DigitCharacter]",
+                   "{True, False}", 0);
+    assert_eval_eq("StringContainsQ[\"abc\", \"B\", IgnoreCase -> True]",
+                   "True", 0);
+    assert_eval_eq("StringStartsQ[\"abc\", \"ab\"]",
+                   "True", 0);
+    assert_eval_eq("StringEndsQ[\"abc\", \"bc\"]",
+                   "True", 0);
+    assert_eval_eq("StringFreeQ[\"abc\", \"d\"]",
+                   "True", 0);
+    assert_eval_eq("StringTrim[\"  ab  \"]",
+                   "\"ab\"", 0);
+    assert_eval_eq("StringTrim[\"xxabxx\", \"x\"]",
+                   "\"xabx\"", 0);
+    assert_eval_eq("StringTrim[\"xxabxx\", \"x\"..]",
+                   "\"ab\"", 0);
+    assert_eval_eq("StringCases[\"The Quick\", CharacterRange[\"A\", \"Z\"]]",
+                   "{\"T\", \"Q\"}", 0);
+    assert_eval_eq("StringMatchQ[\"abc\", \"a\" ~~ \"*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"a*\", \"a\\\\*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"ab\", \"a\\\\*\"]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"abc\", \"a@\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"aBc\", \"a@\"]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"a\", \"a@\"]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"abc\", \"*c\" | \"x\"]",
+                   "True", 0);
+    assert_eval_eq("StringContainsQ[\"abc\", \"a*\"]",
+                   "False", 0);
+    assert_eval_eq("StringCases[\"a*b\", \"a*\"]",
+                   "{\"a*\"}", 0);
+    assert_eval_eq("StringPosition[\"abc\", \"a*\"]",
+                   "{}", 0);
+    assert_eval_eq("StringFreeQ[\"abc\", \"a*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"\", \"*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"ABC\", \"a*\", IgnoreCase -> True]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"a\\nb\", \"a*\"]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"x\", RegularExpression[\"x*\"]]",
+                   "True", 0);
+    assert_eval_eq("StringTrim[\"xxabcxx\", \"x\"]",
+                   "\"xabcx\"", 0);
+    assert_eval_eq("StringTrim[\"x\", \"x\"]",
+                   "\"\"", 0);
+    assert_eval_eq("StringTrim[\"xx\", \"x\"]",
+                   "\"\"", 0);
+    assert_eval_eq("StringTrim[\"xxx\", \"xx\"]",
+                   "\"x\"", 0);
+    assert_eval_eq("StringTrim[\"aba\", \"a\" ~~ ___]",
+                   "\"\"", 0);
+    assert_eval_eq("StringTrim[\" a\\n\"]",
+                   "\"a\"", 0);
+    assert_eval_eq("StringTrim[{\" a \", \"b  \"}]",
+                   "{\"a\", \"b\"}", 0);
+    assert_eval_eq("StringTrim[\"abcab\", \"ab\"]",
+                   "\"c\"", 0);
+    assert_eval_eq("StringTrim[\"abc\", \"\"]",
+                   "\"abc\"", 0);
+    assert_eval_eq("StringTrim[\"123abc456\", DigitCharacter..]",
+                   "\"abc\"", 0);
+    assert_eval_eq("StringTrim[\"abc\", x_ /; x == \"a\"]",
+                   "\"bc\"", 0);
+    assert_eval_eq("StringTrim[\"ABcab\", \"ab\", IgnoreCase -> True]",
+                   "\"c\"", 0);
+}
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
@@ -464,6 +842,8 @@ int main(void) {
     TEST(test_split_thread_and_regex);
     TEST(test_split_unevaluated);
     TEST(test_cases_wl_pattern);
+    TEST(test_issue98_named_captures);
+    TEST(test_string_pattern_language);
 
     TEST(test_trim_whitespace_default);
     TEST(test_trim_pattern);

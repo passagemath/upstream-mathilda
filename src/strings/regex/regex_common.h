@@ -19,26 +19,60 @@
 #include "expr.h"
 #include "regex_engine.h"
 
-/* Largest capture group we ever expose ($0..$63). */
-#define REGEX_MAX_PAIRS 64
-
 /*
  * One compiled pattern, optionally paired with a replacement RHS taken from a
  * Rule/RuleDelayed.  `rhs` is BORROWED from the caller's expression (never
  * owned/freed here); it is NULL for a bare pattern.
  */
+/* A point in a translated pattern where Mathilda code must run mid-match
+ * (emitted as a PCRE2 callout): Condition[p, c] tests `c` with the names bound
+ * so far; PatternTest[p, f] tests f[text p matched], `group` capturing it. */
+enum { SP_CALLOUT_CONDITION = 1, SP_CALLOUT_TEST = 2 };
+typedef struct {
+    int   kind;     /* SP_CALLOUT_* */
+    Expr* expr;     /* borrowed from the pattern: the condition, or the test f */
+    int   group;    /* SP_CALLOUT_TEST: capture group holding the tested text */
+} SpCallout;
+
+/*
+ * What the string-pattern translator learned about one pattern besides its
+ * regex source: which capture group binds which pattern name, so a rule RHS
+ * can be instantiated with the named pieces of each match (x__ ~~ "1" :> x),
+ * and the callouts (Condition / PatternTest) the matcher must evaluate.
+ */
+typedef struct {
+    int          ngroups;     /* capture groups emitted by the translator */
+    const char** group_name;  /* [0..ngroups]; interned name bound by group g,
+                                 NULL for an anonymous group (owned array,
+                                 borrowed names); NULL when ngroups == 0 */
+    int          nnamed;      /* how many groups carry a name */
+    int          has_regex;   /* pattern contains RegularExpression[...]: a
+                                 string RHS is a $n template */
+    int          is_null;     /* pattern is the empty string "" */
+    int          raw_regex;   /* the pattern IS RegularExpression["re"]: source
+                                 is the user's regex verbatim (compile without
+                                 DOTALL, so `.` keeps PCRE's meaning) */
+    SpCallout*   callouts;    /* [ncallouts], owned; callout k is (?C<k+1>) */
+    int          ncallouts;
+} SpInfo;
+
 typedef struct {
     RegexProgram* prog;   /* owned; free via regex_rules_free */
     Expr*         rhs;    /* borrowed; NULL when the element was a bare pattern */
-    Expr*         lhs;    /* borrowed; the delimiter pattern (rule LHS or bare pattern).
-                             Lets StringSplit bind a named Pattern[x,...] for `:>` RHS. */
+    Expr*         lhs;    /* borrowed; the delimiter pattern (rule LHS or bare pattern). */
+    SpInfo        info;   /* owned; capture-name table for binding the RHS */
 } RegexRule;
 
 /*
  * Build an array of RegexRule from a pattern argument.  Accepts
  * RegularExpression["re"], a literal string (matched literally), Rule/
  * RuleDelayed (rhs recorded), or a List of any of those (alternatives / rule
- * set).  When `anchored` is nonzero each pattern is wrapped \A(?:...)\z for a
+ * set).  `anchored` is a bit set: REGEX_RULE_ANCHORED wraps each pattern
+ * \A(?:...)\z for a whole-string match (StringMatchQ), REGEX_RULE_WILDCARDS
+ * makes `*` and `@` in literal strings metacharacters (StringMatchQ only:
+ * `*` is any run of characters, `@` one or more non-uppercase characters,
+ * `\\*` / `\\@` literal). Historically `anchored` was a boolean, so 1 still
+ * means REGEX_RULE_ANCHORED.  When anchored, each pattern is wrapped \A(?:...)\z for a
  * whole-string match (StringMatchQ).
  *
  * Returns the rule count (>= 1) with a malloc'd array stored in *out, or -1 on
@@ -46,6 +80,7 @@ typedef struct {
  * (a diagnostic keyed on `head` is printed to stderr in the latter two cases).
  * A successful result must be released with regex_rules_free().
  */
+enum { REGEX_RULE_ANCHORED = 1, REGEX_RULE_WILDCARDS = 2 };
 int  regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* head);
 /*
  * Extended form: when `caseless` is nonzero each pattern matches case-insensitively
@@ -54,6 +89,13 @@ int  regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* he
  */
 int  regex_rules_build_ex(Expr* patt, int anchored, int caseless,
                           RegexRule** out, const char* head);
+/*
+ * General form: `rule_flags` are REGEX_RULE_* bits (as `anchored` above) and
+ * `regex_flags` are engine REGEX_* compile flags passed straight through
+ * (REGEX_CASELESS, REGEX_ANCHORED, REGEX_ENDANCHORED, ...).
+ */
+int  regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags,
+                            RegexRule** out, const char* head);
 void regex_rules_free(RegexRule* rules, int n);
 
 /*
@@ -69,6 +111,15 @@ void regex_rules_free(RegexRule* rules, int n);
  */
 char* wl_pattern_to_regex(Expr* patt, int* is_null);
 
+/* As wl_pattern_to_regex, additionally filling *info (when non-NULL) with the
+ * capture-group name table. Release *info with sp_info_free (also safe after a
+ * NULL return, when *info is zeroed). */
+char* wl_pattern_to_regex_ex(Expr* patt, SpInfo* info);
+/* As wl_pattern_to_regex_ex with REGEX_RULE_WILDCARDS-style literal wildcards
+ * when `wildcards` is nonzero. */
+char* wl_pattern_to_regex_wild(Expr* patt, SpInfo* info, int wildcards);
+void  sp_info_free(SpInfo* info);
+
 /*
  * Expand a replacement template (`$0`..`$N`, and `$$` -> literal `$`) using the
  * capture offsets `ov` (npairs pairs of byte offsets) against subject `subj`.
@@ -79,12 +130,21 @@ char* regex_expand_template(const char* tpl, const char* subj,
                             const size_t* ov, size_t npairs);
 
 /*
- * Resolve rule `r`'s replacement for one match.  Handles the supported case
- * (rhs is a string, with $n expansion) and returns NULL when the RHS is
- * unsupported in the current scope (a non-string RHS).  Caller frees.
+ * Instantiate rule `r`'s right-hand side for one match and return the new,
+ * evaluated Expr (caller owns), or NULL for a bare pattern (no RHS).
+ *
+ *   - A string RHS of a rule whose pattern contains RegularExpression[...] is a
+ *     $n template, expanded against the captures (Mathematica semantics); any
+ *     other string RHS is returned literally.
+ *   - Otherwise every pattern name of the LHS is bound to the substring its
+ *     capture group matched ("" when that group did not participate -- e.g. the
+ *     untaken branch of an Alternatives), substituted into the RHS with the
+ *     matcher's own scoping-aware replace_bindings, and the result evaluated.
+ *
+ * `ov` holds `npairs` (start, end) byte-offset pairs (pair 0 = whole match).
  */
-char* regex_rule_replacement(const RegexRule* r, const char* subj,
-                             const size_t* ov, size_t npairs);
+Expr* regex_rule_eval_rhs(const RegexRule* r, const char* subj,
+                          const size_t* ov, size_t npairs);
 
 /* ------------------------------------------------------------------ */
 /* Shared match scanner                                               */

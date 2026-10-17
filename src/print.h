@@ -21,6 +21,7 @@ void expr_print(Expr* e);
 void expr_print_fullform(Expr* e);
 char* expr_to_string(Expr* e);
 char* expr_to_string_fullform(Expr* e);
+char* expr_to_string_outputform(Expr* e);   /* strings unquoted, as Print */
 
 /* Builds the pretty Plus/Times/Power/O equivalent of a 6-argument
  * SeriesData[...] node, or NULL if it is not in a renderable shape. Shared by

@@ -2,8 +2,11 @@
  * stringreplace.c - StringReplace[subject, rule | {rules...}]
  *
  * Replaces every non-overlapping match of a rule's pattern by its right-hand
- * side, scanning left to right; unmatched text is copied verbatim.  The RHS is
- * a string in which $0/$1... expand to the whole match and capture groups.
+ * side, scanning left to right; unmatched text is copied verbatim.  Pattern
+ * names in the LHS are bound to the text they matched and substituted into the
+ * RHS (regex_rule_eval_rhs); a non-string value turns the result into a
+ * StringExpression.  For a RegularExpression pattern a string RHS may use
+ * $0/$1... for the whole match and capture groups.
  * With several rules, at each position the leftmost match wins, ties broken by
  * rule order.  A list of subjects threads.
  */
@@ -14,13 +17,72 @@
 
 #include <string.h>
 
-/* Assemble the replaced text for one subject. Returns a malloc'd string. */
-static char* sr_scalar_str(const char* subj, RegexRule* rules, int nr) {
+/*
+ * Result assembly. Unmatched text and string replacements accumulate in `buf`;
+ * a replacement that is not a string (x:DigitCharacter :> ToExpression[x])
+ * cannot be spliced into text, so -- as in Mathematica -- the result becomes a
+ * StringExpression of the string runs and those values:
+ *   StringReplace["abc123", x:DigitCharacter :> f[x]]
+ *     = "abc" ~~ f["1"] ~~ f["2"] ~~ f["3"]
+ * Sequence[...] replacements splice (Sequence[] deletes).
+ */
+typedef struct {
+    RegexBuf buf;        /* current run of text */
+    Expr**   items;      /* StringExpression pieces, once any non-string appears */
+    size_t   n, cap;
+    int      oom;
+} SrOut;
+
+static void sr_push_item(SrOut* o, Expr* e) {
+    if (o->n == o->cap) {
+        size_t nc = o->cap ? o->cap * 2 : 8;
+        Expr** ni = realloc(o->items, nc * sizeof(Expr*));
+        if (!ni) { expr_free(e); o->oom = 1; return; }
+        o->items = ni;
+        o->cap = nc;
+    }
+    o->items[o->n++] = e;
+}
+
+/* Close the current text run as a string piece (only once pieces exist). */
+static void sr_flush(SrOut* o) {
+    if (o->buf.len == 0) return;
+    sr_push_item(o, expr_new_string(o->buf.p));
+    o->buf.len = 0;
+    o->buf.p[0] = '\0';
+}
+
+static void sr_text(SrOut* o, const char* p, size_t n) {
+    if (n && regexbuf_add(&o->buf, p, n)) o->oom = 1;
+}
+
+/* Append one evaluated replacement value; takes ownership of v. */
+static void sr_value(SrOut* o, Expr* v) {
+    if (v->type == EXPR_STRING) {
+        sr_text(o, v->data.string, strlen(v->data.string));
+        expr_free(v);
+        return;
+    }
+    if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+        v->data.function.head->data.symbol.name == SYM_Sequence) {
+        for (size_t i = 0; i < v->data.function.arg_count; i++)
+            sr_value(o, expr_copy(v->data.function.args[i]));
+        expr_free(v);
+        return;
+    }
+    sr_flush(o);
+    sr_push_item(o, v);
+}
+
+/* Replace in one subject. Returns a new String, or StringExpression[...] when a
+ * replacement value is not a string; NULL on OOM. */
+static Expr* sr_scalar(const char* subj, RegexRule* rules, int nr) {
     size_t len = strlen(subj);
-    RegexBuf b = {0};
+    SrOut o;
+    memset(&o, 0, sizeof o);
 
     size_t pos = 0;
-    while (pos <= len) {
+    while (pos <= len && !o.oom) {
         int found = 0, best_rule = 0;
         size_t best_ms = 0, best_me = 0, best_pairs = 0;
         size_t best_ov[REGEX_MAX_PAIRS * 2];
@@ -41,35 +103,39 @@ static char* sr_scalar_str(const char* subj, RegexRule* rules, int nr) {
             }
         }
         if (!found) {
-            regexbuf_add(&b, subj + pos, len - pos);   /* tail */
+            sr_text(&o, subj + pos, len - pos);          /* tail */
             break;
         }
 
-        regexbuf_add(&b, subj + pos, best_ms - pos);   /* literal before match */
-
-        char* rep = regex_rule_replacement(&rules[best_rule], subj,
-                                           best_ov, best_pairs);
-        if (rep) { regexbuf_add(&b, rep, strlen(rep)); free(rep); }
-        else     { regexbuf_add(&b, subj + best_ms, best_me - best_ms); }
+        sr_text(&o, subj + pos, best_ms - pos);          /* literal before match */
+        sr_value(&o, regex_rule_eval_rhs(&rules[best_rule], subj,
+                                         best_ov, best_pairs));
 
         if (best_me > best_ms) {
             pos = best_me;
-        } else {                                       /* zero-width match */
-            if (best_ms < len) regexbuf_add(&b, subj + best_ms, 1);
+        } else {                                         /* zero-width match */
+            if (best_ms < len) sr_text(&o, subj + best_ms, 1);
             pos = best_ms + 1;
         }
     }
 
-    if (!b.p) { b.p = malloc(1); if (b.p) b.p[0] = '\0'; }
-    return b.p;
-}
-
-static Expr* sr_scalar(const char* subj, RegexRule* rules, int nr) {
-    char* s = sr_scalar_str(subj, rules, nr);
-    if (!s) return expr_new_string("");
-    Expr* r = expr_new_string(s);
-    free(s);
-    return r;
+    Expr* result = NULL;
+    if (!o.oom) {
+        if (o.n == 0) {
+            result = expr_new_string(o.buf.p ? o.buf.p : "");
+        } else {
+            sr_flush(&o);
+            if (!o.oom) {
+                result = expr_new_function(expr_new_symbol(SYM_StringExpression),
+                                           o.items, o.n);
+                o.n = 0;
+            }
+        }
+    }
+    for (size_t i = 0; i < o.n; i++) expr_free(o.items[i]);
+    free(o.items);
+    free(o.buf.p);
+    return result;
 }
 
 Expr* builtin_stringreplace(Expr* res) {
@@ -99,6 +165,7 @@ Expr* builtin_stringreplace(Expr* res) {
             out[i] = (si->type == EXPR_STRING)
                          ? sr_scalar(si->data.string, rules, nr)
                          : expr_copy(si);
+            if (!out[i]) out[i] = expr_copy(si);         /* OOM: leave as is */
         }
         Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
         free(out);
@@ -113,5 +180,5 @@ Expr* builtin_stringreplace(Expr* res) {
 
     Expr* result = sr_scalar(arg0->data.string, rules, nr);
     regex_rules_free(rules, nr);
-    return result;
+    return result;                           /* NULL (OOM): left unevaluated */
 }

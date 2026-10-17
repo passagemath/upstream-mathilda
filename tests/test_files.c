@@ -661,14 +661,14 @@ void test_filenamejoin_windows_separator(void) {
     /* Backslash separators when OperatingSystem->"Windows". */
     assert_eval_eq(
         "FileNameJoin[{\"dir1\", \"dir2\", \"file\"}, OperatingSystem->\"Windows\"]",
-        "\"dir1\\dir2\\file\"", 0);
+        "\"dir1\\\\dir2\\\\file\"", 0);
 }
 
 void test_filenamejoin_windows_unc_share(void) {
     /* A leading \\server\share is preserved verbatim as a UNC prefix. */
     assert_eval_eq(
         "FileNameJoin[{\"\\\\\\\\server\\\\share\", \"path\", \"file\"}, OperatingSystem->\"Windows\"]",
-        "\"\\\\server\\share\\path\\file\"", 0);
+        "\"\\\\\\\\server\\\\share\\\\path\\\\file\"", 0);
 }
 
 void test_filenamejoin_unix_option(void) {
@@ -752,7 +752,7 @@ void test_filenamesplit_windows_drive(void) {
 void test_filenamesplit_windows_unc_share(void) {
     assert_eval_eq(
         "FileNameSplit[\"\\\\\\\\server\\\\share\\\\path\\\\file\", OperatingSystem->\"Windows\"]",
-        "{\"\\\\server\\share\", \"path\", \"file\"}", 0);
+        "{\"\\\\\\\\server\\\\share\", \"path\", \"file\"}", 0);
 }
 
 /* OperatingSystem->"Unix"/"MacOSX" force '/' regardless of host; a bare

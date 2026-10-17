@@ -4142,10 +4142,11 @@ void info_init(void) {
     symtab_set_docstring("HoldForm", "HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.");
     symtab_set_docstring("ToString",
         "ToString[expr]\n"
-        "\tgives the printed form of expr (as InputForm) as a String.\n"
+        "\tgives the printed form of expr (as OutputForm) as a String;\n"
+        "\tstrings inside expr appear without quotes, ToString[\"s\"] is \"s\".\n"
         "ToString[expr, form]\n"
         "\tuses the specified output form.\n"
-        "Supported forms: InputForm (default), FullForm, TeXForm.");
+        "Supported forms: OutputForm (default, linear), InputForm, FullForm, TeXForm.");
     symtab_set_docstring("ToExpression",
         "ToExpression[input]\n"
         "\tparses input (a String) as Mathilda input and returns the resulting\n"
@@ -5328,8 +5329,10 @@ void info_init(void) {
         "\tGives True if the whole \"string\" matches patt, and False otherwise.\n"
         "StringMatchQ[{s1, s2, ...}, patt]\n"
         "\tGives the list of results for each of the si.\n\n"
-        "\tpatt may be RegularExpression[\"re\"], a literal string, or a list of\n"
-        "\talternatives.");
+        "\tpatt may be any string pattern, RegularExpression[\"re\"], a literal\n"
+        "\tstring, or a list of alternatives. In a literal string * matches any\n"
+        "\trun of characters and @ one or more non-uppercase characters (\\\\* and\n"
+        "\t\\\\@ are literal). Options: IgnoreCase -> True.");
 
     symtab_set_docstring("StringContainsQ",
         "StringContainsQ[\"string\", patt]\n"
@@ -5389,8 +5392,9 @@ void info_init(void) {
         "\tGives the list of non-overlapping substrings of \"string\" that match\n"
         "\tpatt, from left to right.\n"
         "StringCases[\"string\", patt -> rhs]\n"
-        "\tGives the rhs for each match, with $n replaced by the n-th captured\n"
-        "\tgroup and $0 by the whole match.\n"
+        "\tGives rhs for each match, with the pattern names of patt bound to\n"
+        "\tthe text they matched (x__ ~~ \"1\" :> x). For a RegularExpression\n"
+        "\tpattern a string rhs may use $n (n-th group) and $0 (whole match).\n"
         "StringCases[\"string\", {p1, p2, ...}]\n"
         "\tGives the matches of any of the pi.\n"
         "StringCases[{s1, s2, ...}, patt]\n"
@@ -5420,8 +5424,9 @@ void info_init(void) {
     symtab_set_docstring("StringReplace",
         "StringReplace[\"string\", patt -> rep]\n"
         "\tReplaces each non-overlapping match of patt in \"string\" by rep,\n"
-        "\twith $n replaced by the n-th captured group and $0 by the whole\n"
-        "\tmatch.\n"
+        "\twith the pattern names of patt bound to the text they matched; a\n"
+        "\tnon-string rep makes the result a StringExpression. For a\n"
+        "\tRegularExpression pattern a string rep may use $n and $0.\n"
         "StringReplace[\"string\", {patt1 -> rep1, patt2 -> rep2, ...}]\n"
         "\tApplies a list of replacement rules; at each position the leftmost\n"
         "\tmatch wins, ties broken by rule order.\n"
@@ -5432,12 +5437,12 @@ void info_init(void) {
         "StringTrim[\"string\"]\n"
         "\tTrims whitespace from the beginning and end of \"string\".\n"
         "StringTrim[\"string\", patt]\n"
-        "\tTrims substrings matching the string pattern patt from the beginning\n"
-        "\tand end.\n"
+        "\tRemoves one substring matching the string pattern patt from the\n"
+        "\tbeginning and one from the end (use patt.. to remove runs).\n"
         "StringTrim[{s1, s2, ...}, ...]\n"
         "\tGives the list of results for each of the si.\n\n"
-        "\tWhitespace covers runs of spaces, tabs, and newlines. Each end is\n"
-        "\ttrimmed to a fixed point.");
+        "\tWhitespace covers runs of spaces, tabs, and newlines.\n"
+        "\tOptions: IgnoreCase -> True.");
     symtab_set_docstring("StringExtract",
         "StringExtract[\"string\", n]\n"
         "\tExtracts the nth whitespace-delimited block of \"string\" (-n counts\n"

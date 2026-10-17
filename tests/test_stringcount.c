@@ -271,7 +271,7 @@ static void test_stringcases_options(void) {
                    "{\"a\", \"A\"}", 0);
     /* $n expansion still works when the scan carries capture offsets, both in
      * the overlapping and the all-substrings policies. */
-    assert_eval_eq("StringCases[\"AAAA\", \"AA\" -> \"$0!\", Overlaps -> True]",
+    assert_eval_eq("StringCases[\"AAAA\", RegularExpression[\"AA\"] -> \"$0!\", Overlaps -> True]",
                    "{\"AA!\", \"AA!\", \"AA!\"}", 0);
     assert_eval_eq("StringCases[\"a1b22\", "
                    "RegularExpression[\"([a-z])(\\\\d+)\"] -> \"$2$1\"]",

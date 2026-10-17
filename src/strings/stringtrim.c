@@ -2,80 +2,46 @@
  * stringtrim.c - StringTrim[...], trims matching substrings from both ends.
  *
  *   StringTrim["string"]           trims whitespace runs from start and end
- *   StringTrim["string", patt]     trims substrings matching patt from both ends
+ *   StringTrim["string", patt]     trims a substring matching patt from each end
  *   StringTrim[{s1, s2, ...}, ...] threads over a list of subject strings
+ *   IgnoreCase -> True             case-insensitive pattern
  *
- * The trim pattern is translated to PCRE by the shared string-pattern engine
- * (string_pattern.c: wl_pattern_to_regex), so it accepts literal strings,
- * RegularExpression["re"], the character-class heads (Whitespace, ...),
- * StringExpression (~~), Alternatives (|), Repeated (..), Except, and so on.
- * The default pattern is Whitespace (a run of spaces / tabs / newlines).
+ * As in Mathematica, ONE match is removed at each end -- StringTrim is
+ * StringReplace[s, {StartOfString ~~ patt -> "", patt ~~ EndOfString -> ""}]:
+ * StringTrim["xxabcxx", "x"] is "xabcx" (use "x".. to strip runs). The back
+ * match must start at or after the end of the front match, so StringTrim["xxx",
+ * "xx"] is "x".
  *
- * Anchoring: rather than the whole-string \A...\z wrap the other regex builtins
- * use, StringTrim needs the pattern anchored at just one end.
- *   - The front is stripped by matching `(?:src)` starting at the current
- *     position and accepting only a match that begins exactly there.  PCRE's
- *     `\A`/`^` anchor to absolute offset 0, so a start-relative anchor is done
- *     by the ov[0] == start check, not by wrapping.
- *   - The back is stripped by matching `(?:src)\z` while passing a truncated
- *     subject length (the current end) to regex_match, so `\z` refers to the
- *     current end rather than the absolute string end.
- * Each end is stripped repeatedly to a fixed point (so StringTrim["xxabcxx",
- * "x"] -> "abc"); a zero-width match ends the loop.
+ * Both ends go through the shared string-pattern engine (regex_common.c), so
+ * the full pattern language works, Condition and PatternTest included:
+ *   - front: the pattern compiled REGEX_ANCHORED, one match at offset 0 -- no
+ *     scan of the subject at all;
+ *   - back: the pattern compiled REGEX_ENDANCHORED, searched from the end of the
+ *     front match; PCRE rejects a candidate as soon as it cannot reach the end.
  */
 
 #include "picostrings.h"
 #include "regex_common.h"
 #include "sym_names.h"
+#include "symtab.h"
 #include "common.h"
+#include "message.h"
+#include "print.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Compile a one-end-anchored trim program from raw PCRE source `src`.
- * `anchor_end == 0` builds the front matcher `(?:src)`; `anchor_end != 0`
- * builds the back matcher `(?:src)\z`.  Returns an owned RegexProgram (free
- * with regex_free), or NULL on a compile error / when regex support is absent.
- */
-static RegexProgram* st_compile(const char* src, int anchor_end) {
-    size_t n = strlen(src);
-    size_t extra = anchor_end ? 6 : 4;    /* "(?:" + ")" (+ "\z") + NUL slack */
-    char* pat = malloc(n + extra + 1);
-    if (!pat) return NULL;
-
-    size_t j = 0;
-    memcpy(pat + j, "(?:", 3); j += 3;
-    memcpy(pat + j, src, n);   j += n;
-    pat[j++] = ')';
-    if (anchor_end) { pat[j++] = '\\'; pat[j++] = 'z'; }
-    pat[j] = '\0';
-
-    char err[128];
-    RegexProgram* p = regex_compile(pat, err, sizeof err);
-    free(pat);
-    return p;
-}
-
 /* Trim one string subject, returning a fresh EXPR_STRING. */
-static Expr* st_scalar(const char* subj, RegexProgram* front, RegexProgram* back) {
+static Expr* st_scalar(const char* subj, RegexRule* front, RegexRule* back) {
     size_t len = strlen(subj);
     size_t start = 0, end = len;
     size_t ov[2];
 
-    /* Strip the leading run: repeated matches anchored at the current start. */
-    while (start < end) {
-        if (regex_match(front, subj, end, start, ov, 1) != 1) break;
-        if (ov[0] != start || ov[1] <= start) break;   /* not at start / zero-width */
+    if (regex_match(front->prog, subj, len, 0, ov, 1) == 1)
         start = ov[1];
-    }
-
-    /* Strip the trailing run: `\z`-anchored matches over subj[0..end). */
-    while (end > start) {
-        if (regex_match(back, subj, end, start, ov, 1) != 1) break;
-        if (ov[0] >= end) break;                        /* zero-width at end */
+    if (start < len && regex_match(back->prog, subj, len, start, ov, 1) == 1 &&
+        ov[1] == len)
         end = ov[0];
-    }
 
     size_t n = end - start;
     char* buf = malloc(n + 1);
@@ -92,54 +58,70 @@ Expr* builtin_stringtrim(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** a = res->data.function.args;
 
-    if (argc < 1 || argc > 2) return builtin_arg_error("StringTrim", argc, 1, 2);
+    /* Trailing IgnoreCase option (seeded from Options[StringTrim]). */
+    int caseless = 0;
+    Expr* defs = symtab_get_options("StringTrim");   /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < defs->data.function.arg_count; i++)
+            regex_match_opt(defs->data.function.args[i], SYM_IgnoreCase, &caseless, 0);
+    size_t pargc = argc;
+    while (pargc >= 2 && regex_match_opt(a[pargc - 1], SYM_IgnoreCase, &caseless, 0))
+        pargc--;
+
+    if (pargc < 1 || pargc > 2) return builtin_arg_error("StringTrim", argc, 1, 2);
 
     Expr* subject = a[0];
-
-    /* Trim pattern (default Whitespace). */
-    int own_patt = 0;
-    Expr* patt;
-    if (argc >= 2) {
-        patt = a[1];
-    } else {
-        patt = expr_new_symbol(SYM_Whitespace);
-        own_patt = 1;
-    }
-
-    char* src = wl_pattern_to_regex(patt, NULL);
-    if (own_patt) expr_free(patt);
-    if (!src) return NULL;                              /* unsupported pattern */
-
-    RegexProgram* front = st_compile(src, 0);
-    RegexProgram* back  = st_compile(src, 1);
-    free(src);
-    if (!front || !back) {                              /* compile error / no regex */
-        regex_free(front);
-        regex_free(back);
+    int is_list = subject->type == EXPR_FUNCTION &&
+                  subject->data.function.head->type == EXPR_SYMBOL &&
+                  subject->data.function.head->data.symbol.name == SYM_List;
+    int ok = is_list || subject->type == EXPR_STRING;
+    for (size_t i = 0; is_list && i < subject->data.function.arg_count; i++)
+        if (subject->data.function.args[i]->type != EXPR_STRING) ok = 0;
+    if (!ok) {
+        char* shown = expr_to_string_outputform(res);
+        mth_message("StringTrim", "strse",
+                    "String or list of strings expected at position 1 in %s.",
+                    shown ? shown : "StringTrim");
+        free(shown);
         return NULL;
     }
 
-    Expr* result;
-    if (subject->type == EXPR_FUNCTION &&
-        subject->data.function.head->type == EXPR_SYMBOL &&
-        subject->data.function.head->data.symbol.name == SYM_List) {
-        size_t m = subject->data.function.arg_count;
-        Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
-        for (size_t i = 0; i < m; i++) {
-            Expr* si = subject->data.function.args[i];
-            out[i] = (si->type == EXPR_STRING)
-                         ? st_scalar(si->data.string, front, back)
-                         : expr_copy(si);
-        }
-        result = expr_new_function(expr_new_symbol(SYM_List), out, m);
-        free(out);
-    } else if (subject->type == EXPR_STRING) {
-        result = st_scalar(subject->data.string, front, back);
-    } else {
-        result = NULL;                                  /* non-string subject */
+    /* Trim pattern (default Whitespace). */
+    Expr* patt = (pargc == 2) ? expr_copy(a[1]) : expr_new_symbol(SYM_Whitespace);
+    /* A list of patterns is a set of alternatives (one rule, not several). */
+    if (patt->type == EXPR_FUNCTION && patt->data.function.head->type == EXPR_SYMBOL &&
+        patt->data.function.head->data.symbol.name == SYM_List) {
+        patt = expr_unshare(patt);
+        expr_free(patt->data.function.head);
+        patt->data.function.head = expr_new_symbol(SYM_Alternatives);
     }
 
-    regex_free(front);
-    regex_free(back);
+    RegexRule* front = NULL;
+    RegexRule* back  = NULL;
+    unsigned cf = caseless ? REGEX_CASELESS : 0u;
+    int nf = regex_rules_build_opts(patt, 0, REGEX_ANCHORED | cf, &front, "StringTrim");
+    int nb = (nf == 1)
+           ? regex_rules_build_opts(patt, 0, REGEX_ENDANCHORED | cf, &back, "StringTrim")
+           : -1;
+    Expr* result = NULL;
+    if (nf == 1 && nb == 1) {
+        if (is_list) {
+            size_t m = subject->data.function.arg_count;
+            Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+            if (out) {
+                for (size_t i = 0; i < m; i++)
+                    out[i] = st_scalar(subject->data.function.args[i]->data.string,
+                                       front, back);
+                result = expr_new_function(expr_new_symbol(SYM_List), out, m);
+                free(out);
+            }
+        } else {
+            result = st_scalar(subject->data.string, front, back);
+        }
+    }
+    /* An unsupported pattern leaves the call unevaluated. */
+    if (nf >= 0) regex_rules_free(front, nf);
+    if (nb >= 0) regex_rules_free(back, nb);
+    expr_free(patt);       /* after the rules: they borrow into it */
     return result;
 }

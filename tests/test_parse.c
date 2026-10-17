@@ -383,10 +383,28 @@ void test_operator_precedence_ladder() {
     assert_parse_eq("f @ g @ x",    "f[g[x]]");                             /* @ right */
     assert_parse_eq("a @@ b @@ c",  "Apply[a, Apply[b, c]]");              /* @@ right */
     assert_parse_eq("a && b && c",  "And[And[a, b], c]");                   /* && left (parse) */
-    assert_parse_eq("a <> b <> c",  "StringJoin[StringJoin[a, b], c]");     /* <> left */
+    assert_parse_eq("a <> b <> c",  "StringJoin[a, b, c]");                 /* <> n-ary */
     assert_parse_eq("a . b . c",    "Dot[Dot[a, b], c]");                   /* . left */
-    assert_parse_eq("a | b | c",    "Alternatives[Alternatives[a, b], c]"); /* | left (parse) */
-    assert_parse_eq("a ~~ b ~~ c",  "StringExpression[StringExpression[a, b], c]"); /* ~~ left */
+    assert_parse_eq("a | b | c",    "Alternatives[a, b, c]");               /* | n-ary */
+    assert_parse_eq("a ~~ b ~~ c",  "StringExpression[a, b, c]");           /* ~~ n-ary */
+
+    /* `:` is Pattern (sym:p, binding tighter than ~~) or Optional (p:v, just
+     * below Pattern), as in Mathematica (issue #98). */
+    assert_parse_eq("x__ ~~ y:DigitCharacter..",
+                    "StringExpression[Pattern[x, BlankSequence[]], Pattern[y, Repeated[DigitCharacter]]]");
+    assert_parse_eq("x:_ ~~ \"b\"",  "StringExpression[Pattern[x, Blank[]], \"b\"]");
+    assert_parse_eq("a ~~ x:_",      "StringExpression[a, Pattern[x, Blank[]]]");
+    assert_parse_eq("x:a|b",         "Pattern[x, Alternatives[a, b]]");
+    assert_parse_eq("x:p..",         "Pattern[x, Repeated[p]]");
+    assert_parse_eq("x:_ /; c",      "Condition[Pattern[x, Blank[]], c]");
+    assert_parse_eq("x_:v",          "Optional[Pattern[x, Blank[]], v]");
+    assert_parse_eq("x:_:1",         "Optional[Pattern[x, Blank[]], 1]");
+    assert_parse_eq("a:b:c",         "Optional[Pattern[a, b], c]");
+    assert_parse_eq("a:b:c:d",       "Optional[Pattern[a, b], Pattern[c, d]]");
+    assert_parse_eq("x:_ + y:_",     "Optional[Pattern[x, Plus[Blank[], y]], Blank[]]");
+    assert_parse_eq("p:_ -> rhs",    "Rule[Pattern[p, Blank[]], rhs]");
+    assert_parse_eq("x:_Integer:1 ~~ y",
+                    "StringExpression[Optional[Pattern[x, Blank[Integer]], 1], y]");
 
     /* --- CompoundExpression is the loosest binary operator --- */
     assert_parse_eq("a ; b ; c",    "CompoundExpression[a, b, c]");

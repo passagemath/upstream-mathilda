@@ -9,6 +9,7 @@
 
 #include "picostrings.h"
 #include "regex_common.h"
+#include "symtab.h"
 #include "sym_names.h"
 
 #include <string.h>
@@ -26,14 +27,27 @@ static Expr* smq_scalar(const char* subj, RegexRule* rules, int nr) {
 }
 
 Expr* builtin_stringmatchq(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
-        return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
 
-    Expr* arg0 = res->data.function.args[0];
-    Expr* patt = res->data.function.args[1];
+    /* IgnoreCase: registered default, overridden by a trailing option. */
+    int caseless = 0;
+    Expr* defs = symtab_get_options("StringMatchQ");   /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < defs->data.function.arg_count; i++)
+            regex_match_opt(defs->data.function.args[i], SYM_IgnoreCase, &caseless, 0);
+    while (argc > 2 && regex_match_opt(a[argc - 1], SYM_IgnoreCase, &caseless, 0))
+        argc--;
+    if (argc != 2) return NULL;
+
+    Expr* arg0 = a[0];
+    Expr* patt = a[1];
 
     RegexRule* rules;
-    int nr = regex_rules_build(patt, /*anchored=*/1, &rules, "StringMatchQ");
+    int nr = regex_rules_build_opts(patt, REGEX_RULE_ANCHORED | REGEX_RULE_WILDCARDS,
+                                    caseless ? REGEX_CASELESS : 0u,
+                                    &rules, "StringMatchQ");
     if (nr < 0) return NULL;
 
     /* StringMatchQ[{s1, s2, ...}, patt] threads over the subject list. */

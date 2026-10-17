@@ -1100,8 +1100,8 @@ Out[2]= 1, 2, 3
 ```
 
 ## ToString
-- `ToString[expr]`: returns a `String` containing the printed form of `expr` in `InputForm`.
-- `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `InputForm` (default), `FullForm`, and `TeXForm`. `StandardForm` and `OutputForm` are accepted as aliases for `InputForm`.
+- `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in Mathematica: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
+- `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads), `FullForm`, and `TeXForm`. `StandardForm` is accepted as an alias for `InputForm`.
 
 **Features**:
 - `Protected`.

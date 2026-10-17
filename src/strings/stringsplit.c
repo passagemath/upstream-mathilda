@@ -65,42 +65,12 @@ static int is_empty_string(const Expr* e) {
     return e->type == EXPR_STRING && e->data.string[0] == '\0';
 }
 
-/*
- * Build the value inserted at a delimiter for a matched rule, or NULL to insert
- * nothing. String RHS uses $0/$n template expansion. For a non-string RHS whose
- * delimiter LHS is a named Pattern[x, ...], bind x to the matched text and
- * evaluate the RHS (handles `x:"--" :> x`); otherwise evaluate the RHS as a
- * constant.
- */
+/* The value inserted at a delimiter matched by `rule` (its RHS instantiated
+ * with the delimiter's named pieces, as StringCases does), or NULL to insert
+ * nothing (a bare delimiter pattern). */
 static Expr* make_insertion(const RegexRule* rule, const char* subj,
-                            const size_t* ov, size_t pairs,
-                            size_t ms, size_t me) {
-    if (!rule->rhs) return NULL;
-
-    if (rule->rhs->type == EXPR_STRING) {
-        char* rep = regex_rule_replacement(rule, subj, ov, pairs);
-        if (!rep) return NULL;
-        Expr* r = expr_new_string(rep);
-        free(rep);
-        return r;
-    }
-
-    Expr* rhs_copy = expr_copy(rule->rhs);
-    Expr* lhs = rule->lhs;
-    if (lhs && lhs->type == EXPR_FUNCTION &&
-        lhs->data.function.head->type == EXPR_SYMBOL &&
-        lhs->data.function.head->data.symbol.name == SYM_Pattern &&
-        lhs->data.function.arg_count == 2 &&
-        lhs->data.function.args[0]->type == EXPR_SYMBOL) {
-        Expr* var = expr_copy(lhs->data.function.args[0]);
-        Expr* val = substr_expr(subj, ms, me);
-        Expr* rule_args[2] = { var, val };
-        Expr* r = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
-        Expr* ra_args[2] = { rhs_copy, r };
-        Expr* ra = expr_new_function(expr_new_symbol(SYM_ReplaceAll), ra_args, 2);
-        return eval_and_free(ra);
-    }
-    return eval_and_free(rhs_copy);
+                            const size_t* ov, size_t pairs) {
+    return regex_rule_eval_rhs(rule, subj, ov, pairs);
 }
 
 /* Split one string subject. */
@@ -139,8 +109,7 @@ static Expr* ss_scalar(const char* subj, RegexRule* rules, int nr,
         pv_push(&pv, substr_expr(subj, last_end, best_ms), 1);   /* interior empties kept */
         ns++;
 
-        Expr* ins = make_insertion(&rules[best_rule], subj, best_ov, best_pairs,
-                                   best_ms, best_me);
+        Expr* ins = make_insertion(&rules[best_rule], subj, best_ov, best_pairs);
         if (ins) pv_push(&pv, ins, 0);
 
         last_end = best_me;

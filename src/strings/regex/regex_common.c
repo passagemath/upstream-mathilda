@@ -10,6 +10,8 @@
 #include <string.h>
 #include <ctype.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "match.h"     /* MatchEnv / replace_bindings: RHS instantiation */
+#include "eval.h"
 
 /* ------------------------------------------------------------------ */
 /* Growable byte buffer                                               */
@@ -42,24 +44,99 @@ static char* rc_strdup(const char* s) {
     return d;
 }
 
-/* Wrap regex source as \A(?:src)\z for a whole-string (anchored) match. */
+/* Length of the leading PCRE start-of-pattern verbs -- (*UTF), (*UCP), (*CR),
+ * ... -- which must stay at the very front of the compiled source. */
+static size_t leading_verbs_len(const char* src) {
+    size_t i = 0;
+    while (src[i] == '(' && src[i + 1] == '*') {
+        const char* close = strchr(src + i, ')');
+        if (!close) break;
+        i = (size_t)(close - src) + 1;
+    }
+    return i;
+}
+
+/* Wrap regex source as \A(?:src)\z for a whole-string (anchored) match,
+ * keeping any leading (*VERB)s in front. */
 static char* wrap_anchored(const char* src) {
+    size_t v = leading_verbs_len(src);
     size_t n = strlen(src);
     char* out = malloc(n + 9);              /* "\A(?:" (5) + src + ")\z" (3) + NUL */
     if (!out) return NULL;
-    memcpy(out, "\\A(?:", 5);
-    memcpy(out + 5, src, n);
+    memcpy(out, src, v);
+    memcpy(out + v, "\\A(?:", 5);
+    memcpy(out + v + 5, src + v, n - v);
     memcpy(out + 5 + n, ")\\z", 3);
     out[8 + n] = '\0';
     return out;
 }
 
-/* Regex source (malloc'd) for a single pattern element. Delegates to the shared
- * Wolfram-string-pattern translator (literal strings, RegularExpression, character
- * classes, StringExpression, Alternatives, Repeated, Except, ...). NULL if the
- * pattern is unsupported. */
-static char* pattern_source(Expr* e) {
-    return wl_pattern_to_regex(e, NULL);
+/* New EXPR_STRING holding subj[s, e). */
+static Expr* rc_substr(const char* subj, size_t s, size_t e) {
+    size_t n = e - s;
+    char* buf = malloc(n + 1);
+    if (!buf) return expr_new_string("");
+    memcpy(buf, subj + s, n);
+    buf[n] = '\0';
+    Expr* r = expr_new_string(buf);
+    free(buf);
+    return r;
+}
+
+/*
+ * A MatchEnv binding each pattern name of rule `r` to the text of the first
+ * participating group that carries it (a name repeated across Alternatives
+ * branches owns a group in the branch where it first occurs). A name with no
+ * participating group is bound to "" when `unset_empty` (a finished match:
+ * Mathematica binds the untaken branch's name to ""), else left unbound (a
+ * Condition mid-match: the name has not been reached yet).
+ */
+static MatchEnv* rule_bind_env(const RegexRule* r, const char* subj,
+                               const size_t* ov, size_t npairs, int unset_empty) {
+    MatchEnv* env = env_new();
+    const char* const* gname = r->info.group_name;
+    for (int g = 1; g <= r->info.ngroups; g++) {
+        const char* nm = gname[g];
+        if (!nm || env_get(env, nm)) continue;
+        Expr* v = NULL;
+        for (int h = g; h <= r->info.ngroups && !v; h++) {
+            if (gname[h] == nm && (size_t)h < npairs && ov[2 * h] != REGEX_UNSET)
+                v = rc_substr(subj, ov[2 * h], ov[2 * h + 1]);
+        }
+        if (!v && unset_empty) v = expr_new_string("");
+        if (v) { env_set(env, nm, v); expr_free(v); }
+    }
+    return env;
+}
+
+/*
+ * Callout hook for a translated pattern (see string_pattern.c): evaluate the
+ * Condition / PatternTest it marks against the match in progress. Returns 0 to
+ * let the match continue, 1 to make the engine backtrack.
+ */
+static int rule_callout(int number, const char* subj, size_t len,
+                        const size_t* ov, size_t npairs, void* data) {
+    (void)len;
+    const RegexRule* r = (const RegexRule*)data;
+    if (number < 1 || number > r->info.ncallouts) return 0;
+    const SpCallout* c = &r->info.callouts[number - 1];
+
+    Expr* test;
+    if (c->kind == SP_CALLOUT_TEST) {
+        Expr* text = ((size_t)c->group < npairs && ov[2 * c->group] != REGEX_UNSET)
+                   ? rc_substr(subj, ov[2 * c->group], ov[2 * c->group + 1])
+                   : expr_new_string("");
+        Expr* targs[1] = { text };
+        test = expr_new_function(expr_copy(c->expr), targs, 1);
+    } else {
+        MatchEnv* env = rule_bind_env(r, subj, ov, npairs, /*unset_empty=*/0);
+        test = replace_bindings(c->expr, env);
+        env_free(env);
+    }
+    Expr* v = eval_and_free(test);
+    int pass = v && v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True;
+    if (v) expr_free(v);
+    return pass ? 0 : 1;
 }
 
 /* Is e a Rule[...] or RuleDelayed[...] with two arguments? */
@@ -77,37 +154,40 @@ static int is_rule2(Expr* e, Expr** lhs, Expr** rhs) {
 }
 
 /* Compile one element into `out`. Returns 0 on success, -1 on failure. */
-static int build_one(Expr* e, int anchored, int caseless, RegexRule* out,
-                     const char* head) {
+static int build_one(Expr* e, unsigned anchored, unsigned regex_flags,
+                     RegexRule* out, const char* head) {
     Expr* patt = e;
     Expr* rhs = NULL;
     Expr* l; Expr* r;
     if (is_rule2(e, &l, &r)) { patt = l; rhs = r; }
 
-    char* src = pattern_source(patt);
+    /* Shared Wolfram-string-pattern translator (literal strings,
+     * RegularExpression, character classes, StringExpression, Alternatives,
+     * Repeated, Except, ...), keeping its capture-name table for the RHS. */
+    char* src = wl_pattern_to_regex_wild(patt, &out->info,
+                                         anchored & REGEX_RULE_WILDCARDS);
     if (!src) return -1;                    /* unsupported pattern -> unevaluated */
 
-    if (anchored) {
+    if (anchored & REGEX_RULE_ANCHORED) {
         char* a = wrap_anchored(src);
         free(src);
-        if (!a) return -1;
+        if (!a) { sp_info_free(&out->info); return -1; }
         src = a;
     }
-    if (caseless) {                          /* case-insensitive: prepend (?i) */
-        size_t n = strlen(src);
-        char* c = malloc(n + 5);            /* "(?i)" (4) + src + NUL */
-        if (!c) { free(src); return -1; }
-        memcpy(c, "(?i)", 4);
-        memcpy(c + 4, src, n + 1);
-        free(src);
-        src = c;
-    }
+
+    /* A translated pattern runs DOTALL (blanks match newlines); a bare
+     * RegularExpression keeps PCRE's defaults. */
+    unsigned flags = regex_flags;
+    if (!out->info.raw_regex)  flags |= REGEX_DOTALL;
 
     char err[256];
-    RegexProgram* prog = regex_compile(src, err, sizeof err);
+    RegexProgram* prog = regex_compile_ex(src, flags,
+                                          out->info.ncallouts ? rule_callout : NULL,
+                                          out, err, sizeof err);
     free(src);
     if (!prog) {
         mth_message(head, "regex", "%s", err);
+        sp_info_free(&out->info);
         return -1;
     }
     out->prog = prog;
@@ -126,6 +206,12 @@ int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* hea
 
 int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
                          RegexRule** out, const char* head) {
+    return regex_rules_build_opts(patt, (unsigned)anchored,
+                                  caseless ? REGEX_CASELESS : 0u, out, head);
+}
+
+int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags,
+                           RegexRule** out, const char* head) {
     if (!regex_available()) {
         mth_message(head, "regavail",
                 "regular-expression support is not available; "
@@ -150,7 +236,7 @@ int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
     if (!rules) return -1;
 
     for (int i = 0; i < n; i++) {
-        if (build_one(elems[i], anchored, caseless, &rules[i], head) != 0) {
+        if (build_one(elems[i], rule_flags, regex_flags, &rules[i], head) != 0) {
             regex_rules_free(rules, i);     /* free the i already built */
             return -1;
         }
@@ -161,7 +247,10 @@ int regex_rules_build_ex(Expr* patt, int anchored, int caseless,
 
 void regex_rules_free(RegexRule* rules, int n) {
     if (!rules) return;
-    for (int i = 0; i < n; i++) regex_free(rules[i].prog);
+    for (int i = 0; i < n; i++) {
+        regex_free(rules[i].prog);
+        sp_info_free(&rules[i].info);
+    }
     free(rules);
 }
 
@@ -439,10 +528,24 @@ oom:
     return NULL;
 }
 
-char* regex_rule_replacement(const RegexRule* r, const char* subj,
-                             const size_t* ov, size_t npairs) {
+Expr* regex_rule_eval_rhs(const RegexRule* r, const char* subj,
+                          const size_t* ov, size_t npairs) {
     if (!r->rhs) return NULL;
-    if (r->rhs->type == EXPR_STRING)
-        return regex_expand_template(r->rhs->data.string, subj, ov, npairs);
-    return NULL;                                       /* non-string RHS: out of scope */
+
+    if (r->rhs->type == EXPR_STRING) {
+        if (!r->info.has_regex) return expr_copy(r->rhs);   /* literal text */
+        char* t = regex_expand_template(r->rhs->data.string, subj, ov, npairs);
+        if (!t) return expr_copy(r->rhs);
+        Expr* e = expr_new_string(t);
+        free(t);
+        return e;
+    }
+
+    /* No named captures: the RHS is constant per match; just evaluate it. */
+    if (r->info.nnamed == 0) return evaluate(r->rhs);
+
+    MatchEnv* env = rule_bind_env(r, subj, ov, npairs, /*unset_empty=*/1);
+    Expr* inst = replace_bindings(r->rhs, env);
+    env_free(env);
+    return eval_and_free(inst);
 }

@@ -102,6 +102,15 @@ static bool nf_reformattable_atom(const Expr* e) {
     return false;
 }
 
+/* Blank[] / Blank[h] / BlankSequence[...] / BlankNullSequence[...]: what
+ * Pattern[x, b] prints as the atomic x_ / x_h / x__ / x___. */
+static bool is_plain_blank(const Expr* b) {
+    if (b->type != EXPR_FUNCTION || b->data.function.head->type != EXPR_SYMBOL ||
+        b->data.function.arg_count > 1) return false;
+    const char* h = b->data.function.head->data.symbol.name;
+    return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence;
+}
+
 static int get_expr_prec(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 9500;
     if (e->data.function.head->type != EXPR_SYMBOL) return 9500;
@@ -118,7 +127,13 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_DirectedEdge || head == SYM_UndirectedEdge) return 1500;
     if (head == SYM_Condition) return 1700;
     if (head == SYM_Alternatives) return 2300;
-    if (head == SYM_Repeated || head == SYM_RepeatedNull) return 2500;
+    if (head == SYM_StringExpression) return 2100;   /* a ~~ b, below `|` */
+    if ((head == SYM_Repeated || head == SYM_RepeatedNull) &&
+        e->data.function.arg_count == 1) return 2500;
+    /* x:p (Pattern whose body is not a plain blank; x_ / x__ print atomically). */
+    if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        !is_plain_blank(e->data.function.args[1])) return 2200;
     if (head == SYM_And) return 2800;
     if (head == SYM_Or) return 2700;   /* looser than And, so Or nested in And parenthesises */
     if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 3200;
@@ -164,10 +179,10 @@ static int get_expr_prec(Expr* e) {
     return 9500;
 }
 
-/* Print a string literal with surrounding quotes, re-escaping the control
- * characters that the lexer decodes (`\n`, `\t`, `\r`) so the output is a
- * faithful, re-parseable rendering. Quote/backslash are printed verbatim,
- * matching the historical printer behaviour. */
+/* Print a string literal with surrounding quotes, re-escaping everything the
+ * lexer decodes -- the control characters `\n`, `\t`, `\r` and the quote and
+ * backslash themselves -- so the output is a faithful, re-parseable rendering
+ * (Mathematica's InputForm: ToString["a\"b", InputForm] is "\"a\\\"b\""). */
 /* Print uses OutputForm, in which a String is rendered as its CHARACTERS and
  * not as a quoted literal -- and recursively, so Print[{1, "a"}] is `{1, a}`.
  * Every other consumer of the printer (the REPL's Out[], ToString, FullForm,
@@ -180,13 +195,16 @@ static int get_expr_prec(Expr* e) {
 static bool g_print_output_form = false;
 
 static void print_string_literal(const char* s) {
-    if (g_print_output_form) { fputs(s, MTH_POUT); return; }
+    /* An explicit InputForm[...] inside Print keeps the quoted literal. */
+    if (g_print_output_form && g_inputform_depth == 0) { fputs(s, MTH_POUT); return; }
     putchar('"');
     for (const char* p = s; *p; p++) {
         switch (*p) {
             case '\n': fputs("\\n", MTH_POUT); break;
             case '\t': fputs("\\t", MTH_POUT); break;
             case '\r': fputs("\\r", MTH_POUT); break;
+            case '"':  fputs("\\\"", MTH_POUT); break;
+            case '\\': fputs("\\\\", MTH_POUT); break;
             default:   putchar((unsigned char)*p); break;
         }
     }
@@ -394,7 +412,10 @@ static void print_standard(Expr* e, int parent_prec) {
         const char* head = e->data.function.head->data.symbol.name;
         
         if (head == SYM_FullForm && e->data.function.arg_count == 1) {
+            /* FullForm keeps string quotes even inside Print / ToString. */
+            g_inputform_depth++;
             expr_print_fullform(e->data.function.args[0]);
+            g_inputform_depth--;
         }
         else if (head == SYM_TeXForm && e->data.function.arg_count == 1) {
             print_tex(e->data.function.args[0], 0);
@@ -794,7 +815,7 @@ static void print_standard(Expr* e, int parent_prec) {
             print_definition_body(e->data.function.args[0]->data.symbol.name);
         }
 #endif
-        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply) && e->data.function.arg_count >= 2) {
+        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives || head == SYM_NonCommutativeMultiply || head == SYM_StringExpression) && e->data.function.arg_count >= 2) {
             const char* op = "";
             if (head == SYM_Equal) op = " == ";
             else if (head == SYM_Unequal) op = " != ";
@@ -813,6 +834,7 @@ static void print_standard(Expr* e, int parent_prec) {
             else if (head == SYM_Or) op = " || ";
             else if (head == SYM_Alternatives) op = " | ";
             else if (head == SYM_NonCommutativeMultiply) op = " ** ";
+            else if (head == SYM_StringExpression) op = "~~";   /* as Mathematica */
 
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf("%s", op);
@@ -1069,6 +1091,18 @@ static void print_standard(Expr* e, int parent_prec) {
             printf("%s", e->data.function.args[0]->data.symbol.name);
             print_standard(e->data.function.args[1], 9500);
         }
+        else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
+                 e->data.function.args[0]->type == EXPR_SYMBOL) {
+            /* Pattern[x, p] -> x:p (the body binds tighter than `:`). */
+            printf("%s:", e->data.function.args[0]->data.symbol.name);
+            print_standard(e->data.function.args[1], my_prec + 1);
+        }
+        else if ((head == SYM_Repeated || head == SYM_RepeatedNull) &&
+                 e->data.function.arg_count == 1) {
+            /* Repeated[p] -> p.. ; RepeatedNull[p] -> p... */
+            print_standard(e->data.function.args[0], my_prec + 1);
+            printf(head == SYM_Repeated ? ".." : "...");
+        }
         else {
             print_standard(e->data.function.head, 9500);
             printf("[");
@@ -1154,6 +1188,27 @@ char* expr_to_string(Expr* e) {
 
     FILE* prev = mth_out_push(c.f);
     print_standard(e, 0);
+    mth_out_pop(prev);
+
+    return str_capture_finish(&c);
+}
+
+/* OutputForm rendering into a heap string (caller frees): as expr_to_string,
+ * except that strings render as their characters, recursively, exactly as
+ * Print shows them -- ToString[{"a", 1}] is "{a, 1}". Linear syntax is kept
+ * (Mathilda has no 2-D OutputForm), so ToString[1/2] is "1/2". */
+char* expr_to_string_outputform(Expr* e) {
+    StrCapture c;
+    if (!str_capture_open(&c)) return NULL;
+
+    FILE* prev = mth_out_push(c.f);
+    bool saved_of = g_print_output_form;
+    int saved_if = g_inputform_depth;
+    g_print_output_form = true;
+    g_inputform_depth = 0;
+    print_standard(e, 0);
+    g_inputform_depth = saved_if;
+    g_print_output_form = saved_of;
     mth_out_pop(prev);
 
     return str_capture_finish(&c);

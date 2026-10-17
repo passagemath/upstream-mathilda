@@ -376,8 +376,13 @@ Tests whether a whole string matches a pattern.
 - `StringMatchQ["string", patt]`: `True` if all of `"string"` matches `patt`
   (the pattern is anchored to the whole string), else `False`.
 - `StringMatchQ[{s1, s2, ...}, patt]`: gives the list of results for each `si`.
-- `patt` may be `RegularExpression["re"]`, a literal string (exact match), or a
-  list of alternatives. A non-string subject leaves the call unevaluated.
+- `patt` may be any string pattern (see [String patterns](#string-patterns)),
+  `RegularExpression["re"]`, a literal string, or a list of alternatives. A
+  non-string subject leaves the call unevaluated.
+- **Wildcards**: in `StringMatchQ` (only), `*` in a literal string matches any
+  run of characters and `@` one or more characters that are not uppercase
+  letters; `\\*` and `\\@` are literal. `StringMatchQ["abc", "a*"]` is `True`.
+- **Options**: `IgnoreCase -> True` folds case.
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -518,8 +523,14 @@ Extracts the substrings of a string that match a pattern.
 
 - `StringCases["string", patt]`: the list of non-overlapping substrings that
   match `patt`, from left to right.
-- `StringCases["string", patt -> rhs]`: the `rhs` for each match, with `$n`
-  replaced by the n-th captured group and `$0` by the whole match.
+- `StringCases["string", patt -> rhs]` / `patt :> rhs`: `rhs` for each match,
+  with every pattern name in `patt` bound to the text it matched:
+  `StringCases["abc123", x__ ~~ "123" :> x]` is `{"abc"}`, and `rhs` may be any
+  expression (`x:DigitCharacter.. :> ToExpression[x]` gives integers). A name in
+  an alternative that did not take part in the match is bound to `""`.
+- For a `RegularExpression` pattern a string `rhs` is a template: `$n` is the
+  n-th capture group, `$0` the whole match, `$$` a literal `$`. With any other
+  pattern `"$1"` is literal text, as in Mathematica.
 - `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`;
   non-string elements pass through unchanged.
 - `patt` may be `RegularExpression["re"]`, a literal string, or a list of
@@ -548,6 +559,12 @@ Out[4]= {"AAA", "AA", "A", "AA", "A", "A"}
 
 In[5]:= StringCases["aAbB", "a", IgnoreCase -> True]
 Out[5]= {"a", "A"}
+
+In[6]:= StringCases["abc123", (x__ ~~ "123") :> x]
+Out[6]= {"abc"}
+
+In[7]:= StringCases["a1b22c333", x:DigitCharacter.. /; StringLength[x] > 1 :> ToExpression[x]]
+Out[7]= {22, 333}
 ```
 
 ## StringCount
@@ -603,7 +620,13 @@ Out[7]= 2
 Replaces matches of a pattern in a string.
 
 - `StringReplace["string", patt -> rep]`: replaces each non-overlapping match
-  of `patt` by `rep`, with `$n`/`$0` expanded; unmatched text is copied.
+  of `patt` by `rep`, with the pattern names of `patt` bound to the text they
+  matched (as in `StringCases`); unmatched text is copied. For a
+  `RegularExpression` pattern a string `rep` may use `$n`/`$0`.
+- A replacement that is not a string cannot be spliced into text, so the result
+  becomes a `StringExpression` of the text runs and those values, as in
+  Mathematica: `StringReplace["abc123", x:DigitCharacter :> ToExpression[x]]`
+  is `"abc"~~1~~2~~3`. `Sequence[...]` replacements splice; `Sequence[]` deletes.
 - `StringReplace["string", {patt1 -> rep1, ...}]`: applies a list of rules; at
   each position the leftmost match wins, ties broken by rule order.
 - `StringReplace[{s1, s2, ...}, rules]`: gives the list of results for each
@@ -630,8 +653,9 @@ Splits a string at matches of a delimiter pattern.
   matches of the delimiter `patt`.
 - `StringSplit["string", {p1, p2, ...}]`: splits at any of the `pi`.
 - `StringSplit["string", patt -> val]`: inserts `val` at the position of each
-  delimiter (`patt :> val` evaluates `val` per match; a named `x:patt :> f[x]`
-  binds the matched text). Rejoining the pieces reproduces `StringReplace`.
+  delimiter (`patt :> val` evaluates `val` per match, with every pattern name
+  bound to the text it matched, e.g. `"-" ~~ x:DigitCharacter :> x`). Rejoining
+  the pieces reproduces `StringReplace`.
 - `StringSplit["string", patt, n]`: splits into at most `n` substrings.
 - `StringSplit["string", patt, All]`: keeps the leading/trailing empty
   substrings that are otherwise dropped.
@@ -664,9 +688,11 @@ Trims substrings matching a pattern from the beginning and end of a string.
 
 - `StringTrim["string"]`: trims runs of whitespace (spaces, tabs, newlines)
   from both ends.
-- `StringTrim["string", patt]`: trims substrings matching the string pattern
-  `patt` from the start and the end. Each end is trimmed to a fixed point, so a
-  single-character `patt` still removes an entire run.
+- `StringTrim["string", patt]`: removes one substring matching the string
+  pattern `patt` from the start and one from the end, as in Mathematica:
+  `StringTrim["xxabxx", "x"]` is `"xabx"`; use `"x"..` to remove runs. The end
+  match must begin at or after the end of the start match.
+- Option `IgnoreCase -> True` matches case-insensitively.
 - `StringTrim[{s1, s2, ...}, ...]`: gives the list of results for each `si`;
   non-string list elements pass through unchanged.
 - `patt` accepts the full shared string-pattern vocabulary (see below),
@@ -680,7 +706,7 @@ Trims substrings matching a pattern from the beginning and end of a string.
 In[1]:= StringTrim["   aaa bbb ccc   "]
 Out[1]= "aaa bbb ccc"
 
-In[2]:= StringTrim["++++aaa bbb ccc----", ("+" | "-") ...]
+In[2]:= StringTrim["++++aaa bbb ccc----", ("+" | "-") ..]
 Out[2]= "aaa bbb ccc"
 
 In[3]:= StringTrim["   aaa bbb ccc   ", RegularExpression["^ *"]]
@@ -897,26 +923,41 @@ Out[4]= "{a: 27, b: 28, c: 29}"
 
 ## String patterns
 
-Beyond `RegularExpression["re"]` and literal strings, `StringMatchQ`,
-`StringCases`, `StringReplace`, `StringSplit`, and the substring predicates
-(`StringContainsQ` and friends) share a translator (`string_pattern.c`) that
-turns symbolic Wolfram string patterns into PCRE:
+Beyond `RegularExpression["re"]` and literal strings, every pattern-taking
+string function (`StringMatchQ`, `StringCases`, `StringCount`,
+`StringPosition`, `StringReplace`, `StringSplit`, `StringTrim`, and the
+substring predicates `StringContainsQ` and friends) shares one translator
+(`string_pattern.c`) that turns symbolic Wolfram string patterns into PCRE2:
 
 | Pattern | Matches |
 |---------|---------|
-| `Whitespace` | a run of whitespace (`\s+`) |
+| `Whitespace` | a run of whitespace |
 | `WhitespaceCharacter` | one whitespace character |
 | `LetterCharacter` / `DigitCharacter` / `WordCharacter` | one letter / digit / letter-or-digit |
-| `NumberString` | a signed integer or decimal number |
-| `StartOfString` / `EndOfString` | zero-width; the start / end of the whole string (`\A` / `\z`) |
+| `HexadecimalCharacter` / `PunctuationCharacter` | one hex digit / punctuation character |
+| `NumberString` | a signed integer or decimal number (`"+5"`, `"-.5"`, `"1."`) |
+| `CharacterRange["a", "z"]` | one character in the range |
+| `StartOfString` / `EndOfString` | zero-width; the start / end of the whole string |
+| `StartOfLine` / `EndOfLine` / `WordBoundary` | zero-width; a line start / line end / word boundary |
 | `p1 ~~ p2 ~~ ...` (`StringExpression`) | `p1`, then `p2`, ... in sequence |
 | `p1 \| p2` (`Alternatives`) | any of the alternatives |
 | `p ..` / `p ...` (`Repeated` / `RepeatedNull`) | one-or-more / zero-or-more of `p` |
-| `Except[p]` | one character that does not begin a `p`-match |
-| `_` (`Blank[]`) | any single character |
-| `x : p` (`Pattern`) | `p`, capturing the matched text as `x` |
-| `_?LetterQ` (and `DigitQ`/`UpperCaseQ`/`LowerCaseQ`) | one character satisfying the predicate |
+| `Repeated[p, n]`, `Repeated[p, {n}]`, `Repeated[p, {m, n}]` | up to `n` / exactly `n` / `m` to `n` repetitions (`RepeatedNull` likewise) |
+| `Shortest[p]` / `Longest[p]` | `p` with the shortest / longest repetitions |
+| `Except[p]` / `Except[p, q]` | one character / a `q`-match that does not begin a `p`-match |
+| `_` / `__` / `___` | one character / one or more / zero or more (newlines included) |
+| `x : p`, `x_`, `x__` (`Pattern`) | `p`, naming the matched text `x` |
+| `p ? f` (`PatternTest`) | `p`, if `f[text]` is `True` (`_?LetterQ`-style tests are a character class) |
+| `p /; cond` (`Condition`) | `p`, if `cond` is `True` with the names bound so far |
+
+Pattern names follow Mathematica: a name's first occurrence captures, and
+every later occurrence must match the same text -- `x_ ~~ x_` matches two equal
+characters, and in a repeated pattern `(x:LetterCharacter)..` every repetition
+equals the first (`"aaa"`, not `"abc"`). A failed `Condition` or `PatternTest`
+backtracks, so `StringCases["aabc", (x_ ~~ y_) /; x != y]` finds `"ab"`. The
+blanks match newlines; `.` inside a `RegularExpression` keeps PCRE's meaning.
 
 An unsupported pattern leaves the call unevaluated. `~~` (`StringExpression`)
-is a `Flat` operator with precedence just below `Alternatives`.
-
+is a `Flat` operator with precedence just below `Alternatives`; `x:p` binds
+tighter than `~~` (`x__ ~~ y:DigitCharacter..` is
+`StringExpression[x__, Pattern[y, Repeated[DigitCharacter]]]`).

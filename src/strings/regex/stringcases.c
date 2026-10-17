@@ -3,7 +3,9 @@
  *
  * Returns a List of the substrings of `subject` that match `pattern`, left to
  * right.  With a rule pattern (patt -> rhs / patt :> rhs) each match is replaced
- * by the rhs, with $0/$1... expanded to the whole match and capture groups.  The
+ * by the rhs with the pattern's names bound to the pieces they matched
+ * (StringCases["abc123", x__ ~~ "123" :> x] = {"abc"}); for a RegularExpression
+ * pattern a string rhs may use $0/$1... for the whole match and capture groups.  The
  * pattern may also be a List of alternatives/rules; at each position the
  * leftmost match wins, ties broken by rule order.  A list of subjects threads.
  *
@@ -58,14 +60,13 @@ static Expr* sc_scalar(const char* subj, RegexRule* rules, int nr,
 
     for (size_t k = 0; k < scan.count; k++) {
         RegexSpan* sp = &scan.spans[k];
-        Expr* item = NULL;
-        if (rules[sp->rule].rhs && scan.caps) {
-            char* rep = regex_rule_replacement(&rules[sp->rule], subj,
-                                               scan.caps + sp->caps_off,
-                                               sp->npairs);
-            if (rep) { item = expr_new_string(rep); free(rep); }
-        }
-        /* Bare pattern, or a rule whose RHS we cannot expand: the match itself. */
+        /* A rule: its RHS instantiated with this match's named pieces. A bare
+         * pattern: the matched text itself. */
+        Expr* item = rules[sp->rule].rhs
+            ? regex_rule_eval_rhs(&rules[sp->rule], subj,
+                                  scan.caps ? scan.caps + sp->caps_off : NULL,
+                                  scan.caps ? sp->npairs : 0)
+            : NULL;
         items[k] = item ? item : substr_expr(subj, sp->ms, sp->me);
     }
 
@@ -126,7 +127,7 @@ Expr* builtin_stringcases(Expr* res) {
     int nr = regex_rules_build_ex(patt, anchored, caseless, &rules, "StringCases");
     if (nr < 0) return NULL;
 
-    /* Capture offsets are only needed to expand a rule's $n template. */
+    /* Capture offsets are only needed to instantiate a rule's RHS. */
     int want_captures = 0;
     for (int i = 0; i < nr; i++) if (rules[i].rhs) { want_captures = 1; break; }
 

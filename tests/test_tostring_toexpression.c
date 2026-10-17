@@ -26,17 +26,22 @@ void test_tostring_default(void) {
     assert_eval_eq("ToString[x^2 + y^3]", "\"x^2 + y^3\"", 0);
     assert_eval_eq("ToString[1 + 1]", "\"2\"", 0);
     assert_eval_eq("ToString[123]", "\"123\"", 0);
-    /* InputForm of a String includes the surrounding quotes, so the
-     * stored content is the 7-byte string `"hello"`. When the test
-     * framework prints that EXPR_STRING for comparison it adds another
-     * pair of display quotes, giving "" + hello + "" = 9 visible chars. */
-    assert_eval_eq("ToString[\"hello\"]", "\"\"hello\"\"", 0);
+    /* The default form is OutputForm (Mathematica): a String is its own
+     * characters, and strings nested inside an expression lose their quotes. */
+    assert_eval_eq("ToString[\"hello\"]", "\"hello\"", 0);
+    assert_eval_eq("ToString[{\"a\", 1}]", "\"{a, 1}\"", 0);
+    assert_eval_eq("ToString[a -> \"b\"]", "\"a -> b\"", 0);
+    assert_eval_eq("StringLength[ToString[{\"ab\"}]]", "4", 0);
 }
 
 void test_tostring_inputform(void) {
     assert_eval_eq("ToString[x^2 + y^3, InputForm]", "\"x^2 + y^3\"", 0);
     assert_eval_eq("ToString[Sin[Pi/4], InputForm]", "\"1/Sqrt[2]\"", 0);
     assert_eval_eq("ToString[1/2, InputForm]", "\"1/2\"", 0);
+    /* InputForm keeps (and escapes) string quotes so the result re-reads. */
+    assert_eval_eq("ToString[\"a\", InputForm]", "\"\\\"a\\\"\"", 0);
+    assert_eval_eq("ToString[{\"a\\\"b\"}, InputForm]",
+                   "\"{\\\"a\\\\\\\"b\\\"}\"", 0);
 }
 
 void test_tostring_fullform(void) {
@@ -52,7 +57,7 @@ void test_tostring_texform(void) {
      * a known render to lock the contract; if the TeX printer changes
      * its precise output the test will need to follow. */
     assert_eval_eq("ToString[x^2 + y^3, TeXForm]", "\"x^{2}+y^{3}\"", 0);
-    assert_eval_eq("ToString[1/2, TeXForm]", "\"\\frac{1}{2}\"", 0);
+    assert_eval_eq("ToString[1/2, TeXForm]", "\"\\\\frac{1}{2}\"", 0);
     /* The DSolve/Reduce generated constant C[k] renders as the subscripted
      * c_k, matching Mathematica. Single-char subscript bare, longer braced. */
     assert_eval_eq("ToString[C[1], TeXForm]", "\"c_1\"", 0);

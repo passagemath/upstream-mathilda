@@ -64,6 +64,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine gate */
+#include "sf_machine_bessel.h"  /* raw-double J/Y/I/K, shared with ND/Compile */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -1610,6 +1612,169 @@ static Expr* bessel_origin_value(const char* kind, Expr* order) {
     return expr_new_symbol(SYM_ComplexInfinity);
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Machine-precision fast path                                        */
+/*                                                                    */
+/* A call whose arguments are machine numbers (or exact numbers beside */
+/* a machine one) with a REAL order is answered by the raw-double      */
+/* kernel in sf_machine_bessel.c -- the same helper the NDArray /      */
+/* packed element-wise path and Compile[] call, so all surfaces agree  */
+/* bit for bit. A real argument yields a Real where the value is real, */
+/* a Complex otherwise (BesselJ[1/2, -2.]); a Complex argument always  */
+/* yields a Complex. On a decline (overflow / underflow, order beyond  */
+/* the kernel's range, a pole) the call falls through to the MPFR path */
+/* below, unchanged.                                                  */
+/* ------------------------------------------------------------------ */
+static Expr* bessel_machine(int kind, const Expr* res) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 2 || ma.is_complex[0])
+        return NULL;
+    double rr, ri;
+    bool is_real;
+    if (!sf_bessel_scalar(kind, ma.re[0], ma.re[1], ma.im[1], &rr, &ri, &is_real))
+        return NULL;
+    if (is_real && !ma.is_complex[1]) return expr_new_real(rr);
+    return sf_machine_complex_result(rr, ri);
+}
+
+/* ------------------------------------------------------------------ */
+/* Symbolic rules (formerly the DownValues of src/internal/bessel.m)   */
+/*                                                                    */
+/* As DownValues these were tried BEFORE the builtin on every call,   */
+/* so every numeric BesselJ/Y/I/K paid for six pattern matches with    */
+/* conditions. Here they run only after the numeric paths decline.     */
+/* The rules, for kind F in {J, Y, I, K}:                              */
+/*                                                                    */
+/* 1. Half-integer order -> elementary closed form, ONLY for a         */
+/*    non-numeric z (!NumberQ[z] && !NDArrayQ[z]): with a numeric z    */
+/*    the call stays put (BesselJ[11/2, 1] is unevaluated, as in       */
+/*    Mathematica) so inexact z takes the accurate numeric path        */
+/*    rather than a cancelling elementary expression. Up/down          */
+/*    recurrence to the base orders +-1/2 (DLMF 10.6.1, 10.29.1);      */
+/*    K is even in the order.                                          */
+/* 2. Negative integer order: J_{-n} = (-1)^n J_n, Y_{-n} = (-1)^n Y_n,*/
+/*    I_{-n} = I_n, K_{-n} = K_n (DLMF 10.4.1, 10.27.1/3), any z.      */
+/* ------------------------------------------------------------------ */
+
+/* NumberQ: Integer, Real, BigInt, MPFR, Rational[..], Complex[..]. */
+static bool bs_number_q(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT)
+        return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        return h == SYM_Complex || h == SYM_Rational;
+    }
+    return false;
+}
+
+static Expr* bs_fn1(const char* h, Expr* a) {
+    Expr* args[1] = { a };
+    return expr_new_function(expr_new_symbol(h), args, 1);
+}
+static Expr* bs_fn2(const char* h, Expr* a, Expr* b) {
+    Expr* args[2] = { a, b };
+    return expr_new_function(expr_new_symbol(h), args, 2);
+}
+static Expr* bs_fn4(const char* h, Expr* a, Expr* b, Expr* c, Expr* d) {
+    Expr* args[4] = { a, b, c, d };
+    return expr_new_function(expr_new_symbol(h), args, 4);
+}
+/* F[n + k, z] */
+static Expr* bs_shift(const char* head, const Expr* n, long k, const Expr* z) {
+    return bs_fn2(head, bs_fn2(SYM_Plus, expr_copy((Expr*)n), expr_new_integer(k)),
+                  expr_copy((Expr*)z));
+}
+/* c (n + k) / z * F[n + k, z] */
+static Expr* bs_coef_term(long c, const char* head, const Expr* n, long k, const Expr* z) {
+    return bs_fn4(SYM_Times, expr_new_integer(c),
+                  bs_fn2(SYM_Plus, expr_copy((Expr*)n), expr_new_integer(k)),
+                  bs_fn2(SYM_Power, expr_copy((Expr*)z), expr_new_integer(-1)),
+                  bs_shift(head, n, k, z));
+}
+/* Sqrt[c1 Pi^p1 / (c2 Pi^p2 z)] -- the half-integer prefactors:
+ *   pi_over == false:  Sqrt[2/(Pi z)]      (J, Y, I)
+ *   pi_over == true:   Sqrt[Pi/(2 z)]      (K) */
+static Expr* bs_sqrt_pref(bool pi_over, const Expr* z) {
+    Expr* inner;
+    if (!pi_over)
+        inner = bs_fn2(SYM_Times, expr_new_integer(2),
+                       bs_fn2(SYM_Power,
+                              bs_fn2(SYM_Times, expr_new_symbol(SYM_Pi), expr_copy((Expr*)z)),
+                              expr_new_integer(-1)));
+    else
+        inner = bs_fn2(SYM_Times, expr_new_symbol(SYM_Pi),
+                       bs_fn2(SYM_Power,
+                              bs_fn2(SYM_Times, expr_new_integer(2), expr_copy((Expr*)z)),
+                              expr_new_integer(-1)));
+    return bs_fn1(SYM_Sqrt, inner);
+}
+
+static Expr* bessel_symbolic_rules(const char* kind, const Expr* order, const Expr* z) {
+    /* 1. half-integer order, symbolic z */
+    int64_t num, den;
+    if (order->type == EXPR_FUNCTION && is_rational(order, &num, &den) && den == 2 &&
+        !bs_number_q(z) && z->type != EXPR_NDARRAY) {
+        if (kind == SYM_BesselK) {
+            if (num <= -1)     /* K is even: K_{-n} = K_n */
+                return bs_fn2(SYM_BesselK,
+                              bs_fn2(SYM_Times, expr_new_integer(-1), expr_copy((Expr*)order)),
+                              expr_copy((Expr*)z));
+            if (num == 1)      /* Sqrt[Pi/(2 z)] Exp[-z] */
+                return bs_fn2(SYM_Times, bs_sqrt_pref(true, z),
+                              bs_fn1(SYM_Exp, bs_fn2(SYM_Times, expr_new_integer(-1),
+                                                     expr_copy((Expr*)z))));
+            /* K_n = (2 (n-1)/z) K_{n-1} + K_{n-2} */
+            return bs_fn2(SYM_Plus, bs_coef_term(2, SYM_BesselK, order, -1, z),
+                          bs_shift(SYM_BesselK, order, -2, z));
+        }
+        if (num == 1 || num == -1) {
+            const char* trig;
+            long sign = 1;
+            if (kind == SYM_BesselJ)      trig = (num == 1) ? SYM_Sin : SYM_Cos;
+            else if (kind == SYM_BesselI) trig = (num == 1) ? SYM_Sinh : SYM_Cosh;
+            else { trig = (num == 1) ? SYM_Cos : SYM_Sin; if (num == 1) sign = -1; } /* Y */
+            Expr* body = bs_fn2(SYM_Times, bs_sqrt_pref(false, z),
+                                bs_fn1(trig, expr_copy((Expr*)z)));
+            if (sign < 0) body = bs_fn2(SYM_Times, expr_new_integer(-1), body);
+            return body;
+        }
+        if (kind == SYM_BesselI) {
+            if (num >= 3)      /* I_n = I_{n-2} - (2 (n-1)/z) I_{n-1} */
+                return bs_fn2(SYM_Plus, bs_shift(SYM_BesselI, order, -2, z),
+                              bs_coef_term(-2, SYM_BesselI, order, -1, z));
+            /* num <= -3:        I_n = I_{n+2} + (2 (n+1)/z) I_{n+1} */
+            return bs_fn2(SYM_Plus, bs_shift(SYM_BesselI, order, 2, z),
+                          bs_coef_term(2, SYM_BesselI, order, 1, z));
+        }
+        /* J and Y share the recurrence F_{nu-1} + F_{nu+1} = (2 nu/z) F_nu. */
+        if (num >= 3)          /* F_n = (2 (n-1)/z) F_{n-1} - F_{n-2} */
+            return bs_fn2(SYM_Plus, bs_coef_term(2, kind, order, -1, z),
+                          bs_fn2(SYM_Times, expr_new_integer(-1),
+                                 bs_shift(kind, order, -2, z)));
+        /* num <= -3:             F_n = (2 (n+1)/z) F_{n+1} - F_{n+2} */
+        return bs_fn2(SYM_Plus, bs_coef_term(2, kind, order, 1, z),
+                      bs_fn2(SYM_Times, expr_new_integer(-1),
+                             bs_shift(kind, order, 2, z)));
+    }
+
+    /* 2. negative integer order */
+    if ((order->type == EXPR_INTEGER || order->type == EXPR_BIGINT) &&
+        expr_numeric_sign((Expr*)order) < 0) {
+        Expr* call = bs_fn2(kind, bs_fn2(SYM_Times, expr_new_integer(-1),
+                                         expr_copy((Expr*)order)),
+                            expr_copy((Expr*)z));
+        if (kind == SYM_BesselI || kind == SYM_BesselK) return call;
+        return bs_fn2(SYM_Times,
+                      bs_fn2(SYM_Power, expr_new_integer(-1), expr_copy((Expr*)order)),
+                      call);
+    }
+    return NULL;
+}
+
 static Expr* besselj_two_arg(Expr* order, Expr* z) {
     /* Exact special value at the origin. */
     if (z->type == EXPR_INTEGER && z->data.integer == 0)
@@ -1626,6 +1791,8 @@ static Expr* besselj_two_arg(Expr* order, Expr* z) {
         if (out) return out;
     }
 #endif
+
+    { Expr* r = bessel_symbolic_rules(SYM_BesselJ, order, z); if (r) return r; }
 
     /* Argument parity: J_n(-z) = (-1)^n J_n(z) for integer n. Fires only for
      * symbolic / exact-symbolic z (concrete inexact z is handled numerically
@@ -1646,6 +1813,7 @@ Expr* builtin_besselj(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return besselj_emit_argx(argc);
+    { Expr* m = bessel_machine(SF_BESSEL_J, res); if (m) return m; }
     return besselj_two_arg(res->data.function.args[0],
                            res->data.function.args[1]);
 }
@@ -1668,7 +1836,7 @@ static Expr* besselk_two_arg(Expr* order, Expr* z) {
     }
 #endif
 
-    return NULL;
+    return bessel_symbolic_rules(SYM_BesselK, order, z);
 }
 
 static Expr* besselk_emit_argx(size_t argc) {
@@ -1680,6 +1848,7 @@ Expr* builtin_besselk(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return besselk_emit_argx(argc);
+    { Expr* m = bessel_machine(SF_BESSEL_K, res); if (m) return m; }
     /* BesselK[0, 800.] ~ 1.6*10^-349 underflows a double (and even a 53-bit
      * MPFR kernel drops the exponent), so a flush-to-zero result promotes and
      * re-evaluates at higher working precision. */
@@ -1705,6 +1874,8 @@ static Expr* besseli_two_arg(Expr* order, Expr* z) {
     }
 #endif
 
+    { Expr* r = bessel_symbolic_rules(SYM_BesselI, order, z); if (r) return r; }
+
     /* Argument parity: I_n(-z) = (-1)^n I_n(z) for integer n. Fires only for
      * symbolic / exact-symbolic z (concrete inexact z handled numerically). */
     { Expr* f = bessel_z_parity_fold(SYM_BesselI, order, z); if (f) return f; }
@@ -1721,6 +1892,7 @@ Expr* builtin_besseli(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return besseli_emit_argx(argc);
+    { Expr* m = bessel_machine(SF_BESSEL_I, res); if (m) return m; }
     return besseli_two_arg(res->data.function.args[0],
                            res->data.function.args[1]);
 }
@@ -1746,7 +1918,7 @@ static Expr* bessely_two_arg(Expr* order, Expr* z) {
 
     /* No argument-parity fold: Y_n has a branch cut along the negative real
      * axis, so Y_n(-z) carries no clean parity (cf. bessel_z_parity_fold). */
-    return NULL;
+    return bessel_symbolic_rules(SYM_BesselY, order, z);
 }
 
 static Expr* bessely_emit_argx(size_t argc) {
@@ -1758,6 +1930,7 @@ Expr* builtin_bessely(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return bessely_emit_argx(argc);
+    { Expr* m = bessel_machine(SF_BESSEL_Y, res); if (m) return m; }
     return bessely_two_arg(res->data.function.args[0],
                            res->data.function.args[1]);
 }

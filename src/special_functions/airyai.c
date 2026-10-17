@@ -68,6 +68,8 @@
 #include "symtab.h"
 #include "flint_num_bridge.h" /* flint_num_airy_ai[_prime] (arb acb_hypgeom_airy) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine gate */
+#include "sf_machine_bessel.h"  /* raw-double Airy, shared with ND/Compile */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -729,11 +731,32 @@ static Expr* airyai_emit_argx(size_t argc) {
     return NULL;
 }
 
+
+/* Machine-precision fast path: a machine real or machine complex argument is
+ * answered by the raw-double kernel in sf_machine_bessel.c -- the same helper
+ * the NDArray / packed path and Compile[] call, so every surface agrees bit for
+ * bit. A decline (overflow / underflow past the double range) falls through to
+ * the MPFR / arb path below, unchanged. */
+static Expr* airy_machine(int which, const Expr* res) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma) || ma.n != 1) return NULL;
+    double rr, ri;
+    bool is_real;
+    if (!sf_airy_scalar(which, ma.re[0], ma.im[0], &rr, &ri, &is_real)) return NULL;
+    if (is_real && !ma.is_complex[0]) return expr_new_real(rr);
+    return sf_machine_complex_result(rr, ri);
+}
+
 Expr* builtin_airyai(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return airyai_emit_argx(argc);
-    return airyai_one_arg(res->data.function.args[0]);
+    { Expr* m = airy_machine(SF_AIRY_AI, res); if (m) return m; }
+    /* Ai and Ai' decay like e^(-2/3 x^(3/2)): AiryAi[120.] ~ 2e-382 is below the
+     * double range, and the 53-bit evaluation flushes it to 0. -- promote and
+     * re-evaluate with an extended exponent (as BesselK[0, 800.] does). */
+    return numeric_promote_result_if_degenerate(
+        airyai_one_arg(res->data.function.args[0]), res);
 }
 
 /* Mathematica-compatible argx diagnostic for AiryAiPrime. */
@@ -750,7 +773,12 @@ Expr* builtin_airyaiprime(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return airyaiprime_emit_argx(argc);
-    return airyaiprime_one_arg(res->data.function.args[0]);
+    { Expr* m = airy_machine(SF_AIRY_AIP, res); if (m) return m; }
+    /* Ai and Ai' decay like e^(-2/3 x^(3/2)): AiryAi[120.] ~ 2e-382 is below the
+     * double range, and the 53-bit evaluation flushes it to 0. -- promote and
+     * re-evaluate with an extended exponent (as BesselK[0, 800.] does). */
+    return numeric_promote_result_if_degenerate(
+        airyaiprime_one_arg(res->data.function.args[0]), res);
 }
 
 /* ------------------------------------------------------------------ */

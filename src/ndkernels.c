@@ -41,6 +41,7 @@
 #include "special_functions/sf_machine_zeta.h" /* zeta-family real + complex kernels */
 #include "special_functions/sf_machine_hyper.h"  /* complex hypergeometric-family kernels */
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
+#include "special_functions/sf_machine_bessel.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -515,20 +516,22 @@ static bool ndk_Erfc_r(double x, double* o) { return sf_erfc_r(x, o); }
 static const NDUnaryKernel NDKU_Erf  = { sf_erf_c,  ndk_Erf_r,  true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_Erfc = { sf_erfc_c, ndk_Erfc_r, true, false, NULL, NULL, false };
 
-/* Bessel J/Y of integer order over a real array via libc jn/yn. Kernel receives
- * (order, arg); declines non-integer order or any complex operand -> List path. */
-static bool ndk_BesselJ_c(double nre, double nim, double zre, double zim,
-                          double* rr, double* ri) {
-    if (nim != 0.0 || zim != 0.0 || nre != floor(nre)) return false;
-    *rr = jn((int)nre, zre); *ri = 0.0; return isfinite(*rr);
-}
-static bool ndk_BesselY_c(double nre, double nim, double zre, double zim,
-                          double* rr, double* ri) {
-    if (nim != 0.0 || zim != 0.0 || nre != floor(nre)) return false;
-    *rr = yn((int)nre, zre); *ri = 0.0; return isfinite(*rr);
-}
+/* Bessel J/Y/I/K over real AND complex arrays (real order): the shared
+ * dispatch in special_functions/sf_machine_bessel.c, which the scalar builtins
+ * call too, so the surfaces agree bit for bit. A real element whose value is
+ * complex (BesselJ[1/2, -2.]) declines -> List path. */
+static bool ndk_BesselJ_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
+{ return sf_bessel_nd(SF_BESSEL_J, nre, nim, zre, zim, rr, ri); }
+static bool ndk_BesselY_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
+{ return sf_bessel_nd(SF_BESSEL_Y, nre, nim, zre, zim, rr, ri); }
+static bool ndk_BesselI_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
+{ return sf_bessel_nd(SF_BESSEL_I, nre, nim, zre, zim, rr, ri); }
+static bool ndk_BesselK_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
+{ return sf_bessel_nd(SF_BESSEL_K, nre, nim, zre, zim, rr, ri); }
 static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_BesselI = { ndk_BesselI_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_BesselK = { ndk_BesselK_c, true, NULL, NULL, false };
 
 /* Beta[a, b], real and complex: the Gamma family's kernel (sf_machine_gamma.c),
  * shared with the scalar builtin so the surfaces agree bit for bit. */
@@ -646,14 +649,15 @@ static bool ndk_Zeta_c(double sr, double si, double* rr, double* ri) { return sf
 static const NDUnaryKernel NDKU_Zeta           = { ndk_Zeta_c, ndk_Zeta_r,     true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false, NULL, NULL, false };
-static bool ndk_AiryAi_r(double x, double* o)      { return sf_machine_airy_ai(x, o); }
-static bool ndk_AiryBi_r(double x, double* o)      { return sf_machine_airy_bi(x, o); }
-static bool ndk_AiryAiPrime_r(double x, double* o) { return sf_machine_airy_ai_prime(x, o); }
-static bool ndk_AiryBiPrime_r(double x, double* o) { return sf_machine_airy_bi_prime(x, o); }
-static const NDUnaryKernel NDKU_AiryAi      = { NULL, ndk_AiryAi_r,      true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryBi      = { NULL, ndk_AiryBi_r,      true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryAiPrime = { NULL, ndk_AiryAiPrime_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryBiPrime = { NULL, ndk_AiryBiPrime_r, true, false, NULL, NULL, false };
+/* Airy: real and complex arms of the shared kernels (sf_machine_bessel.c). */
+static bool ndk_AiryAi_c(double a, double b, double* r, double* i)      { return sf_airy_nd(SF_AIRY_AI, a, b, r, i); }
+static bool ndk_AiryBi_c(double a, double b, double* r, double* i)      { return sf_airy_nd(SF_AIRY_BI, a, b, r, i); }
+static bool ndk_AiryAiPrime_c(double a, double b, double* r, double* i) { return sf_airy_nd(SF_AIRY_AIP, a, b, r, i); }
+static bool ndk_AiryBiPrime_c(double a, double b, double* r, double* i) { return sf_airy_nd(SF_AIRY_BIP, a, b, r, i); }
+static const NDUnaryKernel NDKU_AiryAi      = { ndk_AiryAi_c,      sf_airy_ai_r,  true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_AiryBi      = { ndk_AiryBi_c,      sf_airy_bi_r,  true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_AiryAiPrime = { ndk_AiryAiPrime_c, sf_airy_aip_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_AiryBiPrime = { ndk_AiryBiPrime_c, sf_airy_bip_r, true, false, NULL, NULL, false };
 
 /* PolyGamma[n, x] and HurwitzZeta[s, a].  PolyGamma matters as a BINARY kernel
  * even when written unary: the evaluator canonicalises PolyGamma[x] to
@@ -733,8 +737,6 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
     *rr = v; *ri = 0.0; return true;                                           \
 }                                                                              \
 static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false };
-NDK_BIN2(BesselI,           sf_machine_bessel_i)
-NDK_BIN2(BesselK,           sf_machine_bessel_k)
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(StruveH,           sf_machine_struve_h)
 #undef NDK_BIN2

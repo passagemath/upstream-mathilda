@@ -457,11 +457,11 @@ static int word_smooth(mpz_t d, const mpz_t n, double B1, int plus, FiCtx* c) {
 #ifndef NO_ECM
 /* One GMP-ECM p-1 / p+1 run.  Returns 1 = split, 0 = nothing, -1 = every
  * prime of n caught at once (gcd = n). */
-static int gmpecm_smooth(mpz_t d, const mpz_t n, FiCtx* c, int method, double B1, double B2,
-                         int seed) {
+static int gmpecm_smooth(mpz_t d, const mpz_t n, unsigned long rngseed, int method, double B1,
+                         double B2, int seed) {
     ecm_params p;
     ecm_init(p);
-    gmp_randseed_ui(p->rng, (unsigned long)fi_rand(c));
+    gmp_randseed_ui(p->rng, rngseed);
     p->method = method;
     /* Fixed starting values (GMP-ECM would otherwise draw one at random):
      * 3 for p-1; for p+1 the seeds 2/7 and 6/5 that GMP-ECM recommends (they
@@ -491,11 +491,12 @@ static int gmpecm_smooth(mpz_t d, const mpz_t n, FiCtx* c, int method, double B1
 }
 
 /* Run, and on overshoot retry with B1 shrunk 16x at a time: the primes of n
- * separate once B1 drops below the largest prime of some p -/+ 1. */
-static int gmpecm_smooth_backoff(mpz_t d, const mpz_t n, FiCtx* c, int method, double B1, double B2,
-                                 int seed) {
+ * separate once B1 drops below the largest prime of some p -/+ 1.  Touches
+ * no shared state, so it runs on a worker thread. */
+static int gmpecm_smooth_backoff(mpz_t d, const mpz_t n, unsigned long rngseed, int method, double B1,
+                                 double B2, int seed) {
     for (double b = B1; b >= 20; b /= 16) {
-        int r = gmpecm_smooth(d, n, c, method, b, b == B1 ? B2 : 0, seed);
+        int r = gmpecm_smooth(d, n, rngseed, method, b, b == B1 ? B2 : 0, seed);
         if (r >= 0) return r;
     }
     return 0;
@@ -507,7 +508,7 @@ int fi_split_pm1(mpz_t d, const mpz_t n, FiCtx* c, double B1, double B2) {
     if (tiny_factor(d, n)) return 1;
     if (mpz_sizeinbase(n, 2) <= 64) return word_smooth(d, n, B1, 0, c);
 #ifndef NO_ECM
-    return gmpecm_smooth_backoff(d, n, c, ECM_PM1, B1, B2, 0);
+    return gmpecm_smooth_backoff(d, n, (unsigned long)fi_rand(c), ECM_PM1, B1, B2, 0);
 #else
     (void)c;
     return native_pm1(d, n, B1, B2 > 0 ? B2 : 100 * B1);
@@ -561,38 +562,70 @@ static int native_pp1(mpz_t d, const mpz_t n, double B1d, uint64_t seed) {
 }
 #endif
 
+/* One p+1 seed, run on a worker thread: x0 from the seed index (GMP-ECM),
+ * or from the pre-drawn word (FLINT, native). */
+typedef struct {
+    mpz_srcptr n;
+    double     B1, B2;
+    int        seed;
+    uint64_t   rng;
+    mpz_t      f;
+    int        ok;
+} SeedJob;
+
+static void pp1_seed_job(void* arg) {
+    SeedJob* j = (SeedJob*)arg;
+#ifndef NO_ECM
+    j->ok = gmpecm_smooth_backoff(j->f, j->n, (unsigned long)j->rng, ECM_PP1, j->B1, j->B2, j->seed) == 1;
+#elif defined(USE_FLINT)
+    fmpz_t f, nn;
+    fmpz_init(f); fmpz_init(nn);
+    fmpz_set_mpz(nn, j->n);
+    ulong b2s = (ulong)sqrt(100.0 * j->B1);
+    j->ok = fmpz_factor_pp1(f, nn, (ulong)j->B1, b2s, (ulong)(3 + j->rng % 1000));
+    if (j->ok) {
+        fmpz_get_mpz(j->f, f);
+        j->ok = nontrivial(j->f, j->n);
+    }
+    fmpz_clear(f); fmpz_clear(nn);
+#else
+    j->ok = native_pp1(j->f, j->n, j->B1, j->rng);
+#endif
+}
+
 int fi_split_pp1(mpz_t d, const mpz_t n, FiCtx* c, double B1, double B2) {
     return fi_split_pp1_seeds(d, n, c, B1, B2, 3);
 }
 
+/* p+1 only works when the seed's discriminant is a non-residue mod p, so
+ * the method runs several seeds (three: GMP-ECM's recommendation).  Seeds are
+ * independent: with threads they go out one per thread, and a region's
+ * successes are taken in seed order, so the factor found is the serial one. */
 int fi_split_pp1_seeds(mpz_t d, const mpz_t n, FiCtx* c, double B1, double B2, int nseeds) {
     if (B1 <= 0) B1 = 1e6;
     if (tiny_factor(d, n)) return 1;
     if (mpz_sizeinbase(n, 2) <= 64) return word_smooth(d, n, B1, 1, c);
-    /* p+1 only works when the seed's discriminant is a non-residue mod p, so
-     * the method runs three seeds (GMP-ECM's recommendation). */
-    for (int s = 0; s < nseeds; s++) {
-#ifndef NO_ECM
-        if (gmpecm_smooth_backoff(d, n, c, ECM_PP1, B1, B2, s)) return 1;
-#elif defined(USE_FLINT)
-        (void)B2;
-        fmpz_t f, nn;
-        fmpz_init(f); fmpz_init(nn);
-        fmpz_set_mpz(nn, n);
-        ulong b2s = (ulong)sqrt(100.0 * B1);
-        int ok = fmpz_factor_pp1(f, nn, (ulong)B1, b2s, (ulong)(3 + fi_rand(c) % 1000));
-        if (ok) {
-            mpz_t g; mpz_init(g); fmpz_get_mpz(g, f);
-            ok = nontrivial(g, n);
-            if (ok) mpz_set(d, g);
-            mpz_clear(g);
+    int nt = fi_nthreads();
+    if (nt > nseeds) nt = nseeds;
+    if (nt < 1) nt = 1;
+    SeedJob job[FI_MAXTHREADS];
+    for (int t = 0; t < nt; t++) mpz_init(job[t].f);
+    int found = 0;
+    for (int s = 0; s < nseeds && !found; ) {
+        int m = 0;
+        for (; m < nt && s < nseeds; m++, s++) {
+            SeedJob* j = &job[m];
+            j->n = n;
+            j->B1 = B1;
+            j->B2 = B2;
+            j->seed = s;
+            j->rng = fi_rand(c);
+            j->ok = 0;
         }
-        fmpz_clear(f); fmpz_clear(nn);
-        if (ok) return 1;
-#else
-        (void)B2;
-        if (native_pp1(d, n, B1, fi_rand(c))) return 1;
-#endif
+        fi_run_parallel(pp1_seed_job, job, sizeof(SeedJob), m);
+        for (int t = 0; t < m && !found; t++)
+            if (job[t].ok) { mpz_set(d, job[t].f); found = 1; }
     }
-    return 0;
+    for (int t = 0; t < nt; t++) mpz_clear(job[t].f);
+    return found;
 }

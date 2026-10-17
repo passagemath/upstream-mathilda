@@ -22,7 +22,10 @@
  *   fi_qs.c        self-initialising quadratic sieve (FLINT qsieve or native).
  *   fi_cfrac.c     continued-fraction factoring (Morrison–Brillhart).
  *   fi_dixon.c     Dixon's random-squares method.
- *   fi_gf2.c       GF(2) nullspace solver shared by CFRAC / Dixon / QS.
+ *   fi_smooth.c    threaded trial division of CFRAC / Dixon candidates.
+ *   fi_gf2.c       relation store, relation logs, GF(2) nullspace solver
+ *                  shared by CFRAC / Dixon / QS.
+ *   fi_par.c       thread regions and work claiming.
  *   fi_rbd.c       Blake rational base descent (moved verbatim).
  *
  * A *splitter* takes an odd composite n that is not a perfect power and
@@ -243,6 +246,71 @@ size_t  fi_rels_active(const FiRels* R);
 /* Linear algebra + square roots; returns 1 with a proper divisor in d. */
 int     fi_rels_solve(FiRels* R, const mpz_t n, mpz_t d);
 
+/* Relation log: relations found by a worker thread, kept in the order found
+ * and replayed by the main thread (the relation store is not thread-safe).
+ * `tag` orders records across workers (CFRAC / Dixon: the candidate index);
+ * the (col, exp) lists live in a shared pool. */
+typedef struct {
+    mpz_t    X;
+    uint64_t tag, L1, L2;
+    uint32_t off, cnt;
+} FiLogRec;
+
+typedef struct {
+    FiLogRec* r;
+    size_t    n, ninit, cap;   /* r[0..ninit) have X initialised (reused) */
+    uint32_t* col;
+    uint32_t* exps;
+    size_t    npool, cappool;
+} FiRelLog;
+
+void fi_rellog_push(FiRelLog* lg, uint64_t tag, const mpz_t X, const uint32_t* col,
+                    const uint32_t* exps, size_t cnt, uint64_t L1, uint64_t L2);
+/* Add every record to R in log order, then empty the log. */
+void fi_rellog_replay(FiRelLog* lg, FiRels* R, const mpz_t n);
+/* Visit the records of logs[0..nlogs) merged by ascending tag (each log must
+ * already be ascending); stops at the first nonzero visit() and returns it.
+ * Empties every log either way. */
+int  fi_rellog_merge(FiRelLog* logs, int nlogs,
+                     int (*visit)(void* user, const FiLogRec* r, const uint32_t* col,
+                                  const uint32_t* exps),
+                     void* user);
+void fi_rellog_free(FiRelLog* lg);
+
+/* ------------------------------------------------------------------ */
+/* Smooth-relation collection for CFRAC and Dixon (fi_smooth.c)        */
+/* ------------------------------------------------------------------ */
+
+/* Factor v (> 0) over fb[1..nfb] (fb[0] is the sign column), appending the
+ * sorted (col, exp) list after the cnt entries already present; *L is the
+ * large-prime cofactor (1 when smooth).  Returns 1 for a full relation or a
+ * partial with L <= lp_max.  Early abort: after the first quarter of the base,
+ * give up while the cofactor still has more than abort_bits bits. */
+int fi_fb_factor(mpz_t v, const uint32_t* fb, size_t nfb, uint32_t* col, uint32_t* exps,
+                 size_t* cnt, uint64_t* L, uint64_t lp_max, size_t abort_bits);
+
+/* One region trial-divides candidates [0, count) on `nthreads` threads,
+ * which claim chunks of `chunk` indices.  prep() writes candidate idx as
+ * X^2 == v (mod n) (and may seed col/exps, e.g. the sign column); returning 0
+ * skips it.  Hits go to per-thread logs tagged by index, and
+ * fi_smooth_replay() hands them to the main thread in index order, so the
+ * relation stream is the same whatever the thread count.  side(), if set,
+ * runs on worker 0 before it starts claiming (CFRAC generates its next batch
+ * there).  prep() and side() run off the main thread: they may only touch
+ * their own state and the scratch they are given. */
+typedef struct FiSmooth FiSmooth;
+typedef int  (*FiSmoothPrep)(void* user, size_t idx, mpz_t X, mpz_t v, mpz_t tmp,
+                             uint32_t* col, uint32_t* exps, size_t* cnt);
+FiSmooth* fi_smooth_new(int nthreads, size_t max_nfb);
+void      fi_smooth_run(FiSmooth* S, size_t count, size_t chunk, FiSmoothPrep prep,
+                        void (*side)(void*), void* user, const uint32_t* fb, size_t nfb,
+                        uint64_t lp_max, size_t abort_bits);
+int       fi_smooth_replay(FiSmooth* S,
+                           int (*visit)(void* user, const FiLogRec* r, const uint32_t* col,
+                                        const uint32_t* exps),
+                           void* user);
+void      fi_smooth_free(FiSmooth* S);
+
 /* ------------------------------------------------------------------ */
 /* Messages                                                            */
 /* ------------------------------------------------------------------ */
@@ -260,6 +328,18 @@ int  fi_nthreads(void);
 /* Run fn on n jobs laid out stride bytes apart, one thread each, inside a
  * TimeConstrained-deferred region (see fi_par.c). */
 void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n);
+
+/* Work claiming inside a region: indices [0, end) handed out `chunk` at a
+ * time under a lock (a plain cursor without MATHILDA_THREADS). */
+typedef struct {
+    size_t next, end;
+    void*  lock;
+} FiClaim;
+void fi_claim_init(FiClaim* q);
+void fi_claim_reset(FiClaim* q, size_t end);
+/* Claim [*lo, *hi); returns 0 once the range is exhausted. */
+int  fi_claim_next(FiClaim* q, size_t chunk, size_t* lo, size_t* hi);
+void fi_claim_destroy(FiClaim* q);
 
 /* ------------------------------------------------------------------ */
 /* Bit helpers (GCC builtins where available, portable otherwise)      */

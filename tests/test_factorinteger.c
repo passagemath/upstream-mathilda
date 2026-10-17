@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "print.h"
 #include "fi_internal.h"
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -154,6 +155,37 @@ static void test_contract(void) {
     contract("NextPrime[10^27]*NextPrime[3*10^27]", "Method -> \"QuadraticSieve\"");
     contract("NextPrime[10^15]*NextPrime[10^60]", "Method -> \"ECM\"");
     contract("NextPrime[10^24]*NextPrime[10^25]*NextPrime[10^26]", "");
+    /* Threaded CFRAC / Dixon relation collection and p+1 seeds. */
+    contract("NextPrime[3*10^14]*NextPrime[7*10^16]", "Method -> \"CFRAC\"");
+    contract("NextPrime[3*10^8]*NextPrime[7*10^9]", "Method -> \"Dixon\"");
+    contract("4346305828114280557845729185329137098049763216260074649658093501860550615869998510565182512056793391457142603346382853249",
+             "Method -> \"WilliamsPPlus1\"");
+}
+
+/* ---- Threaded relation collection replays the serial stream ----
+ * CFRAC and Dixon trial-divide on threads but feed the relation store in
+ * candidate order, so the smallest "Iterations" budget that succeeds is the
+ * serial method's, whatever the thread count (these are the v0.453 serial
+ * thresholds).  The CFRAC case crosses multiplier restarts. */
+static void test_serial_stream(void) {
+    const char* ok = "Length[Quiet[FactorInteger[%s, Method -> {\"%s\", \"Iterations\" -> %d}]]]";
+    static const struct { const char* n; const char* m; int thr; } T[] = {
+        { "(10^12 + 39)*(10^13 + 37)", "CFRAC", 10313 },
+        { "12791*5060983", "CFRAC", 423 },
+        { "(10^8 + 7)*(10^9 + 7)", "Dixon", 1211465 },
+    };
+    char buf[512];
+    for (size_t i = 0; i < sizeof T / sizeof T[0]; i++) {
+        snprintf(buf, sizeof buf, ok, T[i].n, T[i].m, T[i].thr);
+        check(buf, "2");
+        snprintf(buf, sizeof buf, ok, T[i].n, T[i].m, T[i].thr - 1);
+        check(buf, "1");
+    }
+    /* A timeout inside a threaded region is taken once the region ends. */
+    check("TimeConstrained[FactorInteger[NextPrime[3*10^21]*NextPrime[7*10^23], Method -> \"CFRAC\"], 0.3]",
+          "$Aborted");
+    check("TimeConstrained[FactorInteger[NextPrime[3*10^12]*NextPrime[7*10^13], Method -> \"Dixon\"], 0.3]",
+          "$Aborted");
 }
 
 /* ---- Messages route through the funnel (Quiet / Check) ---- */
@@ -271,6 +303,7 @@ int main(void) {
     test_gaussian();
     test_methods();
     test_contract();
+    test_serial_stream();
     test_messages();
     test_symbols();
     test_u64();

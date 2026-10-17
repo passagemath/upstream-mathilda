@@ -548,11 +548,11 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 | `"Fermat"` | Fermat's method with quadratic-residue filters modulo nine small moduli. | `"Iterations"` |
 | `"Lehman"` | Lehman's O(n^(1/3)) method; complete below 2^42, budgeted above. | `"Iterations"` |
 | `"ShanksSquareForms"` (alias `"SQUFOF"`) | SQUFOF over the 16 Gower–Wagstaff multipliers, in word arithmetic for kN < 2^124. | `"Iterations"` |
-| `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. | `"Iterations"` |
-| `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. | `"Iterations"` |
+| `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. Relation collection is pipelined across threads: one thread extends the continued fraction into the next batch while every thread trial-divides the current one, and the hits are replayed in term order. The relations, restarts and divisor are therefore those of the serial method for any thread count. | `"Iterations"` |
+| `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. The draws are taken in batches; the candidates are built and trial-divided in parallel, and the hits are replayed in draw order. Results and the random stream are those of the serial method. | `"Iterations"` |
 | `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division. Single large primes, plus double large primes from 72 digits, combined by cycle-finding in the large-prime graph. Polynomial families are sieved in parallel from 45 digits (one A per thread). Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
 | `"PollardPMinus1"` (alias `"PollardP-1"`) | GMP-ECM p-1, with a B1 back-off when every prime is caught at once; a word walk with prime-by-prime backtracking below 2^64. | `"B1"` (10^6), `"B2"` |
-| `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. | `"B1"` (10^6), `"B2"` |
+| `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. The seeds run in parallel, one per thread, and the first success in seed order is taken. | `"B1"` (10^6), `"B2"` |
 | `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves run in parallel, one per thread, for n ≥ 2^160. They use the batch parametrisation with sigmas drawn deterministically, and successes are taken in curve order, so the result does not depend on scheduling. A user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |
 | `"BlakeRationalBaseDescent"` | Rational base descent (unchanged; its optimisation is deferred). | `"Base"` -> a/b |
 
@@ -560,10 +560,11 @@ Fallbacks: builds without GMP-ECM use FLINT's ECM and p+1 (and a native p-1); bu
 native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are native, with no external
 dependency.
 
-Threads: the quadratic sieve and ECM use every online CPU (up to 16) in builds with `MATHILDA_THREADS`.
-`TimeConstrained` budgets are process CPU time, so they are consumed correspondingly faster while
-they run. An abort is taken on the main thread when the current region ends: one polynomial family per
-QS thread, one curve per ECM thread.
+Threads: the quadratic sieve, ECM, p+1, CFRAC and Dixon use every online CPU (up to 16) in builds with
+`MATHILDA_THREADS`. `TimeConstrained` budgets are process CPU time, so they are consumed correspondingly
+faster while they run. An abort is taken on the main thread when the current region ends: one polynomial
+family per QS thread, one curve per ECM thread, one seed per p+1 thread, or a few milliseconds of
+CFRAC/Dixon candidates.
 
 **Features**:
 - `Listable`, `Protected`; `Options[FactorInteger]` is `{GaussianIntegers -> False, Method -> Automatic}`.

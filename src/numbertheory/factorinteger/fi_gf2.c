@@ -24,6 +24,10 @@
  * Each dependency gives X = prod X_r, Y = sign-free sqrt of the product of
  * the right-hand sides (exponents halved) times prod E_r, and gcd(X - Y, n)
  * splits n with probability 1/2 per prime pair.
+ *
+ * Relation logs (FiRelLog) carry relations from worker threads to the main
+ * thread, which alone touches the store: QS replays them per worker, CFRAC
+ * and Dixon merge them by candidate index to keep the serial order.
  */
 #include "fi_internal.h"
 
@@ -206,6 +210,77 @@ int fi_rels_add2(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* 
 int fi_rels_add(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
                 size_t cnt, uint64_t L, const mpz_t n) {
     return fi_rels_add2(R, X, col, exps, cnt, 1, L, n);
+}
+
+/* ------------------------------------------------------------------ */
+/* Relation logs (worker threads -> main thread)                       */
+/* ------------------------------------------------------------------ */
+
+/* A log's records keep their mpz_t once initialised, so a worker that fills
+ * the same log region after region allocates nothing in steady state. */
+void fi_rellog_push(FiRelLog* lg, uint64_t tag, const mpz_t X, const uint32_t* col,
+                    const uint32_t* exps, size_t cnt, uint64_t L1, uint64_t L2) {
+    if (lg->n == lg->cap) {
+        lg->cap = lg->cap ? 2 * lg->cap : 256;
+        lg->r = realloc(lg->r, lg->cap * sizeof(FiLogRec));
+    }
+    if (lg->npool + cnt > lg->cappool) {
+        while (lg->npool + cnt > lg->cappool) lg->cappool = lg->cappool ? 2 * lg->cappool : 4096;
+        lg->col = realloc(lg->col, lg->cappool * sizeof(uint32_t));
+        lg->exps = realloc(lg->exps, lg->cappool * sizeof(uint32_t));
+    }
+    FiLogRec* r = &lg->r[lg->n];
+    if (lg->n == lg->ninit) { mpz_init_set(r->X, X); lg->ninit++; }
+    else mpz_set(r->X, X);
+    lg->n++;
+    r->tag = tag;
+    r->off = (uint32_t)lg->npool;
+    r->cnt = (uint32_t)cnt;
+    r->L1 = L1;
+    r->L2 = L2;
+    memcpy(lg->col + lg->npool, col, cnt * sizeof(uint32_t));
+    memcpy(lg->exps + lg->npool, exps, cnt * sizeof(uint32_t));
+    lg->npool += cnt;
+}
+
+void fi_rellog_replay(FiRelLog* lg, FiRels* R, const mpz_t n) {
+    for (size_t i = 0; i < lg->n; i++) {
+        FiLogRec* r = &lg->r[i];
+        fi_rels_add2(R, r->X, lg->col + r->off, lg->exps + r->off, r->cnt, r->L1, r->L2, n);
+    }
+    lg->n = 0;
+    lg->npool = 0;
+}
+
+int fi_rellog_merge(FiRelLog* logs, int nlogs,
+                    int (*visit)(void* user, const FiLogRec* r, const uint32_t* col,
+                                 const uint32_t* exps),
+                    void* user) {
+    size_t pos[FI_MAXTHREADS] = { 0 };
+    int out = 0;
+    if (nlogs > FI_MAXTHREADS) nlogs = FI_MAXTHREADS;
+    /* At most FI_MAXTHREADS logs: a linear scan for the minimum is cheaper
+     * than a heap, and the records are few (smooth candidates only). */
+    for (;;) {
+        int best = -1;
+        for (int w = 0; w < nlogs; w++)
+            if (pos[w] < logs[w].n && (best < 0 || logs[w].r[pos[w]].tag < logs[best].r[pos[best]].tag))
+                best = w;
+        if (best < 0) break;
+        FiRelLog* lg = &logs[best];
+        const FiLogRec* r = &lg->r[pos[best]++];
+        out = visit(user, r, lg->col + r->off, lg->exps + r->off);
+        if (out) break;
+    }
+    for (int w = 0; w < nlogs; w++) { logs[w].n = 0; logs[w].npool = 0; }
+    return out;
+}
+
+void fi_rellog_free(FiRelLog* lg) {
+    for (size_t i = 0; i < lg->ninit; i++) mpz_clear(lg->r[i].X);
+    free(lg->r); free(lg->col); free(lg->exps);
+    lg->r = NULL; lg->col = lg->exps = NULL;
+    lg->n = lg->ninit = lg->cap = lg->npool = lg->cappool = 0;
 }
 
 /* Turn every pending cycle into a full relation.  The tree edges form a

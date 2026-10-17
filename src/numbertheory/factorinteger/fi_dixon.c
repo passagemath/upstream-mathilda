@@ -14,14 +14,67 @@
  *
  * Shares batched factor-base trial division with early abort, the single
  * large-prime variation, linear algebra and square roots with CFRAC.
+ *
+ * Threads (fi_smooth.c): the main thread draws a batch of random words from
+ * the context generator, the workers build and trial-divide the candidates,
+ * and the hits are replayed in draw order; afterwards the generator is left
+ * exactly where the serial loop would have left it.  Relations, solves, the
+ * divisor and the random stream are therefore those of the serial method.
  */
 #include "fi_internal.h"
 
 #include <stdlib.h>
 
-int    fi_fb_factor(mpz_t v, const uint32_t* fb, size_t nfb, uint32_t* col, uint32_t* exps,
-                    size_t* cnt, uint64_t* L, uint64_t lp_max, size_t abort_bits);
 size_t fi_cfrac_fb_size(size_t digits);
+
+/* Candidates per thread per region (a few ms: a timeout is taken between
+ * regions) and the claim chunk.  Dixon's candidates cost about the same at
+ * every size, so the threads pay at once (16x at 9 digits on 8 cores). */
+#define DIXON_BATCH 2048
+#define DIXON_CHUNK 16
+
+typedef struct {
+    mpz_srcptr n;
+    uint64_t*  draw;        /* the batch's random words */
+    /* replay */
+    FiRels*    R;
+    mpz_ptr    d;
+    mpz_t      x;
+    size_t     need;
+    size_t     stop;        /* index of the candidate that ended the run */
+} DixonState;
+
+static int dixon_prep(void* user, size_t idx, mpz_t X, mpz_t v, mpz_t kn,
+                      uint32_t* col, uint32_t* exps, size_t* cnt) {
+    (void)col; (void)exps; (void)cnt;
+    DixonState* D = (DixonState*)user;
+    uint64_t r = D->draw[idx];
+    unsigned long k = 1 + (unsigned long)(r & 0xffff);
+    unsigned long j = 1 + (unsigned long)((r >> 16) & 0xfffff);
+    mpz_mul_ui(kn, D->n, k);
+    mpz_sqrt(X, kn);
+    mpz_add_ui(X, X, j);
+    mpz_mul(v, X, X);
+    mpz_sub(v, v, kn);                      /* z = x^2 - kN > 0, z == x^2 (mod N) */
+    return 1;
+}
+
+static int dixon_visit(void* user, const FiLogRec* r, const uint32_t* col, const uint32_t* exps) {
+    DixonState* D = (DixonState*)user;
+    uint64_t L = r->L1;
+    D->stop = (size_t)r->tag;
+    if (L > 1 && mpz_divisible_ui_p(D->n, (unsigned long)L) && mpz_cmp_ui(D->n, (unsigned long)L) > 0) {
+        mpz_set_ui(D->d, (unsigned long)L);     /* a prime of n as the large prime */
+        return 1;
+    }
+    mpz_mod(D->x, r->X, D->n);
+    fi_rels_add(D->R, D->x, col, exps, r->cnt, L, D->n);
+    if (fi_rels_count(D->R) >= D->need) {
+        if (fi_rels_solve(D->R, D->n, D->d)) return 1;
+        D->need += 32;
+    }
+    return 0;
+}
 
 int fi_split_dixon(mpz_t d, const mpz_t n, FiCtx* ctx) {
     size_t digits = mpz_sizeinbase(n, 10);
@@ -39,43 +92,42 @@ int fi_split_dixon(mpz_t d, const mpz_t n, FiCtx* ctx) {
     for (size_t i = 1; i <= nfb && !found; i++)
         if (mpz_divisible_ui_p(n, fb[i]) && mpz_cmp_ui(n, fb[i]) != 0) { mpz_set_ui(d, fb[i]); found = 1; }
 
-    FiRels* R = fi_rels_new(fb, nfb + 1);
-    uint32_t* col = malloc((nfb + 2) * sizeof(uint32_t));
-    uint32_t* exps = malloc((nfb + 2) * sizeof(uint32_t));
+    unsigned per = DIXON_BATCH;
+    FI_TUNE_U("FI_DIXON_BATCH", per);
+    int nt = fi_nthreads();
+    size_t batch = (size_t)per * (size_t)nt;
+
+    DixonState D;
+    D.n = n;
+    D.d = d;
+    D.R = fi_rels_new(fb, nfb + 1);
+    D.need = nfb + 48;
+    D.draw = malloc(batch * sizeof(uint64_t));
+    mpz_init(D.x);
+    FiSmooth* S = fi_smooth_new(nt, nfb);
     uint64_t pmax = fb[nfb];
     uint64_t lp_max = pmax * 128;
-    mpz_t kn, x, z, s;
-    mpz_inits(kn, x, z, s, NULL);
     size_t zbits = mpz_sizeinbase(n, 2) / 2 + 40;
     size_t abort_bits = (size_t)(0.70 * zbits) + 8;
     uint64_t budget = ctx->iterations ? ctx->iterations : (UINT64_C(1) << 30);
-    size_t need = nfb + 48;
-    for (uint64_t it = 0; it < budget && !found; it++) {
-        uint64_t r = fi_rand(ctx);
-        unsigned long k = 1 + (unsigned long)(r & 0xffff);
-        unsigned long j = 1 + (unsigned long)((r >> 16) & 0xfffff);
-        mpz_mul_ui(kn, n, k);
-        mpz_sqrt(s, kn);
-        mpz_add_ui(x, s, j);
-        mpz_mul(z, x, x);
-        mpz_sub(z, z, kn);                  /* z = x^2 - kN > 0, z == x^2 (mod N) */
-        size_t cnt = 0;
-        uint64_t L;
-        if (!fi_fb_factor(z, fb, nfb, col, exps, &cnt, &L, lp_max, abort_bits)) continue;
-        if (L > 1 && mpz_divisible_ui_p(n, (unsigned long)L) && mpz_cmp_ui(n, (unsigned long)L) > 0) {
-            mpz_set_ui(d, (unsigned long)L);    /* a prime of n as the large prime */
-            found = 1;
-            break;
+    for (uint64_t it = 0; it < budget && !found; ) {
+        size_t m = budget - it < batch ? (size_t)(budget - it) : batch;
+        uint64_t rng0 = ctx->rng;
+        for (size_t i = 0; i < m; i++) D.draw[i] = fi_rand(ctx);
+        fi_smooth_run(S, m, DIXON_CHUNK, dixon_prep, NULL, &D, fb, nfb, lp_max, abort_bits);
+        found = fi_smooth_replay(S, dixon_visit, &D);
+        if (found) {
+            /* Leave the generator where the serial loop stops: after draw
+             * number D.stop of this batch. */
+            ctx->rng = rng0;
+            for (size_t i = 0; i <= D.stop; i++) (void)fi_rand(ctx);
         }
-        mpz_mod(x, x, n);
-        fi_rels_add(R, x, col, exps, cnt, L, n);
-        if (fi_rels_count(R) >= need) {
-            found = fi_rels_solve(R, n, d);
-            if (!found) need += 32;
-        }
+        it += m;
     }
-    mpz_clears(kn, x, z, s, NULL);
-    fi_rels_free(R);
-    free(col); free(exps); free(fb);
+    fi_smooth_free(S);
+    mpz_clear(D.x);
+    free(D.draw);
+    fi_rels_free(D.R);
+    free(fb);
     return found;
 }

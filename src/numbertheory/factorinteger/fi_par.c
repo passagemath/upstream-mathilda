@@ -1,5 +1,7 @@
 /*
- * fi_par.c — the parallel region shared by the quadratic sieve and ECM.
+ * fi_par.c — the parallel region shared by the quadratic sieve, ECM, p+1 and
+ * the CFRAC / Dixon relation collectors, and the work-claim counter the
+ * latter use to balance candidates of uneven cost.
  *
  * fi_run_parallel(fn, jobs, stride, n) runs fn on n independent jobs, one
  * thread each.  The threading discipline (the same as src/graph/gmet_core.c):
@@ -15,7 +17,8 @@
  *   - a job whose thread could not be created runs inline after the joins.
  *
  * Callers keep a region short (one polynomial family per QS worker, one
- * curve per ECM worker) so a timeout is honoured promptly.  Without
+ * curve per ECM worker, one seed per p+1 worker, a few milliseconds of
+ * candidates for CFRAC / Dixon) so a timeout is honoured promptly.  Without
  * MATHILDA_THREADS everything runs serially on the calling thread.
  */
 #ifndef _POSIX_C_SOURCE
@@ -27,6 +30,8 @@
 
 #include "fi_internal.h"
 #include "core.h"
+
+#include <stdlib.h>
 
 #ifdef MATHILDA_THREADS
 #include <pthread.h>
@@ -83,4 +88,45 @@ void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n) {
     }
 #endif
     for (int i = 0; i < n; i++) fn((char*)jobs + (size_t)i * stride);
+}
+
+/* Work claiming.  A claim is one lock round trip per chunk; callers size the
+ * chunk so that is noise (tens of microseconds of work per chunk). */
+void fi_claim_init(FiClaim* q) {
+    q->next = q->end = 0;
+    q->lock = NULL;
+#ifdef MATHILDA_THREADS
+    pthread_mutex_t* m = malloc(sizeof(pthread_mutex_t));
+    if (m && pthread_mutex_init(m, NULL) == 0) q->lock = m;
+    else free(m);
+#endif
+}
+
+void fi_claim_reset(FiClaim* q, size_t end) {
+    q->next = 0;
+    q->end = end;
+}
+
+int fi_claim_next(FiClaim* q, size_t chunk, size_t* lo, size_t* hi) {
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_lock((pthread_mutex_t*)q->lock);
+#endif
+    size_t a = q->next, b = a + chunk < q->end ? a + chunk : q->end;
+    q->next = b;
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+#endif
+    *lo = a;
+    *hi = b;
+    return a < b;
+}
+
+void fi_claim_destroy(FiClaim* q) {
+#ifdef MATHILDA_THREADS
+    if (q->lock) {
+        pthread_mutex_destroy((pthread_mutex_t*)q->lock);
+        free(q->lock);
+    }
+#endif
+    q->lock = NULL;
 }

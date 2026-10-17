@@ -155,58 +155,6 @@ typedef struct {
     size_t    n, cap;
 } Bucket;
 
-/* A worker's relations, replayed into the shared store by the main thread. */
-typedef struct {
-    mpz_t    X;
-    uint32_t off, cnt;
-    uint64_t L1, L2;
-} LogRec;
-
-typedef struct {
-    LogRec*   r;
-    size_t    n, cap;
-    uint32_t* col;
-    uint32_t* exps;
-    size_t    npool, cappool;
-} RelLog;
-
-static void log_push(RelLog* lg, const mpz_t X, const uint32_t* col, const uint32_t* exps,
-                     size_t cnt, uint64_t L1, uint64_t L2) {
-    if (lg->n == lg->cap) {
-        lg->cap = lg->cap ? 2 * lg->cap : 256;
-        lg->r = realloc(lg->r, lg->cap * sizeof(LogRec));
-    }
-    if (lg->npool + cnt > lg->cappool) {
-        while (lg->npool + cnt > lg->cappool) lg->cappool = lg->cappool ? 2 * lg->cappool : 4096;
-        lg->col = realloc(lg->col, lg->cappool * sizeof(uint32_t));
-        lg->exps = realloc(lg->exps, lg->cappool * sizeof(uint32_t));
-    }
-    LogRec* r = &lg->r[lg->n++];
-    mpz_init_set(r->X, X);
-    r->off = (uint32_t)lg->npool;
-    r->cnt = (uint32_t)cnt;
-    r->L1 = L1;
-    r->L2 = L2;
-    memcpy(lg->col + lg->npool, col, cnt * sizeof(uint32_t));
-    memcpy(lg->exps + lg->npool, exps, cnt * sizeof(uint32_t));
-    lg->npool += cnt;
-}
-
-static void log_replay(RelLog* lg, FiRels* R, const mpz_t n) {
-    for (size_t i = 0; i < lg->n; i++) {
-        LogRec* r = &lg->r[i];
-        fi_rels_add2(R, r->X, lg->col + r->off, lg->exps + r->off, r->cnt, r->L1, r->L2, n);
-        mpz_clear(r->X);
-    }
-    lg->n = 0;
-    lg->npool = 0;
-}
-
-static void log_free(RelLog* lg) {
-    for (size_t i = 0; i < lg->n; i++) mpz_clear(lg->r[i].X);
-    free(lg->r); free(lg->col); free(lg->exps);
-}
-
 typedef struct {
     mpz_srcptr N;
     mpz_t     kN;
@@ -244,7 +192,7 @@ typedef struct {
     uint32_t* col;
     uint32_t* exps;
     mpz_t     g, X, t;
-    RelLog    log;          /* relations found, replayed by the main thread */
+    FiRelLog  log;          /* relations found, replayed by the main thread */
 } QS;
 
 
@@ -554,7 +502,7 @@ static void check_candidate(QS* Q, uint32_t blk, uint32_t off,
     }
     sort_pairs(Q->col, Q->exps, cnt);
     mpz_mod(Q->t, Q->X, Q->N);
-    log_push(&Q->log, Q->t, Q->col, Q->exps, cnt, L1, L2);
+    fi_rellog_push(&Q->log, 0, Q->t, Q->col, Q->exps, cnt, L1, L2);
 }
 
 /* Scan one sieved block: gather the candidate offsets, attach to each the
@@ -639,7 +587,7 @@ static void worker_free(QS* W) {
     free(W->col); free(W->exps);
     mpz_clears(W->A, W->B, W->C, W->g, W->X, W->t, NULL);
     for (int l = 0; l < QS_MAXS; l++) mpz_clear(W->Bl[l]);
-    log_free(&W->log);
+    fi_rellog_free(&W->log);
 }
 
 static void sieve_family_job(void* p) { sieve_family((QS*)p); }
@@ -749,7 +697,7 @@ static int qs_run(mpz_t d, const mpz_t n, FiCtx* c) {
             if (nused + 1 >= used_cap || !choose_A(&W[w], c, used, &nused)) { give_up = 1; break; }
         if (give_up) break;
         fi_run_parallel(sieve_family_job, W, sizeof(QS), nw);
-        for (int w = 0; w < nw; w++) log_replay(&W[w].log, R, n);
+        for (int w = 0; w < nw; w++) fi_rellog_replay(&W[w].log, R, n);
         /* Dependencies are guaranteed once relations outnumber the columns
          * actually present; most base primes above the median appear
          * rarely, so this fires well before nfb + 64. */

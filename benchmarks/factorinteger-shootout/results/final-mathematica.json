@@ -1,0 +1,50 @@
+{
+ "mathematica|u32": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.015965,
+  "n": 2000,
+  "bad": [],
+  "wall": 3.9641268253326416
+ },
+ "mathematica|u63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.586827,
+  "n": 2000,
+  "bad": [],
+  "wall": 3.585294008255005
+ },
+ "mathematica|semi63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.585236,
+  "n": 500,
+  "bad": [],
+  "wall": 3.5815720558166504
+ },
+ "mathematica|semi96": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.243644,
+  "n": 20,
+  "bad": [],
+  "wall": 3.140205144882202
+ },
+ "mathematica|rand40": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 2.845564,
+  "n": 100,
+  "bad": [],
+  "wall": 5.772223949432373
+ },
+ "mathematica|smooth": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 2.345805,
+  "n": 200,
+  "bad": [],
+  "wall": 5.309064865112305
+ }
+}

@@ -1,0 +1,331 @@
+{
+ "mathilda|u32": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.005597,
+  "n": 2000,
+  "bad": [],
+  "wall": 0.3918931484222412
+ },
+ "mathilda|u63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.026168,
+  "n": 2000,
+  "bad": [],
+  "wall": 0.0673677921295166
+ },
+ "mathilda|semi63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.038269,
+  "n": 500,
+  "bad": [],
+  "wall": 0.06125307083129883
+ },
+ "mathilda|semi96": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.077217,
+  "n": 20,
+  "bad": [],
+  "wall": 0.09520316123962402
+ },
+ "mathilda|rand40": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.432219,
+  "n": 100,
+  "bad": [],
+  "wall": 0.4516291618347168
+ },
+ "mathilda|smooth": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.105175,
+  "n": 200,
+  "bad": [],
+  "wall": 0.1269829273223877
+ },
+ "mathilda|qs": {
+  "kind": "single",
+  "cases": {
+   "qs30-0": {
+    "status": "ok",
+    "t": 0.006448,
+    "ok": true,
+    "wall": 0.02461409568786621
+   },
+   "qs30-1": {
+    "status": "ok",
+    "t": 0.007137,
+    "ok": true,
+    "wall": 0.02604508399963379
+   },
+   "qs40-0": {
+    "status": "ok",
+    "t": 0.026488,
+    "ok": true,
+    "wall": 0.04540419578552246
+   },
+   "qs40-1": {
+    "status": "ok",
+    "t": 0.029699,
+    "ok": true,
+    "wall": 0.04915928840637207
+   },
+   "qs50-0": {
+    "status": "ok",
+    "t": 0.075937,
+    "ok": true,
+    "wall": 0.0961461067199707
+   },
+   "qs50-1": {
+    "status": "ok",
+    "t": 0.109383,
+    "ok": true,
+    "wall": 0.12912893295288086
+   },
+   "qs60-0": {
+    "status": "ok",
+    "t": 0.613047,
+    "ok": true,
+    "wall": 0.6330788135528564
+   },
+   "qs60-1": {
+    "status": "ok",
+    "t": 0.600715,
+    "ok": true,
+    "wall": 0.6209321022033691
+   },
+   "qs70-0": {
+    "status": "ok",
+    "t": 3.0534,
+    "ok": true,
+    "wall": 3.0734472274780273
+   },
+   "qs70-1": {
+    "status": "ok",
+    "t": 3.4646,
+    "ok": true,
+    "wall": 3.4861249923706055
+   },
+   "qs80-0": {
+    "status": "ok",
+    "t": 32.1047,
+    "ok": true,
+    "wall": 32.12866282463074
+   },
+   "qs80-1": {
+    "status": "ok",
+    "t": 27.2493,
+    "ok": true,
+    "wall": 27.275737047195435
+   },
+   "qs90-0": {
+    "status": "ok",
+    "t": 287.749,
+    "ok": true,
+    "wall": 287.7810130119324
+   },
+   "qs90-1": {
+    "status": "ok",
+    "t": 282.815,
+    "ok": true,
+    "wall": 282.8507981300354
+   }
+  }
+ },
+ "mathilda|ecm": {
+  "kind": "single",
+  "cases": {
+   "ecm-p20-0": {
+    "status": "ok",
+    "t": 1.15975,
+    "ok": true,
+    "wall": 1.1863350868225098
+   },
+   "ecm-p20-1": {
+    "status": "ok",
+    "t": 3.19412,
+    "ok": true,
+    "wall": 3.216222047805786
+   },
+   "ecm-p25-0": {
+    "status": "ok",
+    "t": 3.2327,
+    "ok": true,
+    "wall": 3.2551019191741943
+   },
+   "ecm-p25-1": {
+    "status": "ok",
+    "t": 11.8471,
+    "ok": true,
+    "wall": 11.878311157226562
+   },
+   "ecm-p30-0": {
+    "status": "ok",
+    "t": 53.8449,
+    "ok": true,
+    "wall": 53.8846538066864
+   },
+   "ecm-p30-1": {
+    "status": "ok",
+    "t": 26.1559,
+    "ok": true,
+    "wall": 26.19145703315735
+   },
+   "ecm-p35-0": {
+    "status": "ok",
+    "t": 203.463,
+    "ok": true,
+    "wall": 203.51161885261536
+   },
+   "ecm-p35-1": {
+    "status": "ok",
+    "t": 370.243,
+    "ok": true,
+    "wall": 370.2939338684082
+   }
+  }
+ },
+ "mathilda|pm1": {
+  "kind": "single",
+  "cases": {
+   "pm1-0": {
+    "status": "ok",
+    "t": 0.03294,
+    "ok": true,
+    "wall": 0.07149171829223633
+   },
+   "pm1-1": {
+    "status": "ok",
+    "t": 0.032165,
+    "ok": true,
+    "wall": 0.05350518226623535
+   },
+   "pm1-2": {
+    "status": "ok",
+    "t": 0.031865,
+    "ok": true,
+    "wall": 0.053045034408569336
+   }
+  }
+ },
+ "mathilda|pp1": {
+  "kind": "single",
+  "cases": {
+   "pp1-0": {
+    "status": "ok",
+    "t": 0.209635,
+    "ok": true,
+    "wall": 0.2304542064666748
+   },
+   "pp1-1": {
+    "status": "ok",
+    "t": 0.194905,
+    "ok": true,
+    "wall": 0.21434617042541504
+   },
+   "pp1-2": {
+    "status": "ok",
+    "t": 0.194259,
+    "ok": true,
+    "wall": 0.21330475807189941
+   }
+  }
+ },
+ "mathilda|fermat": {
+  "kind": "single",
+  "cases": {
+   "fermat-100d": {
+    "status": "ok",
+    "t": 0.005963,
+    "ok": true,
+    "wall": 0.024960756301879883
+   },
+   "fermat-80d": {
+    "status": "ok",
+    "t": 0.005587,
+    "ok": true,
+    "wall": 0.024749040603637695
+   },
+   "fermat-60d": {
+    "status": "ok",
+    "t": 0.005052,
+    "ok": true,
+    "wall": 0.0239260196685791
+   }
+  }
+ },
+ "mathilda|power": {
+  "kind": "single",
+  "cases": {
+   "pow-p30^7": {
+    "status": "ok",
+    "t": 0.002594,
+    "ok": true,
+    "wall": 0.02223801612854004
+   },
+   "pow-m61^3*q^2": {
+    "status": "ok",
+    "t": 0.087964,
+    "ok": true,
+    "wall": 0.1079859733581543
+   },
+   "pow-2^4096": {
+    "status": "ok",
+    "t": 2.80002e-05,
+    "ok": true,
+    "wall": 0.018877029418945312
+   },
+   "pow-smooth^5": {
+    "status": "ok",
+    "t": 0.002456,
+    "ok": true,
+    "wall": 0.021861791610717773
+   }
+  }
+ },
+ "mathilda|special": {
+  "kind": "single",
+  "cases": {
+   "F7=2^128+1": {
+    "status": "ok",
+    "t": 0.024518,
+    "ok": true,
+    "wall": 0.04408764839172363
+   },
+   "F8=2^256+1": {
+    "status": "ok",
+    "t": 0.189816,
+    "ok": true,
+    "wall": 0.209028959274292
+   },
+   "M137=2^137-1": {
+    "status": "ok",
+    "t": 0.036847,
+    "ok": true,
+    "wall": 0.054551124572753906
+   },
+   "M149=2^149-1": {
+    "status": "ok",
+    "t": 0.030375,
+    "ok": true,
+    "wall": 0.048445940017700195
+   },
+   "30!+1": {
+    "status": "ok",
+    "t": 0.002482,
+    "ok": true,
+    "wall": 0.021031856536865234
+   },
+   "10^60+1": {
+    "status": "ok",
+    "t": 0.013264,
+    "ok": true,
+    "wall": 0.032955169677734375
+   }
+  }
+ }
+}

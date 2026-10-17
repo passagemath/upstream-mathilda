@@ -31,6 +31,7 @@ from sympy import isprime
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 MATHILDA = os.environ.get("MATHILDA", os.path.join(ROOT, "Mathilda"))
+MATHILDA450 = os.environ.get("MATHILDA450", "")   # a v0.450 build, for the "before" column
 WOLFRAM = "/Applications/Mathematica.app/Contents/MacOS/wolframscript"
 PY = "/usr/local/opt/python@3.11/bin/python3.11"
 FLINT = os.path.join(HERE, "drivers", "flint_factor")
@@ -164,6 +165,7 @@ def gmpecm_input(cases, batch, method=None, engine="gmpecm"):
 
 ENGINES = {
     "mathilda":    (wl_script,     lambda p, b, m: [MATHILDA, "-file", p]),
+    "mathilda450": (wl_script,     lambda p, b, m: [MATHILDA450, "-file", p]),
     "mathematica": (wl_script,     lambda p, b, m: [WOLFRAM, "-file", p]),
     "pari":        (gp_script,     lambda p, b, m: ["gp", "-q", "-f", p]),
     "maxima":      (maxima_script, lambda p, b, m: ["maxima", "--very-quiet", "-b", p]),

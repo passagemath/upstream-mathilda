@@ -5,7 +5,9 @@
  *           one "<id>\t\t<p e p e ...>" line per case;
  *   single  time each case separately, "<id>\t<sec>\t<p e ...>";
  * Method (argv[2], optional): "auto" (fmpz_factor, default), "qs"
- * (qsieve_factor), "ecm:<B1>:<curves>" (fmpz_factor_ecm, one split).
+ * (qsieve_factor), "ecm:<B1>:<curves>" (fmpz_factor_ecm, one split), and for
+ * word-sized n the ulong splitters "squfof" (n_factor_SQUFOF), "lehman"
+ * (n_factor_lehman), "pp1" (n_factor_pp1_wrapper).
  *
  * Build: cc -O2 -o flint_factor flint_factor.c $(pkg-config --cflags --libs flint) -lgmp
  */
@@ -18,6 +20,7 @@
 #include <flint/fmpz.h>
 #include <flint/fmpz_factor.h>
 #include <flint/qsieve.h>
+#include <flint/ulong_extras.h>
 
 static double now(void) {
     struct timespec ts;
@@ -42,6 +45,17 @@ static void run(Case* c, const char* method, flint_rand_t st) {
             _fmpz_factor_append(c->f, c->n, 1);
         }
         fmpz_clear(d);
+    } else if (!strcmp(method, "squfof") || !strcmp(method, "lehman") || !strcmp(method, "pp1")) {
+        ulong n = fmpz_get_ui(c->n), d = 0;
+        if (!strcmp(method, "squfof")) d = n_factor_SQUFOF(n, 1 << 20);
+        else if (!strcmp(method, "lehman")) d = n_factor_lehman(n);
+        else d = n_factor_pp1_wrapper(n);
+        if (d > 1 && d < n) {
+            _fmpz_factor_append_ui(c->f, d, 1);
+            _fmpz_factor_append_ui(c->f, n / d, 1);
+        } else {
+            _fmpz_factor_append(c->f, c->n, 1);
+        }
     } else {
         fmpz_factor(c->f, c->n);
     }

@@ -153,7 +153,7 @@ size_t fi_build_fb(const mpz_t kn, size_t want, uint32_t* fb) {
 
 int fi_split_cfrac(mpz_t d, const mpz_t n, FiCtx* ctx) {
     size_t digits = mpz_sizeinbase(n, 10);
-    unsigned k = fi_ks_multiplier(n);
+    unsigned k = fi_ks_multiplier(n), k0 = k, ki = 0, trivial = 0;
     mpz_t kn, g, P, Q, Qp, q, t, A, Ap, v;
     mpz_inits(kn, g, P, Q, Qp, q, t, A, Ap, v, NULL);
     mpz_mul_ui(kn, n, k);
@@ -198,10 +198,17 @@ int fi_split_cfrac(mpz_t d, const mpz_t n, FiCtx* ctx) {
         if (i & 1) { col[0] = 0; exps[0] = 1; cnt = 1; }
         uint64_t L;
         if (fi_fb_factor(v, fb, nfb, col, exps, &cnt, &L, lp_max, abort_bits)) {
+            /* On a small n the large-prime bound can exceed a prime of n:
+             * such an L is itself the answer. */
+            if (L > 1 && mpz_divisible_ui_p(n, (unsigned long)L) && mpz_cmp_ui(n, (unsigned long)L) > 0) {
+                mpz_set_ui(d, (unsigned long)L);
+                found = 1;
+                break;
+            }
             fi_rels_add(R, A, col, exps, cnt, L, n);
             if (fi_rels_count(R) >= need) {
                 found = fi_rels_solve(R, n, d);
-                if (!found) need += 32;      /* every dependency trivial: gather more */
+                if (!found) { need += 32; trivial++; }  /* every dependency trivial: gather more */
             }
         }
         /* q_i = floor((g + P_i) / Q_i);  A_i = q_i A_{i-1} + A_{i-2}. */
@@ -212,7 +219,40 @@ int fi_split_cfrac(mpz_t d, const mpz_t n, FiCtx* ctx) {
         mpz_set(Ap, A);
         mpz_mod(A, t, n);
         mpz_swap(Qp, Q);
-        /* A square Q at an even step also gives a direct (SQUFOF-like) try. */
+        /* Q = 1 closes the period of the expansion of sqrt(kN): from here
+         * the Q values repeat and the new relations are dependent on the old
+         * ones (every dependency would come out trivial).  Restart on a new
+         * multiplier, with a fresh base and relation store. */
+        /* Repeated all-trivial solves mean the same: for some (N, k) every
+         * relation of the expansion lies in one square class mod each prime
+         * (seen with k = 2 and both primes == 7 mod 8). */
+        if (mpz_cmp_ui(Qp, 1) == 0 || trivial >= 3) {
+            trivial = 0;
+            static const unsigned KS[] = { 1, 3, 5, 7, 11, 13, 15, 17, 19, 21, 23, 29, 31, 33, 35, 37 };
+            do { k = KS[ki++ % (sizeof KS / sizeof KS[0])]; } while (k == k0 && ki < 64);
+            if (ki >= 64) break;
+            mpz_mul_ui(kn, n, k);
+            mpz_sqrt(g, kn);
+            /* Fresh base and relation store: the old relations all lie in the
+             * degenerate class, and elimination would keep returning
+             * dependencies built from them. */
+            nfb = fi_build_fb(kn, want, fb);
+            fi_rels_free(R);
+            R = fi_rels_new(fb, nfb + 1);
+            need = nfb + 1 + 48;
+            pmax = fb[nfb];
+            lp_max = pmax * 128 < pmax * pmax ? pmax * 128 : pmax * pmax;
+            for (size_t t = 1; t <= nfb && !found; t++)
+                if (mpz_divisible_ui_p(n, fb[t]) && mpz_cmp_ui(n, fb[t]) != 0) { mpz_set_ui(d, fb[t]); found = 1; }
+            if (found) break;
+            mpz_set_ui(P, 0);
+            mpz_set_ui(Qp, 1);
+            mpz_set(q, g);
+            mpz_set_ui(Ap, 1);
+            mpz_mod(A, g, n);
+            i = 0;                          /* parity restarts with the expansion */
+            if (mpz_perfect_square_p(kn)) break;
+        }
     }
     fi_rels_free(R);
     free(col); free(exps); free(fb);

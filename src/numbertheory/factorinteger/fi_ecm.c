@@ -267,54 +267,69 @@ out:
 /* ECM front end                                                       */
 /* ------------------------------------------------------------------ */
 
+
 #ifndef NO_ECM
-/* Clear the per-run state ecm_factor writes back into params so the next
- * call draws a fresh curve (issue #95) while keeping the batch-mode product
- * s cached for the same B1. */
-static void ecm_fresh(ecm_params p) {
-    mpz_set_ui(p->sigma, 0);
-    p->sigma_is_A = 0;
-    mpz_set_ui(p->x, 0);
-    p->B1done = ECM_DEFAULT_B1_DONE;
+/* One GMP-ECM curve, run on a worker thread (GMP-ECM is thread-safe since
+ * 7.0).  On gcd = n (every prime caught at once) the curve is replayed with
+ * B1 shrunk until the primes separate. */
+typedef struct {
+    mpz_srcptr    n;
+    double        B1, B2;
+    int           param;
+    unsigned long sigma;
+    mpz_t         f;
+    int           ok;
+} CurveJob;
+
+static void curve_job(void* arg) {
+    CurveJob* j = (CurveJob*)arg;
+    j->ok = 0;
+    for (double b = j->B1; b >= 50; b /= 8) {
+        ecm_params p;
+        ecm_init(p);
+        p->param = j->param;
+        mpz_set_ui(p->sigma, j->sigma);
+        if (j->B2 > 0 && b == j->B1) mpz_set_d(p->B2, j->B2);
+        int r = ecm_factor(j->f, (mpz_ptr)j->n, b, p);
+        ecm_clear(p);
+        if (r > 0 && nontrivial(j->f, j->n)) { j->ok = 1; return; }
+        if (!(r > 0 && mpz_cmp(j->f, j->n) == 0)) return;
+    }
 }
+
+/* Curves below this size are too cheap to be worth a thread each. */
+#define ECM_PAR_BITS 160
 #endif
 
+/* Run `curves` curves at B1.  With GMP-ECM and threads, the curves go out in
+ * regions of one curve per thread; the sigmas are drawn in curve order and a
+ * region's successes are taken in curve order, so the factor found depends
+ * only on n (and the thread count), not on scheduling. */
 static int run_curves(mpz_t d, const mpz_t n, FiCtx* c, double B1, uint64_t curves) {
     int found = 0;
 #ifndef NO_ECM
-    ecm_params p;
-    ecm_init(p);
-    gmp_randseed_ui(p->rng, (unsigned long)fi_rand(c));
-    mpz_t f;
-    mpz_init(f);
-    for (uint64_t k = 0; k < curves && !found; k++) {
-        ecm_fresh(p);
-        /* Set sigma ourselves: with sigma = 0 GMP-ECM draws it from a
-         * time-seeded generator, which made results run-dependent.  A user
-         * "Sigma" is a Suyama parameter (the classical convention); our own
-         * curves use GMP-ECM's fastest parametrisation (batch stage 1). */
-        if (c->sigma) {
-            p->param = ECM_PARAM_SUYAMA;
-            mpz_set_ui(p->sigma, (unsigned long)(c->sigma + k));
-        } else {
-            p->param = ECM_PARAM_BATCH_SQUARE;
-            mpz_set_ui(p->sigma, (unsigned long)(2 + fi_rand(c) % (UINT64_C(1) << 31)));
+    int nt = mpz_sizeinbase(n, 2) >= ECM_PAR_BITS ? fi_nthreads() : 1;
+    CurveJob job[FI_MAXTHREADS];
+    for (int t = 0; t < nt; t++) mpz_init(job[t].f);
+    for (uint64_t k = 0; k < curves && !found; ) {
+        int m = 0;
+        for (; m < nt && k < curves; m++, k++) {
+            CurveJob* j = &job[m];
+            j->n = n;
+            j->B1 = B1;
+            j->B2 = c->B2;
+            /* A user "Sigma" is a Suyama parameter (the classical
+             * convention); our own curves use GMP-ECM's fastest
+             * parametrisation (batch stage 1) with sigmas drawn from the
+             * n-seeded generator (GMP-ECM's own draw is time-seeded). */
+            if (c->sigma) { j->param = ECM_PARAM_SUYAMA; j->sigma = (unsigned long)(c->sigma + k); }
+            else { j->param = ECM_PARAM_BATCH_SQUARE; j->sigma = (unsigned long)(2 + fi_rand(c) % (UINT64_C(1) << 31)); }
         }
-        if (c->B2 > 0) mpz_set_d(p->B2, c->B2);
-        int r = ecm_factor(f, (mpz_ptr)n, B1, p);
-        if (r > 0 && nontrivial(f, n)) { mpz_set(d, f); found = 1; }
-        /* gcd = n: every prime caught on this curve; replay it with B1
-         * shrunk until they separate. */
-        for (double b = B1 / 8; r > 0 && !found && mpz_cmp(f, n) == 0 && b >= 50; b /= 8) {
-            mpz_set(p->sigma, p->sigma);
-            p->B1done = ECM_DEFAULT_B1_DONE;
-            mpz_set_ui(p->x, 0);
-            r = ecm_factor(f, (mpz_ptr)n, b, p);
-            if (r > 0 && nontrivial(f, n)) { mpz_set(d, f); found = 1; }
-        }
+        fi_run_parallel(curve_job, job, sizeof(CurveJob), m);
+        for (int t = 0; t < m && !found; t++)
+            if (job[t].ok) { mpz_set(d, job[t].f); found = 1; }
     }
-    mpz_clear(f);
-    ecm_clear(p);
+    for (int t = 0; t < nt; t++) mpz_clear(job[t].f);
 #elif defined(USE_FLINT)
     flint_rand_t st;
     flint_rand_init(st);

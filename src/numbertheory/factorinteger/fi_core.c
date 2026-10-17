@@ -23,6 +23,7 @@
  */
 #include "fi_internal.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -204,6 +205,193 @@ static int split_named(mpz_t d, const mpz_t m, FiCtx* c) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Named methods on words                                              */
+/* ------------------------------------------------------------------ */
+
+/* A named method with a word-size splitter factors a word input entirely in
+ * word arithmetic (no mpz, no heap): what is measured is the method. */
+static int has_word_splitter(FiMethod m) {
+    return m == FI_RHO || m == FI_FERMAT || m == FI_LEHMAN || m == FI_SQUFOF ||
+           m == FI_PM1 || m == FI_PP1 || m == FI_ECM;
+}
+
+/* Split odd composite word n (not a perfect power) with c->method; 0 when
+ * the method gives up or does not apply at this size. */
+static uint64_t word_split(uint64_t n, FiCtx* c) {
+    uint64_t d = 0;
+    switch (c->method) {
+    case FI_RHO: {
+        uint64_t starts = DEF(c->starts, 16), it = DEF(c->iterations, UINT64_C(1) << 26);
+        for (uint64_t k = 0; k < starts && !d; k++) d = fi_u64_rho(n, 1 + k, it);
+        break;
+    }
+    case FI_FERMAT:
+    case FI_LEHMAN: {
+        int fits = c->method == FI_FERMAT ? !(n >> 62) : !(n >> 42);
+        if (fits) {
+            d = c->method == FI_FERMAT ? fi_u64_fermat(n, DEF(c->iterations, UINT64_C(1) << 24))
+                                       : fi_u64_lehman(n);
+        } else {
+            /* Past the word variant's range: the budgeted bignum version. */
+            mpz_t m, f;
+            mpz_init_set_ui(m, (unsigned long)n);
+            mpz_init(f);
+            int ok = c->method == FI_FERMAT ? fi_split_fermat(f, m, c, c->iterations)
+                                            : fi_split_lehman(f, m, c, c->iterations);
+            if (ok) d = mpz_get_ui(f);
+            mpz_clears(m, f, NULL);
+        }
+        break;
+    }
+    case FI_SQUFOF:
+        if (!(n >> 62)) d = fi_u64_squfof(n, c->iterations);
+        if (!d) {
+            /* kN overflows a word for the larger multipliers: two-word forms. */
+            mpz_t m, f;
+            mpz_init_set_ui(m, (unsigned long)n);
+            mpz_init(f);
+            if (fi_split_squfof(f, m, c, c->iterations)) d = mpz_get_ui(f);
+            mpz_clears(m, f, NULL);
+        }
+        break;
+    case FI_PM1:    d = fi_u64_pm1(n, c->B1 > 0 ? (uint64_t)c->B1 : 0); break;
+    case FI_PP1:
+        for (int s = 0; s < 3 && !d; s++) d = fi_u64_pp1(n, c->B1 > 0 ? (uint64_t)c->B1 : 0, fi_rand(c));
+        break;
+    case FI_ECM:    d = fi_u64_ecm(n, &c->rng, c->curves ? (int)c->curves : 256); break;
+    default: break;
+    }
+    return (d > 1 && d < n) ? d : 0;
+}
+
+/* x^e as a word, or 0 on overflow. */
+static uint64_t wpow(uint64_t x, int e) {
+    uint64_t r = 1;
+    while (e) {
+        uint64_t h, l;
+        if (e & 1) { fi_mul64(r, x, &h, &l); if (h) return 0; r = l; }
+        e >>= 1;
+        if (e) { fi_mul64(x, x, &h, &l); if (h) return 0; x = l; }
+    }
+    return r;
+}
+
+/* n = b^e with b not a perfect power; returns e (1 if none) and sets *b.
+ * Only prime exponents up to log2(n) are tried, each by a rounded floating
+ * root checked exactly; a hit recurses on b, accumulating the exponent. */
+static int word_root(uint64_t n, uint64_t* b) {
+    static const int PE[] = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61 };
+    int bits = 0;
+    for (uint64_t t = n; t; t >>= 1) bits++;
+    for (size_t i = 0; i < sizeof PE / sizeof PE[0] && PE[i] < bits; i++) {
+        int e = PE[i];
+        uint64_t r = (uint64_t)(pow((double)n, 1.0 / e) + 0.5);
+        for (uint64_t x = r > 2 ? r - 1 : 2; x <= r + 1; x++) {
+            if (wpow(x, e) == n) {
+                int e2 = word_root(x, b);
+                return e * e2;
+            }
+        }
+    }
+    *b = n;
+    return 1;
+}
+
+/* Sink for word results: prime powers, plus at most a few unfactored
+ * composites (flagged). */
+typedef struct { uint64_t p[64]; int64_t e[64]; int n; } WordOut;
+
+static void wo_add(WordOut* w, uint64_t p, int64_t e) {
+    for (int i = 0; i < w->n; i++) if (w->p[i] == p) { w->e[i] += e; return; }
+    w->p[w->n] = p; w->e[w->n++] = e;
+}
+
+static void word_factor_method_w(uint64_t n, int64_t mult, WordOut* out, FiCtx* c) {
+    if (n <= 1) return;
+    if (fi_u64_is_prime(n)) { wo_add(out, n, mult); return; }
+    uint64_t b;
+    int e = word_root(n, &b);
+    if (e > 1) { word_factor_method_w(b, mult * e, out, c); return; }
+    if (c->method == FI_PM1 || c->method == FI_PP1 || c->method == FI_ECM) {
+        size_t np;
+        const uint32_t* P = fi_small_primes(&np);
+        for (size_t i = 1; i < np && P[i] < 1024; i++)
+            if (n % P[i] == 0 && n != P[i]) {
+                word_factor_method_w(P[i], mult, out, c);
+                word_factor_method_w(n / P[i], mult, out, c);
+                return;
+            }
+    }
+    uint64_t d = word_split(n, c);
+    if (!d) {
+        mpz_t m;
+        mpz_init_set_ui(m, (unsigned long)n);
+        c->incomplete = 1;
+        fi_warn_incomplete(c, m);
+        mpz_clear(m);
+        wo_add(out, n, mult);
+        return;
+    }
+    word_factor_method_w(d, mult, out, c);
+    word_factor_method_w(n / d, mult, out, c);
+}
+
+/* FactorInteger`Method[n] for a machine integer n >= 2: sorted prime
+ * powers into p[]/e[] (room for 64); returns the count, or -1 when the
+ * method has no word splitter (the caller takes the general path). */
+int fi_word_method_array(uint64_t n, FiCtx* c, uint64_t* p, int64_t* e) {
+    if (!has_word_splitter(c->method)) return -1;
+    WordOut w;
+    w.n = 0;
+    c->rng = n * UINT64_C(0x9E3779B97F4A7C15) | 1;
+    int z = 0;
+    while (!(n & 1)) { n >>= 1; z++; }
+    if (z) wo_add(&w, 2, z);
+    word_factor_method_w(n, 1, &w, c);
+    for (int i = 1; i < w.n; i++) {
+        uint64_t pp = w.p[i];
+        int64_t ee = w.e[i];
+        int j = i;
+        while (j > 0 && w.p[j - 1] > pp) { w.p[j] = w.p[j - 1]; w.e[j] = w.e[j - 1]; j--; }
+        w.p[j] = pp; w.e[j] = ee;
+    }
+    for (int i = 0; i < w.n; i++) { p[i] = w.p[i]; e[i] = w.e[i]; }
+    return w.n;
+}
+
+static void word_factor_method(uint64_t n, int64_t mult, FiFactors* out, FiCtx* c, int* gave_up) {
+    if (n <= 1) return;
+    if (fi_u64_is_prime(n)) { fi_factors_add_ui(out, n, mult); return; }
+    uint64_t b;
+    int e = word_root(n, &b);
+    if (e > 1) { word_factor_method(b, mult * e, out, c, gave_up); return; }
+    if (c->method == FI_PM1 || c->method == FI_PP1 || c->method == FI_ECM) {
+        /* Same tiny-prime pre-step as the bignum front ends. */
+        size_t np;
+        const uint32_t* P = fi_small_primes(&np);
+        for (size_t i = 1; i < np && P[i] < 1024; i++)
+            if (n % P[i] == 0 && n != P[i]) {
+                word_factor_method(P[i], mult, out, c, gave_up);
+                word_factor_method(n / P[i], mult, out, c, gave_up);
+                return;
+            }
+    }
+    uint64_t d = word_split(n, c);
+    if (!d) {
+        mpz_t m;
+        mpz_init_set_ui(m, (unsigned long)n);
+        fi_factors_add(out, m, mult);
+        c->incomplete = 1;
+        fi_warn_incomplete(c, m);
+        mpz_clear(m);
+        *gave_up = 1;
+        return;
+    }
+    word_factor_method(d, mult, out, c, gave_up);
+    word_factor_method(n / d, mult, out, c, gave_up);
+}
+
+/* ------------------------------------------------------------------ */
 /* Automatic tier table                                                */
 /* ------------------------------------------------------------------ */
 
@@ -247,15 +435,16 @@ static int run_tier(int s, mpz_t d, const mpz_t m, size_t bits, int digits, FiCt
     }
     case ST_FERMAT: return fi_split_fermat(d, m, c, AUTO_FERMAT_ITERS);
     case ST_PM1: {
-        double b1 = 2500.0 * digits;
+        double b1 = 2000.0 * digits;
         return fi_split_pm1(d, m, c, b1 < AUTO_PM1_B1 ? b1 : AUTO_PM1_B1, 0);
     }
     case ST_PP1: {
         /* Each seed succeeds with probability 1/2 (it tests p+1 or p-1
          * depending on a Legendre symbol), so composites big enough that ECM
-         * or QS will cost seconds get three seeds; smaller ones one probe. */
+         * or QS will cost seconds (70+ digits) get three seeds; smaller ones
+         * one probe, which costs less than the parallel QS it might save. */
         double b1 = 1500.0 * digits;
-        return fi_split_pp1_seeds(d, m, c, b1 < AUTO_PP1_B1 ? b1 : AUTO_PP1_B1, 0, digits >= 60 ? 3 : 1);
+        return fi_split_pp1_seeds(d, m, c, b1 < AUTO_PP1_B1 ? b1 : AUTO_PP1_B1, 0, digits >= 70 ? 3 : 1);
     }
     default:        return fi_ecm_level(d, m, c, AUTO_ECM_FIRST + (s - ST_ECM0) * AUTO_ECM_STEP);
     }
@@ -354,6 +543,12 @@ void fi_factor(const mpz_t n_in, FiFactors* out, FiCtx* c) {
     } else {
         mp_bitcnt_t z = mpz_scan1(n, 0);
         if (z) { mpz_tdiv_q_2exp(n, n, z); fi_factors_add_ui(out, 2, (int64_t)z); }
+        if (c->k_limit == 0 && has_word_splitter(c->method) && mpz_sizeinbase(n, 2) <= 64) {
+            int gave_up = 0;
+            word_factor_method(mpz_get_ui(n), 1, out, c, &gave_up);
+            mpz_clear(n);
+            return;
+        }
     }
 
     WorkStack st = { NULL, 0, 0 };

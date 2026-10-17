@@ -648,6 +648,20 @@ static Expr* builtin_factorinteger_method(Expr* res) {
     if (!tick || !lookup_method(tick + 1, &m)) return NULL;
     FiCtx c;
     fi_ctx_init(&c, m);
+    /* Fast path: FactorInteger`Method[n] on a machine integer, for the
+     * methods with a word splitter. */
+    if (res->data.function.arg_count == 1 && res->data.function.args[0]->type == EXPR_INTEGER &&
+        res->data.function.args[0]->data.integer >= 2) {
+        uint64_t p[64];
+        int64_t e[64];
+        int k = fi_word_method_array((uint64_t)res->data.function.args[0]->data.integer, &c, p, e);
+        if (k >= 0) {
+            Expr* items[64];
+            for (int i = 0; i < k; i++) items[i] = pair_expr(expr_new_integer((int64_t)p[i]), e[i]);
+            fi_ctx_clear(&c);
+            return expr_new_function(expr_new_symbol(SYM_List), items, (size_t)k);
+        }
+    }
     Expr* out = factorinteger_core(res, &c, 1);
     fi_ctx_clear(&c);
     return out;

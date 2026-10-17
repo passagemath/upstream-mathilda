@@ -43,9 +43,19 @@ FLINT = os.path.join(HERE, "drivers", "flint_factor")
 # --------------------------------------------------------------------------
 
 
-def wl_script(cases, batch, method=None):
-    """Mathilda and Mathematica share one Wolfram-language script."""
-    opt = f', Method -> "{method}"' if method else ""
+METHOD_WL = {   # Mathilda method specs needing suboptions for a fair comparison
+    "TrialDivision": '{"TrialDivision", "Bound" -> 100000}',
+}
+
+
+def wl_script(cases, batch, method=None, engine="mathilda"):
+    """Mathilda and Mathematica share one Wolfram-language script.  Mathematica
+    has no Method option for FactorInteger, so it always runs its own driver."""
+    if engine == "mathematica" or not method:
+        opt = ""
+    else:
+        opt = f', Method -> {METHOD_WL.get(method, chr(34) + method + chr(34))}'
+
     lst = ",\n".join(f'{{"{c["id"]}", {c["n"]}}}' for c in cases)
     fmt = 'StringRiffle[ToString /@ Flatten[#], " "]&'
     if batch:
@@ -61,12 +71,16 @@ def wl_script(cases, batch, method=None):
     return ".m", body
 
 
-PARI_FLAGS = {None: None, "QuadraticSieve": 4 | 2 | 8, "ECM": 1, "PollardRho": 1 | 2 | 8}
+# factorint flags: 1 no MPQS, 2 skip first-stage ECM, 4 no rho/SQUFOF, 8 no final ECM.
+PARI_FLAGS = {None: None, "QuadraticSieve": 4 | 2 | 8, "ECM": 1, "PollardRho": 1 | 2 | 8,
+              "ShanksSquareForms": 1 | 2 | 8}
 
 
-def gp_script(cases, batch, method=None):
+def gp_script(cases, batch, method=None, engine="pari"):
     flag = PARI_FLAGS.get(method)
     call = f"factorint(n, {flag})" if flag is not None else "factor(n)"
+    if method == "TrialDivision":
+        call = "factor(n, 100000)"
     # gp reads its input line by line, so the case vector must be one line.
     lst = ", ".join(f'["{c["id"]}", {c["n"]}]' for c in cases)
     s = ["default(parisizemax, 2^32);", f"cases = [{lst}];",
@@ -82,7 +96,7 @@ def gp_script(cases, batch, method=None):
     return ".gp", "\n".join(s) + "\n"
 
 
-def maxima_script(cases, batch, method=None):
+def maxima_script(cases, batch, method=None, engine="maxima"):
     lst = ",\n".join(f'["{c["id"]}", {c["n"]}]' for c in cases)
     s = [f"cases : [\n{lst}\n]$",
          "fl(f) := simplode(map(string, flatten(f)), \" \")$"]
@@ -97,26 +111,55 @@ def maxima_script(cases, batch, method=None):
     return ".mac", "\n".join(s) + "\n"
 
 
-def sympy_script(cases, batch, method=None):
+SYMPY_CALL = {
+    None: "factorint(n)",
+    "PollardRho": "split(n, pollard_rho(n))",
+    "PollardPMinus1": "split(n, pollard_pm1(n, B=10**6))",
+    "ECM": "dict.fromkeys(sorted(ecm(n)), 1)",
+    "TrialDivision": "factorint(n, limit=10**5, use_rho=False, use_pm1=False, use_ecm=False)",
+}
+
+
+def sympy_script(cases, batch, method=None, engine="sympy"):
     data = json.dumps([[c["id"], c["n"]] for c in cases])
+    call = SYMPY_CALL.get(method, "factorint(n)")
     return ".py", f"""
 import json, time
 from sympy import factorint
+from sympy.ntheory import pollard_rho, pollard_pm1, ecm
+def split(n, d):
+    return {{n: 1}} if not d else {{d: 1, n // d: 1}}
+def factorint_m(n):
+    return {call}
 cases = [(i, int(n)) for i, n in json.loads('''{data}''')]
 fl = lambda f: " ".join(f"{{p}} {{e}}" for p, e in sorted(f.items()))
 if {batch!r}:
-    t0 = time.perf_counter(); rs = [factorint(n) for _, n in cases]
+    t0 = time.perf_counter(); rs = [factorint_m(n) for _, n in cases]
     print("#TOTAL\\t%.9f" % (time.perf_counter() - t0))
     for (i, _), f in zip(cases, rs): print(i + "\\t\\t" + fl(f))
 else:
     for i, n in cases:
-        t0 = time.perf_counter(); f = factorint(n); t = time.perf_counter() - t0
+        t0 = time.perf_counter(); f = factorint_m(n); t = time.perf_counter() - t0
         print(f"{{i}}\\t{{t:.9f}}\\t{{fl(f)}}", flush=True)
 """
 
 
-def flint_input(cases, batch, method=None):
+def flint_input(cases, batch, method=None, engine="flint"):
     return ".txt", "".join(f'{c["id"]} {c["n"]}\n' for c in cases)
+
+
+FLINT_METHODS = {None: "auto", "QuadraticSieve": "qs", "ShanksSquareForms": "squfof",
+                 "Lehman": "lehman", "WilliamsPPlus1": "pp1"}
+
+# GMP-ECM command line, one process per case (its natural drivers: ECM with
+# B1 climbing via -I, p-1 / p+1 at B1 = 10^6).
+GMPECM_ARGS = {"ECM": ["-one", "-I", "1", "-c", "0", "2000"],
+               "PollardPMinus1": ["-pm1", "1e6"],
+               "WilliamsPPlus1": ["-pp1", "-c", "3", "1e6"]}
+
+
+def gmpecm_input(cases, batch, method=None, engine="gmpecm"):
+    return ".txt", "".join(c["n"] + "\n" for c in cases)
 
 
 ENGINES = {
@@ -126,17 +169,19 @@ ENGINES = {
     "maxima":      (maxima_script, lambda p, b, m: ["maxima", "--very-quiet", "-b", p]),
     "sympy":       (sympy_script,  lambda p, b, m: [PY, p]),
     "flint":       (flint_input,   None),
+    "gmpecm":      (gmpecm_input,  None),
 }
-FLINT_METHODS = {None: "auto", "QuadraticSieve": "qs"}
 
 
 def run_engine(engine, cases, batch, timeout, method):
     emit, cmd = ENGINES[engine]
-    suffix, text = emit(cases, batch, method)
+    suffix, text = emit(cases, batch, method, engine)
     with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False, dir=os.environ.get("TMPDIR")) as f:
         f.write(text)
         path = f.name
     try:
+        if engine == "gmpecm":
+            return run_gmpecm(cases, timeout, method)
         if engine == "flint":
             argv = [FLINT, "batch" if batch else "single", FLINT_METHODS.get(method, "auto")]
             stdin = open(path)
@@ -154,6 +199,40 @@ def run_engine(engine, cases, batch, timeout, method):
     finally:
         os.unlink(path)
     return parse(out), status, wall
+
+
+def run_gmpecm(cases, timeout, method):
+    """Factor each case with the ecm CLI, re-running on the cofactor until it
+    is prime (the CLI reports one split per run).  Timed from outside."""
+    from sympy import isprime as _isp
+    rows, total, status = {}, 0.0, "ok"
+    for c in cases:
+        n = int(c["n"])
+        stack, primes = [n], []
+        t0 = time.time()
+        try:
+            while stack:
+                m = stack.pop()
+                if _isp(m):
+                    primes.append(m)
+                    continue
+                p = subprocess.run(["ecm", "-q"] + GMPECM_ARGS.get(method, GMPECM_ARGS["ECM"]),
+                                   input=f"{m}\n", capture_output=True, text=True,
+                                   timeout=max(1, timeout - (time.time() - t0)))
+                toks = [int(t) for t in p.stdout.split() if t.isdigit()]
+                fs = [t for t in toks if 1 < t < m and m % t == 0]
+                if not fs:
+                    primes.append(m)        # no split: reported as-is (fails verification)
+                    break
+                d = fs[0]
+                stack += [d, m // d]
+        except subprocess.TimeoutExpired:
+            status = "timeout"
+        t = time.time() - t0
+        total += t
+        txt = " ".join(f"{q} 1" for q in sorted(primes)) if status == "ok" else ""
+        rows[c["id"]] = (t, txt)
+    return (total, rows), status, total
 
 
 LINE = re.compile(r"^(\S+)\t([^\t]*)\t(.*)$")

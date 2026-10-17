@@ -125,6 +125,10 @@ void fi_factor(const mpz_t n, FiFactors* out, FiCtx* c);
  * composite survived the search (the caller must then decline). */
 int fi_factor_complete_mpz(const mpz_t n, FiFactors* out);
 
+/* Named method on a machine word (allocation-free); -1 if the method has no
+ * word splitter.  Fills sorted p[]/e[] (room for 64). */
+int fi_word_method_array(uint64_t n, FiCtx* c, uint64_t* p, int64_t* e);
+
 /* ------------------------------------------------------------------ */
 /* Word-size engine (fi_u64.c)                                         */
 /* ------------------------------------------------------------------ */
@@ -228,6 +232,9 @@ FiRels* fi_rels_new(const uint32_t* fb, size_t ncols);
 void    fi_rels_free(FiRels* R);
 int     fi_rels_add(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
                     size_t cnt, uint64_t L, const mpz_t n);
+/* Two large primes (each 1 or a prime outside the base). */
+int     fi_rels_add2(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
+                     size_t cnt, uint64_t L1, uint64_t L2, const mpz_t n);
 size_t  fi_rels_count(const FiRels* R);
 size_t  fi_rels_partials(const FiRels* R);
 /* Columns that occur with an odd exponent in some full relation: once the
@@ -242,6 +249,17 @@ int     fi_rels_solve(FiRels* R, const mpz_t n, mpz_t d);
 
 /* FactorInteger::nofac for composite m (unless c->warned). */
 void fi_warn_incomplete(FiCtx* c, const mpz_t m);
+
+/* ------------------------------------------------------------------ */
+/* Parallel regions (fi_par.c)                                         */
+/* ------------------------------------------------------------------ */
+
+#define FI_MAXTHREADS 16
+/* Worker threads available (1 without MATHILDA_THREADS). */
+int  fi_nthreads(void);
+/* Run fn on n jobs laid out stride bytes apart, one thread each, inside a
+ * TimeConstrained-deferred region (see fi_par.c). */
+void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n);
 
 /* ------------------------------------------------------------------ */
 /* Bit helpers (GCC builtins where available, portable otherwise)      */

@@ -332,26 +332,51 @@ uint64_t fi_u64_fermat(uint64_t n, uint64_t max_iters) {
 
 /* Lehman (1974): O(n^(1/3)).  Trial division to n^(1/3), then for each
  * k <= n^(1/3) a short window of a with a^2 - 4kn square.  Requires
- * n < 2^42 so 4 k n stays below 2^63. */
+ * n < 2^42 so 4 k n stays below 2^63.  Trial division uses the primes with
+ * precomputed inverses (n divisible by p <=> n p^-1 mod 2^64 <= floor(
+ * (2^64-1)/p)), so it costs a multiply per prime instead of a division. */
+#define LEH_PMAX 16384u
+static uint32_t leh_p[2000];
+static uint64_t leh_inv[2000], leh_lim[2000];
+static size_t leh_n = 0;
+static void leh_init(void) {
+    size_t np;
+    const uint32_t* P = fi_small_primes(&np);
+    for (size_t i = 1; i < np && P[i] < LEH_PMAX; i++) {
+        leh_p[leh_n] = P[i];
+        leh_inv[leh_n] = inv64(P[i]);
+        leh_lim[leh_n] = UINT64_MAX / P[i];
+        leh_n++;
+    }
+}
+
 uint64_t fi_u64_lehman(uint64_t n) {
     if (!sq_ready) sq_init();
+    if (!leh_n) leh_init();
     if (!(n & 1)) return 2;
     if (n >> 42) return 0;
     uint64_t c = (uint64_t)cbrt((double)n) + 1;
-    for (uint64_t p = 3; p <= c; p += 2)
-        if (n % p == 0) return p == n ? 0 : p;
-    double sixth = pow((double)n, 1.0 / 6.0);
+    for (size_t i = 0; i < leh_n && leh_p[i] <= c; i++)
+        if (n * leh_inv[i] <= leh_lim[i]) return leh_p[i] == n ? 0 : leh_p[i];
+    double sixth = pow((double)n, 1.0 / 6.0) * 0.25;
+    double dn4 = 4.0 * (double)n;
     for (uint64_t k = 1; k <= c; k++) {
         uint64_t fkn = 4 * k * n;
-        uint64_t a0 = fi_u64_isqrt(fkn);
+        double sk = sqrt(dn4 * (double)k);
+        uint64_t a0 = (uint64_t)sk;
         if (a0 * a0 < fkn) a0++;
-        uint64_t a1 = a0 + (uint64_t)(sixth / (4.0 * sqrt((double)k))) + 1;
+        else if ((a0 - 1) * (a0 - 1) >= fkn) a0--;
+        uint64_t a1 = (uint64_t)(sk + sixth / sqrt((double)k)) + 1;
+        /* a must have the parity making a^2 - 4kn a square: for odd k, a is
+         * even unless ...; checking both parities is cheap with the filter. */
+        uint64_t b2 = a0 * a0 - fkn;
         for (uint64_t a = a0; a <= a1; a++) {
-            uint64_t b2 = a * a - fkn, b;
+            uint64_t b;
             if (is_square_u64(b2, &b)) {
                 uint64_t g = fi_u64_gcd(a + b, n);
                 if (g > 1 && g < n) return g;
             }
+            b2 += 2 * a + 1;
         }
     }
     return 0;

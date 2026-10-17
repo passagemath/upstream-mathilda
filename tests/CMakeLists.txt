@@ -447,6 +447,7 @@ set(COMMON_SRC
     ../src/numbertheory/factorinteger/fi_gf2.c
     ../src/numbertheory/factorinteger/fi_lanczos.c
     ../src/numbertheory/factorinteger/fi_rbd.c
+    ../src/numbertheory/factorinteger/fi_par.c
     ../src/special_functions/fibonacci.c
     ../src/special_functions/lucas.c
     ../src/special_functions/hyperfactorial.c

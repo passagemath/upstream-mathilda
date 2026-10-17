@@ -127,6 +127,26 @@ single("special", "classic named composites",
         ("30!+1", math.factorial(30) + 1),
         ("10^60+1", 10 ** 60 + 1)])
 
+# --- method-specific groups (appended: earlier groups keep their values) ---
+batch("rho96", "30 numbers p32 * q64 (Pollard rho territory)",
+      [rp(bits=32) * rp(bits=64) for _ in range(30)])
+batch("squfof60", "100 balanced semiprimes ~2^60 (SQUFOF territory)",
+      [rp(bits=30) * rp(bits=30) for _ in range(100)])
+batch("lehman40", "100 balanced semiprimes ~2^40 (Lehman territory)",
+      [rp(bits=20) * rp(bits=20) for _ in range(100)])
+
+
+def smooth_1e5():
+    small = list(primerange(2, 10 ** 5))
+    m = 1
+    while m < 10 ** 39:
+        m *= rng.choice(small)
+    return m
+
+
+batch("trial40", "50 ~40-digit products of primes < 10^5 (trial-division territory)",
+      [smooth_1e5() for _ in range(50)])
+
 with open("corpus.json", "w") as f:
     json.dump({"seed": SEED, "groups": groups}, f, indent=1)
 

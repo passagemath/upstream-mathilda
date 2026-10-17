@@ -4,9 +4,13 @@
  *
  * A relation is X^2 == sign * prod p_i^e_i * E^2 (mod n) over a factor base,
  * where E collects squared large primes from combined partial relations.
- * Partial relations (one large prime L outside the factor base) are kept in
- * a hash table keyed by L; a second partial with the same L combines with
- * the first into a full relation with E = L.
+ * Partial relations carry one or two large primes outside the factor base
+ * and are kept as edges of a graph on the large primes (vertex 0 stands for
+ * "no large prime", so a one-prime partial is an edge 0 - L).  Union-find
+ * counts the independent cycles as edges arrive; every cycle multiplies out
+ * to a full relation, since each of its vertices' primes appears exactly
+ * twice (E = the product of the cycle's primes).  Two one-prime partials
+ * with the same L are the 2-cycle 0 - L - 0: the classical pairing.
  *
  * Linear algebra finds subsets of relations whose exponent vectors sum to
  * zero mod 2.  The matrix is first pruned (singleton columns removed
@@ -36,10 +40,12 @@ typedef struct {
 } Rel;
 
 typedef struct {
-    uint64_t  L;             /* large prime, 0 = empty slot */
     mpz_t     X;
+    uint32_t  u, v;          /* vertices (large primes) */
     uint32_t  off, cnt;
-} Partial;
+    uint8_t   tree;          /* spanning-forest edge (else it closed a cycle) */
+    uint8_t   done;          /* cycle already turned into a full relation */
+} Edge;
 
 struct FiRels {
     size_t    ncols;         /* factor-base columns, column 0 = sign */
@@ -49,9 +55,16 @@ struct FiRels {
     uint32_t* pcol;          /* pool of column indices */
     uint32_t* pexp;          /* matching exponents */
     size_t    npool, cappool;
-    Partial*  part;          /* open-addressed hash of partials */
-    size_t    partcap, npart;
-    uint64_t  ncombined;
+    Edge*     edge;          /* partial relations */
+    size_t    nedge, capedge;
+    uint64_t* vkey;          /* open-addressed map large prime -> vertex */
+    uint32_t* vval;
+    size_t    vcap;
+    uint64_t* vprime;        /* vertex -> large prime (vprime[0] = 1) */
+    uint32_t* uf;            /* union-find parent */
+    size_t    nvert, capvert;
+    size_t    pending;       /* cycles not yet materialised */
+    uint32_t* ex;            /* scratch: exponent per column */
     unsigned char* colseen;  /* column ever odd in a full relation */
     size_t    nactive;       /* number of such columns */
 };
@@ -73,8 +86,16 @@ FiRels* fi_rels_new(const uint32_t* fb, size_t ncols) {
     FiRels* R = calloc(1, sizeof *R);
     R->fb = fb;
     R->ncols = ncols;
-    R->partcap = 1 << 12;
-    R->part = calloc(R->partcap, sizeof(Partial));
+    R->vcap = 1 << 12;
+    R->vkey = calloc(R->vcap, sizeof(uint64_t));
+    R->vval = calloc(R->vcap, sizeof(uint32_t));
+    R->capvert = 1024;
+    R->vprime = malloc(R->capvert * sizeof(uint64_t));
+    R->uf = malloc(R->capvert * sizeof(uint32_t));
+    R->vprime[0] = 1;
+    R->uf[0] = 0;
+    R->nvert = 1;
+    R->ex = calloc(ncols + 1, sizeof(uint32_t));
     R->colseen = calloc(ncols + 1, 1);
     return R;
 }
@@ -82,14 +103,16 @@ FiRels* fi_rels_new(const uint32_t* fb, size_t ncols) {
 void fi_rels_free(FiRels* R) {
     if (!R) return;
     for (size_t i = 0; i < R->nrel; i++) mpz_clears(R->rel[i].X, R->rel[i].E, NULL);
-    for (size_t i = 0; i < R->partcap; i++) if (R->part[i].L) mpz_clear(R->part[i].X);
-    free(R->rel); free(R->pcol); free(R->pexp); free(R->part); free(R->colseen);
+    for (size_t i = 0; i < R->nedge; i++) mpz_clear(R->edge[i].X);
+    free(R->rel); free(R->pcol); free(R->pexp); free(R->edge);
+    free(R->vkey); free(R->vval); free(R->vprime); free(R->uf);
+    free(R->ex); free(R->colseen);
     free(R);
 }
 
-size_t fi_rels_count(const FiRels* R) { return R->nrel; }
+size_t fi_rels_count(const FiRels* R) { return R->nrel + R->pending; }
 size_t fi_rels_active(const FiRels* R) { return R->nactive; }
-size_t fi_rels_partials(const FiRels* R) { return R->npart; }
+size_t fi_rels_partials(const FiRels* R) { return R->nedge; }
 
 static void add_full(FiRels* R, const mpz_t X, const mpz_t E, const uint32_t* col,
                      const uint32_t* exps, size_t cnt) {
@@ -106,75 +129,180 @@ static void add_full(FiRels* R, const mpz_t X, const mpz_t E, const uint32_t* co
         if ((exps[k] & 1) && !R->colseen[col[k]]) { R->colseen[col[k]] = 1; R->nactive++; }
 }
 
-static void part_grow(FiRels* R);
-
-/* Merge two sparse (col, exp) lists into tmp buffers; returns count. */
-static size_t merge_lists(const uint32_t* c1, const uint32_t* e1, size_t n1,
-                          const uint32_t* c2, const uint32_t* e2, size_t n2,
-                          uint32_t* oc, uint32_t* oe) {
-    size_t i = 0, j = 0, k = 0;
-    while (i < n1 || j < n2) {
-        if (j >= n2 || (i < n1 && c1[i] < c2[j])) { oc[k] = c1[i]; oe[k++] = e1[i++]; }
-        else if (i >= n1 || c2[j] < c1[i])        { oc[k] = c2[j]; oe[k++] = e2[j++]; }
-        else { oc[k] = c1[i]; oe[k++] = e1[i++] + e2[j++]; }
+/* Vertex id of large prime L (1 -> vertex 0), creating it if new. */
+static uint32_t vertex(FiRels* R, uint64_t L) {
+    if (L <= 1) return 0;
+    if (2 * R->nvert >= R->vcap) {                      /* grow the map */
+        size_t oc = R->vcap;
+        uint64_t* ok = R->vkey;
+        uint32_t* ov = R->vval;
+        R->vcap *= 2;
+        R->vkey = calloc(R->vcap, sizeof(uint64_t));
+        R->vval = calloc(R->vcap, sizeof(uint32_t));
+        for (size_t i = 0; i < oc; i++) {
+            if (!ok[i]) continue;
+            size_t h = (size_t)((ok[i] * UINT64_C(0x9E3779B97F4A7C15)) >> 20) & (R->vcap - 1);
+            while (R->vkey[h]) h = (h + 1) & (R->vcap - 1);
+            R->vkey[h] = ok[i];
+            R->vval[h] = ov[i];
+        }
+        free(ok); free(ov);
     }
-    return k;
+    size_t h = (size_t)((L * UINT64_C(0x9E3779B97F4A7C15)) >> 20) & (R->vcap - 1);
+    while (R->vkey[h] && R->vkey[h] != L) h = (h + 1) & (R->vcap - 1);
+    if (R->vkey[h]) return R->vval[h];
+    if (R->nvert == R->capvert) {
+        R->capvert *= 2;
+        R->vprime = realloc(R->vprime, R->capvert * sizeof(uint64_t));
+        R->uf = realloc(R->uf, R->capvert * sizeof(uint32_t));
+    }
+    uint32_t id = (uint32_t)R->nvert++;
+    R->vprime[id] = L;
+    R->uf[id] = id;
+    R->vkey[h] = L;
+    R->vval[h] = id;
+    return id;
 }
 
-/* Add a relation X^2 == prod fb[col]^exp * L (mod n).  col must be sorted
- * ascending (column 0 is the sign, -1).  L = 1 for a full relation, else a
- * prime outside the factor base.  Returns 1 if a full relation was added. */
-int fi_rels_add(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
-                size_t cnt, uint64_t L, const mpz_t n) {
-    mpz_t one;
-    if (L <= 1) {
-        mpz_init_set_ui(one, 1);
-        add_full(R, X, one, col, exps, cnt);
-        mpz_clear(one);
+static uint32_t uf_find(uint32_t* uf, uint32_t x) {
+    while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; }
+    return x;
+}
+
+/* Add a relation X^2 == prod fb[col]^exp * L1 * L2 (mod n).  col must be
+ * sorted ascending (column 0 is the sign, -1).  L1, L2 are 1 or primes
+ * outside the factor base.  Returns 1 if the count of usable relations
+ * (fulls plus cycles) grew. */
+int fi_rels_add2(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
+                 size_t cnt, uint64_t L1, uint64_t L2, const mpz_t n) {
+    (void)n;
+    if (L1 > L2) { uint64_t t = L1; L1 = L2; L2 = t; }
+    if (L2 <= 1 || L1 == L2) {
+        /* Smooth, or the cofactor was a square L^2: a full relation. */
+        mpz_t E;
+        mpz_init_set_ui(E, (unsigned long)(L2 <= 1 ? 1 : L2));
+        add_full(R, X, E, col, exps, cnt);
+        mpz_clear(E);
         return 1;
     }
-    size_t mask = R->partcap - 1;
-    size_t h = (size_t)((L * UINT64_C(0x9E3779B97F4A7C15)) >> 20) & mask;
-    while (R->part[h].L && R->part[h].L != L) h = (h + 1) & mask;
-    if (!R->part[h].L) {
-        Partial* p = &R->part[h];
-        p->L = L;
-        mpz_init_set(p->X, X);
-        p->cnt = (uint32_t)cnt;
-        p->off = pool_push(R, col, exps, cnt);
-        if (++R->npart * 2 > R->partcap) part_grow(R);
-        return 0;
+    uint32_t u = vertex(R, L1), v = vertex(R, L2);
+    if (R->nedge == R->capedge) {
+        R->capedge = R->capedge ? 2 * R->capedge : 4096;
+        R->edge = realloc(R->edge, R->capedge * sizeof(Edge));
     }
-    /* Combine with the stored partial: X = X1 X2, E = L. */
-    Partial* p = &R->part[h];
-    uint32_t* oc = malloc((cnt + p->cnt) * sizeof(uint32_t));
-    uint32_t* oe = malloc((cnt + p->cnt) * sizeof(uint32_t));
-    size_t k = merge_lists(R->pcol + p->off, R->pexp + p->off, p->cnt, col, exps, cnt, oc, oe);
-    mpz_t XX, E;
-    mpz_inits(XX, E, NULL);
-    mpz_mul(XX, X, p->X);
-    mpz_mod(XX, XX, n);
-    mpz_set_ui(E, (unsigned long)L);
-    add_full(R, XX, E, oc, oe, k);
-    mpz_clears(XX, E, NULL);
-    free(oc); free(oe);
-    R->ncombined++;
+    Edge* e = &R->edge[R->nedge++];
+    mpz_init_set(e->X, X);
+    e->u = u; e->v = v;
+    e->cnt = (uint32_t)cnt;
+    e->off = pool_push(R, col, exps, cnt);
+    e->done = 0;
+    uint32_t ru = uf_find(R->uf, u), rv = uf_find(R->uf, v);
+    if (ru != rv) { R->uf[ru] = rv; e->tree = 1; return 0; }
+    e->tree = 0;
+    R->pending++;
     return 1;
 }
 
-static void part_grow(FiRels* R) {
-    size_t oldcap = R->partcap;
-    Partial* old = R->part;
-    R->partcap *= 2;
-    R->part = calloc(R->partcap, sizeof(Partial));
-    size_t mask = R->partcap - 1;
-    for (size_t i = 0; i < oldcap; i++) {
-        if (!old[i].L) continue;
-        size_t h = (size_t)((old[i].L * UINT64_C(0x9E3779B97F4A7C15)) >> 20) & mask;
-        while (R->part[h].L) h = (h + 1) & mask;
-        R->part[h] = old[i];            /* moves the mpz_t struct by value */
+int fi_rels_add(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* exps,
+                size_t cnt, uint64_t L, const mpz_t n) {
+    return fi_rels_add2(R, X, col, exps, cnt, 1, L, n);
+}
+
+/* Turn every pending cycle into a full relation.  The tree edges form a
+ * spanning forest; a closing edge (u, v) plus the forest path v -> u is the
+ * cycle. */
+static void materialise_cycles(FiRels* R, const mpz_t n) {
+    if (!R->pending) return;
+    size_t V = R->nvert, E = R->nedge;
+    uint32_t* head = malloc(V * sizeof(uint32_t));
+    uint32_t* nxt = malloc(2 * E * sizeof(uint32_t) + 1);
+    uint32_t* to = malloc(2 * E * sizeof(uint32_t) + 1);
+    uint32_t* eid = malloc(2 * E * sizeof(uint32_t) + 1);
+    for (size_t i = 0; i < V; i++) head[i] = UINT32_MAX;
+    size_t na = 0;
+    for (size_t k = 0; k < E; k++) {
+        if (!R->edge[k].tree) continue;
+        uint32_t a = R->edge[k].u, b = R->edge[k].v;
+        to[na] = b; eid[na] = (uint32_t)k; nxt[na] = head[a]; head[a] = (uint32_t)na++;
+        to[na] = a; eid[na] = (uint32_t)k; nxt[na] = head[b]; head[b] = (uint32_t)na++;
     }
-    free(old);
+    uint32_t* par = malloc(V * sizeof(uint32_t));      /* parent vertex */
+    uint32_t* pe = malloc(V * sizeof(uint32_t));       /* edge to parent */
+    uint32_t* dep = malloc(V * sizeof(uint32_t));
+    uint32_t* queue = malloc(V * sizeof(uint32_t));
+    for (size_t i = 0; i < V; i++) dep[i] = UINT32_MAX;
+    for (size_t r = 0; r < V; r++) {
+        if (dep[r] != UINT32_MAX) continue;
+        size_t qh = 0, qt = 0;
+        queue[qt++] = (uint32_t)r;
+        dep[r] = 0; par[r] = (uint32_t)r; pe[r] = UINT32_MAX;
+        while (qh < qt) {
+            uint32_t x = queue[qh++];
+            for (uint32_t a = head[x]; a != UINT32_MAX; a = nxt[a]) {
+                uint32_t y = to[a];
+                if (dep[y] != UINT32_MAX) continue;
+                dep[y] = dep[x] + 1; par[y] = x; pe[y] = eid[a];
+                queue[qt++] = y;
+            }
+        }
+    }
+    size_t ncols = R->ncols;
+    uint32_t* touched = malloc((ncols + 1) * sizeof(uint32_t));
+    uint32_t* oc = malloc((ncols + 1) * sizeof(uint32_t));
+    uint32_t* oe = malloc((ncols + 1) * sizeof(uint32_t));
+    mpz_t X, Ev;
+    mpz_inits(X, Ev, NULL);
+    for (size_t k = 0; k < E; k++) {
+        Edge* c = &R->edge[k];
+        if (c->tree || c->done) continue;
+        c->done = 1;
+        size_t nt = 0;
+        mpz_set(X, c->X);
+        mpz_set_ui(Ev, 1);
+#define ACCUM(edge) do { \
+            const Edge* e_ = (edge); \
+            for (uint32_t q = 0; q < e_->cnt; q++) { \
+                uint32_t cc = R->pcol[e_->off + q]; \
+                if (!R->ex[cc]) touched[nt++] = cc; \
+                R->ex[cc] += R->pexp[e_->off + q]; \
+            } \
+        } while (0)
+        ACCUM(c);
+        /* Walk u and v up to their common ancestor. */
+        uint32_t a = c->u, b = c->v;
+        while (a != b) {
+            if (dep[a] >= dep[b]) {
+                const Edge* t = &R->edge[pe[a]];
+                ACCUM(t);
+                mpz_mul(X, X, t->X); mpz_mod(X, X, n);
+                mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[a]); mpz_mod(Ev, Ev, n);
+                a = par[a];
+            } else {
+                const Edge* t = &R->edge[pe[b]];
+                ACCUM(t);
+                mpz_mul(X, X, t->X); mpz_mod(X, X, n);
+                mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[b]); mpz_mod(Ev, Ev, n);
+                b = par[b];
+            }
+        }
+        mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[a]); mpz_mod(Ev, Ev, n);   /* the apex */
+#undef ACCUM
+        /* Collect the summed exponents in column order. */
+        size_t m = 0;
+        for (size_t t = 0; t < nt; t++) { oc[m++] = touched[t]; }
+        for (size_t t = 1; t < m; t++) {                   /* insertion sort */
+            uint32_t x = oc[t];
+            size_t y = t;
+            while (y > 0 && oc[y - 1] > x) { oc[y] = oc[y - 1]; y--; }
+            oc[y] = x;
+        }
+        for (size_t t = 0; t < m; t++) { oe[t] = R->ex[oc[t]]; R->ex[oc[t]] = 0; }
+        add_full(R, X, Ev, oc, oe, m);
+    }
+    R->pending = 0;
+    mpz_clears(X, Ev, NULL);
+    free(touched); free(oc); free(oe);
+    free(head); free(nxt); free(to); free(eid); free(par); free(pe); free(dep); free(queue);
 }
 
 /* ------------------------------------------------------------------ */
@@ -332,6 +460,7 @@ size_t fi_gf2_dependencies(const FiSparseMat* m, uint64_t* deps, size_t max_deps
 
 /* Try every dependency until one splits n.  Returns 1 with d set. */
 int fi_rels_solve(FiRels* R, const mpz_t n, mpz_t d) {
+    materialise_cycles(R, n);
     size_t nr = R->nrel;
     if (nr == 0) return 0;
     FiSparseMat m;

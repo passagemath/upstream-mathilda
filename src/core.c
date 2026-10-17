@@ -134,6 +134,9 @@
 #include <string.h>
 #include <ctype.h>
 #include <signal.h>        /* sig_atomic_t (C89); sigaction/SIGPROF are guarded below */
+#ifdef MATHILDA_THREADS
+#include <pthread.h>       /* tc_on_main_thread: workers never take the timeout jump */
+#endif
 #include <setjmp.h>
 #ifndef _WIN32
 #include <sys/time.h>      /* setitimer / getitimer / ITIMER_PROF -- POSIX, absent on MinGW */
@@ -4375,8 +4378,25 @@ static void tc_sigprof_handler(int sig) {
  * returns.  tc_timed_out is 1 only inside an active, timed-out TimeConstrained
  * body -- it is reset on entry and saved/restored around nesting -- so outside
  * that window this is a single-branch no-op that never touches tc_jmp_env. */
+#ifdef MATHILDA_THREADS
+/* The deferred jump targets the main thread's tc_jmp_env, so it may only be
+ * taken there.  Worker threads (the parallel quadratic sieve and ECM in
+ * src/numbertheory/factorinteger/) allocate through these same guarded GMP
+ * hooks while a TimeConstrained timeout may already be pending; they must not
+ * jump.  Their regions are bracketed by tc_async_defer_push/pop with the main
+ * thread parked in pthread_join, so the timeout is taken on the main thread's
+ * next safe point after the workers have finished. */
+static pthread_t tc_main_thread;
+static int       tc_main_thread_set = 0;
+static int tc_on_main_thread(void) {
+    return !tc_main_thread_set || pthread_equal(pthread_self(), tc_main_thread);
+}
+#else
+#define tc_on_main_thread() 1
+#endif
+
 static void tc_alloc_safepoint(void) {
-    if (tc_timed_out) TC_LONGJMP(tc_jmp_env);
+    if (tc_timed_out && tc_on_main_thread()) TC_LONGJMP(tc_jmp_env);
 }
 
 /* GMP memory functions: the system allocator wrapped in the busy guard so an
@@ -4462,6 +4482,10 @@ static void tc_flint_deallocate(void* ptr) {
  * malloc/realloc/free the defaults used, so memory allocated before this call is
  * still freed correctly. */
 void tc_install_alloc_guard(void) {
+#ifdef MATHILDA_THREADS
+    tc_main_thread = pthread_self();
+    tc_main_thread_set = 1;
+#endif
     mp_set_memory_functions(tc_gmp_allocate, tc_gmp_reallocate, tc_gmp_deallocate);
 #ifdef USE_FLINT
     __flint_set_memory_functions(tc_flint_allocate, tc_flint_calloc,

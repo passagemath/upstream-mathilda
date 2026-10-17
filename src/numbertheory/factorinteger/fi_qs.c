@@ -26,6 +26,15 @@
  *
  * Parameters (factor-base size, interval, large-prime multiplier) come from
  * a table by bit size of kN, interpolated.
+ *
+ * Parallelism (MATHILDA_THREADS): polynomial families are independent, so
+ * from ~45 digits each worker thread takes one A and sieves all 2^(s-1) of
+ * its polynomials into a private relation log; the main thread then replays
+ * the logs into the relation store in worker order (so the result is the
+ * same for a given thread count) and decides whether to solve.  Workers run
+ * with every signal blocked inside a tc_async_defer region, with the main
+ * thread parked in pthread_join: a TimeConstrained timeout is taken on the
+ * main thread once the region (one A per worker) ends.
  */
 #include "fi_internal.h"
 
@@ -36,7 +45,9 @@
 #define QS_BLOCK      32768u
 #define QS_BLOCK_BITS 15
 #define QS_SMALL_P    64u        /* primes below this are not sieved */
-#define QS_MED_P      32768u      /* primes from here up are bucket-sieved */
+#define QS_MED_P      32768u     /* primes from here up are bucket-sieved */
+#define QS_DLP_BITS   240u       /* kN this large uses double large primes */
+#define QS_PAR_BITS   150u       /* kN this large sieves in parallel */
 #define QS_MAXS       20
 
 /* ------------------------------------------------------------------ */
@@ -144,6 +155,58 @@ typedef struct {
     size_t    n, cap;
 } Bucket;
 
+/* A worker's relations, replayed into the shared store by the main thread. */
+typedef struct {
+    mpz_t    X;
+    uint32_t off, cnt;
+    uint64_t L1, L2;
+} LogRec;
+
+typedef struct {
+    LogRec*   r;
+    size_t    n, cap;
+    uint32_t* col;
+    uint32_t* exps;
+    size_t    npool, cappool;
+} RelLog;
+
+static void log_push(RelLog* lg, const mpz_t X, const uint32_t* col, const uint32_t* exps,
+                     size_t cnt, uint64_t L1, uint64_t L2) {
+    if (lg->n == lg->cap) {
+        lg->cap = lg->cap ? 2 * lg->cap : 256;
+        lg->r = realloc(lg->r, lg->cap * sizeof(LogRec));
+    }
+    if (lg->npool + cnt > lg->cappool) {
+        while (lg->npool + cnt > lg->cappool) lg->cappool = lg->cappool ? 2 * lg->cappool : 4096;
+        lg->col = realloc(lg->col, lg->cappool * sizeof(uint32_t));
+        lg->exps = realloc(lg->exps, lg->cappool * sizeof(uint32_t));
+    }
+    LogRec* r = &lg->r[lg->n++];
+    mpz_init_set(r->X, X);
+    r->off = (uint32_t)lg->npool;
+    r->cnt = (uint32_t)cnt;
+    r->L1 = L1;
+    r->L2 = L2;
+    memcpy(lg->col + lg->npool, col, cnt * sizeof(uint32_t));
+    memcpy(lg->exps + lg->npool, exps, cnt * sizeof(uint32_t));
+    lg->npool += cnt;
+}
+
+static void log_replay(RelLog* lg, FiRels* R, const mpz_t n) {
+    for (size_t i = 0; i < lg->n; i++) {
+        LogRec* r = &lg->r[i];
+        fi_rels_add2(R, r->X, lg->col + r->off, lg->exps + r->off, r->cnt, r->L1, r->L2, n);
+        mpz_clear(r->X);
+    }
+    lg->n = 0;
+    lg->npool = 0;
+}
+
+static void log_free(RelLog* lg) {
+    for (size_t i = 0; i < lg->n; i++) mpz_clear(lg->r[i].X);
+    free(lg->r); free(lg->col); free(lg->exps);
+}
+
 typedef struct {
     mpz_srcptr N;
     mpz_t     kN;
@@ -161,6 +224,9 @@ typedef struct {
     uint32_t  sieve_start;  /* first sieved index (p >= QS_SMALL_P) */
     uint32_t  M, L, nblocks;
     uint64_t  lp_max;
+    uint64_t  dlp_max;      /* 0: single large prime only */
+    uint64_t  pmax2;        /* pmax^2 */
+    uint64_t  rng;          /* cofactor-splitting curves */
     uint8_t   init;         /* 128 - threshold */
     double    scale;        /* log2 -> byte units */
     /* polynomial */
@@ -178,6 +244,7 @@ typedef struct {
     uint32_t* col;
     uint32_t* exps;
     mpz_t     g, X, t;
+    RelLog    log;          /* relations found, replayed by the main thread */
 } QS;
 
 
@@ -427,7 +494,7 @@ static void sort_pairs(uint32_t* col, uint32_t* ex, size_t n) {
 /* Trial-divide g(x) for the candidate at absolute position pos and record a
  * relation if it is smooth or a single large-prime partial.  `big` lists
  * the bucket-sieved primes that hit this position. */
-static void check_candidate(QS* Q, FiRels* R, uint32_t blk, uint32_t off,
+static void check_candidate(QS* Q, uint32_t blk, uint32_t off,
                             const uint32_t* big, size_t nbig) {
     uint32_t pos = blk * QS_BLOCK + off;
     long x = (long)pos - (long)Q->M;
@@ -466,22 +533,35 @@ static void check_candidate(QS* Q, FiRels* R, uint32_t blk, uint32_t off,
         while (mpz_divisible_ui_p(Q->g, p)) { mpz_divexact_ui(Q->g, Q->g, p); e++; }
         if (e) { Q->col[cnt] = i; Q->exps[cnt++] = e; }
     }
-    uint64_t L = 1;
+    uint64_t L1 = 1, L2 = 1;
     if (mpz_cmp_ui(Q->g, 1) != 0) {
         if (mpz_sizeinbase(Q->g, 2) > 64) return;
-        L = mpz_get_ui(Q->g);
-        if (L > Q->lp_max) return;
+        uint64_t c = mpz_get_ui(Q->g);
+        if (c <= Q->lp_max) {
+            L2 = c;                              /* < pmax^2: prime */
+        } else {
+            /* Double large prime: c = L1 L2 with both <= lp_max.  A cofactor
+             * below pmax^2 is a prime too large to use; a prime cofactor is
+             * useless; otherwise split it in word arithmetic. */
+            if (!Q->dlp_max || c > Q->dlp_max || c < Q->pmax2 || fi_u64_is_prime(c)) return;
+            uint64_t a = fi_u64_ecm(c, &Q->rng, 8);
+            if (!a) a = fi_u64_squfof(c, 0);
+            if (!a) return;
+            uint64_t b = c / a;
+            if (a > Q->lp_max || b > Q->lp_max) return;
+            L1 = a; L2 = b;
+        }
     }
     sort_pairs(Q->col, Q->exps, cnt);
     mpz_mod(Q->t, Q->X, Q->N);
-    fi_rels_add(R, Q->t, Q->col, Q->exps, cnt, L, Q->N);
+    log_push(&Q->log, Q->t, Q->col, Q->exps, cnt, L1, L2);
 }
 
 /* Scan one sieved block: gather the candidate offsets, attach to each the
  * bucket primes that hit it (one pass over the bucket), then check them. */
 #define QS_MAXCAND 256
 #define QS_MAXBIG  64
-static size_t scan_block(QS* Q, FiRels* R, uint32_t blk) {
+static size_t scan_block(QS* Q, uint32_t blk) {
     uint32_t cand[QS_MAXCAND];
     size_t nc = 0;
     const uint64_t* w = (const uint64_t*)Q->sieve;
@@ -502,7 +582,7 @@ static size_t scan_block(QS* Q, FiRels* R, uint32_t blk) {
     }
     for (size_t k = 0; k < nc; k++) {
         Q->candidx[cand[k]] = 0;
-        check_candidate(Q, R, blk, cand[k], big[k], nbig[k]);
+        check_candidate(Q, blk, cand[k], big[k], nbig[k]);
     }
     return nc;
 }
@@ -510,6 +590,59 @@ static size_t scan_block(QS* Q, FiRels* R, uint32_t blk) {
 /* ------------------------------------------------------------------ */
 /* Driver                                                              */
 /* ------------------------------------------------------------------ */
+
+/* Sieve every polynomial of the family whose A is already chosen. */
+static void sieve_family(QS* Q) {
+    init_poly(Q);
+    uint32_t npoly = 1u << (Q->s - 1);
+    for (uint32_t pi = 0; pi < npoly; pi++) {
+        int v = -1, e = 0;
+        if (pi) { v = 1 + ctz32(pi); e = next_poly(Q, v); }
+        fill_buckets(Q, v, e);
+        start_medium(Q);
+        for (uint32_t blk = 0; blk < Q->nblocks; blk++) {
+            sieve_block(Q, blk);
+            scan_block(Q, blk);
+        }
+    }
+}
+
+/* A worker shares the master's read-only factor base and owns the rest. */
+static void worker_init(QS* W, const QS* M, uint64_t seed) {
+    *W = *M;                                    /* scalars + shared pointers */
+    uint32_t nfb = M->nfb;
+    W->rng = seed | 1;
+    W->ainv = calloc(nfb + 1, sizeof(uint32_t));
+    W->r1 = calloc(nfb + 1, sizeof(uint32_t));
+    W->r2 = calloc(nfb + 1, sizeof(uint32_t));
+    W->pos1 = calloc(nfb + 1, sizeof(uint32_t));
+    W->pos2 = calloc(nfb + 1, sizeof(uint32_t));
+    W->bainv = malloc((size_t)QS_MAXS * (nfb + 1) * sizeof(uint32_t));
+    W->sieve = malloc(QS_BLOCK + 8);
+    W->candidx = calloc(QS_BLOCK, sizeof(uint16_t));
+    W->bigbuf = malloc(256 * sizeof *W->bigbuf);
+    W->nbig = malloc(256);
+    W->bucket = calloc(W->nblocks, sizeof(Bucket));
+    W->col = malloc((nfb + 4 + QS_MAXS) * sizeof(uint32_t));
+    W->exps = malloc((nfb + 4 + QS_MAXS) * sizeof(uint32_t));
+    mpz_inits(W->A, W->B, W->C, W->g, W->X, W->t, NULL);
+    for (int l = 0; l < QS_MAXS; l++) mpz_init(W->Bl[l]);
+    memset(&W->log, 0, sizeof W->log);
+    alloc_buckets(W);
+}
+
+static void worker_free(QS* W) {
+    for (uint32_t b = 0; b < W->nblocks; b++) free(W->bucket[b].hits);
+    free(W->bucket);
+    free(W->ainv); free(W->r1); free(W->r2); free(W->pos1); free(W->pos2); free(W->bainv);
+    free(W->sieve); free(W->candidx); free(W->bigbuf); free(W->nbig);
+    free(W->col); free(W->exps);
+    mpz_clears(W->A, W->B, W->C, W->g, W->X, W->t, NULL);
+    for (int l = 0; l < QS_MAXS; l++) mpz_clear(W->Bl[l]);
+    log_free(&W->log);
+}
+
+static void sieve_family_job(void* p) { sieve_family((QS*)p); }
 
 static int qs_run(mpz_t d, const mpz_t n, FiCtx* c) {
     QS Q;
@@ -565,6 +698,20 @@ static int qs_run(mpz_t d, const mpz_t n, FiCtx* c) {
     uint32_t pmax = Q.fb[nfb];
     Q.lp_max = (uint64_t)pmax * lpmult;
     if (Q.lp_max > (uint64_t)pmax * pmax) Q.lp_max = (uint64_t)pmax * pmax;
+    Q.pmax2 = (uint64_t)pmax * pmax;
+    /* Double large primes pay from ~72 digits: cofactors up to lp_max^1.8
+     * are split, and the threshold drops to let them through. */
+    unsigned dlp = bits >= QS_DLP_BITS;
+    double dlp_exp = 1.8, dlp_slack = 0.7;
+    FI_TUNE_U("FI_QS_DLP", dlp);
+    FI_TUNE_D("FI_QS_DLPEXP", dlp_exp);
+    FI_TUNE_D("FI_QS_DLPSLACK", dlp_slack);
+    Q.dlp_max = 0;
+    if (dlp) {
+        double m = pow((double)Q.lp_max, dlp_exp);
+        Q.dlp_max = m >= 9.2e18 ? UINT64_C(9200000000000000000) : (uint64_t)m;
+        slack += dlp_slack * log2((double)Q.lp_max);
+    }
 
     /* Threshold: |g| ~ M sqrt(kN / 2) at the ends of the interval; accept
      * when the sieved log is within log2(lp_max) (+ slack for the unsieved
@@ -581,58 +728,40 @@ static int qs_run(mpz_t d, const mpz_t n, FiCtx* c) {
             Q.logp[i] = (uint8_t)(log2((double)Q.fb[i]) * Q.scale + 0.5);
     }
 
-    Q.ainv = calloc(nfb + 1, sizeof(uint32_t));
-    Q.r1 = calloc(nfb + 1, sizeof(uint32_t));
-    Q.r2 = calloc(nfb + 1, sizeof(uint32_t));
-    Q.pos1 = calloc(nfb + 1, sizeof(uint32_t));
-    Q.pos2 = calloc(nfb + 1, sizeof(uint32_t));
-    Q.bainv = malloc((size_t)QS_MAXS * (nfb + 1) * sizeof(uint32_t));
-    Q.sieve = malloc(QS_BLOCK + 8);
-    Q.candidx = calloc(QS_BLOCK, sizeof(uint16_t));
-    Q.bigbuf = malloc(256 * sizeof *Q.bigbuf);
-    Q.nbig = malloc(256);
-    Q.bucket = calloc(Q.nblocks, sizeof(Bucket));
-    Q.col = malloc((nfb + 4 + QS_MAXS) * sizeof(uint32_t));
-    Q.exps = malloc((nfb + 4 + QS_MAXS) * sizeof(uint32_t));
-    mpz_inits(Q.A, Q.B, Q.C, Q.g, Q.X, Q.t, NULL);
-    for (int l = 0; l < QS_MAXS; l++) mpz_init(Q.Bl[l]);
+    /* Lazily built tables the workers read must exist before they start. */
+    {
+        uint32_t lim;
+        (void)fi_prime_bitmap(&lim);
+        (void)fi_u64_squfof(15, 0);
+        (void)fi_u64_is_prime(97);
+    }
+    int nw = bits >= QS_PAR_BITS ? fi_nthreads() : 1;
+    QS* W = malloc((size_t)nw * sizeof(QS));
+    for (int w = 0; w < nw; w++) worker_init(&W[w], &Q, fi_rand(c) ^ (uint64_t)(w + 1));
 
-    alloc_buckets(&Q);
     FiRels* R = fi_rels_new(Q.fb, nfb + 1);
     size_t need = nfb + 1 + 64, extra = 0;
     size_t used_cap = 1 << 16, nused = 0;
     uint64_t* used = malloc(used_cap * sizeof(uint64_t));
-    int give_up = 0;
-    while (!found && !give_up) {
-        if (nused + 1 >= used_cap || !choose_A(&Q, c, used, &nused)) { give_up = 1; break; }
-        init_poly(&Q);
-        uint32_t npoly = 1u << (Q.s - 1);
-        for (uint32_t pi = 0; pi < npoly && !found; pi++) {
-            int v = -1, e = 0;
-            if (pi) { v = 1 + ctz32(pi); e = next_poly(&Q, v); }
-            fill_buckets(&Q, v, e);
-            start_medium(&Q);
-            for (uint32_t blk = 0; blk < Q.nblocks; blk++) {
-                sieve_block(&Q, blk);
-                scan_block(&Q, R, blk);
-            }
-            /* Dependencies are guaranteed once relations outnumber the
-             * columns actually present; most base primes above the median
-             * appear rarely, so this fires well before nfb + 64. */
-            if (fi_rels_count(R) >= need || fi_rels_count(R) >= fi_rels_active(R) + 64 + extra) {
-                found = fi_rels_solve(R, n, d);
-                if (!found) { need += 64; extra += 64; }
-            }
+    while (!found) {
+        int give_up = 0;
+        for (int w = 0; w < nw; w++)
+            if (nused + 1 >= used_cap || !choose_A(&W[w], c, used, &nused)) { give_up = 1; break; }
+        if (give_up) break;
+        fi_run_parallel(sieve_family_job, W, sizeof(QS), nw);
+        for (int w = 0; w < nw; w++) log_replay(&W[w].log, R, n);
+        /* Dependencies are guaranteed once relations outnumber the columns
+         * actually present; most base primes above the median appear
+         * rarely, so this fires well before nfb + 64. */
+        if (fi_rels_count(R) >= need || fi_rels_count(R) >= fi_rels_active(R) + 64 + extra) {
+            found = fi_rels_solve(R, n, d);
+            if (!found) { need += 64; extra += 64; }
         }
     }
     free(used);
     fi_rels_free(R);
-    for (uint32_t b = 0; b < Q.nblocks; b++) free(Q.bucket[b].hits);
-    free(Q.bucket);
-    free(Q.ainv); free(Q.r1); free(Q.r2); free(Q.pos1); free(Q.pos2); free(Q.bainv); free(Q.sieve); free(Q.candidx); free(Q.bigbuf); free(Q.nbig);
-    free(Q.col); free(Q.exps);
-    mpz_clears(Q.A, Q.B, Q.C, Q.g, Q.X, Q.t, NULL);
-    for (int l = 0; l < QS_MAXS; l++) mpz_clear(Q.Bl[l]);
+    for (int w = 0; w < nw; w++) worker_free(&W[w]);
+    free(W);
 cleanup_fb:
     free(Q.fb); free(Q.sqrtkn); free(Q.logp);
     mpz_clear(Q.kN);

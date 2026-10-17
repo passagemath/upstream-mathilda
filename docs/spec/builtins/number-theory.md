@@ -542,7 +542,7 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 
 | Method (`FactorInteger`name`) | Algorithm | Suboptions |
 |---|---|---|
-| `Automatic` | Below 2^64 the word engine handles everything: Montgomery arithmetic, a deterministic Miller–Rabin test, micro-ECM with Suyama curves and a baby-step/giant-step stage 2, and rho/SQUFOF as backstops. Above 2^64 the tiers are: trial division to 2^16 → Pollard rho (two-limb Montgomery below 2^126) → a Fermat probe → one p-1 → one p+1 → ECM levels 15, 20, ... digits, switching to the quadratic sieve once the ECM effort reaches 2/7 of the composite's digit count, for composites up to 100 digits. After a split, both parts restart at the tier that succeeded. | — |
+| `Automatic` | Below 2^64 the word engine handles everything: Montgomery arithmetic, a deterministic Miller–Rabin test, micro-ECM with Suyama curves and a baby-step/giant-step stage 2, and rho/SQUFOF as backstops. Above 2^64 the tiers are: trial division to 2^16 → Pollard rho (two-limb Montgomery below 2^126) → two-limb micro-ECM (below 2^126) → a Fermat probe → one p-1 → one p+1 (three seeds from 60 digits) → ECM levels 15, 20, ... digits, switching to the quadratic sieve once the ECM effort reaches 2/7 of the composite's digit count, for composites up to 100 digits. After a split, both parts restart at the tier that succeeded. | — |
 | `"TrialDivision"` | Primes are tested in word-sized products, one bignum remainder per 2–4 primes; a segmented sieve takes over above 2^20. The default bound is sqrt(n) when that is below 10^7, else 10^7. | `"Bound"` (≤ 2^40) |
 | `"PollardRho"` | Brent's variant with batched gcds and backtracking; Montgomery arithmetic on one and two words, GMP above that. | `"Iterations"`, `"Starts"` |
 | `"Fermat"` | Fermat's method with quadratic-residue filters modulo nine small moduli. | `"Iterations"` |
@@ -550,15 +550,20 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 | `"ShanksSquareForms"` (alias `"SQUFOF"`) | SQUFOF over the 16 Gower–Wagstaff multipliers, in word arithmetic for kN < 2^124. | `"Iterations"` |
 | `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. | `"Iterations"` |
 | `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. | `"Iterations"` |
-| `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division, single large primes. Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
+| `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division. Single large primes, plus double large primes from 72 digits, combined by cycle-finding in the large-prime graph. Polynomial families are sieved in parallel from 45 digits (one A per thread). Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
 | `"PollardPMinus1"` (alias `"PollardP-1"`) | GMP-ECM p-1, with a B1 back-off when every prime is caught at once; a word walk with prime-by-prime backtracking below 2^64. | `"B1"` (10^6), `"B2"` |
 | `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. | `"B1"` (10^6), `"B2"` |
-| `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves use the batch parametrisation with sigmas drawn deterministically; a user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |
+| `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves run in parallel, one per thread, for n ≥ 2^160. They use the batch parametrisation with sigmas drawn deterministically, and successes are taken in curve order, so the result does not depend on scheduling. A user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |
 | `"BlakeRationalBaseDescent"` | Rational base descent (unchanged; its optimisation is deferred). | `"Base"` -> a/b |
 
 Fallbacks: builds without GMP-ECM use FLINT's ECM and p+1 (and a native p-1); builds without either use
 native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are native, with no external
 dependency.
+
+Threads: the quadratic sieve and ECM use every online CPU (up to 16) in builds with `MATHILDA_THREADS`.
+`TimeConstrained` budgets are process CPU time, so they are consumed correspondingly faster while
+they run. An abort is taken on the main thread when the current region ends: one polynomial family per
+QS thread, one curve per ECM thread.
 
 **Features**:
 - `Listable`, `Protected`; `Options[FactorInteger]` is `{GaussianIntegers -> False, Method -> Automatic}`.

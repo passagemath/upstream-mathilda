@@ -140,12 +140,20 @@ static void test_contract(void) {
     contract("(10^6 + 3)*(10^6 + 33)*(10^5 + 3)", "Method -> \"Lehman\"");
     contract("(10^9 + 7)*(10^10 + 19)", "Method -> \"ShanksSquareForms\"");
     contract("(10^12 + 39)*(10^13 + 37)", "Method -> \"CFRAC\"");
+    /* k = 2 with both primes == 7 (mod 8): every dependency of that expansion
+     * is trivial; CFRAC must switch multiplier (it used to loop for ever). */
+    contract("12791*5060983", "Method -> \"CFRAC\"");
+    contract("886945583297207549892329", "Method -> \"CFRAC\"");
     contract("(10^8 + 7)*(10^9 + 7)", "Method -> \"Dixon\"");
     contract("(10^15 + 37)*(10^16 + 61)*(10^17 + 3)", "Method -> \"QuadraticSieve\"");
     contract("(10^9 + 7)*(10^12 + 39)", "Method -> \"ECM\"");
     contract("736725780226971718034605203450", "Method -> \"PollardPMinus1\"");
     contract("864041305442689345542027354876", "Method -> \"PollardPMinus1\"");
     contract("2^40 * 3^20 * 7^10", "Method -> \"ECM\"");
+    /* Parallel paths: QS from 150-bit kN, ECM curves from 160-bit n. */
+    contract("NextPrime[10^27]*NextPrime[3*10^27]", "Method -> \"QuadraticSieve\"");
+    contract("NextPrime[10^15]*NextPrime[10^60]", "Method -> \"ECM\"");
+    contract("NextPrime[10^24]*NextPrime[10^25]*NextPrime[10^26]", "");
 }
 
 /* ---- Messages route through the funnel (Quiet / Check) ---- */

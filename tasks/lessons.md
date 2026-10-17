@@ -4609,3 +4609,35 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 - **Every P→U against HEAD gets a residual check.** Seven of the nine were HEAD wrong
    answers. A sampled constant had leaked into the family (`3^(2n)`, `7^n`); residuals
    were 1–36.
+
+## 2026-10-18 — FactorInteger rebuild (v0.452–v0.453)
+
+- **"Leave method X for later" means "don't optimise X", not "don't wire X".** The user
+  deferred BlakeRationalBaseDescent's optimisation. I first read that as excluding it
+  from the FactorInteger`name entry points, and the user corrected me. A deferred
+  method still gets its entry point, docstring and tests; only the tuning waits.
+- **A library's own RNG is a determinism leak.** GMP-ECM draws sigma (ECM) and x0
+  (p-1, p+1) from a time-seeded generator when they are 0. The same call factored F7
+  in one run and missed it in the next. Every random choice must come from an n-seeded
+  generator, set explicitly.
+- **A randomised sweep finds what curated tests cannot.** `verify_methods.py` (random
+  shapes × sizes × methods, verified with sympy) found three real bugs:
+  - GMP-ECM segfaulting on a p-1 seed that shares a factor with n;
+  - SQUFOF failing for 10% of 60-bit inputs (kN overflow);
+  - CFRAC looping for ever on a degenerate (N, k).
+  Run it after any change to the module.
+- **When a solver keeps failing, reproduce it independently before patching.** CFRAC's
+  all-trivial dependencies looked like a bug in the GF(2) code. A 40-line Python
+  reproduction showed the mathematics itself is degenerate for k = 2, so the fix is to
+  switch multiplier. The first restart attempt still failed because the old relations
+  stayed in the matrix.
+- **Worker threads must never take TimeConstrained's deferred jump.** The guarded GMP
+  allocator longjmps to the main thread's jmp_buf from whatever thread allocates.
+  Parallel QS/ECM workers allocate constantly, so the safepoint now jumps only on the
+  main thread, and the main thread waits in pthread_join during a region. Also,
+  ITIMER_PROF budgets are process CPU time: N threads consume them N times faster.
+- **Profile before optimising a "slow method".** Twice the cost was not where expected:
+  - 3 of a 30-digit QS run's 5 ms was the Knuth–Schroeppel multiplier
+    (14,000 `mpz_kronecker` calls);
+  - named methods on words were dominated by a perfect-power test trying every
+    exponent up to 63.

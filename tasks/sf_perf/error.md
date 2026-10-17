@@ -63,6 +63,13 @@ Algorithms (all in raw double re/im, no `<complex.h>`; sources cited in the code
 - **Bug fixed:** `InverseErfc` of a subnormal machine number answered
   `Indeterminate` (the Winitzki seed is log(0)); it now solves at 53 bits in MPFR
   (`InverseErfc[1.*^-320] = 27.0732`).
+- **Bug fixed:** a complex `Erf`/`Erfc`/`Erfi`/`FresnelC`/`FresnelS` whose |z|²
+  made the MPFR series' guard precision wrap (`Erf[1.*^300 + 1.*^300 I]`,
+  `FresnelC[1.*^10 + 1.*^-10 I]`) tripped MPFR's precision assertion and ABORTED
+  the process. The MPFR paths now decline such a call (unevaluated), and the
+  Fresnel axis series (carried scaled, so it cannot overflow) answers the huge-|z|
+  near-axis cases at machine precision (`FresnelC[1.*^10 + 1.*^-10 I] =
+  0.5 + 3.67608*10^-10 I`).
 - Machine-complex inputs now give machine-complex results (`FresnelC[2. I] =
   0. + 0.488253 I`, as in Mathematica).
 

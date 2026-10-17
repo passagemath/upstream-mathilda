@@ -33,15 +33,17 @@ precision (default 50 digits).
   significant digits the engines mutually agree on; any engine that deviates from the
   consensus is flagged. Doubles as the cross-engine mapping validator.
 
-## MeijerG (v0.445)
+## MeijerG (v0.445, v0.446)
 
 Three rows (`MeijerG`, `MeijerG22`, `MeijerGlog`): mpmath is the Python column (scipy
 has no G-function), Maxima has no numeric G. Mathilda is fastest in all nine cells
-(vs mpmath: 35x / 134x / 3.3x machine real, 42x / 234x / 4.3x complex, 2.9x / 2.1x /
-5.2x at 50 digits; Mathematica slower still). Current tables come from
-`results/2026-10-17-final-v0445.json` — the hypergeometric family and MeijerG re-run at
-v0.445, merged with the v0.444 run of every other head. Pass that path to `report.py`
-explicitly: with no argument it picks the alphabetically last file.
+(vs mpmath: 32x / 128x / 539x machine real, 42x / 245x / 469x complex, 2.8x / 2.1x /
+5.1x at 50 digits; Mathematica slower still). v0.446 gave the log case (`MeijerGlog`)
+a machine kernel: 456 us -> 2.99 us per call, 119 s -> 0.32 s per 10^6 buffer. The
+Mathematica throughput run is skipped for these rows (hours per 10^6 buffer). Current
+tables come from `results/2026-10-17-final-v0446.json`: the v0.444 run of every head,
+the hypergeometric family re-run at v0.445, the MeijerG rows re-run at v0.446. Pass that
+path to `report.py` explicitly: with no argument it picks the alphabetically last file.
 
 ## Files
 

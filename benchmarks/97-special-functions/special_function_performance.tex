@@ -153,7 +153,11 @@ $N\times$ faster than the best competitor; $N$ means $N\times$ slower).
 \section{Speed: vectorized machine-real throughput}
 
 Wall time to apply each head to a $10^6$-element buffer. This is where Mathilda's packed
-array / NDArray kernels compete directly with SciPy's vectorized C.
+array / NDArray kernels compete directly with SciPy's vectorized C. Mathematica is too
+slow to test here: outside a handful of heads with vectorized kernels (\mcode{Gamma},
+\mcode{Erf}, \mcode{Sinc}: a few ms), a $10^6$-element buffer costs it seconds to minutes
+(median $\approx 8$\,s, \mcode{StruveH} $334$\,s), and the three \mcode{MeijerG} rows would
+take hours each. Maxima has no array form and is omitted as well.
 
 \input{tab_throughput}
 
@@ -205,30 +209,41 @@ buffer argument. Accuracy rose with speed: the agreement table is at or above it
 values, and every kernel was gated against mpmath (median $\lesssim 1$ ulp) before it was
 wired.
 
-\paragraph{MeijerG (v0.445).} Three rows cover the Meijer $G$-function: a two-term
+\paragraph{MeijerG (v0.445, v0.446).} Three rows cover the Meijer $G$-function: a two-term
 $G^{2,1}_{2,3}$ (\mcode{MeijerG}), a $G^{2,2}_{2,2}$ whose Slater expansion switches from
 $z$ to $1/z$ at the unit circle (\mcode{MeijerG22}), and the documented log case of
 integer-spaced $b$'s (\mcode{MeijerGlog}). SciPy has no $G$-function and Maxima no numeric
 one, so the Python column is mpmath's \mcode{meijerg} and Maxima is absent. Mathilda is the
-fastest engine in all nine cells: against mpmath $35\times$, $134\times$ and $3.3\times$
-(machine real), $42\times$, $234\times$, $4.3\times$ (complex) and $2.9\times$,
-$2.1\times$, $5.2\times$ (50 digits), and Mathematica is slower still in every cell
-($11$--$670\times$). On a $10^6$-element buffer the Slater plan is built once for the
-whole buffer, not once per call, so the two non-log rows run at $0.97$ and $0.17\,\mu$s
-per element, $13\times$ and $55\times$ below their scalar latency. The log row
-(\mcode{MeijerGlog}, $119$\,s) has no machine form and sends each element to the arb
-engine; it gains only the per-call overhead. SciPy has no $G$-function, so these
-throughput rows have no comparison column. The machine path is one Slater plan per parameter set (the
-$z$-independent $\pi/\sin$ and $\Gamma$ products) and one pFq kernel call per term; a log
-case or a cancelling sum is handed to the arb engine, which perturbs the colliding $b$'s
-and checks two perturbation sizes against each other. The 50-digit
+fastest engine in all nine cells: against mpmath $32\times$, $128\times$ and $539\times$
+(machine real), $42\times$, $245\times$, $469\times$ (complex) and $2.8\times$,
+$2.1\times$, $5.1\times$ (50 digits), and Mathematica is slower still in every cell
+($12$--$6500\times$). The machine path is one Slater plan per parameter set (the
+$z$-independent $\pi/\sin$ and $\Gamma$ products) and one pFq kernel call per term; a
+cancelling sum is handed to the arb engine. On a $10^6$-element buffer the plan is built
+once for the whole buffer, not once per call, so the two non-log rows run at $1.0$ and
+$0.23\,\mu$s per element. SciPy has no $G$-function, so these throughput rows have no
+comparison column. The 50-digit
 \mcode{MeijerG22} cell first came out level with mpmath ($2.03$ vs $2.07$\,ms) because
 $N$ of the exactly reduced $_2F_1$ pair summed each series directly; routing
 arbitrary-precision \mcode{Hypergeometric2F1} through arb's transformation-based kernel
 fixed that, and took the \mcode{Hypergeometric2F1} AP cell from $0.62$ to $0.10$\,ms
-($3.8\times$ ahead of mpmath). The hypergeometric family and MeijerG rows were re-run at
-v0.445 and merged with the v0.444 run of the other heads
-(\mcode{results/2026-10-17-final-v0445.json}).
+($3.8\times$ ahead of mpmath).
+
+\paragraph{The MeijerG log case (v0.446).} At v0.445 the log case had no machine form:
+every point went to the arb engine, which perturbs the colliding $b$'s and compares two
+perturbation sizes. That cost $456\,\mu$s per call and $119$\,s per $10^6$ buffer. It is
+now summed on the machine path as the residue series of the Mellin--Barnes integrand,
+$G=\sum_k w^{\beta+k}\sum_j c_{kj}\log^j w$, one series per integer-spaced class of $b$'s
+with base $\beta$. The $c_{kj}$ do not depend on $z$, so the plan tabulates them once: a
+Laurent expansion from arb, then the exact rational step $F(s+1)=F(s)R(s)$ in
+double-double. A point is summed in double, re-summed in double-double when it
+measurably loses more than 3 bits, and handed to arb only past 45. \mcode{MeijerGlog} now
+costs $2.99\,\mu$s (real), $7.6\,\mu$s (complex) and $320$\,ms per $10^6$ buffer,
+$85$--$370\times$ faster than v0.445. Its agreement figure (12.4 digits) is set by
+Mathematica, whose machine log case is off by $3\times10^{-12}$ at $z=5.5$; Mathilda and
+mpmath match 40-digit values to $\approx 10^{-16}$. The MeijerG rows were re-run at v0.446
+and merged with the v0.445 hypergeometric run and the v0.444 run of the other heads
+(\mcode{results/2026-10-17-final-v0446.json}).
 
 \paragraph{Notes on the flagged disagreements.}
 The recurring genuine differences are: Maxima's \mcode{expintegral\_chi} returns a value

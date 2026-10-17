@@ -1,0 +1,767 @@
+{
+ "meta": {
+  "date": "2026-10-17",
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "python": "3.14.7",
+  "engines": {
+   "mathilda": "0.446 (Mathilda 0.446 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline))",
+   "wolfram": "14. (14.0.0 for Mac OS X x86 (64-bit) (December 13, 2023))",
+   "maxima": "Maxima 5.49.0",
+   "python": "scipy 1.18.1, mpmath 1.3.0, numpy 2.5.2"
+  },
+  "ap_dps": 50,
+  "kval": 8,
+  "ktime": 512,
+  "rblk": 5,
+  "timing": "net = min(raw) - min(null loop); machine literals; ClearSystemCache per block; canary"
+ },
+ "cases": {
+  "MeijerG": {
+   "family": "Hypergeometric",
+   "note": "G^{2,1}_{2,3}; Python is mpmath (scipy has none); Maxima has no numeric G",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0153594,
+      "wolfram": 5.9398691,
+      "maxima": null,
+      "python": 0.4844893
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0153594,
+       "raw": 0.0155332,
+       "null": 0.0001738,
+       "canary": 0.0159258,
+       "first": 0.0157852,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.0157852,
+        0.0159238,
+        0.0161074,
+        0.015707,
+        0.0155332
+       ],
+       "null_blocks": [
+        0.000197264,
+        0.000173828,
+        0.000173828,
+        0.000175782,
+        0.000177735
+       ]
+      },
+      "wolfram": {
+       "net": 5.9398691,
+       "raw": 5.9401563,
+       "null": 0.0002871,
+       "canary": 6.5374785,
+       "first": 6.8299512,
+       "cache_suspect": false,
+       "raw_blocks": [
+        6.829951171875,
+        7.248576171875,
+        6.497251953125,
+        6.032947265624999,
+        5.94015625
+       ],
+       "null_blocks": [
+        0.000345703125,
+        0.000349609375,
+        0.000287109375,
+        0.00035546875,
+        0.0002890625
+       ]
+      },
+      "python": {
+       "net": 0.4844893,
+       "raw": 0.4844984,
+       "null": 9.1e-06,
+       "canary": 0.4716396,
+       "first": 0.5493779,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.5493779462995008,
+        0.4844984159717569,
+        0.49241547094425187,
+        0.5076413908682298,
+        0.5236525321379304
+       ],
+       "null_blocks": [
+        9.43873601499945e-06,
+        9.134964784607291e-06,
+        1.1588781489990652e-05,
+        2.1240339265204966e-05,
+        1.0630174074321985e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 14.87,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.0165684,
+      "wolfram": 6.1198203,
+      "maxima": null,
+      "python": 0.7010832
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0165684,
+       "raw": 0.0167266,
+       "null": 0.0001582,
+       "canary": 0.0166953,
+       "first": 0.019998,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.019998,
+        0.0185566,
+        0.0169922,
+        0.0171777,
+        0.0167266
+       ],
+       "null_blocks": [
+        0.000205078,
+        0.000183592,
+        0.000158203,
+        0.000162108,
+        0.000158203
+       ]
+      },
+      "wolfram": {
+       "net": 6.1198203,
+       "raw": 6.1201055,
+       "null": 0.0002852,
+       "canary": 6.4639375,
+       "first": 6.9056504,
+       "cache_suspect": false,
+       "raw_blocks": [
+        6.905650390625,
+        6.169212890625,
+        6.120105468749999,
+        6.33675390625,
+        6.332742187499999
+       ],
+       "null_blocks": [
+        0.00034765625,
+        0.000345703125,
+        0.00028515625,
+        0.000302734375,
+        0.0003671875
+       ]
+      },
+      "python": {
+       "net": 0.7010832,
+       "raw": 0.7010912,
+       "null": 8e-06,
+       "canary": 0.7085346,
+       "first": 0.7328159,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.7328158899326809,
+        0.7138509681681171,
+        0.7325574097194476,
+        0.7010911594989011,
+        0.7201136741059599
+       ],
+       "null_blocks": [
+        1.0048097465187311e-05,
+        1.1244992492720485e-05,
+        8.02901922725141e-06,
+        9.073119144886732e-06,
+        8.003553375601768e-06
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 14.89,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.25975,
+      "wolfram": 17.2903125,
+      "maxima": null,
+      "python": 0.7323822
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.25975,
+       "raw": 0.26,
+       "null": 0.00025,
+       "canary": 0.237187,
+       "first": 0.26425,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.26425,
+        0.26
+       ],
+       "null_blocks": [
+        0.000250002,
+        0.000250002
+       ]
+      },
+      "wolfram": {
+       "net": 17.2903125,
+       "raw": 17.290875,
+       "null": 0.0005625,
+       "canary": 17.46425,
+       "first": 17.630875,
+       "cache_suspect": false,
+       "raw_blocks": [
+        17.630875,
+        17.290875
+       ],
+       "null_blocks": [
+        0.0006875,
+        0.0005625000000000001
+       ]
+      },
+      "python": {
+       "net": 0.7323822,
+       "raw": 0.7324031,
+       "null": 2.1e-05,
+       "canary": 0.6970039,
+       "first": 0.7421932,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.7421931950375438,
+        0.7324031321331859
+       ],
+       "null_blocks": [
+        2.3923348635435104e-05,
+        2.0954757928848267e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 50.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "MeijerG22": {
+   "family": "Hypergeometric",
+   "note": "G^{2,2}_{2,2}: expansion in z inside |z| = 1, in 1/z outside",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0102832,
+      "wolfram": 7.1457656,
+      "maxima": null,
+      "python": 1.3202184
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0102832,
+       "raw": 0.0104277,
+       "null": 0.0001445,
+       "canary": 0.010125,
+       "first": 0.0105586,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.0105586,
+        0.0108711,
+        0.0105352,
+        0.0104277,
+        0.0107891
+       ],
+       "null_blocks": [
+        0.000146485,
+        0.000148439,
+        0.000146485,
+        0.000144531,
+        0.00014453
+       ]
+      },
+      "wolfram": {
+       "net": 7.1457656,
+       "raw": 7.1460508,
+       "null": 0.0002852,
+       "canary": 6.7654609,
+       "first": 9.5240215,
+       "cache_suspect": false,
+       "raw_blocks": [
+        9.524021484375,
+        8.491634765625001,
+        7.71360546875,
+        7.27930859375,
+        7.14605078125
+       ],
+       "null_blocks": [
+        0.000388671875,
+        0.00030078125,
+        0.000345703125,
+        0.00028515625,
+        0.000369140625
+       ]
+      },
+      "python": {
+       "net": 1.3202184,
+       "raw": 1.3202241,
+       "null": 5.8e-06,
+       "canary": 1.3433263,
+       "first": 1.3554296,
+       "cache_suspect": false,
+       "raw_blocks": [
+        1.3554295710491715,
+        1.3512158311641542,
+        1.3202241461840458,
+        1.357659950372181,
+        1.364087511319667
+       ],
+       "null_blocks": [
+        5.77711034566164e-06,
+        1.0273652151226997e-05,
+        1.0046278475783765e-05,
+        1.1365045793354511e-05,
+        1.0240910341963172e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 14.15,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.0117305,
+      "wolfram": 7.3454238,
+      "maxima": null,
+      "python": 2.8708658
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0117305,
+       "raw": 0.0118867,
+       "null": 0.0001562,
+       "canary": 0.0115332,
+       "first": 0.0123672,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.0123672,
+        0.0137168,
+        0.0119707,
+        0.0120215,
+        0.0118867
+       ],
+       "null_blocks": [
+        0.000261718,
+        0.000156249,
+        0.000156249,
+        0.000156249,
+        0.000158203
+       ]
+      },
+      "wolfram": {
+       "net": 7.3454238,
+       "raw": 7.3457051,
+       "null": 0.0002813,
+       "canary": 7.2681523,
+       "first": 7.3815156,
+       "cache_suspect": false,
+       "raw_blocks": [
+        7.381515625,
+        7.404513671875,
+        7.3457050781249995,
+        7.850798828125,
+        7.523998046875
+       ],
+       "null_blocks": [
+        0.000283203125,
+        0.00033593750000000003,
+        0.00034765625,
+        0.000390625,
+        0.00028125000000000003
+       ]
+      },
+      "python": {
+       "net": 2.8708658,
+       "raw": 2.8708723,
+       "null": 6.5e-06,
+       "canary": 2.8856937,
+       "first": 2.8708723,
+       "cache_suspect": false,
+       "raw_blocks": [
+        2.8708722620649496,
+        2.9774165705021005,
+        3.4156558049289742,
+        3.5574915636971127,
+        3.1925485927786212
+       ],
+       "null_blocks": [
+        6.48833520244807e-06,
+        8.987626642920077e-06,
+        1.2330929166637361e-05,
+        1.3584212865680456e-05,
+        3.7896825233474374e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 14.45,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.9939371,
+      "wolfram": 11.640625,
+      "maxima": null,
+      "python": 2.1268436
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.9939371,
+       "raw": 0.994187,
+       "null": 0.0002499,
+       "canary": 1.67762,
+       "first": 1.64394,
+       "cache_suspect": false,
+       "raw_blocks": [
+        1.64394,
+        0.994187
+       ],
+       "null_blocks": [
+        0.000249944,
+        0.0019375
+       ]
+      },
+      "wolfram": {
+       "net": 11.640625,
+       "raw": 11.6410625,
+       "null": 0.0004375,
+       "canary": 12.8751875,
+       "first": 11.6410625,
+       "cache_suspect": false,
+       "raw_blocks": [
+        11.6410625,
+        11.8541875
+       ],
+       "null_blocks": [
+        0.0006875,
+        0.0004375
+       ]
+      },
+      "python": {
+       "net": 2.1268436,
+       "raw": 2.126866,
+       "null": 2.25e-05,
+       "canary": 2.2910885,
+       "first": 2.4088669,
+       "cache_suspect": false,
+       "raw_blocks": [
+        2.4088668869808316,
+        2.1268660202622414
+       ],
+       "null_blocks": [
+        3.073364496231079e-05,
+        2.246815711259842e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 50.35,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "MeijerGlog": {
+   "family": "Hypergeometric",
+   "note": "log case: b's an integer apart (the documented example)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0029902,
+      "wolfram": 19.4775117,
+      "maxima": null,
+      "python": 1.6120305
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0029902,
+       "raw": 0.0031309,
+       "null": 0.0001406,
+       "canary": 0.0031543,
+       "first": 0.0039805,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00398047,
+        0.00329492,
+        0.00313086,
+        0.00363672,
+        0.00316211
+       ],
+       "null_blocks": [
+        0.000144531,
+        0.000140624,
+        0.000142578,
+        0.00014258,
+        0.00014453
+       ]
+      },
+      "wolfram": {
+       "net": 19.4775117,
+       "raw": 19.4778105,
+       "null": 0.0002988,
+       "canary": 19.1148652,
+       "first": 19.488666,
+       "cache_suspect": false,
+       "raw_blocks": [
+        19.488666015625,
+        21.784107421875,
+        20.615626953125002,
+        19.477810546875,
+        19.879140624999998
+       ],
+       "null_blocks": [
+        0.000298828125,
+        0.000349609375,
+        0.00035351562500000004,
+        0.00040234375,
+        0.000359375
+       ]
+      },
+      "python": {
+       "net": 1.6120305,
+       "raw": 1.6120381,
+       "null": 7.5e-06,
+       "canary": 1.9852459,
+       "first": 1.7080864,
+       "cache_suspect": false,
+       "raw_blocks": [
+        1.7080863635783317,
+        1.6133407207234995,
+        1.612038073290023,
+        1.8361376096436288,
+        1.7605002540221903
+       ],
+       "null_blocks": [
+        7.548806024715304e-06,
+        1.2227246770635247e-05,
+        1.0861185728572309e-05,
+        1.2320015230216086e-05,
+        6.851041689515114e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 12.43,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.007625,
+      "wolfram": 19.4299863,
+      "maxima": null,
+      "python": 3.5737846
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.007625,
+       "raw": 0.0077812,
+       "null": 0.0001562,
+       "canary": 0.0084609,
+       "first": 0.0079414,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00794141,
+        0.00778125,
+        0.0079668,
+        0.00853125,
+        0.00786523
+       ],
+       "null_blocks": [
+        0.000158203,
+        0.000164062,
+        0.000156249,
+        0.000226562,
+        0.000226562
+       ]
+      },
+      "wolfram": {
+       "net": 19.4299863,
+       "raw": 19.4302949,
+       "null": 0.0003086,
+       "canary": 21.5424961,
+       "first": 20.33975,
+       "cache_suspect": false,
+       "raw_blocks": [
+        20.33975,
+        19.799474609375,
+        19.430294921875,
+        20.27196875,
+        19.602673828125
+       ],
+       "null_blocks": [
+        0.000369140625,
+        0.000435546875,
+        0.000361328125,
+        0.000357421875,
+        0.00030859375
+       ]
+      },
+      "python": {
+       "net": 3.5737846,
+       "raw": 3.5737929,
+       "null": 8.3e-06,
+       "canary": 3.6891167,
+       "first": 3.5737929,
+       "cache_suspect": false,
+       "raw_blocks": [
+        3.573792910174234,
+        3.832871827398776,
+        3.93059525595163,
+        3.587990995583823,
+        3.916604011465097
+       ],
+       "null_blocks": [
+        2.4672772269695997e-05,
+        8.274582796730101e-06,
+        7.266498869284987e-05,
+        1.0017174645327032e-05,
+        9.988070814870298e-06
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 12.93,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 1.5123775,
+      "wolfram": 41.3014375,
+      "maxima": null,
+      "python": 7.6950166
+     },
+     "timing": {
+      "mathilda": {
+       "net": 1.5123775,
+       "raw": 1.51269,
+       "null": 0.0003125,
+       "canary": 1.49906,
+       "first": 1.52112,
+       "cache_suspect": false,
+       "raw_blocks": [
+        1.52112,
+        1.51269
+       ],
+       "null_blocks": [
+        0.000312517,
+        0.000312517
+       ]
+      },
+      "wolfram": {
+       "net": 41.3014375,
+       "raw": 41.3019375,
+       "null": 0.0005,
+       "canary": 41.0810625,
+       "first": 43.923125,
+       "cache_suspect": false,
+       "raw_blocks": [
+        43.923125,
+        41.301937499999994
+       ],
+       "null_blocks": [
+        0.0011250000000000001,
+        0.0005
+       ]
+      },
+      "python": {
+       "net": 7.6950166,
+       "raw": 7.6950493,
+       "null": 3.27e-05,
+       "canary": 8.0424279,
+       "first": 7.7065719,
+       "cache_suspect": false,
+       "raw_blocks": [
+        7.706571894232184,
+        7.695049280300736
+       ],
+       "null_blocks": [
+        3.620516508817673e-05,
+        3.2654497772455215e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 50.45,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  }
+ },
+ "throughput": {
+  "mathilda": {
+   "MeijerG": 1035.78,
+   "MeijerG22": 228.52,
+   "MeijerGlog": 320.172
+  },
+  "wolfram": {},
+  "python": {}
+ }
+}

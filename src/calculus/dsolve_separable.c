@@ -43,18 +43,59 @@
  * whole cost on e.g. the E^(x y) / E^(2y) exact families).  Returns true (defer
  * to the symbolic ds_is_zero) when chk is ~0 or does not numericize (a residual
  * carrying an extra free parameter), so it NEVER rejects a genuine split. */
+/* Distinct free PARAMETER symbols of e (argument positions only, never heads;
+ * excluding x, Y and protected system symbols such as Pi, E, I) into names[0..*n),
+ * capped at `cap`. */
+static void sep_collect_params(const Expr* e, const char* xvar, const char* Yname,
+                               const char** names, size_t* n, size_t cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (nm == xvar || nm == Yname) return;
+        SymbolDef* d = symtab_lookup(nm);
+        if (d && (d->attributes & ATTR_PROTECTED)) return;
+        for (size_t i = 0; i < *n; i++) if (names[i] == nm) return;
+        names[(*n)++] = nm;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        sep_collect_params(e->data.function.args[i], xvar, Yname, names, n, cap);
+}
+
+/* Cheap numeric pre-screen for the split check F - g h.  Evaluated at a few
+ * (x, Y) points AND with every free parameter at a moderate distinct value: the
+ * exact zero test alone is not enough, because its sampler can certify an
+ * expression that merely agrees asymptotically -- with a symbolic exponent n,
+ * F - g h for x (a + x y^n) y' + b y == 0 (§2.2.54-5331) has both terms tending to
+ * -b/(x^2 Y^(n-1)) at large n and was judged identically zero.  That accepted a
+ * wrong split whose integrals then spent the whole shared separable budget,
+ * starving every nested Separable call of the same top-level solve. */
 static bool sep_chk_maybe_zero(const Expr* chk, const char* xvar, const char* Yname) {
     static const double xs[] = { 1.3, 0.7 };
     static const double ys[] = { 0.9, 1.7 };
+    const char* params[12]; size_t np = 0;
+    if (!getenv("MATHILDA_NO_SEP_PARAMCHK"))                     /* A/B killswitch */
+        sep_collect_params(chk, xvar, Yname, params, &np, 12);
     for (int i = 0; i < 2; i++) {
         Expr* e = expr_copy((Expr*)chk);
         e = ds_subst(e, expr_new_symbol(xvar),  expr_new_real(xs[i]));
         e = ds_subst(e, expr_new_symbol(Yname), expr_new_real(ys[i]));
-        e = eval_and_free(ds_call1("Abs", e));
-        double m = (e && e->type == EXPR_REAL)    ? e->data.real
-                 : (e && e->type == EXPR_INTEGER) ? (double)e->data.integer : NAN;
+        for (int with_params = 0; with_params < 2; with_params++) {
+            Expr* ev = expr_copy(e);
+            if (with_params) {
+                if (np == 0) { expr_free(ev); break; }
+                for (size_t k = 0; k < np; k++)
+                    ev = ds_subst(ev, expr_new_symbol(params[k]),
+                                  expr_new_real(1.13 + 0.37 * (double)k + 0.11 * i));
+            }
+            ev = eval_and_free(ds_call1("Abs", ev));
+            double m = (ev && ev->type == EXPR_REAL)    ? ev->data.real
+                     : (ev && ev->type == EXPR_INTEGER) ? (double)ev->data.integer : NAN;
+            expr_free(ev);
+            if (!isnan(m) && isfinite(m) && m > 1e-6) { expr_free(e); return false; }  /* clearly non-zero */
+        }
         expr_free(e);
-        if (!isnan(m) && isfinite(m) && m > 1e-6) return false;   /* clearly non-zero */
     }
     return true;                                                  /* small / non-numeric */
 }
@@ -317,6 +358,26 @@ static bool sep_has_root(const Expr* e) {
     return false;
 }
 
+/* True when the antiderivative carries TWO OR MORE distinct Log[..] arguments in Y,
+ * at least one of them wrapping a root of Y -- e.g. Log[u] - Log[4 + 2 u + 2 Sqrt[
+ * u (4 + u)]] (the separable branch of an isobaric quadratic, §2.2.55-5429).  Solve
+ * can only invert it by exponentiating and rationalising the radical away, which
+ * took 5 s to reach a degree-16 Root in E^(t + C) -- a worse answer than the first
+ * integral, and long enough to time out every caller.  A single Log wrapping a root
+ * (Log[Y + Sqrt[1 + Y^2]], the ArcSinh shape) still inverts cleanly and is left
+ * alone.  The caller declines; the implicit first-integral twin answers. */
+static bool sep_log_radical_mix(const Expr* lhsInt, const char* Yname) {
+    Expr* args[8]; size_t n = 0;
+    sep_collect_log_args(lhsInt, args, &n, 8);
+    size_t ny = 0; bool rooted = false;
+    for (size_t i = 0; i < n; i++) {
+        if (!ds_contains(args[i], Yname)) continue;
+        ny++;
+        if (sep_has_root(args[i])) rooted = true;
+    }
+    return ny >= 2 && rooted;
+}
+
 Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     const char* xvar = P->ind_names[0];
     Expr* g = NULL; Expr* h = NULL; const char* Yname = NULL;
@@ -338,7 +399,8 @@ Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch) {
     /* Skip a non-invertible >=3-distinct-log relation (cubic+ h(Y)): ds_solve
      * churns on it, so decline here and let the implicit first-integral twin
      * (dsolve_separable_implicit_try, next in the cascade) return G == C[1]. */
-    if (sep_noninvertible_logsum(lhsInt)) {
+    if (sep_noninvertible_logsum(lhsInt)
+        || (!getenv("MATHILDA_NO_SEP_LOGRAD") && sep_log_radical_mix(lhsInt, Yname))) {
         expr_free(lhsInt); expr_free(rhsInt);
         return NULL;
     }

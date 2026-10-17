@@ -108,7 +108,7 @@ static Expr* powneg1(Expr* base) { /* base^-1; base consumed */
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
 
-Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
+static Expr** bern_core(DSolveProblem* P, size_t* nbranch, bool expanded) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
     const char* yname = P->fun_names[0];
@@ -170,7 +170,24 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
      * exponent — the direct (FY - B Y^n)/Y division would instead leave a
      * spurious Y^(n-1) residue for an irrational n. */
     const char* Wn = intern_symbol("DSolve`W");
-    Expr* Fsub = ds_subst(expr_copy(FY), expr_copy(Ynpow), expr_new_symbol(Wn));
+    /* The W-abstraction is textual, so an unexpanded F = -Y^-m (g Y^(m+1) + h Y^n)/f
+     * never shows Y^(n-m) literally and reads B == 0 with a Y-dependent A
+     * (§2.2.54-5332).  The EXPANDED pass (DSolve`BernoulliExpanded) abstracts
+     * Expand[FY] instead, exposing it.  It is a separate LATE cascade slot rather
+     * than a retry here: expanding turns every RHS quadratic in Y into a Bernoulli
+     * shape (the logistic x' == 3 x (5 - x), x (x + a) y' == (b + c y) y), and
+     * claiming those ahead of the specialists that already close them cost up to
+     * 9 s per equation.  An FY that Expand leaves unchanged is the plain pass's
+     * question and declines. */
+    Expr* base = expr_copy(FY);
+    if (expanded) {
+        Expr* ex = eval_and_free(ds_call1("Expand", expr_copy(FY)));
+        bool same = expr_eq(ex, FY);
+        expr_free(base); base = ex;
+        if (same) { expr_free(base); expr_free(Ynpow); expr_free(FY);
+                    expr_free(omn); expr_free(nexp); return NULL; }
+    }
+    Expr* Fsub = ds_subst(base, expr_copy(Ynpow), expr_new_symbol(Wn));
     Expr* B = eval_and_free(ds_call2("Coefficient", expr_copy(Fsub), expr_new_symbol(Wn)));
     Expr* rem = eval_and_free(ds_call1("Expand",
                    eval_and_free(ds_call2(SYM_Subtract, Fsub,          /* consumes Fsub */
@@ -241,6 +258,20 @@ Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
     return out;
 }
 
+Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch) {
+    return bern_core(P, nbranch, false);
+}
+
+/* Late second pass on Expand[F]; MATHILDA_NO_BERN_EXPAND disables it for A/B. */
+Expr** dsolve_bernoulli_expanded_try(DSolveProblem* P, size_t* nbranch) {
+    if (getenv("MATHILDA_NO_BERN_EXPAND")) return NULL;
+    return bern_core(P, nbranch, true);
+}
+
+static Expr* builtin_dsolve_bernoulli_expanded(Expr* res) {
+    return dsolve_method_builtin(res, dsolve_bernoulli_expanded_try);
+}
+
 static Expr* builtin_dsolve_bernoulli(Expr* res) {
     return dsolve_method_builtin(res, dsolve_bernoulli_try);
 }
@@ -251,4 +282,10 @@ void dsolve_bernoulli_init(void) {
     symtab_set_docstring("DSolve`Bernoulli",
         "DSolve`Bernoulli[eqn, y, x] solves y'[x] == A(x) y + B(x) y^n (n != 0, 1) "
         "via the substitution v = y^(1-n), which linearises the equation.");
+    symtab_add_builtin("DSolve`BernoulliExpanded", builtin_dsolve_bernoulli_expanded);
+    symtab_get_def("DSolve`BernoulliExpanded")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`BernoulliExpanded",
+        "DSolve`BernoulliExpanded[eqn, y, x] is DSolve`Bernoulli on the expanded "
+        "right-hand side, so a y^n term hidden inside a product (y' == -(g y^2 + h y^n)/(f y)) "
+        "is recognised; a late cascade pass.");
 }

@@ -32,6 +32,7 @@
  * deadline + per-top-level decline memo bound it (the M12/M14 pattern).
  */
 #include "dsolve_common.h"
+#include "../core.h"
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
@@ -418,6 +419,7 @@ Expr** dsolve_piecewise_try(DSolveProblem* P, size_t* nbranch){
 static Expr* builtin_dsolve_piecewise(Expr* res){ return dsolve_method_builtin(res, dsolve_piecewise_try); }
 
 void dsolve_piecewise_init(void){
+    tc_register_unwind_counter(&g_pw_active);   /* restored on a timeout unwind */
     symtab_add_builtin("DSolve`PiecewiseForcing", builtin_dsolve_piecewise);
     symtab_get_def("DSolve`PiecewiseForcing")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`PiecewiseForcing",

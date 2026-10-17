@@ -13,6 +13,7 @@
  */
 #include "dsolve.h"
 #include "dsolve_common.h"
+#include "../core.h"
 #include "dsolve_linsys.h"
 
 #include "../sym_names.h"
@@ -124,18 +125,25 @@ static DSolveMethod ds_method_from_string(const char* s) {
 /* method try-functions + registrars (one file each) */
 extern Expr** dsolve_factorable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_nth_algebraic_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_bernoulli_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_bernoulli_expanded_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_homogeneous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_separable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_separable_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exact_mu_u_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_exact_mu_u_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_clairaut_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lagrange_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_solvablefory_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_solvablefory_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_homog_g_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_homog_g_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_solvableforx_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_undetcoeff_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch);
@@ -164,6 +172,7 @@ extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_inverse_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_inverse_init(void);
+extern void dsolve_homog_g_init(void);
 extern Expr** dsolve_autonomous_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_autonomous_implicit_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_liouville_try(DSolveProblem* P, size_t* nbranch);
@@ -564,6 +573,20 @@ Expr* builtin_dsolve(Expr* res) {
              * transcendental branch whose back-substitution verify is very slow,
              * so it is opt-in like FirstOrderPowerSeries / EigenvalueProblem. */
             if (!result) result = dsolve_run_parametric(&P, dsolve_solvablefory_try);
+            /* ...and its implicit slope elimination: when the induced x(p) ODE solves
+             * only implicitly, Phi(p, x) == C, each explicit root p_k(x, y) of the
+             * ODE gives the implicit solution Phi(p_k, x) == C (stashed by the pass
+             * above, so no second solve; re-verified against the original ODE).
+             * MATHILDA_NO_SFY_IMPLICIT disables it for A/B. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_solvablefory_implicit_try);
+            /* Homogeneous class G (isobaric): F(l x, l^k y, l^(k-1) y') == l^w F.
+             * y = x^k u, t = Log[x] makes it autonomous in u(t); recursed, mapped back.
+             * The weight is solved from samples and checked identically; k == 1 is
+             * left to DSolve`Homogeneous.  Explicit pass, then its implicit pass
+             * (stashed relations, re-verified against the original ODE).
+             * Top-level only; MATHILDA_NO_HOMOG_G disables both for A/B. */
+            if (!result) result = dsolve_run(&P, dsolve_homog_g_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_homog_g_implicit_try);
             /* Lie point-symmetry: the general first-order backstop.  Heuristic
              * (underdetermined determining PDE), so it runs after EVERY
              * deterministic specialist — including the homogeneous implicit
@@ -595,6 +618,25 @@ Expr* builtin_dsolve(Expr* res) {
              * re-entry guarded so the inner solve cannot invert again, and
              * MATHILDA_NO_INVERSE disables it for A/B.  Reaches the x(y)-only classes
              * (§2.2.45-4408 Bernoulli-in-x). */
+            /* NthAlgebraic's implicit second pass: a first-order ODE of degree >= 2
+             * in y' whose y'-branches each solve only IMPLICITLY (y'^2 == (y-1) y^2 ->
+             * x/2 + ArcTan[Sqrt[y-1]] == C[1] per branch).  The explicit pass at the
+             * front stashed those relations when it declined, so this slot costs no
+             * re-solve; it sits LATE so every specialist (Clairaut, Lagrange,
+             * SolvableForY, ...) claims the original equation first, and each relation
+             * is re-verified against the original ODE by dsolve_run_implicit.  Ahead of
+             * InverseOrientation, which would otherwise recurse the engine for nothing.
+             * MATHILDA_NO_NA_IMPLICIT disables it for A/B. */
+            if (!result) result = dsolve_run_implicit(&P, dsolve_nth_algebraic_implicit_try);
+            /* Bernoulli on Expand[F]: a y^n term hidden inside a product (§2.2.54-5332).
+             * Late, because expanding makes every RHS quadratic in y look Bernoulli and
+             * the specialists above already close (and close faster) most of those. */
+            if (!result) result = dsolve_run(&P, dsolve_bernoulli_expanded_try);
+            /* Exact by a mu(u) integrating factor, u in {x+y, x-y, x y, x^2 +- y^2}: late
+             * for the same reason -- the relation it finds is often implicit where a
+             * specialist above closes explicitly (p' == (x + p)^2). */
+            if (!result) result = dsolve_run(&P, dsolve_exact_mu_u_try);
+            if (!result) result = dsolve_run_implicit(&P, dsolve_exact_mu_u_implicit_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_inverse_try);
             /* NB: the Frobenius / power-series methods are PINNED-ONLY (Method ->
              * "FrobeniusSeries" / "PowerSeries"), like FirstOrderPowerSeries above: a
@@ -615,13 +657,17 @@ Expr* builtin_dsolve(Expr* res) {
         case DS_NTHALGEBRAIC: result = dsolve_run(&P, dsolve_nth_algebraic_try); break;
         case DS_QUADRATURE:   result = dsolve_run(&P, dsolve_quadrature_try);  break;
         case DS_LINEAR1:      result = dsolve_run(&P, dsolve_linear1_try);     break;
-        case DS_BERNOULLI:    result = dsolve_run(&P, dsolve_bernoulli_try);   break;
+        case DS_BERNOULLI:    result = dsolve_run(&P, dsolve_bernoulli_try);
+                              if (!result) result = dsolve_run(&P, dsolve_bernoulli_expanded_try);
+                              break;
         case DS_HOMOGENEOUS:
             result = dsolve_run(&P, dsolve_homogeneous_try);
             if (!result) result = dsolve_run_implicit(&P, dsolve_homogeneous_implicit_try);
             break;
         case DS_SEPARABLE:    result = dsolve_run(&P, dsolve_separable_try);   break;
-        case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);       break;
+        case DS_EXACT:        result = dsolve_run(&P, dsolve_exact_try);
+                              if (!result) result = dsolve_run(&P, dsolve_exact_mu_u_try);
+                              break;
         case DS_CLAIRAUT:     result = dsolve_run(&P, dsolve_clairaut_try);    break;
         case DS_LAGRANGE:     result = dsolve_run_parametric(&P, dsolve_lagrange_try); break;
         case DS_SOLVABLEFORY: result = dsolve_run_parametric(&P, dsolve_solvablefory_try); break;
@@ -718,6 +764,8 @@ void dsolve_init(void) {
     dsolve_lagrange_init();
     dsolve_solvefor_init();
     dsolve_inverse_init();
+    dsolve_homog_g_init();
+    tc_register_unwind_counter(&g_dsolve_depth);   /* restored on a timeout unwind */
     dsolve_undetcoeff_init();
     dsolve_constcoeff_init();
     dsolve_euler_init();

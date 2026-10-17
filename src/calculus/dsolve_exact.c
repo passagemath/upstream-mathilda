@@ -14,12 +14,15 @@
  * answer — it is dropped.
  */
 #include "dsolve_common.h"
+#include "../common.h"
+#include "integrate.h"          /* g_integrate_quiet */
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
 #include <stdlib.h>
+#include <time.h>
 
 static Expr* pw_inv(Expr* base) {
     return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ base, expr_new_integer(-1) }, 2);
@@ -183,14 +186,171 @@ static bool exact_clear_denominators(const Expr* M, const Expr* N, const char* P
     return exact_apply_factor(Db, M, N, xvar, Yn, Mm_out, Nn_out);
 }
 
+/* True when e is algebraic in x and Y: every subexpression involving them is a
+ * Plus, Times or Power with an exponent free of them.  Gates mu(u), whose
+ * Jacobian zero tests on a trig-rational M, N cost seconds and find nothing
+ * (§2.2.53-5238: 7.4 s across the explicit and implicit entries).  e borrowed. */
+static bool exact_algebraic(const Expr* e, const char* x, const char* Y) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (ds_free_of(e, x) && ds_free_of(e, Y)) return true;
+    if (head_is(e, SYM_Plus) || head_is(e, SYM_Times)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!exact_algebraic(e->data.function.args[i], x, Y)) return false;
+        return true;
+    }
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        if (!(ds_free_of(ex, x) && ds_free_of(ex, Y))) return false;
+        return exact_algebraic(e->data.function.args[0], x, Y);
+    }
+    return false;
+}
+
+/* Integrating factor mu(u) depending on one combination u of x and Y (Kamke /
+ * Murphy's classical test).  (mu M)_Y == (mu N)_x gives
+ *        mu'/mu == Q,   Q = (M_Y - N_x) / (u_x N - u_Y M),
+ * so a factor exists iff Q is a function of u alone -- i.e. the Jacobian
+ * Q_x u_Y - Q_Y u_x vanishes identically.  Then phi(u) = Q is read off along the
+ * line x = 1 (Y = Y(1, u)), mu = Exp[Integrate[phi, u]] with u -> u(x, Y), and the
+ * product pair must be exact (checked).  Candidates: x + Y, x - Y, x Y, x^2 + Y^2,
+ * x^2 - Y^2 -- the factors behind (x^2 + y^2 + x) y' == y (mu = 1/(x^2+y^2)) and
+ * the 2nd-type Abel rationals of §2.2.52/53.  NOT Y/x: every homogeneous (class A)
+ * equation has mu(Y/x) = 1/(x M + Y N), so that candidate would claim the whole
+ * class ahead of DSolve`Homogeneous, which owns it (§2.2.52-5120, §2.2.53-5230,
+ * §2.2.54-5349 regressed to timeouts).  Returns the factor (owned) or NULL.
+ * M, N, diff borrowed. */
+static Expr* exact_mu_u_factor(const Expr* M, const Expr* N, const Expr* diff,
+                               const char* xvar, const char* Yn) {
+    if (getenv("MATHILDA_NO_EXACT_MU_U")) return NULL;   /* A/B killswitch */
+    if (!exact_algebraic(M, xvar, Yn) || !exact_algebraic(N, xvar, Yn)) return NULL;
+    /* A homogeneous (class A) equation -- M/N of degree 0, i.e. free of x after
+     * Y -> v x -- has a mu(u) for several u (x + Y as well as Y/x); it belongs to
+     * DSolve`Homogeneous, so leave it there (§2.2.52-5120, §2.2.53-5248). */
+    {
+        const char* Vn = intern_symbol("DSolve`exV");
+        Expr* vx = ds_call2(SYM_Times, expr_new_symbol(Vn), expr_new_symbol(xvar));
+        /* sequenced: the two substitutions must not share vx within one call's
+         * (unordered) argument evaluation */
+        Expr* Mv = ds_subst(expr_copy((Expr*)M), expr_new_symbol(Yn), expr_copy(vx));
+        Expr* Nv = ds_subst(expr_copy((Expr*)N), expr_new_symbol(Yn), vx);
+        Expr* r = eval_and_free(ds_call1(SYM_Together, ds_call2(SYM_Times, Mv,
+                      ds_call2(SYM_Power, Nv, expr_new_integer(-1)))));
+        bool homogeneous = ds_free_of(r, xvar);
+        expr_free(r);
+        if (homogeneous) return NULL;
+    }
+    const char* Un = intern_symbol("DSolve`exU");
+    Expr* X = expr_new_symbol(xvar);
+    Expr* Y = expr_new_symbol(Yn);
+    Expr* U = expr_new_symbol(Un);
+    /* candidate u(x, Y), and Y(1, u) on the line x = 1 */
+    Expr* cand[5][2] = {
+        { ds_call2(SYM_Plus, expr_copy(X), expr_copy(Y)),
+          ds_call2(SYM_Subtract, expr_copy(U), expr_new_integer(1)) },
+        { ds_call2(SYM_Subtract, expr_copy(X), expr_copy(Y)),
+          ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(U)) },
+        { ds_call2(SYM_Times, expr_copy(X), expr_copy(Y)),
+          expr_copy(U) },
+        { ds_call2(SYM_Plus, ds_call2(SYM_Power, expr_copy(X), expr_new_integer(2)),
+                             ds_call2(SYM_Power, expr_copy(Y), expr_new_integer(2))),
+          ds_call1(SYM_Sqrt, ds_call2(SYM_Subtract, expr_copy(U), expr_new_integer(1))) },
+        { ds_call2(SYM_Subtract, ds_call2(SYM_Power, expr_copy(X), expr_new_integer(2)),
+                                 ds_call2(SYM_Power, expr_copy(Y), expr_new_integer(2))),
+          ds_call1(SYM_Sqrt, ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(U))) },
+    };
+    expr_free(X); expr_free(Y); expr_free(U);
+    Expr* Mu = NULL;
+    for (int c = 0; c < 5; c++) {
+        Expr* u  = eval_and_free(cand[c][0]);
+        Expr* yu = eval_and_free(cand[c][1]);
+        if (Mu) { expr_free(u); expr_free(yu); continue; }
+        Expr* ux = ds_d(expr_copy(u), expr_new_symbol(xvar));
+        Expr* uy = ds_d(expr_copy(u), expr_new_symbol(Yn));
+        Expr* den = eval_and_free(ds_call2(SYM_Subtract,
+                        ds_call2(SYM_Times, expr_copy(ux), expr_copy((Expr*)N)),
+                        ds_call2(SYM_Times, expr_copy(uy), expr_copy((Expr*)M))));
+        if (ds_is_zero(den)) { expr_free(den); expr_free(ux); expr_free(uy); expr_free(u); expr_free(yu); continue; }
+        Expr* Q = eval_and_free(ds_call1(SYM_Together, ds_call2(SYM_Times, expr_copy((Expr*)diff),
+                      ds_call2(SYM_Power, den, expr_new_integer(-1)))));
+        /* Jacobian test: Q is a function of u alone */
+        Expr* jac = eval_and_free(ds_call1(SYM_Together, ds_call2(SYM_Subtract,
+                        ds_call2(SYM_Times, ds_d(expr_copy(Q), expr_new_symbol(xvar)), expr_copy(uy)),
+                        ds_call2(SYM_Times, ds_d(expr_copy(Q), expr_new_symbol(Yn)), expr_copy(ux)))));
+        bool fn_of_u = ds_is_zero(jac) && !ds_is_zero(Q);
+        expr_free(jac); expr_free(ux); expr_free(uy);
+        if (fn_of_u) {
+            Expr* phi = ds_subst(ds_subst(expr_copy(Q), expr_new_symbol(xvar), expr_new_integer(1)),
+                                 expr_new_symbol(Yn), expr_copy(yu));
+            phi = eval_and_free(ds_call1(SYM_Together, phi));
+            if (ds_free_of(phi, xvar) && ds_free_of(phi, Yn)) {
+                g_integrate_quiet++;
+                Expr* I = ds_integrate(phi, expr_new_symbol(Un));
+                g_integrate_quiet--;
+                /* ALGEBRAIC factors only: Integrate[phi, u] must be a log/rational
+                 * combination, so mu = Exp[..] is a product of powers.  A
+                 * transcendental mu (an ArcTan in the exponent -- the mu(Y/x) of a
+                 * homogeneous y y' + a x + b y == 0, §2.2.51-5038) is genuine but
+                 * makes the potential integrals below spin, where the methods after
+                 * Exact answer in 0.2 s. */
+                static const char* const transc[] = { "ArcTan", "ArcTanh", "ArcCot", "ArcCoth",
+                    "ArcSin", "ArcCos", "ArcSinh", "ArcCosh", "Erf", "Erfi", "ExpIntegralEi",
+                    "RootSum", "Root" };
+                bool algebraic = !ds_has_head(I, SYM_Integrate);
+                for (size_t t = 0; t < sizeof(transc) / sizeof(transc[0]) && algebraic; t++)
+                    if (ds_has_head(I, intern_symbol(transc[t]))) algebraic = false;
+                if (algebraic) {
+                    Expr* mu = eval_and_free(ds_call1("Exp", ds_subst(I, expr_new_symbol(Un), expr_copy(u))));
+                    Expr* Mm = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), expr_copy((Expr*)M)));
+                    Expr* Nn = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), expr_copy((Expr*)N)));
+                    if (exact_pair_is_exact(Mm, Nn, xvar, Yn)) Mu = mu;
+                    else expr_free(mu);
+                    expr_free(Mm); expr_free(Nn);
+                } else expr_free(I);
+            } else expr_free(phi);
+        }
+        expr_free(Q); expr_free(u); expr_free(yu);
+    }
+    return Mu;
+}
+
+/* Integrate[e, v] -- unbounded as before, or (`deadline` > 0) inside what is left
+ * of that wall-clock deadline, a timeout reading as non-elementary (a decline).
+ * The bound is used only for a mu(u) factor, whose potentials can be far harder
+ * than the equation (§2.2.54-5320 spun past the corpus wall where the methods
+ * after Exact answer in 0.5 s).  e consumed. */
+#define EXACT_MU_U_BUDGET_SEC 2
+static Expr* exact_integrate(Expr* e, const char* var, time_t deadline) {
+    if (deadline <= 0) return ds_integrate(e, expr_new_symbol(var));
+    long left = (long)(deadline - time(NULL));
+    if (left < 1) { expr_free(e); return NULL; }
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Integrate),
+                     (Expr*[]){ e, expr_new_symbol(var) }, 2);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                  (Expr*[]){ call, expr_new_integer(left),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3));
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Aborted")) {
+        expr_free(r); return NULL;
+    }
+    return r;
+}
+/* True when an exact_integrate result is unusable (timed out or non-elementary). */
+static bool exact_int_failed(const Expr* r) { return !r || ds_has_head(r, SYM_Integrate); }
+
 /* Build the exact potential F(x,Y) with F_x = Mu*M, F_y = Mu*N (Mu an
  * integrating factor: 1, mu(x), mu(y), or x^a y^b) for M + N y' == 0.  Returns
  * F (owned), or NULL when the residual is not linear in p, cannot be made
  * exact, or a potential integral is non-elementary.  Shared by the explicit
  * Exact entry (which then Solves F == C[1] for Y) and the implicit entry (which
  * returns F(x, y[x]) == C[1] for a transcendental, non-invertible F). */
+/* mu_u_only selects the LATE pass (DSolve`ExactMuU): skip the classical factors
+ * (1, mu(x), mu(y), x^a y^b -- the plain pass's question) and try only mu(u).  It is
+ * a separate cascade slot because an exact-by-mu(u) relation is often only an
+ * implicit answer where a later specialist closes explicitly: p' == (x + p)^2
+ * (u = x + p) gives ArcTan[x + p] - x == C[1] where the explicit p = -x - Tan[..]
+ * follows, and a second-order reduction (y'' == (x + y')^2, §2.2.2-154) needs the
+ * explicit one. */
 static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
-                             const char* Pn) {
+                             const char* Pn, bool mu_u_only) {
     Expr* R = dsolve_algebraic_residual(P, Yn, Pn);
     if (!R) return NULL;
 
@@ -211,7 +371,13 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
     Expr* diff = eval_and_free(ds_call2(SYM_Subtract, My, Nx));
 
     Expr* Mu = NULL;
-    if (ds_is_zero(diff)) {
+    time_t pot_deadline = 0;           /* bounded potential integrals (mu(u) only) */
+    if (mu_u_only) {
+        if (!ds_is_zero(diff)) {
+            Mu = exact_mu_u_factor(M, N, diff, xvar, Yn);
+            if (Mu) pot_deadline = time(NULL) + EXACT_MU_U_BUDGET_SEC;
+        }
+    } else if (ds_is_zero(diff)) {
         Mu = expr_new_integer(1);
     } else {
         /* mu(x): (M_y - N_x)/N free of Y */
@@ -238,7 +404,7 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
         }
     }
     /* fallback: mu = x^a y^b (constant exponents) when neither mu(x) nor mu(y) fits */
-    if (!Mu) Mu = exact_xayb_factor(M, N, diff, xvar, Yn);
+    if (!Mu && !mu_u_only) Mu = exact_xayb_factor(M, N, diff, xvar, Yn);
     expr_free(diff);
 
     Expr* Mm, * Nn;
@@ -269,46 +435,46 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
      * path whose remainder derivative is already free of the other variable, with
      * NO Simplify on the hot path. */
     Expr* Fpot = NULL;
-    Expr* Fx = ds_integrate(expr_copy(Mm), expr_new_symbol(xvar));
-    if (!ds_has_head(Fx, SYM_Integrate)) {
+    Expr* Fx = exact_integrate(expr_copy(Mm), xvar, pot_deadline);
+    if (!exact_int_failed(Fx)) {
         Expr* gp = eval_and_free(ds_call2(SYM_Subtract, expr_copy(Nn),
                        ds_d(expr_copy(Fx), expr_new_symbol(Yn))));
         if (ds_free_of(gp, xvar)) {
-            Expr* g = ds_integrate(expr_copy(gp), expr_new_symbol(Yn));
-            if (!ds_has_head(g, SYM_Integrate))
+            Expr* g = exact_integrate(expr_copy(gp), Yn, pot_deadline);
+            if (!exact_int_failed(g))
                 Fpot = eval_and_free(ds_call2(SYM_Plus, expr_copy(Fx), g));
-            else expr_free(g);
+            else if (g) expr_free(g);
         }
         expr_free(gp);
     }
-    expr_free(Fx);
+    if (Fx) expr_free(Fx);
     if (!Fpot) {                                    /* Path 2: integrate Nn dY */
-        Expr* Fy = ds_integrate(expr_copy(Nn), expr_new_symbol(Yn));
-        if (!ds_has_head(Fy, SYM_Integrate)) {
+        Expr* Fy = exact_integrate(expr_copy(Nn), Yn, pot_deadline);
+        if (!exact_int_failed(Fy)) {
             Expr* hp = eval_and_free(ds_call2(SYM_Subtract, expr_copy(Mm),
                            ds_d(expr_copy(Fy), expr_new_symbol(xvar))));
             if (ds_free_of(hp, Yn)) {
-                Expr* h = ds_integrate(expr_copy(hp), expr_new_symbol(xvar));
-                if (!ds_has_head(h, SYM_Integrate))
+                Expr* h = exact_integrate(expr_copy(hp), xvar, pot_deadline);
+                if (!exact_int_failed(h))
                     Fpot = eval_and_free(ds_call2(SYM_Plus, expr_copy(Fy), h));
-                else expr_free(h);
+                else if (h) expr_free(h);
             }
             expr_free(hp);
         }
-        expr_free(Fy);
+        if (Fy) expr_free(Fy);
     }
     expr_free(Mm); expr_free(Nn);
     return Fpot;                                     /* NULL if both paths messy */
 }
 
-Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
+static Expr** exact_explicit(DSolveProblem* P, size_t* nbranch, bool mu_u_only) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
     const char* xvar = P->ind_names[0];
     const char* Yn = intern_symbol("DSolve`Y");
     const char* Pn = intern_symbol("DSolve`p");
 
-    Expr* Fpot = exact_potential(P, xvar, Yn, Pn);
+    Expr* Fpot = exact_potential(P, xvar, Yn, Pn, mu_u_only);
     if (!Fpot) return NULL;
 
     /* Gate the explicit inversion to a potential that is a RATIONAL function of Y.
@@ -337,7 +503,7 @@ Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
  * (a transcendental potential, e.g. x + E^(x y) + y^2 for problem 140), return
  * the relation F(x, y[x]) == C[1] via dsolve_run_implicit, which verifies it by
  * the implicit-function rule y' == -F_x/F_y == -M/N (the ODE itself). */
-Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch) {
+static Expr** exact_implicit(DSolveProblem* P, size_t* nbranch, bool mu_u_only) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     if (P->max_order[0] != 1) return NULL;
     const char* xvar = P->ind_names[0];
@@ -345,13 +511,33 @@ Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch) {
     const char* Yn = intern_symbol("DSolve`Y");
     const char* Pn = intern_symbol("DSolve`p");
 
-    Expr* Fpot = exact_potential(P, xvar, Yn, Pn);
+    Expr* Fpot = exact_potential(P, xvar, Yn, Pn, mu_u_only);
     if (!Fpot) return NULL;
     Expr* G = ds_subst(Fpot, expr_new_symbol(Yn), ds_make_funcapp(yname, 0, xvar));
     Expr** out = malloc(sizeof(Expr*));
     out[0] = G;
     *nbranch = 1;
     return out;
+}
+
+Expr** dsolve_exact_try(DSolveProblem* P, size_t* nbranch) {
+    return exact_explicit(P, nbranch, false);
+}
+Expr** dsolve_exact_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    return exact_implicit(P, nbranch, false);
+}
+/* The late mu(u) pass (see exact_potential); MATHILDA_NO_EXACT_MU_U disables it. */
+Expr** dsolve_exact_mu_u_try(DSolveProblem* P, size_t* nbranch) {
+    return exact_explicit(P, nbranch, true);
+}
+Expr** dsolve_exact_mu_u_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    return exact_implicit(P, nbranch, true);
+}
+
+static Expr* builtin_dsolve_exact_mu_u(Expr* res) {
+    Expr* r = dsolve_method_builtin(res, dsolve_exact_mu_u_try);
+    if (!r) r = dsolve_method_builtin_implicit(res, dsolve_exact_mu_u_implicit_try);
+    return r;
 }
 
 static Expr* builtin_dsolve_exact(Expr* res) {
@@ -365,5 +551,11 @@ void dsolve_exact_init(void) {
     symtab_get_def("DSolve`Exact")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Exact",
         "DSolve`Exact[eqn, y, x] solves M(x,y) + N(x,y) y' == 0 when exact "
-        "(M_y == N_x), or made exact by an integrating factor mu(x) or mu(y).");
+        "(M_y == N_x), or made exact by an integrating factor mu(x), mu(y) or x^a y^b.");
+    symtab_add_builtin("DSolve`ExactMuU", builtin_dsolve_exact_mu_u);
+    symtab_get_def("DSolve`ExactMuU")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`ExactMuU",
+        "DSolve`ExactMuU[eqn, y, x] solves M + N y' == 0 made exact by an integrating "
+        "factor mu(u) of one combination u in {x+y, x-y, x y, x^2+y^2, x^2-y^2} with an "
+        "algebraic integral; a late cascade pass after DSolve`Exact.");
 }

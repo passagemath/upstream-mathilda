@@ -29,6 +29,7 @@
  * by the shared substrate when conditions are present, future work).
  */
 #include "dsolve_common.h"
+#include "../core.h"
 #include "dsolve.h"               /* g_dsolve_depth: top-level-only gate */
 #include "../sym_names.h"
 #include "../sym_intern.h"
@@ -184,6 +185,7 @@ static Expr* builtin_dsolve_inverse(Expr* res){
 }
 
 void dsolve_inverse_init(void){
+    tc_register_unwind_counter(&g_inv_active);   /* restored on a timeout unwind */
     const char* doc =
         "DSolve`InverseOrientation[eqn, y, x] solves a first-order ODE by its "
         "reciprocal: dx/dy == 1/F for x(y), recursing the cascade (Bernoulli / "

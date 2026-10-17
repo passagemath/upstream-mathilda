@@ -4556,3 +4556,56 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 - **A nested sub-solve can carry C[k] in its coefficients** (ReducibleFirstIntegral's
   `y' == C[1] y + y^2`); a method that mints its own C[1] must not run there, and a
   particular-solution search must prefer y_p == 0 when q0 == 0 (Bernoulli form).
+
+## 2026-10-17 (b) — The next 500 (§2.2.51–§2.2.55, problems 5001–5500)
+- **I hit the documented probe-loop trap again.** `Do[..., {b, branches}]` over
+  branches that themselves contain the parameter `b` gave `$RecursionLimit` on eight
+  records, and I nearly filed it as a DSolve recursion bug (an investigator caught
+  it). Rule: in EVERY probe script, iterate with `$`-prefixed names (`$br`, `$w`).
+- **Unordered argument evaluation is a use-after-free.** `ds_call2(H, f(expr_copy(v)),
+  g(v))` — one argument copies `v`, the other consumes it — is unsequenced in C; at
+  -O3 the consumer ran first and the copy read freed memory (a corrupt tree, then a
+  stack overflow in eval). Split every copy-then-consume of one Expr into separate
+  statements.
+- **After a `siglongjmp`, a non-volatile local is NOT safe at -O3**, even one written
+  only before the setjmp: the new unwind-counter restore read a clobbered count and
+  dereferenced NULL. Mirror the surrounding code — mark every post-jump local
+  `volatile`.
+- **A TimeConstrained timeout leaves every C nesting counter raised.** `g_dsolve_depth`
+  stuck at 2 after one aborted nested DSolve, which silently disabled every
+  top-level-only method (InverseOrientation, HomogeneousG) for the rest of the
+  session — invisible to the corpus harness because it forks per case. Fixed with
+  `tc_register_unwind_counter`; any new depth/re-entry counter should register.
+- **The zero test certifies asymptotic agreement as identity with symbolic
+  exponents** (`x (a + x y^n) y' + b y`: both sides of a wrong separable split tend to
+  `-b/(x^2 y^(n-1))` at large n). The accepted wrong split (a) spent Separable's
+  whole shared budget, starving every NESTED Separable of the same top-level solve,
+  and (b) had produced three WRONG answers (5005/5007/5008) that the corpus harness
+  scored PASS. A structure accepted on a zero-test TRUE needs an independent numeric
+  screen that also samples the PARAMETERS.
+- **A per-top-level budget is shared with nested sub-solves.** One method wasting it
+  at depth 1 makes the same method decline everything at depth 2 — HomogeneousG's
+  autonomous u(t) solve (0.03 s standalone) aborted at 5 s in the cascade. When a
+  nested solve is mysteriously slower than standalone, look for a shared budget/memo.
+- **A new early candidate must not claim a whole class another method owns.**
+  `mu(Y/x) = 1/(x M + Y N)` exists for EVERY homogeneous equation, so Exact's new mu(u)
+  test took class A away from DSolve`Homogeneous (three timeouts). Gate new
+  candidates on "not already some other method's class", and bound their follow-on
+  integrals.
+- **The matcher committed to the first assignment of a nested pattern** (a nested
+  `match_internal(..., NULL)`), so `IntegrateTable[a_ f_, x_] /; FreeQ[a, x]` missed
+  whenever the variable's power sorted first — the root of several "Exact spins"
+  records. Fix in the matcher (continuation), not in each caller.
+
+- **A widened recogniser goes in a late slot.** Bernoulli retried on `Expand[F]` and Exact
+  gained a μ(u) family. Both were first added *inside* the early method, and the full A/B
+  showed 14 per-record losses. The logistic IVP took 9 s instead of 0.006 s, and
+  `y'' == (x+y')²` lost its explicit reduction to an implicit μ(x+p) relation. The gate
+  totals stayed level because the gains hid the losses. As separate late slots
+  (`BernoulliExpanded`, `ExactMuU`) the batch loses nothing.
+- **Rerun the A/B after the HEAD under it moves, and run both sides under the same load.**
+   Two HEAD runs differed on 13 records with no code change. Only a gain that neither
+   HEAD run passed counts, and a loss counts only if it reproduces in an isolated rerun.
+- **Every P→U against HEAD gets a residual check.** Seven of the nine were HEAD wrong
+   answers. A sampled constant had leaked into the family (`3^(2n)`, `7^n`); residuals
+   were 1–36.

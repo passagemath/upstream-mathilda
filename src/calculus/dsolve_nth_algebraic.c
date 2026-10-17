@@ -19,6 +19,8 @@
 #include "../sym_intern.h"
 #include "../symtab.h"
 #include "../attr.h"
+#include "../message.h"
+#include "../common.h"
 #include <stdlib.h>
 #include <time.h>
 
@@ -44,11 +46,27 @@ static void na_memo_sync(uint64_t tid){ if(tid!=na_epoch){na_epoch=tid;na_memo_n
 static bool na_memo_seen(uint64_t h){ for(int i=0;i<na_memo_n;i++) if(na_memo[i]==h) return true; return false; }
 static void na_memo_add(uint64_t h){ if(na_memo_n<NA_MEMO_SLOTS && !na_memo_seen(h)) na_memo[na_memo_n++]=h; }
 
+/* ---- implicit second pass (DSolve`NthAlgebraicImplicit) ----
+ * When no root's sub-solve is EXPLICIT but every root's sub-solve answered (an
+ * implicit first integral, e.g. y'^2 == (y-1) y^2 -> x/2 + ArcTan[Sqrt[y-1]] ==
+ * C[1]), the explicit pass declines and the relations would be lost.  They are
+ * stashed instead, as first-integral LHSs G(x, y[x]) (G == C[1] solves the
+ * branch), keyed by the residual hash within the top-level evaluation, and the
+ * implicit pass -- placed LATE in the cascade so every specialist still claims
+ * the original equation first -- hands them to dsolve_run_implicit, which
+ * re-verifies each G against the ORIGINAL ODE by the implicit-function rule.
+ * The stash costs no second solve; the explicit pass's behaviour is unchanged.
+ * Shared substrate: dsolve_result_relations / dsolve_stash_* (dsolve_common). */
+#define NA_STASH_TAG 1
+
 /* Recurse DSolve[subeqn, y[x], x] (applied form) and append every explicit body
- * to *acc (grown by realloc).  `subeqn` is consumed. */
+ * to *acc (grown by realloc).  When `rel` is non-NULL the branch is also
+ * collected as first-integral LHSs into *rel; *covered is cleared when it cannot
+ * be (an unsolved root).  `subeqn` is consumed. */
 static void recurse_collect(Expr* subeqn, const char* yname, const char* xvar,
-                            Expr*** acc, size_t* nacc) {
-    if (na_expired()) { expr_free(subeqn); return; }
+                            Expr*** acc, size_t* nacc,
+                            Expr*** rel, size_t* nrel, bool* covered) {
+    if (na_expired()) { expr_free(subeqn); if (covered) *covered = false; return; }
     Expr* call = expr_new_function(expr_new_symbol(SYM_DSolve),
                      (Expr*[]){ subeqn, ds_make_funcapp(yname, 0, xvar),
                                 expr_new_symbol(xvar) }, 3);
@@ -61,12 +79,118 @@ static void recurse_collect(Expr* subeqn, const char* yname, const char* xvar,
     Expr* r = eval_and_free(call);
     size_t nb = 0;
     Expr** bodies = dsolve_extract_applied_bodies(r, yname, &nb);
+    if (rel && covered && *covered && !dsolve_result_relations(r, yname, xvar, rel, nrel))
+        *covered = false;
     expr_free(r);
     if (bodies) {
         *acc = realloc(*acc, (*nacc + nb) * sizeof(Expr*));
         for (size_t i = 0; i < nb; i++) (*acc)[(*nacc)++] = bodies[i];
         free(bodies);
     }
+}
+
+/* ---- perfect-square extraction from a quadratic's root radical ----
+ * Solve returns the roots of a y'-quadratic as (-b ± Sqrt[s^2 r])/(2a) with the
+ * square s^2 left inside the radical (5432: Sqrt[4 Y^2 + 4 Y^2 Cot[x]^2]).  That
+ * literal form hides the structure -- the linear / separable / homogeneous
+ * specialists all decline it and the general methods spin -- while the rewritten
+ * root -Y Cot[x] ± Y Sqrt[1 + Cot[x]^2] is a linear ODE.  Each Sqrt[R] becomes
+ * sqrt(c2) * prod f^Floor[m/2] * Sqrt[c1 * prod f^Mod[m,2]] from
+ * FactorSquareFreeList[R] (c = c2 c1 the numeric content, c2 an exact square).
+ * s Sqrt[r] == ±Sqrt[s^2 r] pointwise, so for a QUADRATIC, rewriting both roots
+ * the same way leaves the pair {root+, root-} unchanged as a set; the caller
+ * applies it only at degree 2 and re-checks that every rewritten root still
+ * annihilates the polynomial, keeping the raw roots otherwise. */
+static Expr* na_sqrt_split(Expr* R) {           /* Sqrt[R] rewritten; R consumed */
+    Expr* fl = eval_and_free(ds_call1("FactorSquareFreeList", expr_copy(R)));
+    if (!head_is(fl, SYM_List)) { expr_free(fl);
+        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1); }
+    size_t nf = fl->data.function.arg_count;
+    Expr** outf = malloc((nf + 1) * sizeof(Expr*)); size_t no = 0;
+    Expr** inf  = malloc((nf + 1) * sizeof(Expr*)); size_t ni = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* pr = fl->data.function.args[i];
+        if (!head_is(pr, SYM_List) || pr->data.function.arg_count != 2
+            || pr->data.function.args[1]->type != EXPR_INTEGER) { ok = false; break; }
+        Expr* f = pr->data.function.args[0];
+        int64_t m = pr->data.function.args[1]->data.integer;
+        bool numeric = (f->type == EXPR_INTEGER || head_is(f, SYM_Rational));
+        if (numeric) {
+            /* numeric content f^m: an exact positive square root comes outside */
+            Expr* c = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ expr_copy(f), expr_new_integer(m) }, 2));
+            Expr* sq = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt),
+                           (Expr*[]){ expr_copy(c) }, 1));
+            if (sq->type == EXPR_INTEGER || head_is(sq, SYM_Rational)) {
+                outf[no++] = sq; expr_free(c);
+            } else { inf[ni++] = c; expr_free(sq); }
+            continue;
+        }
+        if (m / 2 > 0)
+            outf[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                             (Expr*[]){ expr_copy(f), expr_new_integer(m / 2) }, 2);
+        if (m % 2)
+            inf[ni++] = expr_copy(f);
+    }
+    expr_free(fl);
+    bool has_sym_out = false;
+    for (size_t i = 0; i < no; i++)
+        if (!(outf[i]->type == EXPR_INTEGER || head_is(outf[i], SYM_Rational))) has_sym_out = true;
+    if (!ok || !has_sym_out) {               /* nothing symbolic to pull out */
+        for (size_t i = 0; i < no; i++) expr_free(outf[i]);
+        for (size_t i = 0; i < ni; i++) expr_free(inf[i]);
+        free(outf); free(inf);
+        return expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ R }, 1);
+    }
+    expr_free(R);
+    Expr* inner = ni ? expr_new_function(expr_new_symbol(SYM_Times), inf, ni)
+                     : expr_new_integer(1);
+    free(inf);
+    outf[no++] = expr_new_function(expr_new_symbol(SYM_Sqrt), (Expr*[]){ inner }, 1);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), outf, no);
+    free(outf);
+    return r;
+}
+
+/* e with every Sqrt[R] (Power[R, 1/2]) rewritten by na_sqrt_split; e borrowed. */
+static Expr* na_sqrt_extract(const Expr* e, const Expr* half) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[1], half))
+        return na_sqrt_split(na_sqrt_extract(e->data.function.args[0], half));
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = na_sqrt_extract(e->data.function.args[i], half);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+/* Rewrite the degree-2 roots gs[0..ng) in place when every rewritten root still
+ * satisfies poly(Dn) == 0 identically (else leave all of them untouched). */
+static void na_normalise_quadratic_roots(Expr** gs, size_t ng, const Expr* poly,
+                                         const char* Dn) {
+    Expr* half = eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational),
+                     (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2));
+    Expr** nw = malloc(ng * sizeof(Expr*));
+    bool ok = true, changed = false;
+    for (size_t i = 0; i < ng; i++) {
+        nw[i] = eval_and_free(na_sqrt_extract(gs[i], half));
+        if (!expr_eq(nw[i], gs[i])) changed = true;
+    }
+    for (size_t i = 0; i < ng && ok && changed; i++) {
+        Expr* chk = ds_subst(expr_copy((Expr*)poly), expr_new_symbol(Dn), expr_copy(nw[i]));
+        chk = eval_and_free(ds_call1(SYM_Together, eval_and_free(ds_call1(SYM_Expand, chk))));
+        if (!ds_is_zero(chk)) ok = false;
+        expr_free(chk);
+    }
+    for (size_t i = 0; i < ng; i++) {
+        if (ok && changed) { expr_free(gs[i]); gs[i] = nw[i]; }
+        else expr_free(nw[i]);
+    }
+    free(nw);
+    expr_free(half);
 }
 
 Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
@@ -82,6 +206,9 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
     g_na_deadline = time(NULL) + NA_TOTAL_BUDGET_SEC;
 
     Expr** acc = NULL; size_t nacc = 0;
+    Expr** rel = NULL; size_t nrel = 0;     /* first-integral LHSs, for the implicit pass */
+    bool covered = true;                    /* every root's sub-solve gave relations */
+    bool solved_roots = false;              /* the polynomial-in-y' root split ran */
 
     if (n < 1) {
         /* degenerate: purely algebraic in y[x] — Solve[R==0, y[x]] */
@@ -113,12 +240,17 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(pq);
 
         if (deg >= 2 && ispoly) {
+            Expr* poly = (deg == 2 && !getenv("MATHILDA_NO_NA_SQRT")) ? expr_copy(Rsub) : NULL;
             Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                            (Expr*[]){ Rsub, expr_new_integer(0) }, 2);  /* consumes Rsub */
             Expr* sol = ds_solve(eq, expr_new_symbol(Dn));
             size_t ng = 0;
             Expr** gs = dsolve_extract_solutions(sol, Dn, &ng);
             if (sol) expr_free(sol);
+            if (poly) {
+                if (gs && ng == 2) na_normalise_quadratic_roots(gs, ng, poly, Dn);
+                expr_free(poly);
+            }
             /* A branch given as an implicit Root[...] object means Solve found no
              * explicit closed form for the top derivative (e.g. a general cubic in
              * y' with symbolic coefficients).  Recursing DSolve on y^(n) == Root[...]
@@ -131,12 +263,17 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
             if (gs) for (size_t i = 0; i < ng; i++)
                 if (ds_has_head(gs[i], rootn)) { has_root = true; break; }
             if (gs && !has_root) {
+                solved_roots = true;
+                /* first order only: the stashed relations are first integrals */
+                bool want_rel = (n == 1);
                 for (size_t i = 0; i < ng; i++) {
                     /* y^(n)[x] == g_i */
                     Expr* subeqn = expr_new_function(expr_new_symbol(SYM_Equal),
                                        (Expr*[]){ expr_copy(topLit), gs[i] }, 2);
-                    recurse_collect(subeqn, yname, xvar, &acc, &nacc);
+                    recurse_collect(subeqn, yname, xvar, &acc, &nacc,
+                                    want_rel ? &rel : NULL, &nrel, &covered);
                 }
+                if (!want_rel) covered = false;
             } else if (gs) {
                 for (size_t i = 0; i < ng; i++) expr_free(gs[i]);   /* declined */
             }
@@ -172,7 +309,7 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
                 Expr* clearedR = ds_subst(numDn, expr_new_symbol(Dn), expr_copy(topLit));
                 Expr* subeqn = expr_new_function(expr_new_symbol(SYM_Equal),
                                    (Expr*[]){ clearedR, expr_new_integer(0) }, 2);
-                recurse_collect(subeqn, yname, xvar, &acc, &nacc);
+                recurse_collect(subeqn, yname, xvar, &acc, &nacc, NULL, NULL, NULL);
             } else {
                 expr_free(numDn);
             }
@@ -183,13 +320,52 @@ Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch) {
         expr_free(topLit);
     }
 
+    /* Stash the relations only when the explicit pass finds nothing: an explicit
+     * answer (even a partial union) is returned exactly as before. */
+    if (nacc == 0 && solved_roots && covered && nrel > 0) {
+        dsolve_stash_put(NA_STASH_TAG, memo_h, rel, nrel);
+        rel = NULL; nrel = 0;
+    }
+    for (size_t i = 0; i < nrel; i++) expr_free(rel[i]);
+    free(rel);
+
     if (nacc == 0) { if (acc) free(acc); na_memo_add(memo_h); return NULL; }
     *nbranch = nacc;
     return acc;
 }
 
+/* DSolve`NthAlgebraicImplicit: the implicit second pass (see the stash above).  In
+ * the cascade it consumes what the explicit pass stashed for this residual; pinned
+ * on its own it runs the explicit pass first to populate the stash. */
+static Expr** na_implicit_impl(DSolveProblem* P, size_t* nbranch, bool may_solve) {
+    if (getenv("MATHILDA_NO_NA_IMPLICIT")) return NULL;   /* A/B killswitch */
+    if (P->nfun != 1 || P->neq != 1 || P->max_order[0] != 1) return NULL;
+    uint64_t h = expr_hash(P->eq_residuals[0]);
+    size_t n = 0;
+    Expr** G = dsolve_stash_take(NA_STASH_TAG, h, &n);
+    if (!G && may_solve) {
+        size_t ne = 0;
+        Expr** ex = dsolve_nth_algebraic_try(P, &ne);   /* populates the stash on decline */
+        if (ex) { for (size_t i = 0; i < ne; i++) expr_free(ex[i]); free(ex); return NULL; }
+        G = dsolve_stash_take(NA_STASH_TAG, h, &n);
+    }
+    if (!G) return NULL;
+    *nbranch = n;
+    return G;
+}
+
+Expr** dsolve_nth_algebraic_implicit_try(DSolveProblem* P, size_t* nbranch) {
+    return na_implicit_impl(P, nbranch, false);
+}
+static Expr** na_implicit_pinned_try(DSolveProblem* P, size_t* nbranch) {
+    return na_implicit_impl(P, nbranch, true);
+}
+
 static Expr* builtin_dsolve_nth_algebraic(Expr* res) {
     return dsolve_method_builtin(res, dsolve_nth_algebraic_try);
+}
+static Expr* builtin_dsolve_nth_algebraic_implicit(Expr* res) {
+    return dsolve_method_builtin_implicit(res, na_implicit_pinned_try);
 }
 
 void dsolve_nth_algebraic_init(void) {
@@ -199,4 +375,10 @@ void dsolve_nth_algebraic_init(void) {
         "DSolve`NthAlgebraic[eqn, y, x] solves an ODE algebraic (degree >= 2) in its "
         "highest derivative by solving for that derivative and recursing on each "
         "branch; also the degenerate purely-algebraic case.");
+    symtab_add_builtin("DSolve`NthAlgebraicImplicit", builtin_dsolve_nth_algebraic_implicit);
+    symtab_get_def("DSolve`NthAlgebraicImplicit")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DSolve`NthAlgebraicImplicit",
+        "DSolve`NthAlgebraicImplicit[eqn, y, x] solves a first-order ODE algebraic "
+        "(degree >= 2) in y' whose y'-branches solve only implicitly, returning one "
+        "verified first integral G[x, y[x]] == C[1] per branch.");
 }

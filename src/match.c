@@ -698,16 +698,16 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             return res;
         }
 
+        /* The guard is the inner match's continuation (an empty argument level
+         * carrying `cond`, then the parent), so a guard that fails backtracks into
+         * the inner pattern's other assignments instead of ending the match. */
         size_t saved_env_count = env->count;
-        if (!match_internal(expr, inner_pat, env, NULL)) {
+        ParentMatch guard_cont = { NULL, 0, NULL, 0, cond, NULL, 0, parent };
+        if (!match_internal(expr, inner_pat, env, &guard_cont)) {
             env_rollback(env, saved_env_count);
             return false;
         }
-        if (!eval_guard_true(cond, env)) {
-            env_rollback(env, saved_env_count);
-            return false;
-        }
-        return call_parent(env, parent);
+        return true;
     }
 
     Expr* b_head = NULL;
@@ -1456,25 +1456,28 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 
                 if (matched_val) {
                     size_t saved_env_inner = env->count;
-                    if (match_internal(matched_val, inner_p, env, NULL)) {
-                        if (p_sym) {
-                            Expr* existing = env_get(env, p_sym->data.symbol.name);
-                            if (existing) {
-                                if (expr_eq(matched_val, existing)) {
-                                    if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                        expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
-                                    }
-                                }
-                            } else {
-                                env_set(env, p_sym->data.symbol.name, matched_val);
-                                if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                    expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
-                                }
-                            }
-                        } else {
-                            if (match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                                expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
-                            }
+                    /* Bind the element's name first, then match the inner pattern
+                     * with the REST OF THIS LEVEL as its continuation.  Matching
+                     * the inner pattern with no continuation committed to its first
+                     * internal assignment: a nested Orderless Times could never
+                     * re-split when the remaining arguments or the rule's /;
+                     * condition then failed, so IntegrateTable[a_ f_, x_] /;
+                     * FreeQ[a, x] missed z x^k whenever x^k sorted first (and
+                     * MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]] was False).  With
+                     * the continuation, a failure downstream backtracks into the
+                     * nested enumeration, as in Mathematica; a pattern with a single
+                     * inner assignment behaves exactly as before. */
+                    bool bind_ok = true;
+                    if (p_sym) {
+                        Expr* existing = env_get(env, p_sym->data.symbol.name);
+                        if (existing) bind_ok = expr_eq(matched_val, existing);
+                        else env_set(env, p_sym->data.symbol.name, matched_val);
+                    }
+                    if (bind_ok) {
+                        ParentMatch cont = { remainder, n_exprs - k, pats + 1, n_pats - 1,
+                                             condition, pat_head, total_pats, parent };
+                        if (match_internal(matched_val, inner_p, env, &cont)) {
+                            expr_free(matched_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
                         }
                     }
                     env_rollback(env, saved_env_inner);

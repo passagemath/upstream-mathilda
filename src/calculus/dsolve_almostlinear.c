@@ -18,6 +18,24 @@
 #include "../attr.h"
 #include <stdlib.h>
 
+/* Simplify[e] under a short TimeConstrained, or NULL on a timeout (read as a
+ * decline).  The Simplify calls below exist so the "free of Y" tests are
+ * reliable, but unbounded they spin on a radical-laden coefficient -- the induced
+ * x(p) ODE of a SolvableForY sub-solve, deep inside ExactODE's reduction of the
+ * third-order m62 stress equation 2 y y(3) + 2 (y + 3 y') y(2) + 2 (y')^2 == 0,
+ * spent that reduction's whole 3 s budget in one Simplify here.  e consumed. */
+#define AL_SIMPLIFY_SEC 1
+static Expr* al_bsimplify(Expr* e) {
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Simplify), (Expr*[]){ e }, 1);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_TimeConstrained),
+                  (Expr*[]){ call, expr_new_integer(AL_SIMPLIFY_SEC),
+                             expr_new_symbol(intern_symbol("$Aborted")) }, 3));
+    if (r && r->type == EXPR_SYMBOL && r->data.symbol.name == intern_symbol("$Aborted")) {
+        expr_free(r); return NULL;
+    }
+    return r;
+}
+
 /* e /. sym -> val (sym a symbol name, val consumed); e consumed. */
 static Expr* subst_sym(Expr* e, const char* sym, Expr* val) {
     return ds_subst(e, expr_new_symbol(sym), val);
@@ -51,11 +69,11 @@ Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch) {
     /* separate AY = f(x) g(Y):  f = AY|_{Y=1},  g = AY/f (must be free of x) */
     Expr* f = subst_sym(expr_copy(AY), Yn, expr_new_integer(1));
     if (ds_is_zero(f)) { expr_free(AY); expr_free(BY); expr_free(f); return NULL; }
-    Expr* g = ds_simplify(eval_and_free(ds_call2(SYM_Times, expr_copy(AY),
+    Expr* g = al_bsimplify(eval_and_free(ds_call2(SYM_Times, expr_copy(AY),
                   expr_new_function(expr_new_symbol(SYM_Power),
                       (Expr*[]){ expr_copy(f), expr_new_integer(-1) }, 2))));
     expr_free(AY);
-    if (!ds_free_of(g, xvar)) { expr_free(BY); expr_free(f); expr_free(g); return NULL; }
+    if (!g || !ds_free_of(g, xvar)) { expr_free(BY); expr_free(f); if (g) expr_free(g); return NULL; }
 
     /* l(Y) = Integrate[g, Y] */
     Expr* l = ds_integrate(expr_copy(g), expr_new_symbol(Yn));
@@ -69,17 +87,17 @@ Expr** dsolve_almostlinear_try(DSolveProblem* P, size_t* nbranch) {
     expr_free(BY); expr_free(f);
 
     Expr* Hy = ds_d(expr_copy(H), expr_new_symbol(Yn));
-    Expr* Pc = ds_simplify(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
+    Expr* Pc = al_bsimplify(eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1),
                    ds_call2(SYM_Times, Hy,
                        expr_new_function(expr_new_symbol(SYM_Power),
                            (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2)))));
     expr_free(g);
-    if (!ds_free_of(Pc, Yn)) { expr_free(H); expr_free(l); expr_free(Pc); return NULL; }
+    if (!Pc || !ds_free_of(Pc, Yn)) { expr_free(H); expr_free(l); if (Pc) expr_free(Pc); return NULL; }
 
-    Expr* Qc = ds_simplify(eval_and_free(ds_call2(SYM_Plus, expr_copy(H),
+    Expr* Qc = al_bsimplify(eval_and_free(ds_call2(SYM_Plus, expr_copy(H),
                    ds_call2(SYM_Times, expr_copy(Pc), expr_copy(l)))));
     expr_free(H);
-    if (!ds_free_of(Qc, Yn)) { expr_free(l); expr_free(Pc); expr_free(Qc); return NULL; }
+    if (!Qc || !ds_free_of(Qc, Yn)) { expr_free(l); expr_free(Pc); if (Qc) expr_free(Qc); return NULL; }
 
     /* clear the (now inert) Y so the coefficients are pure functions of x */
     Pc = subst_sym(Pc, Yn, expr_new_integer(1));

@@ -94,6 +94,14 @@ Expr* builtin_time_constrained(Expr* res);
  * its usual portability caveats. */
 void tc_check_deadline(void);
 
+/* Register a subsystem's nesting counter (a recursion depth or a re-entry guard,
+ * incremented on entry and decremented on exit) so a TimeConstrained timeout
+ * restores it.  The timeout siglongjmp skips every decrement between the jump and
+ * the TimeConstrained frame, which would otherwise leave the counter raised for
+ * the rest of the session -- e.g. g_dsolve_depth stuck at 2, silently disabling
+ * every top-level-only DSolve method in later calls.  Call once at init. */
+void tc_register_unwind_counter(int* counter);
+
 /* Non-jumping deadline query: true iff an active TimeConstrained deadline has
  * already passed.  Unlike tc_check_deadline it never sets tc_timed_out and never
  * siglongjmp's, so a heavy C routine can poll it and clean-return (freeing its

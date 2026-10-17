@@ -99,3 +99,36 @@ biggest wins were not DSolve methods but core correctness: Together/Cancel were 
 value-changing (binder substitution, Log expansion), Factor could crash the kernel, and
 ∫Secⁿ hung. Ten older gates are red on HEAD already (drift since M73) — flagged, not
 rebaselined.
+
+# DSolve — the next 500 (§2.2.51–§2.2.55, Problems 5001–5500, M79–M83)
+
+Plan: `~/.claude/plans/let-s-continue-our-dsolve-snoopy-biscuit.md`. One batch, as M74–M78.
+
+- [x] Fetch + convert all five (all 100 scalar, 0 IVP, 0 systems; Kamke-ordered first-order:
+      Abel 2nd type / homogeneous / dAlembert / Clairaut / quadrature-in-y'); indvar green
+- [x] Baseline (HEAD v0.445 binary snapshot) → reports
+- [x] Triage + general fixes
+- [x] Full per-record A/B vs HEAD on all 56 sections; 0 FAIL / 0 crash / 0 lost
+- [ ] Unit suites, c99/messages, valgrind
+- [x] Gates, reports, STATUS/README/PLAN/changelog/builtins docs
+- [ ] Version bump(s), commit, tag, push
+
+## Review — next 500 (§2.2.51–55)
+
+- **Result:** 431 → **462 / 500**, 0 FAIL. Gates 18 / 4 / 5 / 9 / 7 (gap 17 / 4 / 4 / 8 / 5 + a named load margin). Three of HEAD's 431 were
+  wrong answers (5005/5007/5008).
+- **A/B** vs HEAD v0.449, all 51 older sections, same load: **+22** (passed by neither HEAD
+  run). The 4 losses are HEAD wrong answers (2.1.2-777, 2.2.48-4777/4779/4792; residuals
+  checked), plus 2 flutterers that pass on rerun. §2.2.48 gate 16 → 20 (+2 for the slow new gains 4774/4727), §2.2.35 2 → 1,
+  §2.2.36 7 → 5.
+- **The late-slot lesson:** the first full A/B showed 14 real losses. Bernoulli-on-`Expand`
+  and Exact-by-μ(u) sat *inside* their early methods and claimed equations the
+  specialists closed. Moving both to late slots, plus the linear integrating-factor
+  constant drop, cleared all 14.
+- **Open:** intermittent SIGILL under load. A TimeConstrained async jump lands inside a
+  non-GMP malloc (`symmemo_lookup`, Expr nodes). It is pre-existing and occurs at the
+  same rate on HEAD. The fix belongs to a TC design pass (all-cooperative jumps, or
+  guarded allocation of Expr nodes).
+- **Residue 38:** Abel 2nd type, Riccati/Chini with symbolic exponents, elliptic
+  separables, symmetry classes, `y = G(x,y')`, lincoeff `F(L1/L2)`, the `u = E^(2y)`
+  substitution.

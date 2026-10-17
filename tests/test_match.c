@@ -186,6 +186,33 @@ void test_match_patterntest() {
     env_free(env);
 }
 
+/* A failing /; condition (or later argument) must backtrack into the other
+ * assignments of a nested Orderless match, not commit to its first split
+ * (v0.451).  The first assignment of a_ f_ against z x^k binds a -> x^k
+ * whenever x^k sorts first; FreeQ[a, x] then fails and a -> z must be tried. */
+void test_match_condition_backtracks_into_nested() {
+    assert_eval_eq("MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]", "True", 0);
+    assert_eval_eq("MatchQ[g[z x^k], g[(a_ f_) /; FreeQ[a, x]]]", "True", 0);
+    assert_eval_eq("ReplaceAll[g[z x^k], g[a_ f_] /; FreeQ[a, x] :> {a, f}]", "{z, x^k}", 0);
+    assert_eval_eq("Module[{tt}, tt[a_ f_, v_] /; FreeQ[a, v] := {a, f}; tt[z x^k, x]]", "{z, x^k}", 0);
+    /* a later ARGUMENT failing also re-splits the nested match */
+    assert_eval_eq("MatchQ[h[z x^k, z], h[a_ f_, a_]]", "True", 0);
+    assert_eval_eq("MatchQ[g[z x^k], g[a_ f_] /; FreeQ[{a, f}, z]]", "False", 0);
+    /* the integrand that used to spin: the constant factor pulls out */
+    assert_eval_eq("Integrate[x^(1/(a-1)) y^(1/(a-1)), x]",
+                   "(x^(1 + 1/(-1 + a)) y^(1/(-1 + a)))/(1 + 1/(-1 + a))", 0);
+}
+
+/* A TimeConstrained timeout restores registered nesting counters (v0.451): an
+ * aborted nested DSolve must not leave DSolve's depth raised, which silently
+ * disabled the top-level-only methods for the rest of the session.  After the
+ * abort, the top-level-only DSolve`InverseOrientation still answers. */
+void test_timeconstrained_restores_dsolve_depth() {
+    /* an equation the cascade grinds on: the 2 s budget aborts it mid-recursion */
+    assert_eval_eq("TimeConstrained[DSolve[(a + x y[x]^2) Sin[x] y'[x] + b Cos[y[x]] y[x] == x^3 y[x]^7, y, x], 2, ok]", "ok", 0);
+    assert_eval_eq("Head[DSolve[y'[x] == 1/(x y[x] + x^3 y[x]^3), y, x]]", "List", 0);
+}
+
 int main() {
     symtab_init();
     TEST(test_match_basic);
@@ -196,6 +223,8 @@ int main() {
     TEST(test_match_deeply_nested);
     TEST(test_match_multiple_bindings);
     TEST(test_match_patterntest);
+    TEST(test_match_condition_backtracks_into_nested);
+    TEST(test_timeconstrained_restores_dsolve_depth);
     printf("All match tests passed!\n");
     return 0;
 }

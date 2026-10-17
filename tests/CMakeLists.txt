@@ -805,6 +805,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_changevar.c
     ../src/calculus/dsolve_solvefor.c
     ../src/calculus/dsolve_inverse.c
+    ../src/calculus/dsolve_homogeneous_g.c
     ../src/calculus/dsolve_ratsol2.c
     ../src/calculus/dsolve_nonhomog_vop.c
     ../src/calculus/dsolve_piecewise.c
@@ -4714,7 +4715,7 @@ add_test(NAME dsolve_corpus_2_2_34_tests
 add_test(NAME dsolve_corpus_2_2_35_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2235.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
 
 # 12000.org "Solving ODEs" section 2.2.36 (Problems 3501-3600).  M63: 100 records, all
 # scalar (9 IVP), 0 systems; Goode & Annin 4th ed 2015 (44), Goode 2nd ed 2000 (43),
@@ -4748,7 +4749,7 @@ add_test(NAME dsolve_corpus_2_2_35_tests
 add_test(NAME dsolve_corpus_2_2_36_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2236.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
 
 # M64 (Problems 3601-3700, our section 2.2.37 = upstream 2.1.37).  Heavily
 # first-order (20 linear / 10 separable / 8 Bernoulli / the homogeneous-classA/
@@ -4946,10 +4947,15 @@ add_test(NAME dsolve_corpus_2_2_47_tests
 # (4703/4705/4709), dAlembert/class-C/G radical (4730/4745-4748), 4733, 4738, 4784.
 # +1 headroom for 4744 (PASS alone, ~11.5 s end-to-end -- faster than HEAD's 14.3 s --
 # but load-sensitive under ctest -j).  Baseline argv3 = 16.
+# v0.451 (M79-M83 batch): 18.  4777/4779/4792 were WRONG answers scored PASS
+# (residuals 36 / 12 / 0.9 at a sample point; a sampled constant leaked into the
+# family) that the batch now declines; 4709/4716/4727/4774 newly solve.  Gate 18 + 2 for
+# 4774 / 4727 (8 s / 5 s solves, load-sensitive; 4727 is the separable
+# y' == Cos[x] Sec[y]^2, slow for its class -- open).
 add_test(NAME dsolve_corpus_2_2_48_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2248.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 16)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 20)
 
 # Section 2.2.49 "Problems 4801 to 4900" (Nasser Abbasi; upstream Ch2.S1.SS49.htm).
 # 100 scalar, first-order nonlinear.  Baseline 85/100 -> 88/100: shared fixes -- Riccati
@@ -4979,6 +4985,61 @@ add_test(NAME dsolve_corpus_2_2_50_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2250.m
                  ../../DSolve_test_status/dsolve_corpus_prelude.m 8)
+
+# --- M79-M83 batch (v0.451): sections 2.2.51-2.2.55, Problems 5001-5500 ---------
+# Shared fixes: NthAlgebraic / SolvableForY implicit second passes, HomogeneousG
+# (class G, y = x^k u, t = Log x), late BernoulliExpanded / ExactMuU passes, the
+# Separable parameter pre-screen and log-radical guard, quadratic-root radical
+# normalisation, the TimeConstrained unwind-counter registry and the matcher's
+# nested-pattern backtracking.  Baselines 431/500 -> 462/500, 0 FAIL.
+
+# Section 2.2.51 "Problems 5001 to 5100" (Nasser Abbasi; upstream Ch2.S1.SS51.htm).
+# 100 scalar, 0 IVP.  Riccati / Abel / Chini with symbolic exponents and elliptic separables.  Baseline 86/100 -> 83/100:
+# HEAD's 5005/5007/5008 were WRONG answers scored PASS, now declined.
+# Residue 17: Abel 5003/5037/5040/5077/5092, Riccati 5005/5007/5008, Chini 5009,
+# elliptic separable 5020/5024/5025/5027, 5028, 5032 (linear, Weierstrass choice),
+# 5049, 5058.  Gate 17 + 1 for the load-sensitive 5026/5029.  Baseline argv3 = 18.
+add_test(NAME dsolve_corpus_2_2_51_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2251.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 18)
+
+# Section 2.2.52 "Problems 5101 to 5200" (Nasser Abbasi; upstream Ch2.S1.SS52.htm).
+# 100 scalar, 0 IVP.  Rational first-order: Abel 2nd type, homogeneous classes.  Baseline 93/100 -> 96/100.
+# Residue 4: 5122 (lincoeff F(L1/L2)), 5133 (dAlembert, homogeneous implicit), Abel
+# 5142/5149.  Baseline argv3 = 4.
+add_test(NAME dsolve_corpus_2_2_52_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2252.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 4)
+
+# Section 2.2.53 "Problems 5201 to 5300" (Nasser Abbasi; upstream Ch2.S1.SS53.htm).
+# 100 scalar, 0 IVP.  Rational first-order.  Baseline 91/100 -> 96/100.
+# Residue 4: Abel 5205, 5224, 5231 (lincoeff F(L1/L2)), 5264 (dAlembert).  Gate 4 + 1
+# for the load-sensitive 5227/5234/5238.  Baseline argv3 = 5.
+add_test(NAME dsolve_corpus_2_2_53_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2253.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 5)
+
+# Section 2.2.54 "Problems 5301 to 5400" (Nasser Abbasi; upstream Ch2.S1.SS54.htm).
+# 100 scalar, 0 IVP.  Bernoulli / class-G / exact and implicit first-order.  Baseline 80/100 -> 92/100.
+# Residue 8: 5341/5376 (y = G(x, y')), 5347, symmetry [F(x), G(x) y + H(x)]
+# 5371-5374, 5375 (separable).  Gate 8 + 1 for 5345 (a 4-5 s solve, load-sensitive).  Baseline argv3 = 9.
+add_test(NAME dsolve_corpus_2_2_54_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2254.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 9)
+
+# Section 2.2.55 "Problems 5401 to 5500" (Nasser Abbasi; upstream Ch2.S1.SS55.htm).
+# 100 scalar, 0 IVP.  Class G / dAlembert / linear-symmetry first-order.  Baseline 81/100 -> 95/100.
+# Residue 5: 5405 (class G sub-solve), 5433/5442 (linear symmetries), 5434/5443
+# (u = E^(2y), t = E^(2x) substitution).  Gate 5 + 2 for 5413/5486 (5-7 s solves,
+# load-sensitive).  Baseline argv3 = 7.
+add_test(NAME dsolve_corpus_2_2_55_tests
+         COMMAND dsolve_corpus_tests
+                 ../../DSolve_test_status/DE_examples_2255.m
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 7)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies

@@ -13,6 +13,11 @@
 - `lhs /; condition`: Conditional matching. Chained `/;` nests right, i.e.
   `p /; c1 /; c2` is `Condition[p, Condition[c1, c2]]`, and every leaf condition
   must hold (`Condition` is `HoldAll`, so the leaves are evaluated individually).
+  A failing condition (or a failing later argument) **backtracks into nested
+  patterns** — every assignment of a nested `Orderless` / `Flat` / sequence match is
+  tried, as in Mathematica (v0.451): `MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]` is
+  `True` (`a -> z`), where the matcher previously committed to the nested match's
+  first split (`a -> x^k`) and failed.
 - `p1 | p2 | ...`: `Alternatives`, matches any one of the `pi`.
 - `Except[c]`, `Except[c, p]`: matches anything not matching `c` (and, in the
   two-argument form, also matching `p`).

@@ -4527,6 +4527,17 @@ bool tc_deadline_passed(void) {
  * cannot know whether `body` is intact and leaves it abandoned; that bounded,
  * rare leak is the unavoidable consequence of siglongjmp unwinding.  Marked
  * TC_NOINLINE so the isolation cannot be undone by the optimiser. */
+/* Registered nesting counters, restored across a timeout unwind (see core.h). */
+#define TC_MAX_UNWIND_COUNTERS 32
+static int* tc_unwind_counters[TC_MAX_UNWIND_COUNTERS];
+static int  tc_n_unwind_counters = 0;
+void tc_register_unwind_counter(int* counter) {
+    for (int i = 0; i < tc_n_unwind_counters; i++)
+        if (tc_unwind_counters[i] == counter) return;
+    if (tc_n_unwind_counters < TC_MAX_UNWIND_COUNTERS)
+        tc_unwind_counters[tc_n_unwind_counters++] = counter;
+}
+
 static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     Expr* volatile result = NULL;
     /* Transient per-body state a timeout siglongjmp would otherwise abandon --
@@ -4547,6 +4558,11 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
      * that installs a temporary rewrite hook and is unwound mid-body would
      * otherwise leave that hook installed permanently. */
     volatile int          saved_blkdep = mth_block_depth_save();
+    /* Registered nesting counters (tc_register_unwind_counter), volatile like the
+     * saved state above: -O3 does not keep a plain local intact across the jump. */
+    volatile int saved_ctr[TC_MAX_UNWIND_COUNTERS];
+    volatile int n_ctr = tc_n_unwind_counters;
+    for (int i = 0; i < n_ctr; i++) saved_ctr[i] = *tc_unwind_counters[i];
     if (TC_SETJMP(tc_jmp_env) == 0) {
         result = evaluate(body);
     } else {
@@ -4554,6 +4570,7 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
          * per-sort symbol-set memo still installed; drop it so a later
          * expr_compare cannot dereference the abandoned stack memo. */
         sort_abort_reset();
+        for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i];
     }
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;

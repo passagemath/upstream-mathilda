@@ -3496,6 +3496,37 @@ fundamental matrix `e^{Ax}` is assembled from the Jordan form, as symbolic
     on HEAD v0.433 already (drift since M73); this batch is equal or better on each and
     turns §2.2.27/.38/.44 green. Not rebaselined — needs its own investigation.
 
+- **M79–M83 — §2.2.51–§2.2.55 corpus (Problems 5001–5500, Nasser Abbasi), one batch.**
+  ✅ DONE (v0.451). New corpora `DE_examples_2251.m` … `DE_examples_2255.m` (upstream
+  §2.1.51–55; 500 scalar first-order, 0 IVP, 0 systems); `make check-corpus-indvar` green;
+  gates `dsolve_corpus_2_2_{51..55}_tests` at **18 / 4 / 5 / 9 / 7** (measured gap 17 / 4 / 4 / 8 / 5, plus a load margin from the maximum over runs under ctest at load ~8, each flutterer named in `tests/CMakeLists.txt`); reports
+  `DSolve_test_status/reports/2.2.5{1..5}.md`. Baseline 86 / 93 / 91 / 80 / 81 →
+  **83 / 96 / 96 / 92 / 95** (431 → **462/500**), 0 FAIL — §2.2.51 "drops" because HEAD's
+  5005/5007/5008 were wrong answers. Per-record A/B against HEAD (v0.449) on all 51 older
+  sections, same load: **+22, and the 4 losses are HEAD wrong answers** (2.1.2-777,
+  2.2.48-4777/4779/4792); §2.2.48 gate 16 → 20 for those plus the load-sensitive new gains 4774/4727 (4727, the separable `y' == Cos[x] Sec[y]²`, takes 5 s — open), §2.2.35 2 → 1, §2.2.36 7 → 5.
+  - **New methods / passes:** `DSolve\`HomogeneousG` (+ `…Implicit`) — Euler-identity
+    weights at exact sample points, `y = x^k u`, `t = Log x`, autonomous recursion;
+    `DSolve\`NthAlgebraicImplicit` and `DSolve\`SolvableForYImplicit` (stash-fed implicit
+    second passes, `dsolve_stash_put/take`, `dsolve_result_relations`);
+    `DSolve\`BernoulliExpanded` and `DSolve\`ExactMuU` as LATE slots.
+  - **Fixes:** Separable parameter pre-screen (zero-test false positive under a symbolic
+    exponent shipped three wrong answers) and log-radical guard; NthAlgebraic
+    quadratic-root radical normalisation; LinearFirstOrder drops x-free factors of a
+    rationalised ArcTanh integrating factor; AlmostLinear `Simplify` bounded; SolvableForY
+    depth gate; Exact potentials bounded under μ(u).
+  - **Core (v0.451):** `tc_register_unwind_counter` — a TimeConstrained timeout no
+    longer leaves `g_dsolve_depth` / re-entry guards raised; matcher passes the rest of
+    the level and an element `/;` guard as a continuation into nested patterns.
+  - **Lesson:** widening an early method's recogniser (Bernoulli on `Expand[F]`, Exact
+    by μ(u)) cost 14 per-record losses that the gate totals hid; as late slots, none.
+  - *Residue 38* (0 FAIL): Abel 2nd type (~10), Riccati/Chini with symbolic exponents
+    (4), elliptic separables (4), first-order symmetry classes (6), `y = G(x, y')` (2),
+    linear-coefficient `F(L1/L2)` (2), dAlembert/class-G implicit (4), the
+    `u = E^(2y)` substitution class (2), individual cases.
+  - **Open:** intermittent SIGILL under load — TimeConstrained's async jump inside a
+    non-GMP `malloc` (pre-existing; same rate on HEAD).
+
 ## Phase 1 — ODE method catalog
 
 Cascade order: cheap deterministic recognizers first. `[✓]` implemented,

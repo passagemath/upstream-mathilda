@@ -8,6 +8,7 @@
  * verify-by-back-substitution policy, but keeps everything symbolic.
  */
 #include "dsolve_common.h"
+#include "../message.h"
 #include "../core.h"          /* leaf_count_internal */
 #include "dsolve.h"          /* g_dsolve_depth */
 
@@ -2272,6 +2273,130 @@ static Expr* dsolve_implicit_rhs(const DSolveProblem* P, const Expr* G) {
     return ds_const(1);
 }
 
+/* ---- converting a sub-DSolve result into first-integral LHSs ---- */
+/* First-integral LHS G with G == C[1] equivalent to `rel` (an Equal carrying the
+ * generated constant C[1] of the default-parameter sub-solve), or NULL.  The common
+ * shape lhs == C[1] is read off directly; otherwise Solve[rel, C[1]] must give
+ * exactly one C-free solution.  `rel` consumed. */
+Expr* dsolve_isolate_constant(Expr* rel) {
+    const char* Cn = intern_symbol("C");
+    Expr* Ck = ds_const(1);
+    Expr* G = NULL;
+    if (head_is(rel, SYM_Equal) && rel->data.function.arg_count == 2) {
+        Expr* l = rel->data.function.args[0];
+        Expr* r = rel->data.function.args[1];
+        if (expr_eq(r, Ck) && !ds_contains(l, Cn))      G = expr_copy(l);
+        else if (expr_eq(l, Ck) && !ds_contains(r, Cn)) G = expr_copy(r);
+    }
+    if (!G) {
+        mth_msg_suppress_push();                        /* internal probe: no Solve::nongen */
+        Expr* sol = ds_solve(rel, expr_copy(Ck));
+        mth_msg_suppress_pop();
+        rel = NULL;
+        if (head_is(sol, SYM_List) && sol->data.function.arg_count == 1) {
+            Expr* b0 = sol->data.function.args[0];
+            if (head_is(b0, SYM_List) && b0->data.function.arg_count == 1) {
+                Expr* rule = b0->data.function.args[0];
+                if (head_is(rule, SYM_Rule) && rule->data.function.arg_count == 2
+                    && expr_eq(rule->data.function.args[0], Ck)
+                    && !ds_contains(rule->data.function.args[1], Cn))
+                    G = expr_copy(rule->data.function.args[1]);
+            }
+        }
+        expr_free(sol);
+    }
+    if (rel) expr_free(rel);
+    expr_free(Ck);
+    return G;
+}
+
+/* Every branch of a sub-DSolve result `r` as a first-integral LHS, appended to
+ * *rel.  An explicit {y[x] -> g} becomes y[x] == g; an implicit {lhs == rhs} is
+ * taken as is.  Returns false (appending nothing) unless EVERY branch converts, so
+ * a stashed family is never silently incomplete.  `r` borrowed. */
+bool dsolve_result_relations(const Expr* r, const char* yname, const char* xvar,
+                             Expr*** rel, size_t* nrel) {
+    if (!head_is(r, SYM_List) || r->data.function.arg_count == 0) return false;
+    size_t nb = r->data.function.arg_count;
+    Expr** tmp = malloc(nb * sizeof(Expr*));
+    size_t nt = 0;
+    bool ok = true;
+    for (size_t b = 0; b < nb && ok; b++) {
+        const Expr* br = r->data.function.args[b];
+        Expr* eq = NULL;
+        if (head_is(br, SYM_List) && br->data.function.arg_count == 1) {
+            const Expr* it = br->data.function.args[0];
+            if (head_is(it, SYM_Equal) && it->data.function.arg_count == 2) {
+                eq = expr_copy((Expr*)it);
+            } else if (head_is(it, SYM_Rule) && it->data.function.arg_count == 2) {
+                Expr* lhs = ds_make_funcapp(yname, 0, xvar);
+                if (expr_eq(it->data.function.args[0], lhs))
+                    eq = expr_new_function(expr_new_symbol(SYM_Equal),
+                             (Expr*[]){ lhs, expr_copy(it->data.function.args[1]) }, 2);
+                else expr_free(lhs);
+            }
+        }
+        Expr* G = eq ? dsolve_isolate_constant(eq) : NULL;
+        if (G && ds_contains(G, yname)) tmp[nt++] = G;
+        else { if (G) expr_free(G); ok = false; }
+    }
+    if (!ok) { for (size_t i = 0; i < nt; i++) expr_free(tmp[i]); free(tmp); return false; }
+    *rel = realloc(*rel, (*nrel + nt) * sizeof(Expr*));
+    for (size_t i = 0; i < nt; i++) (*rel)[(*nrel)++] = tmp[i];
+    free(tmp);
+    return true;
+}
+
+/* ---- the per-top-level relation stash (explicit pass -> implicit pass) ----
+ * A method's explicit pass, on declining, may hand the first-integral LHSs it
+ * found to its own implicit pass placed later in the cascade, so that pass costs
+ * no second solve.  Keyed by (method tag, residual hash) within one top-level
+ * evaluation; a stale epoch frees everything.  Full table: the entry is dropped
+ * (the implicit pass then simply declines). */
+#define DS_STASH_SLOTS 16
+typedef struct { uint64_t key; Expr** G; size_t n; } DSStash;
+static DSStash ds_stash[DS_STASH_SLOTS];
+static int ds_stash_n = 0;
+static uint64_t ds_stash_epoch = 0;
+static void ds_stash_sync(void) {
+    uint64_t tid = eval_toplevel_id();
+    if (tid == ds_stash_epoch) return;
+    for (int i = 0; i < ds_stash_n; i++) {
+        for (size_t k = 0; k < ds_stash[i].n; k++) expr_free(ds_stash[i].G[k]);
+        free(ds_stash[i].G);
+    }
+    ds_stash_n = 0; ds_stash_epoch = tid;
+}
+static uint64_t ds_stash_key(int tag, uint64_t h) {
+    return h ^ ((uint64_t)(unsigned)tag * 0x9E3779B97F4A7C15ull);
+}
+void dsolve_stash_put(int tag, uint64_t h, Expr** G, size_t n) {
+    ds_stash_sync();
+    uint64_t key = ds_stash_key(tag, h);
+    for (int i = 0; i < ds_stash_n; i++) if (ds_stash[i].key == key) {   /* replace */
+        for (size_t k = 0; k < ds_stash[i].n; k++) expr_free(ds_stash[i].G[k]);
+        free(ds_stash[i].G);
+        ds_stash[i].G = G; ds_stash[i].n = n;
+        return;
+    }
+    if (ds_stash_n >= DS_STASH_SLOTS) {
+        for (size_t k = 0; k < n; k++) expr_free(G[k]);
+        free(G); return;
+    }
+    ds_stash[ds_stash_n].key = key; ds_stash[ds_stash_n].G = G; ds_stash[ds_stash_n].n = n;
+    ds_stash_n++;
+}
+Expr** dsolve_stash_take(int tag, uint64_t h, size_t* n) {
+    ds_stash_sync();
+    uint64_t key = ds_stash_key(tag, h);
+    for (int i = 0; i < ds_stash_n; i++) if (ds_stash[i].key == key) {
+        Expr** G = ds_stash[i].G; *n = ds_stash[i].n;
+        ds_stash[i] = ds_stash[--ds_stash_n];
+        return G;
+    }
+    return NULL;
+}
+
 Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
     size_t nb = 0;
     Expr** gs = fn(P, &nb);
@@ -3044,6 +3169,32 @@ Expr* dsolve_algebraic_residual(DSolveProblem* P, const char* Yname, const char*
  * indefinite dsolve_linear_factor_solve and the causal (definite-convolution)
  * dsolve_linear_factor_solve_causal.  Pcoef consumed.  Returns mu, or NULL when
  * Integrate[p, x] is non-elementary (left as an inert Integrate). */
+/* mu is defined only up to a nonzero constant, so the x-free factors of a product
+ * can be dropped.  The ArcTanh -> Log rationalisation below leaves factors such as
+ * (-2)^(-b/a) a^(b/a); a parameter power standing beside the same parameter inside
+ * an x-factor (a^k ... (a+x)^(k-1)) sends Integrate[mu q] into a multi-second
+ * ParallelMixedTower spin, where the same integrand without the constant closes in
+ * milliseconds (x(x+a) y' == (b + c y) y, §2.2.50-4942, through Bernoulli).
+ * Consumes mu. */
+static Expr* linfac_drop_constant_factors(Expr* mu, const char* xvar) {
+    if (getenv("MATHILDA_NO_LINFAC_CONST") || !head_is(mu, SYM_Times)) return mu;
+    size_t n = mu->data.function.arg_count, k = 0;
+    Expr** keep = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        if (!ds_free_of(mu->data.function.args[i], xvar))
+            keep[k++] = expr_copy(mu->data.function.args[i]);
+    if (k == 0 || k == n) {
+        for (size_t i = 0; i < k; i++) expr_free(keep[i]);
+        free(keep);
+        return mu;
+    }
+    Expr* r = (k == 1) ? keep[0]
+                       : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), keep, k));
+    free(keep);
+    expr_free(mu);
+    return r;
+}
+
 static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
     g_integrate_quiet++;   /* a non-elementary integrating-factor integral is kept
                             * unevaluated below, not surfaced as a speculative message */
@@ -3081,7 +3232,7 @@ static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
         Expr* mu2 = eval_and_free(ds_call1("PowerExpand",
                         ds_simplify(eval_and_free(ds_call1("TrigToExp", expr_copy(mu))))));
         if (!ds_contains(mu2, intern_symbol("ArcTanh")) && !ds_contains(mu2, intern_symbol("ArcCoth")))
-            { expr_free(mu); mu = mu2; }
+            { expr_free(mu); mu = linfac_drop_constant_factors(mu2, xvar); }
         else
             expr_free(mu2);
     }

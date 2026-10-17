@@ -1678,7 +1678,7 @@ Martin–Reissner 1961 (15), Nelson–Folley–Coral 1964 (1). Three blocks:
 block — second-order linear homogeneous and nonhomogeneous, missing-`x`, shifted
 Euler, third-order constant-coefficient, third-order exact *nonlinear*, third-order
 missing-`y`, and Gegenbauer at a symbolic eigenvalue with `z` as the independent
-variable. `ctest -R dsolve_corpus_2_2_35_tests` · gate baseline **2**.
+variable. `ctest -R dsolve_corpus_2_2_35_tests` · gate baseline **1** (v0.451: 3497 solves).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
@@ -1826,7 +1826,7 @@ symbolic eigenvalue, Liénard, Emden–Fowler); **3514–3556** elementary first
 quadrature (incl. a symbolic-exponent `y'' == x^n` and a 3rd-order quadrature
 IVP), with **3592–3600 repeating 3514–3522** (eight verbatim; 3596 differs from
 3518 only in a constant), so a fix in that block scores twice.
-`ctest -R dsolve_corpus_2_2_36_tests` · gate baseline **1**.
+`ctest -R dsolve_corpus_2_2_36_tests` · gate baseline **5** (v0.451, measured 5; the CMake gate had been 7).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
@@ -2433,14 +2433,15 @@ Full per-case results: `reports/2.2.47.tsv`; bucketed report: `reports/2.2.47.md
 
 Corpus: `DE_examples_2248.m` — 100 records, **100 scalar (0 IVP), 0 systems**
 (upstream §2.1.48, `Ch2.S1.SS48.htm`). First-order nonlinear: Bernoulli, Chini, dAlembert, class G, Riccati. `make check-corpus-indvar` green.
-`ctest -R dsolve_corpus_2_2_48_tests` · gate baseline **16**.
+`ctest -R dsolve_corpus_2_2_48_tests` · gate baseline **20** (v0.451).
 
 | Date | Solved | Solve % | Gap (non-PASS) | Notes |
 |------|-------:|--------:|---------------:|-------|
 | 2026-10-16 (M74 baseline) | 76 / 100 | 76.0% | 24 | 0 FAIL, 0 crash. |
 | 2026-10-17 (**M74–M78**) | **85 / 100** | **85.0%** | **15** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.46–50 note below). |
+| 2026-10-17 (**M79–M83**, v0.451) | **82 / 100** | **82.0%** | **18** | **0 FAIL.** 4777/4779/4792 were **wrong answers scored PASS** (residuals 36 / 12 / 0.9) — now declined; 4709/4716/4727/4774 newly solve. Gate 20 (+2 for the load-sensitive 4774 and 4727 — the latter the separable `y' == Cos[x] Sec[y]²` at 5 s, slow for its class). |
 
-Residue: Chini 4703/4705/4709, Riccati with symbolic exponents 4778/4788/4789/4790, dAlembert/class-C/G radical 4730/4745–4748, 4733, 4738, 4784 (gate +1 for the load-sensitive 4744).
+Residue: Chini 4703/4705, Riccati with symbolic exponents 4778/4788/4789/4790, dAlembert/class-C/G radical 4730/4745–4748, 4733, 4738, 4784 (gate +1 for the load-sensitive 4744).
 Full per-case results: `reports/2.2.48.tsv`; bucketed report: `reports/2.2.48.md`.
 
 ---
@@ -2514,6 +2515,131 @@ already over baseline — §2.2.8, .10, .19, .20, .21, .26, .30, .33, .37, .40 �
 accumulated since M73 (the v0.417–v0.433 special-function work). This batch is equal or
 better on every one and turns §2.2.27/.38/.44 green; the remaining ten need their own
 investigation (left for the user to decide).
+
+---
+
+## Section 2.2.51 — "Problems 5001 to 5100" (Nasser Abbasi)
+
+Corpus: `DE_examples_2251.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.51, `Ch2.S1.SS51.htm`). Riccati / Abel / Chini with symbolic exponents, elliptic separables. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_51_tests` · gate baseline **18** (17 + 1 for the load-sensitive 5026/5029).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-17 (M79 baseline, HEAD v0.445) | 86 / 100 | 86.0% | 14 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M79–M83**, v0.451) | **83 / 100** | **83.0%** | **17** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.51–55 note below). HEAD's 5005/5007/5008 were **wrong answers scored PASS** (residuals 1–4 at a sample point) — the Separable parameter pre-screen removes them, so the honest baseline was 83. |
+
+Residue: Abel 5003/5037/5040/5077/5092, Riccati 5005/5007/5008, Chini 5009, elliptic separable 5020/5024/5025/5027 (latency, non-inert integral), 5028, 5032 (an `Integrate` Weierstrass choice), 5049, 5058.
+Full per-case results: `reports/2.2.51.tsv`; bucketed report: `reports/2.2.51.md`.
+
+---
+
+## Section 2.2.52 — "Problems 5101 to 5200" (Nasser Abbasi)
+
+Corpus: `DE_examples_2252.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.52, `Ch2.S1.SS52.htm`). Rational first-order: Abel 2nd type, homogeneous classes. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_52_tests` · gate baseline **4**.
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-17 (M79 baseline, HEAD v0.445) | 93 / 100 | 93.0% | 7 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M79–M83**, v0.451) | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.51–55 note below). |
+
+Residue: 5122 (linear-coefficient `F(L1/L2)`), 5133 (dAlembert; homogeneous implicit twin), Abel 5142/5149.
+Full per-case results: `reports/2.2.52.tsv`; bucketed report: `reports/2.2.52.md`.
+
+---
+
+## Section 2.2.53 — "Problems 5201 to 5300" (Nasser Abbasi)
+
+Corpus: `DE_examples_2253.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.53, `Ch2.S1.SS53.htm`). Rational first-order. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_53_tests` · gate baseline **5** (4 + 1 for the load-sensitive 5227/5234/5238).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-17 (M79 baseline, HEAD v0.445) | 91 / 100 | 91.0% | 9 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M79–M83**, v0.451) | **96 / 100** | **96.0%** | **4** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.51–55 note below). |
+
+Residue: Abel 5205, 5224, 5231 (linear-coefficient `F(L1/L2)`), 5264 (dAlembert).
+Full per-case results: `reports/2.2.53.tsv`; bucketed report: `reports/2.2.53.md`.
+
+---
+
+## Section 2.2.54 — "Problems 5301 to 5400" (Nasser Abbasi)
+
+Corpus: `DE_examples_2254.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.54, `Ch2.S1.SS54.htm`). Bernoulli with arbitrary coefficients, class G, exact and implicit first-order. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_54_tests` · gate baseline **9** (8 + 1 for the load-sensitive 4–5 s solve 5345).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-17 (M79 baseline, HEAD v0.445) | 80 / 100 | 80.0% | 20 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M79–M83**, v0.451) | **92 / 100** | **92.0%** | **8** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.51–55 note below). |
+
+Residue: 5341/5376 (`y = G(x, y')`), 5347, symmetry `[F(x), G(x) y + H(x)]` 5371–5374, 5375.
+Full per-case results: `reports/2.2.54.tsv`; bucketed report: `reports/2.2.54.md`.
+
+---
+
+## Section 2.2.55 — "Problems 5401 to 5500" (Nasser Abbasi)
+
+Corpus: `DE_examples_2255.m` — 100 records, **100 scalar (0 IVP), 0 systems**
+(upstream §2.1.55, `Ch2.S1.SS55.htm`). Class G, dAlembert, linear symmetries. `make check-corpus-indvar` green.
+`ctest -R dsolve_corpus_2_2_55_tests` · gate baseline **7** (5 + 2 for the load-sensitive 5–7 s solves 5413/5486).
+
+| Date | Solved | Solve % | Gap (non-PASS) | Notes |
+|------|-------:|--------:|---------------:|-------|
+| 2026-10-17 (M79 baseline, HEAD v0.445) | 81 / 100 | 81.0% | 19 | 0 FAIL, 0 crash. |
+| 2026-10-17 (**M79–M83**, v0.451) | **95 / 100** | **95.0%** | **5** | **0 FAIL, 0 crash.** Shared fixes of the batch (see the §2.2.51–55 note below). |
+
+Residue: 5405 (class-G sub-solve declines), 5433/5442 (linear symmetries), 5434/5443 (need `u = E^(2y)`, `t = E^(2x)`).
+Full per-case results: `reports/2.2.55.tsv`; bucketed report: `reports/2.2.55.md`.
+
+---
+
+## The §2.2.51–§2.2.55 batch (M79–M83, v0.451) — what fixed what
+
+Five sections, Problems 5001–5500: **431/500 → 462/500, 0 FAIL** (and 3 of the 431 were
+wrong answers). Per-record A/B against a HEAD (v0.449) binary on all 51 older sections,
+both sides run under the same load: **+22 gained** (that neither of two HEAD runs
+passed), **4 lost, all of them HEAD wrong answers** (2.1.2-777, 2.2.48-4777/4779/4792:
+residuals 1.4 / 36 / 12 / 0.9 at a sample point), plus two flutterers that pass on a
+rerun (2.1.2-1134; 2.1.2-48, the crash class below). Every fix is general; the records
+are the ones that motivated it.
+
+- **Implicit second passes** (`dsolve_stash_put/take`): `DSolve\`NthAlgebraicImplicit`
+  (y'-branches solving only implicitly), `DSolve\`SolvableForYImplicit` (slope eliminated
+  through each explicit root), and the new **`DSolve\`HomogeneousG`** (isobaric class G,
+  `y = x^k u`, `t = Log x` → an autonomous ODE) with its implicit twin. Late in the
+  cascade, so every HEAD-closing path is unchanged.
+- **Late recogniser widenings** — `DSolve\`BernoulliExpanded` (`Expand[F]` exposes a
+  hidden `y^n`) and `DSolve\`ExactMuU` (μ(u), u ∈ {x±y, xy, x²±y²}, algebraic factor).
+  Both first landed *inside* their early methods and cost 14 per-record losses (the
+  logistic IVP took 9 s, `y'' == (x+y')²` lost its explicit reduction); as separate late
+  slots they lose nothing.
+- **Separable**: parameter pre-screen of a candidate split (the zero test certified
+  asymptotic agreement under a symbolic exponent — HEAD's 5005/5007/5008 wrong answers),
+  and no explicit inversion of a log-radical antiderivative (a degree-16 `Root` in 5 s).
+- **NthAlgebraic**: quadratic-root radical normalisation (`√(s²r) → s√r`).
+- **LinearFirstOrder**: an inverse-hyperbolic integrating factor drops its x-free
+  factors — `(−2)^(−b/a) a^(b/a)` beside `(a+x)^(b/a)` sent `∫μq` into a
+  ParallelMixedTower spin (a linear ODE HEAD timed out on).
+- **AlmostLinear**: `Simplify` bounded to 1 s; **SolvableForY** declines below the first
+  nesting level.
+- **Core: `TimeConstrained` unwind-counter registry.** A timeout `siglongjmp` skipped the
+  decrement of `g_dsolve_depth` and six re-entry guards, silently disabling every
+  top-level-only method for the rest of the session.
+- **Core: matcher backtracks into nested patterns.** The rest of the argument list and an
+  element `/;` guard are passed as a continuation, so a nested Orderless `Times`
+  re-splits — `MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]` was `False`.
+
+**Open: intermittent SIGILL under load (pre-existing).** A `TimeConstrained` SIGPROF
+`siglongjmp` can land inside a *non-GMP* `malloc` (`symmemo_lookup` under
+`expr_orderless_sort`, and small Expr allocations); libmalloc then traps on the
+still-held zone lock. HEAD shows it at the same rate (1–4 records per full run, on
+different records each time); it never reproduces in isolation. The GMP/FLINT allocator
+guard does not cover these sites.
 
 ---
 

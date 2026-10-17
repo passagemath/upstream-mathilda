@@ -20,6 +20,7 @@
 #include "../expr.h"
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* One initial/boundary condition, e.g. y''[0]==5. */
 typedef struct {
@@ -88,6 +89,19 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn);
  * `dsolve_method_builtin_implicit` is the strict pinned-method entry. */
 Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn);
 Expr* dsolve_method_builtin_implicit(Expr* res, DSolveTryFn fn);
+
+/* First-integral LHS G with G == C[1] equivalent to `rel` (an Equal carrying the
+ * default generated constant C[1]), or NULL; `rel` consumed. */
+Expr* dsolve_isolate_constant(Expr* rel);
+/* Append every branch of a sub-DSolve result `r` (for yname[xvar]) to *rel as a
+ * first-integral LHS -- explicit {y[x] -> g} via y[x] == g, implicit {lhs == rhs}
+ * as is.  All or nothing: false (nothing appended) unless every branch converts. */
+bool  dsolve_result_relations(const Expr* r, const char* yname, const char* xvar,
+                              Expr*** rel, size_t* nrel);
+/* Per-top-level stash of first-integral LHSs, from a method's explicit pass to its
+ * own later implicit pass: put adopts G[0..n); take removes and returns (or NULL). */
+void   dsolve_stash_put(int tag, uint64_t h, Expr** G, size_t n);
+Expr** dsolve_stash_take(int tag, uint64_t h, size_t* n);
 
 /* ---- first integrals R(x, y[x], y'[x]) == C[1] of a SECOND-order ODE ----
  * The try-fn returns, per branch, the first-integral LHS Rf (an expression in x,

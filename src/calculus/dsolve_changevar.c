@@ -24,6 +24,7 @@
  * memo (see the M12 lessons); a re-entry guard prevents recursion into itself.
  */
 #include "dsolve_common.h"
+#include "../core.h"
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
@@ -308,6 +309,7 @@ Expr** dsolve_changevar_try(DSolveProblem* P, size_t* nbranch){
 static Expr* builtin_dsolve_changevar(Expr* res){ return dsolve_method_builtin(res, dsolve_changevar_try); }
 
 void dsolve_changevar_init(void){
+    tc_register_unwind_counter(&g_cv_active);   /* restored on a timeout unwind */
     symtab_add_builtin("DSolve`ChangeOfVariable", builtin_dsolve_changevar);
     symtab_get_def("DSolve`ChangeOfVariable")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`ChangeOfVariable",

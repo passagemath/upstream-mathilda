@@ -31,6 +31,7 @@
  * the original ODE), so a spurious candidate can only be dropped.
  */
 #include "dsolve_common.h"
+#include "../core.h"
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../symtab.h"
@@ -238,6 +239,7 @@ static Expr* builtin_dsolve_linearizable(Expr* res) {
 }
 
 void dsolve_linearizable_init(void) {
+    tc_register_unwind_counter(&g_lz_active);   /* restored on a timeout unwind */
     symtab_add_builtin("DSolve`Linearizable", builtin_dsolve_linearizable);
     symtab_get_def("DSolve`Linearizable")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`Linearizable",

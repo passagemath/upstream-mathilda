@@ -447,6 +447,10 @@ set(COMMON_SRC
     ../src/numbertheory/factorinteger/fi_gf2.c
     ../src/numbertheory/factorinteger/fi_lanczos.c
     ../src/numbertheory/factorinteger/fi_rbd.c
+    ../src/numbertheory/factorinteger/fi_rbd_descent.c
+    ../src/numbertheory/factorinteger/fi_rbd_bases.c
+    ../src/numbertheory/factorinteger/fi_rbd_lattice.c
+    ../src/numbertheory/factorinteger/fi_rbd_lll.c
     ../src/numbertheory/factorinteger/fi_par.c
     ../src/numbertheory/factorinteger/fi_smooth.c
     ../src/special_functions/fibonacci.c
@@ -5147,6 +5151,25 @@ else()
 endif()
 add_test(NAME mse_trick_corpus_tests
          COMMAND mse_trick_corpus_tests ../MseTrickIntegralsCorpus.m)
+
+# Integrals mined from R. J. Mathar, "Yet Another Table of Integrals"
+# (arXiv:1207.5845) by tools/mathar/ -- every reference value checked by a
+# Mathematica NIntegrate oracle.  One runner, two corpora; each record runs as a
+# symbolic integral and as a numeric instance (parallel fork pool, MATHAR_JOBS).
+# The trailing arguments are the ratcheting CORRECT floors (symbolic, instance);
+# WRONG and CRASH must be 0.  See docs/design/mathar_integrate_triage.md.
+add_executable(mathar_corpus_tests test_mathar_corpus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mathar_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(mathar_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(mathar_corpus_tests build_ecm)
+else()
+    target_link_libraries(mathar_corpus_tests gmp m)
+endif()
+add_test(NAME mathar_definite_corpus_tests
+         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 0 0)
+add_test(NAME mathar_indefinite_corpus_tests
+         COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 0 0)
 
 # Cauchy principal-value definite-integral stress battery (fractional branch cuts
 # over real poles, log branch cuts, trig/oscillatory poles, higher-order poles).

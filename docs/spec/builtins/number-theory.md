@@ -554,17 +554,103 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 | `"PollardPMinus1"` (alias `"PollardP-1"`) | GMP-ECM p-1, with a B1 back-off when every prime is caught at once; a word walk with prime-by-prime backtracking below 2^64. | `"B1"` (10^6), `"B2"` |
 | `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. The seeds run in parallel, one per thread, and the first success in seed order is taken. | `"B1"` (10^6), `"B2"` |
 | `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves run in parallel, one per thread, for n ≥ 2^160. They use the batch parametrisation with sigmas drawn deterministically, and successes are taken in curve order, so the result does not depend on scheduling. A user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |
-| `"BlakeRationalBaseDescent"` | Rational base descent (unchanged; its optimisation is deferred). | `"Base"` -> a/b |
+| `"BlakeRationalBaseDescent"` | Blake's rational base descent, for a factor close to c (a/b)^k: six variants (exact descent, the reference descent, all-hits, lattice, two-pass, Coppersmith), threaded base search. See [below](#blakerationalbasedescent). | `"Base"`, `"Variant"`, `"Order"`, `"Height"`, `"Bases"`, `"MaxCoefficient"`, `"Multiplier"`, `"Tolerance"`, `"Beta"`, `"Multiplicity"`, `"Dimension"`, `"BaseRange"`, `"Coefficient"`, `"Exponent"` |
 
 Fallbacks: builds without GMP-ECM use FLINT's ECM and p+1 (and a native p-1); builds without either use
 native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are native, with no external
 dependency.
 
-Threads: the quadratic sieve, ECM, p+1, CFRAC and Dixon use every online CPU (up to 16) in builds with
+Threads: the quadratic sieve, ECM, p+1, CFRAC, Dixon and BlakeRationalBaseDescent use every online CPU (up to 16) in builds with
 `MATHILDA_THREADS`. `TimeConstrained` budgets are process CPU time, so they are consumed correspondingly
 faster while they run. An abort is taken on the main thread when the current region ends: one polynomial
 family per QS thread, one curve per ECM thread, one seed per p+1 thread, or a few milliseconds of
 CFRAC/Dixon candidates.
+
+### BlakeRationalBaseDescent
+
+`FactorInteger`BlakeRationalBaseDescent[n]` (the same as `FactorInteger[n, Method -> "BlakeRationalBaseDescent"]`)
+is S. Blake's *rational base descent* (RBD), from two papers: "Rational Base Descent: A Deterministic
+Algorithm for Factoring Structured Semiprimes" and "Lattice-Augmented Rational Base Descent". It is a
+special-purpose method. It succeeds when the **larger** factor P of `n = P M` is close to a power of a
+rational number, `P ≈ c (a/b)^k`, and is no threat to unstructured (e.g. RSA) moduli.
+
+**Mechanism.** Starting from `Q = n`, repeat `Q <- floor(b Q / a)`. Each step divides by the base. After
+`k` steps `Q` has divided `P` down to about `c`, so `Q` lies within a small constant of the integer `c M`,
+and `gcd(Q - j, n)` for a small `j` exposes `M` (or `M gcd(c, P)`). The paper's theorem: if
+`(a/b)^k > M` and `|P - floor(c (a/b)^k)| < (a/b)^k / M`, a factor is found at step `k`. One descent tests
+every exponent and every coefficient at once, in time polynomial in `log n` for a fixed base.
+
+The base is supplied with `"Base"` or found by enumeration. The bases that succeed form a comb of isolated
+teeth of relative width ~1/(k M) around the representations of P (plus harmonic teeth at `a/d`, `d | a`).
+No signal points towards a tooth from a distance, so bases are enumerated breadth-first over the
+Stern–Brocot tree (every rational once, coarse to fine), skipping perfect powers `(x/y)^m`. For an integer
+base the descent truncates the base-`a` digits of `n`, and truncations inherit algebraic divisors. This
+*truncation divisibility* is what recovers the cyclotomic factors of Cunningham numbers and repunits.
+
+| Variant (`"Variant"` -> name; also the head `FactorInteger`BlakeRationalBaseDescent<name>`) | Algorithm |
+|---|---|
+| `"Exact"` (default) | The scaled exact descent. The recurrence runs on `S n`, with `S = 2^s ≥ 2a/(a-b)`, so the target always lies in a base-independent window of four consecutive values. Nothing is tested above `sqrt(cmax n)`, since no target `c M` can lie there; that depth is reached by one exact division. The window products are folded into an accumulator mod `n`, with one gcd per block of steps; a block is replayed candidate by candidate only when its gcd is non-trivial. |
+| `"Classic"` | The paper's reference algorithm R1–R4. It tests `gcd(Q - j, n)` for `|j| ≤ ceil(2 + a/(a-b))` at every depth, searching before the termination test. |
+| `"AllHits"` | The reference descent run to the end. Every distinct non-trivial gcd is recorded, and the record is refined into pairwise-coprime divisors of `n`; later calls on the cofactors split from that cache. Composite pieces are re-run with AllHits, which recovers nested algebraic divisors. |
+| `"Lattice"` | Lattice-augmented descent. Howgrave-Graham's approximate-divisor detector (LLL on `N^(t-i) (Q+x)^i`, `x^j (Q+x)^t`) replaces the gcd window. It finds `c M` from `Q` within `X ≤ n^(β²)` when `M ≥ n^β`, widening the per-step tolerance from O(a/(a-b)) to `X`. The detector runs only in the depth band `X ≤ Q ≤ sqrt(cmax n) + X`, in parallel over the depths. Integer roots are found p-adically on the square-free part of each short polynomial. |
+| `"TwoPass"` | The paper's practical algorithm. Pass 1 is Exact over the bases. Pass 2 is Lattice over a coarse grid of `"BaseRange" -> {lo, hi}`, with relative spacing `X/(2 c k n^β)` and each grid point realised by the simplest rational near it; without a range, pass 2 uses the Stern–Brocot bases of height 16 (or `"Height"`). |
+| `"Coppersmith"` | A known base, coefficient and exponent: one detector call at `floor(c (a/b)^k)`. This is factoring with high bits known. It needs `"Base"`, `"Coefficient"` and `"Exponent"` (else `FactorInteger::rbdcop`). |
+
+Suboptions (defaults in parentheses):
+- `"Base"` -> `a/b` or a list of bases. A base is reduced, and inverted if below 1; `1` is rejected with
+  `FactorInteger::mopt`. (Default: enumerate.)
+- `"Order"` -> `"SternBrocot"` (default) or `"Sum"` (the papers' `a + b` order).
+- `"Height"` -> `H`: largest numerator enumerated (1000). `"Bases"` -> `B`: enumeration budget (200000).
+- `"MaxCoefficient"` -> `cmax` (2^64): sets the deferred-testing ceiling `sqrt(cmax n)`; `Infinity`
+  tests every depth.
+- `"Multiplier"` -> `m`: descend from `m n`, with gcds still taken with `n` (the paper's Open Question 2).
+- `"Tolerance"` -> `X`, `"Beta"` -> `β` (1/2), `"Dimension"` -> `d` (12), `"Multiplicity"` -> `t`: the
+  lattice detector. Given a tolerance, the least dimension whose LLL guarantee covers it is chosen.
+  Otherwise `X` is the largest tolerance the guarantee covers at dimension `d`, less two bits.
+- `"BaseRange"` -> `{lo, hi}` (TwoPass grid), `"Coefficient"` -> `c`, `"Exponent"` -> `k` (Coppersmith).
+
+Behaviour:
+- The suboptions describe the input. A composite cofactor that the configured search cannot split gets a
+  light default search (Exact, Stern–Brocot height 64, at most 2000 bases); AllHits re-runs AllHits
+  instead. Anything still composite is returned with `FactorInteger::nofac`.
+- Threads: a many-base search runs blocks of 2048 bases on every thread. A lattice base runs its band two
+  depths per thread per region. The lowest-indexed success wins (a hit caps the work claim), so the answer
+  does not depend on the thread count, and a `TimeConstrained` abort is taken within milliseconds.
+- Lattice reduction is FLINT's `fmpz_lll` when available, else a native fraction-free integral LLL
+  (de Weger / Cohen 2.6.7, δ = 0.99): exact, but slower.
+- The core (`fi_rbd.h`; `fi_rbd_descent.c`, `fi_rbd_bases.c`, `fi_rbd_lattice.c`, `fi_rbd_lll.c`) uses only
+  GMP (and optionally FLINT), with no global state; the Mathilda glue is `fi_rbd.c`.
+
+Performance, measured on 500 Stern–Brocot bases against a random semiprime, single thread:
+
+| n (bits) | Exact (µs per base) | the v0.454 implementation | speedup |
+|---|---|---|---|
+| 256 | 61 | 2240 | 37× |
+| 512 | 151 | 11400 | 75× |
+| 1024 | 546 | 54800 | 100× |
+
+The paper's Example 1 (1140 bits, base 22/7) takes 2.8 ms with Exact and 27 ms with Classic. The paper's
+2048-bit challenge modulus is factored from scratch, with no base given, in 106 s on 16 threads.
+
+```mathematica
+In[1]:= FactorInteger`BlakeRationalBaseDescent[1001, "Base" -> 22/7]
+Out[1]= {{7, 1}, {11, 1}, {13, 1}}
+
+(* P = NextPrime[Floor[3 (22/7)^150]] times a 40-bit prime: the base is found by search *)
+In[2]:= FactorInteger`BlakeRationalBaseDescent[742245361114170698080188160556986382238609541182118959142360194921632978579427957105431]
+Out[2]= {{623347347967, 1}, {1190741187132579502456731851112421085210615890827643793135496647841845583593, 1}}
+
+(* truncation divisibility: the algebraic factors of 2^1041 + 1 *)
+In[3]:= Select[Quiet[FactorInteger`BlakeRationalBaseDescentAllHits[2^1041 + 1, "Base" -> 2]][[All, 1]], # < 10^120 &]
+Out[3]= {3, 2083, 95562442332919646317117537304253622533190207882011713489066201641121786503686867002917439712921903606443}
+
+(* a planted miss of 2^28 at depth 59: invisible to the gcd window, found by the lattice detector *)
+In[4]:= First /@ FactorInteger`BlakeRationalBaseDescentLattice[195539142822724777401163665279552940381006352574199957151137, "Base" -> 22/7]
+Out[4]= {296454907933147663952202071141, 659591518271709676788151702157}
+
+In[5]:= First /@ FactorInteger`BlakeRationalBaseDescentCoppersmith[195539142822724777401163665279552940381006352574199957151137, "Base" -> 22/7, "Coefficient" -> 3, "Exponent" -> 59]
+Out[5]= {296454907933147663952202071141, 659591518271709676788151702157}
+```
 
 **Features**:
 - `Listable`, `Protected`; `Options[FactorInteger]` is `{GaussianIntegers -> False, Method -> Automatic}`.

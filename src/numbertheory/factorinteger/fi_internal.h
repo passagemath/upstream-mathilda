@@ -26,7 +26,13 @@
  *   fi_gf2.c       relation store, relation logs, GF(2) nullspace solver
  *                  shared by CFRAC / Dixon / QS.
  *   fi_par.c       thread regions and work claiming.
- *   fi_rbd.c       Blake rational base descent (moved verbatim).
+ *   fi_rbd.c       Blake rational base descent: options, variants, the
+ *                  threaded base search and the hit cache (Mathilda glue).
+ *   fi_rbd.h       its reentrant GMP/FLINT core, implemented in
+ *                  fi_rbd_descent.c (iterated / exact descents, batched
+ *                  gcds), fi_rbd_bases.c (Stern-Brocot and sum-ordered
+ *                  bases), fi_rbd_lattice.c (Howgrave-Graham detector) and
+ *                  fi_rbd_lll.c (FLINT fmpz_lll or a native integral LLL).
  *
  * A *splitter* takes an odd composite n that is not a perfect power and
  * either writes a non-trivial divisor 1 < d < n and returns 1, or returns 0
@@ -88,6 +94,51 @@ void fi_factors_sort(FiFactors* f);
 /* Context                                                             */
 /* ------------------------------------------------------------------ */
 
+/* BlakeRationalBaseDescent variants ("Variant" suboption / alias heads). */
+typedef enum {
+    FI_RBD_EXACT = 0,     /* scaled exact descent, batched gcds (default)  */
+    FI_RBD_CLASSIC,       /* the paper's R1-R4 reference descent           */
+    FI_RBD_ALLHITS,       /* record every hit, refine into coprime pieces  */
+    FI_RBD_LATTICE,       /* Howgrave-Graham detector in the depth band    */
+    FI_RBD_TWOPASS,       /* exact pass, then lattice pass                 */
+    FI_RBD_COPPERSMITH,   /* known a/b, c, n: one detector call            */
+    FI_RBD_NVARIANTS
+} FiRbdVariant;
+
+/* BlakeRationalBaseDescent suboptions; zero / unset means "default". */
+typedef struct {
+    int      variant;
+    size_t   nbases;      /* "Base" -> a/b or {a1/b1, ...} (a > b, coprime) */
+    mpz_t*   ba;
+    mpz_t*   bb;
+    int      order;       /* "Order": 0 Stern-Brocot, 1 sum a + b          */
+    uint64_t height;      /* "Height": numerator bound of enumerated bases */
+    uint64_t max_bases;   /* "Bases": enumeration budget                   */
+    int      cmax_set, cmax_inf;
+    mpz_t    cmax;        /* "MaxCoefficient" (Infinity: no deferral)      */
+    int      mult_set;
+    mpz_t    mult;        /* "Multiplier"                                  */
+    double   beta;        /* "Beta": divisor size N^beta (lattice)         */
+    int      tol_set;
+    mpz_t    tol;         /* "Tolerance" X (lattice)                       */
+    int      t, d;        /* "Multiplicity", "Dimension" (lattice)         */
+    int      coef_set;
+    mpz_t    coef;        /* "Coefficient" c (Coppersmith)                 */
+    uint64_t expo;        /* "Exponent" n (Coppersmith)                    */
+    int      range_set;
+    mpq_t    lo, hi;      /* "BaseRange" (lattice pass grid)               */
+    mpz_t*   cache;       /* coprime divisors found earlier in this call   */
+    size_t   ncache;
+    uint64_t ncalls;      /* splitter calls so far (0: the input itself)   */
+} FiRbdOpts;
+
+void fi_rbd_opts_init(FiRbdOpts* o);
+void fi_rbd_opts_clear(FiRbdOpts* o);
+/* Append a/b to the "Base" list (given as p/q with p, q > 0, p != q; it is
+ * reduced, and inverted when below 1); reset_bases empties the list. */
+void fi_rbd_opts_add_base(FiRbdOpts* o, const mpz_t p, const mpz_t q);
+void fi_rbd_opts_reset_bases(FiRbdOpts* o);
+
 typedef struct {
     FiMethod method;
 
@@ -102,8 +153,7 @@ typedef struct {
     uint64_t curves;      /* ECM "Curves"                                */
     double   B1, B2;      /* ECM / p-1 / p+1 stage bounds                */
     uint64_t sigma;       /* ECM "Sigma" (first curve; then sigma+1, ...)*/
-    int      rbd_have_base;
-    mpz_t    rbd_a, rbd_b;/* BlakeRationalBaseDescent "Base" -> a/b      */
+    FiRbdOpts rbd;        /* BlakeRationalBaseDescent suboptions + cache */
 
     /* State. */
     int      incomplete;  /* some composite was returned unfactored      */
@@ -340,6 +390,10 @@ void fi_claim_reset(FiClaim* q, size_t end);
 /* Claim [*lo, *hi); returns 0 once the range is exhausted. */
 int  fi_claim_next(FiClaim* q, size_t chunk, size_t* lo, size_t* hi);
 void fi_claim_destroy(FiClaim* q);
+/* Lower the end of the range to at most `end` (a search that has found a
+ * hit at index `end` stops handing out later indices); and read it. */
+void   fi_claim_cap(FiClaim* q, size_t end);
+size_t fi_claim_end(FiClaim* q);
 
 /* ------------------------------------------------------------------ */
 /* Bit helpers (GCC builtins where available, portable otherwise)      */

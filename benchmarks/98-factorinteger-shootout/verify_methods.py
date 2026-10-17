@@ -36,7 +36,7 @@ METHODS = {
     "PollardPMinus1":    [20, 40, 64, 100],
     "WilliamsPPlus1":    [20, 40, 64, 100],
     "ECM":               [40, 64, 100, 128],
-    "BlakeRationalBaseDescent": [16, 24],
+    "BlakeRationalBaseDescent": [16, 24, 40],
 }
 
 
@@ -77,15 +77,92 @@ def run(method, ns):
     return rows, nofac, p.returncode
 
 
+def planted(rng, qbits, pbits, lattice=False):
+    """A semiprime N = P q with P ~ c (a/b)^k: [RBD] Theorem 1's hypotheses
+    hold (|Delta| < (a/b)^k / q), or, with lattice=True, the miss at the
+    aligned depth is ~2^(qbits/2), far outside the gcd window but inside the
+    Howgrave-Graham tolerance.  Returns (N, P, q, a, b)."""
+    from fractions import Fraction
+    from math import gcd as g
+    while True:
+        b = rng.randrange(1, 12)
+        a = rng.randrange(b + 1, 40)
+        if g(a, b) == 1:
+            break
+    c = rng.randrange(1, 1 << 16)
+    q = randprime(1 << (qbits - 1), 1 << qbits)
+    r = Fraction(a, b)
+    k = 1
+    while (c * r ** k).numerator // (c * r ** k).denominator < (1 << pbits):
+        k += 1
+    base = (c * a ** k) // (b ** k)
+    tol = (a ** k) // (b ** k * q)              # (a/b)^k / q
+    while True:
+        if lattice:
+            miss = rng.randrange(1 << (qbits // 3), 1 << (qbits // 3 + 1))
+            delta = (a ** k * miss) // (b ** k * q)    # miss = Delta (b/a)^k q
+        else:
+            delta = rng.randrange(-(tol // 2), tol // 2 + 1) if tol > 2 else 0
+        P = base + delta
+        from sympy import nextprime
+        P = nextprime(P)
+        if lattice or abs(P - base) < tol:
+            return P * q, P, q, a, b
+
+
+def run_rbd_planted(count, rng):
+    """Each variant must return exactly {q, P} on planted instances."""
+    cases = []
+    for _ in range(count):
+        qb = rng.choice([40, 64, 100])
+        # P must exceed c q by a margin, or the theorem's tolerance
+        # (a/b)^k / q is too small to hold a prime (c < 2^16).
+        cases.append(("exact", planted(rng, qb, qb + 16 + rng.choice([40, 100, 200]))))
+    for _ in range(max(1, count // 4)):
+        cases.append(("lattice", planted(rng, 98, 99, lattice=True)))
+    calls = []
+    for kind, (N, P, q, a, b) in cases:
+        if kind == "exact":
+            calls += [f'FactorInteger`BlakeRationalBaseDescent[{N}, "Base" -> {a}/{b}]',
+                      f'FactorInteger`BlakeRationalBaseDescentClassic[{N}, "Base" -> {a}/{b}]',
+                      f'FactorInteger`BlakeRationalBaseDescent[{N}, "Height" -> 40]']
+        else:
+            calls += [f'FactorInteger`BlakeRationalBaseDescentLattice[{N}, "Base" -> {a}/{b}]']
+    script = "".join(f'r = Quiet[{c}]; Print["R ", StringRiffle[ToString /@ Flatten[r], " "]];\n' for c in calls)
+    with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False, dir=os.environ.get("TMPDIR")) as f:
+        f.write(script)
+        path = f.name
+    try:
+        p = subprocess.run([MATHILDA, "-file", path], capture_output=True, text=True, timeout=3600)
+    finally:
+        os.unlink(path)
+    rows = [l[2:] for l in p.stdout.splitlines() if l.startswith("R ")]
+    bad, i = 0, 0
+    for kind, (N, P, q, a, b) in cases:
+        for _ in range(3 if kind == "exact" else 1):
+            row = rows[i] if i < len(rows) else ""
+            got = sorted(int(x) for x in row.split()[0::2]) if row else []
+            if got != sorted([P, q]):
+                bad += 1
+                print(f"  RBD {kind} call {calls[i][:60]}... N={N} base={a}/{b}: got {got}")
+            i += 1
+    print(f"BlakeRationalBaseDescent planted  cases={len(cases)} calls={len(calls)} wrong={bad}", flush=True)
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--count", type=int, default=100)
     ap.add_argument("--methods", default="")
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--rbd-planted", type=int, default=0,
+                    help="also run N planted rational-base instances through every RBD variant")
     a = ap.parse_args()
     rng = random.Random(a.seed)
     want = a.methods.split(",") if a.methods else list(METHODS)
     bad_total = 0
+    if a.rbd_planted:
+        bad_total += run_rbd_planted(a.rbd_planted, rng)
     for m in want:
         for bits in METHODS[m]:
             ns = [gen(bits, rng) for _ in range(a.count)]

@@ -78,14 +78,12 @@ void fi_factors_sort(FiFactors* f) {
 void fi_ctx_init(FiCtx* c, FiMethod m) {
     memset(c, 0, sizeof *c);
     c->method = m;
-    mpz_init(c->rbd_a);
-    mpz_init(c->rbd_b);
+    fi_rbd_opts_init(&c->rbd);
     c->rng = UINT64_C(0x9E3779B97F4A7C15);
 }
 
 void fi_ctx_clear(FiCtx* c) {
-    mpz_clear(c->rbd_a);
-    mpz_clear(c->rbd_b);
+    fi_rbd_opts_clear(&c->rbd);
 }
 
 /* The randomised methods (rho starts, ECM sigmas, QS) draw from a generator

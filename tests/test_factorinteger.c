@@ -13,11 +13,21 @@
 #include "parse.h"
 #include "print.h"
 #include "fi_internal.h"
+#include "fi_rbd.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
 static int failures = 0;
+
+/* mpz == decimal string, 0 when equal. */
+static int mpz_cmp_str_ok(const mpz_t z, const char* s) {
+    mpz_t t;
+    mpz_init_set_str(t, s, 10);
+    int c = mpz_cmp(z, t);
+    mpz_clear(t);
+    return c;
+}
 
 static void check(const char* input, const char* expected) {
     Expr* e = parse_expression(input);
@@ -295,6 +305,268 @@ static void test_gf2(size_t ncols) {
     free(acc); free(deps); free(m.start); free(m.col);
 }
 
+/* ---- BlakeRationalBaseDescent ----
+ * Instances from the two papers in factorisation_temp/ (reproduced with
+ * gmpy2; the seeded lattice instance is the companion paper's Appendix A
+ * driver, seed 5).  The hit records — (k, j) of every distinct gcd — were
+ * checked against an independent Python implementation of the paper's
+ * reference algorithm (Appendix A, recording every hit), and agree with
+ * the paper's Examples 1-4 and its 533-base comb sweep. */
+static const char RBD_NMIN[] = "13434917067328449643383271289062122492729438008563207396013386022436439625786814860310635092648849808707283885079425559380060603741711887741983827702536077124606526390026531236424033896417798802339681855054916007583273591721147874872971014173899334436432277372280112100845364029259802969568473368054409653616559493278947418005745364854816116209";
+static const char RBD_NMAX[] = "13434917067328449643383271289062122492729438008563207396013386022436439625786814860310635946232502851058036972147222447976537871300232309110236077983704171247600333635603624662228897207255607429818163453115658688268705666669472586861511441849804920313665499850048253134034455058178126780155420375132055020929262098390932828248906338838243332477";
+static const char RBD_Q255[] = "31415926535897932384626433832795028841971693993751058209749445923078164119021";
+static const char RBD_NCOMB[] = "742245361114170698080188160556986382238609541182118959142360194921632978579427957105431";
+static const char RBD_NLAT[] = "195539142822724777401163665279552940381006352574199957151137";   /* 197 bits */
+static const char RBD_QLAT[] = "296454907933147663952202071141";
+static const char RBD_NMULT[] = "155787495570451096703327230969771495548082681342268724343193395164915333146397756437241087392438717459";
+
+/* One C-level descent; returns the hit count (0/1, or the record size). */
+static int rbd_run(mpz_t g, uint64_t* k, int64_t* j, const char* N, unsigned long a,
+                   unsigned long b, int exact, int batch, int all, fi_rbd_hits_t* h) {
+    mpz_t n, A, B;
+    mpz_init_set_str(n, N, 10);
+    mpz_init_set_ui(A, a);
+    mpz_init_set_ui(B, b);
+    fi_rbd_opts_t o;
+    memset(&o, 0, sizeof o);
+    o.exact = exact;
+    o.batch = batch;
+    o.record_all = all;
+    fi_rbd_scratch_t s;
+    fi_rbd_scratch_init(&s);
+    int r = fi_rbd_descend(g, k, j, n, A, B, &o, h, &s);
+    fi_rbd_scratch_clear(&s);
+    mpz_clears(n, A, B, NULL);
+    return r;
+}
+
+#define RBD_FAIL(...) do { printf("FAIL: rbd: " __VA_ARGS__); printf("\n"); failures++; } while (0)
+
+static void test_rbd_core(void) {
+    mpz_t g;
+    mpz_init(g);
+    uint64_t k = 0;
+    int64_t j = 0;
+
+    /* Example 1 (paper): the 255-bit q at descent step 512, misses -2 / 0;
+     * the iterated descent unbatched and batched, the exact descent. */
+    for (int batch = 0; batch < 2; batch++) {
+        if (!rbd_run(g, &k, &j, RBD_NMIN, 22, 7, 0, batch, 0, NULL) || k != 512 || j != -2 ||
+            mpz_cmp_str_ok(g, RBD_Q255) != 0)
+            RBD_FAIL("Nmin classic batch=%d: k=%llu j=%lld", batch, (unsigned long long)k, (long long)j);
+        if (!rbd_run(g, &k, &j, RBD_NMAX, 22, 7, 0, batch, 0, NULL) || k != 512 || j != 0)
+            RBD_FAIL("Nmax classic batch=%d: k=%llu j=%lld", batch, (unsigned long long)k, (long long)j);
+    }
+    if (!rbd_run(g, &k, &j, RBD_NMIN, 22, 7, 1, 1, 0, NULL) || k != 512 || mpz_cmp_str_ok(g, RBD_Q255) != 0)
+        RBD_FAIL("Nmin exact: k=%llu", (unsigned long long)k);
+
+    /* Example 2: 2^1041 + 1, base 2 — exactly four distinct gcds. */
+    {
+        fi_rbd_hits_t h;
+        fi_rbd_hits_init(&h);
+        mpz_t n;
+        mpz_init(n);
+        mpz_ui_pow_ui(n, 2, 1041);
+        mpz_add_ui(n, n, 1);
+        char* ns = mpz_get_str(NULL, 10, n);
+        int r = rbd_run(g, NULL, NULL, ns, 2, 1, 0, 1, 1, &h);
+        mpz_t w;
+        mpz_init(w);
+        mpz_ui_pow_ui(w, 2, 347);
+        mpz_add_ui(w, w, 1);
+        static const struct { unsigned long g; uint64_t k; int64_t j; } want[] = {
+            { 3, 1, 1 }, { 9, 1, 4 }, { 2083, 35, -3 }, { 0, 345, 4 } };
+        if (r != 4 || h.n != 4) RBD_FAIL("2^1041+1: %zu hits", h.n);
+        else
+            for (int i = 0; i < 4; i++) {
+                int geq = want[i].g ? mpz_cmp_ui(h.v[i].g, want[i].g) == 0 : mpz_cmp(h.v[i].g, w) == 0;
+                if (!geq || h.v[i].k != want[i].k || h.v[i].j != want[i].j)
+                    RBD_FAIL("2^1041+1 hit %d at (%llu, %lld)", i, (unsigned long long)h.v[i].k, (long long)h.v[i].j);
+            }
+        /* The coprime refinement of {n, hits}: pairwise coprime divisors. */
+        size_t np;
+        mpz_t* pc = fi_rbd_coprime_base(&h, n, &np);
+        for (size_t a = 0; a < np; a++) {
+            if (!mpz_divisible_p(n, pc[a])) RBD_FAIL("coprime piece does not divide n");
+            for (size_t b = a + 1; b < np; b++) {
+                mpz_gcd(g, pc[a], pc[b]);
+                if (mpz_cmp_ui(g, 1) != 0) RBD_FAIL("coprime pieces share a factor");
+            }
+        }
+        fi_rbd_free_mpz_array(pc, np);
+        free(ns);
+        mpz_clears(n, w, NULL);
+        fi_rbd_hits_clear(&h);
+    }
+
+    /* Example 3: R_2224, base 10 — 14 distinct gcds, R_1112 at (1111, 1). */
+    {
+        fi_rbd_hits_t h;
+        fi_rbd_hits_init(&h);
+        mpz_t n, r1112;
+        mpz_inits(n, r1112, NULL);
+        mpz_ui_pow_ui(n, 10, 2224); mpz_sub_ui(n, n, 1); mpz_divexact_ui(n, n, 9);
+        mpz_ui_pow_ui(r1112, 10, 1112); mpz_sub_ui(r1112, r1112, 1); mpz_divexact_ui(r1112, r1112, 9);
+        char* ns = mpz_get_str(NULL, 10, n);
+        rbd_run(g, NULL, NULL, ns, 10, 1, 0, 1, 1, &h);
+        int at = 0;
+        for (size_t i = 0; i < h.n; i++)
+            if (mpz_cmp(h.v[i].g, r1112) == 0 && h.v[i].k == 1111 && h.v[i].j == 1) at = 1;
+        if (h.n != 14 || !at) RBD_FAIL("R_2224: %zu hits, R_1112 at (1111, 1): %d", h.n, at);
+        free(ns);
+        mpz_clears(n, r1112, NULL);
+        fi_rbd_hits_clear(&h);
+    }
+
+    /* Comb sweep (lattice paper, Section 4): the 533 primitive bases with
+     * a + b <= 60 against the planted c = 3, n = 150, 22/7 instance; only
+     * 22/7 and its harmonic 11/7 fire, both at (150, -1). */
+    {
+        fi_rbd_sum_t it;
+        fi_rbd_sum_init(&it, 0);
+        fi_rbd_base_t bs[64];
+        size_t nb = 0, got;
+        int fired = 0, ok = 1;
+        while ((got = fi_rbd_sum_next(&it, bs, 64)) > 0) {
+            for (size_t i = 0; i < got; i++) {
+                if (bs[i].a + bs[i].b > 60) { got = 0; break; }
+                nb++;
+                if (rbd_run(g, &k, &j, RBD_NCOMB, (unsigned long)bs[i].a, (unsigned long)bs[i].b, 0, 1, 0, NULL)) {
+                    fired++;
+                    if (!((bs[i].a == 22 || bs[i].a == 11) && bs[i].b == 7 && k == 150 && j == -1)) ok = 0;
+                }
+            }
+            if (!got) break;
+        }
+        if (nb != 533 || fired != 2 || !ok) RBD_FAIL("comb sweep: %zu bases, %d fired", nb, fired);
+    }
+
+    /* Stern-Brocot order and the perfect-power filter. */
+    {
+        fi_rbd_sb_t sb;
+        fi_rbd_sb_init(&sb, 5);
+        fi_rbd_base_t bs[16];
+        size_t got = fi_rbd_sb_next(&sb, bs, 16);
+        static const uint64_t want[][2] = { {2,1}, {3,2}, {3,1}, {4,3}, {5,3}, {5,2}, {5,4}, {5,1} };
+        int ok = got == 8;
+        for (size_t i = 0; ok && i < 8; i++) ok = bs[i].a == want[i][0] && bs[i].b == want[i][1];
+        if (!ok) RBD_FAIL("Stern-Brocot order (%zu bases)", got);
+        fi_rbd_sb_clear(&sb);
+        if (fi_rbd_is_primitive(4, 1) || fi_rbd_is_primitive(9, 4) || fi_rbd_is_primitive(27, 8) ||
+            !fi_rbd_is_primitive(12, 1) || !fi_rbd_is_primitive(22, 7) || !fi_rbd_is_primitive(8, 3))
+            RBD_FAIL("perfect-power filter");
+    }
+
+    /* Simplest rational in an interval (brute-force oracle). */
+    {
+        static const char* T[][3] = {
+            { "157/50", "3927/1250", "157/50" }, { "1/3", "1/2", "1/2" }, { "2/5", "3/5", "1/2" },
+            { "22/7", "22/7", "22/7" }, { "7/3", "5/2", "5/2" }, { "10001/10000", "5001/5000", "5001/5000" },
+            { "3", "7/2", "3" } };
+        mpq_t lo, hi, r;
+        mpz_t p, q;
+        mpq_inits(lo, hi, r, NULL);
+        mpz_inits(p, q, NULL);
+        for (size_t i = 0; i < sizeof T / sizeof T[0]; i++) {
+            mpq_set_str(lo, T[i][0], 10); mpq_canonicalize(lo);
+            mpq_set_str(hi, T[i][1], 10); mpq_canonicalize(hi);
+            mpq_set_str(r, T[i][2], 10); mpq_canonicalize(r);
+            fi_rbd_simplest_between(p, q, lo, hi);
+            if (mpz_cmp(p, mpq_numref(r)) || mpz_cmp(q, mpq_denref(r))) RBD_FAIL("simplest in [%s, %s]", T[i][0], T[i][1]);
+        }
+        mpq_clears(lo, hi, r, NULL);
+        mpz_clears(p, q, NULL);
+    }
+
+    /* Howgrave-Graham detector at the aligned depth of the planted-miss
+     * instance (miss -268435481, 29 bits), on both LLLs. */
+    {
+        mpz_t N, Q, X, x0, t;
+        mpz_inits(N, Q, X, x0, t, NULL);
+        mpz_set_str(N, RBD_NLAT, 10);
+        mpz_ui_pow_ui(Q, 7, 59); mpz_mul(Q, Q, N); mpz_ui_pow_ui(t, 22, 59); mpz_fdiv_q(Q, Q, t);
+        mpz_ui_pow_ui(X, 2, 30);
+        if (!fi_rbd_hg_detect(g, x0, N, Q, X, 6, 12) || mpz_cmp_si(x0, -268435481) || mpz_cmp_str_ok(g, RBD_QLAT))
+            RBD_FAIL("HG detector (6, 12)");
+        if (!fi_rbd_hg_detect_native(g, x0, N, Q, X, 6, 12) || mpz_cmp_si(x0, -268435481))
+            RBD_FAIL("HG detector, native LLL");
+        mpz_ui_pow_ui(X, 2, 41);
+        if (!fi_rbd_hg_detect(g, x0, N, Q, X, 5, 12)) RBD_FAIL("HG detector at 2^41");
+        int tt = 0, dd = 0;
+        double lx = 0;
+        if (!fi_rbd_hg_params(&tt, &dd, &lx, 197, 0.497, -1.0) || dd != 12 || lx < 43 || lx > 44)
+            RBD_FAIL("hg_params: t=%d d=%d lx=%g", tt, dd, lx);
+        mpz_clears(N, Q, X, x0, t, NULL);
+    }
+    mpz_clear(g);
+}
+
+static void test_rbd_language(void) {
+    char buf[8192];
+    /* Example 1 through every entry point. */
+    snprintf(buf, sizeof buf, "MemberQ[FactorInteger`BlakeRationalBaseDescent[%s, \"Base\" -> 22/7][[All, 1]], %s]", RBD_NMIN, RBD_Q255);
+    check(buf, "True");
+    snprintf(buf, sizeof buf, "MemberQ[FactorInteger`BlakeRationalBaseDescentClassic[%s, \"Base\" -> 22/7][[All, 1]], %s]", RBD_NMAX, RBD_Q255);
+    check(buf, "True");
+    snprintf(buf, sizeof buf, "MemberQ[FactorInteger[%s, Method -> {\"BlakeRationalBaseDescent\", \"Variant\" -> \"Classic\", \"Base\" -> 7/22}][[All, 1]], %s]", RBD_NMAX, RBD_Q255);
+    check(buf, "True");
+    /* The unknown-base search finds the planted 22/7 instance; both orders. */
+    snprintf(buf, sizeof buf, "FactorInteger`BlakeRationalBaseDescent[%s]", RBD_NCOMB);
+    check(buf, "{{623347347967, 1}, {1190741187132579502456731851112421085210615890827643793135496647841845583593, 1}}");
+    snprintf(buf, sizeof buf, "Length[FactorInteger`BlakeRationalBaseDescent[%s, \"Order\" -> \"Sum\"]]", RBD_NCOMB);
+    check(buf, "2");
+    /* Open Question 2's multiplier; the composite cofactor is split by the
+     * cofactor fallback. */
+    snprintf(buf, sizeof buf, "FactorInteger`BlakeRationalBaseDescent[%s, \"Base\" -> 3, \"Multiplier\" -> 1443663791]", RBD_NMULT);
+    check(buf, "{{24473, 1}, {195311, 1}, {32592575621351777380295131014550050576823494298654980010178247189670100796213387298934358053, 1}}");
+    /* Truncation divisibility: the algebraic factors of 2^1041 + 1. */
+    check("Select[Quiet[FactorInteger`BlakeRationalBaseDescentAllHits[2^1041 + 1, \"Base\" -> 2]][[All, 1]], # < 10^120 &] == {3, 2083, (2^347 + 1)/3}",
+          "True");
+    /* Lattice-augmented descent: the planted 2^28 miss defeats the window
+     * (nofac) and not the lattice; auto parameters, explicit ones, the
+     * fixed-base Coppersmith case, and TwoPass. */
+    snprintf(buf, sizeof buf, "Length[Quiet[FactorInteger`BlakeRationalBaseDescent[%s, \"Base\" -> 22/7]]]", RBD_NLAT);
+    check(buf, "1");
+    const char* lat[] = {
+        "FactorInteger`BlakeRationalBaseDescentLattice[%s, \"Base\" -> 22/7]",
+        "FactorInteger`BlakeRationalBaseDescentLattice[%s, \"Base\" -> 22/7, \"Tolerance\" -> 2^30, \"Multiplicity\" -> 6, \"Dimension\" -> 12]",
+        "FactorInteger`BlakeRationalBaseDescentLattice[%s, \"Base\" -> 22/7, \"Tolerance\" -> 2^36]",
+        "FactorInteger`BlakeRationalBaseDescentCoppersmith[%s, \"Base\" -> 22/7, \"Coefficient\" -> 3, \"Exponent\" -> 59]",
+        "FactorInteger`BlakeRationalBaseDescentTwoPass[%s, \"Base\" -> {3/2, 22/7}]",
+    };
+    for (size_t i = 0; i < sizeof lat / sizeof lat[0]; i++) {
+        char call[4096];
+        snprintf(call, sizeof call, lat[i], RBD_NLAT);
+        snprintf(buf, sizeof buf, "First /@ %s", call);
+        check(buf, "{296454907933147663952202071141, 659591518271709676788151702157}");
+    }
+    /* Small inputs, primes, powers. */
+    check("FactorInteger`BlakeRationalBaseDescent[15]", "{{3, 1}, {5, 1}}");
+    check("FactorInteger`BlakeRationalBaseDescent[2^89 - 1]", "{{618970019642690137449562111, 1}}");
+    check("FactorInteger`BlakeRationalBaseDescent[3^10 * 7^4]", "{{3, 10}, {7, 4}}");
+    check("FactorInteger`BlakeRationalBaseDescent[1001, \"Base\" -> 44/14]", "{{7, 1}, {11, 1}, {13, 1}}");
+    /* Malformed suboptions and the Coppersmith requirements: messages. */
+    check("Check[FactorInteger`BlakeRationalBaseDescent[1001, \"Base\" -> 1], failed]", "failed");
+    check("Check[FactorInteger`BlakeRationalBaseDescent[1001, \"Variant\" -> \"Nope\"], failed]", "failed");
+    check("Check[FactorInteger`BlakeRationalBaseDescent[1001, \"Beta\" -> 2], failed]", "failed");
+    check("Check[FactorInteger`BlakeRationalBaseDescentCoppersmith[1001, \"Base\" -> 2], failed]", "failed");
+    check("Quiet[FactorInteger`BlakeRationalBaseDescentCoppersmith[1001, \"Base\" -> 2]]",
+          "FactorInteger`BlakeRationalBaseDescentCoppersmith[1001, \"Base\" -> 2]");
+    check("Attributes[FactorInteger`BlakeRationalBaseDescentLattice]", "{Listable, Protected}");
+    /* The parent docstring explains the method (it is new), and every
+     * variant head has its own. */
+    const char* doc = symtab_get_docstring("FactorInteger`BlakeRationalBaseDescent");
+    if (!doc || !strstr(doc, "truncation divisibility") || !strstr(doc, "Howgrave-Graham") ||
+        !strstr(doc, "\"MaxCoefficient\"") || strlen(doc) < 3000)
+        RBD_FAIL("parent docstring");
+    static const char* vh[] = { "Exact", "Classic", "AllHits", "Lattice", "TwoPass", "Coppersmith" };
+    for (size_t i = 0; i < 6; i++) {
+        char nm[96];
+        snprintf(nm, sizeof nm, "FactorInteger`BlakeRationalBaseDescent%s", vh[i]);
+        if (!symtab_get_docstring(nm)) RBD_FAIL("no docstring for %s", nm);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -309,6 +581,8 @@ int main(void) {
     test_u64();
     test_gf2(300);      /* dense */
     test_gf2(5000);     /* block Lanczos */
+    test_rbd_core();
+    test_rbd_language();
     if (failures) {
         printf("%d FactorInteger test(s) FAILED\n", failures);
         return 1;

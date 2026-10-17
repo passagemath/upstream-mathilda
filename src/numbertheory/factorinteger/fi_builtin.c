@@ -32,12 +32,95 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The parent docstring of Blake's rational base descent: deliberately long,
+ * since the method is new (S. Blake, "Rational Base Descent: A Deterministic
+ * Algorithm for Factoring Structured Semiprimes" and "Lattice-Augmented
+ * Rational Base Descent"; both in factorisation_temp/). */
+static const char RBD_DOC[] =
+    "FactorInteger`BlakeRationalBaseDescent[n] factors n by Blake's rational base\n"
+    "\tdescent (RBD), a special-purpose method for integers with a factor that is\n"
+    "\tclose to a power of a rational number.\n"
+    "FactorInteger`BlakeRationalBaseDescent[n, \"Sub\" -> v, ...] sets suboptions; the\n"
+    "\tsame method is FactorInteger[n, Method -> {\"BlakeRationalBaseDescent\", ...}].\n"
+    "\n"
+    "Idea.  Suppose n = P M where the larger factor is P ~ c (a/b)^k for a base\n"
+    "\ta/b > 1 (coprime a > b >= 1), a coefficient c and an exponent k.  Starting\n"
+    "\tfrom Q = n, the descent repeats Q <- floor(b Q / a); each step divides by the\n"
+    "\tbase and peels off one power.  After k steps Q has divided P down to about c,\n"
+    "\tso Q lies within a small constant of the integer c M, and gcd(Q - j, n) for\n"
+    "\ta small offset j exposes M (or M gcd(c, P)).  A single descent tests every\n"
+    "\texponent k and every coefficient c at once, at a cost polynomial in log n.\n"
+    "\n"
+    "When it works.  The theorem: if (a/b)^k > M and P differs from floor(c (a/b)^k)\n"
+    "\tby less than (a/b)^k / M, a factor is found at step k.  The structure must\n"
+    "\tlie on the LARGER factor; the cofactor M is unconstrained apart from its\n"
+    "\tsize.  The base must be known or found by search.  The success region in\n"
+    "\tbase space is a comb of isolated teeth of relative width ~1/(k M) (with\n"
+    "\tharmonic teeth at a/d for divisors d of a): nothing signals a nearby base,\n"
+    "\tso bases are enumerated, not optimised.  For an integer base the descent\n"
+    "\ttruncates base-a digits, and truncations inherit the algebraic divisors of\n"
+    "\tCunningham numbers and repunits (truncation divisibility).  The method is no\n"
+    "\tthreat to balanced RSA moduli: against an unstructured n the expected search\n"
+    "\tis ~sqrt(n) bases (~n^(1/4) with the lattice detector).\n"
+    "\n"
+    "Variants (\"Variant\" -> name; each is also the head\n"
+    "\tFactorInteger`BlakeRationalBaseDescent<name>):\n"
+    "\t\"Exact\"      default.  The descent runs on S n with S = 2^s >= 2a/(a-b), so\n"
+    "\t             the target is always one of four consecutive values, for any\n"
+    "\t             base.  Nothing is tested above sqrt(cmax n), since no c M can\n"
+    "\t             lie there; that depth is reached with one division.  Gcds are\n"
+    "\t             batched: one per block of steps, replayed only on a hit.\n"
+    "\t\"Classic\"    the published reference algorithm: Q <- floor(b Q/a), testing\n"
+    "\t             gcd(Q - j, n) for |j| <= ceil(2 + a/(a-b)) at every depth.\n"
+    "\t\"AllHits\"    runs the reference descent to the end, records every distinct\n"
+    "\t             non-trivial gcd, and refines them into pairwise-coprime\n"
+    "\t             divisors of n.  This is the mode for Cunningham numbers and\n"
+    "\t             repunits with an integer base.\n"
+    "\t\"Lattice\"    replaces the gcd window by Howgrave-Graham's approximate-divisor\n"
+    "\t             detector (LLL on a d-dimensional lattice).  It finds c M from Q\n"
+    "\t             within X <= n^(beta^2) when M >= n^beta, so P may be much\n"
+    "\t             further from c (a/b)^k.  It runs only at depths X <= Q <=\n"
+    "\t             sqrt(cmax n) + X, one LLL reduction per depth.\n"
+    "\t\"TwoPass\"    Exact over the bases, then Lattice over a coarse grid of\n"
+    "\t             \"BaseRange\": spacing X/(2 c k n^beta), each grid point realised\n"
+    "\t             by the simplest rational near it.  Without a range it uses the\n"
+    "\t             Stern-Brocot bases (height 16 unless \"Height\" is given).\n"
+    "\t\"Coppersmith\" a known base, coefficient and exponent: one detector call at\n"
+    "\t             floor(c (a/b)^k), which is factoring with high bits known.\n"
+    "\n"
+    "Suboptions:\n"
+    "\t\"Base\" -> a/b or {a1/b1, ...}: the bases to use.  A base is reduced, and\n"
+    "\t\tinverted if below 1.  Default: enumerate.\n"
+    "\t\"Order\" -> \"SternBrocot\" (default: breadth-first over the Stern-Brocot\n"
+    "\t\ttree, every rational once, coarse to fine) or \"Sum\" (a + b ascending).\n"
+    "\t\tBoth skip perfect-power bases (x/y)^m, which are redundant with x/y.\n"
+    "\t\"Height\" -> H: largest numerator enumerated (default 1000).\n"
+    "\t\"Bases\" -> B: enumeration budget (default 200000).\n"
+    "\t\"MaxCoefficient\" -> cmax: largest coefficient c searched for (default\n"
+    "\t\t2^64).  It sets the deferred-testing ceiling; Infinity tests every depth.\n"
+    "\t\"Multiplier\" -> m: descend from m n, with gcds still taken with n.  This\n"
+    "\t\thelps when m P, rather than P, is close to a power of the base.\n"
+    "\t\"Tolerance\" -> X, \"Beta\" -> beta (default 1/2), \"Dimension\" -> d (default\n"
+    "\t\t12) and \"Multiplicity\" -> t set the lattice detector.  When omitted, X is\n"
+    "\t\tthe largest tolerance the LLL bound guarantees for d.\n"
+    "\t\"BaseRange\" -> {lo, hi}: the TwoPass lattice grid.\n"
+    "\t\"Coefficient\" -> c, \"Exponent\" -> k: required by \"Coppersmith\".\n"
+    "\n"
+    "Behaviour.  The suboptions describe the input.  A composite cofactor that the\n"
+    "\tconfigured search cannot split is retried with a light default search\n"
+    "\t(Exact, Stern-Brocot height 64), except under AllHits, whose pieces are\n"
+    "\tre-run with AllHits instead.  Anything still composite is returned with\n"
+    "\tFactorInteger::nofac.  Many-base searches, and a single base's lattice depths,\n"
+    "\trun on all available threads.  The result does not depend on the thread\n"
+    "\tcount: the lowest-indexed success wins.  Lattice reduction uses FLINT's LLL\n"
+    "\twhen available and a native exact LLL otherwise.";
+
 /* ------------------------------------------------------------------ */
 /* Method table                                                        */
 /* ------------------------------------------------------------------ */
 
 enum { SUB_BOUND = 1, SUB_ITER = 2, SUB_STARTS = 4, SUB_B1 = 8, SUB_B2 = 16,
-       SUB_CURVES = 32, SUB_SIGMA = 64, SUB_BASE = 128 };
+       SUB_CURVES = 32, SUB_SIGMA = 64, SUB_BASE = 128, SUB_RBD = 256 };
 
 typedef struct {
     const char* name;       /* canonical Method string = FactorInteger`name */
@@ -104,11 +187,7 @@ static const MethodInfo METHODS[] = {
       "\tBy default it climbs GMP-ECM's optimal levels (B1 = 2000, 11000, 5e4,\n"
       "\t2.5e5, 1e6, ...) with the expected curve count at each.\n"
       "\tSuboptions: \"B1\", \"B2\", \"Curves\", \"Sigma\" (first curve parameter)." },
-    { "BlakeRationalBaseDescent", FI_RBD, SUB_BASE,
-      "FactorInteger`BlakeRationalBaseDescent[n] factors n by rational base\n"
-      "\tdescent: assuming a factor near c (a/b)^k it descends Q <- floor(b Q/a)\n"
-      "\tand probes gcd(Q +- j, n).  Suboption: \"Base\" -> a/b (default: a\n"
-      "\tbounded search over coprime a > b)." },
+    { "BlakeRationalBaseDescent", FI_RBD, SUB_BASE | SUB_RBD, RBD_DOC },
 };
 #define NMETHODS (sizeof METHODS / sizeof METHODS[0])
 
@@ -127,16 +206,66 @@ static const struct { const char* sym; FiMethod m; } SYM_ALIASES[] = {
     { "SQUFOF", FI_SQUFOF }, { "QS", FI_QS }, { "SIQS", FI_QS },
 };
 
+/* BlakeRationalBaseDescent variants: "Variant" -> name, and the alias heads
+ * FactorInteger`BlakeRationalBaseDescent<name>. */
+static const struct { const char* name; FiRbdVariant v; const char* doc; } RBD_VARIANTS[] = {
+    { "Exact", FI_RBD_EXACT,
+      "FactorInteger`BlakeRationalBaseDescentExact[n] is rational base descent by\n"
+      "\tthe scaled exact descent: the descent runs on S n so that the target lies\n"
+      "\tin a base-independent window of four values; nothing is tested above\n"
+      "\tsqrt(\"MaxCoefficient\" n), which is reached by one division, and the gcds\n"
+      "\tare batched.  Suboptions as for FactorInteger`BlakeRationalBaseDescent." },
+    { "Classic", FI_RBD_CLASSIC,
+      "FactorInteger`BlakeRationalBaseDescentClassic[n] is the reference rational\n"
+      "\tbase descent: Q <- floor(b Q/a) from n, testing gcd(Q - j, n) for\n"
+      "\t|j| <= ceil(2 + a/(a-b)) at every depth.  Suboptions as for\n"
+      "\tFactorInteger`BlakeRationalBaseDescent." },
+    { "AllHits", FI_RBD_ALLHITS,
+      "FactorInteger`BlakeRationalBaseDescentAllHits[n] runs the reference descent\n"
+      "\tto the end, records every non-trivial gcd, and refines them into pairwise\n"
+      "\tcoprime divisors of n; this recovers the algebraic factors of Cunningham\n"
+      "\tnumbers and repunits with an integer \"Base\" (truncation divisibility)." },
+    { "Lattice", FI_RBD_LATTICE,
+      "FactorInteger`BlakeRationalBaseDescentLattice[n] is lattice-augmented rational\n"
+      "\tbase descent: Howgrave-Graham's approximate-divisor detector replaces the\n"
+      "\tgcd window at each depth with Q in [X, sqrt(\"MaxCoefficient\" n) + X],\n"
+      "\twidening the tolerance from O(a/(a-b)) to \"Tolerance\" X <= n^(beta^2).\n"
+      "\tSuboptions \"Tolerance\", \"Beta\" (divisor >= n^beta, default 1/2),\n"
+      "\t\"Multiplicity\", \"Dimension\" (default 12), plus the base options." },
+    { "TwoPass", FI_RBD_TWOPASS,
+      "FactorInteger`BlakeRationalBaseDescentTwoPass[n] runs the exact descent over\n"
+      "\tthe bases, then the lattice descent over a coarse grid of \"BaseRange\" ->\n"
+      "\t{lo, hi} (spacing X/(2 c k n^beta), each point realised by its simplest\n"
+      "\trational), or over the same bases when no range is given." },
+    { "Coppersmith", FI_RBD_COPPERSMITH,
+      "FactorInteger`BlakeRationalBaseDescentCoppersmith[n, \"Base\" -> a/b,\n"
+      "\t\"Coefficient\" -> c, \"Exponent\" -> k] finds a factor of n within the\n"
+      "\tlattice tolerance of floor(c (a/b)^k) with one Howgrave-Graham detector\n"
+      "\tcall (factoring with high bits known)." },
+};
+#define NRBD_VARIANTS (sizeof RBD_VARIANTS / sizeof RBD_VARIANTS[0])
+static const char RBD_PREFIX[] = "BlakeRationalBaseDescent";
+
 static const MethodInfo* method_info(FiMethod m) {
     for (size_t i = 0; i < NMETHODS; i++) if (METHODS[i].m == m) return &METHODS[i];
     return NULL;
 }
 
-static int lookup_method(const char* s, FiMethod* out) {
+/* Method name -> method; *variant is set (>= 0) for the RBD variant
+ * aliases "BlakeRationalBaseDescent<Variant>", else left alone. */
+static int lookup_method(const char* s, FiMethod* out, int* variant) {
     for (size_t i = 0; i < NMETHODS; i++)
         if (strcmp(METHODS[i].name, s) == 0) { *out = METHODS[i].m; return 1; }
     for (size_t i = 0; i < sizeof ALIASES / sizeof ALIASES[0]; i++)
         if (strcmp(ALIASES[i].alias, s) == 0) { *out = ALIASES[i].m; return 1; }
+    size_t np = sizeof RBD_PREFIX - 1;
+    if (strncmp(s, RBD_PREFIX, np) == 0)
+        for (size_t i = 0; i < NRBD_VARIANTS; i++)
+            if (strcmp(s + np, RBD_VARIANTS[i].name) == 0) {
+                *out = FI_RBD;
+                if (variant) *variant = (int)RBD_VARIANTS[i].v;
+                return 1;
+            }
     return 0;
 }
 
@@ -205,6 +334,102 @@ static int sub_number(const Expr* v, double* out) {
     return 0;
 }
 
+/* A positive exact integer into z. */
+static int pos_integer(const Expr* v, mpz_t z) {
+    if (!expr_is_integer_like(v)) return 0;
+    expr_to_mpz((Expr*)v, z);
+    return mpz_sgn(z) > 0;
+}
+
+/* A positive real number given exactly or approximately. */
+static int pos_real(const Expr* v, double* out) {
+    if (is_head(v, SYM_Rational, 2) && expr_is_integer_like(v->data.function.args[0]) &&
+        expr_is_integer_like(v->data.function.args[1])) {
+        mpq_t q;
+        mpq_init(q);
+        expr_to_mpz(v->data.function.args[0], mpq_numref(q));
+        expr_to_mpz(v->data.function.args[1], mpq_denref(q));
+        mpq_canonicalize(q);
+        *out = mpq_get_d(q);
+        mpq_clear(q);
+        return *out > 0;
+    }
+    return sub_number(v, out);
+}
+
+/* A positive rational (exact, or a machine real converted exactly). */
+static int pos_rational(const Expr* v, mpq_t q) {
+    if (v->type == EXPR_REAL) { if (!(v->data.real > 0)) return 0; mpq_set_d(q, v->data.real); return 1; }
+    mpz_t p, d;
+    if (!get_rational(v, p, d)) return 0;
+    mpz_set(mpq_numref(q), p);
+    mpz_set(mpq_denref(q), d);
+    mpq_canonicalize(q);
+    mpz_clears(p, d, NULL);
+    return mpq_sgn(q) > 0;
+}
+
+/* The BlakeRationalBaseDescent suboptions other than "Base".  Returns 1
+ * when applied, 0 when k is one of them but the value is malformed, -1 when
+ * k is not an RBD suboption. */
+static int apply_rbd_sub(FiRbdOpts* o, const char* k, const Expr* val) {
+    double x = 0;
+    if (strcmp(k, "Variant") == 0) {
+        if (val->type != EXPR_STRING) return 0;
+        for (size_t i = 0; i < NRBD_VARIANTS; i++)
+            if (strcmp(val->data.string, RBD_VARIANTS[i].name) == 0) { o->variant = (int)RBD_VARIANTS[i].v; return 1; }
+        return 0;
+    }
+    if (strcmp(k, "Order") == 0) {
+        if (val->type != EXPR_STRING) return 0;
+        if (strcmp(val->data.string, "SternBrocot") == 0) { o->order = 0; return 1; }
+        if (strcmp(val->data.string, "Sum") == 0) { o->order = 1; return 1; }
+        return 0;
+    }
+    if (strcmp(k, "MaxCoefficient") == 0) {
+        if ((val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Infinity) ||
+            (is_head(val, SYM_DirectedInfinity, 1) && val->data.function.args[0]->type == EXPR_INTEGER &&
+             val->data.function.args[0]->data.integer == 1)) {
+            o->cmax_set = o->cmax_inf = 1;
+            return 1;
+        }
+        if (!pos_integer(val, o->cmax)) return 0;
+        o->cmax_set = 1;
+        o->cmax_inf = 0;
+        return 1;
+    }
+    if (strcmp(k, "Multiplier") == 0) return (o->mult_set = pos_integer(val, o->mult));
+    if (strcmp(k, "Tolerance") == 0) return (o->tol_set = pos_integer(val, o->tol));
+    if (strcmp(k, "Coefficient") == 0) return (o->coef_set = pos_integer(val, o->coef));
+    if (strcmp(k, "Beta") == 0) {
+        if (!pos_real(val, &x) || x > 1) return 0;
+        o->beta = x;
+        return 1;
+    }
+    if (strcmp(k, "BaseRange") == 0) {
+        if (!is_head(val, SYM_List, 2)) return 0;
+        if (!pos_rational(val->data.function.args[0], o->lo) ||
+            !pos_rational(val->data.function.args[1], o->hi)) return 0;
+        if (mpq_cmp_ui(o->lo, 1, 1) <= 0 || mpq_cmp(o->lo, o->hi) >= 0) return 0;
+        o->range_set = 1;
+        return 1;
+    }
+    int which = strcmp(k, "Height") == 0 ? 1 : strcmp(k, "Bases") == 0 ? 2 :
+                strcmp(k, "Multiplicity") == 0 ? 3 : strcmp(k, "Dimension") == 0 ? 4 :
+                strcmp(k, "Exponent") == 0 ? 5 : 0;
+    if (!which) return -1;
+    if (val->type != EXPR_INTEGER || val->data.integer < 1) return 0;
+    int64_t v = val->data.integer;
+    switch (which) {
+    case 1: o->height = (uint64_t)v; break;
+    case 2: o->max_bases = (uint64_t)v; break;
+    case 3: if (v > 47) return 0; o->t = (int)v; break;
+    case 4: if (v < 2 || v > 48) return 0; o->d = (int)v; break;
+    default: o->expo = (uint64_t)v; break;
+    }
+    return 1;
+}
+
 /* Apply one method suboption ("Name" -> value).  Returns 0 (after a message)
  * on an unknown or malformed suboption. */
 static int apply_sub(FiCtx* c, const Expr* key, const Expr* val) {
@@ -216,13 +441,29 @@ static int apply_sub(FiCtx* c, const Expr* key, const Expr* val) {
     double x = 0;
     if (!k) goto bad;
     if (strcmp(k, "Base") == 0 && (allowed & SUB_BASE)) {
-        mpz_t p, q;
-        if (!get_rational(val, p, q)) goto bad;
-        mpz_set(c->rbd_a, p);
-        mpz_set(c->rbd_b, q);
-        c->rbd_have_base = 1;
-        mpz_clears(p, q, NULL);
+        /* a/b, or a list of them; each must be a positive rational != 1. */
+        const Expr* const* items = &val;
+        size_t ni = 1;
+        if (is_head(val, SYM_List, val->type == EXPR_FUNCTION ? val->data.function.arg_count : 0)) {
+            items = (const Expr* const*)val->data.function.args;
+            ni = val->data.function.arg_count;
+            if (ni == 0) goto bad;
+        }
+        fi_rbd_opts_reset_bases(&c->rbd);
+        for (size_t i = 0; i < ni; i++) {
+            mpz_t p, q;
+            if (!get_rational(items[i], p, q)) goto bad;
+            int ok = mpz_sgn(p) > 0 && mpz_cmp(p, q) != 0;
+            if (ok) fi_rbd_opts_add_base(&c->rbd, p, q);
+            mpz_clears(p, q, NULL);
+            if (!ok) goto bad;
+        }
         return 1;
+    }
+    if (allowed & SUB_RBD) {
+        int r = apply_rbd_sub(&c->rbd, k, val);
+        if (r == 1) return 1;
+        if (r == 0) goto bad;
     }
     if (!sub_number(val, &x)) goto bad;
     if      (strcmp(k, "Bound") == 0 && (allowed & SUB_BOUND))       c->bound = (uint64_t)x;
@@ -248,7 +489,11 @@ static int apply_method(FiCtx* c, const Expr* spec) {
         return 1;
     }
     if (spec->type == EXPR_STRING) {
-        if (lookup_method(spec->data.string, &c->method)) return 1;
+        int variant = -1;
+        if (lookup_method(spec->data.string, &c->method, &variant)) {
+            if (variant >= 0) c->rbd.variant = variant;
+            return 1;
+        }
         mth_message("FactorInteger", "method",
             "Method -> \"%s\" is not a known factoring method; see ?FactorInteger.",
             spec->data.string);
@@ -570,6 +815,13 @@ static Expr* factorinteger_core(Expr* res, FiCtx* c, int named) {
     CallOpts o = { 0, 0, 0 };
     if (!parse_args(res, 1, c, &o, named)) return NULL;
     c->k_limit = o.have_k ? o.k : 0;
+    if (c->method == FI_RBD && c->rbd.variant == FI_RBD_COPPERSMITH &&
+        (c->rbd.nbases != 1 || !c->rbd.coef_set || c->rbd.expo == 0)) {
+        mth_message("FactorInteger", "rbdcop",
+            "The Coppersmith variant of BlakeRationalBaseDescent needs one \"Base\", "
+            "a \"Coefficient\" and an \"Exponent\".");
+        return NULL;
+    }
 
     mpz_t p, q;
     if (get_rational(n, p, q)) {
@@ -645,9 +897,11 @@ static Expr* builtin_factorinteger_method(Expr* res) {
     const char* full = res->data.function.head->data.symbol.name;
     const char* tick = strrchr(full, '`');
     FiMethod m;
-    if (!tick || !lookup_method(tick + 1, &m)) return NULL;
+    int variant = -1;
+    if (!tick || !lookup_method(tick + 1, &m, &variant)) return NULL;
     FiCtx c;
     fi_ctx_init(&c, m);
+    if (variant >= 0) c.rbd.variant = variant;
     /* Fast path: FactorInteger`Method[n] on a machine integer, for the
      * methods with a word splitter. */
     if (res->data.function.arg_count == 1 && res->data.function.args[0]->type == EXPR_INTEGER &&
@@ -721,7 +975,7 @@ static const char FACTORINTEGER_DOC[] =
     "\t\"PollardPMinus1\"           p-1; alias \"PollardP-1\"       (\"B1\", \"B2\")\n"
     "\t\"WilliamsPPlus1\"           p+1; alias \"WilliamsP+1\"      (\"B1\", \"B2\")\n"
     "\t\"ECM\"                      elliptic curves (GMP-ECM)     (\"B1\", \"B2\", \"Curves\", \"Sigma\")\n"
-    "\t\"BlakeRationalBaseDescent\" rational base descent         (\"Base\")\n"
+    "\t\"BlakeRationalBaseDescent\" rational base descent         (\"Base\", \"Variant\", ...)\n"
     "A composite no factor of which is found within a method's bounds is returned\n"
     "\twith exponent 1 and FactorInteger::nofac.";
 
@@ -743,5 +997,9 @@ void fi_init(void) {
     for (size_t i = 0; i < sizeof SYM_ALIASES / sizeof SYM_ALIASES[0]; i++) {
         snprintf(buf, sizeof buf, "FactorInteger`%s", SYM_ALIASES[i].sym);
         reg(buf, method_info(SYM_ALIASES[i].m)->doc);
+    }
+    for (size_t i = 0; i < NRBD_VARIANTS; i++) {
+        snprintf(buf, sizeof buf, "FactorInteger`%s%s", RBD_PREFIX, RBD_VARIANTS[i].name);
+        reg(buf, RBD_VARIANTS[i].doc);
     }
 }

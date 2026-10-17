@@ -37,6 +37,9 @@
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#ifdef USE_FLINT
+#include <flint/flint.h>
+#endif
 #endif
 
 int fi_nthreads(void) {
@@ -60,6 +63,9 @@ typedef struct { void (*fn)(void*); void* arg; } FiJob;
 static void* fi_job_run(void* p) {
     FiJob* j = (FiJob*)p;
     j->fn(j->arg);
+#ifdef USE_FLINT
+    flint_cleanup();                   /* free this thread's FLINT caches */
+#endif
     return NULL;
 }
 #endif
@@ -129,4 +135,25 @@ void fi_claim_destroy(FiClaim* q) {
     }
 #endif
     q->lock = NULL;
+}
+
+void fi_claim_cap(FiClaim* q, size_t end) {
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_lock((pthread_mutex_t*)q->lock);
+#endif
+    if (end < q->end) q->end = end;
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+#endif
+}
+
+size_t fi_claim_end(FiClaim* q) {
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_lock((pthread_mutex_t*)q->lock);
+#endif
+    size_t e = q->end;
+#ifdef MATHILDA_THREADS
+    if (q->lock) pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+#endif
+    return e;
 }

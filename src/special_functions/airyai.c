@@ -752,7 +752,11 @@ Expr* builtin_airyai(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return airyai_emit_argx(argc);
     { Expr* m = airy_machine(SF_AIRY_AI, res); if (m) return m; }
-    return airyai_one_arg(res->data.function.args[0]);
+    /* Ai and Ai' decay like e^(-2/3 x^(3/2)): AiryAi[120.] ~ 2e-382 is below the
+     * double range, and the 53-bit evaluation flushes it to 0. -- promote and
+     * re-evaluate with an extended exponent (as BesselK[0, 800.] does). */
+    return numeric_promote_result_if_degenerate(
+        airyai_one_arg(res->data.function.args[0]), res);
 }
 
 /* Mathematica-compatible argx diagnostic for AiryAiPrime. */
@@ -770,7 +774,11 @@ Expr* builtin_airyaiprime(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return airyaiprime_emit_argx(argc);
     { Expr* m = airy_machine(SF_AIRY_AIP, res); if (m) return m; }
-    return airyaiprime_one_arg(res->data.function.args[0]);
+    /* Ai and Ai' decay like e^(-2/3 x^(3/2)): AiryAi[120.] ~ 2e-382 is below the
+     * double range, and the 53-bit evaluation flushes it to 0. -- promote and
+     * re-evaluate with an extended exponent (as BesselK[0, 800.] does). */
+    return numeric_promote_result_if_degenerate(
+        airyaiprime_one_arg(res->data.function.args[0]), res);
 }
 
 /* ------------------------------------------------------------------ */

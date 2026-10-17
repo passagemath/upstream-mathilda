@@ -516,7 +516,8 @@ static bool k_mu_pair(double mu, cx z, double r, cx* km, cx* km1) {
  * f_{k-1} = f_{k+1} + (2 (nu+k)/z) f_k from f_N = 1, f_{N+1} = 0 generates the
  * minimal solution I_{nu+k}(z) up to a constant (J. C. P. Miller, British
  * Association Mathematical Tables X, 1952; Amos's CMLRI). Two normalisations,
- * both from the Gegenbauer / Neumann expansions (DLMF 10.44.?, 10.23.15):
+ * the Gegenbauer and Neumann expansions at theta = 0 (Watson, "A Treatise on
+ * the Theory of Bessel Functions", 5.2 and 11.5; DLMF 10.23(iii), 10.44(iii)):
  *   e^z (z/2)^nu/Gamma(nu+1) = sum_k (nu+k)/nu (2 nu)_k/k! I_{nu+k}(z)
  *   (z/2)^nu/Gamma(nu+1)     = sum_k (-1)^k (nu+2k)/nu (nu)_k/k! I_{nu+2k}(z)
  * (nu = 0: 1 and 2 for the first, 1 and +-2 for the second). The first is

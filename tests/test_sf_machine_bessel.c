@@ -222,6 +222,7 @@ void test_declines(void) {
     assert_eval_startswith("BesselK[0, 800.]", "1.62503083544");
     assert_eval_startswith("AiryBi[120.]", "6.7340932779644");
     assert_eval_startswith("BesselI[0, 800.]", "3.84608161541921");
+    assert_eval_startswith("AiryAi[120.]", "2.15749809103");    /* was flushed to 0. */
     assert_eval_eq("BesselK[0, 0]", "Infinity", 0);
 }
 

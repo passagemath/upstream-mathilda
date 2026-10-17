@@ -30,22 +30,23 @@
  *   - |z| large (|z| >= 21, nu^2 < |z|): the Hankel asymptotic expansions
  *     (DLMF 10.40.2, 10.40.5), summed until the term falls below 2^-56 of
  *     the sum -- at |z| >= 21 the smallest term is ~e^{-2|z|} < 1e-18;
- *   - |z| <= 2: Temme's series for K_mu and K_{mu+1} (N. M. Temme, "On the
+ *   - K_mu, K_{mu+1} for |z| <= 2: Temme's series (N. M. Temme, "On the
  *     numerical evaluation of the modified Bessel function of the third
  *     kind", J. Comput. Phys. 19 (1975) 324-337), with 1/Gamma(1 +- mu)
  *     from its Taylor series (DLMF 5.7.1);
- *   - |z| > 2: Steed's algorithm for Temme's continued fraction CF2 for
- *     K_mu, K_{mu+1} (I. J. Thompson and A. R. Barnett, "Modified Bessel
- *     functions I_nu(z) and K_nu(z) of real order and complex argument, to
- *     selected accuracy", Comput. Phys. Commun. 47 (1987) 245-257);
+ *   - K_mu, K_{mu+1} for 2 < |z| < 21: for mu = 0 and mu = -+1/3 (the integer
+ *     and the Airy orders) Taylor continuation of the modified Bessel equation
+ *     from tabulated nodes (ktab_eval); for any other mu, Steed's algorithm
+ *     for Temme's continued fraction CF2 (I. J. Thompson and A. R. Barnett,
+ *     "Modified Bessel functions I_nu(z) and K_nu(z) of real order and complex
+ *     argument, to selected accuracy", Comput. Phys. Commun. 47 (1987)
+ *     245-257), which is accurate but needs 30-160 iterations there;
  *   - K_nu, K_{nu+1} by UPWARD recurrence from K_mu, K_{mu+1} (the stable
  *     direction for K);
  *   - I_nu: the ascending series where |z|^2/4 <= nu + 1 (terms decrease from
- *     the first, so the sum cannot cancel badly), otherwise the ratio
- *     I_{nu+1}/I_nu by the continued fraction CF1 (modified Lentz) and the
- *     Wronskian I_nu K_{nu+1} + I_{nu+1} K_nu = 1/z (DLMF 10.28.2). CF1 is
- *     Miller's backward recurrence written as a continued fraction, and the
- *     Wronskian is Amos's normalisation by K.
+ *     the first, so the sum cannot cancel badly), otherwise Miller's backward
+ *     recurrence normalised by a Gegenbauer / Neumann sum (i_miller; Amos's
+ *     CMLRI). It needs no K, so I and J cost ~|z| complex multiplies.
  * Orders are capped (|nu| <= 1000): beyond that the uniform (Debye)
  * expansions would be the right tool and are not implemented, so the kernel
  * declines and the MPFR path answers.
@@ -79,6 +80,7 @@
 #include "sf_machine_bessel.h"
 #include "sf_machine_airy_tab.h"
 #include "sf_machine_bessel_tab.h"
+#include "sf_machine_bessel_ktab.h"
 
 #include <float.h>
 #include <stddef.h>
@@ -92,7 +94,7 @@
 #define BS_EPS     1.0e-17          /* series / CF stopping tolerance */
 #define BS_MAXNU   1000.0           /* order cap (no Debye expansion) */
 #define BS_HANKEL_R 21.0            /* |z| from which Hankel reaches 2^-56 */
-#define BS_TEMME_R  2.0             /* Temme series below, CF2 above */
+#define BS_TEMME_R  1.25            /* Temme series below, tables / CF2 above */
 
 /* ======================================================================== */
 /* Complex arithmetic on (re, im) pairs                                     */
@@ -121,7 +123,14 @@ static inline cx cdiv(cx a, cx b) {
         return cxm((a.re * r + a.im) / d, (a.im * r - a.re) / d);
     }
 }
-static inline cx cinv(cx b) { return cdiv(cxm(1.0, 0.0), b); }
+static inline cx cinv(cx b) {
+    /* one division; the operands here are far from overflow (|b| < 1e150) */
+    if (fmax(fabs(b.re), fabs(b.im)) < 1e150) {
+        double d = 1.0 / (b.re * b.re + b.im * b.im);
+        return cxm(b.re * d, -b.im * d);
+    }
+    return cdiv(cxm(1.0, 0.0), b);
+}
 static inline double cnorm1(cx a) { return fabs(a.re) + fabs(a.im); }
 static inline bool cfinite(cx a) { return isfinite(a.re) && isfinite(a.im); }
 static inline cx cexpz(cx a) {
@@ -166,11 +175,35 @@ static void sincospi(double x, double* s, double* c) {
 }
 static inline cx cispi(double x) { double s, c; sincospi(x, &s, &c); return cxm(c, s); }
 
-/* Horner with fma (one rounding per step). */
+/* Horner. Deliberately a plain multiply-add, not fma(): without -mfma (the
+ * portable build) fma() is a libm call, which would cost more than the whole
+ * polynomial; the tables are generated so that this evaluation stays within
+ * ~1 ulp (tools/sf_accuracy/gen_*_tables.py --check models it). */
 static inline double horner(const double* c, int deg, double t) {
     double s = c[deg];
-    for (int k = deg - 1; k >= 0; k--) s = fma(s, t, c[k]);
+    for (int k = deg - 1; k >= 0; k--) s = s * t + c[k];
     return s;
+}
+
+/* Error-free transforms (Knuth's TwoSum; TwoProd by fma). */
+static inline void two_sum(double a, double b, double* s, double* e) {
+    double x = a + b, bb = x - a;
+    *e = (a - (x - bb)) + (b - bb);
+    *s = x;
+}
+static inline void two_prod(double a, double b, double* p, double* e) {
+    double x = a * b;
+    *e = fma(a, b, -x);
+    *p = x;
+}
+
+/* a*b - c*d as hi + lo. */
+static void dd_diff_prod(double a, double b, double c, double d, double* hi, double* lo) {
+    double p, pe, q, qe, s, se;
+    two_prod(a, b, &p, &pe);
+    two_prod(c, d, &q, &qe);
+    two_sum(p, -q, &s, &se);
+    *hi = s; *lo = se + (pe - qe);
 }
 
 /* A machine answer: finite, and not lost to gradual underflow. */
@@ -308,43 +341,31 @@ static bool steed_k(double mu, cx z, cx* kmu, cx* kmu1) {
     return cfinite(*kmu) && cfinite(*kmu1);
 }
 
-/* I_{nu+1}(z) / I_nu(z), nu > -1, by CF1 = 1/(b1 + 1/(b2 + ...)),
- * b_k = 2 (nu + k)/z, evaluated with the modified Lentz method. */
-static bool cf1_ratio(double nu, cx z, cx* out) {
-    const double tiny = 1e-300;
-    cx zi2 = cscal(cinv(z), 2.0);
-    cx f = cxm(tiny, 0.0), C = f, D = cxm(0.0, 0.0);
-    int k;
-    for (k = 1; k <= 100000; k++) {
-        cx b = cscal(zi2, nu + (double)k);
-        D = cadd(b, D);
-        if (cnorm1(D) == 0.0) D = cxm(tiny, 0.0);
-        D = cinv(D);
-        C = cadd(b, cinv(C));
-        if (cnorm1(C) == 0.0) C = cxm(tiny, 0.0);
-        cx del = cmul(C, D);
-        f = cmul(f, del);
-        if (fabs(del.re - 1.0) + fabs(del.im) < BS_EPS) break;
-    }
-    if (k > 100000) return false;
-    *out = f;
-    return cfinite(f);
-}
-
-/* (z/2)^nu / Gamma(nu + 1), nu > -1. */
+/* (z/2)^nu / Gamma(nu + 1), nu > -1. The power is split as x2^n x2^mu
+ * (n = floor(nu), 0 <= mu < 1): exp(nu log x2) would turn the rounding of
+ * log x2 into a relative error |nu log x2| times larger. */
 static cx i_lead(double nu, cx x2) {
     if (nu == 0.0) return cxm(1.0, 0.0);
-    if (nu == floor(nu) && nu <= 64.0) {             /* exact-ish integer power */
-        cx p = cxm(1.0, 0.0), b = x2;
-        unsigned n = (unsigned)nu;
+    double n = floor(nu), mu = nu - n;
+    cx p = cxm(1.0, 0.0);
+    if (n >= 1.0 && n <= 1e6) {                       /* binary powering */
+        cx b = x2;
+        unsigned long m = (unsigned long)n;
+        while (m) { if (m & 1ul) p = cmul(p, b); m >>= 1; if (m) b = cmul(b, b); }
+    } else if (n != 0.0) {
+        mu = nu;                                       /* nu in (-1, 0): one exp */
+    }
+    if (mu != 0.0) p = cmul(p, cexpz(cscal(clogz(x2), mu)));
+    if (nu == n && nu <= 22.0) {                      /* n! exactly */
         double g = 1.0;
-        for (unsigned k = 2; k <= n; k++) g *= (double)k;
-        while (n) { if (n & 1u) p = cmul(p, b); b = cmul(b, b); n >>= 1; }
+        for (int k = 2; k <= (int)nu; k++) g *= (double)k;
         return cscal(p, 1.0 / g);
     }
-    cx l = cscal(clogz(x2), nu);
+    double g = tgamma(nu + 1.0);
+    if (isfinite(g)) return cscal(p, 1.0 / g);
+    cx l = cscal(clogz(x2), nu);                       /* very large orders */
     l.re -= lgamma(nu + 1.0);
-    return cexpz(l);                                 /* Gamma(nu+1) > 0 for nu > -1 */
+    return cexpz(l);
 }
 
 /* Ascending series I_nu(z) = sum (z/2)^{2k+nu} / (k! Gamma(nu+k+1)). */
@@ -404,46 +425,226 @@ static bool hankel_ik(double nu, cx z, bool want_i, cx* I, cx* K) {
     return cfinite(*K);
 }
 
+/* ---- K_0/K_1 and K_{1/3}/K_{2/3} for 2 <= |z| < 21: tabulated Taylor nodes ----
+ *
+ * The band where neither Temme's series (cancellation) nor Hankel's expansion
+ * (not yet asymptotic) is accurate, and where Steed's CF2 needs 30-160
+ * iterations of complex division. For the two order pairs that matter -- the
+ * integer orders (mu = 0) and the Airy orders (mu = -1/3) -- the values
+ * K_mu(z0), K_{mu+1}(z0) are tabulated at the nodes z0 of a square grid
+ * (tools/sf_accuracy/gen_bessel_ktab.py, mpmath at 50 digits), and K_mu is
+ * continued from the nearest node by the Taylor series of the modified Bessel
+ * equation z^2 w'' + z w' - (z^2 + mu^2) w = 0 (DLMF 10.25.1). With
+ * z = z0 (1 + t), w = sum d_k t^k, the equation gives the recurrence
+ *
+ *   (k+2)(k+1) d_{k+2} = -(k+1)(2k+1) d_{k+1} - (k^2 - mu^2 - z0^2) d_k
+ *                        + 2 z0^2 d_{k-1} + z0^2 d_{k-2},
+ *
+ * d_0 = K_mu(z0), d_1 = z0 K'_mu(z0) = mu K_mu(z0) - z0 K_{mu+1}(z0).
+ * |t| <= (h/sqrt 2)/|z0| < 0.1 on both grids, so 18 terms reach 1e-18; no
+ * complex division in the loop. K_{mu+1} = (mu/z) K_mu - K'_mu (DLMF 10.29.2). */
+#define KTAB_TERMS 26
+
+static bool ktab_eval(const double* tab, double h, int n, double mu, cx z,
+                      cx* kmu, cx* kmu1) {
+    int i = (int)floor(z.re / h + 0.5), j = (int)floor(z.im / h + 0.5);
+    if (i < 0 || j < 0 || i >= n || j >= n) return false;
+    const double* p = tab + 4 * ((size_t)i * (size_t)n + (size_t)j);
+    if (p[0] == 0.0 && p[1] == 0.0) return false;          /* node not served */
+    cx z0 = cxm(h * (double)i, h * (double)j);
+    cx k0 = cxm(p[0], p[1]), k1 = cxm(p[2], p[3]);
+    cx t = cdiv(csub(z, z0), z0);
+    cx z02 = cmul(z0, z0);
+    /* terms: |t| <= 0.165 on the fine grid (|z0| >= 1.07), and the e^-z part
+     * decays like |z - z0|^k / k! -- a cheap bound on |t| picks the count */
+    double at = cnorm1(t);
+    int nt = at < 0.02 ? 12 : at < 0.05 ? 15 : at < 0.1 ? 19 : KTAB_TERMS;
+    cx d[KTAB_TERMS + 1], e[KTAB_TERMS + 1];      /* e_k = z0^2 d_k */
+    d[0] = k0;
+    d[1] = csub(cscal(k0, mu), cmul(z0, k1));
+    e[0] = cmul(z02, d[0]);
+    e[1] = cmul(z02, d[1]);
+    for (int k = 0; k + 2 <= nt; k++) {
+        double kk = (double)k;
+        cx acc = cscal(d[k + 1], -(kk + 1.0) * (2.0 * kk + 1.0));
+        acc = csub(acc, csub(cscal(d[k], kk * kk - mu * mu), e[k]));
+        if (k >= 1) acc = cadd(acc, cscal(e[k - 1], 2.0));
+        if (k >= 2) acc = cadd(acc, e[k - 2]);
+        d[k + 2] = cscal(acc, 1.0 / ((kk + 2.0) * (kk + 1.0)));
+        e[k + 2] = cmul(z02, d[k + 2]);
+    }
+    cx v = d[nt], dv = cscal(d[nt], (double)nt);
+    for (int k = nt - 1; k >= 1; k--) {
+        v = cadd(cmul(v, t), d[k]);
+        dv = cadd(cmul(dv, t), cscal(d[k], (double)k));
+    }
+    v = cadd(cmul(v, t), d[0]);
+    /* K'_mu(z) = dv / z0 ;  K_{mu+1}(z) = (mu/z) K_mu(z) - K'_mu(z) */
+    cx kp = cdiv(dv, z0);
+    *kmu = v;
+    *kmu1 = (mu == 0.0) ? cneg(kp) : csub(cscal(cdiv(v, z), mu), kp);
+    return cfinite(*kmu) && cfinite(*kmu1);
+}
+
+/* K_mu, K_{mu+1} for |mu| <= 1/2 and z in the closed first quadrant. */
+static bool k_mu_pair(double mu, cx z, double r, cx* km, cx* km1) {
+    if (r <= BS_TEMME_R) return temme_k(mu, z, km, km1);
+    if (r < BS_HANKEL_R) {
+        if (mu == 0.0) {
+            if (r < 10.0)
+                return ktab_eval(sf_ktab_fine_m0, SF_KTAB_FINE_H, SF_KTAB_FINE_N, 0.0, z, km, km1);
+            return ktab_eval(sf_ktab_coarse_m0, SF_KTAB_COARSE_H, SF_KTAB_COARSE_N, 0.0, z, km, km1);
+        }
+        if (fabs(fabs(mu) - 1.0 / 3.0) < 4e-16) {
+            /* the table holds K_{1/3} (= K_{-1/3}) and K_{2/3} */
+            cx a, b;
+            bool ok = (r < 10.0)
+                ? ktab_eval(sf_ktab_fine_m13, SF_KTAB_FINE_H, SF_KTAB_FINE_N, -1.0 / 3.0, z, &a, &b)
+                : ktab_eval(sf_ktab_coarse_m13, SF_KTAB_COARSE_H, SF_KTAB_COARSE_N, -1.0 / 3.0, z, &a, &b);
+            if (!ok) return false;
+            *km = a;
+            /* mu = -1/3: K_{mu+1} = K_{2/3};  mu = +1/3: K_{4/3} = K_{2/3} + (2/(3z)) K_{1/3} */
+            *km1 = (mu < 0.0) ? b : cadd(b, cscal(cdiv(a, z), 2.0 / 3.0));
+            return true;
+        }
+    }
+    return steed_k(mu, z, km, km1);
+}
+
+/* ---- I by Miller's backward recurrence ------------------------------------
+ *
+ * f_{k-1} = f_{k+1} + (2 (nu+k)/z) f_k from f_N = 1, f_{N+1} = 0 generates the
+ * minimal solution I_{nu+k}(z) up to a constant (J. C. P. Miller, British
+ * Association Mathematical Tables X, 1952; Amos's CMLRI). Two normalisations,
+ * both from the Gegenbauer / Neumann expansions (DLMF 10.44.?, 10.23.15):
+ *   e^z (z/2)^nu/Gamma(nu+1) = sum_k (nu+k)/nu (2 nu)_k/k! I_{nu+k}(z)
+ *   (z/2)^nu/Gamma(nu+1)     = sum_k (-1)^k (nu+2k)/nu (nu)_k/k! I_{nu+2k}(z)
+ * (nu = 0: 1 and 2 for the first, 1 and +-2 for the second). The first is
+ * well conditioned where Re z dominates, the second near the imaginary axis
+ * (J of a real argument); both sums are formed in the same pass with their
+ * absolute sums, and the one with the smaller condition number is used.
+ * N = nu + |z| + 20 + 4 |z|^(1/3) (measured against mpmath to reach < 2 ulp
+ * for |z| <= 21, nu <= 50). */
+#define MILLER_MAXN 1400
+static bool i_miller(double nu, cx z, double r, cx* Iv, cx* I1) {
+    /* The recurrence runs from the fractional part b = nu - floor(nu), and
+     * f_nu, f_{nu+1} are read off on the way down: the normalisation then only
+     * needs (z/2)^b / Gamma(1+b) with 0 <= b < 1 (no large-order amplification),
+     * and an integer order uses the order-0 weights, the constants 1, 2, 2, ...
+     * and 1, 0, -2, 0, 2, ... */
+    double base = (nu >= 0.0) ? nu - floor(nu) : nu;  /* the fractional part */
+    int off = (int)(nu - base);
+    int N = (int)(nu + r + 20.0 + 4.0 * cbrt(r));
+    if (N > MILLER_MAXN || off > N - 2) return false;
+    double w[MILLER_MAXN + 1], v[MILLER_MAXN + 1];
+    if (base != 0.0) {
+        double pk = 1.0, qm = 1.0;           /* (2b)_k/k!,  (b)_m/m! */
+        w[0] = 1.0; v[0] = 1.0;
+        for (int k = 1; k <= N; k++) {
+            pk *= (2.0 * base + (double)(k - 1)) / (double)k;
+            w[k] = (base + (double)k) / base * pk;
+            if (k & 1) v[k] = 0.0;
+            else {
+                int m = k / 2;
+                qm *= (base + (double)(m - 1)) / (double)m;
+                v[k] = ((m & 1) ? -1.0 : 1.0) * (base + (double)k) / base * qm;
+            }
+        }
+    }
+    /* 2/z in double-double: the recurrence coefficient 2(nu+k)/z multiplies
+     * every step, and a 1-ulp error in it is a 1-ulp perturbation of z, which
+     * J and I amplify by |z J'/J| ~ |z|. */
+    cx rh = cinv(z);
+    double ph, pl, qh, ql;
+    dd_diff_prod(z.re, rh.re, z.im, rh.im, &ph, &pl);       /* re(z rh) */
+    dd_diff_prod(z.re, rh.im, -z.im, rh.re, &qh, &ql);      /* im(z rh) */
+    cx rl = cmul(rh, cxm((1.0 - ph) - pl, -(qh + ql)));
+    rh = cscal(rh, 2.0); rl = cscal(rl, 2.0);
+
+    cx fp1 = cxm(0.0, 0.0), f = cxm(1.0, 0.0);
+    cx fo = cxm(0.0, 0.0), fo1 = fo;            /* f_off, f_{off+1} */
+    cx S = cxm(0.0, 0.0), T = S;
+    double SA = 0.0, TA = 0.0;
+    for (int k = N; ; k--) {
+        /* f is f_k: accumulate the two normalisation sums */
+        double wk, vk;
+        if (base == 0.0) {
+            wk = (k == 0) ? 1.0 : 2.0;
+            vk = (k == 0) ? 1.0 : (k & 1) ? 0.0 : ((k & 2) ? -2.0 : 2.0);
+        } else { wk = w[k]; vk = v[k]; }
+        cx a = cscal(f, wk), b = cscal(f, vk);
+        S = cadd(S, a); T = cadd(T, b);
+        SA += cnorm1(a); TA += cnorm1(b);
+        if (k == off + 1) fo1 = f;
+        if (k == off) fo = f;
+        if (k == 0) break;
+        /* f_{k-1} = f_{k+1} + (2 (b+k)/z) f_k */
+        double ck = base + (double)k;
+        cx fm1 = cadd(fp1, cscal(cadd(cmul(rh, f), cmul(rl, f)), ck));
+        fp1 = f; f = fm1;
+        if (cnorm1(f) > 1e250) {                 /* rescale: only ratios matter */
+            f = cscal(f, 1e-250); fp1 = cscal(fp1, 1e-250);
+            S = cscal(S, 1e-250); T = cscal(T, 1e-250);
+            SA *= 1e-250; TA *= 1e-250;
+            fo = cscal(fo, 1e-250); fo1 = cscal(fo1, 1e-250);
+        }
+    }
+    cx lead = i_lead(base, cscal(z, 0.5));
+    cx scale;
+    if (SA * cnorm1(T) <= TA * cnorm1(S)) {
+        cx e = cexpz(z);
+        if (!cfinite(e)) return false;
+        scale = cdiv(cmul(e, lead), S);
+    } else {
+        scale = cdiv(lead, T);
+    }
+    *Iv = cmul(fo, scale);
+    *I1 = cmul(fo1, scale);
+    return cfinite(*Iv) && cfinite(*I1);
+}
+
 #define NEED_I 1
 #define NEED_1 2      /* also the nu+1 values */
+#define NEED_K 4
 
-/* I_nu, K_nu (and with NEED_1 also I_{nu+1}, K_{nu+1}) for real nu >= -1/2
- * and z in the closed first quadrant, z != 0. */
+/* I_nu, K_nu (and with NEED_1 also I_{nu+1}, K_{nu+1}) for real nu > -1
+ * (nu >= -1/2 when K is wanted) and z in the closed first quadrant, z != 0. */
 static bool ik_q1(double nu, cx z, int need, cx* Iv, cx* Kv, cx* I1, cx* K1) {
     double r = hypot(z.re, z.im);
     if (!(r > 0.0) || !isfinite(r) || nu > BS_MAXNU) return false;
 
-    if (r >= BS_HANKEL_R && nu * nu < r) {
+    if (r >= BS_HANKEL_R && nu * nu < 4.0 * r) {    /* convergence is checked */
         cx a = cxm(0.0, 0.0), b = a, c = a, d = a;
         bool ok = hankel_ik(nu, z, need & NEED_I, &a, &b);
         if (ok && (need & NEED_1)) ok = hankel_ik(nu + 1.0, z, need & NEED_I, &c, &d);
         if (ok) { *Iv = a; *Kv = b; *I1 = c; *K1 = d; return true; }
     }
 
-    int n = (int)floor(nu + 0.5);
-    double mu = nu - (double)n;
-    cx km, km1;
-    if (!(r <= BS_TEMME_R ? temme_k(mu, z, &km, &km1) : steed_k(mu, z, &km, &km1)))
-        return false;
-    if (n > 0) {
-        cx zi2 = cscal(cinv(z), 2.0);
-        for (int k = 1; k <= n; k++) {
-            cx kn = cadd(km, cmul(cscal(zi2, mu + (double)k), km1));
-            km = km1; km1 = kn;
-            if (!cfinite(km1)) return false;
+    if (need & NEED_K) {
+        int n = (int)floor(nu + 0.5);
+        double mu = nu - (double)n;
+        cx km, km1;
+        if (!k_mu_pair(mu, z, r, &km, &km1)) return false;
+        if (n > 0) {
+            cx zi2 = cscal(cinv(z), 2.0);
+            for (int k = 1; k <= n; k++) {
+                cx kn = cadd(km, cmul(cscal(zi2, mu + (double)k), km1));
+                km = km1; km1 = kn;
+                if (!cfinite(km1)) return false;
+            }
         }
+        *Kv = km; *K1 = km1;
     }
-    *Kv = km; *K1 = km1;
 
     if (need & NEED_I) {
-        if (r * r <= 4.0 * (nu + 1.0)) {
+        /* The ascending series cancels by up to ~e^{|z| - Re z} (J of a real
+         * argument): keep it for small |z| near the positive real axis, where
+         * it is the cheapest and most accurate; Miller everywhere else. */
+        if (r * r <= 4.0 * (nu + 1.0) && (r < 0.5 || r - z.re < 0.75)) {
             if (!i_series(nu, z, Iv)) return false;
             if (need & NEED_1) { if (!i_series(nu + 1.0, z, I1)) return false; }
         } else {
-            cx f;
-            if (!cf1_ratio(nu, z, &f)) return false;
-            *Iv = cinv(cmul(z, cadd(km1, cmul(f, km))));
-            *I1 = cmul(f, *Iv);
+            if (!i_miller(nu, z, r, Iv, I1)) return false;
         }
         if (!cfinite(*Iv)) return false;
     }
@@ -460,13 +661,15 @@ static bool ik_rhp(double nu, cx z, int need, cx* Iv, cx* Kv, cx* I1, cx* K1) {
     return ik_q1(nu, z, need, Iv, Kv, I1, K1);
 }
 
-/* I_nu(z) and K_nu(z) for ANY real nu, Re z >= 0. */
+/* I_nu(z) (and K_nu(z) if want_k) for ANY real nu, Re z >= 0. A negative
+ * non-integer order needs K for the reflection I_{-a} = I_a + (2/pi) sin(a pi) K_a. */
 static bool ik_any_rhp(double nu, cx z, bool want_k, cx* I, cx* K) {
     double na = fabs(nu);
-    cx Iv, Kv, I1, K1;
-    if (!ik_rhp(na, z, NEED_I, &Iv, &Kv, &I1, &K1)) return false;
-    (void)want_k;
-    if (nu < 0.0 && nu != floor(nu)) {
+    bool refl = (nu < 0.0 && nu != floor(nu));
+    cx Iv = cxm(0.0, 0.0), Kv = Iv, I1 = Iv, K1 = Iv;
+    if (!ik_rhp(na, z, NEED_I | ((want_k || refl) ? NEED_K : 0), &Iv, &Kv, &I1, &K1))
+        return false;
+    if (refl) {
         double s, c; sincospi(na, &s, &c);
         Iv = cadd(Iv, cscal(Kv, 2.0 / M_PI * s));
     }
@@ -525,11 +728,11 @@ bool sf_bessel_k_c(double nu, double zr, double zi, double* rr, double* ri) {
     }
     cx Iv, Kv, I1, K1, z = cxm(zr, zi), K;
     if (zr >= 0.0) {
-        if (!ik_rhp(nu, z, 0, &Iv, &Kv, &I1, &K1)) return false;
+        if (!ik_rhp(nu, z, NEED_K, &Iv, &Kv, &I1, &K1)) return false;
         K = Kv;
     } else {
         cx w = cneg(z);
-        if (!ik_rhp(nu, w, NEED_I, &Iv, &Kv, &I1, &K1)) return false;
+        if (!ik_rhp(nu, w, NEED_I | NEED_K, &Iv, &Kv, &I1, &K1)) return false;
         double sg = (zi < 0.0) ? -1.0 : 1.0;
         /* K(w e^{s i pi}) = e^{-s i nu pi} K(w) - s i pi I(w) */
         K = csub(cmul(cispi(-sg * nu), Kv), cscal(cmuli(Iv), sg * M_PI));
@@ -538,6 +741,42 @@ bool sf_bessel_k_c(double nu, double zr, double zi, double* rr, double* ri) {
     if (!cx_ok(K)) return false;
     *rr = K.re; *ri = K.im;
     return true;
+}
+
+/* J_nu(z) and (if want_y) Y_nu(z) off the cut, through u = -i z (Re u >= 0
+ * once Im z >= 0; conjugate symmetry below the axis):
+ *   J_a = e^{i a pi/2} I_a(u),  Y_a = -(2/pi) e^{-i a pi/2} K_a(u) + i e^{i a pi/2} I_a(u)
+ * at a = |nu|, and a negative order by the reflections (DLMF 10.4.7-8)
+ *   J_{-a} = cos(a pi) J_a - sin(a pi) Y_a,  Y_{-a} = sin(a pi) J_a + cos(a pi) Y_a,
+ * which keep J and Y apart where the I/K form of a negative order would make
+ * two large terms cancel (near half-integer orders). */
+static bool jy_core(double nu, double zr, double zi, bool want_y, cx* Jo, cx* Yo) {
+    bool lower = zi < 0.0;
+    if (lower) zi = -zi;
+    cx u = cxm(zi, -zr);                         /* -i z, Re u >= 0 */
+    double a = fabs(nu);
+    bool isint = (nu == floor(nu));
+    bool need_y = want_y || (nu < 0.0 && !isint);
+    cx Iv = cxm(0.0, 0.0), Kv = Iv, I1 = Iv, K1 = Iv;
+    if (!ik_rhp(a, u, NEED_I | (need_y ? NEED_K : 0), &Iv, &Kv, &I1, &K1)) return false;
+    cx ph = cispi(0.5 * a);
+    cx J = cmul(ph, Iv);
+    cx Y = cxm(0.0, 0.0);
+    if (need_y)
+        Y = cadd(cscal(cmul(cconj(ph), Kv), -2.0 / M_PI), cmuli(J));
+    if (nu < 0.0) {
+        if (isint) {
+            if (fmod(a, 2.0) == 1.0) { J = cneg(J); Y = cneg(Y); }
+        } else {
+            double s, c; sincospi(a, &s, &c);
+            cx Jn = csub(cscal(J, c), cscal(Y, s));
+            cx Yn = cadd(cscal(J, s), cscal(Y, c));
+            J = Jn; Y = Yn;
+        }
+    }
+    if (lower) { J = cconj(J); Y = cconj(Y); }
+    *Jo = J; *Yo = Y;
+    return cfinite(J) && (!want_y || cfinite(Y));
 }
 
 bool sf_bessel_j_c(double nu, double zr, double zi, double* rr, double* ri) {
@@ -553,13 +792,8 @@ bool sf_bessel_j_c(double nu, double zr, double zi, double* rr, double* ri) {
         *rr = J.re; *ri = J.im;
         return true;
     }
-    bool lower = zi < 0.0;
-    if (lower) zi = -zi;
-    cx u = cxm(zi, -zr);                         /* -i z, Re u >= 0 */
-    cx I, K;
-    if (!ik_any_rhp(nu, u, false, &I, &K)) return false;
-    cx J = cmul(cispi(0.5 * nu), I);
-    if (lower) J = cconj(J);
+    cx J, Y;
+    if (!jy_core(nu, zr, zi, false, &J, &Y)) return false;
     if (zi == 0.0 && (zr > 0.0 || nu == floor(nu))) J.im = 0.0;
     if (!cx_ok(J)) return false;
     *rr = J.re; *ri = J.im;
@@ -580,15 +814,8 @@ bool sf_bessel_y_c(double nu, double zr, double zi, double* rr, double* ri) {
         *rr = Y.re; *ri = Y.im;
         return true;
     }
-    bool lower = zi < 0.0;
-    if (lower) zi = -zi;
-    cx u = cxm(zi, -zr);
-    cx I, K;
-    if (!ik_any_rhp(nu, u, true, &I, &K)) return false;
-    /* Y = -(2/pi) e^{-i nu pi/2} K(u) + i e^{i nu pi/2} I(u) */
-    cx Y = cadd(cscal(cmul(cispi(-0.5 * nu), K), -2.0 / M_PI),
-                cmuli(cmul(cispi(0.5 * nu), I)));
-    if (lower) Y = cconj(Y);
+    cx J, Y;
+    if (!jy_core(nu, zr, zi, true, &J, &Y)) return false;
     if (zi == 0.0 && zr > 0.0) Y.im = 0.0;
     if (!cx_ok(Y)) return false;
     *rr = Y.re; *ri = Y.im;
@@ -941,27 +1168,6 @@ static cx chorner(const double* c, int deg, cx w) {
     return s;
 }
 
-/* Error-free transforms (Knuth's TwoSum; TwoProd by fma). */
-static inline void two_sum(double a, double b, double* s, double* e) {
-    double x = a + b, bb = x - a;
-    *e = (a - (x - bb)) + (b - bb);
-    *s = x;
-}
-static inline void two_prod(double a, double b, double* p, double* e) {
-    double x = a * b;
-    *e = fma(a, b, -x);
-    *p = x;
-}
-
-/* a*b - c*d as hi + lo. */
-static void dd_diff_prod(double a, double b, double c, double d, double* hi, double* lo) {
-    double p, pe, q, qe, s, se;
-    two_prod(a, b, &p, &pe);
-    two_prod(c, d, &q, &qe);
-    two_sum(p, -q, &s, &se);
-    *hi = s; *lo = se + (pe - qe);
-}
-
 /* sqrt(z) = s + slo and zeta = (2/3) z^{3/2} = zh + zl, principal branches. */
 static void airy_zeta_dd_c(cx z, cx* s, cx* zh, cx* zl) {
     cx sq = csqrtz(z);
@@ -1012,30 +1218,48 @@ static bool airy_complex(cx z, bool need_b, cx* ai, cx* aip, cx* bi, cx* bip) {
     airy_zeta_dd_c(z, &sq, &zh, &zl);
     bool cont = zh.re < 0.0;
     cx w = cont ? cneg(zh) : zh;
-    int need = NEED_1 | ((need_b || cont) ? NEED_I : 0);
-    cx Iv = cxm(0, 0), Kv = Iv, I1 = Iv, K1 = Iv;     /* orders -1/3 and 2/3 */
+    int need = NEED_1 | NEED_K | ((need_b || cont) ? NEED_I : 0);
+    cx Iv = cxm(0, 0), Kv = Iv, I1 = Iv, K1 = Iv;     /* orders -1/3 and 2/3 of w */
     if (!ik_rhp(-1.0 / 3.0, w, need, &Iv, &Kv, &I1, &K1)) return false;
-    if (cont) {
-        double sg = (z.im < 0.0) ? -1.0 : 1.0;
-        cx ipi = cxm(0.0, sg * M_PI);
-        cx Iv2 = cmul(cispi(sg * (-1.0 / 3.0)), Iv);
-        cx I12 = cmul(cispi(sg * (2.0 / 3.0)), I1);
-        cx Kv2 = csub(cmul(cispi(-sg * (-1.0 / 3.0)), Kv), cmul(ipi, Iv));
-        cx K12 = csub(cmul(cispi(-sg * (2.0 / 3.0)), K1), cmul(ipi, I1));
-        Iv = Iv2; I1 = I12; Kv = Kv2; K1 = K12;
-    }
     const double INV_PI = 0.3183098861837907, INV_PI_SQRT3 = 0.18377629847393068;
     const double SQRT3_PI = 0.5513288954217921, INV_SQRT3 = 0.5773502691896257;
     cx sq3 = cscal(sq, INV_SQRT3);                     /* sqrt(z/3) */
-    cx A  = cscal(cmul(sq3, Kv), INV_PI);
-    cx Ap = cscal(cmul(z, K1), -INV_PI_SQRT3);
-    /* first-order correction for the low part of zeta */
-    cx Ac  = cadd(A,  cmul(cdiv(Ap, sq), zl));
-    cx Apc = cadd(Ap, cmul(cmul(sq, A), zl));
-    *ai = Ac; *aip = Apc;
+    cx A, Ap, B = cxm(0.0, 0.0), Bp = B;
+    if (!cont) {
+        /* DLMF 9.6.1-9.6.3 with zeta in the right half plane; I_{1/3} and
+         * I_{-2/3} by the reflection I_{-a} = I_a + (2/pi) sin(a pi) K_a. */
+        A  = cscal(cmul(sq3, Kv), INV_PI);
+        Ap = cscal(cmul(z, K1), -INV_PI_SQRT3);
+        if (need_b) {
+            B  = cmul(sq3, csub(cscal(Iv, 2.0), cscal(Kv, SQRT3_PI)));
+            Bp = cscal(cmul(z, cadd(cscal(I1, 2.0), cscal(K1, SQRT3_PI))), INV_SQRT3);
+        }
+    } else {
+        /* zeta = w e^{s i pi}, Re w >= 0. Substituting the continuation
+         * formulas (DLMF 10.34.1-2) into DLMF 9.6.1-9.6.3 and simplifying
+         * (2 e^{-s i pi/3} + s i sqrt3 = 1, 2 e^{2 s i pi/3} - s i sqrt3 = -1):
+         *   Ai  = (1/pi) sqrt(z/3) [e^{s i pi/3} K_{1/3}(w) - s i pi I_{-1/3}(w)]
+         *   Ai' = -(z/(pi sqrt3)) [e^{-2 s i pi/3} K_{2/3}(w) - s i pi I_{2/3}(w)]
+         *   Bi  = sqrt(z/3) [I_{-1/3}(w) - (sqrt3/pi) e^{s i pi/3} K_{1/3}(w)]
+         *   Bi' = (z/sqrt3) [-I_{2/3}(w) + (sqrt3/pi) e^{-2 s i pi/3} K_{2/3}(w)]
+         * so no two large terms cancel. */
+        double sg = (z.im < 0.0) ? -1.0 : 1.0;
+        cx e1 = cxm(0.5, sg * 0.8660254037844386);     /* e^{s i pi/3} */
+        cx e2 = cxm(-0.5, -sg * 0.8660254037844386);   /* e^{-2 s i pi/3} */
+        cx ipi = cxm(0.0, sg * M_PI);
+        cx kk = cmul(e1, Kv), kk1 = cmul(e2, K1);
+        A  = cscal(cmul(sq3, csub(kk, cmul(ipi, Iv))), INV_PI);
+        Ap = cscal(cmul(z, csub(kk1, cmul(ipi, I1))), -INV_PI_SQRT3);
+        if (need_b) {
+            B  = cmul(sq3, csub(Iv, cscal(kk, SQRT3_PI)));
+            Bp = cscal(cmul(z, csub(cscal(kk1, SQRT3_PI), I1)), INV_SQRT3);
+        }
+    }
+    /* first-order correction for the low part of zeta:
+     * d Ai/d zeta = Ai'/sqrt z,  d Ai'/d zeta = sqrt z Ai  (Ai'' = z Ai) */
+    *ai  = cadd(A,  cmul(cdiv(Ap, sq), zl));
+    *aip = cadd(Ap, cmul(cmul(sq, A), zl));
     if (need_b) {
-        cx B  = cmul(sq3, csub(cscal(Iv, 2.0), cscal(Kv, SQRT3_PI)));
-        cx Bp = cscal(cmul(z, cadd(cscal(I1, 2.0), cscal(K1, SQRT3_PI))), INV_SQRT3);
         *bi  = cadd(B,  cmul(cdiv(Bp, sq), zl));
         *bip = cadd(Bp, cmul(cmul(sq, B), zl));
     } else {
@@ -1069,18 +1293,9 @@ typedef bool (*bs_cplx_fn)(double, double, double, double*, double*);
 static const bs_real_fn BS_REAL[4] = { sf_bessel_j_r, sf_bessel_y_r, sf_bessel_i_r, sf_bessel_k_r };
 static const bs_cplx_fn BS_CPLX[4] = { sf_bessel_j_c, sf_bessel_y_c, sf_bessel_i_c, sf_bessel_k_c };
 
-/* STAGING: the generic (complex / non-integer-order) core has not yet passed
- * the accuracy gate, so the dispatch takes only integer orders on the real
- * line and real Airy arguments; everything else declines to MPFR. */
-#define BS_GENERIC_READY 0
-static bool bs_gate(double nu, double zi) {
-    return BS_GENERIC_READY || (zi == 0.0 && nu == floor(nu));
-}
-
 bool sf_bessel_nd(int kind, double nre, double nim, double zre, double zim,
                   double* rr, double* ri) {
     if (kind < 0 || kind > 3 || nim != 0.0) return false;
-    if (!bs_gate(nre, zim)) return false;
     if (zim == 0.0) {
         double v;
         if (!BS_REAL[kind](nre, zre, &v)) return false;
@@ -1093,7 +1308,6 @@ bool sf_bessel_nd(int kind, double nre, double nim, double zre, double zim,
 bool sf_bessel_scalar(int kind, double nu, double zr, double zi,
                       double* rr, double* ri, bool* is_real) {
     if (kind < 0 || kind > 3) return false;
-    if (!bs_gate(nu, zi)) return false;
     if (zi == 0.0) {
         double v;
         if (BS_REAL[kind](nu, zr, &v)) { *rr = v; *ri = 0.0; *is_real = true; return true; }
@@ -1109,7 +1323,6 @@ static const ai_cplx_fn AI_CPLX[4] = { sf_airy_ai_c, sf_airy_aip_c, sf_airy_bi_c
 
 bool sf_airy_nd(int which, double zre, double zim, double* rr, double* ri) {
     if (which < 0 || which > 3) return false;
-    if (!bs_gate(0.0, zim)) return false;
     if (zim == 0.0) {
         double v;
         if (!AI_REAL[which](zre, &v)) return false;

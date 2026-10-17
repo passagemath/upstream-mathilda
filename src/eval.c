@@ -1583,6 +1583,48 @@ static bool strip_nothing(Expr* e) {
  * See the contract in eval.h. NULL is permitted for callers that do not
  * care about the signal.
  */
+/* Does any argument of the call `res` hold a dense buffer (a packed List or a
+ * visible NDArray)? The packed-array gate in evaluate_step has work to do only
+ * then. */
+static inline bool eval_any_ndarray_arg(const Expr* res) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        if (res->data.function.args[i]->type == EXPR_NDARRAY) return true;
+    return false;
+}
+
+/* Is `v` a value that evaluate_step provably leaves unchanged, so that the
+ * fixed-point loop may stop on it without running a confirming step?
+ *   - Numeric and string atoms: evaluate_step returns expr_copy for them.
+ *     Symbols are excluded (an OwnValue may rewrite them), and so are NDArray
+ *     and compiled objects (rare, so not worth reasoning about the pack gate).
+ *   - Complex[re, im] with both parts machine Reals and im != 0: builtin_complex
+ *     returns NULL for it (only a zero imaginary part collapses). Its parts are
+ *     atoms, so no UpValue can attach. Complex is Protected, so no DownValue can
+ *     fire either. This is the shape every machine-complex special-function
+ *     result takes.
+ * Cheap: a type switch, and for Complex two more loads. */
+static inline bool eval_is_terminal_value(const Expr* v) {
+    switch (v->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        case EXPR_FUNCTION: {
+            const Expr* h = v->data.function.head;
+            if (h->type != EXPR_SYMBOL || h->data.symbol.name != SYM_Complex ||
+                v->data.function.arg_count != 2)
+                return false;
+            const Expr* re = v->data.function.args[0];
+            const Expr* im = v->data.function.args[1];
+            return re->type == EXPR_REAL && im->type == EXPR_REAL &&
+                   im->data.real != 0.0;
+        }
+        default:
+            return false;
+    }
+}
+
 Expr* evaluate_step(Expr* e, bool* changed) {
     /* Local sink so we can write through `*changed` unconditionally. */
     bool sink = false;
@@ -1935,7 +1977,15 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
             }
 
-            if (pack_any_created()) {
+            /* The whole gate below is a no-op unless some argument IS a buffer:
+             * pack_lift_listable_args needs an NDArray to lift toward, and the
+             * materialise loop only touches packed arguments. Once any array has
+             * been packed in the session (pack_any_created), every call to every
+             * Listable head would otherwise pay the scans: has_nd_kernel,
+             * has_list_arg, dv_binds_opaquely, and one is_packed_list call per
+             * argument. A scalar F[x] is the hot case that pays for nothing here,
+             * so one type scan decides it. */
+            if (pack_any_created() && eval_any_ndarray_arg(res)) {
                 bool pure_fn = head->type == EXPR_FUNCTION &&
                                head->data.function.head->type == EXPR_SYMBOL &&
                                head->data.function.head->data.symbol.name == SYM_Function;
@@ -2757,8 +2807,25 @@ Expr* evaluate(Expr* e) {
          * the slow case; the win is the cheap boolean fast-path on the
          * common case where nothing fires (atoms, bare symbols, fully
          * reduced functions). */
-        bool is_fixed_point = !step_changed || expr_eq(current, next);
-        if (is_fixed_point && gate_fired) {
+        bool is_fixed_point;
+        if (step_changed && !trace_here && eval_is_terminal_value(next)) {
+            /* The step rewrote `current` into a value that is a fixed point by
+             * construction -- a numeric/string atom, or a canonical machine
+             * Complex (see eval_is_terminal_value). The loop would otherwise run
+             * one more evaluate_step on it purely to discover "nothing changed",
+             * and pay an expr_eq to compare a FUNCTION against an atom. That
+             * confirming pass is the dominant per-call overhead of a numeric
+             * builtin -- F[x_machine] -> Real -- so take `next` as the fixed
+             * point directly. Same result, same stamp, one step fewer. Not
+             * taken while tracing: the rewrite branch below records the step. */
+            expr_free(current);
+            current = next;
+            next = NULL;
+            is_fixed_point = true;
+        } else {
+            is_fixed_point = !step_changed || expr_eq(current, next);
+        }
+        if (is_fixed_point && gate_fired && next) {
             /* The packed-list gate materialised a buffer somewhere in this step,
              * and expr_eq is DELIBERATELY blind to that -- a packed list and its
              * plain form are the same value, which is the whole point. So a step

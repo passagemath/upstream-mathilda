@@ -1733,6 +1733,18 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 if (!((kfn_cn)c->imm.p)(ar, ai, (size_t)na_, &orr, &oi)) RD.r = NAN;
                 else RD.r = orr;
             } NEXT();
+            /* Its complex twin: the argument run holds complex registers and
+             * the kernel's complex result is kept whole. */
+            OP(KERNN_C): {
+                double ar[8], ai[8], orr, oi;
+                unsigned na_ = c->flags;
+                if (na_ > 8) goto vm_fail;
+                for (unsigned k_ = 0; k_ < na_; k_++) {
+                    ar[k_] = creal(R[c->a + k_].z); ai[k_] = cimag(R[c->a + k_].z);
+                }
+                if (!((kfn_cn)c->imm.p)(ar, ai, (size_t)na_, &orr, &oi)) RD.z = NAN + NAN * I;
+                else RD.z = orr + oi * I;
+            } NEXT();
             OP(NOP): NEXT();
             OP(RET): return;
 #if !VM_THREADED

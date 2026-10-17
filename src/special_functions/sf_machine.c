@@ -7,6 +7,7 @@
  * by tests/test_sf_machine.c rather than asserted here.
  */
 #include "sf_machine.h"
+#include "sf_machine_zeta.h"  /* zeta-family kernels */
 
 #include <math.h>
 #include <complex.h>
@@ -431,48 +432,10 @@ bool sf_machine_harmonic(double x, double* out) {
     return isfinite(*out);
 }
 
-/* Riemann zeta on the reals.  Euler-Maclaurin above the critical strip, the
- * functional equation below it. */
+/* Riemann zeta on the reals: the zeta-family kernel (sf_machine_zeta.c) --
+ * tabulated integers, Euler-Maclaurin, the functional equation below 1/2. */
 bool sf_machine_zeta(double s, double* out) {
-    if (s == 1.0) return false;                       /* pole */
-    /* zeta(0) = -1/2.  The functional equation cannot reach it: sin(pi s/2) is
-     * zero there while zeta(1-s) has its pole, so the product is 0 * infinity.
-     * Treating that zero sine as a trivial zero returned 0 instead of -1/2 —
-     * which then propagated into PolyLog, whose expansion sums zeta(n-k) and so
-     * hits s = 0 for every integer order. */
-    if (s == 0.0) { *out = -0.5; return true; }
-    /* The trivial zeros are the NEGATIVE EVEN integers, and only those. */
-    if (s < 0.0 && s == floor(s) && fmod(s, 2.0) == 0.0) { *out = 0.0; return true; }
-    if (s < 0.5) {
-        /* zeta(s) = 2^s pi^(s-1) sin(pi s/2) Gamma(1-s) zeta(1-s) */
-        double sn = sin(M_PI * s / 2.0);
-        double zr;
-        if (!sf_machine_zeta(1.0 - s, &zr)) return false;
-        double v = pow(2.0, s) * pow(M_PI, s - 1.0) * sn * tgamma(1.0 - s) * zr;
-        *out = v;
-        return isfinite(v);
-    }
-    const int N = 16;
-    double sum = 0.0;
-    for (int n = 1; n < N; n++) sum += pow((double)n, -s);
-    double Ns = pow((double)N, -s);
-    sum += Ns * (double)N / (s - 1.0) + 0.5 * Ns;
-    /* + sum_k B_2k/(2k)! * (s)_{2k-1} * N^(-s-2k+1) */
-    static const double B2K_OVER_FACT[] = {          /* B_2k / (2k)! */
-        1.0 / 12.0, -1.0 / 720.0, 1.0 / 30240.0, -1.0 / 1209600.0,
-        1.0 / 47900160.0, -691.0 / 1307674368000.0, 1.0 / 74724249600.0,
-        -3617.0 / 10670622842880000.0
-    };
-    double rising = s, Npow = Ns / (double)N;         /* N^(-s-1) */
-    double N2 = 1.0 / ((double)N * (double)N);
-    for (int k = 1; k <= 8; k++) {
-        sum += B2K_OVER_FACT[k - 1] * rising * Npow;
-        /* advance the rising factorial by two and N^(-s-2k+1) by N^-2 */
-        rising *= (s + 2.0 * k - 1.0) * (s + 2.0 * k);
-        Npow *= N2;
-    }
-    *out = sum;
-    return isfinite(sum);
+    return sf_zeta_r(s, out);
 }
 
 /* Fibonacci and Lucas continued to real argument, which is what the
@@ -490,31 +453,10 @@ bool sf_machine_lucasl(double x, double* out) {
     return isfinite(v);
 }
 
-/* Hurwitz zeta on the reals, by the same Euler-Maclaurin expansion as the
- * Riemann zeta: sum the first N terms directly, then the tail analytically.
- * Restricted to s > 1 and a > 0, where the series is what it is defined by;
- * the analytic continuation below s = 1 is left to the MPFR path. */
+/* Hurwitz zeta on the reals, s >= 1/2 (s != 1), a > 0: the zeta-family kernel
+ * (sf_machine_zeta.c), Euler-Maclaurin with an s-dependent shift. */
 bool sf_machine_hurwitz_zeta(double s, double a, double* out) {
-    if (!(s > 1.0) || !(a > 0.0)) return false;
-    const int N = 16;
-    double sum = 0.0;
-    for (int k = 0; k < N; k++) sum += pow((double)k + a, -s);
-    double Na = (double)N + a;
-    double Ns = pow(Na, -s);
-    sum += Ns * Na / (s - 1.0) + 0.5 * Ns;
-    static const double B2K_OVER_FACT[] = {
-        1.0 / 12.0, -1.0 / 720.0, 1.0 / 30240.0, -1.0 / 1209600.0,
-        1.0 / 47900160.0, -691.0 / 1307674368000.0, 1.0 / 74724249600.0,
-        -3617.0 / 10670622842880000.0
-    };
-    double rising = s, Npow = Ns / Na, Na2 = 1.0 / (Na * Na);
-    for (int k = 1; k <= 8; k++) {
-        sum += B2K_OVER_FACT[k - 1] * rising * Npow;
-        rising *= (s + 2.0 * k - 1.0) * (s + 2.0 * k);
-        Npow *= Na2;
-    }
-    *out = sum;
-    return isfinite(sum);
+    return sf_hurwitz_r(s, a, out);
 }
 
 /* PolyGamma[n, x].  n = 0 is the digamma above; for n >= 1 the standard
@@ -1192,160 +1134,24 @@ bool sf_machine_bessel_k(double nu, double x, double* out) {
     return isfinite(v);
 }
 
-/* zeta at the integers the Jonquiere mu-series needs for INTEGER order s, as
- * constants. For integer s the summands zeta(s-k) are identical for every x, yet
- * the per-term sf_machine_zeta() (Euler-Maclaurin above 1/2, the functional
- * equation below it) recomputed them on every call -- the dominant cost of Li_s
- * on a buffer (the mu-series branch measured ~5x the defining-series branch).
- * Both tables are read-only `const`, hence thread-safe, and carry full double
- * precision (zeta at the non-positive integers is exact in rational Bernoulli
- * form; here rounded to the nearest double). */
-static const double POLYLOG_ZETA_POS[] = {   /* zeta(2), zeta(3), ..., zeta(24) */
-    1.64493406684822643648, 1.2020569031595942854, 1.08232323371113819152,
-    1.03692775514336992634, 1.01734306198444913971, 1.00834927738192282683,
-    1.00407735619794433938, 1.00200839282608221442, 1.00099457512781808534,
-    1.00049418860411946456, 1.00024608655330804829, 1.00012271334757848915,
-    1.00006124813505870483, 1.0000305882363070205,  1.00001528225940865187,
-    1.00000763719763789976, 1.00000381729326499984, 1.00000190821271655393,
-    1.0000009539620338728,  1.0000004769329867878,  1.00000023845050272773,
-    1.00000011921992596531, 1.00000005960818905127
-};
-static const double POLYLOG_ZETA_NONPOS[] = { /* zeta(0), zeta(-1), ..., zeta(-44) */
-    -0.5, -0.0833333333333333333331, 0.0, 0.00833333333333333333331, 0.0,
-    -0.00396825396825396825397, 0.0, 0.00416666666666666666665, 0.0,
-    -0.00757575757575757575757, 0.0, 0.021092796092796092796, 0.0,
-    -0.0833333333333333333331, 0.0, 0.443259803921568627452, 0.0,
-    -3.05395433027011974379, 0.0, 26.4562121212121212121, 0.0,
-    -281.460144927536231884, 0.0, 3607.51054639804639804, 0.0,
-    -54827.5833333333333335, 0.0, 974936.823850574712644, 0.0,
-    -20052695.7966880789461, 0.0, 472384867.72162990196, 0.0,
-    -12635724795.9166666666, 0.0, 380879311252.453688115, 0.0,
-    -12850850499305.0833334, 0.0, 482414483548501.703716, 0.0,
-    -20040310656516252.738, 0.0, 916774360319533077.57, 0.0
-};
-#define POLYLOG_ZETA_POS_N    ((int)(sizeof(POLYLOG_ZETA_POS)    / sizeof(double)))
-#define POLYLOG_ZETA_NONPOS_N ((int)(sizeof(POLYLOG_ZETA_NONPOS) / sizeof(double)))
-
-/* zeta(m) at integer m via the constant tables; falls back to the Euler-Maclaurin
- * kernel only outside the tabulated range (not reached before the mu-series
- * converges -- a safety net). m == 1 is a pole and is never requested here (the
- * k = s-1 term is handled separately by the caller). */
-static bool polylog_zeta_int(int m, double* out) {
-    if (m >= 2 && m - 2 < POLYLOG_ZETA_POS_N) { *out = POLYLOG_ZETA_POS[m - 2]; return true; }
-    if (m <= 0 && -m < POLYLOG_ZETA_NONPOS_N) { *out = POLYLOG_ZETA_NONPOS[-m]; return true; }
-    return sf_machine_zeta((double)m, out);
-}
-
-/* Li_s(x) on the reals, |x| <= 1.
- *
- * The defining series only converges usefully for |x| <~ 1/2, so closer to 1 the
- * Jonquiere expansion in mu = log x takes over; for negative x the duplication
- * identity folds the problem back onto positive arguments.  Beyond |x| = 1 the
- * function is complex and the kernel declines. */
-static bool polylog_mu(double s, double x, double* out) {
-    /* Li_s(x) = Gamma(1-s) (-mu)^(s-1) + sum_k zeta(s-k) mu^k / k!,  mu = log x */
-    double mu = log(x);
-    if (s == floor(s) && s >= 1.0) {
-        /* Integer s: the Gamma pole and the zeta pole cancel; the standard
-         * replacement for the k = s-1 term is mu^(n-1)/(n-1)! (H_{n-1} - log(-mu)). */
-        int n = (int)s;
-        double sum = 0.0, mk = 1.0;
-        int small = 0;
-        for (int k = 0; k < 200; k++) {
-            if (k != n - 1) {
-                double z;
-                if (!polylog_zeta_int(n - k, &z)) return false;   /* constant tables */
-                double add = z * mk / tgamma((double)k + 1.0);
-                sum += add;
-                /* TWO consecutive negligible terms, not one: zeta vanishes at
-                 * every negative even integer, so this series has a zero term
-                 * every other step and a single-term test stops it early. */
-                if (k > n && fabs(add) < fabs(sum) * EI_EPS) { if (++small >= 2) break; }
-                else small = 0;
-            }
-            mk *= mu;
-        }
-        double H = 0.0;
-        for (int j = 1; j <= n - 1; j++) H += 1.0 / j;
-        double lm = (mu < 0.0) ? log(-mu) : log(mu);
-        sum += pow(mu, (double)(n - 1)) / tgamma((double)n) * (H - lm);
-        *out = sum;
-        return isfinite(sum);
-    }
-    double sum = tgamma(1.0 - s) * pow(-mu, s - 1.0), mk = 1.0;
-    int small = 0;
-    for (int k = 0; k < 200; k++) {
-        double z;
-        if (!sf_machine_zeta(s - k, &z)) return false;
-        double add = z * mk / tgamma((double)k + 1.0);
-        sum += add;
-        if (k > 2 && fabs(add) < fabs(sum) * EI_EPS) { if (++small >= 2) break; }
-        else small = 0;
-        mk *= mu;
-    }
-    *out = sum;
-    return isfinite(sum);
-}
-
+/* Li_s(x) on the reals: the zeta-family kernel (sf_machine_zeta.c) -- the
+ * dilogarithm's Bernoulli series for s = 2 (every real x <= 1), closed forms
+ * for s = 0, 1, the power series for |x| <= 1/2 and the Jonquiere expansion in
+ * log x (complex for negative x) up to |x| = 1. Beyond |x| = 1 the value is
+ * complex (or, for x < -1, reached through the complex kernel) and this real
+ * entry declines. */
 bool sf_machine_polylog(double s, double x, double* out) {
-    if (fabs(x) > 1.0) return false;                  /* complex past the cut */
-    if (x == 0.0) { *out = 0.0; return true; }
-    if (x == 1.0) { if (!(s > 1.0)) return false; return sf_machine_zeta(s, out); }
-    if (x == -1.0) {
-        double z;
-        if (!sf_machine_zeta(s, &z)) return false;
-        *out = -(1.0 - pow(2.0, 1.0 - s)) * z;
-        return isfinite(*out);
-    }
-    if (fabs(x) <= 0.5) {                             /* the defining series */
-        /* k^s is a libm pow() per term; for the common integer order (dilog s=2,
-         * trilog s=3, ...) a short integer power is far cheaper and bit-exact. */
-        int si = (int)s;
-        int s_is_int = (s == floor(s) && s >= 0.0 && si <= 32);
-        double sum = 0.0, xk = x;
-        for (int k = 1; k < 2000; k++) {
-            double ks;
-            if (s_is_int) { ks = 1.0; for (int j = 0; j < si; j++) ks *= (double)k; }
-            else          { ks = pow((double)k, s); }
-            double add = xk / ks;
-            sum += add;
-            if (fabs(add) < fabs(sum) * EI_EPS) break;
-            xk *= x;
-        }
-        *out = sum;
-        return isfinite(sum);
-    }
-    if (x > 0.0) return polylog_mu(s, x, out);
-    /* Duplication: Li_s(-y) = 2^(1-s) Li_s(y^2) - Li_s(y). */
-    double y = -x, a, b;
-    if (!sf_machine_polylog(s, y * y, &a)) return false;
-    if (!sf_machine_polylog(s, y, &b)) return false;
-    double v = pow(2.0, 1.0 - s) * a - b;
-    *out = v;
-    return isfinite(v);
+    return sf_polylog_r(s, x, out);
 }
 
 /* ---- n-ary ------------------------------------------------------------- */
 
-/* LerchPhi[z, s, a] = sum_{k>=0} z^k / (k+a)^s.
- * The defining series converges for |z| < 1 and is used directly; at z = 1 the
- * function IS the Hurwitz zeta, which has a proper expansion above. */
+/* LerchPhi[z, s, a] = sum_{k>=0} z^k / (k+a)^s on the reals: the zeta-family
+ * kernel (sf_machine_zeta.c) -- the defining series for |z| < 1 with a
+ * double-double running power and a cancellation guard, the Hurwitz zeta at
+ * z = 1. */
 bool sf_machine_lerchphi(double z, double s, double a, double* out) {
-    if (a <= 0.0 && a == floor(a)) return false;      /* term k = -a is a pole */
-    if (z == 1.0) return sf_machine_hurwitz_zeta(s, a, out);
-    if (fabs(z) >= 1.0) return false;
-    double sum = 0.0, zk = 1.0;
-    for (int k = 0; k < 200000; k++) {
-        double d = a + k;
-        if (d == 0.0) return false;
-        double add = zk / pow(d, s);
-        sum += add;
-        if (fabs(add) < fabs(sum) * EI_EPS && k > 2) break;
-        zk *= z;
-        if (zk == 0.0) break;
-    }
-    *out = sum;
-    return isfinite(sum);
+    return sf_lerch_r(z, s, a, out);
 }
 
 /* 1F1(a; b; z).  For z very negative the direct series alternates and loses

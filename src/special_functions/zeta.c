@@ -50,6 +50,8 @@
 #include "symtab.h"
 #include "flint_num_bridge.h" /* flint_num_zeta (arb acb_dirichlet_zeta) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_zeta.h" /* sf_zeta_r/_c, sf_hurwitz_r/_c: the shared kernels */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -751,6 +753,27 @@ Expr* builtin_zeta(Expr* res) {
 
     if (argc == 1 && is_interval(args[0])) {
         Expr* r = interval_apply_function("Zeta", args[0]); if (r) return r;
+    }
+    /* Machine-precision call: the raw-double kernels shared with the NDArray /
+     * packed / Compile[] surfaces (sf_machine_zeta.c), so all surfaces agree
+     * bit-for-bit. Zeta[s, a] coincides with the principal-branch Hurwitz sum
+     * for Re a > 0, which is all the kernel accepts. A decline (pole, domain,
+     * overflow) falls through to the arbitrary-precision paths unchanged. */
+    {
+        SFMachineArgs ma;
+        if ((argc == 1 || argc == 2) && sf_machine_scalar_args(res, &ma)) {
+            double vr, vi = 0.0;
+            bool ok;
+            if (argc == 1)
+                ok = ma.any_complex ? sf_zeta_c(ma.re[0], ma.im[0], &vr, &vi)
+                                    : sf_zeta_r(ma.re[0], &vr);
+            else
+                ok = ma.any_complex
+                         ? sf_hurwitz_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi)
+                         : sf_hurwitz_r(ma.re[0], ma.re[1], &vr);
+            if (ok) return ma.any_complex ? sf_machine_complex_result(vr, vi)
+                                          : expr_new_real(vr);
+        }
     }
     if (argc == 1) return zeta_one_arg(args[0]);
     if (argc == 2) return zeta_two_arg(args[0], args[1]);

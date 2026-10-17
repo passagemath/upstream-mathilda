@@ -386,6 +386,7 @@ set(COMMON_SRC
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
+    ../src/special_functions/sf_machine_zeta.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -3594,6 +3595,10 @@ target_include_directories(polylog_tests PRIVATE ../src)
 
 add_executable(lerchphi_tests test_lerchphi.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(lerchphi_tests PRIVATE ../src)
+
+add_executable(zeta_machine_tests test_zeta_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(zeta_machine_tests PRIVATE ../src)
+add_test(NAME zeta_machine_tests COMMAND zeta_machine_tests)
 
 add_executable(productlog_tests test_productlog.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(productlog_tests PRIVATE ../src)

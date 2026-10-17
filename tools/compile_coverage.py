@@ -331,7 +331,10 @@ BASELINE = {
     # ABORT (EulerPhi of a negative has no answer), which the K_UN opcodes
     # cannot currently do — they write NaN.
     "MoebiusMu", "EulerPhi", "DivisorSigma", "PowerMod",
-    # Ternary/n-ary special function with a machine kernel and no lowering.
+    # LerchPhi[z, s, a]: a machine N-ary kernel that compiles via OP_KERNN
+    # (real) and OP_KERNN_C (complex z/s/a) -- verify with a 3-scalar-arg
+    # CompileDiagnostics -- but the SHAPES table tops out at two scalar args,
+    # so the tool cannot construct a probe: reported, not enforced.
     "LerchPhi",
     # WhittakerM[k, m, z]: has a machine N-ary kernel and genuinely compiles via
     # the generic OP_KERNN path (verify with a 3-scalar-arg CompileDiagnostics),

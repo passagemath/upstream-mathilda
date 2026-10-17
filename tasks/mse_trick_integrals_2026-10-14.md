@@ -6,7 +6,7 @@ baseline: 17/23 CORRECT, 6 UNEVALUATED, 0 WRONG (v0.402, commit 30964d9)
 now: corpus 15/15 CORRECT, 0 WRONG (all three missing general methods landed)
 corpus: tests/MseTrickIntegralsCorpus.m; gate mse_trick_corpus_tests (WRONG==0, CORRECT>=15)
 plan: ~/.claude/plans/we-should-look-at-enumerated-lark.md
-git: A+B committed+tagged v0.404 (e548b0ea); C (v0.405) commit pending
+git: PUSHED to origin/main — A+B v0.404 (e548b0ea), C v0.405 (3e78aa03); tags v0.404, v0.405 on remote
 ---
 
 ## Outcome

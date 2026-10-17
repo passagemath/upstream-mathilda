@@ -139,7 +139,10 @@ comes **first** in `Beta[z, a, b]`.
       with erfcx from 0.5-wide polynomial tables (6 ≤ x ≤ 27.4: x·erfcx as a
       polynomial in 1/x²), e^(−x²) from the exact (Dekker) square — ≤ 1.6 ulp,
       slightly faster than libm. E.g. `Erf[0.95] = 0.820891`, `Erf[1.5] = 0.966105`.
-    - Complex: |z| ≤ 0.8 the Maclaurin series (19 terms, Estrin);
+    - Complex: |z| ≤ 0.8 the Maclaurin series (19 terms, Estrin); next to an
+      axis (2|xy| < 1/2) the Taylor series about that axis (Hermite recurrence),
+      so the SMALL component keeps full relative accuracy
+      (`Erf[1.*^-300 + 2. I] = 6.16074*10^-299 + 18.5648 I`, not `1.1*10^-16 + …`);
       |Re z|, |Im z| < 4 `erf = 1 − e^(−z²) w(iz)` with the Faddeeva function w
       from a 0.5×0.5 grid of degree-20 Taylor expansions (generated at 60 digits)
       and e^(−z²) from an exact exponent and exactly reduced phase; elsewhere
@@ -553,7 +556,10 @@ inputs.
     `C ± iS = ((1±i)/2) erf((√π/2)(1∓i) z)` through the complex erf kernel, but
     with every exponentiated quantity (`X² = (π/4)(x+y)²`, `XY = (π/4)(y²−x²)`,
     `Y² − X² = ∓πxy`) formed from the exact x, y — rounding the rotated argument
-    first costs ~π|z|² ulps (25 at |z| = 2.8). ≤ 3.1 ulp away from the zeros.
+    first costs ~π|z|² ulps (25 at |z| = 2.8). Next to an axis (π|xy| < 1/2) the
+    Taylor series about the real axis (via C(iz) = iC(z), S(iz) = −iS(z) for the
+    imaginary one), so the small component is accurate relative to itself.
+    ≤ 3.5 ulp away from the zeros.
 - Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
   105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0. + 0.488253 I` (a
   machine-complex argument gives a machine-complex result, as in Mathematica).

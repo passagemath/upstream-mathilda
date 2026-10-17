@@ -5,7 +5,8 @@
  *     every regime boundary (Maclaurin / Faddeeva table / Salzer series for
  *     complex erf; Maclaurin / auxiliary tables / asymptotics for real
  *     Fresnel; the w-segments and the Halley tail of InverseErf(c); ...),
- *     each within 4 ulps;
+ *     each within 4 ulps (and, next to an axis, each COMPONENT within 4 ulps
+ *     of itself);
  *   - the declines (overflow, poles, subnormal InverseErfc) return false so
  *     the builtin falls through to its MPFR path, and that path still answers;
  *   - the five surfaces -- scalar == unpacked List == packed List == NDArray
@@ -196,6 +197,31 @@ void test_kernel_spot_values_real() {
     }
 }
 
+/* Near the axes the SMALL component must be right relative to itself, not
+ * only relative to |f| (references at 400 digits: at 40, mpmath's own
+ * Re erf(1e-300 + 2i) is wrong by 240 orders of magnitude). */
+static const CRef AXIS_REFS[] = {
+    { "sf_erf_c", 1e-300, 2.0, 6.1607415059355131e-299, 18.564802414575553 },
+    { "sf_erf_c", 1.5, 1e-10, 0.96610514647531076, 1.1893028922362937e-11 },
+    { "sf_erfc_c", 2.5, -1e-09, 0.00040695201744495892, 2.1782842303527099e-12 },
+    { "sf_erfi_c", 3e-07, 1.2, 8.0203304101057222e-08, 0.9103139782296642 },
+    { "sf_fresnel_c_c", 3.1, 1e-08, 0.56159390251135666, -8.1814971742502516e-09 },
+    { "sf_fresnel_s_c", -2e-09, 2.2, 1.937166322257263e-09, -0.45570461212465707 },
+    { "sf_erf_c", 0.05, 3.0, 449.97036886788084, 1562.0170564668124 },
+};
+
+void test_axis_components() {
+    for (size_t i = 0; i < sizeof AXIS_REFS / sizeof AXIS_REFS[0]; i++) {
+        const CRef* c = &AXIS_REFS[i];
+        double r, m;
+        ASSERT_MSG(ckernel(c->k)(c->x, c->y, &r, &m), "%s(%g, %g) declined", c->k, c->x, c->y);
+        ASSERT_MSG(fabs(r - c->re) <= 4.0 * ulp_of(c->re) && fabs(m - c->im) <= 4.0 * ulp_of(c->im),
+                   "%s(%g, %g): got %.17g + %.17g i, want %.17g + %.17g i (componentwise)",
+                   c->k, c->x, c->y, r, m, c->re, c->im);
+    }
+    assert_eval_startswith("Re[Erf[1.*^-300 + 2. I]]", "6.16074");
+}
+
 /* Exact special points the kernels must answer exactly. */
 void test_kernel_exact_points() {
     double v, r, m;
@@ -294,6 +320,7 @@ int main() {
 
     TEST(test_kernel_spot_values_complex);
     TEST(test_kernel_spot_values_real);
+    TEST(test_axis_components);
     TEST(test_kernel_exact_points);
     TEST(test_kernel_declines);
     TEST(test_five_surfaces);

@@ -24,7 +24,7 @@ import argparse, os, re, subprocess, sys, tempfile
 import numpy as np
 import mpmath as mp
 
-mp.mp.dps = 30
+mp.mp.dps = 50
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "sf_fit"))
 import fitlib  # erfinv_mp / erfcinv_mp (Newton-polished, fast)
@@ -69,12 +69,16 @@ def bands(rng):
     C = lambda a, b, c, d: (lambda: complex(float(rng.uniform(a, b)), float(rng.uniform(c, d))))
     L = lambda a, b: (lambda: float(10 ** rng.uniform(a, b)))
     out = []
+    NA = lambda a, b: (lambda: (lambda u, v: complex(u, v) if rng.uniform() < 0.5 else complex(v, u))(
+        float(rng.uniform(a, b)), float(10 ** rng.uniform(-12, -1)) * (1 if rng.uniform() < 0.5 else -1)))
     for h in ("Erf", "Erfc", "Erfi"):
         out += [(h, "MR", "bench [-3,3]", U(-3, 3)), (h, "MR", "wide [-6,6]", U(-6, 6)),
-                (h, "C", "bench [-2,2]^2", C(-2, 2, -2, 2)), (h, "C", "wide [-5,5]^2", C(-5, 5, -5, 5))]
+                (h, "C", "bench [-2,2]^2", C(-2, 2, -2, 2)), (h, "C", "wide [-5,5]^2", C(-5, 5, -5, 5)),
+                (h, "C", "near axes", NA(0.8, 4))]
     for h in ("FresnelC", "FresnelS"):
         out += [(h, "MR", "bench [-3,3]", U(-3, 3)), (h, "MR", "wide [-50,50]", U(-50, 50)),
-                (h, "C", "bench [-2,2]^2", C(-2, 2, -2, 2)), (h, "C", "wide [-4,4]^2", C(-4, 4, -4, 4))]
+                (h, "C", "bench [-2,2]^2", C(-2, 2, -2, 2)), (h, "C", "wide [-4,4]^2", C(-4, 4, -4, 4)),
+                (h, "C", "near axes", NA(1.3, 6))]
     out += [("Sinc", "MR", "bench [0.2,10]", U(0.2, 10)), ("Sinc", "MR", "wide [-1e3,1e3]", U(-1e3, 1e3)),
             ("Sinc", "C", "bench [0.5,5]x[-3,3]", C(0.5, 5, -3, 3)), ("Sinc", "C", "wide [-20,20]^2", C(-20, 20, -20, 20))]
     out += [("InverseErf", "MR", "bench [-0.95,0.95]", U(-0.95, 0.95)),
@@ -111,7 +115,7 @@ def main():
             fn = f.name
         out = subprocess.run([a.bin, "-file", fn], capture_output=True, text=True).stdout.strip().split("\n")
         os.unlink(fn)
-        rel, sc, far, bad = [], [], [], 0
+        rel, sc, far, comp, bad = [], [], [], [], 0
         worst = (0.0, None)
         for p, line in zip(pts, out):
             line = line.strip().replace("*^", "e")
@@ -130,13 +134,20 @@ def main():
             rel.append(r_); sc.append(s_)
             if abs(f_) >= loc / 4:          # not near a zero of f
                 far.append(r_)
+            if isinstance(p, complex):
+                # each component against its own ulp (median only: a
+                # component crossing zero is legitimately inexact relative
+                # to itself, so its max is not a figure of merit)
+                comp.append(max(float(abs(mp.re(got) - mp.re(f_)) / ulp(mp.re(f_))),
+                                float(abs(mp.im(got) - mp.im(f_)) / ulp(mp.im(f_)))))
             if s_ > worst[0]:
                 worst = (s_, p)
         rel = np.array(rel); sc = np.array(sc); far = np.array(far) if far else np.zeros(1)
+        cm = "comp med %.2f p90 %.2f" % (np.median(comp), np.percentile(comp, 90)) if comp else ""
         rows.append((head, reg, lab, len(rel), bad, np.median(rel), far.max(), rel.max(),
-                     np.median(sc), np.percentile(sc, 99), sc.max(), worst[1]))
+                     np.median(sc), np.percentile(sc, 99), sc.max(), cm, worst[1]))
         print("%-12s %-3s %-22s n=%-5d bad=%-2d | rel med %.2f max(away from zeros) %.2f max %.2f"
-              " | scaled med %.2f p99 %.2f max %.2f  (worst scaled at %r)" % rows[-1], flush=True)
+              " | scaled med %.2f p99 %.2f max %.2f | %s (worst scaled at %r)" % rows[-1], flush=True)
 
 
 if __name__ == "__main__":

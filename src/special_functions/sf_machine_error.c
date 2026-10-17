@@ -703,13 +703,92 @@ static void w_pieces_exact(double X, double Y, double* mag, double* c2, double* 
     sincos_rad(2.0 * p, 2.0 * pl, s2, c2);
 }
 
+/* Near the axes, inside the table box. 1 - e^{-z^2} w(iz) is accurate in
+ * modulus, but where one COORDINATE is small the matching COMPONENT of erf is
+ * small too (Re erf ~ x e^{y^2} near the imaginary axis, Im erf ~ y e^{-x^2}
+ * near the real one), and the difference leaves it with an absolute error of
+ * ~eps |e^{-z^2} w| -- so Erf[1.*^-300 + 2. I] came out 1.1e-16 + 18.56 I
+ * rather than 6.2e-299 + 18.56 I. Where 2XY < 1/2 the Taylor series about the
+ * nearer axis converges fast and gives each component to full relative
+ * accuracy (erf^(k+1)(t) = (2/sqrt(pi)) (-1)^k H_k(t) e^{-t^2}, Hermite by its
+ * forward recurrence):
+ *   about the real axis   erf(X + iY) = erf(X) + D,
+ *       D = (2/sqrt(pi)) e^{-X^2} sum_k (-1)^k H_k(X) (iY)^{k+1}/(k+1)!
+ *   about the imaginary   erf(X + iY) = i erfi(Y) + D',
+ *       D' = (2/sqrt(pi)) e^{Y^2} sum_k (-i)^k h_k(Y) X^{k+1}/(k+1)!,
+ *       h_{k+1} = 2Y h_k + 2k h_{k-1} (H_k at iY, scaled by i^-k).          */
+#define ERF_AXIS_XY 0.25
+
+/* D for the real-axis series (X >= Y >= 0, XY < ERF_AXIS_XY). */
+static void erf_axis_real(double X, double Y, double emx2, double* dr, double* di) {
+    double Hm = 0.0, H = 1.0, T = Y, sr = 0.0, si = 0.0;
+    for (int k = 0; k < 60; k++) {
+        double t = H * T;
+        switch (k & 3) {
+            case 0: si += t; break;
+            case 1: sr += t; break;
+            case 2: si -= t; break;
+            default: sr -= t; break;
+        }
+        if (k > 2 && fabs(t) < 1e-19 * (fabs(sr) + fabs(si))) break;
+        double Hn = 2.0 * X * H - 2.0 * k * Hm;
+        Hm = H; H = Hn;
+        T *= Y / (k + 2);
+    }
+    *dr = TWO_OVER_SQRTPI * emx2 * sr;
+    *di = TWO_OVER_SQRTPI * emx2 * si;
+}
+
+/* D' for the imaginary-axis series (Y > X >= 0, XY < ERF_AXIS_XY, Y < 4). */
+static void erf_axis_imag(double X, double Y, double* dr, double* di) {
+    double hm = 0.0, h = 1.0, T = X, sr = 0.0, si = 0.0;
+    for (int k = 0; k < 60; k++) {
+        double t = h * T;
+        switch (k & 3) {
+            case 0: sr += t; break;
+            case 1: si -= t; break;
+            case 2: sr -= t; break;
+            default: si += t; break;
+        }
+        if (k > 2 && fabs(t) < 1e-19 * (fabs(sr) + fabs(si))) break;
+        double hn = 2.0 * Y * h + 2.0 * k * hm;
+        hm = h; h = hn;
+        T *= X / (k + 2);
+    }
+    double y2, y2l;
+    dd_mul(Y, Y, &y2, &y2l);
+    double c = TWO_OVER_SQRTPI * exp_dd(y2, y2l);
+    *dr = c * sr;
+    *di = c * si;
+}
+
 /* erf(X + iY) for X, Y >= 0; false when Y is beyond the series' range.
- *   |z| <= 1/2         Maclaurin (1 - e^{-z^2} w would cancel)
- *   X, Y < 4           1 - e^{-z^2} w(iz), w from the table
- *   otherwise          Salzer's series                                   */
+ *   |z| <= 0.8          Maclaurin (1 - e^{-z^2} w would cancel)
+ *   X, Y < 4, 2XY < 1/2 the Taylor series about the nearer axis
+ *   X, Y < 4            1 - e^{-z^2} w(iz), w from the table
+ *   otherwise           Salzer's series                                  */
 static bool erf_quadrant(double X, double Y, double* re, double* im) {
     if (X * X + Y * Y <= ERF_MAC_R2) { erf_maclaurin(X, Y, re, im); return true; }
     if (X < 4.0 && Y < 4.0) {
+        if (X * Y < ERF_AXIS_XY) {
+            double dr, di;
+            if (X >= Y) {
+                double h, l, v;
+                dd_mul(X, X, &h, &l);
+                double emx2 = exp_dd(-h, -l);
+                erf_axis_real(X, Y, emx2, &dr, &di);
+                v = erf_real_fast(X, emx2);
+                *re = v + dr;
+                *im = di;
+            } else {
+                double v;
+                erf_axis_imag(X, Y, &dr, &di);
+                (void)sf_erfi_r(Y, &v);
+                *re = dr;
+                *im = v + di;
+            }
+            return true;
+        }
         double mag, c2, s2, er, ei;
         w_pieces_exact(X, Y, &mag, &c2, &s2);
         erfc_from_w(X, Y, mag, c2, s2, &er, &ei);
@@ -742,6 +821,23 @@ bool sf_erfc_c(double x, double y, double* re, double* im) {
     double X = fabs(x), Y = fabs(y), fr, fi;
     if (!isfinite(x) || !isfinite(y)) return false;
     if (x >= 0.0 && X * X + Y * Y > ERFC_MAC_R2) {
+        if (X < 4.0 && Y < 4.0 && X * Y < ERF_AXIS_XY && X >= Y) {
+            /* near the real axis: erfc(X) - D, componentwise accurate */
+            double h, l, dr, di;
+            dd_mul(X, X, &h, &l);
+            double emx2 = exp_dd(-h, -l);
+            erf_axis_real(X, Y, emx2, &dr, &di);
+            *re = erfc_real_fast(X, emx2) - dr;
+            *im = signbit(y) ? di : -di;
+            return isfinite(*re) && isfinite(*im);
+        }
+        if (X < 4.0 && Y < 4.0 && X * Y < ERF_AXIS_XY) {
+            /* near the imaginary axis: 1 - erf, erf from its axis series */
+            if (!erf_quadrant(X, Y, &fr, &fi)) return false;
+            *re = 1.0 - fr;
+            *im = signbit(y) ? fi : -fi;
+            return isfinite(*re) && isfinite(*im);
+        }
         if (X < 4.0 && Y < 4.0) {                       /* e^{-z^2} w(iz) */
             double mag, c2, s2;
             w_pieces_exact(X, Y, &mag, &c2, &s2);
@@ -882,6 +978,50 @@ static bool fresnel_erf(double ah, double al,   /* X = k a  (a double-double) */
     return true;
 }
 
+/* Near the real axis (pi |x y| < 1/2): the Taylor series about x,
+ *   F(x + iy) = F(x) + phi(x) sum_n q_n (iy)^{n+1}/(n+1)!,   F = C + iS,
+ * phi = e^{i pi x^2/2}, phi^{(n)} = q_n phi with q_0 = 1, q_1 = i pi x,
+ * q_{n+1} = i pi (x q_n + n q_{n-1}). C and S take the real and imaginary
+ * parts of phi q_n as REAL coefficients of (iy)^{n+1} (C = (F + conj-partner)/2),
+ * so Im C, Im S come out proportional to y with full relative accuracy -- the
+ * two-erf combination leaves them an absolute error of ~eps (the same
+ * small-component loss as erf near its axes). C(x) and S(x) and the phase come
+ * from the real kernel. Near the imaginary axis C(iw) = i C(w), S(iw) = -i S(w)
+ * fold onto this case. */
+#define FRESNEL_AXIS 0.5
+
+static void fresnel_cs_r(double x, double* c, double* s);   /* section 5 */
+
+static void fresnel_axis_real(double x, double y, double* cre, double* cim,
+                              double* sre, double* sim) {
+    double C0, S0, t, tl, sp, cp;
+    fresnel_cs_r(x, &C0, &S0);
+    dd_mul(x, x, &t, &tl);
+    sincos_halfpi_dd(t, tl, &sp, &cp);       /* phi = cp + i sp */
+    double qmr = 0.0, qmi = 0.0, qr = 1.0, qi = 0.0;   /* q_{n-1}, q_n */
+    double T = y, a_re = 0.0, a_im = 0.0, b_re = 0.0, b_im = 0.0;
+    for (int n = 0; n < 60; n++) {
+        double A = cp * qr - sp * qi;         /* Re(phi q_n) */
+        double B = cp * qi + sp * qr;         /* Im(phi q_n) */
+        double tA = A * T, tB = B * T;
+        switch (n & 3) {                      /* i^{n+1} */
+            case 0: a_im += tA; b_im += tB; break;
+            case 1: a_re -= tA; b_re -= tB; break;
+            case 2: a_im -= tA; b_im -= tB; break;
+            default: a_re += tA; b_re += tB; break;
+        }
+        if (n > 2 && fabs(tA) + fabs(tB) <
+            1e-19 * (fabs(a_re) + fabs(a_im) + fabs(b_re) + fabs(b_im))) break;
+        /* q_{n+1} = i pi (x q_n + n q_{n-1}) */
+        double ur = x * qr + n * qmr, ui = x * qi + n * qmi;
+        qmr = qr; qmi = qi;
+        qr = -M_PI * ui; qi = M_PI * ur;
+        T *= y / (n + 2);
+    }
+    *cre = C0 + a_re; *cim = a_im;
+    *sre = S0 + b_re; *sim = b_im;
+}
+
 /* Both Fresnel integrals of z = x + iy at once. */
 static bool fresnel_cs_c(double x, double y,
                          double* cre, double* cim, double* sre, double* sim) {
@@ -904,6 +1044,18 @@ static bool fresnel_cs_c(double x, double y,
         *sre = qr * z3r - qi * z3i;
         *sim = qr * z3i + qi * z3r;
         return true;
+    }
+    if (M_PI * fabs(x * y) < FRESNEL_AXIS) {
+        if (fabs(y) <= fabs(x)) {
+            fresnel_axis_real(x, y, cre, cim, sre, sim);
+        } else {
+            /* z = i w, w = y - ix: C(z) = i C(w), S(z) = -i S(w) */
+            double cr, ci, sr, si;
+            fresnel_axis_real(y, -x, &cr, &ci, &sr, &si);
+            *cre = -ci; *cim = cr;
+            *sre = si;  *sim = -sr;
+        }
+        return isfinite(*cre) && isfinite(*cim) && isfinite(*sre) && isfinite(*sim);
     }
     /* u = x + y, v = y - x, exactly. */
     double uh, ul, vh, vl;

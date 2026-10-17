@@ -22,7 +22,12 @@ complex call) and then rounded.
 Algorithms (all in raw double re/im, no `<complex.h>`; sources cited in the code):
 
 - **Complex erf / erfc / erfi.** |z| ≤ 0.8: the Maclaurin series (19 terms,
-  Estrin). |Re z|, |Im z| < 4: `erf = 1 − e^(−z²) w(iz)`, `erfc = e^(−z²) w(iz)`,
+  Estrin). Next to an axis (2|xy| < 1/2): the Taylor series about that axis
+  (erf^(k+1) = (2/√π)(−1)^k H_k e^(−t²), Hermite forward recurrence), which keeps
+  the SMALL component accurate relative to itself (the w route below left it an
+  absolute error of ~ε|e^(−z²)w|: `Erf[1.*^-300 + 2. I]` read `1.1*10^-16 + 18.56 I`
+  in a first version; it is `6.16*10^-299 + 18.56 I`, as the MPFR path gave).
+  |Re z|, |Im z| < 4: `erf = 1 − e^(−z²) w(iz)`, `erfc = e^(−z²) w(iz)`,
   with the Faddeeva function w from a 0.5×0.5 grid of degree-20 Taylor expansions
   (generated at 60 digits from w′ = −2ζw + 2i/√π; Poppe–Wijers / Zaghloul-style
   inner-region tabulation). Elsewhere: Salzer's series (A&S 7.1.29), re-derived as
@@ -36,7 +41,10 @@ Algorithms (all in raw double re/im, no `<complex.h>`; sources cited in the code
 - **Real erfi.** e^(x²)·g(x), g = e^(−x²) erfi(x) (Dawson) from tables, 14-term
   asymptotic beyond x = 10, scaled where e^(x²) alone overflows. The old summed
   Maclaurin kernel (still used by nothing now) reached 30 ulps at |x| ≈ 5.
-- **Fresnel.** Real: Maclaurin (|x| ≤ 1); auxiliary f, g tables (1 < |x| < 8,
+- **Fresnel.** (Complex next to an axis, π|xy| < 1/2: the Taylor series about
+  the real axis, F(x+iy) = F(x) + φ(x)Σ q_n (iy)^{n+1}/(n+1)!, with C, S taking
+  Re/Im of φq_n as real coefficients so the small component is exact-relative;
+  C(iz) = iC(z), S(iz) = −iS(z) fold the imaginary axis.) Real: Maclaurin (|x| ≤ 1); auxiliary f, g tables (1 < |x| < 8,
   the Cephes `fresnl` structure with polynomial tables); asymptotic f, g beyond;
   the phase πx²/2 reduced exactly mod 4 from the double-double x², so large-x
   values are correctly rounded (`FresnelC[123456.789]`). Complex: Maclaurin in z⁴
@@ -68,25 +76,31 @@ as a double-double, every rounded piece re-measured in high precision).
 ulps of the result. "away" = relative max over points not near a zero
 (|f| ≥ |z f′(z)|/4); "scaled" = |error| / ulp(max(|f|, |z f′(z)|)).
 
-| head | regime / band | median | max (away) | max scaled |
-|---|---|---|---|---|
-| Erf | MR [-3,3] | 0.28 | 1.61 | 1.61 |
-| Erf | C [-2,2]² | 0.43 | 3.45 | 2.70 |
-| Erfc | MR [-3,3] | 0.31 | 1.47 | 1.46 |
-| Erfc | C [-2,2]² | 0.53 | 3.87 | 2.50 |
-| Erfi | MR [-3,3] | 0.43 | 2.20 | 1.57 |
-| Erfi | C [-2,2]² | 0.43 | 2.91 | 2.24 |
-| FresnelC | MR [-3,3] / [-50,50] | 0.28 / 0.25 | 1.02 / 0.94 | 1.02 |
-| FresnelC | C [-2,2]² | 0.71 | 2.58 | 1.44 |
-| FresnelS | MR [-3,3] / [-50,50] | 0.32 / 0.25 | 2.50 / 1.85 | 1.00 |
-| FresnelS | C [-2,2]² | 0.86 | 3.14 | 1.90 |
-| Sinc | MR [0.2,10] | 0.31 | 1.37 | 1.37 |
-| Sinc | C [0.5,5]×[-3,3] | 0.70 | 3.03 | 2.66 |
-| InverseErf | MR [-0.95,0.95] / (-1,1) | 0.29 | 1.50 | 1.10 |
-| InverseErfc | MR [0.05,1.95] / 10^[-300,-1] | 0.31 / 0.25 | 2.13 / 0.93 | 2.13 |
+| head | regime / band | median | max (away) | max scaled | component median / p90 |
+|---|---|---|---|---|---|
+| Erf | MR [-3,3] | 0.28 | 1.61 | 1.61 | |
+| Erf | C [-2,2]² | 0.42 | 3.45 | 2.70 | 0.93 / 2.71 |
+| Erf | C near axes | 0.35 | 2.44 | 1.13 | 0.66 / 1.42 |
+| Erfc | MR [-3,3] | 0.31 | 2.05 | 1.77 | |
+| Erfc | C [-2,2]² | 0.55 | 3.47 | 1.98 | 1.01 / 3.26 |
+| Erfc | C near axes | 0.48 | 2.22 | 1.06 | 0.67 / 1.38 |
+| Erfi | MR [-3,3] | 0.46 | 2.17 | 1.86 | |
+| Erfi | C [-2,2]² | 0.42 | 3.21 | 3.21 | 0.91 / 2.61 |
+| FresnelC | MR [-3,3] / [-50,50] | 0.26 / 0.25 | 1.10 / 0.87 | 1.08 | |
+| FresnelC | C [-2,2]² | 0.71 | 2.35 | 1.66 | 1.25 / 4.88 |
+| FresnelC | C near axes | 0.28 | 1.26 | 1.19 | 0.54 / 1.07 |
+| FresnelS | MR [-3,3] / [-50,50] | 0.32 / 0.25 | 2.41 / 1.98 | 1.14 | |
+| FresnelS | C [-2,2]² | 0.83 | 3.49 | 1.90 | 1.37 / 4.72 |
+| Sinc | MR [0.2,10] | 0.33 | 1.43 | 1.43 | |
+| Sinc | C [0.5,5]×[-3,3] | 0.71 | 3.35 | 2.93 | 1.16 / 3.72 |
+| InverseErf | MR [-0.95,0.95] / (-1,1) | 0.28 / 0.30 | 1.34 | 1.10 | |
+| InverseErfc | MR [0.05,1.95] / 10^[-300,-1] | 0.31 / 0.25 | 1.99 / 0.88 | 1.94 | |
 
+"near axes": one coordinate in [0.8, 4] (Fresnel [1.3, 6]), the other ±10^[-12,-1].
+"component": each of Re, Im against its own ulp (a component crossing zero is
+legitimately inexact relative to itself, hence median and p90 rather than max).
 Wider bands (Erf/Erfc/Erfi C [-5,5]², Fresnel C [-4,4]², Sinc C [-20,20]²) are
-within the same bounds (max away ≤ 3.3, scaled ≤ 3.1). The shootout's agreement
+within the same bounds (max away ≤ 3.3, scaled ≤ 2.5). The shootout's agreement
 digits rose in every cell (e.g. Erf C 14.65 → 15.88, FresnelS MR 13.74 → 15.95).
 
 ## Speed (net µs, `run_shootout.py --regimes MR,C --engines mathilda,python`)

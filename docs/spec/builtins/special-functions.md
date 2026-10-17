@@ -382,8 +382,10 @@ the branch cut runs along (−∞, +1).
   `ExpIntegralEi[Log[z]]`: double kernels shared bit-for-bit with the packed/NDArray kernels and `Compile[]` (`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same function, so scalar == List == packed == NDArray == Compile). A decline (pole, overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and arbitrary precision is untouched. The real kernel evaluates
   Ei(log x) with e^(log x) replaced by x itself in the large-argument forms, so
   the rounding of log x is not amplified by an exponential; a real x < 0 returns
-  the complex value directly. Accuracy vs mpmath: median 0.5 ulp, max 2.9 ulp
-  (real, off the zero μ = 1.4513); max 3.1 ulp (complex).
+  the complex value directly. The rounding of log x would otherwise cost ~log x
+  ulps (9 at x = 1e4) through the e^y in Ei(y); it is recovered as
+  dy = (x − e^y)/x and added back as (x/y)·dy. Accuracy vs mpmath: median 0.4 ulp,
+  max 1.9 ulp (real, off the zero μ = 1.4513); max 2.7 ulp (complex).
 - Derivative: `D[LogIntegral[z], z] = 1/Log[z]` (chain rule applies, e.g.
   `D[LogIntegral[x^2], x] = (2 x)/Log[x^2]`); the Taylor series at a regular
   point follows from the generic `D`-based fallback.
@@ -456,7 +458,8 @@ x₀)·Q(x) through the first zero x₀ = 3.3842 on [2, 4] (the series form canc
 value directly. Complex: as for `SinIntegral`, with Ci = −(E1(iz) + E1(−iz))/2 and
 Ci(z) = Ci(−z) ± iπ on the left half-plane. Accuracy vs mpmath: median 0.45 ulp, max
 3.5 ulp scaled by |x Ci′| (the relative error is unbounded only at the zeros);
-complex max 3.0 ulp scaled.
+complex: series only for |z| ≤ 1 or |z| − |Im z| ≤ 1 (the log cancels against
+the sum near the real axis), max 1.8 ulp scaled.
 
 - Exact special values: `CosIntegral[0] = -Infinity`, `CosIntegral[Infinity] = 0`,
   `CosIntegral[-Infinity] = I Pi`, `CosIntegral[±I Infinity] = Infinity`;

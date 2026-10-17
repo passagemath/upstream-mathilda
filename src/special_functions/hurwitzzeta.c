@@ -58,6 +58,8 @@
 #include "symtab.h"
 #include "flint_num_bridge.h" /* flint_num_hurwitz_zeta (arb acb_dirichlet_hurwitz) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_zeta.h" /* sf_hurwitz_r/_c: the shared kernels */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -614,7 +616,23 @@ Expr* builtin_hurwitzzeta(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
-    if (argc == 2) return hz_two_arg(args[0], args[1]);
+    /* Machine-precision call: the raw-double Euler-Maclaurin kernels shared
+     * with the NDArray / packed / Compile[] surfaces (sf_machine_zeta.c). A
+     * decline (pole, Re a <= 0, s < 1/2, overflow) falls through unchanged. */
+    if (argc == 2) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            if (ma.any_complex) {
+                double vr, vi;
+                if (sf_hurwitz_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi))
+                    return sf_machine_complex_result(vr, vi);
+            } else {
+                double v;
+                if (sf_hurwitz_r(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+            }
+        }
+        return hz_two_arg(args[0], args[1]);
+    }
     return hz_emit_argrx(argc);
 }
 

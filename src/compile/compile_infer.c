@@ -748,11 +748,13 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (d && d->ndarray_nary_kernel) {
             const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
             if (k->cplx && k->nargs == na) {
+                bool any_c = false;            /* complex argument -> KERNN_C */
                 for (size_t i = 0; i < na; i++) {
                     CompileType t;
                     if (!infer_type(c, A[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+                    if (t == CT_COMPLEX) any_c = true;
                 }
-                *out = CT_REAL; return true;
+                *out = any_c ? CT_COMPLEX : CT_REAL; return true;
             }
         }
     }

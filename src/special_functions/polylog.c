@@ -50,6 +50,9 @@
 #include "symtab.h"
 #include "flint_num_bridge.h" /* flint_num_polylog (arb acb_polylog) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine.h"      /* sf_machine_polylog: the real kernel */
+#include "sf_machine_zeta.h" /* sf_polylog_c: the complex kernel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -913,6 +916,28 @@ Expr* builtin_polylog(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    /* Machine-precision call (z not the exact 0, which stays exact): the
+     * raw-double kernels shared with the NDArray / packed / Compile[] surfaces
+     * -- sf_machine_polylog for real z in [-1, 1] (and every real z for the
+     * dilogarithm), sf_polylog_c otherwise. A real z > 1 lies on the cut and
+     * answers with a Complex taken from below it; a real z < -1 has a real
+     * value, so only the real part is kept (as the MPFR path does). A decline
+     * (complex order, |z| out of reach, overflow) falls through unchanged. */
+    if (argc == 2 && !(args[1]->type == EXPR_INTEGER && args[1]->data.integer == 0)) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_machine_polylog(ma.re[0], ma.re[1], &vr)) return expr_new_real(vr);
+                if ((ma.re[1] > 1.0 || ma.re[1] < -1.0) &&
+                    sf_polylog_c(ma.re[0], 0.0, ma.re[1], 0.0, &vr, &vi))
+                    return ma.re[1] < -1.0 ? expr_new_real(vr)
+                                           : sf_machine_complex_result(vr, vi);
+            } else if (sf_polylog_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+    }
     if (argc == 2) return polylog_two_arg(args[0], args[1]);
     if (argc == 3) return NULL;             /* Nielsen S_{n,p}(z): stay symbolic */
     return polylog_emit_argt(argc);

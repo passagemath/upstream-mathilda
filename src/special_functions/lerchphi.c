@@ -49,6 +49,8 @@
 #include "symtab.h"
 #include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval, ndt_get/_set */
 #include "sf_machine.h" /* sf_machine_lerchphi (shared double kernel) */
+#include "sf_machine_zeta.h" /* sf_lerch_c: the complex double kernel */
+#include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
 #include "flint_num_bridge.h" /* flint_num_lerchphi (arb acb_dirichlet_lerch_phi) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 
@@ -908,6 +910,27 @@ Expr* builtin_lerchphi(Expr* res) {
     Expr** args = res->data.function.args;
 
     if (argc < 3) return lp_emit_argrx(argc);
+
+    /* Machine-precision call with default options: the raw-double kernels
+     * shared with the NDArray / packed / Compile[] surfaces -- the real series
+     * sf_machine_lerchphi, or sf_lerch_c for complex arguments. Ahead of the
+     * exact special-value ladder so every surface computes the same way; a
+     * decline (|z| >= 1, a <= 0, overflow) falls through unchanged. */
+    if (argc == 3) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            if (ma.any_complex) {
+                double vr, vi;
+                if (sf_lerch_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1],
+                               ma.re[2], ma.im[2], &vr, &vi))
+                    return sf_machine_complex_result(vr, vi);
+            } else {
+                double v;
+                if (sf_machine_lerchphi(ma.re[0], ma.re[1], ma.re[2], &v))
+                    return expr_new_real(v);
+            }
+        }
+    }
 
     bool doubly_infinite = false, include_singular = false;
     Expr* last_bad = NULL;

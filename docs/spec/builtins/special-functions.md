@@ -1110,12 +1110,28 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
   `Zeta[3, 2] = -1 + Zeta[3]` and `Zeta[4, 5] = Pi^4/90 - 22369/20736`.
   `Zeta[s, 1] = Zeta[s]` and `Zeta[s, 1/2] = (2^s - 1) Zeta[s]`
   (e.g. `Zeta[2, 1/2] = Pi^2/2`, `Zeta[3, 1/2] = 7 Zeta[3]`).
-- **Numerics.** Machine-`double` real zeta uses MPFR's `mpfr_zeta`; at **arbitrary
-  precision** (and for complex `s`) one-argument zeta routes through arb's
+- **Machine numerics.** A machine-precision call (real or complex `s`; for
+  `Zeta[s, a]` with `Re a > 0`) is answered by the raw-`double` kernels of
+  `src/special_functions/sf_machine_zeta.c` — the same helpers the packed /
+  `NDArray` kernels and `Compile[]` use, so all surfaces agree bit for bit:
+  - integer `s`: tabulated ζ(2…64) and ζ(0…−60) (`Zeta[2.]` is π²/6 to the
+    last bit);
+  - `s ≥ 20`: the Dirichlet series summed directly (eight terms);
+  - `Re s ≥ 1/2`: Euler–Maclaurin (DLMF 25.2.9) with the direct sum run to
+    w ≥ max(10, |s|/2 + 4) and the Bernoulli correction cut at 2⁻⁵⁶;
+  - real `s < 1/2`: the functional equation with sin(πs/2) reduced exactly,
+    (2π)ˢ from an exact two-product, and the rounding of 1−s corrected to
+    first order in Γ and ζ.
+  Complex `s` with `Re s < 1/2`, the pole and anything the kernels decline
+  (cancellation, overflow) fall through to the MPFR path below. Accuracy
+  against mpmath (2000 points): real s ∈ [1.5, 9] median 0.3 / max 1.0 ulp;
+  complex s ∈ [1.5, 5] × [−3, 3] median 0.3 / max 1.5 ulp; real s ∈ [−40, ½]
+  max ≈ 4.6 ulp. Net latency ≈ 0.35 µs real, 0.85 µs complex (from 75 / 403 µs).
+- **Arbitrary precision.** One-argument zeta routes through arb's
   `acb_dirichlet_zeta` (the `flint_num_zeta` bridge), ~4× faster than `mpfr_zeta`
   and faster than Mathematica at 50 digits. Two-argument (Hurwitz) inputs, and
-  machine complex, still use the Euler–Maclaurin complex-MPFR kernel (Riemann is
-  the `a = 1` case). Precision tracks the input, e.g.
+  machine inputs the kernels decline, use the Euler–Maclaurin complex-MPFR kernel
+  (Riemann is the `a = 1` case). Precision tracks the input, e.g.
   `N[Zeta[3], 50] = 1.2020569031595942853997381615114499907649862923405…`,
   `N[Zeta[5/4], 50] = 4.5951118258429433806853780396946256522810297806048…`,
   `N[Zeta[1/2 + I/2]] = -0.459303 - 0.961254 I`,
@@ -1165,9 +1181,22 @@ follow: the functions disagree for non-positive real `a` (e.g.
   (`HurwitzZeta[2, -2] = ComplexInfinity`), while a non-positive integer `s` gives
   the finite Bernoulli-polynomial value `−BernoulliB[1-s, a]/(1-s)`, e.g.
   `HurwitzZeta[0, 0] = 1/2` and `HurwitzZeta[-1, 0] = -1/12`.
-- **Numerics.** Real and complex, machine- and arbitrary-precision arguments
-  evaluate through one Euler–Maclaurin complex-MPFR kernel; a numeric pole gives
-  `ComplexInfinity`. Precision tracks the input, e.g.
+- **Machine numerics.** Machine-precision `s` and `a` with `s ≠ 1`,
+  `Re s ≥ 1/2` and `Re a > 0` (real or complex) use the raw-`double`
+  Euler–Maclaurin kernels `sf_hurwitz_r` / `sf_hurwitz_c`
+  (`sf_machine_zeta.c`), shared bit for bit with the packed / `NDArray`
+  kernels and `Compile[]`. Each k + a is formed by an exact TwoSum and its
+  power corrected to first order; a complex sum whose terms exceed 16× its
+  value (large `Im s` with `Im a ≠ 0`) declines rather than return the noise.
+  `a = 1` is the Riemann kernel. Accuracy against mpmath (2000 points): real
+  s ∈ [1.5, 6], a ∈ [0.5, 4] median 0.4 / max 1.6 ulp; complex
+  s ∈ [1.5, 4] × [−2, 2], a ∈ [0.5, 3] × [−1, 1] median 0.8 ulp, max ≈ 8 ulp
+  where the sum cancels — within the function's own condition number. Net
+  latency ≈ 0.27 µs real, 1.0 µs complex (from 275 / 709 µs).
+- **Arbitrary precision and declines.** Everything else evaluates through the
+  Euler–Maclaurin complex-MPFR kernel (arb's `acb_dirichlet_hurwitz` above
+  machine precision); a numeric pole gives `ComplexInfinity`. Precision tracks
+  the input, e.g.
   `HurwitzZeta[3, .2] = 125.739`, `HurwitzZeta[7., 5] = 1.84949×10⁻⁵`,
   `HurwitzZeta[2.3, 8 + I] = 0.0544701 - 0.00944852 I`,
   `N[HurwitzZeta[1/3, 8/7], 50] = -1.1389367444490991746548674334535727810961919460755…`.
@@ -1289,8 +1318,31 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
   - The dilogarithm and trilogarithm at ½:
     `PolyLog[2, 1/2] = Pi²/12 - Log[2]²/2`,
     `PolyLog[3, 1/2] = Log[2]³/6 - Pi² Log[2]/12 + 7 Zeta[3]/8`.
-- **Numerics.** With at least one inexact operand, machine- and
-  arbitrary-precision (MPFR) real and complex inputs evaluate numerically:
+- **Machine numerics.** A machine-precision call with a real order is answered
+  by the raw-`double` kernels of `sf_machine_zeta.c` (`sf_machine_polylog` for
+  real z, `sf_polylog_c` for complex z), shared bit for bit with the packed /
+  `NDArray` kernels and `Compile[]`:
+  - the **dilogarithm** `PolyLog[2, z]` (every real and complex z): the
+    Bernoulli series Li₂ = Σ Bₙ uⁿ⁺¹/(n+1)! in u = −log(1−z) ('t Hooft–Veltman;
+    Crandall), after the maps z → 1/z (|z| > 1) and z → 1−z (Re z > ½), which
+    leave |u| ≤ 1.25 and at most ~14 terms; π²/6 is carried as a two-double
+    constant. Real x > 1 answers from below the cut, real x < −1 is real;
+  - other real orders: closed forms for s = 0, 1; the power series (double-
+    double running power, compensated sum) for |z| ≤ ½; the Jonquière expansion
+    in μ = log z (complex μ for negative x) for |μ| < 3.6; the duplication
+    formula for real x ∈ [−1, −½) and s ≥ 1; and, for an integer order and
+    larger |z|, the inversion formula with the Bernoulli polynomial Bₙ. Near an
+    integer order the Jonquière head and ζ(s−k) have cancelling poles: a sum
+    whose terms exceed 4× its value (16× for integer s) declines to MPFR.
+  Accuracy against mpmath (2000 points): Li₂ real x ∈ [−0.9, 0.9] median 0.4 /
+  max 2.3 ulp, complex box |Re|, |Im| ≤ 0.8 median 0.4 / max 3.9 ulp, the wide
+  box |Re|, |Im| ≤ 20 max 2.6 ulp; Li₃ real median 0.4 / max 4 ulp. Net latency
+  ≈ 0.15 µs real, 0.41 µs complex (from 494 / 6560 µs); 10⁶-element
+  `PolyLog[2, v]` ≈ 5 ms (SciPy `spence` 27 ms).
+- **Arbitrary precision and declines.** With at least one inexact operand,
+  arbitrary-precision (MPFR) real and complex inputs — and machine inputs the
+  kernels decline (complex order, |z| out of reach, cancellation) — evaluate
+  numerically:
   a direct power series for `|z| ≤ 1/2` (a fast pure-real path for real order and
   real −1 < z < 1), and the Jonquière / zeta expansion
   Liₛ(z) = Γ(1−s)(−ln z)^{s−1} + Σ_{k≥0} ζ(s−k) (ln z)ᵏ/k! (with the
@@ -1341,12 +1393,19 @@ Out[2]= 1.29971
 `LerchPhi` is the common generalization of `Zeta`, `HurwitzZeta` and `PolyLog`:
 `LerchPhi[1, s, a] = Zeta[s, a]` and `z LerchPhi[z, s, 1] = PolyLog[s, z]`.
 Implemented in `src/special_functions/lerchphi.c`, registered via
-`lerchphi_init()` in `core_init()`. `Listable`. On the machine path (all real
-machine arguments, default convention) it uses the shared `double` kernel
-`sf_machine_lerchphi` — the same helper the Compile VM uses — rather than the MPFR
-series, ~250× faster per call; a single `NDArray`/packed argument is threaded over
-that kernel and returns a packed result (`LerchPhi` is on `pack.c`'s `AWARE` list),
-and anything it declines (`|z| ≥ 1`, non-positive-integer `a`, complex, high
+`lerchphi_init()` in `core_init()`. `Listable`. On the machine path (machine
+arguments, default options, `Re a > 0`) it uses the shared `double` kernels of
+`sf_machine_zeta.c` — `sf_machine_lerchphi` for real arguments, `sf_lerch_c` for
+complex z, s or a — the same helpers the packed / `NDArray` kernels and the
+Compile VM use (a complex argument compiles to the complex n-ary kernel opcode
+`KERNN_C`). The defining series carries zᵏ in double-double (an FMA residual per
+product), forms each k + a by TwoSum with a first-order power correction, sums
+with Neumaier compensation, and declines when the terms exceed 16× the sum.
+Accuracy against mpmath: real z ∈ [0, 0.9] median 0.3 / max 1.0 ulp, complex
+z in the box ±0.6 median 0.2 / max 0.9 ulp; net latency ≈ 1.3 µs real, 1.6 µs
+complex (Mathematica 149 µs). A single `NDArray`/packed argument is threaded over
+the real kernel and returns a packed result (`LerchPhi` is on `pack.c`'s `AWARE`
+list), and anything the kernels decline (`|z| ≥ 1`, `a ≤ 0`, cancellation, high
 precision) falls through to the accurate MPFR path. A visible `NDArray` is never
 left unevaluated. At **arbitrary precision** in the convergent region `|z| ≤ 1`
 (default convention) evaluation routes through arb's `acb_dirichlet_lerch_phi`

@@ -1530,6 +1530,7 @@ static void hy2_lean_x4(const Hy2Tab* t, long kmin, const double* w, int nl,
      * finished lane keeps computing harmlessly (its result is already taken). */
     double wA = w[0], wB = nl > 1 ? w[1] : wA, wC = nl > 2 ? w[2] : wA,
            wD = nl > 3 ? w[3] : wA;
+    for (int l = 0; l < 4; l++) { ok[l] = false; out[l] = 0.0; }
     const double* CC = t->c;
     double c1 = CC[1];
     HY_LEAN_INIT(s0A, e0A, s1A, e1A, peA, poA, w2A, thrA, wA, c1);

@@ -882,8 +882,11 @@ Out[7]= (a1 a2 HypergeometricPFQ[{1 + a1, 1 + a2}, {1 + b1, 1 + b2, 1 + b3}, x])
 > are tabulated once per buffer; the scalar path forms the identical
 > coefficients on the fly). A `2F1` element on the cut widens the result to
 > complex; an int64 buffer, an MPFR parameter, or a declined element takes the
-> element-wise route. 10^6 elements: `1F1(1;2;x)` 18 ms (was 2.3 s),
-> `2F1(1,2;3;x)` 0.2 s (was 4.9 s), `2F2(1,2;3,4;x)` 0.38 s (was 2.6 s).
+> element-wise route. For `2F1` series that are one-signed and never grow
+> (decided from the parameters), the buffer sums four elements in lock-step with
+> the scalar loop's exact arithmetic. 10^6 elements: `1F1(1;2;x)` 11 ms (was
+> 1.3 s; SciPy 27 ms), `2F1(1,2;3;x)` 0.14 s (was 2.6 s; SciPy 0.16 s),
+> `2F2(1,2;3,4;x)` 0.19 s (was 1.3 s).
 
 ## Hypergeometric0F1
 
@@ -948,7 +951,7 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
   (the Mathematica / mpmath convention): `Hypergeometric2F1[1, 2, 3, 2.5]` is
   `-0.929749 - 1.00531 I` (it used to stay unevaluated, as did every real
   `z < -1` and every complex `|z| ≥ 1`).
-- Scalar 0.5 µs (real), 1.9 µs (complex); 10^6 packed elements 0.2 s.
+- Scalar 0.3 µs (real), 1.7 µs (complex); 10^6 packed elements 0.14 s.
 
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]

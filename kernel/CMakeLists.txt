@@ -129,7 +129,10 @@ set_target_properties(xmathilda PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
 # kernelspec, so Jupyter launched the wrong binary or none at all. install(CODE)
 # runs with the effective prefix; install rules fire in declaration order, so the
 # regenerated file is the one install(FILES) picks up.
-set(XEUS_MATHILDA_HOME "${MATHILDA_ROOT}/src" CACHE PATH "Dir containing internal/")
+# $MATHILDA_HOME names the internal/ directory ITSELF (the one holding init.m),
+# not its parent: pointing it at src/ loaded init.m only by luck of the CWD and
+# missed the integral tables (issue #96). The loader now accepts either.
+set(XEUS_MATHILDA_HOME "${MATHILDA_ROOT}/src/internal" CACHE PATH "The internal/ module dir (holds init.m)")
 
 install(TARGETS xmathilda RUNTIME DESTINATION bin)
 install(CODE "

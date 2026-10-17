@@ -39,6 +39,7 @@ Expr* mathilda_run_file(const char* path, int* opened);
  * Resolution is independent of the current working directory so a relocated or
  * installed binary still finds its bundled modules. It tries, in order:
  *   1. $MATHILDA_HOME/<relpath>                     (env var -> src/internal)
+ *      $MATHILDA_HOME/internal/<relpath>            (env var -> src, issue #96)
  *   2. <exe_dir>/src/internal/<relpath>             (binary carries the tree)
  *   3. <exe_dir>/../share/mathilda/internal/<...>   (installed layout)
  *   4. MATHILDA_PREFIX/share/mathilda/internal/<..> (compile-time, if defined)

@@ -27,10 +27,10 @@ static int any_contains(const char* sub){ for(int i=0;i<g_n;i++) if(strstr(g_lin
 static void check(const char* name, int cond){ printf("%s  %s\n", cond?"PASS":"FAIL", name); if(!cond) fails++; }
 
 int main(int argc, char** argv){
-    /* The dir containing internal/ (init.m): argv[1], else $MATHILDA_HOME,
-     * else "src" (run from the repo root). */
+    /* The internal/ module dir (holds init.m): argv[1], else $MATHILDA_HOME,
+     * else "src/internal" (run from the repo root). */
     const char* home = (argc > 1) ? argv[1]
-                     : (getenv("MATHILDA_HOME") ? getenv("MATHILDA_HOME") : "src");
+                     : (getenv("MATHILDA_HOME") ? getenv("MATHILDA_HOME") : "src/internal");
     mathilda_ffi_set_home(home);
     mathilda_ffi_init();
     printf("version: %s\n", mathilda_ffi_version());

@@ -297,7 +297,9 @@ the current working directory.
 - `Protected`. Returns `True` if the module was located and loaded (or had already
   been loaded), `False` otherwise.
 - Resolution is independent of the current working directory and tries, in
-  order: `$MATHILDA_HOME/<relpath>`; `<exe_dir>/src/internal/<relpath>` and
+  order: `$MATHILDA_HOME/<relpath>` (then `$MATHILDA_HOME/internal/<relpath>`, so
+  pointing it at the directory *containing* `internal/` also works);
+  `<exe_dir>/src/internal/<relpath>` and
   `<exe_dir>/../share/mathilda/internal/<relpath>` (relative to the running
   binary, so a relocated or installed executable still finds its modules);
   `$(PREFIX)/share/mathilda/internal/<relpath>` when built with a compile-time

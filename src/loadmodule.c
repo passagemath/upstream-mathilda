@@ -231,10 +231,18 @@ int mathilda_resolve_internal(const char* relpath, char* out, size_t outsz) {
 
     char cand[LM_PATH_MAX];
 
-    /* 1. $MATHILDA_HOME points directly at the src/internal directory. */
+    /* 1. $MATHILDA_HOME points directly at the src/internal directory. Also
+     * accept its parent (the directory CONTAINING internal/): that is what the
+     * Jupyter kernelspec shipped before issue #96, and an easy mistake to make,
+     * where it silently loaded init.m via the CWD ladder but missed the
+     * tables Integrate loads later. */
     const char* home = getenv("MATHILDA_HOME");
     if (home && *home) {
         if ((size_t)snprintf(cand, sizeof(cand), "%s/", home) < sizeof(cand)
+                && lm_try_base(cand, relpath, out, outsz))
+            return 1;
+        if ((size_t)snprintf(cand, sizeof(cand), "%s/internal/", home)
+                < sizeof(cand)
                 && lm_try_base(cand, relpath, out, outsz))
             return 1;
     }

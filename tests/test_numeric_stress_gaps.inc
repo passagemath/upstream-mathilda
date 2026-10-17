@@ -90,14 +90,6 @@
 { "Beta@10^40", "Beta[n, 2] = 1/(n(n+1)) via Pochhammer, which overflows first" },
 
 /* PolyLog — no large-|z| continuation implemented; stays unevaluated */
-{ "PolyLog@2^53", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@10^20", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@2^53+1", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@pi-digits", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@10^25", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@10^40", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@-10^25", "no large-|z| continuation implemented; stays unevaluated" },
-{ "PolyLog@10^20/3", "no large-|z| continuation implemented; stays unevaluated" },
 
 /* HarmonicNumber — reduces to PolyGamma[0, z] at large negative z, which is unimplemented there */
 { "HarmonicNumber@-10^25", "reduces to PolyGamma[0, z] at large negative z, which is unimplemented there" },

@@ -769,6 +769,61 @@ static bool pl_zeta_expansion(pcx* out, const pcx* s, const pcx* Z,
 
 /* Numeric PolyLog[n, z]. `intord` is the positive integer order (>= 2) or 0.
  * Returns a Real/Complex/MPFR result, or NULL to stay symbolic. */
+/* Li_2 for |z| > 1 by the inversion formula (DLMF 25.12.4)
+ *     Li_2(z) = -Pi^2/6 - (1/2) log^2(-z) - Li_2(1/z),
+ * so the series / zeta expansion only ever sees |1/z| < 1. Branches: Z carries
+ * the approach direction in the sign of its zero imaginary part (-0 below the
+ * cut for real z > 1), and 1/Z and -Z inherit it, so for real x > 1 this gives
+ * Pi^2/3 - log^2(x)/2 - Li_2(1/x) - I Pi log x: Mathematica's value, and the
+ * same identity the machine kernel uses. Without it a huge |z| (|log z| past
+ * the zeta expansion's 2 Pi radius) left the MPFR path symbolic while the
+ * machine path answered. */
+static bool pl_li2_inversion(pcx* out, const pcx* s, const pcx* Z, long intord,
+                             mpfr_prec_t wp) {
+    pcx W, L, t;
+    mpfr_t d, mag, lz;
+    pcx_init(&W, wp); pcx_init(&L, wp); pcx_init(&t, wp);
+    mpfr_inits2(wp, d, mag, lz, (mpfr_ptr)0);
+    /* W = 1/Z = conj(Z)/|Z|^2 (keeps the signed-zero imaginary part). */
+    mpfr_sqr(d, Z->re, PRND);
+    mpfr_fma(d, Z->im, Z->im, d, PRND);
+    mpfr_div(W.re, Z->re, d, PRND);
+    mpfr_div(W.im, Z->im, d, PRND);
+    mpfr_neg(W.im, W.im, PRND);
+    pcx_abs(mag, &W);
+    bool got;
+    if (mpfr_cmp_d(mag, 0.5) <= 0) {
+        got = pl_series_cx(&t, s, &W, wp);
+    } else {
+        pcx_log(&L, &W, wp);
+        pcx_abs(lz, &L);
+        got = mpfr_cmp_d(lz, 2.0 * M_PI - 0.05) < 0 &&
+              pl_zeta_expansion(&t, s, &W, intord, wp);
+    }
+    if (got) {
+        /* L = log(-Z); out = -Pi^2/6 - L^2/2 - Li_2(W). */
+        pcx mZ; pcx_init(&mZ, wp);
+        mpfr_neg(mZ.re, Z->re, PRND);
+        mpfr_neg(mZ.im, Z->im, PRND);
+        pcx_log(&L, &mZ, wp);
+        pcx_clear(&mZ);
+        pcx_mul(out, &L, &L, wp);
+        mpfr_div_2ui(out->re, out->re, 1, PRND);
+        mpfr_div_2ui(out->im, out->im, 1, PRND);
+        mpfr_add(out->re, out->re, t.re, PRND);
+        mpfr_add(out->im, out->im, t.im, PRND);
+        mpfr_const_pi(d, PRND);
+        mpfr_sqr(d, d, PRND);
+        mpfr_div_ui(d, d, 6, PRND);
+        mpfr_add(out->re, out->re, d, PRND);
+        mpfr_neg(out->re, out->re, PRND);
+        mpfr_neg(out->im, out->im, PRND);
+    }
+    mpfr_clears(d, mag, lz, (mpfr_ptr)0);
+    pcx_clear(&W); pcx_clear(&L); pcx_clear(&t);
+    return got;
+}
+
 static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
     Expr* zero = expr_new_integer(0);
     Expr *nre, *nim, *zre, *zim;
@@ -847,6 +902,8 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
                 got = pl_zeta_expansion(&res, &s, &Z, intord, wp);
             mpfr_clear(lz);
         }
+        if (!got && n_real && intord == 2 && mpfr_cmp_ui(mag, 1) > 0)
+            got = pl_li2_inversion(&res, &s, &Z, intord, wp);
         if (got) out = pl_result(res.re, res.im, out_prec, real_only);
         mpfr_clears(mag, lnmag, (mpfr_ptr)0);
     }

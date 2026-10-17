@@ -1,0 +1,580 @@
+{
+ "meta": {
+  "date": "2026-10-17",
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "python": "3.14.7",
+  "engines": {
+   "mathilda": "0.45 (Mathilda 0.450 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline))",
+   "wolfram": "14. (14.0.0 for Mac OS X x86 (64-bit) (December 13, 2023))",
+   "maxima": "Maxima 5.49.0",
+   "python": "scipy 1.18.1, mpmath 1.3.0, numpy 2.5.2"
+  },
+  "ap_dps": 50,
+  "kval": 8,
+  "ktime": 512,
+  "rblk": 5,
+  "timing": "net = min(raw) - min(null loop); machine literals; ClearSystemCache per block; canary"
+ },
+ "cases": {
+  "DirichletL": {
+   "family": "Zeta",
+   "note": "real character mod 5 (k = 5, j = 3); Python is mpmath; scipy/Maxima lack it",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0014629,
+      "wolfram": 0.2879375,
+      "maxima": null,
+      "python": 11.7380913
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0014629,
+       "raw": 0.0016602,
+       "null": 0.0001973,
+       "canary": 0.0016621,
+       "first": 0.0017461,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00174609,
+        0.00166211,
+        0.00166211,
+        0.00166211,
+        0.00166016
+       ],
+       "null_blocks": [
+        0.00091211,
+        0.000199219,
+        0.000199219,
+        0.000197266,
+        0.000197266
+       ]
+      },
+      "wolfram": {
+       "net": 0.2879375,
+       "raw": 0.288332,
+       "null": 0.0003945,
+       "canary": 0.4076895,
+       "first": 0.3145625,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.3145625,
+        0.28833203125,
+        0.293294921875,
+        0.30051953125,
+        0.301294921875
+       ],
+       "null_blocks": [
+        0.00040234375,
+        0.000396484375,
+        0.00039453125,
+        0.000396484375,
+        0.00040820312500000004
+       ]
+      },
+      "python": {
+       "net": 11.7380913,
+       "raw": 11.7381023,
+       "null": 1.1e-05,
+       "canary": 13.1741209,
+       "first": 14.7645011,
+       "cache_suspect": false,
+       "raw_blocks": [
+        14.76450108930294,
+        13.838107222909457,
+        11.738102299204911,
+        12.753811770380707,
+        13.032498432949069
+       ],
+       "null_blocks": [
+        2.121669240295887e-05,
+        1.4730176189914346e-05,
+        1.0959411156363785e-05,
+        1.1343217920511961e-05,
+        1.1666998034343123e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 6.98,
+     "disagree": [
+      {
+       "engine": "wolfram",
+       "digits": 6.98
+      }
+     ],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.0029453,
+      "wolfram": 0.4247891,
+      "maxima": null,
+      "python": 9.0995408
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0029453,
+       "raw": 0.0031582,
+       "null": 0.0002129,
+       "canary": 0.0033496,
+       "first": 0.0032695,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00326953,
+        0.00332812,
+        0.00318945,
+        0.00320703,
+        0.0031582
+       ],
+       "null_blocks": [
+        0.00021875,
+        0.000234375,
+        0.000216796,
+        0.000216796,
+        0.000212891
+       ]
+      },
+      "wolfram": {
+       "net": 0.4247891,
+       "raw": 0.4251699,
+       "null": 0.0003809,
+       "canary": 0.4451875,
+       "first": 0.4285254,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.428525390625,
+        0.42516992187499997,
+        0.42789453125,
+        0.436431640625,
+        0.446484375
+       ],
+       "null_blocks": [
+        0.00038671874999999996,
+        0.000388671875,
+        0.00038671874999999996,
+        0.000388671875,
+        0.000380859375
+       ]
+      },
+      "python": {
+       "net": 9.0995408,
+       "raw": 9.0995498,
+       "null": 9e-06,
+       "canary": 9.266651,
+       "first": 9.0995498,
+       "cache_suspect": false,
+       "raw_blocks": [
+        9.099549813981866,
+        9.253810661903117,
+        9.111488236158038,
+        9.180480215945863,
+        9.236467587470543
+       ],
+       "null_blocks": [
+        1.0442818165756762e-05,
+        9.666109690442681e-06,
+        8.974893717095256e-06,
+        9.978975867852569e-06,
+        1.2154487194493413e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 13.57,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.728875,
+      "wolfram": 8.8565625,
+      "maxima": null,
+      "python": 27.8046249
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.728875,
+       "raw": 0.72925,
+       "null": 0.000375,
+       "canary": 0.727875,
+       "first": 0.784938,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.784938,
+        0.72925
+       ],
+       "null_blocks": [
+        0.000374974,
+        0.000375032
+       ]
+      },
+      "wolfram": {
+       "net": 8.8565625,
+       "raw": 8.8571875,
+       "null": 0.000625,
+       "canary": 8.723625,
+       "first": 9.2719375,
+       "cache_suspect": false,
+       "raw_blocks": [
+        9.2719375,
+        8.8571875
+       ],
+       "null_blocks": [
+        0.000625,
+        0.00075
+       ]
+      },
+      "python": {
+       "net": 27.8046249,
+       "raw": 27.8046611,
+       "null": 3.62e-05,
+       "canary": 27.9509294,
+       "first": 27.8046611,
+       "cache_suspect": false,
+       "raw_blocks": [
+        27.804661134723574,
+        32.19509229529649
+       ],
+       "null_blocks": [
+        3.620516508817673e-05,
+        5.995389074087143e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 50.3,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "DirichletLc": {
+   "family": "Zeta",
+   "note": "complex character mod 7 (k = 7, j = 2, order 6); Python is mpmath",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0025762,
+      "wolfram": 0.4624258,
+      "maxima": null,
+      "python": 18.166304
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0025762,
+       "raw": 0.0027734,
+       "null": 0.0001973,
+       "canary": 0.0027734,
+       "first": 0.0028008,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00280078,
+        0.00277539,
+        0.00277344,
+        0.0027793,
+        0.0027793
+       ],
+       "null_blocks": [
+        0.000199219,
+        0.000199218,
+        0.000197266,
+        0.000197266,
+        0.000197266
+       ]
+      },
+      "wolfram": {
+       "net": 0.4624258,
+       "raw": 0.4628105,
+       "null": 0.0003848,
+       "canary": 0.4648203,
+       "first": 0.4693281,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.46932812500000004,
+        0.46444140625,
+        0.48019140625,
+        0.462810546875,
+        0.633908203125
+       ],
+       "null_blocks": [
+        0.000392578125,
+        0.000396484375,
+        0.00038476562499999996,
+        0.0003984375,
+        0.000412109375
+       ]
+      },
+      "python": {
+       "net": 18.166304,
+       "raw": 18.1663133,
+       "null": 9.4e-06,
+       "canary": 19.3711369,
+       "first": 20.7779656,
+       "cache_suspect": false,
+       "raw_blocks": [
+        20.77796560297429,
+        18.61352829655516,
+        18.16631334804697,
+        18.82416943044518,
+        20.131225310251466
+       ],
+       "null_blocks": [
+        1.1736119631677866e-05,
+        9.362338460050523e-06,
+        1.0388248483650386e-05,
+        1.0635631042532623e-05,
+        1.0888470569625497e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 6.14,
+     "disagree": [
+      {
+       "engine": "wolfram",
+       "digits": 6.14
+      }
+     ],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.0041836,
+      "wolfram": 0.6597695,
+      "maxima": null,
+      "python": 10.6634078
+     },
+     "timing": {
+      "mathilda": {
+       "net": 0.0041836,
+       "raw": 0.0043965,
+       "null": 0.0002129,
+       "canary": 0.004377,
+       "first": 0.0043984,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.00439844,
+        0.00439648,
+        0.00440039,
+        0.00443945,
+        0.00442578
+       ],
+       "null_blocks": [
+        0.000214844,
+        0.000214844,
+        0.000214844,
+        0.000212889,
+        0.000214844
+       ]
+      },
+      "wolfram": {
+       "net": 0.6597695,
+       "raw": 0.6601562,
+       "null": 0.0003867,
+       "canary": 0.7182402,
+       "first": 0.6647988,
+       "cache_suspect": false,
+       "raw_blocks": [
+        0.664798828125,
+        0.67233984375,
+        0.66015625,
+        0.675869140625,
+        0.73784375
+       ],
+       "null_blocks": [
+        0.00039453125,
+        0.0003984375,
+        0.000388671875,
+        0.000392578125,
+        0.00038671874999999996
+       ]
+      },
+      "python": {
+       "net": 10.6634078,
+       "raw": 10.6634156,
+       "null": 7.8e-06,
+       "canary": 10.9169528,
+       "first": 10.9254455,
+       "cache_suspect": false,
+       "raw_blocks": [
+        10.925445478278561,
+        10.663415609087679,
+        10.753353624750162,
+        10.94803918749676,
+        10.870183687075041
+       ],
+       "null_blocks": [
+        8.816641638986766e-06,
+        8.123606676235795e-06,
+        7.770722731947899e-06,
+        9.058567229658365e-06,
+        9.673385648056865e-06
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 13.52,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 1.0859375,
+      "wolfram": 11.18175,
+      "maxima": null,
+      "python": 57.6247814
+     },
+     "timing": {
+      "mathilda": {
+       "net": 1.0859375,
+       "raw": 1.08625,
+       "null": 0.0003125,
+       "canary": 1.09181,
+       "first": 1.15037,
+       "cache_suspect": false,
+       "raw_blocks": [
+        1.15037,
+        1.08625
+       ],
+       "null_blocks": [
+        0.000312459,
+        0.000375032
+       ]
+      },
+      "wolfram": {
+       "net": 11.18175,
+       "raw": 11.1824375,
+       "null": 0.0006875,
+       "canary": 12.0640625,
+       "first": 11.1824375,
+       "cache_suspect": false,
+       "raw_blocks": [
+        11.182437499999999,
+        13.4266875
+       ],
+       "null_blocks": [
+        0.0006875,
+        0.0006875
+       ]
+      },
+      "python": {
+       "net": 57.6247814,
+       "raw": 57.6248172,
+       "null": 3.57e-05,
+       "canary": 62.7720617,
+       "first": 64.36821,
+       "cache_suspect": false,
+       "raw_blocks": [
+        64.36820997623727,
+        57.624817185569555
+       ],
+       "null_blocks": [
+        3.8067810237407684e-05,
+        3.573950380086899e-05
+       ]
+      }
+     },
+     "cache_suspect": [],
+     "agree_digits": 16.17,
+     "disagree": [
+      {
+       "engine": "python",
+       "digits": 16.17
+      }
+     ],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  }
+ },
+ "throughput": {
+  "mathilda": {
+   "DirichletL": 979.119,
+   "DirichletLc": 1777.35
+  },
+  "wolfram": {
+   "DirichletL": 170982.408,
+   "DirichletLc": 288762.208
+  },
+  "python": {}
+ },
+ "exact": {
+  "sizes": {
+   "DirichletL": [
+    10,
+    50,
+    150
+   ]
+  },
+  "notes": {
+   "DirichletL": "exact generalized Bernoulli value (real character mod 12); only Mathilda + Wolfram"
+  },
+  "engines": {
+   "mathilda": {
+    "t": {
+     "DirichletL:10": 0.346,
+     "DirichletL:50": 0.302,
+     "DirichletL:150": 2.402
+    },
+    "v": {
+     "DirichletL:10": "-1491632525"
+    }
+   },
+   "wolfram": {
+    "t": {
+     "DirichletL:10": 4.821,
+     "DirichletL:50": 2.5260000000000002,
+     "DirichletL:150": 7.714
+    },
+    "v": {
+     "DirichletL:10": "-1491632525"
+    }
+   },
+   "maxima": {
+    "t": {},
+    "v": {}
+   },
+   "python": {
+    "t": {},
+    "v": {}
+   }
+  }
+ }
+}

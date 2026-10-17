@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -1602,6 +1602,85 @@ Out[1]= PolyLog[s, z]/z
 In[2]:= LerchPhi[0.5, 3, 2.5]
 Out[2]= 0.0794983
 ```
+
+## DirichletL
+
+- `DirichletL[k, j, s]` — the Dirichlet L-function L(χ, s) for the character
+  χ = `DirichletCharacter[k, j, ·]` (see `number-theory.md`); for Re s > 1 it is
+  Σ_{n≥1} χ(n) n⁻ˢ, continued to the whole s-plane (entire unless χ is
+  principal, which has a pole at s = 1).
+
+Implemented in `src/special_functions/dirichlet_l.c` on the character engine
+`dirichlet.{c,h}`, registered via `dirichletl_init()` in `core_init()`.
+Attributes `Listable`, `NumericFunction`, `Protected`. `N` keeps the labels k, j
+exact (`numericalize_rec`, as Mathematica's `NHoldAll` + N-rule does), so
+`N[DirichletL[3, 2, 1/2], 50]` evaluates at s = 0.5`50.
+
+- **Messages.** `argrx` (arity), `intp` (a number that is not a positive integer
+  at position 1 or 2), `invl` (j > EulerPhi[k]); all through `mth_message`.
+- **k = 1** is `Zeta[s]` on every surface (bit-identical machine values).
+- **Exact values** (computed in the cyclotomic field Q(ζ_ord χ) as coefficient
+  vectors reduced modulo the cyclotomic polynomial, rendered as rational
+  combinations of roots of unity in `DirichletCharacter`'s normal form):
+  - s = 1 − m ≤ 0, every character: L(χ, 1−m) = −B_{m,χ*}/m · Π_{p|k, p∤f}
+    (1 − χ*(p) p^{m−1}), with the generalized Bernoulli numbers
+    B_{m,χ} = Σ C(m,i) B_i f^{i−1} Σ_a χ(a) a^{m−i} of the primitive χ* mod the
+    conductor f. E.g. `DirichletL[3, 2, -4] = 2/3`,
+    `DirichletL[5, 2, -4] = 148/25 + 86/25 I`, `DirichletL[12, 3, -4] = 205`.
+  - s = 1, non-principal χ: the classical closed forms of the primitive χ*
+    (odd: π i τ(χ*)/f² Σ χ̄(a) a; even: −2 τ(χ*)/f Σ_{a<f/2} χ̄(a) Log[Sin[π a/f]];
+    τ = √f or i√f for a real χ*) times Π (1 − χ*(p)/p). `DirichletL[3, 2, 1] =
+    Pi/(3 Sqrt[3])`, `DirichletL[4, 2, 1] = Pi/4`. Mathematica leaves the
+    imprimitive s = 1 values unevaluated; Mathilda gives them.
+  - Everything else (s ≥ 2 for k > 1, non-integer exact s, the principal
+    character at s = 1 for k > 1) stays unevaluated, as in Mathematica.
+  - Matches Mathematica on all 1152 exact values it produces for
+    k ∈ {2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15, 16, 20, 21, 24, 25, 27, 32, 35, 40},
+    every j, s ∈ −5..1.
+- **Machine precision** (`src/special_functions/sf_machine_dirichlet.c`, the one
+  raw-double kernel behind the scalar, packed/NDArray and Compile surfaces).
+  Reduce χ to χ* and Euler factors; conductor 1 is `sf_zeta_*`. For Re s ≥ 1/2:
+  Euler–Maclaurin on L itself — the direct sum to n = M f plus, per residue a,
+  the E-M tail of f⁻ˢ ζ(s, M + a/f) with J = 10 Bernoulli terms and M the
+  smallest integer meeting the remainder bound. The integral terms are summed
+  as −M^{1−s} Σ_a χ(a) ℓ_a φ((1−s)ℓ_a), ℓ_a = log1p(a/(fM)), φ(u) = expm1(u)/u,
+  exact because Σ χ(a) = 0: no cancellation as s → 1, and s = 1 is φ(0) = 1. A
+  real character at real s runs in real arithmetic. For Re s < 1/2: the
+  functional equation with the root number ε = τ(χ*)/(i^δ √f) from the
+  character table (ε = 1 for real χ*), exact 0 at the trivial zeros.
+  Accuracy: max 6e-14 relative over 3000 random (k ≤ 300, s real in ±12,
+  complex |Im s| ≤ 40) against arb; Mathematica's own machine values are off by
+  up to 1e-9 relative at some of these points (e.g. (7, 2, −7/2 + 10 I)).
+  Shootout (`benchmarks/97-special-functions`, v0.450): 1.5 µs (real χ mod 5) /
+  2.6 µs (complex χ mod 7) per machine call vs Mathematica 288 / 462 µs and
+  mpmath 12 / 18 ms; complex s 3.0 / 4.2 µs vs 425 / 660 µs; a 10⁶ buffer 1.0 /
+  1.8 s vs 171 / 289 s; ~35 µs at k = 1000.
+- **Arbitrary precision.** arb's `acb_dirichlet_l` on the primitive χ* (set on
+  FLINT's own generators from our values, never via Conrey labels) times the
+  Euler factors, with the bridge's precision-doubling ladder
+  (`flint_num_dirichlet_l`); the result carries the precision of s. 0.73 / 1.09
+  ms at 50 digits (Mathematica 8.9 / 11.2 ms, mpmath 28 / 58 ms). Without FLINT, the HurwitzZeta template
+  f⁻ˢ Σ χ*(a) ζ(s, a/f) × Euler factors.
+- **Interval** (real characters). A rigorous arb enclosure
+  (`flint_dirichlet_l_interval`): pieces whose derivative ball excludes 0 are
+  monotone and bounded by their endpoint values; others are bisected (depth
+  12) and bounded at the leaves by L(mid) ± r sup|L'|. The jets come from
+  deflated Hurwitz series (L = q⁻ˢ Σ χ(a)(ζ(s, a/q) − 1/(s−1)), entire for
+  non-principal χ) or, below s = −1/4, the functional equation. Tighter than
+  Mathematica: `DirichletL[5, 1, Interval[{1.23, 1.24}]] =
+  Interval[{4.11396, 4.25899}]` (the endpoint values; Mathematica returns the
+  looser {4.09145, 4.28087}), and non-principal characters are enclosed where
+  Mathematica returns unevaluated. A range containing s = 1 is left unevaluated
+  (arb's sums have no finite enclosure on a ball through the cancelled poles).
+  `CenteredInterval` is not implemented in Mathilda.
+- **Surfaces.** A packed / `NDArray` s with scalar k, j threads the machine
+  kernel over the buffer with the character table fetched once (`AWARE`; a
+  real character over a real buffer stays real, else complex128; an int64
+  buffer is exact s and goes to the scalar path). `Compile[]` lowers through the
+  n-ary kernel `ndk_DirichletL_n` (scalar `KERNN`/`KERNN_C`, a tile in the s
+  slot `VKERNN_R`/`_C`), typed Real only for literal labels of a real character
+  at real s. Scalar, unpacked List, packed, `NDArray` and both Compile shapes
+  agree bit-for-bit.
 
 ## AiryAi
 

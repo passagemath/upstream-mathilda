@@ -13,6 +13,7 @@
 #include "../symtab.h"           /* symtab_lookup, SymbolDef, ndarray_unary_kernel */
 #include "compiled_function.h"   /* compiled_function_body — a CompiledFunction callee's body */
 #include "../sym_names.h"        /* SYM_SameTest / SYM_List ... */
+#include "../special_functions/dirichlet.h" /* dch_labels_real */
 #include <string.h>
 #include <stdlib.h>
 
@@ -328,6 +329,23 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             CompileType t; infer_type(c, lb->data.function.args[j], &t); cx = (t == CT_COMPLEX);
         }
         *out = cx ? CT_COMPLEX : CT_REAL; return true;
+    }
+    /* DirichletL[k, j, s]: scalar integer labels k, j; s a scalar or an ARRAY
+     * (DirichletL is Listable; the fused loop feeds s as a tile). The value is
+     * real only for a real character at real s -- decidable at compile time
+     * only from literal labels, so anything else is typed Complex (a Real slot
+     * would make every complex-character call bail to the interpreter). */
+    if (strcmp(h, "DirichletL") == 0 && na == 3) {
+        CompileType tk, tj, ts;
+        IT(0, tk); IT(1, tj); IT(2, ts);
+        if (CT_IS_ARRAY(tk) || CT_IS_ARRAY(tj) || tk == CT_BOOL || tj == CT_BOOL
+            || tk == CT_COMPLEX || tj == CT_COMPLEX) return false;
+        CompileType es = CT_IS_ARRAY(ts) ? CT_ELEM(ts) : ts;
+        if (es == CT_BOOL) return false;
+        bool cx = (es == CT_COMPLEX) || !dch_labels_real(A[0], A[1]);
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
+        *out = CT_IS_ARRAY(ts) ? CT_ARRAY(et, CT_RANK(ts)) : et;
+        return true;
     }
     /* MeijerG: parameter Lists of scalars, z scalar -- or a real/complex ARRAY,
      * over which MeijerG threads (the fused loop then feeds z as a tile; see

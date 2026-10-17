@@ -50,6 +50,8 @@
 #include "eulere.h"
 #include "polylog.h"
 #include "lerchphi.h"
+#include "dirichlet_character.h"
+#include "dirichlet_l.h"
 #include "productlog.h"
 #include "legendre.h"
 #include "chebyshev_t.h"
@@ -826,6 +828,8 @@ void core_init(void) {
     eulere_init();
     polylog_init();
     lerchphi_init();
+    dirichletcharacter_init();
+    dirichletl_init();
     productlog_init();
     legendre_init();
     chebyshev_t_init();

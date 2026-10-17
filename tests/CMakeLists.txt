@@ -414,6 +414,10 @@ set(COMMON_SRC
     ../src/special_functions/eulere.c
     ../src/special_functions/polylog.c
     ../src/special_functions/lerchphi.c
+    ../src/special_functions/dirichlet.c
+    ../src/special_functions/dirichlet_character.c
+    ../src/special_functions/dirichlet_l.c
+    ../src/special_functions/sf_machine_dirichlet.c
     ../src/special_functions/productlog.c
     ../src/special_functions/legendre.c
     ../src/special_functions/chebyshev_common.c
@@ -3622,6 +3626,14 @@ target_include_directories(polylog_tests PRIVATE ../src)
 
 add_executable(lerchphi_tests test_lerchphi.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(lerchphi_tests PRIVATE ../src)
+
+add_executable(dirichletcharacter_tests test_dirichletcharacter.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dirichletcharacter_tests PRIVATE ../src)
+add_test(NAME dirichletcharacter_tests COMMAND dirichletcharacter_tests)
+
+add_executable(dirichletl_tests test_dirichletl.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dirichletl_tests PRIVATE ../src)
+add_test(NAME dirichletl_tests COMMAND dirichletl_tests)
 
 add_executable(zeta_machine_tests test_zeta_machine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(zeta_machine_tests PRIVATE ../src)

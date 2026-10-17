@@ -43,6 +43,7 @@
 #include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include "special_functions/sf_machine_bessel.h"
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
+#include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -925,6 +926,16 @@ static bool ndk_MeijerG_n(const double* re, const double* im, size_t n,
 }
 static const NDNaryKernel NDKN_MeijerG = { ndk_MeijerG_n, 0, true };
 static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
+/* DirichletL[k, j, s]: k, j integer labels (an imaginary part, or a
+ * non-integer / out-of-range label, declines), s complex. The helper is the one
+ * behind the scalar builtin and its buffer loop; a complex character makes the
+ * value complex even at real s, so the kernel is not real-closed. */
+static bool ndk_DirichletL_n(const double* re, const double* im, size_t n,
+                             double* rr, double* ri) {
+    if (n != 3 || im[0] != 0.0 || im[1] != 0.0) return false;
+    return sf_dirichlet_l_c(re[0], re[1], re[2], im[2], rr, ri);
+}
+static const NDNaryKernel NDKN_DirichletL          = { ndk_DirichletL_n, 3, false };
 static const NDNaryKernel NDKN_Hypergeometric1F1   = { ndk_Hyper1F1_n, 3, true };
 static const NDNaryKernel NDKN_Hypergeometric2F1   = { ndk_Hyper2F1_n, 4, true };
 static const NDNaryKernel NDKN_LaguerreL           = { ndk_LaguerreL_n, 3, true };
@@ -1018,5 +1029,6 @@ void ndkernels_init(void) {
     REG_N(WhittakerM);  /* WhittakerM[k, m, z] for Compile[] */
     REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */
     REG_N(WhittakerW);  /* WhittakerW[k, m, z] for Compile[] */
+    REG_N(DirichletL);  /* DirichletL[k, j, s] for Compile[] */
 
 }

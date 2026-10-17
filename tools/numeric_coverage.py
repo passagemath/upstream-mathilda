@@ -155,7 +155,7 @@ NUMERIC = {
     "FresnelC", "FresnelS", "ProductLog",
     "BesselJ", "BesselY", "BesselI", "BesselK",
     "AiryAi", "AiryBi", "AiryAiPrime", "AiryBiPrime",
-    "Zeta", "HurwitzZeta", "LerchPhi", "PolyLog", "StieltjesGamma",
+    "Zeta", "HurwitzZeta", "LerchPhi", "PolyLog", "StieltjesGamma", "DirichletL",
     "Hypergeometric0F1", "Hypergeometric1F1", "Hypergeometric2F1",
     "HypergeometricPFQ", "MeijerG", "QPochhammer",
     "LegendreP", "LegendreQ", "ChebyshevT", "ChebyshevU",

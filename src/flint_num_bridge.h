@@ -117,6 +117,28 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
 bool flint_mg_laurent(size_t nf, const double* x, const int* s, const int* e,
                       size_t T, long* v, double* out);
 
+/* Dirichlet L-function L(s, chi) for a character given as a PRIMITIVE
+ * character chi* mod q (conductor q) plus Euler factors: the value is
+ * L(s, chi*) * prod_i (1 - chi*(eul_p[i]) eul_p[i]^-s). chi* is described by a
+ * callback: fn(ctx, n, &num) sets chi*(n) = exp(2 Pi I num/den) and returns
+ * false when gcd(n, q) > 1; chi*(eul_p[i]) = exp(2 Pi I eul_num[i]/den).
+ * Precision follows s (floored at 53 bits), with the usual doubling ladder.
+ * NULL at a pole or without FLINT. */
+typedef bool (*flint_chi_exp_fn)(const void* ctx, uint64_t n, uint64_t* num);
+Expr* flint_num_dirichlet_l(const Expr* s, uint64_t q, uint64_t den,
+                            flint_chi_exp_fn fn, const void* ctx,
+                            int neul, const uint64_t* eul_p, const uint64_t* eul_num);
+
+/* Rigorous real enclosure [*out_lo, *out_hi] of L(s, chi) for s in [lo, hi]
+ * (a REAL character, so the value is real). Monotone pieces are certified by
+ * the sign of L'(s) on the ball and bounded by their endpoint values; the rest
+ * is bisected and bounded by value balls. Outward rounded. False without FLINT
+ * or when the range meets a pole. */
+bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
+                                flint_chi_exp_fn fn, const void* ctx,
+                                int neul, const uint64_t* eul_p, const uint64_t* eul_num,
+                                double* out_lo, double* out_hi);
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

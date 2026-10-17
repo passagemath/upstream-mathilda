@@ -123,6 +123,21 @@ NUMERIC: list[SF] = [
        ((0.0, 0.9), (2.0, 4.0), (0.5, 2.0)),
        ((-0.6, 0.6, -0.6, 0.6), (2.0, 4.0, 0.0, 0.0), (0.5, 2.0, 0.0, 0.0)),
        note="Python column is mpmath (scipy has no LerchPhi)", pylib="mpmath"),
+    # DirichletL: mpmath.dirichlet takes the character as a periodic value list,
+    # built here in Mathematica's DirichletCharacter labelling (the values were
+    # checked against Mathematica 14) at the working precision.
+    SF("DirichletL", "Zeta", 1, "DirichletL[5, 3, {0}]", None,
+       (lambda s: mp.dirichlet(s, [0, 1, -1, -1, 1])), None, False, ALL,
+       ((-4.0, 6.0),), ((0.2, 4.0, -10.0, 10.0),),
+       note="real character mod 5 (k = 5, j = 3); Python is mpmath; scipy/Maxima lack it",
+       pylib="mpmath"),
+    SF("DirichletLc", "Zeta", 1, "DirichletL[7, 2, {0}]", None,
+       (lambda s: mp.dirichlet(s, [0, 1, mp.expjpi(mp.mpf(2) / 3), mp.expjpi(mp.mpf(1) / 3),
+                                   mp.expjpi(mp.mpf(-2) / 3), mp.expjpi(mp.mpf(-1) / 3), -1])),
+       None, False, ALL,
+       ((-4.0, 6.0),), ((0.2, 4.0, -10.0, 10.0),),
+       note="complex character mod 7 (k = 7, j = 2, order 6); Python is mpmath",
+       pylib="mpmath"),
     SF("PolyLog", "Zeta", 1, "PolyLog[2, {0}]", None,
        (lambda z: mp.polylog(2, z)), None, False, ALL,
        ((-0.9, 0.9),), ((-0.8, 0.8, -0.8, 0.8),),
@@ -336,6 +351,8 @@ EXACT: list[ExactSF] = [
             note="exact superfactorial (GMP); only Mathilda + Wolfram"),
     ExactSF("Hyperfactorial", "Hyperfactorial[{0}]", None, None, (20, 60),
             note="exact (GMP); only Mathilda + Wolfram"),
+    ExactSF("DirichletL", "DirichletL[12, 3, -{0}]", None, None, (10, 50, 150),
+            note="exact generalized Bernoulli value (real character mod 12); only Mathilda + Wolfram"),
 ]
 
 

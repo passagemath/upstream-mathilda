@@ -1414,6 +1414,13 @@ int fuse_listable(Ctx* c, const Expr* e) {
     if (!any) return 0;                       /* scalar subtree: unconstrained */
     if (e->data.function.head->type != EXPR_SYMBOL) return -1;
     const char* h = e->data.function.head->data.symbol.name;
+    /* DirichletL threads over s only: the labels k, j must stay scalar (the
+     * emitter broadcasts them into the n-ary kernel's run). */
+    if (strcmp(h, "DirichletL") == 0 && e->data.function.arg_count == 3) {
+        for (size_t i = 0; i < 2; i++)
+            if (fuse_listable(c, e->data.function.args[i]) != 0) return -1;
+        return 1;
+    }
     /* MeijerG is not Listable (its parameters ARE lists) but threads over z,
      * its third argument: fusible when z is the only array-valued argument. */
     if (strcmp(h, "MeijerG") == 0

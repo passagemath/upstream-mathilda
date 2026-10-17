@@ -209,6 +209,22 @@ buffer argument. Accuracy rose with speed: the agreement table is at or above it
 values, and every kernel was gated against mpmath (median $\lesssim 1$ ulp) before it was
 wired.
 
+\paragraph{DirichletL (v0.450).} Two rows cover the Dirichlet $L$-function: the real
+character mod 5 (\mcode{DirichletL}, $k=5$, $j=3$) and the order-6 complex character mod 7
+(\mcode{DirichletLc}, $k=7$, $j=2$), with $s$ sampled on $[-4,6]$ so that both sides of the
+critical line are timed. SciPy and Maxima have no $L$-function; the Python column is
+\mcode{mpmath.dirichlet}, given the character values in Mathematica's labelling. The machine
+kernel runs Euler--Maclaurin on $L$ itself, with the integral terms summed as
+$\mathrm{expm1}/\mathrm{log1p}$ so that nothing cancels as $s\to 1$, and the functional
+equation for $\Re s<\tfrac12$. It is 180--200$\times$ faster than Mathematica at machine
+precision, 145--160$\times$ on complex $s$, 10--12$\times$ at 50 digits (arb's
+\mcode{acb\_dirichlet\_l} on the primitive character), and 160--175$\times$ on a $10^6$
+buffer. The three flagged disagreements are not Mathilda's. Mathematica's own machine values
+are wrong from the seventh digit in the left half-plane: at $(5,3,-3.3)$ it returns
+$2.492235964$, where the 20-digit value is $2.4922356398\ldots$. The 50-digit
+\mcode{DirichletLc} row is an mpmath artefact: a fresh mpmath process agrees with Mathilda
+to 51 digits at all eight points, and Mathilda agrees with Mathematica at 50.
+
 \paragraph{MeijerG (v0.445, v0.446).} Three rows cover the Meijer $G$-function: a two-term
 $G^{2,1}_{2,3}$ (\mcode{MeijerG}), a $G^{2,2}_{2,2}$ whose Slater expansion switches from
 $z$ to $1/z$ at the unit circle (\mcode{MeijerG22}), and the documented log case of

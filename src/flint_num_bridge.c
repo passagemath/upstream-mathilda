@@ -27,6 +27,8 @@
 #include <flint/arb.h>
 #include <flint/acb.h>
 #include <flint/acb_dirichlet.h>
+#include <flint/dirichlet.h>
+#include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
 #include <flint/acb_hypgeom.h>
 #include <flint/acb_poly.h>
@@ -312,6 +314,303 @@ Expr* flint_num_stieltjes(const Expr* n, const Expr* a) {
     acb_clear(A); acb_clear(R);
     fmpz_clear(N);
     return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dirichlet L-functions                                              */
+/* ------------------------------------------------------------------ */
+/* The character arrives as a callback giving chi*(n) = exp(2 Pi I num/den) for
+ * a primitive character mod q (src/special_functions/dirichlet.c owns the
+ * labelling); it is set on FLINT's OWN generators, so FLINT's Conrey labels
+ * never have to agree with Mathematica's. Euler factors (1 - chi*(p) p^-s) for
+ * the primes dividing the modulus but not the conductor are applied in arb. */
+
+static int nb_dirichlet_char(dirichlet_group_t G, dirichlet_char_t x, uint64_t q,
+                             uint64_t den, flint_chi_exp_fn fn, const void* ctx) {
+    dirichlet_group_init(G, (ulong)q);
+    dirichlet_char_init(x, G);
+    for (slong i = 0; i < G->num; i++) {
+        uint64_t num = 0;
+        if (!fn(ctx, (uint64_t)G->generators[i], &num)) return 0;
+        ulong phi = G->P[i].phi.n;
+        /* log = num * phi / den, an integer for a genuine character. */
+        mpz_t t; mpz_init_set_ui(t, (unsigned long)num);
+        mpz_mul_ui(t, t, (unsigned long)phi);
+        int ok = mpz_divisible_ui_p(t, (unsigned long)den);
+        if (ok) { mpz_divexact_ui(t, t, (unsigned long)den); x->log[i] = (ulong)mpz_get_ui(t) % phi; }
+        mpz_clear(t);
+        if (!ok) return 0;
+    }
+    _dirichlet_char_exp(x, G);
+    return 1;
+}
+
+/* res *= prod (1 - chi*(p) p^-s). */
+static void nb_dirichlet_euler(acb_t res, const acb_t s, int neul, const uint64_t* ep,
+                               const uint64_t* enm, uint64_t den, slong prec) {
+    acb_t f, c, ps;
+    acb_init(f); acb_init(c); acb_init(ps);
+    for (int i = 0; i < neul; i++) {
+        fmpq_t r; fmpq_init(r);
+        fmpq_set_si(r, (slong)(2 * (enm[i] % den)), (ulong)den);
+        arb_sin_cos_pi_fmpq(acb_imagref(c), acb_realref(c), r, prec);
+        fmpq_clear(r);
+        acb_set_ui(ps, (ulong)ep[i]);
+        acb_neg(f, s);
+        acb_pow(ps, ps, f, prec);
+        acb_mul(f, c, ps, prec);
+        acb_sub_ui(f, f, 1, prec);
+        acb_neg(f, f);
+        acb_mul(res, res, f, prec);
+    }
+    acb_clear(f); acb_clear(c); acb_clear(ps);
+}
+
+Expr* flint_num_dirichlet_l(const Expr* s, uint64_t q, uint64_t den,
+                            flint_chi_exp_fn fn, const void* ctx,
+                            int neul, const uint64_t* eul_p, const uint64_t* eul_num) {
+    dirichlet_group_t G; dirichlet_char_t x;
+    if (!nb_dirichlet_char(G, x, q, den, fn, ctx)) {
+        dirichlet_char_clear(x); dirichlet_group_clear(G);
+        return NULL;
+    }
+    const Expr* args[1] = { s };
+    slong outb = pick_out_bits(args, 1);
+    acb_t S, R; acb_init(S); acb_init(R);
+    Expr* out = NULL;
+    for (int attempt = 0; ; attempt++) {
+        slong wp = (outb + NB_GUARD) << attempt;
+        if (!expr_to_acb(s, S, wp)) break;
+        acb_dirichlet_l(R, S, G, x, wp);
+        if (neul) nb_dirichlet_euler(R, S, neul, eul_p, eul_num, den, wp);
+        if (nb_should_retry(R, outb, attempt)) continue;
+        slong bits = nb_emit_bits(R, outb);
+        if (bits > 0) out = acb_to_expr(R, bits);
+        break;
+    }
+    acb_clear(S); acb_clear(R);
+    dirichlet_char_clear(x); dirichlet_group_clear(G);
+    return out;
+}
+
+/* Value and first derivative of L(s, chi*) * prod (1 - chi*(p) p^-s) at the
+ * ball s: J[0] = value, J[1] = d/ds.
+ *
+ * For a non-principal chi* (q > 1) the jet is assembled from DEFLATED Hurwitz
+ * zeta series, L(s) = q^-s sum_a chi(a) (zeta(s, a/q) - 1/(s-1)), which is
+ * exact because sum_a chi(a) = 0 and makes every term entire: a ball containing
+ * s = 1 stays finite and wide balls are far less overestimated than with
+ * acb_dirichlet_l_jet, whose Hurwitz poles cancel only in exact arithmetic.
+ * The principal case (q = 1, Zeta) keeps arb's own jet -- its pole is real.
+ * Each Euler factor is the jet (1 - c p^-s, c log(p) p^-s), multiplied in. */
+static void nb_dl_jet_hurwitz(acb_struct* J, const acb_t s, const dirichlet_group_t G,
+                              const dirichlet_char_t x, slong prec) {
+    ulong q = G->q;
+    acb_poly_t S, Z; acb_t a, c, acc0, acc1, lq, t;
+    acb_poly_init(S); acb_poly_init(Z);
+    acb_init(a); acb_init(c); acb_init(acc0); acb_init(acc1); acb_init(lq); acb_init(t);
+    acb_poly_set_coeff_acb(S, 0, s);
+    acb_poly_set_coeff_si(S, 1, 1);                       /* s + eps */
+    for (ulong k = 1; k < q; k++) {
+        if (n_gcd(k, q) != 1) continue;
+        acb_dirichlet_chi(c, G, x, k, prec);
+        acb_set_ui(a, k); acb_div_ui(a, a, q, prec);
+        acb_poly_zeta_series(Z, S, a, 1, 2, prec);
+        acb_poly_get_coeff_acb(t, Z, 0); acb_addmul(acc0, c, t, prec);
+        acb_poly_get_coeff_acb(t, Z, 1); acb_addmul(acc1, c, t, prec);
+    }
+    /* times q^-s = q^-s (1 - eps log q) */
+    acb_set_ui(lq, q); acb_log(lq, lq, prec);
+    acb_mul(t, lq, s, prec); acb_neg(t, t); acb_exp(t, t, prec);   /* q^-s */
+    acb_mul(J, acc0, t, prec);
+    acb_mul(acc1, acc1, t, prec);
+    acb_submul(acc1, J, lq, prec);
+    acb_set(J + 1, acc1);
+    acb_poly_clear(S); acb_poly_clear(Z);
+    acb_clear(a); acb_clear(c); acb_clear(acc0); acb_clear(acc1); acb_clear(lq); acb_clear(t);
+}
+
+/* The functional equation of a REAL primitive character (root number 1) as a
+ * jet: L(s) = (q/Pi)^(1/2-s) Gamma((1-s+d)/2) / Gamma((s+d)/2) L(1-s). Used on
+ * the left half-plane, where Hurwitz balls are hopeless. */
+static void nb_dl_jet_fe(acb_struct* J, const acb_t s, const dirichlet_group_t G,
+                         const dirichlet_char_t x, slong prec) {
+    int d = dirichlet_parity_char(G, x);
+    acb_poly_t S, A, B, C, P; acb_t t, lqp; acb_struct D[2];
+    acb_poly_init(S); acb_poly_init(A); acb_poly_init(B); acb_poly_init(C); acb_poly_init(P);
+    acb_init(t); acb_init(lqp); acb_init(D); acb_init(D + 1);
+    acb_set_ui(lqp, G->q); acb_const_pi(t, prec); acb_div(lqp, lqp, t, prec); acb_log(lqp, lqp, prec);
+    /* A = exp((1/2 - S) log(q/Pi)) */
+    acb_one(t); acb_mul_2exp_si(t, t, -1); acb_sub(t, t, s, prec); acb_mul(t, t, lqp, prec);
+    acb_poly_set_coeff_acb(A, 0, t);
+    acb_neg(t, lqp); acb_poly_set_coeff_acb(A, 1, t);
+    acb_poly_exp_series(A, A, 2, prec);
+    /* B = Gamma((1 - S + d)/2) */
+    acb_set_si(t, 1 + d); acb_sub(t, t, s, prec); acb_mul_2exp_si(t, t, -1);
+    acb_poly_set_coeff_acb(B, 0, t);
+    acb_set_si(t, -1); acb_mul_2exp_si(t, t, -1); acb_poly_set_coeff_acb(B, 1, t);
+    acb_poly_gamma_series(B, B, 2, prec);
+    /* C = 1/Gamma((S + d)/2) */
+    acb_set_si(t, d); acb_add(t, t, s, prec); acb_mul_2exp_si(t, t, -1);
+    acb_poly_set_coeff_acb(C, 0, t);
+    acb_one(t); acb_mul_2exp_si(t, t, -1); acb_poly_set_coeff_acb(C, 1, t);
+    acb_poly_rgamma_series(C, C, 2, prec);
+    /* L(1 - S): value D0, derivative -D1 */
+    acb_one(t); acb_sub(t, t, s, prec);
+    nb_dl_jet_hurwitz(D, t, G, x, prec);
+    acb_poly_fit_length(P, 2);
+    acb_poly_set_coeff_acb(P, 0, D);
+    acb_neg(t, D + 1); acb_poly_set_coeff_acb(P, 1, t);
+    acb_poly_mullow(P, P, A, 2, prec);
+    acb_poly_mullow(P, P, B, 2, prec);
+    acb_poly_mullow(P, P, C, 2, prec);
+    acb_poly_get_coeff_acb(J, P, 0);
+    acb_poly_get_coeff_acb(J + 1, P, 1);
+    acb_poly_clear(S); acb_poly_clear(A); acb_poly_clear(B); acb_poly_clear(C); acb_poly_clear(P);
+    acb_clear(t); acb_clear(lqp); acb_clear(D); acb_clear(D + 1);
+}
+
+static void nb_dl_jet(acb_struct* J, const acb_t s, const dirichlet_group_t G,
+                      const dirichlet_char_t x, int neul, const uint64_t* ep,
+                      const uint64_t* enm, uint64_t den, slong prec) {
+    if (G->q == 1) {
+        acb_dirichlet_l_jet(J, s, G, x, 0, 2, prec);
+    } else {
+        arf_t ub; arf_init(ub);
+        arb_get_ubound_arf(ub, acb_realref(s), prec);
+        /* below -1/4, so that 1 - s stays clear of the s = 1 the Hurwitz form
+         * cannot enclose; near 0 the Hurwitz form itself is well behaved. */
+        arf_neg(ub, ub);
+        int left = arf_cmp_2exp_si(ub, -2) > 0 && dirichlet_order_char(G, x) <= 2;
+        arf_clear(ub);
+        if (left) nb_dl_jet_fe(J, s, G, x, prec);
+        else      nb_dl_jet_hurwitz(J, s, G, x, prec);
+    }
+    if (!neul) return;
+    acb_t c, ps, f0, f1, t, lp;
+    acb_init(c); acb_init(ps); acb_init(f0); acb_init(f1); acb_init(t); acb_init(lp);
+    for (int i = 0; i < neul; i++) {
+        fmpq_t r; fmpq_init(r);
+        fmpq_set_si(r, (slong)(2 * (enm[i] % den)), (ulong)den);
+        arb_sin_cos_pi_fmpq(acb_imagref(c), acb_realref(c), r, prec);
+        fmpq_clear(r);
+        acb_set_ui(ps, (ulong)ep[i]);
+        acb_log(lp, ps, prec);
+        acb_neg(t, s);
+        acb_pow(ps, ps, t, prec);                /* p^-s            */
+        acb_mul(t, c, ps, prec);                 /* c p^-s          */
+        acb_one(f0); acb_sub(f0, f0, t, prec);   /* 1 - c p^-s      */
+        acb_mul(f1, t, lp, prec);                /* c log p p^-s    */
+        /* (J0, J1) * (f0, f1) */
+        acb_mul(t, J + 1, f0, prec);
+        acb_addmul(t, J, f1, prec);
+        acb_set(J + 1, t);
+        acb_mul(J, J, f0, prec);
+    }
+    acb_clear(c); acb_clear(ps); acb_clear(f0); acb_clear(f1); acb_clear(t); acb_clear(lp);
+}
+
+static void nb_dl_widen(const arb_t v, arf_t ylo, arf_t yhi, int* have, slong prec) {
+    arf_t t; arf_init(t);
+    arb_get_lbound_arf(t, v, prec);
+    if (!*have || arf_cmp(t, ylo) < 0) arf_set(ylo, t);
+    arb_get_ubound_arf(t, v, prec);
+    if (!*have || arf_cmp(t, yhi) > 0) arf_set(yhi, t);
+    arf_clear(t);
+    *have = 1;
+}
+
+/* One certified piece of the enclosure over [lo, hi]; widens [*ylo, *yhi].
+ *
+ * Arb's L-function jet on a WIDE ball is badly overestimated (it sums Hurwitz
+ * zetas whose poles cancel only in exact arithmetic: a ball over [1.1, 3] comes
+ * back infinite), so the range is bisected until the derivative ball on a piece
+ * excludes 0 -- that piece is monotone and its endpoint values bound it. Near a
+ * genuine extremum the pieces never certify; at the depth limit such a piece is
+ * bounded by the mean-value form L(mid) +- r sup|L'(piece)|, which is rigorous
+ * and, at that width, tight. Bisection only recurses where certification
+ * fails, so the cost is O(depth) pieces per extremum. */
+static int nb_dl_iv_piece(const arf_t lo, const arf_t hi, int depth,
+                          const dirichlet_group_t G, const dirichlet_char_t x,
+                          int neul, const uint64_t* ep, const uint64_t* enm, uint64_t den,
+                          arf_t ylo, arf_t yhi, int* have, slong prec) {
+    acb_t S; acb_struct J[2];
+    acb_init(S); acb_init(J); acb_init(J + 1);
+    arb_set_interval_arf(acb_realref(S), lo, hi, prec);
+    int ok = 0;
+    nb_dl_jet(J, S, G, x, neul, ep, enm, den, prec);
+    int fin = acb_is_finite(J + 1);
+    if (fin && !arb_contains_zero(acb_realref(J + 1))) {
+        acb_t P; acb_struct V[2];
+        acb_init(P); acb_init(V); acb_init(V + 1);
+        ok = 1;
+        for (int e = 0; e < 2 && ok; e++) {
+            acb_zero(P);
+            arb_set_arf(acb_realref(P), e ? hi : lo);
+            nb_dl_jet(V, P, G, x, neul, ep, enm, den, prec);
+            if (!acb_is_finite(V)) ok = 0;
+            else nb_dl_widen(acb_realref(V), ylo, yhi, have, prec);
+        }
+        acb_clear(P); acb_clear(V); acb_clear(V + 1);
+    } else if (depth > 0) {
+        arf_t mid; arf_init(mid);
+        arf_add(mid, lo, hi, ARF_PREC_EXACT, ARF_RND_DOWN);
+        arf_mul_2exp_si(mid, mid, -1);
+        ok = nb_dl_iv_piece(lo, mid, depth - 1, G, x, neul, ep, enm, den, ylo, yhi, have, prec)
+          && nb_dl_iv_piece(mid, hi, depth - 1, G, x, neul, ep, enm, den, ylo, yhi, have, prec);
+        arf_clear(mid);
+    } else if (fin) {
+        /* L(mid) + [-r, r] * L'(piece) */
+        acb_t P; acb_struct V[2]; arb_t rad, t;
+        acb_init(P); acb_init(V); acb_init(V + 1); arb_init(rad); arb_init(t);
+        acb_zero(P);
+        arb_set(acb_realref(P), acb_realref(S));
+        mag_zero(arb_radref(acb_realref(P)));               /* the midpoint */
+        nb_dl_jet(V, P, G, x, neul, ep, enm, den, prec);
+        if (acb_is_finite(V)) {
+            arb_zero(rad);
+            mag_set(arb_radref(rad), arb_radref(acb_realref(S)));   /* [-r, r] */
+            arb_mul(t, rad, acb_realref(J + 1), prec);
+            arb_add(t, t, acb_realref(V), prec);
+            nb_dl_widen(t, ylo, yhi, have, prec);
+            ok = 1;
+        }
+        acb_clear(P); acb_clear(V); acb_clear(V + 1); arb_clear(rad); arb_clear(t);
+    }
+    acb_clear(S); acb_clear(J); acb_clear(J + 1);
+    return ok;
+}
+
+bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
+                                flint_chi_exp_fn fn, const void* ctx,
+                                int neul, const uint64_t* eul_p, const uint64_t* eul_num,
+                                double* out_lo, double* out_hi) {
+    if (!(lo <= hi)) return false;
+    dirichlet_group_t G; dirichlet_char_t x;
+    if (!nb_dirichlet_char(G, x, q, den, fn, ctx)) {
+        dirichlet_char_clear(x); dirichlet_group_clear(G);
+        return false;
+    }
+    /* Arb has no finite enclosure of these sums on a ball containing s = 1
+     * (the Hurwitz poles cancel only pointwise), so such a range is declined
+     * up front -- unevaluated, as Mathematica leaves it -- rather than bisected
+     * towards a certain failure. A principal character has a real pole there. */
+    if (lo <= 1.0 && 1.0 <= hi) {
+        dirichlet_char_clear(x); dirichlet_group_clear(G);
+        return false;
+    }
+    arf_t L, H, ylo, yhi;
+    arf_init(L); arf_init(H); arf_init(ylo); arf_init(yhi);
+    arf_set_d(L, lo); arf_set_d(H, hi);
+    int have = 0;
+    int ok = nb_dl_iv_piece(L, H, 12, G, x, neul, eul_p, eul_num, den, ylo, yhi, &have, 96);
+    if (ok && have) {
+        *out_lo = arf_get_d(ylo, ARF_RND_FLOOR);
+        *out_hi = arf_get_d(yhi, ARF_RND_CEIL);
+    }
+    arf_clear(L); arf_clear(H); arf_clear(ylo); arf_clear(yhi);
+    dirichlet_char_clear(x); dirichlet_group_clear(G);
+    return ok && have;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1013,6 +1312,19 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
 bool flint_mg_laurent(size_t nf, const double* x, const int* s, const int* e,
                       size_t T, long* v, double* out) {
     (void)nf; (void)x; (void)s; (void)e; (void)T; (void)v; (void)out; return false;
+}
+Expr* flint_num_dirichlet_l(const Expr* s, uint64_t q, uint64_t den,
+                            flint_chi_exp_fn fn, const void* ctx,
+                            int neul, const uint64_t* eul_p, const uint64_t* eul_num) {
+    (void)s; (void)q; (void)den; (void)fn; (void)ctx; (void)neul; (void)eul_p; (void)eul_num;
+    return NULL;
+}
+bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
+                                flint_chi_exp_fn fn, const void* ctx,
+                                int neul, const uint64_t* eul_p, const uint64_t* eul_num,
+                                double* out_lo, double* out_hi) {
+    (void)lo; (void)hi; (void)q; (void)den; (void)fn; (void)ctx; (void)neul; (void)eul_p;
+    (void)eul_num; (void)out_lo; (void)out_hi; return false;
 }
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 

@@ -105,6 +105,14 @@ SHAPES = [
 # parameter LISTS around the numeric argument -- get their own probes, so the
 # tool enforces their lowering instead of carrying them in BASELINE.
 HEAD_SHAPES = {
+    # DirichletL[k, j, s]: integer labels broadcast, s scalar or a tile; a real
+    # character (5, 3) types Real, a complex one (5, 2) Complex.
+    "DirichletL": [
+        ("dl_s",  "scalar", "{{x, _Real}}",    "DirichletL[5, 3, x]"),
+        ("dl_sc", "scalar", "{{x, _Real}}",    "DirichletL[5, 2, x]"),
+        ("dl_v",  "array",  "{{v, _Real, 1}}", "DirichletL[5, 3, v]"),
+        ("dl_vc", "array",  "{{v, _Real, 1}}", "DirichletL[5, 2, v]"),
+    ],
     "MeijerG": [
         ("mg_s",  "scalar", "{{x, _Real}}",
          "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]"),
@@ -240,6 +248,8 @@ EXEMPT = {
     "LatticeReduce": "exact integer lattice; no machine type",
     "FindIntegerNullVector": "exact integer",
     "Prime": "exact integer table lookup, unbounded result",
+    "DirichletCharacter": "exact roots of unity (0, +-1, unit*E^(I Pi r)); not a machine value",
+    "FunctionExpand": "symbolic rewriter of special-function nodes; never computes a number",
     "IntegerDigits": "result length is data-dependent",
     "QuotientRemainder": "returns a pair, not a scalar",
     "MinMax": "returns a pair",

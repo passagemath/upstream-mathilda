@@ -693,6 +693,8 @@ extern const char* SYM_Xor;
 extern const char* SYM_StieltjesGamma;
 extern const char* SYM_Zeta;
 extern const char* SYM_HurwitzZeta;
+extern const char* SYM_DirichletL;
+extern const char* SYM_DirichletCharacter;
 extern const char* SYM_BernoulliB;
 extern const char* SYM_EulerE;
 extern const char* SYM_PolyLog;

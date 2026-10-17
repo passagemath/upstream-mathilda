@@ -1140,6 +1140,24 @@ void info_init(void) {
         "IncludeSingularTerm -> True (keep the k + a = 0 term) are supported.\n"
         "Inexact arguments with |z| < 1 evaluate numerically at machine or\n"
         "arbitrary (MPFR) precision; |z| > 1 stays symbolic. Listable.");
+    symtab_set_docstring("DirichletCharacter",
+        "DirichletCharacter[k, j, n]\n"
+        "\tgives the Dirichlet character chi_{k,j}(n) with modulus k and index j.\n"
+        "There are EulerPhi[k] characters mod k, j = 1 being the principal one;\n"
+        "the ordering is Mathematica's (a primitive root g of a prime k has\n"
+        "DirichletCharacter[k, j, g] = Exp[2 Pi I (j-1)/(k-1)]). The value is 0\n"
+        "when GCD[n, k] > 1, else a root of unity, given exactly. Periodic in n\n"
+        "with period k and completely multiplicative. Threads over lists; k must\n"
+        "be below 2^63.");
+    symtab_set_docstring("DirichletL",
+        "DirichletL[k, j, s]\n"
+        "\tgives the Dirichlet L-function L(chi, s) for the character\n"
+        "chi = DirichletCharacter[k, j, .]; for Re s > 1 it is\n"
+        "Sum_{n>=1} chi(n) n^-s. DirichletL[1, 1, s] is Zeta[s]. Exact values\n"
+        "are generated for non-positive integer s (generalized Bernoulli\n"
+        "numbers) and for s = 1 with a non-principal character. Evaluates to any\n"
+        "precision for real or complex s, and encloses Interval arguments for\n"
+        "real characters. Listable.");
     symtab_set_docstring("ProductLog",
         "ProductLog[z]\n"
         "\tgives the principal solution w of z == w e^w (the Lambert W function).\n"

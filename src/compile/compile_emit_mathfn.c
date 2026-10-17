@@ -8,6 +8,7 @@
 #include "../sym_names.h"
 #include "../sym_intern.h"
 #include "../special_functions/sf_machine_meijerg.h" /* SF_MG_MAXP, sf_mg_shape_code */
+#include "../special_functions/dirichlet.h"        /* dch_labels_real */
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -218,6 +219,59 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
         ins_f(c, cx ? OP_KERNN_C : OP_KERNN, (uint16_t)(total + 1), (uint32_t)base,
               (uint32_t)base, 0, kp);
+        out->reg = base; out->tmp = true; out->type = et;
+        return c->ok ? 1 : -1;
+    }
+
+    /* DirichletL[k, j, s] -- the run [k, j, s] for the n-ary kernel
+     * ndk_DirichletL_n (sf_dirichlet_l_c: the scalar builtin's helper). Inside
+     * a strip-mined loop s is a TILE: the run stops before s and VKERNN_* reads
+     * s per element, the labels broadcast. Typed as compile_infer.c decides:
+     * Real only for literal labels of a real character at real s. */
+    if (strcmp(h, "DirichletL") == 0 && na == 3) {
+        CompileType tk, tj, ts;
+        if (!infer_type(c, A[0], &tk) || !infer_type(c, A[1], &tj) || !infer_type(c, A[2], &ts)
+            || CT_IS_ARRAY(tk) || CT_IS_ARRAY(tj) || CT_IS_ARRAY(ts)
+            || tk == CT_BOOL || tj == CT_BOOL || ts == CT_BOOL
+            || tk == CT_COMPLEX || tj == CT_COMPLEX) { c->ok = false; return -1; }
+        bool cx = (ts == CT_COMPLEX) || !dch_labels_real(A[0], A[1]);
+        CompileType et = cx ? CT_COMPLEX : CT_REAL;
+        SymbolDef* d = symtab_lookup(h);
+        if (!d || !d->ndarray_nary_kernel) { c->ok = false; return -1; }
+        const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
+        if (!k->cplx) { c->ok = false; return -1; }
+        Slot z0; memset(&z0, 0, sizeof z0);
+        int base = alloc_temp(c);
+        (void)alloc_temp(c); (void)alloc_temp(c);
+        int after = c->temp_top;
+        for (int i = 0; i < 2 && c->ok; i++) {
+            Val v;
+            if (!emit(c, A[i], &v)) return -1;
+            if (val_is_tile(v)) { c->ok = false; return -1; }   /* labels broadcast only */
+            coerce(c, &v, et);
+            if (!c->ok) return -1;
+            ins(c, OP_MOVE, (uint32_t)(base + i), (uint32_t)v.reg, 0, z0);
+            c->temp_top = after;
+        }
+        if (!c->ok) return -1;
+        Val vs;
+        if (!emit(c, A[2], &vs)) return -1;
+        Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        if (val_is_tile(vs)) {
+            coerce(c, &vs, et);
+            if (!c->ok) return -1;
+            int dst = alloc_tile(c);
+            ins_f(c, cx ? OP_VKERNN_C : OP_VKERNN_R, 2, (uint32_t)dst,
+                  (uint32_t)base, (uint32_t)vs.reg, kp);
+            c->temp_top = (base - c->nlocals);
+            out->reg = dst; out->tmp = true; out->type = et;
+            return c->ok ? 1 : -1;
+        }
+        coerce(c, &vs, et);
+        if (!c->ok) return -1;
+        ins(c, OP_MOVE, (uint32_t)(base + 2), (uint32_t)vs.reg, 0, z0);
+        c->temp_top = (base - c->nlocals) + 1;
+        ins_f(c, cx ? OP_KERNN_C : OP_KERNN, 3, (uint32_t)base, (uint32_t)base, 0, kp);
         out->reg = base; out->tmp = true; out->type = et;
         return c->ok ? 1 : -1;
     }

@@ -789,10 +789,23 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         expr_free(new_head);
         return expr_copy((Expr*)e);
     }
+    /* Integer-label arguments that N must leave exact. DirichletL[k, j, s]
+     * labels a character by (k, j); Mathematica keeps them exact (NHoldAll
+     * plus an N rule for s). Numericalizing them would give DirichletL[3., 2.,
+     * 0.5`50], which is not a character label and stays unevaluated. */
+    size_t n_label_held = 0;
+    if (n == 3 && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_DirichletL)
+        n_label_held = 2;
+
     /* Numericalize args left-to-right. For Power, decide whether to preserve
      * the exponent based on the (already-computed) numericalized base. */
     bool preserve_power_exp = exp_is_int;
     for (size_t i = 0; i < n; ++i) {
+        if (i < n_label_held) {
+            new_args[i] = expr_copy(e->data.function.args[i]);
+            continue;
+        }
         if (is_power && i == 1) {
             /* By now new_args[0] holds the numericalized base. If the base
              * is still non-numeric, keep the exponent symbolic so e.g.

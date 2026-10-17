@@ -885,6 +885,16 @@ static void pack_mark_aware_heads(void) {
          * threads the element-wise sf_machine_lerchphi), rather than leaving a
          * visible NDArray unevaluated. Not int64_ok: the series runs in double. */
         "LerchPhi",
+        /* DirichletL[k, j, s] holds the buffer s: its builtin threads the
+         * machine kernel sf_dirichlet_l_tab_* over it with the character table
+         * fetched once (a real character over a real buffer stays real, else
+         * complex), and delists on any decline. Not int64_ok: an exact integer s
+         * has exact closed forms, so an int64 buffer must reach the scalar path. */
+        "DirichletL",
+        /* DirichletCharacter[k, j, n] holds an int64 buffer n: a real character
+         * answers with an int64 buffer of 0, +-1 straight from the table; a
+         * complex one with a List of exact roots of unity (not machine numbers). */
+        "DirichletCharacter",
         /* ArrayPlot reads its data table straight off the buffer via
          * na_load_matrix (src/graphics/arrayplot.c, the same loader Fit and
          * DesignMatrix use above) when given an EXPR_NDARRAY, so the gate
@@ -1008,6 +1018,9 @@ static void pack_mark_aware_heads(void) {
          * computation either way, so the float coefficients are identical -- the
          * flag only spares an int64 data matrix from materialising. */
         "Fit",
+        /* DirichletCharacter reads its int64 n buffer through ndt_get_i (exact)
+         * and answers 0 / +-1 (int64) or exact roots of unity. */
+        "DirichletCharacter",
         /* InterpolatingPolynomial reads int64 data exactly and, on exact data,
          * returns an exact polynomial -- so an int64 buffer needs no
          * materialisation and the result is identical. */

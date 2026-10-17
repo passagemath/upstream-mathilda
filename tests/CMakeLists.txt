@@ -387,6 +387,9 @@ set(COMMON_SRC
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
     ../src/special_functions/sf_scalar.c
+    ../src/special_functions/sf_machine_bessel.c
+    ../src/special_functions/sf_machine_airy_tab.c
+    ../src/special_functions/sf_machine_bessel_tab.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c

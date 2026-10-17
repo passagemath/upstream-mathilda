@@ -16,9 +16,9 @@
 #                Cython/Python extension does (fails without -fPIC on Linux);
 #   4. exports — the shared library dynamically exports only mathilda_ffi_*.
 #
-# The probe is BesselJ[1/2, x]: its closed form comes from bessel.m, which
+# The probe is HeavisideTheta[0]: its value 0 comes from distributions.m, which
 # init.m loads, so a library that silently failed to find its module tree
-# answers BesselJ[1/2, x] unevaluated and the check fails.
+# answers HeavisideTheta[0] unevaluated and the check fails.
 #
 # Environment: CC (default gcc), MAKE (default make). POSIX sh; Linux + macOS.
 set -eu
@@ -60,7 +60,7 @@ cat >"$WORK/host.c" <<'EOF'
 #include "mathilda_ffi.h"
 int main(int argc, char** argv) {
     if (argc > 1) mathilda_ffi_set_home(argv[1]);
-    char* r = mathilda_ffi_eval("BesselJ[1/2, x]");
+    char* r = mathilda_ffi_eval("HeavisideTheta[0]");
     printf("%s\n", r);
     mathilda_ffi_free(r);
     return 0;
@@ -75,8 +75,8 @@ pc() {
 
 expect_closed_form() {   # $1 = label, $2 = output
     case "$2" in
-        *BesselJ*|"") bad "$1" "module tree not loaded (got: $2)" ;;
-        *Sin*)        say "$1" "ok ($2)" ;;
+        *HeavisideTheta*|"") bad "$1" "module tree not loaded (got: $2)" ;;
+        0)            say "$1" "ok ($2)" ;;
         *)            bad "$1" "unexpected output: $2" ;;
     esac
 }

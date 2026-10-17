@@ -11,8 +11,9 @@
  * mpmath (tools/sf_accuracy/fit_expint.py -> sf_machine_expint_coef.h):
  *
  *   Si, Ci   (Cephes `sici`, S. L. Moshier 1989)
- *     0 < x <= 4   Si = x S(x^2),  Ci = gamma + log x + x^2 C(x^2)
- *                  (the Maclaurin series DLMF 6.6.5-6.6.6, economised)
+ *     0 < x <= 4   Si = x S(x^2)  (Maclaurin series DLMF 6.6.5, economised)
+ *     0 < x <= 2   Ci = gamma + log x + x^2 C(x^2)            (DLMF 6.6.6)
+ *     2 < x <= 4   Ci = (x - x0) Q(x), x0 = 3.3842 the first zero of Ci
  *     x > 4        Si = pi/2 - f cos x - g sin x,  Ci = f sin x - g cos x
  *                  with the auxiliary functions of DLMF 6.2.17-6.2.18 written
  *                  x f = 1 - w RF(w), x^2 g = 1 - w RG(w), w = 1/x^2, RF/RG
@@ -31,8 +32,8 @@
  *   forms, so the rounding of log x is not amplified by an exp.
  *   E_n(x)  (Numerical Recipes 6.3 / Cephes `expn`): the power series for
  *   x <= 1 and the continued fraction (DLMF 8.19.17) for x > 1, the latter
- *   evaluated by the forward Wallis recurrences with rescaling -- one division
- *   at the end instead of two per level, which is what makes it fast.
+ *   evaluated backward from a calibrated depth (no per-level convergence test,
+ *   no accumulated rounding).
  *
  * ---------------------------------------------------------------------------
  * COMPLEX ARGUMENTS
@@ -139,9 +140,15 @@ bool sf_machine_si(double x, double* out) {
 bool sf_machine_ci(double x, double* out) {
     if (!(x > 0.0) || isinf(x)) return false;     /* complex below, -Inf at 0 */
     double v;
-    if (x <= 4.0) {
+    if (x <= 2.0) {
         double y = x * x, t = y * 0.125 - 1.0;
         v = (EX_EULER + log(x)) + y * ex_poly(SI_C, EX_NELEM(SI_C), t);
+    } else if (x <= 4.0) {
+        /* Through the zero x0 = 3.384...: Ci = (x - x0) Q(x). The series form
+         * above cancels 15-fold by x = 4 (gamma + log x + x^2 C = -0.14 from
+         * terms of size 2); this keeps an ulp or two of RELATIVE accuracy right
+         * through the zero. x - CI_X0_HI is exact (Sterbenz). */
+        v = ((x - CI_X0_HI) - CI_X0_LO) * ex_poly(CI_Q, EX_NELEM(CI_Q), x - 3.0);
     } else {
         double F, G;
         sici_fg(x, &F, &G);
@@ -300,8 +307,18 @@ bool sf_machine_li(double x, double* out) {
     if (!(x > 0.0) || x == 1.0 || isinf(x)) return false;
     double y = log(x), v;
     if (y > 0.0) {
-        if (y <= 16.0) v = ei_mid(y);
-        else           v = x / y * ei_H(y);
+        if (y <= 16.0) {
+            /* Ei(y) depends on y through e^y, so the rounding of y = log x (half
+             * an ulp of y, i.e. ~y/2 ulps relative) would cost ~log(x) ulps of
+             * li: 9 at x = 1e4. Recover the rounding: e^y = x(1 + eps) with eps
+             * set by exp's own half-ulp, and x - e^y is exact (Sterbenz), so
+             * dy = (x - e^y)/x is log x - y to about an ulp of 1, not of y.
+             * Then li = Ei(y + dy) = Ei(y) + (e^y/y) dy, e^y/y = x/y. */
+            double dy = (x - exp(y)) / x;
+            v = ei_mid(y) + (x / y) * dy;
+        } else {
+            v = x / y * ei_H(y);
+        }
     } else {
         double t = -y;
         if (t <= 0.6) v = -e1_small(t);
@@ -321,10 +338,21 @@ bool sf_machine_expn(double nd, double x, double* out) {
     long n = (long)nd;
     double v;
     if (n == 0) {
-        if (x > 745.0) return false;
         v = exp(-x) / x;
     } else if (n == 1) {
         return sf_machine_e1(x, out);
+    } else if (x <= 1.0 && n <= 24) {
+        /* Upward recurrence from E_1 (DLMF 8.19.12):
+         *   E_{k+1}(x) = (e^-x - x E_k(x)) / k.
+         * For x <= 1 each step cancels at most (x + k)/k <= 2-fold and damps the
+         * error it inherits by x E_k/(k E_{k+1}) < 1, so this is measured at
+         * ~2 ulp where the power series below, whose first three terms cancel
+         * 5- to 11-fold, gave 4.75. */
+        double e1;
+        if (!sf_machine_e1(x, &e1)) return false;
+        double ex = exp(-x), ek = e1;
+        for (long k = 1; k < n; k++) ek = (ex - x * ek) / (double)k;
+        v = ek;
     } else if (x <= 1.0) {
         /* Power series (DLMF 8.19.8 / A&S 5.1.12):
          *   E_n(x) = (-x)^(n-1)/(n-1)! (psi(n) - log x) - sum_{k != n-1} (-x)^k/(k! (k-n+1)). */
@@ -346,40 +374,26 @@ bool sf_machine_expn(double nd, double x, double* out) {
         }
         v = ans;
     } else {
-        /* Continued fraction (DLMF 8.19.17, even form):
+        /* Continued fraction (DLMF 8.19.17, even contraction):
          *   E_n(x) = e^-x / (x + n - 1 n/(x + n + 2 - 2(n+1)/(x + n + 4 - ...)))
-         * The convergents A_k/B_k obey A_k = b_k A_{k-1} + a_k A_{k-2} (Wallis),
-         * which is multiply-add only; the pair is rescaled every 8 levels so it
-         * cannot overflow, and the convergence test (one division) is made at
-         * the same cadence. */
-        double Am2 = 1.0, Bm2 = 0.0;              /* A_{-1}, B_{-1} */
-        double b = x + (double)n;
-        double Am1 = 0.0, Bm1 = 1.0;              /* A_0 = 0 ... the CF is 1/(b0 + ...) */
-        /* level 1: A_1 = 1, B_1 = b0 */
-        double A = 1.0, B = b;
-        Am2 = Am1; Bm2 = Bm1; Am1 = A; Bm1 = B;
-        double prev = A / B;
-        bool done = false;
-        for (long i = 1; i < 5000; i++) {
-            double a = -(double)i * (double)(n - 1 + i);
-            b += 2.0;
-            A = b * Am1 + a * Am2;
-            B = b * Bm1 + a * Bm2;
-            Am2 = Am1; Bm2 = Bm1; Am1 = A; Bm1 = B;
-            if ((i & 7) == 0) {
-                double s = 1.0 / B;
-                Am2 *= s; Bm2 *= s; Am1 *= s; Bm1 = 1.0;
-                double cur = Am1;
-                if (fabs(cur - prev) <= 1e-17 * fabs(cur)) { done = true; break; }
-                prev = cur;
-            }
-        }
-        if (!done) return false;
-        if (x > 745.0) return false;
-        v = Am1 / Bm1 * exp(-x);
+         * evaluated BACKWARD from a depth fixed in advance. The forward forms
+         * both lose: Lentz multiplies one rounding per level into the result,
+         * and the Wallis recurrences (no divisions) were measured at 8e-15 at
+         * x = 2.4 -- their subtractions cancel. Backward evaluation damps the
+         * roundings. Depth: calibrated against mpmath for 1 <= n <= 50, the
+         * truncation error is below 1e-17 at N = 105/x + 12 (the CF converges
+         * fastest for large n, so this bound is set by n = 1..3). */
+        int N = (int)(105.0 / x) + 12;
+        double t = x + (double)n + 2.0 * N;
+        for (int i = N; i >= 1; i--)
+            t = (x + (double)n + 2.0 * (i - 1)) - (double)i * (double)(n - 1 + i) / t;
+        v = exp(-x) / t;
     }
+    /* Unlike Ei/E1 (whose MPFR path answers an underflow with a tiny
+     * arbitrary-precision number), ExpIntegralE has no arbitrary-precision path,
+     * so an IEEE underflow to 0 is the machine answer, as it always was. */
     *out = v;
-    return ex_ok(v);
+    return isfinite(v);
 }
 
 /* ========================================================================= */
@@ -512,7 +526,9 @@ bool sf_machine_e1_c(double re, double im, double* ore, double* oim) {
      * upper side (Im w = +0): E1(-x + i0) = -Ei(x) - i pi. */
     ExC w = exc(re, im), v;
     double r = ex_abs(w);
-    if (r + re > 2.0) {
+    /* The series side (Ei of -w) loses about exp(|w| + Re w): keep it to
+     * |w| + Re w <= 1 (a factor e), the continued fraction beyond. */
+    if (r + re > 1.0) {
         v = ex_mul(ex_ge1_cf(w), ex_exp(exc(-re, -im)));
     } else {
         double er, ei;
@@ -597,18 +613,27 @@ static void ex_sici_far(ExC z, ExC* si, ExC* ci) {
     *ci = exc(-0.5 * s.re, -0.5 * s.im);
 }
 
-/* Which method for Si/Ci at z: the series where |z| - |Im z| <= 2 (terms do
- * not cancel) or |z| <= 2.5, and |z| <= 45; otherwise the far forms. */
-static bool ex_sici_use_series(ExC z) {
+/* Which method at z: the series where its terms do not cancel badly --
+ * |z| - |Im z| <= thr (near the imaginary axis the terms share a phase) or
+ * |z| <= rmax -- and |z| <= 45; otherwise the far forms.
+ *   Si, Shi, Chi: rmax = 2.5, thr = 2 (Si = z(1 - z^2/18 + ...) has no additive
+ *     constant to cancel against: measured <= 2.4 ulp).
+ *   Ci: rmax = thr = 1. Ci = gamma + log z + sum cancels the log against the sum
+ *     near the real axis (3.4-fold at z = 2.6 + 0.97 i, 7 ulp measured with the
+ *     Si thresholds); the tighter region costs a deeper continued fraction (up to
+ *     ~250 levels) and holds the benchmark box to 4 ulp. */
+static bool ex_sici_use_series(ExC z, double rmax, double thr) {
     double r = ex_abs(z);
     if (r > 45.0) return false;
-    return r <= 2.5 || r - fabs(z.im) <= 2.0;
+    return r <= rmax || r - fabs(z.im) <= thr;
 }
+#define EX_SI_SERIES(z) ex_sici_use_series(z, 2.5, 2.0)
+#define EX_CI_SERIES(z) ex_sici_use_series(z, 1.0, 1.0)
 
 bool sf_machine_si_c(double re, double im, double* ore, double* oim) {
     if (!isfinite(re) || !isfinite(im)) return false;
     ExC z = exc(re, im), v;
-    if (ex_sici_use_series(z)) {
+    if (EX_SI_SERIES(z)) {
         v = ex_sin_series(z, -1.0);
     } else {
         /* Si is odd: fold onto Re z >= 0. */
@@ -625,7 +650,7 @@ bool sf_machine_si_c(double re, double im, double* ore, double* oim) {
 /* Ci on the principal branch, cut (-inf, 0], upper side on the cut. */
 static bool ex_ci(ExC z, ExC* out) {
     if (z.re == 0.0 && z.im == 0.0) return false;
-    if (ex_sici_use_series(z)) {
+    if (EX_CI_SERIES(z)) {
         ExC s = ex_cos_series(z, -1.0), l = ex_log(z);
         *out = exc((EX_EULER + l.re) + s.re, l.im + s.im);
     } else if (z.re >= 0.0) {
@@ -654,7 +679,7 @@ bool sf_machine_shi_c(double re, double im, double* ore, double* oim) {
     if (!isfinite(re) || !isfinite(im)) return false;
     ExC z = exc(re, im), v;
     ExC iz = exc(-im, re);
-    if (ex_sici_use_series(iz)) {
+    if (EX_SI_SERIES(iz)) {
         v = ex_sin_series(z, 1.0);          /* the same sum with +z^2, no rotation */
     } else {
         double sr, si;
@@ -674,7 +699,7 @@ bool sf_machine_chi_c(double re, double im, double* ore, double* oim) {
     if (re == 0.0 && im == 0.0) return false;
     ExC z = exc(re, im), v;
     ExC iz = exc(-im, re);
-    if (ex_sici_use_series(iz)) {
+    if (EX_SI_SERIES(iz)) {
         ExC s = ex_cos_series(z, 1.0), l = ex_log(z);
         v = exc((EX_EULER + l.re) + s.re, l.im + s.im);
     } else {
@@ -693,6 +718,80 @@ bool sf_machine_li_c(double re, double im, double* ore, double* oim) {
     if (!isfinite(re) || !isfinite(im)) return false;
     if (re == 0.0 && im == 0.0) return false;              /* Indeterminate */
     if (re == 1.0 && im == 0.0) return false;              /* pole */
-    ExC l = ex_log(exc(re, im));
-    return sf_machine_ei_c(l.re, l.im, ore, oim);
+    ExC z = exc(re, im);
+    ExC l = ex_log(z);
+    double er, ei;
+    if (!sf_machine_ei_c(l.re, l.im, &er, &ei)) return false;
+    /* As in the real kernel: Ei(l) depends on l through e^l = z, so recover the
+     * rounding of l = log z, dl = (z - e^l)/z, and add Ei'(l) dl = (z/l) dl. */
+    ExC el = ex_exp(l);
+    ExC dl = ex_div(ex_sub(z, el), z);
+    ExC c = ex_mul(ex_div(z, l), dl);
+    *ore = er + c.re; *oim = ei + c.im;
+    return isfinite(*ore) && isfinite(*oim);
+}
+
+/* ---- E_n, complex ---------------------------------------------------------
+ *
+ * E_n(z) for an integer n >= 0 and complex z (principal branch, cut along
+ * (-inf, 0], the upper side on the cut -- E1(-x + i0) = -Ei(x) - i pi):
+ *   |z| + Re z > 1   the continued fraction of the real kernel, in complex
+ *                    arithmetic, backward from depth 240/s + 8, s = |z| + Re z
+ *                    (the E1 calibration; the CF converges faster as n grows)
+ *   otherwise        the power series (DLMF 8.19.8). Its terms cancel by about
+ *                    exp(|z| + Re z) <= e here: |z| <= 1/2, or z near the
+ *                    negative real axis, where they all have one sign. */
+bool sf_machine_expn_c(double nd, double re, double im, double* ore, double* oim) {
+    if (!isfinite(re) || !isfinite(im)) return false;
+    if (nd != floor(nd) || nd < 0.0 || nd > 1.0e6) return false;
+    if (im == 0.0) im = 0.0;                       /* no negative zero */
+    long n = (long)nd;
+    ExC z = exc(re, im), v;
+    double r = ex_abs(z);
+    if (r == 0.0) return false;                    /* pole (n <= 1) or 1/(n-1) exact */
+    if (n == 0) {
+        v = ex_div(ex_exp(exc(-re, -im)), z);
+    } else if (r + re > 1.0) {
+        double s = r + re;
+        int N = (int)(240.0 / s) + 8;
+        if (N > 400) N = 400;
+        ExC t = exc(re + (double)n + 2.0 * N, im);
+        for (int i = N; i >= 1; i--) {
+            double a = (double)i * (double)(n - 1 + i);
+            ExC q = ex_div(exc(a, 0.0), t);
+            t = exc(re + (double)n + 2.0 * (i - 1) - q.re, im - q.im);
+        }
+        v = ex_div(ex_exp(exc(-re, -im)), t);
+    } else {
+        /* E_n(z) = (-z)^(n-1)/(n-1)! (psi(n) - log z)
+         *          - sum_{k != n-1} (-z)^k / (k! (k - n + 1)) */
+        long nm1 = n - 1;
+        ExC mz = exc(-re, -im);
+        ExC fact = exc(1.0, 0.0);                  /* (-z)^k / k! */
+        ExC sum = (nm1 != 0) ? exc(1.0 / (double)nm1, 0.0) : exc(0.0, 0.0);
+        ExC logterm = exc(0.0, 0.0);
+        if (nm1 == 0) {
+            ExC l = ex_log(z);
+            sum = exc(-EX_EULER - l.re, -l.im);
+        }
+        for (long k = 1; k < 1000; k++) {
+            fact = ex_scale(ex_mul(fact, mz), 1.0 / (double)k);
+            ExC del;
+            if (k != nm1) {
+                del = ex_scale(fact, -1.0 / (double)(k - nm1));
+            } else {
+                double psi = -EX_EULER;
+                for (long i = 1; i <= nm1; i++) psi += 1.0 / (double)i;
+                ExC l = ex_log(z);
+                logterm = ex_mul(fact, exc(psi - l.re, -l.im));
+                del = logterm;
+            }
+            sum = ex_add(sum, del);
+            if (k > nm1 && (double)k > r && ex_abs(del) < 1e-17 * ex_abs(sum)) break;
+        }
+        v = sum;
+    }
+    if (!ex_finite(v)) return false;
+    *ore = v.re; *oim = v.im;
+    return true;
 }

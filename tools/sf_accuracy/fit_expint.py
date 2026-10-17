@@ -151,6 +151,21 @@ def main():
     print("/* Si(x) = x SI_S(t), Ci(x) = gamma + log x + x^2 SI_C(t), t = x^2/8 - 1, 0 <= x <= 4 */")
     print(poly_in_t(S, 0, 16, "SI_S", list(range(9, 16))))
     print(poly_in_t(C, 0, 16, "SI_C", list(range(9, 16))))
+    # Ci on [2, 4] through its zero x0 = 3.3842...: Ci(x) = (x - x0) CI_Q(t),
+    # t = x - 3, so the relative error stays at an ulp or two right through the
+    # zero (gamma + log x + x^2 C cancels 15-fold by x = 4).
+    x0 = mp.findroot(mp.ci, 3.38)
+    x0_hi = float(x0)
+    x0_lo = float(x0 - mp.mpf(x0_hi))
+    def CQ(x):
+        if abs(x - x0) < mp.mpf(10) ** -30:
+            return mp.cos(x0) / x0
+        return mp.ci(x) / (x - x0)
+    print(f"/* Ci(x) = ((x - CI_X0_HI) - CI_X0_LO) CI_Q(t), t = x - 3, 2 <= x <= 4; x0 = {mp.nstr(x0, 25)} */")
+    print(f"#define CI_X0_HI {x0_hi!r}")
+    print(f"#define CI_X0_LO {x0_lo!r}")
+    print(poly_in_t(CQ, 2, 4, "CI_Q", list(range(10, 22))))
+
     print("/* Shi(x) = x SH_S(v), Chi(x) = gamma + log x + x^2 SH_C(v), v = x^2/16, 0 <= x <= 4 */")
     print(poly_in_v(Sh, 0, 16, "SH_S", list(range(9, 18))))
     print(poly_in_v(Ch, 0, 16, "SH_C", list(range(9, 18))))

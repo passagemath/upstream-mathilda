@@ -389,6 +389,7 @@ set(COMMON_SRC
     ../src/special_functions/sf_machine_plog.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/sf_machine_ellk.c
+    ../src/special_functions/sf_machine_expint.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
@@ -3656,6 +3657,10 @@ add_test(NAME struveh_tests COMMAND struveh_tests)
 add_executable(elliptic_machine_tests test_elliptic_machine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(elliptic_machine_tests PRIVATE ../src)
 add_test(NAME elliptic_machine_tests COMMAND elliptic_machine_tests)
+
+add_executable(expint_machine_tests test_expint_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(expint_machine_tests PRIVATE ../src)
+add_test(NAME expint_machine_tests COMMAND expint_machine_tests)
 
 add_executable(loggamma_tests test_loggamma.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(loggamma_tests PRIVATE ../src)

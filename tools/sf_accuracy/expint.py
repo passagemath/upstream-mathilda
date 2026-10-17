@@ -212,18 +212,20 @@ def evaluate(binary, head, regime, n, mode, seed, worst):
         rel = float(err) / ulp(float(mag)) if mag != 0 else float("inf")
         sc = float(err) / ulp(float(max(mag, scale)))
         rels.append((rel, p, s, v))
-        scs.append(sc)
+        scs.append((sc, p, s, v))
     if not rels:
         return {"head": head, "regime": regime, "n": n, "unevaluated": len(bad)}
     rr = sorted(r[0] for r in rels)
     res = {
         "head": head, "regime": regime, "n": len(rels),
         "rel_median": statistics.median(rr), "rel_max": rr[-1],
-        "scaled_median": statistics.median(scs), "scaled_max": max(scs),
+        "scaled_median": statistics.median(t[0] for t in scs), "scaled_max": max(t[0] for t in scs),
         "unevaluated": len(bad),
     }
     res["worst"] = [(r[1], r[2], mp.nstr(r[3], 20), round(r[0], 2))
                     for r in sorted(rels, key=lambda t: -t[0])[:worst]]
+    ws = max(scs, key=lambda t: t[0])
+    res["worst_scaled"] = (ws[1], ws[2], mp.nstr(ws[3], 20), round(ws[0], 2))
     res["bad"] = bad[:3]
     return res
 
@@ -250,6 +252,8 @@ def main():
                   f"{res['scaled_median']:8.2f} {res['scaled_max']:8.2f} {res['unevaluated']:6d}")
             for w in res["worst"]:
                 print(f"      worst: x={w[0]!r} got={w[1]} ref={w[2]} ({w[3]} ulp)")
+            w = res["worst_scaled"]
+            print(f"      worst scaled: x={w[0]!r} got={w[1]} ref={w[2]} ({w[3]} ulp)")
             for b in res["bad"]:
                 print(f"      uneval: x={b[0]!r} -> {b[1][:80]}")
             sys.stdout.flush()

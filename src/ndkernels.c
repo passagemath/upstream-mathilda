@@ -683,12 +683,19 @@ static bool ndk_Binomial_c(double nre, double nim, double kre, double kim,
 static bool ndk_LegendreP_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
     if (nim != 0.0) return false;
+    if (xim == 0.0 && nre >= 0.0) {          /* the real hot path, one call deep */
+        if (!sf_machine_legendre_p(nre, xre, rr)) return false;
+        *ri = 0.0; return true;
+    }
     return sf_machine_legendre_p_c(nre, xre, xim, rr, ri);
 }
 static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
     if (nim != 0.0) return false;
-    if (xim == 0.0 && !(xre > -1.0 && xre < 1.0)) return false;
+    if (xim == 0.0) {
+        if (!sf_machine_legendre_q(nre, xre, rr)) return false;   /* |x| >= 1 declines */
+        *ri = 0.0; return true;
+    }
     return sf_machine_legendre_q_c(nre, xre, xim, rr, ri);
 }
 static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
@@ -696,14 +703,19 @@ static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NU
 static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false };
 
-/* ExpIntegralE[n, x]: integer order n >= 0, real x > 0 (sf_machine_expint.c,
- * the kernel the scalar builtin calls). A complex or out-of-domain element
- * declines, so the List path answers it (symbolic, as the interpreter does). */
+/* ExpIntegralE[n, z]: integer order n >= 0 (sf_machine_expint.c, the kernels
+ * the scalar builtin calls). Real x > 0 stays real; complex z, and real x < 0
+ * (complex-valued), go through the complex kernel. Registered real-closed, so a
+ * real buffer holding an x < 0 abandons to the List path, which answers it. */
 static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
                                double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_expn(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0) return false;
+    if (xim == 0.0) {
+        double v;
+        if (sf_machine_expn(nre, xre, &v)) { *rr = v; *ri = 0.0; return true; }
+        if (xre >= 0.0) return false;            /* x = 0: exact 1/(n-1) or pole */
+    }
+    return sf_machine_expn_c(nre, xre, xim, rr, ri);
 }
 static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false };
 

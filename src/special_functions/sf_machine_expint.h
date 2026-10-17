@@ -46,5 +46,8 @@ bool sf_machine_li_c(double re, double im, double* ore, double* oim);
 /* E_n(x), the generalised exponential integral ExpIntegralE[n, x], for an
  * integer order n >= 0 and real x > 0. */
 bool sf_machine_expn(double n, double x, double* out);
+/* E_n(z) for an integer n >= 0 and complex z (also a real x < 0, whose value
+ * is complex): principal branch, cut (-inf, 0], upper side on the cut. */
+bool sf_machine_expn_c(double n, double re, double im, double* ore, double* oim);
 
 #endif /* MATHILDA_SF_MACHINE_EXPINT_H */

@@ -6,7 +6,10 @@
  *   E_0(z) = e^(-z)/z                      exact, any z
  *   E_n(0) = 1/(n-1),  integer n >= 2      exact
  *   integer n >= 0, machine real x > 0     sf_machine_expn (sf_machine_expint.c):
- *                                          series (x <= 1) / continued fraction
+ *                                          recurrence/series (x <= 1) / continued
+ *                                          fraction (x > 1)
+ *   integer n >= 0, machine complex z      sf_machine_expn_c (and real x < 0,
+ *   (or real x < 0)                        whose value is complex)
  *   everything else                        stays symbolic (return NULL)
  *
  * The derivative rule d/dz E_n(z) = -E_(n-1)(z) (with the base E_0 above) lives
@@ -55,9 +58,17 @@ Expr* builtin_expintegrale(Expr* res) {
      * expression building. Anything else falls through unchanged. */
     {
         SFMachineArgs ma;
-        if (sf_machine_scalar_args(res, &ma) && !ma.any_complex) {
-            double v;
-            if (sf_machine_expn(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+        if (sf_machine_scalar_args(res, &ma) && !ma.is_complex[0]) {
+            double v, vi;
+            if (!ma.is_complex[1]) {
+                if (sf_machine_expn(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+                /* x < 0: E_n is complex there (the upper side of the cut) */
+                if (ma.re[1] < 0.0 &&
+                    sf_machine_expn_c(ma.re[0], ma.re[1], 0.0, &v, &vi))
+                    return sf_machine_complex_result(v, vi);
+            } else if (sf_machine_expn_c(ma.re[0], ma.re[1], ma.im[1], &v, &vi)) {
+                return sf_machine_complex_result(v, vi);
+            }
         }
     }
 

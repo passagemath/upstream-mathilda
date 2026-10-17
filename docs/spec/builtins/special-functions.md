@@ -263,6 +263,21 @@ the principal value (the average of the two sides) is returned.
     `-0.00562839 − 3.12241 I`). This also fixes an `mpfr_init2` abort: the old
     guard-bit count `(long)(|z|/ln2)` overflowed for astronomically large `|z|`
     (e.g. `N[ExpIntegralEi[-10^60 I] + I Pi, 20]`).
+- **Machine precision** (real and complex) runs on double kernels shared bit-for-bit
+  with the packed/NDArray kernels and `Compile[]`
+  (`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+  function, so scalar == List == packed == NDArray == Compile). A decline (pole,
+  overflow, an underflow to a subnormal) falls through to the MPFR path unchanged,
+  and arbitrary precision is untouched. Real: Ei = γ + log x + x·R(x) for 0 < x ≤ 16
+  (R on six pieces, each a positive-coefficient polynomial, so Horner never
+  cancels), e^x/x·(1 + H(1/x)) rational on [16, 64], the asymptotic series beyond;
+  Ei(−x) = −E1(x) with E1 from a polynomial for x ≤ 0.6 and e^−x/x·(1 − J(1/x))
+  rationals beyond (Cody & Thacher's scheme, coefficients refitted with mpmath by
+  `tools/sf_accuracy/fit_expint.py`). Complex: the power series by Horner where its
+  terms do not cancel (|z| − Re z ≤ 2), else −E1(−z) ± iπ with E1 from the continued
+  fraction evaluated backward from a calibrated depth, and the asymptotic series for
+  |z| > 45. Accuracy vs mpmath: median 0.4 ulp (real) / 0.6 (complex), max ≤ 2.6 ulp
+  off the zero x₀ = 0.3725 (scaled by |x f′| there).
 - Derivative: `D[ExpIntegralEi[z], z] = E^z/z` (chain rule applies, e.g.
   `D[ExpIntegralEi[x^2], x] = (2 E^x^2)/x`); the origin Taylor series at a regular
   point follows from the generic `D`-based fallback.
@@ -282,6 +297,21 @@ the principal value (the average of the two sides) is returned.
   standard continued-fraction (z > 1) / power-series (0 < z ≤ 1) split
   (`ExpIntegralE[1, 2.] = 0.0489005`, `ExpIntegralE[2, 1.5] = 0.0731008`).
   Exact arguments stay symbolic; `N` forces evaluation.
+- **Machine precision** (integer order n ≥ 0): double kernels shared bit-for-bit
+  with the packed/NDArray kernels and `Compile[]`
+  (`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+  function, so scalar == List == packed == NDArray == Compile). A decline (a pole,
+  a non-integer order) falls through unchanged. Real x > 0: the upward recurrence E_(k+1) =
+  (e^−x − x E_k)/k from E1 for x ≤ 1 (the power series for n > 24), and for x > 1
+  the continued fraction (DLMF 8.19.17) evaluated backward from depth 105/x + 12
+  (forward Lentz and Wallis forms lose 1e-14 to accumulated rounding). Machine
+  **complex** z — previously unevaluated — and a real x < 0 (complex-valued, the
+  upper side of the cut, e.g. `ExpIntegralE[2, -1.] = 0.823164 - 3.14159 I`) use the
+  complex continued fraction for |z| + Re z > 1 and the series elsewhere. A
+  machine-real underflow returns 0., as before (there is no arbitrary-precision path).
+  `ExpIntegralE[n, packed]` now has a binary NDArray kernel (it threaded element by
+  element before). Accuracy vs mpmath: median 0.4 ulp, max 4.3 ulp (real); max 3.8
+  ulp (complex).
 - Derivative: `D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z]`.
 - Mellin transform: `∫₀^∞ x^(s-1) ExpIntegralE[n, a x] dx = a^(-s) Γ(s)/(s+n-1)`
   (`Re s > 0`), closed by the operational-calculus layer of `Method -> "Mellin"`.
@@ -348,6 +378,12 @@ the branch cut runs along (−∞, +1).
     series with guard bits, so machine-precision complex results are fully
     accurate, e.g. `LogIntegral[2. + I] = 1.41126 + 1.22471 I`,
     `N[Re[LogIntegral[2 + I]], 30] = 1.41125904201780100568439320706`.
+- **Machine precision** (real and complex) no longer builds and evaluates
+  `ExpIntegralEi[Log[z]]`: double kernels shared bit-for-bit with the packed/NDArray kernels and `Compile[]` (`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same function, so scalar == List == packed == NDArray == Compile). A decline (pole, overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and arbitrary precision is untouched. The real kernel evaluates
+  Ei(log x) with e^(log x) replaced by x itself in the large-argument forms, so
+  the rounding of log x is not amplified by an exponential; a real x < 0 returns
+  the complex value directly. Accuracy vs mpmath: median 0.5 ulp, max 2.9 ulp
+  (real, off the zero μ = 1.4513); max 3.1 ulp (complex).
 - Derivative: `D[LogIntegral[z], z] = 1/Log[z]` (chain rule applies, e.g.
   `D[LogIntegral[x^2], x] = (2 x)/Log[x^2]`); the Taylor series at a regular
   point follows from the generic `D`-based fallback.
@@ -362,6 +398,19 @@ series `Si(z) = Σ (−1)ᵏ z^(2k+1)/((2k+1)(2k+1)!)` drives moderate arguments
 large `|z|` the asymptotic form `Si(z) = π/2 − cos(z) f(z) − sin(z) g(z)` is used
 instead. Complex arguments run through the shared `ncpx` MPFR-complex toolkit,
 with odd symmetry folding the left half-plane onto the right.
+
+**Machine precision** (real and complex) runs on double kernels shared bit-for-bit
+with the packed/NDArray kernels and `Compile[]`
+(`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+function, so scalar == List == packed == NDArray == Compile). A decline (pole,
+overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and
+arbitrary precision is untouched. Real (Cephes `sici` scheme, coefficients refitted
+with mpmath): x·S(x²) for |x| ≤ 4, and π/2 − f cos x − g sin x beyond with x f = 1 −
+w RF(w), x² g = 1 − w RG(w), w = 1/x², rational on [4, 8] and [8, ∞). Complex: the
+Maclaurin series by Horner where its terms do not cancel (|z| − |Im z| ≤ 2 or |z| ≤
+2.5), else Si = π/2 + (E1(iz) − E1(−iz))/(2i) from the backward continued fraction,
+and the f/g asymptotic series for |z| > 45. Accuracy vs mpmath: median 0.3 ulp, max
+1.8 ulp (real); max 1.5 ulp scaled by |z f′| near the complex zeros.
 
 - Exact special values: `SinIntegral[0] = 0`, `SinIntegral[Infinity] = Pi/2`,
   `SinIntegral[-Infinity] = -Pi/2`, `SinIntegral[±I Infinity] = ±I Infinity`;
@@ -395,6 +444,19 @@ is needed); for large `|z|` the asymptotic form `Ci(z) = sin(z) f(z) − cos(z) 
 is used, with a piecewise-constant Stokes / reflection term restoring the principal
 branch on and left of the imaginary axis. Complex arguments run through the shared
 `ncpx` MPFR-complex toolkit.
+
+**Machine precision** (real and complex) runs on double kernels shared bit-for-bit
+with the packed/NDArray kernels and `Compile[]`
+(`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+function, so scalar == List == packed == NDArray == Compile). A decline (pole,
+overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and
+arbitrary precision is untouched. Real: γ + log x + x² C(x²) for x ≤ 2, (x −
+x₀)·Q(x) through the first zero x₀ = 3.3842 on [2, 4] (the series form cancels
+15-fold by x = 4), and the f/g rationals beyond; a real x < 0 returns the complex
+value directly. Complex: as for `SinIntegral`, with Ci = −(E1(iz) + E1(−iz))/2 and
+Ci(z) = Ci(−z) ± iπ on the left half-plane. Accuracy vs mpmath: median 0.45 ulp, max
+3.5 ulp scaled by |x Ci′| (the relative error is unbounded only at the zeros);
+complex max 3.0 ulp scaled.
 
 - Exact special values: `CosIntegral[0] = -Infinity`, `CosIntegral[Infinity] = 0`,
   `CosIntegral[-Infinity] = I Pi`, `CosIntegral[±I Infinity] = Infinity`;
@@ -430,6 +492,16 @@ real axis there is no catastrophic cancellation; large |z| uses the
 optimally-truncated asymptotic `cosh(z) F(z) + sinh(z) G(z)` plus a Stokes
 constant off the real axis.
 
+**Machine precision** (real and complex) runs on double kernels shared bit-for-bit
+with the packed/NDArray kernels and `Compile[]`
+(`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+function, so scalar == List == packed == NDArray == Compile). A decline (pole,
+overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and
+arbitrary precision is untouched. Real (Cephes `shichi` scheme): x·Sh(x²) with
+positive coefficients for |x| ≤ 4, (Ei(x) + E1(x))/2 beyond. Complex: Shi(z) = −i
+Si(iz), an exact rotation of the `SinIntegral` kernel. Accuracy vs mpmath: median
+0.4 ulp, max 2.3 ulp (real); max 2.4 ulp (complex).
+
 - Exact special values: `SinhIntegral[0] = 0`, `SinhIntegral[±Infinity] =
   ±Infinity`, `SinhIntegral[±I Infinity] = ±I Pi/2`; `ComplexInfinity` and
   `Indeterminate` give `Indeterminate`.
@@ -464,6 +536,17 @@ negative real axis `(−∞, 0]` — the imaginary-axis sibling of `CosIntegral`
 (Chi(z) = Ci(i z) − i Pi/2). The convergent series is `CosIntegral`'s without
 the alternating sign; large |z| uses the asymptotic `sinh(z) F(z) + cosh(z) G(z)`
 plus a piecewise Stokes constant, with the principal `Log` supplying the branch.
+
+**Machine precision** (real and complex) runs on double kernels shared bit-for-bit
+with the packed/NDArray kernels and `Compile[]`
+(`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same
+function, so scalar == List == packed == NDArray == Compile). A decline (pole,
+overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and
+arbitrary precision is untouched. Real: γ + log x + x² Ch(x²) for x ≤ 4, (Ei(x) −
+E1(x))/2 beyond; a real x < 0 returns the complex value directly. Complex: Chi(z) =
+Ci(iz) + (log z − log iz), the constant (−iπ/2, or 3iπ/2 past arg z = π/2) taken
+exactly rather than by subtraction. Accuracy vs mpmath: median 0.45 ulp, max 1.6 ulp
+scaled (the zero 0.5238); complex max 2.6 ulp.
 
 - Exact special values: `CoshIntegral[0] = -Infinity`, `CoshIntegral[Infinity] =
   Infinity`, `CoshIntegral[-Infinity] = Infinity`, `CoshIntegral[±I Infinity] =

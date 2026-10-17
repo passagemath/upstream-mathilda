@@ -4,8 +4,10 @@
  *   Beta[z, a, b]      = Int_0^z t^(a-1) (1-t)^(b-1) dt          (incomplete)
  *   Beta[z0, z1, a, b] = Beta[z1, a, b] - Beta[z0, a, b]         (generalized)
  *
- * Rather than re-deriving the transcendental machinery, Beta is assembled from
- * functions that already exist and are well tested:
+ * A machine-precision Beta[a, b] (real or complex) is computed directly in double
+ * by sfg_beta / sfg_beta_c (sf_machine_gamma.c), the kernel the NDArray map and
+ * Compile[] share. Everything else is assembled from functions that already
+ * exist and are well tested:
  *
  *   - Beta[a, b] is reduced to a ratio of Gamma calls and handed back to the
  *     evaluator. The existing Gamma builtin already closes exact integers,
@@ -40,6 +42,8 @@
 #include "expr.h"          /* expr_is_integer_like, expr_to_mpz, expr_is_numeric_like */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"        /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_gamma.h" /* sfg_beta(_c): the shared double kernels */
 
 /* ------------------------------------------------------------------ */
 /* Small symbolic builders                                            */
@@ -276,6 +280,24 @@ Expr* builtin_beta(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+
+    /* Machine-scalar fast path, ahead of the lattice / Gamma-ratio rebuild:
+     * computed directly in double by the kernel the NDArray map and Compile[]
+     * share. A decline (a pole, |argument| > 170, underflow) falls through to the
+     * layered path below unchanged. */
+    if (argc == 2) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            if (!ma.any_complex) {
+                double v;
+                if (sfg_beta(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+            } else {
+                double vr, vi;
+                if (sfg_beta_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi))
+                    return sf_machine_complex_result(vr, vi);
+            }
+        }
+    }
 
     switch (argc) {
         case 2: return beta_two_arg(args[0], args[1]);

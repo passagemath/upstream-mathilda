@@ -386,6 +386,7 @@ set(COMMON_SRC
     ../src/special_functions/sinc.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
+    ../src/special_functions/sf_machine_gamma.c
     ../src/special_functions/sf_scalar.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -3503,6 +3504,13 @@ target_include_directories(gamma_tests PRIVATE ../src)
 
 add_executable(beta_tests test_beta.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(beta_tests PRIVATE ../src)
+
+# The Gamma-family machine kernels (sf_machine_gamma.c): spot values vs mpmath,
+# regime boundaries, declines, and the scalar == List == packed == NDArray ==
+# Compile bit-match for Gamma / LogGamma / PolyGamma / Beta / Pochhammer.
+add_executable(gamma_machine_tests test_gamma_machine.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(gamma_machine_tests PRIVATE ../src ../src/special_functions)
+add_test(NAME gamma_machine_tests COMMAND gamma_machine_tests)
 
 add_executable(erf_tests test_erf.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(erf_tests PRIVATE ../src)

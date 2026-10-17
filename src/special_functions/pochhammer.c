@@ -2,8 +2,10 @@
  *
  *   Pochhammer[a, n] = a (a+1) ... (a+n-1) = Gamma[a+n] / Gamma[a]
  *
- * The implementation deliberately holds almost no numeric code of its own:
- * two existing, fully-tested mechanisms do the heavy lifting.
+ * A machine-precision call (real or complex) is computed directly in double by
+ * sfg_pochhammer / sfg_pochhammer_c (sf_machine_gamma.c), the kernel shared with
+ * the NDArray map and Compile[]. Everything else holds almost no numeric code of
+ * its own: two existing, fully-tested mechanisms do the heavy lifting.
  *
  *   1. Times -- for an exact integer n the symbol expands to the product of
  *      n linear factors, Times[a, a+1, ..., a+n-1]. Evaluating that product
@@ -35,6 +37,8 @@
 #include "expr.h"          /* expr_is_numeric_like */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"        /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_gamma.h" /* sfg_pochhammer(_c): the shared double kernels */
 
 /* Largest |n| for which Pochhammer[a, n] is expanded into its explicit
  * product of n linear factors. Beyond this the tree is more noise than help;
@@ -184,6 +188,26 @@ Expr* builtin_pochhammer(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2) return poch_emit_argrx(argc);
+    /* Machine-scalar fast path, ahead of the Times / Gamma-ratio rebuild: an
+     * exact-integer n is a direct product in double (real or complex), any other
+     * n the corrected Gamma ratio -- the kernel the NDArray map and Compile[]
+     * share. Pochhammer[a, 0] keeps its exact 1 (step 1 below), so n = 0 exact
+     * is left to the layered path; a decline falls through unchanged. */
+    {
+        const Expr* n = res->data.function.args[1];
+        SFMachineArgs ma;
+        if (!(n->type == EXPR_INTEGER && n->data.integer == 0) &&
+            sf_machine_scalar_args(res, &ma)) {
+            if (!ma.any_complex) {
+                double v;
+                if (sfg_pochhammer(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
+            } else {
+                double vr, vi;
+                if (sfg_pochhammer_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi))
+                    return sf_machine_complex_result(vr, vi);
+            }
+        }
+    }
     return pochhammer_two_arg(res->data.function.args[0],
                               res->data.function.args[1]);
 }

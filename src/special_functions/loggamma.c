@@ -17,7 +17,8 @@
  *   machine real z > 0            ->  libm   lgamma
  *   machine real z < 0 (non-int)  ->  lgamma + branch term (complex result)
  *   arbitrary real                ->  MPFR   mpfr_lgamma  (+ branch term)
- *   machine complex               ->  Lanczos log-gamma (double complex)
+ *   machine complex               ->  sfg_loggamma_c (sf_machine_gamma.c), shared
+ *                                     with the NDArray kernel and Compile[]
  *   arbitrary complex             ->  Spouge log-gamma   (MPFR, runtime coeffs)
  *   everything else               ->  stays symbolic (return NULL)
  *
@@ -46,6 +47,7 @@
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_machine_gamma.h" /* sfg_loggamma_c: the shared machine-complex kernel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -233,7 +235,14 @@ static double complex lg_lanczos(double complex z) {
     return 0.5 * log(2.0 * M_PI) + (z1 + 0.5) * clog(t) - t + clog(x);
 }
 
+/* The machine-complex LogGamma shared by the scalar builtin, the NDArray
+ * kernel and the Compile[] VM: the sf_machine_gamma.c kernel (Taylor tiles near
+ * the real axis, shifted Stirling with winding-counted product logs elsewhere --
+ * the same continuous branch). The Lanczos series above remains only as the
+ * fallback for what that kernel declines (Re z < -30, the negative real axis),
+ * so those inputs behave exactly as before. */
 bool loggamma_machine_complex(double are, double aim, double* ore, double* oim) {
+    if (sfg_loggamma_c(are, aim, ore, oim)) return true;
     double complex r = lg_lanczos(are + aim * I);
     *ore = creal(r); *oim = cimag(r);
     return isfinite(*ore) && isfinite(*oim);
@@ -667,20 +676,8 @@ static Expr* lg_mpfr_real(Expr* arg) {
 /* ------------------------------------------------------------------ */
 
 static Expr* loggamma_one_arg(Expr* arg) {
-    /* 1. Exact integer / half-integer (incl. the Infinity pole). */
-    {
-        Expr* exact = lg_exact(arg);
-        if (exact) return exact;
-    }
-
-    /* 2. Symbolic infinities. */
-    if (lg_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
-    if (lg_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
-    if (lg_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
-    if (lg_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
-    if (lg_is_complex_infinity_dir(arg))      return expr_new_symbol(SYM_ComplexInfinity);
-
-    /* 3. Machine real. */
+    /* 0. Machine real first: the hot numeric call skips the exact and
+     *    symbolic ladders below (none of which can match a Real). */
     if (arg->type == EXPR_REAL) {
         double v = arg->data.real;
         if (v > 0.0) {
@@ -695,12 +692,8 @@ static Expr* loggamma_one_arg(Expr* arg) {
         return make_complex(expr_new_real(re), expr_new_real(im));
     }
 
-#ifdef USE_MPFR
-    /* 4. Arbitrary-precision real. */
-    if (arg->type == EXPR_MPFR) return lg_mpfr_real(arg);
-#endif
-
-    /* 5. Complex argument (Complex[..] with an inexact part). */
+    /* 0b. Complex argument (Complex[..] with an inexact part), also ahead of the
+     *     ladders below -- none of which can match a Complex[..]. */
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         bool inexact = lg_is_inexact(re) || lg_is_inexact(im);
@@ -712,11 +705,31 @@ static Expr* loggamma_one_arg(Expr* arg) {
 #endif
         double rr, ii;
         if (inexact && lg_to_double(re, &rr) && lg_to_double(im, &ii)) {
-            double complex lg = lg_lanczos(rr + ii * I);
-            if (cimag(lg) == 0.0) return expr_new_real(creal(lg));
-            return make_complex(expr_new_real(creal(lg)), expr_new_real(cimag(lg)));
+            double lr, li;
+            if (loggamma_machine_complex(rr, ii, &lr, &li)) {
+                if (li == 0.0) return expr_new_real(lr);
+                return make_complex(expr_new_real(lr), expr_new_real(li));
+            }
         }
     }
+
+    /* 1. Exact integer / half-integer (incl. the Infinity pole). */
+    {
+        Expr* exact = lg_exact(arg);
+        if (exact) return exact;
+    }
+
+    /* 2. Symbolic infinities. */
+    if (lg_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
+    if (lg_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (lg_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    if (lg_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
+    if (lg_is_complex_infinity_dir(arg))      return expr_new_symbol(SYM_ComplexInfinity);
+
+#ifdef USE_MPFR
+    /* 4. Arbitrary-precision real. */
+    if (arg->type == EXPR_MPFR) return lg_mpfr_real(arg);
+#endif
 
     return NULL; /* leave symbolic */
 }

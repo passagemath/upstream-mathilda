@@ -15,6 +15,9 @@
  *                                                     (via zeta(n+1), even -> Bernoulli)
  *                                    n >= 1 even    : stays symbolic (zeta(odd), no
  *                                                     closed form)
+ *   machine real / complex z,   -> sfg_polygamma / sfg_polygamma_c (sf_machine_gamma.c),
+ *   integer 0 <= n <= 40           shared with the NDArray kernel and Compile[];
+ *                                  the one-argument form computes directly
  *   z inexact real (Real/MPFR)  -> numeric: mpfr_digamma for n = 0, otherwise the
  *                                    recurrence-shift + Bernoulli asymptotic series
  *   z inexact complex           -> the same asymptotic, in complex arithmetic
@@ -51,6 +54,8 @@
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"        /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_gamma.h" /* sfg_polygamma(_c): the shared double kernels */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -736,11 +741,44 @@ static Expr* pg_emit_argt(size_t argc) {
     return NULL;
 }
 
+/* Machine-scalar fast path, ahead of every exact / symbolic ladder: a machine
+ * real or complex z with an integer order 0 <= n <= SFG_POLYGAMMA_MAX_N (the
+ * one-argument form is n = 0) goes straight to the sf_machine_gamma.c kernel --
+ * the same helper the NDArray kernel and Compile[] use, so the surfaces agree
+ * bit for bit. NULL when the call is not machine-scalar or the kernel declines
+ * (a pole, n >= 1 in the left half-plane), and the layered path below then
+ * answers exactly as before. */
+static Expr* pg_machine(const Expr* res, size_t argc) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma)) return NULL;
+    int zi = (int)argc - 1;
+    int n = 0;
+    if (argc == 2) {
+        double nv = ma.re[0];
+        if (ma.is_complex[0] || nv != floor(nv) || nv < 0.0 ||
+            nv > (double)SFG_POLYGAMMA_MAX_N) return NULL;
+        n = (int)nv;
+    }
+    if (!ma.is_complex[zi]) {
+        double v;
+        if (sfg_polygamma(n, ma.re[zi], &v)) return expr_new_real(v);
+    } else {
+        double vr, vi;
+        if (sfg_polygamma_c(n, ma.re[zi], ma.im[zi], &vr, &vi))
+            return sf_machine_complex_result(vr, vi);
+    }
+    return NULL;
+}
+
 Expr* builtin_polygamma(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    if (argc == 1 || argc == 2) {
+        Expr* fast = pg_machine(res, argc);
+        if (fast) return fast;
+    }
     if (argc == 1) {
         /* PolyGamma[z] -> PolyGamma[0, z] (re-evaluated to a fixed point). */
         Expr* pg_args[2] = { expr_new_integer(0), expr_copy(args[0]) };

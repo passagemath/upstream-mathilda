@@ -34,6 +34,7 @@
 #include "elliptic.h"
 #include "symtab.h"
 #include "special_functions/sf_machine.h"
+#include "special_functions/sf_machine_gamma.h"
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -520,12 +521,11 @@ static bool ndk_BesselY_c(double nre, double nim, double zre, double zim,
 static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false };
 static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false };
 
-/* Beta[a, b] = Gamma[a] Gamma[b] / Gamma[a+b] over real arrays via libc. */
+/* Beta[a, b], real and complex: the Gamma family's kernel (sf_machine_gamma.c),
+ * shared with the scalar builtin so the surfaces agree bit for bit. */
 static bool ndk_Beta_c(double are, double aim, double bre, double bim,
                        double* rr, double* ri) {
-    if (aim != 0.0 || bim != 0.0) return false;
-    double v = tgamma(are) * tgamma(bre) / tgamma(are + bre);
-    *rr = v; *ri = 0.0; return isfinite(v);
+    return sfg_beta_c(are, aim, bre, bim, rr, ri);
 }
 static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
 
@@ -619,7 +619,10 @@ static bool ndk_Erfi_r(double x, double* o)          { return sf_machine_erfi(x,
 static bool ndk_ProductLog_r(double x, double* o)    { return sf_machine_productlog(x, o); }
 static bool ndk_FresnelC_r(double x, double* o)      { return sf_machine_fresnel_c(x, o); }
 static bool ndk_FresnelS_r(double x, double* o)      { return sf_machine_fresnel_s(x, o); }
-static bool ndk_PolyGamma_r(double x, double* o)     { return sf_machine_digamma(x, o); }
+static bool ndk_PolyGamma_r(double x, double* o)     { return sfg_digamma(x, o); }
+static bool ndk_PolyGamma_u(double xr, double xi, double* rr, double* ri) {
+    return sfg_polygamma_c(0, xr, xi, rr, ri);
+}
 static bool ndk_HarmonicNumber_r(double x, double* o){ return sf_machine_harmonic(x, o); }
 static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x, o); }
 static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
@@ -628,7 +631,7 @@ static const NDUnaryKernel NDKU_Erfi           = { NULL, ndk_Erfi_r,           t
 static const NDUnaryKernel NDKU_ProductLog     = { NULL, ndk_ProductLog_r,     true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelC       = { NULL, ndk_FresnelC_r,       true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_FresnelS       = { NULL, ndk_FresnelS_r,       true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_PolyGamma      = { NULL, ndk_PolyGamma_r,      true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_PolyGamma      = { ndk_PolyGamma_u, ndk_PolyGamma_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_Zeta           = { NULL, ndk_Zeta_r,           true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false, NULL, NULL, false };
@@ -645,11 +648,12 @@ static const NDUnaryKernel NDKU_AiryBiPrime = { NULL, ndk_AiryBiPrime_r, true, f
 /* PolyGamma[n, x] and HurwitzZeta[s, a].  PolyGamma matters as a BINARY kernel
  * even when written unary: the evaluator canonicalises PolyGamma[x] to
  * PolyGamma[0, x] before anything downstream sees it. */
+/* Integer order n, real or complex x: the Gamma family's kernel. */
 static bool ndk_PolyGamma_c(double nre, double nim, double xre, double xim,
                             double* rr, double* ri) {
-    if (nim != 0.0 || xim != 0.0) return false;
-    double v; if (!sf_machine_polygamma(nre, xre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    if (nim != 0.0 || nre < 0.0 || nre != floor(nre) ||
+        nre > (double)SFG_POLYGAMMA_MAX_N) return false;
+    return sfg_polygamma_c((int)nre, xre, xim, rr, ri);
 }
 static bool ndk_HurwitzZeta_c(double sre, double sim, double are, double aim,
                               double* rr, double* ri) {
@@ -659,9 +663,7 @@ static bool ndk_HurwitzZeta_c(double sre, double sim, double are, double aim,
 }
 static bool ndk_Pochhammer_c(double are, double aim, double nre, double nim,
                              double* rr, double* ri) {
-    if (aim != 0.0 || nim != 0.0) return false;
-    double v; if (!sf_machine_pochhammer(are, nre, &v)) return false;
-    *rr = v; *ri = 0.0; return true;
+    return sfg_pochhammer_c(are, aim, nre, nim, rr, ri);
 }
 static bool ndk_Binomial_c(double nre, double nim, double kre, double kim,
                            double* rr, double* ri) {

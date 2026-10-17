@@ -10,7 +10,8 @@
  *   exact integer / half-integer  ->  (z-1)! via the Factorial machinery
  *                                      (exact, BigInt, or rational*Sqrt[Pi])
  *   machine real        ->  libm   tgamma
- *   machine complex     ->  Lanczos approximation (double complex)
+ *   machine complex     ->  sfg_gamma_c (sf_machine_gamma.c), shared with the
+ *                           NDArray kernel and Compile[]
  *   arbitrary real      ->  MPFR   mpfr_gamma / mpfr_gamma_inc
  *   everything else     ->  stays symbolic (return NULL)
  *
@@ -40,6 +41,7 @@
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_machine_gamma.h" /* sfg_gamma_c: the shared machine-complex kernel */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -148,7 +150,13 @@ static double complex gamma_lanczos(double complex z) {
     return csqrt(2.0 * M_PI) * cpow(t, z + 0.5) * cexp(-t) * x;
 }
 
+/* The machine-complex Gamma shared by the scalar builtin, the NDArray kernel
+ * and the Compile[] VM: the sf_machine_gamma.c kernel (Taylor tiles near the
+ * real axis, shifted Stirling elsewhere; a few ulp). The Lanczos series above
+ * remains only as the fallback for what that kernel declines (Re z < -30,
+ * overflow), so those inputs behave exactly as before. */
 bool gamma_machine_complex(double are, double aim, double* ore, double* oim) {
+    if (sfg_gamma_c(are, aim, ore, oim)) return true;
     double complex r = gamma_lanczos(are + aim * I);
     *ore = creal(r); *oim = cimag(r);
     return isfinite(*ore) && isfinite(*oim);
@@ -624,20 +632,8 @@ static Expr* gamma_mpfr_inc_complex(Expr* ar, Expr* ai, Expr* zr, Expr* zi,
 /* ------------------------------------------------------------------ */
 
 static Expr* gamma_one_arg(Expr* arg) {
-    /* 1. Exact integer / half-integer -> (z-1)!. */
-    int64_t n, d;
-    if (is_rational(arg, &n, &d) && (d == 1 || d == 2)) {
-        Expr* exact = gamma_exact_via_factorial(n, d);
-        if (exact) return exact;
-    }
-
-    /* 2. Symbolic infinities. */
-    if (gamma_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
-    if (gamma_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
-    if (gamma_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
-    if (gamma_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
-
-    /* 3. Machine real. */
+    /* 0. Machine real first: the hot numeric call skips the exact and
+     *    symbolic ladders below (none of which can match a Real). */
     if (arg->type == EXPR_REAL) {
         double v = arg->data.real;
         double r = tgamma(v);
@@ -659,19 +655,8 @@ static Expr* gamma_one_arg(Expr* arg) {
         return expr_new_real(r);
     }
 
-#ifdef USE_MPFR
-    /* 4. Arbitrary-precision real. */
-    if (arg->type == EXPR_MPFR) {
-        mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
-        Expr* out = expr_new_mpfr_bits(prec);
-        mpfr_gamma(out->data.mpfr, arg->data.mpfr, MPFR_RNDN);
-        if (mpfr_inf_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
-        if (mpfr_nan_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
-        return out;
-    }
-#endif
-
-    /* 5. Complex argument (Complex[..] with an inexact part). */
+    /* 0b. Complex argument (Complex[..] with an inexact part), also ahead of the
+     *     ladders below -- none of which can match a Complex[..]. */
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         bool inexact = gamma_is_inexact(re) || gamma_is_inexact(im);
@@ -683,14 +668,41 @@ static Expr* gamma_one_arg(Expr* arg) {
             if (out) return out;
         }
 #endif
-        /* Machine complex: fast double Lanczos. */
+        /* Machine complex: the shared double kernel (gamma_machine_complex). */
         double rr, ii;
         if (inexact && gamma_to_double(re, &rr) && gamma_to_double(im, &ii)) {
-            double complex g = gamma_lanczos(rr + ii * I);
-            if (cimag(g) == 0.0) return expr_new_real(creal(g));
-            return make_complex(expr_new_real(creal(g)), expr_new_real(cimag(g)));
+            double gr, gi;
+            if (gamma_machine_complex(rr, ii, &gr, &gi)) {
+                if (gi == 0.0) return expr_new_real(gr);
+                return make_complex(expr_new_real(gr), expr_new_real(gi));
+            }
         }
     }
+
+    /* 1. Exact integer / half-integer -> (z-1)!. */
+    int64_t n, d;
+    if (is_rational(arg, &n, &d) && (d == 1 || d == 2)) {
+        Expr* exact = gamma_exact_via_factorial(n, d);
+        if (exact) return exact;
+    }
+
+    /* 2. Symbolic infinities. */
+    if (gamma_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
+    if (gamma_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (gamma_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    if (gamma_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
+
+#ifdef USE_MPFR
+    /* 4. Arbitrary-precision real. */
+    if (arg->type == EXPR_MPFR) {
+        mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
+        Expr* out = expr_new_mpfr_bits(prec);
+        mpfr_gamma(out->data.mpfr, arg->data.mpfr, MPFR_RNDN);
+        if (mpfr_inf_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
+        if (mpfr_nan_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
+        return out;
+    }
+#endif
 
     return NULL; /* leave symbolic */
 }

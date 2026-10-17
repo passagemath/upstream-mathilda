@@ -1,0 +1,231 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{float}
+\usepackage{longtable,booktabs,array}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue]{hyperref}
+
+% code font for builtin / library names (lightweight; no book/mathilda.sty dependency)
+\definecolor{mCode}{rgb}{0.10,0.20,0.45}
+\newcommand{\mcode}[1]{\texttt{\textcolor{mCode}{#1}}}
+% coverage marks
+\newcommand{\yes}{\textcolor{green!55!black}{\checkmark}}
+\newcommand{\no}{\textcolor{red!70!black}{$\times$}}
+\newcommand{\na}{\textcolor{gray}{--}}
+
+\input{macros}
+
+\title{\textbf{Special functions in Mathilda:\\a four-engine accuracy and speed shootout}}
+\author{Mathilda benchmark suite}
+\date{\sfdate}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+We benchmark every numerically-evaluable special function in \textbf{Mathilda}
+(\sfncases{} heads) against three external systems --- \textbf{Python} (SciPy for machine
+precision, mpmath for arbitrary precision), \textbf{Maxima}, and \textbf{Mathematica}
+(via \mcode{wolframscript}) --- across three regimes: machine-real, complex, and
+arbitrary precision (\sfapdps{} digits). Two things are measured: \emph{speed} (per-call
+scalar latency in every regime, plus machine-real vectorized throughput over a
+$10^6$-element buffer), and \emph{accuracy}, defined \emph{oracle-free} as the number of
+leading significant digits to which the engines mutually agree, with any engine that
+falls out of the consensus flagged. The sweep is self-contained --- it does not touch the
+weekly \mcode{run\_all.py} gap gate --- and regenerates this document's tables from one
+results JSON.
+\end{abstract}
+
+\section{Method}
+
+\paragraph{Engines and versions.}
+\begin{itemize}\itemsep1pt
+  \item \textbf{Mathilda} --- \sfmathilda{}.
+  \item \textbf{Mathematica} --- \sfwolfram{}, driven by \mcode{wolframscript -file}.
+  \item \textbf{Maxima} --- \sfmaxima{}.
+  \item \textbf{Python} --- \sfpython{}. SciPy's \mcode{scipy.special} (compiled C) backs
+        the machine-real and complex columns; mpmath backs arbitrary precision (SciPy is
+        double-only) and is also the fallback for the handful of heads SciPy lacks.
+\end{itemize}
+Platform: \sfplatform{}.
+
+\paragraph{The three regimes.}
+Each head is exercised at (MR) machine-real arguments, computed to IEEE double;
+(C) complex machine arguments; and (AP) exact-rational arguments evaluated to \sfapdps{}
+digits. In Mathilda these correspond to the \mcode{Gamma[2.5]}, \mcode{Gamma[2.5+1.3 I]},
+and \mcode{N[Gamma[5/2], \sfapdps]} dispatch paths respectively. Arguments are drawn
+deterministically from each head's real principal domain so that timing measures the
+kernel, not a decline-to-fallback path. Arbitrary precision is sampled on the real axis.
+
+\paragraph{Accuracy: agreement, not an oracle.}
+No engine is designated the source of truth. For each sample point we collect the value
+from every engine that returns a number, take the component-wise median as the consensus,
+and report the number of leading significant digits the engines mutually share
+($-\log_{10}$ of the largest pairwise relative spread). An engine whose value deviates
+from the consensus by more than the regime tolerance --- while the others agree closely ---
+is \emph{flagged}. Four independent implementations agreeing to $\approx 15$ digits in
+machine precision (or to \sfapdps{} in AP) is strong evidence of correctness; a lone
+dissenter is either a genuine branch/convention difference (documented) or a bug. This
+agreement check doubled as the cross-engine mapping validator while the benchmark was
+built.
+
+\paragraph{Speed.}
+Latency is timed \emph{inside} each engine (Mathilda/Mathematica \mcode{AbsoluteTiming},
+Maxima \mcode{elapsed\_real\_time}, Python \mcode{perf\_counter}) so process start-up is
+charged once, not per call. Each engine evaluates the head over a block of \emph{distinct}
+arguments and we report the minimum per-call time over several such blocks: distinct
+arguments mean no engine can serve a memoised result (Mathematica's \mcode{N} cache and
+Mathilda's evaluation memo would otherwise measure the cache, not the arithmetic), and the
+single pass per block avoids re-evaluating identical work. \mcode{AbsoluteTiming} is used
+rather than \mcode{Timing}, which sums CPU time across threads.
+
+Three further controls make the figure the \emph{kernel's} cost.
+\begin{itemize}
+\item \textbf{Machine literals.} Machine arguments are written with a trailing backtick
+  (\mcode{1.2345678901234567`}). A 17-digit literal without the backtick is read as
+  \emph{arbitrary} precision by both Mathilda and Mathematica, so the plain form would
+  route part of the machine sample through the MPFR paths.
+\item \textbf{Net latency.} Each block is timed twice: once calling the head, and once as
+  a \emph{null loop} with the same \mcode{Do}/\mcode{Part} (Python: \mcode{for}) loop and
+  no call. Neither loop is wrapped in \mcode{Quiet}. The reported latency is
+  $\min_b(\text{raw}) - \min_b(\text{null})$ (512 points per block, 5 blocks).
+\item \textbf{Cache defence.} \mcode{ClearSystemCache[]} is called before every timed
+  loop. Values and timing run in separate engine processes. Python's warm-up uses its own
+  points. A \emph{cache canary} then re-times block~0 on points it has already seen: a
+  repeat more than $2\times$ faster than the first pass means the engine is serving
+  memoised results. Such a cell is marked $^\dagger$ and excluded from the ranking.
+\end{itemize} The vectorized-throughput
+table instead gives each engine its best array form: a $10^6$-element packed buffer for
+Mathilda and a NumPy array for SciPy (Maxima and Mathematica are scalar here and omitted).
+
+\paragraph{Scope.}
+All \sfncases{} numerically-evaluable heads are covered. The exact integer/rational heads
+(\mcode{Fibonacci}, \mcode{LucasL}, \mcode{BernoulliB}, \mcode{EulerE},
+\mcode{HarmonicNumber}, \mcode{BarnesG}, \mcode{Hyperfactorial}) are reported separately
+as exact arithmetic. The two symbolic-only heads (\mcode{BesselJZero}, a Hadamard-product
+placeholder, and \mcode{StieltjesGamma}, inert except at $0$) have no numeric path and are
+excluded.
+
+\section{Coverage}
+
+Which engines evaluate each head in each regime. This is a result in itself: Mathilda and
+Mathematica cover the whole surface in all three regimes, whereas SciPy is double-only
+(no AP column of its own) and Maxima leaves several higher transcendental functions
+symbolic. Marks are \yes{} supported, \no{} not evaluated, \na{} regime not applicable to
+the head.
+
+\input{tab_coverage}
+
+\section{Accuracy (cross-engine agreement)}
+
+Significant digits of mutual agreement per head and regime (higher is better; machine
+regimes are bounded by the $\approx 15.9$ digits of IEEE double, AP by the \sfapdps{}
+requested digits).
+
+\input{tab_agreement}
+
+\subsection{Disagreements}
+
+The \sfndisagree{} cases where an engine fell out of the consensus. Each is a genuine
+branch or convention difference, not a transcription error (see the notes below the
+table in the discussion).
+
+\input{tab_disagree}
+
+\section{Speed: scalar latency}
+
+Per-call latency with the fastest engine's cell in bold and a trailing column giving
+Mathilda relative to the fastest \emph{other} engine (a bold \mbox{$1/N$} means Mathilda is
+$N\times$ faster than the best competitor; $N$ means $N\times$ slower).
+
+\subsection{Machine real}
+\input{tab_speed_MR}
+
+\subsection{Complex}
+\input{tab_speed_C}
+
+\subsection{Arbitrary precision (\sfapdps{} digits)}
+\input{tab_speed_AP}
+
+\section{Speed: vectorized machine-real throughput}
+
+Wall time to apply each head to a $10^6$-element buffer. This is where Mathilda's packed
+array / NDArray kernels compete directly with SciPy's vectorized C.
+
+\input{tab_throughput}
+
+\section{Exact arithmetic}
+
+The integer/rational-valued heads, compared by exact value (agreement is exact string
+equality at the smallest size) and timed at growing argument sizes. All engines that
+compute a given head returned byte-identical exact values on the \sfexactok{} functions
+where at least two systems evaluate it.
+
+\input{tab_exact}
+
+\section{Discussion}
+
+\paragraph{Where Mathilda stands.} The medians over the sweep, as net latency against the
+fastest other engine: machine real \sfspeedMR{}, complex \sfspeedC{}, arbitrary precision
+\sfspeedAP{}. Mathilda has the lowest net latency in \emph{every} machine-real and
+machine-complex cell, and its $10^6$-element buffers beat SciPy for every head SciPy
+implements.
+
+\paragraph{How the machine regimes were closed (v0.436--v0.444).} The first version of this
+report (v0.433) had Mathilda a median $12\times$ slower for machine reals and $9\times$ for
+complex arguments. Part of that was the measurement itself: 17-digit literals were read as
+arbitrary precision, and the \mcode{Do}/\mcode{Part}/\mcode{Quiet} loop floor was charged to
+every call. Both are fixed in the method above. The rest was real, and had three causes.
+\begin{itemize}
+\item \textbf{Scalar paths bypassed the machine kernels.} Most scalar builtins recomputed in
+  MPFR, or rebuilt and re-evaluated an expression, even where an \mcode{sf\_machine}
+  double kernel already existed. Every special-function builtin now goes first through one
+  shared machine gate (\mcode{sf\_machine\_scalar\_args}) to the same raw-double kernel the
+  packed, NDArray and \mcode{Compile[]} surfaces use, so the five surfaces agree bit for bit.
+\item \textbf{No native complex kernels.} The \mcode{ncpx}-style MPFR pairs are replaced, for
+  machine input, by raw double re/im kernels for every head:
+  \begin{itemize}
+  \item Faddeeva $w(z)$ for the error family and Fresnel
+  \item Amos-style I/K reduction with Taylor continuation for Bessel and Airy
+  \item Euler--Maclaurin and inversion maps for Zeta, HurwitzZeta, LerchPhi and PolyLog
+  \item tiled Taylor/Stirling for $\ln\Gamma$ and $\psi$
+  \item Carlson's integrals in complex arithmetic for the elliptic integrals
+  \item transformation-selected series and ODE continuation for the hypergeometric family
+  \end{itemize}
+\item \textbf{Kernel algorithms.} Real kernels that lost to SciPy were rebuilt as fitted
+  rational, Chebyshev and auxiliary-function approximations. Their coefficients are
+  regenerated from mpmath by scripts under \mcode{tools/}.
+\end{itemize}
+Two evaluator costs were also cut. The confirming step after a builtin returns a numeric or
+canonical-complex atom is gone, and so is the packed-array gate scan for calls with no
+buffer argument. Accuracy rose with speed: the agreement table is at or above its v0.433
+values, and every kernel was gated against mpmath (median $\lesssim 1$ ulp) before it was
+wired.
+
+\paragraph{Notes on the flagged disagreements.}
+The recurring genuine differences are: Maxima's \mcode{expintegral\_chi} returns a value
+with a spurious $i\pi$ imaginary part on the positive real axis (a branch convention);
+Maxima leaves \mcode{hurwitz\_zeta}, \mcode{polylog}, \mcode{HypergeometricU},
+\mcode{WhittakerM/W} and \mcode{BarnesG} symbolic (no numeric kernel, shown as absent, not
+as a disagreement); and branch-cut choices for multivalued heads differ between systems
+off the principal domain.
+
+\section{Reproducing}
+
+\begin{verbatim}
+cd <mathilda-repo>
+make -j                      # build ./Mathilda
+benchmarks/.venv/bin/python benchmarks/97-special-functions/run_shootout.py --ap-dps 50
+benchmarks/.venv/bin/python benchmarks/97-special-functions/report.py [results/<file>.json]
+cd benchmarks/97-special-functions && latexmk -pdf special_function_performance.tex
+\end{verbatim}
+
+\noindent
+The driver writes \mcode{results/<date>.json}; \mcode{report.py} regenerates every
+\mcode{tab\_*.tex} fragment and \mcode{macros.tex} from it. Engine binaries are found via
+\mcode{MATHILDA\_BIN}, \mcode{WOLFRAMSCRIPT}, \mcode{MAXIMA\_BIN}, and the benchmark venv.
+
+\end{document}

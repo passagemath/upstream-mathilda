@@ -1,0 +1,3222 @@
+{
+ "meta": {
+  "date": "2026-10-16",
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "python": "3.14.7",
+  "engines": {
+   "mathilda": "0.433 (Mathilda 0.433 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline))",
+   "wolfram": "14. (14.0.0 for Mac OS X x86 (64-bit) (December 13, 2023))",
+   "maxima": "Maxima 5.49.0",
+   "python": "scipy 1.18.1, mpmath 1.3.0, numpy 2.5.2"
+  },
+  "ap_dps": 50,
+  "kval": 8,
+  "ktime": 64,
+  "rblk": 3
+ },
+ "cases": {
+  "Gamma": {
+   "family": "Gamma",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00489,
+      "wolfram": 0.00081,
+      "maxima": 0.00445,
+      "python": 0.00014
+     },
+     "agree_digits": 15.7,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.12587,
+      "wolfram": 0.00286,
+      "maxima": 0.00875,
+      "python": 0.00031
+     },
+     "agree_digits": 14.31,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.03756,
+      "wolfram": 0.15187,
+      "maxima": 0.71044,
+      "python": 0.02419
+     },
+     "agree_digits": 50.5,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "LogGamma": {
+   "family": "Gamma",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00308,
+      "wolfram": 0.00083,
+      "maxima": 0.00491,
+      "python": 0.00014
+     },
+     "agree_digits": 14.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.90981,
+      "wolfram": 0.00295,
+      "maxima": 0.00648,
+      "python": 0.00029
+     },
+     "agree_digits": 13.94,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.03637,
+      "wolfram": 0.14588,
+      "maxima": 0.355,
+      "python": 0.04999
+     },
+     "agree_digits": 50.53,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "PolyGamma0": {
+   "family": "Gamma",
+   "note": "digamma (PolyGamma[0, z])",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.03666,
+      "wolfram": 0.001,
+      "maxima": 0.13308,
+      "python": 0.00014
+     },
+     "agree_digits": 14.97,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.03861,
+      "wolfram": 0.01439,
+      "maxima": 0.00409,
+      "python": 0.00053
+     },
+     "agree_digits": 15.15,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.11563,
+      "wolfram": 0.09094,
+      "maxima": 0.57119,
+      "python": 0.09211
+     },
+     "agree_digits": 50.26,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "PolyGamma2": {
+   "family": "Gamma",
+   "note": "scipy polygamma is real-only",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.03811,
+      "wolfram": 0.04831,
+      "maxima": 0.29663,
+      "python": 0.00951
+     },
+     "agree_digits": 14.85,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.05911,
+      "wolfram": 0.1835,
+      "maxima": 0.00478,
+      "python": 0.60559
+     },
+     "agree_digits": 15.52,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.13194,
+      "wolfram": 0.38362,
+      "maxima": 1.6,
+      "python": 0.7317
+     },
+     "agree_digits": 50.27,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Beta": {
+   "family": "Gamma",
+   "note": "scipy beta real-only",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01325,
+      "wolfram": 0.00142,
+      "maxima": 0.0117,
+      "python": 0.00087
+     },
+     "agree_digits": 14.58,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.25577,
+      "wolfram": 0.00736,
+      "maxima": 0.02752,
+      "python": 0.3853
+     },
+     "agree_digits": 14.0,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.11812,
+      "wolfram": 0.46594,
+      "maxima": 1.17056,
+      "python": 0.09234
+     },
+     "agree_digits": 50.37,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Pochhammer": {
+   "family": "Gamma",
+   "note": "rising factorial, n = 3; scipy poch real-only",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00394,
+      "wolfram": 0.00092,
+      "maxima": 0.0037,
+      "python": 0.00107
+     },
+     "agree_digits": 15.62,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01783,
+      "wolfram": 0.00189,
+      "maxima": 0.00573,
+      "python": 0.24423
+     },
+     "agree_digits": 15.17,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00419,
+      "wolfram": 0.00269,
+      "maxima": 0.00844,
+      "python": 0.06333
+     },
+     "agree_digits": 50.38,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Zeta": {
+   "family": "Zeta",
+   "note": "s > 1; scipy zeta real-only",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.06483,
+      "wolfram": 0.01588,
+      "maxima": 0.01105,
+      "python": 0.00138
+     },
+     "agree_digits": 15.62,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.29014,
+      "wolfram": 0.04203,
+      "maxima": 0.02278,
+      "python": 0.38139
+     },
+     "agree_digits": 15.61,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.111,
+      "wolfram": 0.4065,
+      "maxima": 16.76363,
+      "python": 0.72512
+     },
+     "agree_digits": 50.17,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "HurwitzZeta": {
+   "family": "Zeta",
+   "note": "Maxima leaves hurwitz_zeta symbolic",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.26959,
+      "wolfram": 0.01495,
+      "maxima": null,
+      "python": 0.00125
+     },
+     "agree_digits": 14.14,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.69978,
+      "wolfram": 0.26948,
+      "maxima": null,
+      "python": 1.8962
+     },
+     "agree_digits": 15.67,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.13719,
+      "wolfram": 0.489,
+      "maxima": null,
+      "python": 2.22686
+     },
+     "agree_digits": 50.5,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "LerchPhi": {
+   "family": "Zeta",
+   "note": "Python column is mpmath (scipy has no LerchPhi)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.42631,
+      "wolfram": 0.11645,
+      "maxima": null,
+      "python": 19.96025
+     },
+     "agree_digits": 15.67,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.59773,
+      "wolfram": 0.12781,
+      "maxima": null,
+      "python": 38.38574
+     },
+     "agree_digits": 15.84,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.96862,
+      "wolfram": 1.39156,
+      "maxima": null,
+      "python": 104.09945
+     },
+     "agree_digits": 50.38,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "PolyLog": {
+   "family": "Zeta",
+   "note": "dilog (s = 2); Python is mpmath; Maxima symbolic",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.4787,
+      "wolfram": 0.00694,
+      "maxima": null,
+      "python": 0.5192
+     },
+     "agree_digits": 15.7,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 7.0392,
+      "wolfram": 0.10789,
+      "maxima": null,
+      "python": 1.35714
+     },
+     "agree_digits": 15.72,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02119,
+      "wolfram": 0.37669,
+      "maxima": null,
+      "python": 0.96695
+     },
+     "agree_digits": 50.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "BesselJ": {
+   "family": "Bessel/Airy",
+   "note": "order n = 2",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01619,
+      "wolfram": 0.02634,
+      "maxima": 0.00622,
+      "python": 0.00179
+     },
+     "agree_digits": 13.08,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.10123,
+      "wolfram": 0.03145,
+      "maxima": 0.01152,
+      "python": 0.00178
+     },
+     "agree_digits": 14.42,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.04181,
+      "wolfram": 0.1825,
+      "maxima": 2.62081,
+      "python": 0.03595
+     },
+     "agree_digits": 49.81,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "BesselY": {
+   "family": "Bessel/Airy",
+   "note": "order n = 1",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0578,
+      "wolfram": 0.147,
+      "maxima": 0.00611,
+      "python": 0.00223
+     },
+     "agree_digits": 13.37,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.17884,
+      "wolfram": 0.05291,
+      "maxima": 0.01281,
+      "python": 0.00278
+     },
+     "agree_digits": 14.66,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.12312,
+      "wolfram": 0.60394,
+      "maxima": 0.01344,
+      "python": 3.33332
+     },
+     "agree_digits": 50.56,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "BesselI": {
+   "family": "Bessel/Airy",
+   "note": "order n = 0",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.03606,
+      "wolfram": 0.00552,
+      "maxima": 0.00594,
+      "python": 0.00148
+     },
+     "agree_digits": 15.04,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.05613,
+      "wolfram": 0.01758,
+      "maxima": 0.00984,
+      "python": 0.00151
+     },
+     "agree_digits": 15.39,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.07587,
+      "wolfram": 0.09312,
+      "maxima": 2.43981,
+      "python": 0.07279
+     },
+     "agree_digits": 50.4,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "BesselK": {
+   "family": "Bessel/Airy",
+   "note": "order n = 0",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.06272,
+      "wolfram": 0.00189,
+      "maxima": 0.00619,
+      "python": 0.00145
+     },
+     "agree_digits": 15.43,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.11834,
+      "wolfram": 0.06931,
+      "maxima": 0.00991,
+      "python": 0.00163
+     },
+     "agree_digits": 13.82,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.13425,
+      "wolfram": 0.17938,
+      "maxima": 0.013,
+      "python": 3.6316
+     },
+     "agree_digits": 50.43,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "AiryAi": {
+   "family": "Bessel/Airy",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.05169,
+      "wolfram": 0.00078,
+      "maxima": 0.00483,
+      "python": 0.00178
+     },
+     "agree_digits": 14.79,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.09533,
+      "wolfram": 0.0723,
+      "maxima": 0.00817,
+      "python": 0.00493
+     },
+     "agree_digits": 14.2,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02706,
+      "wolfram": 0.06363,
+      "maxima": 4.84956,
+      "python": 0.22541
+     },
+     "agree_digits": 50.24,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "AiryBi": {
+   "family": "Bessel/Airy",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.04995,
+      "wolfram": 0.00078,
+      "maxima": 0.00467,
+      "python": 0.00173
+     },
+     "agree_digits": 15.6,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.09848,
+      "wolfram": 0.07381,
+      "maxima": 0.00845,
+      "python": 0.00482
+     },
+     "agree_digits": 14.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01319,
+      "wolfram": 0.06031,
+      "maxima": 5.33312,
+      "python": 0.12918
+     },
+     "agree_digits": 50.55,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "AiryAiPrime": {
+   "family": "Bessel/Airy",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.04698,
+      "wolfram": 0.00077,
+      "maxima": 0.0058,
+      "python": 0.00176
+     },
+     "agree_digits": 12.84,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.10155,
+      "wolfram": 0.08098,
+      "maxima": 0.00842,
+      "python": 0.00477
+     },
+     "agree_digits": 14.44,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.0135,
+      "wolfram": 0.06913,
+      "maxima": 4.78187,
+      "python": 0.17006
+     },
+     "agree_digits": 49.92,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "AiryBiPrime": {
+   "family": "Bessel/Airy",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.04577,
+      "wolfram": 0.0008,
+      "maxima": 0.00477,
+      "python": 0.00176
+     },
+     "agree_digits": 13.67,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.10445,
+      "wolfram": 0.08342,
+      "maxima": 0.00866,
+      "python": 0.00462
+     },
+     "agree_digits": 15.19,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01325,
+      "wolfram": 0.0695,
+      "maxima": 4.72425,
+      "python": 0.15008
+     },
+     "agree_digits": 50.39,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "StruveH": {
+   "family": "Bessel/Airy",
+   "note": "order 0; Mathilda forces the Arb path for complex (no machine-complex kernel)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00437,
+      "wolfram": 0.34019,
+      "maxima": 1.34498,
+      "python": 0.00741
+     },
+     "agree_digits": 13.12,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00637,
+      "wolfram": 0.3437,
+      "maxima": 4.96514,
+      "python": 0.15139
+     },
+     "agree_digits": 15.48,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02187,
+      "wolfram": 0.72756,
+      "maxima": 2.67581,
+      "python": 0.13204
+     },
+     "agree_digits": 50.17,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Erf": {
+   "family": "Error",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00417,
+      "wolfram": 0.0008,
+      "maxima": 0.0047,
+      "python": 0.00014
+     },
+     "agree_digits": 15.64,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.07489,
+      "wolfram": 0.04359,
+      "maxima": 0.0257,
+      "python": 0.00026
+     },
+     "agree_digits": 14.65,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.018,
+      "wolfram": 0.30469,
+      "maxima": 3.03756,
+      "python": 0.0385
+     },
+     "agree_digits": 50.5,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Erfc": {
+   "family": "Error",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00472,
+      "wolfram": 0.00075,
+      "maxima": 0.00727,
+      "python": 0.00013
+     },
+     "agree_digits": 15.11,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.07634,
+      "wolfram": 0.03964,
+      "maxima": 0.02559,
+      "python": 0.00025
+     },
+     "agree_digits": 15.12,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02806,
+      "wolfram": 0.2075,
+      "maxima": 4.53312,
+      "python": 0.03976
+     },
+     "agree_digits": 50.29,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Erfi": {
+   "family": "Error",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01094,
+      "wolfram": 0.01173,
+      "maxima": 0.01767,
+      "python": 0.00015
+     },
+     "agree_digits": 14.77,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.08453,
+      "wolfram": 0.03284,
+      "maxima": 0.02261,
+      "python": 0.00026
+     },
+     "agree_digits": 15.22,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02206,
+      "wolfram": 0.23931,
+      "maxima": 1.21837,
+      "python": 0.08217
+     },
+     "agree_digits": 50.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "InverseErf": {
+   "family": "Error",
+   "note": "real-only in Mathilda; domain (-1, 1)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00322,
+      "wolfram": 0.02384,
+      "maxima": 0.00692,
+      "python": 0.00014
+     },
+     "agree_digits": 15.48,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.0695,
+      "wolfram": 1.368,
+      "maxima": 5.51269,
+      "python": 0.57668
+     },
+     "agree_digits": 50.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "InverseErfc": {
+   "family": "Error",
+   "note": "real-only; domain (0, 2); mpmath via erfinv(1-x)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00841,
+      "wolfram": 0.01864,
+      "maxima": 0.00916,
+      "python": 0.00014
+     },
+     "agree_digits": 15.4,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.061,
+      "wolfram": 1.39663,
+      "maxima": 3.76138,
+      "python": 0.56952
+     },
+     "agree_digits": 50.47,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "FresnelC": {
+   "family": "Error",
+   "note": "scipy fresnel returns (S, C)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01569,
+      "wolfram": 0.02178,
+      "maxima": 0.01692,
+      "python": 0.00129
+     },
+     "agree_digits": 14.88,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.1345,
+      "wolfram": 0.18458,
+      "maxima": 0.03253,
+      "python": 0.00205
+     },
+     "agree_digits": 14.62,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.03275,
+      "wolfram": 4.44344,
+      "maxima": 39.59056,
+      "python": 0.07006
+     },
+     "agree_digits": 50.55,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "FresnelS": {
+   "family": "Error",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01362,
+      "wolfram": 0.02384,
+      "maxima": 0.01958,
+      "python": 0.00127
+     },
+     "agree_digits": 13.74,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.16105,
+      "wolfram": 0.1645,
+      "maxima": 0.0298,
+      "python": 0.00196
+     },
+     "agree_digits": 14.71,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02325,
+      "wolfram": 0.94388,
+      "maxima": 18.10813,
+      "python": 0.07069
+     },
+     "agree_digits": 50.46,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "EllipticK": {
+   "family": "Elliptic",
+   "note": "parameter m; scipy ellipk real-only",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00159,
+      "wolfram": 0.00072,
+      "maxima": 0.01116,
+      "python": 0.00013
+     },
+     "agree_digits": 15.63,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00923,
+      "wolfram": 0.00387,
+      "maxima": 0.03272,
+      "python": 0.19974
+     },
+     "agree_digits": 15.4,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00613,
+      "wolfram": 0.0175,
+      "maxima": 2.53662,
+      "python": 0.02962
+     },
+     "agree_digits": 50.33,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "EllipticE": {
+   "family": "Elliptic",
+   "note": "complete, parameter m",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00278,
+      "wolfram": 0.00075,
+      "maxima": 0.01925,
+      "python": 0.00014
+     },
+     "agree_digits": 15.3,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.02158,
+      "wolfram": 0.00888,
+      "maxima": 0.06437,
+      "python": 0.59178
+     },
+     "agree_digits": 15.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01619,
+      "wolfram": 0.03213,
+      "maxima": 5.1915,
+      "python": 0.15998
+     },
+     "agree_digits": 50.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "EllipticF": {
+   "family": "Elliptic",
+   "note": "incomplete F(phi | m)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00911,
+      "wolfram": 0.00123,
+      "maxima": 0.01181,
+      "python": 0.00106
+     },
+     "agree_digits": 15.55,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.03,
+      "wolfram": 0.09156,
+      "maxima": 2.4495,
+      "python": 0.78004
+     },
+     "agree_digits": 50.63,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "EllipticEinc": {
+   "family": "Elliptic",
+   "note": "incomplete E(phi | m)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01489,
+      "wolfram": 0.00119,
+      "maxima": 0.03267,
+      "python": 0.0011
+     },
+     "agree_digits": 15.5,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.063,
+      "wolfram": 0.11812,
+      "maxima": 10.17406,
+      "python": 2.40164
+     },
+     "agree_digits": 50.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "EllipticPi": {
+   "family": "Elliptic",
+   "note": "complete Pi(n | m); Python is mpmath (scipy has none)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.02006,
+      "wolfram": 0.01442,
+      "maxima": 0.08297,
+      "python": 1.66597
+     },
+     "agree_digits": 15.44,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.09894,
+      "wolfram": 0.0405,
+      "maxima": 42.43431,
+      "python": 3.90974
+     },
+     "agree_digits": 50.22,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "LegendreP": {
+   "family": "Orthogonal",
+   "note": "degree 3; Maxima float wraps in interval()",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00894,
+      "wolfram": 0.0015,
+      "maxima": 0.00787,
+      "python": 0.00098
+     },
+     "agree_digits": 14.81,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01059,
+      "wolfram": 0.02894,
+      "maxima": 0.01587,
+      "python": 0.00119
+     },
+     "agree_digits": 14.76,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02056,
+      "wolfram": 0.01925,
+      "maxima": 0.01881,
+      "python": 0.03453
+     },
+     "agree_digits": 50.24,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "LegendreQ": {
+   "family": "Orthogonal",
+   "note": "degree 2; Python is mpmath (scipy has no Legendre Q)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01709,
+      "wolfram": 0.02031,
+      "maxima": 0.00792,
+      "python": 2.74812
+     },
+     "agree_digits": 15.05,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.02941,
+      "wolfram": 0.04811,
+      "maxima": 0.46387,
+      "python": 5.22324
+     },
+     "agree_digits": 15.3,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.04444,
+      "wolfram": 0.06406,
+      "maxima": 0.15181,
+      "python": 7.7037
+     },
+     "agree_digits": 50.58,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "HermiteH": {
+   "family": "Orthogonal",
+   "note": "physicists' H, degree 4",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00248,
+      "wolfram": 0.00133,
+      "maxima": 0.00648,
+      "python": 0.00099
+     },
+     "agree_digits": 14.48,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00381,
+      "wolfram": 0.0023,
+      "maxima": 0.01373,
+      "python": 0.09908
+     },
+     "agree_digits": 15.59,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00731,
+      "wolfram": 0.01444,
+      "maxima": 0.01831,
+      "python": 0.07091
+     },
+     "agree_digits": 50.11,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "LaguerreL": {
+   "family": "Orthogonal",
+   "note": "degree 3",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00173,
+      "wolfram": 0.00136,
+      "maxima": 0.00598,
+      "python": 0.00105
+     },
+     "agree_digits": 15.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00328,
+      "wolfram": 0.00219,
+      "maxima": 0.01048,
+      "python": 0.0012
+     },
+     "agree_digits": 15.08,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.0205,
+      "wolfram": 0.00437,
+      "maxima": 0.01662,
+      "python": 0.06126
+     },
+     "agree_digits": 50.21,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "ChebyshevT": {
+   "family": "Orthogonal",
+   "note": "degree 5",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00127,
+      "wolfram": 0.00164,
+      "maxima": 0.00744,
+      "python": 0.001
+     },
+     "agree_digits": 14.73,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00194,
+      "wolfram": 0.00247,
+      "maxima": 0.01508,
+      "python": 0.0012
+     },
+     "agree_digits": 14.05,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00869,
+      "wolfram": 0.01319,
+      "maxima": 0.02788,
+      "python": 0.03957
+     },
+     "agree_digits": 50.55,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "ChebyshevU": {
+   "family": "Orthogonal",
+   "note": "degree 5",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00172,
+      "wolfram": 0.00183,
+      "maxima": 0.00747,
+      "python": 0.001
+     },
+     "agree_digits": 14.31,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00233,
+      "wolfram": 0.0027,
+      "maxima": 0.01494,
+      "python": 0.0012
+     },
+     "agree_digits": 14.22,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00875,
+      "wolfram": 0.01063,
+      "maxima": 0.02669,
+      "python": 0.04339
+     },
+     "agree_digits": 50.44,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "SinIntegral": {
+   "family": "Integral",
+   "note": "scipy sici returns (Si, Ci)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00842,
+      "wolfram": 0.08609,
+      "maxima": 0.01611,
+      "python": 0.00129
+     },
+     "agree_digits": 14.49,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.03573,
+      "wolfram": 0.08342,
+      "maxima": 0.02798,
+      "python": 0.12222
+     },
+     "agree_digits": 14.15,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01837,
+      "wolfram": 0.24969,
+      "maxima": 81.99081,
+      "python": 0.03415
+     },
+     "agree_digits": 50.28,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "CosIntegral": {
+   "family": "Integral",
+   "note": "x > 0 on the real axis",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01206,
+      "wolfram": 0.08423,
+      "maxima": 0.01922,
+      "python": 0.0013
+     },
+     "agree_digits": 13.13,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.04528,
+      "wolfram": 0.07438,
+      "maxima": 0.03127,
+      "python": 0.13752
+     },
+     "agree_digits": 13.76,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02187,
+      "wolfram": 0.28506,
+      "maxima": 93.31975,
+      "python": 0.04744
+     },
+     "agree_digits": 50.55,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "SinhIntegral": {
+   "family": "Integral",
+   "note": "scipy shichi returns (Shi, Chi)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00611,
+      "wolfram": 0.07909,
+      "maxima": 0.01492,
+      "python": 0.00135
+     },
+     "agree_digits": 15.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.03084,
+      "wolfram": 0.07389,
+      "maxima": 0.03817,
+      "python": 0.22555
+     },
+     "agree_digits": 14.29,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01463,
+      "wolfram": 0.31406,
+      "maxima": 7.48644,
+      "python": 0.12144
+     },
+     "agree_digits": 50.16,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "CoshIntegral": {
+   "family": "Integral",
+   "note": "x > 0; Maxima adds a spurious i*pi branch",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.0092,
+      "wolfram": 0.04728,
+      "maxima": 0.01752,
+      "python": 0.00136
+     },
+     "agree_digits": -1.28,
+     "disagree": [
+      {
+       "engine": "maxima",
+       "digits": -1.28
+      }
+     ],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.04077,
+      "wolfram": 0.06858,
+      "maxima": 0.03978,
+      "python": 0.22729
+     },
+     "agree_digits": 14.16,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.01869,
+      "wolfram": 0.32075,
+      "maxima": 7.70263,
+      "python": 0.11629
+     },
+     "agree_digits": 50.41,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "ExpIntegralEi": {
+   "family": "Integral",
+   "note": "",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01597,
+      "wolfram": 0.01198,
+      "maxima": 0.01152,
+      "python": 0.00027
+     },
+     "agree_digits": 15.29,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.06961,
+      "wolfram": 0.01963,
+      "maxima": 0.03081,
+      "python": 0.09025
+     },
+     "agree_digits": 14.36,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.04063,
+      "wolfram": 0.12913,
+      "maxima": 4.00494,
+      "python": 0.04977
+     },
+     "agree_digits": 50.41,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "ExpIntegralE": {
+   "family": "Integral",
+   "note": "order n = 2; Mathilda machine-real only (no complex/AP path)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00095,
+      "wolfram": 0.00186,
+      "maxima": 0.01244,
+      "python": 0.00124
+     },
+     "agree_digits": 14.3,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    }
+   }
+  },
+  "LogIntegral": {
+   "family": "Integral",
+   "note": "z > 1; li(z) = Ei(ln z) for scipy",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01481,
+      "wolfram": 0.01114,
+      "maxima": 0.01067,
+      "python": 0.00033
+     },
+     "agree_digits": 15.25,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.05997,
+      "wolfram": 0.01756,
+      "maxima": 0.01287,
+      "python": 0.11355
+     },
+     "agree_digits": 15.58,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.03812,
+      "wolfram": 0.07544,
+      "maxima": 3.22912,
+      "python": 0.05739
+     },
+     "agree_digits": 50.4,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Hypergeometric0F1": {
+   "family": "Hypergeometric",
+   "note": "0F1(; 2; z)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.01533,
+      "wolfram": 0.00567,
+      "maxima": 1.16289,
+      "python": 0.00136
+     },
+     "agree_digits": 14.9,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01045,
+      "wolfram": 0.01328,
+      "maxima": 5.03916,
+      "python": 0.00164
+     },
+     "agree_digits": 15.49,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.0595,
+      "wolfram": 0.05,
+      "maxima": 1.69944,
+      "python": 0.0301
+     },
+     "agree_digits": 50.47,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Hypergeometric1F1": {
+   "family": "Hypergeometric",
+   "note": "1F1(1; 2; z)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00378,
+      "wolfram": 0.00459,
+      "maxima": 1.4785,
+      "python": 0.00152
+     },
+     "agree_digits": 15.41,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.022,
+      "wolfram": 0.01058,
+      "maxima": 8.62166,
+      "python": 0.0016
+     },
+     "agree_digits": 15.59,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.022,
+      "wolfram": 20.33663,
+      "maxima": 2.23425,
+      "python": 0.04861
+     },
+     "agree_digits": 50.35,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Hypergeometric2F1": {
+   "family": "Hypergeometric",
+   "note": "2F1(1,2;3;z), |z| < 1",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.03055,
+      "wolfram": 0.01441,
+      "maxima": 1.46297,
+      "python": 0.002
+     },
+     "agree_digits": 15.08,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01534,
+      "wolfram": 0.05908,
+      "maxima": 12.03669,
+      "python": 0.00266
+     },
+     "agree_digits": 14.71,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.68156,
+      "wolfram": 0.88287,
+      "maxima": 3.10894,
+      "python": 0.3781
+     },
+     "agree_digits": 50.33,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "HypergeometricPFQ": {
+   "family": "Hypergeometric",
+   "note": "2F2; Python is mpmath (scipy has no general pFq)",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.04672,
+      "wolfram": 0.17328,
+      "maxima": 1.48991,
+      "python": 0.02527
+     },
+     "agree_digits": 15.5,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.02734,
+      "wolfram": 0.31972,
+      "maxima": 7.74809,
+      "python": 0.05936
+     },
+     "agree_digits": 15.64,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.19162,
+      "wolfram": 321.05488,
+      "maxima": 2.21719,
+      "python": 0.04677
+     },
+     "agree_digits": 50.44,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "HypergeometricU": {
+   "family": "Hypergeometric",
+   "note": "Tricomi U(1, 2, z), z > 0; Maxima symbolic",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00192,
+      "wolfram": 0.00877,
+      "maxima": null,
+      "python": 0.00154
+     },
+     "agree_digits": 15.67,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.00633,
+      "wolfram": 0.0095,
+      "maxima": null,
+      "python": 0.03437
+     },
+     "agree_digits": 15.57,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00212,
+      "wolfram": 0.01019,
+      "maxima": null,
+      "python": 0.02385
+     },
+     "agree_digits": 50.27,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "WhittakerM": {
+   "family": "Hypergeometric",
+   "note": "k=1, m=1/2; Python is mpmath",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00736,
+      "wolfram": 0.01141,
+      "maxima": null,
+      "python": 0.04701
+     },
+     "agree_digits": 15.66,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01598,
+      "wolfram": 0.01192,
+      "maxima": null,
+      "python": 0.0748
+     },
+     "agree_digits": 15.49,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02819,
+      "wolfram": 0.04844,
+      "maxima": null,
+      "python": 0.0684
+     },
+     "agree_digits": 50.56,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "WhittakerW": {
+   "family": "Hypergeometric",
+   "note": "k=1, m=1/2; Python is mpmath",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00559,
+      "wolfram": 0.01306,
+      "maxima": null,
+      "python": 0.05732
+     },
+     "agree_digits": 15.71,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.01581,
+      "wolfram": 0.01337,
+      "maxima": null,
+      "python": 0.08432
+     },
+     "agree_digits": 15.46,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.02013,
+      "wolfram": 0.05012,
+      "maxima": null,
+      "python": 0.06075
+     },
+     "agree_digits": 50.45,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": false,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "Sinc": {
+   "family": "Misc",
+   "note": "Mathematica Sinc = sin z / z",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.00378,
+      "wolfram": 0.0007,
+      "maxima": 0.00664,
+      "python": 0.00015
+     },
+     "agree_digits": 15.79,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.009,
+      "wolfram": 0.00086,
+      "maxima": 0.01056,
+      "python": 0.00017
+     },
+     "agree_digits": 15.71,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.00563,
+      "wolfram": 0.018,
+      "maxima": 0.05587,
+      "python": 0.01981
+     },
+     "agree_digits": 50.33,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  },
+  "ProductLog": {
+   "family": "Misc",
+   "note": "principal branch W0; z > -1/e on the real axis",
+   "regimes": {
+    "MR": {
+     "time_ms": {
+      "mathilda": 0.02989,
+      "wolfram": 0.00975,
+      "maxima": 0.00816,
+      "python": 0.00189
+     },
+     "agree_digits": 15.81,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "C": {
+     "time_ms": {
+      "mathilda": 0.05778,
+      "wolfram": 0.02591,
+      "maxima": 0.01583,
+      "python": 0.00181
+     },
+     "agree_digits": 15.82,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "scipy"
+    },
+    "AP": {
+     "time_ms": {
+      "mathilda": 0.04988,
+      "wolfram": 0.10031,
+      "maxima": 0.40281,
+      "python": 0.17279
+     },
+     "agree_digits": 50.38,
+     "disagree": [],
+     "coverage": {
+      "mathilda": true,
+      "wolfram": true,
+      "maxima": true,
+      "python": true
+     },
+     "python_lib": "mpmath"
+    }
+   }
+  }
+ },
+ "throughput": {
+  "mathilda": {
+   "Gamma": 4.345,
+   "LogGamma": 9.024,
+   "PolyGamma0": 4.915,
+   "PolyGamma2": 47.108,
+   "Pochhammer": 1.75,
+   "Zeta": 34.241,
+   "PolyLog": 48.039,
+   "BesselJ": 14.079,
+   "BesselY": 7.549,
+   "BesselI": 15.826,
+   "BesselK": 33.937,
+   "AiryAi": 136.802,
+   "AiryBi": 109.926,
+   "AiryAiPrime": 136.366,
+   "AiryBiPrime": 110.002,
+   "StruveH": 30.118,
+   "Erf": 3.442,
+   "Erfc": 3.418,
+   "Erfi": 9.667,
+   "InverseErf": 16.247,
+   "InverseErfc": 16.037,
+   "FresnelC": 24.229,
+   "FresnelS": 24.55,
+   "EllipticK": 10.353,
+   "EllipticE": 17.11,
+   "LegendreP": 2.077,
+   "LegendreQ": 4.124,
+   "HermiteH": 2.014,
+   "LaguerreL": 2.131,
+   "ChebyshevT": 1.7,
+   "ChebyshevU": 1.726,
+   "SinIntegral": 85.191,
+   "CosIntegral": 84.123,
+   "SinhIntegral": 33.424,
+   "CoshIntegral": 34.002,
+   "ExpIntegralEi": 12.243,
+   "ExpIntegralE": 542.607,
+   "LogIntegral": 11.396,
+   "Hypergeometric0F1": 9.587,
+   "Hypergeometric1F1": 1233.14,
+   "Hypergeometric2F1": 2663.75,
+   "HypergeometricPFQ": 1359.73,
+   "HypergeometricU": 27.189,
+   "WhittakerM": 5549.6,
+   "WhittakerW": 3884.35,
+   "Sinc": 3.284,
+   "ProductLog": 18.37
+  },
+  "wolfram": {
+   "Gamma": 4.233,
+   "LogGamma": 7.801,
+   "PolyGamma0": 462.58700000000005,
+   "PolyGamma2": 13924.699999999999,
+   "Pochhammer": 491.296,
+   "Zeta": 11623.365,
+   "PolyLog": 7313.807,
+   "BesselJ": 33203.657,
+   "BesselY": 142724.356,
+   "BesselI": 4655.5,
+   "BesselK": 1208.826,
+   "AiryAi": 287.221,
+   "AiryBi": 316.145,
+   "AiryAiPrime": 286.587,
+   "AiryBiPrime": 299.744,
+   "StruveH": 331723.909,
+   "Erf": 1.331,
+   "Erfc": 0.852,
+   "Erfi": 13277.135,
+   "InverseErf": 15093.327000000001,
+   "InverseErfc": 17266.924,
+   "FresnelC": 21746.336,
+   "FresnelS": 22175.127,
+   "EllipticK": 241.482,
+   "EllipticE": 278.142,
+   "LegendreP": 982.114,
+   "LegendreQ": 19827.742000000002,
+   "HermiteH": 826.126,
+   "LaguerreL": 879.189,
+   "ChebyshevT": 1168.4470000000001,
+   "ChebyshevU": 1299.644,
+   "SinIntegral": 90787.34300000001,
+   "CosIntegral": 108141.87599999999,
+   "SinhIntegral": 90247.269,
+   "CoshIntegral": 54028.002,
+   "ExpIntegralEi": 13256.96,
+   "ExpIntegralE": 1659.731,
+   "LogIntegral": 12448.708,
+   "Hypergeometric0F1": 6006.715,
+   "Hypergeometric1F1": 4883.536,
+   "Hypergeometric2F1": 17246.069,
+   "HypergeometricPFQ": 194215.74599999998,
+   "HypergeometricU": 7760.981,
+   "WhittakerM": 10379.489,
+   "WhittakerW": 12023.953000000001,
+   "Sinc": 3.159,
+   "ProductLog": 9578.462
+  },
+  "python": {
+   "Gamma": 14.447137713432312,
+   "LogGamma": 20.893598906695843,
+   "PolyGamma0": 15.40044043213129,
+   "PolyGamma2": 250.79024583101273,
+   "Pochhammer": 7.957927882671356,
+   "Zeta": 201.49017591029406,
+   "BesselJ": 650.7840109989047,
+   "BesselY": 1029.7963302582502,
+   "BesselI": 366.87418073415756,
+   "BesselK": 344.1196335479617,
+   "AiryAi": 158.9278019964695,
+   "AiryBi": 136.41455210745335,
+   "AiryAiPrime": 158.78305863589048,
+   "AiryBiPrime": 136.1137069761753,
+   "StruveH": 6311.250421218574,
+   "Erf": 14.628306031227112,
+   "Erfc": 13.869859278202057,
+   "Erfi": 24.75687675178051,
+   "InverseErf": 19.512723200023174,
+   "InverseErfc": 15.940003097057343,
+   "FresnelC": 35.11243872344494,
+   "FresnelS": 35.16954556107521,
+   "EllipticK": 14.381499961018562,
+   "EllipticE": 14.185173436999321,
+   "LegendreP": 6.670876406133175,
+   "HermiteH": 7.840186357498169,
+   "LaguerreL": 10.237111710011959,
+   "ChebyshevT": 5.1174648106098175,
+   "ChebyshevU": 4.578379914164543,
+   "SinIntegral": 28.308057226240635,
+   "CosIntegral": 28.110154904425144,
+   "SinhIntegral": 107.41909127682447,
+   "CoshIntegral": 107.2227293625474,
+   "ExpIntegralEi": 155.0429007038474,
+   "ExpIntegralE": 223.80323708057404,
+   "Hypergeometric0F1": 234.26040541380644,
+   "Hypergeometric1F1": 23.6760713160038,
+   "Hypergeometric2F1": 147.41838444024324,
+   "HypergeometricU": 34.27244070917368,
+   "ProductLog": 235.73461174964905
+  }
+ },
+ "exact": {
+  "sizes": {
+   "Fibonacci": [
+    500,
+    5000,
+    50000
+   ],
+   "LucasL": [
+    500,
+    5000,
+    50000
+   ],
+   "BernoulliB": [
+    50,
+    200,
+    500
+   ],
+   "EulerE": [
+    20,
+    50,
+    100
+   ],
+   "HarmonicNumber": [
+    100,
+    1000
+   ],
+   "BarnesG": [
+    20,
+    60
+   ],
+   "Hyperfactorial": [
+    20,
+    60
+   ]
+  },
+  "notes": {
+   "Fibonacci": "exact bigint, fast doubling",
+   "LucasL": "exact bigint",
+   "BernoulliB": "exact rational",
+   "EulerE": "exact integer",
+   "HarmonicNumber": "exact rational sum; Maxima leaves it as a nounform",
+   "BarnesG": "exact superfactorial (GMP); only Mathilda + Wolfram",
+   "Hyperfactorial": "exact (GMP); only Mathilda + Wolfram"
+  },
+  "engines": {
+   "mathilda": {
+    "t": {
+     "Fibonacci:500": 0.0409996,
+     "Fibonacci:5000": 0.0170004,
+     "Fibonacci:50000": 0.112,
+     "LucasL:500": 0.00599958,
+     "LucasL:5000": 0.0100005,
+     "LucasL:50000": 0.0860002,
+     "BernoulliB:50": 0.258,
+     "BernoulliB:200": 5.074,
+     "BernoulliB:500": 54.073,
+     "EulerE:20": 0.00600051,
+     "EulerE:50": 0.0090003,
+     "EulerE:100": 0.0479994,
+     "HarmonicNumber:100": 0.275,
+     "HarmonicNumber:1000": 6.542,
+     "BarnesG:20": 0.00400003,
+     "BarnesG:60": 0.0129994,
+     "Hyperfactorial:20": 0.00500027,
+     "Hyperfactorial:60": 0.0179997
+    },
+    "v": {
+     "Fibonacci:500": "139423224561697880139724382870407283950070256587697307264108962948325571622863290691557658876222521294125",
+     "LucasL:500": "311759807762174781605301007201736860141952393239819073913168769888623683854510476118474315229371415703127",
+     "BernoulliB:50": "495057205241079648212477525/66",
+     "EulerE:20": "370371188237525",
+     "HarmonicNumber:100": "14466636279520351160221518043104131447711/2788815009188499086581352357412492142272",
+     "BarnesG:20": "4306192564997715382115598640379294845786123319603755168023536027873932927153136831171640950784000000000000000000000000000",
+     "Hyperfactorial:20": "100763737898388614355527688003578055557189497372863237259215112020332401543021781214113113511884621846316264239637778832941245615057050789338689848331811015513291187346373172474675200000000000000000000000000000000000000000000000000"
+    }
+   },
+   "wolfram": {
+    "t": {
+     "Fibonacci:500": 0.8220000000000001,
+     "Fibonacci:5000": 0.022,
+     "Fibonacci:50000": 0.064,
+     "LucasL:500": 0.013,
+     "LucasL:5000": 0.015000000000000001,
+     "LucasL:50000": 0.034,
+     "BernoulliB:50": 0.17300000000000001,
+     "BernoulliB:200": 1.895,
+     "BernoulliB:500": 13.684,
+     "EulerE:20": 0.031,
+     "EulerE:50": 0.5720000000000001,
+     "EulerE:100": 1.699,
+     "HarmonicNumber:100": 0.496,
+     "HarmonicNumber:1000": 0.132,
+     "BarnesG:20": 1.245,
+     "BarnesG:60": 0.178,
+     "Hyperfactorial:20": 0.081,
+     "Hyperfactorial:60": 0.147
+    },
+    "v": {
+     "Fibonacci:500": "139423224561697880139724382870407283950070256587697307264108962948325571622863290691557658876222521294125",
+     "LucasL:500": "311759807762174781605301007201736860141952393239819073913168769888623683854510476118474315229371415703127",
+     "BernoulliB:50": "495057205241079648212477525/66",
+     "EulerE:20": "370371188237525",
+     "HarmonicNumber:100": "14466636279520351160221518043104131447711/2788815009188499086581352357412492142272",
+     "BarnesG:20": "4306192564997715382115598640379294845786123319603755168023536027873932927153136831171640950784000000000000000000000000000",
+     "Hyperfactorial:20": "100763737898388614355527688003578055557189497372863237259215112020332401543021781214113113511884621846316264239637778832941245615057050789338689848331811015513291187346373172474675200000000000000000000000000000000000000000000000000"
+    }
+   },
+   "maxima": {
+    "t": {
+     "Fibonacci:500": 0.17299999999997873,
+     "Fibonacci:5000": 0.04300000000001525,
+     "Fibonacci:50000": 0.38800000000005497,
+     "LucasL:500": 0.04499999999996174,
+     "LucasL:5000": 0.04099999999995774,
+     "LucasL:50000": 0.27399999999999647,
+     "BernoulliB:50": 0.41599999999997195,
+     "BernoulliB:200": 15.903,
+     "BernoulliB:500": 148.16299999999993,
+     "EulerE:20": 0.04899999999996574,
+     "EulerE:50": 0.21500000000007624,
+     "EulerE:100": 0.7269999999999222
+    },
+    "v": {
+     "Fibonacci:500": "139423224561697880139724382870407283950070256587697307264108962948325571622863290691557658876222521294125",
+     "LucasL:500": "311759807762174781605301007201736860141952393239819073913168769888623683854510476118474315229371415703127",
+     "BernoulliB:50": "495057205241079648212477525/66",
+     "EulerE:20": "370371188237525"
+    }
+   },
+   "python": {
+    "t": {
+     "Fibonacci:500": 0.014828518033027649,
+     "Fibonacci:5000": 0.06481911987066269,
+     "LucasL:500": 0.20090676844120026,
+     "LucasL:5000": 0.11622067540884018,
+     "BernoulliB:50": 0.011121854186058044,
+     "BernoulliB:200": 0.15371758490800858,
+     "BernoulliB:500": 0.6599007174372673,
+     "EulerE:20": 0.008942559361457825,
+     "EulerE:50": 0.5858028307557106,
+     "EulerE:100": 2.204619348049164,
+     "HarmonicNumber:100": 0.13548601418733597,
+     "HarmonicNumber:1000": 2.0219041034579277
+    },
+    "v": {
+     "Fibonacci:500": "139423224561697880139724382870407283950070256587697307264108962948325571622863290691557658876222521294125",
+     "LucasL:500": "311759807762174781605301007201736860141952393239819073913168769888623683854510476118474315229371415703127",
+     "BernoulliB:50": "495057205241079648212477525/66",
+     "EulerE:20": "370371188237525",
+     "HarmonicNumber:100": "14466636279520351160221518043104131447711/2788815009188499086581352357412492142272"
+    }
+   }
+  }
+ }
+}

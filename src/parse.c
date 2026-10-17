@@ -1,4 +1,5 @@
 #include "parse.h"
+#include "utf8.h"   /* \[Name] / \:hhhh escapes in string literals */
 #include "common.h"
 #include "expr.h"
 #include "context.h"
@@ -701,6 +702,55 @@ static Expr* parse_number(ParserState* s) {
     return result;
 }
 
+/* Value of hex digit c, or -1. */
+static int hexval(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/* `ndig` hex digits at p as a number, or -1. */
+static long hexnum(const char* p, int ndig) {
+    long v = 0;
+    for (int k = 0; k < ndig; k++) {
+        int d = hexval(p[k]);
+        if (d < 0) return -1;
+        v = v * 16 + d;
+    }
+    return v;
+}
+
+/* Decode a Mathematica character escape at p (p[0] == '\\'): \[Name], \:hhhh,
+ * \|hhhhhh, \.hh or \ooo. On success writes the UTF-8 encoding to enc (>= 4
+ * bytes), the escape's source length to *esc_len, and returns the encoded
+ * length; returns 0 if p does not start such an escape. */
+static size_t decode_char_escape(const char* p, size_t* esc_len, char* enc) {
+    long cp = -1;
+    size_t len = 0;
+    if (p[1] == '[') {
+        const char* close = p + 2;
+        while (isalnum((unsigned char)*close)) close++;
+        if (*close == ']' && close > p + 2) {
+            cp = u8_named_char(p + 2, (size_t)(close - (p + 2)));
+            len = (size_t)(close - p) + 1;
+        }
+    } else if (p[1] == ':') {
+        cp = hexnum(p + 2, 4); len = 6;
+    } else if (p[1] == '|') {
+        cp = hexnum(p + 2, 6); len = 8;
+    } else if (p[1] == '.') {
+        cp = hexnum(p + 2, 2); len = 4;
+    } else if (p[1] >= '0' && p[1] <= '7' && p[2] >= '0' && p[2] <= '7' &&
+               p[3] >= '0' && p[3] <= '7') {
+        cp = (p[1] - '0') * 64 + (p[2] - '0') * 8 + (p[3] - '0'); len = 4;
+    }
+    if (cp < 0) return 0;
+    size_t n = u8_encode((uint32_t)cp, enc);
+    if (n) *esc_len = len;
+    return n;
+}
+
 // Parses quoted strings ("text")
 /* The buffer GROWS, like parse_list's: a string literal has no length limit.
  * It was a fixed char[256] whose overflow was silently DROPPED, so every
@@ -722,6 +772,34 @@ static Expr* parse_string(ParserState* s) {
 
     while (*s->pos && *s->pos != '"') {
         char c = *s->pos;
+        /* Mathematica character escapes, decoded to UTF-8:
+         *   \[Name]   named character (\[Alpha] -> U+03B1)
+         *   \:hhhh    4-hex-digit code point
+         *   \|hhhhhh  6-hex-digit code point
+         *   \.hh      2-hex-digit code point
+         *   \ooo      3-octal-digit code point
+         * An escape that does not decode is kept verbatim. */
+        char enc[4];
+        size_t esc_len = 0, enc_len = 0;
+        if (c == '\\' && (enc_len = decode_char_escape(s->pos, &esc_len, enc)) > 0) {
+            if (i + enc_len >= cap) {
+                size_t ncap = cap * 2;
+                char* nb = (buffer == stackbuf) ? (char*)malloc(ncap)
+                                                : (char*)realloc(buffer, ncap);
+                if (!nb) {
+                    if (buffer != stackbuf) free(buffer);
+                    fprintf(stderr, "Out of memory parsing string literal\n");
+                    return NULL;
+                }
+                if (buffer == stackbuf) memcpy(nb, stackbuf, i);
+                buffer = nb;
+                cap = ncap;
+            }
+            memcpy(buffer + i, enc, enc_len);
+            i += enc_len;
+            s->pos += esc_len;
+            continue;
+        }
         if (c == '\\' && s->pos[1] != '\0') {
             /* Decode standard C-style escapes. `\\` and `\"` decode to the
              * literal character (unchanged from the historical behaviour);

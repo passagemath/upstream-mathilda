@@ -903,6 +903,11 @@ static void pack_mark_aware_heads(void) {
          * a separate per-cell path (arrayplot_load) that is unaffected
          * either way. */
         "ArrayPlot",
+        /* FromCharacterCode reads an int64 code buffer (packed List or
+         * NDArray, rank 1 or 2) directly (src/strings/charcode.c); its partner
+         * ToCharacterCode produces exactly such a buffer, so
+         * FromCharacterCode[ToCharacterCode[s]] never boxes a code. */
+        "FromCharacterCode",
     };
     for (size_t i = 0; i < sizeof(AWARE) / sizeof(AWARE[0]); i++)
         symtab_set_packed_aware(AWARE[i]);
@@ -1189,6 +1194,9 @@ static void pack_mark_aware_heads(void) {
          * List path instead of round-tripping through a decline. */
         "Append", "Prepend", "Catenate",
         "RandomSample", "RandomChoice", "Counts",
+        /* Character codes ARE machine integers: an int64 buffer is its
+         * native input (src/strings/charcode.c). */
+        "FromCharacterCode",
     };
     for (size_t i = 0; i < sizeof(INT64_OK) / sizeof(INT64_OK[0]); i++)
         symtab_set_packed_int64_ok(INT64_OK[i]);

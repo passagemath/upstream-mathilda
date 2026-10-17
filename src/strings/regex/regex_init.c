@@ -62,9 +62,38 @@ void regex_init(void) {
 
     symtab_add_builtin("StringReplace", builtin_stringreplace);
     symtab_get_def("StringReplace")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringReplace");
+
+    symtab_add_builtin("StringDelete", builtin_stringdelete);
+    symtab_get_def("StringDelete")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringDelete");
+    symtab_set_docstring("StringDelete",
+        "StringDelete[\"string\", patt]\n"
+        "\tDeletes every substring of \"string\" that matches patt.\n"
+        "StringDelete[{s1, s2, ...}, patt]\n"
+        "\tGives the list of results for each of the si.\n"
+        "StringDelete[patt]\n"
+        "\tRepresents an operator form that can be applied to a string.\n\n"
+        "\tEquivalent to StringReplace[\"string\", patt -> \"\"].\n"
+        "\tOptions: IgnoreCase -> True.");
+
+    symtab_add_builtin("StringReplaceList", builtin_stringreplacelist);
+    symtab_get_def("StringReplaceList")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringReplaceList");
+    symtab_set_docstring("StringReplaceList",
+        "StringReplaceList[\"string\", rules]\n"
+        "\tGives the list of strings obtained by replacing ONE match of the\n"
+        "\trules at a time, for every match start of every rule, in order of\n"
+        "\tposition.\n"
+        "StringReplaceList[\"string\", rules, n]\n"
+        "\tGives at most n results.\n"
+        "StringReplaceList[{s1, s2, ...}, rules]\n"
+        "\tGives the list of results for each of the si.\n\n"
+        "\tOptions: IgnoreCase -> True.");
 
     symtab_add_builtin("StringSplit", builtin_stringsplit);
     symtab_get_def("StringSplit")->attributes |= ATTR_PROTECTED;
+    register_ignorecase_option("StringSplit");
     symtab_set_docstring("StringSplit",
         "StringSplit[\"string\"]\n"
         "\tSplits \"string\" at runs of whitespace.\n"

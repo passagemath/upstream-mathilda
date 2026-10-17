@@ -4,7 +4,7 @@
  * StringPadLeft["str", n]        - "str" of length n, padded on the left with
  *                                  spaces or truncated (keeping the last n chars).
  * StringPadLeft["str", n, "p"]   - as above, padded by repeating copies of "p".
- * StringPadLeft["str"]           - returns "str" unchanged (n = length of str).
+ * StringPadLeft["str"]           - unevaluated (StringPadLeft::strlist).
  * StringPadLeft[{s1, s2, ...}]   - pads each string with spaces to the length of
  *                                  the longest, so all become the same length.
  * StringPadLeft[{s1, ...}, n]    - pads or truncates each string to length n.
@@ -13,17 +13,19 @@
  * StringPadRight is identical except padding is added on the right and
  * truncation keeps the first n characters.
  *
- * Padding is laid down as cyclic copies of the pad string read left-to-right
- * (pad[i] = p[i % plen]) on both sides, truncated when the target width is
- * reached; this matches the Wolfram Language documentation and all documented
- * examples (e.g. StringPadLeft["abcde", 10, "."] -> ".....abcde").
+ * Padding is the pad string repeated cyclically and ALIGNED to the result, as
+ * in Mathematica: on the right, result character i (0-based) is p[i mod plen];
+ * on the left, it is p[(i - n) mod plen], i.e. the cycle is anchored at the
+ * result's end. So StringPadRight["ab", 6, "xyz"] is "abzxyz" and
+ * StringPadLeft["ab", 7, "xyz"] is "zxyzxab".
  *
- * Strings are treated as raw byte arrays (consistent with StringRepeat /
- * StringTake / StringPartition across this subsystem); no UTF-8 codepoint
- * decoding is performed, so lengths count bytes.
+ * Lengths count characters (Unicode code points); the pad string is cycled a
+ * character at a time.
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
+#include "utf8.h"
 #include "common.h"       /* builtin_arg_error */
 #include "sym_names.h"    /* SYM_List */
 #include <stdlib.h>
@@ -33,48 +35,47 @@
 
 /*
  * pad_one:
- * Returns a fresh EXPR_STRING that is s padded (or truncated) to length n.
- *   left == true : pad on the left / truncate keeping the last n bytes.
- *   left == false: pad on the right / truncate keeping the first n bytes.
- * Padding bytes are cyclic copies of p (p[i % plen]). Returns NULL on
- * allocation failure or when padding is required (n > strlen(s)) but the pad
- * string is empty (plen == 0).
+ * Returns a fresh EXPR_STRING that is s padded (or truncated) to n characters.
+ *   left == true : pad on the left / truncate keeping the last n characters.
+ *   left == false: pad on the right / truncate keeping the first n characters.
+ * `pv` is the pad string's character view (pv->nchars >= 1). Returns NULL on
+ * allocation failure.
  */
-static Expr* pad_one(const char* s, int64_t n, const char* p, size_t plen,
-                     bool left) {
-    size_t slen = strlen(s);
+static Expr* pad_one(const char* s, int64_t n, const U8View* pv, bool left) {
+    size_t sbytes = strlen(s);
+    size_t slen = u8_length(s, sbytes);
 
     if ((size_t)n <= slen) {
-        /* Truncation (or exact fit): copy the appropriate n-byte window. */
-        size_t start = left ? (slen - (size_t)n) : 0;
-        char* buf = malloc((size_t)n + 1);
-        if (!buf) return NULL;
-        memcpy(buf, s + start, (size_t)n);
-        buf[n] = '\0';
-        Expr* result = expr_new_string(buf);
-        free(buf);
-        return result;
+        /* Truncation (or exact fit): copy the appropriate n-character window. */
+        size_t from = left ? u8_offset(s, sbytes, slen - (size_t)n) : 0;
+        size_t to   = left ? sbytes : u8_offset(s, sbytes, (size_t)n);
+        return expr_new_string_n(s + from, to - from);
     }
 
-    /* Padding: pad region of width w precedes (left) or follows (right) s. */
+    /* Padding: w characters before (left) or after (right) s. */
     size_t w = (size_t)n - slen;
-    if (plen == 0) return NULL;  /* cannot build padding from an empty string */
-
-    char* buf = malloc((size_t)n + 1);
-    if (!buf) return NULL;
-
-    if (left) {
-        for (size_t i = 0; i < w; i++) buf[i] = p[i % plen];
-        memcpy(buf + w, s, slen);
-    } else {
-        memcpy(buf, s, slen);
-        for (size_t i = 0; i < w; i++) buf[slen + i] = p[i % plen];
+    size_t plen = pv->nchars;
+    size_t pbytes = 0;                         /* bytes in the pad region */
+    size_t start = left ? (size_t)(((int64_t)plen - (n % (int64_t)plen)) % (int64_t)plen)
+                        : slen % plen;         /* cycle index of the first pad char */
+    for (size_t k = 0; k < w; k++) {
+        size_t c = (start + k) % plen;
+        pbytes += u8_view_off(pv, c + 1) - u8_view_off(pv, c);
     }
-    buf[n] = '\0';
 
-    Expr* result = expr_new_string(buf);
-    free(buf);
-    return result;
+    char* buf = malloc(sbytes + pbytes + 1);
+    if (!buf) return NULL;
+    char* w0 = left ? buf : buf + sbytes;      /* where the padding goes */
+    size_t o = 0;
+    for (size_t k = 0; k < w; k++) {
+        size_t c = (start + k) % plen;
+        size_t a = u8_view_off(pv, c), b = u8_view_off(pv, c + 1);
+        memcpy(w0 + o, pv->s + a, b - a);
+        o += b - a;
+    }
+    memcpy(left ? buf + pbytes : buf, s, sbytes);
+    buf[sbytes + pbytes] = '\0';
+    return expr_new_string_adopt(buf);
 }
 
 /*
@@ -106,70 +107,73 @@ static Expr* pad_dispatch(Expr* res, const char* head, bool left) {
     if (argc < 1 || argc > 3)
         return builtin_arg_error(head, argc, 1, 3);
 
-    /* Optional padding string (defaults to a single space). A List padding
-     * (Wolfram's list form) is not supported -> leave unevaluated. */
+    /* Optional padding string (defaults to a single space). */
     const char* p = " ";
-    size_t plen = 1;
     if (argc == 3) {
-        if (args[2]->type != EXPR_STRING) return NULL;
+        if (args[2]->type != EXPR_STRING || args[2]->data.string[0] == '\0')
+            return strings_arg_message(head, "stringnz", "String of non-zero length",
+                                       3, res);
         p = args[2]->data.string;
-        plen = strlen(p);
     }
+    if (argc >= 2) {
+        int64_t probe;
+        if (!pad_parse_n(args[1], &probe))
+            return strings_arg_message(head, "intnm",
+                                       "Non-negative machine-sized integer", 2, res);
+    }
+    U8View pv;
+    if (u8_view_init(&pv, p, strlen(p)) != 0) return NULL;
 
     Expr* arg0 = args[0];
+    Expr* result = NULL;
 
-    /* --- List of strings ------------------------------------------------- */
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
         arg0->data.function.head->data.symbol.name == SYM_List) {
-
+        /* --- List of strings: pad each, to n or to the longest ---------- */
         size_t m = arg0->data.function.arg_count;
         Expr** elems = arg0->data.function.args;
-
-        /* Every element must be a string. */
         for (size_t i = 0; i < m; i++)
-            if (elems[i]->type != EXPR_STRING) return NULL;
+            if (elems[i]->type != EXPR_STRING) {
+                u8_view_free(&pv);
+                return strings_arg_message(head, "strlist", "List of strings", 1, res);
+            }
+        if (m == 0) {   /* Mathematica: StringPadLeft[{}, n] is "", StringPadLeft[{}] is {} */
+            u8_view_free(&pv);
+            return argc >= 2 ? expr_new_string("")
+                             : expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        }
 
-        /* Target length: explicit n when given, else the longest element. */
-        int64_t n;
+        int64_t n = 0;
         if (argc >= 2) {
-            if (!pad_parse_n(args[1], &n)) return NULL;
+            pad_parse_n(args[1], &n);
         } else {
             size_t maxlen = 0;
             for (size_t i = 0; i < m; i++) {
-                size_t li = strlen(elems[i]->data.string);
+                const char* si = elems[i]->data.string;
+                size_t li = u8_length(si, strlen(si));
                 if (li > maxlen) maxlen = li;
             }
             n = (int64_t)maxlen;
         }
 
-        Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
-        if (!out) return NULL;
-        for (size_t i = 0; i < m; i++) {
-            out[i] = pad_one(elems[i]->data.string, n, p, plen, left);
-            if (!out[i]) {
-                for (size_t j = 0; j < i; j++) expr_free(out[j]);
-                free(out);
-                return NULL;
-            }
+        result = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
+        for (size_t i = 0; result && i < m; i++) {
+            result->data.function.args[i] = pad_one(elems[i]->data.string, n, &pv, left);
+            if (!result->data.function.args[i]) { expr_free(result); result = NULL; }
         }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, m);
-        free(out);
-        return result;
-    }
-
-    /* --- Single string --------------------------------------------------- */
-    if (arg0->type != EXPR_STRING) return NULL;
-
-    const char* s = arg0->data.string;
-    int64_t n;
-    if (argc >= 2) {
-        if (!pad_parse_n(args[1], &n)) return NULL;
+    } else if (arg0->type == EXPR_STRING && argc >= 2) {
+        /* --- Single string ---------------------------------------------- */
+        int64_t n = 0;
+        pad_parse_n(args[1], &n);
+        result = pad_one(arg0->data.string, n, &pv, left);
     } else {
-        n = (int64_t)strlen(s);  /* 1-arg single string: no change */
+        /* A single string needs a target length; anything else is not a
+         * list of strings. */
+        result = strings_arg_message(head, "strlist", "List of strings", 1, res);
     }
-
-    return pad_one(s, n, p, plen, left);
+    u8_view_free(&pv);
+    return result;
 }
 
 /*

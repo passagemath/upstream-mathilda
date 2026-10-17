@@ -272,6 +272,29 @@ Expr* expr_new_string(const char* str) {
     return e;
 }
 
+/* A String that ADOPTS `buf` (malloc'd, NUL-terminated) instead of copying it:
+ * builtins assemble their result in a heap buffer and hand it over, saving a
+ * malloc + copy per result. `buf` is freed on failure; NULL buf gives NULL. */
+Expr* expr_new_string_adopt(char* buf) {
+    if (!buf) return NULL;
+    Expr* e = expr_alloc_node();
+    if (!e) { free(buf); return NULL; }
+    e->type = EXPR_STRING;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.string = buf;
+    return e;
+}
+
+/* A String holding the `n` bytes at `s` (a substring; no NUL needed at s+n). */
+Expr* expr_new_string_n(const char* s, size_t n) {
+    char* buf = (char*)malloc(n + 1);
+    if (!buf) return NULL;
+    memcpy(buf, s, n);
+    buf[n] = '\0';
+    return expr_new_string_adopt(buf);
+}
+
 // Create/allocate an expression: h[arg1, arg2, ...]
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
     Expr* e = expr_alloc_node();

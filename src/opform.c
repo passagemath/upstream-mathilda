@@ -139,6 +139,15 @@ void opform_init(void) {
     for (size_t i = 0; i < sizeof(DATA_FIRST_1) / sizeof(DATA_FIRST_1[0]); i++)
         opform_register(DATA_FIRST_1[i], 1, 1, 0);
 
+    /* String functions with an operator form in Mathematica (checked against
+     * Mathematica 14; StringSplit, StringCount and StringTrim have none). */
+    static const char* const STRING_OPS[] = {
+        "StringCases", "StringReplace", "StringMatchQ", "StringPosition",
+        "StringDelete",
+    };
+    for (size_t i = 0; i < sizeof(STRING_OPS) / sizeof(STRING_OPS[0]); i++)
+        opform_register(STRING_OPS[i], 1, 1, 0);
+
     opform_register("Lookup", 1, 1, 0);          /* Lookup[k][a]; WL has no Lookup[k, d][a] */
     opform_register("Insert", 2, 2, 0);          /* Insert[e, n][x]  == Insert[x, e, n] */
     opform_register("TakeLargestBy", 2, 2, 0);   /* TakeLargestBy[f, n][x] */

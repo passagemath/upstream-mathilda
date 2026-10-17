@@ -125,9 +125,8 @@ static void test_cases_arity(void) {
     /* Below the required arity: StringCases::argrx, call left unevaluated. */
     assert_eval_eq("StringCases[]", "StringCases[]", 0);
     assert_eval_eq("StringCases[\"abc\"]", "StringCases[\"abc\"]", 0);
-    /* The WL occurrence-limit form is unsupported: silently unevaluated, with
-     * no (misleading) "2 arguments are expected" message. */
-    assert_eval_eq("StringCases[\"aaa\", \"a\", 2]", "StringCases[\"aaa\", \"a\", 2]", 0);
+    /* The occurrence-limit form keeps the first n matches. */
+    assert_eval_eq("StringCases[\"aaa\", \"a\", 2]", "{\"a\", \"a\"}", 0);
     /* Non-string subject leaves the call unevaluated. */
     assert_eval_eq("StringCases[123, \"a\"]", "StringCases[123, \"a\"]", 0);
 }

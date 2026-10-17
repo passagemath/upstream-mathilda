@@ -1,49 +1,101 @@
 /*
  * stringinsert.c - StringInsert builtin for Mathilda
  *
- * StringInsert["string", "snew", spec] - inserts a string at given positions
+ * StringInsert["string", "snew", spec] - inserts a string at given positions.
+ * Positions count characters (code points), not UTF-8 bytes.
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
 #include "eval.h"
 #include "sym_names.h"
 #include <string.h>
-#include <stdio.h>
-#include "message.h"   /* mth_message: Quiet/Check funnel */
+#include <inttypes.h>
 
 /*
- * si_emit_argrx:
- * Emit `StringInsert::argrx: StringInsert called with N arguments; 3 arguments
- * are expected.` to stderr and return NULL so the call is left unevaluated.
- * Matches Mathematica's diagnostic for a wrong argument count.
+ * si_emit_psl:
+ * StringInsert::psl. For a scalar spec Mathematica names the spec and the
+ * whole call; for a list it names the 1-based index of the bad element and
+ * the list.
  */
-static Expr* si_emit_argrx(size_t argc) {
-    mth_message("StringInsert", "argrx", "StringInsert called with %zu argument%s; 3 arguments are expected.", argc, argc == 1 ? "" : "s");
+static Expr* si_emit_psl(Expr* call, Expr* spec, size_t index) {
+    char* a = index ? NULL : expr_to_string_outputform(spec);
+    char* b = expr_to_string_outputform(index ? spec : call);
+    if (index)
+        mth_message("StringInsert", "psl",
+                    "Position specification %zu in %s is not a machine-sized "
+                    "integer or a list of machine-sized integers.", index, b ? b : "");
+    else
+        mth_message("StringInsert", "psl",
+                    "Position specification %s in %s is not a machine-sized "
+                    "integer or a list of machine-sized integers.", a ? a : "", b ? b : "");
+    free(a);
+    free(b);
     return NULL;
 }
 
+/* int64 ascending, for qsort. */
+static int si_cmp_i64(const void* x, const void* y) {
+    int64_t a = *(const int64_t*)x, b = *(const int64_t*)y;
+    return (a > b) - (a < b);
+}
+
 /*
- * si_pos_to_offset:
- * Convert one StringInsert position specification p (which must be a nonzero
- * integer) into a 0-based insertion offset in [0, len] measured against the
- * ORIGINAL string. StringInsert["string", "snew", n] makes the first character
- * of "snew" the nth character of the result, i.e. it inserts before original
- * character n, so a positive n maps to offset n - 1. A negative -k makes the
- * last character of "snew" the kth character from the end, i.e. it inserts
- * before original character len - k + 2, so a negative n maps to offset
- * len + n + 1. Returns true and writes *out on success, false if p is not an
- * integer, is zero, or resolves out of range.
+ * insert_scalar:
+ * StringInsert[str, ins, positions] where positions are already known to be
+ * machine integers. StringInsert["string", "snew", n] makes the first
+ * character of "snew" the nth character of the result, i.e. it inserts before
+ * original character n (character offset n - 1); a negative -k makes the last
+ * character of "snew" the kth from the end (offset len + 1 - k). Valid
+ * positions are therefore 1..len+1 and -(len+1)..-1. All positions refer to
+ * the ORIGINAL string. Returns NULL after StringInsert::ins for a position out
+ * of range.
  */
-static bool si_pos_to_offset(Expr* p, int64_t len, int64_t* out) {
-    if (p->type != EXPR_INTEGER) return false;
-    int64_t n = p->data.integer;
-    int64_t off;
-    if (n > 0) off = n - 1;
-    else if (n < 0) off = len + n + 1;
-    else return false;              /* position 0 is invalid */
-    if (off < 0 || off > len) return false;
-    *out = off;
-    return true;
+static Expr* insert_scalar(Expr* str, const char* ins, Expr** pos, size_t npos) {
+    const char* s = str->data.string;
+    U8View v;
+    if (u8_view_init(&v, s, strlen(s)) != 0) return NULL;
+    int64_t len = (int64_t)v.nchars;
+
+    /* Byte offsets of the insertion points, sorted. */
+    int64_t* at = malloc(sizeof(int64_t) * (npos ? npos : 1));
+    if (!at) { u8_view_free(&v); return NULL; }
+    for (size_t i = 0; i < npos; i++) {
+        int64_t n = pos[i]->data.integer, off;
+        if (n > 0 && n <= len + 1)         off = n - 1;
+        else if (n < 0 && n >= -(len + 1)) off = len + 1 + n;
+        else {
+            mth_message("StringInsert", "ins", "Cannot insert at position %" PRId64 " in %s.",
+                        n, s);
+            free(at);
+            u8_view_free(&v);
+            return NULL;
+        }
+        at[i] = (int64_t)STR_OFF(&v, off);
+    }
+    if (npos > 1) qsort(at, npos, sizeof(int64_t), si_cmp_i64);
+
+    size_t inslen = strlen(ins);
+    if (npos && inslen > (SIZE_MAX - v.nbytes - 1) / npos) {
+        free(at); u8_view_free(&v); return NULL;
+    }
+    char* buf = malloc(v.nbytes + npos * inslen + 1);
+    if (!buf) { free(at); u8_view_free(&v); return NULL; }
+    size_t o = 0, prev = 0;
+    for (size_t i = 0; i < npos; i++) {
+        size_t b = (size_t)at[i];
+        memcpy(buf + o, s + prev, b - prev);
+        o += b - prev;
+        memcpy(buf + o, ins, inslen);
+        o += inslen;
+        prev = b;
+    }
+    memcpy(buf + o, s + prev, v.nbytes - prev);
+    o += v.nbytes - prev;
+    buf[o] = '\0';
+    free(at);
+    u8_view_free(&v);
+    return expr_new_string_adopt(buf);
 }
 
 /*
@@ -53,106 +105,55 @@ static bool si_pos_to_offset(Expr* p, int64_t len, int64_t* out) {
  * StringInsert["string", "snew", {n1, n2, ...}] - insert a copy at each position
  * StringInsert[{s1, s2, ...}, "snew", spec]   - maps over the list of strings
  *
- * All positions refer to the ORIGINAL string, before any insertion is done, so
- * the offsets are resolved up front and every copy of "snew" is placed relative
- * to the untouched input. Negative positions count from the end (see
- * si_pos_to_offset). A call whose argument count is not three emits
- * StringInsert::argrx and is left unevaluated; a non-string first/second
- * argument, a non-integer position, or an out-of-range position leaves the call
- * unevaluated (NULL) so symbolic arguments flow through the evaluator unchanged.
+ * Messages (call left unevaluated): argr/argrx for the wrong argument count,
+ * strse for a first argument that is not a string or list of strings, string
+ * for a non-string "snew", psl for a position that is not a machine integer,
+ * ins for one out of range. Over a list of strings an element with an
+ * out-of-range position stays as the unevaluated StringInsert[si, snew, spec].
  */
 Expr* builtin_stringinsert(Expr* res) {
-    if (res->type != EXPR_FUNCTION)
-        return NULL;
-
+    if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc != 3)
-        return si_emit_argrx(argc);
+    if (argc != 3) return strings_argr_error("StringInsert", argc, 3);
 
     Expr* arg0 = res->data.function.args[0];
     Expr* snew = res->data.function.args[1];
     Expr* spec = res->data.function.args[2];
 
-    /* StringInsert[{s1, s2, ...}, "snew", spec] - map over list of strings */
-    if (arg0->type == EXPR_FUNCTION &&
-        arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol.name == SYM_List) {
-        size_t n = arg0->data.function.arg_count;
-        Expr** results = malloc(sizeof(Expr*) * n);
-        if (!results) return NULL;
-        for (size_t i = 0; i < n; i++) {
-            Expr** inner_args = malloc(sizeof(Expr*) * 3);
-            inner_args[0] = expr_copy(arg0->data.function.args[i]);
-            inner_args[1] = expr_copy(snew);
-            inner_args[2] = expr_copy(spec);
-            Expr* call = expr_new_function(expr_new_symbol(SYM_StringInsert),
-                                           inner_args, 3);
-            free(inner_args);
-            Expr* r = evaluate(call);
-            expr_free(call);
-            results[i] = r;
-        }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), results, n);
-        free(results);
-        return result;
-    }
+    bool threaded = strings_is_list(arg0);
+    if (!(arg0->type == EXPR_STRING || (threaded && strings_all_strings(arg0))))
+        return strings_msg_strse("StringInsert", res, 1);
+    if (snew->type != EXPR_STRING)
+        return strings_msg_string("StringInsert", res, 2);
 
-    if (arg0->type != EXPR_STRING || snew->type != EXPR_STRING)
-        return NULL;
-
-    const char* str = arg0->data.string;
-    const char* ins = snew->data.string;
-    int64_t len = (int64_t)strlen(str);
-    size_t inslen = strlen(ins);
-
-    /* Gather the position specs into a flat array of Expr* to resolve. */
-    Expr** pos_specs;
+    /* Gather the positions; each must be a machine integer. */
+    Expr** pos;
     size_t npos;
     if (spec->type == EXPR_INTEGER) {
+        pos = &spec;
         npos = 1;
-        pos_specs = &spec;
-    } else if (spec->type == EXPR_FUNCTION &&
-               spec->data.function.head->type == EXPR_SYMBOL &&
-               spec->data.function.head->data.symbol.name == SYM_List) {
+    } else if (strings_is_list(spec)) {
+        pos = spec->data.function.args;
         npos = spec->data.function.arg_count;
-        pos_specs = spec->data.function.args;
+        for (size_t i = 0; i < npos; i++)
+            if (pos[i]->type != EXPR_INTEGER) return si_emit_psl(res, spec, i + 1);
     } else {
-        return NULL;
+        return si_emit_psl(res, spec, 0);
     }
 
-    /* counts[i] = number of copies of "snew" to insert before original
-     * character i (0-based); index len is "insert at the very end". */
-    int64_t* counts = calloc((size_t)len + 1, sizeof(int64_t));
-    if (!counts) return NULL;
+    const char* ins = snew->data.string;
+    if (!threaded) return insert_scalar(arg0, ins, pos, npos);
 
-    for (size_t i = 0; i < npos; i++) {
-        int64_t off;
-        if (!si_pos_to_offset(pos_specs[i], len, &off)) {
-            free(counts);
-            return NULL;
-        }
-        counts[off]++;
+    size_t n = arg0->data.function.arg_count;
+    Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
+    if (!results) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* si = arg0->data.function.args[i];
+        results[i] = insert_scalar(si, ins, pos, npos);
+        if (!results[i])
+            results[i] = strings_uneval(SYM_StringInsert, si, snew, spec);
     }
-
-    /* Build the result: total length is the original plus one "snew" per
-     * insertion. npos is bounded and inslen small, so this cannot overflow in
-     * any realistic input. */
-    size_t total = (size_t)len + npos * inslen;
-    char* buf = malloc(total + 1);
-    if (!buf) { free(counts); return NULL; }
-
-    size_t pos = 0;
-    for (int64_t i = 0; i <= len; i++) {
-        for (int64_t c = 0; c < counts[i]; c++) {
-            memcpy(buf + pos, ins, inslen);
-            pos += inslen;
-        }
-        if (i < len) buf[pos++] = str[i];
-    }
-    buf[pos] = '\0';
-
-    free(counts);
-    Expr* result = expr_new_string(buf);
-    free(buf);
-    return result;
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, n);
+    free(results);
+    return out;
 }

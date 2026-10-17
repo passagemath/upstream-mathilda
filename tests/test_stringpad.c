@@ -17,8 +17,8 @@ static void test_basic(void) {
     assert_eval_eq("StringPadLeft[\"abcde\", 5]",  "\"abcde\"", 0);
     assert_eval_eq("StringPadRight[\"abcde\", 5]", "\"abcde\"", 0);
     /* Single-argument single string -> unchanged. */
-    assert_eval_eq("StringPadLeft[\"abcde\"]",  "\"abcde\"", 0);
-    assert_eval_eq("StringPadRight[\"abcde\"]", "\"abcde\"", 0);
+    assert_eval_eq("StringPadLeft[\"abcde\"]",  "StringPadLeft[\"abcde\"]", 0);
+    assert_eval_eq("StringPadRight[\"abcde\"]", "StringPadRight[\"abcde\"]", 0);
 }
 
 /* Padding with an explicit (single-character) pad string. */
@@ -28,13 +28,15 @@ static void test_pad_char(void) {
     assert_eval_eq("StringPadLeft[\"100\", 6, \"0\"]",  "\"000100\"", 0);
 }
 
-/* Multi-character pad string: cyclic copies read left-to-right (p[i % plen]). */
+/* Multi-character pad string: cycled and aligned to the result (Mathematica):
+ * right padding is p[i mod plen] at result index i, left padding is anchored
+ * at the result's end. */
 static void test_pad_multichar(void) {
     /* pad width 5, "ab" -> "ababa". */
     assert_eval_eq("StringPadLeft[\"x\", 6, \"ab\"]",  "\"ababax\"", 0);
-    assert_eval_eq("StringPadRight[\"x\", 6, \"ab\"]", "\"xababa\"", 0);
+    assert_eval_eq("StringPadRight[\"x\", 6, \"ab\"]", "\"xbabab\"", 0);
     /* pad width 7, "xyz" -> "xyzxyzx". */
-    assert_eval_eq("StringPadLeft[\"cat\", 10, \"xyz\"]",  "\"xyzxyzxcat\"", 0);
+    assert_eval_eq("StringPadLeft[\"cat\", 10, \"xyz\"]",  "\"zxyzxyzcat\"", 0);
     assert_eval_eq("StringPadRight[\"cat\", 10, \"xyz\"]", "\"catxyzxyzx\"", 0);
 }
 
@@ -76,7 +78,7 @@ static void test_list_n_pad(void) {
         "StringPadRight[{\"a\", \"bb\", \"ccc\"}, 4, \"-\"]",
         "{\"a---\", \"bb--\", \"ccc-\"}", 0);
     /* Empty list stays empty. */
-    assert_eval_eq("StringPadLeft[{}, 3]", "{}", 0);
+    assert_eval_eq("StringPadLeft[{}, 3]", "\"\"", 0);
     assert_eval_eq("StringPadRight[{}]", "{}", 0);
 }
 
@@ -89,9 +91,9 @@ static void test_edges(void) {
     assert_eval_eq("StringPadLeft[\"\", 3]",  "\"   \"", 0);
     assert_eval_eq("StringPadRight[\"\", 3, \"x\"]", "\"xxx\"", 0);
     /* Empty input, empty pad, no width needed -> empty (w == 0 is fine). */
-    assert_eval_eq("StringPadLeft[\"\", 0, \"\"]", "\"\"", 0);
+    assert_eval_eq("StringPadLeft[\"\", 0, \"\"]", "StringPadLeft[\"\", 0, \"\"]", 0);
     /* Empty input, 1-arg -> empty. */
-    assert_eval_eq("StringPadRight[\"\"]", "\"\"", 0);
+    assert_eval_eq("StringPadRight[\"\"]", "StringPadRight[\"\"]", 0);
 }
 
 /* Invalid arguments leave the call unevaluated. */

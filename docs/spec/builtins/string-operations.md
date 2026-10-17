@@ -1,11 +1,34 @@
 # String Operations
 
+Strings are UTF-8, and every String function counts, indexes, slices and
+reverses in **characters** (Unicode code points), as Mathematica does:
+`StringLength["h\:00e9llo"]` is `5`, `StringReverse` keeps each character whole,
+`StringPosition` reports character positions, and the string-pattern classes
+are Unicode-aware (`LetterCharacter` matches `"\:00fc"`, `DigitCharacter`
+matches any decimal digit, `IgnoreCase` folds `"\:00dc"`/`"\:00fc"`).
+Pure-ASCII strings take a byte-speed path. A byte that does not begin a valid
+UTF-8 sequence counts as one character, so malformed input never crashes or
+splits.
+
+String literals accept Mathematica's character escapes: `\[Name]` (the 1100+
+named characters, e.g. `"\[Alpha]"`), `\:hhhh`, `\|hhhhhh`, `\.hh` and `\ooo`.
+
+Invalid arguments emit Mathematica's diagnostics through the message system
+(`StringLength::string`, `StringPadLeft::intnm`, `StringRepeat::intp`,
+`StringJoin::string`, `...::strse`, ...) and leave the call unevaluated.
+
+## StringQ
+
+- `StringQ[expr]`: `True` if `expr` is a string, `False` otherwise.
+- **Attributes**: `Protected`.
+
 ## StringLength
 
 Gives the number of characters in a string.
 
-- `StringLength["string"]`: Returns the number of characters as an integer.
-- Returns unevaluated for non-string arguments.
+- `StringLength["string"]`: Returns the number of characters (Unicode code
+  points) as an integer.
+- A non-string argument emits `StringLength::string` and stays unevaluated.
 - **Attributes**: `Listable`, `Protected`.
 
 ```mathematica
@@ -29,8 +52,10 @@ Out[5]= StringLength[x]
 
 Gives a list of the characters in a string.
 
-- `Characters["string"]`: Returns a `List` of single-character strings.
-- Each character is given as a length-1 string.
+- `Characters["string"]`: Returns a `List` of single-character strings, one per
+  Unicode code point.
+- Each character is given as a length-1 string (single ASCII characters are
+  shared, refcounted strings, so this allocates nothing per character).
 - Returns unevaluated for non-string arguments.
 - **Attributes**: `Listable`, `Protected`.
 
@@ -59,7 +84,8 @@ Concatenates strings together.
 - `StringJoin[{"s1", "s2", ...}]`: Flattens all lists recursively and joins enclosed strings.
 - `StringJoin[]`: Returns the empty string `""`.
 - The infix form is `"s1" <> "s2" <> ...`.
-- Returns unevaluated if any non-string, non-list leaf is encountered.
+- A non-string, non-list leaf emits `StringJoin::string` and leaves the call
+  unevaluated (`StringJoin["a", 1]`).
 - **Attributes**: `Flat`, `OneIdentity`, `Protected`.
 
 ```mathematica
@@ -94,7 +120,10 @@ Extracts characters from a string by position.
 - `StringPart[{s1, s2, ...}, spec]`: Gives the list of results for each of the si.
 - Negative indices count from the end of the string.
 - In `StringPart["string", m;;n;;s]`, m, n, and/or s can be negative.
-- Returns unevaluated for invalid arguments or out-of-bounds indices.
+- `StringPart["string", All]`, and spans containing `All`. Positions are
+  characters.
+- Out-of-range positions emit `StringPart::partw` (or `::take` for a span);
+  an invalid spec emits `::pkspec1`. The call stays unevaluated.
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -142,11 +171,19 @@ Gives a substring of a string.
 - `StringTake["string", {m, n}]`: Gives characters m through n.
 - `StringTake["string", {m, n, s}]`: Gives characters m through n in steps of s.
 - `StringTake["string", UpTo[n]]`: Gives n characters, or as many as are available.
+- `StringTake["string", All]` / `None`, and a list of specs
+  `StringTake["string", {{1, 2}, {4, 5}}]` (one result per spec).
 - `StringTake[{s1, s2, ...}, spec]`: Gives the list of results for each si.
 - `StringTake["string", 0]`: Returns the empty string `""`.
 - Negative indices count from the end of the string.
 - In `StringTake["string", {m, n, s}]`, m, n, and/or s can be negative.
-- Returns unevaluated for invalid arguments or out-of-bounds counts.
+- Positions are characters (code points). The range rules are Mathematica's:
+  an empty result needs adjacent bounds (`{4, 3}`), a literal `0` start means
+  "past the end".
+- Out-of-range positions emit `StringTake::take`, a malformed spec
+  `StringTake::mseqs`, a subject that is not a string or list of strings
+  `::strse`; the call stays unevaluated. Over a list, an out-of-range element
+  stays as an unevaluated `StringTake[si, spec]`.
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -199,7 +236,10 @@ are concatenated in order.
 - `StringDrop["string", UpTo[n]]`: Drops n characters, or as many as are available.
 - `StringDrop[{s1, s2, ...}, spec]`: Gives the list of results for each of the si.
 - In `StringDrop["string", {m, n, s}]`, m, n, and/or s can be negative.
-- A decreasing range (m > n) is empty and drops nothing.
+- `StringDrop["string", All]` / `None`. Positions are characters, with
+  `StringTake`'s range rules: `{4, 3}` (adjacent) drops nothing, while
+  `{5, 4}` on `"abc"` or `{4, 2}` is out of range and emits `StringDrop::drop`
+  (an invalid spec emits `::seqs`); the call stays unevaluated.
 - A call whose argument count is not two emits `StringDrop::argrx` and is left unevaluated.
 - **Attributes**: `Protected`.
 
@@ -237,7 +277,8 @@ Out[9]= StringDrop[]
 
 Reverses the order of the characters in a string.
 
-- `StringReverse["string"]`: Reverses the order of the characters in `"string"`.
+- `StringReverse["string"]`: Reverses the order of the characters in `"string"`
+  (each multi-byte UTF-8 character stays whole).
 - `StringReverse[{s1, s2, ...}]`: Gives the list of results for each of the si (via `Listable`).
 - Returns unevaluated for non-string arguments.
 - A call with any number of arguments other than one emits `StringReverse::argx` and is left unevaluated.
@@ -270,7 +311,7 @@ Inserts one string into another at one or more positions.
 - `StringInsert["string", "snew", {n1, n2, ...}]`: Inserts a copy of `"snew"` at each of the positions ni.
 - `StringInsert[{s1, s2, ...}, "snew", spec]`: Gives the list of results for each of the si.
 - The ni all refer to positions in `"string"` *before* any insertion is done. Negative positions count from the end.
-- A position n is valid for `1 <= n <= StringLength["string"] + 1` (or the corresponding negative range); an out-of-range or non-integer position leaves the call unevaluated.
+- A position n is valid for `1 <= n <= StringLength["string"] + 1` (or the corresponding negative range), counting characters; an out-of-range position emits `StringInsert::ins`, a non-integer one `StringInsert::psl`, and the call stays unevaluated.
 - A call whose argument count is not three emits `StringInsert::argrx` and is left unevaluated.
 - **Attributes**: `Protected`.
 
@@ -305,12 +346,13 @@ Replaces one or more ranges of characters in a string with new strings.
 - `StringReplacePart["string", "snew", {m, n}]`: Replaces the characters at positions m through n by `"snew"`.
 - `StringReplacePart["string", "snew", {{m1, n1}, {m2, n2}, ...}]`: Inserts a copy of `"snew"` at each of the given ranges.
 - `StringReplacePart["string", {"snew1", "snew2", ...}, {{m1, n1}, ...}]`: Replaces the characters at each range by the corresponding new string. The list of new strings must be the same length as the list of positions.
-- `StringReplacePart[{s1, s2, ...}, snew, part]`: Gives the list of results for each of the si.
+- `StringReplacePart["string", "snew", n]` means `{1, n}` (`-n`: `{-n, -1}`), and `{m, m-1}` inserts before character m.
+- It does not thread over a list of strings (Mathematica emits `StringReplacePart::string`).
 - `StringReplacePart[new, part][old]`: Operator form, equivalent to `StringReplacePart[old, new, part]`.
 - Position specifications use the form returned by `StringPosition`: each is a pair `{m, n}` of first/last character positions. Negative positions count from the end. All positions refer to `"string"` *before* any replacement is done.
 - Positions are not allowed to overlap: a range that overlaps a previously accepted one emits `StringReplacePart::ovlp` and its new string is not inserted.
 - `StringReplacePart["string", "", ...]` deletes the selected characters.
-- A malformed or out-of-range position, or a new-string/position length mismatch, leaves the call unevaluated.
+- Positions are characters. Out-of-range positions emit `::repart`, a malformed one `::spos` / `::psl`, a new-string/position length mismatch `::plen`; the call stays unevaluated.
 - A call whose argument count is not two (operator form) or three emits `StringReplacePart::argt` and is left unevaluated.
 - **Attributes**: `Protected`.
 
@@ -756,13 +798,15 @@ Out[4]= {Missing["PartAbsent", 3], Missing["PartAbsent", 3], "x"}
 
 Gives the `{start, end}` character positions at which substrings matching a
 string pattern occur, in the 1-based inclusive form used by `StringTake`,
-`StringDrop`, and `StringReplacePart`. Byte-indexed, like the rest of the string
-subsystem, and backed by the same PCRE2 pattern engine as `StringCases`.
+`StringDrop`, and `StringReplacePart`. Positions count characters, and the
+matching is the same PCRE2 pattern engine as `StringCases`.
 
 - `StringPosition["string", patt]`: positions of every substring matching the
   string pattern `patt` (a literal, `RegularExpression[...]`, a general string
   expression such as `x_ ~~ x_`, or a character class).
-- `StringPosition["string", patt, n]`: only the first `n` occurrences.
+- `StringPosition["string", patt, n]`: only the first `n` occurrences (with
+  `Overlaps -> False` the scan stops once it has them).
+- `StringPosition[patt]`: operator form.
 - `StringPosition["string", {p1, p2, ...}]`: matches of each `pi`, merged and
   ordered by start position (a list of patterns is not the same as
   `Alternatives`).
@@ -794,8 +838,7 @@ Out[4]= {{1, 1}, {3, 3}}
 
 ## StringPartition
 
-Partitions a string into fixed-length substrings. Byte-indexed, like
-`StringTake`/`StringDrop`.
+Partitions a string into fixed-length substrings. Lengths count characters.
 
 - `StringPartition["string", n]`: non-overlapping substrings of length `n`
   (offset `d = n`). Trailing characters that cannot fill a full block are
@@ -806,9 +849,12 @@ Partitions a string into fixed-length substrings. Byte-indexed, like
 - `StringPartition["string", UpTo[n]]`: substrings of length up to `n` (offset
   `d = n`), allowing the final substring to be shorter so every character
   appears. Combinable with an explicit offset as `UpTo[n], d`.
-- A list of strings threads. A non-string subject, a non-integer length/offset,
-  or a non-positive `n` or `d` leaves the call unevaluated; other arities emit
-  `StringPartition::argt` (2 or 3 arguments expected).
+- With an explicit offset `d < n` and `UpTo[n]`, the trailing blocks shorten as
+  Mathematica's do (`StringPartition["abcdefg", UpTo[3], 2]` is
+  `{"abc", "cde", "efg", "g"}`).
+- Does not thread over a list (Mathematica emits `StringPartition::string`).
+  A bad length or offset emits `::intpm` / `::intnm` / `::intp`; other arities
+  emit `::argtu` / `::argt`.
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -827,15 +873,15 @@ Out[4]= {"aba", "bab", "aba"}
 
 ## StringRepeat
 
-Builds a string by repeating a base string. Byte-length based, like the other
-string builtins.
+Builds a string by repeating a base string. Lengths count characters.
 
 - `StringRepeat["string", n]`: `"string"` concatenated `n` times.
 - `StringRepeat["string", n, max]`: up to `n` copies of `"string"`, truncated so
   the total length is at most `max` characters (a partial final copy is allowed).
-- `n == 0`, an empty base string, or `max == 0` gives `""`. A non-string subject,
-  a non-integer or negative `n`/`max` leaves the call unevaluated; other arities
-  emit `StringRepeat::argt` (2 or 3 arguments expected).
+- `n == 0`, an empty base string, or `max == 0` gives `""`. A non-string
+  subject emits `StringRepeat::string`, a non-integer or negative `n`/`max`
+  `StringRepeat::intp` (both leave the call unevaluated); other arities emit
+  `StringRepeat::argt` (2 or 3 arguments expected).
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -852,22 +898,26 @@ Out[3]= "abababababababababa"
 ## StringPadLeft / StringPadRight
 
 Make a string a given length by padding it (with spaces or a repeated pad
-string) or truncating it. Byte-length based, like the other string builtins.
+string) or truncating it. Lengths count characters.
 `StringPadLeft` pads on the left and truncates keeping the last `n` characters;
 `StringPadRight` pads on the right and truncates keeping the first `n`.
 
 - `StringPad*["string", n]`: length `n`, padded with spaces or truncated.
-- `StringPad*["string", n, "padding"]`: pads with repeated copies of `"padding"`
-  (laid down as cyclic bytes `padding[i mod Length]`, truncated at width `n`).
-- `StringPad*["string"]`: single string, one argument — returned unchanged.
+- `StringPad*["string", n, "padding"]`: pads with `"padding"` repeated
+  cyclically and aligned to the result, as in Mathematica: on the right,
+  result character `i` is `padding[[i mod len]]`; on the left the cycle is
+  anchored at the result's end. `StringPadRight["ab", 6, "xyz"]` is
+  `"abzxyz"`, `StringPadLeft["ab", 7, "xyz"]` is `"zxyzxab"`.
+- `StringPad*["string"]`: a single string needs a length -- emits
+  `::strlist` and stays unevaluated (Mathematica).
 - `StringPad*[{s1, s2, ...}]`: pads each string to the length of the longest,
   so all become the same length.
 - `StringPad*[{s1, s2, ...}, n, ...]`: pads or truncates each string to length `n`.
-- A non-string subject (that is not a list of strings), a non-integer or negative
-  `n`, a non-string `padding` (a list-valued `padding` is not supported), or an
-  empty `padding` when padding is required leaves the call unevaluated. Other
-  arities emit `StringPadLeft::argb` / `StringPadRight::argb` (1 to 3 arguments
-  expected).
+- Invalid arguments emit Mathematica's messages and leave the call
+  unevaluated: a subject that is not a string or a list of strings
+  (`::strlist`), a non-integer or negative `n` (`::intnm`), an empty or
+  non-string `padding` (`::stringnz`). `StringPadLeft[{}, n]` is `""`. Other
+  arities emit `::argb` (1 to 3 arguments expected).
 - **Attributes**: `Protected`.
 
 ```mathematica
@@ -888,7 +938,8 @@ Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
 
 Assembles a string from a (possibly nested) list by inserting separators between
 elements — the inverse of `StringSplit`. Non-string leaves are converted with
-`ToString` (so `27` becomes `"27"`); string leaves are used verbatim.
+`ToString` (OutputForm, so `27` becomes `"27"` and `f["a"]` becomes `"f[a]"`);
+string leaves are used verbatim. The result is assembled in one buffer.
 
 - `StringRiffle[list]`: joins with the default scheme — a single space at the
   innermost level, one extra newline per level above it. A 2-D array joins rows
@@ -902,8 +953,9 @@ elements — the inverse of `StringSplit`. Non-string leaves are converted with
   delimiter triple) between elements at level `i` (level 1 is outermost); levels
   deeper than the supplied separators use the default scheme.
 - An empty list gives `""` (or just the delimiters for a triple). A first
-  argument that is neither a list nor a string, or a separator that is neither a
-  string nor a 3-string list, leaves the call unevaluated. No arguments emits
+  argument that is neither a list nor a string emits `StringRiffle::list`, and a
+  separator that is neither a string nor a 3-string list `StringRiffle::string`;
+  both leave the call unevaluated. No arguments emits
   `StringRiffle::argm` (1 or more arguments expected).
 - **Attributes**: `Protected`.
 
@@ -961,3 +1013,129 @@ An unsupported pattern leaves the call unevaluated. `~~` (`StringExpression`)
 is a `Flat` operator with precedence just below `Alternatives`; `x:p` binds
 tighter than `~~` (`x__ ~~ y:DigitCharacter..` is
 `StringExpression[x__, Pattern[y, Repeated[DigitCharacter]]]`).
+
+## StringDelete
+
+- `StringDelete["string", patt]`: deletes every substring matching `patt`
+  (any string pattern, or a list of them) -- `StringReplace[s, patt -> ""]`.
+- `StringDelete[{s1, s2, ...}, patt]`: one result per string.
+- `StringDelete[patt]`: operator form.
+- **Options**: `IgnoreCase`. **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringDelete["a1b22c", DigitCharacter..]
+Out[1]= "abc"
+```
+
+## StringReplaceList
+
+- `StringReplaceList["string", rules]`: the list of strings obtained by
+  replacing a single match at a time -- one result for every match start of
+  every rule (overlapping), in order of position, then rule.
+- `StringReplaceList["string", rules, n]`: at most `n` results.
+- **Options**: `IgnoreCase`. **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringReplaceList["aaa", "a" -> "b"]
+Out[1]= {"baa", "aba", "aab"}
+```
+
+## StringTakeDrop
+
+- `StringTakeDrop["string", spec]`: `{StringTake["string", spec],
+  StringDrop["string", spec]}` for any `StringTake` spec.
+- `StringTakeDrop[{s1, s2, ...}, spec]`: one pair per string.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringTakeDrop["abcdef", {2, 4}]
+Out[1]= {"bcd", "aef"}
+```
+
+## StringRotateLeft / StringRotateRight
+
+- `StringRotateLeft["string", n]`: cycles the characters `n` places to the
+  left (`n` may be negative or exceed the length); `StringRotateLeft["string"]`
+  rotates by one. `StringRotateRight` rotates the other way.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringRotateLeft["abcdef", 2]
+Out[1]= "cdefab"
+```
+
+## ToUpperCase / ToLowerCase
+
+- `ToUpperCase["string"]`, `ToLowerCase["string"]`: full Unicode case mapping
+  (`ToUpperCase["\:00df"]` is `"SS"`, `ToLowerCase["\[CapitalSigma]"]` is
+  `"\[Sigma]"`). Non-string arguments stay unevaluated.
+- **Attributes**: `Listable`, `Protected`.
+
+## Capitalize / Decapitalize
+
+- `Capitalize["string"]`: the first character in uppercase;
+  `Decapitalize["string"]` in lowercase. A list of strings maps; anything else
+  emits `::strse`.
+- **Attributes**: `Protected`.
+
+## LetterQ / DigitQ / UpperCaseQ / LowerCaseQ
+
+- `LetterQ["string"]`: every character is a letter of any script.
+- `DigitQ["string"]`: every character is an ASCII digit `0`-`9` (as in
+  Mathematica, even though the pattern `DigitCharacter` matches any Unicode
+  decimal digit).
+- `UpperCaseQ["string"]` / `LowerCaseQ["string"]`: every character is an
+  uppercase / lowercase letter.
+- All are `True` for `""`. A non-string emits `::string`.
+- **Attributes**: `Protected`.
+
+## ToCharacterCode / FromCharacterCode
+
+- `ToCharacterCode["string"]`: the Unicode code points, as a packed integer
+  array (above the packing threshold). A list of strings gives a list of lists.
+- `FromCharacterCode[n]`, `FromCharacterCode[{n1, ...}]`,
+  `FromCharacterCode[{{...}, ...}]`: the inverse. It reads a packed or `NDArray`
+  integer buffer directly. A code outside `0`..`1114111` emits
+  `FromCharacterCode::notunicode` (`::intnm` for a negative or non-integer).
+- No `Compile[]` lowering: one side of each is a `String`.
+- **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= ToCharacterCode["h\:00e9"]
+Out[1]= {104, 233}
+```
+
+## CharacterRange / Alphabet
+
+- `CharacterRange["c1", "c2"]`: the characters with codes from `c1`'s to
+  `c2`'s; `CharacterRange[n1, n2]` by code. `{}` when the range is empty.
+- `Alphabet[]`: `{"a", ..., "z"}`.
+- **Attributes**: `Protected`.
+
+## Operator forms and occurrence limits
+
+- Operator forms: `StringCases[patt][s]`, `StringReplace[rules][s]`,
+  `StringMatchQ[patt][s]`, `StringPosition[patt][s]`, `StringDelete[patt][s]`
+  (in addition to the `StringContainsQ` family). `StringSplit`, `StringCount`
+  and `StringTrim` have none, as in Mathematica.
+- Occurrence limits: `StringCases[s, patt, n]`, `StringReplace[s, rules, n]`,
+  `StringPosition[s, patt, n]`, `StringReplaceList[s, rules, n]` (`n` an
+  integer >= 0 or `Infinity`). With non-overlapping matching the scan stops as
+  soon as it has `n` matches.
+- `IgnoreCase` is an option of every pattern function (`Options[StringReplace]`
+  etc.; `SetOptions` changes the default).
+
+## Performance notes
+
+- Compiled patterns are cached (64 entries, keyed by the pattern expression and
+  flags), so applying one pattern to many strings -- `Map[StringMatchQ[#, p] &,
+  list]`, `Select[list, StringContainsQ[p]]` -- compiles it once.
+  `RegularExpression["re"]` validation shares the cache.
+- A rule set is scanned with a leftmost-match cursor that remembers each rule's
+  next match, so `StringReplace`/`StringSplit`/`StringCases` with several rules
+  cost O(n · rules) rather than re-searching every rule at every position.
+- `StringTrim` matches its front `PCRE2_ANCHORED` and its back
+  `PCRE2_ENDANCHORED`; `StringJoin`/`StringRiffle` assemble the result in one
+  buffer; results are handed to the String constructor without a second copy;
+  single ASCII characters are shared, refcounted strings.
+

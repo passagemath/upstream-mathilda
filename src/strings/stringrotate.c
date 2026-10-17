@@ -1,0 +1,55 @@
+/*
+ * stringrotate.c - StringRotateLeft / StringRotateRight.
+ *
+ *   StringRotateLeft[s, n]   cycles the characters of s n places to the left
+ *   StringRotateLeft[s]      one place
+ *   StringRotateRight[s, n]  n places to the right (StringRotateLeft[s, -n])
+ *
+ * n may be any integer (negative rotates the other way; |n| > length wraps).
+ * Positions count characters (Unicode code points). The result is two memcpys
+ * of the subject's bytes.
+ */
+
+#include "picostrings.h"
+#include "strings_internal.h"
+#include "utf8.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+static Expr* rotate(Expr* res, const char* head, int left) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* s = res->data.function.args[0];
+    if (s->type != EXPR_STRING)
+        return strings_arg_message(head, "string", "String", 1, res);
+    int64_t n = 1;
+    if (argc == 2) {
+        if (res->data.function.args[1]->type != EXPR_INTEGER)
+            return strings_arg_message(head, "int", "Integer", 2, res);
+        n = res->data.function.args[1]->data.integer;
+    }
+
+    const char* str = s->data.string;
+    size_t len = strlen(str);
+    size_t clen = u8_length(str, len);
+    if (clen == 0) return expr_new_string("");
+
+    /* Left rotation by k in [0, clen): the result starts at character k. */
+    int64_t m = (int64_t)clen;
+    int64_t k = (left ? n : -n) % m;
+    if (k < 0) k += m;
+    size_t cut = u8_offset(str, len, (size_t)k);
+
+    char* buf = malloc(len + 1);
+    if (!buf) return NULL;
+    memcpy(buf, str + cut, len - cut);
+    memcpy(buf + (len - cut), str, cut);
+    buf[len] = '\0';
+    return expr_new_string_adopt(buf);
+}
+
+Expr* builtin_stringrotateleft(Expr* res)  { return rotate(res, "StringRotateLeft", 1); }
+Expr* builtin_stringrotateright(Expr* res) { return rotate(res, "StringRotateRight", 0); }

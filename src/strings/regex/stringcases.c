@@ -50,9 +50,10 @@ static Expr* substr_expr(const char* subj, size_t s, size_t e) {
  * never pays for the capture pool.  Returns a fresh List[...], or NULL on OOM.
  */
 static Expr* sc_scalar(const char* subj, RegexRule* rules, int nr,
-                       RegexOverlapMode mode, int want_captures) {
+                       RegexOverlapMode mode, int want_captures, size_t limit) {
     RegexScan scan;
-    if (regex_scan(subj, strlen(subj), rules, nr, mode, want_captures, &scan) < 0)
+    if (regex_scan_limit(subj, strlen(subj), rules, nr, mode, want_captures,
+                         limit, &scan) < 0)
         return NULL;
 
     Expr** items = malloc(sizeof(Expr*) * (scan.count ? scan.count : 1));
@@ -81,7 +82,7 @@ Expr* builtin_stringcases(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** a = res->data.function.args;
 
-    if (argc == 0) return builtin_arg_error("StringCases", 0, 2, 2);
+    if (argc == 0) return builtin_arg_error("StringCases", 0, 1, 3);
 
     /* Seed option state from the registered defaults (so SetOptions[StringCases,
      * ...] takes effect), then let explicit trailing options override below.
@@ -111,12 +112,21 @@ Expr* builtin_stringcases(Expr* res) {
             break;
         }
     }
-    /* Too few positional args is a genuine arity error. Extra ones are not: the
-     * WL occurrence-limit form StringCases["s", patt, n] is simply unsupported
-     * here, and claiming "2 arguments are expected" would misdescribe it, so it
-     * is left unevaluated silently (as StringCases has always done). */
-    if (pargc < 2) return builtin_arg_error("StringCases", argc, 2, 2);
-    if (pargc > 2) return NULL;
+    /* StringCases[patt] is the operator form (applied by src/opform.c), so a
+     * single positional argument stays unevaluated. StringCases[s, patt, n]
+     * keeps the first n matches (n an integer >= 0, or Infinity). */
+    if (pargc == 1 || pargc > 3) return NULL;
+    size_t limit = 0;
+    if (pargc == 3) {
+        Expr* n = a[2];
+        if (n->type == EXPR_INTEGER && n->data.integer >= 0) {
+            if (n->data.integer == 0)
+                return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+            limit = (size_t)n->data.integer;
+        } else if (!(n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_Infinity)) {
+            return NULL;
+        }
+    }
 
     Expr* subject = a[0];
     Expr* patt = a[1];
@@ -142,7 +152,7 @@ Expr* builtin_stringcases(Expr* res) {
         for (; built < m; built++) {
             Expr* si = subject->data.function.args[built];
             Expr* one = (si->type == EXPR_STRING)
-                            ? sc_scalar(si->data.string, rules, nr, mode, want_captures)
+                            ? sc_scalar(si->data.string, rules, nr, mode, want_captures, limit)
                             : expr_copy(si);
             if (!one) break;                     /* OOM: unwind and bail out */
             out[built] = one;
@@ -156,7 +166,7 @@ Expr* builtin_stringcases(Expr* res) {
         result = expr_new_function(expr_new_symbol(SYM_List), out, m);
         free(out);
     } else if (subject->type == EXPR_STRING) {
-        result = sc_scalar(subject->data.string, rules, nr, mode, want_captures);
+        result = sc_scalar(subject->data.string, rules, nr, mode, want_captures, limit);
     } else {
         result = NULL;   /* non-string subject: leave unevaluated */
     }

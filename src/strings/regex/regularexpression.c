@@ -13,6 +13,7 @@
 
 #include "picostrings.h"
 #include "regex_engine.h"
+#include "regex_common.h"
 
 #include <stdio.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -30,15 +31,15 @@ Expr* builtin_regularexpression(Expr* res) {
         return NULL;
 
     /* Best-effort syntax check: warn (once per evaluation) on a bad pattern,
-     * but still leave the head inert so downstream code can report context. */
+     * but still leave the head inert so downstream code can report context.
+     * The check goes through the shared rule builder, so a valid pattern is
+     * compiled once and left in its cache -- under exactly the key the string
+     * functions then look up, so StringCases[s, RegularExpression[re]] does
+     * not compile `re` a second time. */
     if (regex_available()) {
-        char err[256];
-        RegexProgram* prog = regex_compile(arg->data.string, err, sizeof err);
-        if (!prog) {
-            mth_message("RegularExpression", "regex", "%s", err);
-        } else {
-            regex_free(prog);
-        }
+        RegexRule* rules;
+        int nr = regex_rules_build_opts(res, 0, 0, &rules, "RegularExpression");
+        if (nr > 0) regex_rules_free(rules, nr);
     }
 
     return NULL;   /* inert: RegularExpression["re"] stays as itself */

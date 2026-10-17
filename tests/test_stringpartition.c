@@ -55,14 +55,14 @@ static void test_upto(void) {
                    "{\"123\", \"456\", \"7\"}", 0);
 }
 
-/* Threading over a list of strings. */
+/* No threading over a list of strings: Mathematica emits
+ * StringPartition::string and leaves the call unevaluated. */
 static void test_list_threading(void) {
     assert_eval_eq("StringPartition[{\"abcd\", \"ef\"}, 2]",
-                   "{{\"ab\", \"cd\"}, {\"ef\"}}", 0);
+                   "StringPartition[{\"abcd\", \"ef\"}, 2]", 0);
     assert_eval_eq("StringPartition[{\"abcd\"}, 2, 1]",
-                   "{{\"ab\", \"bc\", \"cd\"}}", 0);
-    /* Empty list threads to an empty list. */
-    assert_eval_eq("StringPartition[{}, 2]", "{}", 0);
+                   "StringPartition[{\"abcd\"}, 2, 1]", 0);
+    assert_eval_eq("StringPartition[{}, 2]", "StringPartition[{}, 2]", 0);
 }
 
 /* Boundary conditions. */

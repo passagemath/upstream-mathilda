@@ -25,6 +25,8 @@
 #include "sym_names.h"
 #include "common.h"
 #include "eval.h"
+#include "symtab.h"
+#include "utf8.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -51,14 +53,7 @@ static int pv_push(PieceVec* pv, Expr* e, int is_sub) {
 
 /* New EXPR_STRING from subj[s..e). */
 static Expr* substr_expr(const char* subj, size_t s, size_t e) {
-    size_t n = e - s;
-    char* buf = malloc(n + 1);
-    if (!buf) return expr_new_string("");
-    memcpy(buf, subj + s, n);
-    buf[n] = '\0';
-    Expr* r = expr_new_string(buf);
-    free(buf);
-    return r;
+    return expr_new_string_n(subj + s, e - s);
 }
 
 static int is_empty_string(const Expr* e) {
@@ -81,41 +76,31 @@ static Expr* ss_scalar(const char* subj, RegexRule* rules, int nr,
 
     size_t last_end = 0, pos = 0;
     long ns = 0;                        /* substrings emitted so far */
+    RegexCursor cur;
+    if (regex_cursor_init(&cur, rules, nr, subj, len) != 0) return NULL;
 
     while (pos <= len) {
         if (n_limit > 0 && ns >= n_limit - 1) break;   /* remainder is last piece */
 
-        int found = 0, best_rule = 0;
-        size_t best_ms = 0, best_me = 0, best_pairs = 0;
-        size_t best_ov[REGEX_MAX_PAIRS * 2];
-
-        for (int i = 0; i < nr; i++) {
-            int gc = regex_group_count(rules[i].prog) + 1;
-            size_t pairs = (gc > REGEX_MAX_PAIRS) ? REGEX_MAX_PAIRS : (size_t)gc;
-            size_t ov[REGEX_MAX_PAIRS * 2];
-            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs) == 1) {
-                if (!found || ov[0] < best_ms) {
-                    found = 1;
-                    best_rule = i;
-                    best_ms = ov[0];
-                    best_me = ov[1];
-                    best_pairs = pairs;
-                    memcpy(best_ov, ov, sizeof(size_t) * 2 * pairs);
-                }
-            }
-        }
-        if (!found) break;
+        int rule;
+        const size_t* ov;
+        size_t np;
+        int m = regex_cursor_next(&cur, pos, &rule, &ov, &np);
+        if (m <= 0) break;
+        size_t best_ms = ov[0], best_me = ov[1];
 
         pv_push(&pv, substr_expr(subj, last_end, best_ms), 1);   /* interior empties kept */
         ns++;
 
-        Expr* ins = make_insertion(&rules[best_rule], subj, best_ov, best_pairs);
+        Expr* ins = make_insertion(&rules[rule], subj, ov, np);
         if (ins) pv_push(&pv, ins, 0);
 
         last_end = best_me;
-        pos = (best_me > best_ms) ? best_me : best_ms + 1;       /* zero-width guard */
+        pos = (best_me > best_ms) ? best_me
+                                  : regex_next_char(subj, len, best_ms); /* zero-width guard */
     }
 
+    regex_cursor_free(&cur);
     pv_push(&pv, substr_expr(subj, last_end, len), 1);           /* trailing piece */
 
     /* Drop the leading and trailing runs of empty substring pieces unless All. */
@@ -138,12 +123,18 @@ static Expr* ss_scalar(const char* subj, RegexRule* rules, int nr,
     return result;
 }
 
-/* Null delimiter "": split into individual (byte) characters. */
+/* Null delimiter "": split into individual characters (UTF-8 code points). */
 static Expr* ss_null(const char* subj) {
     size_t len = strlen(subj);
     Expr** items = malloc(sizeof(Expr*) * (len ? len : 1));
-    for (size_t i = 0; i < len; i++) items[i] = substr_expr(subj, i, i + 1);
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, len);
+    if (!items) return NULL;
+    size_t n = 0;
+    for (size_t i = 0; i < len; ) {                /* one piece per character */
+        size_t k = u8_char_len(subj, len, i);
+        items[n++] = expr_new_string_n(subj + i, k);
+        i += k;
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return result;
 }
@@ -172,7 +163,13 @@ Expr* builtin_stringsplit(Expr* res) {
     if (argc == 0) return builtin_arg_error("StringSplit", 0, 1, 3);
 
     /* Strip trailing IgnoreCase options, leaving the positional arguments. */
+    /* IgnoreCase: the registered default (SetOptions[StringSplit, ...]), then
+     * a trailing option. */
     int caseless = 0;
+    Expr* defs = symtab_get_options("StringSplit");   /* borrowed */
+    if (defs && defs->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < defs->data.function.arg_count; i++)
+            is_ignorecase_opt(defs->data.function.args[i], &caseless);
     size_t pargc = argc;
     while (pargc >= 2) {
         int v;

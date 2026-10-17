@@ -678,6 +678,12 @@ set(COMMON_SRC
     ../src/strings/stringpad.c
     ../src/strings/stringriffle.c
     ../src/strings/strings_init.c
+    ../src/strings/utf8.c
+    ../src/strings/strings_common.c
+    ../src/strings/stringcase.c
+    ../src/strings/charcode.c
+    ../src/strings/stringrotate.c
+    ../src/strings/stringtakedrop.c
     ../src/strings/regex/regex_engine.c
     ../src/strings/regex/regex_common.c
     ../src/strings/regex/string_pattern.c
@@ -3323,6 +3329,8 @@ target_include_directories(regex_tests PRIVATE ../src ../src/strings ../src/stri
 
 add_executable(stringfns_tests test_stringfns.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(stringfns_tests PRIVATE ../src ../src/strings ../src/strings/regex)
+add_executable(string_review_tests test_string_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(string_review_tests PRIVATE ../src ../src/strings ../src/strings/regex)
 
 add_executable(stringpartition_tests test_stringpartition.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(stringpartition_tests PRIVATE ../src ../src/strings ../src/strings/regex)
@@ -3892,6 +3900,7 @@ if(USE_ECM)
     add_dependencies(strings_tests build_ecm)
     add_dependencies(regex_tests build_ecm)
     add_dependencies(stringfns_tests build_ecm)
+    add_dependencies(string_review_tests build_ecm)
     add_dependencies(stringpartition_tests build_ecm)
     add_dependencies(stringposition_tests build_ecm)
     add_dependencies(stringcount_tests build_ecm)

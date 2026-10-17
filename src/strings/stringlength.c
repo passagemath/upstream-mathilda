@@ -5,12 +5,16 @@
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
+#include "utf8.h"
 #include <string.h>
 
 /*
  * builtin_stringlength:
- * StringLength["string"] returns the number of characters in the string
- * as an integer. Returns NULL (unevaluated) for non-string arguments.
+ * StringLength["string"] returns the number of characters (Unicode code
+ * points) in the UTF-8 string -- StringLength["h\:00e9llo"] is 5 -- skipping
+ * ASCII runs eight bytes at a time. Listable (threads over lists). A
+ * non-string argument emits StringLength::string and stays unevaluated.
  */
 Expr* builtin_stringlength(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
@@ -18,10 +22,8 @@ Expr* builtin_stringlength(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
     if (arg->type != EXPR_STRING)
-        return NULL;
+        return strings_arg_message("StringLength", "string", "String", 1, res);
 
-    int64_t len = (int64_t)strlen(arg->data.string);
-    Expr* result = expr_new_integer(len);
-
-    return result;
+    const char* s = arg->data.string;
+    return expr_new_integer((int64_t)u8_length(s, strlen(s)));
 }

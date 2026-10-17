@@ -5,6 +5,8 @@
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
+#include "utf8.h"
 #include <string.h>
 #include <stdio.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
@@ -41,7 +43,7 @@ Expr* builtin_stringreverse(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
     if (arg->type != EXPR_STRING)
-        return NULL;
+        return strings_arg_message("StringReverse", "string", "String", 1, res);
 
     const char* str = arg->data.string;
     size_t len = strlen(str);
@@ -50,11 +52,18 @@ Expr* builtin_stringreverse(Expr* res) {
     if (!buf)
         return NULL;
 
-    for (size_t i = 0; i < len; i++)
-        buf[i] = str[len - 1 - i];
+    /* Reverse the order of the CHARACTERS: each UTF-8 sequence is copied
+     * whole to its mirrored position (a byte reversal would corrupt them). */
+    if (u8_is_ascii(str, len)) {
+        for (size_t i = 0; i < len; i++)
+            buf[i] = str[len - 1 - i];
+    } else {
+        for (size_t i = 0; i < len; ) {
+            size_t n = u8_char_len(str, len, i);
+            memcpy(buf + len - i - n, str + i, n);
+            i += n;
+        }
+    }
     buf[len] = '\0';
-
-    Expr* result = expr_new_string(buf);
-    free(buf);
-    return result;
+    return expr_new_string_adopt(buf);
 }

@@ -23,6 +23,8 @@
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
+#include "regex_common.h"   /* RegexBuf */
 #include "common.h"
 #include "sym_names.h"
 #include "print.h"
@@ -36,25 +38,6 @@ static bool is_list(const Expr* e) {
     return e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_List;
-}
-
-/*
- * leaf_to_str:
- * Renders a non-list element as a freshly malloc'd, NUL-terminated C string.
- * String elements are copied verbatim (no surrounding quotes); every other
- * expression is rendered via expr_to_string (StandardForm). Returns NULL on
- * allocation failure.
- */
-static char* leaf_to_str(Expr* e) {
-    if (e->type == EXPR_STRING) {
-        size_t len = strlen(e->data.string);
-        char* out = malloc(len + 1);
-        if (!out) return NULL;
-        memcpy(out, e->data.string, len + 1);
-        return out;
-    }
-    /* expr_to_string returns a heap string the caller must free. */
-    return expr_to_string(e);
 }
 
 /*
@@ -115,93 +98,63 @@ static size_t depth_from_bottom(const Expr* e) {
 
 /*
  * riffle_build:
- * Recursively assembles the riffled string for e. level is the 0-based nesting
- * level from the top; df is the distance from bottom (used for the default
- * separator when no explicit separator covers this level). Returns a freshly
- * malloc'd string, or NULL on failure (propagated up).
+ * Appends the riffled form of e to `out` -- one buffer for the whole result, so
+ * every leaf is copied exactly once whatever the nesting depth. level is the
+ * 0-based nesting level from the top; df is the distance from bottom (used for
+ * the default separator when no explicit separator covers this level). Leaves
+ * that are not strings appear as ToString would show them (OutputForm).
+ * Returns 0, or -1 on allocation failure.
  */
-static char* riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
-                          size_t level, size_t df) {
-    if (!is_list(e))
-        return leaf_to_str(e);
-
-    size_t n = e->data.function.arg_count;
-
-    /* Build each child string first. */
-    char** parts = malloc(n ? n * sizeof(char*) : 1);
-    if (!parts) return NULL;
-    for (size_t i = 0; i < n; i++) {
-        parts[i] = riffle_build(e->data.function.args[i], seps, nseps,
-                                level + 1, df ? df - 1 : 0);
-        if (!parts[i]) {
-            for (size_t j = 0; j < i; j++) free(parts[j]);
-            free(parts);
-            return NULL;
-        }
+static int riffle_build(Expr* e, const SepSpec* seps, size_t nseps,
+                        size_t level, size_t df, RegexBuf* out) {
+    if (!is_list(e)) {
+        if (e->type == EXPR_STRING)
+            return regexbuf_add(out, e->data.string, strlen(e->data.string));
+        char* t = expr_to_string_outputform(e);
+        if (!t) return -1;
+        int rc = regexbuf_add(out, t, strlen(t));
+        free(t);
+        return rc;
     }
 
     /* Resolve the separator for this level. An explicit separator wins; else
      * fall back to the default scheme (space at the bottom, newlines above). */
-    SepSpec spec;
-    char* gen = NULL;                 /* owned buffer for a default newline run */
+    const char* left = "";
+    const char* right = "";
+    const char* sep = " ";
+    size_t sep_len = 1;
     if (level < nseps) {
-        spec = seps[level];
-    } else {
-        spec.left = "";
-        spec.right = "";
-        if (df <= 1) {
-            spec.sep = " ";
-        } else {
-            size_t nl = df - 1;       /* df-1 newlines between elements */
-            gen = malloc(nl + 1);
-            if (!gen) {
-                for (size_t i = 0; i < n; i++) free(parts[i]);
-                free(parts);
-                return NULL;
-            }
-            memset(gen, '\n', nl);
-            gen[nl] = '\0';
-            spec.sep = gen;
-        }
+        left = seps[level].left;
+        sep = seps[level].sep;
+        right = seps[level].right;
+        sep_len = strlen(sep);
+    } else if (df > 1) {
+        sep = NULL;                    /* df-1 newlines between elements */
+        sep_len = df - 1;
     }
 
-    /* Two-pass assemble: left + p0 + sep + p1 + ... + right. */
-    size_t sep_len = strlen(spec.sep);
-    size_t total = strlen(spec.left) + strlen(spec.right);
-    for (size_t i = 0; i < n; i++)
-        total += strlen(parts[i]);
-    if (n > 1)
-        total += (n - 1) * sep_len;
-
-    char* buf = malloc(total + 1);
-    if (!buf) {
-        for (size_t i = 0; i < n; i++) free(parts[i]);
-        free(parts);
-        free(gen);
-        return NULL;
-    }
-
-    size_t off = 0;
-    size_t ll = strlen(spec.left);
-    memcpy(buf + off, spec.left, ll); off += ll;
+    if (regexbuf_add(out, left, strlen(left))) return -1;
+    size_t n = e->data.function.arg_count;
     for (size_t i = 0; i < n; i++) {
-        if (i > 0) { memcpy(buf + off, spec.sep, sep_len); off += sep_len; }
-        size_t pl = strlen(parts[i]);
-        memcpy(buf + off, parts[i], pl); off += pl;
+        if (i > 0) {
+            if (sep) {
+                if (regexbuf_add(out, sep, sep_len)) return -1;
+            } else {
+                for (size_t k = 0; k < sep_len; k++)
+                    if (regexbuf_add(out, "\n", 1)) return -1;
+            }
+        }
+        if (riffle_build(e->data.function.args[i], seps, nseps,
+                         level + 1, df ? df - 1 : 0, out))
+            return -1;
     }
-    size_t rl = strlen(spec.right);
-    memcpy(buf + off, spec.right, rl); off += rl;
-    buf[off] = '\0';
-
-    for (size_t i = 0; i < n; i++) free(parts[i]);
-    free(parts);
-    free(gen);
-    return buf;
+    return regexbuf_add(out, right, strlen(right));
 }
 
 /*
  * builtin_stringriffle:
- * See file header for the accepted forms. Returns NULL (unevaluated) for a
+ * See file header for the accepted forms. Emits StringRiffle::list /
+ * StringRiffle::string and returns NULL (unevaluated) for a
  * first argument that is neither a list nor a string, a malformed separator, or
  * allocation failure. StringRiffle[] with no arguments emits StringRiffle::argm
  * (via builtin_arg_error) and leaves the call unevaluated.
@@ -222,23 +175,21 @@ Expr* builtin_stringriffle(Expr* res) {
     for (size_t i = 0; i < nseps; i++) {
         if (!parse_sep(args[i + 1], &seps[i])) {
             free(seps);
-            return NULL;   /* malformed separator: leave unevaluated */
+            return strings_arg_message("StringRiffle", "string", "String", i + 2, res);
         }
     }
 
-    /* Only a list or a bare string can be riffled; anything else stays
-     * symbolic (e.g. StringRiffle[x]). */
+    /* Only a list or a bare string can be riffled. */
     if (!is_list(args[0]) && args[0]->type != EXPR_STRING) {
         free(seps);
-        return NULL;
+        return strings_arg_message("StringRiffle", "list", "List", 1, res);
     }
 
     size_t depth = depth_from_bottom(args[0]);
-    char* buf = riffle_build(args[0], seps, nseps, 0, depth);
+    RegexBuf out = { NULL, 0, 0 };
+    int rc = riffle_build(args[0], seps, nseps, 0, depth, &out);
     free(seps);
-    if (!buf) return NULL;
-
-    Expr* out = expr_new_string(buf);
-    free(buf);
-    return out;
+    if (rc) { free(out.p); return NULL; }
+    if (!out.p) return expr_new_string("");
+    return expr_new_string_adopt(out.p);
 }

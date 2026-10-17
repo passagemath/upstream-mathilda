@@ -61,6 +61,8 @@ typedef struct {
     Expr*         rhs;    /* borrowed; NULL when the element was a bare pattern */
     Expr*         lhs;    /* borrowed; the delimiter pattern (rule LHS or bare pattern). */
     SpInfo        info;   /* owned; capture-name table for binding the RHS */
+    size_t        npairs; /* offset pairs a match fills: group 0 + captures
+                             (clamped to REGEX_MAX_PAIRS) */
 } RegexRule;
 
 /*
@@ -97,6 +99,37 @@ int  regex_rules_build_ex(Expr* patt, int anchored, int caseless,
 int  regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags,
                             RegexRule** out, const char* head);
 void regex_rules_free(RegexRule* rules, int n);
+
+/* Release every cached compiled rule set (at shutdown, for leak checking). */
+void regex_cache_clear(void);
+
+/* Byte offset of the character after the one at `pos` (UTF-8 aware); pos+1 at
+ * or past the end, so a scan loop always progresses. */
+size_t regex_next_char(const char* subj, size_t len, size_t pos);
+
+/*
+ * Leftmost-match cursor over a rule set: regex_cursor_next(c, pos, ...) finds the
+ * match with the smallest start >= pos across all rules (ties: rule order), and
+ * sets *rule, *ov (the match's offset pairs, valid until the next call) and
+ * *npairs. Returns 1, 0 for no match, -1 on error. Each rule's last result is
+ * cached, so a left-to-right scan costs O(n · rules), not O(n^2). Used by every
+ * non-overlapping scan (StringCases/Count/Position with Overlaps -> False,
+ * StringReplace, StringSplit).
+ */
+typedef struct {
+    RegexRule*  rules;
+    int         nr;
+    const char* subj;
+    size_t      len;
+    size_t*     from;    /* per rule: search start of the cached result */
+    int*        found;   /* per rule: cached result is a match */
+    size_t*     ov;      /* per rule: REGEX_MAX_PAIRS*2 offsets */
+} RegexCursor;
+int  regex_cursor_init(RegexCursor* c, RegexRule* rules, int nr,
+                       const char* subj, size_t len);
+int  regex_cursor_next(RegexCursor* c, size_t pos, int* rule,
+                       const size_t** ov, size_t* npairs);
+void regex_cursor_free(RegexCursor* c);
 
 /*
  * Translate a Wolfram string pattern into malloc'd PCRE source (caller frees), or
@@ -167,7 +200,8 @@ typedef enum { REGEX_OV_TRUE = 0, REGEX_OV_FALSE = 1, REGEX_OV_ALL = 2 }
         RegexOverlapMode;
 
 /*
- * One recorded match. [ms, me) are half-open BYTE offsets into the subject;
+ * One recorded match. [ms, me) are half-open BYTE offsets into the UTF-8
+ * subject (callers that report positions convert to characters);
  * `rule` is the index of the RegexRule that produced it (so a caller can find
  * the matching rule's rhs). When the scan was asked for captures,
  * caps[caps_off .. caps_off + 2*npairs) holds that match's capture offsets in
@@ -195,6 +229,11 @@ typedef struct { RegexSpan* spans; size_t count; size_t* caps; } RegexScan;
  */
 long regex_scan(const char* subj, size_t len, RegexRule* rules, int nr,
                 RegexOverlapMode mode, int want_captures, RegexScan* out);
+/* As regex_scan, keeping at most `limit` matches (0: all); with Overlaps ->
+ * False the scan stops as soon as it has them. */
+long regex_scan_limit(const char* subj, size_t len, RegexRule* rules, int nr,
+                      RegexOverlapMode mode, int want_captures, size_t limit,
+                      RegexScan* out);
 void regex_scan_free(RegexScan* s);
 
 /*

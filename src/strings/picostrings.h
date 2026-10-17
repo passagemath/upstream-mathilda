@@ -22,6 +22,23 @@ Expr* builtin_stringrepeat(Expr* res);
 Expr* builtin_stringpadleft(Expr* res);
 Expr* builtin_stringpadright(Expr* res);
 Expr* builtin_stringriffle(Expr* res);
+Expr* builtin_stringrotateleft(Expr* res);
+Expr* builtin_stringrotateright(Expr* res);
+Expr* builtin_touppercase(Expr* res);
+Expr* builtin_tolowercase(Expr* res);
+Expr* builtin_capitalize(Expr* res);
+Expr* builtin_decapitalize(Expr* res);
+Expr* builtin_letterq(Expr* res);
+Expr* builtin_digitq(Expr* res);
+Expr* builtin_uppercaseq(Expr* res);
+Expr* builtin_lowercaseq(Expr* res);
+Expr* builtin_tocharactercode(Expr* res);
+Expr* builtin_fromcharactercode(Expr* res);
+Expr* builtin_characterrange(Expr* res);
+Expr* builtin_alphabet(Expr* res);
+Expr* builtin_stringdelete(Expr* res);
+Expr* builtin_stringreplacelist(Expr* res);
+Expr* builtin_stringtakedrop(Expr* res);
 
 /*
  * Regular-expression string builtins (src/strings/regex/, backed by PCRE2).

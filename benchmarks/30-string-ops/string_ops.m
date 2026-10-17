@@ -50,3 +50,49 @@ checkIf["StringReplace regex, 200k chars", "RegularExpression",
 
 bench["Characters of 200k chars", Characters[big], 1];
 check["Characters of 200k chars", Length[Characters[unit]]];
+
+(* ---- String-subsystem review (v0.455+): the cases the review targeted. ----
+   words: the 40000 words of `big`; bigU: 200000 characters of 2-byte UTF-8. *)
+words = StringSplit[big];
+bigU = StringRepeat["h\:00e9llo w\:00f6rld ", 16667];
+
+(* One pattern over many short strings: pays a pattern compile per call unless
+   compiled patterns are cached. *)
+bench["StringMatchQ over 40k words",
+  Map[StringMatchQ[#, __ ~~ "o" ~~ __] &, words];, 1];
+check["StringMatchQ over 40k words",
+  Count[Map[StringMatchQ[#, __ ~~ "o" ~~ __] &, StringSplit[unit]], True]];
+
+(* Several rules, one of which never matches: re-searching every rule at every
+   step made this quadratic. *)
+bench["StringReplace 3 rules, 200k chars",
+  StringReplace[big, {"quick" -> "slow", "fox" -> "cat", "zzz" -> "y"}];, 1];
+check["StringReplace 3 rules, 200k chars",
+  StringLength[StringReplace[unit, {"quick" -> "slow", "fox" -> "cat", "zzz" -> "y"}]]];
+
+(* A named capture bound into an evaluated right-hand side (issue #98). *)
+bench["StringCases x:p :> f[x], 200k chars",
+  StringCases[big, x:LetterCharacter.. ~~ " " :> StringLength[x]];, 1];
+check["StringCases x:p :> f[x], 200k chars",
+  Total[StringCases[unit, x:LetterCharacter.. ~~ " " :> StringLength[x]]]];
+
+bench["StringPosition overlapping, 200k chars", StringPosition[big, "o"];, 1];
+check["StringPosition overlapping, 200k chars", Length[StringPosition[unit, "o"]]];
+
+bench["StringLength UTF-8, 200k chars", StringLength[bigU];];
+check["StringLength UTF-8, 200k chars", StringLength["h\:00e9llo w\:00f6rld "]];
+
+bench["Characters UTF-8, 200k chars", Characters[bigU];, 1];
+check["Characters UTF-8, 200k chars", Length[Characters["h\:00e9llo w\:00f6rld "]]];
+
+bench["StringTake over 40k words", StringTake[words, UpTo[3]];, 1];
+check["StringTake over 40k words", StringLength[StringJoin[StringTake[StringSplit[unit], UpTo[3]]]]];
+
+bench["ToUpperCase 200k chars", ToUpperCase[big];];
+check["ToUpperCase 200k chars", StringLength[ToUpperCase[unit]]];
+
+bench["StringJoin of 40k words", StringJoin[words];];
+check["StringJoin of 40k words", StringLength[StringJoin[StringSplit[unit]]]];
+
+bench["StringRiffle of 40k words", StringRiffle[words, ","];, 1];
+check["StringRiffle of 40k words", StringLength[StringRiffle[StringSplit[unit], ","]]];

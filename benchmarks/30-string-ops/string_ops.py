@@ -52,3 +52,48 @@ check("StringReplace regex, 200k chars", len(VOWEL.sub("*", unit)))
 
 bench("Characters of 200k chars", lambda: list(big), reps=1)
 check("Characters of 200k chars", len(list(unit)))
+
+# ---- String-subsystem review (v0.455+): the cases the review targeted. ----
+words = big.split()
+bigU = "héllo wörld " * 16667
+O_PAT = re.compile(r".+o.+", re.S)
+
+bench("StringMatchQ over 40k words",
+      lambda: [O_PAT.fullmatch(w) is not None for w in words], reps=1)
+check("StringMatchQ over 40k words",
+      sum(O_PAT.fullmatch(w) is not None for w in unit.split()))
+
+THREE = re.compile("quick|fox|zzz")
+REPL = {"quick": "slow", "fox": "cat", "zzz": "y"}
+bench("StringReplace 3 rules, 200k chars",
+      lambda: THREE.sub(lambda m: REPL[m.group(0)], big), reps=1)
+check("StringReplace 3 rules, 200k chars",
+      len(THREE.sub(lambda m: REPL[m.group(0)], unit)))
+
+WORD_SP = re.compile(r"([^\W\d_]+) ")
+bench("StringCases x:p :> f[x], 200k chars",
+      lambda: [len(m.group(1)) for m in WORD_SP.finditer(big)], reps=1)
+check("StringCases x:p :> f[x], 200k chars",
+      sum(len(m.group(1)) for m in WORD_SP.finditer(unit)))
+
+bench("StringPosition overlapping, 200k chars",
+      lambda: [(m.start() + 1, m.end()) for m in re.finditer("o", big)], reps=1)
+check("StringPosition overlapping, 200k chars", unit.count("o"))
+
+bench("StringLength UTF-8, 200k chars", lambda: len(bigU))
+check("StringLength UTF-8, 200k chars", len("héllo wörld "))
+
+bench("Characters UTF-8, 200k chars", lambda: list(bigU), reps=1)
+check("Characters UTF-8, 200k chars", len(list("héllo wörld ")))
+
+bench("StringTake over 40k words", lambda: [w[:3] for w in words], reps=1)
+check("StringTake over 40k words", len("".join(w[:3] for w in unit.split())))
+
+bench("ToUpperCase 200k chars", lambda: big.upper())
+check("ToUpperCase 200k chars", len(unit.upper()))
+
+bench("StringJoin of 40k words", lambda: "".join(words))
+check("StringJoin of 40k words", len("".join(unit.split())))
+
+bench("StringRiffle of 40k words", lambda: ",".join(words), reps=1)
+check("StringRiffle of 40k words", len(",".join(unit.split())))

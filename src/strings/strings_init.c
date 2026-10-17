@@ -107,4 +107,108 @@ void strings_init(void) {
     symtab_add_builtin("StringRiffle", builtin_stringriffle);
     symtab_get_def("StringRiffle")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (info_init). */
+
+    symtab_add_builtin("StringTakeDrop", builtin_stringtakedrop);
+    symtab_get_def("StringTakeDrop")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("StringTakeDrop",
+        "StringTakeDrop[\"string\", spec]\n"
+        "\tGives {StringTake[\"string\", spec], StringDrop[\"string\", spec]}.\n"
+        "StringTakeDrop[{s1, s2, ...}, spec]\n"
+        "\tGives one pair for each of the si.");
+
+    /* Rotation (stringrotate.c). */
+    symtab_add_builtin("StringRotateLeft", builtin_stringrotateleft);
+    symtab_get_def("StringRotateLeft")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("StringRotateLeft",
+        "StringRotateLeft[\"string\", n]\n"
+        "\tCycles the characters of \"string\" n places to the left.\n"
+        "StringRotateLeft[\"string\"]\n"
+        "\tCycles one place to the left.");
+    symtab_add_builtin("StringRotateRight", builtin_stringrotateright);
+    symtab_get_def("StringRotateRight")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("StringRotateRight",
+        "StringRotateRight[\"string\", n]\n"
+        "\tCycles the characters of \"string\" n places to the right.\n"
+        "StringRotateRight[\"string\"]\n"
+        "\tCycles one place to the right.");
+
+    /* Letter case and character-class predicates (stringcase.c). */
+    symtab_add_builtin("ToUpperCase", builtin_touppercase);
+    symtab_get_def("ToUpperCase")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_set_docstring("ToUpperCase",
+        "ToUpperCase[\"string\"]\n"
+        "\tGives \"string\" with every letter converted to uppercase (full\n"
+        "\tUnicode case mapping: ToUpperCase[\"\\[SZ]\"] is \"SS\").");
+    symtab_add_builtin("ToLowerCase", builtin_tolowercase);
+    symtab_get_def("ToLowerCase")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_set_docstring("ToLowerCase",
+        "ToLowerCase[\"string\"]\n"
+        "\tGives \"string\" with every letter converted to lowercase.");
+    symtab_add_builtin("Capitalize", builtin_capitalize);
+    symtab_get_def("Capitalize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Capitalize",
+        "Capitalize[\"string\"]\n"
+        "\tGives \"string\" with its first character in uppercase.\n"
+        "Capitalize[{s1, s2, ...}]\n"
+        "\tCapitalizes each string.");
+    symtab_add_builtin("Decapitalize", builtin_decapitalize);
+    symtab_get_def("Decapitalize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Decapitalize",
+        "Decapitalize[\"string\"]\n"
+        "\tGives \"string\" with its first character in lowercase.\n"
+        "Decapitalize[{s1, s2, ...}]\n"
+        "\tDecapitalizes each string.");
+    symtab_add_builtin("LetterQ", builtin_letterq);
+    symtab_get_def("LetterQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LetterQ",
+        "LetterQ[\"string\"]\n"
+        "\tGives True if every character of \"string\" is a letter (any\n"
+        "\tscript), and False otherwise. LetterQ[\"\"] is True.");
+    symtab_add_builtin("DigitQ", builtin_digitq);
+    symtab_get_def("DigitQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("DigitQ",
+        "DigitQ[\"string\"]\n"
+        "\tGives True if every character of \"string\" is a digit 0-9, and\n"
+        "\tFalse otherwise. DigitQ[\"\"] is True.");
+    symtab_add_builtin("UpperCaseQ", builtin_uppercaseq);
+    symtab_get_def("UpperCaseQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("UpperCaseQ",
+        "UpperCaseQ[\"string\"]\n"
+        "\tGives True if every character of \"string\" is an uppercase letter.");
+    symtab_add_builtin("LowerCaseQ", builtin_lowercaseq);
+    symtab_get_def("LowerCaseQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LowerCaseQ",
+        "LowerCaseQ[\"string\"]\n"
+        "\tGives True if every character of \"string\" is a lowercase letter.");
+
+    /* Character codes and ranges (charcode.c). */
+    symtab_add_builtin("ToCharacterCode", builtin_tocharactercode);
+    symtab_get_def("ToCharacterCode")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ToCharacterCode",
+        "ToCharacterCode[\"string\"]\n"
+        "\tGives the list of the Unicode code points of the characters of\n"
+        "\t\"string\" (a packed integer array).\n"
+        "ToCharacterCode[{s1, s2, ...}]\n"
+        "\tGives one list of codes per string.");
+    symtab_add_builtin("FromCharacterCode", builtin_fromcharactercode);
+    symtab_get_def("FromCharacterCode")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("FromCharacterCode",
+        "FromCharacterCode[n]\n"
+        "\tGives the one-character string with Unicode code point n.\n"
+        "FromCharacterCode[{n1, n2, ...}]\n"
+        "\tGives the string of the characters with those codes.\n"
+        "FromCharacterCode[{{n11, ...}, {n21, ...}, ...}]\n"
+        "\tGives one string per sublist.");
+    symtab_add_builtin("CharacterRange", builtin_characterrange);
+    symtab_get_def("CharacterRange")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("CharacterRange",
+        "CharacterRange[\"c1\", \"c2\"]\n"
+        "\tGives the list of characters with codes from that of c1 to that of c2.\n"
+        "CharacterRange[n1, n2]\n"
+        "\tGives the characters with codes n1 through n2.");
+    symtab_add_builtin("Alphabet", builtin_alphabet);
+    symtab_get_def("Alphabet")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Alphabet",
+        "Alphabet[]\n"
+        "\tGives the list of the lowercase letters a through z.");
 }

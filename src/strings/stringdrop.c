@@ -1,7 +1,8 @@
 /*
  * stringdrop.c - StringDrop builtin for Mathilda
  *
- * StringDrop["string", spec] - removes characters by count, range, or step
+ * StringDrop["string", spec] - removes characters by count, range, or step.
+ * Positions count characters (code points), not UTF-8 bytes.
  */
 
 #include "picostrings.h"
@@ -9,198 +10,131 @@
 #include "eval.h"
 #include "sym_names.h"
 #include <string.h>
-#include <stdio.h>
-#include "message.h"   /* mth_message: Quiet/Check funnel */
+#include <inttypes.h>
 
 /*
- * sd_emit_argrx:
- * Emit `StringDrop::argrx: StringDrop called with N arguments; 2 arguments
- * are expected.` to stderr and return NULL so the call is left unevaluated.
- * Matches Mathematica's diagnostic for a wrong argument count.
+ * sd_emit_drop:
+ * StringDrop::drop: Cannot drop positions m through n in "string".
  */
-static Expr* sd_emit_argrx(size_t argc) {
-    mth_message("StringDrop", "argrx", "StringDrop called with %zu argument%s; 2 arguments are expected.", argc, argc == 1 ? "" : "s");
+static void sd_emit_drop(const StrSeq* q, Expr* str) {
+    char* s = expr_to_string(str);
+    mth_message("StringDrop", "drop",
+                "Cannot drop positions %" PRId64 " through %" PRId64 " in %s.",
+                q->m, q->n, s ? s : "");
+    free(s);
+}
+
+/* StringDrop::seqs - the spec is not a sequence specification. Unlike
+ * StringTake, StringDrop takes no list of specifications. */
+static Expr* sd_emit_seqs(Expr* call) {
+    char* c = expr_to_string_outputform(call);
+    mth_message("StringDrop", "seqs",
+                "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) "
+                "expected at position 2 in %s.", c ? c : "");
+    free(c);
     return NULL;
 }
 
 /*
- * stringdrop_build_kept:
- * Rebuild a string from str keeping only the positions i (0-based) for which
- * keep[i] is true, in order. Returns a new EXPR_STRING (possibly ""). The
- * complementary "keep" mask is how StringDrop is expressed: the sequence spec
- * marks characters to drop, and everything else survives.
+ * drop_scalar:
+ * StringDrop[str, q]. The dropped positions are first, first+step, ...
+ * (count of them), spanning characters lo..hi; everything else is kept in
+ * order. The prefix before lo and the suffix after hi are copied whole; a
+ * contiguous run (|step| == 1, or one position) drops the span outright, a
+ * strided one walks a U8View of just the span, testing membership
+ * arithmetically (no per-character mask). Returns NULL after StringDrop::drop
+ * when the positions are out of range.
  */
-static Expr* stringdrop_build_kept(const char* str, int64_t len, const bool* keep) {
-    char* buf = malloc((size_t)len + 1);
-    if (!buf) return NULL;
-    int64_t j = 0;
-    for (int64_t i = 0; i < len; i++) {
-        if (keep[i]) buf[j++] = str[i];
+Expr* strings_drop_seq(Expr* str, const StrSeq* q) {
+    if (q->kind == SSEQ_ALL) return expr_new_string_n("", 0); /* no scan needed */
+    if (q->kind == SSEQ_NONE) return expr_copy(str);
+    StrChars c;
+    strings_chars_init(&c, str->data.string, strings_seq_prefix(q));
+
+    int64_t first, step, count;
+    if (!strings_seq_resolve(q, c.len, &first, &step, &count)) {
+        sd_emit_drop(q, str);
+        return NULL;
     }
-    buf[j] = '\0';
-    Expr* result = expr_new_string(buf);
-    free(buf);
-    return result;
+    if (count == 0) return expr_copy(str);
+
+    int64_t last = first + (count - 1) * step;
+    int64_t lo = first < last ? first : last;
+    int64_t hi = first < last ? last : first;
+    size_t b_lo, b_hi;
+    strings_chars_span(&c, lo, hi, &b_lo, &b_hi);
+
+    char* buf = malloc(c.nbytes + 1);
+    if (!buf) return NULL;
+    memcpy(buf, c.s, b_lo);
+    size_t o = b_lo;
+    if (count >= 2 && step != 1 && step != -1) {
+        U8View v;                                /* characters lo..hi only */
+        if (u8_view_init(&v, c.s + b_lo, b_hi - b_lo) != 0) { free(buf); return NULL; }
+        /* count >= 2 bounds |step| by len, so negating it is safe. */
+        int64_t a = step > 0 ? step : -step;
+        for (int64_t k = 0; k < (int64_t)v.nchars; k++) {
+            if (k % a == 0) continue;            /* lo, lo+a, ..., hi dropped */
+            size_t b0 = STR_OFF(&v, k), b1 = STR_OFF(&v, k + 1);
+            memcpy(buf + o, v.s + b0, b1 - b0);
+            o += b1 - b0;
+        }
+        u8_view_free(&v);
+    }
+    memcpy(buf + o, c.s + b_hi, c.nbytes - b_hi);
+    o += c.nbytes - b_hi;
+    buf[o] = '\0';
+    return expr_new_string_adopt(buf);
 }
 
 /*
  * builtin_stringdrop:
  * StringDrop["string", n]       - drop the first n characters
  * StringDrop["string", -n]      - drop the last n characters
- * StringDrop["string", UpTo[n]] - drop n characters, or as many as available
  * StringDrop["string", {n}]     - drop the nth character
  * StringDrop["string", {m, n}]  - drop characters m through n
  * StringDrop["string", {m, n, s}] - drop characters m through n in steps of s
+ * StringDrop["string", UpTo[n]] - drop n characters, or as many as available
+ * StringDrop["string", All]     - drop everything; None drops nothing
  * StringDrop[{s1, s2, ...}, spec] - maps over the list of strings
  *
- * StringDrop is the complement of StringTake: the same standard Wolfram
- * Language sequence specification selects the characters to remove, and the
- * remaining characters are concatenated in order. Negative indices count from
- * the end. A call whose argument count is not two emits StringDrop::argrx and
- * is left unevaluated; an out-of-range position or a symbolic argument leaves
- * the call unevaluated (NULL) so it flows through the evaluator unchanged.
+ * StringDrop is the complement of StringTake: the same standard sequence
+ * specification selects the characters to remove, with the same range rules
+ * (strings_seq_range). Messages (call left unevaluated): argr/argrx, strse for
+ * a first argument that is not a string or list of strings, seqs for an
+ * invalid spec, drop for out-of-range positions. Over a list of strings, an
+ * element whose positions are out of range stays as the unevaluated
+ * StringDrop[si, spec] inside the result.
  */
 Expr* builtin_stringdrop(Expr* res) {
-    if (res->type != EXPR_FUNCTION)
-        return NULL;
-
+    if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc != 2)
-        return sd_emit_argrx(argc);
+    if (argc != 2) return strings_argr_error("StringDrop", argc, 2);
 
     Expr* arg0 = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
 
-    /* StringDrop[{s1, s2, ...}, spec] - map over list of strings */
-    if (arg0->type == EXPR_FUNCTION &&
-        arg0->data.function.head->type == EXPR_SYMBOL &&
-        arg0->data.function.head->data.symbol.name == SYM_List) {
-        size_t n = arg0->data.function.arg_count;
-        Expr** results = malloc(sizeof(Expr*) * n);
-        if (!results) return NULL;
-        for (size_t i = 0; i < n; i++) {
-            Expr** inner_args = malloc(sizeof(Expr*) * 2);
-            inner_args[0] = expr_copy(arg0->data.function.args[i]);
-            inner_args[1] = expr_copy(spec);
-            Expr* call = expr_new_function(expr_new_symbol(SYM_StringDrop),
-                                           inner_args, 2);
-            free(inner_args);
-            Expr* r = evaluate(call);
-            expr_free(call);
-            results[i] = r;
-        }
-        Expr* result = expr_new_function(expr_new_symbol(SYM_List), results, n);
-        free(results);
-        return result;
+    bool threaded = strings_is_list(arg0);
+    if (!(arg0->type == EXPR_STRING || (threaded && strings_all_strings(arg0))))
+        return strings_msg_strse("StringDrop", res, 1);
+
+    StrSeq q;
+    if (strings_is_list(spec) && spec->data.function.arg_count == 0)
+        q.kind = SSEQ_NONE;                       /* {} drops nothing */
+    else if (!strings_seq_parse(spec, &q))
+        return sd_emit_seqs(res);
+
+    if (!threaded) return strings_drop_seq(arg0, &q);
+
+    size_t n = arg0->data.function.arg_count;
+    Expr** results = malloc(sizeof(Expr*) * (n ? n : 1));
+    if (!results) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* si = arg0->data.function.args[i];
+        results[i] = strings_drop_seq(si, &q);
+        if (!results[i]) results[i] = strings_uneval(SYM_StringDrop, si, spec, NULL);
     }
-
-    if (arg0->type != EXPR_STRING) return NULL;
-
-    const char* str = arg0->data.string;
-    int64_t len = (int64_t)strlen(str);
-
-    /* keep[i] tracks whether position i (0-based) survives the drop. */
-    bool* keep = malloc(sizeof(bool) * (len > 0 ? (size_t)len : 1));
-    if (!keep) return NULL;
-    for (int64_t i = 0; i < len; i++) keep[i] = true;
-
-    /* StringDrop["string", n] - drop first n (n>0) or last |n| (n<0) chars */
-    if (spec->type == EXPR_INTEGER) {
-        int64_t n = spec->data.integer;
-        if (n == 0) {
-            /* drop nothing */
-        } else if (n > 0) {
-            if (n > len) { free(keep); return NULL; }
-            for (int64_t i = 0; i < n; i++) keep[i] = false;
-        } else {
-            int64_t take = -n;
-            if (take > len) { free(keep); return NULL; }
-            for (int64_t i = len - take; i < len; i++) keep[i] = false;
-        }
-        Expr* result = stringdrop_build_kept(str, len, keep);
-        free(keep);
-        return result;
-    }
-
-    /* StringDrop["string", UpTo[n]] - drop n, or as many as are available */
-    int64_t upto_n;
-    if (strings_is_upto(spec, &upto_n)) {
-        if (upto_n <= 0) { free(keep); return NULL; }
-        int64_t take = upto_n < len ? upto_n : len;
-        for (int64_t i = 0; i < take; i++) keep[i] = false;
-        Expr* result = stringdrop_build_kept(str, len, keep);
-        free(keep);
-        return result;
-    }
-
-    /* StringDrop["string", {spec}] - list spec */
-    if (spec->type == EXPR_FUNCTION &&
-        spec->data.function.head->type == EXPR_SYMBOL &&
-        spec->data.function.head->data.symbol.name == SYM_List) {
-        size_t spec_argc = spec->data.function.arg_count;
-
-        /* StringDrop["string", {n}] - drop the single character n */
-        if (spec_argc == 1) {
-            Expr* a1 = spec->data.function.args[0];
-            if (a1->type != EXPR_INTEGER) { free(keep); return NULL; }
-            int64_t k = a1->data.integer;
-            if (k < 0) k = len + k + 1;
-            if (k < 1 || k > len) { free(keep); return NULL; }
-            keep[k - 1] = false;
-            Expr* result = stringdrop_build_kept(str, len, keep);
-            free(keep);
-            return result;
-        }
-
-        /* StringDrop["string", {m, n}] - drop the range m through n */
-        if (spec_argc == 2) {
-            Expr* a1 = spec->data.function.args[0];
-            Expr* a2 = spec->data.function.args[1];
-            if (a1->type != EXPR_INTEGER || a2->type != EXPR_INTEGER) {
-                free(keep); return NULL;
-            }
-            int64_t m = a1->data.integer;
-            int64_t n = a2->data.integer;
-            if (m < 0) m = len + m + 1;
-            if (n < 0) n = len + n + 1;
-            /* A decreasing range (m > n) is empty and drops nothing. */
-            if (m <= n) {
-                if (m < 1 || m > len || n < 1 || n > len) {
-                    free(keep); return NULL;
-                }
-                for (int64_t i = m; i <= n; i++) keep[i - 1] = false;
-            }
-            Expr* result = stringdrop_build_kept(str, len, keep);
-            free(keep);
-            return result;
-        }
-
-        /* StringDrop["string", {m, n, s}] - drop the range m..n in steps of s */
-        if (spec_argc == 3) {
-            Expr* a1 = spec->data.function.args[0];
-            Expr* a2 = spec->data.function.args[1];
-            Expr* a3 = spec->data.function.args[2];
-            if (a1->type != EXPR_INTEGER || a2->type != EXPR_INTEGER ||
-                a3->type != EXPR_INTEGER) {
-                free(keep); return NULL;
-            }
-            int64_t m = a1->data.integer;
-            int64_t n = a2->data.integer;
-            int64_t s = a3->data.integer;
-            if (s == 0) { free(keep); return NULL; }
-            if (m < 0) m = len + m + 1;
-            if (n < 0) n = len + n + 1;
-
-            for (int64_t p = m; s > 0 ? p <= n : p >= n; p += s) {
-                if (p < 1 || p > len) { free(keep); return NULL; }
-                keep[p - 1] = false;
-            }
-            Expr* result = stringdrop_build_kept(str, len, keep);
-            free(keep);
-            return result;
-        }
-    }
-
-    free(keep);
-    return NULL;
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), results, n);
+    free(results);
+    return out;
 }

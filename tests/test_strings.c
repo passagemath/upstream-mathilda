@@ -711,12 +711,16 @@ void test_stringdrop_range_all() {
 }
 
 void test_stringdrop_range_empty() {
-    /* A decreasing range is empty and drops nothing. */
-    assert_eval_eq("StringDrop[\"abc\", {5, 4}]", "\"abc\"", 0);
+    /* {5, 4} on a 3-character string is out of range (Mathematica emits
+     * StringDrop::drop and leaves the call unevaluated); an empty range is
+     * only allowed between adjacent in-range bounds. */
+    assert_eval_eq("StringDrop[\"abc\", {5, 4}]", "StringDrop[\"abc\", {5, 4}]", 0);
 }
 
 void test_stringdrop_range_empty_in_bounds() {
-    assert_eval_eq("StringDrop[\"abcdef\", {4, 2}]", "\"abcdef\"", 0);
+    /* Not adjacent: StringDrop::drop, unevaluated (Mathematica). */
+    assert_eval_eq("StringDrop[\"abcdef\", {4, 2}]", "StringDrop[\"abcdef\", {4, 2}]", 0);
+    assert_eval_eq("StringDrop[\"abcdef\", {4, 3}]", "\"abcdef\"", 0);
 }
 
 /* StringDrop["string", {m, n, s}] - drop range with step */
@@ -1099,10 +1103,11 @@ void test_stringreplacepart_empty_positions() {
     assert_eval_eq("StringReplacePart[\"abc\", \"X\", {}]", "\"abc\"", 0);
 }
 
-/* Maps over a list of strings in the first argument. */
+/* Does NOT thread over a list of strings: Mathematica emits
+ * StringReplacePart::string and leaves the call unevaluated. */
 void test_stringreplacepart_list_strings_map() {
     assert_eval_eq("StringReplacePart[{\"abc\", \"xyz\"}, \"Q\", {2, 2}]",
-                   "{\"aQc\", \"xQz\"}", 0);
+                   "StringReplacePart[{\"abc\", \"xyz\"}, \"Q\", {2, 2}]", 0);
 }
 
 /* Operator form used to delete a substring. */

@@ -6,12 +6,14 @@
  *                                 total length is at most max (a partial final
  *                                 copy is allowed).
  *
- * Strings are treated as raw byte arrays (consistent with StringTake/StringDrop
- * and StringPartition across this subsystem); no UTF-8 codepoint decoding is
- * performed, so lengths count bytes.
+ * Lengths count characters (Unicode code points): StringRepeat["a\:00e9", 2, 3]
+ * is "a\:00e9a". Invalid arguments emit Mathematica's StringRepeat::string /
+ * StringRepeat::intp and leave the call unevaluated.
  */
 
 #include "picostrings.h"
+#include "strings_internal.h"
+#include "utf8.h"
 #include "common.h"
 #include <stdlib.h>
 #include <string.h>
@@ -34,53 +36,45 @@ Expr* builtin_stringrepeat(Expr* res) {
         return builtin_arg_error("StringRepeat", argc, 2, 3);
 
     Expr* arg0 = args[0];
-    if (arg0->type != EXPR_STRING) return NULL;
+    if (arg0->type != EXPR_STRING)
+        return strings_arg_message("StringRepeat", "string", "String", 1, res);
 
     /* Count n: non-negative integer. */
-    if (args[1]->type != EXPR_INTEGER) return NULL;
+    if (args[1]->type != EXPR_INTEGER || args[1]->data.integer < 0)
+        return strings_arg_message("StringRepeat", "intp", "Positive integer", 2, res);
     int64_t n = args[1]->data.integer;
-    if (n < 0) return NULL;
 
-    /* Optional maximum total length: non-negative integer. */
+    /* Optional maximum total length (characters): non-negative integer. */
     bool have_max = false;
     int64_t max = 0;
     if (argc == 3) {
-        if (args[2]->type != EXPR_INTEGER) return NULL;
+        if (args[2]->type != EXPR_INTEGER || args[2]->data.integer < 0)
+            return strings_arg_message("StringRepeat", "intp", "Positive integer", 3, res);
         max = args[2]->data.integer;
-        if (max < 0) return NULL;
         have_max = true;
     }
 
     const char* str = arg0->data.string;
     size_t len = strlen(str);
+    if (n == 0 || len == 0 || (have_max && max == 0)) return expr_new_string("");
 
-    /* Determine the output length. An empty base string or zero copies yields
-     * the empty string; guarding len == 0 also avoids the i % len below. */
-    size_t out_len;
-    if (n == 0 || len == 0) {
-        out_len = 0;
-    } else {
-        /* full = n * len, guarded against size_t overflow. */
-        size_t un = (size_t)n;
-        if (un > SIZE_MAX / len) {
-            /* Overflow: only tolerable if a max cap keeps the result finite. */
-            if (!have_max) return NULL;
-            out_len = (size_t)max;  /* n*len exceeds SIZE_MAX, so cap wins. */
-        } else {
-            size_t full = un * len;
-            out_len = (have_max && (size_t)max < full) ? (size_t)max : full;
-        }
+    /* Whole copies that fit, then (when capped by max) a partial copy of the
+     * first `rem` characters. Lengths count characters; copies are memcpy'd
+     * whole, so only the cut needs a character offset. */
+    size_t clen = u8_length(str, len);
+    size_t copies = (size_t)n, rem_bytes = 0;
+    if (have_max && (uint64_t)max / clen < (uint64_t)n) {
+        copies = (size_t)((uint64_t)max / clen);
+        rem_bytes = u8_offset(str, len, (size_t)((uint64_t)max % clen));
     }
+    if (copies > (SIZE_MAX - rem_bytes - 1) / len) return NULL;   /* overflow */
+    size_t out_len = copies * len + rem_bytes;
 
     char* buf = malloc(out_len + 1);
     if (!buf) return NULL;
-
-    /* Fill cyclically so a truncated final copy is handled naturally. */
-    for (size_t i = 0; i < out_len; i++)
-        buf[i] = str[i % len];
+    for (size_t i = 0; i < copies; i++)
+        memcpy(buf + i * len, str, len);
+    memcpy(buf + copies * len, str, rem_bytes);
     buf[out_len] = '\0';
-
-    Expr* result = expr_new_string(buf);
-    free(buf);
-    return result;
+    return expr_new_string_adopt(buf);
 }

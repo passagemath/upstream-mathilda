@@ -218,6 +218,8 @@ EXEMPT = {
     "Block": "scoping",
     "With": "scoping; lowered by substitution",
     "N": "numericalisation is a no-op on a machine value",
+    "FromCharacterCode": "reads an int64 code buffer but returns a String, "
+                         "which no compiled register holds",
     "TeXForm": "formatting",
     "Normal": "representation conversion",
     "ToNDArray": "representation conversion",

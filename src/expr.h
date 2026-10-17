@@ -244,6 +244,8 @@ Expr* expr_new_integer(int64_t value);
 Expr* expr_new_real(double value);
 Expr* expr_new_symbol(const char* name);
 Expr* expr_new_string(const char* str);
+Expr* expr_new_string_adopt(char* buf);              /* takes ownership of buf */
+Expr* expr_new_string_n(const char* s, size_t n);    /* copy of s[0, n) */
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count);
 void expr_free(Expr* e);
 Expr* expr_copy(Expr* e);

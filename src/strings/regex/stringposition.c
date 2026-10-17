@@ -21,8 +21,9 @@
  * The match enumeration itself is regex_scan() in regex_common.c, shared with
  * StringCases and StringCount; this file only turns spans into position pairs.
  *
- * Byte semantics: like the rest of src/strings, positions are byte offsets (no
- * UTF-8 codepoint decoding), consistent with StringLength / StringPart.
+ * Positions are CHARACTER positions (UTF-8 code points), consistent with
+ * StringLength / StringTake: the scan's byte offsets are mapped through the
+ * subject's character-offset table (a binary search; identity for ASCII).
  */
 
 #include "picostrings.h"
@@ -30,18 +31,27 @@
 #include "sym_names.h"
 #include "symtab.h"
 #include "common.h"
+#include "utf8.h"
 
 #include <string.h>
 #include <stdlib.h>
 
-/* Build the 1-based inclusive position pair List[ms+1, me] for match [ms, me). */
+/* Character index of byte offset `b` (a character boundary) in view `v`. */
+static size_t sp_char_index(const U8View* v, size_t b) {
+    if (!v->off) return b;                         /* ASCII: identity */
+    size_t lo = 0, hi = v->nchars;                 /* off[0..nchars] ascending */
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (v->off[mid] < b) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+}
+
+/* Build the 1-based inclusive position pair List[ms+1, me] for the match
+ * covering characters [ms, me). */
 static Expr* sp_pair(size_t ms, size_t me) {
-    Expr** p = malloc(sizeof(Expr*) * 2);
-    p[0] = expr_new_integer((int64_t)(ms + 1));
-    p[1] = expr_new_integer((int64_t)me);
-    Expr* r = expr_new_function(expr_new_symbol(SYM_List), p, 2);
-    free(p);   /* expr_new_function copies the args array; free our copy */
-    return r;
+    Expr* p[2] = { expr_new_integer((int64_t)(ms + 1)), expr_new_integer((int64_t)me) };
+    return expr_new_function(expr_new_symbol(SYM_List), p, 2);
 }
 
 /*
@@ -52,19 +62,24 @@ static Expr* sp_pair(size_t ms, size_t me) {
  */
 static Expr* sp_scalar(const char* subj, RegexRule* rules, int nr,
                        RegexOverlapMode mode, long n_limit) {
+    size_t len = strlen(subj);
     RegexScan scan;
-    if (regex_scan(subj, strlen(subj), rules, nr, mode, /*want_captures=*/0,
-                   &scan) < 0)
+    if (regex_scan_limit(subj, len, rules, nr, mode, /*want_captures=*/0,
+                         n_limit > 0 ? (size_t)n_limit : 0, &scan) < 0)
         return NULL;
 
-    size_t out_n = scan.count;
-    if (n_limit > 0 && (size_t)n_limit < out_n) out_n = (size_t)n_limit;
+    U8View v;
+    if (u8_view_init(&v, subj, len) != 0) { regex_scan_free(&scan); return NULL; }
 
+    size_t out_n = scan.count;
     Expr** items = malloc(sizeof(Expr*) * (out_n ? out_n : 1));
+    if (!items) { u8_view_free(&v); regex_scan_free(&scan); return NULL; }
     for (size_t k = 0; k < out_n; k++)
-        items[k] = sp_pair(scan.spans[k].ms, scan.spans[k].me);
+        items[k] = sp_pair(sp_char_index(&v, scan.spans[k].ms),
+                           sp_char_index(&v, scan.spans[k].me));
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, out_n);
     free(items);
+    u8_view_free(&v);
     regex_scan_free(&scan);
     return result;
 }
@@ -104,7 +119,9 @@ Expr* builtin_stringposition(Expr* res) {
             break;
         }
     }
-    if (pargc < 2 || pargc > 3)
+    /* StringPosition[patt] is the operator form (src/opform.c). */
+    if (pargc == 1) return NULL;
+    if (pargc > 3)
         return builtin_arg_error("StringPosition", argc, 1, 3);
 
     Expr* subject = a[0];

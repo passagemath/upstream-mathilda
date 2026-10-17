@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "regex_common.h"
 #include "expr.h"
 #include "parse.h"
 #include "print.h"
@@ -1561,6 +1562,7 @@ int main(int argc, char** argv) {
      * any open package frames are freed rather than lingering as leaks at exit.
      * context_init() is called from core_init(); this is its symmetric partner,
      * which was previously never invoked (dead code). Nothing runs after this. */
+    regex_cache_clear();     /* compiled string-pattern cache (leak hygiene) */
     context_shutdown();
     return rc;
 }

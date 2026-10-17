@@ -12,6 +12,10 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "match.h"     /* MatchEnv / replace_bindings: RHS instantiation */
 #include "eval.h"
+#include "utf8.h"
+
+#include <stdint.h>
+#include <stddef.h>
 
 /* ------------------------------------------------------------------ */
 /* Growable byte buffer                                               */
@@ -197,8 +201,87 @@ static int build_one(Expr* e, unsigned anchored, unsigned regex_flags,
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: build / free a rule set                                    */
+/* Public: build / free a rule set, with a compiled-pattern cache      */
 /* ------------------------------------------------------------------ */
+
+/*
+ * A rule set lives in a refcounted block. Building is expensive -- pattern
+ * translation, pcre2_compile and a JIT compile per rule -- and string code
+ * routinely applies ONE pattern to many strings (Map[StringMatchQ[#, p] &, list],
+ * Select[..., StringContainsQ[p]]), so built sets are kept in a small LRU cache
+ * keyed by the pattern expression (structural hash + equality) and the build
+ * flags. A hit costs a hash lookup instead of a compile.
+ *
+ * The cache holds a reference to the pattern (expr_copy is a refcount bump), so
+ * the rules' borrowed lhs/rhs/callout pointers stay valid while it is cached.
+ * Each regex_rules_build* result holds one more reference, released by
+ * regex_rules_free; a block is destroyed when both are gone. The evaluator is
+ * single-threaded, so the cache needs no lock; nested use of one cached set
+ * (a callout evaluating the same pattern) is safe because regex_match gives a
+ * nested match private match data.
+ */
+typedef struct RulesBlock {
+    int        refs;
+    int        nr;
+    Expr*      key;            /* owned pattern reference; NULL if uncached */
+    uint64_t   hash;
+    unsigned   rule_flags, regex_flags;
+    RegexRule  rules[];        /* C99 flexible array member */
+} RulesBlock;
+
+#define RULES_CACHE_SIZE 64
+static RulesBlock* g_rules_cache[RULES_CACHE_SIZE];   /* [0] most recent */
+static int         g_rules_cache_n = 0;
+
+static RulesBlock* block_of(RegexRule* rules) {
+    return (RulesBlock*)((char*)rules - offsetof(RulesBlock, rules));
+}
+
+static void block_destroy(RulesBlock* b) {
+    for (int i = 0; i < b->nr; i++) {
+        regex_free(b->rules[i].prog);
+        sp_info_free(&b->rules[i].info);
+    }
+    if (b->key) expr_free(b->key);
+    free(b);
+}
+
+static void block_release(RulesBlock* b) {
+    if (--b->refs == 0) block_destroy(b);
+}
+
+/* Insert at the front, evicting the least recently used entry if full. */
+static void cache_insert(RulesBlock* b) {
+    if (g_rules_cache_n == RULES_CACHE_SIZE) {
+        block_release(g_rules_cache[RULES_CACHE_SIZE - 1]);
+        g_rules_cache_n--;
+    }
+    memmove(g_rules_cache + 1, g_rules_cache,
+            (size_t)g_rules_cache_n * sizeof(RulesBlock*));
+    g_rules_cache[0] = b;
+    g_rules_cache_n++;
+    b->refs++;
+}
+
+static RulesBlock* cache_lookup(Expr* patt, uint64_t h, unsigned rf, unsigned xf) {
+    for (int i = 0; i < g_rules_cache_n; i++) {
+        RulesBlock* b = g_rules_cache[i];
+        if (b->hash != h || b->rule_flags != rf || b->regex_flags != xf ||
+            !expr_eq(b->key, patt))
+            continue;
+        if (i > 0) {                                   /* move to front */
+            memmove(g_rules_cache + 1, g_rules_cache, (size_t)i * sizeof(RulesBlock*));
+            g_rules_cache[0] = b;
+        }
+        return b;
+    }
+    return NULL;
+}
+
+void regex_cache_clear(void) {
+    for (int i = 0; i < g_rules_cache_n; i++) block_release(g_rules_cache[i]);
+    g_rules_cache_n = 0;
+}
 
 int regex_rules_build(Expr* patt, int anchored, RegexRule** out, const char* head) {
     return regex_rules_build_ex(patt, anchored, /*caseless=*/0, out, head);
@@ -218,6 +301,15 @@ int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags
                 "rebuild Mathilda with PCRE2 (USE_REGEX=1).");
         return -1;
     }
+    regex_flags |= REGEX_UTF;              /* strings are UTF-8, classes Unicode */
+
+    uint64_t h = expr_hash(patt);
+    RulesBlock* hit = cache_lookup(patt, h, rule_flags, regex_flags);
+    if (hit) {
+        hit->refs++;
+        *out = hit->rules;
+        return hit->nr;
+    }
 
     Expr** elems;
     int n;
@@ -232,26 +324,99 @@ int regex_rules_build_opts(Expr* patt, unsigned rule_flags, unsigned regex_flags
         elems = &patt;
     }
 
-    RegexRule* rules = calloc((size_t)n, sizeof(RegexRule));
-    if (!rules) return -1;
-
+    RulesBlock* b = calloc(1, sizeof(RulesBlock) + (size_t)n * sizeof(RegexRule));
+    if (!b) return -1;
+    b->refs = 1;
     for (int i = 0; i < n; i++) {
-        if (build_one(elems[i], rule_flags, regex_flags, &rules[i], head) != 0) {
-            regex_rules_free(rules, i);     /* free the i already built */
+        if (build_one(elems[i], rule_flags, regex_flags, &b->rules[i], head) != 0) {
+            b->nr = i;                      /* free the i already built */
+            block_destroy(b);
             return -1;
         }
+        int gc = regex_group_count(b->rules[i].prog) + 1;
+        b->rules[i].npairs = (gc > REGEX_MAX_PAIRS) ? (size_t)REGEX_MAX_PAIRS : (size_t)gc;
     }
-    *out = rules;
+    b->nr = n;
+    b->key = expr_copy(patt);
+    b->hash = h;
+    b->rule_flags = rule_flags;
+    b->regex_flags = regex_flags;
+    cache_insert(b);
+    *out = b->rules;
     return n;
 }
 
 void regex_rules_free(RegexRule* rules, int n) {
-    if (!rules) return;
-    for (int i = 0; i < n; i++) {
-        regex_free(rules[i].prog);
-        sp_info_free(&rules[i].info);
+    (void)n;
+    if (rules) block_release(block_of(rules));
+}
+
+/* ------------------------------------------------------------------ */
+/* Character stepping                                                 */
+/* ------------------------------------------------------------------ */
+
+size_t regex_next_char(const char* subj, size_t len, size_t pos) {
+    if (pos >= len) return pos + 1;
+    return pos + u8_char_len(subj, len, pos);
+}
+
+/* ------------------------------------------------------------------ */
+/* Multi-rule cursor: leftmost match across a rule set                 */
+/* ------------------------------------------------------------------ */
+
+int regex_cursor_init(RegexCursor* c, RegexRule* rules, int nr,
+                      const char* subj, size_t len) {
+    c->rules = rules;
+    c->nr = nr;
+    c->subj = subj;
+    c->len = len;
+    c->from = malloc((size_t)nr * sizeof(size_t));
+    c->found = malloc((size_t)nr * sizeof(int));
+    c->ov = malloc((size_t)nr * REGEX_MAX_PAIRS * 2 * sizeof(size_t));
+    if (!c->from || !c->found || !c->ov) { regex_cursor_free(c); return -1; }
+    for (int i = 0; i < nr; i++) c->from[i] = REGEX_UNSET;   /* nothing cached */
+    return 0;
+}
+
+void regex_cursor_free(RegexCursor* c) {
+    free(c->from);
+    free(c->found);
+    free(c->ov);
+    c->from = NULL;
+    c->found = NULL;
+    c->ov = NULL;
+}
+
+/*
+ * The match a regex finds at a given START is independent of where the search
+ * began, so rule i's leftmost match from position p is still its leftmost match
+ * from any later q <= that match's start. Each rule therefore keeps its last
+ * result and is re-searched only when the cursor has moved past it -- a scan is
+ * O(n · rules) instead of re-running every rule at every step.
+ */
+int regex_cursor_next(RegexCursor* c, size_t pos, int* rule,
+                      const size_t** ov, size_t* npairs) {
+    int best = -1;
+    for (int i = 0; i < c->nr; i++) {
+        size_t* rov = c->ov + (size_t)i * REGEX_MAX_PAIRS * 2;
+        int valid = c->from[i] != REGEX_UNSET && c->from[i] <= pos &&
+                    (!c->found[i] || rov[0] >= pos);
+        if (!valid) {
+            int rc = regex_match(c->rules[i].prog, c->subj, c->len, pos,
+                                 rov, c->rules[i].npairs);
+            if (rc < 0) return -1;
+            c->from[i] = pos;
+            c->found[i] = rc;
+        }
+        if (c->found[i] &&
+            (best < 0 || rov[0] < c->ov[(size_t)best * REGEX_MAX_PAIRS * 2]))
+            best = i;
     }
-    free(rules);
+    if (best < 0) return 0;
+    *rule = best;
+    *ov = c->ov + (size_t)best * REGEX_MAX_PAIRS * 2;
+    *npairs = c->rules[best].npairs;
+    return 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -269,6 +434,7 @@ typedef struct {
     size_t*    caps;
     size_t     caps_len, caps_cap;
     int        want_captures;
+    size_t     limit;                  /* stop after this many spans (0: all) */
 } ScanState;
 
 /*
@@ -314,138 +480,143 @@ static int scan_push(ScanState* st, size_t ms, size_t me, int rule,
     return 0;
 }
 
-/*
- * Offset pairs to request per rule: the whole match plus every capture group,
- * clamped to the range we expose ($0..$63).  Computed once per scan -- All-mode
- * probes O(len^2 * nr) substrings, so querying the group count inside that loop
- * would be pure overhead.  Returns a malloc'd array, or NULL on failure.
- */
-static size_t* scan_pairs_table(RegexRule* rules, int nr) {
-    size_t* pairs = malloc((size_t)nr * sizeof(size_t));
-    if (!pairs) return NULL;
-    for (int i = 0; i < nr; i++) {
-        int gc = regex_group_count(rules[i].prog) + 1;
-        pairs[i] = (gc > REGEX_MAX_PAIRS) ? (size_t)REGEX_MAX_PAIRS : (size_t)gc;
-    }
-    return pairs;
+static int scan_full(const ScanState* st) {
+    return st->limit && st->count >= st->limit;
 }
 
 /*
  * Overlaps -> False.  Streaming left-to-right: at each position take the match
  * with the smallest start across all rules (ties broken by rule order), then
- * resume at its end.  Zero-width matches advance by one so the loop always
- * makes progress.
+ * resume at its end.  A zero-width match advances by one character so the loop
+ * always makes progress.
  */
 static int scan_false(const char* subj, size_t len, RegexRule* rules, int nr,
-                      const size_t* pairs, ScanState* st) {
+                      ScanState* st) {
+    RegexCursor cur;
+    if (regex_cursor_init(&cur, rules, nr, subj, len) != 0) return -1;
     size_t pos = 0;
-    while (pos <= len) {
-        int found = 0, best_rule = 0;
-        size_t best_ms = 0, best_me = 0, best_pairs = 0;
-        size_t best_ov[REGEX_MAX_PAIRS * 2];
-
-        for (int i = 0; i < nr; i++) {
-            size_t ov[REGEX_MAX_PAIRS * 2];
-            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs[i]) != 1)
-                continue;
-            if (!found || ov[0] < best_ms) {
-                found = 1;
-                best_rule = i;
-                best_ms = ov[0];
-                best_me = ov[1];
-                best_pairs = pairs[i];
-                memcpy(best_ov, ov, sizeof(size_t) * 2 * pairs[i]);
-            }
-        }
-        if (!found) break;
-
-        if (scan_push(st, best_ms, best_me, best_rule, best_ov, best_pairs, 0) != 0)
-            return -1;
-        pos = (best_me > best_ms) ? best_me : best_ms + 1;   /* progress */
+    int rc = 0;
+    while (pos <= len && !scan_full(st)) {
+        int rule;
+        const size_t* ov;
+        size_t np;
+        int m = regex_cursor_next(&cur, pos, &rule, &ov, &np);
+        if (m < 0) { rc = -1; break; }
+        if (m == 0) break;
+        if (scan_push(st, ov[0], ov[1], rule, ov, np, 0) != 0) { rc = -1; break; }
+        pos = (ov[1] > ov[0]) ? ov[1] : regex_next_char(subj, len, ov[0]);
     }
-    return 0;
+    regex_cursor_free(&cur);
+    return rc;
 }
 
 /*
  * Overlaps -> True.  Per rule independently, the leftmost match at or after each
- * position, advancing by one past the match START so every distinct match start
- * is enumerated.
+ * position, advancing one character past the match START so every distinct
+ * match start is enumerated.
  */
 static int scan_true(const char* subj, size_t len, RegexRule* rules, int nr,
-                     const size_t* pairs, ScanState* st) {
+                     ScanState* st) {
     for (int i = 0; i < nr; i++) {
         size_t pos = 0;
         while (pos <= len) {
             size_t ov[REGEX_MAX_PAIRS * 2];
-            if (regex_match(rules[i].prog, subj, len, pos, ov, pairs[i]) != 1) break;
-            if (scan_push(st, ov[0], ov[1], i, ov, pairs[i], 0) != 0) return -1;
-            pos = ov[0] + 1;   /* past the match start (overlap-friendly) */
+            int m = regex_match(rules[i].prog, subj, len, pos, ov, rules[i].npairs);
+            if (m < 0) return -1;
+            if (m == 0) break;
+            if (scan_push(st, ov[0], ov[1], i, ov, rules[i].npairs, 0) != 0) return -1;
+            pos = regex_next_char(subj, len, ov[0]);
         }
     }
     return 0;
 }
 
 /*
- * Overlaps -> All.  Every matching substring at every start: for each start p
- * ascending and end e descending, test an exact match of subj[p, e).  The rules
- * are anchored (\A(?:...)\z) by the caller, so a match means the pattern covers
- * [p, e) exactly.
+ * Overlaps -> All.  Every matching substring at every start: for each character
+ * start p ascending and character end e descending, test an exact match of
+ * subj[p, e).  The rules are anchored (\A(?:...)\z) by the caller, so a match
+ * means the pattern covers [p, e) exactly.
  */
 static int scan_all(const char* subj, size_t len, RegexRule* rules, int nr,
-                    const size_t* pairs, ScanState* st) {
-    for (size_t p = 0; p < len; p++) {
-        for (size_t e = len; e > p; e--) {
+                    ScanState* st) {
+    U8View v;
+    if (u8_view_init(&v, subj, len) != 0) return -1;
+    int rc = 0;
+    for (size_t pc = 0; pc < v.nchars && rc == 0; pc++) {
+        size_t p = u8_view_off(&v, pc);
+        for (size_t ec = v.nchars; ec > pc && rc == 0; ec--) {
+            size_t e = u8_view_off(&v, ec);
             for (int i = 0; i < nr; i++) {
                 size_t ov[REGEX_MAX_PAIRS * 2];
-                if (regex_match(rules[i].prog, subj + p, e - p, 0, ov, pairs[i]) != 1)
-                    continue;
-                if (scan_push(st, p, e, i, ov, pairs[i], p) != 0) return -1;
+                int m = regex_match(rules[i].prog, subj + p, e - p, 0, ov, rules[i].npairs);
+                if (m < 0) { rc = -1; break; }
+                if (m == 0) continue;
+                if (scan_push(st, p, e, i, ov, rules[i].npairs, p) != 0) { rc = -1; break; }
             }
         }
     }
-    return 0;
+    u8_view_free(&v);
+    return rc;
 }
 
-/* Stable insertion sort by start offset (ties keep discovery order: rule index,
- * then match order). qsort is not stable, and the input is nearly sorted -- it
- * is a concatenation of per-rule ascending runs -- so this is close to linear. */
-static void scan_stable_sort(RegexSpan* a, size_t n) {
-    for (size_t i = 1; i < n; i++) {
-        RegexSpan key = a[i];
-        size_t j = i;
-        while (j > 0 && a[j - 1].ms > key.ms) { a[j] = a[j - 1]; j--; }
-        a[j] = key;
+/* Stable merge sort of spans by start offset (ties keep discovery order: rule
+ * index, then match order). The True scan concatenates one ascending run per
+ * rule, so this is O(n log n) worst case where the old insertion sort was
+ * O(n^2) for two or more rules with many matches. */
+static int scan_stable_sort(RegexSpan* a, size_t n) {
+    if (n < 2) return 0;
+    RegexSpan* tmp = malloc(n * sizeof(RegexSpan));
+    if (!tmp) return -1;
+    for (size_t width = 1; width < n; width *= 2) {
+        for (size_t lo = 0; lo < n; lo += 2 * width) {
+            size_t mid = lo + width < n ? lo + width : n;
+            size_t hi = lo + 2 * width < n ? lo + 2 * width : n;
+            size_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) tmp[k++] = (a[j].ms < a[i].ms) ? a[j++] : a[i++];
+            while (i < mid) tmp[k++] = a[i++];
+            while (j < hi)  tmp[k++] = a[j++];
+        }
+        memcpy(a, tmp, n * sizeof(RegexSpan));
     }
+    free(tmp);
+    return 0;
 }
 
 long regex_scan(const char* subj, size_t len, RegexRule* rules, int nr,
                 RegexOverlapMode mode, int want_captures, RegexScan* out) {
+    return regex_scan_limit(subj, len, rules, nr, mode, want_captures, 0, out);
+}
+
+long regex_scan_limit(const char* subj, size_t len, RegexRule* rules, int nr,
+                      RegexOverlapMode mode, int want_captures, size_t limit,
+                      RegexScan* out) {
     ScanState st;
     memset(&st, 0, sizeof st);
     st.want_captures = want_captures;
+    /* Only the False scan emits in final order as it goes, so only it can stop
+     * early; the others are cut after sorting. */
+    st.limit = (mode == REGEX_OV_FALSE) ? limit : 0;
 
     out->spans = NULL;
     out->count = 0;
     out->caps  = NULL;
 
-    size_t* pairs = scan_pairs_table(rules, nr);
-    if (!pairs) return -1;
-
     int rc;
-    if (mode == REGEX_OV_ALL)        rc = scan_all(subj, len, rules, nr, pairs, &st);
-    else if (mode == REGEX_OV_FALSE) rc = scan_false(subj, len, rules, nr, pairs, &st);
-    else                             rc = scan_true(subj, len, rules, nr, pairs, &st);
-    free(pairs);
+    if (mode == REGEX_OV_ALL)        rc = scan_all(subj, len, rules, nr, &st);
+    else if (mode == REGEX_OV_FALSE) rc = scan_false(subj, len, rules, nr, &st);
+    else                             rc = scan_true(subj, len, rules, nr, &st);
 
-    if (rc != 0) {                  /* OOM mid-scan: *out stays the zeroed state */
+    /* The False and All scans already emit in ascending start order; only the
+     * True scan concatenates one run per rule and needs merging. */
+    if (rc == 0 && mode == REGEX_OV_TRUE && nr > 1)
+        rc = scan_stable_sort(st.spans, st.count);
+
+    if (rc != 0) {                  /* OOM / engine error: *out stays zeroed */
         free(st.spans);
         free(st.caps);
         return -1;
     }
-
-    /* The False and All scans already emit in ascending start order; only the
-     * True scan concatenates one run per rule and needs merging. */
-    if (mode == REGEX_OV_TRUE && nr > 1) scan_stable_sort(st.spans, st.count);
+    if (limit && st.count > limit) st.count = limit;
 
     out->spans = st.spans;
     out->count = st.count;
@@ -518,8 +689,11 @@ char* regex_expand_template(const char* tpl, const char* subj,
             i += 1;
             continue;
         }
-        if (regexbuf_add(&b, &tpl[i], 1)) goto oom;
-        i += 1;
+        /* Copy the literal run up to the next '$' in one append. */
+        const char* d = strchr(tpl + i, '$');
+        size_t run = d ? (size_t)(d - (tpl + i)) : strlen(tpl + i);
+        if (regexbuf_add(&b, tpl + i, run)) goto oom;
+        i += run;
     }
     if (!b.p) return rc_strdup("");                   /* empty template */
     return b.p;

@@ -1,0 +1,331 @@
+{
+ "mathematica|u32": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.024893,
+  "n": 2000,
+  "bad": [],
+  "wall": 3.870573043823242
+ },
+ "mathematica|u63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.962955,
+  "n": 2000,
+  "bad": [],
+  "wall": 5.616627931594849
+ },
+ "mathematica|semi63": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 1.042514,
+  "n": 500,
+  "bad": [],
+  "wall": 6.18443489074707
+ },
+ "mathematica|semi96": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 0.481268,
+  "n": 20,
+  "bad": [],
+  "wall": 5.650395154953003
+ },
+ "mathematica|rand40": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 5.680053,
+  "n": 100,
+  "bad": [],
+  "wall": 11.341612100601196
+ },
+ "mathematica|smooth": {
+  "kind": "batch",
+  "status": "ok",
+  "total": 4.837213,
+  "n": 200,
+  "bad": [],
+  "wall": 10.853258848190308
+ },
+ "mathematica|qs": {
+  "kind": "single",
+  "cases": {
+   "qs30-0": {
+    "status": "ok",
+    "t": 0.061452,
+    "ok": true,
+    "wall": 5.740778923034668
+   },
+   "qs30-1": {
+    "status": "ok",
+    "t": 0.061868,
+    "ok": true,
+    "wall": 5.839613914489746
+   },
+   "qs40-0": {
+    "status": "ok",
+    "t": 0.018214,
+    "ok": true,
+    "wall": 5.755191087722778
+   },
+   "qs40-1": {
+    "status": "ok",
+    "t": 0.330838,
+    "ok": true,
+    "wall": 5.88962984085083
+   },
+   "qs50-0": {
+    "status": "ok",
+    "t": 6.151965,
+    "ok": true,
+    "wall": 11.918737888336182
+   },
+   "qs50-1": {
+    "status": "ok",
+    "t": 6.478981,
+    "ok": true,
+    "wall": 11.787353992462158
+   },
+   "qs60-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00834321975708
+   },
+   "qs60-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00787115097046
+   },
+   "qs70-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.009499073028564
+   },
+   "qs70-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01117420196533
+   },
+   "qs80-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01398277282715
+   },
+   "qs80-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01568675041199
+   },
+   "qs90-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.02308416366577
+   },
+   "qs90-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01162815093994
+   }
+  }
+ },
+ "mathematica|ecm": {
+  "kind": "single",
+  "cases": {
+   "ecm-p20-0": {
+    "status": "ok",
+    "t": 1.468862,
+    "ok": true,
+    "wall": 6.922007083892822
+   },
+   "ecm-p20-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00861620903015
+   },
+   "ecm-p25-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01005172729492
+   },
+   "ecm-p25-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00899910926819
+   },
+   "ecm-p30-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.0096480846405
+   },
+   "ecm-p30-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00853395462036
+   },
+   "ecm-p35-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.0171480178833
+   },
+   "ecm-p35-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01021909713745
+   }
+  }
+ },
+ "mathematica|pm1": {
+  "kind": "single",
+  "cases": {
+   "pm1-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00816893577576
+   },
+   "pm1-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01745295524597
+   },
+   "pm1-2": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.00976514816284
+   }
+  }
+ },
+ "mathematica|pp1": {
+  "kind": "single",
+  "cases": {
+   "pp1-0": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.038503885269165
+   },
+   "pp1-1": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.009584188461304
+   },
+   "pp1-2": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01447796821594
+   }
+  }
+ },
+ "mathematica|fermat": {
+  "kind": "single",
+  "cases": {
+   "fermat-100d": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01444482803345
+   },
+   "fermat-80d": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.01106786727905
+   },
+   "fermat-60d": {
+    "status": "timeout",
+    "t": null,
+    "ok": false,
+    "wall": 60.015206813812256
+   }
+  }
+ },
+ "mathematica|power": {
+  "kind": "single",
+  "cases": {
+   "pow-p30^7": {
+    "status": "ok",
+    "t": 0.003768,
+    "ok": true,
+    "wall": 5.983874082565308
+   },
+   "pow-m61^3*q^2": {
+    "status": "ok",
+    "t": 0.018273,
+    "ok": true,
+    "wall": 5.62034273147583
+   },
+   "pow-2^4096": {
+    "status": "ok",
+    "t": 2.6e-05,
+    "ok": true,
+    "wall": 5.53188419342041
+   },
+   "pow-smooth^5": {
+    "status": "ok",
+    "t": 0.004964,
+    "ok": true,
+    "wall": 6.370877981185913
+   }
+  }
+ },
+ "mathematica|special": {
+  "kind": "single",
+  "cases": {
+   "F7=2^128+1": {
+    "status": "ok",
+    "t": 0.286857,
+    "ok": true,
+    "wall": 7.179441213607788
+   },
+   "F8=2^256+1": {
+    "status": "ok",
+    "t": 0.975775,
+    "ok": true,
+    "wall": 7.000118017196655
+   },
+   "M137=2^137-1": {
+    "status": "ok",
+    "t": 0.35789,
+    "ok": true,
+    "wall": 5.930018186569214
+   },
+   "M149=2^149-1": {
+    "status": "ok",
+    "t": 0.847973,
+    "ok": true,
+    "wall": 6.064147233963013
+   },
+   "30!+1": {
+    "status": "ok",
+    "t": 0.013307,
+    "ok": true,
+    "wall": 4.846829891204834
+   },
+   "10^60+1": {
+    "status": "ok",
+    "t": 0.032421,
+    "ok": true,
+    "wall": 4.595504999160767
+   }
+  }
+ }
+}

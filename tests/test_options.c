@@ -61,7 +61,7 @@ int main(void) {
         "{MonomialOrder -> Lexicographic, CoefficientDomain -> Rationals, "
         "Method -> Automatic, Sort -> False, Modulus -> 0}");
     chk("Options[Eigenvalues]", "{Cubics -> False, Quartics -> False}");
-    chk("Options[FactorInteger]", "{GaussianIntegers -> False}");
+    chk("Options[FactorInteger]", "{GaussianIntegers -> False, Method -> Automatic}");
     chk("Options[SingularValueDecomposition]",
         "{Tolerance -> Automatic, TargetStructure -> \"Dense\"}");
     /* Heads default differs across the structural family. */

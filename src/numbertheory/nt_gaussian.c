@@ -78,9 +78,12 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
             pair->data.function.args[1]->data.integer <= 0) {
             ok = false; break;
         }
-        expr_to_mpz(pair->data.function.args[0], primes[i]);  /* inits primes[i] */
-        exps[i] = (unsigned long)pair->data.function.args[1]->data.integer;
-        got = i + 1;
+        /* FactorInteger[1] is {{1, 1}} (Mathematica): a unit entry is not a
+         * prime and contributes nothing. */
+        expr_to_mpz(pair->data.function.args[0], primes[got]);  /* inits primes[got] */
+        if (mpz_cmpabs_ui(primes[got], 1) == 0) { mpz_clear(primes[got]); continue; }
+        exps[got] = (unsigned long)pair->data.function.args[1]->data.integer;
+        got++;
         /* Every base must actually BE prime.  FactorInteger's Automatic method
          * is bounded, and on a hard composite that survives trial division,
          * Pollard rho and ECM it returns the cofactor unfactored with exponent
@@ -102,8 +105,7 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
          * function uses.  A unit base (+-1) is not a prime and not a failure.
          * Every caller already returns NULL on false, which leaves the head
          * unevaluated: an honest "I cannot" in place of a wrong integer. */
-        if (mpz_cmpabs_ui(primes[i], 1) != 0 &&
-            mpz_probab_prime_p(primes[i], 40) == 0) {
+        if (mpz_probab_prime_p(primes[got - 1], 40) == 0) {
             ok = false; break;
         }
     }
@@ -115,9 +117,10 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
         free(exps);
         return false;
     }
+    if (got == 0) { free(primes); free(exps); primes = NULL; exps = NULL; }
     *out_primes = primes;
     *out_exps = exps;
-    *out_n = n;
+    *out_n = got;
     return true;
 }
 

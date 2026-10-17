@@ -947,7 +947,10 @@ void test_factorinteger(void) {
     assert_eval_eq("FactorInteger[3/4]", "List[List[2, -2], List[3, 1]]", 1);
     
     // Partial factorization
-    assert_eval_eq("FactorInteger[100, 1]", "List[List[2, 2]]", 1);
+    /* Mathematica: at most k entries, the last an unfactored remainder. */
+    assert_eval_eq("FactorInteger[100, 1]", "List[List[100, 1]]", 1);
+    assert_eval_eq("FactorInteger[100, 2]", "List[List[2, 2], List[25, 1]]", 1);
+    assert_eval_eq("FactorInteger[1]", "List[List[1, 1]]", 1);
     
     // Automatic (easy factors)
     // Removed flaky ECM test
@@ -1210,8 +1213,12 @@ void test_factor_methods() {
     // 2^60 - 1 = 3^2 * 5^2 * 7 * 11 * 13 * 31 * 41 * 61 * 151 * 331 * 1321
     // The prime components for some algorithms might remain composite if they don't resolve.
     // We'll just ensure they don't crash and parse the method rule correctly.
-    assert_eval_eq("FactorInteger[91, Method -> \"PollardP-1\"]", "List[List[91, 1]]", 1);
-    assert_eval_eq("FactorInteger[91, Method -> \"WilliamsP+1\"]", "List[List[91, 1]]", 1);
+    /* The p-1 / p+1 / ECM front ends split off primes below 2^10 first (a
+     * seed sharing a factor with n crashes GMP-ECM). */
+    assert_eval_eq("FactorInteger[91, Method -> \"PollardP-1\"]", "List[List[7, 1], List[13, 1]]", 1);
+    /* p+1 splits 91: the word walk backtracks prime by prime when a batch
+     * catches 7 and 13 together. */
+    assert_eval_eq("FactorInteger[91, Method -> \"WilliamsP+1\"]", "List[List[7, 1], List[13, 1]]", 1);
     
     // Fermat
     assert_eval_eq("FactorInteger[5959, Method -> \"Fermat\"]", "List[List[59, 1], List[101, 1]]", 1);

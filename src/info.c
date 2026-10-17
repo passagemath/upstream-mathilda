@@ -4945,7 +4945,8 @@ void info_init(void) {
     symtab_set_docstring("LiouvilleLambda", "LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].");
     symtab_set_docstring("PrimeOmega", "PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.");
     symtab_set_docstring("PrimeNu", "PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.");
-    symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
+    /* FactorInteger and FactorInteger`<Method>: docstrings set in fi_init()
+     * (src/numbertheory/factorinteger/fi_builtin.c), next to the method table. */
     symtab_set_docstring("EulerPhi",
         "EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n "
         "-- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever "

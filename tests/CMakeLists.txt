@@ -254,6 +254,7 @@ include_directories(../src/list)
 include_directories(../src/ml)
 include_directories(../src/linalg)
 include_directories(../src/numbertheory)
+include_directories(../src/numbertheory/factorinteger)
 include_directories(../src/bitwise)
 include_directories(../src/poly)
 include_directories(../src/simp)
@@ -431,6 +432,21 @@ set(COMMON_SRC
     ../src/special_functions/airybi.c
     ../src/special_functions/bessel.c
     ../src/facint.c
+    ../src/numbertheory/factorinteger/fi_core.c
+    ../src/numbertheory/factorinteger/fi_builtin.c
+    ../src/numbertheory/factorinteger/fi_u64.c
+    ../src/numbertheory/factorinteger/fi_u128.c
+    ../src/numbertheory/factorinteger/fi_trial.c
+    ../src/numbertheory/factorinteger/fi_rho.c
+    ../src/numbertheory/factorinteger/fi_fermat.c
+    ../src/numbertheory/factorinteger/fi_squfof.c
+    ../src/numbertheory/factorinteger/fi_ecm.c
+    ../src/numbertheory/factorinteger/fi_qs.c
+    ../src/numbertheory/factorinteger/fi_cfrac.c
+    ../src/numbertheory/factorinteger/fi_dixon.c
+    ../src/numbertheory/factorinteger/fi_gf2.c
+    ../src/numbertheory/factorinteger/fi_lanczos.c
+    ../src/numbertheory/factorinteger/fi_rbd.c
     ../src/special_functions/fibonacci.c
     ../src/special_functions/lucas.c
     ../src/special_functions/hyperfactorial.c
@@ -1356,6 +1372,10 @@ add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)
+
+add_executable(factorinteger_tests test_factorinteger.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factorinteger_tests PRIVATE ../src ../src/numbertheory/factorinteger)
+add_test(NAME factorinteger_tests COMMAND factorinteger_tests)
 
 add_executable(liouvillelambda_tests test_liouvillelambda.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(liouvillelambda_tests PRIVATE ../src)

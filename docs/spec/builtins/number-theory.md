@@ -515,52 +515,75 @@ Out[3]= {4, 25}
 
 ## FactorInteger
 
-- `FactorInteger[n]`: Returns a list of prime factors and their exponents.
-- `FactorInteger[n, k]`: Partial factorization, at most `k` distinct factors.
-- `FactorInteger[n, Automatic]`: Pulls out easy factors using trial division.
-- `FactorInteger[n, Method -> method]`: Factors `n` using a specific algorithmic method.
+- `FactorInteger[n]`: the prime factorisation `{{p1, e1}, {p2, e2}, ...}`, primes ascending.
+- `FactorInteger[n, k]`: partial factorisation with **at most `k` entries**; the last entry may be an
+  unfactored remainder (Mathematica's contract: `FactorInteger[100, 1]` is `{{100, 1}}`,
+  `FactorInteger[100, 2]` is `{{2, 2}, {25, 1}}`). `k < 1` leaves the call unevaluated.
+- `FactorInteger[n, Automatic]`: the same as `FactorInteger[n]`.
+- `FactorInteger[n, GaussianIntegers -> True]`: factorisation over Z[i]. A Gaussian integer or Gaussian
+  rational argument (`3 + 4 I`, `(3 + 4 I)/(1 + I)`) is factored over Z[i] automatically. The unit comes
+  first, when it is not 1. Primes are given in the first quadrant (Re > 0, Im >= 0), sorted by real part
+  and then imaginary part. Every output matches Mathematica 14.
+- `FactorInteger[n, Method -> m]`: the algorithm is chosen by `m`, which is a method name, `Automatic`,
+  or `{name, "Sub" -> v, ...}`. Every method is also a builtin of its own,
+  `FactorInteger`name[n, "Sub" -> v, ...]`, taking the same `k` and `GaussianIntegers` arguments.
+- Rationals: the denominator's primes get negative exponents. Negative `n` starts with `{-1, 1}`;
+  `0` gives `{{0, 1}}`, `1` gives `{{1, 1}}`.
+- Messages, all routed through the `Quiet`/`Check` funnel:
+  - `FactorInteger::nofac`: a composite was left unfactored, once per such composite;
+  - `FactorInteger::method`: unknown method;
+  - `FactorInteger::mopt`: bad suboption;
+  - `FactorInteger::optx`: unknown option;
+  - `FactorInteger::exact`: inexact or symbolic argument, as in Mathematica.
 
-**Options for `Method`**:
-- `"Automatic"`: (Default) Attempts factorization by sequentially executing Trial Division, Pollard's Rho, one Pollard $p-1$ pass ($B_1 = 10^6$), and ECM (up to ten fresh random curves at each of seven increasing $B_1$ bounds).
-- `"TrialDivision"`: Extracts bounds matching the first 1000 computed primes and halts cleanly. Composite residues are preserved.
-- `"PollardRho"`: Executes the Brent cycle-finding variant of Pollard's Rho algorithm targeting GMP bignums.
-- `"BlakeRationalBaseDescent"`: Executes the Rational Base Descent algorithm against semiprimes `n = p q` where one factor is approximately `c (a/b)^k` for some unknown `c`, `k` and a small coprime integer pair `a > b`. With no explicit `"Base"`, auto-searches coprime partitions `a + b = j` for `j = 3, 4, ...` indefinitely until a factor is found (interruptible).
-- `{"BlakeRationalBaseDescent", "Base" -> a/b}`: Same algorithm but pinned to a specific rational base `a/b`. Skips the auto-search.
-- `"PollardP-1"`: Executes the Pollard $P-1$ algorithm, leveraging GMP and ECM natively.
-- `"WilliamsP+1"`: Executes the Williams $P+1$ algorithm via the ECM library natively.
-- `"Fermat"`: Explores factors symmetrically close to the square root boundary natively on large integers.
-- `"CFRAC"`: Implements the continued fraction integer factorization method natively on GMP bignums.
-- `"ShanksSquareForms"`: Implements Shanks's Square Forms Factorization (SQUFOF) natively on large integers. Halts explicitly if factors are not discovered within the loop constraints.
-- `"ECM"`: Explicitly triggers Elliptic-Curve Method discovery natively.
+The implementation is in `src/numbertheory/factorinteger/` (one file per algorithm; see `fi_internal.h`).
+Every randomised choice (rho constants, ECM sigmas, p+1 seeds, QS polynomials) is drawn from a generator
+seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone.
+
+| Method (`FactorInteger`name`) | Algorithm | Suboptions |
+|---|---|---|
+| `Automatic` | Below 2^64 the word engine handles everything: Montgomery arithmetic, a deterministic Miller–Rabin test, micro-ECM with Suyama curves and a baby-step/giant-step stage 2, and rho/SQUFOF as backstops. Above 2^64 the tiers are: trial division to 2^16 → Pollard rho (two-limb Montgomery below 2^126) → a Fermat probe → one p-1 → one p+1 → ECM levels 15, 20, ... digits, switching to the quadratic sieve once the ECM effort reaches 2/7 of the composite's digit count, for composites up to 100 digits. After a split, both parts restart at the tier that succeeded. | — |
+| `"TrialDivision"` | Primes are tested in word-sized products, one bignum remainder per 2–4 primes; a segmented sieve takes over above 2^20. The default bound is sqrt(n) when that is below 10^7, else 10^7. | `"Bound"` (≤ 2^40) |
+| `"PollardRho"` | Brent's variant with batched gcds and backtracking; Montgomery arithmetic on one and two words, GMP above that. | `"Iterations"`, `"Starts"` |
+| `"Fermat"` | Fermat's method with quadratic-residue filters modulo nine small moduli. | `"Iterations"` |
+| `"Lehman"` | Lehman's O(n^(1/3)) method; complete below 2^42, budgeted above. | `"Iterations"` |
+| `"ShanksSquareForms"` (alias `"SQUFOF"`) | SQUFOF over the 16 Gower–Wagstaff multipliers, in word arithmetic for kN < 2^124. | `"Iterations"` |
+| `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. | `"Iterations"` |
+| `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. | `"Iterations"` |
+| `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division, single large primes. Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
+| `"PollardPMinus1"` (alias `"PollardP-1"`) | GMP-ECM p-1, with a B1 back-off when every prime is caught at once; a word walk with prime-by-prime backtracking below 2^64. | `"B1"` (10^6), `"B2"` |
+| `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. | `"B1"` (10^6), `"B2"` |
+| `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves use the batch parametrisation with sigmas drawn deterministically; a user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |
+| `"BlakeRationalBaseDescent"` | Rational base descent (unchanged; its optimisation is deferred). | `"Base"` -> a/b |
+
+Fallbacks: builds without GMP-ECM use FLINT's ECM and p+1 (and a native p-1); builds without either use
+native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are native, with no external
+dependency.
 
 **Features**:
-- `Listable`, `Protected`.
-- Supports negative integers (includes `{-1, 1}`).
-- Supports rational numbers (denominator factors have negative exponents).
-- Perfect powers are reduced before the general search: `n = base^m` is peeled
-  to a primitive base, factored once, and the exponents scaled by `m`. This is
-  what makes prime powers of a large prime (e.g. `(2^61-1)^2`) factor correctly
-  rather than being mislabelled as prime — Pollard rho and ECM alone cannot
-  split such powers.
-- `FactorInteger::nofac`: under the default `Automatic` method, a hard composite
-  (e.g. a semiprime of two large distinct primes) that survives trial division,
-  Pollard rho and ECM within the search bounds is returned unfactored with
-  exponent 1 — which looks like a prime factor. A warning is emitted to make
-  that compromise explicit rather than silent. It is suppressed inside routines
-  that mute arithmetic warnings (numeric integration, `Limit`, `Series`, …).
+- `Listable`, `Protected`; `Options[FactorInteger]` is `{GaussianIntegers -> False, Method -> Automatic}`.
+- Perfect powers are reduced to a primitive base before any search, so `(2^61 - 1)^2` factors correctly.
+- `EulerPhi` and `facint_factor_complete` decline (stay unevaluated or report incompleteness) rather than
+  build an answer on a composite that survived the search.
 
 ```mathematica
-In[1]:= FactorInteger[12]
-Out[1]= {{2, 2}, {3, 1}}
+In[1]:= FactorInteger[-12]
+Out[1]= {{-1, 1}, {2, 2}, {3, 1}}
 
-In[2]:= FactorInteger[-12]
-Out[2]= {{-1, 1}, {2, 2}, {3, 1}}
+In[2]:= FactorInteger[3/4]
+Out[2]= {{2, -2}, {3, 1}}
 
-In[3]:= FactorInteger[3/4]
-Out[3]= {{2, -2}, {3, 1}}
+In[3]:= FactorInteger[100, 2]
+Out[3]= {{2, 2}, {25, 1}}
 
-In[4]:= FactorInteger[100, 1]
-Out[4]= {{2, 2}, 25}
+In[4]:= FactorInteger[5, GaussianIntegers -> True]
+Out[4]= {{-I, 1}, {1 + 2 I, 1}, {2 + I, 1}}
+
+In[5]:= FactorInteger`ECM[2^128 + 1]
+Out[5]= {{59649589127497217, 1}, {5704689200685129054721, 1}}
+
+In[6]:= FactorInteger`QuadraticSieve[NextPrime[10^29] NextPrime[3 10^29]]
+Out[6]= {{100000000000000000000000000319, 1}, {300000000000000000000000000007, 1}}
 ```
 
 ## Divisors

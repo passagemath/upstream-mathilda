@@ -3,7 +3,6 @@
 #include "sf_scalar.h"
 
 #include <gmp.h>
-#include "arithmetic.h"
 #include "sym_names.h"
 
 bool sf_machine_leaf(const Expr* e, double* out, bool* inexact) {
@@ -78,5 +77,13 @@ bool sf_machine_scalar_args(const Expr* res, SFMachineArgs* out) {
 }
 
 Expr* sf_machine_complex_result(double re, double im) {
-    return make_complex(expr_new_real(re), expr_new_real(im));
+    /* One shared `Complex` head node, handed out by refcount. expr_new_symbol
+     * would allocate a node and re-hash the name through intern_symbol on every
+     * call, which is a measurable share of a ~0.2 us machine-complex call.
+     * Symbol nodes are immutable apart from the benign cached-def pointer, so
+     * sharing one is safe (the same idiom as expr_copy everywhere else). */
+    static Expr* complex_head = NULL;
+    if (!complex_head) complex_head = expr_new_symbol(SYM_Complex);
+    Expr* args[2] = { expr_new_real(re), expr_new_real(im) };
+    return expr_new_function(expr_copy(complex_head), args, 2);
 }

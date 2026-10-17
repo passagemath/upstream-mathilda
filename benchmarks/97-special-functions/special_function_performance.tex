@@ -213,7 +213,12 @@ one, so the Python column is mpmath's \mcode{meijerg} and Maxima is absent. Math
 fastest engine in all nine cells: against mpmath $35\times$, $134\times$ and $3.3\times$
 (machine real), $42\times$, $234\times$, $4.3\times$ (complex) and $2.9\times$,
 $2.1\times$, $5.2\times$ (50 digits), and Mathematica is slower still in every cell
-($11$--$670\times$). The machine path is one Slater plan per parameter set (the
+($11$--$670\times$). On a $10^6$-element buffer the Slater plan is built once for the
+whole buffer, not once per call, so the two non-log rows run at $0.97$ and $0.17\,\mu$s
+per element, $13\times$ and $55\times$ below their scalar latency. The log row
+(\mcode{MeijerGlog}, $119$\,s) has no machine form and sends each element to the arb
+engine; it gains only the per-call overhead. SciPy has no $G$-function, so these
+throughput rows have no comparison column. The machine path is one Slater plan per parameter set (the
 $z$-independent $\pi/\sin$ and $\Gamma$ products) and one pFq kernel call per term; a log
 case or a cancelling sum is handed to the arb engine, which perturbs the colliding $b$'s
 and checks two perturbation sizes against each other. The 50-digit

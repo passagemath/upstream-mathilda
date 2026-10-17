@@ -15942,7 +15942,10 @@
    "WhittakerM": 14.267,
    "WhittakerW": 15.325,
    "Sinc": 2.709,
-   "ProductLog": 18.103
+   "ProductLog": 18.103,
+   "MeijerG": 965.22,
+   "MeijerG22": 174.188,
+   "MeijerGlog": 118635.0
   },
   "wolfram": {
    "Gamma": 3.646,

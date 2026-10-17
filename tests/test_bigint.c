@@ -149,6 +149,23 @@ void test_squfof(void) {
     assert_eval_eq("FactorInteger[15, Method -> \"ShanksSquareForms\"]", "{{3, 1}, {5, 1}}", 0);
 }
 
+/* Issue #95: a 39-digit semiprime (19- and 21-digit factors) that the default
+ * method returned unfactored in most runs, because every ECM "retry" replayed
+ * the same curve. Repeated so a single lucky curve cannot mask a regression;
+ * the ECM-only method exercises the fresh-curve fix without the p-1 pre-pass. */
+void test_ecm_semiprime(void) {
+#ifndef NO_ECM
+    for (int i = 0; i < 3; i++) {
+        assert_eval_eq("FactorInteger[(2^61-1)*(10^20+39)]",
+                       "{{2305843009213693951, 1}, {100000000000000000039, 1}}", 0);
+        assert_eval_eq("FactorInteger[(2^61-1)*(10^20+39), Method -> \"ECM\"]",
+                       "{{2305843009213693951, 1}, {100000000000000000039, 1}}", 0);
+        assert_eval_eq("FactorInteger[10000000000000012363*300000000000000000797]",
+                       "{{10000000000000012363, 1}, {300000000000000000797, 1}}", 0);
+    }
+#endif
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -166,7 +183,8 @@ int main(void) {
     TEST(test_abs_bigint);
     TEST(test_plus_rational_with_bigint_parts);
     TEST(test_squfof);
-    
+    TEST(test_ecm_semiprime);
+
     // Additional GMP integration tests
     assert_eval_eq("Binomial[100, 50]", "100891344545564193334812497256", 0);
     assert_eval_eq("PowerMod[2, 100, 101]", "1", 0); // Fermat's Little Theorem: 2^(101-1) mod 101 = 1

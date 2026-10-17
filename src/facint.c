@@ -247,6 +247,22 @@ Expr* builtin_nextprime(Expr* res) {
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #ifndef NO_ECM
 #include "ecm.h"
+
+/* Stage-1 bound of the Automatic method's single Pollard p-1 pass. */
+#define FACINT_AUTO_PM1_B1 1000000.0
+
+/* Reset the per-run state ecm_factor writes back into params, so the next
+ * call draws a fresh random curve (ECM) or seed (P+1) instead of replaying
+ * the previous one. */
+static void facint_ecm_fresh_start(ecm_params params) {
+    mpz_set_ui(params->sigma, 0);
+    params->sigma_is_A = 0;
+    mpz_set_ui(params->x, 0);
+    params->B1done = ECM_DEFAULT_B1_DONE;
+#ifdef ECM_PARAM_DEFAULT
+    params->param = ECM_PARAM_DEFAULT;
+#endif
+}
 #endif
 
 typedef struct {
@@ -1120,20 +1136,41 @@ static void factorize_mpz(mpz_t n, FactorMpz* factors, int* num_factors, int* k_
     
 #ifndef NO_ECM
     if (method == METHOD_AUTOMATIC || method == METHOD_ECM || method == METHOD_POLLARD_P1 || method == METHOD_WILLIAMS_P1) {
+        int found = 0;
+
+        /* Automatic: one cheap Pollard p-1 pass before the ECM curves. It
+         * finds any factor p with p-1 smooth (e.g. a Mersenne prime 2^k-1,
+         * since 2^k-2 = 2(2^(k-1)-1) is built from small cyclotomic pieces)
+         * almost instantly, where ECM would need dozens of curves (issue #95). */
+        if (method == METHOD_AUTOMATIC) {
+            ecm_params pm1;
+            ecm_init(pm1);
+            pm1->method = ECM_PM1;
+            if (ecm_factor(f, n, FACINT_AUTO_PM1_B1, pm1) > 0
+                    && mpz_cmp_ui(f, 1) > 0 && mpz_cmp(f, n) < 0)
+                found = 1;
+            ecm_clear(pm1);
+        }
+
         ecm_params params;
         ecm_init(params);
         if (method == METHOD_POLLARD_P1) params->method = ECM_PM1;
         else if (method == METHOD_WILLIAMS_P1) params->method = ECM_PP1;
-        
-        params->B1done = 0.0; /* We can do a quick check with small B1 */
 
-        int found = 0;
         // Try with increasing bounds
         double B1_bounds[] = {2000.0, 11000.0, 50000.0, 250000.0, 1000000.0, 3000000.0, 11000000.0};
         int num_bounds = sizeof(B1_bounds)/sizeof(B1_bounds[0]);
-        
+
         for (int i = 0; i < num_bounds && !found; i++) {
             for (int tries = 0; tries < 10 && !found; tries++) {
+                /* ecm_factor writes its random choices back into params: the
+                 * curve parameter sigma (ECM), the starting point x and the
+                 * stage-1 progress B1done. Reusing params unchanged therefore
+                 * reran the SAME curve every try — one curve per B1, not ten
+                 * (issue #95). Clear them so each try draws a fresh curve /
+                 * seed. P-1 is deterministic, so it keeps x and B1done and
+                 * simply resumes stage 1 at the next, larger bound. */
+                if (method != METHOD_POLLARD_P1) facint_ecm_fresh_start(params);
                 int ret = ecm_factor(f, n, B1_bounds[i], params);
                 if (ret > 0) {
                     found = 1;

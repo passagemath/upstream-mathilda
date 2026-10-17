@@ -481,7 +481,7 @@ Out[3]= {4, 25}
 - `FactorInteger[n, Method -> method]`: Factors `n` using a specific algorithmic method.
 
 **Options for `Method`**:
-- `"Automatic"`: (Default) Attempts factorization by sequentially executing Trial Division, Pollard's Rho, and ECM.
+- `"Automatic"`: (Default) Attempts factorization by sequentially executing Trial Division, Pollard's Rho, one Pollard $p-1$ pass ($B_1 = 10^6$), and ECM (up to ten fresh random curves at each of seven increasing $B_1$ bounds).
 - `"TrialDivision"`: Extracts bounds matching the first 1000 computed primes and halts cleanly. Composite residues are preserved.
 - `"PollardRho"`: Executes the Brent cycle-finding variant of Pollard's Rho algorithm targeting GMP bignums.
 - `"BlakeRationalBaseDescent"`: Executes the Rational Base Descent algorithm against semiprimes `n = p q` where one factor is approximately `c (a/b)^k` for some unknown `c`, `k` and a small coprime integer pair `a > b`. With no explicit `"Base"`, auto-searches coprime partitions `a + b = j` for `j = 3, 4, ...` indefinitely until a factor is found (interruptible).

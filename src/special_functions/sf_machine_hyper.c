@@ -40,6 +40,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -223,9 +224,19 @@ static inline void c_exp(double zr, double zi, double* rr, double* ri) {
  * rounding error of log|w| by |s log|w||, which cost several ulp in the
  * transformation prefactors (1-z)^-a. On the real axis (arg = 0) the result is
  * pow's ~0.5 ulp. */
+static double hy_cospi(double x);
 static inline void c_pow_ma(double mod, double arg, double s, double* rr, double* ri) {
     double m = pow(mod, s);
     if (arg == 0.0) { *rr = m; *ri = 0.0 * arg; return; }
+    if (arg == M_PI || arg == -M_PI) {
+        /* The negative real axis: the phase is exactly +-pi s, so reduce it
+         * exactly (an integer s gives a real result, not one with a 1e-16
+         * imaginary residue from sin(fl(pi) s)). */
+        double sn = hy_cospi(s - 0.5);                 /* sin(pi s) */
+        *rr = m * hy_cospi(s);
+        *ri = (arg > 0.0 ? m : -m) * sn;
+        return;
+    }
     double ph = s * arg;
     *rr = m * cos(ph);
     *ri = m * sin(ph);
@@ -433,6 +444,46 @@ static bool hy_sum_c(const HySer* s, const HySerInfo* inf, double zr, double zi,
     return true;
 }
 
+/* Real parameters, complex z: the ratio (prod (a_i+k)) / (prod (b_j+k) (k+1)) is
+ * a real double-double, and the term update is one complex-dd by real-dd
+ * product and one complex-dd by complex-double product -- a fraction of the
+ * general complex-parameter path below. Same series, same stop rule. */
+static bool hy_sum_c_dd_rp(const HySer* s, const HySerInfo* inf, double zr, double zi,
+                           double* orr, double* ori) {
+    hdd tr = dd_from(1.0), ti = dd_from(0.0), sr = dd_from(1.0), si = dd_from(0.0);
+    double rho_z = (s->p == s->q + 1) ? c_abs(zr, zi) : 0.0;
+    double az = c_abs(zr, zi);
+    for (long k = 0; k < HY_DD_MAXTERMS; k++) {
+        double kd = (double)k;
+        hdd num = dd_from(1.0), den = dd_from(kd + 1.0);
+        for (size_t i = 0; i < s->p; i++)
+            num = dd_mul(num, dd_param(s->ar[i], hs_alo(s, i), kd));
+        if (num.hi == 0.0) break;
+        for (size_t j = 0; j < s->q; j++)
+            den = dd_mul(den, dd_param(s->br[j], hs_blo(s, j), kd));
+        if (den.hi == 0.0) return false;
+        hdd f = dd_div(num, den);
+        /* (tr + i ti) * f * (zr + i zi) */
+        hdd ur = dd_mul(tr, f), ui = dd_mul(ti, f);
+        tr = dd_sub(dd_mul_d(ur, zr), dd_mul_d(ui, zi));
+        ti = dd_add(dd_mul_d(ur, zi), dd_mul_d(ui, zr));
+        sr = dd_add(sr, tr); si = dd_add(si, ti);
+        double at = c_mag(tr.hi, ti.hi);
+        if (!isfinite(sr.hi) || !isfinite(si.hi) || at > 1e290) return false;
+        if (!inf->terminating && k + 1 >= inf->kmin) {
+            double rho = fabs(f.hi) * az;
+            if (rho < rho_z) rho = rho_z;
+            if (rho < 1.0 && at <= c_mag(sr.hi, si.hi) * HY_DD_TOL * (1.0 - rho)) {
+                *orr = sr.hi + sr.lo; *ori = si.hi + si.lo;
+                return isfinite(*orr) && isfinite(*ori);
+            }
+        }
+        if (k == HY_DD_MAXTERMS - 1) return false;
+    }
+    *orr = sr.hi + sr.lo; *ori = si.hi + si.lo;
+    return isfinite(*orr) && isfinite(*ori);
+}
+
 static bool hy_sum_c_dd(const HySer* s, const HySerInfo* inf, double zr, double zi,
                         double* orr, double* ori) {
     cdd term, sum, zz;
@@ -489,6 +540,7 @@ static bool hy_series_c(const HySer* s, double zr, double zi, double* orr, doubl
     double m = c_mag(vr, vi);
     if (peak <= HY_LOSS_OK * m && kpk <= HY_KPEAK_DD) { *orr = vr; *ori = vi; return true; }
     if (!(peak <= HY_LOSS_MAX * m)) return false;
+    if (hy_ser_real_params(s)) return hy_sum_c_dd_rp(s, &inf, zr, zi, orr, ori);
     return hy_sum_c_dd(s, &inf, zr, zi, orr, ori);
 }
 
@@ -1217,7 +1269,7 @@ typedef struct {
     double* g;                       /* g_k                                    */
     int n;
     bool pos;                        /* every g_k > 0 (all k): one-signed terms */
-    double g0, g1;                   /* g_0, g_1 (the lean-loop test)          */
+    bool lean;                       /* pos, and every g_k <= 1: terms never grow */
 } Hy2Tab;
 
 static inline double hy2_g(const Hy2Tab* t, double kd) {
@@ -1239,54 +1291,53 @@ static void hy2_tab_fill(Hy2Tab* t) {
     t->n = HY2_TAB_MAX;
 }
 
-/* One-signed, non-terminating case (every g_k > 0 and 0 < w < 1): all terms
- * positive, so there is no cancellation to measure and the loop carries only
- * the two compensated sums. Same coefficient and power sequence as the general
- * loop below -- and both scalar and buffer paths take the same loop for the
- * same (parameters, w) -- so the surfaces still agree bit-for-bit. */
+/* The lean case (t->lean: every g_k in (0, 1]) and 0 < w < 1: all terms
+ * positive and non-increasing, so there is no cancellation or deep peak to
+ * measure, every partial sum dominates every later term (Fast2Sum is exact:
+ * 3 flops instead of TwoSum's 6), the ratio bound is w itself, and the stop
+ * test can run once per four terms. Even and odd terms go to two compensated
+ * sums seeded with t_0 = 1 and t_1 (two independent dependency chains).
+ *
+ * hy2_lean_x4 below runs this very loop on four buffer elements in lock-step;
+ * the arithmetic and the stop rule are written once (HY_LEAN_* macros) so the
+ * scalar, buffer and Compile[] surfaces cannot drift apart. */
+#define HY_LEAN_INIT(S0, C0, S1, C1, PE, PO, W2, THR, W, C1COEF)              \
+    double S0 = 1.0, C0 = 0.0, S1 = (C1COEF) * (W), C1 = 0.0;                 \
+    double W2 = (W) * (W), PE = W2, PO = (W) * W2;                            \
+    double THR = HY_TOL * (1.0 - (W))
+/* terms k..k+3 (k even, k >= 2) with coefficients ca..cd */
+#define HY_LEAN_STEP(S0, C0, S1, C1, PE, PO, W2, ca, cb, cc, cd, T4, T5) do {  \
+    double t2_ = (ca) * PE, t3_ = (cb) * PO; PE *= W2; PO *= W2;               \
+    T4 = (cc) * PE; T5 = (cd) * PO; PE *= W2; PO *= W2;                        \
+    double h_;                                                                 \
+    h_ = S0 + t2_; C0 += t2_ - (h_ - S0); S0 = h_;                             \
+    h_ = S1 + t3_; C1 += t3_ - (h_ - S1); S1 = h_;                             \
+    h_ = S0 + T4;  C0 += T4  - (h_ - S0); S0 = h_;                             \
+    h_ = S1 + T5;  C1 += T5  - (h_ - S1); S1 = h_;                             \
+} while (0)
+#define HY_LEAN_DONE(S0, S1, THR, T4, T5) ((T4) + (T5) <= ((S0) + (S1)) * (THR))
+
 static bool hy2_tab_sum_pos(const Hy2Tab* t, long kmin, double w, double* out) {
-    double s0 = 1.0, c0 = 0.0, s1 = 0.0, c1 = 0.0;
-    double w2 = w * w, p0 = w2, p1 = w, ck = 1.0;
-    long k = 0;
-    bool done = false;
-    /* Table part: no recurrence, no branches on the coefficient source. */
-    if (t->c) {
-        const double* C = t->c;
-        const double* G = t->g;
-        long lim = (long)t->n - 3;
-        for (; k < lim; k += 2) {
-            double t1 = C[k + 1] * p1, t2 = C[k + 2] * p0;
-            hdd q = dd_two_sum(s1, t1); s1 = q.hi; c1 += q.lo;
-            q = dd_two_sum(s0, t2); s0 = q.hi; c0 += q.lo;
-            if (k + 2 >= kmin) {
-                double rho = G[k + 1] * w;
-                if (rho < w) rho = w;
-                if (rho < 1.0 && t1 + t2 <= (s0 + s1) * HY_TOL * (1.0 - rho)) {
-                    done = true; break;
-                }
-            }
-            p0 *= w2; p1 *= w2;
+    /* coefficients c_1.. on the fly (or from the table: the same numbers) */
+    double c1 = (t->n > 1) ? t->c[1] : hy2_g(t, 0.0);
+    HY_LEAN_INIT(s0, e0, s1, e1, pe, po, w2, thr, w, c1);
+    double ck = c1;                                 /* c_{k-1} for k = 2 */
+    for (long k = 2; k + 4 < HY_MAXTERMS; k += 4) {
+        double ca, cb, cc, cd;
+        if (k + 3 < t->n) {
+            ca = t->c[k]; cb = t->c[k + 1]; cc = t->c[k + 2]; cd = t->c[k + 3];
+        } else {
+            ca = ck * hy2_g(t, (double)(k - 1));
+            cb = ca * hy2_g(t, (double)k);
+            cc = cb * hy2_g(t, (double)(k + 1));
+            cd = cc * hy2_g(t, (double)(k + 2));
         }
-        if (!done) ck = C[k];
+        ck = cd;
+        double t4, t5;
+        HY_LEAN_STEP(s0, e0, s1, e1, pe, po, w2, ca, cb, cc, cd, t4, t5);
+        if (k + 4 >= kmin && HY_LEAN_DONE(s0, s1, thr, t4, t5)) break;
     }
-    /* On-the-fly part (the scalar path, or past the table): the same c_k. */
-    for (; !done && k + 2 < HY_MAXTERMS; k += 2) {
-        double g0 = (k < t->n) ? t->g[k] : hy2_g(t, (double)k);
-        double ck1 = (k + 1 < t->n) ? t->c[k + 1] : ck * g0;
-        double g1 = (k + 1 < t->n) ? t->g[k + 1] : hy2_g(t, (double)(k + 1));
-        double ck2 = (k + 2 < t->n) ? t->c[k + 2] : ck1 * g1;
-        double t1 = ck1 * p1, t2 = ck2 * p0;
-        hdd q = dd_two_sum(s1, t1); s1 = q.hi; c1 += q.lo;
-        q = dd_two_sum(s0, t2); s0 = q.hi; c0 += q.lo;
-        if (k + 2 >= kmin) {
-            double rho = g1 * w;
-            if (rho < w) rho = w;
-            if (rho < 1.0 && t1 + t2 <= (s0 + s1) * HY_TOL * (1.0 - rho)) break;
-        }
-        p0 *= w2; p1 *= w2;
-        ck = ck2;
-    }
-    *out = (s0 + s1) + (c0 + c1);
+    *out = (s0 + s1) + (e0 + e1);
     return isfinite(*out);
 }
 
@@ -1365,8 +1416,14 @@ static bool hy2_plan_init(Hy2Plan* P, double a, double b, double c, bool tabulat
     /* g_k > 0 for every k exactly when all three parameters are positive. */
     P->dir.pos = (a > 0.0 && b > 0.0 && c > 0.0);
     P->pf.pos = (P->pf.p0 + P->pf.p0lo > 0.0 && P->pf.p1 + P->pf.p1lo > 0.0 && c > 0.0);
-    P->dir.g0 = hy2_g(&P->dir, 0.0); P->dir.g1 = hy2_g(&P->dir, 1.0);
-    P->pf.g0 = hy2_g(&P->pf, 0.0);   P->pf.g1 = hy2_g(&P->pf, 1.0);
+    /* g_k = (p0+k)(p1+k)/((q0+k)(k+1)) <= 1 for all k >= 0 exactly when
+     * p0 p1 + (p0+p1) k <= q0 + (q0+1) k for all k, i.e. (sufficient, and
+     * necessary as k -> 0 and k -> infinity) p0 p1 <= q0 and p0 + p1 <= q0 + 1. */
+    P->dir.lean = P->dir.pos && a * b <= c && a + b <= c + 1.0;
+    {
+        double q0 = P->pf.p0 + P->pf.p0lo, q1 = P->pf.p1 + P->pf.p1lo;
+        P->pf.lean = P->pf.pos && q0 * q1 <= c && q0 + q1 <= c + 1.0;
+    }
     P->kmin_dir = hy2_kmin(a, b, c);
     P->kmin_pf = hy2_kmin(P->pf.p0 + P->pf.p0lo, P->pf.p1 + P->pf.p1lo, c);
     /* A non-terminating series is the generic one; a terminating Pfaff inner
@@ -1389,11 +1446,10 @@ static void hy2_plan_free(Hy2Plan* P) {
 /* One of the two tabulated series at w, with the double-double re-sum when
  * the double one loses more than a bit (one-signed terms make that rare). */
 static bool hy2_series(const Hy2Tab* t, long kmin, double w, double* out) {
-    /* The lean loop needs one-signed terms whose peak is the first one, so
-     * there is neither cancellation nor deep-peak rounding to measure: all g_k
-     * > 0, and g_0 w < 1 with g_1 <= g_0 (the cheap sufficient test; g0/g1 are
-     * precomputed per plan). Anything else takes the measured loop. */
-    if (t->pos && w > 0.0 && t->g0 * w < 1.0 && t->g1 <= t->g0)
+    /* The lean loop needs one-signed terms that never grow (peak at k = 0), so
+     * there is neither cancellation nor deep-peak rounding to measure: all
+     * g_k > 0 and g_k <= 1 for every k, decided once per plan (t->lean). */
+    if (t->lean && w > 0.0 && w < 1.0)
         return hy2_tab_sum_pos(t, kmin, w, out);
     double v, peak;
     long kpk;
@@ -1461,16 +1517,125 @@ bool sf_machine_hyper2f1(double a, double b, double c, double x, double* out) {
  * plan's tables hold the very coefficients the scalar path forms on the fly,
  * and the 1F1(1;2;x) closed form is the same expression -- so the buffer and
  * scalar surfaces agree bit-for-bit. */
+/* Four buffer elements' lean sums (hy2_tab_sum_pos, table part) in lock-step.
+ * Each lane performs exactly the scalar loop's operations in the scalar order
+ * and stops where the scalar loop would, so its result is bit-identical; the
+ * point is only that four independent dependency chains keep the FP units busy
+ * where one chain is latency-bound. A lane that runs off the end of the table
+ * (never, for the |w| <= 0.9 the lean path sees) is left to the scalar loop
+ * (*ok = false for it). */
+static void hy2_lean_x4(const Hy2Tab* t, long kmin, const double* w, int nl,
+                        double* out, bool* ok) {
+    /* Four lanes as plain scalars so every chain stays in a register; a
+     * finished lane keeps computing harmlessly (its result is already taken). */
+    double wA = w[0], wB = nl > 1 ? w[1] : wA, wC = nl > 2 ? w[2] : wA,
+           wD = nl > 3 ? w[3] : wA;
+    const double* CC = t->c;
+    double c1 = CC[1];
+    HY_LEAN_INIT(s0A, e0A, s1A, e1A, peA, poA, w2A, thrA, wA, c1);
+    HY_LEAN_INIT(s0B, e0B, s1B, e1B, peB, poB, w2B, thrB, wB, c1);
+    HY_LEAN_INIT(s0C, e0C, s1C, e1C, peC, poC, w2C, thrC, wC, c1);
+    HY_LEAN_INIT(s0D, e0D, s1D, e1D, peD, poD, w2D, thrD, wD, c1);
+    bool aA = true, aB = nl > 1, aC = nl > 2, aD = nl > 3;
+    for (long k = 2; k + 3 < (long)t->n && (aA || aB || aC || aD); k += 4) {
+        double ca = CC[k], cb = CC[k + 1], cc = CC[k + 2], cd = CC[k + 3];
+        bool test = (k + 4 >= kmin);
+        double t4, t5;
+#define HY_LANE(L, IDX) do {                                                   \
+        HY_LEAN_STEP(s0##L, e0##L, s1##L, e1##L, pe##L, po##L, w2##L,          \
+                     ca, cb, cc, cd, t4, t5);                                  \
+        if (a##L && test && HY_LEAN_DONE(s0##L, s1##L, thr##L, t4, t5)) {      \
+            out[IDX] = (s0##L + s1##L) + (e0##L + e1##L);                      \
+            ok[IDX] = isfinite(out[IDX]);                                      \
+            a##L = false;                                                      \
+        }                                                                      \
+    } while (0)
+        HY_LANE(A, 0); HY_LANE(B, 1); HY_LANE(C, 2); HY_LANE(D, 3);
+#undef HY_LANE
+    }
+    /* Lanes still running at the end of the table: the scalar loop decides. */
+    if (aA) ok[0] = false;
+    if (nl > 1 && aB) ok[1] = false;
+    if (nl > 2 && aC) ok[2] = false;
+    if (nl > 3 && aD) ok[3] = false;
+}
+
+/* The lean-path test of hy2_series, for the batch driver. */
+static bool hy2_is_lean(const Hy2Tab* t, double w) {
+    return t->c && t->lean && w > 0.0 && w < 1.0;
+}
+
 size_t sf_machine_pfq_vec(const double* a, size_t p, const double* b, size_t q,
                           const double* x, double* out, size_t n) {
     if (p == 2 && q == 1) {
         if (!isfinite(a[0]) || !isfinite(a[1]) || !isfinite(b[0])) return 0;
         Hy2Plan P;
         if (!hy2_plan_init(&P, a[0], a[1], b[0], n >= 64)) return 0;
-        size_t i = 0;
-        for (; i < n; i++) if (!hy2_plan_eval(&P, x[i], &out[i])) break;
+        size_t fail = n;
+        if (P.kind == 0 && P.a != 0.0 && P.b != 0.0) {
+            /* Elements on the lean direct (0 < x <= 0.9) or lean Pfaff
+             * (-9 <= x < 0) path are queued per table AND per |w| bucket (so
+             * the four lanes of a batch need similar numbers of terms) and
+             * summed four at a time; everything else goes through
+             * hy2_plan_eval as is. */
+            enum { NB = 32 };
+            size_t qi[2][NB][4]; double qw[2][NB][4]; int qn[2][NB];
+            memset(qn, 0, sizeof qn);
+            const Hy2Tab* tab[2] = { &P.dir, &P.pf };
+            long km[2] = { P.kmin_dir, P.kmin_pf };
+            for (size_t i = 0; i <= n; i++) {
+                int fw = -1, fb = -1;          /* the (table, bucket) to flush */
+                if (i < n) {
+                    double xi = x[i];
+                    int which = -1; double w = 0.0;
+                    if (isfinite(xi) && xi > 0.0 && xi <= 0.9 && P.dir_ok &&
+                        hy2_is_lean(&P.dir, xi)) { which = 0; w = xi; }
+                    else if (isfinite(xi) && xi < 0.0 && xi >= -9.0 && P.pf_ok) {
+                        w = xi / (xi - 1.0);
+                        if (hy2_is_lean(&P.pf, w)) which = 1;
+                    }
+                    if (which < 0) {
+                        if (!hy2_plan_eval(&P, xi, &out[i]) && i < fail) fail = i;
+                        continue;
+                    }
+                    int bk = (int)(w * NB);
+                    if (bk >= NB) bk = NB - 1;
+                    int m = qn[which][bk];
+                    qi[which][bk][m] = i; qw[which][bk][m] = w; qn[which][bk] = m + 1;
+                    if (m + 1 < 4) continue;
+                    fw = which; fb = bk;
+                }
+                for (int wq = 0; wq < 2; wq++) {
+                    for (int bk = 0; bk < NB; bk++) {
+                        int m = qn[wq][bk];
+                        if (m == 0) continue;
+                        if (i < n && !(wq == fw && bk == fb)) continue;
+                        double v[4]; bool okl[4];
+                        hy2_lean_x4(tab[wq], km[wq], qw[wq][bk], m, v, okl);
+                        for (int l = 0; l < m; l++) {
+                            size_t j = qi[wq][bk][l];
+                            bool good;
+                            if (!okl[l]) {                  /* scalar loop decides */
+                                good = hy2_plan_eval(&P, x[j], &out[j]);
+                            } else if (wq == 0) {
+                                out[j] = v[l]; good = true;
+                            } else {                        /* as hy2_plan_eval */
+                                double r = hy_pow_1mx(x[j], P.e) * v[l];
+                                good = isfinite(r);
+                                if (good) out[j] = r;
+                            }
+                            if (!good && j < fail) fail = j;
+                        }
+                        qn[wq][bk] = 0;
+                    }
+                }
+            }
+        } else {
+            for (size_t i = 0; i < n; i++)
+                if (!hy2_plan_eval(&P, x[i], &out[i])) { fail = i; break; }
+        }
         hy2_plan_free(&P);
-        return i;
+        return fail;
     }
     if (p == 1 && q == 1 && a[0] == 1.0 && b[0] == 2.0) {
         size_t i = 0;
@@ -1749,8 +1914,16 @@ bool sf_machine_hyperu_quad(double a, double b, double z, double* out) {
 /* e^(-z/2) z^(m+1/2) as one complex factor (principal power). */
 static void hy_whit_pref(double m, double zr, double zi, double* pr, double* pi) {
     double e = m + 0.5;
+    double ar = atan2(zi, zr);
+    if (zi == 0.0) {                       /* real axis: exact phase via c_pow_ma */
+        double qr, qi;
+        c_pow_ma(fabs(zr), ar, e, &qr, &qi);
+        double ex = exp(-0.5 * zr);
+        *pr = qr * ex; *pi = qi * ex;
+        return;
+    }
     double mod = pow(c_abs(zr, zi), e) * exp(-0.5 * zr);
-    double ph = e * atan2(zi, zr) - 0.5 * zi;
+    double ph = e * ar - 0.5 * zi;
     *pr = mod * cos(ph);
     *pi = mod * sin(ph);
 }

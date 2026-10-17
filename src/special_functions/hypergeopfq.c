@@ -971,15 +971,17 @@ void hypergeopfq_init(void) {
     symtab_get_def("HypergeometricPFQ")->attributes |=
         ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
+    /* The fixed-arity heads are Listable, as in Mathematica (HypergeometricPFQ
+     * is not: its first two arguments ARE lists). */
     symtab_add_builtin("Hypergeometric0F1", builtin_hypergeometric_0f1);
     symtab_get_def("Hypergeometric0F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
     symtab_add_builtin("Hypergeometric1F1", builtin_hypergeometric_1f1);
     symtab_get_def("Hypergeometric1F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 
     symtab_add_builtin("Hypergeometric2F1", builtin_hypergeometric_2f1);
     symtab_get_def("Hypergeometric2F1")->attributes |=
-        ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
+        ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
 }

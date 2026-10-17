@@ -821,23 +821,33 @@ HypergeometricPFQ[{a1,…,ap}, {b1,…,bq}, z]
   central-binomial-cubed Ramanujan `1/Pi` series:
   `4F3({1/2,1/2,1/2,5/4}, {1/4,1,1}, -1) -> 2/Pi` (general `1/Pi` summation is an
   open problem, so this is a recognizer for the known class, not universal).
-- Numeric evaluation at machine, arbitrary (MPFR), and complex precision by
-  direct series summation, with output precision tracking the input. The
-  series is summed only where it converges — `p <= q` (entire) and `p == q+1`
-  with `|z| < 1`; outside that regime (and `p > q+1`) the call stays
-  unevaluated (analytic continuation beyond the unit disk is not yet
-  implemented).
-- **Cancellation is handled, not ignored.** For negative real `z` the series
-  alternates and its largest term exceeds the sum by a factor of order `e^|z|`,
-  so a doubles-only summation silently loses that many bits. The machine path
-  measures the loss (`max|term| / |sum|`) and re-sums through the MPFR path at
-  enough working precision to absorb it, then rounds back. The answer stays
-  machine precision — it is simply the correctly rounded one. `1F1(1;2;-40)`
-  agrees with its closed form `(E^z-1)/z` to one ulp; before this it was wrong
-  in the second decimal place.
-- Has a machine kernel, so bodies containing it compile
-  (`Compile`, `Plot`, `NIntegrate`, `NDSolve`, …) rather than falling back to
-  the interpreter. `Hypergeometric0F1`/`1F1`/`2F1` share that one kernel.
+- Numeric evaluation at machine, arbitrary (MPFR), and complex precision, with
+  output precision tracking the input. The general series is summed where it
+  converges — `p <= q` (entire) and `p == q+1` with `|z| < 1`; for `p > q+1`,
+  and `p == q+1` with `|z| >= 1` other than `2F1`, the call stays unevaluated.
+  `2F1` (`{a, b}, {c}`) is analytically continued to the whole plane (see
+  `Hypergeometric2F1`).
+- **Machine precision: one raw-`double` kernel** (`sf_machine_hyper.c`), real and
+  complex (raw re/im), answering every machine-precision call — exact
+  (Integer / Rational) parameters included — *before* the exact rewrites, so the
+  scalar result is bit-identical to the packed / NDArray buffer and `Compile[]`
+  results. `{}/{b}`, `{a}/{b}` and `{a, b}/{c}` dispatch to the
+  `Hypergeometric0F1` / `1F1` / `2F1` kernels, so every spelling of the same
+  function returns the same bits.
+- **Cancellation and rounding are measured, not ignored.** Each series is
+  summed once in double with compensated (TwoSum) summation while tracking its
+  largest term and where it occurs. If the largest term exceeds the sum by more
+  than 2× (cancellation — e.g. the alternating series at negative `z`, whose
+  terms reach `e^|z|` times the result) or lies deeper than the 6th term (each
+  term then carries the rounding of the ratio products before it), the same
+  series is re-summed in double-double arithmetic (~106 bits); beyond 2^45 of
+  cancellation the kernel declines and the MPFR series answers.
+  `1F1(1;2;-40)` agrees with `(E^z-1)/z` to one ulp; `2F1(1,2;3;0.89)` (380
+  terms) is within 1.4 ulp where the plain sum was 13 ulp off.
+- Compiles (`Compile`, `Plot`, `NIntegrate`, `NDSolve`, …) at real and complex
+  scalar shapes; a complex argument lowers to the kernel's complex arm
+  (`OP_KERNN_C`). The rank-1 array shape of the n-ary heads is still open
+  (`COMPILE_MISSING.md`).
 - `D[HypergeometricPFQ[{a},{b},x], x]
    = (prod a_i / prod b_j) HypergeometricPFQ[{a_i+1},{b_j+1},x]`.
 
@@ -864,18 +874,30 @@ In[7]:= D[HypergeometricPFQ[{a1, a2}, {b1, b2, b3}, x], x]
 Out[7]= (a1 a2 HypergeometricPFQ[{1 + a1, 1 + a2}, {1 + b1, 1 + b2, 1 + b3}, x])/(b1 b2 b3)
 ```
 
-> **Packed arrays.** With a real buffer as `z` and every parameter inexact,
-> the series is summed elementwise over the buffer. `Hypergeometric0F1`,
-> `1F1` and `2F1` all rewrite to `HypergeometricPFQ`, so they take the same
-> path. **Exact** parameters do not: the parameter-cancellation, terminating
-> and closed-form reductions answer with exact or symbolic results
-> (`Hypergeometric2F1[1, 1, 2, z]` is `-Log[1 - z]/z`) and must keep running.
+> **Packed arrays.** With a real or complex machine buffer as `z` and every
+> parameter a machine Real or exact Integer / Rational, the machine kernel is
+> mapped over the buffer — the same kernel the scalar call uses, so the results
+> agree bit-for-bit. For real parameters over a float64 buffer a vector driver
+> hoists the parameter work out of the loop (for `2F1`, the series coefficients
+> are tabulated once per buffer; the scalar path forms the identical
+> coefficients on the fly). A `2F1` element on the cut widens the result to
+> complex; an int64 buffer, an MPFR parameter, or a declined element takes the
+> element-wise route. 10^6 elements: `1F1(1;2;x)` 18 ms (was 2.3 s),
+> `2F1(1,2;3;x)` 0.2 s (was 4.9 s), `2F2(1,2;3,4;x)` 0.38 s (was 2.6 s).
 
 ## Hypergeometric0F1
 
 
 `Hypergeometric0F1[b, z]` is the confluent hypergeometric function ₀F₁,
 equal to `HypergeometricPFQ[{}, {b}, z]`.
+
+- Attributes `Listable`, `NumericFunction`, `Protected`.
+- Machine kernel (real and complex `b`, `z`): the series where it loses at most
+  a bit; for `z < 0` the double-double re-sum up to `|z| ~ 250` and beyond that
+  Miller's backward recurrence for `J_{b-1}(2 Sqrt[-z])` written in `-z` itself
+  (no rounded `2 Sqrt[-z]`), normalised by the Neumann series (Gautschi 1967) —
+  accurate to the envelope of the oscillation; for `z > 900`, the Hankel
+  expansion of `I_{b-1}` with `2 Sqrt[z]` formed in double-double. Scalar 0.9 µs.
 
 ```mathematica
 In[1]:= Hypergeometric0F1[1/2, z]
@@ -888,6 +910,17 @@ Out[1]= Cosh[2 Sqrt[z]]
 `Hypergeometric1F1[a, b, z]` is Kummer's confluent hypergeometric function
 ₁F₁, equal to `HypergeometricPFQ[{a}, {b}, z]`.
 
+- Attributes `Listable`, `NumericFunction`, `Protected`.
+- Machine kernel (real and complex): closed forms for `a = 0`, `a = b` and
+  `(a, b) = (1, 2)` (`expm1(z)/z`, complex form free of cancellation at small
+  `|z|`); a terminating polynomial for non-positive integer `a` (also past a
+  lower pole it never reaches); for `|z| > 20` the DLMF 13.7.2 expansion with
+  both exponential sectors (the subdominant one with the Stokes-line `cos`
+  factor, exact in the terminating cases), accepted only when its least term is
+  below half an ulp; for `Re z < 0` Kummer's transformation
+  `e^z 1F1(b-a; b; -z)` (one-signed terms, `b - a` carried in double-double);
+  otherwise the series. Scalar 0.15 µs (real), 0.35 µs (complex).
+
 ```mathematica
 In[1]:= Hypergeometric1F1[a, b, 0]
 Out[1]= 1
@@ -898,6 +931,24 @@ Out[1]= 1
 
 `Hypergeometric2F1[a, b, c, z]` is the Gauss hypergeometric function ₂F₁,
 equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
+
+- Attributes `Listable`, `NumericFunction`, `Protected`.
+- Machine kernel, real `z`: direct series on `[0, 0.9]`, Pfaff's
+  `(1-z)^-a F(a, c-b; c; z/(z-1))` on `[-9, 0)`, Gauss's sum at `z = 1`, and the
+  connection formulas beyond. Complex `z` (real parameters): the cheapest of the
+  direct / Pfaff series (|w| ≤ 0.75), the `1-z` and `1/(1-z)` connection
+  formulas (Abramowitz & Stegun 15.3.6, with the degenerate logarithmic cases
+  15.3.10–15.3.12 when `c-a-b` or `b-a` is an integer — the digamma differences
+  carried by their own recurrences), accepted only while the combination's
+  condition number is ≤ 2; otherwise — around `z = e^{±iπ/3}`, where every
+  transformation has `|w| ≈ 1`, or for ill-conditioned parameters — analytic
+  continuation of the hypergeometric ODE by successive Taylor steps (Bühring
+  1987) from `z0 = 1/2 ± 0.45 i`. Complex parameters: series for `|z| ≤ 0.9`.
+- **On the cut** `z > 1` a machine-real `z` returns the complex limit from below
+  (the Mathematica / mpmath convention): `Hypergeometric2F1[1, 2, 3, 2.5]` is
+  `-0.929749 - 1.00531 I` (it used to stay unevaluated, as did every real
+  `z < -1` and every complex `|z| ≥ 1`).
+- Scalar 0.5 µs (real), 1.9 µs (complex); 10^6 packed elements 0.2 s.
 
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
@@ -918,12 +969,20 @@ Out[1]= -Log[1 - z]/z
   machine or arbitrary (MPFR) precision, real or complex:
   `HypergeometricU[1.5, 7, 4.5] = 0.554931`,
   `N[HypergeometricU[3/2, 7, 9/2], 25]` to 25 digits,
-  `HypergeometricU[3 - I, 2 I, 3.0]` complex. A real machine-precision argument
-  with `z > 0` uses a hardware-`double` kernel (the asymptotic series for large
-  `z`, the DLMF 13.2.9 confluent-limit log-series for integer `b`, and the Kummer
-  two-`₁F₁` connection for non-integer `b`); a complex or arbitrary-precision
-  argument, or `z ≤ 0`, uses FLINT's rigorous `acb_hypgeom_u` (correct rounding,
-  standard branch cut, integer `b` handled natively).
+  `HypergeometricU[3 - I, 2 I, 3.0]` complex. A machine-precision call (real
+  `a`, `b` exact or machine; `z` machine real or complex) uses a raw-`double`
+  kernel, checked before the exact reductions: the asymptotic series for large
+  `|z|` (compensated, accepted only when its least term is below half an ulp —
+  it used to accept 1e-13), the DLMF 13.2.9 confluent-limit log series for
+  integer `b`, the Kummer two-`₁F₁` connection for non-integer `b` (each
+  accepted only when its combination amplifies rounding by at most 4× — these
+  guards used to allow 1e13 and 1e6, and e.g. `HypergeometricU[5.5, 0.3, 3.]`
+  came back 1.5e-10 off), and between them, where both series cancel, the
+  integral representation by double-exponential quadrature (exp-sinh rule, 50–90
+  nodes, ~4 µs; FLINT took 280 µs there). Real `z < 0` returns the principal
+  complex value; a complex machine `z` uses the complex twin of the same
+  regimes. Complex parameters or arbitrary precision use FLINT's rigorous
+  `acb_hypgeom_u`.
 - **Derivative.** `D[HypergeometricU[a, b, z], z] = -a HypergeometricU[a+1, b+1, z]`
   (DLMF 13.3.22); `d/da` and `d/db` stay as inert `Derivative[...]`.
 - **Performance (machine reals).** A real machine argument with `z > 0` shares a
@@ -2121,11 +2180,15 @@ Hypergeometric1F1[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
   `Series[WhittakerM[2, 1/2, x], {x, Infinity, 5}] = x E^(-x/2) (1 - x/2)`;
   `SeriesCoefficient` at the origin follows for a concrete `m`.
 - **Listable.** `WhittakerM[2, 3, {1.5, 2.5, 3.5}] = {2.76149, 13.0096, 34.2394}`.
-- **Performance (machine reals).** A real machine-precision argument uses a
-  hardware-`double` kernel shared bit-for-bit with the NDArray / packed fast path
-  and `Compile[]` (`CompileDiagnostics[{{x,_Real},{y,_Real},{z,_Real}},
-  WhittakerM[x,y,z]]` reports `Compiled -> True`). A complex or arbitrary-precision
-  argument, or `z ≤ 0`, falls back to the confluent-form evaluator.
+- **Performance (machine precision).** A machine-precision call — `k`, `m` exact
+  or machine real, `z` machine real or complex — uses a raw-`double` kernel
+  shared bit-for-bit with the NDArray / packed fast path and `Compile[]` (real
+  and complex: `CompileDiagnostics[{{x,_Complex}}, WhittakerM[1, 1/2, x]]`
+  reports `Compiled -> True`). Real `z < 0` returns the principal complex value
+  (an integer `m + 1/2` gives a real one). Scalar 0.2 µs (real), 0.4 µs
+  (complex); exact rational `m` used to fall to the expression template (4.7 µs)
+  and its buffers to the element-wise route (5.5 s per 10^6; now 0.08 s).
+  Arbitrary precision falls back to the confluent-form evaluator.
 
 The general (non-terminating) asymptotic at Infinity — a two-scale Stokes
 transseries — is not produced, `FunctionExpand` is not yet available, and the
@@ -2158,10 +2221,12 @@ HypergeometricU[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
   `WhittakerW[2, 3, 4.5] = 11.3063`, `WhittakerW[6, 4, 1.7] = 1740.55`,
   `N[WhittakerW[3/5, 1/3, 1/7], 30]` to 30 digits,
   `N[WhittakerW[1/5, 2 - I, 2]] = 0.314759 - 1.27345 I`, and the 45-digit complex
-  `WhittakerW[2 - 5 I, 3, 4.5\`45]`. A real machine argument with `z > 0` uses a
-  hardware-`double` kernel shared bit-for-bit with the NDArray / packed fast path
-  and `Compile[]`; complex, arbitrary-precision, or `z ≤ 0` uses the
-  `HypergeometricU` evaluator (FLINT `acb_hypgeom_u`). In the common
+  `WhittakerW[2 - 5 I, 3, 4.5\`45]`. A machine-precision call (`k`, `m` exact
+  or machine real; `z` machine real or complex) uses the raw-`double`
+  `HypergeometricU` kernel (real or complex), shared bit-for-bit with the
+  NDArray / packed fast path and `Compile[]`; real `z < 0` gives the principal
+  complex value. Arbitrary precision uses the `HypergeometricU` evaluator (FLINT
+  `acb_hypgeom_u`). In the common
   integer/half-integer `m` case (`b = 2m+1` an integer) the `double` kernel's
   log series advances its three digammas by the recurrence `ψ(x+1) = ψ(x) + 1/x`
   — three seed evaluations instead of three per term — so the packed path runs

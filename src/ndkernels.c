@@ -40,6 +40,7 @@
 #include "special_functions/sf_machine_plog.h"
 #include "special_functions/sf_machine_zeta.h" /* zeta-family real + complex kernels */
 #include "special_functions/sf_machine_hyper.h"  /* complex hypergeometric-family kernels */
+#include "special_functions/sf_machine_error.h"   /* complex erf family, Fresnel, Sinc, InverseErf(c) */
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -506,10 +507,13 @@ static bool ndk_LogGamma_r(double x, double* o) {
  * true value is complex and a CT_REAL program cannot carry it. */
 static const NDUnaryKernel NDKU_LogGamma = { loggamma_machine_complex, ndk_LogGamma_r, true, false, NULL, NULL, false };
 
-static bool ndk_Erf_r(double x, double* o)  { double v = erf(x);  *o = v; return isfinite(v); }
-static bool ndk_Erfc_r(double x, double* o) { double v = erfc(x); *o = v; return isfinite(v); }
-static const NDUnaryKernel NDKU_Erf  = { NULL, ndk_Erf_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_Erfc = { NULL, ndk_Erfc_r, true, false, NULL, NULL, false };
+static bool ndk_Erf_r(double x, double* o)  { return sf_erf_r(x, o); }
+static bool ndk_Erfc_r(double x, double* o) { return sf_erfc_r(x, o); }
+/* Both arms are the sf_machine_error.c kernels (the scalar builtin and the
+ * Compile opcodes OP_ERF_R / OP_ERFC_R / OP_VERF_R / OP_VERFC_R call the same
+ * helpers, so every surface agrees bit for bit). */
+static const NDUnaryKernel NDKU_Erf  = { sf_erf_c,  ndk_Erf_r,  true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Erfc = { sf_erfc_c, ndk_Erfc_r, true, false, NULL, NULL, false };
 
 /* Bessel J/Y of integer order over a real array via libc jn/yn. Kernel receives
  * (order, arg); declines non-integer order or any complex operand -> List path. */
@@ -604,29 +608,25 @@ static bool ndk_SinIntegral_r(double x, double* o)   { return sf_machine_si(x, o
 static bool ndk_CosIntegral_r(double x, double* o)   { return sf_machine_ci(x, o); }
 static bool ndk_SinhIntegral_r(double x, double* o)  { return sf_machine_shi(x, o); }
 static bool ndk_CoshIntegral_r(double x, double* o)  { return sf_machine_chi(x, o); }
-static bool ndk_Sinc_r(double x, double* o)          { return sf_machine_sinc(x, o); }
-static bool ndk_InverseErf_r(double x, double* o) {
-    if (!(x > -1.0 && x < 1.0)) return false;         /* +-1 are the poles */
-    double v = inverf_double(x); *o = v; return isfinite(v);
-}
-static bool ndk_InverseErfc_r(double x, double* o) {
-    if (!(x > 0.0 && x < 2.0)) return false;
-    double v = inverfc_double(x); *o = v; return isfinite(v);
-}
+static bool ndk_Sinc_r(double x, double* o)          { return sf_sinc_r(x, o); }
+/* InverseErf/InverseErfc: the piecewise-polynomial kernels (decline at the
+ * poles +-1 / 0, 2 and outside the real domain). */
+static bool ndk_InverseErf_r(double x, double* o)    { return sf_inverse_erf_r(x, o); }
+static bool ndk_InverseErfc_r(double x, double* o)   { return sf_inverse_erfc_r(x, o); }
 static const NDUnaryKernel NDKU_ExpIntegralEi = { expintegralei_machine_complex, ndk_ExpIntegralEi_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_LogIntegral   = { logintegral_machine_complex, ndk_LogIntegral_r,   true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_SinIntegral   = { sinintegral_machine_complex, ndk_SinIntegral_r,   true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_CosIntegral   = { cosintegral_machine_complex, ndk_CosIntegral_r,   true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_SinhIntegral  = { sinhintegral_machine_complex, ndk_SinhIntegral_r,  true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_CoshIntegral  = { coshintegral_machine_complex, ndk_CoshIntegral_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_Sinc          = { NULL, ndk_Sinc_r,          true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Sinc          = { sf_sinc_c, ndk_Sinc_r,     true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false, NULL, NULL, false };
 
-static bool ndk_Erfi_r(double x, double* o)          { return sf_machine_erfi(x, o); }
+static bool ndk_Erfi_r(double x, double* o)          { return sf_erfi_r(x, o); }
 static bool ndk_ProductLog_r(double x, double* o)    { return sf_machine_productlog(x, o); }
-static bool ndk_FresnelC_r(double x, double* o)      { return sf_machine_fresnel_c(x, o); }
-static bool ndk_FresnelS_r(double x, double* o)      { return sf_machine_fresnel_s(x, o); }
+static bool ndk_FresnelC_r(double x, double* o)      { return sf_fresnel_c_r(x, o); }
+static bool ndk_FresnelS_r(double x, double* o)      { return sf_fresnel_s_r(x, o); }
 static bool ndk_PolyGamma_r(double x, double* o)     { return sfg_digamma(x, o); }
 static bool ndk_PolyGamma_u(double xr, double xi, double* rr, double* ri) {
     return sfg_polygamma_c(0, xr, xi, rr, ri);
@@ -635,10 +635,10 @@ static bool ndk_HarmonicNumber_r(double x, double* o){ return sf_machine_harmoni
 static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x, o); }
 static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
 static bool ndk_LucasL_r(double x, double* o)        { return sf_machine_lucasl(x, o); }
-static const NDUnaryKernel NDKU_Erfi           = { NULL, ndk_Erfi_r,           true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Erfi           = { sf_erfi_c, ndk_Erfi_r,      true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_ProductLog     = { sf_machine_productlog_c, ndk_ProductLog_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_FresnelC       = { NULL, ndk_FresnelC_r,       true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_FresnelS       = { NULL, ndk_FresnelS_r,       true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_FresnelC       = { sf_fresnel_c_c, ndk_FresnelC_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_FresnelS       = { sf_fresnel_s_c, ndk_FresnelS_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_PolyGamma      = { ndk_PolyGamma_u, ndk_PolyGamma_r, true, false, NULL, NULL, false };
 static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, true, false, NULL, NULL, false };
 /* Zeta's complex arm: the same sf_zeta_c the scalar builtin calls. */

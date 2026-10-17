@@ -56,6 +56,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"           /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -497,7 +499,10 @@ static bool fresnel_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec,
     int sgn = (red < 0.0) ? -1 : 1;             /* fold to Re >= 0 (C,S odd) */
     double zabs = sqrt(red * red + imd * imd);
 
-    /* Partial sums peak ~e^((Pi/2)|z|^2); add that many guard bits. */
+    /* Partial sums peak ~e^((Pi/2)|z|^2); add that many guard bits -- unless
+     * that is beyond any MPFR precision (the cast used to wrap and trip MPFR's
+     * precision assertion, aborting the process): then decline. */
+    if (!(zabs * zabs < 1e9)) return false;
     long guard = 64 + (long)(M_PI_2 * zabs * zabs / M_LN2);
     mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
 
@@ -647,9 +652,27 @@ static Expr* fresnel_emit_argx(const char* name, size_t argc) {
     return NULL;
 }
 
+/* Machine-scalar fast path shared by FresnelC and FresnelS, ahead of the
+ * special-value ladder: the kernels the NDArray / packed / Compile surfaces
+ * call (sf_machine_error.c), so all five agree bit for bit. NULL = not a
+ * machine call, or the kernel declined (fall through to MPFR). */
+static Expr* fresnel_machine(const Expr* res, int want_S) {
+    SFMachineArgs ma;
+    if (!sf_machine_scalar_args(res, &ma)) return NULL;
+    double vr, vi;
+    if (!ma.any_complex) {
+        bool ok = want_S ? sf_fresnel_s_r(ma.re[0], &vr) : sf_fresnel_c_r(ma.re[0], &vr);
+        return ok ? expr_new_real(vr) : NULL;
+    }
+    bool ok = want_S ? sf_fresnel_s_c(ma.re[0], ma.im[0], &vr, &vi)
+                     : sf_fresnel_c_c(ma.re[0], ma.im[0], &vr, &vi);
+    return ok ? sf_machine_complex_result(vr, vi) : NULL;
+}
+
 Expr* builtin_fresnelc(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    if (argc == 1) { Expr* m = fresnel_machine(res, 0); if (m) return m; }
     if (argc == 1) return fresnel_one_arg(res->data.function.args[0], 0);
     return fresnel_emit_argx("FresnelC", argc);
 }
@@ -657,6 +680,7 @@ Expr* builtin_fresnelc(Expr* res) {
 Expr* builtin_fresnels(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    if (argc == 1) { Expr* m = fresnel_machine(res, 1); if (m) return m; }
     if (argc == 1) return fresnel_one_arg(res->data.function.args[0], 1);
     return fresnel_emit_argx("FresnelS", argc);
 }

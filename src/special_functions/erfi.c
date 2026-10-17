@@ -45,6 +45,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -441,6 +443,10 @@ static Expr* erfi_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
     (void)erfi_to_double(re, &red);
     (void)erfi_to_double(im, &imd);
     double z2abs = red * red + imd * imd;
+    /* |z|^2/ln2 guard bits: past ~1e9 that is beyond any MPFR precision
+     * (the cast used to wrap and trip MPFR's precision assertion, aborting
+     * the process); leave such a call unevaluated instead. */
+    if (!(z2abs < 1e9)) return NULL;
     long guard = 64 + (long)(z2abs / M_LN2);
     mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
 
@@ -554,6 +560,20 @@ Expr* builtin_erfi(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    /* Machine-scalar fast path, ahead of the special-value ladder: the kernels
+     * the NDArray / packed / Compile surfaces share (sf_machine_error.c). A
+     * decline (overflow) falls through to the MPFR path. */
+    if (argc == 1) {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (!ma.any_complex) {
+                if (sf_erfi_r(ma.re[0], &vr)) return expr_new_real(vr);
+            } else if (sf_erfi_c(ma.re[0], ma.im[0], &vr, &vi)) {
+                return sf_machine_complex_result(vr, vi);
+            }
+        }
+    }
     if (argc == 1) return numeric_promote_result_if_degenerate(erfi_one_arg(args[0]), res);
     return erfi_emit_argx(argc);
 }

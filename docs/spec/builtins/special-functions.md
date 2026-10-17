@@ -152,16 +152,35 @@ comes **first** in `Beta[z, a, b]`.
 - Odd symmetry for symbolic arguments: `Erf[-x] = -Erf[x]`,
   `Erf[-2 x] = -Erf[2 x]`.
 - Numeric evaluation:
-  - Machine-precision real → libm `erf`, e.g. `Erf[0.95] = 0.820891`,
-    `Erf[1.5] = 0.966105`.
+  - **Machine precision** (real and complex) → the raw-double kernels of
+    `src/special_functions/sf_machine_error.c`, shared bit-for-bit by the
+    scalar builtin, the packed/`NDArray` element-wise map and `Compile[]`
+    (scalar and rank-1, real and complex). The machine gate runs before any
+    special-value ladder.
+    - Real: |x| < 1/2 the Maclaurin series; otherwise `erf = 1 − e^(−x²)·erfcx(x)`
+      with erfcx from 0.5-wide polynomial tables (6 ≤ x ≤ 27.4: x·erfcx as a
+      polynomial in 1/x²), e^(−x²) from the exact (Dekker) square — ≤ 1.6 ulp,
+      slightly faster than libm. E.g. `Erf[0.95] = 0.820891`, `Erf[1.5] = 0.966105`.
+    - Complex: |z| ≤ 0.8 the Maclaurin series (19 terms, Estrin); next to an
+      axis (2|xy| < 1/2) the Taylor series about that axis (Hermite recurrence),
+      so the SMALL component keeps full relative accuracy
+      (`Erf[1.*^-300 + 2. I] = 6.16074*10^-299 + 18.5648 I`, not `1.1*10^-16 + …`);
+      |Re z|, |Im z| < 4 `erf = 1 − e^(−z²) w(iz)` with the Faddeeva function w
+      from a 0.5×0.5 grid of degree-20 Taylor expansions (generated at 60 digits)
+      and e^(−z²) from an exact exponent and exactly reduced phase; elsewhere
+      Salzer's series (A&S 7.1.29, an exponentially convergent trapezoidal sum,
+      error 2e^(−4π²) relative), with `cosh(nY)` generated outward from the
+      Gaussian peak and compensated sums. Odd/conjugate symmetry fold the plane.
+      Measured against mpmath: median 0.4 ulp, ≤ 3.5 ulp away from the complex
+      zeros (absolute error scaled by |z erf′(z)| ≤ 2.7 ulp everywhere).
+      `|Im z| > 26` (e^(y²) overflow) declines to the MPFR path.
   - Arbitrary precision (MPFR) real → `mpfr_erf`, output precision tracking the
     input, e.g.
     `N[Erf[3/2], 50] = 0.96610514647531072706697626164594785868141047925764`
     and `Erf[0.95`100]`.
-  - **Complex** (machine *and* arbitrary precision) → the cancellation-aware
+  - **Complex, arbitrary precision** → the cancellation-aware
     Maclaurin series erf(z) = (2/√π) e^(−z²) Σ 2ⁿ z^(2n+1)/(1·3···(2n+1))
-    (DLMF 7.6.2), evaluated in MPFR with `|z|²/ln2` guard bits so even
-    machine-precision complex results carry full accuracy, e.g.
+    (DLMF 7.6.2), evaluated in MPFR with `|z|²/ln2` guard bits, e.g.
     `Erf[1.5 - I] = 1.0784 + 0.0279637 I`,
     `N[Erf[1/2 + I], 30] = 1.20484755831421800270211268210 + 1.02440088160844588172486045441 I`.
     A `double complex` series is the fallback for `USE_MPFR=0` builds.
@@ -189,18 +208,21 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   `Erfc[-I Infinity] = DirectedInfinity[I]` (negated relative to `Erf`), plus
   `ComplexInfinity` and `Indeterminate` pass through.
 - Numeric evaluation:
-  - Machine-precision real → libm `erfc`, e.g. `Erfc[0.95] = 0.179109`,
-    `Erfc[1.5] = 0.0338949`.
+  - **Machine precision** (real and complex) → the shared kernels of
+    `sf_machine_error.c` (see `Erf`): real `erfc = e^(−x²)·erfcx(x)` for x ≥ 1/2
+    (no cancellation; ≤ 3.1 ulp where the macOS libm measured 5.1), `2 − erfc(−x)`
+    for x < 0; complex `erfc = e^(−z²) w(iz)` for Re z ≥ 0 inside the table box,
+    `erfc(X) − (erf(z) − erf(X))` from Salzer's series beyond it (Re z > 26
+    declines), `1 − erf(z)` for Re z < 0. E.g. `Erfc[0.95] = 0.179109`,
+    `Erfc[1.5] = 0.0338949`, `Erfc[1.5 - I] = -0.0783992 - 0.0279637 I`.
   - Arbitrary precision (MPFR) real → `mpfr_erfc`, which is cancellation-free
     even for large positive z (where `1 − erf(z)` would lose all significance),
     output precision tracking the input, e.g.
     `N[Erfc[3/2], 50] = 0.033894853524689272933023738354052141318589520742363`.
-  - **Complex** (machine *and* arbitrary precision) → `1 − erf(z)`, with erf(z)
+  - **Complex, arbitrary precision** → `1 − erf(z)`, with erf(z)
     from the cancellation-aware DLMF 7.6.2 series evaluated in MPFR; the
     complement is formed at working precision (with `|z|²/ln2` guard bits) before
-    rounding, so even machine-precision complex results carry full accuracy, e.g.
-    `Erfc[1.5 - I] = -0.0783992 - 0.0279637 I`. A `double complex` series is the
-    fallback for `USE_MPFR=0` builds.
+    rounding. A `double complex` series is the fallback for `USE_MPFR=0` builds.
 - Derivative: `D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(−z²)` (chain rule applies), so
   the origin Taylor series follows from the generic `D`-based fallback, e.g.
   `Series[Erfc[x], {x, 0, 3}]` begins `1 − 2/Sqrt[Pi] x + …`.
@@ -225,16 +247,23 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   `Erfi[-2 x] = -Erfi[2 x]`.
 - Numeric evaluation (there is no libm/MPFR `erfi`, so the kernels are
   hand-rolled):
-  - Real (machine *and* arbitrary precision) → the all-positive Maclaurin series
+  - **Machine precision** → the shared kernels of `sf_machine_error.c`. Real:
+    |x| < 1/2 the positive Maclaurin series; otherwise
+    `erfi(x) = e^(x²)·g(x)` with g = e^(−x²) erfi(x) = (2/√π)·Dawson(x) from
+    0.5-wide tables (x < 10) or its 14-term asymptotic series, e^(x²) from the
+    exact square (scaled by e^(−64) where e^(x²) alone would overflow,
+    x² ∈ (709, 713.6)); ≤ 2.6 ulp (the old summed series reached 30 ulps at
+    |x| ≈ 5, and cost ~80 ns). Complex: `−i erf(iz)` through the complex erf
+    kernel. `|x| > 26.72` declines to MPFR.
+  - Real, arbitrary precision → the all-positive Maclaurin series
     erfi(x) = (2/√π) Σ x^(2n+1)/(n!(2n+1)). For real x every term shares x's
     sign, so the partial sums climb monotonically to the result — no
     cancellation, no e^(x²) prefactor — evaluated in MPFR with output precision
     tracking the input, e.g. `Erfi[2.5] = 130.396`, `Erfi[0.5] = 0.614952`,
     `N[Erfi[1/2], 50] = 0.61495209469651098083968118562364139305134561789540`.
-  - **Complex** (machine *and* arbitrary precision) → erfi(z) = -i erf(i z),
+  - **Complex, arbitrary precision** → erfi(z) = -i erf(i z),
     reusing the cancellation-aware erf series (DLMF 7.6.2) in MPFR with
-    `|z|²/ln2` guard bits, so even machine-precision complex results carry full
-    accuracy, e.g. `Erfi[1.5 - I] = -0.70136 - 1.84683 I`,
+    `|z|²/ln2` guard bits, e.g. `Erfi[1.5 - I] = -0.70136 - 1.84683 I`,
     `N[Erfi[1/2 + I], 30] = 0.187973467223383313628263810077 + 0.950709728318957173804611826379 I`.
     A `double complex` series is the fallback for `USE_MPFR=0` builds.
 - Derivative: `D[Erfi[z], z] = (2/Sqrt[Pi]) E^(z^2)` (positive exponent, vs
@@ -622,12 +651,26 @@ inputs.
 - Numeric evaluation at machine or arbitrary (MPFR) precision, tracking the input
   precision: `FresnelC[1.8] = 0.333633`, `FresnelS[1.8] = 0.450939`,
   `N[FresnelC[2], 50] = 0.48825340607534075450022350335726103768836715450922`.
-  On the real machine/packed path the `|x| > 1.5` Lentz continued fraction is
-  carried in real/imag pairs (not C99 `double _Complex`, which compiles each
-  complex divide to libgcc's slow `__divdc3`); the values are unchanged to ≤1 ulp
-  and the branch is ~1.9× faster, taking `FresnelC[v]` over 10⁶ to ~59 ms.
+  **Machine precision** (real and complex; scalar, packed/`NDArray` and
+  `Compile[]` share the kernels of `sf_machine_error.c` bit for bit):
+  - Real: |x| ≤ 1 the Maclaurin series (x³ formed exactly); 1 < |x| < 8
+    `C = 1/2 + f sin(πx²/2) − g cos(πx²/2)`, `S = 1/2 − f cos − g sin` (DLMF
+    7.5.3–4) with the auxiliary f, g from 0.5-wide polynomial tables (the Cephes
+    `fresnl` structure); |x| ≥ 8 the asymptotic series of f, g (DLMF 7.12.2–3).
+    The phase πx²/2 is reduced **exactly** (x² as a Dekker double-double, mod 4),
+    so even `FresnelC[123456.789]` is correctly rounded — libm's `sin(π x x/2)`
+    carries ~x² ulps of phase error. ≤ 2.5 ulp, median 0.3.
+  - Complex: |z| ≤ 1.3 the Maclaurin series in z⁴; beyond,
+    `C ± iS = ((1±i)/2) erf((√π/2)(1∓i) z)` through the complex erf kernel, but
+    with every exponentiated quantity (`X² = (π/4)(x+y)²`, `XY = (π/4)(y²−x²)`,
+    `Y² − X² = ∓πxy`) formed from the exact x, y — rounding the rotated argument
+    first costs ~π|z|² ulps (25 at |z| = 2.8). Next to an axis (π|xy| < 1/2) the
+    Taylor series about the real axis (via C(iz) = iC(z), S(iz) = −iS(z) for the
+    imaginary one), so the small component is accurate relative to itself.
+    ≤ 3.5 ulp away from the zeros.
 - Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
-  105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0.488253 I`.
+  105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0. + 0.488253 I` (a
+  machine-complex argument gives a machine-complex result, as in Mathematica).
 - Derivatives: `D[FresnelC[z], z] = Cos[π z²/2]`, `D[FresnelS[z], z] =
   Sin[π z²/2]` (chain rule applies, e.g. `D[FresnelC[x^2], x] = 2 x Cos[π x⁴/2]`).
 - Series: Taylor at the origin (`Series[FresnelC[x], {x, 0, 9}] = x − π² x⁵/40 +
@@ -646,9 +689,13 @@ inputs.
 - `Sinc[z]` — the cardinal sine Sin[z]/z, with the removable singularity filled
   in as `Sinc[0] = 1`.
 
-`Sinc` is entire and even. Real arguments use `mpfr_sin(z)/z`; complex arguments
-use `sin(z)/z` via the shared `ncpx` toolkit. Provided as a first-class head so
-`SinIntegral` differentiates to it.
+`Sinc` is entire and even. Machine-precision arguments use the kernels of
+`sf_machine_error.c` (shared with the packed/`NDArray` map and `Compile[]`):
+real `sin(x)/x` (≤ 1.9 ulp), complex `|z| ≤ 1` the even Maclaurin series and
+`(sin x cosh y + i cos x sinh y)/z` beyond (≤ 3.7 ulp; `|Im z| > 709` declines).
+Arbitrary-precision real arguments use `mpfr_sin(z)/z`; complex ones `sin(z)/z`
+via the shared `ncpx` toolkit. Provided as a first-class head so `SinIntegral`
+differentiates to it.
 
 - Exact special values: `Sinc[0] = 1`, `Sinc[±Infinity] = 0`;
   `ComplexInfinity` maps to `Indeterminate`.
@@ -684,9 +731,15 @@ inputs stay symbolic.
 - Numeric evaluation (neither C99 libm nor MPFR ships an inverse-erf, so the
   kernel is Newton's iteration on `f(z) = erf(z) − s`,
   `z ← z − (erf(z) − s)(Sqrt[Pi]/2) e^{z²}`):
-  - Machine-precision real → a Winitzki seed polished by Newton on libm `erf`,
-    e.g. `InverseErf[0.6] = 0.595116`, `InverseErf[1/{2.,3.,4.,5.}] =
-    {0.476936, 0.30457, 0.225312, 0.179143}`.
+  - Machine-precision real → `sf_inverse_erf_r` (`sf_machine_error.c`, shared
+    with the packed/`NDArray` map and `Compile[]`): |s| < 0.875 a degree-14
+    polynomial for erfinv(s)/s on 1/16-wide pieces (no logarithm); beyond, in
+    Giles' variable w = −log(1 − s²) (erfinv(s)/s is analytic in the strip
+    |Im w| < π), unit-width degree-11 pieces for w < 6 and, past that, a 1e-7 seed
+    in 1/√w plus one Halley step on erfc written with the relative residual. No
+    erf evaluation on the main path; ≤ 1.5 ulp (the old Winitzki + up-to-four
+    Newton steps cost an erf and an exp each). E.g. `InverseErf[0.6] = 0.595116`,
+    `InverseErf[1/{2.,3.,4.,5.}] = {0.476936, 0.30457, 0.225312, 0.179143}`.
   - Arbitrary precision (MPFR) real → Newton with precision doubling on
     `mpfr_erf`, output precision tracking the input, e.g.
     `N[InverseErf[33/100], 50] = 0.30133214613370582612850271815839477396582428282853`.
@@ -720,9 +773,13 @@ out-of-domain (`s < 0` or `s > 2`) inputs stay symbolic.
   cancellation, so the kernel instead Newton-iterates directly on the
   cancellation-free `erfc`: `f(z) = erfc(z) − s`,
   `z ← z + (erfc(z) − s)(Sqrt[Pi]/2) e^{z²}`:
-  - Machine-precision real → a Winitzki seed polished by Newton on libm `erfc`,
-    e.g. `InverseErfc[0.6] = 0.370807`, `InverseErfc[1/{2.,3.,4.,5.}] =
-    {0.476936, 0.68407, 0.81342, 0.906194}`.
+  - Machine-precision real → `sf_inverse_erfc_r`, the `InverseErf` kernel fed
+    the exact complement q = min(s, 2 − s), so the tail (q down to the least
+    normal double, z ≈ 26.5) is resolved from q itself, never from 1 − s;
+    ≤ 2.2 ulp. A subnormal s (whose few bits the Halley residual cannot resolve)
+    is solved at 53 bits in MPFR — it used to answer `Indeterminate`. E.g.
+    `InverseErfc[0.6] = 0.370807`, `InverseErfc[1/{2.,3.,4.,5.}] =
+    {0.476936, 0.68407, 0.81342, 0.906194}`, `InverseErfc[1.*^-320] = 27.0732`.
   - Arbitrary precision (MPFR) real → Newton with precision doubling on
     `mpfr_erfc`, output precision tracking the input, e.g.
     `N[InverseErfc[33/100], 50] = 0.68880252811655645040250472890525783544948992349371`

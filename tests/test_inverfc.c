@@ -159,6 +159,19 @@ void test_inverfc_arity() {
     assert_eval_eq("InverseErfc[1, 2, 3]", "InverseErfc[1, 2, 3]", 0);
 }
 
+/* The machine-precision value comes from the shared raw-double kernel
+ * (sf_machine_error.c) on every surface: scalar == unpacked List == packed
+ * List == NDArray == Compile (scalar and rank-1), bit for bit. */
+void test_inverseerfc_machine_surfaces() {
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[1]; RandomReal[{0.00001, 1.99999}, 200]), sc, cf, cfa}, sc = InverseErfc /@ xs;"
+        " cf = Compile[{{x, _Real}}, InverseErfc[x]]; cfa = Compile[{{v, _Real, 1}}, InverseErfc[v]];"
+        " {Max[Abs[sc - InverseErfc[FromPackedArray[xs]]]], Max[Abs[sc - InverseErfc[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[InverseErfc[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -171,6 +184,8 @@ int main() {
     TEST(test_inverfc_listable);
     TEST(test_inverfc_attributes);
     TEST(test_inverfc_arity);
+
+    TEST(test_inverseerfc_machine_surfaces);
 
     printf("All InverseErfc tests passed.\n");
     return 0;

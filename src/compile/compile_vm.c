@@ -25,12 +25,19 @@
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
+#include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #endif
 #include <math.h>
 #include <complex.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+
+/* Erf / Erfc go through the shared machine kernels (sf_machine_error.c) on
+ * every surface; these adapt them to the expression form VUN expects. The
+ * kernels never decline a non-NaN real, and pass NaN through as NaN. */
+static inline double vm_erf_r(double x)  { double v = x; (void)sf_erf_r(x, &v);  return v; }
+static inline double vm_erfc_r(double x) { double v = x; (void)sf_erfc_r(x, &v); return v; }
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1109,8 +1116,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(MAX_R): RD.r = RA.r > RB.r ? RA.r : RB.r; NEXT();
             OP(MIN_I): RD.i = RA.i < RB.i ? RA.i : RB.i; NEXT();
             OP(MIN_R): RD.r = RA.r < RB.r ? RA.r : RB.r; NEXT();
-            OP(ERF_R): RD.r = erf(RA.r); NEXT();
-            OP(ERFC_R): RD.r = erfc(RA.r); NEXT();
+            OP(ERF_R): (void)sf_erf_r(RA.r, &RD.r); NEXT();     /* the shared kernel, */
+            OP(ERFC_R): (void)sf_erfc_r(RA.r, &RD.r); NEXT();   /* not libm erf/erfc  */
             OP(KERN_RR): { double o; RD.r = ((kfn_r)c->imm.p)(RA.r, &o) ? o : NAN; } NEXT();
             OP(KERN_R2R): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
             OP(KERN_RC): { double orr, oi; if (((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
@@ -1671,8 +1678,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             VUN(VATAN_R, R, double, atan(a_[k_]));   VUN(VATAN_C, C, double _Complex, catan(a_[k_]));
             VUN(VABS_R, R, double, fabs(a_[k_]));
             VUN(VSIGN_R, R, double, (double)((a_[k_] > 0) - (a_[k_] < 0)));
-            VUN(VERF_R, R, double, erf(a_[k_]));
-            VUN(VERFC_R, R, double, erfc(a_[k_]));
+            VUN(VERF_R, R, double, vm_erf_r(a_[k_]));
+            VUN(VERFC_R, R, double, vm_erfc_r(a_[k_]));
             /* complex tile in, real tile out */
             OP(VABS_C): { double* d_ = TD_R; const double _Complex* a_ = TA_C;
                           for (int k_ = 0; k_ < VBLOCK; k_++) d_[k_] = cabs(a_[k_]); } NEXT();

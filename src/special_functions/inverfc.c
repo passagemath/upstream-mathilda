@@ -42,6 +42,8 @@
 #include "expr.h"
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_error.h"   /* the shared raw-double kernels (ND / Compile too) */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -82,6 +84,21 @@ static Expr* ifc_neg_infinity(void) {
  * it directly instead of sitting on a degrade sentinel. */
 double inverfc_double(double x) {
     if (x == 1.0) return 0.0;
+    {   /* the piecewise-polynomial kernel; the Winitzki + Newton fallback only
+         * for what it declines */
+        double v;
+        if (sf_inverse_erfc_r(x, &v)) return v;
+    }
+    if (x > 0.0 && x < 1e-300) {
+        /* Subnormal / tiny s: Winitzki's 1 - s rounds to 1 and the seed is
+         * log(0). The leading asymptotics of erfc, e^{-z^2}/(z sqrt(pi)) = s,
+         * give a seed the MPFR Newton refines (it used to start from NaN and
+         * answer Indeterminate). */
+        double L = -log(x);
+        double z = sqrt(L);
+        z = sqrt(L - log(INVERFC_SQRT_PI * z));
+        return sqrt(L - log(INVERFC_SQRT_PI * z));
+    }
     const double a = 0.147;                 /* Winitzki's tuned constant */
     double w  = 1.0 - x;                    /* erf(z) = 1 - erfc(z) = w   */
     double ln = log(1.0 - w * w);           /* < 0 for |w| < 1            */
@@ -172,6 +189,25 @@ static Expr* inverfc_one_arg(Expr* arg) {
         if (x < 0.0 || x > 2.0) return NULL;             /* out of domain */
         if (x == 0.0) return expr_new_symbol(SYM_Infinity);
         if (x == 2.0) return ifc_neg_infinity();
+        {
+            double v;
+            if (sf_inverse_erfc_r(x, &v)) return expr_new_real(v);
+        }
+#ifdef USE_MPFR
+        /* The kernel declines a subnormal s (its Halley residual cannot
+         * resolve s's few bits; the Winitzki seed below breaks down there
+         * too): solve at 53 bits in MPFR instead. */
+        {
+            mpfr_t s53, r53;
+            mpfr_init2(s53, 53);
+            mpfr_init2(r53, 53);
+            mpfr_set_d(s53, x, MPFR_RNDN);
+            inverfc_mpfr(r53, s53, 53);
+            double v = mpfr_get_d(r53, MPFR_RNDN);
+            mpfr_clears(s53, r53, (mpfr_ptr)0);
+            if (isfinite(v)) return expr_new_real(v);
+        }
+#endif
         return expr_new_real(inverfc_double(x));
     }
 
@@ -209,6 +245,14 @@ Expr* builtin_inverfc(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
 
+    /* Machine-scalar fast path (see builtin_inverf). */
+    if (argc == 1) {
+        SFMachineArgs ma;
+        double v;
+        if (sf_machine_scalar_args(res, &ma) && !ma.any_complex &&
+            sf_inverse_erfc_r(ma.re[0], &v))
+            return expr_new_real(v);
+    }
     if (argc == 1) return inverfc_one_arg(args[0]);
     return inverfc_emit_argx(argc);
 }

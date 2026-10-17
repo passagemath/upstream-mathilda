@@ -196,6 +196,26 @@ void test_fs_arity() {
     assert_eval_eq("FresnelS[1, 2]", "FresnelS[1, 2]", 0);
 }
 
+/* The machine-precision value comes from the shared raw-double kernel
+ * (sf_machine_error.c) on every surface: scalar == unpacked List == packed
+ * List == NDArray == Compile (scalar and rank-1), bit for bit, for machine-real and machine-complex arguments. */
+void test_fresnels_machine_surfaces() {
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[1]; RandomReal[{-10, 10}, 200]), sc, cf, cfa}, sc = FresnelS /@ xs;"
+        " cf = Compile[{{x, _Real}}, FresnelS[x]]; cfa = Compile[{{v, _Real, 1}}, FresnelS[v]];"
+        " {Max[Abs[sc - FresnelS[FromPackedArray[xs]]]], Max[Abs[sc - FresnelS[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[FresnelS[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[2]; RandomComplex[{-3 - 3 I, 3 + 3 I}, 200]), sc, cf, cfa},"
+        " sc = FresnelS /@ xs; cf = Compile[{{x, _Complex}}, FresnelS[x]]; cfa = Compile[{{v, _Complex, 1}}, FresnelS[v]];"
+        " {Max[Abs[sc - FresnelS[FromPackedArray[xs]]]], Max[Abs[sc - FresnelS[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[FresnelS[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -214,6 +234,8 @@ int main() {
     TEST(test_fs_listable_numeric);
     TEST(test_fs_attributes);
     TEST(test_fs_arity);
+
+    TEST(test_fresnels_machine_surfaces);
 
     printf("All FresnelS tests passed.\n");
     return 0;

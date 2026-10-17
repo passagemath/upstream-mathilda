@@ -147,6 +147,26 @@ void test_sinc_arity() {
     assert_eval_eq("Sinc[1, 2, 3]", "Sinc[1, 2, 3]", 0);
 }
 
+/* The machine-precision value comes from the shared raw-double kernel
+ * (sf_machine_error.c) on every surface: scalar == unpacked List == packed
+ * List == NDArray == Compile (scalar and rank-1), bit for bit, for machine-real and machine-complex arguments. */
+void test_sinc_machine_surfaces() {
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[1]; RandomReal[{-20, 20}, 200]), sc, cf, cfa}, sc = Sinc /@ xs;"
+        " cf = Compile[{{x, _Real}}, Sinc[x]]; cfa = Compile[{{v, _Real, 1}}, Sinc[v]];"
+        " {Max[Abs[sc - Sinc[FromPackedArray[xs]]]], Max[Abs[sc - Sinc[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[Sinc[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[2]; RandomComplex[{-3 - 3 I, 3 + 3 I}, 200]), sc, cf, cfa},"
+        " sc = Sinc /@ xs; cf = Compile[{{x, _Complex}}, Sinc[x]]; cfa = Compile[{{v, _Complex, 1}}, Sinc[v]];"
+        " {Max[Abs[sc - Sinc[FromPackedArray[xs]]]], Max[Abs[sc - Sinc[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[Sinc[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -162,6 +182,8 @@ int main() {
     TEST(test_sinc_listable);
     TEST(test_sinc_attributes);
     TEST(test_sinc_arity);
+
+    TEST(test_sinc_machine_surfaces);
 
     printf("All Sinc tests passed.\n");
     return 0;

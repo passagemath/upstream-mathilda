@@ -190,6 +190,26 @@ void test_erfi_arity() {
     assert_eval_eq("Erfi[1, 2, 3]", "Erfi[1, 2, 3]", 0);
 }
 
+/* The machine-precision value comes from the shared raw-double kernel
+ * (sf_machine_error.c) on every surface: scalar == unpacked List == packed
+ * List == NDArray == Compile (scalar and rank-1), bit for bit, for machine-real and machine-complex arguments. */
+void test_erfi_machine_surfaces() {
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[1]; RandomReal[{-6, 6}, 200]), sc, cf, cfa}, sc = Erfi /@ xs;"
+        " cf = Compile[{{x, _Real}}, Erfi[x]]; cfa = Compile[{{v, _Real, 1}}, Erfi[v]];"
+        " {Max[Abs[sc - Erfi[FromPackedArray[xs]]]], Max[Abs[sc - Erfi[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[Erfi[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+    assert_eval_eq(
+        "Module[{xs = (SeedRandom[2]; RandomComplex[{-3 - 3 I, 3 + 3 I}, 200]), sc, cf, cfa},"
+        " sc = Erfi /@ xs; cf = Compile[{{x, _Complex}}, Erfi[x]]; cfa = Compile[{{v, _Complex, 1}}, Erfi[v]];"
+        " {Max[Abs[sc - Erfi[FromPackedArray[xs]]]], Max[Abs[sc - Erfi[ToPackedArray[xs]]]],"
+        "  Max[Abs[sc - FromNDArray[Erfi[ToNDArray[xs]]]]], Max[Abs[sc - (cf /@ xs)]],"
+        "  Max[Abs[sc - cfa[xs]]]}]",
+        "{0.0, 0.0, 0.0, 0.0, 0.0}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -204,6 +224,8 @@ int main() {
     TEST(test_erfi_listable);
     TEST(test_erfi_attributes);
     TEST(test_erfi_arity);
+
+    TEST(test_erfi_machine_surfaces);
 
     printf("All Erfi tests passed.\n");
     return 0;

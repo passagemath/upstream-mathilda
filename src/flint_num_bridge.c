@@ -29,6 +29,7 @@
 #include <flint/acb_dirichlet.h>
 #include <flint/acb_elliptic.h>
 #include <flint/acb_hypgeom.h>
+#include <flint/acb_poly.h>
 
 /* ------------------------------------------------------------------ */
 /*  Expr -> acb  (numeric scalars only)                                */
@@ -808,6 +809,104 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
     return ok;
 }
 
+/* x_i loaded exactly: (hi + lo) + i (hi + lo) needs at most ~2 * 53 bits plus
+ * the exponent gap, well inside the working precision. */
+static void mg_laurent_load(acb_t X, const double* x, slong prec) {
+    arb_t t; arb_init(t);
+    arb_set_d(acb_realref(X), x[0]); arb_set_d(t, x[1]);
+    arb_add(acb_realref(X), acb_realref(X), t, prec);
+    arb_set_d(acb_imagref(X), x[2]); arb_set_d(t, x[3]);
+    arb_add(acb_imagref(X), acb_imagref(X), t, prec);
+    arb_clear(t);
+}
+
+static int mg_laurent_is_pole(const double* x) {
+    return x[1] == 0.0 && x[2] == 0.0 && x[3] == 0.0 && x[0] <= 0.0 && x[0] == floor(x[0]);
+}
+
+/* The midpoint of c as a double-double pair. */
+static void arb_to_dd(const arb_t c, double* hi, double* lo) {
+    arf_t r; arf_init(r);
+    *hi = arf_get_d(arb_midref(c), ARF_RND_NEAR);
+    arf_set_d(r, *hi);
+    arf_sub(r, arb_midref(c), r, ARF_PREC_EXACT, ARF_RND_NEAR);
+    *lo = arf_get_d(r, ARF_RND_NEAR);
+    arf_clear(r);
+}
+
+bool flint_mg_laurent(size_t nf, const double* x, const int* s, const int* e,
+                      size_t T, long* v, double* out) {
+    if (T == 0) return false;
+    /* F = Dn / Nm with Dn the product of 1/Gamma over e = -1 and Nm the
+     * product of 1/Gamma over e = +1: both entire in eps, so only their known
+     * zero orders (one per pole argument) need dividing out. */
+    slong zn = 0, zd = 0;
+    for (size_t i = 0; i < nf; i++)
+        if (mg_laurent_is_pole(x + 4 * i)) { if (e[i] > 0) zn++; else zd++; }
+    slong lenN = (slong)T + zn, lenD = (slong)T + zd;
+    bool ok = false;
+    for (slong prec = 192; prec <= 768 && !ok; prec *= 2) {
+        acb_poly_t h, t, Nm, Dn, F;
+        acb_poly_init(h); acb_poly_init(t); acb_poly_init(Nm); acb_poly_init(Dn);
+        acb_poly_init(F);
+        acb_t X; acb_init(X);
+        acb_poly_one(Nm); acb_poly_one(Dn);
+        for (size_t i = 0; i < nf; i++) {
+            mg_laurent_load(X, x + 4 * i, prec);
+            acb_poly_zero(h);
+            acb_poly_set_coeff_acb(h, 0, X);
+            acb_poly_set_coeff_si(h, 1, s[i] > 0 ? 1 : -1);
+            slong len = e[i] > 0 ? lenN : lenD;
+            acb_poly_rgamma_series(t, h, len, prec);
+            if (mg_laurent_is_pole(x + 4 * i))                /* exact zero at eps = 0 */
+                acb_zero(t->coeffs + 0);
+            if (e[i] > 0) acb_poly_mullow(Nm, Nm, t, len, prec);
+            else          acb_poly_mullow(Dn, Dn, t, len, prec);
+        }
+        acb_poly_shift_right(Nm, Nm, zn);
+        acb_poly_shift_right(Dn, Dn, zd);
+        bool good = acb_poly_length(Nm) > 0 && !acb_contains_zero(Nm->coeffs + 0);
+        if (good) {
+            acb_poly_div_series(F, Dn, Nm, (slong)T, prec);
+            /* Every coefficient to >= 110 bits, or negligible beside the largest. */
+            arb_t a, big; arb_init(a); arb_init(big);
+            arb_zero(big);
+            for (slong k = 0; k < (slong)T; k++) {
+                acb_t c; acb_init(c);
+                acb_poly_get_coeff_acb(c, F, k);
+                acb_abs(a, c, 64);
+                arb_max(big, big, a, 64);
+                acb_clear(c);
+            }
+            for (slong k = 0; k < (slong)T && good; k++) {
+                acb_t c; acb_init(c);
+                acb_poly_get_coeff_acb(c, F, k);
+                if (!acb_is_finite(c)) good = false;
+                else if (!acb_is_exact(c) && acb_rel_accuracy_bits(c) < 110) {
+                    mag_t rad, lim; mag_init(rad); mag_init(lim);
+                    mag_hypot(rad, arb_radref(acb_realref(c)), arb_radref(acb_imagref(c)));
+                    arb_get_mag(lim, big);
+                    mag_mul_2exp_si(lim, lim, -115);
+                    if (mag_cmp(rad, lim) > 0) good = false;
+                    mag_clear(rad); mag_clear(lim);
+                }
+                if (good) {
+                    arb_to_dd(acb_realref(c), &out[4 * k + 0], &out[4 * k + 1]);
+                    arb_to_dd(acb_imagref(c), &out[4 * k + 2], &out[4 * k + 3]);
+                }
+                acb_clear(c);
+            }
+            arb_clear(a); arb_clear(big);
+            ok = good;
+        }
+        acb_clear(X);
+        acb_poly_clear(h); acb_poly_clear(t); acb_poly_clear(Nm); acb_poly_clear(Dn);
+        acb_poly_clear(F);
+    }
+    *v = (long)(zd - zn);
+    return ok;
+}
+
 /* ------------------------------------------------------------------ */
 /*  FLINT` context builtins                                            */
 /* ------------------------------------------------------------------ */
@@ -910,6 +1009,10 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
                      double* rr, double* ri, bool* is_c) {
     (void)ar; (void)ai; (void)n; (void)p; (void)br; (void)bi; (void)m; (void)q;
     (void)r; (void)zr; (void)zi; (void)rr; (void)ri; (void)is_c; return false;
+}
+bool flint_mg_laurent(size_t nf, const double* x, const int* s, const int* e,
+                      size_t T, long* v, double* out) {
+    (void)nf; (void)x; (void)s; (void)e; (void)T; (void)v; (void)out; return false;
 }
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 

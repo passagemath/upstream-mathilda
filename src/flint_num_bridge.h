@@ -102,6 +102,21 @@ bool flint_mg_eval_d(const double* ar, const double* ai, size_t n, size_t p,
                      double r, double zr, double zi,
                      double* rr, double* ri, bool* is_c);
 
+/* Laurent expansion about eps = 0 of
+ *
+ *   F(eps) = prod_{i < nf} Gamma(x_i + s_i eps)^{e_i},   s_i, e_i in {+1, -1},
+ *
+ * as F = eps^v (f_0 + f_1 eps + ... + f_{T-1} eps^{T-1} + O(eps^T)). x_i is
+ * read EXACTLY from x[4i .. 4i+3] = (re.hi, re.lo, im.hi, im.lo); an x_i with
+ * lo parts and imaginary part zero and an integer hi <= 0 is a pole of Gamma
+ * (a zero of 1/Gamma) and moves v by -e_i. The coefficients come back as
+ * double-doubles, out[4k .. 4k+3] = (re.hi, re.lo, im.hi, im.lo) of f_k,
+ * computed in arb to >= 110 certified bits. This is the z-independent start of
+ * sf_machine_meijerg.c's log-case residue table. False without FLINT, or when
+ * the accuracy is not reached (the caller then has no table and declines). */
+bool flint_mg_laurent(size_t nf, const double* x, const int* s, const int* e,
+                      size_t T, long* v, double* out);
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

@@ -2699,9 +2699,26 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   hypergeometric kernels and the `z`-independent coefficients
   `∏ π/sin(π(b_j−b_h)) ∏Γ(1+b_h−a_j)/∏Γ(a_j−b_h)` precomputed once per parameter
   set. It declines — and the same point is re-evaluated in arb and rounded — for
-  the **log case** (two of `b1…bm` an integer apart), for more than 6 bits of
-  cancellation between terms, or when a term kernel declines, so a machine answer
-  is always within a few ulp (25 Mathematica references agree to ≤ 6×10⁻¹⁵).
+  more than 6 bits of cancellation between terms, or when a term kernel declines,
+  so a machine answer is always within a few ulp (25 Mathematica references agree
+  to ≤ 6×10⁻¹⁵).
+  The **log case** (two of `b1…bm` an integer apart, where the `π/sin` factors
+  have cancelling poles) has its own machine kernel (v0.446): the residue series
+  of the Mellin–Barnes integrand, `G = Σ_k w^(β+k) Σ_j c[k][j] (log w)^j` per
+  integer-spaced class with base `β`, `j` below the class size. The `c[k][j]` do
+  not depend on `z`, so the plan tabulates them once (256 terms): the Laurent
+  expansion about `β` from arb's Γ / 1/Γ series, then the exact step
+  `F(s+1) = F(s) R(s)` (a rational `R`) in double-double. A point is summed in
+  double, re-summed in double-double (`log w` and `w` included) when the measured
+  cancellation exceeds 3 bits, and handed to arb only past 45 bits or the table's
+  end (`|w|` near 1 for `p = q`, very large `|w|` for `p < q`). The dual's
+  parameters `1 − b` are carried exactly, as `G` can amplify their rounding
+  ~10²×. Machine log-case values agree with 30-digit references to ≤ 4.5×10⁻¹⁶
+  (36 points: triple poles, equal `b`'s, complex parameters, `n > 0`, `p = q`
+  both sides, `p > q`, `r ≠ 1`). `MeijerG[{{},{2}},{{1/2,3/2},{}},z]` on a 10⁶
+  buffer went from 119 s (per-point arb) to ~0.3 s, and from 456 µs to ~3 µs per
+  scalar call; a log-case plan is memoised, so repeated scalar calls build its
+  table once.
   Arbitrary precision (`N`, or any MPFR argument) uses arb throughout: regularized
   `acb_hypgeom_pfq` terms, the log case by perturbing `b_j → b_j + (j+1)ε` and
   comparing two `ε` until they agree to the target, `p = q = 2` at `z = 1` (where

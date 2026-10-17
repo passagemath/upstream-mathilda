@@ -399,10 +399,16 @@ static Expr* mg_machine(const MgView* g) {
     double zr, zi;
     if (!mg_leaf(g->z, &zr, &zi, &inexact)) return NULL;
     if (!inexact) return NULL;                  /* exact call stays exact */
-    SfMgPlan P;
-    if (!sf_mg_plan(ar, ai, g->n, g->p, br, bi, g->m, g->q, r, &P)) return NULL;
+    /* A log-case plan (residue table) is memoised, so repeated scalar calls
+     * with the same parameters pay its build once. */
+    SfMgPlan scratch;
+    const SfMgPlan* P = sf_mg_plan_get(ar, ai, g->n, g->p, br, bi, g->m, g->q, r,
+                                       false, &scratch);
+    if (!P) return NULL;
     double rr, ri; bool is_c;
-    if (!sf_mg_eval(&P, zr, zi, &rr, &ri, &is_c)) return NULL;
+    bool ok = sf_mg_eval(P, zr, zi, &rr, &ri, &is_c);
+    if (P == &scratch) sf_mg_plan_free(&scratch);
+    if (!ok) return NULL;
     return mg_machine_result(rr, ri, is_c);
 }
 
@@ -430,17 +436,25 @@ static Expr* mg_ndarray(const MgView* g) {
     double ar[SF_MG_MAXP], ai[SF_MG_MAXP], br[SF_MG_MAXP], bi[SF_MG_MAXP], r;
     bool inexact = true;     /* a machine buffer makes every element call inexact */
     if (!mg_machine_params(g, ar, ai, br, bi, &r, &inexact)) return NULL;
-    SfMgPlan* P = malloc(sizeof *P);
-    if (!P) return NULL;
-    if (!sf_mg_plan(ar, ai, g->n, g->p, br, bi, g->m, g->q, r, P)) { free(P); return NULL; }
+    int any_c = 0;
+    SfMgPlan* scratch = malloc(sizeof *scratch);
+    if (!scratch) return NULL;
+    const SfMgPlan* P = sf_mg_plan_get(ar, ai, g->n, g->p, br, bi, g->m, g->q, r,
+                                       false, scratch);
+    if (!P) { free(scratch); return NULL; }
     size_t sz = ndarray_size(z);
     double* buf = malloc(sizeof(double) * 2 * (sz ? sz : 1));
-    if (!buf) { free(P); return NULL; }
-    MgNdCtx ctx = { P, z->data.ndarray.data, zdt, buf, ndt_is_complex(zdt) ? 1 : 0 };
-    bool ok = nd_parallel_for(sz, mg_nd_chunk, &ctx);
-    free(P);
+    bool ok = false;
+    if (buf) {
+        MgNdCtx ctx = { P, z->data.ndarray.data, zdt, buf, ndt_is_complex(zdt) ? 1 : 0 };
+        ok = nd_parallel_for(sz, mg_nd_chunk, &ctx);
+        any_c = ctx.any_c;
+    }
+    if (P == scratch) sf_mg_plan_free(scratch);
+    free(scratch);
+    if (!buf) return NULL;
     if (!ok) { free(buf); return NULL; }
-    NDType odt = ctx.any_c ? ((zdt == NDT_FLOAT32 || zdt == NDT_COMPLEX32) ? NDT_COMPLEX32
+    NDType odt = any_c ? ((zdt == NDT_FLOAT32 || zdt == NDT_COMPLEX32) ? NDT_COMPLEX32
                                                                            : NDT_COMPLEX64)
                            : zdt;
     void* out = malloc(ndt_elem_size(odt) * (sz ? sz : 1));

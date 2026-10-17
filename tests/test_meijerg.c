@@ -136,6 +136,74 @@ void test_mg_machine_values() {
     }
 }
 
+/* ---- the log case: the machine residue-series kernel -------------------- */
+
+/* References: N[..., 30] of the exact call (the arb perturbation engine),
+ * cross-checked against mpmath's meijerg to < 1e-30. The machine kernel is held
+ * to 1e-15: a few ulp, not the 2e-14 the Slater table above allows. Covers the
+ * real and complex lanes, the negative axis, a triple pole, equal b's, a
+ * j > m b on the class's lattice (1/Gamma zeros), a log class beside a
+ * singleton, complex parameters, n > 0, p == q on both sides (the dual's a's
+ * integer-spaced, where 1 - b must be carried exactly: [{{1,2},{}},{{1/3,1/5},
+ * {}},5] moved 7e-15 under the rounding of 1 - 1/3), p > q, and r != 1. */
+static const Ref LOG_REFS[] = {
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[1/2]]", 0.34262361824553751, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[2]]", 0.10618736107936532, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[4]]", 0.015864691547299182, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[6]]", 0.0022362556754388202, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[10]]", 0.000042497231344177857, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[1+2I]]", -0.077995973365857538, -0.30095709451102893 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[-3]]", 27.450942132638667, 6.4535868450016939 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[4-3I]]", -0.016137525255138102, 0.0033353526190916015 },
+    { "MeijerG[{{},{}},{{0,1,2},{}},N[1]]", 0.38765435986163989, 0 },
+    { "MeijerG[{{},{}},{{0,1,2},{}},N[5]]", 0.10084792557230176, 0 },
+    { "MeijerG[{{},{}},{{0,1,2},{}},N[-2]]", -0.17988404634277521, -1.2688441902141011 },
+    { "MeijerG[{{},{}},{{0,1,2},{}},N[2+3I]]", 0.10104882756199226, -0.1502385448040353 },
+    { "MeijerG[{{},{}},{{0,1},{3}},N[1]]", -0.65631932807346815, 0 },
+    { "MeijerG[{{},{}},{{0,1},{3}},N[8]]", -0.2332115624312092, 0 },
+    { "MeijerG[{{},{}},{{0,1},{3}},N[-1/2+I]]", -0.013912032331918432, -1.2736484490270695 },
+    { "MeijerG[{{},{}},{{1/2,1/2},{}},N[1]]", 0.22778774549906687, 0 },
+    { "MeijerG[{{},{}},{{1/2,1/2},{}},N[20]]", 0.00048263684423674198, 0 },
+    { "MeijerG[{{},{}},{{1/2,1/2},{}},N[3I]]", -0.088040551755930794, -0.1756170680570507 },
+    { "MeijerG[{{},{}},{{0,1,1/3},{}},N[2]]", 0.09873141941875017, 0 },
+    { "MeijerG[{{},{}},{{0,1,1/3},{}},N[-1+I]]", -0.22074033463949931, -0.31051991204309688 },
+    { "MeijerG[{{},{}},{{I,1+I},{}},N[3]]", 0.036540441647046558, 0.071547402493918697 },
+    { "MeijerG[{{},{}},{{I,1+I},{}},N[2-I]]", 0.035892882980992611, 0.20563495430207833 },
+    { "MeijerG[{{-1/2},{}},{{0,1},{}},N[1]]", 0.25367456811498862, 0 },
+    { "MeijerG[{{-1/2},{}},{{0,1},{}},N[9]]", 0.031160768831454853, 0 },
+    { "MeijerG[{{1/3,1/2},{}},{{0,1},{}},N[1/2]]", 1.9481251471517893, 0 },
+    { "MeijerG[{{1/3,1/2},{}},{{0,1},{}},N[-1/3]]", 2.5177120660887332, -0.58389122078948413 },
+    { "MeijerG[{{1,2},{}},{{1/3,1/5},{}},N[3]]", -46.420860906000778, 0 },
+    { "MeijerG[{{1,2},{}},{{1/3,1/5},{}},N[5]]", -6.4518380587371442, 0 },
+    { "MeijerG[{{1,2},{}},{{1/3,1/5},{}},N[-4]]", -210.64881181949378, -38.334613520392391 },
+    { "MeijerG[{{1,2},{}},{{1/3,1/5},{}},N[2+3I]]", -71.6043566995666, 57.341285496496347 },
+    { "MeijerG[{{0,1,2},{}},{{1/3},{}},N[10]]", -53.183476871568586, 0 },
+    { "MeijerG[{{0,1,2},{}},{{1/3},{}},N[4+I]]", -26.973931467268104, -4.5787839099439607 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[9],2]", 0.041591159875396984, 0 },
+    { "MeijerG[{{},{2}},{{1/2,3/2},{}},N[2+I],2]", 0.1662487911486264, -0.050955241814240161 },
+    { "MeijerG[{{},{}},{{0,1},{}},N[3],1/2]", 0.008063518306413054, 0 },
+    { "MeijerG[{{},{}},{{0,1},{}},N[1+I],1/2]", -0.034715510866210254, -0.31043835712896461 },
+};
+
+void test_mg_log_case() {
+    for (size_t i = 0; i < sizeof LOG_REFS / sizeof LOG_REFS[0]; i++) {
+        double re, im;
+        ASSERT_MSG(eval_vals(LOG_REFS[i].expr, &re, &im, 1) == 1, "no machine value: %s", LOG_REFS[i].expr);
+        double d = hypot(re - LOG_REFS[i].re, im - LOG_REFS[i].im);
+        double s = hypot(LOG_REFS[i].re, LOG_REFS[i].im);
+        ASSERT_MSG(d <= 1e-15 * s, "%s = %.17g%+.17gi, want %.17g%+.17gi (rel %.3g)",
+                   LOG_REFS[i].expr, re, im, LOG_REFS[i].re, LOG_REFS[i].im, d / s);
+    }
+    /* The buffer stays on the machine kernel: 10^5 points cost ~30 ms there,
+     * ~12 s through the per-point arb perturbation it replaced. */
+    assert_true("SeedRandom[7]; First[AbsoluteTiming[MeijerG[{{},{2}},{{1/2,3/2},{}},"
+                "RandomReal[{0.3, 6.}, 10^5]];]] < 1.5");
+    /* A parameter set beyond the plan memo (16 slots) still answers right:
+     * those plans are built, used and freed per call. */
+    assert_true("Max[Table[Abs[MeijerG[{{},{}},{{k/40,k/40+1},{}},2.5] - "
+                "N[MeijerG[{{},{}},{{k/40,k/40+1},{}},5/2],20]], {k, 1, 24}]] < 10^-14");
+}
+
 /* ---- arbitrary precision ---------------------------------------------- */
 
 void test_mg_arbitrary_precision() {
@@ -224,8 +292,14 @@ void test_mg_surfaces() {
     double x[] = { 0.05, 0.7, 1.9, 6.25, 31.0 };
     check_surfaces("MeijerG[{{1/3},{1/4}},{{1/5,1/6},{1/7}},%s]", "_Real", x, NULL, 5, 0);
     check_surfaces("MeijerG[{{1/3},{}},{{1/2},{1}},%s,1/2]", "_Real", x, NULL, 5, 0);
-    /* the log case: every point goes through the arb fallback */
+    /* the log case: the residue-series kernel (its double and dd passes, and
+     * the arb fallback past its reach at 31.0) */
     check_surfaces("MeijerG[{{},{2}},{{1/2,3/2},{}},%s]", "_Real", x, NULL, 5, 0);
+    check_surfaces("MeijerG[{{},{}},{{0,1,2},{}},%s]", "_Real", x, NULL, 5, 0);
+    double lc_r[] = { 0.5, -1.25, 3.0 }, lc_i[] = { 1.2, 0.5, -2.0 };
+    check_surfaces("MeijerG[{{},{2}},{{1/2,3/2},{}},%s]", "_Complex", lc_r, lc_i, 3, 1);
+    double du[] = { 0.4, 1.5, 3.0, 5.0 };
+    check_surfaces("MeijerG[{{1,2},{}},{{1/3,1/5},{}},%s]", "_Real", du, NULL, 4, 0);
     /* p == q, both expansions */
     double y[] = { 0.2, 0.9, 1.0, 1.4, 8.0 };
     check_surfaces("MeijerG[{{1/3,1/2},{}},{{1/5,1/7},{}},%s]", "_Real", y, NULL, 5, 0);
@@ -405,6 +479,7 @@ int main() {
     core_init();
 
     TEST(test_mg_machine_values);
+    TEST(test_mg_log_case);
     TEST(test_mg_arbitrary_precision);
     TEST(test_mg_surfaces);
     TEST(test_mg_compile);

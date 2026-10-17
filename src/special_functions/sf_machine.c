@@ -7,6 +7,7 @@
  * by tests/test_sf_machine.c rather than asserted here.
  */
 #include "sf_machine.h"
+#include "sf_machine_gamma.h"
 
 #include <math.h>
 #include <complex.h>
@@ -397,31 +398,10 @@ bool sf_machine_fresnel_s(double x, double* out) {
 
 /* Digamma.  Recurrence up to where the asymptotic series is good, reflection
  * below zero; the poles at the non-positive integers decline. */
+/* Digamma: the Gamma family's kernel (sf_machine_gamma.c), so PolyGamma,
+ * HarmonicNumber and the hypergeometric digamma sums share one implementation. */
 bool sf_machine_digamma(double x, double* out) {
-    if (x <= 0.0 && x == floor(x)) return false;      /* pole */
-    double v = 0.0, z = x;
-    if (z < 0.0) {
-        /* psi(z) = psi(1-z) - pi/tan(pi z) */
-        double refl = M_PI / tan(M_PI * z);
-        double up;
-        if (!sf_machine_digamma(1.0 - z, &up)) return false;
-        *out = up - refl;
-        return isfinite(*out);
-    }
-    while (z < 12.0) { v -= 1.0 / z; z += 1.0; }
-    double inv = 1.0 / z, inv2 = inv * inv;
-    /* psi(z) ~ log z - 1/(2z) - sum B_2k / (2k z^2k) */
-    v += log(z) - 0.5 * inv;
-    double p = inv2;
-    v -= p / 12.0;              p *= inv2;
-    v += p / 120.0;             p *= inv2;
-    v -= p / 252.0;             p *= inv2;
-    v += p / 240.0;             p *= inv2;
-    v -= p / 132.0;             p *= inv2;
-    v += p * 691.0 / 32760.0;   p *= inv2;
-    v -= p / 12.0;
-    *out = v;
-    return isfinite(v);
+    return sfg_digamma(x, out);
 }
 
 bool sf_machine_harmonic(double x, double* out) {
@@ -517,18 +497,11 @@ bool sf_machine_hurwitz_zeta(double s, double a, double* out) {
     return isfinite(sum);
 }
 
-/* PolyGamma[n, x].  n = 0 is the digamma above; for n >= 1 the standard
- * identity psi^(n)(x) = (-1)^(n+1) n! zeta(n+1, x) reuses the Hurwitz zeta. */
+/* PolyGamma[n, x] for an integer order: the Gamma family's kernel
+ * (sf_machine_gamma.c). */
 bool sf_machine_polygamma(double n, double x, double* out) {
-    if (n < 0.0 || n != floor(n) || n > 60.0) return false;
-    if (n == 0.0) return sf_machine_digamma(x, out);
-    if (!(x > 0.0)) return false;                 /* reflection for n >= 1 not covered */
-    double hz;
-    if (!sf_machine_hurwitz_zeta(n + 1.0, x, &hz)) return false;
-    double v = tgamma(n + 1.0) * hz;
-    if (fmod(n, 2.0) == 0.0) v = -v;              /* (-1)^(n+1) */
-    *out = v;
-    return isfinite(v);
+    if (n < 0.0 || n != floor(n) || n > (double)SFG_POLYGAMMA_MAX_N) return false;
+    return sfg_polygamma((int)n, x, out);
 }
 
 /* Sign of Gamma(x), computed rather than taken from lgamma_r or the global
@@ -541,24 +514,9 @@ static double gamma_sign(double x) {
     return (k & 1L) ? -1.0 : 1.0;
 }
 
-/* Pochhammer[a, n] = Gamma(a+n)/Gamma(a), evaluated through lgamma with the
- * sign tracked separately so the poles of Gamma cancel where the ratio is
- * finite (a negative integer a with a+n still negative, say). */
+/* Pochhammer[a, n]: the Gamma family's kernel (sf_machine_gamma.c). */
 bool sf_machine_pochhammer(double a, double n, double* out) {
-    if (n == 0.0) { *out = 1.0; return true; }
-    /* Small non-negative integer n: the product is exact and pole-free. */
-    if (n == floor(n) && n > 0.0 && n <= 200.0) {
-        double v = 1.0;
-        for (int k = 0; k < (int)n; k++) v *= a + (double)k;
-        *out = v;
-        return isfinite(v);
-    }
-    if (a <= 0.0 && a == floor(a)) return false;          /* pole in Gamma(a) */
-    if (a + n <= 0.0 && a + n == floor(a + n)) return false;
-    double l1 = lgamma(a + n), l2 = lgamma(a);
-    double v = gamma_sign(a + n) * gamma_sign(a) * exp(l1 - l2);
-    *out = v;
-    return isfinite(v);
+    return sfg_pochhammer(a, n, out);
 }
 
 /* Binomial[n, k] = Gamma(n+1) / (Gamma(k+1) Gamma(n-k+1)).  The interpreter

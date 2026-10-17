@@ -35,8 +35,20 @@ magnitude past MPFR's range returns `Overflow[]`/`Indeterminate`. See
     e.g. `Gamma[1, z] = E^-z`, `Gamma[2, x] = (1 + x) E^-x`,
     `Gamma[3, x] = (2 + 2 x + x^2) E^-x`, and exact `Gamma[2, 3] = 4/E^3`.
 - Numeric evaluation:
-  - Machine-precision real → libm `tgamma`; machine-precision complex →
-    Lanczos approximation, e.g. `Gamma[2.3 + I] = 0.719141 + 0.540614 I`.
+  - Machine-precision real → libm `tgamma`. Machine-precision complex →
+    the Gamma-family double kernel `sfg_gamma_c`
+    (`src/special_functions/sf_machine_gamma.c`), shared bit-for-bit by the
+    scalar call, packed / `NDArray` maps and `Compile[]`, e.g.
+    `Gamma[2.3 + I] = 0.719141 + 0.540614 I`. For `-5 ≤ Re z < 10`,
+    `|Im z| < 19/4` the exact recurrence moves z into the strip `1 ≤ Re < 5/2`
+    and a Taylor series of lnΓ about the nearest of 30 precomputed centres is
+    summed (the constant term carried as a double-double); elsewhere shifted
+    Stirling (Re w ≥ 7) with the exponent formed in double-double (Dekker
+    products, an extra-precise log|w|), then ONE complex exponential. Accuracy:
+    median 0.8 / max 3.5 ulp on `0.5 ≤ Re z ≤ 4, |Im z| ≤ 3`; median 3.6 ulp
+    over `-10..30 × ±20i`, where the conditioning |z ψ(z)| itself reaches 10².
+    (The former Lanczos g = 7 series was median 9 / max 53 ulp on the same box.)
+    `Re z < -30` and overflow fall back to the Lanczos/reflection path.
   - Arbitrary precision (MPFR) real → `mpfr_gamma`, output precision tracking
     the input, e.g. `N[Gamma[22/10], 50]` and `Gamma[2.2`200]`.
   - **Arbitrary-precision complex** `Gamma[z]` → Spouge's approximation,
@@ -87,7 +99,17 @@ comes **first** in `Beta[z, a, b]`.
   (`Beta[0, b]`, `Beta[a, 0]`, `Beta[0, n]`, `Beta[-2, 5]`,
   `Beta[Infinity, 0]`); a cancelling pair reduces by the finite limit of the
   gamma ratio (`Beta[-2, 1] = -1/2`, `Beta[2, -5] = 1/20`).
-- Numeric `Beta[a, b]`: machine and arbitrary-precision (MPFR) real and complex
+- **Machine precision** (real or complex) is computed directly in double by
+  `sfg_beta` / `sfg_beta_c` (`sf_machine_gamma.c`), the kernel the packed /
+  `NDArray` map and `Compile[]` share — no Gamma-ratio expression is rebuilt.
+  Real: `tgamma(a) / tgamma(a+b) · tgamma(b)` with the rounding of `a + b`
+  undone to first order through ψ(a+b) (`Γ(s+e) = Γ(s)(1 + ψ(s) e)`; left
+  alone it costs up to ~10 ulp at a+b ≈ 10). Complex: the three Gammas
+  combined under one exponential (their double-double exponents summed), the
+  same ψ correction. Accuracy median 0.8 / max 4.1 ulp real on `[0.3, 5]²`,
+  median 1.3 / max 6.3 ulp complex on `[0.5,3] × ±2i`. Poles, `|a|, |b|, |a+b|
+  > 170` and underflow fall through to the layered path below.
+- Numeric `Beta[a, b]` otherwise: arbitrary-precision (MPFR) real and complex
   arguments evaluate numerically with precision tracking,
   e.g. `Beta[2.3, 3.2] = 0.0540298`, `Beta[2.5 + I, 1 − I] = 0.0831078 +
   0.142164 I`, `N[Beta[22/10, 33/10], 50] =
@@ -671,8 +693,9 @@ Behaviour:
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
-- `PolyGamma[z]` — the digamma function ψ(z) = Γ′(z)/Γ(z). Always rewrites to
-  the two-argument form `PolyGamma[0, z]`.
+- `PolyGamma[z]` — the digamma function ψ(z) = Γ′(z)/Γ(z). Rewrites to the
+  two-argument form `PolyGamma[0, z]`, except for a machine-precision `z`,
+  which is computed directly (`PolyGamma[2.5] === PolyGamma[0, 2.5]`).
 - `PolyGamma[n, z]` — the n-th polygamma ψ⁽ⁿ⁾(z) = dⁿ/dzⁿ ψ(z).
 
 Behaviour:
@@ -698,8 +721,27 @@ Behaviour:
   `PolyGamma[0, 2/3] - PolyGamma[0, 1/3] = Pi/Sqrt[3]`.
 - **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (the log-gamma function;
   see below). Orders ≤ −2 stay unevaluated.
-- **Numeric.** Inexact real arguments evaluate at machine precision (`Real`) or
-  arbitrary precision (`MPFR`, precision tracked from the input):
+- **Machine precision** (integer order `0 ≤ n ≤ 40`, real or complex `z`) →
+  `sfg_polygamma` / `sfg_polygamma_c` (`sf_machine_gamma.c`), shared with the
+  packed / `NDArray` maps and `Compile[]`:
+  - ψ, real: a degree-22 Chebyshev interpolant of ψ(x)/(x − x₀) on [1, 2]
+    times (x − x₀), x₀ = 1.4616… carried as a double-double, so the value is
+    relatively accurate through the zero; integer shifts (exact in double) to
+    reach [1, 2] from (0, 10); the asymptotic series for x ≥ 10; reflection
+    with an exactly reduced cotangent for x < 0. Median 0.5 / max 3.5 ulp.
+  - ψ⁽ⁿ⁾, n ≥ 1, real x > 0: upward recurrence to x ≥ 10 + n/2 and the
+    Hurwitz-zeta asymptotic tail (DLMF 25.11.43); every term has one sign,
+    each carries a first-order correction for the rounding of x + j, and the
+    sum is compensated. `PolyGamma[2, x]` median 0.5 / max 3.3 ulp.
+  - ψ, complex: Taylor tiles (as for `Gamma`) on `-5 ≤ Re z < 10`,
+    `|Im z| < 19/4`, a Taylor series about x₀ for |z − x₀| ≤ 0.35, the
+    asymptotic series after shifting Re z ≥ 10 elsewhere, reflection for
+    Re z < -5. ψ⁽ⁿ⁾, n ≥ 1, complex: the recurrence + tail, Re z ≥ 0. Median
+    0.7 / max ≈ 4–7 ulp on `0.5 ≤ Re z ≤ 4, |Im z| ≤ 3` (the maxima sit beside
+    ψ's real zero, where the error scaled by |z ψ′| is ≤ 2.4 ulp).
+  - n ≥ 1 with Re z < 0 declines to the layered path below.
+- **Numeric, otherwise.** Inexact real arguments evaluate at arbitrary
+  precision (`MPFR`, precision tracked from the input):
   `PolyGamma[100.5] = 4.605174…`, `PolyGamma[1, 3.5] = 0.330358…`,
   `N[PolyGamma[22/10], 50] = 0.5442934367411450377861253708833812285077…`.
   `n = 0` uses MPFR's digamma; higher orders use a recurrence-shift plus the
@@ -735,8 +777,9 @@ primitive for factorial ratios and asymptotics.
 - **Symbolic infinities.** `LogGamma[Infinity] = Infinity`,
   `LogGamma[-Infinity] = Indeterminate`, `LogGamma[I Infinity] =
   LogGamma[ComplexInfinity] = ComplexInfinity`.
-- **Branch continuity across the reflection.** For `Re[z] < 1/2` both numeric
-  paths use `LogGamma[z] = Log[Pi] - Log[Sin[Pi z]] - LogGamma[1-z]`, where the
+- **Branch continuity across the reflection.** For `Re[z] < 1/2` the
+  arbitrary-precision path (and the machine fallback, `Re z < -30`) use
+  `LogGamma[z] = Log[Pi] - Log[Sin[Pi z]] - LogGamma[1-z]`, where the
   log of the sine must be the *continued* one. Factoring
   `Sin[Pi z] = E^(-I Pi z) (E^(2 I Pi z) - 1)/(2 I)` puts the whole winding in
   the exact `-I Pi z` term and leaves a factor near `-1` whose principal log is
@@ -747,7 +790,17 @@ primitive for factorial ratios and asymptotics.
   `LogGamma[-4.5 + 3. I]` equalled `Log[Gamma[-4.5 + 3. I]]` rather than the
   continuation.
 - **Numerics.** Machine real via `lgamma`; arbitrary-precision real via MPFR
-  `lgamma`; machine complex via a Lanczos log-series; arbitrary-precision
+  `lgamma`; machine complex via `sfg_loggamma_c` (`sf_machine_gamma.c`, shared
+  with the packed / `NDArray` maps and `Compile[]`): Taylor tiles about 30
+  centres in the strip `1 ≤ Re < 5/2` reached by the exact recurrence
+  (`-5 ≤ Re z < 10`, `|Im z| < 19/4`; on the real-axis row the series is for
+  lnΓ/((z−1)(z−2)), so both zeros are carried exactly), shifted Stirling
+  elsewhere. The recurrence's N logs are one log of the product, with the
+  2πi windings counted as the running product crosses the negative real
+  axis — the same continuous branch (Hare 1997). Median 0.5 / max 3.3 ulp on
+  `0.5 ≤ Re z ≤ 4, |Im z| ≤ 3` (the Lanczos series it replaces: median 7 /
+  max 689 ulp, worst near the zeros at 1 and 2). `Re z < -30` falls back to the
+  Lanczos/reflection path described above; arbitrary-precision
   complex via a Stirling series with argument reduction (the continuous
   branch — its imaginary part grows past π where `Log[Gamma]` would wrap).
   Negative real arguments return the complex value `log|Γ(z)| - Pi Ceiling[-z] I`.
@@ -776,6 +829,12 @@ primitive for factorial ratios and asymptotics.
     `Pochhammer[10, -3] = 1/504`.
   - `Pochhammer[0, n] = 0` for positive integer `n` (short-circuited, so
     even `Pochhammer[0, 1285] = 0`); `Pochhammer[Infinity, n] = Infinity`.
+- **Machine precision** (real or complex) → `sfg_pochhammer` /
+  `sfg_pochhammer_c` (`sf_machine_gamma.c`), shared with the packed /
+  `NDArray` maps and `Compile[]`: an integer `n` (|n| ≤ 256) is the product
+  `a (a+1) … (a+n−1)` (or `1/((a−1)…(a−|n|))`) in double, any other `n` the
+  Gamma ratio with the rounding of `a + n` corrected through ψ, e.g.
+  `Pochhammer[2.5, 3] = 39.375`. `Pochhammer[a, 0]` keeps its exact `1`.
 - Other numeric arguments evaluate via the Gamma ratio `Γ(a+n)/Γ(a)`,
   reusing the `Gamma` builtin:
   - Exact half-integers reduce to rational multiples of `Sqrt[Pi]`, e.g.

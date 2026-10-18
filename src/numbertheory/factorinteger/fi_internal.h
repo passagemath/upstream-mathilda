@@ -378,6 +378,12 @@ int  fi_nthreads(void);
 /* Run fn on n jobs laid out stride bytes apart, one thread each, inside a
  * TimeConstrained-deferred region (see fi_par.c). */
 void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n);
+/* Nonzero once an enclosing TimeConstrained deadline has passed.  Safe on a
+ * worker thread (the main thread is parked in fi_run_parallel's joins and
+ * writes no deadline state meanwhile): a long region polls it -- or hands it
+ * to GMP-ECM as stop_asap -- and winds down, and the main thread then takes
+ * the timeout as soon as the region ends. */
+int  fi_stop_requested(void);
 
 /* Work claiming inside a region: indices [0, end) handed out `chunk` at a
  * time under a lock (a plain cursor without MATHILDA_THREADS). */

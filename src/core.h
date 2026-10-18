@@ -83,10 +83,11 @@ Expr* builtin_time_constrained(Expr* res);
  * No-op outside any TimeConstrained call. When the innermost
  * TimeConstrained's wall-clock deadline has passed, sets the timeout
  * flag and siglongjmp's back to the matching sigsetjmp -- identical to
- * the SIGPROF path. This is the portable backstop for hosts whose
- * ITIMER_PROF is unreliable (notably WSL 1, which under-counts CPU time
- * and delivers SIGPROF many times late). On real Linux / macOS the
- * SIGPROF normally fires first and this check is a cheap no-op.
+ * the SIGPROF path. The budget is elapsed time; the SIGPROF/ITIMER_PROF
+ * layer is only a CPU-time wake-up that re-checks this same deadline. This
+ * check catches a budget spent idle (no CPU accrues, so no SIGPROF) and is
+ * the backstop for hosts whose ITIMER_PROF is unreliable (notably WSL 1,
+ * which under-counts CPU time and delivers SIGPROF many times late).
  *
  * Granularity: limited to between rewrite steps -- a single long-running
  * C builtin (e.g. FactorInteger on a large composite) cannot be aborted
@@ -108,6 +109,12 @@ void tc_register_unwind_counter(int* counter);
  * locals) instead of being unwound mid-frame.  Always false outside a
  * TimeConstrained scope. */
 bool tc_deadline_passed(void);
+
+/* Seconds left before the innermost active TimeConstrained deadline (0 once
+ * it has passed); negative when no TimeConstrained is active.  The budget is
+ * elapsed (wall-clock) time, so a blocking builtin such as Pause waits no
+ * longer than this and then calls tc_check_deadline. */
+double tc_deadline_remaining(void);
 /* Async-jump defer for a heavy, malloc-bound method run inside TimeConstrained:
  * bracket the work with push/pop so a timeout is taken at a safe point, not
  * mid-malloc.  tc_async_region_active is a re-entry guard (see core.c). */

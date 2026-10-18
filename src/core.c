@@ -4231,21 +4231,32 @@ Expr* builtin_symbol(Expr* res) {
  *
  * Mechanism (two cooperating layers):
  *
- *   1. SIGPROF + ITIMER_PROF (POSIX only, #ifndef _WIN32): install a
- *      one-shot SIGPROF handler and an ITIMER_PROF timer; run evaluate()
- *      inside TC_SETJMP.  If the CPU-time budget is exhausted, the
- *      handler siglongjmp's back here and we abort.  ITIMER_PROF counts
- *      only CPU time of this process, matching the Mathematica semantic
- *      ("CPU time spent inside the main Mathilda kernel process").
- *      SIGPROF is used (not SIGALRM) so other SIGALRM/ITIMER_REAL users
- *      -- notably the test-harness alarm(60) -- keep working.
+ * The budget is ELAPSED (wall-clock) time, as in Mathematica: the deadline
+ * is the monotonic instant tc_deadline_sec = mth_mono_seconds() + budget,
+ * and both layers below enforce that one instant.
  *
- *   2. Wall-clock cooperative deadline: capture mth_mono_seconds() +
- *      budget on entry (tc_deadline_sec); the evaluator calls
+ *   1. SIGPROF + ITIMER_PROF (POSIX only, #ifndef _WIN32): install a
+ *      SIGPROF handler and an ITIMER_PROF timer for the time remaining to
+ *      the deadline; run evaluate() inside TC_SETJMP.  The timer is only
+ *      the WAKE-UP for the async preemption -- the handler compares the
+ *      monotonic clock with the deadline and, if it has not yet passed,
+ *      re-arms for the remainder and returns.  ITIMER_PROF counts the CPU
+ *      time of the whole process, summed over threads: a single busy
+ *      thread accrues CPU no faster than wall time, so the timer fires at
+ *      (or just after) the deadline, while N busy threads (the parallel
+ *      QS / ECM in src/numbertheory/factorinteger/) make it fire ~N times
+ *      early -- which the deadline check absorbs.  (Until v0.461 the CPU
+ *      timer WAS the budget, so a threaded FactorInteger aborted 10-16x
+ *      early in elapsed time.)  SIGPROF is used rather than SIGALRM /
+ *      ITIMER_REAL so other SIGALRM users -- notably the test-harness
+ *      alarm(60) -- keep working, and so an idle process is never woken.
+ *
+ *   2. Cooperative check of the same deadline: the evaluator calls
  *      tc_check_deadline() once per rewrite step in its fixed-point loop,
- *      and heavy C kernels poll tc_deadline_passed() at their loop heads.
- *      If the deadline has passed, the check TC_LONGJMP's exactly as the
- *      signal handler would.
+ *      heavy C kernels poll tc_deadline_passed() at their loop heads, and
+ *      Pause sleeps no further than the deadline.  If the deadline has
+ *      passed, the check TC_LONGJMP's exactly as the signal handler would.
+ *      This is what catches a budget spent idle (no CPU, so no SIGPROF).
  *
  * Why both: on real Linux and macOS, ITIMER_PROF is precise and the
  * cooperative check is a cheap backstop.  On hosts that mishandle
@@ -4280,8 +4291,9 @@ Expr* builtin_symbol(Expr* res) {
  *   - the ITIMER_PROF layer armed the inner budget outright and, on
  *     exit, reinstalled the outer timer at the value it had when the
  *     inner call STARTED -- a full refund of everything the inner call
- *     spent.  It now arms min(inner, outer remaining) and reinstalls the
- *     outer at (remaining - consumed).
+ *     spent.  Both layers now share the one absolute deadline, so the
+ *     timer is armed for (inner deadline - now) and, on exit, re-armed
+ *     for (outer deadline - now).
  *   - the cooperative wall-clock layer set an inner absolute deadline
  *     that could be LATER than the outer's, so the outer deadline went
  *     unenforced for the duration.  The inner deadline is now min'd with
@@ -4361,12 +4373,47 @@ static volatile sig_atomic_t tc_async_deferred = 0;
  * the budget is spent.  Both fields are updated only on the main thread
  * between TC_SETJMP installs, so no sig_atomic_t / memory-barrier dance
  * is required. */
-static double tc_deadline_sec    = 0.0;
+static volatile double tc_deadline_sec = 0.0;  /* read by the SIGPROF handler */
 static int    tc_deadline_active = 0;
 
+/* Nonzero exactly while a TimeConstrained body is inside evaluate() under
+ * its own sigsetjmp (set and cleared by tc_run_guarded).  The SIGPROF
+ * handler only jumps while it is set: a timer expiring in the few
+ * instructions between the body returning and the teardown disarming the
+ * timer would otherwise siglongjmp into tc_run_guarded's dead frame. */
+static volatile sig_atomic_t tc_body_live = 0;
+
 #ifndef _WIN32
+/* Arm ITIMER_PROF one-shot for `us` microseconds of process CPU time (never
+ * (0,0), which would disarm).  setitimer is a plain system call, safe to make
+ * from the handler on Linux and macOS. */
+static void tc_arm_prof_us(long long us) {
+    struct itimerval it;
+    if (us < 1) us = 1;
+    memset(&it, 0, sizeof(it));
+    it.it_value.tv_sec  = (time_t)(us / 1000000LL);
+    it.it_value.tv_usec = (suseconds_t)(us % 1000000LL);
+    setitimer(ITIMER_PROF, &it, NULL);
+}
+
+/* Re-arm granularity once the timer has woken us early: never below 1 ms of
+ * CPU, so N busy threads cost at most ~(budget / 1 ms) wake-ups, and a
+ * deadline less than 0.1 ms away counts as reached. */
+#define TC_REARM_MIN_US   1000LL
+#define TC_DEADLINE_SLACK 1e-4
+
 static void tc_sigprof_handler(int sig) {
     (void)sig;
+    if (!tc_body_live) return;          /* body finished; teardown disarms */
+    /* The CPU timer is only the wake-up; the budget is elapsed time.  Woken
+     * before the deadline (threads accrue CPU faster than wall time), re-arm
+     * for what is left and carry on.  clock_gettime is async-signal-safe. */
+    double left = tc_deadline_sec - mth_mono_seconds();
+    if (left > TC_DEADLINE_SLACK) {
+        long long us = (long long)(left * 1e6);
+        tc_arm_prof_us(us < TC_REARM_MIN_US ? TC_REARM_MIN_US : us);
+        return;
+    }
     tc_timed_out = 1;
     /* If the signal landed inside a GMP allocation, do NOT unwind here: that
      * would abandon libmalloc's held zone lock.  Record the timeout and let
@@ -4530,6 +4577,15 @@ bool tc_deadline_passed(void) {
     return mth_mono_seconds() >= tc_deadline_sec;
 }
 
+/* Seconds left before the innermost active TimeConstrained deadline (0 once
+ * it has passed), or a negative value when no TimeConstrained is active.  A
+ * blocking builtin (Pause) waits no longer than this. */
+double tc_deadline_remaining(void) {
+    if (!tc_deadline_active) return -1.0;
+    double left = tc_deadline_sec - mth_mono_seconds();
+    return left > 0.0 ? left : 0.0;
+}
+
 /* Portable "do not inline" hint.  GCC/Clang both define __GNUC__. */
 #if defined(__GNUC__)
 #  define TC_NOINLINE __attribute__((noinline))
@@ -4591,8 +4647,11 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
     volatile int n_ctr = tc_n_unwind_counters;
     for (int i = 0; i < n_ctr; i++) saved_ctr[i] = *tc_unwind_counters[i];
     if (TC_SETJMP(tc_jmp_env) == 0) {
+        tc_body_live = 1;
         result = evaluate(body);
+        tc_body_live = 0;
     } else {
+        tc_body_live = 0;
         /* The unwind may have jumped out of an Orderless sort with the
          * per-sort symbol-set memo still installed; drop it so a later
          * expr_compare cannot dereference the abandoned stack memo. */
@@ -4701,115 +4760,84 @@ Expr* builtin_time_constrained(Expr* res) {
      * inside time_t / suseconds_t / double range on every platform. */
     if (seconds > 2147483.0) seconds = 2147483.0;
 
+    tc_jmp_t saved_jmp_env;
+    memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
+    int saved_depth = eval_get_recursion_depth();
+    volatile sig_atomic_t saved_timed_out = tc_timed_out;
+    volatile sig_atomic_t saved_body_live = tc_body_live;
+    tc_timed_out = 0;
+
+    /* The deadline: one monotonic instant, shared by both enforcement layers
+     * (see the function header).  Never outlive the enclosing budget: an
+     * inner deadline later than the outer's would leave the outer unenforced
+     * while we run.  Nested calls save/restore so the outer resumes. */
+    double saved_deadline_sec    = tc_deadline_sec;
+    int    saved_deadline_active = tc_deadline_active;
+    double now = mth_mono_seconds();
+    double deadline = now + seconds;
+    if (saved_deadline_active && deadline > saved_deadline_sec)
+        deadline = saved_deadline_sec;
+    tc_deadline_sec    = deadline;
+    tc_deadline_active = 1;
+
 #ifndef _WIN32
     /* ---- POSIX async preemption: SIGPROF + ITIMER_PROF ----
      * Forcibly interrupts a long-running C builtin that never returns to the
      * evaluator loop.  Absent on native Windows (MinGW has no
-     * setitimer/sigaction/SIGPROF): there the cooperative deadline armed below
+     * setitimer/sigaction/SIGPROF): there the cooperative deadline armed above
      * is the sole enforcement -- see the function header and docs/building.md.
      *
-     * Translate seconds -> (tv_sec, tv_usec).  Round a sub-microsecond budget
-     * up to 1 us so setitimer never sees (0,0), which would DISARM. */
-    long secs  = (long)seconds;
-    long usecs = (long)((seconds - (double)secs) * 1e6);
-    if (usecs < 0) usecs = 0;
-    if (usecs >= 1000000) { secs += usecs / 1000000; usecs %= 1000000; }
-    if (secs == 0 && usecs == 0) usecs = 1;
-
-    /* Save the previous SIGPROF handler and ITIMER_PROF state so nested
-     * TimeConstrained calls compose and any external profiler is left exactly
-     * as we found it. */
+     * Save the previous SIGPROF handler and ITIMER_PROF state so nested
+     * TimeConstrained calls compose and any external profiler is left as we
+     * found it; the deadline is set above BEFORE the handler can run. */
     struct sigaction sa, old_sa;
     struct itimerval old_it;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = tc_sigprof_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGPROF, &sa, &old_sa);
-
-    /* Read the enclosing timer BEFORE arming ours, so our budget can be
-     * clamped to what it has left (see the nesting note in the header).  A
-     * zero it_value means nothing was armed: no enclosing budget. */
     memset(&old_it, 0, sizeof(old_it));
     getitimer(ITIMER_PROF, &old_it);
-    long long outer_us = (long long)old_it.it_value.tv_sec * 1000000LL
-                       + (long long)old_it.it_value.tv_usec;
-    long long armed_us = (long long)secs * 1000000LL + (long long)usecs;
-    if (outer_us > 0 && outer_us < armed_us) armed_us = outer_us;
-    if (armed_us <= 0) armed_us = 1;
-
-    struct itimerval new_it;
-    memset(&new_it, 0, sizeof(new_it));
-    new_it.it_value.tv_sec  = (time_t)(armed_us / 1000000LL);
-    new_it.it_value.tv_usec = (suseconds_t)(armed_us % 1000000LL);
-    setitimer(ITIMER_PROF, &new_it, NULL);
+    sigaction(SIGPROF, &sa, &old_sa);
+    tc_arm_prof_us((long long)((deadline - now) * 1e6));
 #endif /* !_WIN32 */
-
-    tc_jmp_t saved_jmp_env;
-    memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
-    int saved_depth = eval_get_recursion_depth();
-    volatile sig_atomic_t saved_timed_out = tc_timed_out;
-    tc_timed_out = 0;
-
-    /* Arm the cooperative wall-clock deadline.  On POSIX this is the
-     * portability backstop (the SIGPROF timer fires first where reliable; on
-     * WSL 1, and ALWAYS on Windows, tc_check_deadline catches the timeout at
-     * the next rewrite step, and tc_deadline_passed() at heavy-kernel loop
-     * heads).  mth_mono_seconds never fails, so the deadline is always armed.
-     * Nested calls save/restore so the outer deadline resumes correctly. */
-    double saved_deadline_sec    = tc_deadline_sec;
-    int    saved_deadline_active = tc_deadline_active;
-    tc_deadline_sec = mth_mono_seconds() + seconds;
-    /* Never outlive the enclosing budget: an inner deadline later than the
-     * outer's would leave the outer unenforced while we run. */
-    if (saved_deadline_active && tc_deadline_sec > saved_deadline_sec)
-        tc_deadline_sec = saved_deadline_sec;
-    tc_deadline_active = 1;
 
     Expr* body = expr_copy(expr_arg);
     Expr* result = tc_run_guarded(body);
 
-    /* Restore the cooperative-deadline state first, so that any
-     * tc_check_deadline call racing during the teardown below sees the
-     * outer-call deadline (or no deadline if there was no outer call). */
-    tc_deadline_sec    = saved_deadline_sec;
-    tc_deadline_active = saved_deadline_active;
-
 #ifndef _WIN32
-    /* Disarm OUR timer first, then reinstall the prior timer and handler.
-     * Order matters: leaving our timer armed while we swap the handler
-     * back could deliver SIGPROF into someone else's handler.
-     *
-     * The enclosing timer is reinstalled CHARGED for what we spent, not at
-     * the value it held on entry: restoring the entry value refunds the
-     * whole nested computation to the caller's budget.  Our timer's own
-     * remaining time gives the amount consumed (zero when we aborted,
-     * because it had already fired).  An outer budget that is used up comes
-     * back armed at 1 us, so the caller aborts at its next step rather than
-     * running on unbounded. */
-    struct itimerval cur, disarm, restore;
-    memset(&cur, 0, sizeof(cur));
-    getitimer(ITIMER_PROF, &cur);
-    long long rem_us  = (long long)cur.it_value.tv_sec * 1000000LL
-                      + (long long)cur.it_value.tv_usec;
-    long long used_us = armed_us - rem_us;
-    if (used_us < 0) used_us = 0;
-    memset(&disarm, 0, sizeof(disarm));
-    memset(&restore, 0, sizeof(restore));
-    if (outer_us > 0) {
-        long long left_us = outer_us - used_us;
-        if (left_us < 1) left_us = 1;
-        restore.it_value.tv_sec  = (time_t)(left_us / 1000000LL);
-        restore.it_value.tv_usec = (suseconds_t)(left_us % 1000000LL);
+    /* Disarm OUR timer before anything else, so no SIGPROF can arrive while
+     * the jmp_buf and deadline are swapped back.  (tc_run_guarded has already
+     * cleared tc_body_live, so one arriving before this is ignored.) */
+    {
+        struct itimerval disarm;
+        memset(&disarm, 0, sizeof(disarm));
+        setitimer(ITIMER_PROF, &disarm, NULL);
     }
-    setitimer(ITIMER_PROF, &disarm, NULL);
-    setitimer(ITIMER_PROF, &restore, NULL);
-    sigaction(SIGPROF, &old_sa, NULL);
 #endif /* !_WIN32 */
 
     /* Restore the outer-call jmp_buf so a parent TimeConstrained can
-     * still receive its own timeout unwind correctly. */
+     * still receive its own timeout unwind correctly, then the outer's
+     * deadline and live flag. */
     memcpy(&tc_jmp_env, &saved_jmp_env, sizeof(saved_jmp_env));
+    tc_deadline_sec    = saved_deadline_sec;
+    tc_deadline_active = saved_deadline_active;
+    tc_body_live       = saved_body_live;
+
+#ifndef _WIN32
+    /* Reinstall the prior handler, then the prior timer.  An enclosing
+     * TimeConstrained is re-armed for ITS deadline measured from now -- the
+     * time we consumed is thereby charged to it, never refunded; one already
+     * past comes back at 1 us, so the caller aborts at once.  A non-TC timer
+     * (an external profiler) is put back as it was. */
+    sigaction(SIGPROF, &old_sa, NULL);
+    if (saved_deadline_active) {
+        double left = saved_deadline_sec - mth_mono_seconds();
+        tc_arm_prof_us(left > 0.0 ? (long long)(left * 1e6) : 1);
+    } else {
+        setitimer(ITIMER_PROF, &old_it, NULL);
+    }
+#endif /* !_WIN32 */
 
     bool aborted_here = (tc_timed_out != 0);
     tc_timed_out = saved_timed_out;
@@ -4825,7 +4853,7 @@ Expr* builtin_time_constrained(Expr* res) {
         if (result) expr_free(result);   /* defensive; should be NULL */
         if (fail_arg) {
             /* failexpr is evaluated AFTER the timeout context is torn
-             * down, with a fresh CPU budget.  Mathematica's semantics
+             * down, under the enclosing budget (if any).  Mathematica's semantics
              * say "TimeConstrained evaluates failexpr only if the
              * evaluation is aborted." */
             return eval_and_free(expr_copy(fail_arg));

@@ -545,6 +545,7 @@ static void sieve_family(QS* Q) {
     uint32_t npoly = 1u << (Q->s - 1);
     for (uint32_t pi = 0; pi < npoly; pi++) {
         int v = -1, e = 0;
+        if ((pi & 15u) == 15u && fi_stop_requested()) break;   /* TimeConstrained */
         if (pi) { v = 1 + ctz32(pi); e = next_poly(Q, v); }
         fill_buckets(Q, v, e);
         start_medium(Q);

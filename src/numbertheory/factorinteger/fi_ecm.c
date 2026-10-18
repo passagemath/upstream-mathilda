@@ -284,9 +284,10 @@ typedef struct {
 static void curve_job(void* arg) {
     CurveJob* j = (CurveJob*)arg;
     j->ok = 0;
-    for (double b = j->B1; b >= 50; b /= 8) {
+    for (double b = j->B1; b >= 50 && !fi_stop_requested(); b /= 8) {
         ecm_params p;
         ecm_init(p);
+        p->stop_asap = fi_stop_requested;   /* TimeConstrained deadline */
         p->param = j->param;
         mpz_set_ui(p->sigma, j->sigma);
         if (j->B2 > 0 && b == j->B1) mpz_set_d(p->B2, j->B2);
@@ -461,6 +462,7 @@ static int gmpecm_smooth(mpz_t d, const mpz_t n, unsigned long rngseed, int meth
                          double B2, int seed) {
     ecm_params p;
     ecm_init(p);
+    p->stop_asap = fi_stop_requested;       /* TimeConstrained deadline */
     gmp_randseed_ui(p->rng, rngseed);
     p->method = method;
     /* Fixed starting values (GMP-ECM would otherwise draw one at random):
@@ -495,7 +497,7 @@ static int gmpecm_smooth(mpz_t d, const mpz_t n, unsigned long rngseed, int meth
  * no shared state, so it runs on a worker thread. */
 static int gmpecm_smooth_backoff(mpz_t d, const mpz_t n, unsigned long rngseed, int method, double B1,
                                  double B2, int seed) {
-    for (double b = B1; b >= 20; b /= 16) {
+    for (double b = B1; b >= 20 && !fi_stop_requested(); b /= 16) {
         int r = gmpecm_smooth(d, n, rngseed, method, b, b == B1 ? B2 : 0, seed);
         if (r >= 0) return r;
     }

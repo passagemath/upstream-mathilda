@@ -211,6 +211,15 @@ static void test_serial_stream(void) {
           "$Aborted");
     check("TimeConstrained[FactorInteger[NextPrime[3*10^12]*NextPrime[7*10^13], Method -> \"Dixon\"], 0.3]",
           "$Aborted");
+    /* The budget is ELAPSED time: threaded ECM (CPU accrues ~nthreads x
+     * faster) must neither abort early nor overrun by a long curve -- workers
+     * stop through GMP-ECM's stop_asap hook.  Was $Aborted after 0.3 s for a
+     * 3 s budget (CPU-time budget), then ~7 s (curve ran to completion).
+     * Bounds are loose for loaded CI hosts; the lower one is the point. */
+    check("Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained["
+          "FactorInteger`ECM[NextPrime[3 10^29] NextPrime[7 10^29]], 1.5]]; "
+          "{r, t >= 1.4, t < 6}]",
+          "{$Aborted, True, True}");
 }
 
 /* ---- Messages route through the funnel (Quiet / Check) ---- */

@@ -17,6 +17,7 @@
 #include "message.h"
 #include "print.h"
 #include "mtime.h"   /* mth_mono_seconds / mth_wall_seconds / mth_sleep_seconds */
+#include "core.h"    /* tc_deadline_remaining / tc_check_deadline (Pause under TimeConstrained) */
 #include <time.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -924,6 +925,11 @@ static int pause_seconds(const Expr* e, double* out) {
  * it for free.  On POSIX a signal can cut the sleep short, so the shim resumes
  * with the reported remainder until the full duration has elapsed, honouring
  * the "at least n seconds" contract.
+ *
+ * Inside TimeConstrained, whose budget is elapsed time, Pause sleeps no
+ * further than the deadline and then takes the timeout (tc_check_deadline):
+ * TimeConstrained[Pause[10], 1] gives $Aborted after 1 s, not 10 s.  The sleep
+ * uses no CPU, so the CPU-time wake-up timer could never interrupt it.
  */
 Expr* builtin_pause(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
@@ -937,7 +943,17 @@ Expr* builtin_pause(Expr* res) {
     }
 
     if (seconds > 0.0 && isfinite(seconds)) {
-        mth_sleep_seconds(seconds);
+        double left = tc_deadline_remaining();
+        if (left >= 0.0 && left < seconds) {
+            mth_sleep_seconds(left);
+            tc_check_deadline();            /* deadline reached: unwinds */
+            /* Not reached unless the clock disagrees; finish the wait. */
+            left = tc_deadline_remaining();
+            if (left > 0.0) mth_sleep_seconds(left);
+            tc_check_deadline();
+        } else {
+            mth_sleep_seconds(seconds);
+        }
     }
 
     /* seconds <= 0 (or non-finite) means no wait, matching Pause[0]. */

@@ -18,7 +18,13 @@
  *
  * Callers keep a region short (one polynomial family per QS worker, one
  * curve per ECM worker, one seed per p+1 worker, a few milliseconds of
- * candidates for CFRAC / Dixon) so a timeout is honoured promptly.  Without
+ * candidates for CFRAC / Dixon) so a timeout is honoured promptly.  A unit
+ * of work can still last seconds (a large-B1 ECM curve), so the long ones
+ * also poll fi_stop_requested() -- GMP-ECM through its stop_asap hook, the
+ * QS per polynomial, the RBD search per candidate -- and the main thread
+ * checks the deadline the moment the joins return (TimeConstrained's budget
+ * is elapsed time, so a timeout pending when the region ends is taken there
+ * rather than after the caller's next allocation).  Without
  * MATHILDA_THREADS everything runs serially on the calling thread.
  */
 #ifndef _POSIX_C_SOURCE
@@ -90,10 +96,15 @@ void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n) {
         for (int i = 0; i < n; i++) if (started[i]) pthread_join(th[i], NULL);
         for (int i = 0; i < n; i++) if (!started[i]) fn(job[i].arg);
         tc_async_defer_pop();
+        tc_check_deadline();               /* a timeout due now unwinds here */
         return;
     }
 #endif
     for (int i = 0; i < n; i++) fn((char*)jobs + (size_t)i * stride);
+}
+
+int fi_stop_requested(void) {
+    return tc_deadline_passed() ? 1 : 0;
 }
 
 /* Work claiming.  A claim is one lock round trip per chunk; callers size the

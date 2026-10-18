@@ -572,10 +572,11 @@ native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are nati
 dependency.
 
 Threads: the quadratic sieve, ECM, p+1, CFRAC, Dixon and BlakeRationalBaseDescent use every online CPU (up to 16) in builds with
-`MATHILDA_THREADS`. `TimeConstrained` budgets are process CPU time, so they are consumed correspondingly
-faster while they run. An abort is taken on the main thread when the current region ends: one polynomial
-family per QS thread, one curve per ECM thread, one seed per p+1 thread, or a few milliseconds of
-CFRAC/Dixon candidates.
+`MATHILDA_THREADS`. `TimeConstrained` budgets are elapsed time (v0.461; they were process CPU time, so a
+16-thread region used a budget up 16 times too fast). An abort is taken on the main thread as soon as the
+current region ends. Long units of work stop early when the deadline passes: ECM curves and p±1 seeds through
+GMP-ECM's `stop_asap` hook, QS families every 16 polynomials, and BlakeRationalBaseDescent per candidate. A
+CFRAC/Dixon region lasts only a few milliseconds.
 
 ### BlakeRationalBaseDescent
 

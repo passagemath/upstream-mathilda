@@ -252,6 +252,7 @@ static void search_worker(void* arg) {
     while (fi_claim_next(&sh->claim, sh->chunk, &lo, &hi)) {
         for (size_t i = lo; i < hi; i++) {
             if (i >= J->best || i >= fi_claim_end(&sh->claim)) break;
+            if (fi_stop_requested()) return;   /* TimeConstrained deadline */
             if (sh->item(sh, i, J->tmp, &J->w)) {
                 J->best = i;
                 mpz_set(J->g, J->tmp);

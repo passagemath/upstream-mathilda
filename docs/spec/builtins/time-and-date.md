@@ -56,17 +56,18 @@ Evaluates `expr`, generating an interrupt to abort the evaluation if it has not 
 
 **Features**:
 - `HoldAll`, `Protected`.
-- Returns the value of `expr` if it completes within `t` seconds of CPU time.
+- Returns the value of `expr` if it completes within `t` seconds of elapsed (wall-clock) time, as in Mathematica.
 - Returns `$Aborted` if the budget is exhausted and no `failexpr` is provided.
 - Returns the (then-evaluated) value of `failexpr` if the budget is exhausted and the three-argument form is used. `failexpr` is **not** evaluated when the body completes in time.
 - `TimeConstrained[expr, Infinity]` imposes no time constraint.
 - Zero, negative, or non-numeric (NaN) time budgets abort immediately without evaluating `expr`; the abort path still produces `$Aborted` (or `failexpr` for the 3-argument form).
-- The time budget is measured with `ITIMER_PROF` and counts only CPU time (user + kernel) consumed by the Mathilda kernel process. Wall-clock time spent in I/O, sleep, or other processes is not charged.
-- A cooperative wall-clock deadline (`CLOCK_MONOTONIC` + budget) is also armed and checked once per evaluator rewrite step, as a portability backstop on hosts where `ITIMER_PROF` is unreliable (notably WSL 1, whose syscall-translation layer under-counts CPU time and delivers `SIGPROF` many seconds late). On real Linux / macOS the `SIGPROF` normally fires first and the cooperative check is a cheap no-op; on broken hosts the cooperative check enforces the deadline between rewrite steps. The only case that escapes both layers is a single long-running C builtin (e.g. `FactorInteger` on a huge composite) on a broken host -- it must wait for the late `SIGPROF`.
+- **The budget is elapsed time** (v0.461): the deadline is one `CLOCK_MONOTONIC` instant, `now + t`. Two layers enforce it. (1) A cooperative check once per evaluator rewrite step, at heavy-kernel loop heads (`tc_deadline_passed`), and in `Pause`, which sleeps no further than the deadline. (2) On POSIX, an `ITIMER_PROF`/`SIGPROF` timer that preempts a long C builtin which never returns to the evaluator. That timer counts process CPU time summed over threads, so it serves only as a *wake-up*: its handler compares the monotonic clock with the deadline and, when woken early (N busy threads accrue CPU N times faster than wall time), re-arms for the remainder. Threaded `FactorInteger` regions (QS, ECM, p±1, BlakeRationalBaseDescent) poll the deadline from their workers — GMP-ECM through its `stop_asap` hook — and the main thread takes the timeout as the region ends.
+- Before v0.461 the CPU timer *was* the budget. Threaded ECM/QS runs therefore aborted 10–16× early in elapsed time: `TimeConstrained[FactorInteger`ECM[NextPrime[3 10^29] NextPrime[7 10^29]], 3]` gave `$Aborted` after 0.3 s. Time spent idle was not charged either: `TimeConstrained[Pause[5], 1]` slept the full 5 s and returned `Null`. Both now stop at the budget.
+- On hosts whose `ITIMER_PROF` is unreliable (notably WSL 1, which under-counts CPU time and delivers `SIGPROF` late), and always on native Windows, which has no `SIGPROF`, the cooperative layer alone enforces the deadline between rewrite steps. A single long-running C builtin that neither returns nor polls is the one case it cannot interrupt.
 - May give different results on different occasions within a single session, for example as a result of different conditions of internal system caches.
-- Nested `TimeConstrained` calls compose: each call saves and restores the previous `SIGPROF` handler, `ITIMER_PROF` state, and the cooperative-deadline state, so an inner abort does not disturb an outer time budget.
+- Nested `TimeConstrained` calls compose: each call saves and restores the previous `SIGPROF` handler, the timer, and the deadline state, so an inner abort does not disturb an outer time budget.
 - A timeout also restores every C nesting counter a subsystem has registered with `tc_register_unwind_counter` (v0.451) — the unwind skips their decrements, and a counter left raised changes behaviour for the rest of the session (one aborted nested `DSolve` used to leave `DSolve`'s recursion depth at 2, disabling its top-level-only methods and its failure memo).
-- **Nesting CLAMPS, it does not refund** (v0.253). An inner budget can only ever *shorten* the enclosing one: the timer actually armed is `min(inner request, outer remaining)`, and on exit the enclosing budget is reinstalled **charged** for the CPU time the inner call consumed. So `TimeConstrained[expr, t]` is an upper bound on the whole call, however many nested budgets `expr` enters. A shorter inner budget still wins, and a computation that fits inside its budget is unaffected. Before this, both layers lifted the caller's deadline merely by entering an inner scope — the `ITIMER_PROF` layer reinstalled the outer timer at the value it held when the inner call *started*, and the cooperative layer set an inner absolute deadline that could be later than the outer's — so `TimeConstrained[TimeConstrained[<long loop>, 30], 3]` ran the loop to completion in 24.5 s. Since `Integrate`, `Simplify`, `NIntegrate` and `DSolve` all bound their own sub-steps this way, no budget was an upper bound in practice.
+- **Nesting CLAMPS, it does not refund** (v0.253). An inner budget can only ever *shorten* the enclosing one: the inner deadline is `min(now + inner, outer deadline)`, and since the outer's deadline is an absolute instant, the time the inner call spent is charged to it automatically (the outer timer is re-armed for `outer deadline − now` on exit). So `TimeConstrained[expr, t]` is an upper bound on the whole call, however many nested budgets `expr` enters. A shorter inner budget still wins, and a computation that fits inside its budget is unaffected. Before this, both layers lifted the caller's deadline merely by entering an inner scope — the `ITIMER_PROF` layer reinstalled the outer timer at the value it held when the inner call *started*, and the cooperative layer set an inner absolute deadline that could be later than the outer's — so `TimeConstrained[TimeConstrained[<long loop>, 30], 3]` ran the loop to completion in 24.5 s. Since `Integrate`, `Simplify`, `NIntegrate` and `DSolve` all bound their own sub-steps this way, no budget was an upper bound in practice.
 - The abort is implemented by `siglongjmp`-ing out of the in-flight evaluator. Expression nodes allocated by the aborted computation are not reclaimed; this is the documented behaviour.
 
 ```mathematica
@@ -81,6 +82,9 @@ Out[3]= $Aborted
 
 In[4]:= TimeConstrained[{TimeConstrained[While[True], 0.1, "inner"], 7}, 5]
 Out[4]= {"inner", 7}
+
+In[5]:= AbsoluteTiming[TimeConstrained[Pause[3], 0.3]]
+Out[5]= {0.300412, $Aborted}
 ```
 
 ## AbsoluteTime

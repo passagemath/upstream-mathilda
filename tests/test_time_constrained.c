@@ -15,10 +15,13 @@
  *   - Protected attribute is set; Attributes[TimeConstrained] reads back
  *     {HoldAll, Protected}.
  *
+ *   - Elapsed-time budget: Pause is charged and cut short, nested scopes
+ *     clamp and charge the outer, a CPU loop aborts at its budget.
+ *
  * The CPU-burning tests use Do[expensive, {many}].  On very fast
- * machines the body may finish before the kernel ITIMER_PROF tick
- * fires; those cases accept either the timed-out result or the
- * "completed normally" result (Null from Do) to stay portable.
+ * machines the body may finish before the budget expires; those cases
+ * accept either the timed-out result or the "completed normally" result
+ * (Null from Do) to stay portable.
  */
 
 #include "test_utils.h"
@@ -318,6 +321,54 @@ void test_tc_cooperative_backstop_without_sigprof(void) {
     free(s);
 }
 
+/* ------------------------------------------------------------------ */
+/* Elapsed-time semantics.  The budget is wall-clock time (Mathematica's  */
+/* semantics): an idle wait is charged, and Pause sleeps no further than  */
+/* the deadline.  Upper bounds are loose for loaded hosts.               */
+/* ------------------------------------------------------------------ */
+
+void test_tc_pause_is_charged(void) {
+    /* Was: Pause ran its full 3 s (no CPU, so no SIGPROF) and returned Null. */
+    char* s = eval_string(
+        "Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained[Pause[3], 0.3]]; "
+        "{r, t >= 0.29, t < 2}]");
+    ASSERT_STR_EQ(s, "{$Aborted, True, True}");
+    free(s);
+}
+
+void test_tc_pause_fits(void) {
+    char* s = eval_string("TimeConstrained[Pause[0.05]; 7, 5]");
+    ASSERT_STR_EQ(s, "7");
+    free(s);
+}
+
+void test_tc_nested_pause_clamped_by_outer(void) {
+    char* s = eval_string(
+        "Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained["
+        "TimeConstrained[Pause[5], 30, inner], 0.3, outer]]; {r, t < 2}]");
+    /* The inner deadline is clamped to the outer's, so the inner scope is the
+     * one that times out (and returns its failexpr) -- at 0.3 s, not 5 s. */
+    ASSERT_STR_EQ(s, "{inner, True}");
+    free(s);
+}
+
+void test_tc_nested_time_charged_to_outer(void) {
+    /* 0.25 s inside the inner scope + 0.25 s after it exceed the outer 0.4 s. */
+    char* s = eval_string(
+        "TimeConstrained[TimeConstrained[Pause[0.25], 10]; Pause[0.25]; done, 0.4, outer]");
+    ASSERT_STR_EQ(s, "outer");
+    free(s);
+}
+
+void test_tc_cpu_loop_elapsed(void) {
+    /* A single-threaded CPU loop aborts at (not long after) its budget. */
+    char* s = eval_string(
+        "Module[{t, r}, {t, r} = AbsoluteTiming[TimeConstrained[Do[Sin[1.0], {10^9}], 0.3]]; "
+        "{r, t >= 0.29, t < 3}]");
+    ASSERT_STR_EQ(s, "{$Aborted, True, True}");
+    free(s);
+}
+
 void test_tc_holdall_blocks_premature_eval(void) {
     /* If TimeConstrained lacked HoldAll, the body Print[...] would be
      * evaluated by the caller before the builtin saw it.  With HoldAll,
@@ -369,6 +420,11 @@ int main(void) {
     TEST(test_tc_failexpr_can_be_symbolic);
     TEST(test_tc_cooperative_backstop_without_sigprof);
     TEST(test_tc_holdall_blocks_premature_eval);
+    TEST(test_tc_pause_is_charged);
+    TEST(test_tc_pause_fits);
+    TEST(test_tc_nested_pause_clamped_by_outer);
+    TEST(test_tc_nested_time_charged_to_outer);
+    TEST(test_tc_cpu_loop_elapsed);
 
     printf("All TimeConstrained tests passed!\n");
     return 0;

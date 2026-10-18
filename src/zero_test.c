@@ -264,6 +264,36 @@ static void collect_free(const Expr* e, SymPtrSet* out) {
     }
 }
 
+/* True for a head that is NOT holomorphic in its argument: it is defined by
+ * the real/imaginary split (Conjugate, Re, Im) or by the modulus/argument
+ * (Abs, Arg, Sign).  For such a head the identity theorem does not apply — a
+ * relation that holds on the real line (Conjugate[x] == x, Re[x] == x,
+ * Abs[x]^2 == x^2) need not hold off it — so real sample points cannot
+ * certify a zero. */
+static bool is_nonholomorphic_head(const char* h) {
+    return h == SYM_Conjugate || h == SYM_Re  || h == SYM_Im ||
+           h == SYM_Abs       || h == SYM_Arg || h == SYM_Sign;
+}
+
+/* Collect the free symbols of `e` that occur INSIDE the argument of a
+ * non-holomorphic head (see is_nonholomorphic_head).  Only those symbols need
+ * complex sample points: a symbol that appears solely in holomorphic positions
+ * leaves the expression holomorphic in it (for every fixed value of the
+ * others), so real draws for it remain decisive by the identity theorem. */
+static void collect_nonholomorphic_free(const Expr* e, bool inside, SymPtrSet* out) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (inside) collect_free(e, out);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    bool in = inside || (h && h->type == EXPR_SYMBOL &&
+                         is_nonholomorphic_head(h->data.symbol.name));
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        collect_nonholomorphic_free(e->data.function.args[i], in, out);
+}
+
 static bool has_free_symbols(const Expr* e) {
     SymPtrSet s; sps_init(&s);
     collect_free(e, &s);
@@ -1395,6 +1425,8 @@ typedef struct {
     SampleDomain domain;
     Channel val;      /* value channel (REAL/INT) or real-part channel (CPLX) */
     Channel im;       /* imaginary-part channel (CPLX only)                    */
+    bool mentioned;   /* some assumption fact constrains this symbol; when false
+                       * the REAL domain is a default, not an assumption        */
 } SampleSpec;
 
 static void channel_init(Channel* c) {
@@ -1521,6 +1553,7 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
     channel_init(&ch_bare); channel_init(&ch_re); channel_init(&ch_im);
     bool seen_int = false, seen_cplx = false;
     bool seen_re = false, seen_im = false, seen_im_zero = false;
+    bool mentioned = false;
 
     for (size_t i = 0; ctx && i < ctx->count; ++i) {
         const Expr* f = ctx->facts[i];
@@ -1531,6 +1564,7 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
 
         if (h == SYM_Element && argc == 2) {
             if (channel_of_operand(f->data.function.args[0], sym) != 0) continue;
+            mentioned = true;
             const Expr* dom = f->data.function.args[1];
             if (!dom || dom->type != EXPR_SYMBOL) continue;
             const char* dn = dom->data.symbol.name;
@@ -1551,6 +1585,7 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
             if (ch >= 0) { cst = f->data.function.args[1]; var_left = true; }
             else { ch = channel_of_operand(f->data.function.args[1], sym); cst = f->data.function.args[0]; var_left = false; }
             if (ch < 0) continue;
+            mentioned = true;
             double c;
             if (!bound_to_double(cst, &c)) continue;
             if (ch == 1) seen_re = true;
@@ -1571,6 +1606,7 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
         if (h == SYM_Inequality && argc == 5) {
             int ch = channel_of_operand(f->data.function.args[2], sym);
             if (ch < 0) continue;
+            mentioned = true;
             if (ch == 1) seen_re = true;
             if (ch == 2) seen_im = true;
             Channel* tgt = (ch == 1) ? &ch_re : (ch == 2) ? &ch_im : &ch_bare;
@@ -1583,6 +1619,7 @@ static SampleSpec extract_spec(const AssumeCtx* ctx, const char* sym) {
     }
 
     SampleSpec spec;
+    spec.mentioned = mentioned;
     if (seen_int)                                    spec.domain = SDOM_INT;
     else if (seen_im_zero)                           spec.domain = SDOM_REAL;
     else if (seen_cplx || seen_re || seen_im)        spec.domain = SDOM_CPLX;
@@ -1934,13 +1971,30 @@ static ZeroTestResult decide_schwartz_zippel_core(const Expr* e, const AssumeCtx
         return ZERO_TEST_UNKNOWN;
     }
 
+    /* Symbols under a non-holomorphic head (Conjugate/Re/Im/Abs/Arg/Sign) must
+     * be drawn off the real line: Conjugate[x] - x vanishes at every real x but
+     * is not zero.  A symbol whose REAL domain is only the default (no
+     * assumption fact constrains it) is therefore sampled at a generic complex
+     * point; an explicit Element[x, Reals] / x > 0 / ... keeps it real.  With
+     * no such symbol the draw stream is byte-for-byte the legacy one. */
+    SymPtrSet nonhol; sps_init(&nonhol);
+    collect_nonholomorphic_free(e, false, &nonhol);
+
     SampleSpec* specs = NULL;
-    if (ctx) {
+    if (ctx || nonhol.count) {
         specs = malloc(sizeof(SampleSpec) * syms.count);
         if (specs)
-            for (size_t i = 0; i < syms.count; ++i)
+            for (size_t i = 0; i < syms.count; ++i) {
+                /* extract_spec(NULL, ..) is the unconstrained REAL spec, whose
+                 * draw equals sample_random_value's exactly. */
                 specs[i] = extract_spec(ctx, syms.items[i]);
+                if (!specs[i].mentioned && sps_contains(&nonhol, syms.items[i])) {
+                    specs[i].domain = SDOM_CPLX;
+                    channel_init(&specs[i].im);
+                }
+            }
     }
+    sps_free(&nonhol);
 
     /* Classify every ctx fact touching e's symbols into one of three handlings,
      * because the per-symbol SampleSpec can only express single-variable regions:

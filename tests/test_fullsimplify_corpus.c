@@ -73,10 +73,14 @@ int main(int argc, char** argv) {
          * is resolved through the context system exactly as the parser would,
          * so the bare "FullSimplify" maps to the package's FullSimplify`
          * FullSimplify symbol (where the DownValue lives) via $ContextPath. */
-        Expr** args = (Expr**)malloc(sizeof(Expr*));
+        /* An optional third element is the positional assumption:
+         * {input, expected, assum} runs FullSimplify[input, assum]. */
+        size_t nargs = pair->data.function.arg_count >= 3 ? 2 : 1;
+        Expr** args = (Expr**)malloc(2 * sizeof(Expr*));
         args[0] = expr_copy(input);
+        if (nargs == 2) args[1] = expr_copy(pair->data.function.args[2]);
         char* head_name = context_resolve_name("FullSimplify");
-        Expr* call = expr_new_function(expr_new_symbol(head_name), args, 1);
+        Expr* call = expr_new_function(expr_new_symbol(head_name), args, nargs);
         free(head_name);
         free(args);
         Expr* result = evaluate(call);

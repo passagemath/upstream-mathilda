@@ -409,10 +409,13 @@ special functions costs no more than `Simplify`, and the collection scales to
 many identities without slowing the common case. The first-cut libraries cover
 the gamma family (`Gamma`/`LogGamma`/`PolyGamma` recurrences,
 `Pochhammer`/`Beta`/`Factorial` → `Gamma`, plus guarded **pair** reductions:
-reflection `Gamma[z] Gamma[1-z] -> Pi/Sin[Pi z]` for non-integer `z`, and
-conjugate pairs `Gamma[1±I b] -> Pi b/Sinh[Pi b]` and
-`Gamma[1/2±I b] -> Pi/Cosh[Pi b]` — so `FullSimplify[Gamma[1/4] Gamma[3/4]] ->
-Pi Sqrt[2]` and `FullSimplify[Gamma[1+I] Gamma[1-I]] -> Pi Csch[Pi]`), the error
+reflection `Gamma[z] Gamma[1-z] -> Pi/Sin[Pi z]` for non-integer `z`, its
+symmetric form `Gamma[1/2+d] Gamma[1/2-d] -> Pi/Cos[Pi d]`, and the shifted form
+`Gamma[1+d] Gamma[1-d] -> Pi d/Sin[Pi d]`, all valid for every complex `d` — so
+`FullSimplify[Gamma[1/4] Gamma[3/4]] -> Pi Sqrt[2]`,
+`FullSimplify[Gamma[1+I] Gamma[1-I]] -> Pi Csch[Pi]`, and
+`FullSimplify[Gamma[1/2 + I b] Gamma[1/2 - I b]] -> Pi Sech[Pi b]` for symbolic
+(complex) `b`), the error
 functions
 (`Erf[z] + Erfc[z] -> 1`), the dilogarithm (`PolyLog[2, z] + PolyLog[2, -z] ->
 PolyLog[2, z^2]/2`), real radicals (`Surd[x, n]^n -> x`), and the
@@ -479,7 +482,23 @@ Out[10]= 1 + a
 The real-log rules are identities only where the log argument is positive.
 `Sec[x] + Tan[x] > 0` holds on `-Pi/2 < x < Pi/2`, and `Coth[x] - Csch[x] > 0`
 for `x > 0`. Where the argument is negative the left side picks up an `I Pi`
-term.
+term, so each rule fires **only when the assumptions prove** its condition
+(`Cos[y] > 0` for `Sec ± Tan`; `Sin[y] > 0` for `Csc ± Cot`, `Tan[y/2]`,
+`Cot[y/2]`; `y > 0` for `Coth ± Csch`, `Tanh[y/2]`, `Coth[y/2]`; `y` real for
+`Cosh ± Sinh`). The proof is interval arithmetic on an affine angle against the
+inequality facts in force (a positional assumption, `Assuming`, or
+`$Assumptions`); without one the input is returned unchanged:
+
+```mathematica
+In[11]:= FullSimplify[Log[Sec[x] + Tan[x]]]
+Out[11]= Log[Sec[x] + Tan[x]]
+
+In[12]:= FullSimplify[Log[Sec[x] + Tan[x]], Pi/2 < x < 3 Pi/2]
+Out[12]= Log[Sec[x] + Tan[x]]
+
+In[13]:= FullSimplify[Log[Tan[x/2]], 0 < x < Pi]
+Out[13]= -ArcTanh[Cos[x]]
+```
 
 First-cut limitations: the gamma recurrence matches a literal `+1` shift only
 (`Gamma[x + 2]/Gamma[x]` is left unreduced). The identity collection is expected

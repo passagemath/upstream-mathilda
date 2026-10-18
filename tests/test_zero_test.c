@@ -1127,6 +1127,33 @@ static void test_huge_cancel_preserves_normal_identities(void) {
 /*  Main driver                                                   */
 /* ============================================================== */
 
+/* Group 21 -- non-holomorphic heads are sampled off the real line.
+ * Conjugate[x] - x and Re[x] - x vanish at every REAL x, so a real-only draw
+ * misread them as identities; the identity theorem only licenses real samples
+ * for holomorphic expressions.  A symbol under Conjugate/Re/Im/Abs/Arg/Sign is
+ * now drawn at complex points unless an assumption fact constrains it. */
+static void test_nonholomorphic_conjugate_minus_x(void) {
+    assert_pzq("PossibleZeroQ[Conjugate[x] - x]", "False");
+}
+static void test_nonholomorphic_re_minus_x(void) {
+    assert_pzq("PossibleZeroQ[Re[x] - x]", "False");
+    assert_pzq("PossibleZeroQ[Im[x]]", "False");
+    assert_pzq("PossibleZeroQ[Abs[x]^2 - x^2]", "False");
+}
+static void test_nonholomorphic_genuine_identities(void) {
+    assert_pzq("PossibleZeroQ[Abs[x]^2 - x Conjugate[x]]", "True");
+    assert_pzq("PossibleZeroQ[Re[x]^2 + Im[x]^2 - Abs[x]^2]", "True");
+    assert_pzq("PossibleZeroQ[Re[x] - (x + Conjugate[x])/2]", "True");
+    /* holomorphic symbol y keeps real draws alongside complex x */
+    assert_pzq("PossibleZeroQ[Sin[y]^2 + Cos[y]^2 - 1 + Conjugate[x] - Conjugate[x]]", "True");
+}
+static void test_nonholomorphic_assumed_real_stays_real(void) {
+    assert_pzq("PossibleZeroQ[Conjugate[x] - x, Assumptions -> Element[x, Reals]]", "True");
+    assert_pzq("PossibleZeroQ[Re[x] - x, Assumptions -> x > 0]", "True");
+    /* a fact about ANOTHER symbol does not make x real */
+    assert_pzq("PossibleZeroQ[Conjugate[x] - x, Assumptions -> y > 0]", "False");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1322,6 +1349,11 @@ int main(void) {
     TEST(test_huge_cancel_verdict_stable);
     TEST(test_huge_cancel_genuine_nonzero_stays_false);
     TEST(test_huge_cancel_preserves_normal_identities);
+    /* Group 21 — non-holomorphic heads sampled at complex points */
+    TEST(test_nonholomorphic_conjugate_minus_x);
+    TEST(test_nonholomorphic_re_minus_x);
+    TEST(test_nonholomorphic_genuine_identities);
+    TEST(test_nonholomorphic_assumed_real_stays_real);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

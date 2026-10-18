@@ -316,6 +316,24 @@ Pipeline (each stage exits early on a definite verdict):
    distinct on some complex branch (e.g. `Log[Exp[x]] - x` off the
    principal strip) reads `True` under these real-variable semantics.
 
+   The identity theorem covers only *holomorphic* expressions, so a symbol
+   that occurs inside a non-holomorphic head — `Conjugate`, `Re`, `Im`,
+   `Abs`, `Arg`, `Sign` — is drawn at **complex** points instead (unless an
+   assumption fact such as `Element[x, Reals]` or `x > 0` constrains it).
+   `Conjugate[x] - x` and `Re[x] - x` vanish at every real `x`, and used to
+   read `True`; they are now `False`, while genuine identities such as
+   `Abs[x]^2 - x Conjugate[x]` stay `True`. Symbols that appear only in
+   holomorphic positions keep the real draw, and an input with no such head
+   draws exactly the same points as before.
+
+   ```mathematica
+   In[1]:= {PossibleZeroQ[Conjugate[x] - x], PossibleZeroQ[Re[x] - x]}
+   Out[1]= {False, False}
+
+   In[2]:= PossibleZeroQ[Conjugate[x] - x, Assumptions -> Element[x, Reals]]
+   Out[2]= True
+   ```
+
 **Assumptions.** `PossibleZeroQ[expr, Assumptions -> assum]` tests `expr`
 under `assum`, and an ambient `Assuming[...]` / `$Assumptions` scope is
 honoured even for the one-argument form. Assumptions do **not** invoke

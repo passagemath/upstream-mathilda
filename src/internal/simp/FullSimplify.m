@@ -162,7 +162,7 @@ Consolidate[r_, fns_, score_] := Module[{cands},
 FullSimplify[expr_, opts___] := Core[expr, {opts}];
 
 Core[expr_, allOpts_List] := Module[
-    {optRules, positional, assumSeq, cf, userTF, tc, tLoc, tTot,
+    {optRules, positional, assum, cf, userTF, tc, tLoc, tTot,
      relevant, allTF, simpArgs, simp, score},
 
     optRules   = Cases[allOpts, _Rule];
@@ -185,28 +185,38 @@ Core[expr_, allOpts_List] := Module[
     allTF = Join[{Automatic}, WrapLocal[relevant, tLoc],
                  WrapLocal[userTF, tLoc]];
 
-    (* Forward the positional assumption (if any) so Simplify combines it with
-       $Assumptions exactly as it does for Simplify[expr, assum]. *)
-    assumSeq = If[positional === {}, {}, {First[positional]}];
+    (* The positional assumption (if any) is put in force by binding
+       $Assumptions = $Assumptions && assum around the whole run, exactly as
+       Assuming[assum, Simplify[expr]] does -- which Simplify[expr, assum]
+       is equivalent to. Binding it (rather than only forwarding it to
+       Simplify) is what lets the identity libraries SEE it: a transformation
+       function is an ordinary Mathilda function called during the search and
+       during the consolidation sweep, and a domain-guarded identity (the
+       real-log family in logexp.m) reads its facts from $Assumptions. *)
+    assum = If[positional === {}, True,
+        If[Head[First[positional]] === List, Apply[And, First[positional]],
+           First[positional]]];
 
-    simpArgs = Join[{expr}, assumSeq,
+    simpArgs = Join[{expr},
                     {TransformationFunctions -> allTF, ComplexityFunction -> cf}];
 
-    (* Total time budget across all transformations. The plain-Simplify
-       fallback is the HoldAll-protected third argument of TimeConstrained, so
-       it is computed only on timeout -- never doubling work in the common
-       (unconstrained) path -- and it preserves the >= Simplify contract. *)
-    simp = If[tTot === Infinity,
-        Apply[Simplify, simpArgs],
-        TimeConstrained[
-            Apply[Simplify, simpArgs],
-            tTot,
-            Apply[Simplify, Join[{expr}, assumSeq, {ComplexityFunction -> cf}]]]];
-
-    (* Final consolidation, scored with the same complexity measure Simplify
+    (* Final consolidation is scored with the same complexity measure Simplify
        used (SimplifyCount when ComplexityFunction is Automatic). *)
     score = If[cf === Automatic, SimplifyCount, cf];
-    Consolidate[simp, relevant, score]
+
+    Block[{$Assumptions = $Assumptions && assum},
+        (* Total time budget across all transformations. The plain-Simplify
+           fallback is the HoldAll-protected third argument of TimeConstrained,
+           so it is computed only on timeout -- never doubling work in the
+           common (unconstrained) path -- and it preserves the >= Simplify
+           contract. *)
+        simp = If[tTot === Infinity,
+            Apply[Simplify, simpArgs],
+            TimeConstrained[
+                Apply[Simplify, simpArgs],
+                tTot,
+                Apply[Simplify, {expr, ComplexityFunction -> cf}]]];
+        Consolidate[simp, relevant, score]]
 ];
 
 End[];

@@ -80,12 +80,27 @@ int main(void) {
      * inverse/linear form. These are a genuine FullSimplify gap -- Simplify
      * leaves them untouched. --- */
     chk("Simplify[Log[Sec[x] + Tan[x]]]", "Log[Sec[x] + Tan[x]]"); /* gap */
-    chk("FullSimplify[Log[Sec[x] + Tan[x]]]", "ArcTanh[Sin[x]]");
-    chk("FullSimplify[Log[Sec[x] - Tan[x]]]", "-ArcTanh[Sin[x]]");
-    chk("FullSimplify[Log[2 Sec[x] - 2 Tan[x]]]", "Log[2] - ArcTanh[Sin[x]]");
-    chk("FullSimplify[Log[Csc[x] + Cot[x]]]", "ArcTanh[Cos[x]]");
-    chk("FullSimplify[Log[Coth[x] + Csch[x]]]", "ArcCoth[Cosh[x]]");
-    chk("FullSimplify[Log[Tan[x/2]]]", "-ArcTanh[Cos[x]]");
+    /* Real-log identities hold only where the log argument is positive, so
+     * each fires only when the assumptions PROVE it (Log[Sec[3] + Tan[3]] is
+     * 0.142 + I Pi, ArcTanh[Sin[3]] is 0.142).  Unassumed input is left alone. */
+    chk("FullSimplify[Log[Sec[x] + Tan[x]]]", "Log[Sec[x] + Tan[x]]");
+    chk("FullSimplify[Log[Tan[x/2]]]", "Log[Tan[1/2 x]]");
+    chk("FullSimplify[Log[Coth[x] + Csch[x]]]", "Log[Coth[x] + Csch[x]]");
+    chk("FullSimplify[Log[Sec[x] + Tan[x]], x > 0]", "Log[Sec[x] + Tan[x]]");
+    chk("FullSimplify[Log[Sec[x] + Tan[x]], Pi/2 < x < 3 Pi/2]", "Log[Sec[x] + Tan[x]]");
+    chk("FullSimplify[Log[Csc[x] + Cot[x]], 0 < x < 4]", "Log[Cot[x] + Csc[x]]");
+    chk("FullSimplify[Log[Sec[x] + Tan[x]], -Pi/2 < x < Pi/2]", "ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Sec[x] - Tan[x]], -Pi/2 < x < Pi/2]", "-ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[2 Sec[x] - 2 Tan[x]], -Pi/2 < x < Pi/2]", "Log[2] - ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Sec[x] + Tan[x]], -5 Pi/2 < x < -3 Pi/2]", "ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Sec[2 x] + Tan[2 x]], 0 < x < Pi/4]", "ArcTanh[Sin[2 x]]");
+    chk("Assuming[-Pi/2 < x < Pi/2, FullSimplify[Log[Sec[x] + Tan[x]]]]", "ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[Csc[x] + Cot[x]], 0 < x < Pi]", "ArcTanh[Cos[x]]");
+    chk("FullSimplify[Log[Tan[x/2]], 0 < x < Pi]", "-ArcTanh[Cos[x]]");
+    chk("FullSimplify[Log[Tan[x/2]], -Pi < x < 0]", "Log[Tan[1/2 x]]");
+    chk("FullSimplify[Log[Coth[x] + Csch[x]], x > 0]", "ArcCoth[Cosh[x]]");
+    chk("FullSimplify[Log[Coth[x] - Csch[x]], x > 0]", "-ArcCoth[Cosh[x]]");
+    chk("FullSimplify[Log[Tanh[x/2]], x < 0]", "Log[Tanh[1/2 x]]");
     /* Non-firing guards return the input unchanged (sound: no branch crossed). */
     chk("FullSimplify[Log[2 Sec[x] + 3 Tan[x]]]", "Log[2 Sec[x] + 3 Tan[x]]");
     chk("FullSimplify[Log[Sec[x] + Tan[y]]]", "Log[Sec[x] + Tan[y]]");

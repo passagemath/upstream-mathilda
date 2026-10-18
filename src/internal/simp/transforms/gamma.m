@@ -34,18 +34,27 @@ RegisterTransforms[Gamma, {
         HoldPattern[Times[r___, Gamma[z_], Gamma[w_]]] /;
             (! IntegerQ[z]) && PossibleZeroQ[z + w - 1] :>
             Pi / Sin[Pi z] Times[r]]],
-    (* Conjugate PAIR (Re == 1): Gamma[1+I b] Gamma[1-I b] == Pi b/Sinh[Pi b].*)
+    (* Shifted reflection PAIR (u + v == 2): with d = (u - v)/2,               *)
+    (* Gamma[1+d] Gamma[1-d] == d Gamma[d] Gamma[1-d] == Pi d / Sin[Pi d].     *)
+    (* Holds for EVERY complex d (an analytic identity), so it needs no        *)
+    (* conjugate-pair or reality guard: Gamma[1+I b] Gamma[1-I b] collapses to *)
+    (* Pi b / Sinh[Pi b] for any b.  Integer d is excluded (Sin[Pi d] == 0).   *)
     Function[e, Replace[e,
         HoldPattern[Times[r___, Gamma[u_], Gamma[v_]]] /;
-            (! PossibleZeroQ[Im[u]]) && PossibleZeroQ[u - Conjugate[v]]
-            && PossibleZeroQ[Re[u] - 1] :>
-            (Pi Im[u] / Sinh[Pi Im[u]]) Times[r]]],
-    (* Conjugate PAIR (Re == 1/2): Gamma[1/2+I b] Gamma[1/2-I b] == Pi/Cosh[Pi b].*)
+            (! IntegerQ[Together[(u - v)/2]]) && PossibleZeroQ[u + v - 2] :>
+            (Pi ((u - v)/2) / Sin[Pi (u - v)/2]) Times[r]]],
+    (* Symmetric reflection PAIR (u + v == 1): with d = (u - v)/2,             *)
+    (* Gamma[1/2+d] Gamma[1/2-d] == Pi / Cos[Pi d] (the reflection formula     *)
+    (* rewritten about 1/2), again valid for every complex d.  It gives the    *)
+    (* compact Pi Sech[Pi b] for Gamma[1/2+I b] Gamma[1/2-I b], where the      *)
+    (* Pi/Sin[Pi z] form above leaves Csc[Pi (1/2 + I b)].  (These replace the *)
+    (* former conjugate-pair rules, whose PossibleZeroQ[u - Conjugate[v]]       *)
+    (* guard was decided at real points only and so fired for complex b,       *)
+    (* returning Pi Sech[Pi Im[u]] -- wrong off the real line.)                 *)
     Function[e, Replace[e,
         HoldPattern[Times[r___, Gamma[u_], Gamma[v_]]] /;
-            (! PossibleZeroQ[Im[u]]) && PossibleZeroQ[u - Conjugate[v]]
-            && PossibleZeroQ[Re[u] - 1/2] :>
-            (Pi / Cosh[Pi Im[u]]) Times[r]]]
+            (! IntegerQ[u]) && PossibleZeroQ[u + v - 1] :>
+            (Pi / Cos[Pi (u - v)/2]) Times[r]]]
 }];
 
 (* LogGamma[z+1] == Log[z] + LogGamma[z]. *)

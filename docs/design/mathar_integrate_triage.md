@@ -66,8 +66,10 @@ Each fix has a root-cause test in `tests/test_mathar_regressions.c`.
 | indefinite N | 79 | 79 | **82** |
 
 v0.459 adds Log-of-trig: definite 93/191, indefinite unchanged 66/82.
+v0.460 adds MeijerConvolution: definite 106/203.
 
-WRONG, NONNUMERIC and CRASH are all 0. CMake floors: 78/163 and 65/80, a small margin for timeouts.
+WRONG, NONNUMERIC and CRASH are all 0. CMake floors: definite 103/198, indefinite 65/80, a small margin
+for timeouts.
 
 ## 4. What remains: ranked by "Mathematica closes it"
 
@@ -118,7 +120,9 @@ Both are exact identities, accepted after a differentiation check. Supporting ch
      definite range at the zeros of the factors on the real axis.
    - Closes ∫ log sin, ∫ log cot, ∫ x log 2sin(πx/2), ∫ log(1 + a² + 2a cos t). The values come out as
      Catalan, Clausen, ζ.
-2. **Bessel × Bessel × power on [0, ∞) by Mellin–Barnes / MeijerG** (38 definite).
+2. **Done in v0.460 (two-kernel case). Bessel × Bessel × power on [0, ∞) by Mellin–Barnes / MeijerG**
+   (38 definite). Module `src/internal/MeijerConvolution.m`, stage and `Method -> "MeijerConvolution"`.
+   Three-kernel products and kernels of non-linear argument remain open.
    - Each kernel (J, Y, I, K, exp, power, (1+x²)^ν) is a MeijerG.
    - ∫₀^∞ G₁(ax) G₂(bx) x^{s−1} dx is a single MeijerG by the convolution theorem.
    - Reduce that G back to hypergeometric / Gamma / elementary forms.
@@ -145,5 +149,9 @@ Both are exact identities, accepted after a differentiation check. Supporting ch
   campaign and also fails on HEAD.
 - Expressions written as `E^(I q Pi)` with q not a half-integer stay symbolic (as in Mathematica). Whereas
   `Exp[I Pi/3]` → `(-1)^(1/3)` in Mathilda but stays `E^(I Pi/3)` in Mathematica: a cosmetic divergence.
+- `Simplify[-a > 0, a > 0]` gives `a < 0` and `Simplify[-b^2 > 0, b > 0]` gives `b^2 < 0`, where
+  Mathematica (and Mathilda's own `Refine`) give `False`. Simplify does not decide an inequality that
+  its assumptions refute. MeijerConvolution's condition prover therefore runs `Refine` to a fixed
+  point first (v0.460).
 - ParallelMixedSpecial emits `Set::wrsym` on `Plus`/`Missing` for √(1−k² sin²θ) integrands. This
   predates the campaign; package state is suspect.

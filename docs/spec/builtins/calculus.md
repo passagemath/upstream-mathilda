@@ -1822,6 +1822,11 @@ monotonically down.
     Log[Log[x]]^6/6`, `Integrate[E^x E^(6 E^x)/(1+E^(E^x)), x]`).  The
     **leading-coefficient cancellation / resonance** sub-case of `RdeBoundDegree`
     completes the SPDE degree machinery — the bound is widened monotonically to
+  - `"MeijerConvolution"` (definite, (0, Infinity); v0.460): `C x^alpha K1(x) K2(x)` with two kernels from `BesselJ`, `BesselY`, `BesselK`, `E^(-p x)`, `E^(-p x^2)`, `Cos`, `Sin` and `(a^2 + x^2)^-r` at arbitrary scales (`src/internal/MeijerConvolution.m`).
+    - Each kernel is written as a Meijer G-function of x^2; exp, cos and sin of x get there through the duplication formula.
+    - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
+    - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
+    - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
     `max(naive, m_res)` at the Bronstein resonance integer `m_res` (detected live for the
     exponential top), correct by the same certification-and-diff-back gate.  Only
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing

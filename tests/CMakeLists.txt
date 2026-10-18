@@ -5169,7 +5169,7 @@ else()
     target_link_libraries(mathar_corpus_tests gmp m)
 endif()
 add_test(NAME mathar_definite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 91 188)
+         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 103 198)
 add_test(NAME mathar_indefinite_corpus_tests
          COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 65 80)
 
@@ -5196,6 +5196,17 @@ else()
     target_link_libraries(integrate_polylog_tests gmp m)
 endif()
 add_test(NAME integrate_polylog_tests COMMAND integrate_polylog_tests)
+
+# MeijerConvolution definite-integration stage (src/internal/MeijerConvolution.m).
+add_executable(integrate_meijerconv_tests test_integrate_meijerconv.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_meijerconv_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_meijerconv_tests gmp m ${ECM_LIB})
+    add_dependencies(integrate_meijerconv_tests build_ecm)
+else()
+    target_link_libraries(integrate_meijerconv_tests gmp m)
+endif()
+add_test(NAME integrate_meijerconv_tests COMMAND integrate_meijerconv_tests)
 
 # Cauchy principal-value definite-integral stress battery (fractional branch cuts
 # over real poles, log branch cuts, trig/oscillatory poles, higher-order poles).

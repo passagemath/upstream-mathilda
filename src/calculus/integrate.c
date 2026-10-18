@@ -1261,6 +1261,7 @@ typedef enum {
     METHOD_OSC_POWER,        /* definite-only: Cos/Sin[b x^n] on [0,Inf) */
     METHOD_RATIONAL_LOG,     /* definite-only: R(x) Log[x]^n on [0,Inf) */
     METHOD_INTEGRAL_REP,     /* definite-only: special-function integral reps (half-line) */
+    METHOD_MEIJER_CONV,      /* definite-only: Meijer G convolution of two kernels (half-line) */
     METHOD_PIECEWISE,        /* definite-only: Abs/Sign/Heaviside/UnitStep/Min/Max/Piecewise */
     METHOD_SERIES,           /* definite-only: series term-by-term on [0,1] (R(x) Log[x]^k) */
     METHOD_KING,             /* definite-only: general King reflection x -> a+b-x */
@@ -1301,6 +1302,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RamanujanMasterTheorem") == 0 || strcmp(s, "Mellin") == 0)
         return METHOD_RAMANUJAN;
     if (strcmp(s, "IntegralRepresentation") == 0) return METHOD_INTEGRAL_REP;
+    if (strcmp(s, "MeijerConvolution") == 0) return METHOD_MEIJER_CONV;
     if (strcmp(s, "Piecewise") == 0) return METHOD_PIECEWISE;
     if (strcmp(s, "SeriesExpansion") == 0 || strcmp(s, "SeriesTermByTerm") == 0)
         return METHOD_SERIES;
@@ -1403,7 +1405,8 @@ static bool definite_parse_method(Expr* opt, const char** name,
         m == METHOD_SYMMETRY || m == METHOD_BETA ||
         m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
         m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG ||
-        m == METHOD_INTEGRAL_REP || m == METHOD_PIECEWISE) return true;
+        m == METHOD_INTEGRAL_REP || m == METHOD_MEIJER_CONV ||
+        m == METHOD_PIECEWISE) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -1498,6 +1501,42 @@ static bool def_has_undefined_function(const Expr* e, const Expr* x) {
  * Reduces innermost-first (the last spec is the inner integral) so an inner
  * bound may depend on an outer variable.  Returns NULL (unevaluated) if any
  * stage cannot be evaluated. */
+/* Definite stage: Meijer G convolution (src/internal/MeijerConvolution.m),
+ * loaded lazily.  Half-line (0, Infinity) only; any atom result (the package's
+ * $Failed) or a surviving Integrate is a decline. */
+static bool mcv_load_attempted = false;
+static bool mcv_load_succeeded = false;
+
+static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
+    if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    if (!(b->type == EXPR_SYMBOL && strcmp(b->data.symbol.name, "Infinity") == 0)) return NULL;
+    if (!mcv_load_attempted) {
+        mcv_load_attempted = true;
+        mth_msg_suppress_push();
+        mcv_load_succeeded = mathilda_load_module("MeijerConvolution.m") != 0;
+        mth_msg_suppress_pop();
+        if (!mcv_load_succeeded)
+            mth_message("Integrate`MeijerConvolution", "nofile",
+                "cannot locate src/internal/MeijerConvolution.m on disk.");
+    }
+    if (!mcv_load_succeeded) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("MeijerConvolution`Run"),
+        (Expr*[]){ expr_copy(f), expr_copy(x),
+                   assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 3);
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    expr_free(call);
+    if (!r) return NULL;
+    if (r->type != EXPR_FUNCTION || result_contains_head(r, "Integrate") ||
+        result_contains_head(r, "MeijerConvolution`Run") ||
+        result_contains_head(r, "Throw")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 static Expr* integrate_definite(Expr* res) {
     size_t argc = res->data.function.arg_count;
     Expr* f = res->data.function.args[0];
@@ -1723,6 +1762,12 @@ static Expr* integrate_definite(Expr* res) {
              * FTC/DiffUnderInt. */
             if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_INTEGRAL_REP))
                 r = integrate_intrep_try(cur, x, a, b, assumptions);
+            /* Meijer G convolution: C x^alpha K1(x) K2(x) on (0, Infinity) for
+             * Bessel J/Y/K, exponential, Gaussian, trig and (a^2+x^2)^-r kernels
+             * at arbitrary scales (src/internal/MeijerConvolution.m).  After
+             * the table stages (they own their closed forms), before FTC. */
+            if (!r && !has_undef && (mech == METHOD_AUTOMATIC || mech == METHOD_MEIJER_CONV))
+                r = try_meijer_convolution(cur, x, a, b, assumptions);
             /* Newton-Leibniz (FTC) unless the user pinned Residue, the
              * parameter-differentiation mechanism, the Ramanujan/Mellin
              * mechanism, the symmetry mechanism, or a Beta mechanism.  Runs
@@ -1733,6 +1778,7 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_BETA && mech != METHOD_TRIG_POWER &&
                 mech != METHOD_SINPOW_MONO && mech != METHOD_OSC_POWER &&
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
+                mech != METHOD_MEIJER_CONV &&
                 mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
                 mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM)
                 r = integrate_newton_leibniz_try_pv(cur, x, a, b, method,
@@ -2464,6 +2510,7 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_OSC_POWER:
         case METHOD_RATIONAL_LOG:
         case METHOD_INTEGRAL_REP:
+        case METHOD_MEIJER_CONV:
         case METHOD_PIECEWISE:
         case METHOD_SERIES:
         case METHOD_KING:

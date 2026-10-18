@@ -120,7 +120,7 @@ Produces the power-series expansion of an expression about a point.
 - `Series[f, x -> x0]` — leading-term form. The engine scans the internal expansion for the first non-zero coefficient at exponent `e1` and the next non-zero at `e2 > e1`; the reported `O`-term lands at exponent `e2` (or `e1 + 1` when no further non-zero term exists). So `Series[Sin[x] - x, x -> 0]` returns `-x^3/6 + O[x]^5`, `Series[f[x], x -> 0]` returns `f[0] + O[x]^1`, and analytic-at-x0 inputs collapse to their constant plus `O[x - x0]^1`.
 - `Series[f, {x, x0, nx}, {y, y0, ny}, ...]` — iterated multivariate expansion. Each inner coefficient is itself a `SeriesData` in the next variable.
 - `ArcTan`/`ArcCot` of an argument that blows up at the expansion point take the constant `Sign[k] Pi/2`, where `k` is the argument's leading coefficient. The sign comes from the N value of a numeric `k` (so `1/(1 - Sqrt[3])` gives `-Pi/2`), from the assumptions for a symbolic `k`, and otherwise from Mathematica's `Sqrt[k^2]/k` factor (v0.458). `Limit` inherits this, so `Limit[2 ArcTan[x/(1 - Sqrt[3])], x -> Infinity]` is `-Pi`.
-- `Series[f, {x, Infinity, n}]` — expansion at infinity, substituting `x -> 1/u` internally. The emitted `SeriesData` uses `Power[x, -1]` as its variable, so the series prints with `1/x` as the base and an `O[1/x]^(n+1)` term.
+- `Series[f, {x, Infinity, n}]` — expansion at infinity, substituting `x -> 1/u` internally. The emitted `SeriesData` uses `Power[x, -1]` as its variable, so the series prints in powers of `1/x` with an `O[1/x]^(n+1)` term. An integer power `(1/x)^k` is displayed as the equivalent power of `x`, as Mathematica does: `Series[x + 1/x, {x, Infinity, 2}]` prints `x + 1/x + O[1/x]^3` and `Series[x^2 + x, {x, Infinity, 1}]` prints `x^2 + x + O[1/x]^2` (these previously printed `1/1/x + ...` and `1/(1/x)^2 + 1/1/x + ...`, the first of which re-reads as `1/x`). A fractional power stays `(1/x)^(p/q)` (`Series[Sqrt[x + 1], {x, Infinity, 1}]` = `1/Sqrt[1/x] + 1/2 Sqrt[1/x] + O[1/x]^(3/2)`), because `(1/x)^(1/2)` is not `x^(-1/2)` on the negative reals a `-Infinity` expansion lives on. When the series is a summand of a larger sum (`Series[PolyGamma[0, x], {x, Infinity, 4}]` is `Log[x] + SeriesData[...]`) its terms are printed inline, so the signs read `Log[x] - 1/(2 x) - ...`, not `Log[x] + -1/(2 x) ...`. Every printed form re-parses, `O`-terms dropped, to the series' `Normal`.
 
 **Features**:
 - `Protected` only — **`Series` does not hold its arguments**, matching Mathematica (and `Limit`, `D` and `NSeries` here). So a *named* argument behaves exactly like the literal it stands for: `s = {x, 0, 3}; Series[Exp[x], s]` expands, `Series[Exp[x], Sequence @@ {{x, 0, 3}}]` splices, `l = {Sin[x], Cos[x]}; Series[l, {x, 0, 2}]` threads into a list of two series just as the literal list does, and a call that cannot be expanded echoes the evaluated argument rather than the name. (Through v0.235 these all froze: `Series` carried a stray `HoldAll`.)
@@ -243,7 +243,7 @@ In[6]:= Series[(1 + x)^n, {x, 0, 4}]
 Out[6]= 1 + n x + 1/2 n (-1 + n) x^2 + 1/6 n (-2 + n) (-1 + n) x^3 + 1/24 n (-3 + n) (-2 + n) (-1 + n) x^4 + O[x]^5
 
 In[7]:= Series[Sin[1/x], {x, Infinity, 10}]
-Out[7]= 1/x - 1/6 (1/x)^3 + 1/120 (1/x)^5 - 1/5040 (1/x)^7 + 1/362880 (1/x)^9 + O[1/x]^11
+Out[7]= 1/x - 1/(6 x^3) + 1/(120 x^5) - 1/(5040 x^7) + 1/(362880 x^9) + O[1/x]^11
 
 In[8]:= Series[Sin[x + y], {x, 0, 3}, {y, 0, 3}]
 Out[8]= y - 1/6 y^3 + O[y]^4 + (1 - 1/2 y^2 + O[y]^4) x + (-1/2 y + 1/12 y^3 + O[y]^4) x^2 + (-1/6 + 1/12 y^2 + O[y]^4) x^3 + O[x]^4

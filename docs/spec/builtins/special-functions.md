@@ -2860,7 +2860,7 @@ orthogonal on `(-∞, ∞)` with weight `e^(-x²)` and satisfy `y'' - 2x y' + 2n
   rule, e.g. `Series[HermiteH[n, x], {x, x0, 2}] = HermiteH[n, x0] + 2 n
   HermiteH[-1+n, x0] (x-x0) + 2 n (-1+n) HermiteH[-2+n, x0] (x-x0)² + O[x-x0]³`.
   At Infinity the algebraic asymptotic series is produced, `Series[HermiteH[n,
-  x], {x, Infinity, 2}] = (2x)^n (1 + ¼ n (1-n) (1/x)² + O[1/x]⁴)` (the
+  x], {x, Infinity, 2}] = (2x)^n (1 + (n (1-n))/(4 x²) + O[1/x]⁴)` (the
   subdominant `e^(x²)` branch is not included). `SeriesCoefficient` gives the
   general `x⁰`-expansion term as a `Piecewise` on the parity of the index.
 - **Listable.** `HermiteH[3, {1, 2, 3}] = {-4, 40, 180}`.

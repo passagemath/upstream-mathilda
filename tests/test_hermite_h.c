@@ -156,7 +156,7 @@ void test_hermite_h_series() {
         "2 n (-1 + n) HermiteH[-2 + n, x0] (x - x0)^2 + O[x - x0]^3", 0);
     /* Asymptotic expansion at Infinity (symbolic order). */
     assert_eval_eq("Series[HermiteH[n, x], {x, Infinity, 2}]",
-                   "(2 x)^n (1 + 1/4 n (1 - n) (1/x)^2 + O[1/x]^4)", 0);
+                   "(2 x)^n (1 + (n (1 - n))/(4 x^2) + O[1/x]^4)", 0);
     /* An integer-order polynomial expands via the generic path. */
     assert_eval_eq("Normal[Series[HermiteH[2, x], {x, 0, 4}]]", "-2 + 4 x^2", 0);
 }

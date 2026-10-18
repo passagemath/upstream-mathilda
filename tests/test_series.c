@@ -260,6 +260,46 @@ static void test_series_polygamma_at_infinity(void) {
         "- PolyGamma[2, 30]] < 10^-12", "True", 0);
 }
 
+/* 10c'. Printing an expansion at +/-Infinity (a SeriesData in Power[x, -1]):
+ * an integer power of 1/x folds into a power of x, so a negative exponent
+ * prints as x / x^2 (not "1/1/x" -- which re-reads as 1/x -- or
+ * "1/(1/x)^2"), and a SeriesData summand of a Plus is spliced into it so
+ * signs read "Log[x] - 1/(2 x)", not "Log[x] + -1/(2 x)". Each printed form
+ * re-parses (O-terms dropped) to the same Normal. */
+static void test_series_at_infinity_printing(void) {
+    setup_full();
+    assert_outputform("Series[x + 1/x, {x, Infinity, 2}]",
+                      "x + 1/x + O[1/x]^3");
+    assert_outputform("Series[x^2 + x, {x, Infinity, 1}]",
+                      "x^2 + x + O[1/x]^2");
+    assert_outputform("Series[PolyGamma[0, x], {x, Infinity, 4}]",
+                      "Log[x] - 1/(2 x) - 1/(12 x^2) + 1/(120 x^4) + O[1/x]^5");
+    assert_outputform(
+        "Series[Sqrt[x^2 + a x], {x, -Infinity, 1}, Assumptions -> Element[a, Reals]]",
+        "-x - 1/2 a + a^2/(8 x) + O[1/x]^2");
+    assert_outputform("Series[ArcTan[x], {x, Infinity, 5}]",
+                      "1/2 Pi - 1/x + 1/(3 x^3) - 1/(5 x^5) + O[1/x]^6");
+    /* A fractional power of 1/x is NOT folded: (1/x)^(1/2) != x^(-1/2) on
+     * the negative reals, where a -Infinity expansion lives. */
+    assert_outputform("Series[Sqrt[x + 1], {x, Infinity, 1}]",
+                      "1/Sqrt[1/x] + 1/2 Sqrt[1/x] + O[1/x]^(3/2)");
+    /* Round trip: the printed text, O-terms dropped, equals Normal. */
+    static const char* const rt[] = {
+        "Series[x + 1/x, {x, Infinity, 2}]",
+        "Series[x^3/(x - 1), {x, Infinity, 2}]",
+        "Series[PolyGamma[0, x], {x, Infinity, 4}]",
+        "Series[Sqrt[x^2 + 1], {x, -Infinity, 2}]",
+        "Series[(x^2 + 1)^(1/3), {x, Infinity, 2}]",
+    };
+    for (size_t i = 0; i < sizeof(rt) / sizeof(rt[0]); i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf,
+                 "With[{s = %s}, Simplify[(ToExpression[ToString[s]] /. "
+                 "{O[_]^_ :> 0, O[_] :> 0}) - Normal[s]] === 0]", rt[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+}
+
 /* 10d. Zeta[x] at Infinity: the exponential-scale asymptotic
  * 1 + 2^-x + 3^-x + ... (a truncated exp-log Dirichlet sum, NOT a 1/x Laurent
  * series). n counts the correction terms kept (bases 2..n+1). */
@@ -2431,6 +2471,7 @@ int main(void) {
     TEST(test_series_at_infinity);
     TEST(test_series_loggamma_at_infinity);
     TEST(test_series_polygamma_at_infinity);
+    TEST(test_series_at_infinity_printing);
     TEST(test_series_zeta_at_infinity);
     TEST(test_series_bivariate);
     TEST(test_series_list_threading);

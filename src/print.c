@@ -48,6 +48,7 @@ void  mth_out_pop(FILE* prev) { g_print_sink = prev; }
 
 static void print_standard(Expr* e, int parent_prec);
 static void print_series_data(Expr* e, int parent_prec);
+static bool print_plus_spliced_series(Expr* e);
 static void print_tex(Expr* e, int parent_prec);
 
 /* True when every argument of `e` is a two-argument Rule/RuleDelayed, i.e. a
@@ -568,13 +569,19 @@ static void print_standard(Expr* e, int parent_prec) {
             }
 
             if (is_negative) {
+                /* The denominator is the RIGHT operand of a left-associative
+                 * `/`, so it is printed one level above Divide (5001): a
+                 * base that itself prints as a quotient (Power[x, -1],
+                 * Rational, Divide -- all 5000) must be parenthesised, or
+                 * Power[Power[x, -1], -1] prints "1/1/x", which re-reads as
+                 * (1/1)/x = 1/x instead of x. */
                 printf("1/");
                 if (pos_exp->type == EXPR_INTEGER && pos_exp->data.integer == 1) {
-                    print_standard(e->data.function.args[0], 5000);
+                    print_standard(e->data.function.args[0], 5001);
                 } else {
                     Expr* args[2] = { expr_copy(e->data.function.args[0]), expr_copy(pos_exp) };
                     Expr* tmp = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
-                    print_standard(tmp, 5000);
+                    print_standard(tmp, 5001);
                     expr_free(tmp);
                 }
                 if (pos_exp) expr_free(pos_exp);
@@ -738,7 +745,10 @@ static void print_standard(Expr* e, int parent_prec) {
                 
                 print_standard(num, 5000);
                 printf("/");
-                print_standard(den, 5000);
+                /* 5001: the right operand of a left-associative `/` (see the
+                 * Power branch) -- a quotient-valued denominator factor must
+                 * be parenthesised, a/(1/x) not a/1/x. */
+                print_standard(den, 5001);
                 
                 expr_free(num);
                 expr_free(den);
@@ -840,6 +850,10 @@ static void print_standard(Expr* e, int parent_prec) {
                 if (i > 0) printf("%s", op);
                 print_standard(e->data.function.args[i], my_prec);
             }
+        }
+        else if (head == SYM_Plus && g_inputform_depth == 0 &&
+                 print_plus_spliced_series(e)) {
+            /* printed: a SeriesData summand's terms were spliced in. */
         }
         else if (head == SYM_Plus) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -1395,6 +1409,26 @@ static Expr* series_build_power(Expr* base, int64_t num, int64_t den) {
 
     if (d == 1 && n == 1) return expr_copy(base);
 
+    /* An expansion at +/-Infinity is a SeriesData in Power[x, -1], so the
+     * term is (x^k)^n. For an INTEGER n that is exactly x^(k n) for every x,
+     * so fold it: x + 1/x + O[1/x]^3, not (1/x)^-1 + 1/x + ..., matching
+     * Mathematica. A fractional n is left as (x^k)^(n/d): (1/x)^(1/2) is not
+     * x^(-1/2) on the negative reals, which a -Infinity expansion lives on. */
+    if (d == 1 && base->type == EXPR_FUNCTION &&
+        base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol.name == SYM_Power &&
+        base->data.function.arg_count == 2 &&
+        base->data.function.args[1]->type == EXPR_INTEGER) {
+        int64_t k = base->data.function.args[1]->data.integer;
+        if (k != 0 && abs_i64(k) <= INT32_MAX && abs_i64(n) <= INT32_MAX) {
+            int64_t kn = k * n;
+            if (kn == 1) return expr_copy(base->data.function.args[0]);
+            Expr* pargs[2] = { expr_copy(base->data.function.args[0]),
+                               expr_new_integer(kn) };
+            return expr_new_function(expr_new_symbol(SYM_Power), pargs, 2);
+        }
+    }
+
     Expr* exp;
     if (d == 1) exp = expr_new_integer(n);
     else exp = make_rational(n, d);
@@ -1543,6 +1577,82 @@ static void print_series_data(Expr* e, int parent_prec) {
     }
     print_standard(sum, parent_prec);
     expr_free(sum);
+}
+
+static bool is_series_data6(const Expr* a) {
+    return a->type == EXPR_FUNCTION &&
+           a->data.function.head->type == EXPR_SYMBOL &&
+           a->data.function.head->data.symbol.name == SYM_SeriesData &&
+           a->data.function.arg_count == 6;
+}
+
+/* Plus[..., SeriesData[...], ...] -- e.g. Log[x] + (series in 1/x), which
+ * Series[PolyGamma[0, x], {x, Infinity, n}] returns -- printed as one flat
+ * sum: the series' display terms are spliced into the outer Plus so each
+ * summand's sign is read off by the Plus printer ("Log[x] - 1/(2 x) ...",
+ * not "Log[x] + -1/(2 x) ..."). The terms are spliced in place (no
+ * reordering), so a nested multivariate series keeps its inner O[y]^n next
+ * to its own terms, as before. Returns false (nothing printed) when no
+ * summand is a renderable SeriesData, so the caller prints the Plus
+ * normally. */
+static bool print_plus_spliced_series(Expr* e) {
+    size_t n = e->data.function.arg_count;
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++)
+        any = is_series_data6(e->data.function.args[i]);
+    if (!any) return false;
+
+    /* Display sums of the series summands (NULL for a non-series or an
+     * unrenderable one, which is then kept as-is). */
+    Expr** disp = calloc(n, sizeof(Expr*));
+    if (!disp) return false;
+    size_t total = 0;
+    bool spliced = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        if (is_series_data6(a)) disp[i] = series_data_to_display_expr(a);
+        Expr* d = disp[i];
+        if (d && d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
+            d->data.function.head->data.symbol.name == SYM_Plus) {
+            total += d->data.function.arg_count;
+        } else {
+            total += 1;
+        }
+        if (d) spliced = true;
+    }
+    if (!spliced) { free(disp); return false; }
+
+    Expr** terms = malloc(total * sizeof(Expr*));
+    if (!terms) {
+        for (size_t i = 0; i < n; i++) if (disp[i]) expr_free(disp[i]);
+        free(disp);
+        return false;
+    }
+    size_t nt = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* d = disp[i];
+        if (!d) { terms[nt++] = expr_copy(e->data.function.args[i]); continue; }
+        bool is_sum = d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
+                      d->data.function.head->data.symbol.name == SYM_Plus;
+        if (is_sum) {
+            for (size_t j = 0; j < d->data.function.arg_count; j++)
+                terms[nt++] = expr_copy(d->data.function.args[j]);
+        } else {
+            terms[nt++] = expr_copy(d);
+        }
+        expr_free(d);
+    }
+    free(disp);
+
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, nt);
+    free(terms);
+    /* The caller's parentheses (if any) are already open: print at 0. A
+     * series coefficient that is itself a SeriesData (multivariate) is
+     * spliced again one level down, so the recursion is bounded by the
+     * nesting depth of the input. */
+    print_standard(sum, 0);
+    expr_free(sum);
+    return true;
 }
 
 /* ===================== TeXForm renderer =====================

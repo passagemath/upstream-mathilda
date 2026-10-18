@@ -422,6 +422,35 @@ void test_texform_fraction_parenthesisation() {
     printf("PASS: TeXForm parenthesises juxtaposed factors in a fraction\n");
 }
 
+/* A denominator is the right operand of a left-associative `/`: a factor
+ * that itself prints as a quotient (a negative Power, a Rational) must be
+ * parenthesised, or the text re-reads as a different value -- "1/1/x" is
+ * (1/1)/x = 1/x, not x. */
+void test_quotient_denominator_parenthesised() {
+    static const struct { const char* in; const char* out; } cases[] = {
+        {"HoldForm[Power[Power[x, -1], -1]]",          "1/(1/x)"},
+        {"HoldForm[Times[a, Power[Power[x, -1], -1]]]", "a/(1/x)"},
+        {"HoldForm[Power[Rational[2, 3], -1]]",         "1/(2/3)"},
+        {"HoldForm[Power[Power[x, -1], -2]]",           "1/(1/x)^2"},
+        {"1/(2 x)",                                     "1/(2 x)"},
+        {"a/b^2",                                       "a/b^2"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = expr_to_string(res);
+        if (!str || strcmp(str, cases[i].out) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].out);
+        ASSERT(str && strcmp(str, cases[i].out) == 0);
+        free(str);
+        expr_free(e);
+        expr_free(res);
+    }
+    printf("PASS: quotient-valued denominators are parenthesised\n");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -438,6 +467,7 @@ int main() {
     TEST(test_selectable_standardform);
     TEST(test_radical_body_unbracketed);
     TEST(test_texform_fraction_parenthesisation);
+    TEST(test_quotient_denominator_parenthesised);
 
     printf("All print tests passed!\n");
     return 0;

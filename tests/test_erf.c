@@ -174,7 +174,7 @@ void test_erf_derivatives() {
     /* Chain rule. */
     assert_eval_eq("D[Erf[x^2], x]", "(4 x E^(-x^4))/Sqrt[Pi]", 0);
     /* Series at the origin (generic D-based Taylor fallback). */
-    assert_eval_startswith("Series[Erf[x], {x, 0, 3}]", "2/Sqrt[Pi] x");
+    assert_eval_startswith("Series[Erf[x], {x, 0, 3}]", "(2 x)/Sqrt[Pi] - (2 x^3)/(3 Sqrt[Pi])");
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

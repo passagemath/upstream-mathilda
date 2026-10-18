@@ -140,7 +140,7 @@ void test_erfc_derivatives() {
     assert_eval_eq("D[Erfc[x^2], x]", "-(4 x E^(-x^4))/Sqrt[Pi]", 0);
     /* Series at the origin (generic D-based Taylor fallback); constant term
      * is the Erfc[0] = 1 exact value. */
-    assert_eval_startswith("Series[Erfc[x], {x, 0, 3}]", "1 + -2/Sqrt[Pi] x");
+    assert_eval_startswith("Series[Erfc[x], {x, 0, 3}]", "1 - (2 x)/Sqrt[Pi] + (2 x^3)/(3 Sqrt[Pi])");
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

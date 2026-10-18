@@ -62,6 +62,34 @@ ifneq ($(strip $(HOMEBREW)),)
   endif
 endif
 
+# Conventional Unix site prefix (/usr/local), searched for headers and libraries
+# by the compile/link lines and the ECM/LAPACK probes below. Unix hosts only: on
+# MSYS2 `/usr` is the MSYS (Cygwin) runtime root, so `-I/usr/include` or
+# `-I/usr/local/include` there makes the native UCRT64/MINGW64 toolchain read
+# Cygwin headers ahead of its own (passagemath PR #2966). The default is empty on
+# Windows. An explicit SYSTEM_PREFIX=... always wins; SYSTEM_PREFIX= (empty) is the
+# packager opt-out, the twin of HOMEBREW= above, so a build against a private
+# prefix searches nothing it was not given. /usr/include itself is never added:
+# on Linux/macOS it is a system directory GCC already searches (and ignores as an
+# -I), and on MSYS2 it is the Cygwin tree.
+ifeq ($(origin SYSTEM_PREFIX),undefined)
+  ifeq ($(BUILD_PLATFORM),Windows)
+    SYSTEM_PREFIX :=
+  else
+    SYSTEM_PREFIX := /usr/local
+  endif
+endif
+SYSPREFIX_CFLAGS  :=
+SYSPREFIX_LDFLAGS :=
+ifneq ($(strip $(SYSTEM_PREFIX)),)
+  ifneq ($(wildcard $(SYSTEM_PREFIX)/include),)
+    SYSPREFIX_CFLAGS := -I$(SYSTEM_PREFIX)/include
+  endif
+  ifneq ($(wildcard $(SYSTEM_PREFIX)/lib),)
+    SYSPREFIX_LDFLAGS := -L$(SYSTEM_PREFIX)/lib
+  endif
+endif
+
 # Compiler. Mathilda must be built with a REAL GCC, never Apple's clang shim: on
 # macOS the plain `gcc` is a symlink to Apple clang, and LLVM both miscompiles some
 # of our -std=c99 paths and hides the glibc portability class the Linux CI gates on.
@@ -73,12 +101,21 @@ endif
 # name when CC was not set explicitly, so `make CC=gcc-14` (or any other override on
 # the command line / in the environment) is still honoured. A versioned name is fine
 # here because it is *tried*, not hardcoded — hosts without it fall through.
+# Platform-specific advice for the two compiler errors below. CLANG64/CLANGARM64
+# on MSYS2 are deliberately unsupported: there is no GCC in those environments.
+ifeq ($(BUILD_PLATFORM),Darwin)
+  GCC_HINT := Install Homebrew GCC (brew install gcc) and use the default CC or CC=gcc-16
+else ifeq ($(BUILD_PLATFORM),Linux)
+  GCC_HINT := Install your distribution's gcc package and use the default CC or CC=gcc
+else
+  GCC_HINT := On Windows build in the MSYS2 UCRT64 (or MINGW64) environment with mingw-w64-ucrt-x86_64-gcc; the CLANG64/CLANGARM64 environments are not supported
+endif
 ifeq ($(origin CC),default)
   CC := $(shell for c in gcc-16 gcc-15 gcc-14 gcc-13 gcc; do \
                   command -v $$c >/dev/null 2>&1 && { echo $$c; break; }; \
                 done)
   ifeq ($(strip $(CC)),)
-    $(error Mathilda: no C compiler found. Mathilda builds with real GCC only — install Homebrew GCC (brew install gcc).)
+    $(error Mathilda: no C compiler found. Mathilda builds with real GCC only. $(GCC_HINT))
   endif
 endif
 # Enforce the rule for BOTH the autodetected name and an explicit CC=...: if the
@@ -86,7 +123,7 @@ endif
 # unsupported binary. The fix is always `brew install gcc`, then build with the
 # default CC (or CC=gcc-NN).
 ifneq ($(shell $(CC) --version 2>/dev/null | grep -ci clang),0)
-  $(error Mathilda: '$(CC)' is clang, not GCC — Mathilda must be built with real GCC. Install Homebrew GCC (brew install gcc) and use the default CC or CC=gcc-16.)
+  $(error Mathilda: '$(CC)' is clang, not GCC — Mathilda must be built with real GCC. $(GCC_HINT))
 endif
 # `-Werror=implicit-function-declaration`: under -std=c99 glibc hides every
 # POSIX symbol, so reaching for one without a feature-test macro leaves the
@@ -115,7 +152,7 @@ endif
 # definition with the same `#ifdef` as its caller.
 CFLAGS = -O3 -std=c99 -Wall -Wextra -Werror=implicit-function-declaration \
          -Werror=incompatible-pointer-types -Werror=int-conversion \
-         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/ml -I./src/linalg -I./src/numbertheory -I./src/numbertheory/factorinteger -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/solve -I./src/ffi -I./src/bitwise -I/usr/include -I/usr/local/include
+         -Werror=implicit-int -Werror=unused-function -g -I./src -I./src/list -I./src/ml -I./src/linalg -I./src/numbertheory -I./src/numbertheory/factorinteger -I./src/poly -I./src/simp -I./src/stats -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I./src/graph -I./src/strings -I./src/strings/regex -I./src/solve -I./src/ffi -I./src/bitwise $(SYSPREFIX_CFLAGS)
 
 # UpValues subsystem (trial). Every change is gated behind `#if UP_VALUES`, so
 # UP_VALUES=0 compiles the tree back to the exact pre-UpValues behaviour. ON by
@@ -176,7 +213,7 @@ else
   THREAD_LIBS =
 endif
 
-LDFLAGS = $(READLINE_LIBS) $(THREAD_LIBS) -L/usr/local/lib -lgmp -lm
+LDFLAGS = $(READLINE_LIBS) $(THREAD_LIBS) $(SYSPREFIX_LDFLAGS) -lgmp -lm
 
 # Embeddable codegen (issue #88). Every object is compiled position-independent
 # and with hidden default visibility, so ONE object set serves the Mathilda
@@ -263,8 +300,8 @@ endif
 ifeq ($(USE_ECM), 1)
   ECM_PROBE := $(shell f=/tmp/mathilda_ecmprobe_$$$$; \
     printf '\043include <stdio.h>\n\043include <ecm.h>\nint main(void){ecm_params p;ecm_init(p);return 0;}\n' > $$f.c 2>/dev/null && \
-    $(CC) $$f.c -o $$f -I/usr/include -I/usr/local/include $(HOMEBREW_CFLAGS) \
-      -L/usr/local/lib $(HOMEBREW_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
+    $(CC) $$f.c -o $$f $(SYSPREFIX_CFLAGS) $(HOMEBREW_CFLAGS) \
+      $(SYSPREFIX_LDFLAGS) $(HOMEBREW_LDFLAGS) -lecm -lgmp 2>/dev/null && echo y; \
     rm -f $$f.c $$f)
   ifeq ($(ECM_PROBE), y)
     LDFLAGS += -lecm
@@ -293,8 +330,8 @@ LDFLAGS += -lmpfr
 endif
 
 # Homebrew include/lib dirs (resolved above; empty when HOMEBREW is opted out or
-# absent). /usr/local is already on CFLAGS/LDFLAGS unconditionally, so on an
-# Intel-prefix install these may duplicate it harmlessly.
+# absent). SYSTEM_PREFIX (/usr/local on Unix) is already on CFLAGS/LDFLAGS, so
+# on an Intel-prefix install these may duplicate it harmlessly.
 CFLAGS  += $(HOMEBREW_CFLAGS)
 LDFLAGS += $(HOMEBREW_LDFLAGS)
 
@@ -317,7 +354,7 @@ endif
 # Eigenvalues, LeastSquares, SVD).  Four-tier autodetection:
 #   1. Darwin              -> Apple Accelerate framework (zero install).
 #   2. pkg-config lapacke  -> use pkg-config flags (OpenBLAS / MKL / etc).
-#   3. /usr/include/lapacke.h or /usr/local/include/lapacke.h
+#   3. /usr/include/lapacke.h or $(SYSTEM_PREFIX)/include/lapacke.h
 #                          -> link -llapacke -llapack -lblas.
 #   4. nothing found       -> warn and override USE_LAPACK := 0.
 # The BLAS provider is found by a LINK PROBE, not assumed: Mathilda calls
@@ -334,6 +371,9 @@ endif
 # MPFR / symbolic path with a one-time runtime warning.  This matches
 # the existing USE_MPFR=0 / USE_ECM=0 graceful-degrade policy so that
 # `git clone && make` always succeeds, no matter the host environment.
+# Tier-3 header locations: /usr/include on Unix only (on MSYS2 it is the Cygwin
+# tree), plus SYSTEM_PREFIX's include dir when it exists.
+LAPACKE_HDR_DIRS := $(if $(filter Windows,$(BUILD_PLATFORM)),,/usr/include) $(SYSPREFIX_CFLAGS:-I%=%)
 LAPACK_BLAS_CANDIDATES := -lflexiblas -lopenblas -lcblas -lblas '-lcblas -lblas'
 lapack_blas_probe = $(shell f=/tmp/mathilda_blasprobe_$$$$; \
     printf '%s\n' 'double cblas_ddot(int, const double*, int, const double*, int);' \
@@ -374,9 +414,9 @@ ifeq ($(USE_LAPACK), 1)
     endif
     LAPACK_BLAS_FOUND := $(call lapack_blas_probe,$(LAPACKE_LIBS))
     LDFLAGS += $(call lapack_with_blas,$(LAPACKE_LIBS))
-  else ifneq ($(wildcard /usr/include/lapacke.h)$(wildcard /usr/local/include/lapacke.h),)
+  else ifneq ($(wildcard $(addsuffix /lapacke.h,$(LAPACKE_HDR_DIRS))),)
     CFLAGS  += -DUSE_LAPACK
-    LAPACK_BLAS_FOUND := $(call lapack_blas_probe,-L/usr/local/lib -llapacke -llapack)
+    LAPACK_BLAS_FOUND := $(call lapack_blas_probe,$(SYSPREFIX_LDFLAGS) -llapacke -llapack)
     LDFLAGS += $(call lapack_with_blas,-llapacke -llapack)
   else
     $(warning LAPACK/LAPACKE not detected; building with USE_LAPACK=0)
@@ -989,11 +1029,18 @@ print-cc:
 	@echo "CC = $(CC)"
 	@$(CC) --version 2>/dev/null | head -1
 
+# Report the fully expanded compile and link flags. The Windows CI leg uses this
+# to assert that no /usr search path reaches a native MinGW build (the MSYS2
+# Cygwin-header trap, passagemath PR #2966).
+print-flags:
+	@echo "CFLAGS = $(CFLAGS)"
+	@echo "LDFLAGS = $(LDFLAGS)"
+
 .PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \
-        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc
+        check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags
 
 # Pull in the auto-generated header dependencies. The leading `-` silences the
 # "no such file" notice on a fresh tree (no .d files exist until the first

@@ -123,6 +123,12 @@ Rust/MSVC toolchain.
    environment, substitute the `mingw-w64-ucrt-x86_64-` package prefix; this is
    what the CI Windows job uses.)
 
+   **Supported environments: UCRT64 and MINGW64 (GCC).** The CLANG64 and CLANGARM64
+   environments are deliberately unsupported: Mathilda is built with real GCC only,
+   and the makefile stops with an error when `CC` is clang. The makefile never adds
+   `/usr/include` or `/usr/local` on Windows, because under MSYS2 those paths hold the
+   Cygwin (`msys2-runtime-devel`) headers, and a native build that read them would fail.
+
 3. Install [Rust for Windows](https://rustup.rs/) using the
    `x86_64-pc-windows-msvc` host (the default Windows installer selects this).
 
@@ -244,8 +250,13 @@ cargo tauri dev
 | `USE_LAPACK=0` | `1` | Disable BLAS/LAPACK linear-algebra kernels |
 | `HOMEBREW=<prefix>` | auto (`brew --prefix`) | Homebrew prefix whose `include`, `lib`, and `lib/pkgconfig` directories are added to the search paths for the optional dependencies above. Auto-detected with `brew --prefix`, so the Apple-Silicon `/opt/homebrew`, the Intel `/usr/local`, a Linuxbrew prefix, and any custom install all work without editing the makefile. Pass it explicitly to force a prefix, or **opt out of all Homebrew discovery** with `HOMEBREW=` (empty) or `HOMEBREW=/nonexisting`. Honoured identically by the makefile and the CMake test build. |
 
-`HOMEBREW` is read from the command line or the environment (`make HOMEBREW=/opt/homebrew`,
-`export HOMEBREW=`); the CMake test build also accepts `-DHOMEBREW=...`.
+| `SYSTEM_PREFIX=<prefix>` | `/usr/local` (empty on Windows) | Conventional site prefix whose `include` and `lib` directories (when they exist) are added to the compile/link lines and to the GMP-ECM and LAPACK probes. Empty by default on native Windows, where MSYS2's `/usr` is the Cygwin runtime tree. Opt out with `SYSTEM_PREFIX=` (empty). `/usr/include` itself is never added. |
+
+`HOMEBREW` and `SYSTEM_PREFIX` are read from the command line or the environment (`make HOMEBREW=/opt/homebrew`,
+`export HOMEBREW=`); the CMake test build also accepts `-DHOMEBREW=...`. A packager building
+against a private prefix can pass `HOMEBREW= SYSTEM_PREFIX=` so that the makefile searches only
+the paths it is given (`CFLAGS`, `pkg-config`). `make print-flags` prints the fully expanded
+compile and link flags.
 
 ---
 

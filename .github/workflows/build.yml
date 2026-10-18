@@ -221,6 +221,17 @@ jobs:
           uname -s
           make print-cc
 
+      # Under MSYS2, /usr is the Cygwin runtime tree. A -I/usr/... or -L/usr/... on
+      # a native UCRT64 compile line makes the toolchain read Cygwin headers
+      # (passagemath PR #2966). The makefile must add no such path on Windows.
+      - name: No /usr search paths on Windows (make print-flags)
+        run: |
+          make print-flags
+          if make print-flags | grep -- '-[IL]/usr'; then
+            echo "error: a /usr search path reached the native Windows flags" >&2
+            exit 1
+          fi
+
       # The minimal native-Windows build documented in docs/building.md: the
       # pkg-config-autodetected subsystems (FLINT/LAPACK/raylib/PCRE2/FFTW) and
       # ECM are off; readline and threads are force-disabled on Windows by the

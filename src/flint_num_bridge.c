@@ -31,6 +31,7 @@
 #include <flint/ulong_extras.h>
 #include <flint/acb_elliptic.h>
 #include <flint/acb_hypgeom.h>
+#include <flint/arb_hypgeom.h>
 #include <flint/acb_poly.h>
 
 /* ------------------------------------------------------------------ */
@@ -1236,6 +1237,371 @@ static Expr* builtin_flint_stieltjes(Expr* res) {
     return NULL;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Certified signs of an exact numeric constant (flint_cert_parts_sign)*/
+/* ------------------------------------------------------------------ */
+
+#define CERT_MAX_DEPTH 256
+
+static const char* cert_head(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = e->data.function.head;
+    return (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+}
+
+static bool cert_is_constant_symbol(const char* s) {
+    return s == SYM_Pi || s == SYM_E || s == SYM_EulerGamma || s == SYM_Catalan
+        || s == SYM_GoldenRatio || s == SYM_Degree || s == SYM_Khinchin
+        || s == SYM_Glaisher;
+}
+
+static bool cert_is_int_like(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT;
+}
+
+static bool cert_is_rational_leaf(const Expr* e) {
+    if (cert_is_int_like(e)) return true;
+    return cert_head(e) == SYM_Rational && e->data.function.arg_count == 2
+        && cert_is_int_like(e->data.function.args[0])
+        && cert_is_int_like(e->data.function.args[1]);
+}
+
+/* Pure structural pre-pass (no arithmetic): is every node of `e` in the
+ * supported constant language?  This is the cheap prefilter — a free symbol or
+ * an inexact leaf anywhere is found by pointer compares before any ball is
+ * computed, so the hot path (Abs[x], Sign[a b], ...) pays only a short walk. */
+static bool cert_supported(const Expr* e, int depth) {
+    if (depth > CERT_MAX_DEPTH) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_SYMBOL: return cert_is_constant_symbol(e->data.symbol.name);
+        case EXPR_FUNCTION: break;
+        default: return false;            /* Real / MPFR / String / ... */
+    }
+    const char* h = cert_head(e);
+    if (!h) return false;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Rational) return cert_is_rational_leaf(e);
+    if (h == SYM_Complex)
+        return n == 2 && cert_is_rational_leaf(e->data.function.args[0])
+                      && cert_is_rational_leaf(e->data.function.args[1]);
+    if (h == SYM_Plus || h == SYM_Times) { if (n == 0) return false; }
+    else if (h == SYM_Power || (h == SYM_Log && n == 2)) { if (n != 2) return false; }
+    else if (h == SYM_Sqrt || h == SYM_Exp || h == SYM_Log
+          || h == SYM_Sin || h == SYM_Cos || h == SYM_Tan
+          || h == SYM_Cot || h == SYM_Sec || h == SYM_Csc
+          || h == SYM_Sinh || h == SYM_Cosh || h == SYM_Tanh
+          || h == SYM_Coth || h == SYM_Sech || h == SYM_Csch
+          || h == SYM_ArcSin || h == SYM_ArcCos || h == SYM_ArcTan
+          || h == SYM_ArcSinh || h == SYM_ArcCosh || h == SYM_ArcTanh
+          || h == SYM_Gamma || h == SYM_Erf || h == SYM_Erfc
+          || h == SYM_Abs || h == SYM_Re || h == SYM_Im || h == SYM_Conjugate) {
+        if (n != 1) return false;
+    } else {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (!cert_supported(e->data.function.args[i], depth + 1)) return false;
+    return true;
+}
+
+static void cert_set_real(acb_t out, const arb_t r) {
+    arb_set(acb_realref(out), r);
+    arb_zero(acb_imagref(out));
+}
+
+/* Principal Log with a branch-cut guard.  On the cut itself (Im exactly 0,
+ * Re certified < 0) the value is Log|z| + I Pi, Mathematica's convention; a
+ * ball that merely touches the closed negative real axis is refused. */
+static int cert_log(acb_t out, const acb_t z, slong prec) {
+    const arb_struct* re = acb_realref(z);
+    const arb_struct* im = acb_imagref(z);
+    if (arb_is_zero(im)) {
+        arb_t t; arb_init(t);
+        int ok = 1;
+        if (arb_is_positive(re)) {
+            arb_log(t, re, prec);
+            cert_set_real(out, t);
+        } else if (arb_is_negative(re)) {
+            arb_neg(t, re);
+            arb_log(acb_realref(out), t, prec);
+            arb_const_pi(acb_imagref(out), prec);
+        } else ok = 0;
+        arb_clear(t);
+        return ok;
+    }
+    if (arb_is_positive(re) || !arb_contains_zero(im)) {
+        acb_log(out, z, prec);
+        return acb_is_finite(out);
+    }
+    return 0;
+}
+
+static int cert_eval(const Expr* e, acb_t out, slong prec);
+
+/* base^x.  Integer x by exact repeated multiplication; a positive real base
+ * with a real exponent via arb_pow (real result, exact-zero imaginary part);
+ * an exactly-negative real base with exponent p/2 as |b|^(p/2) * I^p (keeps
+ * the zero part exactly zero); otherwise Exp[x Log[b]] with the guarded Log. */
+static int cert_power(const Expr* e, acb_t out, slong prec) {
+    const Expr* be = e->data.function.args[0];
+    const Expr* xe = e->data.function.args[1];
+    acb_t b, x;
+    acb_init(b); acb_init(x);
+    int ok = 0;
+    if (cert_is_int_like(xe)) {
+        if (!cert_eval(be, b, prec)) goto done;
+        fmpz_t n; fmpz_init(n);
+        expr_to_fmpz(xe, n);
+        if (fmpz_sgn(n) < 0 && acb_contains_zero(b)) { fmpz_clear(n); goto done; }
+        if (arb_is_zero(acb_imagref(b))) {
+            arb_t r; arb_init(r);
+            arb_pow_fmpz(r, acb_realref(b), n, prec);
+            cert_set_real(out, r);
+            arb_clear(r);
+        } else {
+            acb_pow_fmpz(out, b, n, prec);
+        }
+        fmpz_clear(n);
+        ok = acb_is_finite(out);
+        goto done;
+    }
+    if (be->type == EXPR_SYMBOL && be->data.symbol.name == SYM_E) {
+        if (!cert_eval(xe, x, prec)) goto done;
+        if (arb_is_zero(acb_imagref(x))) {
+            arb_t r; arb_init(r);
+            arb_exp(r, acb_realref(x), prec);
+            cert_set_real(out, r);
+            arb_clear(r);
+        } else acb_exp(out, x, prec);
+        ok = acb_is_finite(out);
+        goto done;
+    }
+    if (!cert_eval(be, b, prec) || !cert_eval(xe, x, prec)) goto done;
+    if (arb_is_zero(acb_imagref(b)) && arb_is_zero(acb_imagref(x))) {
+        if (arb_is_positive(acb_realref(b))) {
+            arb_t r; arb_init(r);
+            arb_pow(r, acb_realref(b), acb_realref(x), prec);
+            cert_set_real(out, r);
+            arb_clear(r);
+            ok = acb_is_finite(out);
+            goto done;
+        }
+        /* Exactly negative base, exponent p/2: |b|^(p/2) * I^p. */
+        if (arb_is_negative(acb_realref(b)) && cert_head(xe) == SYM_Rational
+            && xe->data.function.args[1]->type == EXPR_INTEGER
+            && xe->data.function.args[1]->data.integer == 2
+            && xe->data.function.args[0]->type == EXPR_INTEGER) {
+            int64_t p = xe->data.function.args[0]->data.integer;
+            arb_t r; arb_init(r);
+            arb_neg(r, acb_realref(b));
+            arb_pow(r, r, acb_realref(x), prec);
+            int k = (int)(((p % 4) + 4) % 4);       /* I^p, p odd: I or -I */
+            arb_zero(acb_realref(out));
+            if (k == 1) arb_set(acb_imagref(out), r);
+            else        arb_neg(acb_imagref(out), r);
+            arb_clear(r);
+            ok = acb_is_finite(out);
+            goto done;
+        }
+    }
+    if (acb_contains_zero(b)) goto done;
+    {
+        acb_t L; acb_init(L);
+        if (cert_log(L, b, prec)) {
+            acb_mul(L, L, x, prec);
+            acb_exp(out, L, prec);
+            ok = acb_is_finite(out);
+        }
+        acb_clear(L);
+    }
+done:
+    acb_clear(b); acb_clear(x);
+    return ok;
+}
+
+/* One-argument function application f(z).  Real-analytic heads take the arb
+ * path on a real ball so the imaginary part stays EXACTLY zero (that exact
+ * zero is what certifies realness downstream). */
+static int cert_unary(const char* h, acb_t out, const acb_t z, slong prec) {
+    bool real = arb_is_zero(acb_imagref(z)) != 0;
+    const arb_struct* x = acb_realref(z);
+    arb_t r; arb_init(r);
+    int ok = 1;
+#define CERT_RC(arbf, acbf) do { \
+        if (real) { arbf(r, x, prec); cert_set_real(out, r); } \
+        else acbf(out, z, prec); } while (0)
+    if      (h == SYM_Exp)  CERT_RC(arb_exp,  acb_exp);
+    else if (h == SYM_Sin)  CERT_RC(arb_sin,  acb_sin);
+    else if (h == SYM_Cos)  CERT_RC(arb_cos,  acb_cos);
+    else if (h == SYM_Tan)  CERT_RC(arb_tan,  acb_tan);
+    else if (h == SYM_Cot)  CERT_RC(arb_cot,  acb_cot);
+    else if (h == SYM_Sec)  CERT_RC(arb_sec,  acb_sec);
+    else if (h == SYM_Csc)  CERT_RC(arb_csc,  acb_csc);
+    else if (h == SYM_Sinh) CERT_RC(arb_sinh, acb_sinh);
+    else if (h == SYM_Cosh) CERT_RC(arb_cosh, acb_cosh);
+    else if (h == SYM_Tanh) CERT_RC(arb_tanh, acb_tanh);
+    else if (h == SYM_Coth) CERT_RC(arb_coth, acb_coth);
+    else if (h == SYM_Sech) CERT_RC(arb_sech, acb_sech);
+    else if (h == SYM_Csch) CERT_RC(arb_csch, acb_csch);
+    else if (h == SYM_Gamma) CERT_RC(arb_gamma, acb_gamma);
+    else if (h == SYM_Erf)  {
+        if (real) { arb_hypgeom_erf(r, x, prec); cert_set_real(out, r); }
+        else acb_hypgeom_erf(out, z, prec);
+    } else if (h == SYM_Erfc) {
+        if (real) { arb_hypgeom_erfc(r, x, prec); cert_set_real(out, r); }
+        else acb_hypgeom_erfc(out, z, prec);
+    } else if (h == SYM_Log || h == SYM_Sqrt) {
+        acb_t L; acb_init(L);
+        ok = cert_log(L, z, prec);
+        if (ok && h == SYM_Sqrt) {
+            if (real && arb_is_positive(x)) { arb_sqrt(r, x, prec); cert_set_real(out, r); }
+            else if (real) {                       /* exactly negative: I Sqrt[-x] */
+                arb_neg(r, x); arb_sqrt(r, r, prec);
+                arb_zero(acb_realref(out)); arb_set(acb_imagref(out), r);
+            } else acb_sqrt(out, z, prec);        /* off the cut: principal */
+        } else if (ok) acb_set(out, L);
+        acb_clear(L);
+    }
+    /* Inverse functions: only where the ball provably avoids the cut. */
+    else if (h == SYM_ArcTan || h == SYM_ArcSinh) {    /* cuts on the imaginary axis */
+        if (real) {
+            if (h == SYM_ArcTan) arb_atan(r, x, prec); else arb_asinh(r, x, prec);
+            cert_set_real(out, r);
+        } else if (!arb_contains_zero(x)) {
+            if (h == SYM_ArcTan) acb_atan(out, z, prec); else acb_asinh(out, z, prec);
+        } else ok = 0;
+    } else if (h == SYM_ArcSin || h == SYM_ArcCos || h == SYM_ArcTanh || h == SYM_ArcCosh) {
+        /* cuts on the real axis: real input strictly inside the domain, or a
+         * ball that excludes the real axis altogether. */
+        if (real) {
+            arb_t a; arb_init(a);
+            if (h == SYM_ArcCosh) {
+                arb_sub_ui(a, x, 1, prec);
+                ok = arb_is_positive(a);
+                if (ok) arb_acosh(r, x, prec);
+            } else {
+                arb_abs(a, x);
+                arb_sub_ui(a, a, 1, prec);
+                ok = arb_is_negative(a);
+                if (ok) {
+                    if (h == SYM_ArcSin)      arb_asin(r, x, prec);
+                    else if (h == SYM_ArcCos) arb_acos(r, x, prec);
+                    else                      arb_atanh(r, x, prec);
+                }
+            }
+            arb_clear(a);
+            if (ok) cert_set_real(out, r);
+        } else if (!arb_contains_zero(acb_imagref(z))) {
+            if (h == SYM_ArcSin)       acb_asin(out, z, prec);
+            else if (h == SYM_ArcCos)  acb_acos(out, z, prec);
+            else if (h == SYM_ArcTanh) acb_atanh(out, z, prec);
+            else                       acb_acosh(out, z, prec);
+        } else ok = 0;
+    } else if (h == SYM_Abs) {
+        acb_abs(r, z, prec); cert_set_real(out, r);
+    } else if (h == SYM_Re) {
+        cert_set_real(out, acb_realref(z));
+    } else if (h == SYM_Im) {
+        arb_set(r, acb_imagref(z)); cert_set_real(out, r);
+    } else if (h == SYM_Conjugate) {
+        acb_conj(out, z);
+    } else ok = 0;
+#undef CERT_RC
+    arb_clear(r);
+    return ok && acb_is_finite(out);
+}
+
+static int cert_eval(const Expr* e, acb_t out, slong prec) {
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        arb_t r; arb_init(r);
+        if (s == SYM_Pi) arb_const_pi(r, prec);
+        else if (s == SYM_E) arb_const_e(r, prec);
+        else if (s == SYM_EulerGamma) arb_const_euler(r, prec);
+        else if (s == SYM_Catalan) arb_const_catalan(r, prec);
+        else if (s == SYM_Khinchin) arb_const_khinchin(r, prec);
+        else if (s == SYM_Glaisher) arb_const_glaisher(r, prec);
+        else if (s == SYM_GoldenRatio) {
+            arb_sqrt_ui(r, 5, prec); arb_add_ui(r, r, 1, prec); arb_mul_2exp_si(r, r, -1);
+        } else if (s == SYM_Degree) {
+            arb_const_pi(r, prec); arb_div_ui(r, r, 180, prec);
+        } else { arb_clear(r); return 0; }
+        cert_set_real(out, r);
+        arb_clear(r);
+        return 1;
+    }
+    if (cert_is_rational_leaf(e)) {
+        arb_zero(acb_imagref(out));
+        return scalar_to_arb(e, acb_realref(out), prec);
+    }
+    const char* h = cert_head(e);
+    if (!h) return 0;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Complex)
+        return scalar_to_arb(e->data.function.args[0], acb_realref(out), prec)
+            && scalar_to_arb(e->data.function.args[1], acb_imagref(out), prec);
+    if (h == SYM_Plus || h == SYM_Times) {
+        acb_t t; acb_init(t);
+        int ok = cert_eval(e->data.function.args[0], out, prec);
+        for (size_t i = 1; ok && i < n; i++) {
+            ok = cert_eval(e->data.function.args[i], t, prec);
+            if (ok) {
+                if (h == SYM_Plus) acb_add(out, out, t, prec);
+                else               acb_mul(out, out, t, prec);
+            }
+        }
+        acb_clear(t);
+        return ok && acb_is_finite(out);
+    }
+    if (h == SYM_Power) return cert_power(e, out, prec);
+    if (h == SYM_Log && n == 2) {                  /* Log[b, x] = Log[x]/Log[b] */
+        acb_t b, x, lb;
+        acb_init(b); acb_init(x); acb_init(lb);
+        int ok = cert_eval(e->data.function.args[0], b, prec)
+              && cert_eval(e->data.function.args[1], x, prec)
+              && cert_log(lb, b, prec) && cert_log(out, x, prec)
+              && !acb_contains_zero(lb);
+        if (ok) {
+            if (arb_is_zero(acb_imagref(lb)) && arb_is_zero(acb_imagref(out))) {
+                arb_div(acb_realref(out), acb_realref(out), acb_realref(lb), prec);
+            } else acb_div(out, out, lb, prec);
+            ok = acb_is_finite(out);
+        }
+        acb_clear(b); acb_clear(x); acb_clear(lb);
+        return ok;
+    }
+    acb_t z; acb_init(z);
+    int ok = cert_eval(e->data.function.args[0], z, prec)
+          && cert_unary(h, out, z, prec);
+    acb_clear(z);
+    return ok;
+}
+
+static int cert_arb_sign(const arb_t x) {
+    if (arb_is_zero(x)) return 0;
+    if (arb_is_positive(x)) return 1;
+    if (arb_is_negative(x)) return -1;
+    return 2;
+}
+
+bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
+    *re_sgn = *im_sgn = 2;
+    if (!e || !cert_supported(e, 0)) return false;
+    static const slong ladder[] = { 64, 256, 1024 };
+    bool any = false;
+    acb_t z; acb_init(z);
+    for (size_t i = 0; i < sizeof ladder / sizeof ladder[0]; i++) {
+        if (!cert_eval(e, z, ladder[i])) continue;   /* a wider ball may refuse a cut */
+        any = true;
+        *re_sgn = cert_arb_sign(acb_realref(z));
+        *im_sgn = cert_arb_sign(acb_imagref(z));
+        if (*re_sgn != 2 && *im_sgn != 2) break;
+    }
+    acb_clear(z);
+    return any;
+}
+
 void flint_num_bridge_init(void) {
     symtab_add_builtin(SYM_FLINT_Zeta, builtin_flint_zeta);
     symtab_get_def(SYM_FLINT_Zeta)->attributes |= ATTR_PROTECTED;
@@ -1271,6 +1637,10 @@ void flint_num_bridge_init(void) {
 }
 
 #else /* !(USE_FLINT && USE_MPFR) */
+
+bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
+    (void)e; *re_sgn = *im_sgn = 2; return false;
+}
 
 Expr* flint_num_zeta(const Expr* s) { (void)s; return NULL; }
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; return NULL; }

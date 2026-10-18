@@ -625,6 +625,49 @@ void test_sign(void) {
     assert(strcmp(s16, "List[1, -1, 0, 1]") == 0); free(s16);
 }
 
+/* Re / Im / ReIm / Abs / Sign / Arg of EXACT numeric constants: the sign of
+ * each part is certified by an Arb ball evaluation (flint_cert_parts_sign),
+ * matching Mathematica.  An exact zero that does not autosimplify must stay
+ * unevaluated (a straddling ball), never be given a guessed sign. */
+static void expect_true(const char* src) {
+    char* s = expr_to_string_fullform(eval_and_free(parse_expression(src)));
+    if (strcmp(s, "True") != 0) { fprintf(stderr, "FAIL: %s -> %s\n", src, s); }
+    assert(strcmp(s, "True") == 0);
+    free(s);
+}
+
+void test_exact_constant_complex_heads(void) {
+    /* real constants */
+    expect_true("SameQ[Abs[Sqrt[2]], Sqrt[2]]");
+    expect_true("SameQ[Abs[-Pi], Pi]");
+    expect_true("SameQ[Abs[Pi - 4], 4 - Pi]");
+    expect_true("SameQ[Abs[1 - Sqrt[2]], -1 + Sqrt[2]]");
+    expect_true("SameQ[Abs[Sin[10]], -Sin[10]]");
+    expect_true("SameQ[Abs[Gamma[1/3] - 3], 3 - Gamma[1/3]]");
+    expect_true("SameQ[Abs[Exp[-Pi] - 1/23], 1/23 - E^(-Pi)]");
+    expect_true("SameQ[{Sign[Pi], Sign[Sqrt[2]], Sign[Pi - 3], Sign[Log[2] - 7/10]}, {1, 1, 1, -1}]");
+    expect_true("SameQ[{Re[Pi], Im[Pi - 4], ReIm[Pi - 4]}, {Pi, 0, {Pi - 4, 0}}]");
+    expect_true("SameQ[{Arg[Pi - 4], Arg[-Sqrt[2]], Arg[Sqrt[3]]}, {Pi, Pi, 0}]");
+    /* exact complex constants */
+    expect_true("SameQ[Abs[1 + I Sqrt[2]], Sqrt[3]]");
+    expect_true("SameQ[Abs[Sqrt[2] I], Sqrt[2]]");
+    expect_true("SameQ[Abs[-Pi I], Pi]");
+    expect_true("SameQ[{Re[E + I Pi], Im[E + I Pi], ReIm[E + I Pi]}, {E, Pi, {E, Pi}}]");
+    expect_true("SameQ[{Sign[I Pi], Sign[-I Sqrt[3]]}, {I, -I}]");
+    expect_true("SameQ[Sign[1 + I Sqrt[2]], (1 + I Sqrt[2])/Sqrt[3]]");
+    expect_true("SameQ[{Arg[I Pi], Arg[-I E]}, {Pi/2, -Pi/2}]");
+    expect_true("SameQ[Arg[1 + I Sqrt[2]], ArcTan[Sqrt[2]]]");
+    expect_true("SameQ[Arg[-1 + I Sqrt[2]], Pi - ArcTan[Sqrt[2]]]");
+    expect_true("SameQ[Arg[-1 - I Sqrt[2]], -Pi + ArcTan[Sqrt[2]]]");
+    /* exact zero that does not autosimplify: sign undecidable, stay put */
+    expect_true("MatchQ[Abs[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]], _Abs]");
+    expect_true("MatchQ[Sign[(1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]], _Sign]");
+    expect_true("MatchQ[Arg[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]], _Arg]");
+    /* symbolic / off-language arguments are untouched */
+    expect_true("SameQ[{Abs[x], Sign[a b], Abs[1 + I x], Re[Pi + x]}, {Abs[x], Sign[a b], Abs[1 + I x], Re[Pi + x]}]");
+    expect_true("MatchQ[Abs[ArcSin[2]], _Abs]");
+}
+
 void test_arg(void) {
     char* s1 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[0]")));
     assert(strcmp(s1, "0") == 0);
@@ -1336,6 +1379,7 @@ int main(void) {
 
     TEST(test_numberq);
     TEST(test_numericq);
+    TEST(test_exact_constant_complex_heads);
     TEST(test_stringq);
     TEST(test_atomq);
     TEST(test_integerq);

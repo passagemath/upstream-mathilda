@@ -7,6 +7,7 @@
 #include "common.h"
 #include "sym_names.h"
 #include "flint_qqbar.h"
+#include "flint_num_bridge.h"   /* flint_cert_parts_sign */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -194,7 +195,8 @@ void complex_init(void) {
 
     symtab_set_docstring("Sign",
         "Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, "
-        "and z/Abs[z] for a nonzero numeric complex z.");
+        "and z/Abs[z] for a nonzero numeric complex z; exact constants such "
+        "as Pi - 3 or I Pi use a certified sign test.");
     symtab_set_docstring("Re",
         "Re[z] gives the real part of numeric z; Re[Re[z]], Re[Im[z]], "
         "Re[Abs[z]], Re[Arg[z]] fold since those heads are real-valued.");
@@ -203,7 +205,8 @@ void complex_init(void) {
         "real-valued (Re/Im/Abs/Arg) arguments.");
     symtab_set_docstring("Abs",
         "Abs[z] gives the absolute value (modulus) of numeric z, "
-        "Sqrt[Re[z]^2 + Im[z]^2] for complex z.");
+        "Sqrt[Re[z]^2 + Im[z]^2] for complex z; exact constants evaluate "
+        "by a certified sign test (Abs[Pi - 4] = 4 - Pi).");
     symtab_set_docstring("Arg",
         "Arg[z] gives the argument (phase angle in (-Pi, Pi]) of numeric z; "
         "0 for nonnegative reals, Pi for negative reals.");
@@ -213,6 +216,161 @@ void complex_init(void) {
     symtab_set_docstring("ReIm",
         "ReIm[z] gives {Re[z], Im[z]}, the real and imaginary parts of numeric z "
         "as a list; real-valued arguments give {z, 0}.");
+}
+
+/* ------------------------------------------------------------------------
+ * Certified real/imaginary split of an EXACT numeric constant.
+ *
+ * Abs / Sign / Re / Im / ReIm / Arg of a closed-form constant such as
+ * Sqrt[2], Pi - 4, E + I Pi or Sin[10] must evaluate (Abs[Pi - 4] -> 4 - Pi,
+ * Sign[Pi - 3] -> 1, Re[E + I Pi] -> E), which needs the SIGN of the real and
+ * imaginary parts.  Those signs come from flint_cert_parts_sign — a rigorous
+ * acb ball evaluation — never from a rounded N[]: an expression that is
+ * exactly zero without autosimplifying, e.g. (1 + Sqrt[2])^2 - 3 - 2 Sqrt[2],
+ * gives a ball straddling 0 at every precision, and the head is left
+ * unevaluated rather than guessing a sign.
+ *
+ * The whole argument is certified first; that call doubles as the cheap
+ * prefilter (a purely structural walk rejects any free symbol / inexact leaf /
+ * unsupported head before any arithmetic), so symbolic Abs[x] etc. pay only a
+ * short pointer walk.  When the argument is certified real (imaginary part
+ * exactly zero) re = arg, im = 0.  Otherwise the symbolic parts come from
+ * complex_decompose, and each part is itself certified real with a known sign
+ * — which also proves the decomposition (whose non-Complex factors it assumes
+ * real) correct.  On success *re_out / *im_out are owned by the caller and
+ * *rs / *is are certified signs in {-1, 0, 1}.
+ * ------------------------------------------------------------------------ */
+static bool certified_real_sign(Expr* e, int* s) {
+    if (is_rational_like(e)) { *s = expr_numeric_sign(e); return true; }
+    int r, i;
+    if (!flint_cert_parts_sign(e, &r, &i)) return false;
+    if (i != 0 || r == 2) return false;
+    *s = r;
+    return true;
+}
+
+static bool exact_constant_parts(Expr* arg, Expr** re_out, Expr** im_out,
+                                 int* rs, int* is) {
+    if (!arg || (arg->type != EXPR_FUNCTION && arg->type != EXPR_SYMBOL)) return false;
+    int r, i;
+    if (!flint_cert_parts_sign(arg, &r, &i)) return false;
+    if (i == 0) {                                  /* certified real */
+        if (r == 2) return false;                  /* sign undecided: decline */
+        *re_out = expr_copy(arg);
+        *im_out = expr_new_integer(0);
+        *rs = r; *is = 0;
+        return true;
+    }
+    Expr *re = NULL, *im = NULL;
+    if (!complex_decompose(arg, &re, &im)) return false;
+    if (!certified_real_sign(re, rs) || !certified_real_sign(im, is)) {
+        expr_free(re); expr_free(im);
+        return false;
+    }
+    *re_out = re;
+    *im_out = im;
+    return true;
+}
+
+/* -x, evaluated, with the sign distributed over a sum (Pi - 4 -> 4 - Pi, as
+ * Mathematica prints Abs[Pi - 4]); Mathilda's Times does not distribute a
+ * numeric factor over Plus itself.  Consumes x. */
+static Expr* cx_negate(Expr* x) {
+    if (head_is(x, SYM_Plus)) {
+        size_t n = x->data.function.arg_count;
+        Expr** terms = malloc(sizeof(Expr*) * n);
+        for (size_t k = 0; k < n; k++) {
+            Expr* a[2] = { expr_new_integer(-1), x->data.function.args[k] };
+            x->data.function.args[k] = NULL;
+            terms[k] = expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+        }
+        expr_free(x);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
+        free(terms);
+        return eval_and_free(sum);
+    }
+    Expr* a[2] = { expr_new_integer(-1), x };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), a, 2));
+}
+
+static Expr* cx_list2(Expr* a, Expr* b) {
+    Expr* v[2] = { a, b };
+    return expr_new_function(expr_new_symbol(SYM_List), v, 2);
+}
+
+/* +/- Pi/2 */
+static Expr* cx_half_pi(int sgn) {
+    Expr* a[2] = { make_rational(sgn, 2), expr_new_symbol(SYM_Pi) };
+    return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+}
+
+/* Shared tail of Re / Im / ReIm / Abs / Sign / Arg for an exact numeric
+ * constant the literal paths declined on.  `which` selects the head. */
+typedef enum { CX_RE, CX_IM, CX_REIM, CX_ABS, CX_SIGN, CX_ARG } CxHead;
+
+static Expr* exact_constant_head(Expr* arg, CxHead which) {
+    Expr *re, *im;
+    int rs, is;
+    if (!exact_constant_parts(arg, &re, &im, &rs, &is)) return NULL;
+    switch (which) {
+        case CX_RE:   expr_free(im); return re;
+        case CX_IM:   expr_free(re); return im;
+        case CX_REIM: return cx_list2(re, im);
+        case CX_ABS:
+            if (is == 0) {
+                expr_free(im);
+                if (rs >= 0) return re;
+                return cx_negate(re);
+            }
+            if (rs == 0) {
+                expr_free(re);
+                return is > 0 ? im : cx_negate(im);
+            } else {
+                Expr* p1[2] = { re, expr_new_integer(2) };
+                Expr* p2[2] = { im, expr_new_integer(2) };
+                Expr* sum[2] = { expr_new_function(expr_new_symbol(SYM_Power), p1, 2),
+                                 expr_new_function(expr_new_symbol(SYM_Power), p2, 2) };
+                Expr* sq[1] = { expr_new_function(expr_new_symbol(SYM_Plus), sum, 2) };
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Sqrt), sq, 1));
+            }
+        case CX_SIGN:
+            expr_free(re); expr_free(im);
+            if (is == 0) return expr_new_integer(rs);
+            if (rs == 0) return make_complex(expr_new_integer(0), expr_new_integer(is));
+            {
+                /* z / Abs[z]; Abs takes the certified path above. */
+                Expr* ab[1] = { expr_copy(arg) };
+                Expr* absz = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), ab, 1));
+                Expr* inv[2] = { absz, expr_new_integer(-1) };
+                Expr* t[2] = { expr_copy(arg),
+                               expr_new_function(expr_new_symbol(SYM_Power), inv, 2) };
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t, 2));
+            }
+        case CX_ARG:
+            if (is == 0) {
+                expr_free(re); expr_free(im);
+                return rs < 0 ? expr_new_symbol(SYM_Pi) : expr_new_integer(0);
+            }
+            if (rs == 0) {
+                expr_free(re); expr_free(im);
+                return cx_half_pi(is);
+            }
+            {
+                /* Arg = ArcTan[im/re] + (re < 0 ? sgn(im) Pi : 0).  Built
+                 * explicitly (not ArcTan[re, im]) so the quadrant shift comes
+                 * from the certified signs. */
+                Expr* inv[2] = { re, expr_new_integer(-1) };
+                Expr* q[2] = { im, expr_new_function(expr_new_symbol(SYM_Power), inv, 2) };
+                Expr* at[1] = { expr_new_function(expr_new_symbol(SYM_Times), q, 2) };
+                Expr* atan = expr_new_function(expr_new_symbol(SYM_ArcTan), at, 1);
+                if (rs > 0) return eval_and_free(atan);
+                Expr* shift[2] = { expr_new_integer(is), expr_new_symbol(SYM_Pi) };
+                Expr* pl[2] = { atan, expr_new_function(expr_new_symbol(SYM_Times), shift, 2) };
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), pl, 2));
+            }
+    }
+    expr_free(re); expr_free(im);
+    return NULL;
 }
 
 /* True when `e` is `f[x]` for one of the real-valued-by-construction heads
@@ -262,7 +420,7 @@ Expr* builtin_re(Expr* res) {
         expr_free(re);
         expr_free(im);
     }
-    return NULL;
+    return exact_constant_head(arg, CX_RE);
 }
 
 Expr* builtin_im(Expr* res) {
@@ -290,7 +448,7 @@ Expr* builtin_im(Expr* res) {
         expr_free(re);
         expr_free(im);
     }
-    return NULL;
+    return exact_constant_head(arg, CX_IM);
 }
 
 Expr* builtin_reim(Expr* res) {
@@ -335,7 +493,7 @@ Expr* builtin_reim(Expr* res) {
         expr_free(re);
         expr_free(im);
     }
-    return NULL;
+    return exact_constant_head(arg, CX_REIM);
 }
 
 Expr* builtin_abs(Expr* res) {
@@ -474,7 +632,7 @@ Expr* builtin_abs(Expr* res) {
         mpz_clear(num); mpz_clear(den);
         return r;
     }
-    return NULL;
+    return exact_constant_head(arg, CX_ABS);
 }
 
 /* Sign[x] returns -1, 0, or 1 for a real numeric x and z/Abs[z] for a
@@ -577,7 +735,7 @@ Expr* builtin_sign(Expr* res) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), times_args, 2));
     }
 
-    return NULL;
+    return exact_constant_head(arg, CX_SIGN);
 }
 
 Expr* builtin_conjugate(Expr* res) {
@@ -790,7 +948,9 @@ Expr* builtin_arg(Expr* res) {
          * above. */
         re = arg;
     } else {
-        return NULL;
+        /* Exact numeric constant (Arg[Pi - 4] -> Pi, Arg[1 + I Sqrt[2]] ->
+         * ArcTan[Sqrt[2]]), decided by certified signs. */
+        return exact_constant_head(arg, CX_ARG);
     }
 
     double re_val = 0.0;

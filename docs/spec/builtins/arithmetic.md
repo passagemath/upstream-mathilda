@@ -1377,6 +1377,25 @@ Complex number functions.
   Σ eᵢ[bᵢ<0]) Pi`), so the generic `a + b I` re/im split that cannot recover it
   is bypassed; a free symbol or a non-root-of-unity Gaussian stays unevaluated.
 
+**Exact numeric constants.** `Re`, `Im`, `ReIm`, `Abs`, `Sign` and `Arg` also
+evaluate on closed-form constants such as `Sqrt[2]`, `Pi - 4`, `Sin[10]`,
+`E + I Pi` or `1 + I Sqrt[2]`, as Mathematica does: `Abs[Pi - 4] = 4 - Pi`,
+`Sign[Pi - 3] = 1`, `Re[E + I Pi] = E`, `Sign[I Pi] = I`, `Arg[-Sqrt[2]] = Pi`,
+`Arg[-1 + I Sqrt[2]] = Pi - ArcTan[Sqrt[2]]`, `Abs[1 + I Sqrt[2]] = Sqrt[3]`.
+The real and imaginary parts come from the structural `a + b I` split, and the
+**sign** of each part is *certified* by a rigorous FLINT/Arb ball evaluation
+(precision ladder 64 → 256 → 1024 bits; multi-valued `Log`/`Power`/inverse
+trig are evaluated only off their branch cuts), never by a rounded `N[]`. An
+expression that is exactly zero but does not autosimplify — e.g.
+`Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]` — has a ball that straddles 0 at
+every precision, so the head is left unevaluated rather than guessing a sign.
+The supported constant language is: rationals and Gaussian rationals; `Pi`,
+`E`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Degree`, `Khinchin`, `Glaisher`;
+`Plus`, `Times`, `Power`, `Sqrt`, `Exp`, `Log`, the trig, hyperbolic and
+inverse trig/hyperbolic functions, `Gamma`, `Erf`, `Erfc`, `Abs`, `Re`, `Im`,
+`Conjugate`. Anything outside it (a free symbol, an inexact leaf, another head)
+leaves the call unevaluated, as before.
+
 ```mathematica
 In[1]:= Re[1/(2 + 3 I)]
 Out[1]= 2/13
@@ -1398,6 +1417,15 @@ Out[6]= -1/10 - 7/10*I
 
 In[7]:= Arg[(-1)^(1/6)]
 Out[7]= 1/6 Pi
+
+In[8]:= {Abs[Pi - 4], Sign[Sqrt[2]], Im[Pi - 4], Arg[Pi - 4]}
+Out[8]= {4 - Pi, 1, 0, Pi}
+
+In[9]:= {Re[E + I Pi], Sign[I Pi], Arg[-1 + I Sqrt[2]]}
+Out[9]= {E, I, Pi - ArcTan[Sqrt[2]]}
+
+In[10]:= Abs[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]   (* exactly 0: undecidable sign, left alone *)
+Out[10]= Abs[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
 ```
 
 ## ComplexExpand

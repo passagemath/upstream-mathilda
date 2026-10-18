@@ -139,6 +139,30 @@ bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
                                 int neul, const uint64_t* eul_p, const uint64_t* eul_num,
                                 double* out_lo, double* out_hi);
 
+/* Certified signs of the real and imaginary parts of an EXACT numeric
+ * constant, by rigorous acb ball evaluation (precision ladder 64 -> 256 ->
+ * 1024 bits). This is the sign oracle behind Abs / Sign / Re / Im / ReIm /
+ * Arg of closed-form constants (Abs[Pi - 4] -> 4 - Pi).
+ *
+ * Supported language: Integer / BigInt / Rational / Complex of those; the
+ * constants Pi, E, EulerGamma, Catalan, GoldenRatio, Degree, Khinchin,
+ * Glaisher; Plus, Times, Power, Sqrt, Exp, Log (1 and 2 args), the six trig
+ * and six hyperbolic functions, ArcSin/ArcCos/ArcTan/ArcSinh/ArcCosh/ArcTanh,
+ * Gamma, Erf, Erfc, Abs, Re, Im, Conjugate. Multi-valued functions are
+ * evaluated only where the input ball provably avoids the branch cut (or lies
+ * exactly on the negative real axis for Log/Power, where the principal value
+ * is unambiguous), so the ball always encloses the value Mathematica means.
+ *
+ * Returns false when `e` lies outside that language (a free symbol, an
+ * inexact number, an unsupported head) or does not evaluate to a finite ball.
+ * Otherwise sets *re_sgn and *im_sgn each to -1 / 0 / +1 when certified, or 2
+ * when the ball still contains zero at the top precision. 0 is reported only
+ * for a ball that is EXACTLY zero (exact cancellation, e.g. the imaginary part
+ * of a real expression); an expression that is zero only symbolically, e.g.
+ * (1 + Sqrt[2])^2 - 3 - 2 Sqrt[2], reports 2 (undecided) and callers decline.
+ * Read-only; false without FLINT. */
+bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn);
+
 /* Registers the FLINT` context numeric builtins (Zeta / HurwitzZeta /
  * PolyGamma / StieltjesGamma). Called from core_init(). No-op without FLINT. */
 void flint_num_bridge_init(void);

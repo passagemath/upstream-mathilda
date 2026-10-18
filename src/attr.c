@@ -63,6 +63,8 @@ static SymbolAttr builtin_attrs[] = {
     {"Pattern", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"PatternTest", ATTR_HOLDREST | ATTR_PROTECTED},
     {"PatternSequence", ATTR_PROTECTED},
+    {"Repeated", ATTR_PROTECTED},
+    {"RepeatedNull", ATTR_PROTECTED},
     {"OrderlessPatternSequence", ATTR_PROTECTED},
     {"Verbatim", ATTR_PROTECTED},
     {"Condition", ATTR_HOLDREST | ATTR_PROTECTED},

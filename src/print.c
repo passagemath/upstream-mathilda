@@ -1146,8 +1146,21 @@ static void print_standard(Expr* e, int parent_prec) {
         }
         else if ((head == SYM_Repeated || head == SYM_RepeatedNull) &&
                  e->data.function.arg_count == 1) {
-            /* Repeated[p] -> p.. ; RepeatedNull[p] -> p... */
-            print_standard(e->data.function.args[0], my_prec + 1);
+            /* Repeated[p] -> p.. ; RepeatedNull[p] -> p...
+             * A bare blank is parenthesised, as WL prints it: `_..` would
+             * re-read as Optional `_.` and a stray `.`, a syntax error, and
+             * `x_...` as Repeated[x_.] -- so (_).. and (x_)... instead.  A
+             * headed blank (`_h..`) needs no parentheses. */
+            Expr* rp = e->data.function.args[0];
+            Expr* rb = rp;
+            if (rb->type == EXPR_FUNCTION && rb->data.function.head->type == EXPR_SYMBOL
+                && rb->data.function.head->data.symbol.name == SYM_Pattern
+                && rb->data.function.arg_count == 2)
+                rb = rb->data.function.args[1];
+            bool bare_blank = is_plain_blank(rb) && rb->data.function.arg_count == 0;
+            if (bare_blank) printf("(");
+            print_standard(rp, my_prec + 1);
+            if (bare_blank) printf(")");
             printf(head == SYM_Repeated ? ".." : "...");
         }
         else {

@@ -8,9 +8,11 @@
 #include "attr.h"
 #include "default_helper.h"
 #include "sym_names.h"
+#include "message.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 
 /* An option argument: Rule[name,val] / RuleDelayed[name,val] with a
  * symbol/string name. Used by OptionsPattern matching. */
@@ -163,43 +165,101 @@ static bool is_sequence_blank(Expr* e, Expr** head_out, int* min_len) {
     return false;
 }
 
-static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
+/* Read one repeat bound of a Repeated / RepeatedNull spec. A machine integer
+ * is taken as is; a BigInt (necessarily huge -- normalised integers that fit
+ * stay EXPR_INTEGER) or one beyond INT_MAX is as good as unbounded, since no
+ * argument list can be that long, and becomes -1; `Infinity` is -1 when
+ * `allow_inf`. Anything else -- a symbol, a negative count, a real -- is not
+ * a valid bound and yields false. */
+static bool repeat_bound(Expr* b, bool allow_inf, int* out) {
+    if (b->type == EXPR_INTEGER) {
+        if (b->data.integer < 0) return false;
+        *out = (b->data.integer > INT_MAX) ? -1 : (int)b->data.integer;
+        return true;
+    }
+    if (b->type == EXPR_BIGINT) {
+        if (mpz_sgn(b->data.bigint) < 0) return false;
+        *out = -1;
+        return true;
+    }
+    if (allow_inf && b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_Infinity) {
+        *out = -1;
+        return true;
+    }
+    return false;
+}
+
+/* Repeated::range / Repeated::order for a malformed repeat spec, as WL. */
+static void repeat_spec_message(Expr* e, bool order) {
+    char* txt = expr_to_string(e);
+    if (order)
+        mth_message(e->data.function.head->data.symbol.name, "order",
+                    "Range out of order in %s.", txt ? txt : "");
+    else
+        mth_message(e->data.function.head->data.symbol.name, "range",
+                    "Range specification in integers (max or {min, max}) expected "
+                    "at position 2 in %s.", txt ? txt : "");
+    free(txt);
+}
+
+/* Recognise Repeated[p] / RepeatedNull[p] with an optional repeat spec:
+ *   p..  / p...                    1.. / 0.. repeats (unbounded)
+ *   Repeated[p, max]               min .. max   (min = 1, or 0 for RepeatedNull)
+ *   Repeated[p, {n}]               exactly n
+ *   Repeated[p, {min, max}]        min .. max   (max may be Infinity)
+ * On success fills rep_pat / min_len / max_len (-1 = no upper bound). An
+ * invalid spec (negative or symbolic count, min > max, wrong shape) returns
+ * false: the expression is then not a repeat pattern at all and is matched
+ * structurally, so it matches nothing -- it must never silently behave as an
+ * unbounded repeat. With `warn` (the matcher's dispatch sites) the malformed
+ * spec is reported as Repeated::range / Repeated::order, as in WL. */
+static bool is_repeated_ex(Expr* e, Expr** rep_pat, int* min_len, int* max_len, bool warn) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* head = e->data.function.head->data.symbol.name;
     bool is_rep = (head == SYM_Repeated);
     bool is_rep_null = (head == SYM_RepeatedNull);
     if (!is_rep && !is_rep_null) return false;
+    size_t argc = e->data.function.arg_count;
+    if (argc < 1 || argc > 2) return false;
 
-    *min_len = is_rep ? 1 : 0;
-    *max_len = -1; // -1 means infinity
-    
-    if (e->data.function.arg_count >= 1) {
-        *rep_pat = e->data.function.args[0];
-    } else {
-        return false;
-    }
-    
-    if (e->data.function.arg_count >= 2) {
+    int lo = is_rep ? 1 : 0;
+    int hi = -1;   /* -1 means infinity */
+    if (argc == 2) {
         Expr* spec = e->data.function.args[1];
-        if (spec->type == EXPR_INTEGER) {
-            *max_len = (int)spec->data.integer;
-        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol.name == SYM_List) {
-            if (spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
-                *min_len = (int)spec->data.function.args[0]->data.integer;
-                *max_len = *min_len;
-            } else if (spec->data.function.arg_count == 2) {
-                if (spec->data.function.args[0]->type == EXPR_INTEGER) {
-                    *min_len = (int)spec->data.function.args[0]->data.integer;
-                }
-                if (spec->data.function.args[1]->type == EXPR_INTEGER) {
-                    *max_len = (int)spec->data.function.args[1]->data.integer;
-                } else if (spec->data.function.args[1]->type == EXPR_SYMBOL && spec->data.function.args[1]->data.symbol.name == SYM_Infinity) {
-                    *max_len = -1;
-                }
+        if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+            && spec->data.function.head->data.symbol.name == SYM_List) {
+            size_t sc = spec->data.function.arg_count;
+            if (sc == 1) {
+                if (!repeat_bound(spec->data.function.args[0], false, &lo)) goto bad_range;
+                if (lo == -1) return false;   /* exactly 10^30 args: valid, unsatisfiable */
+                hi = lo;
+            } else if (sc == 2) {
+                if (!repeat_bound(spec->data.function.args[0], false, &lo)) goto bad_range;
+                if (lo == -1) return false;   /* likewise at least 10^30 */
+                if (!repeat_bound(spec->data.function.args[1], true, &hi)) goto bad_range;
+            } else {
+                goto bad_range;
             }
+        } else if (!repeat_bound(spec, true, &hi)) {
+            goto bad_range;
+        }
+        if (hi != -1 && lo > hi) {
+            if (warn) repeat_spec_message(e, true);
+            return false;
         }
     }
+    *rep_pat = e->data.function.args[0];
+    *min_len = lo;
+    *max_len = hi;
     return true;
+
+bad_range:
+    if (warn) repeat_spec_message(e, false);
+    return false;
+}
+
+static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
+    return is_repeated_ex(e, rep_pat, min_len, max_len, false);
 }
 
 /* True when pattern element `p` matches a *variable* number of subject
@@ -420,6 +480,10 @@ typedef struct ParentMatch {
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent);
+static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
+                            int min_reps, int max_reps,
+                            MatchEnv* env, Expr* pat_head);
+static bool rep_unit_split(Expr* rep_pat, Expr** slot, Expr*** unit, size_t* m);
 
 /* C-stack-overflow guard for the mutually-recursive matcher.  match_internal
  * is the per-expression-level entry (the descent that overflows on deeply
@@ -894,11 +958,22 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
     {
         Expr* rep_pat = NULL;
         int rmin = 0, rmax = -1;
+        /* No warning here: a malformed spec inside a pattern list is
+         * reported once at the sequence site, which then falls back to
+         * matching it as a single element -- and so lands here again. */
         if (is_repeated(pattern, &rep_pat, &rmin, &rmax)) {
-            if (rmin <= 1 && (rmax == -1 || rmax >= 1)) {
-                size_t saved = env->count;
+            size_t saved = env->count;
+            Expr* slot = NULL; Expr** unit = NULL; size_t um = 0;
+            if (rep_unit_split(rep_pat, &slot, &unit, &um)) {
+                /* A variable-width body ((PatternSequence[...])..): the lone
+                 * subject is a one-argument sequence for the units to cover. */
+                if (rep_units_match(&expr, 1, unit, um, rmin, rmax, env, NULL)) {
+                    if (call_parent(env, parent)) return true;
+                }
+                env_rollback(env, saved);
+            } else if (rmin <= 1 && (rmax == -1 || rmax >= 1)) {
                 if (match_internal(expr, rep_pat, env, NULL)) {
-                    return call_parent(env, parent);
+                    if (call_parent(env, parent)) return true;
                 }
                 env_rollback(env, saved);
             }
@@ -1038,6 +1113,218 @@ bool match(Expr* expr, Expr* pattern, MatchEnv* env) {
     return match_internal(expr, pattern, env, &top_level_sentinel);
 }
 
+/* True when pattern `p` always consumes exactly ONE argument of a sequence:
+ * a blank, a literal, or a structural pattern, possibly named, tested,
+ * conditioned or alternated. Sequence blanks, repeats, Optional (which may
+ * consume zero), Longest/Shortest and (Orderless)PatternSequence have a
+ * variable width and return false. Used to give a Repeated[PatternSequence]
+ * unit a fixed width so it can be matched chunk by chunk. */
+static bool pat_is_single_elem(Expr* p) {
+    while (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = p->data.function.head->data.symbol.name;
+        size_t ac = p->data.function.arg_count;
+        if (h == SYM_BlankSequence || h == SYM_BlankNullSequence
+            || h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Optional
+            || h == SYM_Longest || h == SYM_Shortest
+            || h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence)
+            return false;
+        if (h == SYM_Pattern && ac == 2) { p = p->data.function.args[1]; continue; }
+        if ((h == SYM_Condition || h == SYM_PatternTest) && ac == 2) {
+            p = p->data.function.args[0]; continue;
+        }
+        if (h == SYM_HoldPattern && ac == 1) { p = p->data.function.args[0]; continue; }
+        if (h == SYM_Alternatives) {
+            for (size_t i = 0; i < ac; i++)
+                if (!pat_is_single_elem(p->data.function.args[i])) return false;
+            return true;
+        }
+        return true;
+    }
+    return true;
+}
+
+/* Static bounds on how many arguments pattern `p` can consume in a sequence:
+ * [*lo, *hi], *hi == SIZE_MAX when unbounded. Conservative -- the true widths
+ * always lie inside -- so it only prunes spans that could never match. Lets
+ * rep_units_match try just the feasible unit widths instead of every span. */
+static void pat_width(Expr* p, size_t* lo, size_t* hi) {
+    *lo = 1; *hi = 1;
+    if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL) return;
+    const char* h = p->data.function.head->data.symbol.name;
+    size_t ac = p->data.function.arg_count;
+    if (h == SYM_Pattern && ac == 2) { pat_width(p->data.function.args[1], lo, hi); return; }
+    if ((h == SYM_Condition || h == SYM_PatternTest) && ac == 2) {
+        pat_width(p->data.function.args[0], lo, hi); return;
+    }
+    if ((h == SYM_HoldPattern || h == SYM_Longest || h == SYM_Shortest) && ac >= 1) {
+        pat_width(p->data.function.args[0], lo, hi); return;
+    }
+    if (h == SYM_Optional && ac >= 1) {
+        pat_width(p->data.function.args[0], lo, hi); *lo = 0; return;
+    }
+    if (h == SYM_BlankSequence) { *lo = 1; *hi = SIZE_MAX; return; }
+    if (h == SYM_BlankNullSequence) { *lo = 0; *hi = SIZE_MAX; return; }
+    if (h == SYM_Repeated || h == SYM_RepeatedNull) {
+        Expr* rp = NULL; int rmin = 0, rmax = -1;
+        if (!is_repeated(p, &rp, &rmin, &rmax)) return;
+        size_t ilo, ihi;
+        pat_width(rp, &ilo, &ihi);
+        *lo = ilo * (size_t)rmin;
+        *hi = (rmax == -1 || ihi == SIZE_MAX) ? SIZE_MAX
+              : (ihi > SIZE_MAX / ((size_t)rmax + 1) ? SIZE_MAX : ihi * (size_t)rmax);
+        if (rmax != -1 && rmax == 0) *hi = 0;
+        return;
+    }
+    if (h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence) {
+        size_t tlo = 0, thi = 0;
+        for (size_t i = 0; i < ac; i++) {
+            size_t a, b;
+            pat_width(p->data.function.args[i], &a, &b);
+            tlo += a;
+            thi = (thi == SIZE_MAX || b == SIZE_MAX) ? SIZE_MAX : thi + b;
+        }
+        *lo = tlo; *hi = thi;
+        return;
+    }
+    if (h == SYM_Alternatives && ac > 0) {
+        size_t tlo = SIZE_MAX, thi = 0;
+        for (size_t i = 0; i < ac; i++) {
+            size_t a, b;
+            pat_width(p->data.function.args[i], &a, &b);
+            if (a < tlo) tlo = a;
+            if (b > thi) thi = b;
+        }
+        *lo = tlo; *hi = thi;
+        return;
+    }
+}
+
+/* Does xs[0..n) split into r consecutive units, min_reps <= r <= max_reps
+ * (max_reps -1 = unbounded), each unit matching the pattern sequence
+ * unit[0..m)? This is the sequence semantics of a Repeated whose body can
+ * span a variable number of arguments: {a,b,a,b} matches
+ * {PatternSequence[a,b]..} (unit = a, b), {c,a,b} matches
+ * {(PatternSequence[a,b] | c)..} and {1,2,1,2} matches {x__..} with x bound
+ * to Sequence[1,2] (unit = the one body pattern). Bindings made by the units
+ * accumulate in `env`, so a named sub-pattern must bind the same value in
+ * every repetition, exactly as for single-argument repeats; on failure
+ * everything this call bound is rolled back.
+ *
+ * When the unit is a PatternSequence of single-argument patterns (the common
+ * PatternSequence[a, b] / PatternSequence[x_, _Integer]) its width is fixed
+ * and the split is unique, so the units are checked in one linear pass.
+ * Otherwise the split is searched depth-first over the width of each unit,
+ * with an explicit stack (no recursion, so a long subject cannot exhaust the
+ * C stack); each unit takes its first inner match at a given width. */
+static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
+                            int min_reps, int max_reps,
+                            MatchEnv* env, Expr* pat_head) {
+    size_t saved = env->count;
+    if (n == 0) {
+        /* Zero units suffice when the bounds allow it; otherwise min_reps
+         * units must each match nothing -- one empty match stands for all of
+         * them, since repeating it binds nothing new. */
+        if (min_reps == 0) return true;
+        if (max_reps == 0) return false;
+        if (match_args_internal(xs, 0, unit, m, env, NULL, pat_head, m, NULL)) return true;
+        env_rollback(env, saved);
+        return false;
+    }
+
+    bool fixed = (m > 0);
+    for (size_t i = 0; i < m && fixed; i++) fixed = pat_is_single_elem(unit[i]);
+    if (fixed) {
+        if (n % m != 0) return false;
+        size_t reps = n / m;
+        if (reps < (size_t)min_reps) return false;
+        if (max_reps != -1 && reps > (size_t)max_reps) return false;
+        for (size_t off = 0; off < n; off += m) {
+            if (!match_args_internal(xs + off, m, unit, m, env, NULL, pat_head, m, NULL)) {
+                env_rollback(env, saved);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* Depth-first search over unit widths. Frame d records where unit d
+     * started, the width it took, and the env mark to roll back to when that
+     * width is abandoned. A unit always consumes at least one argument here
+     * (n > 0; a zero-width unit would repeat forever without progress), and
+     * only widths inside the unit's static bounds are tried, which keeps a
+     * bounded unit such as (PatternSequence[a, b] | c) linear in n. */
+    size_t wlo = 0, whi = 0;
+    for (size_t i = 0; i < m; i++) {
+        size_t a, b;
+        pat_width(unit[i], &a, &b);
+        wlo += a;
+        whi = (whi == SIZE_MAX || b == SIZE_MAX) ? SIZE_MAX : whi + b;
+    }
+    if (wlo < 1) wlo = 1;
+    if (whi == 0) return false;   /* only zero-width units, and n > 0 */
+    size_t cap = 16, depth = 0;
+    size_t* f_off = malloc(cap * sizeof(size_t));
+    size_t* f_w = malloc(cap * sizeof(size_t));
+    size_t* f_env = malloc(cap * sizeof(size_t));
+    size_t off = 0, next_w = wlo;
+    bool ok = false;
+    for (;;) {
+        if (off == n) {
+            if (depth >= (size_t)min_reps) { ok = true; break; }
+        } else if (max_reps == -1 || depth < (size_t)max_reps) {
+            bool pushed = false;
+            size_t wmax = (whi < n - off) ? whi : n - off;
+            for (size_t w = next_w; w <= wmax; w++) {
+                size_t mark = env->count;
+                if (match_args_internal(xs + off, w, unit, m, env, NULL, pat_head, m, NULL)) {
+                    if (depth == cap) {
+                        cap *= 2;
+                        f_off = realloc(f_off, cap * sizeof(size_t));
+                        f_w = realloc(f_w, cap * sizeof(size_t));
+                        f_env = realloc(f_env, cap * sizeof(size_t));
+                    }
+                    f_off[depth] = off; f_w[depth] = w; f_env[depth] = mark;
+                    depth++;
+                    off += w;
+                    next_w = wlo;
+                    pushed = true;
+                    break;
+                }
+                env_rollback(env, mark);
+            }
+            if (pushed) continue;
+        }
+        /* Dead end: abandon the last unit's width and try the next one. */
+        if (depth == 0) break;
+        depth--;
+        env_rollback(env, f_env[depth]);
+        off = f_off[depth];
+        next_w = f_w[depth] + 1;
+    }
+    free(f_off); free(f_w); free(f_env);
+    if (!ok) env_rollback(env, saved);
+    return ok;
+}
+
+/* Split the body of a repeat into the unit pattern sequence rep_units_match
+ * walks: the arguments of a PatternSequence, otherwise the body itself as a
+ * one-pattern sequence (*slot holds it, so `unit` may point at it). Returns
+ * false for a body that always consumes exactly one argument -- the caller's
+ * per-argument loop handles that case faster. */
+static bool rep_unit_split(Expr* rep_pat, Expr** slot, Expr*** unit, size_t* m) {
+    if (pat_is_single_elem(rep_pat)) return false;
+    if (rep_pat->type == EXPR_FUNCTION && rep_pat->data.function.head->type == EXPR_SYMBOL
+        && rep_pat->data.function.head->data.symbol.name == SYM_PatternSequence) {
+        *unit = rep_pat->data.function.args;
+        *m = rep_pat->data.function.arg_count;
+    } else {
+        *slot = rep_pat;
+        *unit = slot;
+        *m = 1;
+    }
+    return true;
+}
+
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
     
     if (n_pats == 0) {
@@ -1064,6 +1351,31 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         for (size_t i = 1; i < n_pats; i++) newpats[m + i - 1] = pats[i];
         bool r = match_args_internal(exprs, n_exprs, newpats, new_n, env, condition,
                                      pat_head, total_pats + m - 1, parent);
+        free(newpats);
+        return r;
+    }
+
+    /* Sequence alternatives: an unnamed Alternatives element with a branch
+     * that can span other than exactly one argument (PatternSequence[a, b] | c,
+     * __ | x_) is not a single-argument test -- each branch is spliced into
+     * the pattern list in turn, like PatternSequence above, so the branch takes
+     * as many arguments as it needs and the rest of the list continues after
+     * it. {a, b, d} matches {PatternSequence[a, b] | c, d}. Plain alternatives
+     * (a | b | _h) keep the cheaper single-argument path in match_internal. */
+    if (pats[0]->type == EXPR_FUNCTION && pats[0]->data.function.head->type == EXPR_SYMBOL
+        && pats[0]->data.function.head->data.symbol.name == SYM_Alternatives
+        && !pat_is_single_elem(pats[0])) {
+        Expr* alts = pats[0];
+        Expr** newpats = malloc(sizeof(Expr*) * n_pats);
+        for (size_t i = 1; i < n_pats; i++) newpats[i] = pats[i];
+        size_t saved = env->count;
+        bool r = false;
+        for (size_t a = 0; a < alts->data.function.arg_count && !r; a++) {
+            newpats[0] = alts->data.function.args[a];
+            r = match_args_internal(exprs, n_exprs, newpats, n_pats, env, condition,
+                                    pat_head, total_pats, parent);
+            if (!r) env_rollback(env, saved);
+        }
         free(newpats);
         return r;
     }
@@ -1260,11 +1572,20 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
      * backtrack the internal split against the outer remainder, which only
      * matters for PatternSequence bodies that themselves contain sequence
      * blanks. */
+    /* The same applies to a named sequence alternative, x:(PatternSequence[a,
+     * b] | c): the body is matched as a one-pattern sequence (the unnamed
+     * splice above then picks the branch) and x binds what it consumed. */
+    Expr* named_alt_slot = opt_pat;
+    bool named_seq_alt = opt_pat->type == EXPR_FUNCTION
+        && opt_pat->data.function.head->type == EXPR_SYMBOL
+        && opt_pat->data.function.head->data.symbol.name == SYM_Alternatives
+        && !pat_is_single_elem(opt_pat);
     if (bind_sym && bind_sym->type == EXPR_SYMBOL
         && opt_pat->type == EXPR_FUNCTION && opt_pat->data.function.head->type == EXPR_SYMBOL
-        && opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence) {
-        Expr** qs = opt_pat->data.function.args;
-        size_t m = opt_pat->data.function.arg_count;
+        && (opt_pat->data.function.head->data.symbol.name == SYM_PatternSequence
+            || named_seq_alt)) {
+        Expr** qs = named_seq_alt ? &named_alt_slot : opt_pat->data.function.args;
+        size_t m = named_seq_alt ? 1 : opt_pat->data.function.arg_count;
         for (size_t k = 0; k <= n_exprs; k++) {
             size_t saved = env->count;
             /* Full boolean sub-match of exprs[0..k) against q1..qm (parent NULL
@@ -1406,10 +1727,10 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     bool is_rep = false;
     if (!p_sym && is_pattern(opt_pat, &p_sym, &inner_p)) {
         is_seq = is_sequence_blank(inner_p, &b_head, &min_len);
-        if (!is_seq) is_rep = is_repeated(inner_p, &rep_pat, &min_len, &max_len);
+        if (!is_seq) is_rep = is_repeated_ex(inner_p, &rep_pat, &min_len, &max_len, true);
     } else {
         is_seq = is_sequence_blank(inner_p, &b_head, &min_len);
-        if (!is_seq) is_rep = is_repeated(inner_p, &rep_pat, &min_len, &max_len);
+        if (!is_seq) is_rep = is_repeated_ex(inner_p, &rep_pat, &min_len, &max_len, true);
     }
 
 
@@ -1437,6 +1758,15 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             if ((size_t)min_len <= n_exprs) { min_k = max_k = n_exprs; }
             else { min_k = 1; max_k = 0; }   /* not enough args for this blank */
         }
+    } else if (is_rep && !pat_is_single_elem(rep_pat)) {
+        /* A variable-width body (PatternSequence[...].., (p | PatternSequence[
+         * ...]).., x__..): the repeat bounds count UNITS, not arguments, and a
+         * unit's width is only known while matching, so offer every span and
+         * let rep_units_match decide. The last pattern element must consume
+         * everything that is left. */
+        min_k = 0;
+        max_k = n_exprs;
+        if (n_pats == 1) min_k = n_exprs;
     } else if (is_rep) {
         min_k = min_len;
         max_k = (max_len == -1 || max_len > (int)n_exprs) ? n_exprs : (size_t)max_len;
@@ -1605,8 +1935,14 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                         }
                     }
                 } else if (is_rep) {
-                    for (size_t i = 0; i < k; i++) {
-                        if (!match_internal(subset[i], rep_pat, env, NULL)) { type_ok = false; break; }
+                    Expr* slot = NULL; Expr** unit = NULL; size_t um = 0;
+                    if (rep_unit_split(rep_pat, &slot, &unit, &um)) {
+                        type_ok = rep_units_match(subset, k, unit, um, min_len, max_len,
+                                                  env, is_orderless ? NULL : pat_head);
+                    } else {
+                        for (size_t i = 0; i < k; i++) {
+                            if (!match_internal(subset[i], rep_pat, env, NULL)) { type_ok = false; break; }
+                        }
                     }
                 }
 

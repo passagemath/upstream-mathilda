@@ -34,7 +34,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `!` (prefix) | `Not` | 3000 | Right |
 | `&&`     | `And` | 2800 | Left |
 | `\|\|`   | `Or` | 2700 | Left |
-| `..`, `...` | `Repeated`, `RepeatedNull` | 2500 | None |
+| `..`, `...` | `Repeated`, `RepeatedNull` (postfix; a single token that wins over a decimal point, so `0..` is `Repeated[0]`) | 2500 | None |
 | `\|`     | `Alternatives` | 2300 | Left |
 | `~~`     | `StringExpression` | 2100 | Left |
 | `:`      | `Optional` | 1900 | Right |

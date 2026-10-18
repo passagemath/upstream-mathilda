@@ -1152,6 +1152,9 @@ target_include_directories(match_tests PRIVATE ../src)
 add_executable(match_extensive_tests test_match_extensive.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(match_extensive_tests PRIVATE ../src)
 
+add_executable(repeated_tests test_repeated.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(repeated_tests PRIVATE ../src)
+
 add_executable(symtab_tests test_symtab.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(symtab_tests PRIVATE ../src)
 
@@ -3824,6 +3827,7 @@ if(USE_ECM)
     add_dependencies(eval_tests build_ecm)
     add_dependencies(match_tests build_ecm)
     add_dependencies(match_extensive_tests build_ecm)
+    add_dependencies(repeated_tests build_ecm)
     add_dependencies(symtab_tests build_ecm)
     add_dependencies(regression_tests build_ecm)
     add_dependencies(comparisons_tests build_ecm)

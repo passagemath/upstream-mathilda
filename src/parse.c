@@ -295,6 +295,10 @@ static int parse_precision_suffix(ParserState* s, double* out_digits, bool* has_
     if (looks_like_number) {
         char* end;
         double v = strtod(s->pos, &end);
+        /* strtod would swallow the first dot of a following `..`/`...`
+         * (`2.5`10..` is Repeated[2.5`10]); give it back, as parse_number
+         * does for the mantissa. */
+        if (end > s->pos && end[-1] == '.' && *end == '.') end--;
         if (end != s->pos) {
             s->pos = end;
             *out_digits = v;
@@ -452,7 +456,11 @@ static Expr* parse_number(ParserState* s) {
     const char* p = s->pos;
     if (*p == '-' || *p == '+') p++;
     while (isdigit(*p)) p++;
-    if (*p == '.' || *p == 'e' || *p == 'E') {
+    /* `..` / `...` are single tokens (Repeated / RepeatedNull) and win by
+     * longest munch, as in the Wolfram Language: `0..` is Repeated[0] and
+     * `0...` is RepeatedNull[0], so a '.' that is itself followed by '.' is
+     * never the literal's decimal point (issue #100). */
+    if ((*p == '.' && p[1] != '.') || *p == 'e' || *p == 'E') {
         is_real = 1;
     }
 
@@ -480,7 +488,7 @@ static Expr* parse_number(ParserState* s) {
         while (isdigit((unsigned char)*lp)) { lp++; int_digits++; }
         bool has_dot = false;
         int frac_digits = 0;
-        if (*lp == '.') {
+        if (*lp == '.' && lp[1] != '.') {   /* `1..` / `1...`: see above */
             has_dot = true;
             lp++;
             while (isdigit((unsigned char)*lp)) { lp++; frac_digits++; }
@@ -627,7 +635,7 @@ static Expr* parse_number(ParserState* s) {
              * optional exponent. This mirrors the pre-suffix scan above. */
             if (*mantissa_end == '+' || *mantissa_end == '-') mantissa_end++;
             while (isdigit((unsigned char)*mantissa_end)) mantissa_end++;
-            if (*mantissa_end == '.') {
+            if (*mantissa_end == '.' && mantissa_end[1] != '.') {
                 mantissa_end++;
                 while (isdigit((unsigned char)*mantissa_end)) mantissa_end++;
             }
@@ -1400,7 +1408,15 @@ static Expr* parse_primary(ParserState* s) {
                         head = blank;
                     }
                     
-                    if (*s->pos == '.') {
+                    /* `x_.` is Optional. As in the Wolfram Language the
+                     * `_.` token is only formed by a BARE single blank, so
+                     * `_...` is (_.).. and `_..` is a syntax error; after a
+                     * head or a sequence blank the dots are the `..` / `...`
+                     * operator: `_Integer..` is Repeated[_Integer], `x__..`
+                     * is Repeated[x__].  (A lone `_h.` / `x__.` is still read
+                     * as Optional, which WL rejects -- kept for leniency.) */
+                    bool bare_single = (underscores == 1 && !blank_head);
+                    if (*s->pos == '.' && (bare_single || s->pos[1] != '.')) {
                         s->pos++;
                         Expr* opt_args[1] = { head };
                         head = expr_new_function(expr_new_symbol(SYM_Optional), opt_args, 1);
@@ -1429,7 +1445,8 @@ static bool can_start_primary(char c) {
  * '.'fraction, optional 'e[+-]?digits' exponent. */
 static bool number_followed_by_power(const char* p) {
     while (isdigit((unsigned char)*p)) p++;
-    if (*p == '.') { p++; while (isdigit((unsigned char)*p)) p++; }
+    /* A '.' starting `..`/`...` is not a decimal point (see parse_number). */
+    if (*p == '.' && p[1] != '.') { p++; while (isdigit((unsigned char)*p)) p++; }
     if (*p == 'e' || *p == 'E') {
         const char* save = p;
         p++;

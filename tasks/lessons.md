@@ -1,5 +1,20 @@
 # Lessons learned
 
+## Parser change => parser tests only; and soft-assert FAILs are silent (2026-10-19, issue #100)
+
+- Correction: I launched the full 555-binary suite (and a HEAD worktree for A/B
+  triage) for a lexer + matcher fix. The user: "We should only need to run the
+  parser tests for a parser change!" Run `parse_tests`, `parser_precision_tests`, the
+  directly touched suites (match/patterns/replace/print when those files changed) and
+  the new tests -- nothing more unless asked.
+- Settle WL semantics with the local `wolframscript` before writing code or test
+  expectations. It overturned two confident assumptions here (`_..` is a WL syntax
+  error, `_...` is `(_.)..`; `x:p..` before `y___` is shortest-first).
+- The unit tests' `assert` is soft (NDEBUG): a suite prints `FAIL:` and still exits 0
+  and prints "All ... passed". Grep logs for `FAIL`, never trust rc or the summary.
+  Eight such stale/wrong expectations had accumulated unnoticed (v0.464 Series
+  layout, v0.465 InputForm digits, BitLength[-4], a Compile "overflow" that fit).
+
 ## ParallelMixedTower nested-radical antiderivatives were branch-split (correct only on x>0) (2026-09-25)
 
 `Integrate[Sqrt[x + Sqrt[x]], x, Method -> "ParallelMixedTower"]` returned

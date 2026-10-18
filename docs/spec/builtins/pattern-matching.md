@@ -38,7 +38,7 @@
 - `Longest[p]` / `Shortest[p]`: prefer the longest / shortest match for a
   sequence pattern `p`; transparent at a non-sequence position.
 - A sequence pattern used at the **top level** matches the single subject as a
-  length-1 sequence: `MatchQ[a, a..]`, `MatchQ[a, _..]` and `MatchQ[a, a...]`
+  length-1 sequence: `MatchQ[a, a..]`, `MatchQ[a, (_)..]` and `MatchQ[a, a...]`
   are all `True` (as are `__`/`___` there). A `List` is one expression, so it
   is not decomposed against a bare top-level sequence pattern —
   `MatchQ[{a, b}, (a | b)..]` is `False` (use `{(a | b)..}`). Nested repeats
@@ -126,7 +126,11 @@ Gives the number of elements or subexpressions that match a pattern.
 - `x_.`: `Optional[Pattern[x, _]]`, matches `x_`, but if omitted defaults to globally specified `Default` values.
 - `p..`: `Repeated[p]`, matches a sequence of one or more expressions, each matching `p`.
 - `p...`: `RepeatedNull[p]`, matches a sequence of zero or more expressions, each matching `p`.
-- `Repeated[p, max]`, `Repeated[p, {min, max}]`, `Repeated[p, {n}]`: match sequences of length bounded by `max` or `{min, max}`. Equivalent properties exist for `RepeatedNull`.
+- `Repeated[p, max]`, `Repeated[p, {min, max}]`, `Repeated[p, {n}]`: match sequences of length bounded by `max` or `{min, max}` (`max` may be `Infinity`). Equivalent properties exist for `RepeatedNull`. The bounds count *repetitions*, so they are argument counts only when `p` matches one argument at a time. A malformed spec (negative or non-integer count, `{min, max}` with `min > max`, `Repeated[p, 0]`) issues `Repeated::range` or `Repeated::order` and matches nothing. A bound too large for any argument list (`10^30`) acts as unbounded. `Repeated` and `RepeatedNull` are `Protected`.
+- **Tokenization.** `..` and `...` are single tokens that take precedence over a decimal point: `0..` is `Repeated[0]`, `0...` is `RepeatedNull[0]`, and `1.5..` is `Repeated[1.5]`. After a headed or sequence blank the dots are the repeat operator (`_Integer..`, `x__..`). After a bare single blank `_.` is formed first, as in WL, so `_...` is `(_.)..` and `_..` is a syntax error; write `(_)..` (that is also how it prints).
+- **Unnamed sub-patterns** inside a repeat must bind the same value in every repetition: `{1, 1}` matches `{(x_ /; x > 0)..}`, `{1, 2}` does not. An unconstrained `x:p..` followed by more patterns takes the *shortest* run (`{1, 1, 2} /. {x:1.., y___} :> {{x}, {y}}` is `{{1}, {1, 2}}`); wrap it in `Longest` for the longest run.
+- **Multi-argument units.** The repeated pattern may span several arguments: `{a, b, a, b}` matches `{PatternSequence[a, b]..}`, `{c, a, b}` matches `{(PatternSequence[a, b] | c)..}`, and `{1, 2, 1, 2} /. {x__..} :> {x}` is `{1, 2}`. A unit of fixed width is checked in one linear pass. A variable-width unit is searched over its feasible widths without recursion, so a 40 000-argument subject stays linear even when the match fails.
+- **Sequence alternatives.** An `Alternatives` whose branches span other than one argument matches as a sequence, named or not: `{a, b, d}` matches `{PatternSequence[a, b] | c, d}`, and `{a, b, d} /. {x:(PatternSequence[a, b] | c), y___} :> {{x}, {y}}` is `{{a, b}, {d}}`.
 
 ## Default Values
 - `Default[f] = val`: Sets the default value for arguments of `f`.

@@ -747,6 +747,131 @@ void test_parse_empty_slots_are_null() {
     }
 }
 
+/* The input must be rejected as a syntax error (parse_expression -> NULL). */
+static void assert_parse_fails(const char* input) {
+    Expr* p = parse_expression(input);
+    if (p) {
+        char* s = expr_to_string_fullform(p);
+        printf("FAIL: expected a syntax error for %s, parsed as %s\n", input, s);
+        free(s);
+        expr_free(p);
+        assert(0);
+    }
+}
+
+/* `..` / `...` (Repeated / RepeatedNull) tokenization -- issue #100.
+ *
+ * `..` is a single token that wins over a decimal point by longest munch, so
+ * `0..` is Repeated[0], not the real `0.` followed by a stray `.`.  Every
+ * expected form here was taken from Mathematica 14 (ToExpression[s,
+ * InputForm, Hold] // FullForm), including the syntax errors: WL forms the
+ * Optional token `_.` only from a BARE single blank, so `_...` is (_.).. and
+ * `_..` does not parse, while a headed or sequence blank takes the dots as
+ * the repeat operator. */
+void test_parse_repeated_tokens() {
+    /* Integers: the issue itself. */
+    assert_parse_eq("0..",          "Repeated[0]");
+    assert_parse_eq("0...",         "RepeatedNull[0]");
+    assert_parse_eq("-0..",         "Repeated[0]");
+    assert_parse_eq("-1..",         "Repeated[-1]");
+    assert_parse_eq("12..",         "Repeated[12]");
+    assert_parse_eq("123456789012345678901234567890..",
+                    "Repeated[123456789012345678901234567890]");
+    assert_parse_eq("0.....",       "Repeated[RepeatedNull[0]]");
+    assert_parse_eq("1*^2..",       "Repeated[100]");
+    /* Reals keep their decimal point; only a dot followed by a dot is the
+     * operator. */
+    assert_parse_eq("1.5..",        "Repeated[1.5]");
+    assert_parse_eq("1.5...",       "RepeatedNull[1.5]");
+    assert_parse_eq("1. ..",        "Repeated[1.0]");
+    assert_parse_eq(".1..",         "Repeated[0.1]");
+    assert_parse_eq("1.2",          "1.2");
+    assert_parse_eq("1. 2",         "Times[1.0, 2]");
+    /* Precision suffix: strtod must not swallow the first dot of `..`. */
+    {
+        Expr* p = parse_expression("2.5`10..");
+        assert(p && p->type == EXPR_FUNCTION);
+        char* h = expr_to_string(p->data.function.head);
+        assert(strcmp(h, "Repeated") == 0);
+        free(h);
+        expr_free(p);
+    }
+    /* A repeated number inside larger expressions. */
+    assert_parse_eq("{0..}",        "List[Repeated[0]]");
+    assert_parse_eq("f[0.., 1...]", "f[Repeated[0], RepeatedNull[1]]");
+    assert_parse_eq("0..|1",        "Alternatives[Repeated[0], 1]");
+    assert_parse_eq("x:0..",        "Pattern[x, Repeated[0]]");
+    assert_parse_eq("0..->a",       "Rule[Repeated[0], a]");
+    assert_parse_eq("0.. :> 1",     "RuleDelayed[Repeated[0], 1]");
+    assert_parse_eq("x_:0..",       "Optional[Pattern[x, Blank[]], Repeated[0]]");
+    assert_parse_eq("1..2",         "Times[Repeated[1], 2]");
+    assert_parse_eq("1...2",        "Times[RepeatedNull[1], 2]");
+    assert_parse_eq("1..^2",        "Power[Repeated[1], 2]");
+    assert_parse_eq("-3^2",         "Times[-1, Power[3, 2]]");
+    assert_parse_eq("{0,0} /. {0..} -> z",
+                    "ReplaceAll[List[0, 0], Rule[List[Repeated[0]], z]]");
+    /* Bare single blanks: `_.` is Optional and binds first. */
+    assert_parse_eq("_.",           "Optional[Blank[]]");
+    assert_parse_eq("x_.",          "Optional[Pattern[x, Blank[]]]");
+    assert_parse_eq("_...",         "Repeated[Optional[Blank[]]]");
+    assert_parse_eq("x_...",        "Repeated[Optional[Pattern[x, Blank[]]]]");
+    assert_parse_eq("_....",        "RepeatedNull[Optional[Blank[]]]");
+    assert_parse_eq("x_. ..",       "Repeated[Optional[Pattern[x, Blank[]]]]");
+    assert_parse_eq("_. ..",        "Repeated[Optional[Blank[]]]");
+    /* Headed and sequence blanks: the dots are the repeat operator. */
+    assert_parse_eq("_Integer..",   "Repeated[Blank[Integer]]");
+    assert_parse_eq("_Integer...",  "RepeatedNull[Blank[Integer]]");
+    assert_parse_eq("x_Integer..",  "Repeated[Pattern[x, Blank[Integer]]]");
+    assert_parse_eq("x_Integer...", "RepeatedNull[Pattern[x, Blank[Integer]]]");
+    assert_parse_eq("_h..",         "Repeated[Blank[h]]");
+    assert_parse_eq("__..",         "Repeated[BlankSequence[]]");
+    assert_parse_eq("___...",       "RepeatedNull[BlankNullSequence[]]");
+    assert_parse_eq("x__..",        "Repeated[Pattern[x, BlankSequence[]]]");
+    assert_parse_eq("x___..",       "Repeated[Pattern[x, BlankNullSequence[]]]");
+    assert_parse_eq("x__h..",       "Repeated[Pattern[x, BlankSequence[h]]]");
+    assert_parse_eq("__h...",       "RepeatedNull[BlankSequence[h]]");
+    assert_parse_eq("{_Integer..}", "List[Repeated[Blank[Integer]]]");
+    assert_parse_eq("f[x_Real.., y___]",
+                    "f[Repeated[Pattern[x, Blank[Real]]], Pattern[y, BlankNullSequence[]]]");
+    /* Other operands, and Dot left intact. */
+    assert_parse_eq("a..",          "Repeated[a]");
+    assert_parse_eq("a...",         "RepeatedNull[a]");
+    assert_parse_eq("(a|b)..",      "Repeated[Alternatives[a, b]]");
+    assert_parse_eq("{a,b}..",      "Repeated[List[a, b]]");
+    assert_parse_eq("\"a\"..",      "Repeated[\"a\"]");
+    assert_parse_eq("#..",          "Repeated[Slot[1]]");
+    assert_parse_eq("a . b",        "Dot[a, b]");
+    assert_parse_eq("a.b.c",        "Dot[Dot[a, b], c]");
+    /* Syntax errors in WL too. */
+    assert_parse_fails("_..");
+    assert_parse_fails("x_..");
+    assert_parse_fails("0....");
+    assert_parse_fails("a....");
+}
+
+/* Printed repeat patterns must read back as the same expression. */
+void test_repeated_print_roundtrip() {
+    const char* cases[] = {
+        "Repeated[0]", "RepeatedNull[0]", "Repeated[1.]", "RepeatedNull[2.5]",
+        "Repeated[-1]", "Repeated[_]", "RepeatedNull[_Integer]",
+        "Repeated[Optional[x_]]", "Repeated[x__]", "Repeated[a | b]",
+        "Repeated[PatternSequence[a, b]]", "Repeated[RepeatedNull[0]]", NULL
+    };
+    for (int i = 0; cases[i]; i++) {
+        Expr* e = parse_expression(cases[i]);
+        assert(e);
+        char* printed = expr_to_string(e);
+        Expr* back = parse_expression(printed);
+        if (!back || !expr_eq(e, back)) {
+            printf("FAIL: %s printed as %s, which does not read back\n", cases[i], printed);
+            assert(0);
+        }
+        free(printed);
+        expr_free(back);
+        expr_free(e);
+    }
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -772,6 +897,8 @@ int main() {
     TEST(test_parse_trailing_semicolon);
     TEST(test_parse_newline_separator);
     TEST(test_parse_dots);
+    TEST(test_parse_repeated_tokens);
+    TEST(test_repeated_print_roundtrip);
     TEST(test_parse_scaled_scientific);
     TEST(test_parentheses_break_comparison_chains);
     TEST(test_unparenthesised_chains_still_chain);

@@ -25,6 +25,9 @@
 #include "sym_names.h"
 #include "internal.h"
 #include "poly.h"    /* get_degree_poly */
+#include "root_trans.h"
+#include "message.h"
+#include "print.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -33,7 +36,24 @@
  * the time we get here, so there is nothing to compute.  Returning
  * NULL preserves the input verbatim. */
 static Expr* builtin_root(Expr* res) {
-    (void)res;
+    /* Transcendental form Root[{f, x0}]: certify that f has a unique simple
+     * root next to x0 and canonicalise x0 to the nearest machine number of
+     * that root (Mathematica refines x0 the same way); an x0 that is not at a
+     * root is Root::invrt and stays unevaluated.  The polynomial form is held
+     * verbatim. */
+    if (res->data.function.arg_count == 1) {
+        bool invalid = false;
+        Expr* canon = root_trans_canonicalize(res, &invalid);
+        if (invalid) {
+            Expr* l = res->data.function.args[0];
+            char* x0 = expr_to_string(l->data.function.args[1]);
+            char* fn = expr_to_string(l->data.function.args[0]);
+            mth_message("Root", "invrt", "%s is not equal to a root of %s.",
+                        x0 ? x0 : "?", fn ? fn : "?");
+            free(x0); free(fn);
+        }
+        return canon;
+    }
     return NULL;
 }
 
@@ -450,7 +470,13 @@ void root_init(void) {
         "\tcomplex roots ordered by Re ascending, |Im| ascending, with the\n"
         "\tnegative-Im member of each conjugate pair first. N[Root[..]]\n"
         "\tand N[Root[..], prec] return a numerical approximation via a\n"
-        "\tcompanion-matrix + Sturm + Newton pipeline.");
+        "\tcompanion-matrix + Sturm + Newton pipeline.\n"
+        "Root[{f, x0}]\n"
+        "\tRepresents the real root of the (transcendental) function f, a pure\n"
+        "\tfunction of #1, lying at the approximation x0, e.g.\n"
+        "\tRoot[{-2 Sin[#1] + #1 &, 1.89549}].  The root is certified simple and\n"
+        "\tunique near x0 by interval Newton; N refines it to any precision.\n"
+        "\tReduce returns such objects for exp-trig-polynomial breakpoints.");
 
     symtab_add_builtin("RootSum", builtin_rootsum);
     symtab_get_def("RootSum")->attributes |= ATTR_PROTECTED | ATTR_HOLDALL;

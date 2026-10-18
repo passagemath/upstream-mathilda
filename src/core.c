@@ -52,6 +52,7 @@
 #include "lerchphi.h"
 #include "dirichlet_character.h"
 #include "dirichlet_l.h"
+#include "root_trans.h"
 #include "productlog.h"
 #include "legendre.h"
 #include "chebyshev_t.h"
@@ -2618,6 +2619,10 @@ static bool is_numeric_quantity(Expr* e) {
              * and that every coefficient is rational. */
             if (head_name == SYM_AlgebraicNumber)
                 return flint_qqbar_is_constant_algebraic(e);
+
+            /* Transcendental Root[{f, x0}] is a numeric constant (N certifies
+             * and refines it); its held Function body is not an argument. */
+            if (head_name == SYM_Root) return root_trans_is_object(e);
 
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {

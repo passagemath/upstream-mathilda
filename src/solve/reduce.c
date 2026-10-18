@@ -807,8 +807,13 @@ static Expr* reduce_impl(Expr* res) {
                     expr_free(region_stmt);
                 } else if (reduce_has_trig_ineq_conj(orig_eq, vlist[0])) {
                     /* A trig/hyperbolic INEQUALITY + bounds: sign-decompose the
-                     * bounded region into cells (reduce_trigregion.c). */
-                    trig_region_shape = true;
+                     * bounded region into cells (reduce_trigregion.c).  When it
+                     * declines (x Sin[x] < 1 && -5 < x < 5: a non-periodic
+                     * residual), the general sign diagram below may still
+                     * decide it -- it is sound here, since a residual whose
+                     * roots Solve cannot list is either root-isolated with
+                     * certified arithmetic or makes it decline, and a periodic
+                     * root family always makes it decline. */
                     out = reduce_trig_ineq_region(orig_eq, vlist[0], &opts);
                 }
             }

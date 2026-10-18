@@ -892,6 +892,7 @@ set(COMMON_SRC
     ../src/product/product_logsum.c
     ../src/root.c
     ../src/root_numeric.c
+    ../src/root_trans.c
     ../src/radicals.c
     ../src/poly/poly_eval_mpfr.c
     ../src/solve/solve.c

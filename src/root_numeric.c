@@ -31,6 +31,7 @@
 #include "message.h"       /* mth_msg_suppressed / _note_fired: honour Quiet[] */
 
 #include "poly/zupoly.h"
+#include "root_trans.h"
 #include "poly/poly_eval_mpfr.h"
 #include "poly/poly.h"       /* is_polynomial / get_degree_poly / get_all_coeffs_expanded */
 #include "expand.h"          /* expr_expand */
@@ -869,6 +870,8 @@ static Expr* solve_root_inexact(Expr* body, int64_t k,
  *  Entry point (uncached core — see the memoising wrapper below)
  * ================================================================== */
 static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec) {
+    if (root_trans_is_object(root_expr))            /* Root[{f, x0}] */
+        return root_trans_numericalize(root_expr, spec);
     Expr* body = NULL;
     int64_t k = 0;
     if (!parse_root_call(root_expr, &body, &k)) return NULL;
@@ -1015,7 +1018,8 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
     /* Only genuine Root[Function[..], k] calls are memoised; a malformed
      * argument returns NULL cheaply from the core and need not be cached. */
     Expr* body_probe = NULL; int64_t k_probe = 0;
-    if (!parse_root_call(root_expr, &body_probe, &k_probe)) return NULL;
+    if (!parse_root_call(root_expr, &body_probe, &k_probe)
+        && !root_trans_is_object(root_expr)) return NULL;
 
     uint64_t h = rnum_key_hash(root_expr, spec);
     Expr* cached = NULL; int cached_fired = 0;

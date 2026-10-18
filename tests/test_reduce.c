@@ -1712,9 +1712,10 @@ static void test_reals_parametric_families(void) {
  * these.  Unknown roots now decline (unevaluated); an imaginary-period
  * exponential family contributes its one real member. */
 static void test_reals_unknown_roots_decline(void) {
-    run_contains("Reduce[Sin[x] > x/2, x, Reals]", "Reduce[");
-    run_contains("Reduce[x + Sin[x] > 0, x, Reals]", "Reduce[");
+    /* Infinitely many roots (periodic) or no provable bound: still declines. */
     run_contains("Reduce[Sin[x] > 0, x, Reals]", "Reduce[");
+    run_contains("Reduce[x Sin[x] < 1, x, Reals]", "Reduce[");
+    run_contains("Reduce[Sqrt[x] > Cos[x], x, Reals]", "Reduce[");
     run_contains("Reduce[Cos[x] <= 0, x, Reals]", "Reduce[");
     run_test("Reduce[Exp[x] > 2, x, Reals]", "Greater[x, Log[2]]");
     /* Refine decides through Reduce: the wrong False made these True/False. */
@@ -1722,6 +1723,70 @@ static void test_reals_unknown_roots_decline(void) {
     run_test("Refine[Sin[x] > 0]", "Greater[Sin[x], 0]");
     run_test("Refine[Sin[x] > 0, 0 < x < 4]", "Greater[Sin[x], 0]");
     run_test("Refine[Cos[x] > 0, x > 0]", "Greater[Cos[x], 0]");
+}
+
+/* Certified real-root isolation for exp-trig-polynomial residuals Solve cannot
+ * root (root_trans.c).  On a provably bounded region the roots are isolated
+ * with arb interval arithmetic and emitted as exact rationals (x == 0) or as
+ * transcendental Root[{f, x0}] objects, as Mathematica does.  Reference roots
+ * from mpmath.findroot at 30 digits:
+ *   x - 2 Sin[x]: 1.89549426703398094714403573809
+ *   x - Cos[x]:   0.739085133215160641655312087674
+ *   3x - E^x:     0.619061286735945..., 1.51213455165784247389673967807
+ *   x Sin[x] - 1: 1.11415714087193..., 2.7726047082659912339535697215 */
+static void test_reals_transcendental_root_isolation(void) {
+    /* The headline case: x < -r || 0 < x < r with r the root of x - 2 Sin[x]. */
+    run_test("Reduce[Sin[x] > x/2, x, Reals]",
+             "Or[Less[x, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], -1.89549]]], "
+             "Inequality[0, Less, x, Less, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], 1.89549]]]]");
+    run_test("Reduce[Sin[x] >= x/2, x, Reals]",
+             "Or[LessEqual[x, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], -1.89549]]], "
+             "Inequality[0, LessEqual, x, LessEqual, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], 1.89549]]]]");
+    run_test("Abs[N[Reduce[Sin[x] > x/2, x, Reals][[2, 5]], 25] - 1.895494267033980947144036`25] < 10^-22",
+             "True");
+    run_test("Reduce[Cos[x] == x, x, Reals]",
+             "Equal[x, Root[List[Function[Plus[Slot[1], Times[-1, Cos[Slot[1]]]]], 0.739085]]]");
+    run_test("Abs[N[Reduce[Cos[x] == x, x, Reals][[2]], 30] - "
+             "0.739085133215160641655312087674`30] < 10^-27", "True");
+    /* Exp: right tail certified by the monotone-derivative chain. */
+    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "0.619061");
+    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "1.51213");
+    run_contains("Reduce[x^2 > Cos[x], x, Reals]", "0.824132");
+    /* Bounded by the region constraint instead of a dominance bound; the two
+     * unbounded end cells are decided without the residual (Kleene). */
+    run_contains("Reduce[x Sin[x] < 1 && -5 < x < 5, x, Reals]", "Inequality[-5, Less, x");
+    run_contains("Reduce[x Sin[x] < 1 && -5 < x < 5, x, Reals]", "2.7726");
+    /* Exact rational roots, including multiple ones (multiplicity certified
+     * by the first nonvanishing derivative). */
+    run_test("Reduce[x + Sin[x] > 0, x, Reals]", "Greater[x, 0]");
+    run_test("Reduce[Sin[x] > x, x, Reals]", "Less[x, 0]");
+    run_test("Reduce[Sin[x] == x, x, Reals]", "Equal[x, 0]");
+    run_test("Reduce[Sin[x] > x - x^3/6, x, Reals]", "Greater[x, 0]");
+    run_test("Reduce[Cos[x] >= 1 - x^2/2, x, Reals]", "True");
+    /* Truth agrees with the input at every sample point (independent check). */
+    run_test("With[{r = Reduce[Sin[x] > x/2, x, Reals]}, "
+             "And @@ Table[TrueQ[Sin[p] > p/2] === TrueQ[r /. x -> p], {p, -6.3, 6.3, 0.0137}]]",
+             "True");
+    run_test("With[{r = Reduce[Exp[x] > 3 x, x, Reals]}, "
+             "And @@ Table[TrueQ[Exp[p] > 3 p] === TrueQ[r /. x -> p], {p, -3, 4, 0.0113}]]",
+             "True");
+    run_test("With[{r = Reduce[x Sin[x] < 1 && -5 < x < 5, x, Reals]}, "
+             "And @@ Table[TrueQ[p Sin[p] < 1 && -5 < p < 5] === TrueQ[r /. x -> p], {p, -7, 7, 0.0131}]]",
+             "True");
+}
+
+/* Root[{f, x0}] objects: numeric, refinable, comparable, validated. */
+static void test_transcendental_root_object(void) {
+    run_test("NumericQ[Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}]]", "True");
+    run_test("Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}] > 1", "True");
+    run_test("Abs[N[Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}], 30] - "
+             "1.89549426703398094714403573809`30] < 10^-27", "True");
+    /* x0 is canonicalised to the nearest machine number of the root ... */
+    run_test("Root[{Cos[#1] - #1 &, 0.739085133}][[1, 2]] == 0.7390851332151607", "True");
+    /* ... and an x0 that is not at a root is Root::invrt (Check sees it). */
+    run_test("Check[Root[{Cos[#1] - #1 &, 0.7}], caught]", "caught");
+    run_test("Quiet[Root[{Cos[#1] - #1 &, 0.7}]]",
+             "Root[List[Function[Plus[Cos[Slot[1]], Times[-1, Slot[1]]]], 0.7]]");
 }
 
 /* Evaluate `input`, capturing the real stderr fd into a temp file, and report
@@ -1789,6 +1854,8 @@ int main(void) {
     TEST(test_trig_ineq_region);
     TEST(test_reals_parametric_families);
     TEST(test_reals_unknown_roots_decline);
+    TEST(test_reals_transcendental_root_isolation);
+    TEST(test_transcendental_root_object);
     TEST(test_no_ifun_message);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);

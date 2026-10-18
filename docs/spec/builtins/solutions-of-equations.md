@@ -1293,16 +1293,48 @@ In[10]:= Reduce[Cos[x] == a && 0 < x < Pi, x, Reals]
 Out[10]= -1 < a < 1 && x == ArcCos[a]
 
 In[11]:= Reduce[Sin[x] > x/2, x, Reals]
-Out[11]= Reduce[Sin[x] > 1/2 x, x, Reals]
+Out[11]= x < Root[{#1 - 2 Sin[#1] &, -1.89549}] || 0 < x < Root[{#1 - 2 Sin[#1] &, 1.89549}]
+
+In[12]:= Reduce[x Sin[x] < 1 && -5 < x < 5, x, Reals]
+Out[12]= -5 < x < Root[{-1 + #1 Sin[#1] &, -2.7726}] || Root[{-1 + #1 Sin[#1] &, -1.11416}] < x < Root[{-1 + #1 Sin[#1] &, 1.11416}] || Root[{-1 + #1 Sin[#1] &, 2.7726}] < x < 5
+
+In[13]:= Reduce[Sin[x] > 0, x, Reals]
+Out[13]= Reduce[Sin[x] > 0, x, Reals]
 ```
 
 Over Reals every parameter is real, so a solution family whose offset is real
 only for some parameter values (`ArcSin[a]`, `Log[a]`, `ArcCosh[a]`) is kept
 under its exact reality condition (`-1 <= a <= 1`, `a > 0`, `a >= 1`); a bounded
 region selects the finitely many members by the offset's range and conditions
-each on the parameters. A univariate sign diagram whose breakpoints Solve
-cannot find (`Sin[x] == x/2`), or which would need infinitely many of them
-(`Sin[x] > 0`), is left unevaluated rather than decided from one sample cell.
+each on the parameters.
+
+**Transcendental breakpoints.** When Solve cannot find the real roots of a
+univariate residual (`Sin[x] - x/2`), the sign diagram isolates them with
+certified arb interval arithmetic (`src/root_trans.c`) on a *provably bounded*
+region and emits each as an exact rational (`x == 0`) or as a transcendental
+`Root[{f, x0}]` object, as Mathematica does:
+
+- the region is `[-R, R]` when `R` can be proved to bound the roots: the
+  expansion is a polynomial whose lower coefficients are bounded (`Sin`, `Cos`,
+  `Tanh`, `Erf`, `Sech`, `ArcTan` of real polynomials, and on each side an
+  exponential that decays there, which also absorbs powers of `x`) below a
+  constant top coefficient (Cauchy-type bound), or a tail is certified monotone
+  through its derivative (`Exp[x] - 3 x` on the right);
+- otherwise the region is the span of the other breakpoints (`-5 < x < 5`), and
+  each unbounded end cell must be decided *without* the residual (Kleene
+  evaluation: `x < 5` is false there) or the call declines;
+- on the region, arb ball arithmetic with a nested mean-value (Taylor-like)
+  form excludes root-free subintervals, a derivative that excludes zero
+  certifies one simple root by the endpoint signs, and an exact rational root
+  is recognised by exact evaluation, including a multiple one (`Sin[x] == x`:
+  multiplicity certified by the first nonvanishing derivative, which by Rolle
+  also excludes any other root nearby). Anything uncertifiable — an irrational
+  multiple root, roots closer than 2^-40 relative, a point outside the
+  evaluator's language — declines.
+
+A residual with infinitely many real roots (`Sin[x] > 0`, `x Sin[x] < 1`) or no
+provable bound (`Sqrt[x] > Cos[x]`) is still left unevaluated rather than
+decided from one sample cell.
 
 ## Exists
 
@@ -1775,6 +1807,30 @@ Out[3]= 0.34116390191400966368 - 1.1615414252683233453 I
 
 In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
 Out[4]= 0.34116390191400966368 + 1.1615414252683233453 I
+```
+
+**Transcendental roots** — `Root[{f, x0}]`:
+
+The real root of a (generally transcendental) pure function `f` of `#1` lying
+at the approximation `x0`, e.g. `Root[{#1 - 2 Sin[#1] &, 1.89549}]`. This is
+what `Reduce` emits for an exp-trig-polynomial breakpoint (see Reduce).
+
+- **Certified**: evaluation runs interval Newton in arb on the window
+  `x0 (1 ± 2^-24)`; `N(X) = m - f(m)/f'(X)` landing inside `X` proves that `X`
+  holds exactly one simple root. A machine `x0` is canonicalised to the
+  nearest machine number of that root (`Root[{Cos[#1] - #1 &, 0.739085133}]`
+  becomes `... 0.7390851332151607`); an `x0` that is not at a simple root is
+  `Root::invrt` and stays unevaluated.
+- `N[Root[{f, x0}], prec]` refines to any precision; `NumericQ` is `True`, so
+  comparisons (`Root[{...}] > 1`) decide numerically.
+
+```
+In[5]:= N[Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}], 30]
+Out[5]= 1.895494267033980947144035738094
+
+In[6]:= Root[{Cos[#1] - #1 &, 0.7}]
+Root::invrt: 0.7 is not equal to a root of Cos[#1] - #1 &.
+Out[6]= Root[{Cos[#1] - #1 &, 0.7}]
 ```
 
 ## ToRadicals

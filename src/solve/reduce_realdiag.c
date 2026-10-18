@@ -17,6 +17,7 @@
 #include "reduce_real_util.h"
 #include "reduce_eq.h"
 #include "zero_test.h"
+#include "root_trans.h"
 
 #include "eval.h"
 #include "sym_names.h"
@@ -87,10 +88,71 @@ static Expr* subst_eval(const Expr* poly, const Expr* x, const Expr* sample) {
 static const ReduceOpts* g_rd_opts = NULL;
 static double            g_rd_tol  = 1e-9;
 
+/* Residuals whose real roots Solve could not find (borrowed from the current
+ * call's RForm; per-call scratch, reset by reduce_univar_general). */
+static const Expr** g_rd_unrooted    = NULL;
+static int          g_rd_nunrooted   = 0;
+static int          g_rd_capunrooted = 0;
+
+/* Certified roots of those residuals (isolate_unrooted): the breakpoint value
+ * (owned copy) and the residual it is a root of (borrowed).  At such a sample
+ * any polynomial carrying the residual as a factor is EXACTLY zero -- the one
+ * fact a numeric sign evaluation at a Root[{f, x0}] can never establish. */
+static Expr**       g_rd_regval = NULL;
+static const Expr** g_rd_regres = NULL;
+static int          g_rd_nreg = 0, g_rd_capreg = 0;
+
+/* Kleene mask over g_rd_unrooted for the current sample: a residual whose
+ * roots were NOT isolated in the sample's region is "unknown" there, and so
+ * is every sign / atom that contains it.  NULL == all known. */
+static bool*        g_rd_unknown = NULL;
+
+/* r is poly itself or a Times / positive-Power factor of it (pointer). */
+static bool rd_has_factor(const Expr* poly, const Expr* r) {
+    if (poly == r) return true;
+    if (is_head(poly, SYM_Times)) {
+        for (size_t i = 0; i < poly->data.function.arg_count; i++)
+            if (rd_has_factor(poly->data.function.args[i], r)) return true;
+        return false;
+    }
+    if (is_head(poly, SYM_Power) && poly->data.function.arg_count == 2
+        && poly->data.function.args[1]->type == EXPR_INTEGER
+        && poly->data.function.args[1]->data.integer > 0)
+        return rd_has_factor(poly->data.function.args[0], r);
+    return false;
+}
+
+/* r occurs (by pointer) anywhere in e. */
+static bool rd_contains_ptr(const Expr* e, const Expr* r) {
+    if (e == r) return true;
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rd_contains_ptr(e->data.function.args[i], r)) return true;
+    return false;
+}
+
+/* poly carries a residual that is unknown at the current sample. */
+static bool rd_poly_unknown(const Expr* poly) {
+    if (!g_rd_unknown) return false;
+    for (int u = 0; u < g_rd_nunrooted; u++)
+        if (g_rd_unknown[u] && rd_contains_ptr(poly, g_rd_unrooted[u])) return true;
+    return false;
+}
+
+/* The sample is a certified root of a residual factor of poly. */
+static bool rd_registered_zero(const Expr* poly, const Expr* sample) {
+    for (int i = 0; i < g_rd_nreg; i++)
+        if (rd_has_factor(poly, g_rd_regres[i]) && expr_eq(g_rd_regval[i], sample))
+            return true;
+    return false;
+}
+
 /* Sign of poly at the sample: -1/0/1, or -2 undecidable.  Exact (qqbar) first,
  * then a numeric N fallback for transcendental constants (multiples of Pi),
  * at the WorkingPrecision tolerance g_rd_tol. */
 static int gen_sign_at(const Expr* poly, const Expr* x, const Expr* sample) {
+    if (rd_poly_unknown(poly)) return -2;
+    if (rd_registered_zero(poly, sample)) return 0;
     Expr* val = subst_eval(poly, x, sample);
     int s = rru_sign_of(val);
     if (s == -2) {
@@ -168,12 +230,6 @@ static bool has_free_parameter(const RForm* F, const Expr* x) {
  *  Breakpoint collection (soft Solve)                                 *
  * ------------------------------------------------------------------ */
 
-/* Residuals whose real roots Solve could not find (borrowed from the current
- * call's RForm; per-call scratch, reset by reduce_univar_general). */
-static const Expr** g_rd_unrooted    = NULL;
-static int          g_rd_nunrooted   = 0;
-static int          g_rd_capunrooted = 0;
-
 /* Class of N[poly /. x -> s]: 0 numerically zero, 1 non-real, 2 real nonzero,
  * -1 not a finite number. */
 static int unrooted_class_at(const Expr* poly, const Expr* x, double s) {
@@ -201,12 +257,12 @@ static int unrooted_class_at(const Expr* poly, const Expr* x, double s) {
     return cls;
 }
 
-/* Every unrooted residual must, on each open cell between consecutive
+/* Unrooted residual u must, on each open cell between consecutive
  * breakpoints, be numerically zero at all probes or non-real at all probes --
- * a cell where it is real and nonzero could hide a root (Sin[x] - x/2), so the
- * diagram declines. */
-static bool unrooted_cells_ok(const Expr* x, Expr** bp, int m) {
-    for (int u = 0; u < g_rd_nunrooted; u++) {
+ * a cell where it is real and nonzero could hide a root (Sin[x] - x/2), and
+ * then its roots must be isolated (isolate_unrooted) or the diagram declines. */
+static bool unrooted_cells_ok(const Expr* x, Expr** bp, int m, int u) {
+    {
         for (int j = 0; j <= m; j++) {
             bool ok_lo = true, ok_hi = true;
             double lo = (j == 0) ? 0.0 : rru_approx_double(bp[j - 1], &ok_lo);
@@ -417,6 +473,95 @@ static Expr* gen_sample_between(const Expr* lo, const Expr* hi) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Certified isolation of unrooted residuals                          *
+ * ------------------------------------------------------------------ */
+
+/* An exact rational isolation endpoint for breakpoint e: e itself when it is
+ * already an Integer / Rational, else a dyadic rational just outside it
+ * (dir -1: below, +1: above).  Widening only enlarges the searched span, and
+ * every root found in the margin is still a genuine root -- an extra
+ * breakpoint, which only refines the cells. */
+static Expr* rd_outer_rational(const Expr* e, int dir) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || is_head(e, SYM_Rational))
+        return expr_copy((Expr*)e);
+    bool ok; double d = rru_approx_double(e, &ok);
+    if (!ok || !isfinite(d) || fabs(d) > 1e12) return NULL;
+    double scale = 1048576.0;                         /* 2^20 */
+    double t = d * scale;
+    double k = (dir < 0) ? floor(t) - 1.0 : ceil(t) + 1.0;
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer((int64_t)k),
+                   expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_new_integer(1048576), expr_new_integer(-1) }, 2) }, 2));
+}
+
+/* Isolate, with certified arb arithmetic (root_trans_isolate), the real roots
+ * of every unrooted residual that unrooted_cells_ok rejected, and append them
+ * to the breakpoints.  The searched span is
+ *   [-R, R]          when root_trans_dominance_bound proves f != 0 for |x| >= R
+ *                    (Sin[x] - x/2: R = 3; x^2 - Cos[x]: R = 2);
+ *   [bp_0, bp_{m-1}] otherwise -- the bounded cells between the known
+ *                    breakpoints (x Sin[x] < 1 && -5 < x < 5), and the residual
+ *                    is marked *unbounded[u]: on the two unbounded end cells its
+ *                    roots stay unknown and the cell must be decided without it
+ *                    (Kleene evaluation, see g_rd_unknown) or the call declines
+ *                    (Sin[x] > 0 has infinitely many roots).
+ * Each root is registered as a certified zero of its residual.  Returns false
+ * (decline) when some residual's roots cannot be certified. */
+static bool isolate_unrooted(const Expr* x, Expr*** bp, int* m, int* cap,
+                             const bool* need, bool* unbounded) {
+    int m0 = *m;
+    Expr** nb = NULL; int nn = 0, ncap = 0;
+    bool ok = true;
+    for (int u = 0; ok && u < g_rd_nunrooted; u++) {
+        unbounded[u] = false;
+        if (!need[u]) continue;
+        const Expr* f = g_rd_unrooted[u];
+        Expr* R = root_trans_dominance_bound(f, x);
+        Expr *lo = NULL, *hi = NULL;
+        if (R) {
+            if (!(R->type == EXPR_INTEGER && R->data.integer == 0)) {
+                hi = R;
+                lo = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(R) }, 2));
+            } else expr_free(R);
+        } else {
+            unbounded[u] = true;
+            if (m0 > 0) {
+                lo = rd_outer_rational((*bp)[0], -1);
+                hi = rd_outer_rational((*bp)[m0 - 1], +1);
+                if (!lo || !hi) ok = false;
+            }
+        }
+        if (ok && lo && hi) {
+            int n0 = nn;
+            ok = root_trans_isolate(f, x, lo, hi, &nb, &nn, &ncap);
+            for (int i = n0; ok && i < nn; i++) {
+                if (g_rd_nreg == g_rd_capreg) {
+                    g_rd_capreg = g_rd_capreg ? 2 * g_rd_capreg : 8;
+                    g_rd_regval = realloc(g_rd_regval, (size_t)g_rd_capreg * sizeof(Expr*));
+                    g_rd_regres = (const Expr**)realloc((void*)g_rd_regres,
+                                        (size_t)g_rd_capreg * sizeof(Expr*));
+                }
+                g_rd_regval[g_rd_nreg] = expr_copy(nb[i]);
+                g_rd_regres[g_rd_nreg] = f;
+                g_rd_nreg++;
+            }
+        }
+        if (lo) expr_free(lo);
+        if (hi) expr_free(hi);
+    }
+    for (int i = 0; i < nn; i++) {
+        if (ok) {
+            if (*m == *cap) { *cap = *cap ? 2 * *cap : 8; *bp = realloc(*bp, (size_t)*cap * sizeof(Expr*)); }
+            (*bp)[(*m)++] = nb[i];
+        } else expr_free(nb[i]);
+    }
+    free(nb);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ *
  *  Per-sample truth (domain gate + pole gate + decide)                *
  * ------------------------------------------------------------------ */
 
@@ -433,6 +578,14 @@ static int atom_truth_general(const RAtom* a, const Expr* x, const Expr* sample)
     }
 
     if (a->rel == R_EQ || a->rel == R_NE) {
+        /* At a transcendental Root breakpoint (or with an unknown residual)
+         * the truth is the certified sign, never a numeric Equal. */
+        if (rd_poly_unknown(a->poly)) return -1;
+        if (rd_registered_zero(a->poly, sample) || root_trans_is_object(sample)) {
+            int s = gen_sign_at(a->poly, x, sample);
+            if (s == -2) return -1;
+            return (a->rel == R_EQ) ? (s == 0) : (s != 0);
+        }
         const char* head = (a->rel == R_EQ) ? SYM_Equal : SYM_Unequal;
         Expr* rel = expr_new_function(expr_new_symbol(head),
             (Expr*[]){ expr_copy(a->poly), expr_new_integer(0) }, 2);
@@ -476,10 +629,13 @@ static int form_truth_general(const RForm* F, const Expr* x, const Expr* sample,
             if (!okdom) { conj = 0; break; }   /* out of this conjunct's domain */
         }
         if (conj == 1 && dom_undec) conj = -1; /* in-domain where decidable, else undetermined */
-        if (conj == 1)
+        /* Kleene AND: an undetermined atom does not stop the scan -- a later
+         * decidably-false atom (x < 5 outside the region of x Sin[x] < 1)
+         * still makes the conjunct false. */
+        if (conj != 0)
             for (int k = 0; k < c->n; k++) {
                 int t = atom_truth_general(&c->a[k], x, sample);
-                if (t == -1) { conj = -1; break; }
+                if (t == -1) { conj = -1; continue; }
                 if (t == 0)  { conj = 0;  break; }
             }
         if (conj == 1)  return 1;              /* a fully-true conjunct decides the DNF */
@@ -550,11 +706,19 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
      * the cell decomposition and are always sound. */
     Expr** bp = NULL; int m = 0, cap = 0;
     bool ok = true;
-    /* Per-call scratch (see soft_roots).  Solve may re-enter Reduce and so this
-     * function: save the caller's list and restore it on every exit. */
+    /* Per-call scratch (see soft_roots / isolate_unrooted).  Solve may re-enter
+     * Reduce and so this function: save the caller's state, restore on exit. */
     const Expr** saved_unrooted = g_rd_unrooted;
     int saved_nunrooted = g_rd_nunrooted, saved_capunrooted = g_rd_capunrooted;
+    Expr** saved_regval = g_rd_regval; const Expr** saved_regres = g_rd_regres;
+    int saved_nreg = g_rd_nreg, saved_capreg = g_rd_capreg;
+    bool* saved_unknown = g_rd_unknown;
     g_rd_unrooted = NULL; g_rd_nunrooted = 0; g_rd_capunrooted = 0;
+    g_rd_regval = NULL; g_rd_regres = NULL; g_rd_nreg = 0; g_rd_capreg = 0;
+    g_rd_unknown = NULL;
+    bool* unbounded = NULL;               /* per residual: roots unknown off-span */
+    Expr *span_lo = NULL, *span_hi = NULL;/* known-breakpoint span (copies)      */
+    Expr* result = NULL;
     for (int i = 0; ok && i < F->n; i++)
         for (int k = 0; ok && k < F->c[i]->n; k++) {
             const RAtom* a = &F->c[i]->a[k];
@@ -564,15 +728,32 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
     for (int i = 0; ok && i < F->n; i++)
         for (int t = 0; ok && t < cncon[i]; t++)
             ok = collect_factor_roots(ccons[i][t].poly, x, &bp, &m, &cap);
-    if (!ok) goto decline;
+    if (!ok) goto out;
 
     ok = sort_dedup_bp(bp, &m);
-    if (!ok) goto decline;
-    if (g_rd_nunrooted > 0 && !unrooted_cells_ok(x, bp, m)) { ok = false; goto decline; }
+    if (!ok) goto out;
+    if (g_rd_nunrooted > 0) {
+        /* A residual whose roots Solve could not find either cannot change
+         * sign on any cell (unrooted_cells_ok), or its roots are isolated with
+         * certified interval arithmetic (Sin[x] > x/2). */
+        bool* need = calloc((size_t)g_rd_nunrooted, sizeof(bool));
+        bool any = false;
+        for (int u = 0; u < g_rd_nunrooted; u++)
+            if (!unrooted_cells_ok(x, bp, m, u)) { need[u] = true; any = true; }
+        if (any) {
+            unbounded = calloc((size_t)g_rd_nunrooted, sizeof(bool));
+            if (m > 0) { span_lo = expr_copy(bp[0]); span_hi = expr_copy(bp[m - 1]); }
+            ok = isolate_unrooted(x, &bp, &m, &cap, need, unbounded);
+            if (ok) ok = sort_dedup_bp(bp, &m);
+        }
+        free(need);
+        if (!ok) goto out;
+    }
 
     {
         int ncells = 2 * m + 1;
         int* truth = malloc((size_t)ncells * sizeof(int));
+        bool* unknown = unbounded ? calloc((size_t)g_rd_nunrooted, sizeof(bool)) : NULL;
         for (int idx = 0; idx < ncells && ok; idx++) {
             Expr* sample;
             if (idx % 2 == 1) {                       /* point cell */
@@ -584,30 +765,46 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
                 sample = gen_sample_between(lo, hi);
                 if (!sample) { ok = false; break; }
             }
+            /* Residuals whose roots are unknown at this sample: those with no
+             * dominance bound, outside the isolated span [span_lo, span_hi].
+             * The cell's truth is constant there only if it is decided
+             * WITHOUT them (Kleene); else form_truth_general returns -1. */
+            g_rd_unknown = NULL;
+            if (unknown) {
+                bool outside = true;
+                if (span_lo) {
+                    int c1 = cmp_bp(sample, span_lo), c2 = cmp_bp(sample, span_hi);
+                    outside = (c1 == -2 || c2 == -2 || c1 < 0 || c2 > 0);
+                }
+                for (int u = 0; u < g_rd_nunrooted; u++)
+                    unknown[u] = unbounded[u] && outside;
+                g_rd_unknown = unknown;
+            }
             int t = form_truth_general(F, x, sample, ccons, cncon);
+            g_rd_unknown = NULL;
             expr_free(sample);
             if (t == -1) { ok = false; break; }
             truth[idx] = t;
         }
-        if (!ok) { free(truth); goto decline; }
-
-        Expr* result = rru_emit_sign_diagram(bp, m, truth, x);
+        free(unknown);
+        if (ok) result = rru_emit_sign_diagram(bp, m, truth, x);
         free(truth);
-        for (int i = 0; i < m; i++) expr_free(bp[i]);
-        free(bp);
-        free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
-        free((void*)g_rd_unrooted);
-        g_rd_unrooted = saved_unrooted;
-        g_rd_nunrooted = saved_nunrooted; g_rd_capunrooted = saved_capunrooted;
-        return result;
     }
 
-decline:
+out:
     for (int i = 0; i < m; i++) expr_free(bp[i]);
     free(bp);
     free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
+    free(unbounded);
+    if (span_lo) expr_free(span_lo);
+    if (span_hi) expr_free(span_hi);
+    for (int i = 0; i < g_rd_nreg; i++) expr_free(g_rd_regval[i]);
+    free(g_rd_regval); free((void*)g_rd_regres);
     free((void*)g_rd_unrooted);
     g_rd_unrooted = saved_unrooted;
     g_rd_nunrooted = saved_nunrooted; g_rd_capunrooted = saved_capunrooted;
-    return NULL;
+    g_rd_regval = saved_regval; g_rd_regres = saved_regres;
+    g_rd_nreg = saved_nreg; g_rd_capreg = saved_capreg;
+    g_rd_unknown = saved_unknown;
+    return ok ? result : NULL;
 }

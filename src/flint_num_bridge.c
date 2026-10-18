@@ -1264,6 +1264,14 @@ static Expr* builtin_flint_stieltjes(Expr* res) {
 
 #define CERT_MAX_DEPTH 256
 
+/* Optional variable binding for flint_cert_eval_real (root_trans.c): while set,
+ * the symbol g_cert_var is part of the supported language and evaluates to the
+ * real ball g_cert_ball, so cert_eval becomes a rigorous INTERVAL evaluator of
+ * a univariate expression over that ball.  cert_eval never calls back into the
+ * evaluator, so the binding cannot leak into a nested call. */
+static const char*      g_cert_var  = NULL;
+static const arb_struct* g_cert_ball = NULL;
+
 static const char* cert_head(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return NULL;
     const Expr* h = e->data.function.head;
@@ -1295,7 +1303,9 @@ static bool cert_supported(const Expr* e, int depth) {
     if (depth > CERT_MAX_DEPTH) return false;
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT: return true;
-        case EXPR_SYMBOL: return cert_is_constant_symbol(e->data.symbol.name);
+        case EXPR_SYMBOL:
+            return cert_is_constant_symbol(e->data.symbol.name)
+                || (g_cert_var && e->data.symbol.name == g_cert_var);
         case EXPR_FUNCTION: break;
         default: return false;            /* Real / MPFR / String / ... */
     }
@@ -1536,6 +1546,10 @@ static int cert_unary(const char* h, acb_t out, const acb_t z, slong prec) {
 static int cert_eval(const Expr* e, acb_t out, slong prec) {
     if (e->type == EXPR_SYMBOL) {
         const char* s = e->data.symbol.name;
+        if (g_cert_var && s == g_cert_var) {
+            cert_set_real(out, g_cert_ball);
+            return 1;
+        }
         arb_t r; arb_init(r);
         if (s == SYM_Pi) arb_const_pi(r, prec);
         else if (s == SYM_E) arb_const_e(r, prec);
@@ -1621,6 +1635,25 @@ bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
     }
     acb_clear(z);
     return any;
+}
+
+int flint_cert_eval_real(const Expr* e, const char* var, const arb_t xball,
+                         arb_t out, slong prec) {
+    if (!e) return 0;
+    const char* sv = g_cert_var; const arb_struct* sb = g_cert_ball;
+    g_cert_var = var; g_cert_ball = xball;
+    int ok = 0;
+    if (cert_supported(e, 0)) {
+        acb_t z; acb_init(z);
+        if (cert_eval(e, z, prec) && arb_is_zero(acb_imagref(z))
+            && arb_is_finite(acb_realref(z))) {
+            arb_set(out, acb_realref(z));
+            ok = 1;
+        }
+        acb_clear(z);
+    }
+    g_cert_var = sv; g_cert_ball = sb;
+    return ok;
 }
 
 void flint_num_bridge_init(void) {

@@ -1,57 +1,59 @@
 ### Worked examples
 
-At `z = 1` the polylogarithm is the Riemann zeta value; `PolyLog[1, z]` is the
-ordinary logarithm:
-
 ```mathematica
-In[1]:= PolyLog[2, 1]
-Out[1]= 1/6 Pi^2
-
-In[2]:= PolyLog[1, z]
-Out[1]= -Log[1 - z]
+In[1]:= PolyLog[2, 1]  (* at z = 1 the polylogarithm is a zeta value *)
 ```
 
-The classical closed forms at `z = 1/2` — including the celebrated Euler value
-of `Li_3(1/2)` mixing `Log[2]`, `Pi^2`, and `Zeta[3]`:
-
 ```mathematica
-In[1]:= PolyLog[2, 1/2]
-Out[1]= -1/2 Log[2]^2 + 1/12 Pi^2
-
-In[2]:= PolyLog[3, 1/2]
-Out[2]= 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]
+In[1]:= PolyLog[3, 1/2]  (* Euler's closed form mixing Log[2], Pi^2 and Zeta[3] *)
 ```
 
-Non-positive integer orders are rational functions of `z` (the negative-order
-polylogarithms), produced in closed form:
-
 ```mathematica
-In[1]:= PolyLog[0, z]
-Out[1]= z/(1 - z)
-
-In[2]:= PolyLog[-2, z]
-Out[2]= (z + z^2)/(1 - z)^3
+In[1]:= PolyLog[2, I]  (* the dilogarithm at I: Catalan's constant appears *)
 ```
 
-The numeric core evaluates real and complex arguments to arbitrary precision —
-here `Li_2(1/2)` to 40 digits and `Li_3` at a complex point to 30:
+```mathematica
+In[1]:= PolyLog[-2, z]  (* negative integer orders are rational functions *)
+```
 
 ```mathematica
-In[1]:= N[PolyLog[2, 1/2], 40]
-Out[1]= 0.58224052646501250590265632015968010874412
+In[1]:= N[PolyLog[3, 1/2 + I/2], 30]  (* a complex argument at 30 digits *)
+```
 
-In[2]:= N[PolyLog[3, 1/2 + I/2], 30]
-Out[2]= 0.48615953708556007896672148708 + 0.5700774070887689781956097575898*I
+```mathematica
+In[1]:= N[PolyLog[1/3, 9/10], 40]  (* a fractional order at high precision via arb *)
+```
+
+```mathematica
+In[1]:= PolyLog[2, 3.0]  (* on the cut the value is taken from below: Im = -Pi Log[3] *)
+```
+
+```mathematica
+In[1]:= PolyLog[2, -1000.0]  (* real for z < -1, through the 1/z inversion *)
+```
+
+```mathematica
+In[1]:= PolyLog[2, {0.25, 0.5, 0.75}]  (* a machine list runs through the packed dilogarithm kernel *)
+```
+
+```mathematica
+In[1]:= PolyLog[2.5, 1000.0]  (* a non-integer order far from the origin is outside every regime, so it stays unevaluated *)
 ```
 
 ### Notes
 
-`PolyLog[n, z]` is the polylogarithm Li_n(z) = Σ_{k≥1} z^k / k^n. Special
-arguments reduce in closed form: `PolyLog[n, 0] = 0`, `PolyLog[1, z] = -Log[1-z]`,
-`PolyLog[0, z] = z/(1-z)`, negative integer orders give rational functions, and
-`PolyLog[n, 1] = Zeta[n]`, `PolyLog[n, -1] = (2^(1-n)-1) Zeta[n]` for integer
-`n ≥ 2`, with exact forms for `PolyLog[2, 1/2]` and `PolyLog[3, 1/2]`. Inexact
-real or complex arguments evaluate numerically at machine or MPFR precision via
-a power series or the Jonquière/zeta expansion. There is a branch cut from `1`
-to `Infinity`. Listable. The Nielsen generalized form `PolyLog[n, p, z]` is
-accepted but left unevaluated.
+- `PolyLog[n, z] = Li_n(z) = Σ_{k≥1} zᵏ/kⁿ`, with a branch cut along
+  `[1, ∞)`. Values on the cut are taken from below, as in Mathematica.
+- Exact closed forms: `PolyLog[n, 0] = 0`, `PolyLog[1, z] = -Log[1 - z]`, and
+  `PolyLog[0, z] = z/(1 - z)`. Negative integer orders give rational functions.
+  `PolyLog[n, ±1]` reduces to `Zeta[n]`. `Li_2(1/2)`, `Li_3(1/2)` and `Li_2(±I)`
+  have closed forms.
+- Numeric surfaces: a real order at machine precision runs on one `double`
+  kernel (the Bernoulli-series dilogarithm, plus power series, Jonquière and
+  inversion for other orders). The scalar, packed/`NDArray` and `Compile[]`
+  paths (scalar and array, real and complex `z`) all share it. A complex order
+  and arbitrary precision use complex MPFR; real `-1 < z < 1` at high precision
+  uses arb's `acb_polylog`.
+- `PolyLog[n, p, z]` (Nielsen) is accepted but left unevaluated.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `LerchPhi`, `Zeta`, `Log`.

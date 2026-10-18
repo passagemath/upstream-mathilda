@@ -94,6 +94,7 @@ Out[11]= "1cd2gh"
 
 - Source: [`src/strings/stringreplacepart.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringreplacepart.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
 
 ## Notes & additional examples

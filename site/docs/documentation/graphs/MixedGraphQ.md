@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MixedGraphQ[g] gives True if g has both directed and undirected edges.`**
+**`MixedGraphQ[g]`**
+
+gives True if g has both directed and undirected edges.
 
 ## Examples (4)
 

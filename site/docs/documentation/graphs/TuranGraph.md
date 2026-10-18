@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TuranGraph[n, k] gives the Turan graph: the complete k-partite graph on n vertices with parts as equal as possible.`**
+**`TuranGraph[n, k]`**
+
+gives the Turan graph: the complete k-partite graph on n vertices with parts as equal as possible.
 
 ## Examples (7)
 

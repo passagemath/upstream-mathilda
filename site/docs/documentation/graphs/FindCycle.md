@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindCycle[g] finds a cycle of g, as {list of edges}, or {}. FindCycle[g, k] finds a cycle of length at most k, FindCycle[g, {k}] of length exactly k, FindCycle[g, {kmin, kmax}] of length in that range; FindCycle[g, kspec, n] finds at most n (n an integer or All). Each cycle is reported once. Length-bounded searches are exhaustive and give up (unevaluated) after 5*10^7 steps; use TimeConstrained to bound them.`**
+**`FindCycle[g]`**
+
+finds a cycle of g, as {list of edges}, or {}. FindCycle\[g, k\] finds a cycle of length at most k, FindCycle\[g, {k}\] of length exactly k, FindCycle\[g, {kmin, kmax}\] of length in that range; FindCycle\[g, kspec, n\] finds at most n (n an integer or All). Each cycle is reported once. Length-bounded searches are exhaustive and give up (unevaluated) after 5\*10^7 steps; use TimeConstrained to bound them.
 
 ## Examples (13)
 

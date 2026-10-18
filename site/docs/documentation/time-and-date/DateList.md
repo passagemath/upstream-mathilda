@@ -16,7 +16,16 @@ gives a date list corresponding to the given date specification.
 <details>
 <summary>Notes</summary>
 
-The supported date specifications are: {y, m, d, h, m, s}    DateList specification time            AbsoluteTime specification (a number of seconds since 1900) "string"        DateString specification {"string", {e1, ...}}    date string parsed with the given format elements In {y, m, ...} entries may be elided from the right: {y} is {y,1,1,0,0,0}, {y,m} is {y,m,1,0,0,0}, and so on. Values of m, d, h, m, s outside their normal ranges are reduced (m=0 is the previous December, d=0 the last day of the previous month); d, h, m, s may be noninteger, but the year and month must be integers. The format elements are "Year", "YearShort", "Quarter", "Month", "MonthName", "Day", "DayName", "Hour", "Hour12", "AMPM", "Minute", "Second", and "Millisecond". Elements are read from the string in the order given, separated by any non-alphanumeric characters (or by explicit separator strings placed between them). Fields not filled default to {current year, 1, 1, 0, 0, 0}. DateList uses the local date and time with no correction for time zones, daylight saving time, or leap seconds.
+The supported date specifications are:
+
+```text
+{y, m, d, h, m, s}    DateList specification
+time            AbsoluteTime specification (a number of seconds since 1900)
+"string"        DateString specification
+{"string", {e1, ...}}    date string parsed with the given format elements
+```
+
+In {y, m, ...} entries may be elided from the right: {y} is {y,1,1,0,0,0}, {y,m} is {y,m,1,0,0,0}, and so on. Values of m, d, h, m, s outside their normal ranges are reduced (m=0 is the previous December, d=0 the last day of the previous month); d, h, m, s may be noninteger, but the year and month must be integers. The format elements are "Year", "YearShort", "Quarter", "Month", "MonthName", "Day", "DayName", "Hour", "Hour12", "AMPM", "Minute", "Second", and "Millisecond". Elements are read from the string in the order given, separated by any non-alphanumeric characters (or by explicit separator strings placed between them). Fields not filled default to {current year, 1, 1, 0, 0, 0}. DateList uses the local date and time with no correction for time zones, daylight saving time, or leap seconds.
 
 </details>
 

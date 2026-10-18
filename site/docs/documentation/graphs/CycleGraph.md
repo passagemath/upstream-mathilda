@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CycleGraph[n] gives the cycle graph on n vertices.`**
+**`CycleGraph[n]`**
+
+gives the cycle graph on n vertices.
 
 ## Examples (10)
 

@@ -24,7 +24,20 @@ gives the generalized singular value decomposition of m with respect to a as {{u
 <details>
 <summary>Notes</summary>
 
-SingularValueDecomposition works on every input family supported by the rest of the linear-algebra builtins: - exact integer / rational matrices (output stays exact; singular values are Sqrt\[...\] forms when irrational) - complex matrices (u and v are unitary in the Hermitian inner product) - machine-precision Real matrices (LAPACK dgesdd / zgesdd, or dggsvd3 / zggsvd3 for the generalized form) - arbitrary-precision MPFR matrices (one-sided Jacobi SVD at the input precision, real and complex) - free-symbolic matrices (eigendecomposition of m^H . m; the call is left unevaluated when no closed form exists) Options: Tolerance -\> t       :  zero out singular values below t TargetStructure -\> "Dense"            :  u, sigma, v all dense (default) "Structured"       :  sigma returned as DiagonalMatrix\[{..}\] A non-rank-2 or empty matrix emits SingularValueDecomposition::matrix and the call is left unevaluated.  Generalized SVD with mismatched column counts emits ::matdims.  An out-of-range k or UpTo\[k\] emits ::sval. Unknown option keys / values emit ::opts and leave the call unevaluated.
+SingularValueDecomposition works on every input family supported by the rest of the linear-algebra builtins: - exact integer / rational matrices (output stays exact; singular values are Sqrt\[...\] forms when irrational) - complex matrices (u and v are unitary in the Hermitian inner product) - machine-precision Real matrices (LAPACK dgesdd / zgesdd, or dggsvd3 / zggsvd3 for the generalized form) - arbitrary-precision MPFR matrices (one-sided Jacobi SVD at the input precision, real and complex) - free-symbolic matrices (eigendecomposition of m^H . m; the call is left unevaluated when no closed form exists) Options:
+
+```text
+Tolerance -> t       :  zero out singular values below t
+```
+
+TargetStructure -\>
+
+```text
+  "Dense"            :  u, sigma, v all dense (default)
+  "Structured"       :  sigma returned as DiagonalMatrix[{..}]
+```
+
+A non-rank-2 or empty matrix emits SingularValueDecomposition::matrix and the call is left unevaluated.  Generalized SVD with mismatched column counts emits ::matdims.  An out-of-range k or UpTo\[k\] emits ::sval. Unknown option keys / values emit ::opts and leave the call unevaluated.
 
 </details>
 

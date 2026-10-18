@@ -6,6 +6,7 @@ nav:
   - 03-pattern-matching-and-rules.md
   - 04-arithmetic.md
   - 05-number-theory.md
+  - factorinteger-methods
   - 06-algebra.md
   - 07-solutions-of-equations.md
   - solutions-of-inequalities.md
@@ -18,4 +19,6 @@ nav:
   - 15-interval-arithmetic.md
   - 11-symbolic-summation.md
   - 12-infinite-products.md
+  - 13-blas.md
+  - 14-lapack.md
   - 16-compilation.md

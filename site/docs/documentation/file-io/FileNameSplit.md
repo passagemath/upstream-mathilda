@@ -9,7 +9,9 @@
 
 splits a file name into a list of parts.
 
-**`FileNameSplit[..., OperatingSystem->"os"] uses the conventions of the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".`**
+**`FileNameSplit[..., OperatingSystem->"os"]`**
+
+uses the conventions of the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".
 
 <details>
 <summary>Notes</summary>

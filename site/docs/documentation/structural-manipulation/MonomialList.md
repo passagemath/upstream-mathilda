@@ -5,9 +5,13 @@
 
 ## Description
 
-**`MonomialList[poly] gives the list of monomials of poly, using Variables[poly].`**
+**`MonomialList[poly]`**
 
-**`MonomialList[poly, {x1, x2, ...}] uses the given variables; MonomialList[poly, vars, order]`**
+gives the list of monomials of poly, using Variables\[poly\].
+
+**`MonomialList[poly, {x1, x2, ...}]`**
+
+uses the given variables; MonomialList\[poly, vars, order\]
 
 <details>
 <summary>Notes</summary>

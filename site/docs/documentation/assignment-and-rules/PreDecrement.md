@@ -5,9 +5,9 @@
 
 ## Description
 
-**`PreDecrement[x] or --x`**
+**`PreDecrement[x]`**
 
-decreases the value of x by 1, returning the new value of x. --x is equivalent to x = x - 1.
+or --x decreases the value of x by 1, returning the new value of x. --x is equivalent to x = x - 1.
 
 <details>
 <summary>Notes</summary>

@@ -90,6 +90,7 @@ Out[9]= 2
 - Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
 - Tests: [`tests/test_sequence.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sequence.c)
 - Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)
+- Tests: [`tests/test_upvalues.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upvalues.c)
 
 ## Notes & additional examples
 

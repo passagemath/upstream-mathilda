@@ -33,7 +33,9 @@ applies f an additional n times after the loop terminates.
 
 returns the result found when f had been applied n fewer times.
 
-**`NestWhile[f, expr, UnsameQ, 2] is equivalent to FixedPoint[f, expr].`**
+**`NestWhile[f, expr, UnsameQ, 2]`**
+
+is equivalent to FixedPoint\[f, expr\].
 
 <details>
 <summary>Notes</summary>

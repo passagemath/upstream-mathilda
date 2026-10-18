@@ -9,7 +9,7 @@
 
 loads the internal Mathilda source module at relpath (relative to src/internal), resolving the location independently of the current working directory. Each module is loaded at most once. Returns True if the module was located and loaded, False otherwise.
 
-## Examples (6)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -36,27 +36,55 @@ In[3]:= Quiet[LoadModule["no/such/module.m"]]
 Out[3]= False
 ```
 
-### Applications (3)
+### Applications (7)
 
-Load an internal module; True on success
+Already loaded by the kernel at startup, so True without re-reading the file
 
 ```mathematica
 In[4]:= LoadModule["simp/FullSimplify.m"]
 Out[4]= True
 ```
 
-Already loaded: still True, not re-read
+One of the identity libraries FullSimplify loads on demand
 
 ```mathematica
-In[5]:= LoadModule["simp/FullSimplify.m"]; LoadModule["simp/FullSimplify.m"]
+In[5]:= LoadModule["simp/transforms/gamma.m"]
 Out[5]= True
 ```
 
-Not found -> False
+Load-once: a repeat is a table hit, not a re-read
 
 ```mathematica
-In[6]:= Quiet[LoadModule["no/such/module.m"]]
-Out[6]= False
+In[6]:= LoadModule["simp/transforms/gamma.m"]; LoadModule["simp/transforms/gamma.m"]
+Out[6]= True
+```
+
+Not found: False, with the LoadModule::nofile message silenced
+
+```mathematica
+In[7]:= Quiet[LoadModule["no/such/module.m"]]
+Out[7]= False
+```
+
+The message routes through the funnel, so Check sees it
+
+```mathematica
+In[8]:= Check[LoadModule["no/such/module.m"], "failed"]
+Out[8]= "failed"
+```
+
+The guard idiom internal modules use for an optional dependency
+
+```mathematica
+In[9]:= If[TrueQ[LoadModule["no/such/module.m"]], "loaded", "fallback"]
+Out[9]= "fallback"
+```
+
+A non-string argument is left unevaluated
+
+```mathematica
+In[10]:= LoadModule[42]
+Out[10]= LoadModule[42]
 ```
 
 ## Algorithm
@@ -65,42 +93,66 @@ loadmodule.c -- runtime loading of Mathilda (.m) source modules.
 
 See loadmodule.h for the contract. The file-reading loop here is the same one Get[] uses (builtin_get in readwrite.c is now a thin wrapper over mathilda_run_file); mathilda_load_module adds working-directory-independent path resolution and load-once bookkeeping on top.
 
-Path resolution (mathilda_resolve_internal) is deliberately CWD-independent: a relocated or installed binary must still find its bundled src/internal tree. On glibc, readlink("/proc/self/exe") needs the POSIX feature-test macro to be visible under -std=c99; define it before any system header.
+Path resolution (mathilda_resolve_internal) is deliberately CWD-independent: a relocated or installed binary must still find its bundled src/internal tree — and so must an installed shared libmathilda loaded into some other program (a Python extension, a Jupyter kernel), which is located through dladdr. On glibc, readlink("/proc/self/exe") needs the POSIX feature-test macro and dladdr/Dl_info need _GNU_SOURCE to be visible under -std=c99; define it before any system header.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_loadmodule` takes one `EXPR_STRING` relpath and calls
-`mathilda_load_module`, returning `True`/`False`. `mathilda_load_module` short-circuits to
-`True` if the relpath is already in the load-once table (`lm_already_loaded`); otherwise it
-resolves the path, runs the file, and on success records the relpath (`lm_mark_loaded`) so a
-repeat call never re-reads it. A relpath that resolves nowhere emits `LoadModule::nofile`
-through `mth_message` (the `Quiet`/`Check` funnel) and returns `False`.
+**Algorithm.** `builtin_loadmodule` takes one `EXPR_STRING` relpath, calls
+`mathilda_load_module`, and returns `True` or `False`. Any other argument shape
+leaves the call unevaluated. `mathilda_load_module` returns `True` at once if
+the relpath is already in the load-once table (`lm_already_loaded`). Otherwise it
+resolves the path, runs the file with `mathilda_run_file`, and on a successful
+open records the relpath (`lm_mark_loaded`), so a repeat call never re-reads it.
+A relpath that resolves nowhere emits `LoadModule::nofile` through `mth_message`,
+so `Quiet` and `Check` both see it, and returns `False`.
 
-`mathilda_resolve_internal` is deliberately **working-directory-independent**, trying in order:
-(1) `$MATHILDA_HOME/<relpath>`; (2–3) relative to the running executable —
-`<exe_dir>/src/internal/<relpath>` and `<exe_dir>/../share/mathilda/internal/<relpath>`, via
-`readlink("/proc/self/exe")` on Linux, `_NSGetExecutablePath` on macOS, `GetModuleFileNameA` on
-Windows — so a relocated or installed binary still finds its bundled modules; (4) a compile-time
-`MATHILDA_PREFIX/share/mathilda/internal/`; (5) a CWD ladder (`src/internal/` up to three levels
-up). The winning base directory is cached (`lm_base`) so later lookups skip the search.
+`mathilda_resolve_internal` is deliberately **independent of the working
+directory**. It first tries the cached base directory (`lm_base`) from an
+earlier hit, then searches in this order:
 
-`mathilda_run_file` is the file-reading core `Get` now wraps: slurp the file into a
-buffer, then loop `parse_next_expression(&ptr)` / `evaluate` over it, freeing each parse and
-keeping the last evaluated value (`Null` for an empty file). `LoadModule` discards that value
-and reports only whether the file was opened.
+1. `$MATHILDA_HOME/<relpath>`, then `$MATHILDA_HOME/internal/<relpath>`. The
+   parent form was added for issue #96, where a kernelspec pointing at the
+   directory containing `internal/` silently missed late-loaded tables.
+2. Relative to the running executable (`lm_exe_dir`, using
+   `readlink("/proc/self/exe")` on Linux, `_NSGetExecutablePath` on macOS and
+   `GetModuleFileNameA` on Windows): `<exe_dir>/src/internal/` and
+   `<exe_dir>/../share/mathilda/internal/`.
+3. Relative to the image that holds this code (`lm_self_dir`, using `dladdr` on
+   POSIX and `GetModuleHandleExA` on Windows): `<lib_dir>/../share/mathilda/internal/`.
+   An installed shared `libmathilda` loaded into Python or Jupyter therefore
+   finds its modules without `$MATHILDA_HOME` (issue #88). This step is skipped
+   when that directory is the executable's own.
+4. The compile-time `MATHILDA_PREFIX/share/mathilda/internal/`.
+5. A CWD ladder: `src/internal/` up to three levels up, for the test binaries.
 
-**Data structures.** Fixed-size bookkeeping tables (`lm_loaded[256][256]` relpaths; a cached
-`lm_base`) and a transient slurp buffer. On glibc `_POSIX_C_SOURCE 200112L` is defined before
-any include so `readlink` is visible under `-std=c99` (SPEC.md §10).
+`mathilda_run_file` is the file-reading core that `Get` also wraps. It slurps the
+file and loops `parse_next_expression` / `evaluate`, stopping at end of file or at
+the first unparseable expression, and keeps the last value. `LoadModule`
+discards that value and reports only whether the file was opened.
 
-**Complexity / limits.** First load is `O(file size)` to read and evaluate; a repeat is `O(1)`
-(table hit). Each module is loaded **at most once**, so the lazy per-family loading in
-`FullSimplify` never re-registers its rules. `ATTR_PROTECTED`.
+**Data structures.** The bookkeeping uses fixed-size tables: `lm_loaded[256][256]`
+holds the relpaths (past 256 modules new entries are silently not recorded), and
+`lm_base` caches the base directory. The file is read into one transient buffer.
+On Linux `_GNU_SOURCE` is defined before any include, so `readlink` and `dladdr`
+are visible under `-std=c99` (SPEC.md §10).
+
+**Complexity / limits.** A first load is `O(file size)` to read and evaluate. A
+repeat is a linear scan of the table, which is effectively `O(1)` for the small
+fixed module set. Each module is loaded **at most once**, keyed by the literal
+relpath string. That is what lets callers load lazily without re-registering
+rules: `core.c` loads `simp/FullSimplify.m` at startup, `FullSimplify` loads its
+`simp/transforms/*.m` families, `init.m` loads `distributions.m`, and
+`Integrate` loads `PolyLogLadder.m`, `mixed/ParallelMixed.m` and
+`ParallelMixedSpecial.m`. A file read with `Get` is not recorded. A syntax error
+part-way through a module still counts as a successful load. Attributes:
+`ATTR_PROTECTED`.
 
 - `Protected`. Returns `True` if the module was located and loaded (or had already
   been loaded), `False` otherwise.
 - Resolution is independent of the current working directory and tries, in
-  order: `$MATHILDA_HOME/<relpath>`; `<exe_dir>/src/internal/<relpath>` and
+  order: `$MATHILDA_HOME/<relpath>` (then `$MATHILDA_HOME/internal/<relpath>`, so
+  pointing it at the directory *containing* `internal/` also works);
+  `<exe_dir>/src/internal/<relpath>` and
   `<exe_dir>/../share/mathilda/internal/<relpath>` (relative to the running
   binary, so a relocated or installed executable still finds its modules);
   `$(PREFIX)/share/mathilda/internal/<relpath>` when built with a compile-time
@@ -129,15 +181,9 @@ any include so `readlink` is visible under `-std=c99` (SPEC.md §10).
 
 ### Notes
 
-`LoadModule["relpath"]` loads a Mathilda `.m` source module, with `relpath`
-relative to the source tree's `src/internal` directory (e.g.
-`"simp/FullSimplify.m"`). It returns `True` if the module was found and loaded (or
-had already been loaded) and `False` otherwise. This is the mechanism the lazy
-per-family loading in `FullSimplify` uses.
-
-Resolution is deliberately **independent of the working directory**: it tries
-`$MATHILDA_HOME`, then paths relative to the running executable (so a relocated or
-installed binary still finds its bundled modules), then a compile-time prefix, then
-a CWD ladder. Each module is loaded **at most once**, so repeated calls never
-re-register rules — which is why the second call above is still `True` without
-re-reading the file. It shares its file-reading core with `Get`.
+- `LoadModule["relpath"]` loads a Mathilda `.m` source module, where `relpath` is relative to `src/internal` (or the installed `share/mathilda/internal`). It returns `True` if the module was found and loaded, or had already been loaded, and `False` otherwise.
+- Each module is loaded at most once per session, keyed by the exact `relpath` string. This makes it safe to call from inside other modules and from lazy loaders: `FullSimplify` loads its `simp/transforms/*.m` families on demand, and `Integrate` loads `PolyLogLadder.m` and `mixed/ParallelMixed.m` this way. A module first loaded with `Get` is not in the table, so `LoadModule` would read it again.
+- Resolution does not depend on the working directory. The search order is: `$MATHILDA_HOME/` (or its `internal/` subdirectory, since v0.449); the running executable's `src/internal/` and `../share/mathilda/internal/`; the directory of the image that holds the code, so an installed shared `libmathilda` inside Python or Jupyter finds its modules; a compile-time `PREFIX`; and finally a CWD ladder. The winning base directory is cached.
+- A missing file emits `LoadModule::nofile` through `mth_message`, so both `Quiet` and `Check` work. A file that opens but stops at a syntax error still counts as loaded (`True`), because reading simply ends at the first unparseable expression, as with `Get`.
+- Attributes: `Protected`. The value of the module's last expression is discarded. Use `Get` to get it back.
+- See also: `Get`, `FullSimplify`.

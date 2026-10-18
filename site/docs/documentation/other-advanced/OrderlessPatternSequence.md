@@ -5,7 +5,9 @@
 
 ## Description
 
-**`OrderlessPatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....`**
+**`OrderlessPatternSequence[p1, p2, ...]`**
+
+is a pattern object that matches a sequence of arguments, in any order, that together match p1, p2, ....
 
 ## Examples (3)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LoopFreeGraphQ[g] gives True if g is a graph with no self-loops -- every valid Mathilda graph -- and False otherwise.`**
+**`LoopFreeGraphQ[g]`**
+
+gives True if g is a graph with no self-loops -- every valid Mathilda graph -- and False otherwise.
 
 ## Examples (5)
 

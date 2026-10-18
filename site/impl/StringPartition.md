@@ -1,8 +1,8 @@
 ---
 source: src/strings/stringpartition.c
 ---
-**Algorithm.** `builtin_stringpartition` accepts 2–3 arguments (else `StringPartition::argt`). The block length `n` comes from an integer (every block exactly `n`) or from `UpTo[n]` (a short final block allowed); the offset `d` defaults to `n`. It walks `start = 0, d, 2d, …`, emitting `subj[start, start+n)` while the full block fits, or the short tail `subj[start, len)` when `UpTo` permits, and stops otherwise. With `d > n` characters are skipped; with `d < n` the blocks overlap. A `List` first argument threads via `evaluate`.
+**Algorithm.** `builtin_stringpartition` takes 2–3 arguments and gives `::argtu`/`::argt` otherwise. The block length `n` is an integer, in which case every block is exactly `n` characters, or `UpTo[n]`, which clips each block to what remains. The offset `d` defaults to `n`. Block starts run over `0, d, 2d, …` in characters. A fixed `n` stops when a full block no longer fits. `UpTo[n]` takes every start before the end, so with `d < n` the tail repeats shorter and shorter blocks, as in Mathematica. With an explicit `d`, `n = 0` is allowed, and every block is then `""`.
 
-**Data structures.** An `Expr*` block array bounded by `len/d + 2`; each block is a fresh `EXPR_STRING` (`sp_block` `memcpy`s the byte range).
+**Data structures.** A `U8View` over the subject, so lengths and offsets count Unicode code points. Each block is created by `expr_new_string_n` straight from the byte span. The block array is bounded by `len/d + 1`.
 
-**Complexity / limits.** `O(output)`. Both `n` and `d` must be positive integers; a non-integer or non-positive value, or a non-string subject, leaves the call unevaluated. Byte-indexed, consistent with `StringTake`/`StringDrop`.
+**Complexity / limits.** `O(output)`. As in Mathematica, the first argument must be a single string. A list of strings is not threaded (a v0.456 change) and gives `StringPartition::string`. A bad block length gives `::intpm`, or `::intnm` once an offset is present. A non-positive or non-integer offset gives `::intp`. Each of these leaves the call unevaluated, and `UpTo[negative]` stays unevaluated without a message.

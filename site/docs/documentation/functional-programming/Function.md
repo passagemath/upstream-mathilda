@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Function[x, body] or Function[{x1, x2, ...}, body]`**
+**`Function[x, body]`**
 
-represents a pure function with named formal parameters x or x1, x2, ....
+or Function\[{x1, x2, ...}, body\] represents a pure function with named formal parameters x or x1, x2, ....
 
 **`Function[params, body, attrs]`**
 

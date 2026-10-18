@@ -700,7 +700,7 @@ In[4]:= Residue[(z + 1)/(z^2 (z - 2)), {z, 0}]      (* order-2 pole *)
 Out[4]= -3/4
 
 In[5]:= Residue[1/(z^2 + 1), {z, I}]                (* complex pole *)
-Out[5]= -I/2
+Out[5]= -1/2*I
 
 In[6]:= Residue[x^3/(x^4 - 2), {x, 2^(1/4)}]        (* algebraic pole *)
 Out[6]= 1/4
@@ -709,7 +709,7 @@ In[7]:= Residue[f[z]/z^5, {z, 0}]                   (* unknown numerator *)
 Out[7]= 1/24 Derivative[4][f][0]
 
 In[8]:= Residue[Zeta[z]/(z - 1)^10, {z, 1}]
-Out[8]= -StieltjesGamma[9]/362880
+Out[8]= -1/362880 StieltjesGamma[9]
 
 In[9]:= Residue[1/Sqrt[z], {z, 0}]                  (* branch point *)
 Out[9]= Residue[1/Sqrt[z], {z, 0}]
@@ -854,21 +854,22 @@ In[5]:= DSolve[y''[x] + 4 y'[x] + 5 y[x] == 0, y[x], x]
 Out[5]= {{y[x] -> C[1] Cos[x] E^(-2 x) - C[2] Sin[x] E^(-2 x)}}
 
 In[6]:= DSolve[y'''[x] + 4 y'[x] == 5 y[x], y[x], x]
-Out[6]= {{y[x] -> C[1] E^x + C[2] E^(-x/2) Cos[Sqrt[19] x/2]
-              - C[3] E^(-x/2) Sin[Sqrt[19] x/2]}}
+Out[6]= {{y[x] -> C[1] E^x + C[2] E^(-1/2 x) Cos[1/2 Sqrt[19] x] - C[3] E^(-1/2 x) Sin[1/2 Sqrt[19] x]}}
 
 In[7]:= DSolve[{y''[x] + y[x] == 0, y[0] == 0, y[Pi/2] == 1}, y[x], x]  (* BVP *)
 Out[7]= {{y[x] -> Sin[x]}}
 
 In[8]:= DSolve[y''[x] - (x^2 + 3) y[x] == 0, y[x], x]   (* Kovacic Case 1 *)
-Out[8]= {{y[x] -> E^(-x^2/2) (C[1] x E^(x^2) + ...)}}    (* Liouvillian, not a series *)
+Out[8]= {{y[x] -> (C[1] (x^2)^(3/4) E^(1/2 x^2))/Sqrt[x] + (C[2] (x^2)^(1/4) HypergeometricPFQ[{1}, {1/2}, x^2] E^(-1/2 x^2))/Sqrt[x]}}
 
-In[9]:= DSolve[y''[x] + Sin[x] y[x] == 0, y[x], x]       (* no closed form → series *)
-Out[9]= {{y[x] -> C[1] (1 - x^3/6 + ...) + C[2] (x - x^4/12 + ...) + O[x]^7}}
+In[9]:= DSolve[y''[x] + Sin[x] y[x] == 0, y[x], x]       (* no closed form → unevaluated *)
+Out[9]= DSolve[Derivative[2][y][x] + Sin[x] y[x] == 0, y[x], x]
+
+In[10]:= DSolve[y''[x] + Sin[x] y[x] == 0, y[x], x, Method -> "PowerSeries"]  (* series only when pinned *)
+Out[10]= {{y[x] -> C[1] + C[2] x - 1/6 C[1] x^3 - 1/12 C[2] x^4 + 1/120 C[1] x^5 + 1/180 (C[1] + C[2]) x^6 + O[x]^7}}
 
 In[8]:= DSolve[x^2 y''[x] + 4 x y'[x] + 7 y[x] == 0, y[x], x]  (* Euler-Cauchy *)
-Out[8]= {{y[x] -> (C[1] Cos[Sqrt[19]/2 Log[x]])/x^(3/2)
-              - (C[2] Sin[Sqrt[19]/2 Log[x]])/x^(3/2)}}
+Out[8]= {{y[x] -> (C[1] Cos[1/2 Sqrt[19] Log[x]])/x^(3/2) - (C[2] Sin[1/2 Sqrt[19] Log[x]])/x^(3/2)}}
 
 In[9]:= DSolve[y''[x] - x y[x] == 0, y[x], x]  (* Airy *)
 Out[9]= {{y[x] -> C[1] AiryAi[x] + C[2] AiryBi[x]}}
@@ -884,19 +885,16 @@ Out[12]= {{y[x] -> C[1] E^(C[2] x)}}
 
 In[11]:= DSolve[{y'[x] == y[x] - 2 z[x], z'[x] == y[x] - z[x],
                  y[0] == 1, z[0] == 4}, {y[x], z[x]}, x]  (* system, complex eigenvalues *)
-Out[11]= {{y[x] -> -3 (Cos[x] + Sin[x]) + 4 (Cos[x] - Sin[x]),
-           z[x] -> 4 Cos[x] - 3 Sin[x]}}
+Out[11]= {{y[x] -> Cos[x] - 7 Sin[x], z[x] -> Sin[x] + 4 (Cos[x] - Sin[x])}}
 
 In[12]:= DSolve[{y'[t] == 0, x'[t] + y[t] == 0}, {y[t], x[t]}, t]  (* defective + singular *)
 Out[12]= {{y[t] -> C[1], x[t] -> C[2] - C[1] t}}
 
 In[13]:= DSolve[{u'[t] == u[t] - v[t], v'[t] == u[t] + 3 v[t]}, {u[t], v[t]}, t]  (* defective, x e^{2t} *)
-Out[13]= {{u[t] -> E^(2 t) (C[1] - C[1] t - C[2] t),
-           v[t] -> E^(2 t) (C[2] + C[1] t + C[2] t)}}
+Out[13]= {{u[t] -> C[1] E^(2 t) - C[1] t E^(2 t) - C[2] t E^(2 t), v[t] -> C[2] E^(2 t) + C[1] t E^(2 t) + C[2] t E^(2 t)}}
 
 In[14]:= DSolve[{y'[x] == (2 y[x] + z[x])/x, z'[x] == (y[x] + 2 z[x])/x}, {y, z}, x]  (* coupled variable-coeff *)
-Out[14]= {{y[x] -> 1/2 x (C[1] - C[2] + C[1] x^2 + C[2] x^2),
-           z[x] -> 1/2 x (C[2] - C[1] + C[1] x^2 + C[2] x^2)}}
+Out[14]= {{y -> Function[{x}, 1/2 x (C[1] - C[2] + C[1] x^2 + C[2] x^2)], z -> Function[{x}, 1/2 x (C[2] - C[1] + C[1] x^2 + C[2] x^2)]}}
 
 In[15]:= DSolve[{y''[x] + y[x] == 0, y[0] == 1, y[Pi] == 1}, y, x]   (* inconsistent BVP *)
 Out[15]= {}
@@ -922,7 +920,7 @@ In[12]:= DSolve[D[u[t,x],t] + c D[u[t,x],x] == 0, u, {t,x}]  (* transport *)
 Out[12]= {{u -> Function[{t, x}, C[1][-c t + x]]}}
 
 In[13]:= DSolve[D[u[x,y],x] + 3 D[u[x,y],y] + u[x,y] == 1, u, {x,y}]
-Out[13]= {{u -> Function[{x, y}, E^-x (E^x + C[1][-3 x + y])]}}
+Out[13]= {{u -> Function[{x, y}, E^(-x) (E^x + C[1][-3 x + y])]}}
 ```
 
 Homogeneous, constant-coefficient, principal-part-only **second-order** linear
@@ -932,7 +930,7 @@ arbitrary functions and covers all three discriminant types uniformly:
 
 ```
 In[14]:= DSolve[D[u[t,x],{t,2}] == c^2 D[u[t,x],{x,2}], u, {t,x}]  (* wave/d'Alembert *)
-Out[14]= {{u -> Function[{t, x}, C[1][x - Sqrt[c^2] t] + C[2][x + Sqrt[c^2] t]]}}
+Out[14]= {{u -> Function[{t, x}, C[1][-Sqrt[c^2] t + x] + C[2][Sqrt[c^2] t + x]]}}
 
 In[15]:= DSolve[D[u[x,y],{x,2}] + D[u[x,y],{y,2}] == 0, u, {x,y}]  (* Laplace/elliptic *)
 Out[15]= {{u -> Function[{x, y}, C[1][-I x + y] + C[2][I x + y]]}}
@@ -970,12 +968,11 @@ d'Alembert's formula — automatically, or via the pinned `DSolve`WaveDAlembert`
 ```
 In[19]:= DSolve[{D[u[x,t],{t,2}] == c^2 D[u[x,t],{x,2}], u[x,0] == f[x],
                  Derivative[0,1][u][x,0] == g[x]}, u, {x,t}]
-Out[19]= {{u -> Function[{x, t}, (f[x - c t] + f[x + c t])/2
-                 + Integrate[g[K], {K, x - c t, x + c t}]/(2 c)]}}
+Out[19]= {{u -> Function[{x, t}, 1/2 (f[Sqrt[c^2] t + x] + f[-Sqrt[c^2] t + x]) + Integrate[g[K], {K, -Sqrt[c^2] t + x, Sqrt[c^2] t + x}]/(2 Sqrt[c^2])]}}
 
 In[20]:= DSolve[{D[u[x,t],{t,2}] == 4 D[u[x,t],{x,2}], u[x,0] == Sin[x],
                  Derivative[0,1][u][x,0] == 0}, u, {x,t}]
-Out[20]= {{u -> Function[{x, t}, (Sin[x - 2 t] + Sin[x + 2 t])/2]}}
+Out[20]= {{u -> Function[{x, t}, 1/2 (Sin[-2 t + x] + Sin[2 t + x])]}}
 ```
 
 The **Cauchy problem** for the heat equation on the whole line is solved by the
@@ -984,20 +981,18 @@ integral — matching Mathematica for a general `f`):
 
 ```
 In[21]:= DSolve[{D[u[x,t],t] == k D[u[x,t],{x,2}], u[x,0] == f[x]}, u, {x,t}]
-Out[21]= {{u -> Function[{x, t},
-             Integrate[f[K] E^(-(x - K)^2/(4 k t)), {K, -Infinity, Infinity}]
-               / (2 Sqrt[k π t])]}}
+Out[21]= {{u -> Function[{x, t}, 1/(2 Sqrt[Pi k t]) Integrate[f[K] E^(-(-K + x)^2/(4 k t)), {K, -Infinity, Infinity}]]}}
 ```
 
 ```
 In[1]:= DSolve[y'[x] + y[x] == a Sin[x], y[x], x]
-Out[1]= {{y[x] -> E^(-x) (C[1] + 1/2 (-a Cos[x] E^x + a E^x Sin[x]))}}
+Out[1]= {{y[x] -> E^(-x) (C[1] + (-1/4 - 1/4*I) a E^((1 + I) x) + (-1/4 + 1/4*I) a E^((1 - I) x))}}
 
 In[2]:= DSolve[{y'[x] == 3 y[x], y[0] == 5}, y[x], x]
 Out[2]= {{y[x] -> 5 E^(3 x)}}
 
 In[3]:= DSolve[{y'[x] == -3 y[x]^2, y[1] == 2}, y[x], x]
-Out[3]= {{y[x] -> 4/(-10 + 12 x)}}
+Out[3]= {{y[x] -> 1/(-5/2 + 3 x)}}
 
 In[4]:= DSolve[y''[x] == 7, y, x]
 Out[4]= {{y -> Function[{x}, C[1] + C[2] x + 7/2 x^2]}}
@@ -2353,21 +2348,19 @@ In[2]:= Integrate[2 x/(x^2 + 1), x]
 Out[2]= Log[1 + x^2]
 
 In[3]:= Integrate[1/(x - a)^2, x]
-Out[3]= -1/(-a + x)
+Out[3]= 1/(a - x)
 
 In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
 Out[4]= -1/(5 + 3 x + x^2)
 
 In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]          (* Phase 2 LRT closes this *)
-Out[5]= 1/2 Log[-3 + x] - Log[-2 + x] + 1/2 Log[-1 + x]
+Out[5]= -Log[-2 + x] + 1/2 Log[3 - 4 x + x^2]
 
 In[6]:= Integrate[1/(x^2 + 1), x]                  (* Phase 4 LogToReal *)
 Out[6]= ArcTan[x]
 
 In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *)
-Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
-        1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] +
-        1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
+Out[7]= 1/4 Log[1 + x + x^2] + ArcTan[(-1 + 2 x)/Sqrt[3]]/(2 Sqrt[3]) + ArcTan[(1 + 2 x)/Sqrt[3]]/(2 Sqrt[3]) - 1/4 Log[1 - x + x^2]
 
 In[8]:= Integrate[Sin[x], x, Method -> "RischTranscendental"]  (* strict, no fallback *)
 Out[8]= -Cos[x]
@@ -2492,10 +2485,10 @@ real machinery already in place:
 **Examples**:
 ```mathematica
 In[1]:= Integrate[1/x, {x, 1 - I, 2 + 3 I}]
-Out[1]= Log[2 + 3 I] - Log[1 - I]
+Out[1]= Log[2 + 3*I] - Log[1 - I]
 
 In[2]:= Integrate[z^2, {z, 0, 1 + I}]
-Out[2]= -2/3 + 2/3 I
+Out[2]= -2/3 + 2/3*I
 
 In[3]:= Integrate[1/Sqrt[z], {z, 0, 1 + I}]        (* branch-point endpoint *)
 Out[3]= 2 Sqrt[1 + I]
@@ -2508,7 +2501,7 @@ Integrate::idiv: Integral of 1/z does not converge on the contour {-1 - I, 1 + I
 Out[5]= Integrate[1/z, {z, -1 - I, 1 + I}]
 
 In[6]:= Chop[N[Integrate[1/z, {z, 1, I, -1, -I, 1}]]]   (* CCW loop about 0 *)
-Out[6]= 0.0 + 6.28319 I                                 (* = 2 Pi I *)
+Out[6]= 0.0 + 6.28319*I                                 (* = 2 Pi I *)
 ```
 
 ### Contour / residue-theorem definite integration
@@ -2852,7 +2845,7 @@ In[5]:= Integrate[Sin[x]/x, {x, -Infinity, Infinity}]        (* principal value 
 Out[5]= Pi
 
 In[6]:= Integrate[1/(1 + x^4), {x, 0, Infinity}]             (* even half-line *)
-Out[6]= (1/2 Pi)/Sqrt[2]
+Out[6]= Pi/(2 Sqrt[2])
 ```
 
 The residue sums are closed with `RootReduce` (algebraic families) or the
@@ -3128,7 +3121,7 @@ In[3]:= Integrate[1/(1 + x^(1/3)), x, Method -> "LinearRadicals"]
 Out[3]= -3 x^(1/3) + 3/2 x^(2/3) + 3 Log[1 + x^(1/3)]
 
 In[4]:= Integrate[Sqrt[2 x + 3]/x, x, Method -> "LinearRadicals"]
-Out[4]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcTanh[Sqrt[3 + 2 x]/Sqrt[3]]
+Out[4]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcCoth[Sqrt[3 + 2 x]/Sqrt[3]]
 ```
 
 ### Integrate`QuadraticRadicals
@@ -3171,16 +3164,16 @@ unevaluated when `f` is not of this form or the reduced integral does not close.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[x^2 + 1], x]
-Out[1]= -Log[-x + Sqrt[1 + x^2]]
+Out[1]= ArcSinh[x]
 
 In[2]:= Integrate[1/Sqrt[1 - x^2], x]
-Out[2]= -2 ArcTan[Sqrt[1 - x^2]/(-1 + x)]
+Out[2]= ArcSin[x]
 
 In[3]:= Integrate[1/Sqrt[a x^2 + 1], x]               (* symbolic leading coeff *)
 Out[3]= -Log[-Sqrt[a] x + Sqrt[1 + a x^2]]/Sqrt[a]
 
 In[4]:= Integrate[1/Sqrt[x^2 - 1], x, Method -> "QuadraticRadicals"]
-Out[4]= -Log[-x + Sqrt[-1 + x^2]]
+Out[4]= Log[2 x + 2 Sqrt[-1 + x^2]]
 ```
 
 ### Integrate`LinearRatioRadicals
@@ -3224,12 +3217,10 @@ not close.  `Protected`.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x]
-Out[1]= 2 Sqrt[(1 + x)/(-1 + x)]/(-1 + (1 + x)/(-1 + x)) -
-        2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
+Out[1]= (2 Sqrt[(1 + x)/(-1 + x)])/(-1 + (1 + x)/(-1 + x)) - 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
 
 In[2]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"]
-Out[2]= -5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) +
-        5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]
+Out[2]= -(5 Sqrt[(1 + 2 x)/(3 + x)])/(-4 + (2 (1 + 2 x))/(3 + x)) + (5 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]])/(2 Sqrt[2])
 ```
 
 ### Integrate`Weierstrass
@@ -3270,13 +3261,13 @@ or a radical of a kernel).  `Protected`.
 
 ```mathematica
 In[1]:= Integrate[3/(5 - 4 Cos[x]), x]               (* paper eq. (10) *)
-Out[1]= 2 Pi Floor[(-Pi + x)/(2 Pi)] + 2 ArcTan[3 Tan[x/2]]
+Out[1]= 2 Pi Floor[(-Pi + x)/(2 Pi)] + 2 ArcTan[3 Tan[1/2 x]]
 
 In[2]:= Integrate[1/(2 + Cos[x]), x]                 (* continuous form *)
-Out[2]= 2 Pi Floor[(-Pi + x)/(2 Pi)]/Sqrt[3] + 2 ArcTan[Tan[x/2]/Sqrt[3]]/Sqrt[3]
+Out[2]= (2 Pi Floor[(-Pi + x)/(2 Pi)])/Sqrt[3] + (2 ArcTan[Tan[1/2 x]/Sqrt[3]])/Sqrt[3]
 
 In[3]:= Integrate[1/(2 + Cosh[x]), x]                (* hyperbolic: no Floor *)
-Out[3]= 2 ArcTanh[Tanh[x/2]/Sqrt[3]]/Sqrt[3]
+Out[3]= (2 ArcTanh[Tanh[1/2 x]/Sqrt[3]])/Sqrt[3]
 ```
 
 ### InterpolatingFunction integrands

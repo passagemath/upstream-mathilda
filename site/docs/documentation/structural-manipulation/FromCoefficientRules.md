@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}] reconstructs the polynomial`**
+**`FromCoefficientRules[{expvec -> coeff, ...}, {x1, x2, ...}]`**
+
+reconstructs the polynomial
 
 **`Sum[coeff * x1^e1 * x2^e2 * ..., over rules]. The exponent vectors must match the number of`**
 

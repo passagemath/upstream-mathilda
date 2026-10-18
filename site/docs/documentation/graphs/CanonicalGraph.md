@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CanonicalGraph[g] gives a canonical form of g on vertices 1..n: two graphs are isomorphic iff their canonical graphs are identical.`**
+**`CanonicalGraph[g]`**
+
+gives a canonical form of g on vertices 1..n: two graphs are isomorphic iff their canonical graphs are identical.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`KirchhoffMatrix[g] gives the Kirchhoff (Laplacian) matrix D - A of g, with D the diagonal matrix of vertex degrees (incident edges) and A the adjacency matrix. Dense (Wolfram returns a SparseArray); weights are ignored.`**
+**`KirchhoffMatrix[g]`**
+
+gives the Kirchhoff (Laplacian) matrix D - A of g, with D the diagonal matrix of vertex degrees (incident edges) and A the adjacency matrix. Dense (Wolfram returns a SparseArray); weights are ignored.
 
 ## Examples (10)
 

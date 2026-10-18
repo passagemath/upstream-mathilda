@@ -9,9 +9,13 @@
 
 yields 1 if expr is True and 0 if it is False.
 
-**`Boole[expr] remains unchanged if expr is neither True nor False.`**
+**`Boole[expr]`**
 
-**`Boole[expr] is effectively equivalent to If[expr, 1, 0].`**
+remains unchanged if expr is neither True nor False.
+
+**`Boole[expr]`**
+
+is effectively equivalent to If\[expr, 1, 0\].
 
 <details>
 <summary>Notes</summary>

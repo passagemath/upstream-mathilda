@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphDual[h] gives the dual hypergraph: vertices 1..m (one per hyperedge of h) and, for each vertex v of h in VertexList order, the hyperedge of indices of the hyperedges containing v.`**
+**`HypergraphDual[h]`**
+
+gives the dual hypergraph: vertices 1..m (one per hyperedge of h) and, for each vertex v of h in VertexList order, the hyperedge of indices of the hyperedges containing v.
 
 ## Examples (7)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TopologicalSort[g] gives the vertices of the directed acyclic graph g ordered so that u precedes v for every edge u->v; ties go to the vertex earlier in VertexList[g]. TopologicalSort[{v->w, ...}] uses the rules as the graph. Left unevaluated if g has a cycle or an undirected edge.`**
+**`TopologicalSort[g]`**
+
+gives the vertices of the directed acyclic graph g ordered so that u precedes v for every edge u-\>v; ties go to the vertex earlier in VertexList\[g\]. TopologicalSort\[{v-\>w, ...}\] uses the rules as the graph. Left unevaluated if g has a cycle or an undirected edge.
 
 ## Examples (10)
 

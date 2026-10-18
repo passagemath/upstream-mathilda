@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HyperedgeSizes[h] gives the arity (Length) of each hyperedge of h, in EdgeList order.`**
+**`HyperedgeSizes[h]`**
+
+gives the arity (Length) of each hyperedge of h, in EdgeList order.
 
 ## Examples (10)
 

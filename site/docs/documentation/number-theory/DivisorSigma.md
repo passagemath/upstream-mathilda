@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.`**
+**`DivisorSigma[k, n]`**
+
+gives the divisor function sigma\_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma\[k, n, GaussianIntegers -\> True\] sums over Gaussian-integer divisors.
 
 ## Examples (15)
 

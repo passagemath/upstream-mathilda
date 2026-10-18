@@ -60,6 +60,14 @@ In[1]:= CompileDiagnostics[{{x, _Real}}, EllipticPi[0.5, x, 0.25]]  (* the three
 Out[1]= {"Compiled" -> True, "ResultType" -> "Real", "Instructions" -> 7, "CommonSubexpressions" -> 0, "InstructionsUnoptimized" -> 7}
 ```
 
+```mathematica
+In[1]:= EllipticPi[0.3 + 0.1 I, 0.5]  (* a complex characteristic at machine precision goes to Arb: right value, but a 53-bit arbitrary-precision number rather than a machine Complex *)
+```
+
+```mathematica
+In[1]:= NIntegrate[1/((1 - (0.3 + 0.1 I) Sin[t]^2) Sqrt[1 - 0.5 Sin[t]^2]), {t, 0, Pi/2}]  (* quadrature of the defining integral agrees *)
+```
+
 ### Notes
 
 `EllipticPi` is arity-overloaded: **two** arguments are the complete integral `Π(n|m)`,
@@ -83,3 +91,8 @@ complete form at 41 ns/element and 2 ulp, the incomplete at 1 ulp with the quasi
 arity two, only the complete form rides that buffer — but `Compile[]` lowers all three
 shapes, and a visible `NDArray` in any argument position of the three-argument form is
 delisted and re-evaluated rather than left standing.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- No machine-complex kernel (unlike the complete `EllipticK`/`EllipticE`): complex machine
+  arguments and `n > 1` are answered by Arb as 53-bit arbitrary-precision numbers.
+- See also: `EllipticK`, `EllipticF`, `EllipticE`.

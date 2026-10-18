@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphPeriphery[g] gives the vertices of g with maximum eccentricity; {} unless g is (strongly) connected.`**
+**`GraphPeriphery[g]`**
+
+gives the vertices of g with maximum eccentricity; {} unless g is (strongly) connected.
 
 ## Examples (8)
 

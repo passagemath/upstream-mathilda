@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EulerianGraphQ[g] gives True if g has a cycle using every edge exactly once: all degrees even (undirected) or in-degree = out-degree (directed), with all edges in one connected component. Left unevaluated for mixed graphs.`**
+**`EulerianGraphQ[g]`**
+
+gives True if g has a cycle using every edge exactly once: all degrees even (undirected) or in-degree = out-degree (directed), with all edges in one connected component. Left unevaluated for mixed graphs.
 
 ## Examples (7)
 

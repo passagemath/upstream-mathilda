@@ -66,7 +66,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **See also:** [Variance](../../data-structures/Variance/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_bignum_rational_numeric.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bignum_rational_numeric.c)

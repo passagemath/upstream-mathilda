@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexIndex[g, v] gives the position of the vertex v in VertexList[g]; VertexIndex[g, {v1, ...}] gives a list of positions.`**
+**`VertexIndex[g, v]`**
+
+gives the position of the vertex v in VertexList\[g\]; VertexIndex\[g, {v1, ...}\] gives a list of positions.
 
 ## Examples (10)
 

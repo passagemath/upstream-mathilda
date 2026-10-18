@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindMaximumFlow[g, s, t] gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow[g, s, t, "prop"] gives "FlowValue", "FlowMatrix" (dense n x n matrix of edge flows) or "EdgeList" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.`**
+**`FindMaximumFlow[g, s, t]`**
+
+gives the value of a maximum flow from s to t (s and t may be lists of sources and sinks). FindMaximumFlow\[g, s, t, "prop"\] gives "FlowValue", "FlowMatrix" (dense n x n matrix of edge flows) or "EdgeList" (edges carrying flow, oriented along it). Capacities come from the EdgeCapacity -\> {c1, ...} option (EdgeList order), else from g's own EdgeCapacity, else 1; EdgeWeight is ignored; VertexCapacity -\> {c1, ...} caps the flow through each vertex. Undirected edges carry flow either way. Dinic's algorithm; exact for integer capacities.
 
 ## Examples (17)
 

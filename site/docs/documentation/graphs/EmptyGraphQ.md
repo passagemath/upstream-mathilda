@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EmptyGraphQ[g] gives True if g is a graph with no edges (it may have vertices), and False otherwise.`**
+**`EmptyGraphQ[g]`**
+
+gives True if g is a graph with no edges (it may have vertices), and False otherwise.
 
 ## Examples (6)
 

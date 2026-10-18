@@ -13,9 +13,9 @@ gives a list of polynomials that form a Gröbner basis for the ideal generated b
 
 eliminates the yi and returns a Gröbner basis of the elimination ideal in {x1, ...}.
 
-**`TimeConstrained[GroebnerBasis[...], t] aborts cleanly via the`**
+**`TimeConstrained[GroebnerBasis[...], t]`**
 
-cooperative deadline hook.  Lex order can be exponentially slow on systems with 3+ variables; switch to MonomialOrder -\> DegreeReverseLexicographic for hard inputs.
+aborts cleanly via the cooperative deadline hook.  Lex order can be exponentially slow on systems with 3+ variables; switch to MonomialOrder -\> DegreeReverseLexicographic for hard inputs.
 
 <details>
 <summary>Notes</summary>

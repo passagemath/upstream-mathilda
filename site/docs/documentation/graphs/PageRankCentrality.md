@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PageRankCentrality[g, a] gives the PageRank of each vertex with damping factor a (default 0.85): x = a P^T x + (1-a)/n, where a vertex with no outgoing edge links to every vertex; the entries sum to 1. Edge weights are ignored.`**
+**`PageRankCentrality[g, a]`**
+
+gives the PageRank of each vertex with damping factor a (default 0.85): x = a P^T x + (1-a)/n, where a vertex with no outgoing edge links to every vertex; the entries sum to 1. Edge weights are ignored.
 
 ## Examples (10)
 

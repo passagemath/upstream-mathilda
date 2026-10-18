@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Break[] exits the nearest enclosing Do, For, or While loop.`**
+**`Break[]`**
 
-**`Break[] takes effect as soon as it is evaluated.`**
+exits the nearest enclosing Do, For, or While loop.
+
+**`Break[]`**
+
+takes effect as soon as it is evaluated.
 
 <details>
 <summary>Notes</summary>

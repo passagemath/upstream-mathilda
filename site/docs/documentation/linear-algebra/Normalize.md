@@ -32,7 +32,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= Normalize[{1, 5, 1}]
-Out[1]= {1/3/Sqrt[3], 5/3/Sqrt[3], 1/3/Sqrt[3]}
+Out[1]= {1/(3 Sqrt[3]), 5/(3 Sqrt[3]), 1/(3 Sqrt[3])}
 
 In[2]:= Normalize[{3, 4}]
 Out[2]= {3/5, 4/5}

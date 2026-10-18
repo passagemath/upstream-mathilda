@@ -1,16 +1,17 @@
 # Number Theory
 
-29 built-in function(s) in this category.
+30 built-in function(s) in this category.
 
 - [`ChineseRemainder`](ChineseRemainder.md) — ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].  _(Stable)_
 - [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.  _(Stable)_
 - [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.  _(Stable)_
+- [`DirichletCharacter`](DirichletCharacter.md) — DirichletCharacter[k, j, n]  _(Stable)_
 - [`Divisible`](Divisible.md) — Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.  _(Stable)_
 - [`DivisorSigma`](DivisorSigma.md) — DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.  _(Stable)_
 - [`Divisors`](Divisors.md) — Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.  _(Stable)_
 - [`EulerPhi`](EulerPhi.md) — EulerPhi[n] gives the Euler totient phi(n), the number of integers from 1 to n coprime to n -- equivalently the order of the group (Z/nZ)* of units, so a^phi(n) == 1 (mod n) whenever gcd(a, n) == 1 (Euler's theorem).  _(Stable)_
 - [`ExtendedGCD`](ExtendedGCD.md) — ExtendedGCD[n1, n2, ...] gives the extended GCD {g, {r1, r2, ...}}, where g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ... -- Bezout's identity, the certificate that also yields modular inverses.  _(Stable)_
-- [`FactorInteger`](FactorInteger.md) — FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.  _(Stable)_
+- [`FactorInteger`](FactorInteger.md) — FactorInteger[n] gives a list of the prime factors of the integer n, together  _(Stable)_
 - [`FromContinuedFraction`](FromContinuedFraction.md) — FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.  _(Stable)_
 - [`GCD`](GCD.md) — GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.  _(Stable)_
 - [`IntegerPartitions`](IntegerPartitions.md) — IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.  _(Stable)_

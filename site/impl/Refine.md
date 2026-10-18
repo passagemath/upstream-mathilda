@@ -18,10 +18,21 @@ logic go to a `Reduce`/CAD entailment over the reals, where `P` is `True` iff `R
 !P]` is unsatisfiable (literally `False`) and `False` iff `Reduce[A && P]` is. **(2) Rewrite
 path** (everything else): `apply_assumption_rules` rewrites the expression under the facts
 (the very rules `Simplify` applies — `Sqrt[x^2]->±x/Abs[x]`, `Log[x^p]->p Log[x]`, integer-`k`
-trig, `Abs`/`Sign`/`Conjugate` under sign facts, …), then a bottom-up `deep_positivity_walk`
-resolves `Sign[p]`, `Abs[p]` and `Sqrt[p^2]` for compound polynomials `p` the fast sign
-prover could not settle, each via a `deep_sign` CAD run, and the tree is evaluated. With no
-usable facts the call is the identity (it steals the positional expression out of `res`).
+trig, `Abs`/`Sign`/`Conjugate`/`Arg` under sign facts, and the structural rules in
+`assume_structural_rewrite`). Those structural rules cover the integer-assumption
+reductions (`Floor`/`Mod`/`(-1)^k`/`I^k` parity, `Sin[k Pi]`), the inverse-trig branch
+formulas such as `ArcSin[Sin[x]] -> Pi - x` on `(Pi/2, Pi)`, and `Arg` of a canonicalised
+exponential. Next, a bottom-up `deep_positivity_walk` resolves `Sign[p]`, `Abs[p]` and
+`Sqrt[p^2]` for compound polynomials `p` that the fast sign prover could not settle,
+each through a `deep_sign` CAD run. Since v0.379 the walk also reduces radicals over
+products and quotients: `sqrt_extract` splits
+`Sqrt[Π base_i^(2 k_i) · R] -> (Π |base_i|^k_i) Sqrt[R]`, with each `|base_i|` resolved by
+`deep_sign`. A `Plus` radicand is passed through `Together` first to expose its
+denominator, and the `^(-1/2)` form is handled too, so `Sqrt[1 + b^2/a^2]` becomes
+`Sqrt[a^2 + b^2]/a` under `a > 0`. The rule is sound because every factor pulled out is
+non-negative. `Integrate` calls this pass on a definite result whenever it was given
+`Assumptions`. The tree is then evaluated. With no usable facts the call is the
+identity: it takes the positional expression out of `res` unchanged.
 
 **Data structures.** Everything is `Expr` trees. Assumptions are held as an `AssumeCtx`
 (flat `Expr*` fact array) borrowed from `simp`. Entailment is threaded through a

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GlobalClusteringCoefficient[g] gives 3 x (number of triangles) / (number of connected triples) of g, exactly.`**
+**`GlobalClusteringCoefficient[g]`**
+
+gives 3 x (number of triangles) / (number of connected triples) of g, exactly.
 
 ## Examples (7)
 

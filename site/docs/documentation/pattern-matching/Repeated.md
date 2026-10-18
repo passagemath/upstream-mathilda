@@ -5,11 +5,17 @@
 
 ## Description
 
-**`Repeated[p, max] represents from 1 to max expressions matching p.`**
+**`Repeated[p, max]`**
 
-**`Repeated[p, {min, max}] represents between min and max expressions matching p.`**
+represents from 1 to max expressions matching p.
 
-**`Repeated[p, {n}] represents exactly n expressions matching p.`**
+**`Repeated[p, {min, max}]`**
+
+represents between min and max expressions matching p.
+
+**`Repeated[p, {n}]`**
+
+represents exactly n expressions matching p.
 
 <details>
 <summary>Notes</summary>
@@ -54,6 +60,7 @@ Out[5]= True
 - Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
 - Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 - Tests: [`tests/test_replace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replace.c)
+- Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
 
 ## Notes & additional examples
 

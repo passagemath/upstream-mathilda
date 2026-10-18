@@ -13,7 +13,9 @@ gives True if expr is a list, none of whose elements are themselves lists, and g
 
 gives True only if test yields True when applied to each of the elements in expr.
 
-**`VectorQ[expr, NumberQ] tests whether expr is a vector of numbers.`**
+**`VectorQ[expr, NumberQ]`**
+
+tests whether expr is a vector of numbers.
 
 ## Examples (2)
 
@@ -39,7 +41,7 @@ Out[2]= False
 
 **See also:** [ListQ](../../expression-information/ListQ/), [MatrixQ](../../expression-information/MatrixQ/), [List](../../other-advanced/List/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_ml_pca.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_pca.c)

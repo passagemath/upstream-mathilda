@@ -102,8 +102,9 @@ Out[13]= 42
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_eval_timestamps.c`](https://github.com/stblake/mathilda/blob/main/tests/test_eval_timestamps.c)
-- Tests: [`tests/test_releasehold.c`](https://github.com/stblake/mathilda/blob/main/tests/test_releasehold.c)
-- Tests: [`tests/test_unevaluated.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unevaluated.c)
+- Tests: [`tests/test_extreme_definite_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extreme_definite_corpus.c)
+- Tests: [`tests/test_mse_trick_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mse_trick_corpus.c)
+- Tests: [`tests/test_principal_value_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_principal_value_corpus.c)
 
 ## Notes & additional examples
 

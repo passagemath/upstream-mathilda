@@ -5,13 +5,15 @@
 
 ## Description
 
-**`EllipticPi[n, m] is the complete elliptic integral of the third kind, Integrate[1/((1 - n Sin[t]^2) Sqrt[1 - m Sin[t]^2]), {t, 0, Pi/2}], and EllipticPi[n, phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi[0, m] is EllipticK[m] and EllipticPi[0, phi, m] is EllipticF[phi, m]; EllipticPi[1, m] is ComplexInfinity. Where the path crosses the pole at Sin[t]^2 == 1/n the value is complex, not a real principal value: EllipticPi[3/2, 1/2] is -0.4567203134529101 - 2.720699046351328 I.`**
+**`EllipticPi[n, m]`**
 
-## Examples (16)
+is the complete elliptic integral of the third kind, Integrate\[1/((1 - n Sin\[t\]^2) Sqrt\[1 - m Sin\[t\]^2\]), {t, 0, Pi/2}\], and EllipticPi\[n, phi, m\] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticPi\[0, m\] is EllipticK\[m\] and EllipticPi\[0, phi, m\] is EllipticF\[phi, m\]; EllipticPi\[1, m\] is ComplexInfinity. Where the path crosses the pole at Sin\[t\]^2 == 1/n the value is complex, not a real principal value: EllipticPi\[3/2, 1/2\] is -0.4567203134529101 - 2.720699046351328 I.
+
+## Examples (20)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (4)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= EllipticK[0]
@@ -25,92 +27,112 @@ Out[3]= 1/Sqrt[1 - m Sin[phi]^2]
 
 In[4]:= N[EllipticPi[3/2, ArcSin[Sqrt[2] Sqrt[1/(1 + 7/5)]], 1/2], 20]
 Out[4]= 0.987739699728522080208 - 2.7206990463513267759*I
+
+In[5]:= EllipticK[2.]
+Out[5]= 1.31103 - 1.31103*I
+
+In[6]:= EllipticE[0.3 + 0.4 I]
+Out[6]= 1.46251 - 0.175161*I
 ```
 
-### Applications (12)
+### Applications (14)
 
 With n = 0 the third factor vanishes, leaving the first kind
 
 ```mathematica
-In[5]:= EllipticPi[0, 1/2]
-Out[5]= (8 Pi^(3/2))/Gamma[-1/4]^2
+In[7]:= EllipticPi[0, 1/2]
+Out[7]= (8 Pi^(3/2))/Gamma[-1/4]^2
 ```
 
 The same reduction, incomplete
 
 ```mathematica
-In[6]:= EllipticPi[0, phi, m]
-Out[6]= EllipticF[phi, m]
+In[8]:= EllipticPi[0, phi, m]
+Out[8]= EllipticF[phi, m]
 ```
 
 At m = 0 there is a closed form in n alone
 
 ```mathematica
-In[7]:= EllipticPi[n, 0]
-Out[7]= (1/2 Pi)/Sqrt[1 - n]
+In[9]:= EllipticPi[n, 0]
+Out[9]= Pi/(2 Sqrt[1 - n])
 ```
 
 And its incomplete counterpart
 
 ```mathematica
-In[8]:= EllipticPi[n, phi, 0]
-Out[8]= ArcTanh[Sqrt[-1 + n] Tan[phi]]/Sqrt[-1 + n]
+In[10]:= EllipticPi[n, phi, 0]
+Out[10]= ArcTanh[Sqrt[-1 + n] Tan[phi]]/Sqrt[-1 + n]
 ```
 
 A pole of the COMPLETE form only: the integrand carries 1/Cos[t]^2 at the upper limit
 
 ```mathematica
-In[9]:= EllipticPi[1, m]
-Out[9]= ComplexInfinity
+In[11]:= EllipticPi[1, m]
+Out[11]= ComplexInfinity
 ```
 
 Complete, via R_F + (n/3) R_J
 
 ```mathematica
-In[10]:= N[EllipticPi[1/2, 1/4], 30]
-Out[10]= 2.41367150420119464066692352054
+In[12]:= N[EllipticPi[1/2, 1/4], 30]
+Out[12]= 2.41367150420119464066692352054
 ```
 
 Incomplete, amplitude Pi/3
 
 ```mathematica
-In[11]:= N[EllipticPi[1/2, Pi/3, 1/4], 25]
-Out[11]= 1.3101681612463965511336307
+In[13]:= N[EllipticPi[1/2, Pi/3, 1/4], 25]
+Out[13]= 1.3101681612463965511336307
 ```
 
 For n > 1 the path crosses the pole at Sin[t]^2 == 1/n: the value is complex, not a real principal value
 
 ```mathematica
-In[12]:= N[EllipticPi[3/2, 1/2], 20]
-Out[12]= -0.456720313452909897007 - 2.7206990463513267759*I
+In[14]:= N[EllipticPi[3/2, 1/2], 20]
+Out[14]= -0.456720313452909897007 - 2.7206990463513267759*I
 ```
 
 The amplitude derivative is the integrand
 
 ```mathematica
-In[13]:= D[EllipticPi[n, phi, m], phi]
-Out[13]= 1/(Sqrt[1 - m Sin[phi]^2] (1 - n Sin[phi]^2))
+In[15]:= D[EllipticPi[n, phi, m], phi]
+Out[15]= 1/(Sqrt[1 - m Sin[phi]^2] (1 - n Sin[phi]^2))
 ```
 
 The complete form's parameter derivative is closed form; the incomplete one's stays inert
 
 ```mathematica
-In[14]:= D[EllipticPi[n, m], m]
-Out[14]= (1/2 (EllipticE[m]/(-1 + m) + EllipticPi[n, m]))/(-m + n)
+In[16]:= D[EllipticPi[n, m], m]
+Out[16]= (EllipticE[m]/(-1 + m) + EllipticPi[n, m])/(2 (-m + n))
 ```
 
 A visible NDArray in the amplitude slot
 
 ```mathematica
-In[15]:= EllipticPi[0.5, NDArray[{0.1, 0.2, 0.3}], 0.25]
-Out[15]= {0.100209, 0.201675, 0.305686}
+In[17]:= EllipticPi[0.5, NDArray[{0.1, 0.2, 0.3}], 0.25]
+Out[17]= {0.100209, 0.201675, 0.305686}
 ```
 
 The three-argument shape lowers too, through the n-ary kernel opcode
 
 ```mathematica
-In[16]:= CompileDiagnostics[{{x, _Real}}, EllipticPi[0.5, x, 0.25]]
-Out[16]= {"Compiled" -> True, "ResultType" -> "Real", "Instructions" -> 7, "CommonSubexpressions" -> 0, "InstructionsUnoptimized" -> 7}
+In[18]:= CompileDiagnostics[{{x, _Real}}, EllipticPi[0.5, x, 0.25]]
+Out[18]= {"Compiled" -> True, "ResultType" -> "Real", "Instructions" -> 7, "CommonSubexpressions" -> 0, "InstructionsUnoptimized" -> 7}
+```
+
+A complex characteristic at machine precision goes to Arb: right value, but a 53-bit arbitrary-precision number rather than a machine Complex
+
+```mathematica
+In[19]:= EllipticPi[0.3 + 0.1 I, 0.5]
+Out[19]= 2.231444960528361 + 0.1722967721967064*I
+```
+
+Quadrature of the defining integral agrees
+
+```mathematica
+In[20]:= NIntegrate[1/((1 - (0.3 + 0.1 I) Sin[t]^2) Sqrt[1 - 0.5 Sin[t]^2]), {t, 0, Pi/2}]
+Out[20]= 2.23144 + 0.172297*I
 ```
 
 ## Performance
@@ -177,7 +199,10 @@ first — a visible `NDArray` left unevaluated is a wrong answer, not a slow one
 **Complexity / limits.** `O(1)` per element: 41 ns/element for the complete form at 2 ulp
 (a 970× speedup over the Arb-per-element path it replaced, and 7.7× faster than the
 equivalent SciPy composition), 1 ulp for the incomplete one. Real principal domain only
-(`m < 1`, `n < 1`, and `1 − n sin²φ > 0`). The `n`- and `m`-derivatives of the *incomplete*
+(`m < 1`, `n < 1`, and `1 − n sin²φ > 0`); unlike the complete `EllipticK`/`EllipticE`,
+which gained machine-complex AGM kernels in v0.438, `EllipticPi` has no complex arm, so a
+machine-complex argument (or `n > 1`) is answered by Arb and comes back as a 53-bit
+arbitrary-precision number rather than a machine `Complex`. The `n`- and `m`-derivatives of the *incomplete*
 form stay inert `Derivative[…]`: a least-squares fit over the natural candidate basis does
 not recover them (residual 1.5 relative, no simple rational coefficients), so the closed
 form involves terms that basis does not span — and an inert derivative is honest where a
@@ -204,7 +229,33 @@ guessed one corrupts every caller silently.
     crosses `sin²t = 1/n`. It is not a real principal value — `Π(3/2 | 1/2)` is
     `−0.456720313453 − 2.72069904635 i`, mpmath and Arb agreeing — so the machine
     kernel declines there and Arb answers.
-- **Machine kernels.** `EllipticK`, `EllipticE` (both arities) and `EllipticF`
+- **Complete integrals at machine precision** (`src/special_functions/sf_machine_ellk.c`).
+  One kernel per (function, real | complex), called by the scalar builtin, the
+  packed/NDArray element-wise path and `Compile[]` alike, so all five surfaces
+  (scalar, List, packed, NDArray, Compile) agree bit for bit.
+  - *Real `m < 1`*: Cephes' form (Moshier's `ellpk`/`ellpe`; the structure of
+    A&S 17.3.34/17.3.36) `K = P(t) − log(t) Q(t)`, `E = P(t) − t log(t) Q(t)`,
+    `t = 1 − m`, with degree-10 `P`, `Q` **re-fitted** for Mathilda by
+    `tools/sf_accuracy/fit_ellk.py` (linear relative-error minimax by Lawson
+    IRLS in mpmath, points down to `t = 10⁻³⁰⁰`; fit error ≤ 1.2·10⁻¹⁸).
+    `m < 0` by `K(m) = K(m/(m−1))/√(1−m)`, `E(m) = √(1−m) E(m/(m−1))`
+    (DLMF 19.7.5), i.e. the same polynomials at `t' = 1/t`. Accuracy vs mpmath:
+    max 1.7 ulp (`K`), 1.3 ulp (`E`) on `[0, 0.95]`; ≤ 2.4 ulp on `[−50, 1)`.
+  - *Complex `m`*: the AGM, `K = π/(2 M(1, √(1−m)))`,
+    `E = K (1 − Σ 2ⁿ⁻¹ cₙ²)` (DLMF 19.8.5–6), in raw `double` re/im with the
+    "right choice" of square root at each step (Cox 1984), which gives the
+    principal branch with the cut on `[1, ∞)`; on the cut the value is the limit
+    from below (`EllipticK[2.] = 1.31103 − 1.31103 I`, as Mathematica and
+    mpmath). Max 3.4 ulp (`K`), 3.9 ulp (`E`) on `|Re m|, |Im m| ≤ 0.9`; ≤ 4.7
+    ulp on `|Re m|, |Im m| ≤ 20`.
+  - A machine **complex** argument, and a machine **real** `m > 1`, now return
+    a machine `Complex`; they used to go through Arb and come back as 53-bit
+    `EXPR_MPFR` numbers. The pole `K(1)` and `|m| > 10³⁰⁰` decline to the
+    exact/Arb path.
+  - Cost (net, per call): `EllipticK[0.6]` 0.19 → 0.12 µs, `EllipticE[0.6]`
+    0.24 → 0.12 µs; complex 6.7 → 0.37 µs (`K`) and 19.9 → 0.36 µs (`E`).
+    10⁶-element buffer: `K` 12.5 → 4.0 ms, `E` 18.5 → 3.3 ms (SciPy 16.7 / 16.5).
+- **Machine kernels (incomplete).** `EllipticE[φ, m]` and `EllipticF`
   carry `double` kernels built on Carlson's symmetric forms `R_F` and `R_D`, used
   by the packed/NDArray element-wise paths. They cover the real principal domain
   and **decline** outside it (`m > 1`, or `1 − m sin²φ < 0`), which abandons the
@@ -314,14 +365,15 @@ guessed one corrupts every caller silently.
   `EllipticE::argt` / `EllipticPi::argt` (the overloaded pair) and stays
   unevaluated.
 - Without FLINT (`USE_FLINT` undefined) the numeric path falls back to the
-  machine Carlson kernels for the real domain and otherwise declines, leaving the
+  machine kernels (Cephes-form / AGM for the complete integrals, Carlson for
+  the incomplete ones) and otherwise declines, leaving the
   call symbolic.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
-**See also:** [EllipticK](../../special-functions/EllipticK/), [EllipticF](../../special-functions/EllipticF/), [EllipticE](../../special-functions/EllipticE/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/), [ArcSin](../../elementary-functions/ArcSin/), [List](../../other-advanced/List/), [Series](../../power-series/Series/)
+**See also:** [EllipticK](../../special-functions/EllipticK/), [EllipticF](../../special-functions/EllipticF/), [EllipticE](../../special-functions/EllipticE/), [E](../../mathematical-constants/E/), [N](../../arithmetic/N/), [ArcSin](../../elementary-functions/ArcSin/), [Complex](../../arithmetic/Complex/), [List](../../other-advanced/List/)
 
 - B. C. Carlson, *Computing elliptic integrals by duplication*, Numer. Math. **33** (1979) 1-16.
 - B. C. Carlson, *Numerical computation of real or complex elliptic integrals*, Numer. Algorithms **10** (1995) 13-26 — `R_J` and the `p < 0` transformation.
@@ -356,3 +408,8 @@ complete form at 41 ns/element and 2 ulp, the incomplete at 1 ulp with the quasi
 arity two, only the complete form rides that buffer — but `Compile[]` lowers all three
 shapes, and a visible `NDArray` in any argument position of the three-argument form is
 delisted and re-evaluated rather than left standing.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- No machine-complex kernel (unlike the complete `EllipticK`/`EllipticE`): complex machine
+  arguments and `n > 1` are answered by Arb as 53-bit arbitrary-precision numbers.
+- See also: `EllipticK`, `EllipticF`, `EllipticE`.

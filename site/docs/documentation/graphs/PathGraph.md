@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PathGraph[n] gives the path on n vertices; PathGraph[{v1,...}] the path over the given vertices.`**
+**`PathGraph[n]`**
+
+gives the path on n vertices; PathGraph\[{v1,...}\] the path over the given vertices.
 
 ## Examples (8)
 

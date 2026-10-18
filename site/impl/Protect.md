@@ -16,4 +16,7 @@ already-protected symbol yields `{}`. The `Protected` attribute is what the
 evaluator and `Set` consult to refuse redefinition of a symbol.
 
 **Attributes & limits.** `Protect` carries `HoldAll | Protected`, so its
-arguments reach the handler as unevaluated symbol names.
+arguments reach the handler as unevaluated symbol names. Assigning to a protected
+symbol emits `Set::wrsym` / `SetDelayed::wrsym` through the message funnel, so
+`Check` sees the refusal. `Protected` is the only sealing attribute (since
+v0.301), and `Unprotect` always lifts it.

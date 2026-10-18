@@ -17,7 +17,9 @@ generates the leading term of a power-series expansion of f about x = x0.
 
 iteratively expands f, first in x, then in y, etc.
 
-**`Series[f, {x, Infinity, n}] expands around x = Infinity by substituting x -> 1/u.`**
+**`Series[f, {x, Infinity, n}]`**
+
+expands around x = Infinity by substituting x -\> 1/u.
 
 <details>
 <summary>Notes</summary>
@@ -26,7 +28,7 @@ Series handles Taylor, Laurent (negative powers), and Puiseux (fractional powers
 
 </details>
 
-## Examples (21)
+## Examples (23)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -65,44 +67,88 @@ Out[9]= {x - 1/6 x^3 + 1/120 x^5 + O[x]^6, 1 - 1/2 x^2 + 1/24 x^4 + O[x]^6, x + 
 
 ```mathematica
 In[10]:= Series[Erf[x], {x, Infinity, 2}]
-Out[10]= 1 + E^(-x^2) ((-1/Sqrt[Pi])/x + O[1/x]^3)
+Out[10]= 1 + E^(-x^2) (-1/(Sqrt[Pi] x) + O[1/x]^3)
 
 In[11]:= Series[LogGamma[x], {x, Infinity, 2}]
-Out[11]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/12/x + O[1/x]^3
+Out[11]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/(12 x) + O[1/x]^3
 
 In[12]:= Series[PolyGamma[0, x], {x, Infinity, 4}]
-Out[12]= Log[x] + -1/2/x - 1/12 (1/x)^2 + 1/120 (1/x)^4 + O[1/x]^5
+Out[12]= Log[x] + -1/(2 x) - 1/12 (1/x)^2 + 1/120 (1/x)^4 + O[1/x]^5
 
 In[13]:= Series[PolyGamma[1, x], {x, Infinity, 5}]
 Out[13]= 1/x + 1/2 (1/x)^2 + 1/6 (1/x)^3 - 1/30 (1/x)^5 + O[1/x]^6
 ```
 
-### Applications (8)
+### Applications (10)
+
+A Taylor series, returned as SeriesData with an O-term
 
 ```mathematica
-In[14]:= Series[Sin[x], {x, 0, 5}]
-Out[14]= x - 1/6 x^3 + 1/120 x^5 + O[x]^6
+In[14]:= Series[Sin[x], {x, 0, 7}]
+Out[14]= x - 1/6 x^3 + 1/120 x^5 - 1/5040 x^7 + O[x]^8
+```
 
-In[15]:= Series[1/(1 - x), {x, 0, 4}]
-Out[15]= 1 + x + x^2 + x^3 + x^4 + O[x]^5
+A Laurent series; the coefficients are Bernoulli numbers over factorials
 
-In[16]:= Series[Log[1 + x], {x, 0, 4}]
-Out[16]= x - 1/2 x^2 + 1/3 x^3 - 1/4 x^4 + O[x]^5
+```mathematica
+In[15]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
+Out[15]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
+```
 
-In[17]:= Normal[Series[Exp[x], {x, 0, 3}]]
-Out[17]= 1 + x + 1/2 x^2 + 1/6 x^3
+A Puiseux series in half-integer powers
 
-In[18]:= Series[Tan[x], {x, 0, 7}]
-Out[18]= x + 1/3 x^3 + 2/15 x^5 + 17/315 x^7 + O[x]^8
+```mathematica
+In[16]:= Series[Sqrt[Sin[x]], {x, 0, 5}]
+Out[16]= Sqrt[x] - 1/12 x^(5/2) + 1/1440 x^(9/2) + O[x]^(11/2)
+```
 
-In[19]:= Series[1/(Exp[x] - 1), {x, 0, 4}]
-Out[19]= 1/x - 1/2 + 1/12 x - 1/720 x^3 + O[x]^5
+Leading-term form
 
-In[20]:= Series[x^x, {x, 0, 3}]
-Out[20]= 1 + Log[x] x + 1/2 Log[x]^2 x^2 + 1/6 Log[x]^3 x^3 + O[x]^4
+```mathematica
+In[17]:= Series[Sin[x] - x, x -> 0]
+Out[17]= -1/6 x^3 + O[x]^5
+```
 
-In[21]:= Series[(1 + 1/x)^x, {x, Infinity, 2}]
-Out[21]= E + (-1/2 E)/x + 11/24 E (1/x)^2 + O[1/x]^3
+Laurent expansion at the pole, with Stieltjes constants
+
+```mathematica
+In[18]:= Series[Zeta[s], {s, 1, 1}]
+Out[18]= 1/(s - 1) + EulerGamma - StieltjesGamma[1] (s - 1) + O[s - 1]^2
+```
+
+Stirling's expansion, keeping the additive growth head symbolic
+
+```mathematica
+In[19]:= Series[LogGamma[x], {x, Infinity, 3}]
+Out[19]= 1/2 Log[2 Pi] - x + Log[x] (-1/2 + x) + 1/(12 x) - 1/360 (1/x)^3 + O[1/x]^4
+```
+
+A branch point, with Mathematica's (-1)^Floor[...] sheet discriminator
+
+```mathematica
+In[20]:= Series[ArcSin[x], {x, 1, 1}]
+Out[20]= 1/2 Pi + (-1)^Floor[(1/2 Pi - Arg[-1 + x])/(2 Pi)] (-I Sqrt[2] Sqrt[x - 1] + O[x - 1]^(3/2))
+```
+
+Assumptions simplify Sqrt[a^2] to a in every coefficient
+
+```mathematica
+In[21]:= Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0]
+Out[21]= a + x/(2 a) - x^2/(8 a^3) + O[x]^3
+```
+
+The sign of the scale selects the -Pi/2 branch
+
+```mathematica
+In[22]:= Series[ArcTan[a x], {x, Infinity, 1}, Assumptions -> a < 0]
+Out[22]= -1/2 Pi - 1/(a x) + O[1/x]^2
+```
+
+Limitation: the pole of Gamma at 0 is not expanded, so the call stays unevaluated
+
+```mathematica
+In[23]:= Series[Gamma[x], {x, 0, 1}]
+Out[23]= Series[Gamma[x], {x, 0, 1}]
 ```
 
 ## Options & behaviour
@@ -124,6 +170,13 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 - `Series[Erf[x], {x, Infinity, n}]`, `Series[Erfc[x], ...]`, `Series[Erfi[x], ...]` return the error-function asymptotic expansions (DLMF 7.12.1), each an `Exp[±x^2]` essential-singularity prefactor times a Laurent series in `1/x` with only odd powers populated.  (the leading `1` is the limit); `Erfc = 1 - Erf` uses the negated multiplier without the constant; `Erfi` has all-positive coefficients and a growing `Exp[+x^2]` prefactor. The general coefficient is `a_k = (2k-1)!!/(2^k Sqrt[Pi])` at `x^-(2k+1)`, with alternating signs for `Erf`/`Erfc`.
 - `Series[LogGamma[x], {x, Infinity, n}]` returns the Stirling expansion (DLMF 5.11.1): an *additive* growth head `(x - 1/2) Log[x] - x + Log[2 Pi]/2` (kept symbolic, as the `E^x` prefactor is for `ExpIntegralEi`) plus a Bernoulli Laurent tail `Σ_{k≥1} B_{2k}/(2k(2k-1)) x^-(2k-1)` in `1/x`, i.e. `1/(12x) - 1/(360 x^3) + 1/(1260 x^5) - ...`. . (`Gamma[x] = Exp[LogGamma[x]]` still has no series at infinity — it diverges — so `Series[Gamma[x], {x, Infinity, n}]` stays unevaluated.)
 - `Series[PolyGamma[m, x], {x, Infinity, n}]` returns the polygamma Stirling expansion (DLMF 5.11.2). The digamma `m = 0` mirrors `LogGamma`: an additive `Log[x]` growth head plus a Laurent tail `-1/(2x) - Σ_{k≥1} B_{2k}/(2k) x^-(2k)`, so . For `m ≥ 1` it is a pure Laurent series in `1/x` with leading power `x^-m` (decays to 0): `PolyGamma[m, x] ~ (-1)^(m-1) [ (m-1)!/x^m + m!/(2 x^(m+1)) + Σ_{k≥1} B_{2k}(2k+m-1)!/(2k)! x^-(2k+m) ]`. E.g. . `PolyGamma[x]` (unindexed) normalises to `PolyGamma[0, x]`. A requested order below the leading power `m` yields a pure `O[1/x]^(n+1)`.
+- **Expansion at `-Infinity`** is handled by reflection: `Series[f, {x, -Infinity, n}]` is computed as `Series[f[x -> -x], {x, +Infinity, n}]` and then reflected back `x -> -x`, so the entire `+Infinity` machinery (the special-function asymptotics above and the generic `x -> 1/u` path) is reused verbatim. The result is reported in the canonical `1/x` variable: `Series[Sqrt[x^2 + a x], {x, -Infinity, 1}, Assumptions -> Element[a, Reals]]` = `-x - a/2 + a^2/(8 x) + O[1/x]^2` (the `+Infinity` twin with the odd-exponent terms sign-flipped), and `Series[Sqrt[a^2 x^2 + b x], {x, -Infinity, 1}, Assumptions -> a > 0 && Element[b, Reals]]` = `-a x - b/(2 a) + b^2/(8 a^3 x) + O[1/x]^2`. Because `-Infinity` never reaches the finite-`x0` arithmetic, this path emits none of the spurious `Infinity::indet` warnings the pre-reflection code did.
+- **Parametric (scaled) arguments at infinity.** For a head applied to a homogeneous linear argument `c*x` (with `c` free of `x` and its sign known under the assumptions), the sign of `c` selects the branch/direction:
+  - *`ArcTan[c x]`* emits `Sign[c] Pi/2 - 1/(c x) + ...`: `Series[ArcTan[a x], {x, Infinity, 1}, Assumptions -> a > 0]` = `Pi/2 - 1/(a x)`, and `-Pi/2 - 1/(a x)` for `a < 0` (the argument runs to `-Infinity`). Composes with the `-Infinity` reflection, so `{x, -Infinity, 1}` flips accordingly.
+  - *Saturating heads* `Erf`/`Erfc`/`Tanh`/`FresnelS`/`FresnelC` limit to a sign-dependent constant: `Erf[c x] -> Sign[c]`, `Tanh[c x] -> Sign[c]`, `Erfc[c x] -> 0`/`2`, `FresnelS[c x]`/`FresnelC[c x] -> ±1/2` (at order 0). Emitted directly for the scaled form (the bare `H[x]` emitter, which keeps the exponential/oscillatory tail, is unchanged).
+  - *`ArcCosh[c x]`/`ArcSinh[c x]`* take the correct principal branch for `c < 0` via the reflections `ArcCosh[c x] = I Pi + ArcCosh[-c x]` and `ArcSinh[c x] = -ArcSinh[-c x]`: `Series[ArcCosh[a x], {x, Infinity, 1}, Assumptions -> a < 0]` = `I Pi + Log[-2 a x] + ...` (previously the wrong `-I Pi` branch).
+  - *Growth/decay heads* `ExpIntegralEi[c x]` and `ExpIntegralE[1, c x]` (`c > 0`) carry the scaled asymptotic: `Series[ExpIntegralEi[a x], {x, Infinity, 1}, Assumptions -> a > 0]` = `E^(a x)/(a x) + O[...]`, and `ExpIntegralE[1, a x]` = `E^(-a x)/(a x) + O[...]`.
+- `Series[ExpIntegralE[1, x], {x, Infinity, n}]` returns the first-kind exponential-integral asymptotic (DLMF 6.12.1): `E_1(x) ~ E^(-x) Σ_{k≥0} (-1)^k k!/x^(k+1)` = `E^(-x)(1/x - 1/x^2 + 2/x^3 - ...)`, the decaying `E^(-x)` kept as a symbolic prefactor (mirroring `ExpIntegralEi`).
 - `Series[Zeta[x], {x, Infinity, n}]` returns the truncated Dirichlet head `1 + 2^-x + 3^-x + ... + (n+1)^-x`. Because `Zeta[x] = Σ_{k≥1} k^-x` and each `k^-x = Exp[-x Log[k]]` is exponentially smaller than the previous as `x → +∞`, the natural asymptotic scale here is *exponential* (`2^-x`), not a power of `1/x` — so this is a plain `Plus` of powers, not a `SeriesData` with an `O`-term. `n` counts the correction terms kept (bases `2..n+1`); the leading `1` is always present. This is exactly the exp-log form the Gruntz mrv engine consumes to resolve limits like `(Zeta[x] - 1) 2^x → 1` and `Log[Zeta[x] - 1]/x → -Log[2]`.
 
 **Logarithmic series at `x = 0` for special functions**: Some functions have a finite-radius series at the origin built around a single `Log[x]` branch term, with the log baked into the `x^0` coefficient. Naive Taylor-via-`D` cannot reach these (`f(0)` is infinite or the derivatives have poles), so they are emitted from dedicated identities:
@@ -201,49 +254,86 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Algorithm.** Series computes a truncated power series via recursive *series
-algebra*. `builtin_series` (`ATTR_HOLDALL`) parses each spec — full form
-`{x, x0, n}` or leading-term form `x -> x0` (via `parse_series_spec`) — threads a
-`List` first argument, and handles the multivariate form by expanding left-to-
-right (each coefficient of the outer series is recursively expanded in the next
-variable). Inexact inputs are rationalised then numericalised back
-(`internal_rationalize_then_numericalize`).
+**Algorithm.** `Series` computes a truncated power series by recursive *series
+algebra*. Its only attribute is `Protected`. The arguments evaluate normally,
+because the stray `HoldAll` was removed in v0.236. `builtin_series` first checks
+that every expansion variable is a symbol (`series_spec_vars_ok`; otherwise
+`Series::ivar`). Inexact inputs are rationalised and the result is numericalised
+afterwards (`internal_rationalize_then_numericalize`). A `List` first argument
+is threaded. An `Assumptions -> assm` option is pulled out of the trailing specs
+by its LHS symbol, so it is never mistaken for a leading-term spec `x -> x0`.
+`series_effective_assumptions` turns it into an `AssumeCtx`, falling back to the
+ambient `$Assumptions` or `Assuming[...]`. With several specs the leftmost
+variable is expanded first. Each coefficient is then re-expanded in the remaining
+variables, and the assumptions are forwarded.
 
-`do_series_single` does the work. It evaluates `f`, returns it verbatim if free of
-`x`, optionally Apart-decomposes a rational function in `x` (each partial-fraction
-term hits the cheap monomial binomial path instead of a Newton inversion), pulls
-out a symbolic `x^alpha` prefactor when expanding at 0 or Infinity, and handles
-expansion at Infinity by substituting `x -> 1/u`. It expands to a padded internal
-order (`order + pad`, pad = 12 for numeric `x0`, 2 for symbolic `x0` to keep
-symbolic convolution from exploding) and then truncates back to the user O-term;
-the leading-term form widens the O-term to the first non-zero coefficient.
+`do_series_single` does the work for one variable. A body free of `x` is returned
+verbatim. `WhittakerM`/`WhittakerW` and `MeijerG`/`BesselK` at `0` or `Infinity`
+are rewritten to closed or Slater forms, which the generic path can expand. An
+expansion at `-Infinity` is computed *by reflection*: the function expands
+`f /. x -> -x` at `+Infinity` and flips the odd-exponent coefficients. At
+`+Infinity`, a bank of dedicated emitters (`try_series_*_at_infinity`) supplies
+asymptotic expansions that have no Laurent series. The essential factor is kept
+symbolic. Covered heads: `ExpIntegralEi`, `ExpIntegralE[1, x]`, `Erf`/`Erfc`/`Erfi`,
+`LogGamma` (Stirling), `PolyGamma`, `Zeta` (a truncated Dirichlet head),
+`SinIntegral`/`CosIntegral`/`Sinh-`/`CoshIntegral`, `FresnelS`/`FresnelC`, the Airy
+functions, `BesselJ`/`Y`/`I`/`K`, `HermiteH` and `ProductLog`. A scaled argument
+`c x` with the sign of `c` known from the assumptions selects the branch
+(`ArcTan[c x] -> Sign[c] Pi/2 - ...`) or the saturating constant (`Erf`, `Tanh`,
+`Fresnel*`, `Erfc`). `ArcCosh`/`ArcSinh` of `c x` with `c < 0` reflect to the
+principal branch. At `0` the logarithmic expansions of `ExpIntegralEi`,
+`LogIntegral` (a generalized series in `1/Log[x]`), `CosIntegral`, `CoshIntegral`,
+`BesselK`/`BesselY` and `LerchPhi` are emitted directly. When the assumptions
+prove `x < 0`, these emitters use the `Log[-x]` branch.
 
-The recursion is `series_expand(e, ctx)`: a subexpression free of `x` becomes a
-constant series; `x` itself becomes the identity series; `Plus`/`Times`/`Power`
-combine child series with `so_add`/`so_mul`/`so_inv`/`so_pow_int`; the elementary
-heads `Exp, Log, Sin, Cos, Tan, Sinh, Cosh, Tanh` and the inverse trig/hyperbolic
-family compose their known Taylor kernels (`kernel_coefs` →
-`so_compose_scalar_kernel`) with the inner argument's series, with reciprocal
-heads (`Sec`/`Csc`/`Cot`/...) rewritten via `rewrite_reciprocal_head` and a large
-set of branch-point / at-infinity identities for the inverse functions. Any
-unrecognised head falls back to naive Taylor `series_taylor_via_D`: coefficients
-`a_k = (D^k f at x0)/k!`, capped at `MAX_NAIVE_ORDER` = 20 and bailing out
-(`has_infinity`) at singularities.
+On the generic path a rational function in `x` is first `Apart`-decomposed, and a
+symbolic `x^alpha` prefactor is peeled off at `0` or `Infinity`. At `Infinity`
+the engine then substitutes `x -> 1/u`. The body is expanded to a padded internal
+order (`order + 12` at a numeric point, `+ 2` at a symbolic one, so that symbolic
+convolution cannot explode) and truncated back to the requested order. The core
+routine `series_expand` combines child series with `so_add`, `so_mul`, `so_inv`,
+`so_div`, `so_pow_int` and `so_pow_expr`. The binomial `(a + b x^m)^alpha` has a
+monomial fast path. Elementary and inverse heads compose known Taylor kernels
+(`kernel_coefs` → `so_compose_scalar_kernel`) with the inner series. Reciprocal
+heads are rewritten first (`rewrite_reciprocal_head`). The inverse trig and
+hyperbolic heads have MMA-faithful branch-point handlers: Puiseux for
+`ArcSin`/`ArcCos`/`ArcSinh`/`ArcCosh`, and an explicit `Log[x - x0]` term for
+`ArcTan`/`ArcCot`/`ArcTanh`/`ArcCoth`. Both carry the
+`(-1)^Floor[(Pi/2 - Arg[x - x0])/(2 Pi)]` discriminator. A head that cannot be
+expanded otherwise falls back to `series_taylor_via_D`, which computes
+`D^k f(x0)/k!` for up to 20 iterations and gives up when a derivative is infinite.
 
-**Data structures.** The internal `SeriesObj` struct holds the expansion variable
-`x`, expansion point `x0`, an owned array of coefficient `Expr*`, the leading
-exponent numerator `nmin`, the (exclusive) O-term exponent numerator `order`, and
-a common exponent denominator `den` (>= 1) — so coefficient `i` multiplies
-`(x - x0)^((nmin+i)/den)`, supporting Laurent and Puiseux (fractional-exponent)
-series. `so_rescale`/`so_align_den` reconcile denominators before arithmetic.
-`SeriesObj` is converted to the user-facing `SeriesData[x, x0, {coefs}, nmin,
-nmax, den]` head by `so_to_expr`.
+Assumptions (v0.368) act in four places:
 
-**Complexity / limits.** Kernel-path heads are exact and fast; the naive D-path is
-capped at order 20 and fails at true branch points where derivatives blow up
-(Puiseux at such points is out of scope except for the explicit inverse-function
-branch-point handlers). Symbolic expansion points cap the internal pad tightly to
-avoid `O(N^2)` symbolic coefficient blow-up.
+- They give the sign of `x` for the log-branch emitters.
+- They resolve the non-analytic heads `Abs`, `Sign`, `UnitStep`, `Sqrt[g^2]` and
+  `Conjugate` by the sign of their argument at `x0`, decided through the
+  Reduce/CAD bridge.
+- They flip the even-order-root sign under `x < 0` (`Sqrt[1 - Cos[x]] -> -x/Sqrt[2]`).
+- They clean up the final coefficients with `apply_assumption_rules`, for
+  example `Sqrt[a^2] -> a` and `Sqrt[a] -> I Sqrt[-a]` for `a < 0`. No
+  `Simplify` search is involved.
+
+**Data structures.** The internal `SeriesObj` holds `x`, `x0`, an owned array of
+coefficient `Expr*`, the leading exponent numerator `nmin`, the exclusive O-term
+numerator `order`, and a common exponent denominator `den`. Coefficient `i`
+multiplies `(x - x0)^((nmin+i)/den)`, so Laurent and Puiseux series share one
+representation. `so_rescale`/`so_align_den` reconcile denominators before
+arithmetic. `so_to_expr` emits `SeriesData[x, x0, {coefs}, nmin, nmax, den]`. At
+infinity the variable is `1/x`. A symbolic prefactor (`E^x`, `x^a`) or an
+additive growth head (`(x - 1/2) Log[x] - x + ...`) rides outside the
+`SeriesData` at the expression level. Coefficient arithmetic promotes to
+GMP-backed rationals on overflow.
+
+**Complexity / limits.** Kernel-path heads are exact and fast. Convolution is
+`O(N^2)` in the padded order. The D-path is capped at 20 derivatives and gives
+up at singular points. For example, `Series[Gamma[x], {x, 0, n}]` stays
+unevaluated, as does `Gamma` at any of its poles, and `Series[Gamma[x], {x,
+Infinity, n}]` also stays unevaluated because `Gamma` has no asymptotic series
+there. The general non-terminating `WhittakerM`/`WhittakerW` asymptotics are
+deferred. A Puiseux base at a genuine branch point is handled only where an
+explicit handler exists. This is a symbolic routine with no packed, NDArray or
+`Compile[]` surface.
 
 - `Protected` only — **`Series` does not hold its arguments**, matching Mathematica (and `Limit`, `D` and `NSeries` here). So a *named* argument behaves exactly like the literal it stands for: `s = {x, 0, 3}; Series[Exp[x], s]` expands, `Series[Exp[x], Sequence @@ {{x, 0, 3}}]` splices, `l = {Sin[x], Cos[x]}; Series[l, {x, 0, 2}]` threads into a list of two series just as the literal list does, and a call that cannot be expanded echoes the evaluated argument rather than the name. (Through v0.235 these all froze: `Series` carried a stray `HoldAll`.)
 - **A variable naming a symbol is resolved**, because that is what ordinary argument evaluation does: `Module[{w}, w = Unique["w"]; Normal[Series[Sqrt[1 + w^4], {w, 0, 4}]]]` expands in the generated symbol and gives `1 + w11^4/2`. This matters for any `.m` routine that expands in a freshly generated symbol — without the resolution the symbol does not occur in the expression at all, the expression is *constant* in it, and the "series" is the input itself, returned silently with no message. `SeriesCoefficient` resolves the same way.
@@ -255,8 +345,9 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 - For unknown heads (e.g. `f[x]` where `f` has no rules), the engine falls back to naive Taylor via `D` at the expansion point; the coefficients appear as `Derivative[k][f][x0]`.
 - **Assumptions** — `Series` honours assumptions through the same three channels as `Limit` and `PossibleZeroQ`: the `Assumptions -> assm` **option** (matched by its LHS symbol `Assumptions`, so it is not confused with a leading-term spec `x -> x0`), an ambient **`Assuming[assm, ...]`** scope, and a direct **`$Assumptions`** assignment (e.g. via `Block[{$Assumptions = assm}, ...]`). The option overrides the ambient value; a `True`/`Automatic`/inconsistent/uninformative assumption reproduces the assumption-free result byte-for-byte. Assumptions reach the expansion in three places:
   - *Sign of the expansion variable* — selects the branch of the logarithmic expansions at `x = 0` (`ExpIntegralEi`, `LogIntegral`, `CosIntegral`, `CoshIntegral`). Under `x < 0` (proved by the assumption context) `Log[x]` is emitted as `Log[-x]`; otherwise the principal `x > 0` form is used.
-  - *Non-analytic heads of the expansion variable* — `Abs[x]`, `Sign[x]`, `UnitStep[x]`, `Sqrt[x^2]`, `Conjugate[x]` have no Taylor series, but collapse to an analytic form once the assumptions pin the argument's sign or reality: `Series[Abs[x], {x, 0, 3}, Assumptions -> x > 0]` = `x + O[x]^4` (and `-x + O[x]^4` for `x < 0`); `Sign[x] -> ±1`, `UnitStep[x] -> 1`/`0`, `Conjugate[x] -> x` for real `x`. Without an assumption these fall back to the naive `Derivative[Abs][0]` Taylor row, as before.
-  - *Coefficient cleanup* — the final coefficients are simplified under the assumptions via the shared `apply_assumption_rules` rewriter (no `Simplify` search): `Sqrt[a^2] -> a`, `Abs[a] -> a` (for `a > 0`; `-a`/`Abs[a]` for `a < 0`/real), `(a^2)^r -> a^(2r)`, `Log[a^p] -> p Log[a]`, `Sign[a] -> ±1`, and integer/parity facts such as `Cos[n Pi] -> (-1)^n`. So `Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0]` = `a + x/(2a) - x^2/(8 a^3) + O[x]^3`, whereas the no-assumption form keeps `Sqrt[a^2]`. Only subterms keyed on a proven symbol are touched (a coefficient free of such symbols — the entire no-assumption case — is returned unchanged), and `Element[a, Complexes]` correctly leaves `Sqrt[a^2]` alone.
+  - *Non-analytic heads, resolved by the sign at the expansion point* — `Abs[g]`, `Sign[g]`, `UnitStep[g]`, `Sqrt[g^2]`, `Conjugate[g]` have no Taylor series, but collapse to an analytic form once the assumptions pin the argument's sign or reality: `Series[Abs[x], {x, 0, 3}, Assumptions -> x > 0]` = `x + O[x]^4` (and `-x + O[x]^4` for `x < 0`); `Sign[x] -> ±1`, `UnitStep[x] -> 1`/`0`, `Conjugate[x] -> x` for real `x`. When the argument is not the bare variable, the branch is fixed by the sign of `g` **at the expansion point** `g(x0)`, since `Abs`/`Sign`/`UnitStep` are locally smooth/constant wherever the argument is nonzero: `Series[Abs[x - a], {x, 0, 2}, Assumptions -> a > 0]` = `a - x` (because `(x-a)|_{x=0} = -a < 0`), and `x - a` for `a < 0`. The sign query at the point goes through the Reduce/CAD bridge, so a compound value like `-a` or `b - c` (under `b > c`) is decided, not just a bare signed symbol. Without an assumption these fall back to the naive `Derivative[Abs][0]` Taylor row, as before.
+  - *Even-order roots under `x < 0`* — when the radicand vanishes to an even order `2m` at the origin, the series machinery factors the leading monomial and takes the principal `+` root, giving `x^m`; for real `x < 0` the true value is `|x|^m`, so an **odd** extracted exponent flips the whole series sign. Under `x < 0`: `Series[Sqrt[1 - Cos[x]], {x, 0, 2}]` = `-x/Sqrt[2]` (vs `x/Sqrt[2]` for `x > 0`), and `Series[Sqrt[x^4 + a x^2], {x, 0, 3}, Assumptions -> a > 0 && x < 0]` = `-Sqrt[a] x - x^3/(2 Sqrt[a])`. This is the "hidden square" generalization of the explicit `Sqrt[x^2] -> ±x` handler (the radicand need not be literally `g^2`).
+  - *Coefficient cleanup* — the final coefficients are simplified under the assumptions via the shared `apply_assumption_rules` rewriter (no `Simplify` search): `Sqrt[a^2] -> a`, `Abs[a] -> a` (for `a > 0`; `-a`/`Abs[a]` for `a < 0`/real), `(a^2)^r -> a^(2r)`, `Log[a^p] -> p Log[a]`, `Sign[a] -> ±1`, the principal imaginary branch of a half-integer power of a negative real `a^(p/2) -> I^p (-a)^(p/2)` (so `Sqrt[a] -> I Sqrt[-a]`, `1/Sqrt[a] -> -I/Sqrt[-a]` for `a < 0`), and integer/parity facts such as `Cos[n Pi] -> (-1)^n`. So `Series[Sqrt[a^2 + x], {x, 0, 2}, Assumptions -> a > 0]` = `a + x/(2a) - x^2/(8 a^3) + O[x]^3`, whereas the no-assumption form keeps `Sqrt[a^2]`; and `Series[Sqrt[a - x], {x, 0, 1}, Assumptions -> a < 0]` = `I Sqrt[-a] + (I/2) x/Sqrt[-a]` (vs the real branch `Sqrt[a] - x/(2 Sqrt[a])` for `a > 0`). Only subterms keyed on a proven symbol are touched (a coefficient free of such symbols — the entire no-assumption case — is returned unchanged), and `Element[a, Complexes]` correctly leaves `Sqrt[a^2]` alone.
 
   The assumption is forwarded into each inner variable for multivariate expansions.
 
@@ -264,10 +355,11 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 
 ## References
 
-**See also:** [SeriesData](../../power-series/SeriesData/), [Limit](../../calculus/Limit/), [D](../../calculus/D/), [NSeries](../../numerical-calculus/NSeries/), [HoldAll](../../expression-information/HoldAll/), [SeriesCoefficient](../../power-series/SeriesCoefficient/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/), [$Assumptions](../../simplification/$Assumptions/)
+**See also:** [SeriesData](../../power-series/SeriesData/), [ArcTan](../../elementary-functions/ArcTan/), [Limit](../../calculus/Limit/), [D](../../calculus/D/), [NSeries](../../numerical-calculus/NSeries/), [HoldAll](../../expression-information/HoldAll/), [SeriesCoefficient](../../power-series/SeriesCoefficient/), [PossibleZeroQ](../../expression-information/PossibleZeroQ/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 3.
 - Joel S. Cohen, *Computer Algebra and Symbolic Computation: Mathematical Methods* (A K Peters, 2003).
+- NIST Digital Library of Mathematical Functions (DLMF), §5.11, §6.6, §6.12, §7.12 — asymptotic and logarithmic expansions used by the special-function emitters.
 - Source: [`src/calculus/series.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/series.c)
 - Specification: [`docs/spec/builtins/power-series.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/power-series.md)
 - Tests: [`tests/test_airyai.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airyai.c)
@@ -279,4 +371,27 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 
 ### Notes
 
-`Series[f, {x, x0, n}]` builds a power-series expansion to order `(x - x0)^n`, returning a `SeriesData` object that prints with a trailing `O[x]^(n+1)` term. It handles Taylor, Laurent (negative powers), and Puiseux (fractional powers) cases, as well as expansion around `Infinity` via the `x -> 1/u` substitution. Apply `Normal` to drop the order term and recover an ordinary polynomial, as in the `Exp` example above. `Series` is `HoldAll`, so the expansion variable is held unevaluated while the expansion point and order are read off.
+- `Series[f, {x, x0, n}]` returns a `SeriesData` object covering Taylor, Laurent
+  and Puiseux expansions. At infinity it also gives asymptotic forms, in which a
+  symbolic prefactor (`E^(-x^2)`) or an additive head (`Log[x]`) multiplies or
+  adds to a series in `1/x`. Apply `Normal` to drop the O-term.
+- Attributes: `Protected` only. `Series` does **not** hold its arguments, as in
+  Mathematica, so a named spec `s = {x, 0, 3}` works. The expansion variable
+  must be a symbol; anything else emits `Series::ivar`.
+- `Assumptions -> assm` (or an ambient `Assuming` / `$Assumptions`) selects
+  branches. It decides the `Log[x]` vs `Log[-x]` form at `0`, resolves `Abs`,
+  `Sign`, `UnitStep` and `Sqrt[g^2]` by the sign of their argument at `x0`, picks
+  the sign of even-order roots under `x < 0`, and picks the branch for scaled
+  arguments `c x` at infinity. Uninformative assumptions reproduce the
+  assumption-free result exactly.
+- `{x, -Infinity, n}` is computed by reflecting to `+Infinity`.
+- Dedicated asymptotic expansions at infinity exist for `ExpIntegralEi`,
+  `ExpIntegralE[1, x]`, `Erf`/`Erfc`/`Erfi`, `LogGamma`, `PolyGamma`, `Zeta`, the
+  sine/cosine/hyperbolic integrals, `FresnelS`/`FresnelC`, the Airy and Bessel
+  families, `HermiteH` and `ProductLog`.
+- Limitation: `Gamma` is not expanded at its poles or at infinity. Expand
+  `Gamma[x + 1]/x` instead of `Gamma[x]` at `0`.
+- Limitation: `StieltjesGamma[n]` (from the `Zeta` expansion) has no numerical
+  value in this build.
+- See also: `Normal`, `SeriesCoefficient`, `SeriesData`, `Limit`, `Residue`,
+  `NSeries`.

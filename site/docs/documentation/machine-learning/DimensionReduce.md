@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DimensionReduce[data, k] reduces each row of data to k dimensions. Method -> "PrincipalComponentsAnalysis" (default) centres the columns and projects onto the leading eigenvectors of the covariance; "LatentSemanticAnalysis" skips the centring, giving a truncated SVD, which is what a sparse non-negative term-document matrix wants; "MultidimensionalScaling" double-centres the squared distance matrix (classical Torgerson scaling) and is capped at 2000 rows, its matrix being n x n. Asking for more dimensions than the data supports returns unevaluated rather than padding with zeros.`**
+**`DimensionReduce[data, k]`**
+
+reduces each row of data to k dimensions. Method -\> "PrincipalComponentsAnalysis" (default) centres the columns and projects onto the leading eigenvectors of the covariance; "LatentSemanticAnalysis" skips the centring, giving a truncated SVD, which is what a sparse non-negative term-document matrix wants; "MultidimensionalScaling" double-centres the squared distance matrix (classical Torgerson scaling) and is capped at 2000 rows, its matrix being n x n. Asking for more dimensions than the data supports returns unevaluated rather than padding with zeros.
 
 ## Examples (7)
 

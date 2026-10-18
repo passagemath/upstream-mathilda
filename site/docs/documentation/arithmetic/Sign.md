@@ -5,37 +5,121 @@
 
 ## Description
 
-**`Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, and z/Abs[z] for a nonzero numeric complex z.`**
+**`Sign[x]`**
 
-## Examples (6)
+gives -1, 0, or 1 for real numeric x according to its sign, and z/Abs\[z\] for a nonzero numeric complex z.
+
+## Examples (18)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (6)
+### Basic examples (7)
 
 ```mathematica
-In[1]:= Sign[-7]
-Out[1]= -1
+In[1]:= Re[1/(2 + 3 I)]
+Out[1]= 2/13
 
-In[2]:= Sign[0]
-Out[2]= 0
+In[2]:= Im[Log[-1]]
+Out[2]= Pi
 
-In[3]:= Sign[{-2, 0, 5}]
-Out[3]= {-1, 0, 1}
+In[3]:= ReIm[(2 + I)^3]
+Out[3]= {2, 11}
 
-In[4]:= Sign[3 + 4 I]
-Out[4]= 3/5 + 4/5*I
+In[4]:= Abs[-9223372036854775807 - 1]
+Out[4]= 9223372036854775808
 
-In[5]:= Sign[(1 + I)^2]
-Out[5]= I
+In[5]:= Sign[3 + 4 I]
+Out[5]= 3/5 + 4/5*I
 
-In[6]:= Sign[2 - 2 I]
-Out[6]= (1/2 - 1/2*I) Sqrt[2]
+In[6]:= Conjugate[(2 + I)/(1 - 3 I)]
+Out[6]= -1/10 - 7/10*I
+
+In[7]:= Arg[(-1)^(1/6)]
+Out[7]= 1/6 Pi
+```
+
+### Applications (11)
+
+```mathematica
+In[8]:= Sign[-7]
+Out[8]= -1
+```
+
+Listable
+
+```mathematica
+In[9]:= Sign[{-2, 0, 5}]
+Out[9]= {-1, 0, 1}
+```
+
+The sign of an inexact real is still the exact integer -1
+
+```mathematica
+In[10]:= Sign[-2.5]
+Out[10]= -1
+```
+
+A bignum rational
+
+```mathematica
+In[11]:= Sign[-1/10^25]
+Out[11]= -1
+```
+
+A complex number gives the unit vector z/Abs[z]
+
+```mathematica
+In[12]:= Sign[3 + 4 I]
+Out[12]= 3/5 + 4/5*I
+```
+
+(1 + I)^2 = 2 I points straight up
+
+```mathematica
+In[13]:= Sign[(1 + I)^2]
+Out[13]= I
+```
+
+```mathematica
+In[14]:= Sign[2 - 2 I]
+Out[14]= (1/2 - 1/2*I) Sqrt[2]
+```
+
+MPFR components keep their precision
+
+```mathematica
+In[15]:= Sign[N[1 + I, 25]]
+Out[15]= 0.70710678118654752440084433 + 0.70710678118654752440084433*I
+```
+
+An interval maps monotonically
+
+```mathematica
+In[16]:= Sign[Interval[{-1, 2}]]
+Out[16]= Interval[{-1, 1}]
+```
+
+The narrowing kernel writes an int64 buffer
+
+```mathematica
+In[17]:= Sign[NDArray[{-1.5, 0., 2.}]]
+Out[17]= NDArray[{-1, 0, 1}]
+```
+
+Not yet evaluated: exact real constants other than rationals stay as they are
+
+```mathematica
+In[18]:= Sign[Pi - 3]
+Out[18]= Sign[-3 + Pi]
 ```
 
 ## Implementation notes
 
-`builtin_sign` returns the sign (-1/0/1) of a real number — direct comparisons for `EXPR_INTEGER`/`EXPR_REAL` (and Rational by sign of numerator×denominator), `mpz_sgn` for BigInt, `mpfr_sgn` for MPFR. For a numeric `Complex[re, im]` with both parts numeric it returns the unit-modulus direction `z/Abs[z]` (short-circuiting `0+0I -> 0`); MPFR components take a fast path computing the direction directly via `mpfr_hypot` and division at the combined working precision rather than building the symbolic `z·Power[Abs[z], -1]` tree. Non-numeric arguments return `NULL` (unevaluated).
+**Algorithm.** `builtin_sign` maps an `Interval` monotonically through `interval_thread_monotone`, so `Sign[Interval[{-1, 2}]]` is `Interval[{-1, 1}]`. For a real number it returns the **exact** integer -1, 0 or 1 whatever the input type: a direct comparison for an int64 or a machine Real (so `Sign[-2.5]` is `-1`, not `-1.`), `mpz_sgn` for a bigint, `mpfr_sgn` for MPFR, and `expr_numeric_sign` for a Rational, including one with bignum parts such as `1/10^25`. For a `Complex[re, im]` with numeric parts it returns the unit vector `z/Abs[z]`, and `0` for `0 + 0 I`. Exact parts build `z · Abs[z]^-1` and let the evaluator fold it, so `Sign[3 + 4 I]` is `3/5 + 4/5 I` and `Sign[2 - 2 I]` is `(1/2 - 1/2 I) Sqrt[2]`. MPFR parts are divided by `mpfr_hypot` at the combined precision. Anything else returns `NULL`.
+
+**Data structures.** The routine allocates no temporaries beyond the MPFR scratch values. On the packed and NDArray surfaces `NDKU_Sign` is a *narrowing* kernel: a real or int64 buffer gives an int64 buffer of -1, 0 and 1 (`-0.` gives 0; a non-finite element abandons the buffer), and a complex buffer gives `z/|z|`. `Sign` is on `pack.c`'s `AWARE` and `INT64_OK` lists. In `Compile[]` the result type is Integer for an Integer or Real argument and Complex for a Complex one, at scalar and array shapes.
+
+**Complexity / limits.** Each case is O(1). `Sign[x]` stays unevaluated for symbolic `x`. A gap: an exact real constant that is not a rational, such as `Sign[Pi]`, `Sign[Sqrt[2]]` or `Sign[Pi - 3]`, also stays unevaluated at present, whereas Mathematica returns `1`. Use `Sign[N[expr]]`, which is still exact.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
@@ -54,4 +138,7 @@ Out[6]= (1/2 - 1/2*I) Sqrt[2]
 
 ### Notes
 
-For real `x`, `Sign[x]` is -1, 0, or 1. For a nonzero complex `z` it returns the unit-modulus direction `z/Abs[z]`: `(1+I)^2 = 2I` points straight up the imaginary axis (`I`), while `2 - 2I` lies on the diagonal and returns the exact unit vector `(1 - I)/Sqrt[2]`. Sign is Listable.
+- For a real number `Sign` is the exact integer `-1`, `0` or `1`, even for an inexact input (`Sign[-2.5]` is `-1`, as in Mathematica). For a nonzero complex `z` it is `z/Abs[z]`, and `Sign[0]` is `0`.
+- Limitation: an exact real constant that is not rational (`Sign[Pi]`, `Sign[Sqrt[2]]`, `Sign[Pi - 3]`) stays unevaluated, where Mathematica gives `1`. `Sign[N[expr]]` still returns an exact integer.
+- `Listable`, `NumericFunction`, `Protected`. The packed/NDArray kernel narrows real and int64 data to int64 (`Sign` is on `pack.c`'s `INT64_OK` list), and `Compile[]` gives an Integer result for real arguments and a Complex one for complex arguments.
+- See also: `Abs`, `UnitStep`, `Arg`, `Positive`.

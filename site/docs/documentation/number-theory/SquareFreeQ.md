@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- and False otherwise; the squarefree integers have density 6/Pi^2.`**
+**`SquareFreeQ[expr]`**
+
+gives True if expr is a square-free number or polynomial -- no prime (or irreducible factor) occurs more than once, equivalently MoebiusMu\[n\] != 0 for an integer -- and False otherwise; the squarefree integers have density 6/Pi^2.
 
 **`SquareFreeQ[expr, vars]`**
 

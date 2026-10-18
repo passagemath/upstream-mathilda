@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".`**
+**`PrimePi[x]`**
+
+gives the number of primes less than or equal to x, exact for x up to 5\*10^13 (larger x is left unevaluated). The option Method -\> m selects the algorithm: Automatic (default), "Sieve", "Legendre", "Meissel", "Lehmer", "LMO" (Lagarias-Miller-Odlyzko), "DelegliseRivat", or "LucyHedgehog".
 
 ## Examples (6)
 

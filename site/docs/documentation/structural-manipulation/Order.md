@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Order[e1, e2] gives 1 if e1 is before e2 in canonical order, -1 if e1 is after e2, and 0 if e1 is identical to e2.`**
+**`Order[e1, e2]`**
+
+gives 1 if e1 is before e2 in canonical order, -1 if e1 is after e2, and 0 if e1 is identical to e2.
 
 <details>
 <summary>Notes</summary>

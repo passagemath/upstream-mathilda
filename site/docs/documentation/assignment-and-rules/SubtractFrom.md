@@ -5,9 +5,9 @@
 
 ## Description
 
-**`SubtractFrom[x, dx] or x -= dx`**
+**`SubtractFrom[x, dx]`**
 
-subtracts dx from x and returns the new value of x. x -= dx is equivalent to x = x - dx.
+or x -= dx subtracts dx from x and returns the new value of x. x -= dx is equivalent to x = x - dx.
 
 <details>
 <summary>Notes</summary>

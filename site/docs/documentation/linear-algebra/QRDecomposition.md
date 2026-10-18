@@ -28,7 +28,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= {q, r} = QRDecomposition[{{1, 2}, {3, 4}, {5, 6}}]; Transpose[q] . r
-Out[1]= {{1, 26/35 + (2 Sqrt[7/5] + 6 Sqrt[5/7])/Sqrt[35]}, {3, 8/35 + 3 (2 Sqrt[7/5] + 6 Sqrt[5/7])/Sqrt[35]}, {5, -2/7 + 5 (2 Sqrt[7/5] + 6 Sqrt[5/7])/Sqrt[35]}}
+Out[1]= {{1, 26/35 + (2 Sqrt[7/5] + 6 Sqrt[5/7])/Sqrt[35]}, {3, 8/35 + (3 (2 Sqrt[7/5] + 6 Sqrt[5/7]))/Sqrt[35]}, {5, -2/7 + (5 (2 Sqrt[7/5] + 6 Sqrt[5/7]))/Sqrt[35]}}
 
 In[2]:= {q, r} = QRDecomposition[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]; {Length[q], Length[r]}
 Out[2]= {2, 2}

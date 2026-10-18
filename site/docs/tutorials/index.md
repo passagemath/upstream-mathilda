@@ -36,6 +36,15 @@ Work through them in order if you're new — each one builds on the last.
     (`PrimeQ`, `FactorInteger`, `NextPrime`), `EulerPhi`, and continued
     fractions — up to RSA-style worked examples.
 
+-   :material-sitemap: __[FactorInteger methods](factorinteger-methods/index.md)__
+
+    Advanced, per-method deep dives into `FactorInteger`: trial division,
+    Fermat and Lehman, **Pollard rho**, **SQUFOF**, **p−1** and **p+1**, the
+    **elliptic-curve method**, CFRAC and Dixon, the **self-initialising
+    quadratic sieve**, and **Blake's rational base descent** — how each works,
+    which numbers it suits, where it fails, and how `Automatic` picks between
+    them, with timings against PARI/GP and FLINT.
+
 -   :material-function-variant: __[6. Algebra](06-algebra.md)__
 
     Expand and factor polynomials, dissect and divide them, reshape rational

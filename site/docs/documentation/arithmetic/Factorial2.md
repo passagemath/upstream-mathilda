@@ -45,10 +45,11 @@ Out[5]= True
 
 ## References
 
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
 - Tests: [`tests/test_factorial_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factorial_simplify.c)
+- Tests: [`tests/test_integer_assume_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_assume_simplify.c)
 - Tests: [`tests/test_numeric_domain.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_domain.c)
 
 ## Notes & additional examples

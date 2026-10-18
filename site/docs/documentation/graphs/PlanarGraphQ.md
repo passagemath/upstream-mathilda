@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PlanarGraphQ[g] gives True if g can be drawn in the plane without edge crossings. Linear-time left-right planarity test; gives False for non-graphs.`**
+**`PlanarGraphQ[g]`**
+
+gives True if g can be drawn in the plane without edge crossings. Linear-time left-right planarity test; gives False for non-graphs.
 
 ## Examples (13)
 

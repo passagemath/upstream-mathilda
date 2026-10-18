@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ContinuedFraction[x, n] gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.`**
+**`ContinuedFraction[x, n]`**
+
+gives the first n terms of the continued-fraction expansion of x, the list {a1, a2, ...} standing for a1 + 1/(a2 + 1/(a3 + ...)); truncating it gives the convergents, the best rational approximations to x.
 
 **`ContinuedFraction[x]`**
 

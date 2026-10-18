@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.`**
+**`PolynomialLCM[poly1, poly2, ...]`**
+
+gives the least common multiple of the polynomials.
 
 <details>
 <summary>Notes</summary>

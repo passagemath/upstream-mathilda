@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.`**
+**`ClassifierFunction[method, parameters, featureCount, k]`**
+
+is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.
 
 ## Examples (2)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CompleteGraphQ[g] gives True if every pair of distinct vertices of g is joined by an edge in both directions (an undirected edge, or directed edges both ways). CompleteGraphQ[g, vlist] tests the subgraph induced by vlist; False if some element of vlist is not a vertex of g.`**
+**`CompleteGraphQ[g]`**
+
+gives True if every pair of distinct vertices of g is joined by an edge in both directions (an undirected edge, or directed edges both ways). CompleteGraphQ\[g, vlist\] tests the subgraph induced by vlist; False if some element of vlist is not a vertex of g.
 
 ## Examples (11)
 

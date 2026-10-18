@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BetweennessCentrality[g] gives for each vertex v the sum over pairs of other vertices s, t of the fraction of shortest s-t paths passing through v (unordered pairs for undirected graphs, ordered pairs for directed ones). Brandes' algorithm; edge weights are ignored, as in Wolfram. Mixed graphs are not supported.`**
+**`BetweennessCentrality[g]`**
+
+gives for each vertex v the sum over pairs of other vertices s, t of the fraction of shortest s-t paths passing through v (unordered pairs for undirected graphs, ordered pairs for directed ones). Brandes' algorithm; edge weights are ignored, as in Wolfram. Mixed graphs are not supported.
 
 ## Examples (6)
 

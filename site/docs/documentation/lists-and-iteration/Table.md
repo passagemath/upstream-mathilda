@@ -122,7 +122,7 @@ For a single iterator the spec is parsed by the shared `iter_spec_parse` (`src/i
 
 **See also:** [HoldAll](../../expression-information/HoldAll/), [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/), [Pi](../../mathematical-constants/Pi/), [Do](../../control-flow/Do/), [Range](../../lists-and-iteration/Range/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_array_pad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_pad.c)
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)

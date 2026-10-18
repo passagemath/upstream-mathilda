@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindHamiltonianPath[g] gives a Hamiltonian path of g as a vertex list, or {} if there is none; FindHamiltonianPath[g, s, t] one from s to t. Exact; unevaluated if the search budget is exhausted.`**
+**`FindHamiltonianPath[g]`**
+
+gives a Hamiltonian path of g as a vertex list, or {} if there is none; FindHamiltonianPath\[g, s, t\] one from s to t. Exact; unevaluated if the search budget is exhausted.
 
 ## Examples (9)
 

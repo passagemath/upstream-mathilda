@@ -63,12 +63,12 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## References
 
-- Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
+- Source: [`src/strings/strings_init.c`](https://github.com/stblake/mathilda/blob/main/src/strings/strings_init.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_blas.c`](https://github.com/stblake/mathilda/blob/main/tests/test_blas.c)
-- Tests: [`tests/test_integer_string.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_string.c)
+- Tests: [`tests/test_hash.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hash.c)
 
 ## Notes & additional examples
 

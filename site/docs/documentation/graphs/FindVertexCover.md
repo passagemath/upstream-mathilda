@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindVertexCover[g] gives a minimum vertex cover of g (a smallest vertex set touching every edge), exact by branch and reduce. Stays unevaluated if optimality cannot be proven within the search budget.`**
+**`FindVertexCover[g]`**
+
+gives a minimum vertex cover of g (a smallest vertex set touching every edge), exact by branch and reduce. Stays unevaluated if optimality cannot be proven within the search budget.
 
 ## Examples (10)
 

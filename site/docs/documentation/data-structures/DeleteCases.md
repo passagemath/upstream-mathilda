@@ -5,13 +5,21 @@
 
 ## Description
 
-**`DeleteCases[expr, pattern] removes all elements of expr that match pattern.`**
+**`DeleteCases[expr, pattern]`**
 
-**`DeleteCases[expr, pattern, levelspec] removes all parts of expr on levels specified by levelspec that match pattern.`**
+removes all elements of expr that match pattern.
 
-**`DeleteCases[expr, pattern, levelspec, n] removes the first n parts of expr that match pattern.`**
+**`DeleteCases[expr, pattern, levelspec]`**
 
-**`DeleteCases[pattern] represents an operator form of DeleteCases that can be applied to an expression.`**
+removes all parts of expr on levels specified by levelspec that match pattern.
+
+**`DeleteCases[expr, pattern, levelspec, n]`**
+
+removes the first n parts of expr that match pattern.
+
+**`DeleteCases[pattern]`**
+
+represents an operator form of DeleteCases that can be applied to an expression.
 
 <details>
 <summary>Notes</summary>

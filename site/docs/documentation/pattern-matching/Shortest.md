@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Shortest[p] is a pattern object that matches the shortest sequence consistent with the pattern p.`**
+**`Shortest[p]`**
+
+is a pattern object that matches the shortest sequence consistent with the pattern p.
 
 ## Examples (4)
 
@@ -39,6 +41,7 @@ Out[4]= {{{a, b}, {c}}, {{a}, {b, c}}}
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
 - Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
 - Tests: [`tests/test_replace.c`](https://github.com/stblake/mathilda/blob/main/tests/test_replace.c)
+- Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
 
 ## Notes & additional examples
 

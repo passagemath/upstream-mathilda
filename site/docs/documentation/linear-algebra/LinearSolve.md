@@ -16,7 +16,22 @@ runs a specific elimination algorithm.
 <details>
 <summary>Notes</summary>
 
-LinearSolve works on both numerical and symbolic matrices. The matrix m may be square or rectangular. The argument b may be a vector or a matrix; when b is a matrix (one column per RHS) LinearSolve returns a matrix of solutions. Higher-rank tensor inputs are also supported: when m has dimensions {d1, ..., d(N-1), n}, b may have dimensions {d1, ..., d(N-1), e1, ..., ep} and the result has dimensions {n, e1, ..., ep}. For under-determined systems LinearSolve returns a particular solution in which the free (non-pivot) variables are taken to be 0; Solve returns the general solution.  When the equation has no solution LinearSolve emits LinearSolve::nosol and returns unevaluated. Accepted method names: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on \[m | b\] "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — Cramer's rule via Laplace cofactor expansion (square non-singular m only; LinearSolve::cofnsq / ::cofsng on shape / singularity errors) Default implementation: fraction-free Gauss-Jordan elimination on the augmented matrix \[m | b\] (the Bareiss-like algorithm shared with RowReduce and Inverse), so exact integer / rational / symbolic inputs flow through without any spurious denominator blow-up.
+LinearSolve works on both numerical and symbolic matrices. The matrix m may be square or rectangular. The argument b may be a vector or a matrix; when b is a matrix (one column per RHS) LinearSolve returns a matrix of solutions. Higher-rank tensor inputs are also supported: when m has dimensions {d1, ..., d(N-1), n}, b may have dimensions {d1, ..., d(N-1), e1, ..., ep} and the result has dimensions {n, e1, ..., ep}. For under-determined systems LinearSolve returns a particular solution in which the free (non-pivot) variables are taken to be 0; Solve returns the general solution.  When the equation has no solution LinearSolve emits LinearSolve::nosol and returns unevaluated. Accepted method names:
+
+```text
+"Automatic"                 — alias for "DivisionFreeRowReduction" (default)
+```
+
+"DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on \[m | b\]
+
+```text
+"OneStepRowReduction"       — classical Gauss-Jordan with division per pivot
+"CofactorExpansion"         — Cramer's rule via Laplace cofactor expansion
+                             (square non-singular m only; LinearSolve::cofnsq
+                             / ::cofsng on shape / singularity errors)
+```
+
+Default implementation: fraction-free Gauss-Jordan elimination on the augmented matrix \[m | b\] (the Bareiss-like algorithm shared with RowReduce and Inverse), so exact integer / rational / symbolic inputs flow through without any spurious denominator blow-up.
 
 </details>
 

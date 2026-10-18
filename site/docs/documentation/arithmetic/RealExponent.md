@@ -5,9 +5,13 @@
 
 ## Description
 
-**`RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent of x.`**
+**`RealExponent[x]`**
 
-**`RealExponent[x, b] gives Log[b, |x|] in the specified base b.`**
+gives Log\[10, |x|\] -- the base-10 real exponent of x.
+
+**`RealExponent[x, b]`**
+
+gives Log\[b, |x|\] in the specified base b.
 
 <details>
 <summary>Notes</summary>

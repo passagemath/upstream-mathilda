@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.`**
+**`EvenQ[n]`**
+
+gives True if n is an even integer (Integer or BigInt), False otherwise.
 
 ## Examples (2)
 

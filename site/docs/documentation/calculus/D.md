@@ -5,13 +5,21 @@
 
 ## Description
 
-**`D[f, x] gives the partial derivative of f with respect to x.`**
+**`D[f, x]`**
 
-**`D[f, {x, n}] gives the nth partial derivative.`**
+gives the partial derivative of f with respect to x.
 
-**`D[f, x, y, ...] gives the mixed derivative.`**
+**`D[f, {x, n}]`**
 
-**`D[f, x, NonConstants -> {y, ...}] treats the listed symbols as implicit functions of x.`**
+gives the nth partial derivative.
+
+**`D[f, x, y, ...]`**
+
+gives the mixed derivative.
+
+**`D[f, x, NonConstants -> {y, ...}]`**
+
+treats the listed symbols as implicit functions of x.
 
 <details>
 <summary>Notes</summary>

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RandomHypergraph[{n, m}, k] gives a k-uniform hypergraph on 1..n with m independent uniformly random k-subsets as hyperedges; RandomHypergraph[{n, m}, k, c] gives c of them. RandomHypergraph[{n, {e, a}}] and [{n, {{e1, a1}, ...}}] draw e_i hyperedges of arity a_i with vertices chosen with replacement from 1..n. Honors SeedRandom.`**
+**`RandomHypergraph[{n, m}, k]`**
+
+gives a k-uniform hypergraph on 1..n with m independent uniformly random k-subsets as hyperedges; RandomHypergraph\[{n, m}, k, c\] gives c of them. RandomHypergraph\[{n, {e, a}}\] and \[{n, {{e1, a1}, ...}}\] draw e\_i hyperedges of arity a\_i with vertices chosen with replacement from 1..n. Honors SeedRandom.
 
 ## Examples (9)
 

@@ -9,7 +9,9 @@
 
 returns True if x is provably an element of the domain dom under the current $Assumptions, False if it is provably not, and stays unevaluated otherwise.
 
-**`Element[{x1, ..., xN}, dom] and Element[x1 | ... | xN, dom] are shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.`**
+**`Element[{x1, ..., xN}, dom]`**
+
+and Element\[x1 | ... | xN, dom\] are shorthand for the conjunction Element\[x1, dom\] && ... && Element\[xN, dom\]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.
 
 <details>
 <summary>Notes</summary>

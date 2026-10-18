@@ -2,44 +2,43 @@
 
 ```mathematica
 In[1]:= Im[3 + 4 I]
-Out[1]= 4
-
-In[2]:= Im[7]
-Out[2]= 0
 ```
 
-`Im` resolves exact algebraic and transcendental values, including radicals of
-negative numbers and branch-cut logarithms:
-
 ```mathematica
-In[1]:= Im[Sqrt[-4]]
-Out[1]= 2
-
-In[2]:= Im[(1 + I)^10]
-Out[2]= 32
-
-In[3]:= Im[Log[-1]]
-Out[3]= Pi
+In[1]:= Im[7]
 ```
 
-Being Listable, it threads over a list of numbers:
-
 ```mathematica
-In[1]:= Im[{1 + 2 I, 3 - 4 I, 5}]
-Out[1]= {2, -4, 0}
+In[1]:= Im[Sqrt[-4]]  (* Sqrt[-4] evaluates to 2 I *)
 ```
 
-For values it cannot reduce in closed form, `Im` stays symbolic but still
-yields to high-precision numerics — here the imaginary part of Γ(1 + i):
+```mathematica
+In[1]:= Im[Log[-1]]  (* the principal branch: Log[-1] = I Pi *)
+```
 
 ```mathematica
-In[1]:= Im[Gamma[1 + I]]
-Out[1]= Im[Gamma[1 + I]]
+In[1]:= Im[{1 + 2 I, 3 - 4 I, 5}]  (* Listable *)
+```
 
-In[2]:= N[Im[Gamma[1 + I]], 40]
-Out[2]= -0.15494982830181068512495513048388660519589
+```mathematica
+In[1]:= Im[Abs[z]]  (* a real-valued head gives 0 *)
+```
+
+```mathematica
+In[1]:= Im[Gamma[1 + I]]  (* no closed form, so it stays symbolic *)
+```
+
+```mathematica
+In[1]:= N[Im[Gamma[1 + I]], 40]  (* but it evaluates numerically *)
+```
+
+```mathematica
+In[1]:= Im[NDArray[{1, 2}, DataType -> "int64"]]  (* the narrowing kernel gives exact zeros for integer data *)
 ```
 
 ### Notes
 
-`Im[z]` extracts the imaginary part of numeric `z`, giving 0 for real (or real-valued) arguments. It is Listable.
+- `Im[z]` is the imaginary part of a numeric `z`. It is `0` for real numbers, for real `Root` and `AlgebraicNumber` objects, and for calls to the real-valued heads `Re`, `Im`, `Abs`, `Arg`.
+- Symbols are not assumed real (`Im[x]` stays unevaluated). An exact real constant with no complex part written out, such as `Im[Pi - 4]`, also stays unevaluated at present (Mathematica gives `0`).
+- `Listable`, `NumericFunction`, `Protected`. The packed/NDArray kernel gives an int64 zero buffer for real or integer data and the imaginary parts for complex data. `Compile[]` lowers `Im` at scalar and array shapes.
+- See also: `Re`, `ReIm`, `Conjugate`, `ComplexExpand`.

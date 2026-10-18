@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Pruning[image] removes one pixel from every free end of the foreground; Pruning[image, n] repeats that n times, which shortens each branch by up to n and deletes any branch shorter than that. Used after Thinning to remove the short spurs a skeleton grows at boundary irregularities. An end point has exactly one foreground neighbour, so an ISOLATED pixel is not one and survives: pruning shortens branches rather than erasing specks. Pruning[image, 0] is the image unchanged. The result is a "Bit" image.`**
+**`Pruning[image]`**
+
+removes one pixel from every free end of the foreground; Pruning\[image, n\] repeats that n times, which shortens each branch by up to n and deletes any branch shorter than that. Used after Thinning to remove the short spurs a skeleton grows at boundary irregularities. An end point has exactly one foreground neighbour, so an ISOLATED pixel is not one and survives: pruning shortens branches rather than erasing specks. Pruning\[image, 0\] is the image unchanged. The result is a "Bit" image.
 
 ## Examples (13)
 

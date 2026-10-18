@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphComplement[g] gives the complement of g: the same vertices, with an edge wherever g has none. For a directed or mixed g the complement is directed (u->v present iff no edge of g leads from u to v). Edges are in row-major VertexList order; weights are dropped.`**
+**`GraphComplement[g]`**
+
+gives the complement of g: the same vertices, with an edge wherever g has none. For a directed or mixed g the complement is directed (u-\>v present iff no edge of g leads from u to v). Edges are in row-major VertexList order; weights are dropped.
 
 ## Examples (8)
 

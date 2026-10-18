@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RotateLeft[expr, n] rotates the elements of expr n positions to the left.`**
+**`RotateLeft[expr, n]`**
+
+rotates the elements of expr n positions to the left.
 
 ## Examples (2)
 
@@ -48,7 +50,7 @@ is implemented by negating `n` and calling the same routine.
 
 **See also:** [RotateRight](../../structural-manipulation/RotateRight/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

@@ -107,6 +107,7 @@ Registered by regex_init() (regex_init.c) alongside its StringSplit dependency. 
 
 - Source: [`src/strings/stringextract.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringextract.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
 
 ## Notes & additional examples

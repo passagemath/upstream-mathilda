@@ -1,56 +1,56 @@
 ### Worked examples
 
-A trivial value — Euler's solution of the Basel problem, ζ(2) = π²/6:
-
 ```mathematica
-In[1]:= Zeta[2]
-Out[1]= 1/6 Pi^2
+In[1]:= Zeta[6]  (* even positive integers: a rational multiple of a power of Pi *)
 ```
 
-Even positive integers are rational multiples of powers of π (via Bernoulli numbers):
-
 ```mathematica
-In[1]:= Zeta[6]
-Out[1]= 1/945 Pi^6
+In[1]:= Table[Zeta[-n], {n, 1, 6}]  (* negative integers give -BernoulliB[n+1]/(n+1); the even ones are the trivial zeros *)
 ```
 
-Negative-integer values are rational, exposing the Bernoulli-number connection ζ(−n) = −Bₙ₊₁/(n+1); the negative even integers are the trivial zeros:
-
 ```mathematica
-In[1]:= Zeta[-1]
-Out[1]= -1/12
-
-In[1]:= Zeta[-3]
-Out[1]= 1/120
-
-In[1]:= Table[Zeta[-2 n], {n, 1, 4}]
-Out[1]= {0, 0, 0, 0}
+In[1]:= N[Zeta[5], 50]  (* odd values stay symbolic; N reaches them through arb *)
 ```
 
-Apéry's constant ζ(3) to 40 digits, evaluated through the MPFR kernel:
-
 ```mathematica
-In[1]:= N[Zeta[3], 40]
-Out[1]= 1.2020569031595942853997381615114499907651
+In[1]:= Zeta[0.5 + 14.134725141734693 I]  (* the first nontrivial zero, to machine precision *)
 ```
 
-A value on the critical line at the first nontrivial zero ρ ≈ 1/2 + 14.134725 i — the result is numerically zero to within the input precision, confirming the zero of the Riemann hypothesis:
-
 ```mathematica
-In[1]:= N[Zeta[1/2 + 14.134725 I], 10]
-Out[1]= 1.7674298414e-08 - 1.1102028931e-07*I
+In[1]:= N[Zeta[2 + 3 I], 30]  (* a complex argument at 30 digits *)
 ```
 
-The Laurent expansion about the pole s = 1 defines the Stieltjes constants, with residue 1 and constant term the Euler–Mascheroni constant γ:
-
 ```mathematica
-In[1]:= Series[Zeta[s], {s, 1, 2}]
-Out[1]= 1/(s - 1) + EulerGamma + -StieltjesGamma[1] (s - 1) + 1/2 StieltjesGamma[2] (s - 1)^2 + O[s - 1]^3
+In[1]:= Zeta[{0.5, 2.0, 3.0, -1.5}]  (* a machine-real list runs through the packed kernel *)
 ```
 
-The Hurwitz zeta at an integer second argument reduces to ζ(s) minus a finite power sum, mixing exact π-power and rational parts:
+```mathematica
+In[1]:= Series[Zeta[s], {s, 1, 2}]  (* the Laurent expansion at the pole defines the Stieltjes constants *)
+```
 
 ```mathematica
-In[1]:= Zeta[4, 5]
-Out[1]= -22369/20736 + 1/90 Pi^4
+In[1]:= Zeta[4, 5]  (* Hurwitz form at an integer shift: Zeta[4] minus a finite power sum *)
 ```
+
+```mathematica
+In[1]:= {Zeta[-2.5, -0.5], Zeta[3, -1.5]}  (* the two-argument form uses ((k+a)^2)^(-s/2), so it is real for negative a *)
+```
+
+### Notes
+
+- `Zeta[s]` is the Riemann zeta function, `Zeta[s, a]` the generalized zeta
+  Σ_{k≥0} ((k+a)²)^(−s/2). That is Mathematica's convention: for `Re a > 0` it
+  equals `HurwitzZeta[s, a]`, and for negative real `a` it stays real where the
+  principal-branch `HurwitzZeta` has poles or complex values.
+- Exact closed forms: `Zeta[0] = -1/2`, `Zeta[1] = ComplexInfinity`, even positive
+  integers give rational·π²ⁿ, negative integers give rationals, and
+  `Zeta[Infinity] = 1`. Odd positive integers stay symbolic.
+- Numeric surfaces: machine-precision real and complex `s` (with `Re s ≥ 1/2` for
+  complex `s`) use one `double` kernel, shared bit-for-bit by the scalar,
+  packed/`NDArray` and `Compile[]` paths. Arbitrary precision uses arb
+  (`acb_dirichlet_zeta`) for `Zeta[s]` and a complex-MPFR Euler–Maclaurin kernel
+  for `Zeta[s, a]`.
+- `Compile[]` lowers `Zeta[s]` (scalar and array, real and complex) but not the
+  two-argument form. Inside compiled code, use `HurwitzZeta[s, a]` instead.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `HurwitzZeta`, `LerchPhi`, `PolyLog`, `StieltjesGamma`, `BernoulliB`.

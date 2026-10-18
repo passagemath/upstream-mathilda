@@ -9,7 +9,9 @@
 
 is the Glaisher-Kinkelin constant A, with numerical value ~= 1.28243.
 
-**`D[Glaisher, x] is 0. N[Glaisher, prec] evaluates it to any precision.`**
+**`D[Glaisher, x]`**
+
+is 0. N\[Glaisher, prec\] evaluates it to any precision.
 
 <details>
 <summary>Notes</summary>

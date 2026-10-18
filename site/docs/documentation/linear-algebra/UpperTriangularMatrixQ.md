@@ -16,7 +16,13 @@ gives True if m is upper triangular starting from the k-th diagonal (every entry
 <details>
 <summary>Notes</summary>
 
-Option: Tolerance -\> Automatic   numeric tolerance for approximate matrices. With Tolerance -\> t, sub-diagonal entries e are taken to be zero when Abs\[e\] \<= t evaluates to True.  Without a tolerance the test is structural: only literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Returns False on non-matrix, ragged, empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix (e.g. {{}, {}}) is vacuously upper triangular.
+Option:
+
+```text
+Tolerance -> Automatic   numeric tolerance for approximate matrices.
+```
+
+With Tolerance -\> t, sub-diagonal entries e are taken to be zero when Abs\[e\] \<= t evaluates to True.  Without a tolerance the test is structural: only literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Returns False on non-matrix, ragged, empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix (e.g. {{}, {}}) is vacuously upper triangular.
 
 </details>
 
@@ -112,7 +118,7 @@ Out[13]= True
 
 **See also:** [Rule](../../assignment-and-rules/Rule/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_schurdecomp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_schurdecomp.c)
 - Tests: [`tests/test_upper_triangular_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upper_triangular_matrix_q.c)

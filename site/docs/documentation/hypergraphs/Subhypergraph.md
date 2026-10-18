@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Subhypergraph[h, {v1, ...}] gives the sub-hypergraph induced by the given vertices: those of them in h, and the hyperedges lying entirely among them.`**
+**`Subhypergraph[h, {v1, ...}]`**
+
+gives the sub-hypergraph induced by the given vertices: those of them in h, and the hyperedges lying entirely among them.
 
 ## Examples (8)
 

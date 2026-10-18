@@ -5,7 +5,9 @@
 
 ## Description
 
-**`JacobiSymbol[n, m] gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, +-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when m divides n, and it satisfies the law of quadratic reciprocity.`**
+**`JacobiSymbol[n, m]`**
+
+gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, +-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when m divides n, and it satisfies the law of quadratic reciprocity.
 
 <details>
 <summary>Notes</summary>
@@ -88,6 +90,7 @@ emits `JacobiSymbol::argrx`.
 - K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — the Legendre, Jacobi and Kronecker symbols and quadratic reciprocity (Chapter 5).
 - Source: [`src/numbertheory/jacobisymbol.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/jacobisymbol.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
 - Tests: [`tests/test_jacobisymbol.c`](https://github.com/stblake/mathilda/blob/main/tests/test_jacobisymbol.c)
 
 ## Notes & additional examples

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ConnectedHypergraphQ[h] gives True if h has at least one vertex and is connected. h may be a plain List of hyperedges.`**
+**`ConnectedHypergraphQ[h]`**
+
+gives True if h has at least one vertex and is connected. h may be a plain List of hyperedges.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Divisible[n, m] yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod[n, m] == 0 -- and False otherwise.`**
+**`Divisible[n, m]`**
+
+yields True if n is an integer multiple of m -- the divisibility relation m | n, effectively Mod\[n, m\] == 0 -- and False otherwise.
 
 <details>
 <summary>Notes</summary>

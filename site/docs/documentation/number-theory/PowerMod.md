@@ -5,11 +5,17 @@
 
 ## Description
 
-**`PowerMod[a, b, m] gives a^b mod m by square-and-multiply, reducing modulo m at every step so the full power is never formed.`**
+**`PowerMod[a, b, m]`**
 
-**`PowerMod[a, -1, m] finds the modular inverse of a modulo m (a consequence of Euler's theorem).`**
+gives a^b mod m by square-and-multiply, reducing modulo m at every step so the full power is never formed.
 
-**`PowerMod[a, 1/r, m] finds a modular r-th root of a (Tonelli-Shanks / Hensel lifting / CRT).`**
+**`PowerMod[a, -1, m]`**
+
+finds the modular inverse of a modulo m (a consequence of Euler's theorem).
+
+**`PowerMod[a, 1/r, m]`**
+
+finds a modular r-th root of a (Tonelli-Shanks / Hensel lifting / CRT).
 
 <details>
 <summary>Notes</summary>
@@ -106,7 +112,7 @@ Out[12]= 352941179
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on modular exponentiation and modular inverses.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on the extended Euclidean algorithm.
 - A. Tonelli, "Bemerkung über die Auflösung quadratischer Congruenzen", Göttinger Nachrichten, 1891; D. Shanks, "Five number-theoretic algorithms", 1973.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

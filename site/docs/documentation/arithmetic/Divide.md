@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Times[x, Power[y, -1]] so it inherits Times's flattening and ordering.`**
+**`Times[x, Power[y, -1]]`**
+
+so it inherits Times's flattening and ordering.
 
 <details>
 <summary>Notes</summary>

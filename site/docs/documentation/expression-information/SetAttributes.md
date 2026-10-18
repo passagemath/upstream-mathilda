@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SetAttributes[s, attr] sets the attributes for s.`**
+**`SetAttributes[s, attr]`**
+
+sets the attributes for s.
 
 ## Examples (3)
 

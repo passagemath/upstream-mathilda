@@ -16,7 +16,20 @@ runs a specific inversion algorithm.
 <details>
 <summary>Notes</summary>
 
-Inverse works on both symbolic and numerical matrices. For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.  Inverse::sing is issued for singular matrices and Inverse::matsq for non-square / empty input; in either case the call is returned unevaluated. Accepted method names: "Automatic"                 — alias for "DivisionFreeRowReduction" (default) "DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on \[m | I\] "OneStepRowReduction"       — classical Gauss-Jordan with division per pivot "CofactorExpansion"         — adjugate / determinant formula via Laplace expansion An unknown method name emits Inverse::method and leaves the call unevaluated.  Method -\> Automatic (the symbol) is also accepted.
+Inverse works on both symbolic and numerical matrices. For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.  Inverse::sing is issued for singular matrices and Inverse::matsq for non-square / empty input; in either case the call is returned unevaluated. Accepted method names:
+
+```text
+"Automatic"                 — alias for "DivisionFreeRowReduction" (default)
+```
+
+"DivisionFreeRowReduction"  — Bareiss-like fraction-free Gauss-Jordan on \[m | I\]
+
+```text
+"OneStepRowReduction"       — classical Gauss-Jordan with division per pivot
+"CofactorExpansion"         — adjugate / determinant formula via Laplace expansion
+```
+
+An unknown method name emits Inverse::method and leaves the call unevaluated.  Method -\> Automatic (the symbol) is also accepted.
 
 </details>
 

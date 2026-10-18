@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AdjacencyMatrix[g] gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).`**
+**`AdjacencyMatrix[g]`**
+
+gives the 0/1 adjacency matrix of g (symmetric for undirected graphs).
 
 ## Examples (11)
 

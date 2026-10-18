@@ -5,9 +5,13 @@
 
 ## Description
 
-**`HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).`**
+**`HilbertMatrix[n]`**
 
-**`HilbertMatrix[{m, n}] gives the m x n Hilbert matrix.`**
+gives the n x n Hilbert matrix with entries 1/(i + j - 1).
+
+**`HilbertMatrix[{m, n}]`**
+
+gives the m x n Hilbert matrix.
 
 <details>
 <summary>Notes</summary>

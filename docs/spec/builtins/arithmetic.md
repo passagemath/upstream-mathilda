@@ -163,7 +163,16 @@ Symbolic sum.
 
 ```mathematica
 In[1]:= 1 + 2 + x + 2*x
-Out[1]= 3 + 3*x
+Out[1]= 3 + 3 x
+
+In[2]:= a + b - (a + b)
+Out[2]= 0
+
+In[3]:= Interval[{1, 2}] + Interval[{-1, 3}]
+Out[3]= Interval[{0, 5}]
+
+In[4]:= NDArray[{1., 2., 3.}] + 10
+Out[4]= NDArray[{11.0, 12.0, 13.0}]
 ```
 
 ## Total
@@ -978,6 +987,9 @@ Out[5]= {{9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, -4}
 
 In[6]:= RealDigits[1.234, 2, 15]
 Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}
+
+In[7]:= {RealDigits[1000.], RealDigits[0.999]}
+Out[7]= {{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}, {{9, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}}
 ```
 
 ## MantissaExponent
@@ -1353,6 +1365,29 @@ Complex number functions.
   `(-Pi, Pi]`.  The argument adds mod `2 Pi` over the factors (`arg = ([c<0] +
   Σ eᵢ[bᵢ<0]) Pi`), so the generic `a + b I` re/im split that cannot recover it
   is bypassed; a free symbol or a non-root-of-unity Gaussian stays unevaluated.
+
+```mathematica
+In[1]:= Re[1/(2 + 3 I)]
+Out[1]= 2/13
+
+In[2]:= Im[Log[-1]]
+Out[2]= Pi
+
+In[3]:= ReIm[(2 + I)^3]
+Out[3]= {2, 11}
+
+In[4]:= Abs[-9223372036854775807 - 1]
+Out[4]= 9223372036854775808
+
+In[5]:= Sign[3 + 4 I]
+Out[5]= 3/5 + 4/5*I
+
+In[6]:= Conjugate[(2 + I)/(1 - 3 I)]
+Out[6]= -1/10 - 7/10*I
+
+In[7]:= Arg[(-1)^(1/6)]
+Out[7]= 1/6 Pi
+```
 
 ## ComplexExpand
 

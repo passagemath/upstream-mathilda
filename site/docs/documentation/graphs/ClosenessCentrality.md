@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ClosenessCentrality[g] gives, for each vertex v, r/s where r is the number of vertices reachable from v and s the sum of their distances from v (0 if v reaches none). Uses EdgeWeight as lengths.`**
+**`ClosenessCentrality[g]`**
+
+gives, for each vertex v, r/s where r is the number of vertices reachable from v and s the sum of their distances from v (0 if v reaches none). Uses EdgeWeight as lengths.
 
 ## Examples (6)
 

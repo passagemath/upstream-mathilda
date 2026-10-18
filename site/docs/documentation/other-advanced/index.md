@@ -19,7 +19,7 @@
 - [`BooleanQ`](BooleanQ.md) — BooleanQ[expr] gives True if expr is either True or False, and False otherwise. Unlike TrueQ it tests the symbol, so BooleanQ[False] is True.  _(Experimental)_
 - [`Brown`](Brown.md) — Brown  _(Experimental)_
 - [`Byte`](Byte.md) — Byte  _(Stable)_
-- [`Character`](Character.md) — Character  _(Experimental)_
+- [`Character`](Character.md) — Character  _(Stable)_
 - [`ChartLabels`](ChartLabels.md) — ChartLabels  _(Experimental)_
 - [`ChartStyle`](ChartStyle.md) — ChartStyle  _(Experimental)_
 - [`ClassifierFunction`](ClassifierFunction.md) — ClassifierFunction[method, parameters, featureCount, k] is the fitted classifier Classify returns. Apply it to a feature vector to get a class, or to a feature vector and "Probabilities" to get one rule per class.  _(Stable)_
@@ -96,7 +96,7 @@
 - [`String`](String.md) — String  _(Stable)_
 - [`StringExpression`](StringExpression.md) — StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...  _(Stable)_
 - [`Subsets`](Subsets.md) — Subsets[list]  _(Stable)_
-- [`SymbolName`](SymbolName.md) — SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.  _(Experimental)_
+- [`SymbolName`](SymbolName.md) — SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.  _(Stable)_
 - [`TokenWords`](TokenWords.md) — TokenWords  _(Experimental)_
 - [`UniformDistribution`](UniformDistribution.md) — UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.  _(Stable)_
 - [`VectorPoints`](VectorPoints.md) — VectorPoints  _(Experimental)_

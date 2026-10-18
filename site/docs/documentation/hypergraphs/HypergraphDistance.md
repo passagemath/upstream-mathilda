@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphDistance[h, u, v] gives the least number of hyperedges in a chain joining vertices u and v, or Infinity. HypergraphDistance[h, u] gives the distances from u to every vertex, in VertexList order.`**
+**`HypergraphDistance[h, u, v]`**
+
+gives the least number of hyperedges in a chain joining vertices u and v, or Infinity. HypergraphDistance\[h, u\] gives the distances from u to every vertex, in VertexList order.
 
 ## Examples (10)
 

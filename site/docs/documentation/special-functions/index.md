@@ -1,6 +1,6 @@
 # Special Functions
 
-47 built-in function(s) in this category.
+59 built-in function(s) in this category.
 
 - [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
 - [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
@@ -11,8 +11,11 @@
 - [`BesselK`](BesselK.md) — BesselK[n, z]  _(Stable)_
 - [`BesselY`](BesselY.md) — BesselY[n, z]  _(Stable)_
 - [`Beta`](Beta.md) — Beta[a, b]  _(Stable)_
+- [`ChebyshevT`](ChebyshevT.md) — ChebyshevT[n, x]  _(Stable)_
+- [`ChebyshevU`](ChebyshevU.md) — ChebyshevU[n, x]  _(Stable)_
 - [`CosIntegral`](CosIntegral.md) — CosIntegral[z]  _(Stable)_
 - [`CoshIntegral`](CoshIntegral.md) — CoshIntegral[z]  _(Stable)_
+- [`DirichletL`](DirichletL.md) — DirichletL[k, j, s]  _(Stable)_
 - [`EllipticE`](EllipticE.md) — EllipticE[m] is the complete elliptic integral of the second kind, Integrate[Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}], and EllipticE[phi, m] the incomplete one, with upper limit phi. The parameter argument is m = k^2, not the modulus k. EllipticE[0] is Pi/2 and EllipticE[1] is 1. EllipticE[phi, 1] is Sin[phi] only for |phi| <= Pi/2, since E(phi|1) is the integral of Abs[Cos[t]]: EllipticE[2, 1] is 2 - Sin[2], not Sin[2].  _(Stable)_
 - [`EllipticF`](EllipticF.md) — EllipticF[phi, m] is the incomplete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, phi}]. The second argument is the PARAMETER m = k^2, not the modulus k. EllipticF[phi, 0] is phi and EllipticF[Pi/2, m] is EllipticK[m]; phi may be complex and of any size (the quasi-period is applied).  _(Stable)_
 - [`EllipticK`](EllipticK.md) — EllipticK[m] is the complete elliptic integral of the first kind, Integrate[1/Sqrt[1 - m Sin[t]^2], {t, 0, Pi/2}]. The argument is the PARAMETER m = k^2, not the modulus k. EllipticK[0] is Pi/2 and EllipticK[1] is ComplexInfinity; exact arguments otherwise stay symbolic and inexact ones evaluate numerically at their precision.  _(Stable)_
@@ -21,24 +24,30 @@
 - [`Erfc`](Erfc.md) — Erfc[z]  _(Stable)_
 - [`Erfi`](Erfi.md) — Erfi[z]  _(Stable)_
 - [`EulerE`](EulerE.md) — EulerE[n]  _(Stable)_
+- [`ExpIntegralE`](ExpIntegralE.md) — ExpIntegralE[n, z]  _(Stable)_
 - [`ExpIntegralEi`](ExpIntegralEi.md) — ExpIntegralEi[z]  _(Stable)_
 - [`FresnelC`](FresnelC.md) — FresnelC[z]  _(Stable)_
 - [`FresnelS`](FresnelS.md) — FresnelS[z]  _(Stable)_
+- [`FunctionExpand`](FunctionExpand.md) — FunctionExpand[expr]  _(Stable)_
 - [`Gamma`](Gamma.md) — Gamma[z]  _(Stable)_
 - [`HarmonicNumber`](HarmonicNumber.md) — HarmonicNumber[n]  _(Stable)_
+- [`HermiteH`](HermiteH.md) — HermiteH[n, x]  _(Stable)_
 - [`HurwitzZeta`](HurwitzZeta.md) — HurwitzZeta[s, a]  _(Stable)_
 - [`Hyperfactorial`](Hyperfactorial.md) — Hyperfactorial[n]  _(Stable)_
 - [`Hypergeometric0F1`](Hypergeometric0F1.md) — Hypergeometric0F1[b, z]  _(Stable)_
 - [`Hypergeometric1F1`](Hypergeometric1F1.md) — Hypergeometric1F1[a, b, z]  _(Stable)_
 - [`Hypergeometric2F1`](Hypergeometric2F1.md) — Hypergeometric2F1[a, b, c, z]  _(Stable)_
 - [`HypergeometricPFQ`](HypergeometricPFQ.md) — HypergeometricPFQ[{a1, ...}, {b1, ...}, z]  _(Stable)_
+- [`HypergeometricU`](HypergeometricU.md) — HypergeometricU[a, b, z]  _(Stable)_
 - [`InverseErf`](InverseErf.md) — InverseErf[s]  _(Stable)_
 - [`InverseErfc`](InverseErfc.md) — InverseErfc[s]  _(Stable)_
+- [`LaguerreL`](LaguerreL.md) — LaguerreL[n, x]  _(Stable)_
 - [`LegendreP`](LegendreP.md) — LegendreP[n, x]  _(Stable)_
 - [`LegendreQ`](LegendreQ.md) — LegendreQ[n, x]  _(Stable)_
 - [`LerchPhi`](LerchPhi.md) — LerchPhi[z, s, a]  _(Stable)_
 - [`LogGamma`](LogGamma.md) — LogGamma[z]  _(Stable)_
 - [`LogIntegral`](LogIntegral.md) — LogIntegral[z]  _(Stable)_
+- [`MeijerG`](MeijerG.md) — MeijerG[{{a1, ..., an}, {an+1, ..., ap}}, {{b1, ..., bm}, {bm+1, ..., bq}}, z]  _(Stable)_
 - [`Pochhammer`](Pochhammer.md) — Pochhammer[a, n]  _(Stable)_
 - [`PolyGamma`](PolyGamma.md) — PolyGamma[z]  _(Stable)_
 - [`PolyLog`](PolyLog.md) — PolyLog[n, z]  _(Stable)_
@@ -48,4 +57,7 @@
 - [`Sinc`](Sinc.md) — Sinc[z]  _(Stable)_
 - [`SinhIntegral`](SinhIntegral.md) — SinhIntegral[z]  _(Stable)_
 - [`StieltjesGamma`](StieltjesGamma.md) — StieltjesGamma[n]  _(Stable)_
+- [`StruveH`](StruveH.md) — StruveH[nu, z]  _(Stable)_
+- [`WhittakerM`](WhittakerM.md) — WhittakerM[k, m, z]  _(Stable)_
+- [`WhittakerW`](WhittakerW.md) — WhittakerW[k, m, z]  _(Stable)_
 - [`Zeta`](Zeta.md) — Zeta[s]  _(Stable)_

@@ -5,11 +5,17 @@
 
 ## Description
 
-**`FirstPosition[expr, pattern] gives the position of the first element in expr matching pattern (in depth-first order), or Missing["NotFound"] if no such element is found.`**
+**`FirstPosition[expr, pattern]`**
 
-**`FirstPosition[expr, pattern, default] gives default if no element matching pattern is found; default is evaluated only when it is returned.`**
+gives the position of the first element in expr matching pattern (in depth-first order), or Missing\["NotFound"\] if no such element is found.
 
-**`FirstPosition[expr, pattern, default, levelspec] finds only objects on the levels specified by levelspec.`**
+**`FirstPosition[expr, pattern, default]`**
+
+gives default if no element matching pattern is found; default is evaluated only when it is returned.
+
+**`FirstPosition[expr, pattern, default, levelspec]`**
+
+finds only objects on the levels specified by levelspec.
 
 <details>
 <summary>Notes</summary>

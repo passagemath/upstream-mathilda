@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexConnectivity[g] gives the minimum number of vertices whose removal disconnects g.`**
+**`VertexConnectivity[g]`**
+
+gives the minimum number of vertices whose removal disconnects g.
 
 ## Examples (8)
 

@@ -31,7 +31,7 @@ In[1]:= ExpandAll[1/(1+x)^3 + Sin[(1+x)^3]]
 Out[1]= 1/(1 + 3 x + 3 x^2 + x^3) + Sin[1 + 3 x + 3 x^2 + x^3]
 
 In[2]:= ExpandAll[(x+z)^2/(x+y)^2]
-Out[2]= x^2/(x^2 + 2 x y + y^2) + 2 (x z)/(x^2 + 2 x y + y^2) + z^2/(x^2 + 2 x y + y^2)
+Out[2]= x^2/(x^2 + 2 x y + y^2) + (2 x z)/(x^2 + 2 x y + y^2) + z^2/(x^2 + 2 x y + y^2)
 
 In[3]:= ExpandAll[E^(I a (t-b))]
 Out[3]= E^(-I a b + I a t)
@@ -63,7 +63,7 @@ The denominator is expanded as well
 
 ```mathematica
 In[8]:= ExpandAll[(x + 1)^2/(x + 2)^2]
-Out[8]= 1/(4 + 4 x + x^2) + 2 x/(4 + 4 x + x^2) + x^2/(4 + 4 x + x^2)
+Out[8]= 1/(4 + 4 x + x^2) + x^2/(4 + 4 x + x^2) + (2 x)/(4 + 4 x + x^2)
 ```
 
 A second argument confines expansion to parts containing x

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IntervalMemberQ[interval, x] gives True if x lies within interval, and False otherwise. IntervalMemberQ[interval, other] tests whether the interval other is wholly contained in interval.`**
+**`IntervalMemberQ[interval, x]`**
+
+gives True if x lies within interval, and False otherwise. IntervalMemberQ\[interval, other\] tests whether the interval other is wholly contained in interval.
 
 ## Examples (4)
 

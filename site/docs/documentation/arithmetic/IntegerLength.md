@@ -5,9 +5,13 @@
 
 ## Description
 
-**`IntegerLength[n] gives the number of decimal digits in the integer n.`**
+**`IntegerLength[n]`**
 
-**`IntegerLength[n, b] gives the number of base b digits in n.`**
+gives the number of decimal digits in the integer n.
+
+**`IntegerLength[n, b]`**
+
+gives the number of base b digits in n.
 
 <details>
 <summary>Notes</summary>

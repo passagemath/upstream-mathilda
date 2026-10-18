@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDensity[g] gives the number of edges of g divided by the number of possible edges: (directed edges + 2 undirected edges)/(n(n-1)).`**
+**`GraphDensity[g]`**
+
+gives the number of edges of g divided by the number of possible edges: (directed edges + 2 undirected edges)/(n(n-1)).
 
 ## Examples (9)
 

@@ -21,7 +21,7 @@ Counts the occurrences of any of the pi.
 
 Gives the list of results for each of the si. Equivalent to Length\[StringCases\[...\]\] but does not build the matched substrings. Options: Overlaps -\> False (default; overlapping substrings are not counted as separate), True (overlaps counted separately, one substring per start), or All (every matching substring at every start); IgnoreCase -\> True treats upper/lowercase as equivalent.
 
-## Examples (10)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -54,7 +54,7 @@ In[7]:= StringCount["aAbB", "a", IgnoreCase -> True]
 Out[7]= 2
 ```
 
-### Applications (3)
+### Applications (7)
 
 Non-overlapping by default
 
@@ -63,18 +63,46 @@ In[8]:= StringCount["mississippi", "ss"]
 Out[8]= 2
 ```
 
-A character-class pattern
+Maximal runs of digits
 
 ```mathematica
-In[9]:= StringCount["a1b2c3d4", DigitCharacter]
-Out[9]= 4
+In[9]:= StringCount["a1 b22 c333", DigitCharacter..]
+Out[9]= 3
 ```
 
-Count overlapping starts
+Overlapping occurrences are counted only on request
 
 ```mathematica
-In[10]:= StringCount["banana", "a", Overlaps -> True]
-Out[10]= 3
+In[10]:= {StringCount["banana", "ana"], StringCount["banana", "ana", Overlaps -> True]}
+Out[10]= {1, 2}
+```
+
+Every nonempty substring: 4 + 3 + 2 + 1
+
+```mathematica
+In[11]:= StringCount["abcd", __, Overlaps -> All]
+Out[11]= 10
+```
+
+Case-insensitive
+
+```mathematica
+In[12]:= StringCount["Hello HELLO", "hello", IgnoreCase -> True]
+Out[12]= 2
+```
+
+One count per subject
+
+```mathematica
+In[13]:= StringCount[{"aa", "aba", "c"}, "a"]
+Out[13]= {2, 2, 0}
+```
+
+Non-ASCII patterns
+
+```mathematica
+In[14]:= StringCount["h\:00e9h\:00e9", "\:00e9"]
+Out[14]= 2
 ```
 
 ## Algorithm
@@ -111,11 +139,11 @@ Byte semantics: like the rest of src/strings, offsets are byte offsets (no UTF-8
 
 ## Implementation notes
 
-**Algorithm.** `builtin_stringcount` handles options and builds its rule set exactly as `StringCases` does, but `sct_scalar` calls `regex_scan` with `want_captures = 0` and returns the span count as an `Integer` — it never materialises a substring, costing one small span record per match instead of a `malloc` + `Expr` + list element. A `Rule`/`RuleDelayed` pattern is accepted (only the LHS matters to a count), as is a list of subjects, which threads to one count each.
+**Algorithm.** `builtin_stringcount` reads its options and builds its rule set exactly as `StringCases` does, seeding `Overlaps -> False` and `IgnoreCase -> False` from `Options[StringCount]` and stripping trailing option rules. Then `sct_scalar` calls `regex_scan` with `want_captures = 0` and returns the number of spans as an `Integer`. No substring is ever created, so each match costs one small span record instead of a string `Expr` and a list slot. A `Rule`/`RuleDelayed` pattern is accepted, but only its left-hand side matters to a count. A list of subjects threads, giving one count each.
 
-**Data structures.** The shared `RegexScan` (span array only, no capture pool); one `Integer` result per subject.
+**Data structures.** The shared `RegexScan`: a span array and no capture pool. For `Overlaps -> False` the scan uses the `RegexCursor` leftmost-match cursor. Rule sets come from the 64-entry compiled-pattern LRU cache.
 
-**Complexity / limits.** Because the scan is the same, `StringCount[s, p, opts]` is always exactly `Length[StringCases[s, p, opts]]` and `Length[StringPosition[...]]`. `Overlaps`/`IgnoreCase` behave as in `StringCases`. A wrong positional arity emits `StringCount::argrx`; byte semantics throughout.
+**Complexity / limits.** Because the scan is shared, `StringCount[s, p, opts]` always equals `Length[StringCases[s, p, opts]]` and `Length[StringPosition[s, p, opts]]` under the same `Overlaps` setting. Note that `StringPosition` defaults to `Overlaps -> True`. `Overlaps -> All` counts every matching substring at every start, testing `O(len²)` substrings. A positional argument count other than two emits `StringCount::argrx`. Matching is Unicode-aware (PCRE2 UTF + UCP).
 
 **Attributes:** `Protected`.
 
@@ -126,6 +154,7 @@ Byte semantics: like the rest of src/strings, offsets are byte offsets (no UTF-8
 - Source: [`src/strings/regex/stringcount.c`](https://github.com/stblake/mathilda/blob/main/src/strings/regex/stringcount.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
 - Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)
 - Tests: [`tests/test_stringcount.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcount.c)
 
@@ -133,10 +162,13 @@ Byte semantics: like the rest of src/strings, offsets are byte offsets (no UTF-8
 
 ### Notes
 
-`StringCount` is the counting-only companion of `StringCases`: it runs the same
-`regex_scan` enumeration but records only a small span per match rather than
-building each substring, so it is cheaper for a pure count.
-
-The result is exactly `Length[StringCases[...]]` for every pattern and option.
-`Overlaps`/`IgnoreCase` behave as in `StringCases`, and a list of subjects
-threads, giving one count each.
+- `StringCount` is the counting-only companion of `StringCases`. It runs the
+  same match scan but never builds a substring.
+- Because the scan is shared, `StringCount[s, p, opts]` is always
+  `Length[StringCases[s, p, opts]]`. It also equals
+  `Length[StringPosition[s, p, opts]]` under the same `Overlaps` setting, but
+  note that `StringPosition` defaults to `Overlaps -> True`.
+- A rule pattern is accepted, and only its left-hand side matters.
+  `Overlaps`/`IgnoreCase` defaults come from `Options[StringCount]`.
+- A positional argument count other than two emits `StringCount::argrx`.
+- See also: `StringCases`, `StringPosition`, `Count`.

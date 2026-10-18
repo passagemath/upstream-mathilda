@@ -5,11 +5,17 @@
 
 ## Description
 
-**`IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.`**
+**`IntegerPartitions[n]`**
 
-**`IntegerPartitions[n, k] gives partitions into at most k parts;`**
+gives the partitions of the integer n -- the ways to write n as a sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.
 
-**`PartitionsP[n] for the plain form.`**
+**`IntegerPartitions[n, k]`**
+
+gives partitions into at most k parts;
+
+**`PartitionsP[n]`**
+
+for the plain form.
 
 <details>
 <summary>Notes</summary>

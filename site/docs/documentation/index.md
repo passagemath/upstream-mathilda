@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_1086 functions across 38 categories. Use the search box (press `/`) to jump to any function._
+_1129 functions across 38 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -12,11 +12,11 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Arithmetic](arithmetic/index.md)
 
-[`Abs`](arithmetic/Abs.md)  [`Accumulate`](arithmetic/Accumulate.md)  [`Accuracy`](arithmetic/Accuracy.md)  [`Arg`](arithmetic/Arg.md)  [`Binomial`](arithmetic/Binomial.md)  [`Ceiling`](arithmetic/Ceiling.md)  [`Complex`](arithmetic/Complex.md)  [`ComplexExpand`](arithmetic/ComplexExpand.md)  [`Conjugate`](arithmetic/Conjugate.md)  [`Differences`](arithmetic/Differences.md)  [`DigitCount`](arithmetic/DigitCount.md)  [`DigitSum`](arithmetic/DigitSum.md)  [`Divide`](arithmetic/Divide.md)  [`Factorial`](arithmetic/Factorial.md)  [`Factorial2`](arithmetic/Factorial2.md)  [`FactorialPower`](arithmetic/FactorialPower.md)  [`Fibonacci`](arithmetic/Fibonacci.md)  [`Floor`](arithmetic/Floor.md)  [`FractionalPart`](arithmetic/FractionalPart.md)  [`FromDigits`](arithmetic/FromDigits.md)  [`Im`](arithmetic/Im.md)  [`IntegerDigits`](arithmetic/IntegerDigits.md)  [`IntegerExponent`](arithmetic/IntegerExponent.md)  [`IntegerLength`](arithmetic/IntegerLength.md)  [`IntegerPart`](arithmetic/IntegerPart.md)  [`IntegerString`](arithmetic/IntegerString.md)  [`ListGradient`](arithmetic/ListGradient.md)  [`LucasL`](arithmetic/LucasL.md)  [`MantissaExponent`](arithmetic/MantissaExponent.md)  [`Minus`](arithmetic/Minus.md)  [`Mod`](arithmetic/Mod.md)  [`N`](arithmetic/N.md)  [`Plus`](arithmetic/Plus.md)  [`Power`](arithmetic/Power.md)  [`Precision`](arithmetic/Precision.md)  [`Quotient`](arithmetic/Quotient.md)  [`QuotientRemainder`](arithmetic/QuotientRemainder.md)  [`Rational`](arithmetic/Rational.md)  [`Rationalize`](arithmetic/Rationalize.md)  [`Ratios`](arithmetic/Ratios.md)  [`Re`](arithmetic/Re.md)  [`ReIm`](arithmetic/ReIm.md)  [`RealDigits`](arithmetic/RealDigits.md)  [`RealExponent`](arithmetic/RealExponent.md)  [`Round`](arithmetic/Round.md)  [`SetAccuracy`](arithmetic/SetAccuracy.md)  [`SetPrecision`](arithmetic/SetPrecision.md)  [`Sign`](arithmetic/Sign.md)  [`Sqrt`](arithmetic/Sqrt.md)  [`Subtract`](arithmetic/Subtract.md)  [`Times`](arithmetic/Times.md)  [`Total`](arithmetic/Total.md)
+[`Abs`](arithmetic/Abs.md)  [`Accumulate`](arithmetic/Accumulate.md)  [`Accuracy`](arithmetic/Accuracy.md)  [`Arg`](arithmetic/Arg.md)  [`Binomial`](arithmetic/Binomial.md)  [`Ceiling`](arithmetic/Ceiling.md)  [`Complex`](arithmetic/Complex.md)  [`ComplexExpand`](arithmetic/ComplexExpand.md)  [`Conjugate`](arithmetic/Conjugate.md)  [`Differences`](arithmetic/Differences.md)  [`DigitCount`](arithmetic/DigitCount.md)  [`DigitSum`](arithmetic/DigitSum.md)  [`Divide`](arithmetic/Divide.md)  [`Factorial`](arithmetic/Factorial.md)  [`Factorial2`](arithmetic/Factorial2.md)  [`FactorialPower`](arithmetic/FactorialPower.md)  [`Fibonacci`](arithmetic/Fibonacci.md)  [`Floor`](arithmetic/Floor.md)  [`FractionalPart`](arithmetic/FractionalPart.md)  [`FromDigits`](arithmetic/FromDigits.md)  [`Im`](arithmetic/Im.md)  [`IntegerDigits`](arithmetic/IntegerDigits.md)  [`IntegerExponent`](arithmetic/IntegerExponent.md)  [`IntegerLength`](arithmetic/IntegerLength.md)  [`IntegerPart`](arithmetic/IntegerPart.md)  [`IntegerString`](arithmetic/IntegerString.md)  [`ListGradient`](arithmetic/ListGradient.md)  [`LucasL`](arithmetic/LucasL.md)  [`MantissaExponent`](arithmetic/MantissaExponent.md)  [`Minus`](arithmetic/Minus.md)  [`Mod`](arithmetic/Mod.md)  [`N`](arithmetic/N.md)  [`NonCommutativeMultiply`](arithmetic/NonCommutativeMultiply.md)  [`Plus`](arithmetic/Plus.md)  [`Power`](arithmetic/Power.md)  [`Precision`](arithmetic/Precision.md)  [`Quotient`](arithmetic/Quotient.md)  [`QuotientRemainder`](arithmetic/QuotientRemainder.md)  [`Rational`](arithmetic/Rational.md)  [`Rationalize`](arithmetic/Rationalize.md)  [`Ratios`](arithmetic/Ratios.md)  [`Re`](arithmetic/Re.md)  [`ReIm`](arithmetic/ReIm.md)  [`RealDigits`](arithmetic/RealDigits.md)  [`RealExponent`](arithmetic/RealExponent.md)  [`Round`](arithmetic/Round.md)  [`SetAccuracy`](arithmetic/SetAccuracy.md)  [`SetPrecision`](arithmetic/SetPrecision.md)  [`Sign`](arithmetic/Sign.md)  [`Sqrt`](arithmetic/Sqrt.md)  [`Subtract`](arithmetic/Subtract.md)  [`Times`](arithmetic/Times.md)  [`Total`](arithmetic/Total.md)
 
 ### [Assignment and Rules](assignment-and-rules/index.md)
 
-[`AddTo`](assignment-and-rules/AddTo.md)  [`Clear`](assignment-and-rules/Clear.md)  [`ClearAll`](assignment-and-rules/ClearAll.md)  [`CompoundExpression`](assignment-and-rules/CompoundExpression.md)  [`Decrement`](assignment-and-rules/Decrement.md)  [`DivideBy`](assignment-and-rules/DivideBy.md)  [`DownValues`](assignment-and-rules/DownValues.md)  [`Increment`](assignment-and-rules/Increment.md)  [`OptionValue`](assignment-and-rules/OptionValue.md)  [`Options`](assignment-and-rules/Options.md)  [`OwnValues`](assignment-and-rules/OwnValues.md)  [`PreDecrement`](assignment-and-rules/PreDecrement.md)  [`PreIncrement`](assignment-and-rules/PreIncrement.md)  [`Protect`](assignment-and-rules/Protect.md)  [`Remove`](assignment-and-rules/Remove.md)  [`Replace`](assignment-and-rules/Replace.md)  [`ReplaceAll`](assignment-and-rules/ReplaceAll.md)  [`ReplaceAt`](assignment-and-rules/ReplaceAt.md)  [`ReplaceList`](assignment-and-rules/ReplaceList.md)  [`ReplaceRepeated`](assignment-and-rules/ReplaceRepeated.md)  [`Rule`](assignment-and-rules/Rule.md)  [`RuleDelayed`](assignment-and-rules/RuleDelayed.md)  [`Set`](assignment-and-rules/Set.md)  [`SetDelayed`](assignment-and-rules/SetDelayed.md)  [`SetOptions`](assignment-and-rules/SetOptions.md)  [`SubtractFrom`](assignment-and-rules/SubtractFrom.md)  [`TimesBy`](assignment-and-rules/TimesBy.md)  [`Unprotect`](assignment-and-rules/Unprotect.md)  [`Unset`](assignment-and-rules/Unset.md)
+[`AddTo`](assignment-and-rules/AddTo.md)  [`Clear`](assignment-and-rules/Clear.md)  [`ClearAll`](assignment-and-rules/ClearAll.md)  [`CompoundExpression`](assignment-and-rules/CompoundExpression.md)  [`Decrement`](assignment-and-rules/Decrement.md)  [`DivideBy`](assignment-and-rules/DivideBy.md)  [`DownValues`](assignment-and-rules/DownValues.md)  [`Increment`](assignment-and-rules/Increment.md)  [`OptionValue`](assignment-and-rules/OptionValue.md)  [`Options`](assignment-and-rules/Options.md)  [`OwnValues`](assignment-and-rules/OwnValues.md)  [`PreDecrement`](assignment-and-rules/PreDecrement.md)  [`PreIncrement`](assignment-and-rules/PreIncrement.md)  [`Protect`](assignment-and-rules/Protect.md)  [`Remove`](assignment-and-rules/Remove.md)  [`Replace`](assignment-and-rules/Replace.md)  [`ReplaceAll`](assignment-and-rules/ReplaceAll.md)  [`ReplaceAt`](assignment-and-rules/ReplaceAt.md)  [`ReplaceList`](assignment-and-rules/ReplaceList.md)  [`ReplaceRepeated`](assignment-and-rules/ReplaceRepeated.md)  [`Rule`](assignment-and-rules/Rule.md)  [`RuleDelayed`](assignment-and-rules/RuleDelayed.md)  [`Set`](assignment-and-rules/Set.md)  [`SetDelayed`](assignment-and-rules/SetDelayed.md)  [`SetOptions`](assignment-and-rules/SetOptions.md)  [`SubtractFrom`](assignment-and-rules/SubtractFrom.md)  [`TagSet`](assignment-and-rules/TagSet.md)  [`TagSetDelayed`](assignment-and-rules/TagSetDelayed.md)  [`TagUnset`](assignment-and-rules/TagUnset.md)  [`TimesBy`](assignment-and-rules/TimesBy.md)  [`Unprotect`](assignment-and-rules/Unprotect.md)  [`Unset`](assignment-and-rules/Unset.md)  [`UpSet`](assignment-and-rules/UpSet.md)  [`UpSetDelayed`](assignment-and-rules/UpSetDelayed.md)
 
 ### [Bitwise operations](bitwise/index.md)
 
@@ -24,7 +24,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Calculus](calculus/index.md)
 
-[`Curl`](calculus/Curl.md)  [`D`](calculus/D.md)  [`DSolve`](calculus/DSolve.md)  [`Derivative`](calculus/Derivative.md)  [`DifferenceDelta`](calculus/DifferenceDelta.md)  [`Div`](calculus/Div.md)  [`Dt`](calculus/Dt.md)  [`FindRoot`](calculus/FindRoot.md)  [`Grad`](calculus/Grad.md)  [`Integrate`](calculus/Integrate.md)  [`Laplacian`](calculus/Laplacian.md)  [`Limit`](calculus/Limit.md)  [`PolynomialQuotientRemainder`](calculus/PolynomialQuotientRemainder.md)  [`Product`](calculus/Product.md)  [`Residue`](calculus/Residue.md)  [`SubresultantPolynomialRemainders`](calculus/SubresultantPolynomialRemainders.md)  [`Sum`](calculus/Sum.md)
+[`Curl`](calculus/Curl.md)  [`D`](calculus/D.md)  [`DSolve`](calculus/DSolve.md)  [`Derivative`](calculus/Derivative.md)  [`DifferenceDelta`](calculus/DifferenceDelta.md)  [`Div`](calculus/Div.md)  [`Dt`](calculus/Dt.md)  [`FindRoot`](calculus/FindRoot.md)  [`Grad`](calculus/Grad.md)  [`Integrate`](calculus/Integrate.md)  [`Laplacian`](calculus/Laplacian.md)  [`Limit`](calculus/Limit.md)  [`Maximize`](calculus/Maximize.md)  [`Minimize`](calculus/Minimize.md)  [`PolynomialQuotientRemainder`](calculus/PolynomialQuotientRemainder.md)  [`Product`](calculus/Product.md)  [`Residue`](calculus/Residue.md)  [`SubresultantPolynomialRemainders`](calculus/SubresultantPolynomialRemainders.md)  [`Sum`](calculus/Sum.md)
 
 ### [Comparisons](comparisons/index.md)
 
@@ -44,7 +44,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Expression Information](expression-information/index.md)
 
-[`$MachineEpsilon`](expression-information/$MachineEpsilon.md)  [`$MachinePrecision`](expression-information/$MachinePrecision.md)  [`$MaxMachineNumber`](expression-information/$MaxMachineNumber.md)  [`$MaxNumber`](expression-information/$MaxNumber.md)  [`$MinMachineNumber`](expression-information/$MinMachineNumber.md)  [`$MinNumber`](expression-information/$MinNumber.md)  [`$Version`](expression-information/$Version.md)  [`$VersionNumber`](expression-information/$VersionNumber.md)  [`Activate`](expression-information/Activate.md)  [`AtomQ`](expression-information/AtomQ.md)  [`Attributes`](expression-information/Attributes.md)  [`ByteCount`](expression-information/ByteCount.md)  [`ClearAttributes`](expression-information/ClearAttributes.md)  [`ComposeList`](expression-information/ComposeList.md)  [`Composition`](expression-information/Composition.md)  [`Evaluate`](expression-information/Evaluate.md)  [`EvenQ`](expression-information/EvenQ.md)  [`Flat`](expression-information/Flat.md)  [`FreeQ`](expression-information/FreeQ.md)  [`FullForm`](expression-information/FullForm.md)  [`Hold`](expression-information/Hold.md)  [`HoldAll`](expression-information/HoldAll.md)  [`HoldAllComplete`](expression-information/HoldAllComplete.md)  [`HoldComplete`](expression-information/HoldComplete.md)  [`HoldForm`](expression-information/HoldForm.md)  [`Identity`](expression-information/Identity.md)  [`Inactive`](expression-information/Inactive.md)  [`Information`](expression-information/Information.md)  [`InputForm`](expression-information/InputForm.md)  [`IntegerQ`](expression-information/IntegerQ.md)  [`LeafCount`](expression-information/LeafCount.md)  [`ListQ`](expression-information/ListQ.md)  [`MachineNumberQ`](expression-information/MachineNumberQ.md)  [`MatrixQ`](expression-information/MatrixQ.md)  [`MaxMemoryUsed`](expression-information/MaxMemoryUsed.md)  [`MemberQ`](expression-information/MemberQ.md)  [`MemoryInUse`](expression-information/MemoryInUse.md)  [`Names`](expression-information/Names.md)  [`Negative`](expression-information/Negative.md)  [`NonNegative`](expression-information/NonNegative.md)  [`NonPositive`](expression-information/NonPositive.md)  [`NumberForm`](expression-information/NumberForm.md)  [`NumberQ`](expression-information/NumberQ.md)  [`NumericQ`](expression-information/NumericQ.md)  [`OddQ`](expression-information/OddQ.md)  [`OneIdentity`](expression-information/OneIdentity.md)  [`Orderless`](expression-information/Orderless.md)  [`Positive`](expression-information/Positive.md)  [`PossibleZeroQ`](expression-information/PossibleZeroQ.md)  [`Print`](expression-information/Print.md)  [`ReleaseHold`](expression-information/ReleaseHold.md)  [`Row`](expression-information/Row.md)  [`Sequence`](expression-information/Sequence.md)  [`SequenceHold`](expression-information/SequenceHold.md)  [`SetAttributes`](expression-information/SetAttributes.md)  [`StringQ`](expression-information/StringQ.md)  [`Symbol`](expression-information/Symbol.md)  [`TeXForm`](expression-information/TeXForm.md)  [`ToExpression`](expression-information/ToExpression.md)  [`ToString`](expression-information/ToString.md)  [`Trace`](expression-information/Trace.md)  [`Unevaluated`](expression-information/Unevaluated.md)  [`ValueQ`](expression-information/ValueQ.md)  [`VectorQ`](expression-information/VectorQ.md)
+[`$MachineEpsilon`](expression-information/$MachineEpsilon.md)  [`$MachinePrecision`](expression-information/$MachinePrecision.md)  [`$MaxMachineNumber`](expression-information/$MaxMachineNumber.md)  [`$MaxNumber`](expression-information/$MaxNumber.md)  [`$MinMachineNumber`](expression-information/$MinMachineNumber.md)  [`$MinNumber`](expression-information/$MinNumber.md)  [`$Version`](expression-information/$Version.md)  [`$VersionNumber`](expression-information/$VersionNumber.md)  [`Activate`](expression-information/Activate.md)  [`AtomQ`](expression-information/AtomQ.md)  [`Attributes`](expression-information/Attributes.md)  [`ByteCount`](expression-information/ByteCount.md)  [`ClearAttributes`](expression-information/ClearAttributes.md)  [`ComposeList`](expression-information/ComposeList.md)  [`Composition`](expression-information/Composition.md)  [`Definition`](expression-information/Definition.md)  [`Evaluate`](expression-information/Evaluate.md)  [`EvenQ`](expression-information/EvenQ.md)  [`Flat`](expression-information/Flat.md)  [`FreeQ`](expression-information/FreeQ.md)  [`FullForm`](expression-information/FullForm.md)  [`Hash`](expression-information/Hash.md)  [`Hold`](expression-information/Hold.md)  [`HoldAll`](expression-information/HoldAll.md)  [`HoldAllComplete`](expression-information/HoldAllComplete.md)  [`HoldComplete`](expression-information/HoldComplete.md)  [`HoldForm`](expression-information/HoldForm.md)  [`Identity`](expression-information/Identity.md)  [`Inactive`](expression-information/Inactive.md)  [`Information`](expression-information/Information.md)  [`InputForm`](expression-information/InputForm.md)  [`IntegerQ`](expression-information/IntegerQ.md)  [`LeafCount`](expression-information/LeafCount.md)  [`ListQ`](expression-information/ListQ.md)  [`MachineNumberQ`](expression-information/MachineNumberQ.md)  [`MatrixQ`](expression-information/MatrixQ.md)  [`MaxMemoryUsed`](expression-information/MaxMemoryUsed.md)  [`MemberQ`](expression-information/MemberQ.md)  [`MemoryInUse`](expression-information/MemoryInUse.md)  [`Names`](expression-information/Names.md)  [`Negative`](expression-information/Negative.md)  [`NonNegative`](expression-information/NonNegative.md)  [`NonPositive`](expression-information/NonPositive.md)  [`NumberForm`](expression-information/NumberForm.md)  [`NumberQ`](expression-information/NumberQ.md)  [`NumericQ`](expression-information/NumericQ.md)  [`OddQ`](expression-information/OddQ.md)  [`OneIdentity`](expression-information/OneIdentity.md)  [`Orderless`](expression-information/Orderless.md)  [`Positive`](expression-information/Positive.md)  [`PossibleZeroQ`](expression-information/PossibleZeroQ.md)  [`Print`](expression-information/Print.md)  [`ReleaseHold`](expression-information/ReleaseHold.md)  [`Row`](expression-information/Row.md)  [`Sequence`](expression-information/Sequence.md)  [`SequenceHold`](expression-information/SequenceHold.md)  [`SetAttributes`](expression-information/SetAttributes.md)  [`StandardForm`](expression-information/StandardForm.md)  [`StringQ`](expression-information/StringQ.md)  [`Symbol`](expression-information/Symbol.md)  [`TeXForm`](expression-information/TeXForm.md)  [`ToExpression`](expression-information/ToExpression.md)  [`ToString`](expression-information/ToString.md)  [`Trace`](expression-information/Trace.md)  [`TraditionalForm`](expression-information/TraditionalForm.md)  [`Unevaluated`](expression-information/Unevaluated.md)  [`UpValues`](expression-information/UpValues.md)  [`ValueQ`](expression-information/ValueQ.md)  [`VectorQ`](expression-information/VectorQ.md)
 
 ### [File I/O](file-io/index.md)
 
@@ -96,7 +96,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Number Theory](number-theory/index.md)
 
-[`ChineseRemainder`](number-theory/ChineseRemainder.md)  [`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimeNu`](number-theory/PrimeNu.md)  [`PrimeOmega`](number-theory/PrimeOmega.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
+[`ChineseRemainder`](number-theory/ChineseRemainder.md)  [`ContinuedFraction`](number-theory/ContinuedFraction.md)  [`CoprimeQ`](number-theory/CoprimeQ.md)  [`DirichletCharacter`](number-theory/DirichletCharacter.md)  [`Divisible`](number-theory/Divisible.md)  [`DivisorSigma`](number-theory/DivisorSigma.md)  [`Divisors`](number-theory/Divisors.md)  [`EulerPhi`](number-theory/EulerPhi.md)  [`ExtendedGCD`](number-theory/ExtendedGCD.md)  [`FactorInteger`](number-theory/FactorInteger.md)  [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)  [`GCD`](number-theory/GCD.md)  [`IntegerPartitions`](number-theory/IntegerPartitions.md)  [`JacobiSymbol`](number-theory/JacobiSymbol.md)  [`LCM`](number-theory/LCM.md)  [`LiouvilleLambda`](number-theory/LiouvilleLambda.md)  [`MoebiusMu`](number-theory/MoebiusMu.md)  [`MultiplicativeOrder`](number-theory/MultiplicativeOrder.md)  [`NextPrime`](number-theory/NextPrime.md)  [`PartitionsP`](number-theory/PartitionsP.md)  [`PartitionsQ`](number-theory/PartitionsQ.md)  [`PowerMod`](number-theory/PowerMod.md)  [`Prime`](number-theory/Prime.md)  [`PrimeNu`](number-theory/PrimeNu.md)  [`PrimeOmega`](number-theory/PrimeOmega.md)  [`PrimePi`](number-theory/PrimePi.md)  [`PrimeQ`](number-theory/PrimeQ.md)  [`PrimitiveRoot`](number-theory/PrimitiveRoot.md)  [`PrimitiveRootList`](number-theory/PrimitiveRootList.md)  [`SquareFreeQ`](number-theory/SquareFreeQ.md)
 
 ### [Numerical Calculus](numerical-calculus/index.md)
 
@@ -132,7 +132,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [Special Functions](special-functions/index.md)
 
-[`AiryAi`](special-functions/AiryAi.md)  [`AiryBi`](special-functions/AiryBi.md)  [`BarnesG`](special-functions/BarnesG.md)  [`BernoulliB`](special-functions/BernoulliB.md)  [`BesselI`](special-functions/BesselI.md)  [`BesselJ`](special-functions/BesselJ.md)  [`BesselK`](special-functions/BesselK.md)  [`BesselY`](special-functions/BesselY.md)  [`Beta`](special-functions/Beta.md)  [`CosIntegral`](special-functions/CosIntegral.md)  [`CoshIntegral`](special-functions/CoshIntegral.md)  [`EllipticE`](special-functions/EllipticE.md)  [`EllipticF`](special-functions/EllipticF.md)  [`EllipticK`](special-functions/EllipticK.md)  [`EllipticPi`](special-functions/EllipticPi.md)  [`Erf`](special-functions/Erf.md)  [`Erfc`](special-functions/Erfc.md)  [`Erfi`](special-functions/Erfi.md)  [`EulerE`](special-functions/EulerE.md)  [`ExpIntegralEi`](special-functions/ExpIntegralEi.md)  [`FresnelC`](special-functions/FresnelC.md)  [`FresnelS`](special-functions/FresnelS.md)  [`Gamma`](special-functions/Gamma.md)  [`HarmonicNumber`](special-functions/HarmonicNumber.md)  [`HurwitzZeta`](special-functions/HurwitzZeta.md)  [`Hyperfactorial`](special-functions/Hyperfactorial.md)  [`Hypergeometric0F1`](special-functions/Hypergeometric0F1.md)  [`Hypergeometric1F1`](special-functions/Hypergeometric1F1.md)  [`Hypergeometric2F1`](special-functions/Hypergeometric2F1.md)  [`HypergeometricPFQ`](special-functions/HypergeometricPFQ.md)  [`InverseErf`](special-functions/InverseErf.md)  [`InverseErfc`](special-functions/InverseErfc.md)  [`LegendreP`](special-functions/LegendreP.md)  [`LegendreQ`](special-functions/LegendreQ.md)  [`LerchPhi`](special-functions/LerchPhi.md)  [`LogGamma`](special-functions/LogGamma.md)  [`LogIntegral`](special-functions/LogIntegral.md)  [`Pochhammer`](special-functions/Pochhammer.md)  [`PolyGamma`](special-functions/PolyGamma.md)  [`PolyLog`](special-functions/PolyLog.md)  [`ProductLog`](special-functions/ProductLog.md)  [`QPochhammer`](special-functions/QPochhammer.md)  [`SinIntegral`](special-functions/SinIntegral.md)  [`Sinc`](special-functions/Sinc.md)  [`SinhIntegral`](special-functions/SinhIntegral.md)  [`StieltjesGamma`](special-functions/StieltjesGamma.md)  [`Zeta`](special-functions/Zeta.md)
+[`AiryAi`](special-functions/AiryAi.md)  [`AiryBi`](special-functions/AiryBi.md)  [`BarnesG`](special-functions/BarnesG.md)  [`BernoulliB`](special-functions/BernoulliB.md)  [`BesselI`](special-functions/BesselI.md)  [`BesselJ`](special-functions/BesselJ.md)  [`BesselK`](special-functions/BesselK.md)  [`BesselY`](special-functions/BesselY.md)  [`Beta`](special-functions/Beta.md)  [`ChebyshevT`](special-functions/ChebyshevT.md)  [`ChebyshevU`](special-functions/ChebyshevU.md)  [`CosIntegral`](special-functions/CosIntegral.md)  [`CoshIntegral`](special-functions/CoshIntegral.md)  [`DirichletL`](special-functions/DirichletL.md)  [`EllipticE`](special-functions/EllipticE.md)  [`EllipticF`](special-functions/EllipticF.md)  [`EllipticK`](special-functions/EllipticK.md)  [`EllipticPi`](special-functions/EllipticPi.md)  [`Erf`](special-functions/Erf.md)  [`Erfc`](special-functions/Erfc.md)  [`Erfi`](special-functions/Erfi.md)  [`EulerE`](special-functions/EulerE.md)  [`ExpIntegralE`](special-functions/ExpIntegralE.md)  [`ExpIntegralEi`](special-functions/ExpIntegralEi.md)  [`FresnelC`](special-functions/FresnelC.md)  [`FresnelS`](special-functions/FresnelS.md)  [`FunctionExpand`](special-functions/FunctionExpand.md)  [`Gamma`](special-functions/Gamma.md)  [`HarmonicNumber`](special-functions/HarmonicNumber.md)  [`HermiteH`](special-functions/HermiteH.md)  [`HurwitzZeta`](special-functions/HurwitzZeta.md)  [`Hyperfactorial`](special-functions/Hyperfactorial.md)  [`Hypergeometric0F1`](special-functions/Hypergeometric0F1.md)  [`Hypergeometric1F1`](special-functions/Hypergeometric1F1.md)  [`Hypergeometric2F1`](special-functions/Hypergeometric2F1.md)  [`HypergeometricPFQ`](special-functions/HypergeometricPFQ.md)  [`HypergeometricU`](special-functions/HypergeometricU.md)  [`InverseErf`](special-functions/InverseErf.md)  [`InverseErfc`](special-functions/InverseErfc.md)  [`LaguerreL`](special-functions/LaguerreL.md)  [`LegendreP`](special-functions/LegendreP.md)  [`LegendreQ`](special-functions/LegendreQ.md)  [`LerchPhi`](special-functions/LerchPhi.md)  [`LogGamma`](special-functions/LogGamma.md)  [`LogIntegral`](special-functions/LogIntegral.md)  [`MeijerG`](special-functions/MeijerG.md)  [`Pochhammer`](special-functions/Pochhammer.md)  [`PolyGamma`](special-functions/PolyGamma.md)  [`PolyLog`](special-functions/PolyLog.md)  [`ProductLog`](special-functions/ProductLog.md)  [`QPochhammer`](special-functions/QPochhammer.md)  [`SinIntegral`](special-functions/SinIntegral.md)  [`Sinc`](special-functions/Sinc.md)  [`SinhIntegral`](special-functions/SinhIntegral.md)  [`StieltjesGamma`](special-functions/StieltjesGamma.md)  [`StruveH`](special-functions/StruveH.md)  [`WhittakerM`](special-functions/WhittakerM.md)  [`WhittakerW`](special-functions/WhittakerW.md)  [`Zeta`](special-functions/Zeta.md)
 
 ### [Statistics](statistics/index.md)
 
@@ -140,7 +140,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 
 ### [String Operations](string-operations/index.md)
 
-[`Characters`](string-operations/Characters.md)  [`RegularExpression`](string-operations/RegularExpression.md)  [`StringCases`](string-operations/StringCases.md)  [`StringContainsQ`](string-operations/StringContainsQ.md)  [`StringCount`](string-operations/StringCount.md)  [`StringDrop`](string-operations/StringDrop.md)  [`StringEndsQ`](string-operations/StringEndsQ.md)  [`StringExtract`](string-operations/StringExtract.md)  [`StringFreeQ`](string-operations/StringFreeQ.md)  [`StringInsert`](string-operations/StringInsert.md)  [`StringJoin`](string-operations/StringJoin.md)  [`StringLength`](string-operations/StringLength.md)  [`StringMatchQ`](string-operations/StringMatchQ.md)  [`StringPadLeft`](string-operations/StringPadLeft.md)  [`StringPadRight`](string-operations/StringPadRight.md)  [`StringPart`](string-operations/StringPart.md)  [`StringPartition`](string-operations/StringPartition.md)  [`StringPosition`](string-operations/StringPosition.md)  [`StringRepeat`](string-operations/StringRepeat.md)  [`StringReplace`](string-operations/StringReplace.md)  [`StringReplacePart`](string-operations/StringReplacePart.md)  [`StringReverse`](string-operations/StringReverse.md)  [`StringRiffle`](string-operations/StringRiffle.md)  [`StringSplit`](string-operations/StringSplit.md)  [`StringStartsQ`](string-operations/StringStartsQ.md)  [`StringTake`](string-operations/StringTake.md)  [`StringTrim`](string-operations/StringTrim.md)
+[`Alphabet`](string-operations/Alphabet.md)  [`Capitalize`](string-operations/Capitalize.md)  [`CharacterRange`](string-operations/CharacterRange.md)  [`Characters`](string-operations/Characters.md)  [`Decapitalize`](string-operations/Decapitalize.md)  [`DigitQ`](string-operations/DigitQ.md)  [`FromCharacterCode`](string-operations/FromCharacterCode.md)  [`LetterQ`](string-operations/LetterQ.md)  [`LowerCaseQ`](string-operations/LowerCaseQ.md)  [`RegularExpression`](string-operations/RegularExpression.md)  [`StringCases`](string-operations/StringCases.md)  [`StringContainsQ`](string-operations/StringContainsQ.md)  [`StringCount`](string-operations/StringCount.md)  [`StringDelete`](string-operations/StringDelete.md)  [`StringDrop`](string-operations/StringDrop.md)  [`StringEndsQ`](string-operations/StringEndsQ.md)  [`StringExtract`](string-operations/StringExtract.md)  [`StringFreeQ`](string-operations/StringFreeQ.md)  [`StringInsert`](string-operations/StringInsert.md)  [`StringJoin`](string-operations/StringJoin.md)  [`StringLength`](string-operations/StringLength.md)  [`StringMatchQ`](string-operations/StringMatchQ.md)  [`StringPadLeft`](string-operations/StringPadLeft.md)  [`StringPadRight`](string-operations/StringPadRight.md)  [`StringPart`](string-operations/StringPart.md)  [`StringPartition`](string-operations/StringPartition.md)  [`StringPosition`](string-operations/StringPosition.md)  [`StringRepeat`](string-operations/StringRepeat.md)  [`StringReplace`](string-operations/StringReplace.md)  [`StringReplaceList`](string-operations/StringReplaceList.md)  [`StringReplacePart`](string-operations/StringReplacePart.md)  [`StringReverse`](string-operations/StringReverse.md)  [`StringRiffle`](string-operations/StringRiffle.md)  [`StringRotateLeft`](string-operations/StringRotateLeft.md)  [`StringRotateRight`](string-operations/StringRotateRight.md)  [`StringSplit`](string-operations/StringSplit.md)  [`StringStartsQ`](string-operations/StringStartsQ.md)  [`StringTake`](string-operations/StringTake.md)  [`StringTakeDrop`](string-operations/StringTakeDrop.md)  [`StringTrim`](string-operations/StringTrim.md)  [`ToCharacterCode`](string-operations/ToCharacterCode.md)  [`ToLowerCase`](string-operations/ToLowerCase.md)  [`ToUpperCase`](string-operations/ToUpperCase.md)  [`UpperCaseQ`](string-operations/UpperCaseQ.md)
 
 ### [Structural Manipulation](structural-manipulation/index.md)
 
@@ -209,6 +209,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`AlgebraicNumberTrace`](algebra/AlgebraicNumberTrace.md)
 - [`AllTrue`](functional-programming/AllTrue.md)
 - [`AlphaChannel`](image-processing/AlphaChannel.md)
+- [`Alphabet`](string-operations/Alphabet.md)
 - [`Animate`](graphics/Animate.md)
 - [`AnyTrue`](functional-programming/AnyTrue.md)
 - [`Apart`](algebra/Apart.md)
@@ -268,6 +269,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`CMYKColor`](graphics/CMYKColor.md)
 - [`Cancel`](algebra/Cancel.md)
 - [`CanonicalGraph`](graphs/CanonicalGraph.md)
+- [`Capitalize`](string-operations/Capitalize.md)
 - [`Cases`](data-structures/Cases.md)
 - [`Catalan`](mathematical-constants/Catalan.md)
 - [`Catch`](control-flow/Catch.md)
@@ -275,10 +277,13 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Ceiling`](arithmetic/Ceiling.md)
 - [`CentralMoment`](statistics/CentralMoment.md)
 - [`Character`](other-advanced/Character.md)
+- [`CharacterRange`](string-operations/CharacterRange.md)
 - [`CharacteristicPolynomial`](linear-algebra/CharacteristicPolynomial.md)
 - [`Characters`](string-operations/Characters.md)
 - [`ChartLabels`](other-advanced/ChartLabels.md)
 - [`ChartStyle`](other-advanced/ChartStyle.md)
+- [`ChebyshevT`](special-functions/ChebyshevT.md)
+- [`ChebyshevU`](special-functions/ChebyshevU.md)
 - [`Check`](control-flow/Check.md)
 - [`ChineseRemainder`](number-theory/ChineseRemainder.md)
 - [`Chop`](elementary-functions/Chop.md)
@@ -358,9 +363,11 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`DSolve`](calculus/DSolve.md)
 - [`DataType`](other-advanced/DataType.md)
 - [`DateList`](time-and-date/DateList.md)
+- [`Decapitalize`](string-operations/Decapitalize.md)
 - [`Decompose`](algebra/Decompose.md)
 - [`Decrement`](assignment-and-rules/Decrement.md)
 - [`Default`](pattern-matching/Default.md)
+- [`Definition`](expression-information/Definition.md)
 - [`Degree`](mathematical-constants/Degree.md)
 - [`DegreeCentrality`](graphs/DegreeCentrality.md)
 - [`Delete`](data-structures/Delete.md)
@@ -380,6 +387,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`DifferenceDelta`](calculus/DifferenceDelta.md)
 - [`Differences`](arithmetic/Differences.md)
 - [`DigitCount`](arithmetic/DigitCount.md)
+- [`DigitQ`](string-operations/DigitQ.md)
 - [`DigitSum`](arithmetic/DigitSum.md)
 - [`Dilation`](image-processing/Dilation.md)
 - [`DimensionReduce`](machine-learning/DimensionReduce.md)
@@ -388,6 +396,8 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Dimensions`](structural-manipulation/Dimensions.md)
 - [`DirectedGraph`](graphs/DirectedGraph.md)
 - [`DirectedGraphQ`](graphs/DirectedGraphQ.md)
+- [`DirichletCharacter`](number-theory/DirichletCharacter.md)
+- [`DirichletL`](special-functions/DirichletL.md)
 - [`Discard`](data-structures/Discard.md)
 - [`Discriminant`](algebra/Discriminant.md)
 - [`DistanceTransform`](image-processing/DistanceTransform.md)
@@ -448,6 +458,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`ExactNumberQ`](other-advanced/ExactNumberQ.md)
 - [`Exists`](solutions-of-equations/Exists.md)
 - [`Exp`](elementary-functions/Exp.md)
+- [`ExpIntegralE`](special-functions/ExpIntegralE.md)
 - [`ExpIntegralEi`](special-functions/ExpIntegralEi.md)
 - [`ExpToTrig`](elementary-functions/ExpToTrig.md)
 - [`Expand`](algebra/Expand.md)
@@ -544,6 +555,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`FreeQ`](expression-information/FreeQ.md)
 - [`FresnelC`](special-functions/FresnelC.md)
 - [`FresnelS`](special-functions/FresnelS.md)
+- [`FromCharacterCode`](string-operations/FromCharacterCode.md)
 - [`FromCoefficientRules`](structural-manipulation/FromCoefficientRules.md)
 - [`FromContinuedFraction`](number-theory/FromContinuedFraction.md)
 - [`FromDigits`](arithmetic/FromDigits.md)
@@ -551,6 +563,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`FromPackedArray`](packed-arrays/FromPackedArray.md)
 - [`FullForm`](expression-information/FullForm.md)
 - [`Function`](functional-programming/Function.md)
+- [`FunctionExpand`](special-functions/FunctionExpand.md)
 - [`GCD`](number-theory/GCD.md)
 - [`Gamma`](special-functions/Gamma.md)
 - [`Gather`](data-structures/Gather.md)
@@ -596,8 +609,10 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`HankelMatrix`](linear-algebra/HankelMatrix.md)
 - [`HararyGraph`](graphs/HararyGraph.md)
 - [`HarmonicNumber`](special-functions/HarmonicNumber.md)
+- [`Hash`](expression-information/Hash.md)
 - [`Head`](structural-manipulation/Head.md)
 - [`HermiteDecomposition`](linear-algebra/HermiteDecomposition.md)
+- [`HermiteH`](special-functions/HermiteH.md)
 - [`HermitianMatrixQ`](linear-algebra/HermitianMatrixQ.md)
 - [`HilbertMatrix`](linear-algebra/HilbertMatrix.md)
 - [`Histogram`](graphics/Histogram.md)
@@ -621,6 +636,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Hypergeometric1F1`](special-functions/Hypergeometric1F1.md)
 - [`Hypergeometric2F1`](special-functions/Hypergeometric2F1.md)
 - [`HypergeometricPFQ`](special-functions/HypergeometricPFQ.md)
+- [`HypergeometricU`](special-functions/HypergeometricU.md)
 - [`Hypergraph`](hypergraphs/Hypergraph.md)
 - [`HypergraphCliqueExpansion`](hypergraphs/HypergraphCliqueExpansion.md)
 - [`HypergraphConnectedComponents`](hypergraphs/HypergraphConnectedComponents.md)
@@ -731,6 +747,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`LCM`](number-theory/LCM.md)
 - [`LUDecomposition`](linear-algebra/LUDecomposition.md)
 - [`Label`](control-flow/Label.md)
+- [`LaguerreL`](special-functions/LaguerreL.md)
 - [`Laplacian`](calculus/Laplacian.md)
 - [`Last`](data-structures/Last.md)
 - [`LatticeReduce`](linear-algebra/LatticeReduce.md)
@@ -745,6 +762,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`LerchPhi`](special-functions/LerchPhi.md)
 - [`Less`](comparisons/Less.md)
 - [`LessEqual`](comparisons/LessEqual.md)
+- [`LetterQ`](string-operations/LetterQ.md)
 - [`Level`](structural-manipulation/Level.md)
 - [`LightBlue`](other-advanced/LightBlue.md)
 - [`LightBrown`](other-advanced/LightBrown.md)
@@ -782,6 +800,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Longest`](pattern-matching/Longest.md)
 - [`Lookup`](data-structures/Lookup.md)
 - [`LoopFreeGraphQ`](graphs/LoopFreeGraphQ.md)
+- [`LowerCaseQ`](string-operations/LowerCaseQ.md)
 - [`LucasL`](arithmetic/LucasL.md)
 - [`MachineIntegerQ`](other-advanced/MachineIntegerQ.md)
 - [`MachineNumberQ`](expression-information/MachineNumberQ.md)
@@ -801,6 +820,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Max`](data-structures/Max.md)
 - [`MaxMemoryUsed`](expression-information/MaxMemoryUsed.md)
 - [`MaximalBy`](functional-programming/MaximalBy.md)
+- [`Maximize`](calculus/Maximize.md)
 - [`Mean`](data-structures/Mean.md)
 - [`MeanClusteringCoefficient`](graphs/MeanClusteringCoefficient.md)
 - [`MeanDeviation`](statistics/MeanDeviation.md)
@@ -809,6 +829,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Median`](data-structures/Median.md)
 - [`MedianDeviation`](statistics/MedianDeviation.md)
 - [`MedianFilter`](image-processing/MedianFilter.md)
+- [`MeijerG`](special-functions/MeijerG.md)
 - [`MemberQ`](expression-information/MemberQ.md)
 - [`MemoryInUse`](expression-information/MemoryInUse.md)
 - [`Merge`](data-structures/Merge.md)
@@ -817,6 +838,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`MinMax`](data-structures/MinMax.md)
 - [`MinimalBy`](functional-programming/MinimalBy.md)
 - [`MinimalPolynomial`](algebra/MinimalPolynomial.md)
+- [`Minimize`](calculus/Minimize.md)
 - [`Minus`](arithmetic/Minus.md)
 - [`Missing`](data-structures/Missing.md)
 - [`MissingQ`](data-structures/MissingQ.md)
@@ -857,6 +879,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`NestWhile`](functional-programming/NestWhile.md)
 - [`NestWhileList`](functional-programming/NestWhileList.md)
 - [`NextPrime`](number-theory/NextPrime.md)
+- [`NonCommutativeMultiply`](arithmetic/NonCommutativeMultiply.md)
 - [`NonNegative`](expression-information/NonNegative.md)
 - [`NonPositive`](expression-information/NonPositive.md)
 - [`NoneTrue`](functional-programming/NoneTrue.md)
@@ -1095,6 +1118,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`SquareMatrixQ`](linear-algebra/SquareMatrixQ.md)
 - [`SquaredEuclideanDistance`](lists-and-iteration/SquaredEuclideanDistance.md)
 - [`StandardDeviation`](data-structures/StandardDeviation.md)
+- [`StandardForm`](expression-information/StandardForm.md)
 - [`Standardize`](machine-learning/Standardize.md)
 - [`StarGraph`](graphs/StarGraph.md)
 - [`StieltjesGamma`](special-functions/StieltjesGamma.md)
@@ -1105,6 +1129,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`StringCases`](string-operations/StringCases.md)
 - [`StringContainsQ`](string-operations/StringContainsQ.md)
 - [`StringCount`](string-operations/StringCount.md)
+- [`StringDelete`](string-operations/StringDelete.md)
 - [`StringDrop`](string-operations/StringDrop.md)
 - [`StringEndsQ`](string-operations/StringEndsQ.md)
 - [`StringExpression`](other-advanced/StringExpression.md)
@@ -1122,14 +1147,19 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`StringQ`](expression-information/StringQ.md)
 - [`StringRepeat`](string-operations/StringRepeat.md)
 - [`StringReplace`](string-operations/StringReplace.md)
+- [`StringReplaceList`](string-operations/StringReplaceList.md)
 - [`StringReplacePart`](string-operations/StringReplacePart.md)
 - [`StringReverse`](string-operations/StringReverse.md)
 - [`StringRiffle`](string-operations/StringRiffle.md)
+- [`StringRotateLeft`](string-operations/StringRotateLeft.md)
+- [`StringRotateRight`](string-operations/StringRotateRight.md)
 - [`StringSplit`](string-operations/StringSplit.md)
 - [`StringStartsQ`](string-operations/StringStartsQ.md)
 - [`StringTake`](string-operations/StringTake.md)
+- [`StringTakeDrop`](string-operations/StringTakeDrop.md)
 - [`StringTrim`](string-operations/StringTrim.md)
 - [`StronglyConnectedComponents`](graphs/StronglyConnectedComponents.md)
+- [`StruveH`](special-functions/StruveH.md)
 - [`Subdivide`](lists-and-iteration/Subdivide.md)
 - [`Subgraph`](graphs/Subgraph.md)
 - [`Subhypergraph`](hypergraphs/Subhypergraph.md)
@@ -1146,6 +1176,9 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`SymbolName`](other-advanced/SymbolName.md)
 - [`SymmetricMatrixQ`](linear-algebra/SymmetricMatrixQ.md)
 - [`Table`](lists-and-iteration/Table.md)
+- [`TagSet`](assignment-and-rules/TagSet.md)
+- [`TagSetDelayed`](assignment-and-rules/TagSetDelayed.md)
+- [`TagUnset`](assignment-and-rules/TagUnset.md)
 - [`Take`](data-structures/Take.md)
 - [`TakeLargest`](functional-programming/TakeLargest.md)
 - [`TakeLargestBy`](functional-programming/TakeLargestBy.md)
@@ -1165,12 +1198,15 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Times`](arithmetic/Times.md)
 - [`TimesBy`](assignment-and-rules/TimesBy.md)
 - [`Timing`](time-and-date/Timing.md)
+- [`ToCharacterCode`](string-operations/ToCharacterCode.md)
 - [`ToExpression`](expression-information/ToExpression.md)
+- [`ToLowerCase`](string-operations/ToLowerCase.md)
 - [`ToNDArray`](packed-arrays/ToNDArray.md)
 - [`ToNumberField`](algebra/ToNumberField.md)
 - [`ToPackedArray`](packed-arrays/ToPackedArray.md)
 - [`ToRadicals`](solutions-of-equations/ToRadicals.md)
 - [`ToString`](expression-information/ToString.md)
+- [`ToUpperCase`](string-operations/ToUpperCase.md)
 - [`ToeplitzMatrix`](linear-algebra/ToeplitzMatrix.md)
 - [`Together`](algebra/Together.md)
 - [`TokenWords`](other-advanced/TokenWords.md)
@@ -1178,6 +1214,7 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Total`](arithmetic/Total.md)
 - [`Tr`](linear-algebra/Tr.md)
 - [`Trace`](expression-information/Trace.md)
+- [`TraditionalForm`](expression-information/TraditionalForm.md)
 - [`TransformationFunctions`](simplification/TransformationFunctions.md)
 - [`Transpose`](data-structures/Transpose.md)
 - [`TransversalHypergraph`](hypergraphs/TransversalHypergraph.md)
@@ -1204,7 +1241,11 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Unprotect`](assignment-and-rules/Unprotect.md)
 - [`UnsameQ`](comparisons/UnsameQ.md)
 - [`Unset`](assignment-and-rules/Unset.md)
+- [`UpSet`](assignment-and-rules/UpSet.md)
+- [`UpSetDelayed`](assignment-and-rules/UpSetDelayed.md)
 - [`UpTo`](structural-manipulation/UpTo.md)
+- [`UpValues`](expression-information/UpValues.md)
+- [`UpperCaseQ`](string-operations/UpperCaseQ.md)
 - [`UpperTriangularMatrixQ`](linear-algebra/UpperTriangularMatrixQ.md)
 - [`ValueQ`](expression-information/ValueQ.md)
 - [`Values`](data-structures/Values.md)
@@ -1238,6 +1279,8 @@ _1086 functions across 38 categories. Use the search box (press `/`) to jump to 
 - [`Which`](control-flow/Which.md)
 - [`While`](control-flow/While.md)
 - [`White`](other-advanced/White.md)
+- [`WhittakerM`](special-functions/WhittakerM.md)
+- [`WhittakerW`](special-functions/WhittakerW.md)
 - [`With`](scoping-constructs/With.md)
 - [`Word`](other-advanced/Word.md)
 - [`WordSeparators`](other-advanced/WordSeparators.md)

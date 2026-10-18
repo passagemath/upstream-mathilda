@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Standardize[data] shifts each column of data to zero mean and rescales it to unit sample standard deviation (divisor n-1, matching StandardDeviation). A flat list is treated as n observations of one variable. A constant column becomes exactly 0 rather than Indeterminate.`**
+**`Standardize[data]`**
+
+shifts each column of data to zero mean and rescales it to unit sample standard deviation (divisor n-1, matching StandardDeviation). A flat list is treated as n observations of one variable. A constant column becomes exactly 0 rather than Indeterminate.
 
 ## Examples (6)
 

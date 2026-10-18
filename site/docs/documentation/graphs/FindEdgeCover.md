@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindEdgeCover[g] gives a minimum edge cover of g: a smallest set of edges touching every vertex. Gives {} when g has an isolated vertex (no edge cover exists).`**
+**`FindEdgeCover[g]`**
+
+gives a minimum edge cover of g: a smallest set of edges touching every vertex. Gives {} when g has an isolated vertex (no edge cover exists).
 
 ## Examples (5)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CompleteKaryTree[n] gives the complete binary tree with n levels; CompleteKaryTree[n, k] the complete k-ary tree with n levels.`**
+**`CompleteKaryTree[n]`**
+
+gives the complete binary tree with n levels; CompleteKaryTree\[n, k\] the complete k-ary tree with n levels.
 
 ## Examples (12)
 

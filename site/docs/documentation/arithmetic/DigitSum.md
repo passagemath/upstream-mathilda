@@ -5,9 +5,13 @@
 
 ## Description
 
-**`DigitSum[n] gives the sum of the decimal digits of the integer n.`**
+**`DigitSum[n]`**
 
-**`DigitSum[n, b] gives the sum of the base-b digits of n.`**
+gives the sum of the decimal digits of the integer n.
+
+**`DigitSum[n, b]`**
+
+gives the sum of the base-b digits of n.
 
 <details>
 <summary>Notes</summary>

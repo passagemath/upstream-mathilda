@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Commonest[list] gives a list of the elements that are the most common in list.`**
+**`Commonest[list]`**
 
-**`Commonest[list, n] gives a list of the n most common elements in list.`**
+gives a list of the elements that are the most common in list.
+
+**`Commonest[list, n]`**
+
+gives a list of the n most common elements in list.
 
 ## Examples (5)
 
@@ -48,7 +52,7 @@ Out[5]= {1, 4, 2}
 
 **See also:** [Tally](../../data-structures/Tally/), [Counts](../../data-structures/Counts/), [CountsBy](../../data-structures/CountsBy/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)

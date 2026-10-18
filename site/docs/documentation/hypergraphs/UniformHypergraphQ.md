@@ -5,7 +5,9 @@
 
 ## Description
 
-**`UniformHypergraphQ[h] gives True if every hyperedge of h has the same arity. UniformHypergraphQ[h, k] gives True if h is k-uniform.`**
+**`UniformHypergraphQ[h]`**
+
+gives True if every hyperedge of h has the same arity. UniformHypergraphQ\[h, k\] gives True if h is k-uniform.
 
 ## Examples (9)
 

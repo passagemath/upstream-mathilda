@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TrueQ[expr] yields True if expr is True, and False otherwise.`**
+**`TrueQ[expr]`**
+
+yields True if expr is True, and False otherwise.
 
 ## Examples (3)
 

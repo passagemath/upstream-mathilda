@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Subgraph[g, {v1, v2, ...}] gives the subgraph of g induced by the listed vertices (elements that are not vertices of g are ignored); Subgraph[g, patt] uses the vertices matching patt. Vertices come in the order given; edges in lower-triangular order of that vertex order. Edge weights are kept.`**
+**`Subgraph[g, {v1, v2, ...}]`**
+
+gives the subgraph of g induced by the listed vertices (elements that are not vertices of g are ignored); Subgraph\[g, patt\] uses the vertices matching patt. Vertices come in the order given; edges in lower-triangular order of that vertex order. Edge weights are kept.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HITSCentrality[g] gives {h, a}: h is the principal eigenvector of A^T A (per block of vertices sharing in-neighbours, each block of k > 1 vertices weighted k - 1, total 1) and a = A h, with A the adjacency matrix (Wolfram's convention). Edge weights are ignored.`**
+**`HITSCentrality[g]`**
+
+gives {h, a}: h is the principal eigenvector of A^T A (per block of vertices sharing in-neighbours, each block of k \> 1 vertices weighted k - 1, total 1) and a = A h, with A the adjacency matrix (Wolfram's convention). Edge weights are ignored.
 
 ## Examples (5)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Inequality[v0, op0, v1, op1, v2, ...] is the canonical form for a chained comparison such as a < b <= c. It returns True if every adjacent pair holds, False if any pair fails, and otherwise the residual chain with decidable pairs dropped.`**
+**`Inequality[v0, op0, v1, op1, v2, ...]`**
+
+is the canonical form for a chained comparison such as a \< b \<= c. It returns True if every adjacent pair holds, False if any pair fails, and otherwise the residual chain with decidable pairs dropped.
 
 ## Examples (5)
 

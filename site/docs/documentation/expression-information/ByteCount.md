@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.`**
+**`ByteCount[expr]`**
+
+gives the number of bytes used internally by Mathilda to store expr.
 
 ## Examples (5)
 

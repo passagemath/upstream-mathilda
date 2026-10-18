@@ -9,9 +9,13 @@
 
 gives the base name for a file without its extension.
 
-**`FileBaseName["name.ext"] gives "name".`**
+**`FileBaseName["name.ext"]`**
 
-**`FileBaseName["file.tar.gz"] gives "file.tar" — only the final extension is split off.`**
+gives "name".
+
+**`FileBaseName["file.tar.gz"]`**
+
+gives "file.tar" — only the final extension is split off.
 
 <details>
 <summary>Notes</summary>

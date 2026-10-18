@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphToGraph[h] converts h, read as an ordered hypergraph, to the directed Graph with v_a->v_b for every a<b in each hyperedge {v_1, ..., v_k} (the Function Repository's HypergraphToGraph). Self-loops are dropped and parallel edges merged. h may be a plain List of hyperedges.`**
+**`HypergraphToGraph[h]`**
+
+converts h, read as an ordered hypergraph, to the directed Graph with v\_a-\>v\_b for every a\<b in each hyperedge {v\_1, ..., v\_k} (the Function Repository's HypergraphToGraph). Self-loops are dropped and parallel edges merged. h may be a plain List of hyperedges.
 
 ## Examples (7)
 

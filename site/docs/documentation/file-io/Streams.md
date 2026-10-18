@@ -9,7 +9,9 @@
 
 gives a list of all currently open streams.
 
-**`Streams["file"] lists only the open streams for the named file.`**
+**`Streams["file"]`**
+
+lists only the open streams for the named file.
 
 ## Examples (8)
 

@@ -5,11 +5,17 @@
 
 ## Description
 
-**`ToeplitzMatrix[n] gives the n x n Toeplitz matrix with first row and column the integers 1..n.`**
+**`ToeplitzMatrix[n]`**
 
-**`ToeplitzMatrix[{c1, ..., cn}] gives the n x n symmetric Toeplitz matrix with first column the given list.`**
+gives the n x n Toeplitz matrix with first row and column the integers 1..n.
 
-**`ToeplitzMatrix[{c1, ..., cm}, {r1, ..., rn}] gives the m x n Toeplitz matrix with first column the first list and first row the second.`**
+**`ToeplitzMatrix[{c1, ..., cn}]`**
+
+gives the n x n symmetric Toeplitz matrix with first column the given list.
+
+**`ToeplitzMatrix[{c1, ..., cm}, {r1, ..., rn}]`**
+
+gives the m x n Toeplitz matrix with first column the first list and first row the second.
 
 <details>
 <summary>Notes</summary>

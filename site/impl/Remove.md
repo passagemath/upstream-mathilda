@@ -15,5 +15,8 @@ appears in the symbol table until it is next referenced (at which point a fresh,
 undefined symbol is created). `Remove` is itself `Protected` so it cannot
 be removed.
 
-**Attributes & limits.** `Remove` carries `HoldAll | Protected`; its
-arguments arrive unevaluated, and non-symbol/non-string specs are ignored.
+**Attributes & limits.** `Attributes[Remove]` is `{HoldAll, Protected}`, and
+`Protected` alone is what keeps it, and every other builtin, from being removed.
+Its arguments arrive unevaluated, and non-symbol/non-string specs are
+ignored. A removed symbol's registered default options go with it, whereas
+`Clear` and `ClearAll` keep `Options[s]`.

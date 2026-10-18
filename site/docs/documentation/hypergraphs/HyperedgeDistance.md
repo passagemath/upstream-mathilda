@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HyperedgeDistance[h, i, j] gives the length of a shortest walk of intersecting hyperedges from hyperedge i to hyperedge j, or Infinity. HyperedgeDistance[h, i, j, s] uses s-walks (consecutive hyperedges share at least s vertices). HyperedgeDistance[h, i] or [h, i, All, s] gives the distances from i to every hyperedge.`**
+**`HyperedgeDistance[h, i, j]`**
+
+gives the length of a shortest walk of intersecting hyperedges from hyperedge i to hyperedge j, or Infinity. HyperedgeDistance\[h, i, j, s\] uses s-walks (consecutive hyperedges share at least s vertices). HyperedgeDistance\[h, i\] or \[h, i, All, s\] gives the distances from i to every hyperedge.
 
 ## Examples (10)
 

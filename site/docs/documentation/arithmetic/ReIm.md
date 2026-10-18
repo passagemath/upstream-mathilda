@@ -5,31 +5,95 @@
 
 ## Description
 
-**`ReIm[z] gives {Re[z], Im[z]}, the real and imaginary parts of numeric z as a list; real-valued arguments give {z, 0}.`**
+**`ReIm[z]`**
 
-## Examples (4)
+gives {Re\[z\], Im\[z\]}, the real and imaginary parts of numeric z as a list; real-valued arguments give {z, 0}.
+
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (4)
+### Basic examples (7)
 
 ```mathematica
-In[1]:= ReIm[3 + 4 I]
-Out[1]= {3, 4}
+In[1]:= Re[1/(2 + 3 I)]
+Out[1]= 2/13
 
-In[2]:= ReIm[(2 + I)^3]
-Out[2]= {2, 11}
+In[2]:= Im[Log[-1]]
+Out[2]= Pi
 
-In[3]:= ReIm[(3 + 4 I)/(1 - 2 I)]
-Out[3]= {-1, 2}
+In[3]:= ReIm[(2 + I)^3]
+Out[3]= {2, 11}
 
-In[4]:= ReIm[N[E^(I Pi/4), 20]]
-Out[4]= {0.707106781186547524402, 0.707106781186547524402}
+In[4]:= Abs[-9223372036854775807 - 1]
+Out[4]= 9223372036854775808
+
+In[5]:= Sign[3 + 4 I]
+Out[5]= 3/5 + 4/5*I
+
+In[6]:= Conjugate[(2 + I)/(1 - 3 I)]
+Out[6]= -1/10 - 7/10*I
+
+In[7]:= Arg[(-1)^(1/6)]
+Out[7]= 1/6 Pi
+```
+
+### Applications (7)
+
+```mathematica
+In[8]:= ReIm[3 + 4 I]
+Out[8]= {3, 4}
+```
+
+(2 + I)^3 = 2 + 11 I
+
+```mathematica
+In[9]:= ReIm[(2 + I)^3]
+Out[9]= {2, 11}
+```
+
+A complex quotient reduces to Gaussian integers
+
+```mathematica
+In[10]:= ReIm[(3 + 4 I)/(1 - 2 I)]
+Out[10]= {-1, 2}
+```
+
+Both parts are 1/Sqrt[2], to 20 digits
+
+```mathematica
+In[11]:= ReIm[N[E^(I Pi/4), 20]]
+Out[11]= {0.707106781186547524402, 0.707106781186547524402}
+```
+
+Listable: one pair per element
+
+```mathematica
+In[12]:= ReIm[{1 + 2 I, 3.5}]
+Out[12]= {{1, 2}, {3.5, 0}}
+```
+
+A real-valued head gives {f[z], 0}
+
+```mathematica
+In[13]:= ReIm[Abs[z]]
+Out[13]= {Abs[z], 0}
+```
+
+Symbolic z stays unevaluated
+
+```mathematica
+In[14]:= ReIm[z]
+Out[14]= ReIm[z]
 ```
 
 ## Implementation notes
 
-`builtin_reim` returns `{Re[z], Im[z]}` as a two-element `List`. It mirrors `builtin_re`/`builtin_im`: `{f[z], 0}` for real-valued head calls (`Re`/`Im`/`Abs`/`Arg`), `{re, im}` for a `Complex[re, im]` literal, `{x, 0}` for real numeric kinds (Integer/Real/Rational), and `{re, im}` when `complex_decompose` yields numeric parts. Returns `NULL` (unevaluated) for genuinely symbolic input.
+**Algorithm.** `builtin_reim` returns `{Re[z], Im[z]}` as a two-element `List` and follows the same order of cases as `builtin_re` and `builtin_im`. A call to a head that is real by construction (`Re`, `Im`, `Abs`, `Arg`) gives `{f[z], 0}`. A `Complex[re, im]` literal gives `{re, im}`. A real number leaf (an Integer, bigint, machine Real, MPFR, or Rational with int64 or bignum parts) gives `{x, 0}`. Otherwise the shared `complex_decompose` Plus/Times walk supplies both parts when they are concretely numeric. Anything else returns `NULL`. Unlike `Re` and `Im`, `ReIm` has no special case for real `AlgebraicNumber` or `Root` objects.
+
+**Data structures.** The result is a fresh `List` of the two parts. Because `ReIm` is `Listable`, a list argument gives a list of pairs.
+
+**Complexity / limits.** The cost is the same as one `Re` plus one `Im`, and the decomposition is done only once. `ReIm` has no packed or NDArray kernel and no `Compile[]` lowering. `ReIm[NDArray[...]]` stays unevaluated, a packed complex list is unpacked before the call, and a compiled body containing `ReIm` falls back to the interpreter. The head is recorded in the fast-path sweep's `OFF_BUFFER` backlog (`tools/nd_fastpath_sweep.py`). Use `{Re[v], Im[v]}` inside `Compile[]` or on large arrays. Symbolic `z` stays unevaluated, as do exact real constants such as `ReIm[Pi]`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
@@ -47,4 +111,7 @@ Out[4]= {0.707106781186547524402, 0.707106781186547524402}
 
 ### Notes
 
-`ReIm[z]` is shorthand for `{Re[z], Im[z]}`; a real-valued argument gives `{z, 0}`.
+- `ReIm[z]` is `{Re[z], Im[z]}`, and a real argument gives `{z, 0}`.
+- Unlike `Re` and `Im`, `ReIm` has no packed/NDArray kernel and no `Compile[]` lowering. `ReIm[NDArray[...]]` stays unevaluated, and a compiled body that uses it runs in the interpreter (a recorded backlog item). Use `{Re[v], Im[v]}` on large arrays or inside `Compile[]`.
+- `Listable`, `NumericFunction`, `Protected`.
+- See also: `Re`, `Im`, `AbsArg`, `Conjugate`.

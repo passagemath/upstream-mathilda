@@ -21,7 +21,7 @@ Partitions into substrings of length up to n, allowing a shorter final substring
 
 Threads over a list of strings.
 
-## Examples (7)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,7 +41,7 @@ In[4]:= StringPartition["ababababab", 3]
 Out[4]= {"aba", "bab", "aba"}
 ```
 
-### Applications (3)
+### Applications (7)
 
 Non-overlapping blocks; a short tail is dropped
 
@@ -57,11 +57,39 @@ In[6]:= StringPartition["abcdef", 2, 1]
 Out[6]= {"ab", "bc", "cd", "de", "ef"}
 ```
 
+An offset larger than the block skips characters
+
+```mathematica
+In[7]:= StringPartition["abcdef", 2, 3]
+Out[7]= {"ab", "de"}
+```
+
 Allow a shorter final block
 
 ```mathematica
-In[7]:= StringPartition["abcdefg", UpTo[3]]
-Out[7]= {"abc", "def", "g"}
+In[8]:= StringPartition["abcdefg", UpTo[3]]
+Out[8]= {"abc", "def", "g"}
+```
+
+With an offset, UpTo keeps the clipped tail
+
+```mathematica
+In[9]:= StringPartition["abcdefgh", UpTo[3], 2]
+Out[9]= {"abc", "cde", "efg", "gh"}
+```
+
+Blocks count characters, not bytes
+
+```mathematica
+In[10]:= StringPartition["h\:00e9llo", 2]
+Out[10]= {"hé", "ll"}
+```
+
+As in Mathematica, a list of strings is not threaded
+
+```mathematica
+In[11]:= StringPartition[{"ab", "cd"}, 1]
+Out[11]= StringPartition[{"ab", "cd"}, 1]
 ```
 
 ## Algorithm
@@ -74,36 +102,38 @@ StringPartition["string", n, d]     - length-n blocks starting every d chars
 StringPartition["string", UpTo[n]]  - length-<=n blocks; final may be shorter
 ```
 
-StringPartition[{s1, s2, ...}, spec] - threads over a list of strings
+StringPartition["string", UpTo[n], d] - the same, with offset d
 
-Strings are treated as raw byte arrays (consistent with StringTake/StringDrop across this subsystem); no UTF-8 codepoint decoding is performed.
+Lengths and offsets count characters (code points), not UTF-8 bytes. As in Mathematica, the first argument must be a single string (no threading).
 
 ## Implementation notes
 
-**Algorithm.** `builtin_stringpartition` accepts 2–3 arguments (else `StringPartition::argt`). The block length `n` comes from an integer (every block exactly `n`) or from `UpTo[n]` (a short final block allowed); the offset `d` defaults to `n`. It walks `start = 0, d, 2d, …`, emitting `subj[start, start+n)` while the full block fits, or the short tail `subj[start, len)` when `UpTo` permits, and stops otherwise. With `d > n` characters are skipped; with `d < n` the blocks overlap. A `List` first argument threads via `evaluate`.
+**Algorithm.** `builtin_stringpartition` takes 2–3 arguments and gives `::argtu`/`::argt` otherwise. The block length `n` is an integer, in which case every block is exactly `n` characters, or `UpTo[n]`, which clips each block to what remains. The offset `d` defaults to `n`. Block starts run over `0, d, 2d, …` in characters. A fixed `n` stops when a full block no longer fits. `UpTo[n]` takes every start before the end, so with `d < n` the tail repeats shorter and shorter blocks, as in Mathematica. With an explicit `d`, `n = 0` is allowed, and every block is then `""`.
 
-**Data structures.** An `Expr*` block array bounded by `len/d + 2`; each block is a fresh `EXPR_STRING` (`sp_block` `memcpy`s the byte range).
+**Data structures.** A `U8View` over the subject, so lengths and offsets count Unicode code points. Each block is created by `expr_new_string_n` straight from the byte span. The block array is bounded by `len/d + 1`.
 
-**Complexity / limits.** `O(output)`. Both `n` and `d` must be positive integers; a non-integer or non-positive value, or a non-string subject, leaves the call unevaluated. Byte-indexed, consistent with `StringTake`/`StringDrop`.
+**Complexity / limits.** `O(output)`. As in Mathematica, the first argument must be a single string. A list of strings is not threaded (a v0.456 change) and gives `StringPartition::string`. A bad block length gives `::intpm`, or `::intnm` once an offset is present. A non-positive or non-integer offset gives `::intp`. Each of these leaves the call unevaluated, and `UpTo[negative]` stays unevaluated without a message.
 
 **Attributes:** `Protected`.
 
 ## References
 
-**See also:** [StringTake](../../string-operations/StringTake/), [StringDrop](../../string-operations/StringDrop/)
-
 - Source: [`src/strings/stringpartition.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringpartition.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringpartition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringpartition.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`StringPartition[s, n, d]` gives length-`n` substrings starting every `d`
-characters (`d` defaults to `n`). With `d > n` characters are skipped; with
-`d < n` the blocks overlap. By default a trailing run too short to fill a block
-is dropped.
-
-`UpTo[n]` keeps that final short block so every character appears. Both `n` and
-`d` must be positive integers; indexing is byte-based. A list of strings threads.
+- `StringPartition[s, n, d]` gives the length-`n` substrings that start every `d`
+  characters, with `d` defaulting to `n`. A tail too short for a whole block is
+  dropped, unless the length is given as `UpTo[n]`.
+- Since v0.456 lengths count Unicode code points, and a list first argument is
+  rejected with `StringPartition::string` instead of being threaded, matching
+  Mathematica. Map it over the list if needed.
+- Other messages are `::intpm` (block length not a positive integer), `::intnm`
+  (once an offset is given, `n = 0` is allowed) and `::intp` (bad offset). All
+  leave the call unevaluated.
+- See also: `Partition`, `StringTake`, `Characters`.

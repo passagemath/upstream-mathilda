@@ -5,11 +5,17 @@
 
 ## Description
 
-**`DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 in the base-10 representation of n.`**
+**`DigitCount[n]`**
 
-**`DigitCount[n, b] gives a list of the counts of digits 1, 2, ..., b-1, 0 in the base-b representation of n.`**
+gives a list of the counts of digits 1, 2, ..., 9, 0 in the base-10 representation of n.
 
-**`DigitCount[n, b, d] gives the number of d digits in the base-b representation of n.`**
+**`DigitCount[n, b]`**
+
+gives a list of the counts of digits 1, 2, ..., b-1, 0 in the base-b representation of n.
+
+**`DigitCount[n, b, d]`**
+
+gives the number of d digits in the base-b representation of n.
 
 <details>
 <summary>Notes</summary>

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SessionTime[] gives the total number of seconds of wall-clock time elapsed since the beginning of the current Mathilda session.`**
+**`SessionTime[]`**
+
+gives the total number of seconds of wall-clock time elapsed since the beginning of the current Mathilda session.
 
 ## Examples (4)
 

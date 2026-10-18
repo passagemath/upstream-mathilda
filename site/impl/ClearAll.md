@@ -18,4 +18,7 @@ guard already keeps `ClearAll` away from builtins. The head returns `Null`.
 
 **Attributes & limits.** `ClearAll` carries `HoldAll | Protected`, so the
 symbols arrive unevaluated rather than being replaced by their current values.
-Non-symbol/non-string specs are silently ignored.
+Non-symbol and non-string specs are ignored without a message. A `Protected`
+user symbol is also skipped silently, and keeps its values until it is
+`Unprotect`ed. `Protected` is the only guard (since v0.301), and every protection
+can be lifted with `Unprotect`.

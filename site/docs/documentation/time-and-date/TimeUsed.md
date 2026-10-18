@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TimeUsed[] gives the total number of seconds of CPU time used so far in the current Mathilda session.`**
+**`TimeUsed[]`**
+
+gives the total number of seconds of CPU time used so far in the current Mathilda session.
 
 ## Examples (4)
 

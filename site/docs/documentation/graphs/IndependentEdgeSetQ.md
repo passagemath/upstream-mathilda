@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IndependentEdgeSetQ[g, elist] gives True if elist is a set of edges of g no two of which share a vertex.`**
+**`IndependentEdgeSetQ[g, elist]`**
+
+gives True if elist is a set of edges of g no two of which share a vertex.
 
 ## Examples (8)
 

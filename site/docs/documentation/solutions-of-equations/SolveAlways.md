@@ -87,7 +87,7 @@ Scope (v1):
 
 **See also:** [Solve](../../solutions-of-equations/Solve/), [List](../../other-advanced/List/), [Unequal](../../comparisons/Unequal/), [Series](../../power-series/Series/), [CoefficientList](../../algebra/CoefficientList/), [Equal](../../comparisons/Equal/)
 
-- Source: [`src/solvealways.c`](https://github.com/stblake/mathilda/blob/main/src/solvealways.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
 - Tests: [`tests/test_solvealways.c`](https://github.com/stblake/mathilda/blob/main/tests/test_solvealways.c)
 

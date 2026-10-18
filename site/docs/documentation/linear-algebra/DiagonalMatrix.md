@@ -5,11 +5,17 @@
 
 ## Description
 
-**`DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.`**
+**`DiagonalMatrix[list]`**
 
-**`DiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.`**
+gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.
 
-**`DiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.`**
+**`DiagonalMatrix[list, k]`**
+
+gives a matrix with the elements of list on the k-th diagonal.
+
+**`DiagonalMatrix[list, k, n]`**
+
+pads with zeros to create an n x n matrix.
 
 ## Examples (8)
 

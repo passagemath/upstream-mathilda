@@ -1,6 +1,6 @@
 # Arithmetic
 
-52 built-in function(s) in this category.
+53 built-in function(s) in this category.
 
 - [`Abs`](Abs.md) — Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.  _(Stable)_
 - [`Accumulate`](Accumulate.md) — Accumulate[list]  _(Stable)_
@@ -34,6 +34,7 @@
 - [`Minus`](Minus.md) — Minus[x] is the arithmetic negation of x, equivalent to -x (Times[-1, x]).  _(Stable)_
 - [`Mod`](Mod.md) — Mod[m, n]  _(Stable)_
 - [`N`](N.md) — N[expr]  _(Stable)_
+- [`NonCommutativeMultiply`](NonCommutativeMultiply.md) — a ** b ** c or NonCommutativeMultiply[a, b, c]  _(Stable)_
 - [`Plus`](Plus.md) — x + y + ... or Plus[x, y, ...] represents a sum of terms.  _(Stable)_
 - [`Power`](Power.md) — x ^ y or Power[x, y] represents x to the power y.  _(Stable)_
 - [`Precision`](Precision.md) — Precision[x]  _(Stable)_

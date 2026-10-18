@@ -5,9 +5,13 @@
 
 ## Description
 
-**`CoefficientRules[poly, {x1, x2, ...}] gives {expvec -> coeff, ...} for the monomials of poly.`**
+**`CoefficientRules[poly, {x1, x2, ...}]`**
 
-**`CoefficientRules[poly] uses Variables[poly]; CoefficientRules[poly, vars, order] sorts by order`**
+gives {expvec -\> coeff, ...} for the monomials of poly.
+
+**`CoefficientRules[poly]`**
+
+uses Variables\[poly\]; CoefficientRules\[poly, vars, order\] sorts by order
 
 <details>
 <summary>Notes</summary>

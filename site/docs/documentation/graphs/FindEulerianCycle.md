@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindEulerianCycle[g] gives {c}, an Eulerian cycle c of g as a list of edges (Hierholzer's algorithm, linear time), or {} if there is none. Only FindEulerianCycle[g] and FindEulerianCycle[g, 1] are supported; mixed graphs are left unevaluated.`**
+**`FindEulerianCycle[g]`**
+
+gives {c}, an Eulerian cycle c of g as a list of edges (Hierholzer's algorithm, linear time), or {} if there is none. Only FindEulerianCycle\[g\] and FindEulerianCycle\[g, 1\] are supported; mixed graphs are left unevaluated.
 
 ## Examples (11)
 

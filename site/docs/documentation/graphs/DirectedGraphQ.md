@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DirectedGraphQ[g] gives True if g has at least one edge and all edges of g are directed. An edgeless graph counts as undirected.`**
+**`DirectedGraphQ[g]`**
+
+gives True if g has at least one edge and all edges of g are directed. An edgeless graph counts as undirected.
 
 ## Examples (8)
 

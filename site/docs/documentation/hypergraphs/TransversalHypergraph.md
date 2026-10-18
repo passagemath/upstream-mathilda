@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TransversalHypergraph[h] gives the hypergraph of all minimal transversals (minimal hitting sets) of h, on the vertices of h. For a plain List of hyperedges the List of minimal transversals is returned. Left unevaluated if the search exceeds its budget.`**
+**`TransversalHypergraph[h]`**
+
+gives the hypergraph of all minimal transversals (minimal hitting sets) of h, on the vertices of h. For a plain List of hyperedges the List of minimal transversals is returned. Left unevaluated if the search exceeds its budget.
 
 ## Examples (9)
 

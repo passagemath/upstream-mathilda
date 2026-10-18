@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FromContinuedFraction[{a1, a2, ..., an}] reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.`**
+**`FromContinuedFraction[{a1, a2, ..., an}]`**
+
+reconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)), the convergent of a continued fraction, in nested (un-expanded) form; the inverse of ContinuedFraction.
 
 **`FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]`**
 

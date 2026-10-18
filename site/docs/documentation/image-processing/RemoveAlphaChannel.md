@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RemoveAlphaChannel[image] drops the alpha channel. RemoveAlphaChannel[image, b] instead COMPOSITES over a background of brightness b, which is the difference between forgetting the transparency and resolving it: a half-transparent white pixel over black is grey, where dropping alpha would leave it white.`**
+**`RemoveAlphaChannel[image]`**
+
+drops the alpha channel. RemoveAlphaChannel\[image, b\] instead COMPOSITES over a background of brightness b, which is the difference between forgetting the transparency and resolving it: a half-transparent white pixel over black is grey, where dropping alpha would leave it white.
 
 ## Examples (7)
 

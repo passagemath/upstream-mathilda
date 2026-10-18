@@ -76,7 +76,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **See also:** [List](../../other-advanced/List/), [NDArrayQ](../../other-advanced/NDArrayQ/), [Table](../../lists-and-iteration/Table/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)
 - Tests: [`tests/test_array_pad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_pad.c)
 - Tests: [`tests/test_array_reshape.c`](https://github.com/stblake/mathilda/blob/main/tests/test_array_reshape.c)

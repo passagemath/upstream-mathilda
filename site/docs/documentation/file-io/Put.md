@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Put[expr, "filename"] or expr >> "filename"`**
+**`Put[expr, "filename"]`**
 
-writes expr to the file, replacing any prior contents.
+or expr \>\> "filename" writes expr to the file, replacing any prior contents.
 
 **`Put[expr1, expr2, ..., "filename"]`**
 

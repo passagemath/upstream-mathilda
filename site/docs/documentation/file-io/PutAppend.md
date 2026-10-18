@@ -5,9 +5,9 @@
 
 ## Description
 
-**`PutAppend[expr, "filename"] or expr >>> "filename"`**
+**`PutAppend[expr, "filename"]`**
 
-appends expr to the end of the file, creating the file if it does not exist.
+or expr \>\>\> "filename" appends expr to the end of the file, creating the file if it does not exist.
 
 **`PutAppend[expr1, expr2, ..., "filename"]`**
 

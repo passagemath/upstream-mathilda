@@ -13,9 +13,13 @@ gives True if expr is a list of lists that can represent a matrix, and gives Fal
 
 gives True only if test yields True when applied to each of the matrix elements in expr.
 
-**`MatrixQ[expr] gives True only if expr is a list and each of its elements is a list of the same length,`**
+**`MatrixQ[expr]`**
 
-**`MatrixQ[expr, NumberQ] tests whether expr is a numerical matrix.`**
+gives True only if expr is a list and each of its elements is a list of the same length,
+
+**`MatrixQ[expr, NumberQ]`**
+
+tests whether expr is a numerical matrix.
 
 <details>
 <summary>Notes</summary>
@@ -48,7 +52,7 @@ Out[2]= False
 
 **See also:** [ListQ](../../expression-information/ListQ/), [VectorQ](../../expression-information/VectorQ/), [List](../../other-advanced/List/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_ml_pca.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ml_pca.c)

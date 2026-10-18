@@ -9,11 +9,17 @@
 
 joins the namei into a file name suitable for your current operating system.
 
-**`FileNameJoin[{"", "name1", ...}] gives an absolute file path beginning with a pathname separator.`**
+**`FileNameJoin[{"", "name1", ...}]`**
 
-**`FileNameJoin["name"] canonicalizes name, making pathname separators appropriate for your operating system.`**
+gives an absolute file path beginning with a pathname separator.
 
-**`FileNameJoin[..., OperatingSystem->"os"] yields a file name in the format for the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".`**
+**`FileNameJoin["name"]`**
+
+canonicalizes name, making pathname separators appropriate for your operating system.
+
+**`FileNameJoin[..., OperatingSystem->"os"]`**
+
+yields a file name in the format for the specified operating system; possible choices are "Windows", "MacOSX", and "Unix".
 
 <details>
 <summary>Notes</summary>
@@ -51,7 +57,7 @@ Backslash separator
 
 ```mathematica
 In[4]:= FileNameJoin[{"dir1", "dir2"}, OperatingSystem -> "Windows"]
-Out[4]= "dir1\dir2"
+Out[4]= "dir1\\dir2"
 ```
 
 ### Applications (4)
@@ -81,7 +87,7 @@ Backslash separator
 
 ```mathematica
 In[8]:= FileNameJoin[{"dir1", "dir2"}, OperatingSystem -> "Windows"]
-Out[8]= "dir1\dir2"
+Out[8]= "dir1\\dir2"
 ```
 
 ## Implementation notes

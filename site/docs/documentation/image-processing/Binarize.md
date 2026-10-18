@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Binarize[image] thresholds image by Otsu's method (see FindThreshold), giving a "Bit" image. Binarize[image, t] thresholds at t. A pixel STRICTLY ABOVE the threshold becomes 1, so a pixel exactly at it becomes 0 -- which matters, because "above" and "at or above" differ on exactly the pixels a threshold was chosen to sit between. A colour image is reduced to luminance first.`**
+**`Binarize[image]`**
+
+thresholds image by Otsu's method (see FindThreshold), giving a "Bit" image. Binarize\[image, t\] thresholds at t. A pixel STRICTLY ABOVE the threshold becomes 1, so a pixel exactly at it becomes 0 -- which matters, because "above" and "at or above" differ on exactly the pixels a threshold was chosen to sit between. A colour image is reduced to luminance first.
 
 ## Examples (41)
 

@@ -5,9 +5,13 @@
 
 ## Description
 
-**`OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.`**
+**`OrderedQ[h[e1, e2, ...]]`**
 
-**`OrderedQ[expr, p] uses the ordering function p to determine whether each pair of elements is in order.`**
+gives True if the elements are in canonical order, and False otherwise.
+
+**`OrderedQ[expr, p]`**
+
+uses the ordering function p to determine whether each pair of elements is in order.
 
 ## Examples (10)
 

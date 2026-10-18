@@ -61,7 +61,7 @@ Out[6]= 15
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_deriv.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv.c)
-- Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)
+- Tests: [`tests/test_gamma_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_gamma_machine.c)
 
 ## Notes & additional examples
 

@@ -27,7 +27,7 @@ In[2]:= Hypergeometric0F1[1/2, z]
 Out[2]= Cosh[2 Sqrt[z]]
 
 In[3]:= Hypergeometric0F1[3/2, z]
-Out[3]= (1/2 Sinh[2 Sqrt[z]])/Sqrt[z]
+Out[3]= Sinh[2 Sqrt[z]]/(2 Sqrt[z])
 
 In[4]:= N[Hypergeometric0F1[3/2, -(Pi^2/16)]*Pi/2, 40]
 Out[4]= 1.0 + 2.546305796115700172884063021572241471189e-60*I
@@ -55,7 +55,7 @@ in `HypergeometricPFQ`). `Compile[]` lowers at both scalar and rank-1 array
 shapes (`Compiled -> True`), because it is a *binary* ND kernel — unlike the
 `1F1`/`2F1`/`PFQ` heads, which lower only at scalar shape.
 
-**Attributes:** `NumericFunction`, `Protected`.
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
@@ -64,6 +64,7 @@ shapes (`Compiled -> True`), because it is a *binary* ND kernel — unlike the
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_hypergeopfq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hypergeopfq.c)
+- Tests: [`tests/test_sf_machine_hyper.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sf_machine_hyper.c)
 
 ## Notes & additional examples
 

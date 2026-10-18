@@ -9,7 +9,9 @@
 
 gives the file extension for a file name.
 
-**`FileExtension["name.ext"] gives "ext".`**
+**`FileExtension["name.ext"]`**
+
+gives "ext".
 
 <details>
 <summary>Notes</summary>

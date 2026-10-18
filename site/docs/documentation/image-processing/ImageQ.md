@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageQ[expr] gives True if expr is a valid image in canonical form, and False otherwise. Malformed input to Image stays unevaluated, so ImageQ is how validity is tested.`**
+**`ImageQ[expr]`**
+
+gives True if expr is a valid image in canonical form, and False otherwise. Malformed input to Image stays unevaluated, so ImageQ is how validity is tested.
 
 ## Examples (38)
 

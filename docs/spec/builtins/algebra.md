@@ -112,25 +112,25 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 
 ```mathematica
 In[1]:= Together[a/b + c/d]
-Out[1]= (b c + a d) / (b d)
+Out[1]= (b c + a d)/(b d)
 
 In[2]:= Together[x^2/(x^2 - 1) + x/(x^2 - 1)]
-Out[2]= x / (-1 + x)
+Out[2]= x/(-1 + x)
 
 In[3]:= Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]
-Out[3]= (2 (3 + 11 x + 9 x^2 + 2 x^3)) / (x (1 + x) (2 + x) (3 + x))
+Out[3]= (6 + 22 x + 18 x^2 + 4 x^3)/(6 x + 11 x^2 + 6 x^3 + x^4)
 
 In[4]:= Together[x^2/(x - y) - x y/(x - y)]
 Out[4]= x
 
 In[5]:= Together[y^(5/8)*(y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))]
-Out[5]= -y^3 / (-1 + y)
+Out[5]= -y^3/(-1 + y)
 
 In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
 Out[6]= (2 x)/(-2 + x^2)
 
 In[7]:= Together[1/(x - k^(1/3)) + 1/(x + k^(1/3))]
-Out[7]= (2 x)/(-k^(2/3) + x^2)
+Out[7]= -(2 x)/(k^(2/3) - x^2)
 ```
 
 - **Cube-and-higher-root towers** (2026-07-04): a `Plus` of fractions over

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`UndirectedGraphQ[g] gives True if every edge of g is undirected (including when g has no edges), and False otherwise.`**
+**`UndirectedGraphQ[g]`**
+
+gives True if every edge of g is undirected (including when g has no edges), and False otherwise.
 
 ## Examples (9)
 

@@ -769,7 +769,7 @@ In[4]:= g = Compile[{{n, _Integer}}, Module[{s = 0.}, Do[s = s + 1/i^2, {i, 1, n
 Out[4]= 1.63498
 
 In[5]:= Compile[{{z, _Complex}}, z^2][1.0 + 2.0 I]
-Out[5]= -3.0 + 4.0 I
+Out[5]= -3.0 + 4.0*I
 
 In[6]:= Compile[{{m, _Real, 2}}, m[[All, 1]]][{{1., 2.}, {3., 4.}}]
 Out[6]= {1.0, 3.0}
@@ -824,13 +824,13 @@ path (and its speed) is unchanged when neither is given.
 ```
 In[1]:= f = Compile[{{x, _Real}}, Sin[x] Cos[x] + x^3, WorkingPrecision -> 40];
         f[N[7/5, 40]]
-Out[1]= 2.887293159352105...              (* = the interpreter's N[.,40] of the same body *)
+Out[1]= 2.9114940750779524597719268763562110530148   (* N[body, 50] gives ...0530151532...: fixed 40-digit working precision *)
 
 In[2]:= Compile[{{n, _Integer}}, n^20, "BigIntegers" -> True][99]
 Out[2]= 8179069375972308708891986605443361898001
 
 In[3]:= Compile[{{z, _Complex}}, Exp[z] + z^2, WorkingPrecision -> 45][N[1/2 + I/3, 45]]
-Out[3]= 1.28... + 1.14...*I
+Out[3]= 1.696859506173835946311071541529964410492750645 + 0.8727861896014286091867555415942467494395774456*I
 ```
 
 Deferred (see [`docs/design/compile-arbitrary-precision.md`](../../design/compile-arbitrary-precision.md)):

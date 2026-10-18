@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageDimensions[image] gives {width, height}. This is TRANSPOSED relative to ImageData, which returns a height x width array -- the same convention Mathematica uses.`**
+**`ImageDimensions[image]`**
+
+gives {width, height}. This is TRANSPOSED relative to ImageData, which returns a height x width array -- the same convention Mathematica uses.
 
 ## Examples (34)
 

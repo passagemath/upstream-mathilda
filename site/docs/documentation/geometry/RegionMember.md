@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RegionMember[Polygon[{{x1, y1}, ...}], {x, y}] gives True if the point lies inside or on the boundary of the simple 2D polygon, and False otherwise.`**
+**`RegionMember[Polygon[{{x1, y1}, ...}], {x, y}]`**
+
+gives True if the point lies inside or on the boundary of the simple 2D polygon, and False otherwise.
 
 ## Examples (7)
 

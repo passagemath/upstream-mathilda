@@ -50,7 +50,7 @@ Mathilda -- the Pochhammer symbol (rising factorial).
   Pochhammer[a, n] = a (a+1) ... (a+n-1) = Gamma[a+n] / Gamma[a]
 ```
 
-The implementation deliberately holds almost no numeric code of its own: two existing, fully-tested mechanisms do the heavy lifting.
+A machine-precision call (real or complex) is computed directly in double by sfg_pochhammer / sfg_pochhammer_c (sf_machine_gamma.c), the kernel shared with the NDArray map and Compile[]. Everything else holds almost no numeric code of its own: two existing, fully-tested mechanisms do the heavy lifting.
 
 ```text
   1. Times -- for an exact integer n the symbol expands to the product of
@@ -87,6 +87,12 @@ Attributes: Listable, NumericFunction, Protected.
     `Pochhammer[10, -3] = 1/504`.
   - `Pochhammer[0, n] = 0` for positive integer `n` (short-circuited, so
     even `Pochhammer[0, 1285] = 0`); `Pochhammer[Infinity, n] = Infinity`.
+- **Machine precision** (real or complex) → `sfg_pochhammer` /
+  `sfg_pochhammer_c` (`sf_machine_gamma.c`), shared with the packed /
+  `NDArray` maps and `Compile[]`: an integer `n` (|n| ≤ 256) is the product
+  `a (a+1) … (a+n−1)` (or `1/((a−1)…(a−|n|))`) in double, any other `n` the
+  Gamma ratio with the rounding of `a + n` corrected through ψ, e.g.
+  `Pochhammer[2.5, 3] = 39.375`. `Pochhammer[a, 0]` keeps its exact `1`.
 - Other numeric arguments evaluate via the Gamma ratio `Γ(a+n)/Γ(a)`,
   reusing the `Gamma` builtin:
   - Exact half-integers reduce to rational multiples of `Sqrt[Pi]`, e.g.
@@ -107,12 +113,12 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## References
 
-**See also:** [Gamma](../../special-functions/Gamma/), [PolyGamma](../../special-functions/PolyGamma/)
+**See also:** [NDArray](../../linear-algebra/NDArray/), [Gamma](../../special-functions/Gamma/), [PolyGamma](../../special-functions/PolyGamma/)
 
 - Abramowitz & Stegun, "Handbook of Mathematical Functions" (1964), §6.1.22 — the Pochhammer symbol (rising factorial).
 - NIST Digital Library of Mathematical Functions, §5.2(iii), https://dlmf.nist.gov/5.2 — (a)_n = Gamma(a+n)/Gamma(a).
 - Knuth, "The Art of Computer Programming, Vol. 1: Fundamental Algorithms", on rising and falling factorial powers.
-- Source: [`src/pochhammer.c`](https://github.com/stblake/mathilda/blob/main/src/pochhammer.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)

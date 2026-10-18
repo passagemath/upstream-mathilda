@@ -2,28 +2,35 @@
 
 ```mathematica
 In[1]:= ReIm[3 + 4 I]
-Out[1]= {3, 4}
 ```
 
-It splits exact powers and quotients into their real/imaginary components —
-`(2 + I)^3 = 2 + 11 I`, and a complex division reduces to integers:
-
 ```mathematica
-In[1]:= ReIm[(2 + I)^3]
-Out[1]= {2, 11}
-
-In[2]:= ReIm[(3 + 4 I)/(1 - 2 I)]
-Out[2]= {-1, 2}
+In[1]:= ReIm[(2 + I)^3]  (* (2 + I)^3 = 2 + 11 I *)
 ```
 
-On a transcendental argument it returns the numeric pair — here Euler's formula
-`e^(iπ/4)` to 20 digits, the real and imaginary parts each `1/√2`:
+```mathematica
+In[1]:= ReIm[(3 + 4 I)/(1 - 2 I)]  (* a complex quotient reduces to Gaussian integers *)
+```
 
 ```mathematica
-In[1]:= ReIm[N[E^(I Pi/4), 20]]
-Out[1]= {0.707106781186547524409, 0.707106781186547524395}
+In[1]:= ReIm[N[E^(I Pi/4), 20]]  (* both parts are 1/Sqrt[2], to 20 digits *)
+```
+
+```mathematica
+In[1]:= ReIm[{1 + 2 I, 3.5}]  (* Listable: one pair per element *)
+```
+
+```mathematica
+In[1]:= ReIm[Abs[z]]  (* a real-valued head gives {f[z], 0} *)
+```
+
+```mathematica
+In[1]:= ReIm[z]  (* symbolic z stays unevaluated *)
 ```
 
 ### Notes
 
-`ReIm[z]` is shorthand for `{Re[z], Im[z]}`; a real-valued argument gives `{z, 0}`.
+- `ReIm[z]` is `{Re[z], Im[z]}`, and a real argument gives `{z, 0}`.
+- Unlike `Re` and `Im`, `ReIm` has no packed/NDArray kernel and no `Compile[]` lowering. `ReIm[NDArray[...]]` stays unevaluated, and a compiled body that uses it runs in the interpreter (a recorded backlog item). Use `{Re[v], Im[v]}` on large arrays or inside `Compile[]`.
+- `Listable`, `NumericFunction`, `Protected`.
+- See also: `Re`, `Im`, `AbsArg`, `Conjugate`.

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SetAlphaChannel[image] attaches a fully opaque alpha channel. SetAlphaChannel[image, a] sets one opacity everywhere when a is a number in [0, 1], or per pixel when a is an image of the same dimensions (read as grey, so a colour mask is not taken as its red channel alone). A mask of the wrong size is declined rather than resampled.`**
+**`SetAlphaChannel[image]`**
+
+attaches a fully opaque alpha channel. SetAlphaChannel\[image, a\] sets one opacity everywhere when a is a number in \[0, 1\], or per pixel when a is an image of the same dimensions (read as grey, so a colour mask is not taken as its red channel alone). A mask of the wrong size is declined rather than resampled.
 
 ## Examples (12)
 

@@ -16,7 +16,13 @@ gives True if m has nonzero elements only on the k-th diagonal, and False otherw
 <details>
 <summary>Notes</summary>
 
-Option: Tolerance -\> Automatic   numeric tolerance for approximate matrices. With Tolerance -\> t, off-diagonal entries e are taken to be zero when Abs\[e\] \<= t evaluates to True.  Without a tolerance the test is structural: only literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Returns False on non-matrix, ragged, empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix (e.g. {{}, {}}) is vacuously diagonal.
+Option:
+
+```text
+Tolerance -> Automatic   numeric tolerance for approximate matrices.
+```
+
+With Tolerance -\> t, off-diagonal entries e are taken to be zero when Abs\[e\] \<= t evaluates to True.  Without a tolerance the test is structural: only literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Returns False on non-matrix, ragged, empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix (e.g. {{}, {}}) is vacuously diagonal.
 
 </details>
 
@@ -112,7 +118,7 @@ Out[13]= True
 
 **See also:** [Rule](../../assignment-and-rules/Rule/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_diagonal_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_diagonal_matrix_q.c)
 

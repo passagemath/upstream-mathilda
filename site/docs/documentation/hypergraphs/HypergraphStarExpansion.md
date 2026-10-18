@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphStarExpansion[h] gives the incidence (star) expansion of h: the bipartite Graph on VertexList[h] and nodes Hyperedge[1], ..., Hyperedge[m], with v<->Hyperedge[j] whenever v lies in hyperedge j.`**
+**`HypergraphStarExpansion[h]`**
+
+gives the incidence (star) expansion of h: the bipartite Graph on VertexList\[h\] and nodes Hyperedge\[1\], ..., Hyperedge\[m\], with v\<-\>Hyperedge\[j\] whenever v lies in hyperedge j.
 
 ## Examples (6)
 

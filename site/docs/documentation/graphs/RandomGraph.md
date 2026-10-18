@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RandomGraph[{n, m}] gives a random undirected graph with n vertices and m edges. RandomGraph[{n, m}, k] gives a list of k such graphs; memory use grows with k.`**
+**`RandomGraph[{n, m}]`**
+
+gives a random undirected graph with n vertices and m edges. RandomGraph\[{n, m}, k\] gives a list of k such graphs; memory use grows with k.
 
 ## Examples (9)
 

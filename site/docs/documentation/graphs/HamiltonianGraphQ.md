@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HamiltonianGraphQ[g] gives True if g has a Hamiltonian cycle. Exact; unevaluated if the search budget is exhausted.`**
+**`HamiltonianGraphQ[g]`**
+
+gives True if g has a Hamiltonian cycle. Exact; unevaluated if the search budget is exhausted.
 
 ## Examples (9)
 

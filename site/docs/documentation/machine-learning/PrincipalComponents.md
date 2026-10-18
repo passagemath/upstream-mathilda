@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrincipalComponents[matrix] gives the rows of matrix in principal-component coordinates, components ordered by decreasing variance. Rows are observations and columns are variables. Method -> "Correlation" standardises each variable to unit variance first, which is what you want when the columns have different units; the default "Covariance" does not.`**
+**`PrincipalComponents[matrix]`**
+
+gives the rows of matrix in principal-component coordinates, components ordered by decreasing variance. Rows are observations and columns are variables. Method -\> "Correlation" standardises each variable to unit variance first, which is what you want when the columns have different units; the default "Covariance" does not.
 
 ## Examples (6)
 

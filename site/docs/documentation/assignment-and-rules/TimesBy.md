@@ -5,9 +5,9 @@
 
 ## Description
 
-**`TimesBy[x, dx] or x *= dx`**
+**`TimesBy[x, dx]`**
 
-multiplies x by dx and returns the new value of x. x \*= dx is equivalent to x = x dx.
+or x \*= dx multiplies x by dx and returns the new value of x. x \*= dx is equivalent to x = x dx.
 
 <details>
 <summary>Notes</summary>

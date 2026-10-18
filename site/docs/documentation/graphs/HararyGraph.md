@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HararyGraph[k, n] gives the Harary graph: a k-connected graph on n vertices with the minimum number of edges (k >= 2, n > k).`**
+**`HararyGraph[k, n]`**
+
+gives the Harary graph: a k-connected graph on n vertices with the minimum number of edges (k \>= 2, n \> k).
 
 ## Examples (9)
 

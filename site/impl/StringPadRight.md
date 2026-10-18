@@ -1,8 +1,8 @@
 ---
 source: src/strings/stringpad.c
 ---
-**Algorithm.** `StringPadRight` is the mirror of `StringPadLeft` and shares the same `pad_dispatch` (invoked with the `left` flag false). It pads on the right and, when the string is longer than `n`, truncates keeping the first `n` bytes. The pad string (a single space by default) is laid down cyclically from the left, `p[i mod plen]`, so a multi-character pad such as `".-"` repeats `.-.-…`. A `List` first argument pads every element to the explicit `n`, or to the longest element in the one-argument form.
+**Algorithm.** `StringPadRight` mirrors `StringPadLeft` through the same `pad_dispatch`, called with `left` false. It pads on the right, and when the string is longer than `n` it keeps the first `n` characters. The pad string (default `" "`) cycles one character at a time and is aligned to the result: result character `i` (0-based) is `p[i mod plen]`. So the cycle continues across the original text rather than restarting after it. `StringPadRight["ab", 6, "xyz"]` is `"abzxyz"` and `StringPadRight["x", 6, "ab"]` is `"xbabab"`. Before v0.456 these gave `"xababa"`-style answers. A `List` first argument pads every element to `n`, or, in the one-argument form, to the longest element.
 
-**Data structures.** One output buffer per string; a `List` result for a list input.
+**Data structures.** A `U8View` gives the pad string's code-point offsets. Lengths count Unicode characters. Each string gets one output buffer, and a list input gives a `List`.
 
-**Complexity / limits.** `O(n)` per string. An arity outside 1–3 emits `StringPadRight::argb`. A non-integer/negative `n`, a non-string or list-valued pad, or an empty pad when padding is required, leaves the call unevaluated. Not `Listable`; byte-length based.
+**Complexity / limits.** `O(n)` per string. A wrong arity gives `::argb`, a negative or non-integer `n` gives `::intnm`, an empty or non-string pad gives `::stringnz`, and a non-list or non-string element gives `::strlist`. All of these leave the call unevaluated. Not `Listable`.

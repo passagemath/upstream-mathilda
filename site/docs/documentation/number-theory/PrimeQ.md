@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and Miller-Rabin probabilistic primality test (no known counterexample, and definite below 2^64).`**
+**`PrimeQ[n]`**
+
+gives True if n is a prime integer and False otherwise, using a Baillie-PSW and Miller-Rabin probabilistic primality test (no known counterexample, and definite below 2^64).
 
 **`PrimeQ[z]`**
 
@@ -107,9 +109,9 @@ Out[16]= True
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
+- Tests: [`tests/test_factorinteger.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factorinteger.c)
 - Tests: [`tests/test_nestwhile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhile.c)
 - Tests: [`tests/test_nestwhilelist.c`](https://github.com/stblake/mathilda/blob/main/tests/test_nestwhilelist.c)
-- Tests: [`tests/test_pred_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_pred_compile.c)
 
 ## Notes & additional examples
 

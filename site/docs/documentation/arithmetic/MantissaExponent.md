@@ -5,9 +5,13 @@
 
 ## Description
 
-**`MantissaExponent[x] gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m * 10^e and 1/10 <= |m| < 1 (or m = 0 when x = 0).`**
+**`MantissaExponent[x]`**
 
-**`MantissaExponent[x, b] gives the base-b mantissa and exponent; the mantissa then lies in 1/b <= |m| < 1.`**
+gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m \* 10^e and 1/10 \<= |m| \< 1 (or m = 0 when x = 0).
+
+**`MantissaExponent[x, b]`**
+
+gives the base-b mantissa and exponent; the mantissa then lies in 1/b \<= |m| \< 1.
 
 <details>
 <summary>Notes</summary>

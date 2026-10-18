@@ -126,6 +126,7 @@ Gives pseudorandom complex numbers.
 - Uses 53 bits of randomness per component for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and complex range arguments, as well as symbolic-but-numeric corners that `N[]` can reduce to a number, e.g. `RandomComplex[{-Pi - I, Pi + I}]` (a `Plus` that only collapses to a `Complex` once `Pi` is numeric). When the range has no imaginary component, the result simplifies to a real.
 - `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so the real and imaginary parts are MPFR atoms at the requested precision.
+- Machine-precision `RandomComplex[range, n]` / `RandomComplex[range, {n1, ...}]` with a genuinely complex range fill a packed `complex64` buffer directly (v0.402), in the same re-then-im draw order as scalar calls, so a seeded stream is unchanged. A zero-imaginary range returns an unpacked List of Reals; MPFR results are boxed.
 
 ```mathematica
 In[1]:= SeedRandom[42]; Head[RandomComplex[]]
@@ -145,6 +146,9 @@ Out[5]= RandomComplex[x]
 
 In[6]:= SeedRandom[42]; z = RandomComplex[1 + I, WorkingPrecision -> 30]; {Precision[Re[z]], Precision[Im[z]]}
 Out[6]= {30.103, 30.103}
+
+In[7]:= SeedRandom[7]; pts = RandomComplex[{-1 - 2 I, 3 + I}, 10^5]; {PackedArrayQ[pts], MinMax[Re[pts]], MinMax[Im[pts]]}
+Out[7]= {True, {-0.999983, 2.99996}, {-1.99997, 0.999965}}
 ```
 
 ## RandomChoice

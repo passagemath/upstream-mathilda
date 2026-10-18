@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GaussianFilter[image, r] blurs image with a Gaussian of radius r. It is exactly ImageConvolve[image, GaussianMatrix[r]] -- the same matrix through the same convolution, not a second implementation -- and a test asserts the identity.`**
+**`GaussianFilter[image, r]`**
+
+blurs image with a Gaussian of radius r. It is exactly ImageConvolve\[image, GaussianMatrix\[r\]\] -- the same matrix through the same convolution, not a second implementation -- and a test asserts the identity.
 
 ## Examples (50)
 

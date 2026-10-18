@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FactorSquareFreeList[poly] gives a list of the square-free factors of poly`**
+**`FactorSquareFreeList[poly]`**
+
+gives a list of the square-free factors of poly
 
 <details>
 <summary>Notes</summary>

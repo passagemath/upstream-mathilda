@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ColorQuantize[image, n] reduces the image to at most n colours by MEDIAN CUT: the box with the widest single-channel spread is split at its median until n boxes remain, and each collapses to its mean colour. Widest spread rather than most pixels, since a large box of nearly identical colours does not need splitting and a small one spanning half the spectrum does. Median cut rather than k-means because it is DETERMINISTIC -- a palette that depended on the random stream could not be tested or documented. The channel count is preserved and alpha passes through.`**
+**`ColorQuantize[image, n]`**
+
+reduces the image to at most n colours by MEDIAN CUT: the box with the widest single-channel spread is split at its median until n boxes remain, and each collapses to its mean colour. Widest spread rather than most pixels, since a large box of nearly identical colours does not need splitting and a small one spanning half the spectrum does. Median cut rather than k-means because it is DETERMINISTIC -- a palette that depended on the random stream could not be tested or documented. The channel count is preserved and alpha passes through.
 
 ## Examples (11)
 

@@ -392,6 +392,14 @@
     "url": "documentation/image-processing/AlphaChannel/"
   },
   {
+    "name": "Alphabet",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "Alphabet[]",
+    "url": "documentation/string-operations/Alphabet/"
+  },
+  {
     "name": "Animate",
     "category": "Graphics",
     "slug": "graphics",
@@ -763,7 +771,7 @@
     "name": "BlankSequence",
     "category": "Pattern Matching",
     "slug": "pattern-matching",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "__ or BlankSequence[] represents a sequence of one or more expressions.",
     "url": "documentation/pattern-matching/BlankSequence/"
   },
@@ -864,6 +872,14 @@
     "url": "documentation/graphs/CanonicalGraph/"
   },
   {
+    "name": "Capitalize",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "Capitalize[\"string\"]",
+    "url": "documentation/string-operations/Capitalize/"
+  },
+  {
     "name": "Cases",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -915,9 +931,17 @@
     "name": "Character",
     "category": "Other & Advanced",
     "slug": "other-advanced",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "Character",
     "url": "documentation/other-advanced/Character/"
+  },
+  {
+    "name": "CharacterRange",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "CharacterRange[\"c1\", \"c2\"]",
+    "url": "documentation/string-operations/CharacterRange/"
   },
   {
     "name": "CharacteristicPolynomial",
@@ -950,6 +974,22 @@
     "status": "Experimental",
     "summary": "ChartStyle",
     "url": "documentation/other-advanced/ChartStyle/"
+  },
+  {
+    "name": "ChebyshevT",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "ChebyshevT[n, x]",
+    "url": "documentation/special-functions/ChebyshevT/"
+  },
+  {
+    "name": "ChebyshevU",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "ChebyshevU[n, x]",
+    "url": "documentation/special-functions/ChebyshevU/"
   },
   {
     "name": "Check",
@@ -1584,6 +1624,14 @@
     "url": "documentation/time-and-date/DateList/"
   },
   {
+    "name": "Decapitalize",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "Decapitalize[\"string\"]",
+    "url": "documentation/string-operations/Decapitalize/"
+  },
+  {
     "name": "Decompose",
     "category": "Algebra",
     "slug": "algebra",
@@ -1606,6 +1654,14 @@
     "status": "Experimental",
     "summary": "Default[f]",
     "url": "documentation/pattern-matching/Default/"
+  },
+  {
+    "name": "Definition",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Definition[s] prints the own-, down- and up-values associated with s.",
+    "url": "documentation/expression-information/Definition/"
   },
   {
     "name": "Degree",
@@ -1760,6 +1816,14 @@
     "url": "documentation/arithmetic/DigitCount/"
   },
   {
+    "name": "DigitQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "DigitQ[\"string\"]",
+    "url": "documentation/string-operations/DigitQ/"
+  },
+  {
     "name": "DigitSum",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -1822,6 +1886,22 @@
     "status": "Stable",
     "summary": "DirectedGraphQ[g] gives True if g has at least one edge and all edges of g are directed. An edgeless graph counts as undirected.",
     "url": "documentation/graphs/DirectedGraphQ/"
+  },
+  {
+    "name": "DirichletCharacter",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "DirichletCharacter[k, j, n]",
+    "url": "documentation/number-theory/DirichletCharacter/"
+  },
+  {
+    "name": "DirichletL",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "DirichletL[k, j, s]",
+    "url": "documentation/special-functions/DirichletL/"
   },
   {
     "name": "Discard",
@@ -2304,6 +2384,14 @@
     "url": "documentation/elementary-functions/Exp/"
   },
   {
+    "name": "ExpIntegralE",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "ExpIntegralE[n, z]",
+    "url": "documentation/special-functions/ExpIntegralE/"
+  },
+  {
     "name": "ExpIntegralEi",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -2516,7 +2604,7 @@
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.",
+    "summary": "FactorInteger[n] gives a list of the prime factors of the integer n, together",
     "url": "documentation/number-theory/FactorInteger/"
   },
   {
@@ -3072,6 +3160,14 @@
     "url": "documentation/special-functions/FresnelS/"
   },
   {
+    "name": "FromCharacterCode",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "FromCharacterCode[n]",
+    "url": "documentation/string-operations/FromCharacterCode/"
+  },
+  {
     "name": "FromCoefficientRules",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3126,6 +3222,14 @@
     "status": "Stable",
     "summary": "body & or Function[body]",
     "url": "documentation/functional-programming/Function/"
+  },
+  {
+    "name": "FunctionExpand",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "FunctionExpand[expr]",
+    "url": "documentation/special-functions/FunctionExpand/"
   },
   {
     "name": "GCD",
@@ -3488,6 +3592,14 @@
     "url": "documentation/special-functions/HarmonicNumber/"
   },
   {
+    "name": "Hash",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Hash[expr] gives an integer hash code for expr (the \"Expression\" hash).",
+    "url": "documentation/expression-information/Hash/"
+  },
+  {
     "name": "Head",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3502,6 +3614,14 @@
     "status": "Stable",
     "summary": "HermiteDecomposition[m]",
     "url": "documentation/linear-algebra/HermiteDecomposition/"
+  },
+  {
+    "name": "HermiteH",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "HermiteH[n, x]",
+    "url": "documentation/special-functions/HermiteH/"
   },
   {
     "name": "HermitianMatrixQ",
@@ -3686,6 +3806,14 @@
     "status": "Stable",
     "summary": "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]",
     "url": "documentation/special-functions/HypergeometricPFQ/"
+  },
+  {
+    "name": "HypergeometricU",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "HypergeometricU[a, b, z]",
+    "url": "documentation/special-functions/HypergeometricU/"
   },
   {
     "name": "Hypergraph",
@@ -4568,6 +4696,14 @@
     "url": "documentation/control-flow/Label/"
   },
   {
+    "name": "LaguerreL",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LaguerreL[n, x]",
+    "url": "documentation/special-functions/LaguerreL/"
+  },
+  {
     "name": "Laplacian",
     "category": "Calculus",
     "slug": "calculus",
@@ -4678,6 +4814,14 @@
     "status": "Stable",
     "summary": "x <= y or LessEqual[x, y]",
     "url": "documentation/comparisons/LessEqual/"
+  },
+  {
+    "name": "LetterQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "LetterQ[\"string\"]",
+    "url": "documentation/string-operations/LetterQ/"
   },
   {
     "name": "Level",
@@ -4976,6 +5120,14 @@
     "url": "documentation/graphs/LoopFreeGraphQ/"
   },
   {
+    "name": "LowerCaseQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "LowerCaseQ[\"string\"]",
+    "url": "documentation/string-operations/LowerCaseQ/"
+  },
+  {
     "name": "LucasL",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -5128,6 +5280,14 @@
     "url": "documentation/functional-programming/MaximalBy/"
   },
   {
+    "name": "Maximize",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Maximize[f, x]",
+    "url": "documentation/calculus/Maximize/"
+  },
+  {
     "name": "Mean",
     "category": "Data Structures",
     "slug": "data-structures",
@@ -5192,6 +5352,14 @@
     "url": "documentation/image-processing/MedianFilter/"
   },
   {
+    "name": "MeijerG",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "MeijerG[{{a1, ..., an}, {an+1, ..., ap}}, {{b1, ..., bm}, {bm+1, ..., bq}}, z]",
+    "url": "documentation/special-functions/MeijerG/"
+  },
+  {
     "name": "MemberQ",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -5254,6 +5422,14 @@
     "status": "Stable",
     "summary": "MinimalPolynomial[s, x]",
     "url": "documentation/algebra/MinimalPolynomial/"
+  },
+  {
+    "name": "Minimize",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Minimize[f, x]",
+    "url": "documentation/calculus/Minimize/"
   },
   {
     "name": "Minus",
@@ -5574,6 +5750,14 @@
     "status": "Stable",
     "summary": "NextPrime[x] gives the next prime after x.",
     "url": "documentation/number-theory/NextPrime/"
+  },
+  {
+    "name": "NonCommutativeMultiply",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "a ** b ** c or NonCommutativeMultiply[a, b, c]",
+    "url": "documentation/arithmetic/NonCommutativeMultiply/"
   },
   {
     "name": "NonNegative",
@@ -7480,6 +7664,14 @@
     "url": "documentation/data-structures/StandardDeviation/"
   },
   {
+    "name": "StandardForm",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "StandardForm[expr]",
+    "url": "documentation/expression-information/StandardForm/"
+  },
+  {
     "name": "Standardize",
     "category": "Machine Learning",
     "slug": "machine-learning",
@@ -7558,6 +7750,14 @@
     "status": "Stable",
     "summary": "StringCount[\"string\", \"sub\"]",
     "url": "documentation/string-operations/StringCount/"
+  },
+  {
+    "name": "StringDelete",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringDelete[\"string\", patt]",
+    "url": "documentation/string-operations/StringDelete/"
   },
   {
     "name": "StringDrop",
@@ -7696,6 +7896,14 @@
     "url": "documentation/string-operations/StringReplace/"
   },
   {
+    "name": "StringReplaceList",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringReplaceList[\"string\", rules]",
+    "url": "documentation/string-operations/StringReplaceList/"
+  },
+  {
     "name": "StringReplacePart",
     "category": "String Operations",
     "slug": "string-operations",
@@ -7718,6 +7926,22 @@
     "status": "Stable",
     "summary": "StringRiffle[{s1, s2, ...}]",
     "url": "documentation/string-operations/StringRiffle/"
+  },
+  {
+    "name": "StringRotateLeft",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringRotateLeft[\"string\", n]",
+    "url": "documentation/string-operations/StringRotateLeft/"
+  },
+  {
+    "name": "StringRotateRight",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringRotateRight[\"string\", n]",
+    "url": "documentation/string-operations/StringRotateRight/"
   },
   {
     "name": "StringSplit",
@@ -7744,6 +7968,14 @@
     "url": "documentation/string-operations/StringTake/"
   },
   {
+    "name": "StringTakeDrop",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "StringTakeDrop[\"string\", spec]",
+    "url": "documentation/string-operations/StringTakeDrop/"
+  },
+  {
     "name": "StringTrim",
     "category": "String Operations",
     "slug": "string-operations",
@@ -7758,6 +7990,14 @@
     "status": "Stable",
     "summary": "StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions), in the same order as ConnectedComponents on a directed graph.",
     "url": "documentation/graphs/StronglyConnectedComponents/"
+  },
+  {
+    "name": "StruveH",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "StruveH[nu, z]",
+    "url": "documentation/special-functions/StruveH/"
   },
   {
     "name": "Subdivide",
@@ -7867,7 +8107,7 @@
     "name": "SymbolName",
     "category": "Other & Advanced",
     "slug": "other-advanced",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.",
     "url": "documentation/other-advanced/SymbolName/"
   },
@@ -7886,6 +8126,30 @@
     "status": "Stable",
     "summary": "Table[expr, n]",
     "url": "documentation/lists-and-iteration/Table/"
+  },
+  {
+    "name": "TagSet",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "f /: lhs = rhs assigns rhs and associates the assignment with the symbol f (as an up-, down- or own-value as appropriate).",
+    "url": "documentation/assignment-and-rules/TagSet/"
+  },
+  {
+    "name": "TagSetDelayed",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "f /: lhs := rhs assigns rhs as a delayed value associated with the symbol f.",
+    "url": "documentation/assignment-and-rules/TagSetDelayed/"
+  },
+  {
+    "name": "TagUnset",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "f /: lhs =. removes the rule for lhs associated with the symbol f.",
+    "url": "documentation/assignment-and-rules/TagUnset/"
   },
   {
     "name": "Take",
@@ -8040,12 +8304,28 @@
     "url": "documentation/time-and-date/Timing/"
   },
   {
+    "name": "ToCharacterCode",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "ToCharacterCode[\"string\"]",
+    "url": "documentation/string-operations/ToCharacterCode/"
+  },
+  {
     "name": "ToExpression",
     "category": "Expression Information",
     "slug": "expression-information",
     "status": "Stable",
     "summary": "ToExpression[input]",
     "url": "documentation/expression-information/ToExpression/"
+  },
+  {
+    "name": "ToLowerCase",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "ToLowerCase[\"string\"]",
+    "url": "documentation/string-operations/ToLowerCase/"
   },
   {
     "name": "ToNDArray",
@@ -8086,6 +8366,14 @@
     "status": "Stable",
     "summary": "ToString[expr]",
     "url": "documentation/expression-information/ToString/"
+  },
+  {
+    "name": "ToUpperCase",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "ToUpperCase[\"string\"]",
+    "url": "documentation/string-operations/ToUpperCase/"
   },
   {
     "name": "ToeplitzMatrix",
@@ -8142,6 +8430,14 @@
     "status": "Stable",
     "summary": "Trace[expr]",
     "url": "documentation/expression-information/Trace/"
+  },
+  {
+    "name": "TraditionalForm",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "TraditionalForm[expr]",
+    "url": "documentation/expression-information/TraditionalForm/"
   },
   {
     "name": "TransformationFunctions",
@@ -8352,12 +8648,44 @@
     "url": "documentation/assignment-and-rules/Unset/"
   },
   {
+    "name": "UpSet",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "lhs ^= rhs assigns rhs and associates the assignment with the symbols at level one of lhs (UpValues).",
+    "url": "documentation/assignment-and-rules/UpSet/"
+  },
+  {
+    "name": "UpSetDelayed",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "lhs ^:= rhs assigns rhs as a delayed value and associates it with the symbols at level one of lhs (UpValues).",
+    "url": "documentation/assignment-and-rules/UpSetDelayed/"
+  },
+  {
     "name": "UpTo",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
     "status": "Stable",
     "summary": "UpTo[n]",
     "url": "documentation/structural-manipulation/UpTo/"
+  },
+  {
+    "name": "UpValues",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "UpValues[s] gives a list of up-value rules for s (values for g[..,s,..] or g[..,s[..],..]).",
+    "url": "documentation/expression-information/UpValues/"
+  },
+  {
+    "name": "UpperCaseQ",
+    "category": "String Operations",
+    "slug": "string-operations",
+    "status": "Stable",
+    "summary": "UpperCaseQ[\"string\"]",
+    "url": "documentation/string-operations/UpperCaseQ/"
   },
   {
     "name": "UpperTriangularMatrixQ",
@@ -8622,6 +8950,22 @@
     "status": "Experimental",
     "summary": "White",
     "url": "documentation/other-advanced/White/"
+  },
+  {
+    "name": "WhittakerM",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "WhittakerM[k, m, z]",
+    "url": "documentation/special-functions/WhittakerM/"
+  },
+  {
+    "name": "WhittakerW",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "WhittakerW[k, m, z]",
+    "url": "documentation/special-functions/WhittakerW/"
   },
   {
     "name": "With",

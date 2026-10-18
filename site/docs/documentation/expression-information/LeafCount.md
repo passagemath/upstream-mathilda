@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LeafCount[expr] gives the total number of indivisible subexpressions in expr.`**
+**`LeafCount[expr]`**
+
+gives the total number of indivisible subexpressions in expr.
 
 ## Examples (8)
 
@@ -37,7 +39,7 @@ In[6]:= LeafCount[Expand[(1 + x)^10]]
 Out[6]= 48
 
 In[7]:= LeafCount[Integrate[1/(1 + x^4), x]]
-Out[7]= 89
+Out[7]= 84
 
 In[8]:= Map[LeafCount, {1, 1/2, x, f[x], {a, b, c}}]
 Out[8]= {1, 3, 1, 2, 4}

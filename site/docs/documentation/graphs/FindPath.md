@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindPath[g, s, t] finds a path from s to t, as {vertex list}, or {} (depth-first, linear time). FindPath[g, s, t, k] finds a path with at most k edges, FindPath[g, s, t, {k}] exactly k, {kmin, kmax} in a range; FindPath[g, s, t, kspec, n] finds at most n paths (n or All), shortest first. Length-bounded searches give up (unevaluated) after 5*10^7 steps.`**
+**`FindPath[g, s, t]`**
+
+finds a path from s to t, as {vertex list}, or {} (depth-first, linear time). FindPath\[g, s, t, k\] finds a path with at most k edges, FindPath\[g, s, t, {k}\] exactly k, {kmin, kmax} in a range; FindPath\[g, s, t, kspec, n\] finds at most n paths (n or All), shortest first. Length-bounded searches give up (unevaluated) after 5\*10^7 steps.
 
 ## Examples (12)
 

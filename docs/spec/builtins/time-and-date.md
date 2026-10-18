@@ -69,6 +69,20 @@ Evaluates `expr`, generating an interrupt to abort the evaluation if it has not 
 - **Nesting CLAMPS, it does not refund** (v0.253). An inner budget can only ever *shorten* the enclosing one: the timer actually armed is `min(inner request, outer remaining)`, and on exit the enclosing budget is reinstalled **charged** for the CPU time the inner call consumed. So `TimeConstrained[expr, t]` is an upper bound on the whole call, however many nested budgets `expr` enters. A shorter inner budget still wins, and a computation that fits inside its budget is unaffected. Before this, both layers lifted the caller's deadline merely by entering an inner scope — the `ITIMER_PROF` layer reinstalled the outer timer at the value it held when the inner call *started*, and the cooperative layer set an inner absolute deadline that could be later than the outer's — so `TimeConstrained[TimeConstrained[<long loop>, 30], 3]` ran the loop to completion in 24.5 s. Since `Integrate`, `Simplify`, `NIntegrate` and `DSolve` all bound their own sub-steps this way, no budget was an upper bound in practice.
 - The abort is implemented by `siglongjmp`-ing out of the in-flight evaluator. Expression nodes allocated by the aborted computation are not reclaimed; this is the documented behaviour.
 
+```mathematica
+In[1]:= TimeConstrained[2 + 2, 1, Print["never printed"]; -1]
+Out[1]= 4
+
+In[2]:= TimeConstrained[While[True], 0.2, "timed out"]
+Out[2]= "timed out"
+
+In[3]:= TimeConstrained[Print["not run"], 0]
+Out[3]= $Aborted
+
+In[4]:= TimeConstrained[{TimeConstrained[While[True], 0.1, "inner"], 7}, 5]
+Out[4]= {"inner", 7}
+```
+
 ## AbsoluteTime
 Gives the total number of seconds since the beginning of January 1, 1900.
 - `AbsoluteTime[]` -- current wall-clock time, in the local time zone.

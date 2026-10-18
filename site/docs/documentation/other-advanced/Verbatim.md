@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Verbatim[expr] is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim[x_] matches only the literal expression x_.`**
+**`Verbatim[expr]`**
+
+is a pattern object that matches expr taken literally: the pattern constructs inside expr (Blank, Pattern, ...) are not interpreted, so Verbatim\[x\_\] matches only the literal expression x\_.
 
 ## Examples (4)
 

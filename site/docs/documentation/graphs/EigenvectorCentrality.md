@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EigenvectorCentrality[g] gives the eigenvector centrality of each vertex, computed per strongly connected component (each component of k > 1 vertices weighted by k - 1, total 1; isolated vertices 0). EigenvectorCentrality[g, "In"] (default) uses incoming edges, [g, "Out"] outgoing ones. Edge weights are ignored.`**
+**`EigenvectorCentrality[g]`**
+
+gives the eigenvector centrality of each vertex, computed per strongly connected component (each component of k \> 1 vertices weighted by k - 1, total 1; isolated vertices 0). EigenvectorCentrality\[g, "In"\] (default) uses incoming edges, \[g, "Out"\] outgoing ones. Edge weights are ignored.
 
 ## Examples (11)
 

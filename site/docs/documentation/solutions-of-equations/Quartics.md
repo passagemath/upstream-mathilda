@@ -40,7 +40,7 @@ Out[5]= {{x -> -Sqrt[1/2 (10 - 4 Sqrt[6])]}, {x -> Sqrt[1/2 (10 - 4 Sqrt[6])]}, 
 
 **See also:** [Solve](../../solutions-of-equations/Solve/)
 
-- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
+- Source: [`src/solve/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
 
 ## Notes & additional examples

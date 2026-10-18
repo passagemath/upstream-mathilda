@@ -1,10 +1,8 @@
 ---
 source: src/strings/regex/stringmatchq.c
 ---
-**Algorithm.** `builtin_stringmatchq` compiles the pattern *anchored* — `regex_rules_build` with `anchored = 1` wraps each rule as `\A(?:...)\z` — so a match means the pattern covers the whole subject. For each subject it runs `regex_match` at offset 0 and returns `True` on the first rule that matches, else `False`. A `List` pattern becomes several rules (a match if any one matches); a list of subjects threads, with non-string elements copied through unchanged.
+**Algorithm.** `builtin_stringmatchq` seeds `IgnoreCase` from `Options[StringMatchQ]` and strips a trailing `IgnoreCase` rule. A single positional argument is the operator form, applied by `src/opform.c`. The pattern is built by `regex_rules_build_opts` with `REGEX_RULE_ANCHORED | REGEX_RULE_WILDCARDS`. The anchored flag wraps each rule as `\A(?:...)\z`, with any leading PCRE `(*VERB)` hoisted out of the wrapper, so a match must cover the whole subject. The wildcards flag turns `*` (any run of characters) and `@` (one or more characters that are not uppercase letters) into metacharacters inside literal strings; `\\*` and `\\@` stay literal. `smq_scalar` runs `regex_match` at offset 0 against each rule and stops at the first hit. A `List` pattern is a set of alternatives. A list of subjects threads, and non-string elements are copied through.
 
-The pattern may be a literal string, `RegularExpression[...]`, a general string expression (`~~`, `|`, `..`, character classes, `Pattern`), or a list of alternatives — all handled by the shared translator `wl_pattern_to_regex`.
+**Data structures.** A `RegexRule` array from the shared compiled-pattern cache: a 64-entry refcounted LRU keyed by the pattern's structural hash plus the compile flags. `Map[StringMatchQ[#, p] &, words]` therefore compiles `p` once. Only the whole-match offset pair is requested, so no capture pool and no `regex_scan` enumeration are needed.
 
-**Data structures.** A `RegexRule` array, each a compiled `RegexProgram`. Only the whole-match pair is requested (`ov[2]`): a yes/no answer needs no capture pool and no `regex_scan` enumeration.
-
-**Complexity / limits.** One PCRE2 match per rule per subject, early-exiting on the first hit. Byte semantics throughout (no UTF-8 decoding). A non-string subject leaves the call unevaluated.
+**Complexity / limits.** One PCRE2 match per rule per subject, with early exit. PCRE2 runs in UTF + UCP mode with JIT, so `LetterCharacter`, `DigitCharacter` and `IgnoreCase` are Unicode-aware. Pattern names are capture groups, and a repeated name is a backreference (`x_ ~~ "X" ~~ x_`). `Condition` and general `PatternTest` are PCRE2 callouts into the evaluator. A non-string subject leaves the call unevaluated.

@@ -276,7 +276,7 @@ In[8]:= Simplify[Log[72] - 3 Log[2] - 2 Log[3]]
 Out[8]= 0
 
 In[9]:= Simplify[4 Sin[x]^2 Cos[x]^2 + 4 Sin[x] Cos[x] + 1]
-Out[9]= 1/2 (3 - Cos[4 x] + 4 Sin[2 x])
+Out[9]= (Cos[x] + Sin[x])^4
 
 In[10]:= Simplify[2 x - 4 y + 6 z - 10 == -8]
 Out[10]= x + 3 z == 1 + 2 y
@@ -466,17 +466,24 @@ Out[6]= 1/Gamma[a]
 In[7]:= FullSimplify[Gamma[x + 1]/Gamma[x], TimeConstraint -> {1, 5}]
 Out[7]= x
 
-In[8]:= FullSimplify[Log[Sec[x] + Tan[x]]]
+In[8]:= FullSimplify[Log[Sec[x] + Tan[x]], -Pi/2 < x < Pi/2]
 Out[8]= ArcTanh[Sin[x]]
 
-In[9]:= FullSimplify[Log[Coth[x] - Csch[x]]]
+In[9]:= FullSimplify[Log[Coth[x] - Csch[x]], x > 0]
 Out[9]= -ArcCoth[Cosh[x]]
+
+In[10]:= FullSimplify[a + Erf[x] + Erfc[x]]
+Out[10]= 1 + a
 ```
 
+The real-log rules are identities only where the log argument is positive.
+`Sec[x] + Tan[x] > 0` holds on `-Pi/2 < x < Pi/2`, and `Coth[x] - Csch[x] > 0`
+for `x > 0`. Where the argument is negative the left side picks up an `I Pi`
+term.
+
 First-cut limitations: the gamma recurrence matches a literal `+1` shift only
-(`Gamma[x + 2]/Gamma[x]` is left unreduced), and an identity over an `Orderless`
-sum must match the whole sum (`a + Erf[x] + Erfc[x]` is not collapsed). The
-identity collection is expected to grow; each family lives in its own file under
+(`Gamma[x + 2]/Gamma[x]` is left unreduced). The identity collection is expected
+to grow, and each family lives in its own file under
 `src/internal/simp/transforms/`.
 
 ## SimplifyCount

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Graph[v, e] represents a graph with vertices v and edges e. Graph[e] derives the vertices from the edge list. Edges are DirectedEdge[u,v] or UndirectedEdge[u,v]; u->v and u<->v are accepted as shorthand. Graph[e, opts] and Graph[v, e, opts] attach per-edge lists, matched to e by position: EdgeWeight -> {w1, ...} and EdgeCapacity -> {c1, ...}. Simple graphs only: no self-loops or parallel edges.`**
+**`Graph[v, e]`**
+
+represents a graph with vertices v and edges e. Graph\[e\] derives the vertices from the edge list. Edges are DirectedEdge\[u,v\] or UndirectedEdge\[u,v\]; u-\>v and u\<-\>v are accepted as shorthand. Graph\[e, opts\] and Graph\[v, e, opts\] attach per-edge lists, matched to e by position: EdgeWeight -\> {w1, ...} and EdgeCapacity -\> {c1, ...}. Simple graphs only: no self-loops or parallel edges.
 
 ## Examples (17)
 

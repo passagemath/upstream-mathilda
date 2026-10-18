@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ToNDArray[list] returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray[list, DataType -> "float64"] forces the element type. A mix of Integer and Real machine values is widened to a Real buffer (the integers become doubles); an all-Integer list stays Integer. Returns list unchanged when it is not rectangular, is empty, or holds any non-machine value. Unlike automatic packing it ignores the size threshold.`**
+**`ToNDArray[list]`**
+
+returns list stored as a dense machine-precision buffer. The result is still a List -- same Head, same printed form, same elements -- but NDArrayQ gives True for it. ToNDArray\[list, DataType -\> "float64"\] forces the element type. A mix of Integer and Real machine values is widened to a Real buffer (the integers become doubles); an all-Integer list stays Integer. Returns list unchanged when it is not rectangular, is empty, or holds any non-machine value. Unlike automatic packing it ignores the size threshold.
 
 ## Examples (12)
 
@@ -132,9 +134,9 @@ answers exactly as the ordinary list does or falls back to it.
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
-- Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
-- Tests: [`tests/test_ndarray.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray.c)
-- Tests: [`tests/test_ndarray_functions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_functions.c)
+- Tests: [`tests/test_erf.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erf.c)
+- Tests: [`tests/test_erfc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfc.c)
+- Tests: [`tests/test_erfi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfi.c)
 
 ## Notes & additional examples
 

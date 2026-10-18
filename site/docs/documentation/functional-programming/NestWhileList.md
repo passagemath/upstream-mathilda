@@ -33,9 +33,13 @@ appends n additional applications of f to the list.
 
 drops the last n elements from the list.
 
-**`NestWhileList[f, expr, UnsameQ, 2] is equivalent to FixedPointList[f, expr].`**
+**`NestWhileList[f, expr, UnsameQ, 2]`**
 
-**`NestWhileList[f, expr, test, All] is equivalent to`**
+is equivalent to FixedPointList\[f, expr\].
+
+**`NestWhileList[f, expr, test, All]`**
+
+is equivalent to
 
 **`NestWhileList[f, expr, test, {1, Infinity}].`**
 

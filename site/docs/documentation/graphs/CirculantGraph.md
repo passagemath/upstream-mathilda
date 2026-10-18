@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CirculantGraph[n, j] gives the circulant graph on n vertices with i joined to i+j and i-j (mod n); CirculantGraph[n, {j1, j2, ...}] uses every jump ji.`**
+**`CirculantGraph[n, j]`**
+
+gives the circulant graph on n vertices with i joined to i+j and i-j (mod n); CirculantGraph\[n, {j1, j2, ...}\] uses every jump ji.
 
 ## Examples (10)
 

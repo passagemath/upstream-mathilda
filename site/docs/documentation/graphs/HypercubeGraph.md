@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypercubeGraph[n] gives the n-dimensional hypercube graph on 2^n vertices.`**
+**`HypercubeGraph[n]`**
+
+gives the n-dimensional hypercube graph on 2^n vertices.
 
 ## Examples (10)
 

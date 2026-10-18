@@ -1,0 +1,8 @@
+---
+source: src/strings/regex/stringreplace.c, src/strings/regex/regex_common.c, src/strings/regex/string_pattern.c, src/strings/regex/regex_engine.c
+---
+**Algorithm.** `builtin_stringreplacelist` is `sr_dispatch(res, "StringReplaceList", SR_LIST)`. `sr_args` strips `IgnoreCase` options and decodes the optional limit `n` (integer ≥ 0 or `Infinity`; anything else leaves the call unevaluated). The subject must be a string or list of strings (`::strse` otherwise), and every element of the rule set must carry a right-hand side — a bare pattern returns unevaluated. The rules are compiled by `regex_rules_build_opts` (Wolfram string pattern → PCRE2, UTF/UCP). For each subject, `sr_list_scalar` calls `regex_scan_limit` in `REGEX_OV_TRUE` (overlapping) mode with captures: one pass per rule finds a match at every start position, the per-rule runs are merged by a stable sort (`scan_stable_sort`) into position-then-rule order, and the list is cut to `n`. Each span then yields a fresh string — the prefix, the rule's right-hand side instantiated with the match's named captures by `regex_rule_eval_rhs`, and the suffix. A non-string value turns that result into a `StringExpression` (`sr_finish`), and `Sequence[...]` values splice.
+
+**Data structures.** A `RegexScan` of `RegexSpan {ms, me, rule, caps_off, npairs}` records with a shared capture-offset array, and a per-result `SrOut` builder. Compiled rule sets come from the same 64-entry LRU cache as the rest of the string-pattern family.
+
+**Complexity / limits.** The overlapping scan does not stop early: the limit `n` is applied after sorting, so a small `n` on a long subject still pays the full scan, and the output is `O(k · L)` for `k` matches in a string of length `L`. `n = 0` short-circuits to `{}`.

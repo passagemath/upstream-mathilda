@@ -160,7 +160,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on binomial coefficients.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on the generalized binomial and its polynomial form.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)

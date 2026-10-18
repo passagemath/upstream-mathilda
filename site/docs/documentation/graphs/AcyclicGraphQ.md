@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AcyclicGraphQ[g] gives True if g has no cycle, following directed edges forwards and undirected edges either way: a forest when undirected, a DAG when directed. u->v together with v->u is a cycle.`**
+**`AcyclicGraphQ[g]`**
+
+gives True if g has no cycle, following directed edges forwards and undirected edges either way: a forest when undirected, a DAG when directed. u-\>v together with v-\>u is a cycle.
 
 ## Examples (9)
 

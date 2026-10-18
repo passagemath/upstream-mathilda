@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DimensionReduction[data, k] returns a DimensionReducerFunction projecting into k dimensions, applicable to data it was NOT trained on -- the difference from DimensionReduce[data, k], which returns the reduced training data. New rows are centred on the TRAINING column means, which is what makes projections comparable across batches. Accepts one point or a matrix of points, and answers "Method", "FeatureCount" and "ReducedDimension".`**
+**`DimensionReduction[data, k]`**
+
+returns a DimensionReducerFunction projecting into k dimensions, applicable to data it was NOT trained on -- the difference from DimensionReduce\[data, k\], which returns the reduced training data. New rows are centred on the TRAINING column means, which is what makes projections comparable across batches. Accepts one point or a matrix of points, and answers "Method", "FeatureCount" and "ReducedDimension".
 
 ## Examples (7)
 

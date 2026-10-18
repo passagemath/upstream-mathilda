@@ -22,11 +22,11 @@ evaluate numerically at machine or arbitrary (MPFR) precision;
 
 </details>
 
-## Examples (6)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (3)
 
 ```mathematica
 In[1]:= AiryBi[0]
@@ -34,22 +34,95 @@ Out[1]= 1/(3^(1/6) Gamma[2/3])
 
 In[2]:= AiryBi[1.8]
 Out[2]= 2.59587
+
+In[3]:= AiryBi[2.5 + I]
+Out[3]= 0.512544 + 5.335*I
 ```
 
-### Applications (4)
+### Applications (12)
+
+Closed-form value at the origin
 
 ```mathematica
-In[3]:= AiryBi[0]
-Out[3]= 1/(3^(1/6) Gamma[2/3])
+In[4]:= AiryBi[0]
+Out[4]= 1/(3^(1/6) Gamma[2/3])
+```
 
-In[4]:= N[AiryBi[0], 40]
-Out[4]= 0.6149266274460007351509223690936135535947
+The dominant solution grows without bound
 
-In[5]:= D[AiryBi[z], z]
-Out[5]= AiryBiPrime[z]
+```mathematica
+In[5]:= AiryBi[Infinity]
+Out[5]= Infinity
+```
 
-In[6]:= N[AiryBi[2.0 + 1.0 I], 20]
-Out[6]= 0.77823 + 2.5051*I
+Oscillatory on the left, growing on the right
+
+```mathematica
+In[6]:= AiryBi[{-2., 0., 2.}]
+Out[6]= {-0.412303, 0.614927, 3.29809}
+```
+
+Derivative head
+
+```mathematica
+In[7]:= D[AiryBi[z], z]
+Out[7]= AiryBiPrime[z]
+```
+
+Maclaurin series; every third coefficient vanishes
+
+```mathematica
+In[8]:= Series[AiryBi[x], {x, 0, 4}]
+Out[8]= 1/(3^(1/6) Gamma[2/3]) + (3^(1/6) x)/Gamma[1/3] + x^3/(6 3^(1/6) Gamma[2/3]) + x^4/(4 3^(5/6) Gamma[1/3]) + O[x]^5
+```
+
+Complex argument, machine kernel
+
+```mathematica
+In[9]:= AiryBi[2.5 + I]
+Out[9]= 0.512544 + 5.335*I
+```
+
+Far into the oscillatory region
+
+```mathematica
+In[10]:= AiryBi[-50.]
+Out[10]= -0.13715
+```
+
+Overflow past the double range returns an arbitrary-precision value
+
+```mathematica
+In[11]:= AiryBi[1000.]
+Out[11]= 5.4077118391949465475e+9154
+```
+
+Fifty digits through arb
+
+```mathematica
+In[12]:= N[AiryBi[2], 50]
+Out[12]= 3.29809499997821471028060442522345242200397596340362
+```
+
+Precision follows the input
+
+```mathematica
+In[13]:= AiryBi[1.8`30]
+Out[13]= 2.595869356743906290059891254823
+```
+
+Complex arbitrary precision
+
+```mathematica
+In[14]:= N[AiryBi[-4 + 3 I], 30]
+Out[14]= 39.53486809004638450919341130274 - 77.72465709666247736654596806913*I
+```
+
+Compiled, bit-identical to the scalar values
+
+```mathematica
+In[15]:= cf = Compile[{{v, _Real, 1}}, AiryBi[v]]; cf[{-2., 0., 2.}]
+Out[15]= {-0.412303, 0.614927, 3.29809}
 ```
 
 ## Algorithm
@@ -120,11 +193,11 @@ Attributes (both heads): Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_airybi` is the companion of `AiryAi` — the solution of `y'' = z y` that grows exponentially as `z -> +Infinity`. Exact special values come first: `AiryBi[0] = 1/(3^(1/6) Gamma[2/3])`, `AiryBi[+Infinity] = Infinity`, `AiryBi[-Infinity] = 0`, `AiryBi[Indeterminate] = Indeterminate`. Numeric arguments route to the unified core `airy_bi_core`, which evaluates `Bi(z)` and `Bi'(z)` together and chooses among three algorithms on `r = |z|`, `theta = arg z`, and precision `P`: the **Maclaurin series** (same recurrence `b_n = b_{n-3}/(n(n-1))` as Ai, different seed constants, with `(2/3) r^{3/2}/ln2` guard bits) for small/moderate `|z|`; the **dominant asymptotic series** DLMF 9.7.7/9.7.8 (the same `u_k, v_k` as Ai but with no `(-1)^k` sign and prefactor `1/sqrt(pi)`) in the central sector where the neglected recessive companion `~exp(-2 Re zeta)` is below `2^-P` (Bi's anti-Stokes line is `|arg z| = π/3`); and the **connection to Ai** DLMF 9.2.10 near and left of `|arg z| = π/3`, evaluating the two rotated points by a file-local Ai asymptotic kernel so Bi's oscillation on the negative axis emerges naturally. `AiryBiPrime` reuses the core (`AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]`, `+Infinity` at `+Infinity`); `D[AiryBi[z], z] = AiryBiPrime[z]` lives in `calculus/deriv.c`.
+**Algorithm.** `builtin_airybi` mirrors `AiryAi`'s four layers. (1) **Machine scalar**: `airy_machine` uses the shared gate `sf_machine_scalar_args` and calls `sf_airy_scalar(SF_AIRY_BI, …)` in `src/special_functions/sf_machine_bessel.c`. For **real** `x` on `[-10, 10]` it evaluates the generated piecewise polynomials in `sf_machine_airy_tab.c`: `Bi` itself on `[-10, 2]`, and the scaled `Bi·e^{-zeta}` on `[2, 10]`, with `exp()` carrying the growth. Beyond that range the Poincaré expansions DLMF 9.7 apply, with `zeta = (2/3) x^{3/2}` in double-double. For a **complex** `z` it uses the Maclaurin series for `|z| <= 1`, and otherwise DLMF 9.6.3, `Bi(z) = sqrt(z/3)(I_{-1/3}(zeta) + I_{1/3}(zeta))`. One call to the right-half-plane Bessel core (shared with `BesselI`/`BesselK`) supplies every order needed, and the continuation formulas handle `Re zeta < 0`. A value past the double range declines. (2) **Exact values**: `AiryBi[0] = 1/(3^(1/6) Gamma[2/3])`, `AiryBi[Infinity] = Infinity`, `AiryBi[-Infinity] = 0` and `Indeterminate → Indeterminate`. (3) **Arbitrary precision**: an MPFR real, or a complex argument above 53 bits, goes to arb's `acb_hypgeom_airy` via `flint_num_airy_bi` (`src/flint_num_bridge.c`). (4) **Fallback**: the file-local complex-MPFR core `airy_bi_core` has three methods. It sums the Maclaurin series (`b_n = b_{n-3}/(n(n-1))`, `(2/3) r^{3/2}/ln2` guard bits) for small `|z|`. In the central sector it uses the dominant asymptotic series DLMF 9.7.7/9.7.8, but only where the recessive companion `~exp(-2 Re zeta)` is below `2^-P`. Near and left of the anti-Stokes line `|arg z| = π/3`, including the oscillatory negative axis, it uses the connection to `Ai` (DLMF 9.2.10). A machine input whose value overflows (`AiryBi[1000.] ≈ 5.41×10^9154`) is returned as an arbitrary-precision number. `AiryBiPrime` shares every layer and selects the derivative component. `D[AiryBi[z], z] = AiryBiPrime[z]` lives in `calculus/deriv.c`.
 
-**Data structures.** `Expr`; the numeric core uses the same file-local complex-MPFR `acx` toolkit (pairs of `mpfr_t`, alias-safe, explicit working precision) as `airyai.c`. Machine results overflowing a `double` are promoted to MPFR. The ND kernel is a real `REG_U` registration (`NDKU_AiryBi` → `sf_machine_airy_bi`), real-only; `Compile[]` lowers `AiryBi` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+**Data structures.** Scalars use `Expr` leaves. The machine kernel works on double `(re, im)` pairs with static coefficient tables, double-double `zeta`, and `sf_machine_airy_tab.c`. The fallback core uses the same file-local `acx` complex-MPFR toolkit as `airyai.c`. The ND kernel `NDKU_AiryBi` (`REG_U` in `ndkernels.c`) has a real arm `sf_airy_bi_r` and a complex arm `sf_airy_nd`, so real and complex packed or `NDArray` buffers run element-wise. `Compile[]` lowers `AiryBi` at scalar real, scalar complex and rank-1 shapes through the same helpers, bit-identical to the scalar.
 
-**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `P` and `|z|`. Entire function (no branch cuts). Exact value at `0` only; symbolic/exact non-zero arguments stay symbolic. `AiryBiPrime` leaves `-Infinity` unevaluated (growing-amplitude oscillation).
+**Complexity / limits.** At machine precision the cost is O(1) per element. The documented accuracy is ≤ 4 ulp of the local magnitude on the real line, median ≈ 1 and max ≤ 10 for complex arguments. Arbitrary precision is arb's rigorous evaluation. `Bi` is entire. An exact non-zero argument (`AiryBi[2]`) stays unevaluated until `N`. `AiryBiPrime[-Infinity]` is left unevaluated (growing-amplitude oscillation).
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
@@ -133,18 +206,22 @@ Attributes (both heads): Listable, NumericFunction, Protected.
 **See also:** [AiryAi](../../special-functions/AiryAi/), [N](../../arithmetic/N/), [AiryBiPrime](../../other-advanced/AiryBiPrime/)
 
 - DLMF §9.2, §9.7 — Airy functions: dominant asymptotic series Bi(z) ~ exp(zeta)/(sqrt(pi) z^{1/4}) Sum u_k/zeta^k, and the Bi–Ai connection Bi(z) = e^{iπ/6} Ai(z e^{2πi/3}) + e^{-iπ/6} Ai(z e^{-2πi/3}).
+- DLMF §9.6.3 — Bi(z) = sqrt(z/3) (I_{-1/3}(zeta) + I_{1/3}(zeta)), used by the complex machine kernel.
+- D. E. Amos, A portable package for Bessel functions of a complex argument and nonnegative order, ACM TOMS 12 (1986) 265-273 (Algorithm 644; CBIRY).
+- F. Johansson, Arb: efficient arbitrary-precision midpoint-radius interval arithmetic, IEEE Trans. Comput. 66 (2017) 1281-1292.
 - Source: [`src/special_functions/airybi.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/airybi.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_airybi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airybi.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
+- Tests: [`tests/test_sf_machine_bessel.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sf_machine_bessel.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`AiryBi[z]` is the dominant solution of the Airy equation `y'' == z y`, growing
-exponentially as `z -> +Infinity` while `AiryBi[-Infinity] == 0`. Its exact
-value at the origin is `1/(3^(1/6) Gamma[2/3])`, and `D[AiryBi[z], z]` returns
-`AiryBiPrime[z]`. Complex arguments are evaluated to the requested MPFR
-precision; `AiryBi` is Listable.
+- `AiryBi[z]` is the solution of `y'' == z y` that grows as `z -> +Infinity`. It is entire, `AiryBi[-Infinity] = 0`, and the origin value is `1/(3^(1/6) Gamma[2/3])`.
+- Machine real and complex arguments use the raw-double kernel in `sf_machine_bessel.c`. On `[-10, 10]` it evaluates piecewise Chebyshev tables; beyond that the Poincaré expansions apply. For complex `z` it uses `I_{±1/3}`. That helper also serves packed lists, `NDArray` and `Compile[]`. Arbitrary precision goes through arb's `acb_hypgeom_airy`, and the MPFR core is the fallback.
+- `D[AiryBi[z], z] = AiryBiPrime[z]`. `AiryBiPrime[-Infinity]` is left unevaluated.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `AiryAi`, `AiryBiPrime`, `BesselI`.

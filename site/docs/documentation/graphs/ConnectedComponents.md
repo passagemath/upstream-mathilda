@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ConnectedComponents[g] gives the connected components of g: the strongly connected components when g has directed edges (listed with no edge from a component to a later one), else the components, largest first. ConnectedComponents[g, {v1, ...}] keeps only those containing some vi.`**
+**`ConnectedComponents[g]`**
+
+gives the connected components of g: the strongly connected components when g has directed edges (listed with no edge from a component to a later one), else the components, largest first. ConnectedComponents\[g, {v1, ...}\] keeps only those containing some vi.
 
 ## Examples (9)
 

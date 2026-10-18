@@ -53,6 +53,14 @@ In[1]:= EllipticF[{0.3, 0.6, 0.9}, 0.5]  (* Listable, and the list rides the pac
 Out[1]= {0.302255, 0.618108, 0.960966}
 ```
 
+```mathematica
+In[1]:= EllipticF[0.5 + 0.2 I, 0.3]  (* honest limitation: no machine-complex kernel, so Arb answers and the result is a 53-bit arbitrary-precision number, not a machine Complex *)
+```
+
+```mathematica
+In[1]:= NIntegrate[(0.5 + 0.2 I)/Sqrt[1 - 0.3 Sin[(0.5 + 0.2 I) s]^2], {s, 0, 1}]  (* the defining integral along the straight path to the complex amplitude *)
+```
+
 ### Notes
 
 The second argument is the **parameter** `m = k²`, not the modulus `k`.
@@ -69,3 +77,10 @@ The `π/2 − 10⁻⁸` example is a regression guard. `R_F`'s first argument is
 computing it as `1 − Sin[φ]²` gave ~100% relative error there: the result was wrong by
 2.7e-08 relative, an eight-digit loss, against 6.7e-16 at a generic amplitude. Squaring
 `cos` instead brings it to 1.7e-15 worst case.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`. The real machine kernel serves the
+  scalar call, packed `List`s, real `NDArray`s and `Compile[]` (scalar and rank-1); the
+  quasi-period term `2k K(m)` uses the same Cephes-form `K` kernel as `EllipticK`.
+- Unlike `EllipticK`/`EllipticE[m]`, there is no machine-complex kernel: a complex machine
+  argument is answered correctly by Arb but as a 53-bit arbitrary-precision number.
+- See also: `EllipticK`, `EllipticE`, `EllipticPi`.

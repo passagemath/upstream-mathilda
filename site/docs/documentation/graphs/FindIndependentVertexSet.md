@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindIndependentVertexSet[g] gives {s} with s a maximum independent vertex set of g. FindIndependentVertexSet[g, k] finds a maximal independent set of at most k vertices, [g, {k}] of exactly k, [g, {kmin, kmax}] within the range; a third argument n (or All) gives up to n such sets. Exact; unevaluated if the search budget is exhausted.`**
+**`FindIndependentVertexSet[g]`**
+
+gives {s} with s a maximum independent vertex set of g. FindIndependentVertexSet\[g, k\] finds a maximal independent set of at most k vertices, \[g, {k}\] of exactly k, \[g, {kmin, kmax}\] within the range; a third argument n (or All) gives up to n such sets. Exact; unevaluated if the search budget is exhausted.
 
 ## Examples (11)
 

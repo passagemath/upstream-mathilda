@@ -65,7 +65,7 @@ Out[7]= 1/2 Sqrt[Pi]
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on factorial computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on the Gamma function and special values.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)

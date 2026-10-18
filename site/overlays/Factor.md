@@ -7,54 +7,64 @@ references:
 ### Worked examples
 
 ```mathematica
-In[1]:= Factor[x^4 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x^2)
+In[1]:= Factor[6 x^2 + 7 x + 2]  (* factorisation over the integers with a non-monic leading coefficient *)
 ```
 
 ```mathematica
-In[1]:= Factor[6 x^2 + 7 x + 2]
-Out[1]= (1 + 2 x) (2 + 3 x)
+In[1]:= Factor[x^10 - 1]  (* cyclotomic factors of x^10 - 1 *)
 ```
 
 ```mathematica
-In[1]:= Factor[x^2 + 1, Extension -> I]
-Out[1]= (-I + x) (I + x)
+In[1]:= Length[Factor[x^99 - y^99]]  (* the multivariate FLINT path: one factor for each divisor of 99 *)
 ```
 
 ```mathematica
-In[1]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
-Out[1]= (Sqrt[2] + x) (-Sqrt[2] + x)
+In[1]:= Factor[(x^3 + 2 x^2)/(x^2 - 4 y^2) - (x + 2)/(x^2 - 4 y^2)]  (* a rational function: combined first, then numerator and denominator factored *)
 ```
 
 ```mathematica
-In[1]:= Factor[x^10 - 1]
-Out[1]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
+In[1]:= Factor[x^4 + 1, Extension -> Sqrt[2]]  (* an irreducible quartic splits over Q(Sqrt[2]) *)
 ```
 
 ```mathematica
-In[1]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
-Out[1]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
+In[1]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]  (* a tower of extensions, reduced to one primitive element *)
 ```
 
 ```mathematica
-In[1]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
-Out[1]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+In[1]:= Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Automatic]  (* the extension is detected from the coefficients *)
+```
+
+```mathematica
+In[1]:= Factor[x^4 + 1, Modulus -> 3]  (* factorisation in F_3[x] *)
+```
+
+```mathematica
+In[1]:= Factor[E^(2 x) - 1]  (* a polynomial in the kernel E^x *)
+```
+
+```mathematica
+In[1]:= Factor[Integrate[f[x], x] x^2 - Integrate[f[x], x]]  (* an unevaluated integral is carried as an opaque factor *)
 ```
 
 ### Notes
 
-Over the integers, `Factor` returns irreducible factors and keeps an
-integer content split out front; `x^2 + 1` stays irreducible because it has
-no rational roots. Supplying `Extension -> I`, `Extension -> Sqrt[c]`, or
-`Extension -> c^(1/n)` factors over the corresponding algebraic number field
-via Trager's algorithm, so `x^2 + 1` splits over `Q(I)` and `x^2 - 2` over
-`Q(Sqrt[2])`. Factors are printed in canonical term order, which places the
-constant term before the leading term (`-1 + x` rather than `x - 1`).
-
-The cyclotomic factorisation of `x^10 - 1` recovers the degree-1, degree-4
-cyclotomic polynomials Φ₁, Φ₂, Φ₅, Φ₁₀ over the integers. `x^4 + 1` (the 8th
-cyclotomic, irreducible over Q) splits into two real quadratics over
-`Q(Sqrt[2])`. Passing a list to `Extension` factors over the compositum: over
-`Q(Sqrt[2], Sqrt[3])` the biquadratic `x^4 - 5 x^2 + 6` splits completely into
-four linear factors, the tower being reduced to a single primitive element via
-Trager's primitive-element algorithm.
+- Over the integers, `Factor` returns irreducible factors with the integer
+  content pulled out front. `x^2 + 1` stays as it is because it has no
+  rational factors. Factors print in canonical term order, constant term
+  first (`-1 + x`, not `x - 1`).
+- **Engines.** With FLINT, univariate integer polynomials go to
+  `fmpz_poly_factor` and multivariate rational polynomials to
+  `fmpq_mpoly_factor`. Otherwise the native Berlekamp–Zassenhaus and Hensel
+  code runs, with heuristics for three or more variables. `Extension -> α`
+  (or a list, or `Automatic`) factors over the number field with Trager's
+  algorithm. `Modulus -> p` factors over `F_p`. A composite modulus is left
+  unevaluated.
+- **Rational functions and kernels.** A rational expression is combined
+  with `Together` first. Exponentials, trig functions and fractional powers
+  are factored as polynomials in their kernels. Unevaluated `Integrate`,
+  `D` and `Sum` are opaque atoms.
+- **Threading.** `Listable`, and threads over equations, inequalities and
+  logical connectives as well.
+- `Protected`. Symbolic only.
+- See also: `FactorList`, `FactorSquareFree`, `FactorTerms`, `Expand`,
+  `Together`, `FactorInteger`.

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphTriangleCount[g] gives the number of triangles of an undirected graph g, or of directed 3-cycles of a directed graph. O(m^1.5) degree-ordered triangle listing.`**
+**`GraphTriangleCount[g]`**
+
+gives the number of triangles of an undirected graph g, or of directed 3-cycles of a directed graph. O(m^1.5) degree-ordered triangle listing.
 
 ## Examples (9)
 

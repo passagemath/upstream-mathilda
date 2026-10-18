@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeDelete[g, e] removes the edge e from g; EdgeDelete[g, {e1, ...}] removes several (each must be an edge of g, else the call stays unevaluated; an undirected edge matches either orientation); EdgeDelete[g, patt] removes every edge matching patt. Vertices, order and the remaining weights are kept.`**
+**`EdgeDelete[g, e]`**
+
+removes the edge e from g; EdgeDelete\[g, {e1, ...}\] removes several (each must be an edge of g, else the call stays unevaluated; an undirected edge matches either orientation); EdgeDelete\[g, patt\] removes every edge matching patt. Vertices, order and the remaining weights are kept.
 
 ## Examples (6)
 

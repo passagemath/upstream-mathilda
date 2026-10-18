@@ -12,7 +12,14 @@ gives True if m is explicitly Hermitian (m == ConjugateTranspose\[m\]), and Fals
 <details>
 <summary>Notes</summary>
 
-Options: SameTest  -\> Automatic   function used to test equality of entries. Tolerance -\> Automatic   numeric tolerance for approximate matrices. With SameTest -\> f, entries m\[i,j\] and Conjugate\[m\[j,i\]\] are taken to be equal when f\[m\[i,j\], Conjugate\[m\[j,i\]\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - Conjugate\[m\[j,i\]\]\] \<= t. Diagonal entries must satisfy the same test (i.e. be purely real for numeric matrices).
+Options:
+
+```text
+SameTest  -> Automatic   function used to test equality of entries.
+Tolerance -> Automatic   numeric tolerance for approximate matrices.
+```
+
+With SameTest -\> f, entries m\[i,j\] and Conjugate\[m\[j,i\]\] are taken to be equal when f\[m\[i,j\], Conjugate\[m\[j,i\]\]\] gives True.  With Tolerance -\> t, entries are accepted when Abs\[m\[i,j\] - Conjugate\[m\[j,i\]\]\] \<= t. Diagonal entries must satisfy the same test (i.e. be purely real for numeric matrices).
 
 </details>
 
@@ -80,7 +87,7 @@ Out[10]= True
 
 **See also:** [Conjugate](../../arithmetic/Conjugate/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_hermitian_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hermitian_matrix_q.c)
 - Tests: [`tests/test_symmetric_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_symmetric_matrix_q.c)

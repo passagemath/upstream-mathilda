@@ -36,7 +36,7 @@ May return a finite value, Infinity, -Infinity, ComplexInfinity, Indeterminate, 
 
 </details>
 
-## Examples (33)
+## Examples (34)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -120,35 +120,76 @@ In[24]:= Limit[x^a/(x^a + 1), x -> Infinity, Assumptions -> a > 0]
 Out[24]= 1
 ```
 
-### Applications (9)
+### Applications (10)
+
+The classic removable singularity
 
 ```mathematica
 In[25]:= Limit[Sin[x]/x, x -> 0]
 Out[25]= 1
+```
 
-In[26]:= Limit[(x^2 - 1)/(x - 1), x -> 1]
-Out[26]= 2
+A symbolic 1^Infinity form via the f^g = Exp[g Log f] reduction
 
-In[27]:= Limit[(1 + a/x)^x, x -> Infinity]
-Out[27]= E^a
+```mathematica
+In[26]:= Limit[(1 + a/x)^x, x -> Infinity]
+Out[26]= E^a
+```
 
-In[28]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
-Out[28]= 1/120
+One-sided; the two-sided limit is ComplexInfinity
 
-In[29]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
-Out[29]= -2
+```mathematica
+In[27]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[27]= Infinity
+```
 
-In[30]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
-Out[30]= -1/2
+One-sided limit of a step function at an integer
 
-In[31]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
-Out[31]= 5
+```mathematica
+In[28]:= Limit[Floor[x], x -> 2, Direction -> "FromBelow"]
+Out[28]= 1
+```
 
-In[32]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
-Out[32]= Infinity
+Assumptions decide that the power dominates the logarithm
 
-In[33]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
-Out[33]= -Infinity
+```mathematica
+In[29]:= Limit[x^a Log[x], x -> 0, Direction -> "FromAbove", Assumptions -> a > 0]
+Out[29]= 0
+```
+
+Sub-leading incomplete-Gamma asymptotics
+
+```mathematica
+In[30]:= Limit[x (Gamma[a, x] Exp[x] x^(1 - a) - 1), x -> Infinity]
+Out[30]= -1 + a
+```
+
+The Dirichlet tail of Zeta at infinity
+
+```mathematica
+In[31]:= Limit[(Zeta[x] - 1) 2^x, x -> Infinity]
+Out[31]= 1
+```
+
+Nested-exponential cancellation by Gruntz's mrv algorithm
+
+```mathematica
+In[32]:= Limit[Exp[x] (Exp[1/x - Exp[-x]] - Exp[1/x]), x -> Infinity, Method -> "Gruntz"]
+Out[32]= -1
+```
+
+Two incommensurate oscillations, proved to have no limit
+
+```mathematica
+In[33]:= Limit[Cos[x] + Sin[Sqrt[2] x], x -> Infinity]
+Out[33]= Indeterminate
+```
+
+Limitation: no continuity is assumed for an undefined head
+
+```mathematica
+In[34]:= Limit[f[x], x -> 0]
+Out[34]= Limit[f[x], x -> 0]
 ```
 
 ## Algorithm
@@ -187,15 +228,105 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Algorithm.** `builtin_limit` is a layered dispatcher; each layer either resolves the limit and short-circuits or hands the problem to the next. `builtin_limit` first rationalizes any inexact coefficients (the symbolic machinery is rational-coefficient only), mutes transient `Power::infy`/`Infinity::indet` warnings, then `builtin_limit_impl` normalizes the three calling forms — `Limit[f, x->a]`, `Limit[f, {x->a,…}]` (iterated), and `Limit[f, {x..}->{a..}]` (multivariate) — plus the `Direction`/`Assumptions` options and the `Direction -> I`/`Complexes` branch-cut post-pass.
+**Algorithm.** `builtin_limit` first rationalises any inexact coefficients,
+because the symbolic machinery only handles rational coefficients, and
+numericalises the value afterwards. It then mutes the transient
+`Power::infy`/`Infinity::indet` warnings its probes would raise. Next,
+`builtin_limit_impl` normalises the three calling forms:
 
-The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hyperbolic→exponential rewrite + `Expand`; an early bail on opaque/discontinuous heads (Floor, Ceiling, Sign, unknown `f[…x…]`); then the layer cascade — **Layer 1** structural fast paths (numeric-point substitution, then generic continuous substitution via `Together`); `Abs[g]` direction-aware rewrite; `ArcTan`/`ArcCot`-of-divergent; **Layer 3** rational-function `P(x)/Q(x)` shortcuts (leading-degree comparison); `Log` of a finite-limit inner; a Gruntz-lite dominant-summand `Log[sum]` reduction; `Log`+linear merge; term-wise `Plus` summation; **Layer 5.3** `f^g` logarithmic reduction (for exponents that depend on x, which `Series` can't expand); a bounded-envelope squeeze; **Layer 2** the `Series`-based workhorse (calls `Series[]` symbolically and reads the leading term); **Layer 5.1** L'Hospital's rule with leaf-count growth guardrails; **Layer 6** bounded-oscillation `Interval` returns; an atom-substitution recursion for `Power[b, e(x)]` subterms; and a last-resort one-sided-disagreement probe returning `Indeterminate`. Any layer returning NULL means "couldn't make progress here"; if all fail the `Limit[…]` is left unevaluated.
+- `Limit[f, x -> a]`
+- the nested `Limit[f, {x1 -> a1, ...}]`, innermost limit last
+- the joint `Limit[f, {x, y} -> {a, b}]`, which uses a polar substitution and
+  directional probes
 
-**Method dispatch.** The `Method` option groups those layers into six named strategies — `"Substitution"`, `"RationalFunction"`, `"Series"`, `"LHospital"`, `"Asymptotic"` (the `ArcTan`/`Log`/dominant-term/`f^g` layers) and `"Bounded"` (envelope + oscillation) — plus `Automatic` (all of them). `parse_method` maps the option value to a `LIMIT_M_*` tag stored on `LimitCtx.method`. Inside `compute_limit` a `TRY(group, layer)` macro runs a layer only when it belongs to the selected group; the selection is enforced **only at the outermost call** (`method != Automatic && depth == 1`), so recursive sub-limits — one-sided probes, L'Hospital iterations, `Abs` splitting, the polar multivariate substitution — always inherit the full cascade. A named method that resolves nothing therefore leaves the whole `Limit` unevaluated, matching the "fail ⇒ unevaluated" contract; an unrecognised value emits `Limit::method` and is likewise left unevaluated.
+The same step parses three options:
 
-**Data structures.** A `LimitCtx { x, point, direction, depth, method }` threads the variable, the approach point, the (collapsed) direction, a recursion counter (capped at `LIMIT_MAX_DEPTH`), and the selected `Method` tag through every layer. Subexpressions are manipulated as `Expr*` trees and most analysis is delegated to the evaluator (`Series`, `D`, `Together`, `Expand` are invoked symbolically through the symbol table, not via direct C calls).
+- `Direction`, which takes `"FromAbove"`/`"FromBelow"`/`±1`, `Reals`,
+  `Complexes`, or a complex direction such as `I`.
+- `Method`.
+- `Assumptions`, built into an `AssumeCtx` by `limit_effective_assumptions`.
+  It falls back to the ambient `$Assumptions` or `Assuming[...]`.
 
-**Complexity / limits.** `Series` subsumes most classical cases; L'Hospital is reserved for shapes `Series` can't expand and is guarded against complexity blow-up. Discontinuous-head and undefined-head inputs are deliberately refused rather than evaluated at a single side.
+The core is `compute_limit`, run under a `LimitCtx {x, point, direction, depth,
+method, assume}`. It begins with pre-passes:
+
+- One-sided step functions at integers (`Floor`, `Ceiling`, `Round`,
+  `IntegerPart`, `FractionalPart`), bounded opaque factors times vanishing
+  factors, and `Mod[a, x]` at infinity.
+- A refusal on undefined heads `f[...x...]`.
+- A reciprocal-trig rewrite.
+- At `±Infinity`, a hyperbolic→exponential rewrite plus `Expand`.
+
+Then the layer cascade runs in this fixed order. The first layer that returns a
+value wins.
+
+1. `layer_param_power`: assumption-gated `x^n` and `a^x`.
+2. `layer_special_fn_asymptotic`. This layer is the Gamma firewall. It handles
+   Gamma ratios and Stirling's formula, Hurwitz `Zeta` with two-term tails,
+   `BesselJ`/`BesselY` at small argument, `Erfc`, and incomplete `Gamma`. It runs
+   before substitution can produce husks such as `BesselJ[a, 0] 0^(-a)`.
+3. `layer1_fast_paths`: numeric and continuous substitution through `Together`.
+4. `layer_abs_rewrite`.
+5. `layer_compose_at_infinity`: a head's own value at infinity, as in
+   `Erf[Infinity] = 1`.
+6. `layer_exp_decay_re`: the sign of `Re[rate]` under the assumptions.
+7. `layer3_rational`: leading-degree comparison for `P/Q`.
+8. The Log layers: log of a finite inner limit, the Gruntz-lite dominant-summand
+   `Log[sum]`, and Log+linear merge.
+9. Term-wise `Plus`.
+10. The `f^g` → `Exp[g Log f]` reduction.
+11. The bounded layers: bounded envelope (squeeze), assumption-pinned dominant
+    products, and `Max`/`Min` against a bounded oscillation.
+12. `layer_oscillatory`, from `limit_osc.c`. It rewrites a sum at `±Infinity`
+    into a normal form `c0 + Σ cj E^(I θj)` with pairwise-distinct phases. A sum
+    with no dominant phase is proved to have no limit, and the layer returns
+    `Indeterminate`.
+13. `layer2_series`, the workhorse. It calls `Series` at orders 4 → 32 and reads
+    the leading term.
+14. `layer_gruntz`, from `gruntz.c`. This is a port of Gruntz's mrv algorithm
+    with the structure of SymPy's `gruntz.py`: `mrv` sets, `compare`, `rewrite`
+    to `w → 0+`, `mrv_leadterm` and a `sign` oracle. It reduces every point and
+    direction to `x → +∞`. Its budgets are a depth of 80, series orders 2–16 and
+    6000 `mrv_leadterm` calls. If it hits any cap, or an oracle is undecided, the
+    limit is left unevaluated.
+15. `layer5_lhospital`, with at most 12 iterations and a leaf-growth cap.
+16. `layer6_bounded`, which returns an `Interval`.
+17. Late fallbacks, in this order: a convergent-summand `Plus` split,
+    atom substitution for a `b^e(x)` subterm, a parametric-monomial substitution
+    `t = x^a`, small-argument linearisation `H[g] ~ g`, constant-factor
+    linearity, and a one-sided-disagreement probe that returns `Indeterminate`.
+
+**Method dispatch.** The `TRY(group, layer)` macro tags every layer with one of
+eight groups: `"Substitution"`, `"RationalFunction"`, `"Asymptotic"`,
+`"Bounded"`, `"Oscillatory"`, `"Series"`, `"Gruntz"`, `"LHospital"`. The default
+`Automatic` runs all of them. A named `Method` restricts **only the outermost
+call** (`depth == 1`), so recursive sub-limits always see the full cascade. A
+named method that does not apply leaves the `Limit` unevaluated. Each method is
+also exposed as a head of its own. For example, ``Limit`Gruntz[f, x -> a]`` is
+the same as `Limit[f, x -> a, Method -> "Gruntz"]`.
+
+**Assumptions** (v0.366). With no informative assumption the context is `NULL`,
+and the legacy path runs byte-for-byte. Under assumptions, the following layers
+switch on:
+
+- the signs of symbolic exponents, rates and coefficients (`literal_sign_ctx`,
+  `exponent_sign_ctx`)
+- dominant products: `x^p Log[x] → 0` and vanishing×bounded
+- `x^a → 0+` for `a < 0`
+- `Re[w] > 0` decay
+- symbolic dominant-log summands
+- an `Abs`-of-complex pre-pass through `ComplexExpand` plus `Refine`
+
+**Data structures.** Subexpressions are `Expr*` trees. Most of the analysis
+calls the evaluator symbolically (`Series`, `D`, `Together`, `Expand`,
+`ComplexExpand`) rather than through direct C calls. Gruntz keeps a `SubsSet`
+of mrv elements mapped to fresh dummies, plus an 8192-bucket memo.
+
+**Complexity / limits.** Recursion is capped at `LIMIT_MAX_DEPTH = 24`. `Series`
+covers most `0/0` and `∞/∞` forms. Gruntz covers nested exp-log cancellation.
+L'Hospital is kept for shapes `Series` cannot expand. Discontinuous and
+undefined heads are refused, never evaluated from one side. A bounded
+oscillation such as `Sin[x]` at infinity gives `Indeterminate`.
 
 - `Protected` (matches Mathematica; `Limit` does *not*
   hold its arguments, so `Limit[%, x -> Infinity]` sees the evaluated `f`).
@@ -365,8 +496,60 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
     (`Limit[x^n/x^m, x -> Infinity, Assumptions -> n > m] = Infinity`), and a
     function of one divergent parametric monomial `x^a` (`a > 0`) is closed by
     the substitution `t = x^a` (`Limit[x^a/(x^a + 1), x -> Infinity,
-    Assumptions -> a > 0] = 1`), which also feeds the bounded envelope
-    (`Limit[Sin[x]/x^p, x -> Infinity, Assumptions -> p > 0] = 0`).
+    Assumptions -> a > 0] = 1`) — and its mirror at `a < 0`, where `x^a -> 0`
+    (`Limit[1/(x^a + 1), x -> Infinity, Assumptions -> a < 0] = 1`) — which also
+    feeds the bounded envelope (`Limit[Sin[x]/x^p, x -> Infinity,
+    Assumptions -> p > 0] = 0`).
+  - **product dominance** — a `Times` whose growth ordering the facts pin folds
+    to `0`: a power beating a logarithm (`Limit[x^a Log[x], x -> 0,
+    Direction -> "FromAbove", Assumptions -> a > 0] = 0`), a geometric decay
+    beating a polynomial (`Limit[x a^x, x -> Infinity, Assumptions -> 0 < a < 1]
+    = 0`), or a vanishing factor times a bounded oscillation
+    (`Limit[x^a Sin[1/x], x -> 0, Direction -> "FromAbove", Assumptions ->
+    a > 0] = 0`). A genuinely indeterminate `0 * Infinity` is left to Gruntz.
+  - **symbolic-power log asymptotics** — `Limit[Log[x^a + 1]/Log[x],
+    x -> Infinity, Assumptions -> a > 0] = a` (the dominant `x^a` summand is
+    recognised under the assumption even when the integer-degree classifier
+    cannot see the symbolic exponent).
+  - **exponential decay by complex part** — `Limit[E^(c t), t -> Infinity]` is
+    `0` when the oracle proves `Re[c] < 0`: `Limit[Exp[-w t], t -> Infinity,
+    Assumptions -> Re[w] > 0] = 0` and `Limit[Exp[I w t], t -> Infinity,
+    Assumptions -> Im[w] > 0] = 0`.
+  - **step functions one-sided at an integer** — for `Floor`, `Ceiling`,
+    `Round`, `IntegerPart`, `FractionalPart` at an integer point (a literal, or
+    a symbolic `a` with `Element[a, Integers]`): `Limit[Floor[x], x -> a,
+    Direction -> "FromBelow", Assumptions -> Element[a, Integers]] = a - 1`
+    (`FromAbove -> a`), `Limit[FractionalPart[x], x -> a, Direction ->
+    "FromBelow", ...] = 1` (`FromAbove -> 0`). Two-sided or non-integer points
+    stay unevaluated.
+  - **special-function leading asymptotics** — a Gamma ratio
+    (`Limit[Gamma[x + a]/(x^a Gamma[x]), x -> Infinity] = 1`, rewritten to a
+    pure power so no Gamma tower reaches `Series`), the Hurwitz zeta
+    (`Limit[x^(a - 1) Zeta[a, x], x -> Infinity, Assumptions -> a > 1] =
+    1/(a - 1)`), and the small-argument BesselJ
+    (`Limit[BesselJ[a, x]/x^a, x -> 0, Direction -> "FromAbove",
+    Assumptions -> a > 0] = 1/(2^a Gamma[a + 1])`).
+  - **step functions away from an integer** — Floor/Ceiling/Round/IntegerPart in
+    a product whose other factors vanish use `H[g] ~ g` as `g -> +-Infinity`
+    (`Limit[x Floor[a/x], x -> 0] = a`, `Limit[Floor[t]/t, t -> Infinity] = 1`);
+    a bounded `FractionalPart` times a vanishing factor goes to 0; and
+    `Limit[Mod[a, x], x -> Infinity] = a` for `a >= 0`. (`Floor[x] - x`, which
+    oscillates, is correctly left unevaluated.)
+  - **vanishing-argument linearization** — `H[g] ~ g` for `g -> 0` and H in the
+    Sin/Tan/Sinh/Tanh/ArcSin/ArcTan/ArcSinh/ArcTanh family
+    (`Limit[x^a Sin[b/x^a], x -> Infinity] = b`); a late fallback, so an exact
+    Series expansion always wins first.
+  - **exponential decay by an ordering fact** — the decay rate is the exponent's
+    slope, and a real rate whose sign is an ordering fact decides decay
+    (`Limit[E^(a x^2 + b x)/E^(a x^2 + d x), x -> -Infinity, b > d] = 0`).
+  - **Abs of a complex argument** folds to the modulus before the limit
+    (`Limit[Abs[x + I a] - x, x -> Infinity] = 0`,
+    `Limit[x (Abs[x + I a] - x), x -> Infinity] = a^2/2`), and the integrand is
+    `Refine`d under the assumptions up front, so `Limit[Sin[a Pi + x]/x, x -> 0,
+    Assumptions -> Element[a, Integers]] = (-1)^a`.
+  - **further special-function asymptotics** — Erfc, the incomplete `Gamma[s, z]`,
+    small-argument `BesselY`, and the full Stirling `Gamma[z]` (rewritten to an
+    explicit power/exp form, never routed through `Series`).
   - domain facts imply signs (`Element[n, PositiveIntegers]` gives `n > 0`), and
     the pre-existing `Assumptions -> Abs[B] R c` power dispatch (`|B| < 1 -> 0`,
     `|B| > 1 -> ComplexInfinity`, `|B| == 1 -> Indeterminate`) is unchanged.
@@ -402,7 +585,7 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
 **See also:** [Abs](../../arithmetic/Abs/), [Log](../../elementary-functions/Log/), [Sin](../../elementary-functions/Sin/), [Cos](../../elementary-functions/Cos/), [Plus](../../arithmetic/Plus/), [Interval](../../other-advanced/Interval/), [TrigToExp](../../elementary-functions/TrigToExp/), [Expand](../../algebra/Expand/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 3.
-- G. Gruntz, *On Computing Limits in a Symbolic Manipulation System*, PhD thesis, ETH Zürich, 1996.
+- D. Gruntz, *On Computing Limits in a Symbolic Manipulation System*, PhD thesis, ETH Zürich, 1996.
 - Source: [`src/calculus/limit.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/limit.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 - Tests: [`tests/test_besselk.c`](https://github.com/stblake/mathilda/blob/main/tests/test_besselk.c)
@@ -412,41 +595,31 @@ The core `compute_limit` runs (in order): reciprocal-trig rewrite; at ±∞ a hy
 
 ## Notes & additional examples
 
-### Choosing a method
-
-`Limit` evaluates by running a cascade of strategy layers in turn; each either
-resolves the limit or hands the problem to the next. `Method -> m` restricts the
-top-level call to a single strategy group. The default `Method -> Automatic`
-runs the whole cascade in the order below. A named method computes *only* that
-group; if it does not apply to the given expression, the `Limit` is left
-unevaluated (an unrecognised method name is reported and also left unevaluated).
-
-```mathematica
-In[1]:= Limit[Sin[x]/x, x -> 0, Method -> "Series"]
-Out[1]= 1
-
-In[2]:= Limit[(2 x^2 + 1)/(x^2 + x), x -> Infinity, Method -> "RationalFunction"]
-Out[2]= 2
-
-In[3]:= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
-Out[3]= Limit[Sin[x]/x, x -> 0, Method -> "RationalFunction"]
-```
-
-| `Method` | Strategy | Typical use |
-|----------|----------|-------------|
-| `Automatic` | run every strategy below, in order | default — best all-rounder |
-| `"Substitution"` | continuity / direct substitution (via `Together`), `Abs` kink resolution, atom-substitution and one-sided probes | removable singularities, `Abs`, essential-singularity ratios |
-| `"RationalFunction"` | leading-degree comparison for `P(x)/Q(x)` | rational functions at a point or at `Infinity` |
-| `"Series"` | Taylor / Laurent / Puiseux expansion, reading the leading term | the workhorse — most `0/0` and `∞/∞` forms |
-| `"LHospital"` | L'Hospital's rule with growth guardrails | `0/0`, `∞/∞` where `Series` cannot expand |
-| `"Asymptotic"` | dominant-term / `Log` / exponential reductions at infinity, including `f^g` via `Exp[g Log f]` | limits at `Infinity`, `(1 + a/x)^x`, `Log`-of-sum |
-| `"Bounded"` | squeeze / bounded-envelope to 0 and bounded-oscillation `Interval` returns | `Sin[x^2]/x`, oscillatory numerators |
-
-The method restriction applies only to the outermost call: recursive
-sub-limits — one-sided probes, L'Hospital iterations, `Abs` splitting — always
-run the full cascade, so e.g. `Method -> "Series"` still resolves a two-sided
-pole by falling back to its one-sided branches.
-
 ### Notes
 
-`Limit[f, x -> a]` resolves the standard removable-singularity and indeterminate forms, including the classic `(1 + 1/x)^x -> E` and `0/0` cancellations such as `(x^2 - 1)/(x - 1)`. The `Direction` option selects one-sided (`"FromAbove"`/`"FromBelow"`) or complex approaches; the default is two-sided. The `Method` option (see above) selects a specific internal strategy, defaulting to `Automatic`. Results may be a finite value, `Infinity`, `ComplexInfinity`, `Indeterminate`, an `Interval`, or the original expression unevaluated when the limit cannot be determined. Iterated and joint multivariate limits are supported through the list forms of the second argument.
+- `Limit[f, x -> a]` can return a finite value, `±Infinity`, `ComplexInfinity`,
+  `Indeterminate` (for example, a bounded oscillation with no limit), or the
+  unevaluated call. The default is two-sided.
+  `Direction -> "FromAbove"`/`"FromBelow"` (or `-1`/`+1`, following Mathematica's
+  sign convention) selects one side. `Direction -> Reals`, `Complexes` or a
+  complex number such as `I` give the other approaches.
+- Calling forms: nested `Limit[f, {x -> a, y -> b}]` (the last rule is applied
+  innermost) and joint `Limit[f, {x, y} -> {a, b}]`. The joint form returns
+  `Indeterminate` when directional limits disagree, as with `x y/(x^2 + y^2)` at
+  the origin.
+- `Assumptions -> cond`, or an ambient `Assuming` / `$Assumptions`, supplies the
+  signs of parameters. It is used for exponents, rates, dominant products and
+  `Re`/`Im` decay. Without it the cascade behaves exactly as it does with no
+  assumptions.
+- `Method` values: `Automatic` (the full cascade), `"Substitution"`,
+  `"RationalFunction"`, `"Series"`, `"LHospital"`, `"Asymptotic"` (the
+  Log/dominant-term, `f^g` and special-function asymptotics layers), `"Bounded"`
+  (squeeze and `Interval`), `"Oscillatory"` (the phase normal form at infinity)
+  and `"Gruntz"`. A named method applies only to the outermost call and never
+  falls back to the full cascade. Each method is also callable as a head, for
+  example ``Limit`Gruntz[f, x -> a]``.
+- Inexact input is rationalised, solved exactly, and numericalised back.
+- Discontinuous heads at a jump are left unevaluated when the limit is
+  two-sided, for example `Limit[Floor[x], x -> 2]`. Ask for a one-sided limit
+  instead.
+- See also: `Series`, `D`, `Residue`, `NLimit`.

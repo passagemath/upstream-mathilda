@@ -5,7 +5,9 @@
 
 ## Description
 
-**`WeightedGraphQ[g] gives True if g carries edge weights (EdgeWeight).`**
+**`WeightedGraphQ[g]`**
+
+gives True if g carries edge weights (EdgeWeight).
 
 ## Examples (5)
 

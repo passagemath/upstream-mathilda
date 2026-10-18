@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageCompose[base, over] alpha-composites over onto base, centred, keeping base's size and clipping whatever falls outside. ImageCompose[base, over, {x, y}] centres the overlay at {x, y} in image coordinates -- x from the left, y from the BOTTOM. ImageCompose[base, {over, a}] scales the overlay's opacity by a. A grey image composed with a colour one produces colour: grey means the same value in every channel, so it is replicated rather than zero-padded.`**
+**`ImageCompose[base, over]`**
+
+alpha-composites over onto base, centred, keeping base's size and clipping whatever falls outside. ImageCompose\[base, over, {x, y}\] centres the overlay at {x, y} in image coordinates -- x from the left, y from the BOTTOM. ImageCompose\[base, {over, a}\] scales the overlay's opacity by a. A grey image composed with a colour one produces colour: grey means the same value in every channel, so it is replicated rather than zero-padded.
 
 ## Examples (19)
 

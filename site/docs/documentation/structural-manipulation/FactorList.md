@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FactorList[poly] gives a list of the irreducible factors of poly together`**
+**`FactorList[poly]`**
+
+gives a list of the irreducible factors of poly together
 
 <details>
 <summary>Notes</summary>

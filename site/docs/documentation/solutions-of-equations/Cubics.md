@@ -18,7 +18,7 @@ In[1]:= Solve[x^3 + x + 1 == 0, x]
 Out[1]= {{x -> Root[1 + #1 + #1^3 &, 1]}, {x -> Root[1 + #1 + #1^3 &, 2]}, {x -> Root[1 + #1 + #1^3 &, 3]}}
 
 In[2]:= Solve[x^3 + x + 1 == 0, x, Cubics -> True]
-Out[2]= {{x -> -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(1/3))}, {x -> -1/3 (-3 (-1)^(2/3)/(1/2 (27 + 3 Sqrt[93]))^(1/3) - (-1)^(1/3) (1/2 (27 + 3 Sqrt[93]))^(1/3))}, {x -> -1/3 (3 (-1)^(1/3)/(1/2 (27 + 3 Sqrt[93]))^(1/3) + (-1)^(2/3) (1/2 (27 + 3 Sqrt[93]))^(1/3))}}
+Out[2]= {{x -> -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(1/3))}, {x -> -1/3 ((-1)^(2/3) (1/2 (27 + 3 Sqrt[93]))^(1/3) + (3 (-1)^(1/3))/(1/2 (27 + 3 Sqrt[93]))^(1/3))}, {x -> -1/3 (-(3 (-1)^(2/3))/(1/2 (27 + 3 Sqrt[93]))^(1/3) - (-1)^(1/3) (1/2 (27 + 3 Sqrt[93]))^(1/3))}}
 ```
 
 ## Implementation notes
@@ -31,7 +31,7 @@ Out[2]= {{x -> -1/3 ((1/2 (27 + 3 Sqrt[93]))^(1/3) - 3/(1/2 (27 + 3 Sqrt[93]))^(
 
 **See also:** [Solve](../../solutions-of-equations/Solve/)
 
-- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
+- Source: [`src/solve/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
 
 ## Notes & additional examples

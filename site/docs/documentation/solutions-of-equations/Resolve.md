@@ -11,38 +11,102 @@
 
 Eliminates the quantifiers (Exists, ForAll) from expr over the domain dom (Reals; the default and only supported domain), returning an equivalent quantifier-free statement -- True or False for a fully quantified sentence, or a condition on the remaining free variables (one or more). Alternating quantifier prefixes are eliminated inner-block-first. An undecidable sign, a non-Reals domain, or an unsupported case is left unevaluated rather than guessed.
 
-## Examples (4)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (4)
+### Basic examples (6)
+
+```mathematica
+In[1]:= Resolve[ForAll[x, x^2 + a x + 1 > 0], Reals]
+Out[1]= -2 < a < 2
+
+In[2]:= Resolve[Exists[x, x^2 + b x + c == 0], Reals]
+Out[2]= c <= 1/4 b^2
+
+In[3]:= Resolve[ForAll[x, Abs[x] < d, x^2 < 9], Reals]
+Out[3]= d <= 3
+
+In[4]:= Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals]
+Out[4]= True
+
+In[5]:= Resolve[ForAll[eps, eps > 0, Exists[nn, nn > 0, ForAll[x, x > nn, Abs[1/x] < eps]]], Reals]
+Out[5]= True
+
+In[6]:= Resolve[Exists[{x, y, z}, x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && x^2 + y^2 + z^2 > 4], Reals]
+Out[6]= False
+```
+
+### Applications (10)
 
 An inverse for a exists exactly when a != 0
 
 ```mathematica
-In[1]:= Resolve[Exists[x, a x == 1], Reals]
-Out[1]= a != 0
+In[7]:= Resolve[Exists[x, a x == 1], Reals]
+Out[7]= a != 0
 ```
 
 Discriminant band for a positive-definite quadratic
 
 ```mathematica
-In[2]:= Resolve[ForAll[x, x^2 + a x + 1 > 0], Reals]
-Out[2]= -2 < a < 2
+In[8]:= Resolve[ForAll[x, x^2 + a x + 1 > 0], Reals]
+Out[8]= -2 < a < 2
 ```
 
-Fully quantified sentence, decides to True
+Parametric elimination of a quartic: q below the minimum value 3 (p/4)^(4/3)
 
 ```mathematica
-In[3]:= Resolve[Exists[x, x^2 == 2 && x > 0]]
-Out[3]= True
+In[9]:= Resolve[Exists[x, x^4 + p x + q < 0], Reals]
+Out[9]= p < 0 && q < (27/256 p^4)^(1/3) || p == 0 && q < 0 || p > 0 && q < (27/256 p^4)^(1/3)
 ```
 
-An alternating prefix, eliminated inner-block-first
+An alternating prefix, eliminated inner block first
 
 ```mathematica
-In[4]:= Resolve[ForAll[x, Exists[y, y > x]]]
-Out[4]= True
+In[10]:= Resolve[ForAll[x, Exists[y, y > x]]]
+Out[10]= True
+```
+
+A restricted quantifier whose Abs is case-split before the CAD
+
+```mathematica
+In[11]:= Resolve[ForAll[x, Abs[x] < d, x^2 < 9], Reals]
+Out[11]= d <= 3
+```
+
+The epsilon-delta proof that 3 x - 1 tends to 5 at x = 2
+
+```mathematica
+In[12]:= Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals]
+Out[12]= True
+```
+
+The wrong limit 6 is refuted
+
+```mathematica
+In[13]:= Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del, Abs[(3 x - 1) - 6] < eps]]], Reals]
+Out[13]= False
+```
+
+A limit at infinity, decidable once 1/x is cleared to polynomial form
+
+```mathematica
+In[14]:= Resolve[ForAll[eps, eps > 0, Exists[nn, nn > 0, ForAll[x, x > nn, Abs[1/x] < eps]]], Reals]
+Out[14]= True
+```
+
+A three-variable sentence decided False
+
+```mathematica
+In[15]:= Resolve[Exists[{x, y, z}, x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && x^2 + y^2 + z^2 > 4], Reals]
+Out[15]= False
+```
+
+Transcendental body: no polynomial CAD, so it is left unevaluated
+
+```mathematica
+In[16]:= Resolve[Exists[x, Sin[x] == a], Reals]
+Out[16]= Resolve[Exists[x, Sin[x] == a], Reals]
 ```
 
 ## Algorithm
@@ -86,10 +150,20 @@ Elimination of a single block branches on the number of remaining free variables
 Zero free variables is a decision via `qe_decide`, which re-enters `Reduce` on the
 matrix (or its negation, for `ForAll`) and reads emptiness, returning `True` or
 `False`. One or more free variables is parametric QE via `qe_parametric` →
-`reduce_cad_qe`: after `Reals` preprocessing the matrix becomes an `RForm` fed to an
-iterated McCallum projection, whose sign formula is emitted over the free-variable
-subspace (free-variable names are sorted alphabetically first, so the answer is
-stable). A fully quantified sentence therefore resolves to `True`/`False`; a
+`reduce_cad_qe`. Before the CAD sees the matrix, `qe_parametric` runs
+`reduce_piecewise_preprocess`, the real-domain preprocessing of the base `Reduce`
+engine. It case-splits `Abs`, `Max`/`Min`, `Piecewise`, `Sign` and the other
+selectors, rationalises square roots, and (since v0.289) clears variable
+denominators to sign-exact polynomial atoms. A chained elimination can therefore carry
+an intermediate rational atom such as `m <= 1/del` into the next level, which is what
+lets ε–δ limit statements, limits at infinity and infinite limits decide. The
+matrix then becomes an `RForm` fed to an iterated McCallum projection with the
+bound variables projected out first. Its sign formula is emitted over the
+free-variable subspace, with free-variable names sorted alphabetically so the answer
+is stable. The CAD is built through `cad_build_augmented` (v0.321), the same
+well-orientedness augment-and-retry loop as plain `Reduce`: a positive-dimensional
+fibre nullification adds coefficients and rebuilds, instead of declining
+immediately. A fully quantified sentence therefore resolves to `True`/`False`; a
 partially quantified one resolves to a condition on its free variables.
 
 **Data structures.** `Expr` trees; interned-pointer arrays for the bound and free
@@ -98,7 +172,11 @@ stacks, the `CADRegion` cell tree, the `qqbar` sign oracle) lives in
 `reduce_cad.c`.
 
 **Complexity / limits.** `Reals` is the default and only supported domain — any
-other declines. Cost is that of the CAD (doubly exponential in the variable count).
+other declines, and a first argument that is not quantified declines too
+(`Resolve[x > 0]` stays unevaluated). Cost is that of the CAD, doubly
+exponential in the variable count. The CAD's loop-head deadline polls make
+`TimeConstrained[Resolve[...], t]` return promptly. A transcendental body
+(`Exists[x, Sin[x] == a]`) has no polynomial CAD and declines.
 By the engine's hard invariant, an undecidable sign, a non-`Reals` domain, an
 unsupported construct, or an inner block whose elimination declines all return
 `NULL`, leaving the `Resolve[...]` call unevaluated rather than returning a wrong
@@ -120,20 +198,25 @@ formula.
 
 ### Notes
 
-`Resolve[expr]` eliminates the quantifiers (`Exists`, `ForAll`) from `expr`,
-returning an equivalent quantifier-free statement: `True` or `False` for a fully
-quantified sentence, or a condition on the remaining free variables otherwise. It
-is the dedicated quantifier-elimination front-end — its argument must be a
-quantified head, and it shares the engine `Reduce` uses when its own input happens
-to be quantified. `Resolve[expr, dom]` names the domain, but **Reals** is the
-default and only supported one.
-
-Alternating quantifier prefixes such as `ForAll[x, Exists[y, y > x]]` are handled
-by eliminating the innermost block to a quantifier-free formula and then
-re-eliminating the enclosing block over it, composing to arbitrary depth. The
-parametric case is driven by a Cylindrical Algebraic Decomposition that projects
-away the bound variables and emits a sign formula over the free ones.
-
-`Resolve` follows the engine's soundness rule: an undecidable sign, a non-`Reals`
-domain, or a construct outside the supported fragment leaves the call unevaluated
-rather than returning a wrong formula.
+- `Resolve[expr]` and `Resolve[expr, Reals]` eliminate the quantifiers
+  `Exists` and `ForAll` from `expr`. A fully quantified sentence gives
+  `True` or `False`; otherwise the result is an equivalent quantifier-free
+  condition on the free variables. The first argument must be quantified,
+  so `Resolve[x > 0]` stays unevaluated. A quantified statement inside
+  `Reduce` goes through the same engine.
+- **Domain.** `Reals` is the default and the only domain supported. Any
+  other domain declines.
+- **What it handles.** It handles polynomial bodies, and also bodies with
+  `Abs`, `Max`/`Min`, piecewise selectors, square roots, or rational atoms
+  with variable denominators, all rewritten to polynomial branches first.
+  The restricted form `ForAll[x, cond, body]` can appear at any level of
+  an alternating prefix. Together these make ε–δ statements decidable for
+  semialgebraic functions, including limits at infinity and infinite
+  limits.
+- **Soundness rule.** An undecidable sign, a non-`Reals` domain, a
+  transcendental body, or a free leading coefficient that mixes a degree
+  drop with an irrational boundary all leave the call unevaluated, rather
+  than return a formula that might be wrong.
+- `Protected`. Symbolic only.
+- See also: `Reduce`, `Exists`, `ForAll`, `FindInstance`,
+  `CylindricalDecomposition`.

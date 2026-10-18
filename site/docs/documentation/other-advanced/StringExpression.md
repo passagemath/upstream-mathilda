@@ -5,9 +5,9 @@
 
 ## Description
 
-**`StringExpression[p1, p2, ...] or p1 ~~ p2 ~~ ...`**
+**`StringExpression[p1, p2, ...]`**
 
-Represents a sequence of string patterns to be matched consecutively.
+or p1 ~~ p2 ~~ ... Represents a sequence of string patterns to be matched consecutively.
 
 ## Examples (3)
 
@@ -68,6 +68,7 @@ replacement spec used by `StringReplace`.
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
 - Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 - Tests: [`tests/test_stringcontainsq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringcontainsq.c)
+- Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
 - Tests: [`tests/test_stringposition.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringposition.c)
 
 ## Notes & additional examples

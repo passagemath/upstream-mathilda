@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ConvexHullRegion[{{x1, y1}, ...}] gives the convex hull of a set of 2D points: a Polygon with the hull vertices in counterclockwise order, a Line for collinear input, or a Point for a single point.`**
+**`ConvexHullRegion[{{x1, y1}, ...}]`**
+
+gives the convex hull of a set of 2D points: a Polygon with the hull vertices in counterclockwise order, a Line for collinear input, or a Point for a single point.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphPlot[h, opts] gives a Graphics object drawing the hypergraph h (or a list of hyperedges): vertices placed by the stress layout of the star expansion, each hyperedge of 3 or more vertices a translucent rounded hull in its own palette colour, one of 2 a stadium and one of 1 a circle around its vertex, vertex disks on top. Options: VertexLabels, VertexCoordinates, VertexStyle and GraphLayout as in GraphPlot; others pass through to Graphics.`**
+**`HypergraphPlot[h, opts]`**
+
+gives a Graphics object drawing the hypergraph h (or a list of hyperedges): vertices placed by the stress layout of the star expansion, each hyperedge of 3 or more vertices a translucent rounded hull in its own palette colour, one of 2 a stadium and one of 1 a circle around its vertex, vertex disks on top. Options: VertexLabels, VertexCoordinates, VertexStyle and GraphLayout as in GraphPlot; others pass through to Graphics.
 
 ## Examples (8)
 

@@ -5,11 +5,17 @@
 
 ## Description
 
-**`Continue[] proceeds to the next iteration of the nearest enclosing Do, For, or While loop.`**
+**`Continue[]`**
 
-**`Continue[] skips the remainder of the current loop body.`**
+proceeds to the next iteration of the nearest enclosing Do, For, or While loop.
 
-**`Continue[] takes effect as soon as it is evaluated.`**
+**`Continue[]`**
+
+skips the remainder of the current loop body.
+
+**`Continue[]`**
+
+takes effect as soon as it is evaluated.
 
 <details>
 <summary>Notes</summary>

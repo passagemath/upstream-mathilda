@@ -5,7 +5,9 @@
 
 ## Description
 
-**`UniformDistribution[{lo, hi}] represents a continuous uniform distribution; UniformDistribution[] is uniform on {0, 1}.`**
+**`UniformDistribution[{lo, hi}]`**
+
+represents a continuous uniform distribution; UniformDistribution\[\] is uniform on {0, 1}.
 
 ## Examples (3)
 

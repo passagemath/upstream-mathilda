@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SubresultantPolynomialRemainders[a, b, x] gives the polynomial-remainder`**
+**`SubresultantPolynomialRemainders[a, b, x]`**
+
+gives the polynomial-remainder
 
 <details>
 <summary>Notes</summary>

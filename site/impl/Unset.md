@@ -11,9 +11,13 @@ inner head. A non-assignable left-hand side (e.g. `Unset[5]`) returns `NULL`.
 
 A `Protected` owner is refused with `Unset::wrsym` (mirroring `Set`),
 returning `Null`. Otherwise `symtab_remove_matching_rule(name, lhs, own_value)`
-deletes exactly the rule whose stored pattern equals `lhs`, leaving the symbol's
-other definitions, attributes, and remaining rules intact. The head returns
-`Null`.
+deletes exactly one rule, leaving the symbol's other definitions, attributes and
+remaining rules intact. To find it, the function canonicalizes the query the way
+`add_rule` canonicalized the stored patterns (`pattern_canonicalize`), then
+alpha-normalizes both sides (`pattern_alpha_normalize`). So `f[y_] =.` removes
+a rule defined as `f[x_] := ...`. A removal bumps the evaluation clock so that
+cached results which relied on the rule are dropped. The head returns `Null`
+whether or not a rule was found.
 
 **Attributes & limits.** `Unset` carries `HoldFirst | Protected`, so the target
 is not evaluated to its current value before the rule is located. It takes one

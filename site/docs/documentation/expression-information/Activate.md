@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Activate[expr] reactivates every Inactive[h] in expr (replacing Inactive[h] by h) and re-evaluates, so an inactive integral Inactive[Integrate][g,x] becomes Integrate[g,x] and evaluates.`**
+**`Activate[expr]`**
+
+reactivates every Inactive\[h\] in expr (replacing Inactive\[h\] by h) and re-evaluates, so an inactive integral Inactive\[Integrate\]\[g,x\] becomes Integrate\[g,x\] and evaluates.
 
 ## Examples (3)
 

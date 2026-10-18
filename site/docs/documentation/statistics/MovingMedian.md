@@ -69,7 +69,7 @@ Out[8]= {9/2, 9/2, 4, 4, 4, 9/2, 9/2, 5/2, 1}
 
 **See also:** [Median](../../data-structures/Median/), [NumericQ](../../expression-information/NumericQ/), [Pi](../../mathematical-constants/Pi/), [E](../../mathematical-constants/E/), [List](../../other-advanced/List/)
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)

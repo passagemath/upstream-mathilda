@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphPlot[g, opts] gives a Graphics object drawing the graph g (or a list of rules {u -> v, ...}). The default layout is deterministic: tidy layered trees for branching forests, layered drawings for DAGs, stress majorization otherwise, with components packed side by side. Options: GraphLayout -> "StressEmbedding" | "SpringElectricalEmbedding" | "CircularEmbedding" | "LayeredEmbedding" | "BipartiteEmbedding" | "GridEmbedding"; VertexCoordinates -> {{x,y}, ...} or {v -> {x,y}, ...}; VertexLabels -> None | "Name" | Automatic | {v -> lbl, ...}; GraphHighlight -> {v, e, ...} (red, thicker); VertexStyle and EdgeStyle -> a colour or {item -> colour, ...}; EdgeLabels -> "EdgeWeight" | {e -> lbl}; VertexSize -> d (diameter in edge lengths). Directed edges get arrowheads that stop at the target vertex. Other options (ImageSize, PlotLabel, ...) pass through to Graphics.`**
+**`GraphPlot[g, opts]`**
+
+gives a Graphics object drawing the graph g (or a list of rules {u -\> v, ...}). The default layout is deterministic: tidy layered trees for branching forests, layered drawings for DAGs, stress majorization otherwise, with components packed side by side. Options: GraphLayout -\> "StressEmbedding" | "SpringElectricalEmbedding" | "CircularEmbedding" | "LayeredEmbedding" | "BipartiteEmbedding" | "GridEmbedding"; VertexCoordinates -\> {{x,y}, ...} or {v -\> {x,y}, ...}; VertexLabels -\> None | "Name" | Automatic | {v -\> lbl, ...}; GraphHighlight -\> {v, e, ...} (red, thicker); VertexStyle and EdgeStyle -\> a colour or {item -\> colour, ...}; EdgeLabels -\> "EdgeWeight" | {e -\> lbl}; VertexSize -\> d (diameter in edge lengths). Directed edges get arrowheads that stop at the target vertex. Other options (ImageSize, PlotLabel, ...) pass through to Graphics.
 
 ## Examples (13)
 

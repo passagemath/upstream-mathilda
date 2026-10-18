@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Image3D[data] is a volumetric image, normalising to Image3D[data, type]. The data is a depth x height x width array of voxels, or depth x height x width x channels for colour, so it is indexed data[[z, y, x]] with slices outermost. ImageDimensions reports {width, height, depth} -- FULLY REVERSED from that order, which is Mathematica's convention. Type inference and the accessors match Image: ImageQ is False for a volume (use Image3DQ), while ImageDimensions, ImageChannels, ImageType and ImageData all accept either rank.`**
+**`Image3D[data]`**
+
+is a volumetric image, normalising to Image3D\[data, type\]. The data is a depth x height x width array of voxels, or depth x height x width x channels for colour, so it is indexed data\[\[z, y, x\]\] with slices outermost. ImageDimensions reports {width, height, depth} -- FULLY REVERSED from that order, which is Mathematica's convention. Type inference and the accessors match Image: ImageQ is False for a volume (use Image3DQ), while ImageDimensions, ImageChannels, ImageType and ImageData all accept either rank.
 
 ## Examples (71)
 

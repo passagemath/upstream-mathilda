@@ -1,0 +1,955 @@
+{
+ "budget_s": 20.0,
+ "shapes": {
+  "u64 semiprime (2\u00d732-bit)": "NextPrime[2^31 + 12345] NextPrime[2^32 - 999]",
+  "bal20": "NextPrime[3 10^9] NextPrime[7 10^9]",
+  "bal30": "NextPrime[3 10^14] NextPrime[7 10^14]",
+  "bal40": "NextPrime[3 10^19] NextPrime[7 10^19]",
+  "bal60": "NextPrime[3 10^29] NextPrime[7 10^29]",
+  "p10 x p50": "NextPrime[10^9] NextPrime[10^50]",
+  "p20 x p80": "NextPrime[10^19] NextPrime[10^79]",
+  "close (60d, |p-q|~1e6)": "NextPrime[10^30] NextPrime[10^30 + 10^6]",
+  "smooth p-1 (p25 x p40)": "(2 NestWhile[# + 1 &, 1, ! PrimeQ[2 # Product[Prime[i], {i, 2, 18}] + 1] &] Product[Prime[i], {i, 2, 18}] + 1) NextPrime[10^40]",
+  "smooth p+1 (p25 x p40)": "(2 NestWhile[# + 1 &, 1, ! PrimeQ[2 # Product[Prime[i], {i, 2, 18}] - 1] &] Product[Prime[i], {i, 2, 18}] - 1) NextPrime[10^40]",
+  "RBD-structured (88d)": "742245361114170698080188160556986382238609541182118959142360194921632978579427957105431",
+  "F7 = 2^128+1": "2^128 + 1"
+ },
+ "results": [
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.000304
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.065726
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "PollardRho",
+   "status": "OK",
+   "seconds": 0.000189
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.43609
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "Lehman",
+   "status": "OK",
+   "seconds": 0.003762
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "ShanksSquareForms",
+   "status": "OK",
+   "seconds": 0.002898
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "CFRAC",
+   "status": "OK",
+   "seconds": 0.007545
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "Dixon",
+   "status": "OK",
+   "seconds": 0.597036
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.000236
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.003159
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.003891
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.004359
+  },
+  {
+   "shape": "u64 semiprime (2\u00d732-bit)",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 0.849208
+  },
+  {
+   "shape": "bal20",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.004337
+  },
+  {
+   "shape": "bal20",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.056091
+  },
+  {
+   "shape": "bal20",
+   "method": "PollardRho",
+   "status": "OK",
+   "seconds": 0.006304
+  },
+  {
+   "shape": "bal20",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.432409
+  },
+  {
+   "shape": "bal20",
+   "method": "Lehman",
+   "status": "OK",
+   "seconds": 0.005445
+  },
+  {
+   "shape": "bal20",
+   "method": "ShanksSquareForms",
+   "status": "OK",
+   "seconds": 0.002949
+  },
+  {
+   "shape": "bal20",
+   "method": "CFRAC",
+   "status": "OK",
+   "seconds": 0.010872
+  },
+  {
+   "shape": "bal20",
+   "method": "Dixon",
+   "status": "OK",
+   "seconds": 0.723474
+  },
+  {
+   "shape": "bal20",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.005489
+  },
+  {
+   "shape": "bal20",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.138596
+  },
+  {
+   "shape": "bal20",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.397882
+  },
+  {
+   "shape": "bal20",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.006884
+  },
+  {
+   "shape": "bal20",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 0.857275
+  },
+  {
+   "shape": "bal30",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.011572
+  },
+  {
+   "shape": "bal30",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.067131
+  },
+  {
+   "shape": "bal30",
+   "method": "PollardRho",
+   "status": "OK",
+   "seconds": 1.36886
+  },
+  {
+   "shape": "bal30",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.452562
+  },
+  {
+   "shape": "bal30",
+   "method": "Lehman",
+   "status": "OK",
+   "seconds": 0.004753
+  },
+  {
+   "shape": "bal30",
+   "method": "ShanksSquareForms",
+   "status": "OK",
+   "seconds": 0.139349
+  },
+  {
+   "shape": "bal30",
+   "method": "CFRAC",
+   "status": "OK",
+   "seconds": 0.049592
+  },
+  {
+   "shape": "bal30",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal30",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.010962
+  },
+  {
+   "shape": "bal30",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.15359
+  },
+  {
+   "shape": "bal30",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.406476
+  },
+  {
+   "shape": "bal30",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.07587
+  },
+  {
+   "shape": "bal30",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 1.12399
+  },
+  {
+   "shape": "bal40",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.050578
+  },
+  {
+   "shape": "bal40",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.058224
+  },
+  {
+   "shape": "bal40",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal40",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.385935
+  },
+  {
+   "shape": "bal40",
+   "method": "Lehman",
+   "status": "OK",
+   "seconds": 0.050103
+  },
+  {
+   "shape": "bal40",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 8.30004e-05
+  },
+  {
+   "shape": "bal40",
+   "method": "CFRAC",
+   "status": "OK",
+   "seconds": 0.519262
+  },
+  {
+   "shape": "bal40",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal40",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.047648
+  },
+  {
+   "shape": "bal40",
+   "method": "PollardPMinus1",
+   "status": "PARTIAL",
+   "seconds": 0.256074
+  },
+  {
+   "shape": "bal40",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.564058
+  },
+  {
+   "shape": "bal40",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 2.24129
+  },
+  {
+   "shape": "bal40",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 1.68096
+  },
+  {
+   "shape": "bal60",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.801586
+  },
+  {
+   "shape": "bal60",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.060304
+  },
+  {
+   "shape": "bal60",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal60",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.403235
+  },
+  {
+   "shape": "bal60",
+   "method": "Lehman",
+   "status": "PARTIAL",
+   "seconds": 10.7626
+  },
+  {
+   "shape": "bal60",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 9.3e-05
+  },
+  {
+   "shape": "bal60",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal60",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "bal60",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.490281
+  },
+  {
+   "shape": "bal60",
+   "method": "PollardPMinus1",
+   "status": "PARTIAL",
+   "seconds": 0.301607
+  },
+  {
+   "shape": "bal60",
+   "method": "WilliamsPPlus1",
+   "status": "PARTIAL",
+   "seconds": 0.682939
+  },
+  {
+   "shape": "bal60",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 9.53845
+  },
+  {
+   "shape": "bal60",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 2.74149
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.075691
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.056295
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "PollardRho",
+   "status": "OK",
+   "seconds": 0.025232
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.446893
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "Lehman",
+   "status": "PARTIAL",
+   "seconds": 10.2418
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000109999
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.581632
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.320241
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.344509
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.020157
+  },
+  {
+   "shape": "p10 x p50",
+   "method": "BlakeRationalBaseDescent",
+   "status": "OK",
+   "seconds": 0.002381
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.185592
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.061887
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.44097
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "Lehman",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000138
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "QuadraticSieve",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.289816
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.772685
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.233614
+  },
+  {
+   "shape": "p20 x p80",
+   "method": "BlakeRationalBaseDescent",
+   "status": "OK",
+   "seconds": 0.004404
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.007325
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.064702
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "Fermat",
+   "status": "OK",
+   "seconds": 0.00013
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "Lehman",
+   "status": "OK",
+   "seconds": 0.005058
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000108
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.717155
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "PollardPMinus1",
+   "status": "PARTIAL",
+   "seconds": 0.299662
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "WilliamsPPlus1",
+   "status": "PARTIAL",
+   "seconds": 0.683378
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 5.55464
+  },
+  {
+   "shape": "close (60d, |p-q|~1e6)",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 2.87325
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.025286
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.068526
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.403681
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "Lehman",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000104
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 1.27494
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.133819
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.347262
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.479569
+  },
+  {
+   "shape": "smooth p-1 (p25 x p40)",
+   "method": "BlakeRationalBaseDescent",
+   "status": "OK",
+   "seconds": 0.003811
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.093087
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.056613
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.346794
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "Lehman",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 8.79997e-05
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 1.44984
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "PollardPMinus1",
+   "status": "PARTIAL",
+   "seconds": 0.314799
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.62701
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 8.52149
+  },
+  {
+   "shape": "smooth p+1 (p25 x p40)",
+   "method": "BlakeRationalBaseDescent",
+   "status": "OK",
+   "seconds": 0.002528
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.047071
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.063588
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "PollardRho",
+   "status": "OK",
+   "seconds": 0.581036
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.41206
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "Lehman",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000137
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "CFRAC",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "QuadraticSieve",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "PollardPMinus1",
+   "status": "OK",
+   "seconds": 0.182518
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "WilliamsPPlus1",
+   "status": "OK",
+   "seconds": 0.788634
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.023577
+  },
+  {
+   "shape": "RBD-structured (88d)",
+   "method": "BlakeRationalBaseDescent",
+   "status": "OK",
+   "seconds": 0.010442
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "Automatic",
+   "status": "OK",
+   "seconds": 0.041567
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "TrialDivision",
+   "status": "PARTIAL",
+   "seconds": 0.057631
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "PollardRho",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "Fermat",
+   "status": "PARTIAL",
+   "seconds": 0.392548
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "Lehman",
+   "status": "PARTIAL",
+   "seconds": 0.115104
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "ShanksSquareForms",
+   "status": "PARTIAL",
+   "seconds": 0.000145
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "CFRAC",
+   "status": "OK",
+   "seconds": 0.40575
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "Dixon",
+   "status": "TIMEOUT",
+   "seconds": null
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "QuadraticSieve",
+   "status": "OK",
+   "seconds": 0.040581
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "PollardPMinus1",
+   "status": "PARTIAL",
+   "seconds": 0.290689
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "WilliamsPPlus1",
+   "status": "PARTIAL",
+   "seconds": 0.733117
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "ECM",
+   "status": "OK",
+   "seconds": 0.200798
+  },
+  {
+   "shape": "F7 = 2^128+1",
+   "method": "BlakeRationalBaseDescent",
+   "status": "PARTIAL",
+   "seconds": 1.55918
+  }
+ ]
+}

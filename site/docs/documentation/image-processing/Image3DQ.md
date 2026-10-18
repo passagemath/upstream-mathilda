@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Image3DQ[expr] gives True if expr is a valid volumetric image in canonical form. Malformed input to Image3D stays unevaluated, so this is how validity is tested.`**
+**`Image3DQ[expr]`**
+
+gives True if expr is a valid volumetric image in canonical form. Malformed input to Image3D stays unevaluated, so this is how validity is tested.
 
 ## Examples (37)
 

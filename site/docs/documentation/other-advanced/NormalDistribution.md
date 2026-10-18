@@ -5,7 +5,9 @@
 
 ## Description
 
-**`NormalDistribution[mu, sigma] represents a normal distribution; NormalDistribution[] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.`**
+**`NormalDistribution[mu, sigma]`**
+
+represents a normal distribution; NormalDistribution\[\] is the standard normal. Unlike a fitted model it prints its parameters in full, because they are what the user specified rather than an implementation detail.
 
 ## Examples (4)
 

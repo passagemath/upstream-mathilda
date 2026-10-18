@@ -9,7 +9,9 @@
 
 maintains expr in an unevaluated form.
 
-**`Evaluate[expr] inside Hold overrides the hold and evaluates expr once.`**
+**`Evaluate[expr]`**
+
+inside Hold overrides the hold and evaluates expr once.
 
 <details>
 <summary>Notes</summary>

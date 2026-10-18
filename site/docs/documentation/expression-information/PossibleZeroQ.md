@@ -5,9 +5,13 @@
 
 ## Description
 
-**`PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.`**
+**`PossibleZeroQ[expr]`**
 
-**`PossibleZeroQ[expr, Assumptions -> assum] tests under the assumptions assum; it also respects an ambient Assuming[] / $Assumptions scope. Assumptions restrict the numeric sampler to the assumed region (integer, real or complex domain, sign, range, and Re/Im-part constraints), so identities that hold only there are recognised.`**
+gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.
+
+**`PossibleZeroQ[expr, Assumptions -> assum]`**
+
+tests under the assumptions assum; it also respects an ambient Assuming\[\] / $Assumptions scope. Assumptions restrict the numeric sampler to the assumed region (integer, real or complex domain, sign, range, and Re/Im-part constraints), so identities that hold only there are recognised.
 
 <details>
 <summary>Notes</summary>
@@ -16,7 +20,7 @@ The general problem of deciding whether an expression is zero is undecidable; Po
 
 </details>
 
-## Examples (18)
+## Examples (23)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -71,23 +75,76 @@ In[13]:= Gamma[x] - Gamma[x]
 Out[13]= 0
 ```
 
-### Applications (5)
+### Applications (10)
+
+A rational identity, decided exactly by Together and Cancel
 
 ```mathematica
 In[14]:= PossibleZeroQ[(x - 1) (x + 1) - (x^2 - 1)]
 Out[14]= True
+```
 
-In[15]:= PossibleZeroQ[x^2 + 1]
-Out[15]= False
+A nested-radical denesting, confirmed on the MPFR ladder
 
-In[16]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
+```mathematica
+In[15]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
+Out[15]= True
+```
+
+Constant-phase angle expansion in the exact trig/exp test
+
+```mathematica
+In[16]:= PossibleZeroQ[Tan[Pi/2 - x] - Cot[x]]
 Out[16]= True
+```
 
-In[17]:= PossibleZeroQ[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
+Huge operands: the cancellation is judged by its trend up to 1000 bits
+
+```mathematica
+In[17]:= PossibleZeroQ[Cosh[14]^30 - (1 - Tanh[14]^2)^(-15)]
 Out[17]= True
+```
 
-In[18]:= PossibleZeroQ[Log[2] + Log[3] - Log[6]]
-Out[18]= True
+The same scale with a genuine +1 is rejected
+
+```mathematica
+In[18]:= PossibleZeroQ[Cosh[14]^30 - (1 - Tanh[14]^2)^(-15) + 1]
+Out[18]= False
+```
+
+Numeric-function declines are re-drawn, not taken as undecidable
+
+```mathematica
+In[19]:= PossibleZeroQ[PolyLog[2, x^2] + 1]
+Out[19]= False
+```
+
+Structural certificate: an exponential never vanishes
+
+```mathematica
+In[20]:= PossibleZeroQ[-E^(-a x)]
+Out[20]= False
+```
+
+Sampling is confined to the assumed region
+
+```mathematica
+In[21]:= PossibleZeroQ[Sqrt[x^2] - x, Assumptions -> x > 0]
+Out[21]= True
+```
+
+A coupling inequality is enforced by rejection sampling
+
+```mathematica
+In[22]:= PossibleZeroQ[{Max[x, y] - x, Max[x, y] - y}, Assumptions -> x > y]
+Out[22]= {True, False}
+```
+
+Zero on the integer lattice only
+
+```mathematica
+In[23]:= PossibleZeroQ[Exp[2 Pi I k] - 1, Assumptions -> Element[k, Integers]]
+Out[23]= True
 ```
 
 ## Algorithm
@@ -137,14 +194,70 @@ Pipeline (early exit at any stage that yields a definite verdict):
 
 ## Implementation notes
 
-**Algorithm.** `builtin_possible_zero_q` (`src/zero_test.c`) calls `zero_test_decide`, a staged hybrid symbolic-numeric pipeline that early-exits on the first definite verdict:
+**Algorithm.** `builtin_possible_zero_q` (`src/zero_test.c`) threads a `List`
+first argument by hand and broadcasts the remaining arguments unchanged, so a
+list of assumptions is never threaded against the expressions. The head is
+not `Listable`. Next it forms the effective assumption: an
+`Assumptions -> X` option overrides `$Assumptions`, and a positional
+assumption is `And`-ed with it. With no usable facts it calls
+`zero_test_decide`; otherwise it builds an `AssumeCtx` and calls
+`zero_test_decide_assuming`. Both entries first apply
+`zt_normalize_exp_kernels`, which combines exponentials so that
+Gaussian × `Erf` style products cannot hang the later stages. They then run
+a staged pipeline that exits on the first definite verdict:
 
-- *Stage 0 — structural:* O(1) shortcuts for literal `Integer`/`Real`/`BigInt`/`MPFR` zero, `Complex[0,0]`, lists of zeros, and unbound symbols (`decide_structural`).
-- *Stage 1 — rational normalisation:* `Together ∘ Cancel` plus `Expand`, then a polynomial zero test, deciding every identity in `Q(x_1,...,x_n)` (`decide_rational`). A `True` here is trusted; a `False` is not trusted alone.
-- *Stage 2 — numeric:* for symbol-free inputs, numericalize at machine precision and compare `|z|` against an IEEE catastrophic-cancellation threshold, climbing a precision ladder (53 -> 200 -> 500 -> 1000 bits) while ambiguous; a true zero shrinks geometrically across precisions (`decide_numeric`).
-- *Stage 3 — Schwartz–Zippel:* for inputs with free symbols, substitute each free symbol with a random rational drawn from `Q[i]` (to probe branch cuts) and require several independent Stage-2 confirmations (`decide_schwartz_zippel`).
+- *Stage 0, structural* (`decide_structural`): literal zeros, `Complex[0,0]`
+  and nonzero constants are settled at once. `provably_nonzero` then
+  certifies shapes such as `c E^f`, which can never vanish, so `-E^(-a x)`
+  is `False` even though sampling sees only underflow.
+- *Guards.* A free symbol mixed with an algebraic constant, or a symbolic
+  exponent, skips straight to sampling, because `Together ∘ Cancel` over
+  `Q(α)` can fail to terminate.
+- *Stage 1, rational* (`decide_rational`): `Together ∘ Cancel` and `Expand`
+  decide identities in `Q(x_1, …, x_n)`. `False` is trusted only on the pure
+  rational-function path.
+- *Stage 1b, exact trig/exp* (`trigexp_rational_is_zero`): a rational
+  function of one kernel `t = E^(i x)` is decided by exact evaluation on a
+  Nullstellensatz grid. A constant phase `k x + c Pi` is angle-expanded
+  first (`expand_pi_phase`), so `Tan[Pi/2 - x] - Cot[x]` comes out `True`
+  rather than a spurious `False`.
+- *Stage 2, numeric* (`decide_numeric`): a symbol-free input is evaluated at
+  machine precision and checked against a cancellation threshold, then up an
+  MPFR ladder (53 → 200 → 500 → 1000 bits) while the verdict is ambiguous.
+  Once the operand scale passes `ZT_HUGE_SCALE_BITS` (2^40), the machine
+  rejection is not trusted and `decide_numeric_huge_scale` reads the trend
+  of the residual across the ladder: a plateau means nonzero, shrinking to
+  the top rung means zero.
+- *Stage 3, Schwartz–Zippel* (`decide_schwartz_zippel_core`): each free
+  symbol is replaced by a random real point with |v| ≥ 1, or by a point
+  drawn from a per-symbol `SampleSpec` (real, integer or complex channels,
+  with bounds) when assumptions apply. `ZT_SCREEN_SAMPLES` = 24 screening
+  points are followed by `ZT_CONFIRM_SAMPLES` = 4 confirmations. IEEE
+  overflow and numeric-function declines
+  (`residue_is_numeric_decline`: `PolyLog[2, z]` returning itself for a
+  large argument) are re-drawn on smaller magnitude shells, not
+  treated as undecidable. An inequality that couples two or more symbols
+  (`x > y`) is enforced by rejection sampling (`assignment_conforms`, up to
+  `ZT_CONFORM_MAX_TRIES` = 128 tries), so every test point lies inside the
+  region. A measure-zero fact (`a == b`, `Or`) cannot be sampled into, so
+  under such a fact a `False` is downgraded to unknown.
 
-**Result mapping.** A definite `False` returns `False`; both `True` and `UNKNOWN` return `True`, following the documented "assume zero when uncertain" behaviour (the accompanying `PossibleZeroQ::ztest1` message is not emitted). The symbol is `Listable`.
+Under assumptions, only `True` from the exact stages is trusted: an
+unconditional `False` can be wrong on an integer lattice, as with
+`E^(2 Pi I k) - 1`. Constrained sampling alone settles `False`.
+
+**Result mapping.** `False` is returned only for a definite `False`. Both
+`True` and unknown give `True`, the documented "assume zero when
+uncertain" behaviour, and no `PossibleZeroQ::ztest1` message is emitted.
+The attribute set is just `Protected`.
+
+**Complexity / limits.** The cost is a few symbolic normalisations plus at
+most about 28 sampled evaluations, with MPFR only on ambiguous rungs.
+Without assumptions the free symbols are sampled on the real line. A
+function that is not analytic in its argument (`Conjugate`, `Re`, `Im`)
+therefore looks like the identity there: `PossibleZeroQ[Conjugate[x] - x]`
+returns `True`. Supply an assumption such as `Element[x, Complexes]`, or
+expand with `ComplexExpand`, before relying on that verdict.
 
 **Attributes:** `Protected`.
 
@@ -165,13 +278,26 @@ Pipeline (early exit at any stage that yields a definite verdict):
 
 ### Notes
 
-`PossibleZeroQ[expr]` uses combined symbolic and numerical heuristics to decide
-whether `expr` is identically zero. It sees through polynomial cancellation
-(`(x-1)(x+1) - (x^2-1) = 0`), the Pythagorean identity
-`Sin[x]^2 + Cos[x]^2 - 1`, the nested-radical denesting
-`Sqrt[2] + Sqrt[3] = Sqrt[5 + 2 Sqrt[6]]`, and the logarithm law
-`Log[2] + Log[3] = Log[6]`. A nonzero expression like `x^2 + 1` returns
-`False`. Because deciding whether a closed-form expression is exactly zero is
-undecidable in general, `PossibleZeroQ` is a fast but not infallible test:
-`True` strongly suggests a zero and `False` rules one out for the cases it can
-analyse.
+- **Heuristic, as in Mathematica.** `PossibleZeroQ` runs exact symbolic
+  stages first (rational normalisation, the exact trig/exp kernel test,
+  structural non-zero certificates). Then come numeric evaluation on an MPFR
+  precision ladder and Schwartz–Zippel sampling at random points. `False`
+  means a definite non-zero was found. `True` means the expression was
+  proved zero, or behaved like zero at every point tested; when unsure it
+  answers `True` and prints no message.
+- **Assumptions.** `PossibleZeroQ[e, Assumptions -> a]` and an enclosing
+  `Assuming` restrict the sample points to the assumed region. That covers
+  sign and interval bounds, `Element[x, Integers]`,
+  `Element[x, Complexes]`, and inequalities coupling several variables. An
+  option replaces `$Assumptions`, and a positional assumption is conjoined
+  with it.
+- **Real sampling by default.** Without assumptions, free symbols are
+  sampled as reals. Functions that are not analytic, such as `Conjugate`,
+  `Re` and `Im`, then look like the identity:
+  `PossibleZeroQ[Conjugate[x] - x]` is `True`. Pass
+  `Assumptions -> Element[x, Complexes]` to sample off the real line, which
+  gives `False`.
+- **Threading.** A list in the first argument threads with the options
+  broadcast. The head is `Protected` and not `Listable`, so a list
+  assumption is read as one conjunction.
+- See also: `Simplify`, `Refine`, `Equal`, `ComplexExpand`.

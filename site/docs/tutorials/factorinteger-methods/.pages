@@ -1,0 +1,13 @@
+title: FactorInteger methods
+nav:
+  - index.md
+  - trial-division.md
+  - fermat-lehman.md
+  - pollard-rho.md
+  - squfof.md
+  - pminus1-pplus1.md
+  - ecm.md
+  - cfrac-dixon.md
+  - quadratic-sieve.md
+  - blake-rational-base-descent.md
+  - performance.md

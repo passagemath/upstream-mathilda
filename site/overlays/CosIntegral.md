@@ -1,54 +1,20 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= CosIntegral[2.8]
-Out[1]= 0.186488
-```
-
-```mathematica
-In[1]:= N[CosIntegral[2], 50]
-Out[1]= 0.42298082877486499569856515319825589413573775630619
-```
-
-```mathematica
-In[1]:= CosIntegral[{-Infinity, Infinity, -I Infinity, I Infinity}]
-Out[1]= {I Pi, 0, Infinity, Infinity}
-```
-
-```mathematica
-In[1]:= CosIntegral[-2.]
-Out[1]= 0.422981 + 3.14159 I
-```
-
-```mathematica
-In[1]:= CosIntegral[3. I]
-Out[1]= 4.96039 + 1.5708 I
-```
-
-```mathematica
-In[1]:= D[CosIntegral[x], x]
-Out[1]= Cos[x]/x
-```
-
-```mathematica
-In[1]:= Series[CosIntegral[x], {x, 0, 6}]
-Out[1]= EulerGamma + Log[x] - 1/4 x^2 + 1/96 x^4 - 1/4320 x^6 + O[x]^7
-```
-
-```mathematica
-In[1]:= Normal[Series[CosIntegral[x], {x, Infinity, 3}]]
-Out[1]= -Cos[x]/x^2 + Sin[x] (1/x - 2/x^3)
+In[1]:= CosIntegral[{-Infinity, Infinity, -I Infinity, I Infinity}]  (* the limits along the four axis directions *)
+In[2]:= CosIntegral[2.8]  (* machine real *)
+In[3]:= CosIntegral[3.5]  (* inside [2, 4] the real kernel uses the factored form (x - x0) Q(x) through the first zero x0 = 3.3842... *)
+In[4]:= CosIntegral[-2.]  (* a negative real lies on the cut: the value from above, Ci(2) + I Pi *)
+In[5]:= CosIntegral[3. I]  (* on the imaginary axis, CoshIntegral[3] + I Pi/2 *)
+In[6]:= CosIntegral[2.5 + I]  (* machine complex *)
+In[7]:= N[CosIntegral[2], 50]  (* arbitrary precision *)
+In[8]:= Series[CosIntegral[x], {x, 0, 6}]  (* the logarithmic Taylor series at the origin *)
+In[9]:= Normal[Series[CosIntegral[x], {x, Infinity, 3}]]  (* the trig-prefactored asymptotic expansion *)
+In[10]:= CosIntegral[-x]  (* no symmetry fold *)
 ```
 
 ### Notes
 
-`CosIntegral[z]` is the cosine integral `Ci(z) = -Integral_z^Infinity Cos[t]/t dt`.
-Unlike its sibling [`SinIntegral`](SinIntegral.md) — which is entire and odd — `Ci`
-has a logarithmic singularity at the origin (`CosIntegral[0] = -Infinity`) and a
-branch cut running along the negative real axis `(-Infinity, 0]`. On the cut it
-takes the from-above value, so for a negative real `x` the result is complex:
-`Ci(x) = Ci(|x|) + I Pi`, matching `CosIntegral[-Infinity] = I Pi`. On the imaginary
-axis `Ci(I y) = Chi(y) + I Pi/2` in terms of the hyperbolic cosine integral. Its
-derivative is `Cos[z]/z`. Numeric evaluation uses a convergent series near the
-origin and a trig-prefactored asymptotic expansion for large `|z|`, at machine or
-arbitrary (MPFR) precision. Listable.
+- `CosIntegral[z] = -∫_z^∞ Cos[t]/t dt` has a logarithmic singularity at 0 and a branch cut on `(-∞, 0]`; a negative real gives the from-above value `Ci(|x|) + I Pi`.
+- Machine arguments use the `sf_machine_expint.c` kernels (Cephes `sici` structure on the real line with a factored form through the first zero; series or E1 continued fraction in the complex plane), shared bit for bit with packed lists, `NDArray` and `Compile[]`; arbitrary precision uses the guarded series or the Stokes-corrected asymptotic expansion.
+- `D[CosIntegral[z], z] = Cos[z]/z`. Attributes: `Listable`, `NumericFunction`, `Protected`. See also `SinIntegral`, `CoshIntegral`, `ExpIntegralEi`.

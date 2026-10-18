@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BipartiteGraphQ[g] gives True if the vertices of g split into two sets with every edge running between them (edge direction is ignored).`**
+**`BipartiteGraphQ[g]`**
+
+gives True if the vertices of g split into two sets with every edge running between them (edge direction is ignored).
 
 ## Examples (8)
 

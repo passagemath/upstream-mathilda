@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.`**
+**`Divisors[n]`**
+
+gives a list of the integers that divide n. Divisors\[n, GaussianIntegers -\> True\] includes Gaussian-integer divisors.
 
 ## Examples (12)
 

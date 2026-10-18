@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Prepend[expr, elem] adds elem to the beginning of expr.`**
+**`Prepend[expr, elem]`**
+
+adds elem to the beginning of expr.
 
 ## Examples (6)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageAssemble[{{a, b}, {c, d}}] tiles a grid of images into one; ImageAssemble[{a, b}] makes a single row. Each tile keeps its natural size -- a row is as tall as its tallest tile and a column as wide as its widest, and any gap is left blank rather than stretched, since stretching would resample an image the caller did not ask to resize. Alpha survives if any tile had it.`**
+**`ImageAssemble[{{a, b}, {c, d}}]`**
+
+tiles a grid of images into one; ImageAssemble\[{a, b}\] makes a single row. Each tile keeps its natural size -- a row is as tall as its tallest tile and a column as wide as its widest, and any gap is left blank rather than stretched, since stretching would resample an image the caller did not ask to resize. Alpha survives if any tile had it.
 
 ## Examples (10)
 

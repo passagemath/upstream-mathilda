@@ -5,7 +5,9 @@
 
 ## Description
 
-**`StarGraph[n] gives the star on n vertices: the hub 1 joined to each of the n-1 leaves 2..n.`**
+**`StarGraph[n]`**
+
+gives the star on n vertices: the hub 1 joined to each of the n-1 leaves 2..n.
 
 ## Examples (10)
 

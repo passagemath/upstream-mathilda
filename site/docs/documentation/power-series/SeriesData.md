@@ -9,7 +9,9 @@
 
 represents a power series in the variable x about the point x0. The ai are the coefficients in the power series. The powers of (x - x0) that appear are nmin/den, (nmin+1)/den, ..., (nmax-1)/den, and an O\[x - x0\]^(nmax/den) term represents the omitted higher-order terms.
 
-**`Normal[expr] converts a SeriesData object into a normal expression, dropping the O-term.`**
+**`Normal[expr]`**
+
+converts a SeriesData object into a normal expression, dropping the O-term.
 
 <details>
 <summary>Notes</summary>

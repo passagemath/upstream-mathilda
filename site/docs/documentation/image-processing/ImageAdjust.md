@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageAdjust[image] stretches to the full range: the darkest pixel becomes exactly 0 and the brightest exactly 1. It is IDEMPOTENT, a second stretch being the identity. A constant image has no range to stretch and comes back unchanged, since dividing by zero is not the answer and mapping the single value to either end would be arbitrary. ImageAdjust[image, {c, b}] and [image, {c, b, g}] apply contrast c, brightness b and gamma g by a curve stated here rather than inferred: v' = (v - 1/2)(1 + c) + 1/2 + b, clipped to [0, 1], then raised to the power 1/g. Contrast pivots about mid-grey so it does not also shift brightness; clipping precedes gamma because a negative base has no real power. This curve is Mathilda's documented choice, not a claim of bit-compatibility with Mathematica. Accepts volumes as well as planes.`**
+**`ImageAdjust[image]`**
+
+stretches to the full range: the darkest pixel becomes exactly 0 and the brightest exactly 1. It is IDEMPOTENT, a second stretch being the identity. A constant image has no range to stretch and comes back unchanged, since dividing by zero is not the answer and mapping the single value to either end would be arbitrary. ImageAdjust\[image, {c, b}\] and \[image, {c, b, g}\] apply contrast c, brightness b and gamma g by a curve stated here rather than inferred: v' = (v - 1/2)(1 + c) + 1/2 + b, clipped to \[0, 1\], then raised to the power 1/g. Contrast pivots about mid-grey so it does not also shift brightness; clipping precedes gamma because a negative base has no real power. This curve is Mathilda's documented choice, not a claim of bit-compatibility with Mathematica. Accepts volumes as well as planes.
 
 ## Examples (39)
 

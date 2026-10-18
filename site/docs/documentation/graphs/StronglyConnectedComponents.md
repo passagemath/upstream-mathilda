@@ -5,7 +5,9 @@
 
 ## Description
 
-**`StronglyConnectedComponents[g] gives the strongly connected components of g (following edge directions), in the same order as ConnectedComponents on a directed graph.`**
+**`StronglyConnectedComponents[g]`**
+
+gives the strongly connected components of g (following edge directions), in the same order as ConnectedComponents on a directed graph.
 
 ## Examples (4)
 

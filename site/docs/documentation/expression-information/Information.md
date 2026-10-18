@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Information[symbol] or ?symbol returns information on symbol.`**
+**`Information[symbol]`**
+
+or ?symbol returns information on symbol.
 
 ## Examples (4)
 

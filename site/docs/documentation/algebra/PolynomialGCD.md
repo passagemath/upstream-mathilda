@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.`**
+**`PolynomialGCD[poly1, poly2, ...]`**
+
+gives the greatest common divisor of the polynomials.
 
 <details>
 <summary>Notes</summary>

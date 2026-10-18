@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MedianFilter[image, r] replaces each pixel with the median over a (2r+1) x (2r+1) neighbourhood. Unlike a Gaussian it removes an isolated outlier EXACTLY rather than attenuating and smearing it, which is what makes it the filter for salt-and-pepper noise. It is also the one filter here that is NOT separable: a sum, a maximum and a minimum all decompose because they ignore grouping, but a median depends on a value's rank within the whole window, and grouping destroys rank -- the median of row medians of {{1,2,9},{3,4,5},{6,7,8}} is 4 where the true median is 5. For an even window the lower middle is taken rather than the average of the two, so the output is always one of the inputs.`**
+**`MedianFilter[image, r]`**
+
+replaces each pixel with the median over a (2r+1) x (2r+1) neighbourhood. Unlike a Gaussian it removes an isolated outlier EXACTLY rather than attenuating and smearing it, which is what makes it the filter for salt-and-pepper noise. It is also the one filter here that is NOT separable: a sum, a maximum and a minimum all decompose because they ignore grouping, but a median depends on a value's rank within the whole window, and grouping destroys rank -- the median of row medians of {{1,2,9},{3,4,5},{6,7,8}} is 4 where the true median is 5. For an even window the lower middle is taken rather than the average of the two, so the output is always one of the inputs.
 
 ## Examples (49)
 

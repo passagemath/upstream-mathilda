@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DifferenceDelta[f, i] gives the forward difference (f /. i -> i+1) - f, the discrete analogue of D. It is the left inverse of indefinite Sum.`**
+**`DifferenceDelta[f, i]`**
+
+gives the forward difference (f /. i -\> i+1) - f, the discrete analogue of D. It is the left inverse of indefinite Sum.
 
 ## Examples (6)
 

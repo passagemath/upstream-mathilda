@@ -1,34 +1,20 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= Erfc[0]
-Out[1]= 1
-```
-
-```mathematica
-In[1]:= N[Erfc[2], 40]
-Out[1]= 0.0046777349810472658379307436327470713891081
-```
-
-```mathematica
-In[1]:= N[Erfc[1 + I], 25]
-Out[1]= -0.31615128169794764488027107 - 0.19045346923783468628410886*I
-```
-
-```mathematica
-In[1]:= Series[Erfc[x], {x, 0, 5}]
-Out[1]= 1 + -2/Sqrt[Pi] x + 2/3/Sqrt[Pi] x^3 + -1/5/Sqrt[Pi] x^5 + O[x]^6
-
-In[2]:= D[Erfc[Sqrt[x]], x]
-Out[2]= -E^(-x)/(Sqrt[Pi] Sqrt[x])
+In[1]:= {Erfc[0], Erfc[Infinity], Erfc[-Infinity]}  (* exact special values *)
+In[2]:= Erfc[10.]  (* computed as e^(-x^2) erfcx(x), with no cancellation against 1 *)
+In[3]:= 1 - Erf[10.]  (* the naive complement loses every digit *)
+In[4]:= Erfc[27.]  (* the tail is rounded once into the subnormal range *)
+In[5]:= N[Erfc[3/2], 50]  (* arbitrary-precision real through mpfr_erfc *)
+In[6]:= Erfc[1.5 - I]  (* machine complex on the shared kernel *)
+In[7]:= N[Erfc[1 + I], 25]  (* arbitrary-precision complex *)
+In[8]:= Series[Erfc[x], {x, 0, 5}]  (* the Maclaurin series of 1 - erf *)
+In[9]:= Erfc[-x]  (* no symmetry fold: erfc(-x) = 2 - erfc(x) is not applied *)
 ```
 
 ### Notes
 
-`Erfc[z] = 1 - Erf[z]` is the complementary error function, with `Erfc[0] = 1`,
-`Erfc[Infinity] = 0`, and `Erfc[-Infinity] = 2`. Real inputs evaluate through the
-cancellation-free `erfc` of libm / MPFR — important in the right tail, where the
-`N[Erfc[2], 40]` example keeps full precision instead of losing it to a `1 - Erf`
-subtraction. Complex inputs route through `1 - Erf[z]` at machine or arbitrary
-precision. The derivative is `D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(-z^2)`, and `Erfc`
-is `Listable`.
+- `Erfc[z] = 1 - Erf[z]` is entire; unlike `Erf` it is not odd, and `Erfc[-x]` is left as written.
+- Machine arguments use the `sf_machine_error.c` kernels shared bit for bit with packed lists, `NDArray` and `Compile[]`: `e^(-x²) erfcx(x)` on the real line (accurate far into the tail), and `e^(-z²) w(iz)` or Salzer's series in the complex plane.
+- Arbitrary precision uses `mpfr_erfc` (real) and the guarded complex erf series with the complement formed at working precision.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `Erf`, `Erfi`, `InverseErfc`.

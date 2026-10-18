@@ -20,45 +20,93 @@ Has a logarithmic singularity at 0 and a branch cut on (-Infinity, 0\]. Real and
 
 </details>
 
-## Examples (5)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (5)
-
-Logarithmic singularity at the origin
+### Basic examples (3)
 
 ```mathematica
-In[1]:= CoshIntegral[0]
-Out[1]= -Infinity
+In[1]:= CoshIntegral[2.8]
+Out[1]= 4.33122
+
+In[2]:= CoshIntegral[-2.]
+Out[2]= 2.45267 + 3.14159*I
+
+In[3]:= CoshIntegral[3.5 + I]
+Out[3]= 5.36668 + 4.28423*I
 ```
 
-Grows without bound on the positive real axis
+### Applications (10)
+
+The logarithmic singularity and the limits
 
 ```mathematica
-In[2]:= CoshIntegral[Infinity]
-Out[2]= Infinity
+In[4]:= {CoshIntegral[0], CoshIntegral[Infinity], CoshIntegral[I Infinity]}
+Out[4]= {-Infinity, Infinity, (1/2*I) Pi}
 ```
 
-Arbitrary-precision value through the MPFR kernel
+Machine real
 
 ```mathematica
-In[3]:= N[CoshIntegral[1], 20]
-Out[3]= 0.837866940980208240895
+In[5]:= CoshIntegral[2.8]
+Out[5]= 4.33122
+```
+
+Beside the zero x0 = 0.52382..., still relatively accurate
+
+```mathematica
+In[6]:= CoshIntegral[0.5238]
+Out[6]= -4.91387e-05
+```
+
+A negative real is on the cut: the value from above, Chi(2) + I Pi
+
+```mathematica
+In[7]:= CoshIntegral[-2.]
+Out[7]= 2.45267 + 3.14159*I
+```
+
+On the imaginary axis, CosIntegral[3] + I Pi/2
+
+```mathematica
+In[8]:= CoshIntegral[3. I]
+Out[8]= 0.11963 + 1.5708*I
+```
+
+Machine complex
+
+```mathematica
+In[9]:= CoshIntegral[3.5 + I]
+Out[9]= 5.36668 + 4.28423*I
+```
+
+Arbitrary precision
+
+```mathematica
+In[10]:= N[CoshIntegral[2], 50]
+Out[10]= 2.45266692264691452190613264749949287660178068872851
+```
+
+Threads element-wise over a packed real list
+
+```mathematica
+In[11]:= CoshIntegral[{1.0, 2.0, 3.0}]
+Out[11]= {0.837867, 2.45267, 4.96039}
+```
+
+The logarithmic Taylor series
+
+```mathematica
+In[12]:= Series[CoshIntegral[x], {x, 0, 4}]
+Out[12]= EulerGamma + Log[x] + 1/4 x^2 + 1/96 x^4 + O[x]^5
 ```
 
 The derivative is Cosh[x]/x
 
 ```mathematica
-In[4]:= D[CoshIntegral[x], x]
-Out[4]= Cosh[x]/x
-```
-
-Threads element-wise over the packed real list
-
-```mathematica
-In[5]:= CoshIntegral[{1.0, 2.0, 3.0}]
-Out[5]= {0.837867, 2.45267, 4.96039}
+In[13]:= D[CoshIntegral[x], x]
+Out[13]= Cosh[x]/x
 ```
 
 ## Algorithm
@@ -135,11 +183,24 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_coshintegral` handles `CoshIntegral[z] = Chi(z)`, the imaginary-axis sibling of `Ci` (`Chi(z) = Ci(iz) - iπ/2`), with a logarithmic singularity at `0` and a branch cut along `(-Infinity, 0]`. Exact special values first: `Chi[0] = -Infinity`, `Chi[±Infinity] = Infinity`, `Chi[±I Infinity] = ±I π/2`, `ComplexInfinity`/`Indeterminate -> Indeterminate`. A **numeric real or complex** argument routes to the MPFR kernel: for moderate `|z|` the **convergent Maclaurin series** (`Chi(z) = γ + Log(z) + Sum_{k>=1} z^{2k}/(2k(2k)!)` — the trig series with the alternating sign removed, so every term is positive and the real axis needs no cancellation guard, only a fixed 64-bit guard); the principal `Log(z)` supplies the `±iπ` cut jump. For large `|z|` the **asymptotic expansion** `sinh(z) F(z) + cosh(z) G(z)` plus a piecewise Stokes constant `K` (`-π/2` for `Im z < 0`, `π sgn⁺(Re z) - π/2` for `Im z > 0`) restores the principal branch. A negative real `x` gives the from-above value `Complex[Chi(|x|), Pi]`; machine-real results that overflow a `double` (Chi grows like `e^{|x|}`) are emitted as a 53-bit MPFR real. The complex path uses the shared `ncpx` toolkit; a `USE_MPFR=0` build uses a machine-double series/asymptotic.
+**Algorithm.** `builtin_coshintegral` evaluates `Chi(z)`, the imaginary-axis sibling of `Ci` (`Chi(z) = Ci(iz) - iπ/2`). It has a logarithmic singularity at 0 and a branch cut along `(-∞, 0]`.
 
-**Data structures.** `Expr`; the shared complex-MPFR toolkit `ncpx` (`numeric_complex.h`). The ND kernel is a real `REG_U` registration (`NDKU_CoshIntegral`): real buffers via `ndk_CoshIntegral_r` → `sf_machine_chi`, complex buffers via `coshintegral_machine_complex` (with the shared `sf_series_usable` cancellation gate). `Compile[]` lowers `CoshIntegral` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+A machine call first passes the `sf_machine_scalar_args` gate and goes to the kernels in `sf_machine_expint.c`:
 
-**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `|z|` and precision. Logarithmic singularity at `0`, branch cut on the negative real axis. Symbolic arguments stay symbolic. Attributes: `Listable`, `NumericFunction`, `Protected`.
+- **Real** (`sf_machine_chi`, Cephes `shichi` structure). For `0 < x <= 4` it uses `γ + log x + x²·Ch(x²)`; for larger `x`, `(Ei(x) - E1(x))/2`. It declines `x > 720` (overflow). For `x < 0` the scalar path asks `sf_machine_chi_c` for the complex from-above value `Chi(|x|) + iπ`.
+- **Complex** (`sf_machine_chi_c`). It uses `Ci(iz) + (log z - log iz)`. The constant `-iπ/2`, or `3iπ/2` past `arg z = π/2`, is inserted exactly rather than obtained by subtraction.
+
+A declined call, or an MPFR call, goes to `chi_one_arg`:
+
+- **Exact values:** `Chi[0] = -Infinity`, `±Infinity → Infinity`, `±I Infinity → ±I π/2`, and `ComplexInfinity` or `Indeterminate → Indeterminate`.
+- **MPFR series, moderate `|z|`.** The convergent series `γ + Log z + Σ z^{2k}/(2k (2k)!)`. All its terms are positive on the real axis, so a fixed 64-bit guard is enough. The principal `Log` supplies the jump across the cut.
+- **MPFR asymptotic, large `|z|`.** `sinh(z) F(z) + cosh(z) G(z)` plus a piecewise Stokes constant.
+
+A machine result that overflows a double comes back as a 53-bit MPFR real.
+
+**Data structures.** `Expr`; `ncpx` (`numeric_complex.h`) on the MPFR side; refitted tables in `sf_machine_expint_coef.h`. The ND kernel is `NDKU_CoshIntegral = { coshintegral_machine_complex, ndk_CoshIntegral_r }`, registered with `REG_U`. Its real arm declines `x <= 0` and hands that buffer to the `List` path, which returns the complex values. `Compile[]` lowers `CoshIntegral` through the kernel for real and complex scalars and for rank-1 arrays. All surfaces call the same helpers and agree bit for bit.
+
+**Complexity / limits.** The machine kernels are `O(1)`. Against mpmath the real kernel has median error 0.45 ulp and maximum 1.6 ulp, scaled at the zero `0.5238…`; the complex kernel's maximum is 2.6 ulp. The cost of the MPFR path grows with `|z|` and with the precision. Exact non-special arguments, and `CoshIntegral[-x]`, stay unevaluated. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
@@ -148,24 +209,19 @@ Attributes: Listable, NumericFunction, Protected.
 **See also:** [CosIntegral](../../special-functions/CosIntegral/), [Log](../../elementary-functions/Log/)
 
 - DLMF §6.2.16 — the hyperbolic cosine integral Chi(z) = γ + Log(z) + Int_0^z (cosh t - 1)/t dt.
+- S. L. Moshier, *Methods and Programs for Mathematical Functions* (Ellis Horwood, 1989) — the Cephes `shichi` structure of the real kernel.
+- W. J. Cody and H. C. Thacher, *Chebyshev approximations for the exponential integral Ei(x)*, Math. Comp. 23 (1969) 289–303.
 - Source: [`src/special_functions/coshintegral.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/coshintegral.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_coshintegral.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coshintegral.c)
+- Tests: [`tests/test_expint_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expint_machine.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
-- Tests: [`tests/test_series.c`](https://github.com/stblake/mathilda/blob/main/tests/test_series.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`CoshIntegral[z] = Chi(z) = EulerGamma + Log[z] + Int_0^z (Cosh[t] - 1)/t dt`
-is the hyperbolic sibling of `CosIntegral` (`Chi(z) = Ci(i z) - i Pi/2`). It has
-a logarithmic singularity at `0` and a branch cut along the negative real axis;
-a negative real argument returns the from-above branch value `Chi(|x|) + i Pi`.
-
-The numeric kernel sums a convergent Maclaurin series for moderate `|z|` and an
-asymptotic expansion for large `|z|` (where `Chi` grows like `e^{|z|}`;
-machine-real results that overflow a C `double` are kept as extended-exponent
-reals). `CoshIntegral` carries a real `NDArray` kernel and lowers under
-`Compile[]` at both scalar and rank-1 array shapes.
+- `CoshIntegral[z] = EulerGamma + Log[z] + ∫₀ᶻ (Cosh[t] - 1)/t dt` has a logarithmic singularity at 0 and a branch cut on `(-∞, 0]`; it is the imaginary-axis sibling of `CosIntegral` (`Chi(z) = Ci(I z) - I Pi/2`).
+- Machine arguments use the `sf_machine_expint.c` kernels (Cephes `shichi` on the real line, `(Ei - E1)/2` beyond 4; `Ci(iz)` with an exactly placed constant in the complex plane), shared bit for bit with packed lists, `NDArray` and `Compile[]`; overflow and arbitrary precision go to MPFR.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `SinhIntegral`, `CosIntegral`, `ExpIntegralEi`.

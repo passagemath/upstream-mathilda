@@ -1,35 +1,63 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= ToString[x^2 + y^3]  (* InputForm by default *)
+In[1]:= ToString[x^2 + y^3]  (* the default is OutputForm *)
 ```
 
 ```mathematica
-In[1]:= ToString[x^2 + y^3, FullForm]
+In[1]:= ToString["hello"]  (* a string is its own OutputForm: no added quotes *)
 ```
 
 ```mathematica
-In[1]:= ToString[x^2 + y^3, TeXForm]
+In[1]:= ToString[{"a", 1}]  (* strings inside an expression print as their characters *)
 ```
 
 ```mathematica
-In[1]:= Head[ToString[42]]  (* the result is always a String *)
+In[1]:= ToString["a\"b", InputForm]  (* under InputForm, quotes and backslashes are escaped *)
+```
+
+```mathematica
+In[1]:= ToString[{1, "a"}, FullForm]  (* the internal tree *)
+```
+
+```mathematica
+In[1]:= ToString[x^2 + y^3, TeXForm]  (* TeX for typesetting *)
+```
+
+```mathematica
+In[1]:= ToString[a :> b, TeXForm]  (* rule-delayed stays distinct from rule *)
 ```
 
 ```mathematica
 In[1]:= ToString[C[10], TeXForm]  (* a generated constant becomes a subscript *)
 ```
 
+```mathematica
+In[1]:= StringLength[ToString[2^100]]  (* the decimal digits of 2^100 *)
+```
+
+```mathematica
+In[1]:= ToExpression[ToString[(a + b)^2/c, InputForm]] === (a + b)^2/c  (* the InputForm text reads back *)
+```
+
+```mathematica
+In[1]:= ToString[x, FooForm]  (* an unknown form stays unevaluated *)
+```
+
 ### Notes
 
-`ToString[expr]` returns a `String` holding the printed form of `expr` in
-`InputForm`; `ToString[expr, form]` selects the form, with `FullForm` and
-`TeXForm` supported and `StandardForm` / `OutputForm` accepted as aliases of
-`InputForm`. All of the formatting is shared with the standard printer, so the
-string matches what the REPL would display.
-
-An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]`),
-making a typo visible at the call site rather than silently downgrading it. Under
-`TeXForm` the generated constants `C[k]` from `DSolve` / `Reduce` / `Integrate`
-render as the subscripted `c_k` (single-character subscripts bare, longer ones
-braced), matching Mathematica and the notebook LaTeX renderer.
+- Since v0.455 `ToString[expr]` uses `OutputForm` by default, as Mathematica
+  does, so strings come out without quotes: `ToString["hello"]` is `"hello"`.
+  It used to be `"\"hello\""`.
+- The supported forms are `OutputForm` (the default), `InputForm`, `FullForm`
+  and `TeXForm`. `StandardForm` is accepted as an alias of `InputForm`.
+  `InputForm` keeps string quotes and escapes `"` and `\`, so the result can be
+  read back with `ToExpression`.
+- Mathilda's `OutputForm` is one-dimensional (`ToString[1/2]` is `"1/2"`),
+  whereas Mathematica's is a 2-D layout.
+- Under `TeXForm` the generated constants `C[k]` render as `c_k` (single
+  characters bare, longer subscripts braced), and `Rule`/`RuleDelayed` render
+  as `\to` / `:\to`.
+- An unknown form leaves the call unevaluated, so a typo shows at the call site.
+  `Protected`.
+- See also: `ToExpression`, `InputForm`, `FullForm`, `TeXForm`, `StringJoin`.

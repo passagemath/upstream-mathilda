@@ -5,7 +5,9 @@
 
 ## Description
 
-**`WeaklyConnectedComponents[g] gives the weakly connected components of g (edge directions ignored), largest first. WeaklyConnectedComponents[g, {v1, ...}] keeps only those containing some vi.`**
+**`WeaklyConnectedComponents[g]`**
+
+gives the weakly connected components of g (edge directions ignored), largest first. WeaklyConnectedComponents\[g, {v1, ...}\] keeps only those containing some vi.
 
 ## Examples (8)
 

@@ -55,7 +55,10 @@ first — a visible `NDArray` left unevaluated is a wrong answer, not a slow one
 **Complexity / limits.** `O(1)` per element: 41 ns/element for the complete form at 2 ulp
 (a 970× speedup over the Arb-per-element path it replaced, and 7.7× faster than the
 equivalent SciPy composition), 1 ulp for the incomplete one. Real principal domain only
-(`m < 1`, `n < 1`, and `1 − n sin²φ > 0`). The `n`- and `m`-derivatives of the *incomplete*
+(`m < 1`, `n < 1`, and `1 − n sin²φ > 0`); unlike the complete `EllipticK`/`EllipticE`,
+which gained machine-complex AGM kernels in v0.438, `EllipticPi` has no complex arm, so a
+machine-complex argument (or `n > 1`) is answered by Arb and comes back as a 53-bit
+arbitrary-precision number rather than a machine `Complex`. The `n`- and `m`-derivatives of the *incomplete*
 form stay inert `Derivative[…]`: a least-squares fit over the natural candidate basis does
 not recover them (residual 1.5 relative, no simple rational coefficients), so the closed
 form involves terms that basis does not span — and an inert derivative is honest where a

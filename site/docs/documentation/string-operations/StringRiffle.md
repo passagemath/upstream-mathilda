@@ -21,7 +21,7 @@ Joins with sep and wraps the result in the left/right delimiters.
 
 Inserts separator sep\_i (a string or {left, sep, right}) between elements at level i.
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,7 +41,7 @@ In[4]:= StringRiffle[{{"a", 27}, {"b", 28}, {"c", 29}}, {"{", ", ", "}"}, ": "]
 Out[4]= "{a: 27, b: 28, c: 29}"
 ```
 
-### Applications (3)
+### Applications (8)
 
 Default scheme: a single space
 
@@ -62,6 +62,41 @@ A {left, sep, right} triple
 ```mathematica
 In[7]:= StringRiffle[{"x", "y", "z"}, {"(", ", ", ")"}]
 Out[7]= "(x, y, z)"
+```
+
+Non-string elements are converted as ToString would
+
+```mathematica
+In[8]:= StringRiffle[{1, 2, 3}, ", "]
+Out[8]= "1, 2, 3"
+```
+
+Nested: rows by newline, cells by space
+
+```mathematica
+In[9]:= StringRiffle[{{"a", "b"}, {"c", "d"}}]
+Out[9]= "a b\nc d"
+```
+
+One separator per level, outermost first
+
+```mathematica
+In[10]:= StringRiffle[{{1, 2}, {3, 4}}, "; ", ","]
+Out[10]= "1,2; 3,4"
+```
+
+The inverse of StringSplit
+
+```mathematica
+In[11]:= StringRiffle[StringSplit["a  b   c"], "_"]
+Out[11]= "a_b_c"
+```
+
+The first argument must be a list: StringRiffle::list
+
+```mathematica
+In[12]:= StringRiffle[5]
+Out[12]= StringRiffle[5]
 ```
 
 ## Algorithm
@@ -89,11 +124,11 @@ Strings are treated as raw byte arrays (consistent with the rest of the string s
 
 ## Implementation notes
 
-**Algorithm.** `builtin_stringriffle` takes the first argument as the data and the rest as per-level separators (level 1 outermost). Each separator is parsed by `parse_sep` into a `{left, sep, right}` triple — a plain string becomes `{"", sep, ""}`, a 3-string list is the triple itself. `riffle_build` recurses: a leaf renders through `leaf_to_str` (strings verbatim, any other expression via `expr_to_string`/`ToString`), and each level joins its children with the explicit separator for that level or, when none is supplied, the default scheme chosen from `depth_from_bottom` — a single space at the innermost level and one extra newline per level above. It is the inverse of `StringSplit`.
+**Algorithm.** `builtin_stringriffle` treats the first argument as the data and the rest as separators, one per level, with level 1 outermost. `parse_sep` reads each separator into a `{left, sep, right}` triple. A plain string becomes `{"", sep, ""}`, and a 3-string list is the triple itself. `riffle_build` then recurses over the data. A string leaf is copied verbatim, and any other leaf is rendered in OutputForm (`expr_to_string_outputform`, which is what `ToString` gives). Each level joins its children with its explicit separator. When a level has none, the default scheme applies, chosen by `depth_from_bottom`: one space at the innermost level, and one more newline for each level above it. It is the inverse of `StringSplit`.
 
-**Data structures.** A `SepSpec` array of resolved triples; per level the child strings are built first, then assembled two-pass (sum lengths, then copy) into one buffer.
+**Data structures.** A `SepSpec` array that borrows the argument strings. The whole result is built in one growable `RegexBuf`, so each leaf is copied exactly once whatever the nesting depth, and the buffer is adopted into the result string. This replaced a build-each-level-then-concatenate design in v0.456 (3.6 ms → 1.0 ms on the string benchmark).
 
-**Complexity / limits.** `O(total output)`. No arguments emits `StringRiffle::argm`; a first argument that is neither a list nor a string, or a malformed separator, leaves the call unevaluated. `StringRiffle` is deliberately not `Listable` so it can inspect the whole nested structure. Byte-oriented.
+**Complexity / limits.** `O(total output)`. No arguments emits `StringRiffle::argm`. A first argument that is neither a list nor a string emits `StringRiffle::list`, and a malformed separator emits `StringRiffle::string`; both leave the call unevaluated. Not `Listable`, so it can see the whole nested structure.
 
 **Attributes:** `Protected`.
 
@@ -103,16 +138,19 @@ Strings are treated as raw byte arrays (consistent with the rest of the string s
 
 - Source: [`src/strings/stringriffle.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringriffle.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringriffle.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringriffle.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`StringRiffle` is the inverse of `StringSplit`: it joins a (possibly nested) list
-with separators. A plain string separator goes between the top-level elements; a
-3-string list is a `{left, sep, right}` delimiter triple.
-
-The default scheme uses a single space at the innermost level and one extra
-newline per level above it. Non-string leaves are rendered with `ToString` (so
-`27` becomes `"27"`); string leaves are used verbatim.
+- `StringRiffle[list, sep1, sep2, ...]` joins a possibly nested list. `sep_i`
+  goes between elements at level `i`, counting from the outside. A separator is
+  a string or a `{left, sep, right}` triple.
+- Levels without an explicit separator use the default scheme: one space at the
+  innermost level and one more newline per level above it.
+- String leaves are used verbatim, and any other leaf appears in its OutputForm.
+- The result is built in one buffer, so each leaf is copied once whatever the
+  depth (v0.456: 3.6 ms → 1.0 ms on the string benchmark).
+- See also: `StringJoin`, `StringSplit`, `Riffle`.

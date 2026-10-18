@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphCliqueExpansion[h] gives the 2-section of h: the undirected Graph on VertexList[h] with u<->v whenever u and v share a hyperedge.`**
+**`HypergraphCliqueExpansion[h]`**
+
+gives the 2-section of h: the undirected Graph on VertexList\[h\] with u\<-\>v whenever u and v share a hyperedge.
 
 ## Examples (6)
 

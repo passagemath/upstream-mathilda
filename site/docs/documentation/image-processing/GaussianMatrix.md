@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GaussianMatrix[r] gives a (2r+1) x (2r+1) Gaussian matrix normalised to sum 1. GaussianMatrix[{r, sigma}] states the standard deviation; it defaults to r/2, which puts the kernel's edge at two standard deviations. Normalisation divides by the realised sum rather than the analytic 2 pi sigma^2, because the analytic constant is correct only for an infinite kernel and using it on a truncated one leaves the sum under 1 -- which darkens an image slightly on every pass.`**
+**`GaussianMatrix[r]`**
+
+gives a (2r+1) x (2r+1) Gaussian matrix normalised to sum 1. GaussianMatrix\[{r, sigma}\] states the standard deviation; it defaults to r/2, which puts the kernel's edge at two standard deviations. Normalisation divides by the realised sum rather than the analytic 2 pi sigma^2, because the analytic constant is correct only for an infinite kernel and using it on a truncated one leaves the sum under 1 -- which darkens an image slightly on every pass.
 
 ## Examples (6)
 

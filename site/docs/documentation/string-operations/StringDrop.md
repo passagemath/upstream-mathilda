@@ -106,6 +106,7 @@ Out[12]= "aef"
 
 - Source: [`src/strings/stringdrop.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringdrop.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
 
 ## Notes & additional examples

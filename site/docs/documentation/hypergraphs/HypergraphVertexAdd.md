@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphVertexAdd[h, v] adds the vertex v to h; HypergraphVertexAdd[h, {v1, ...}] adds several. Existing vertices are left alone.`**
+**`HypergraphVertexAdd[h, v]`**
+
+adds the vertex v to h; HypergraphVertexAdd\[h, {v1, ...}\] adds several. Existing vertices are left alone.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CoprimeQ[n1, n2, ...] yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.`**
+**`CoprimeQ[n1, n2, ...]`**
+
+yields True if the arguments are pairwise relatively prime -- pairwise GCD equal to 1 -- and False otherwise; two random integers are coprime with probability 6/Pi^2.
 
 <details>
 <summary>Notes</summary>
@@ -132,6 +134,7 @@ remainder norm decreases. Sign is ignored (GCD uses magnitudes); `CoprimeQ[]` is
 - Source: [`src/numbertheory/coprimeq.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/coprimeq.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_coprimeq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coprimeq.c)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 
 ## Notes & additional examples

@@ -27,7 +27,7 @@ In[2]:= ComplexExpand[Re[z^2], {z}]
 Out[2]= -Im[z]^2 + Re[z]^2
 
 In[3]:= ComplexExpand[Tan[x + I y]]
-Out[3]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])
+Out[3]= Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + (I Sinh[2 y])/(Cos[2 x] + Cosh[2 y])
 ```
 
 ### Options (1)
@@ -185,6 +185,7 @@ inert, so an expression carrying those is as far as the decomposition reduces.
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_cherry_ei.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_ei.c)
 - Tests: [`tests/test_complexexpand.c`](https://github.com/stblake/mathilda/blob/main/tests/test_complexexpand.c)
+- Tests: [`tests/test_integrate_residue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_residue.c)
 
 ## Notes & additional examples
 

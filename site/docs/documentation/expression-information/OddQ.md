@@ -5,7 +5,9 @@
 
 ## Description
 
-**`OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.`**
+**`OddQ[n]`**
+
+gives True if n is an odd integer (Integer or BigInt), False otherwise.
 
 ## Examples (2)
 

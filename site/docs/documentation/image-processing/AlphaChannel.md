@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AlphaChannel[image] gives the image's opacity as a one-channel image. An image with no alpha channel answers with an all-opaque one rather than declining: "how transparent is this?" has an answer for every image, and it is "not at all". Two channels are read as grey+alpha and four as RGB+alpha.`**
+**`AlphaChannel[image]`**
+
+gives the image's opacity as a one-channel image. An image with no alpha channel answers with an all-opaque one rather than declining: "how transparent is this?" has an answer for every image, and it is "not at all". Two channels are read as grey+alpha and four as RGB+alpha.
 
 ## Examples (7)
 

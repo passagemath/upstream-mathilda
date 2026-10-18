@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Quiet[expr] evaluates expr with messages suppressed and returns its value. Quiet[expr, spec] suppresses all messages regardless of spec.`**
+**`Quiet[expr]`**
+
+evaluates expr with messages suppressed and returns its value. Quiet\[expr, spec\] suppresses all messages regardless of spec.
 
 ## Examples (4)
 
@@ -71,10 +73,10 @@ nor whether a message is considered to have fired.
 
 - Source: [`src/message.c`](https://github.com/stblake/mathilda/blob/main/src/message.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
+- Tests: [`tests/test_factorinteger.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factorinteger.c)
 - Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
 - Tests: [`tests/test_graph.c`](https://github.com/stblake/mathilda/blob/main/tests/test_graph.c)
-- Tests: [`tests/test_limit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit.c)
-- Tests: [`tests/test_parallelmixedspecial.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parallelmixedspecial.c)
 
 ## Notes & additional examples
 

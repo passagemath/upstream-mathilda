@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexCount[g] gives the number of vertices in the graph g.`**
+**`VertexCount[g]`**
+
+gives the number of vertices in the graph g.
 
 ## Examples (8)
 

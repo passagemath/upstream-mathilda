@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphLineGraph[h] gives the line graph of h: vertices 1..m, i<->j when hyperedges i and j intersect. HypergraphLineGraph[h, s] gives the s-line graph, joining hyperedges that share at least s vertices.`**
+**`HypergraphLineGraph[h]`**
+
+gives the line graph of h: vertices 1..m, i\<-\>j when hyperedges i and j intersect. HypergraphLineGraph\[h, s\] gives the s-line graph, joining hyperedges that share at least s vertices.
 
 ## Examples (7)
 

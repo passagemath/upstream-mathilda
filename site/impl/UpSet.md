@@ -1,0 +1,13 @@
+---
+references:
+  - "D. Withoff, *Mathematica Internals* (Wolfram Research technical report, 1992), §3.1 (evaluation order: upvalues before downvalues)."
+source:
+  - src/eval.c
+  - src/symtab.c
+  - src/parse.c
+---
+**Algorithm.** `lhs ^= rhs` parses (`OP_UPSET`, precedence 500, right-associative, `src/parse.c`) to `UpSet[lhs, rhs]`. `UpSet` is `HoldFirst`, so the evaluator's assignment branch (step 6b in `evaluate_step`) receives an already-evaluated `rhs`. `build_assignment_target` evaluates the *arguments* of `lhs` exactly as `Set` does (pattern-bearing and Hold-attributed positions stay held), then `apply_up_assignment` calls `collect_level_one_symbols`: a top-level `Condition` is unwrapped, and for each argument `element_dispatch_head` yields the symbol an occurrence would consult — the argument itself when it is a symbol, the head of a call `g[...]`, the head named by a constrained blank (`a_h`, `_h`, and through `PatternTest`/`Condition`/`Optional` wrappers), and nothing for a bare `_` or an `Alternatives`. The distinct symbols (up to 64) each receive the rule via `symtab_add_up_value`; a `Protected` one is skipped with `UpSet::write`, and an `lhs` with no such symbol issues `UpSet::nosym` and leaves the `UpSet` unevaluated. The call returns `rhs`.
+
+**Data structures.** An UpValue is an ordinary `Rule` node (pattern, replacement, dispatch arity and first-argument-head keys) on the tag's `SymbolDef.up_values` list, inserted by the same `add_rule` specificity sort that DownValues use; a same-LHS rule is replaced in place. A global `symtab_up_value_count` tracks the total, and each install advances the rule epoch (`eval_rule_epoch_mark`) so memoised GROUND nodes re-check. At call time `apply_up_values` (step 3b, before the head's DownValues and builtin) collects the distinct UpValue-bearing symbols at level one of the call (≤ 32 candidates), canonically sorts the arguments first when the head is `Orderless`, and tries each candidate's list with `match`, falling back to `match_flat_leftover` when the enclosing head is `Flat`.
+
+**Complexity / limits.** With no UpValues anywhere, every call pays one load-and-branch (`symtab_up_value_count == 0`). Otherwise the cost is a scan of the level-one arguments plus the rule lists of the candidates found, filtered by arity and first-argument head. UpValues are skipped under `HoldAllComplete` and inside the assignment primitives themselves, so an `_[g[x_]]` rule cannot hijack a held assignment LHS. For a non-`Orderless` `Flat` head the matched operands must form a leading run. The whole subsystem is compiled in under the `UP_VALUES` build flag (default on).

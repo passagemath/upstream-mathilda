@@ -414,6 +414,10 @@ theorem, expand numbers as continued fractions, and assemble all of it into a
 working public-key cryptosystem. This is the integer-arithmetic foundation that
 sits beneath much of the rest of Mathilda.
 
+- **[FactorInteger methods](factorinteger-methods/index.md)** — an advanced,
+  per-algorithm tour of how `FactorInteger` actually factors: Pollard rho,
+  p−1/p+1, ECM, the quadratic sieve, and rational base descent, with the
+  strengths and weaknesses of each.
 - **[6. Algebra](06-algebra.md)** — move from the integers to polynomials and
   rational expressions: expand and factor, take polynomial gcds, simplify, and
   solve equations and systems.

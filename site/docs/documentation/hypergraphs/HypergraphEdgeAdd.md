@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphEdgeAdd[h, e] appends the hyperedge e (a List); HypergraphEdgeAdd[h, {e1, ...}] appends several. New vertices are added.`**
+**`HypergraphEdgeAdd[h, e]`**
+
+appends the hyperedge e (a List); HypergraphEdgeAdd\[h, {e1, ...}\] appends several. New vertices are added.
 
 ## Examples (8)
 

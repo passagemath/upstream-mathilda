@@ -16,7 +16,7 @@ ClearAll has attribute HoldAll; symbols with attribute Protected are not affecte
 
 </details>
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,22 +33,66 @@ In[3]:= x = 2; Remove[x]; x
 Out[3]= x
 ```
 
-### Applications (4)
+### Applications (9)
+
+A value and an attribute
 
 ```mathematica
 In[4]:= SetAttributes[g, Orderless]; g = 5
 Out[4]= 5
+```
 
+```mathematica
 In[5]:= ClearAll[g]
+```
 
+Both are gone
+
+```mathematica
 In[6]:= {g, Attributes[g]}
 Out[6]= {g, {}}
 ```
 
-Several symbols in one call
+DownValues and attributes together
 
 ```mathematica
-In[7]:= ClearAll[a, b]
+In[7]:= h[x_] := x^2; SetAttributes[h, Listable]; ClearAll[h]; {DownValues[h], Attributes[h]}
+Out[7]= {{}, {}}
+```
+
+Compare Clear, which keeps the attributes
+
+```mathematica
+In[8]:= w = 3; SetAttributes[w, Flat]; Clear[w]; {w, Attributes[w]}
+Out[8]= {w, {Flat}}
+```
+
+A list of specs, mixing symbols and strings
+
+```mathematica
+In[9]:= p = 1; q = 2; ClearAll[{p, "q"}]; {p, q}
+Out[9]= {p, q}
+```
+
+Default options survive; Remove deletes them
+
+```mathematica
+In[10]:= Options[o1] = {opt -> 1}; ClearAll[o1]; Options[o1]
+Out[10]= {opt -> 1}
+```
+
+A Protected symbol is skipped
+
+```mathematica
+In[11]:= k = 1; Protect[k]; ClearAll[k]; k
+Out[11]= 1
+```
+
+So built-ins are never wiped
+
+```mathematica
+In[12]:= ClearAll[Sin]; Sin[0]
+Out[12]= 0
 ```
 
 ## Implementation notes
@@ -70,13 +114,15 @@ guard already keeps `ClearAll` away from builtins. The head returns `Null`.
 
 **Attributes & limits.** `ClearAll` carries `HoldAll | Protected`, so the
 symbols arrive unevaluated rather than being replaced by their current values.
-Non-symbol/non-string specs are silently ignored.
+Non-symbol and non-string specs are ignored without a message. A `Protected`
+user symbol is also skipped silently, and keeps its values until it is
+`Unprotect`ed. `Protected` is the only guard (since v0.301), and every protection
+can be lifted with `Unprotect`.
 
-- `ClearAll` has attributes `{HoldAll, Protected}`; `Remove` has
-  `{HoldAll, Protected}`. Both hold their arguments, so they operate on
-  the symbol, not its current value.
-- Neither affects symbols with the attribute `Protected`. This is
-  what prevents `Remove`/`ClearAll` from ever deleting or wiping a built-in.
+- `ClearAll` and `Remove` both have attributes `{HoldAll, Protected}`. Both hold
+  their arguments, so they operate on the symbol, not its current value.
+- Neither affects symbols with the attribute `Protected`. This is what prevents
+  `Remove`/`ClearAll` from ever deleting or wiping a built-in.
 - `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
 - Both return `Null`.
 
@@ -97,12 +143,14 @@ Non-symbol/non-string specs are silently ignored.
 
 ### Notes
 
-`ClearAll[s]` is the thorough erase: it removes `s`'s OwnValues and DownValues
-*and* its attributes and usage message, so the symbol is returned to its
-pristine undefined state — compare `Clear[s]`, which drops only the
-values. Here `g` loses both its assigned value and the `Orderless` attribute, so
-`Attributes[g]` is `{}`.
-
-Arguments may be symbols, strings naming symbols, or a flat list of them
-(`ClearAll[{a, b}]`). A `Protected` symbol is skipped, which is what
-keeps `ClearAll` from ever gutting a built-in. The result is `Null`.
+- `ClearAll[s]` removes `s`'s OwnValues, DownValues, attributes and usage
+  message, returning the symbol to its undefined state. Compare `Clear[s]`,
+  which drops only the values. Registered default options are kept. `Remove`
+  deletes them along with the symbol.
+- Arguments may be symbols, strings naming symbols, or a flat list of them. The
+  result is `Null`.
+- `HoldAll | Protected`, so the symbols themselves are cleared, not their values.
+- A `Protected` symbol is skipped silently, which is what keeps `ClearAll` from
+  wiping a built-in. To clear one of your own protected symbols, `Unprotect` it
+  first. `Protected` is the only guard, and every protection can be lifted.
+- See also: `Clear`, `Remove`, `Unset`, `ClearAttributes`.

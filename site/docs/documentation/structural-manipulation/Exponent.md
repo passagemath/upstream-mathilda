@@ -5,11 +5,17 @@
 
 ## Description
 
-**`Exponent[expr, form] gives the maximum power with which form appears in the`**
+**`Exponent[expr, form]`**
 
-**`Exponent[expr, form, h] applies h to the set of exponents (default Max).`**
+gives the maximum power with which form appears in the
 
-**`Exponent[0, x] is -Infinity.  Exponent[expr, {f1, f2, ...}] gives the list of`**
+**`Exponent[expr, form, h]`**
+
+applies h to the set of exponents (default Max).
+
+**`Exponent[0, x]`**
+
+is -Infinity.  Exponent\[expr, {f1, f2, ...}\] gives the list of
 
 <details>
 <summary>Notes</summary>
@@ -18,7 +24,7 @@ expanded form of expr. form may be a symbol, a kernel, or a product of terms; ex
 
 </details>
 
-## Examples (10)
+## Examples (14)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,7 +47,7 @@ In[5]:= Exponent[1 + x^2 + a x^3, x, List]
 Out[5]= {0, 2, 3}
 ```
 
-### Applications (5)
+### Applications (9)
 
 The highest power of x
 
@@ -50,32 +56,60 @@ In[6]:= Exponent[1 + x^2 + x^5, x]
 Out[6]= 5
 ```
 
-Expr need not be expanded first
+The argument is expanded first, so it need not be given expanded
 
 ```mathematica
 In[7]:= Exponent[(1 + x)^3, x]
 Out[7]= 3
 ```
 
-Collect the exponent set with a custom h
+A custom h collects the whole exponent set, negative powers included
 
 ```mathematica
-In[8]:= Exponent[1 + x + x^2, x, List]
-Out[8]= {0, 1, 2}
+In[8]:= Exponent[1/x + x^2, x, List]
+Out[8]= {-1, 2}
+```
+
+With h = Min, the lowest power
+
+```mathematica
+In[9]:= Exponent[1 + x + x^2, x, Min]
+Out[9]= 0
+```
+
+Fractional exponents
+
+```mathematica
+In[10]:= Exponent[x^(1/2) + x^(3/2), x]
+Out[10]= 3/2
+```
+
+A symbolic exponent stays inside Max
+
+```mathematica
+In[11]:= Exponent[x^n + x^2, x]
+Out[11]= Max[2, n]
 ```
 
 A list of forms threads
 
 ```mathematica
-In[9]:= Exponent[a x^2 + b x y^3, {x, y}]
-Out[9]= {2, 3}
+In[12]:= Exponent[a x^2 + b x y^3, {x, y}]
+Out[12]= {2, 3}
 ```
 
-The zero polynomial: Max of an empty set
+The form may be any kernel
 
 ```mathematica
-In[10]:= Exponent[0, x]
-Out[10]= -Infinity
+In[13]:= Exponent[2 Sin[x]^3 + Sin[x], Sin[x]]
+Out[13]= 3
+```
+
+The zero polynomial: Max of the empty set
+
+```mathematica
+In[14]:= Exponent[0, x]
+Out[14]= -Infinity
 ```
 
 ## Algorithm
@@ -137,7 +171,9 @@ pairs by `form_pairs` — a symbol or kernel gives `(form, 1)`, a `Power[b, e]`
 gives `(b, e)`, and a `Times` gives one pair per non-numeric factor. For each
 monomial term `exp_in_term` reads the power of each base (`base_exp_in_monomial`:
 1 if the base *is* the term, the exponent of a matching `Power`, the sum over a
-`Times`, else `0`); for a single-base form the term's exponent is that power
+`Times`, else `0`). Since v0.278 a nested non-flat `Times` factor, such as
+`Times[-1, Times[a, x^2]]` evaluated next to a complex sibling, is searched
+recursively, so `Exponent[-a x^2 + I x, x]` is `2` and no longer `1`. For a single-base form the term's exponent is that power
 divided by `fe`, and for a product form it is the `Min` over bases of
 `base-exponent / fe` — the largest `k` with `form^k` dividing the term. The
 exponents are insertion-sorted by `expr_compare`, de-duplicated with `expr_eq`,
@@ -163,12 +199,18 @@ makes `Exponent[expr, {f1, f2, ...}]` thread into a per-form list for free.
 - Works whether or not `expr` is explicitly given in expanded form (it expands internally).
 - Purely syntactic: it does not attempt to recognise zero coefficients.
 - Exponents may be rational numbers or symbolic expressions.
+- A monomial given as a non-flat nested `Times` is handled: a term such as
+  `Times[-1, Times[a, x^2]]` (which `-a x^2` evaluates to beside a complex
+  sibling like `I x`) is recursed into, so `Exponent[-a x^2 + I x, x]` is `2`,
+  not `1`.
 - `Exponent[0, x]` is `-Infinity` (empty exponent set, `h = Max`).
 - The `Listable` attribute makes `Exponent[expr, {form1, form2, ...}]` give the list of exponents for each `formi`.
 
 **Attributes:** `Listable`, `Protected`.
 
 ## References
+
+**See also:** [Times](../../arithmetic/Times/)
 
 - Source: [`src/poly/exponent.c`](https://github.com/stblake/mathilda/blob/main/src/poly/exponent.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
@@ -181,12 +223,15 @@ makes `Exponent[expr, {f1, f2, ...}]` thread into a per-form list for free.
 
 ### Notes
 
-`Exponent[expr, form]` gives the maximum power of `form` in the expanded form of
-`expr`, applying `h` (default `Max`) to the set of exponents found;
-`Exponent[expr, form, h]` substitutes any other `h`, so `h = List` returns the
-whole sorted exponent set. `expr` is expanded first, so it need not be given
-expanded, and `form` may be a symbol, a kernel, or a product of terms. The
-reading is **purely syntactic** — there is no zero-coefficient recognition — and
-the genuine zero polynomial has an empty exponent set, so `Exponent[0, x]` is
-`Max[]` = `-Infinity`. Because `Exponent` is `Listable`, a list of forms threads
-into a list of exponents.
+- `Exponent[expr, form]` gives the largest power of `form` in the expanded
+  `expr`, applying `h` (default `Max`) to the set of exponents found.
+  `Exponent[expr, form, h]` substitutes any other `h`, so `h = List`
+  returns the sorted, de-duplicated exponent set. `form` may be a symbol, a
+  kernel or a product (`Exponent[(x y)^2 + x^3 y, x y]` is `2`).
+- The reading is **purely syntactic**, with no zero-coefficient
+  recognition. The genuine zero polynomial has an empty exponent set, so
+  `Exponent[0, x]` is `Max[]`, which is `-Infinity`.
+- Since v0.278 a non-flat nested `Times` inside a term is searched
+  recursively, so `Exponent[-a x^2 + I x, x]` is `2`.
+- `Listable`, `Protected`. Symbolic, with no packed or `Compile[]` path.
+- See also: `Coefficient`, `CoefficientList`, `Variables`, `Expand`.

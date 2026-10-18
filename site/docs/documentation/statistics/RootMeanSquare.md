@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RootMeanSquare[list] gives the root mean square of values in list.`**
+**`RootMeanSquare[list]`**
+
+gives the root mean square of values in list.
 
 ## Examples (10)
 
@@ -63,7 +65,7 @@ Out[10]= 0.707242937053949660265
 
 ## References
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_ndarray_reduce.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray_reduce.c)

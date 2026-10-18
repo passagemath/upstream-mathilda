@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....`**
+**`Block[{x, y, ...}, expr]`**
+
+evaluates expr with local values for x, y, ....
 
 ## Examples (4)
 

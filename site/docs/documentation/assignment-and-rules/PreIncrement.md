@@ -5,9 +5,9 @@
 
 ## Description
 
-**`PreIncrement[x] or ++x`**
+**`PreIncrement[x]`**
 
-increases the value of x by 1, returning the new value of x. ++x is equivalent to x = x + 1.
+or ++x increases the value of x by 1, returning the new value of x. ++x is equivalent to x = x + 1.
 
 <details>
 <summary>Notes</summary>

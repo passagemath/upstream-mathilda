@@ -5,11 +5,17 @@
 
 ## Description
 
-**`Dt[f] gives the total derivative of f.`**
+**`Dt[f]`**
 
-**`Dt[f, x] gives the total derivative of f with respect to x.`**
+gives the total derivative of f.
 
-**`Dt[f, {x, n}] gives the nth total derivative.`**
+**`Dt[f, x]`**
+
+gives the total derivative of f with respect to x.
+
+**`Dt[f, {x, n}]`**
+
+gives the nth total derivative.
 
 ## Examples (12)
 

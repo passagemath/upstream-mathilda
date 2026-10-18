@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LineGraph[g] gives the line graph of g: one vertex per edge (numbered by EdgeList position); undirected edges sharing an endpoint are joined, and for directed g, edge i -> edge j when i ends where j starts. Mixed graphs are left unevaluated.`**
+**`LineGraph[g]`**
+
+gives the line graph of g: one vertex per edge (numbered by EdgeList position); undirected edges sharing an endpoint are joined, and for directed g, edge i -\> edge j when i ends where j starts. Mixed graphs are left unevaluated.
 
 ## Examples (6)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MultiplicativeOrder[k, n] gives the multiplicative order of k modulo n, the smallest positive integer m such that k^m is congruent to 1 modulo n; reversing it -- recovering the exponent x with k^x congruent to a given target -- is the discrete logarithm problem, whose presumed hardness underlies Diffie-Hellman key exchange and the ElGamal and DSA schemes.`**
+**`MultiplicativeOrder[k, n]`**
+
+gives the multiplicative order of k modulo n, the smallest positive integer m such that k^m is congruent to 1 modulo n; reversing it -- recovering the exponent x with k^x congruent to a given target -- is the discrete logarithm problem, whose presumed hardness underlies Diffie-Hellman key exchange and the ElGamal and DSA schemes.
 
 **`MultiplicativeOrder[k, n, {r1, r2, ...}]`**
 
@@ -101,7 +103,7 @@ Out[12]= 5
 
 - A. J. Menezes, P. C. van Oorschot and S. A. Vanstone, *Handbook of Applied Cryptography*, CRC Press, 1996 — §3.6 covers the discrete logarithm problem and its algorithms (baby-step giant-step, Pohlig–Hellman, index calculus).
 - R. Crandall and C. Pomerance, *Prime Numbers: A Computational Perspective*, 2nd ed., Springer, 2005 — §5.2, discrete logarithms.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 

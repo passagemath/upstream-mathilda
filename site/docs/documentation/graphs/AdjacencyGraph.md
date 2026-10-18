@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AdjacencyGraph[m] builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).`**
+**`AdjacencyGraph[m]`**
+
+builds a graph on vertices 1..n from a 0/1 adjacency matrix m (undirected if m is symmetric, else directed).
 
 ## Examples (9)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IndexGraph[g] replaces the vertices of g by 1, 2, ..., n (in VertexList order); IndexGraph[g, r] by r, r+1, ..., r+n-1. Edge weights are kept.`**
+**`IndexGraph[g]`**
+
+replaces the vertices of g by 1, 2, ..., n (in VertexList order); IndexGraph\[g, r\] by r, r+1, ..., r+n-1. Edge weights are kept.
 
 ## Examples (7)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RandomVariate[dist] draws one value from dist; RandomVariate[dist, n] draws a list of n. Supports NormalDistribution[mu, sigma] and UniformDistribution[{lo, hi}], each also usable with no arguments for the standard case. Draws come from the same stream as RandomReal, so SeedRandom makes them reproducible. A non-positive standard deviation, or an inverted range, returns unevaluated rather than producing NaNs.`**
+**`RandomVariate[dist]`**
+
+draws one value from dist; RandomVariate\[dist, n\] draws a list of n. Supports NormalDistribution\[mu, sigma\] and UniformDistribution\[{lo, hi}\], each also usable with no arguments for the standard case. Draws come from the same stream as RandomReal, so SeedRandom makes them reproducible. A non-positive standard deviation, or an inverted range, returns unevaluated rather than producing NaNs.
 
 ## Examples (6)
 

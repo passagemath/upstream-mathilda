@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeCoverQ[g, elist] gives True if elist is a set of edges of g touching every vertex of g.`**
+**`EdgeCoverQ[g, elist]`**
+
+gives True if elist is a set of edges of g touching every vertex of g.
 
 ## Examples (12)
 

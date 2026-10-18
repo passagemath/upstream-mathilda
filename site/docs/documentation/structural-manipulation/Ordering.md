@@ -5,13 +5,21 @@
 
 ## Description
 
-**`Ordering[list] gives the positions in list at which each successive element of Sort[list] appears, so that list[[Ordering[list]]] is Sort[list].`**
+**`Ordering[list]`**
 
-**`Ordering[list, n] gives the positions of the n smallest elements; Ordering[list, -n] gives the positions of the n largest.`**
+gives the positions in list at which each successive element of Sort\[list\] appears, so that list\[\[Ordering\[list\]\]\] is Sort\[list\].
 
-**`Ordering[list, seq] is equivalent to Take[Ordering[list], seq], where seq may be an integer n or -n, a {m, n} or {m, n, s} span, UpTo[k], or All.`**
+**`Ordering[list, n]`**
 
-**`Ordering[list, seq, p] orders using the ordering function p, as in Sort[list, p].`**
+gives the positions of the n smallest elements; Ordering\[list, -n\] gives the positions of the n largest.
+
+**`Ordering[list, seq]`**
+
+is equivalent to Take\[Ordering\[list\], seq\], where seq may be an integer n or -n, a {m, n} or {m, n, s} span, UpTo\[k\], or All.
+
+**`Ordering[list, seq, p]`**
+
+orders using the ordering function p, as in Sort\[list, p\].
 
 <details>
 <summary>Notes</summary>

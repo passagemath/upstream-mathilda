@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MeanGraphDistance[g] gives the mean distance over all ordered pairs of distinct vertices of g: exact for unweighted graphs, a machine real for weighted ones, Infinity unless g is (strongly) connected.`**
+**`MeanGraphDistance[g]`**
+
+gives the mean distance over all ordered pairs of distinct vertices of g: exact for unweighted graphs, a machine real for weighted ones, Infinity unless g is (strongly) connected.
 
 ## Examples (6)
 

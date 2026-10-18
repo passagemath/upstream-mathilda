@@ -16,7 +16,7 @@ Remove has attribute HoldAll; symbols with attribute Protected are not affected.
 
 </details>
 
-## Examples (6)
+## Examples (10)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -33,16 +33,52 @@ In[3]:= x = 2; Remove[x]; x
 Out[3]= x
 ```
 
-### Applications (3)
+### Applications (7)
+
+A user symbol
 
 ```mathematica
 In[4]:= tmpvar = 7
 Out[4]= 7
+```
 
+```mathematica
 In[5]:= Remove[tmpvar]
+```
 
+A fresh, undefined symbol
+
+```mathematica
 In[6]:= tmpvar
 Out[6]= tmpvar
+```
+
+The entry is gone from the symbol table
+
+```mathematica
+In[7]:= r = 7; Remove[r]; Names["r"]
+Out[7]= {}
+```
+
+Default options go with it
+
+```mathematica
+In[8]:= Options[o2] = {opt -> 1}; Remove[o2]; Options[o2]
+Out[8]= {}
+```
+
+Built-ins are Protected, so they are skipped
+
+```mathematica
+In[9]:= Remove[Plus]; 1 + 1
+Out[9]= 2
+```
+
+Protected like every built-in
+
+```mathematica
+In[10]:= Attributes[Remove]
+Out[10]= {HoldAll, Protected}
 ```
 
 ## Implementation notes
@@ -61,14 +97,16 @@ appears in the symbol table until it is next referenced (at which point a fresh,
 undefined symbol is created). `Remove` is itself `Protected` so it cannot
 be removed.
 
-**Attributes & limits.** `Remove` carries `HoldAll | Protected`; its
-arguments arrive unevaluated, and non-symbol/non-string specs are ignored.
+**Attributes & limits.** `Attributes[Remove]` is `{HoldAll, Protected}`, and
+`Protected` alone is what keeps it, and every other builtin, from being removed.
+Its arguments arrive unevaluated, and non-symbol/non-string specs are
+ignored. A removed symbol's registered default options go with it, whereas
+`Clear` and `ClearAll` keep `Options[s]`.
 
-- `ClearAll` has attributes `{HoldAll, Protected}`; `Remove` has
-  `{HoldAll, Protected}`. Both hold their arguments, so they operate on
-  the symbol, not its current value.
-- Neither affects symbols with the attribute `Protected`. This is
-  what prevents `Remove`/`ClearAll` from ever deleting or wiping a built-in.
+- `ClearAll` and `Remove` both have attributes `{HoldAll, Protected}`. Both hold
+  their arguments, so they operate on the symbol, not its current value.
+- Neither affects symbols with the attribute `Protected`. This is what prevents
+  `Remove`/`ClearAll` from ever deleting or wiping a built-in.
 - `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
 - Both return `Null`.
 
@@ -86,11 +124,12 @@ arguments arrive unevaluated, and non-symbol/non-string specs are ignored.
 
 ### Notes
 
-`Remove[s]` deletes the symbol `s` from the symbol table entirely — a stronger
-erase than `ClearAll`, which empties a symbol but keeps its entry. After removal
-the name no longer exists; the next reference to it (as in `In[3]`) creates a
-fresh, undefined symbol. The result is `Null`.
-
-Arguments may be symbols, strings, or a flat list of them. A `Protected`
-symbol is skipped, so `Remove` can never delete a built-in; `Remove`
-itself is `Protected`.
+- `Remove[s]` deletes the symbol `s` from the symbol table entirely. This is
+  stronger than `ClearAll`, which empties a symbol but keeps its entry and its
+  default options.
+- After removal the name no longer exists, and the next reference to it creates
+  a fresh, undefined symbol. The result is `Null`.
+- Arguments may be symbols, strings, or a flat list of them.
+- A `Protected` symbol is skipped, so `Remove` never deletes a built-in.
+  `Attributes[Remove]` is `{HoldAll, Protected}`.
+- See also: `ClearAll`, `Clear`, `Names`.

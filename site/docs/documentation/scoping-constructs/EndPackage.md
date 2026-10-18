@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EndPackage[] restores the state saved by BeginPackage and prepends the`**
+**`EndPackage[]`**
+
+restores the state saved by BeginPackage and prepends the
 
 <details>
 <summary>Notes</summary>

@@ -1,43 +1,64 @@
 ---
 references:
-  - "B. C. Carlson, *Computing elliptic integrals by duplication*, Numer. Math. **33** (1979) 1-16."
+  - "M. Abramowitz and I. A. Stegun, *Handbook of Mathematical Functions* (Dover, 1964), §17.3.34 — the `P(t) − log(t) Q(t)` form of `K`."
+  - "S. L. Moshier, *Cephes Math Library* (1984–2000), `ellpk` — the polynomial-with-logarithm structure (coefficients re-fitted for Mathilda)."
+  - "DLMF §19.7.5 — the imaginary-modulus transformation `K(m) = K(m/(m−1))/√(1−m)`."
+  - "DLMF §19.8.5 — `K(m) = π/(2 M(1, √(1−m)))`, the arithmetic-geometric mean."
+  - "D. A. Cox, *The arithmetic-geometric mean of Gauss*, L'Enseignement Math. **30** (1984) 275-330 — the \"right choice\" of square root for the complex AGM."
+  - "R. L. Smith, *Algorithm 116: Complex division*, Comm. ACM **5** (1962) 435."
   - "B. C. Carlson, *Numerical computation of real or complex elliptic integrals*, Numer. Algorithms **10** (1995) 13-26."
-  - "W. H. Press et al., *Numerical Recipes in C*, 2nd ed. (Cambridge, 1992), §6.11 — the `rf`/`rd` duplication loops."
-  - "M. Abramowitz and I. A. Stegun, *Handbook of Mathematical Functions* (Dover, 1964), ch. 17."
-  - "DLMF §19.25 — Legendre integrals in terms of Carlson's symmetric forms."
 source: src/special_functions/elliptic.c
 ---
-**Algorithm.** `builtin_elliptick` tries, in this order: the pole (`m == 1` →
-`ComplexInfinity`), an exact zero (`π/2`), infinity (`K(m) ~ (π − i log 16m)/(2√m)`,
-so the magnitude vanishes and the answer is `0`), then the two lemniscatic singular
-values `m = 1/2` and `m = −1` as closed forms in `Γ` (`ell_k_closed_half`,
-`ell_k_closed_minus_one`). Only then does an inexact argument reach a number:
-`elliptic_machine_k` evaluates `K(m) = R_F(0, 1−m, 1)` in `double` and the result is
-returned as an `EXPR_REAL`, so `Precision[EllipticK[0.5]]` is `MachinePrecision` and the
-value packs. If the kernel declines — `m ≥ 1`, where the value is a pole or genuinely
-complex — `flint_num_elliptic_k` answers through Arb's `acb_elliptic_k`.
+**Algorithm.** `builtin_elliptick` tries, in this order: the pole (`ell_is_one`, which
+recognises `1`, `1.` and an `EXPR_MPFR` one alike → `ComplexInfinity`); then the
+**machine fast path** `ell_complete_machine`, gated by the shared
+`sf_machine_scalar_args` (a machine `Real` or machine `Complex` argument; exact and
+`EXPR_MPFR` arguments do not pass); then the exact reductions — `K[0] = π/2`,
+`K[∞] = 0` (since `K(m) ~ (π − i log 16m)/(2√m)`), and the two lemniscatic singular values
+`m = 1/2` and `m = −1` as closed forms in `Γ` (`ell_k_closed_half`,
+`ell_k_closed_minus_one`). Any remaining inexact argument — in practice an arbitrary-precision
+one, or a machine one the kernels declined — goes to `flint_num_elliptic_k`, i.e. Arb's
+`acb_elliptic_k`, under the bridge's accuracy ladder (`nb_eval1` doubles the working
+precision while `acb_rel_accuracy_bits` falls short of the digits requested). An exact
+non-special argument stays symbolic.
 
-**Order is load-bearing, twice.** The pole is tested *before* the numeric path because
-Arb returns a non-finite ball there and the bridge maps that to `NULL`, which would leave
-`EllipticK[1.]` unevaluated instead of `ComplexInfinity`; `ell_is_one` therefore also
-knows `EXPR_MPFR`, so `SetPrecision[1, 30]` and `1.` cannot disagree about being at a
-pole. Conversely the numeric path runs *before* the remaining exact reductions, so an
-inexact argument gets an inexact answer (`EllipticK[0.]` is `1.5707963267948966`, not the
-exact `π/2`) — the reductions stay underneath as the fallback for spellings Arb cannot
-read, such as an exact `Pi/2` upper limit.
+The machine kernels live in `src/special_functions/sf_machine_ellk.c` and are chosen by the
+argument's type and value:
 
-**Data structures.** Plain `double` scalars: `carlson_rf` runs the duplication
-`x,y,z → (x+λ)/4` with `λ = √x√y + √y√z + √z√x`, stopping when every relative deviation
-from the mean is below `EC_ERRTOL_RF = 0.0025`, then adds the fifth-order tail in the
-`E₂`/`E₃` invariants. The tolerance is not cosmetic: the tail is fifth order, so the error
-goes as `(q/A)⁶` and the previous `0.01` bought 1e-12 where the comment claimed 1e-16.
-The arbitrary-precision path is `acb_t` throughout, with the bridge's accuracy ladder
-(`nb_eval1`) doubling the working precision while `acb_rel_accuracy_bits` falls short of
-the digits requested.
+- *real `m < 1`* — `sf_machine_ellk_k`: Cephes' structure `K = P(t) − log(t) Q(t)`,
+  `t = 1 − m`, two degree-10 Horner chains and one `log`. The coefficients are not
+  Cephes': `tools/sf_accuracy/fit_ellk.py` re-fitted them as a relative-error minimax
+  (Lawson IRLS in mpmath, points down to `t = 10⁻³⁰⁰` so that `Q(0)` is pinned against
+  `|log t| ≈ 690`), fit error 1.2·10⁻¹⁸. For `m < 0` the DLMF 19.7.5 transformation maps
+  the argument to `t' = 1/t`, so the same polynomials serve `(−∞, 1)`;
+- *complex `m`, or a real `m > 1`* — `sf_machine_ellk_k_c`: the AGM `π/(2 M(1, √(1−m)))` in
+  raw `double` re/im (no `<complex.h>`), taking at every step the square root with
+  `Re(aₙ₊₁ conj bₙ₊₁) ≥ 0` (Cox's "right choice"), which yields the principal branch with
+  the cut on `[1, ∞)`. A zero imaginary part of either sign is read as `+0`, so on the cut
+  the value is the limit from below: `EllipticK[2.]` is `1.31103 − 1.31103 I`. The final
+  `(π/2)/M` uses Smith's division. A complex slot holding a real `m < 1` is sent back to the
+  real kernel, so `0.9 + 0. I` in a complex buffer and the scalar `0.9` agree bit for bit.
 
-**Complexity / limits.** Seven duplication steps at most, so the machine path is `O(1)`
-with ~3 ulp error and no allocation; the `Listable`/NDArray path runs it element-wise
-across cores. The machine kernel is real-domain only (`m < 1`); everything else — complex
-`m`, `m > 1`, and every request above machine precision — is Arb's, which is rigorous but
-single-threaded. `Series` at `m = 0` comes from a dedicated kernel rather than
-Taylor-via-`D`, because `d/dm K` at `m = 0` is `(π/2 − π/2)/0`.
+**Data structures.** `static const double` coefficient tables and plain `double`
+scalars; nothing is allocated. A complex result is built by `sf_machine_complex_result`,
+which hands out one shared `Complex` head node by refcount. The same two kernels are the
+`NDKU_EllipticK` unary ND kernel in `src/ndkernels.c` (real arm `elliptic_machine_k`, which
+now delegates to `sf_machine_ellk_k`; complex arm `sf_machine_ellk_k_c`), registered with
+`REG_U`, which also makes the head `packed_aware`, and `Compile[]` calls those registered
+kernels at `_Real`, `_Complex` and rank-1 shapes. So scalar, `List`, packed `List`,
+`NDArray` and `Compile[]` agree bit for bit (`tests/test_elliptic_machine.c`). A *real*
+buffer stays real-closed: an element with `m > 1` makes the real arm decline, the buffer
+is abandoned to the `List` path, and that element's scalar call takes the complex kernel.
+The incomplete integrals keep Carlson's `R_F`/`R_D` duplication in `elliptic.c`, and the
+quasi-period `2k K(m)` they add off the principal strip goes through the same
+`elliptic_machine_k`.
+
+**Complexity / limits.** `O(1)`: about 0.12 µs per real call and 0.37 µs per complex one
+(the AGM converges quadratically, 4–6 square roots for `|m| ≤ 1`, at most 40 iterations).
+Measured against mpmath the real kernel is within 1.7 ulp on `[0, 0.95]` and 2.4 ulp on
+`[−50, 1)`; the complex one within 3.4 ulp on `|Re m|, |Im m| ≤ 0.9` and 4.7 ulp out to 20.
+The kernels decline the pole, a non-finite result, and `|Re m|` or `|Im m| > 10³⁰⁰` (where
+the AGM products would overflow); those cases, and every request above machine precision,
+are Arb's, which is rigorous but slower and single-threaded. `Series` at `m = 0` comes from
+a dedicated kernel rather than Taylor-via-`D`, because `d/dm K` at `m = 0` is
+`(π/2 − π/2)/0`, and `Interval[]` threads by certified monotonicity below `m = 1`.

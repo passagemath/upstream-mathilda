@@ -5,7 +5,9 @@
 
 ## Description
 
-**`KaryTree[n] gives a binary tree with n vertices; KaryTree[n, k] a k-ary tree with n vertices, vertices numbered in breadth-first order.`**
+**`KaryTree[n]`**
+
+gives a binary tree with n vertices; KaryTree\[n, k\] a k-ary tree with n vertices, vertices numbered in breadth-first order.
 
 ## Examples (10)
 

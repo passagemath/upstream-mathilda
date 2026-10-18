@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Names["string"] gives a sorted list of the names of symbols matching the string. Names[patt] matches a string pattern with metacharacters * (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression["re"]. Names[{p1, p2, ...}] matches any of the patterns. Names[] lists all symbol names.`**
+**`Names["string"]`**
+
+gives a sorted list of the names of symbols matching the string. Names\[patt\] matches a string pattern with metacharacters \* (zero or more characters) and @ (one or more non-uppercase characters), or a RegularExpression\["re"\]. Names\[{p1, p2, ...}\] matches any of the patterns. Names\[\] lists all symbol names.
 
 ## Examples (8)
 

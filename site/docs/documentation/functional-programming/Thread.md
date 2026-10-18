@@ -20,7 +20,18 @@ threads f over objects with head h that appear in the first n args.
 <details>
 <summary>Notes</summary>
 
-Functions with attribute Listable are automatically threaded over lists. All the elements in the specified args whose heads are h must be of the same length. Arguments that do not have head h are copied as many times as there are elements in the arguments that do have head h. Thread specifies argument positions using the standard sequence specification: All       all elements None      no elements n         elements 1 through n -n        last n elements {n}       element n only {m, n}    elements m through n inclusive {m, n, s} elements m through n in steps of s
+Functions with attribute Listable are automatically threaded over lists. All the elements in the specified args whose heads are h must be of the same length. Arguments that do not have head h are copied as many times as there are elements in the arguments that do have head h. Thread specifies argument positions using the standard sequence specification:
+
+```text
+All       all elements
+None      no elements
+n         elements 1 through n
+-n        last n elements
+{n}       element n only
+{m, n}    elements m through n inclusive
+```
+
+{m, n, s} elements m through n in steps of s
 
 </details>
 

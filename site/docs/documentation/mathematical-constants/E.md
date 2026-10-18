@@ -9,7 +9,9 @@
 
 is the exponential constant e (base of natural logarithms), with numerical value ~= 2.71828.
 
-**`NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any`**
+**`NumericQ[E]`**
+
+is True, and D\[E, x\] is 0. N\[E, prec\] evaluates it to any
 
 <details>
 <summary>Notes</summary>

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphConnectedComponents[h] gives the connected components of h as Lists of vertices; two vertices are connected when a chain of hyperedges joins them. Components are ordered by their first vertex.`**
+**`HypergraphConnectedComponents[h]`**
+
+gives the connected components of h as Lists of vertices; two vertices are connected when a chain of hyperedges joins them. Components are ordered by their first vertex.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Hypergraph[{e1, e2, ...}] represents a hypergraph whose hyperedges e_i are Lists of vertices; the vertices are derived in first-appearance order. Hypergraph[{v1, ...}, {e1, ...}] gives the vertices explicitly. Hypergraph[g] converts a Graph. Hyperedges may repeat, overlap, nest, be empty, or repeat a vertex; their order is kept for ordered (Wolfram-model) use, while set-based heads read each as the set of its vertices.`**
+**`Hypergraph[{e1, e2, ...}]`**
+
+represents a hypergraph whose hyperedges e\_i are Lists of vertices; the vertices are derived in first-appearance order. Hypergraph\[{v1, ...}, {e1, ...}\] gives the vertices explicitly. Hypergraph\[g\] converts a Graph. Hyperedges may repeat, overlap, nest, be empty, or repeat a vertex; their order is kept for ordered (Wolfram-model) use, while set-based heads read each as the set of its vertices.
 
 ## Examples (11)
 

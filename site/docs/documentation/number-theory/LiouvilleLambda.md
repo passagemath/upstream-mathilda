@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].`**
+**`LiouvilleLambda[n]`**
+
+gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -\> True, is handled over Z\[i\].
 
 ## Examples (12)
 

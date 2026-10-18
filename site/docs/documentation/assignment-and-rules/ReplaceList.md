@@ -5,9 +5,13 @@
 
 ## Description
 
-**`ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.`**
+**`ReplaceList[expr, rules]`**
 
-**`ReplaceList[expr, rules, n] gives a list of at most n results.`**
+attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.
+
+**`ReplaceList[expr, rules, n]`**
+
+gives a list of at most n results.
 
 ## Examples (5)
 

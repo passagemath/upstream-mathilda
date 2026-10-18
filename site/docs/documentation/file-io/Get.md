@@ -59,9 +59,9 @@ infix shorthand `expr >> "file"` and lowers it to `Put[expr, "file"]`.
 - Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
 - Tests: [`tests/test_crc_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_crc_corpus.c)
+- Tests: [`tests/test_extreme_definite_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extreme_definite_corpus.c)
 - Tests: [`tests/test_fullsimplify_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fullsimplify_corpus.c)
 - Tests: [`tests/test_integrals.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrals.c)
-- Tests: [`tests/test_intrat_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_intrat_corpus.c)
 
 ## Notes & additional examples
 

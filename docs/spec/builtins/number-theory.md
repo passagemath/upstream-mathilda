@@ -309,6 +309,17 @@ threads over lists in every argument itself.
   per residue). Exact-valued, so no `Compile[]` lowering (compile-coverage
   `EXEMPT`).
 
+```mathematica
+In[1]:= Table[DirichletCharacter[5, 2, n], {n, 1, 5}]
+Out[1]= {1, I, -I, -1, 0}
+
+In[2]:= Table[DirichletCharacter[8, j, n], {j, 1, 4}, {n, 1, 8}]
+Out[2]= {{1, 0, 1, 0, 1, 0, 1, 0}, {1, 0, -1, 0, -1, 0, 1, 0}, {1, 0, -1, 0, 1, 0, -1, 0}, {1, 0, 1, 0, -1, 0, -1, 0}}
+
+In[3]:= DirichletCharacter[45, 8, 7]
+Out[3]= -I E^((-2/3*I) Pi)
+```
+
 ## PrimitiveRoot
 
 Gives a primitive root of `n`, i.e. a generator of the multiplicative group
@@ -542,7 +553,7 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 
 | Method (`FactorInteger`name`) | Algorithm | Suboptions |
 |---|---|---|
-| `Automatic` | Below 2^64 the word engine handles everything: Montgomery arithmetic, a deterministic Miller–Rabin test, micro-ECM with Suyama curves and a baby-step/giant-step stage 2, and rho/SQUFOF as backstops. Above 2^64 the tiers are: trial division to 2^16 → Pollard rho (two-limb Montgomery below 2^126) → two-limb micro-ECM (below 2^126) → a Fermat probe → one p-1 → one p+1 (three seeds from 60 digits) → ECM levels 15, 20, ... digits, switching to the quadratic sieve once the ECM effort reaches 2/7 of the composite's digit count, for composites up to 100 digits. After a split, both parts restart at the tier that succeeded. | — |
+| `Automatic` | Below 2^64 the word engine handles everything: Montgomery arithmetic, a deterministic Miller–Rabin test, micro-ECM with Suyama curves and a baby-step/giant-step stage 2, and rho/SQUFOF as backstops. Above 2^64 the tiers are: trial division to 2^16 → Pollard rho (two-limb Montgomery below 2^126) → two-limb micro-ECM (below 2^126) → a Fermat probe → one p-1 → one p+1 (three seeds from 70 digits) → ECM levels 15, 20, ... digits, switching to the quadratic sieve once the ECM effort reaches 2/7 of the composite's digit count, for composites up to 100 digits. After a split, both parts restart at the tier that succeeded. | — |
 | `"TrialDivision"` | Primes are tested in word-sized products, one bignum remainder per 2–4 primes; a segmented sieve takes over above 2^20. The default bound is sqrt(n) when that is below 10^7, else 10^7. | `"Bound"` (≤ 2^40) |
 | `"PollardRho"` | Brent's variant with batched gcds and backtracking; Montgomery arithmetic on one and two words, GMP above that. | `"Iterations"`, `"Starts"` |
 | `"Fermat"` | Fermat's method with quadratic-residue filters modulo nine small moduli. | `"Iterations"` |
@@ -550,7 +561,7 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 | `"ShanksSquareForms"` (alias `"SQUFOF"`) | SQUFOF over the 16 Gower–Wagstaff multipliers, in word arithmetic for kN < 2^124. | `"Iterations"` |
 | `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. Relation collection is pipelined across threads: one thread extends the continued fraction into the next batch while every thread trial-divides the current one, and the hits are replayed in term order. The relations, restarts and divisor are therefore those of the serial method for any thread count. | `"Iterations"` |
 | `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. The draws are taken in batches; the candidates are built and trial-divided in parallel, and the hits are replayed in draw order. Results and the random stream are those of the serial method. | `"Iterations"` |
-| `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division. Single large primes, plus double large primes from 72 digits, combined by cycle-finding in the large-prime graph. Polynomial families are sieved in parallel from 45 digits (one A per thread). Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
+| `"QuadraticSieve"` (aliases `"QS"`, `"SIQS"`, `"MPQS"`; the heads `FactorInteger`QS` and `FactorInteger`SIQS` exist, `"MPQS"` is a `Method` string only) | Native self-initialising QS: Gray-code polynomial switching, 32 KB block sieve with bucket sieving for primes ≥ 2^15, batched candidate trial division. Single large primes, plus double large primes from 72 digits, combined by cycle-finding in the large-prime graph. Polynomial families are sieved in parallel from 45 digits (one A per thread). Linear algebra is block Lanczos (Montgomery 1995) above 1000 columns, dense elimination below. | — |
 | `"PollardPMinus1"` (alias `"PollardP-1"`) | GMP-ECM p-1, with a B1 back-off when every prime is caught at once; a word walk with prime-by-prime backtracking below 2^64. | `"B1"` (10^6), `"B2"` |
 | `"WilliamsPPlus1"` (alias `"WilliamsP+1"`) | GMP-ECM p+1 with seeds 2/7, 6/5, 3, and the same back-off and word walk. The seeds run in parallel, one per thread, and the first success in seed order is taken. | `"B1"` (10^6), `"B2"` |
 | `"ECM"` | GMP-ECM, climbing its optimal levels (B1 = 2000, 11000, 5e4, ...) with the expected curve count at each. Curves run in parallel, one per thread, for n ≥ 2^160. They use the batch parametrisation with sigmas drawn deterministically, and successes are taken in curve order, so the result does not depend on scheduling. A user `"Sigma"` is a Suyama parameter. There is a B1 back-off on gcd = n. | `"B1"`, `"B2"`, `"Curves"`, `"Sigma"` |

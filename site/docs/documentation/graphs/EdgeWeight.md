@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeWeight[g] gives the weights of g's edges, in EdgeList order. Defaults to all 1s if g was built without an EdgeWeight option.`**
+**`EdgeWeight[g]`**
+
+gives the weights of g's edges, in EdgeList order. Defaults to all 1s if g was built without an EdgeWeight option.
 
 ## Examples (8)
 

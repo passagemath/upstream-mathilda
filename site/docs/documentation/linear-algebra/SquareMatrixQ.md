@@ -85,7 +85,7 @@ Out[11]= False
 
 ## References
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 - Tests: [`tests/test_square_matrix_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_square_matrix_q.c)
 

@@ -5,11 +5,17 @@
 
 ## Description
 
-**`MemberQ[list, form] returns True if an element of list matches form, and False otherwise.`**
+**`MemberQ[list, form]`**
 
-**`MemberQ[list, form, levelspec] tests all parts of list specified by levelspec.`**
+returns True if an element of list matches form, and False otherwise.
 
-**`MemberQ[form] represents an operator form of MemberQ that can be applied to an expression.`**
+**`MemberQ[list, form, levelspec]`**
+
+tests all parts of list specified by levelspec.
+
+**`MemberQ[form]`**
+
+represents an operator form of MemberQ that can be applied to an expression.
 
 ## Examples (9)
 

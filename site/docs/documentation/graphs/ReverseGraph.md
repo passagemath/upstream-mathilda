@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ReverseGraph[g] reverses every directed edge of g; undirected edges, the edge order and the weights are kept.`**
+**`ReverseGraph[g]`**
+
+reverses every directed edge of g; undirected edges, the edge order and the weights are kept.
 
 ## Examples (5)
 

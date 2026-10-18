@@ -24,43 +24,109 @@ Integer and half-integer arguments reduce to exact values ((z-1)!, and rational 
 
 </details>
 
-## Examples (9)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
+
+```mathematica
+In[1]:= Gamma[7/2]
+Out[1]= 15/8 Sqrt[Pi]
+
+In[2]:= Gamma[2.3 + I]
+Out[2]= 0.719141 + 0.540614*I
+
+In[3]:= Gamma[3, x]
+Out[3]= E^(-x) (2 + 2 x + x^2)
+```
 
 ### Worked examples (4)
 
 ```mathematica
-In[1]:= Gamma[-n]
-Out[1]= Gamma[-n]
+In[4]:= Gamma[-n]
+Out[4]= Gamma[-n]
 
-In[2]:= Gamma[Infinity]
-Out[2]= Infinity
+In[5]:= Gamma[Infinity]
+Out[5]= Infinity
 
-In[3]:= Gamma[-Infinity]
-Out[3]= Indeterminate
+In[6]:= Gamma[-Infinity]
+Out[6]= Indeterminate
 
-In[4]:= Gamma[ComplexInfinity]
-Out[4]= ComplexInfinity
+In[7]:= Gamma[ComplexInfinity]
+Out[7]= ComplexInfinity
 ```
 
-### Applications (5)
+### Applications (10)
+
+The shifted factorial, 4!
 
 ```mathematica
-In[5]:= Gamma[5]
-Out[5]= 24
+In[8]:= Gamma[5]
+Out[8]= 24
+```
 
-In[6]:= Gamma[7/2]
-Out[6]= 15/8 Sqrt[Pi]
+Half-integers close to rational multiples of Sqrt[Pi]
 
-In[7]:= Gamma[-1/2]
-Out[7]= -2 Sqrt[Pi]
+```mathematica
+In[9]:= Gamma[7/2]
+Out[9]= 15/8 Sqrt[Pi]
+```
 
-In[8]:= N[Gamma[1/3], 40]
-Out[8]= 2.6789385347077476336556929409746776441286
+The functional equation continues past the poles at the non-positive integers
 
-In[9]:= N[Gamma[3 + 4 I], 20]
-Out[9]= 0.00522553847136921419473 - 0.172547079294300187719*I
+```mathematica
+In[10]:= {Gamma[-1/2], Gamma[0]}
+Out[10]= {-2 Sqrt[Pi], ComplexInfinity}
+```
+
+Arbitrary-precision real through mpfr_gamma
+
+```mathematica
+In[11]:= N[Gamma[1/3], 40]
+Out[11]= 2.6789385347077476336556929409746776441286
+```
+
+Machine complex on the shared double kernel
+
+```mathematica
+In[12]:= Gamma[2.3 + I]
+Out[12]= 0.719141 + 0.540614*I
+```
+
+The compiled call and the scalar builtin agree bit for bit
+
+```mathematica
+In[13]:= cg = Compile[{{z, _Complex}}, Gamma[z]]; cg[2.3 + I] === Gamma[2.3 + I]
+Out[13]= True
+```
+
+Arbitrary-precision complex through Spouge's approximation
+
+```mathematica
+In[14]:= N[Gamma[3 + 4 I], 20]
+Out[14]= 0.00522553847136921419473 - 0.172547079294300187719*I
+```
+
+A positive-integer first argument gives the finite closed form
+
+```mathematica
+In[15]:= Gamma[3, x]
+Out[15]= E^(-x) (2 + 2 x + x^2)
+```
+
+Upper and generalized incomplete gamma, numerically
+
+```mathematica
+In[16]:= {Gamma[1.5, 7.5], Gamma[1, 1.1, 2.2]}
+Out[16]= {0.00160996, 0.222068}
+```
+
+An exact complex incomplete gamma has no closed form and stays unevaluated
+
+```mathematica
+In[17]:= Gamma[3/2, I]
+Out[17]= Gamma[3/2, I]
 ```
 
 ## Algorithm
@@ -79,7 +145,8 @@ Evaluation is layered so each kind of argument takes the cheapest exact or faste
   exact integer / half-integer  ->  (z-1)! via the Factorial machinery
                                      (exact, BigInt, or rational*Sqrt[Pi])
   machine real        ->  libm   tgamma
-  machine complex     ->  Lanczos approximation (double complex)
+  machine complex     ->  sfg_gamma_c (sf_machine_gamma.c), shared with the
+                          NDArray kernel and Compile[]
   arbitrary real      ->  MPFR   mpfr_gamma / mpfr_gamma_inc
   everything else     ->  stays symbolic (return NULL)
 ```
@@ -90,11 +157,20 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_gamma` serves `Gamma[z]`, `Gamma[a, z]` (upper incomplete), and `Gamma[a, z0, z1] = Gamma[a,z0] - Gamma[a,z1]`. For `Gamma[z]` the layering is: an **exact integer / half-integer** reduces to `(z-1)!` through the `Factorial` machinery (exact `BigInt`, or the `Sqrt[Pi]` half-integer rationals); symbolic infinities map to `Infinity`/`ComplexInfinity`/`Indeterminate`; a **machine real** uses libm `tgamma` (overflow promotes to a 53-bit MPFR real via `mpfr_gamma`, poles give `ComplexInfinity`); an **arbitrary real** uses `mpfr_gamma`; a **machine complex** uses a fixed-coefficient **Lanczos** approximation (`g = 7, n = 9`, ~15 digits, reflection for `Re z < 1/2`); and an **arbitrary-precision complex** uses **Spouge's** approximation (runtime-computable coefficients, so it honours the requested precision) in the file-local complex-MPFR toolkit `gcx`. The incomplete form: `Gamma[a, 0] = Gamma[a]`, `Gamma[a, Infinity] = 0`; a **positive integer `a`** with symbolic/exact `z` expands to the finite closed form `(n-1)! e^{-z} Sum_{k<n} z^k/k!`; numeric real routes to `mpfr_gamma_inc`; numeric complex uses a lower-series / Lentz-continued-fraction split in `gcx` with the `e^{-z} z^a` prefactor.
+**Algorithm.** `builtin_gamma` serves `Gamma[z]`, `Gamma[a, z]` (upper incomplete) and `Gamma[a, z0, z1] = Gamma[a, z0] - Gamma[a, z1]`; an `Interval` argument goes to `interval_apply_function`. `gamma_one_arg` tests the cheap numeric cases first, then the exact ones:
 
-**Data structures.** `Expr`; file-local `gcx` (pairs of `mpfr_t`, alias-safe, explicit precision) for complex/incomplete MPFR work; GMP for the exact factorial path. The ND kernel is a real `REG_U` registration (`NDKU_Gamma`): real buffers via `ndk_Gamma_r` (libm `tgamma`), complex buffers via `gamma_machine_complex` (the machine Lanczos kernel). `Compile[]` lowers `Gamma` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+1. **Machine real** → libm `tgamma`. A pole (`NaN`) gives `ComplexInfinity`. An overflow (`Gamma[172.]` and beyond) is recomputed by `mpfr_gamma` at 53 bits, so the answer is a machine-precision number with an extended exponent and not `Infinity`.
+2. **Complex with an MPFR part** → `gamma_mpfr_complex`: Spouge's approximation in the file-local complex-MPFR toolkit `gcx`. Its coefficients are computed at run time for the working precision (output precision + 64 guard bits), so the requested digits are correct.
+3. **Machine complex** → `gamma_machine_complex`, which calls `sfg_gamma_c` in `sf_machine_gamma.c`. For `-5 <= Re z < 10`, `|Im z| < 19/4`, the exact recurrence moves `z` into the strip `1 <= Re < 5/2`, and lnΓ comes from a Taylor series about the nearest of 30 precomputed centres. Elsewhere the kernel shifts to `Re w >= 7` and sums Stirling's series. The `N` recurrence logarithms are taken as one log of the running product, with its windings counted (Hare's continuous branch). Γ is then `exp` of a double-double exponent, built with Dekker products, times the product correction. A real-valued result (`Im = 0`) comes back as a `Real`. Inputs the kernel declines (`Re z < -30`, overflow) fall back to the old `g = 7`, 9-term Lanczos series with reflection.
+4. **Exact integer / half-integer** → `(z-1)!` through the `Factorial` machinery. This gives an exact integer, a `BigInt`, or a rational multiple of `Sqrt[Pi]`, and works for negative half-integers too. Non-positive integers are poles (`ComplexInfinity`).
+5. **Symbolic infinities**: `Infinity → Infinity`, `-Infinity → Indeterminate`, `ComplexInfinity → ComplexInfinity`.
+6. **Arbitrary-precision real** → `mpfr_gamma` at the input precision.
 
-**Complexity / limits.** `O(1)` per element on the real/machine-complex paths; the MPFR paths scale their term count with precision. Arbitrary-precision complex uses Spouge (precision-honest); machine complex uses Lanczos (~15 digits). Simple poles at the non-positive integers give `ComplexInfinity`. The incomplete integer expansion is capped at `a <= 1000`. Attributes: `Listable`, `NumericFunction`, `Protected`.
+The incomplete form does the exact rewrites first: `Gamma[a, 0] = Gamma[a]` and `Gamma[a, Infinity] = 0`. A positive-integer `a <= 1000` with exact or symbolic `z` expands to `e^{-z} Sum_k ((n-1)!/k!) z^k`, with the coefficients built in GMP (`gamma_incomplete_int`). For a numeric real it calls `mpfr_gamma_inc` at the minimum input precision, keeping a 53-bit MPFR value when a double would overflow or underflow. For numeric complex it uses `gcx_inc_gamma`: the lower series `gamma(a,z) = z^a e^{-z} Sum z^n/(a)_{n+1}` when `Re z < Re a + 1`, otherwise a Lentz continued fraction, then multiplies by `e^{-z} z^a`.
+
+**Data structures.** `Expr` trees; `gcx` (a pair of `mpfr_t`; alias-safe, explicit precision) for the complex and incomplete MPFR work; GMP for the factorial and closed-form coefficients. The machine kernel works on `(re, im)` doubles, without `<complex.h>`. Its tables (tile Taylor coefficients, Stirling `B_2k/(2k(2k-1))`) come from `tools/sf_accuracy/gen_gamma_tables.py` (mpmath), and `tools/sf_accuracy/gamma.py` gates their accuracy. The ND kernel is `NDKU_Gamma = { gamma_machine_complex, ndk_Gamma_r }`, registered with `REG_U`, so packed arrays and visible `NDArray`s are mapped directly: real elements use `tgamma` (a pole or overflow declines to the `List` path), complex elements use the same `gamma_machine_complex` as the scalar call. `Compile[]` lowers `Gamma` through that kernel for real scalars, complex scalars and rank-1 arrays. An integer argument uses the integer-closed opcode `OP_GAMMA_I`, so `Gamma[5]` stays the exact `24`. The scalar, packed, `NDArray` and `Compile[]` answers agree bit for bit.
+
+**Complexity / limits.** The machine paths are `O(1)` per element. The complex kernel has a median error of 0.8 ulp and a maximum of about 4 ulp in the box `0.5 <= Re z <= 4`, `|Im z| <= 3` (the Lanczos series it replaced reached 50 ulp). The MPFR paths scale their term counts and guard bits with the precision. Exact complex arguments (`Gamma[3/2, I]`), exact non-integer `a` in `Gamma[a, z]`, and symbolic `z` stay unevaluated. The incomplete integer expansion is capped at `a <= 1000`. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 - Exact reductions for `Gamma[z]`:
   - Positive integers: `Gamma[n] = (n-1)!` (exact, with GMP BigInt for large `n`).
@@ -111,8 +187,20 @@ Attributes: Listable, NumericFunction, Protected.
     e.g. `Gamma[1, z] = E^-z`, `Gamma[2, x] = (1 + x) E^-x`,
     `Gamma[3, x] = (2 + 2 x + x^2) E^-x`, and exact `Gamma[2, 3] = 4/E^3`.
 - Numeric evaluation:
-  - Machine-precision real → libm `tgamma`; machine-precision complex →
-    Lanczos approximation, e.g. `Gamma[2.3 + I] = 0.719141 + 0.540614 I`.
+  - Machine-precision real → libm `tgamma`. Machine-precision complex →
+    the Gamma-family double kernel `sfg_gamma_c`
+    (`src/special_functions/sf_machine_gamma.c`), shared bit-for-bit by the
+    scalar call, packed / `NDArray` maps and `Compile[]`, e.g.
+    `Gamma[2.3 + I] = 0.719141 + 0.540614 I`. For `-5 ≤ Re z < 10`,
+    `|Im z| < 19/4` the exact recurrence moves z into the strip `1 ≤ Re < 5/2`
+    and a Taylor series of lnΓ about the nearest of 30 precomputed centres is
+    summed (the constant term carried as a double-double); elsewhere shifted
+    Stirling (Re w ≥ 7) with the exponent formed in double-double (Dekker
+    products, an extra-precise log|w|), then ONE complex exponential. Accuracy:
+    median 0.8 / max 3.5 ulp on `0.5 ≤ Re z ≤ 4, |Im z| ≤ 3`; median 3.6 ulp
+    over `-10..30 × ±20i`, where the conditioning |z ψ(z)| itself reaches 10².
+    (The former Lanczos g = 7 series was median 9 / max 53 ulp on the same box.)
+    `Re z < -30` and overflow fall back to the Lanczos/reflection path.
   - Arbitrary precision (MPFR) real → `mpfr_gamma`, output precision tracking
     the input, e.g. `N[Gamma[22/10], 50]` and `Gamma[2.2`200]`.
   - **Arbitrary-precision complex** `Gamma[z]` → Spouge's approximation,
@@ -138,12 +226,15 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## References
 
-**See also:** [PolyGamma](../../special-functions/PolyGamma/)
+**See also:** [NDArray](../../linear-algebra/NDArray/), [PolyGamma](../../special-functions/PolyGamma/)
 
 - DLMF §5.2, §5.5 — the Euler gamma function and the reflection formula.
+- DLMF §5.11 — Stirling's series for ln Gamma.
 - DLMF §8.2, §8.11 — the (upper) incomplete gamma function Gamma(a,z).
 - J. L. Spouge, *Computation of the gamma, digamma, and trigamma functions*, SIAM J. Numer. Anal. 31 (1994) 931–944.
 - C. Lanczos, *A precision approximation of the gamma function*, SIAM J. Numer. Anal. Ser. B 1 (1964) 86–96.
+- D. E. G. Hare, *Computing the principal branch of log-Gamma*, J. Algorithms 25 (1997) 221–236.
+- T. J. Dekker, *A floating-point technique for extending the available precision*, Numer. Math. 18 (1971) 224–242.
 - Source: [`src/special_functions/gamma.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/gamma.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_airyai.c`](https://github.com/stblake/mathilda/blob/main/tests/test_airyai.c)
@@ -155,12 +246,8 @@ Attributes: Listable, NumericFunction, Protected.
 
 ### Notes
 
-`Gamma` is the Euler gamma function, the analytic continuation of the
-factorial: `Gamma[n] = (n-1)!`, so `Gamma[5] = 24`. Half-integer arguments
-collapse to exact rational multiples of `Sqrt[Pi]` — `Gamma[7/2] = 15/8 Sqrt[Pi]`
-— and this continues through the poles at non-positive integers into negative
-half-integers, where `Gamma[-1/2] = -2 Sqrt[Pi]`. For arguments with no
-closed form it evaluates to arbitrary precision via MPFR (`Gamma[1/3]` to 40
-digits) and across the complex plane (`Gamma[3 + 4 I]`). The two- and
-three-argument forms give the upper incomplete and generalized incomplete gamma
-functions.
+- `Gamma[n] = (n-1)!` for positive integers; half-integers reduce exactly to rational multiples of `Sqrt[Pi]`; non-positive integers are poles (`ComplexInfinity`).
+- Machine reals use libm `tgamma`; past `Gamma[171.6]` the value is recomputed in MPFR and returned as a machine-precision number with an extended exponent instead of overflowing.
+- Machine complex arguments use the `sf_machine_gamma.c` kernel (Taylor tiles near the real axis, shifted Stirling elsewhere). Scalar, packed list, `NDArray` and `Compile[]` share it bit for bit; arbitrary-precision complex uses Spouge's approximation at the requested precision.
+- `Gamma[a, z]` is the upper incomplete gamma and `Gamma[a, z0, z1] = Gamma[a, z0] - Gamma[a, z1]`; inexact arguments go through `mpfr_gamma_inc` (real) or a series/continued-fraction split (complex).
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `LogGamma`, `PolyGamma`, `Beta`, `Pochhammer`, `Factorial`.

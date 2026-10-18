@@ -9,9 +9,9 @@
 
 closes an open input or output stream and returns its file name.
 
-**`Close["file"] closes a stream opened for that file. Returns $Failed if`**
+**`Close["file"]`**
 
-the stream is not open.
+closes a stream opened for that file. Returns $Failed if the stream is not open.
 
 ## Examples (8)
 

@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Begin["ctx`"] sets the current context ($Context) to "ctx`", saving`**
+**`Begin["ctx`"]`**
 
-**`Begin["`Private`"] inside "MyPkg`" yields "MyPkg`Private`".`**
+sets the current context ($Context) to "ctx\`", saving
+
+**`Begin["`Private`"]`**
+
+inside "MyPkg\`" yields "MyPkg\`Private\`".
 
 <details>
 <summary>Notes</summary>

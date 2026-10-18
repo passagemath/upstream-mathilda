@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HyperedgeConnectedComponents[h] gives the components of the hyperedges of h under intersection, as Lists of 1-based hyperedge indices. HyperedgeConnectedComponents[h, s] gives the s-connected components: hyperedges with at least s vertices, joined when they share at least s.`**
+**`HyperedgeConnectedComponents[h]`**
+
+gives the components of the hyperedges of h under intersection, as Lists of 1-based hyperedge indices. HyperedgeConnectedComponents\[h, s\] gives the s-connected components: hyperedges with at least s vertices, joined when they share at least s.
 
 ## Examples (8)
 

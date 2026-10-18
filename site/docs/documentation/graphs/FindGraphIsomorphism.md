@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindGraphIsomorphism[g1, g2] gives {assoc}, an isomorphism from g1 to g2 as an association of vertices, or {} if the graphs are not isomorphic. FindGraphIsomorphism[g1, g2, n] / [g1, g2, All] gives up to n / all isomorphisms.`**
+**`FindGraphIsomorphism[g1, g2]`**
+
+gives {assoc}, an isomorphism from g1 to g2 as an association of vertices, or {} if the graphs are not isomorphic. FindGraphIsomorphism\[g1, g2, n\] / \[g1, g2, All\] gives up to n / all isomorphisms.
 
 ## Examples (10)
 

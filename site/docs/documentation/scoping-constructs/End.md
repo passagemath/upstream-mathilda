@@ -5,7 +5,9 @@
 
 ## Description
 
-**`End[] restores the context that was active before the matching Begin[]`**
+**`End[]`**
+
+restores the context that was active before the matching Begin\[\]
 
 <details>
 <summary>Notes</summary>

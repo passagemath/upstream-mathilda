@@ -5,7 +5,9 @@
 
 ## Description
 
-**`NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.`**
+**`NumericQ[expr]`**
+
+gives True if expr is a numeric quantity, and False otherwise.
 
 <details>
 <summary>Notes</summary>
@@ -50,7 +52,7 @@ Out[5]= True
 - Tests: [`tests/test_algebraicnumber.c`](https://github.com/stblake/mathilda/blob/main/tests/test_algebraicnumber.c)
 - Tests: [`tests/test_bigint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_bigint.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
-- Tests: [`tests/test_legendreq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_legendreq.c)
+- Tests: [`tests/test_dirichletl.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletl.c)
 
 ## Notes & additional examples
 

@@ -5,9 +5,13 @@
 
 ## Description
 
-**`PatternSequence[p1, p2, ...] is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....`**
+**`PatternSequence[p1, p2, ...]`**
 
-**`PatternSequence[] matches an empty (zero-length) sequence of arguments.`**
+is a pattern object that matches a sequence of arguments, each in turn matching p1, p2, ....
+
+**`PatternSequence[]`**
+
+matches an empty (zero-length) sequence of arguments.
 
 <details>
 <summary>Notes</summary>

@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Fit[data, {f1, ..., fn}, vars] finds a least-squares fit a1 f1 + ... + an fn to data for functions of the variables vars (a symbol or list of symbols).`**
+**`Fit[data, {f1, ..., fn}, vars]`**
 
-**`Fit[{m, v}] gives the coefficient vector minimizing ||m.a - v|| for design matrix m and response vector v.`**
+finds a least-squares fit a1 f1 + ... + an fn to data for functions of the variables vars (a symbol or list of symbols).
+
+**`Fit[{m, v}]`**
+
+gives the coefficient vector minimizing ||m.a - v|| for design matrix m and response vector v.
 
 <details>
 <summary>Notes</summary>

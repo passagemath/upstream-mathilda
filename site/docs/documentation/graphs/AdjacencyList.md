@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AdjacencyList[g] gives the adjacency list of g; AdjacencyList[g,v] gives the vertices adjacent to v (successors for directed edges).`**
+**`AdjacencyList[g]`**
+
+gives the adjacency list of g; AdjacencyList\[g,v\] gives the vertices adjacent to v (successors for directed edges).
 
 ## Examples (9)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BooleanQ[expr] gives True if expr is either True or False, and False otherwise. Unlike TrueQ it tests the symbol, so BooleanQ[False] is True.`**
+**`BooleanQ[expr]`**
+
+gives True if expr is either True or False, and False otherwise. Unlike TrueQ it tests the symbol, so BooleanQ\[False\] is True.
 
 ## Examples (4)
 

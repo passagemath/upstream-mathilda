@@ -126,7 +126,7 @@ Memory: the builtin honours the ownership contract -- it never frees `res`, retu
 
 **See also:** [Real](../../other-advanced/Real/), [Complex](../../arithmetic/Complex/), [N](../../arithmetic/N/)
 
-- Source: [`src/fibonacci.c`](https://github.com/stblake/mathilda/blob/main/src/fibonacci.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)

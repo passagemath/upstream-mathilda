@@ -9,7 +9,9 @@
 
 is the golden angle (3 - Sqrt\[5\]) Pi = 2 Pi / GoldenRatio^2, with numerical value ~= 2.39996 radians (~= 137.5 degrees).
 
-**`N[GoldenAngle, prec] evaluates it to any precision.`**
+**`N[GoldenAngle, prec]`**
+
+evaluates it to any precision.
 
 <details>
 <summary>Notes</summary>

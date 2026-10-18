@@ -5,7 +5,9 @@
 
 ## Description
 
-**`KatzCentrality[g, a] gives the Katz centrality x = a A^T x + 1 of each vertex; KatzCentrality[g, a, b] uses b (a number or a list) in place of 1. Edge weights are ignored.`**
+**`KatzCentrality[g, a]`**
+
+gives the Katz centrality x = a A^T x + 1 of each vertex; KatzCentrality\[g, a, b\] uses b (a number or a list) in place of 1. Edge weights are ignored.
 
 ## Examples (11)
 

@@ -17,13 +17,14 @@ A tutorial is run as ONE continuous session (state carries across blocks), and
 inputs are matched to outputs by position; the displayed In[k]/Out[k] numbers
 are cosmetic and ignored.
 """
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MATHILDA = ROOT / "Mathilda"
+MATHILDA = Path(os.environ.get("MATHILDA_BIN", ROOT / "Mathilda"))
 
 OUT_RE = re.compile(r"^Out\[\d+\]=\s?(.*)$")
 IN_RE = re.compile(r"^In\[\d+\]:=\s?(.*)$")

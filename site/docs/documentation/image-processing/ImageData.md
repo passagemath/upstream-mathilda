@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageData[image] gives the pixel array as reals in [0, 1], scaling out the image's type -- a "Byte" 255 comes back as exactly 1.0. The array is height x width, or height x width x channels for a colour image, interleaved. ImageData[image, type] gives the stored values unscaled instead, where type must be the image's own type; converting between types is a separate operation with its own rounding, not something this does silently.`**
+**`ImageData[image]`**
+
+gives the pixel array as reals in \[0, 1\], scaling out the image's type -- a "Byte" 255 comes back as exactly 1.0. The array is height x width, or height x width x channels for a colour image, interleaved. ImageData\[image, type\] gives the stored values unscaled instead, where type must be the image's own type; converting between types is a separate operation with its own rounding, not something this does silently.
 
 ## Examples (5)
 

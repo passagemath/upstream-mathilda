@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindThreshold[image] gives a threshold separating the image into two classes, by Otsu's method: the level maximising the BETWEEN-class variance w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted within-class variance but needs only one incremental pass over a 256-bin histogram. A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an image whose pixels are all identical, since no threshold splits one cluster into two.`**
+**`FindThreshold[image]`**
+
+gives a threshold separating the image into two classes, by Otsu's method: the level maximising the BETWEEN-class variance w0 w1 (mu0 - mu1)^2, which is algebraically the same as minimising the weighted within-class variance but needs only one incremental pass over a 256-bin histogram. A colour image is reduced to Rec. 601 luminance first. Returns unevaluated for an image whose pixels are all identical, since no threshold splits one cluster into two.
 
 ## Examples (28)
 

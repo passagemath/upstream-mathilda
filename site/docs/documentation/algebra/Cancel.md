@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Cancel[expr] cancels out common factors in the numerator and denominator of expr.`**
+**`Cancel[expr]`**
+
+cancels out common factors in the numerator and denominator of expr.
 
 <details>
 <summary>Notes</summary>
@@ -14,7 +16,7 @@ Option Extension -\> alpha cancels factors over Q(alpha) (e.g. simplifies (x^2 -
 
 </details>
 
-## Examples (14)
+## Examples (19)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -53,32 +55,91 @@ In[9]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
 Out[9]= 2^(2/3) + 2^(1/3) x + x^2
 ```
 
-### Applications (5)
+### Applications (10)
+
+The common factor x - 1 is divided out; the rest stays a reduced quotient
 
 ```mathematica
-In[10]:= Cancel[(x^2 - 1)/(x - 1)]
-Out[10]= 1 + x
+In[10]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
+Out[10]= (1 + x)/(-1 + x)
+```
 
-In[11]:= Cancel[(x^2 + 2 x + 1)/(x + 1)]
-Out[11]= 1 + x
+Exact polynomial division by the GCD
 
-In[12]:= Cancel[(x^2 - 1)/(x^2 - 2 x + 1)]
-Out[12]= (1 + x)/(-1 + x)
+```mathematica
+In[11]:= Cancel[(x^4 - 1)/(x^2 - 1)]
+Out[11]= 1 + x^2
+```
 
-In[13]:= Cancel[(x^4 - 1)/(x^2 - 1)]
-Out[13]= 1 + x^2
+Each term of a sum is cancelled; the sum is not combined
 
+```mathematica
+In[12]:= Cancel[(x - y)^2/(x^2 - y^2) + a]
+Out[12]= a + (x - y)/(x + y)
+```
+
+Threads over equations
+
+```mathematica
+In[13]:= Cancel[(x^3 - 1)/(x - 1) == y]
+Out[13]= 1 + x + x^2 == y
+```
+
+Cancellation over Q(Sqrt[2])
+
+```mathematica
 In[14]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
 Out[14]= Sqrt[2] + x
 ```
 
+The extension Q(I) is detected automatically
+
+```mathematica
+In[15]:= Cancel[(x^2 + 1)/(x - I), Extension -> Automatic]
+Out[15]= I + x
+```
+
+Both exponentials reduce to the single generator E^x
+
+```mathematica
+In[16]:= Cancel[(E^(2 x) - 1)/(E^x - 1)]
+Out[16]= 1 + E^x
+```
+
+A trig kernel is an opaque generator
+
+```mathematica
+In[17]:= Cancel[(Sin[x]^2 - 1)/(Sin[x] - 1)]
+Out[17]= 1 + Sin[x]
+```
+
+An unevaluated integral is kept as an atom
+
+```mathematica
+In[18]:= Cancel[Integrate[f[x], x] (x^2 - 1)/(x - 1)]
+Out[18]= (1 + x) Integrate[f[x], x]
+```
+
+Inexact coefficients round-trip
+
+```mathematica
+In[19]:= Cancel[(x^2 - 1.)/(x - 1)]
+Out[19]= 1.0 + x
+```
+
 ## Implementation notes
 
-**Algorithm.** `Cancel` reduces a rational expression to lowest terms by cancelling the polynomial GCD of numerator and denominator. `builtin_cancel_compute` strips an optional `Extension -> α` (with `Automatic` via `extension_autodetect`, routing single-generator and tower cases through the `Q(α)` paths `cancel_with_extension` / `qa_cancel_with_tower`) and otherwise calls `cancel_recursive`. That routine recurses through `List`/`Plus`/relational/logical heads, then for a leaf fraction: splits the expression into `num`/`den` with `extract_num_den` (which understands `Rational`, `Complex`, `Power`/`Exp` with negative or split exponents, and `Times`), strips common symbolic atoms (`rat_strip_symbolic_common`), computes `g = PolynomialGCD[num, den]`, and divides both sides by `g` using fraction-free exact polynomial division (`exact_poly_div` over the collected variable set). A soundness gate (`has_embedded_rational_subterm`) leaves the input untouched when a `Power[Plus/Times, negative]` is present, since the multivariate Euclidean GCD could blow up; the denominator's leading sign is normalised to positive.
+**Algorithm.** `Cancel` reduces a rational expression to lowest terms by dividing out the polynomial GCD of numerator and denominator. It never combines a sum of fractions; that is `Together`'s job. In a FLINT build, `builtin_cancel_compute` dispatches in this order, and each stage returns `NULL` to fall through:
 
-**Data structures.** `Expr` trees throughout; the cancellation calls into the polynomial subsystem via the `PolynomialGCD` builtin (dispatching to `qaupoly_gcd` for extensions) and `exact_poly_div`, with variable sets collected by `collect_variables` and sorted by `compare_expr_ptrs`. `Numerator`/`Denominator` (same file) expose `extract_num_den` directly.
+1. **Unified canonicaliser.** For exact, option-free input, `rat_canon_normalize(arg, RCM_CANCEL)` (`src/poly/ratcanon.c`) maps over the top-level `Plus` terms. For each term, `rat_canon_build` substitutes every kernel by a fresh generator. Logs, exponentials (after splitting `E^(a+b)`) and inverse trig become free generators; `I`, radicals and roots of unity become algebraic generators with their minimal polynomial. `rat_canon_reduce` then reduces modulo those relations with `flint_tower_reduce` and maps back. The stage declines whenever a number-field common factor might be missed, for example a radical numerator over a polynomial denominator. `MATHILDA_RATCANON=off` disables it.
+2. **FLINT fraction paths.** `flint_cancel_fraction` handles algebraic extensions, `flint_rational_cancel` reduces a lone plain-Q fraction in `fmpz_mpoly_q`, `flint_gaussian_cancel` covers `Q(i)` with `I -> t`, and `flint_field_cancel` covers `AlgebraicNumber` coefficients over one field `Q(θ)`.
+3. **Classical cascade.** This step strips an optional `Extension -> α`. `Automatic` goes through `extension_autodetect`, and single-generator and tower cases take the `Q(α)` paths `cancel_with_extension` and `qa_cancel_with_tower`. Without an extension it calls `cancel_recursive`, which recurses through `List`/`Plus`/relational/logical heads. For a leaf fraction it splits `num`/`den` with `extract_num_den` and strips common symbolic atoms (`rat_strip_symbolic_common`). It then computes `g = PolynomialGCD[num, den]` and divides both sides by `g` with fraction-free exact division (`exact_poly_div`). A soundness gate (`has_embedded_rational_subterm`) leaves the input untouched when a `Power[Plus/Times, negative]` is embedded. The denominator's leading sign is normalised to positive.
 
-**Complexity / limits.** Dominated by the multivariate polynomial GCD; the embedded-rational gate and leaf-count fallbacks exist to avoid pathological Euclidean-blowup hangs, so some algebraically-cancellable inputs are returned uncancelled (left for later `Simplify` passes).
+Since v0.434 every path is value-preserving on kernels. `poly_is_binding_operator` makes unevaluated `Integrate`, `D`, `Sum`, `Limit`, `Function`, `Hold*` and `Inactive[op][…]` opaque atoms, so a substitution never re-evaluates one with a symbol in place of its kernel. Logarithms are never expanded (`Log[x^2]` is not rewritten to `2 Log[x]`). Inexact input is rationalised, cancelled, and numericalised again.
+
+**Data structures.** `Expr` trees at the surface. The FLINT stages work on `fmpz_mpoly`/`fmpz_mpoly_q` over the generator symbols, with the tower IR `RatCanonForm` (an ordered `RcGen` array of kernel ↔ fresh-symbol pairs plus relations). The classical path calls the `PolynomialGCD` builtin (`qaupoly_gcd` for extensions) and `exact_poly_div`, with variable sets from `collect_variables`.
+
+**Complexity / limits.** In a FLINT build, multivariate cancellation over Q, Q(i) and number fields is a single FLINT GCD. The classical fallback is dominated by the multivariate Euclidean GCD, and its gates may leave some algebraically cancellable inputs uncancelled. Algebraic constants such as `Sqrt[2]` are cancelled even without `Extension`, through the canonicaliser's algebraic generators. `Cancel` is `Listable` and `Protected`, and symbolic only.
 
 - `Protected`, `Listable`.
 - Threads over equations, inequalities, logic functions, and sums dynamically.
@@ -111,16 +172,18 @@ Out[14]= Sqrt[2] + x
 
 ### Notes
 
-Cancel removes the common polynomial factors between numerator and denominator by
-dividing out their GCD, without performing a partial-fraction split. It reduces
-`(x^2-1)/(x-1)` to `1 + x` and recognises perfect-square numerators such as
-`(x^2+2x+1)/(x+1)`. When a common factor remains after cancellation, the result
-stays a reduced quotient: `(x^2-1)/(x^2-2x+1)` becomes `(1+x)/(-1+x)` because both
-share the factor `(x-1)` but the leftover `(x+1)/(x-1)` is already in lowest
-terms. Cancel does not expand the surviving factors back out.
-
-With the `Extension -> alpha` option, cancellation is performed over the
-algebraic field `Q(alpha)`: `(x^2 - 2)/(x - Sqrt[2])` factors as
-`(x - Sqrt[2])(x + Sqrt[2])` over `Q(Sqrt[2])`, so the denominator divides out
-and the quotient collapses to `Sqrt[2] + x`. The default `Extension -> None`
-treats algebraic numbers as opaque and would leave that quotient intact.
+- `Cancel[expr]` divides out the common polynomial factors of a numerator
+  and denominator. It does not split into partial fractions (`Apart`), and
+  it does not combine a sum of fractions (`Together`): each term of a sum
+  is cancelled on its own. The surviving factors are not expanded again.
+- **Generators.** Exponential, trig, log and other kernels become
+  independent generators, with `E^(a+b)` split so related exponentials
+  agree. Algebraic constants carry their minimal polynomial, so
+  `(x^2 - 2)/(x - Sqrt[2])` cancels to `Sqrt[2] + x` even without
+  `Extension`. `Extension -> α`, a list, or `Automatic` makes the field
+  explicit.
+- **Value-preserving.** Since v0.434, unevaluated `Integrate`, `D`, `Sum`
+  and similar heads are never substituted into, and logarithms are not
+  expanded.
+- `Listable`, `Protected`. Symbolic only.
+- See also: `Together`, `Factor`, `PolynomialGCD`, `Apart`, `Simplify`.

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Unique[] generates a new symbol; Unique["x"] or Unique[x] uses a name prefix; Unique[{x, ...}] gives a list of fresh symbols. Each is Temporary and never previously used.`**
+**`Unique[]`**
+
+generates a new symbol; Unique\["x"\] or Unique\[x\] uses a name prefix; Unique\[{x, ...}\] gives a list of fresh symbols. Each is Temporary and never previously used.
 
 ## Examples (5)
 

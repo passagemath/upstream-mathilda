@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindEdgeCut[g] gives a minimum set of edges whose removal disconnects g (strongly, for directed graphs); FindEdgeCut[g, s, t] gives a minimum s-t edge cut. Uses EdgeWeight as capacity when present. Edges are returned in EdgeList order.`**
+**`FindEdgeCut[g]`**
+
+gives a minimum set of edges whose removal disconnects g (strongly, for directed graphs); FindEdgeCut\[g, s, t\] gives a minimum s-t edge cut. Uses EdgeWeight as capacity when present. Edges are returned in EdgeList order.
 
 ## Examples (8)
 

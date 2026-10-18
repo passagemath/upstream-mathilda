@@ -1,34 +1,35 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= N[BesselK[1, 2.5]]
-Out[1]= 0.0738908
+In[1]:= BesselK[0, 0]  (* a directed divergence at the origin *)
+In[2]:= BesselK[I, 0]  (* pure-imaginary order oscillates boundedly, so there is no limit *)
+In[3]:= BesselK[{1, 2, 3}, 1.0]  (* listable over the order *)
 ```
 
-Half-integer orders give exponentially decaying elementary forms:
-
 ```mathematica
-In[1]:= BesselK[1/2, z]
-Out[1]= E^(-z) Sqrt[(1/2 Pi)/z]
+In[1]:= BesselK[3/2, x]  (* half-integer orders give decaying elementary forms *)
+In[2]:= BesselK[-2, x]  (* even in the order *)
+In[3]:= Series[BesselK[0, x], {x, 0, 3}]  (* logarithmic expansion at the origin *)
+In[4]:= Limit[BesselK[1, x], x -> Infinity]  (* exponential decay *)
 ```
 
-High-precision real and complex evaluation:
-
 ```mathematica
-In[1]:= N[BesselK[0, 1], 40]
-Out[1]= 0.42102443824070833333562737921260903613623
-
-In[2]:= N[BesselK[0, 3 + I], 30]
-Out[2]= 0.01383067506051671850189255536523 - 0.03098977854031822729465893945728*I
+In[1]:= BesselK[1/3, 2.0 + 1.0 I]  (* fractional order, complex argument, machine kernel *)
+In[2]:= BesselK[0, -1.0]  (* across the cut: K_0(1) - i Pi I_0(1) *)
+In[3]:= BesselK[1 + I, 3.0 - 2 I]  (* complex order takes the MPFR core *)
+In[4]:= N[BesselK[0, 4], 50]  (* fifty digits *)
+In[5]:= BesselK[0, 800.]  (* an underflowing double is promoted rather than flushed to zero *)
 ```
 
-The Wronskian with `BesselI` confirms `I_0(z) K_1(z) + I_1(z) K_0(z) = 1/z`, here `1/2` at `z = 2`:
-
 ```mathematica
-In[1]:= N[BesselI[0, 2] BesselK[1, 2] + BesselI[1, 2] BesselK[0, 2], 30]
-Out[1]= 0.5
+In[1]:= BesselK[0, NDArray[{0.5, 1., 2.}]]  (* an NDArray runs through the element-wise kernel *)
+In[2]:= BesselK[1, -z]  (* no parity fold across the branch cut *)
 ```
 
 ### Notes
 
-`BesselK[n, z]` is the modified Bessel function of the second kind, decaying like `e^{-z}` and even in `n` (`K_{-n} = K_n`). `K_0(0) = Infinity`, `K_n(0) = ComplexInfinity`, with a branch cut along the negative real axis. Real and complex order and argument evaluate at machine or MPFR precision; `D[BesselK[n, z], z] = -(BesselK[n-1, z] + BesselK[n+1, z])/2`. Listable.
+- `BesselK[n, z]` is the modified Bessel function of the second kind. It decays like `e^{-z}`, is even in the order, diverges at the origin, and has a cut along the negative real axis.
+- Machine-number calls with a real order use the raw-double kernel in `sf_machine_bessel.c`. Integer orders take table-fitted `K_0`/`K_1` and upward recurrence. Fractional orders take Temme's series, tabulated Taylor nodes or Steed's CF2, plus Hankel. Packed lists, `NDArray` and `Compile[]` (scalar real, scalar complex and rank-1) call the same helper, bit for bit. Complex order, arbitrary precision and underflow go to the MPFR core: the logarithmic series, the connection formula or the asymptotic series.
+- `D[BesselK[n, z], z] = -(BesselK[n-1, z] + BesselK[n+1, z])/2`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `BesselI`, `BesselJ`, `BesselY`, `AiryAi`.

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindClique[g] gives {c} with c a maximum clique of g. FindClique[g, k] finds a maximal clique of at most k vertices, [g, {k}] of exactly k, [g, {kmin, kmax}] within the range; a third argument n (or All) gives up to n such cliques. For directed graphs a clique needs edges both ways. Exact branch and bound with colouring bounds.`**
+**`FindClique[g]`**
+
+gives {c} with c a maximum clique of g. FindClique\[g, k\] finds a maximal clique of at most k vertices, \[g, {k}\] of exactly k, \[g, {kmin, kmax}\] within the range; a third argument n (or All) gives up to n such cliques. For directed graphs a clique needs edges both ways. Exact branch and bound with colouring bounds.
 
 ## Examples (12)
 

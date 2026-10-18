@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.`**
+**`PolynomialRemainder[p, q, x]`**
+
+gives the remainder from dividing p by q, treated as polynomials in x.
 
 <details>
 <summary>Notes</summary>

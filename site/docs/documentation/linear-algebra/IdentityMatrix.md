@@ -5,9 +5,13 @@
 
 ## Description
 
-**`IdentityMatrix[n] gives the n x n identity matrix.`**
+**`IdentityMatrix[n]`**
 
-**`IdentityMatrix[{m, n}] gives the m x n identity matrix.`**
+gives the n x n identity matrix.
+
+**`IdentityMatrix[{m, n}]`**
+
+gives the m x n identity matrix.
 
 ## Examples (5)
 

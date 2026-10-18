@@ -5,7 +5,9 @@
 
 ## Description
 
-**`First[expr] gives the first element of expr.`**
+**`First[expr]`**
+
+gives the first element of expr.
 
 ## Examples (4)
 

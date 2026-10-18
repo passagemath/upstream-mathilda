@@ -9,7 +9,9 @@
 
 represents a color in the CMYK (cyan, magenta, yellow, black) space.
 
-**`CMYKColor[c, m, y, k, a] specifies opacity a; CMYKColor[c, m, y] takes`**
+**`CMYKColor[c, m, y, k, a]`**
+
+specifies opacity a; CMYKColor\[c, m, y\] takes
 
 <details>
 <summary>Notes</summary>

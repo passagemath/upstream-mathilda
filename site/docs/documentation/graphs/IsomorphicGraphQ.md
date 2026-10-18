@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IsomorphicGraphQ[g1, g2, ...] gives True if all the graphs are isomorphic. Colour refinement with individualization-refinement search.`**
+**`IsomorphicGraphQ[g1, g2, ...]`**
+
+gives True if all the graphs are isomorphic. Colour refinement with individualization-refinement search.
 
 ## Examples (9)
 

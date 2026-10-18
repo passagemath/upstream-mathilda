@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.`**
+**`Timing[expr]`**
+
+evaluates expr, and returns a list of the time in seconds used, together with the result obtained.
 
 <details>
 <summary>Notes</summary>
@@ -22,7 +24,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= Timing[Sum[i, {i, 1000}]]
-Out[1]= {0.000112, 500500}
+Out[1]= {0.000113, 500500}
 
 In[2]:= Timing[Sum[i, {i, 1, 1000000}]][[2]]
 Out[2]= 500000500000
@@ -63,6 +65,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
 - Tests: [`tests/test_datetime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_datetime.c)
 - Tests: [`tests/test_ludecomposition_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ludecomposition_machine.c)
+- Tests: [`tests/test_meijerg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meijerg.c)
 - Tests: [`tests/test_parse.c`](https://github.com/stblake/mathilda/blob/main/tests/test_parse.c)
 
 ## Notes & additional examples

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphVertexDelete[h, v] or [h, {v1, ...}] deletes the vertices and every hyperedge containing one of them, as VertexDelete does for a Graph.`**
+**`HypergraphVertexDelete[h, v]`**
+
+or \[h, {v1, ...}\] deletes the vertices and every hyperedge containing one of them, as VertexDelete does for a Graph.
 
 ## Examples (8)
 

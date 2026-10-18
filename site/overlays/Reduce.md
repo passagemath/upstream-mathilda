@@ -8,114 +8,75 @@ references:
 ---
 ### Worked examples
 
-Equations over the **complexes** (the default): `Reduce` keeps *every* case,
-including the degenerate branches `Solve` drops.
-
 ```mathematica
-In[1]:= Reduce[a x == b, x]
-Out[1]= a != 0 && x == b/a || a == 0 && b == 0
-
-In[2]:= Solve[a x == b, x]
-Out[2]= {{x -> b/a}}
+In[1]:= Reduce[a x == b, x]  (* the degenerate branch a == 0 is kept, unlike Solve *)
 ```
 
 ```mathematica
-In[1]:= Reduce[x^2 == 4, x]
-Out[1]= x == -2 || x == 2
-
-In[2]:= Reduce[x^2 == -1, x]
-Out[2]= x == -I || x == I
-
-In[3]:= Reduce[a x^2 + b x + c == 0, x]
-Out[3]= a != 0 && x == (1/2 (-b + Sqrt[b^2 - 4 a c]))/a || a != 0 && x == (1/2 (-b - Sqrt[b^2 - 4 a c]))/a || a == 0 && b != 0 && x == -c/b || a == 0 && b == 0 && c == 0
+In[1]:= Reduce[x^2 < 1]  (* variables inferred; the ordering inequality selects the Reals *)
 ```
 
-Inequalities over the **reals**. A statement with an ordering inequality and no
-explicit domain defaults to `Reals`, so `Reals` may be omitted:
-
 ```mathematica
-In[1]:= Reduce[x^2 > 1, x, Reals]
-Out[1]= x < -1 || x > 1
-
-In[2]:= Reduce[x^2 < 2, x, Reals]
-Out[2]= -Sqrt[2] < x < Sqrt[2]
-
-In[3]:= Reduce[(x - 1) (x - 2) (x - 3) > 0, x, Reals]
-Out[3]= 1 < x < 2 || x > 3
+In[1]:= Reduce[1/x < 1, x, Reals]  (* the pole at 0 is an excluded breakpoint of the sign diagram *)
 ```
 
-A rational-function inequality treats the denominator roots as excluded poles,
-and a chained inequality is solved directly:
-
 ```mathematica
-In[1]:= Reduce[1/x < 1, x, Reals]
-Out[1]= x < 0 || x > 1
-
-In[2]:= Reduce[-5 < 3 x + 7 <= 22, x]
-Out[2]= -4 < x <= 5
-
-In[3]:= Reduce[Abs[x] < 1, x, Reals]
-Out[3]= -1 < x < 1
+In[1]:= Reduce[Sin[x] == 1/2 && 0 < x < 2 Pi, x]  (* periodic families filtered against a bounding region *)
 ```
 
-A statement that decides returns a plain `True` or `False`:
-
 ```mathematica
-In[1]:= Reduce[x^2 + 1 > 0, x, Reals]
-Out[1]= True
-
-In[2]:= Reduce[x < 0 && x > 1, x, Reals]
-Out[2]= False
+In[1]:= Reduce[x^2 + y^2 < 1 && y > x^2, {x, y}, Reals]  (* two-variable CAD with algebraic breakpoints *)
 ```
 
-**Several variables.** Linear systems go through Fourier-Motzkin elimination;
-genuinely nonlinear ones through a Cylindrical Algebraic Decomposition:
-
 ```mathematica
-In[1]:= Reduce[x + y < 1 && x > 0 && y > 0, {x, y}, Reals]
-Out[1]= 0 < x < 1 && 0 < y < 1 - x
-
-In[2]:= Reduce[x y > 0, {x, y}, Reals]
-Out[2]= x < 0 && y < 0 || x > 0 && y > 0
+In[1]:= Reduce[x y z > 0, {x, y, z}, Reals]  (* CAD in three variables, split by the sign of each coordinate *)
 ```
 
-**Over the integers.** The `Integers`/`Rationals` domain reuses the `Solve`
-Diophantine engine and reports its answer in logical form, introducing an
-integer parameter `C[k]` for an infinite family:
+```mathematica
+In[1]:= Reduce[x + y + z == 1 && x > 0 && y > 0 && z > 0 && x y + x z + y z < 9 x y z]  (* exact sum-of-squares certificate proves the region empty *)
+```
 
 ```mathematica
-In[1]:= Reduce[2 x + 3 y == 1, {x, y}, Integers]
-Out[1]= Element[C[1], Integers] && x == -1 + 3 C[1] && y == 1 - 2 C[1]
+In[1]:= Reduce[Exists[y, x^2 + y^2 < 1], {x}, Reals]  (* an embedded quantifier is eliminated *)
+```
 
-In[2]:= Reduce[x^2 < 10 && x > 0, x, Integers]
-Out[2]= x == 1 || x == 2 || x == 3
+```mathematica
+In[1]:= Reduce[2 x + 3 y == 1, {x, y}, Integers]  (* linear Diophantine family with an integer parameter *)
+```
+
+```mathematica
+In[1]:= Reduce[x^2 + y^2 == 1, {x, y}]  (* honest decline: a positive-dimensional system over the complexes stays unevaluated *)
 ```
 
 ### Notes
 
-`Reduce` and `Solve` answer different questions. `Solve[eqns, vars]` returns the
-*generic* solution as a list of replacement rules and quietly discards the
-special cases — `Solve[a x == b, x]` gives `{{x -> b/a}}`, silently assuming
-`a != 0`. `Reduce[expr, vars]` returns instead a quantifier-free `And`/`Or` tree
-of equations and inequalities that describes the **entire** solution set, every
-parametric and boundary case included, so it reports both `a != 0 && x == b/a`
-and the degenerate branch `a == 0 && b == 0`. Use `Solve` when you want to
-substitute a solution back with `/.`; use `Reduce` when you need the complete
-condition under which a statement holds — especially with symbolic parameters,
-or with inequalities, where there is no finite list of rules to return.
-
-**Domain.** The default domain is `Complexes`. Because an ordering (`<`, `<=`,
-`>`, `>=`) is undefined over the complex numbers, a statement that contains one
-and is given no explicit domain is solved over the `Reals` — matching
-Mathematica — so the `Reals` argument is optional whenever the statement
-already contains an inequality. Equations (`==`) and `Unequal` (`!=`) keep the
-`Complexes` default. Pass a third argument (`Complexes`, `Reals`, `Integers`, or
-`Rationals`) to choose explicitly.
-
-**Soundness over completeness.** `Reduce` never returns a wrong or incomplete
-formula: when a sign or ordering cannot be decided exactly, when it meets a
-construct it does not yet handle, or when it reaches an engine not yet wired
-(nonlinear equations over the complexes, and general quantifier elimination),
-it leaves the input unevaluated rather than guess. An empty logical result
-(`False`) is therefore a genuine proof that no solution exists, and a returned
-formula is guaranteed to describe the whole solution set exactly.
+- **Reduce and Solve answer different questions.** `Solve[eqns, vars]`
+  returns generic solutions as replacement rules and drops the special
+  cases. `Reduce[expr, vars]` returns a quantifier-free `And`/`Or` formula
+  covering the whole solution set, every parametric and boundary branch
+  included. Use `Reduce` when you need the exact conditions, especially
+  with symbolic parameters or with inequalities.
+- **Domain and variables.** The default domain is `Complexes`. A statement
+  with an ordering inequality, or with a real-only function such as `Abs`,
+  `Floor` or `Max`, defaults to `Reals`. `Reduce[expr]` and
+  `Reduce[expr, dom]` infer the variables, taking every free symbol except
+  named constants, in alphabetical order. A third argument (`Complexes`,
+  `Reals`, `Integers` or `Rationals`) chooses the domain explicitly.
+- **Engines over the reals.** One variable goes to an exact
+  real-algebraic sign diagram, which handles poles, radicals, `Abs`,
+  `Floor`, piecewise heads and bounded trig regions. Several variables go
+  to Fourier–Motzkin for linear systems. Higher-degree regions go to an
+  exact SOS/Positivstellensatz emptiness certificate, then an n-variable
+  McCallum CAD, then a zero-dimensional solver. Rational atoms in several
+  variables are cleared to polynomial form first.
+- **Options.** `Cubics`, `Quartics`, `Modulus -> p`,
+  `GeneratedParameters`, `Backsubstitution`, `WorkingPrecision` and
+  `Method` are accepted. `TimeConstrained[Reduce[...], t]` interrupts the
+  CAD cleanly, without leaking.
+- **Soundness over completeness.** The engine is designed to return either
+  the exact solution set or nothing. An undecidable sign, an unsupported
+  construct, or an engine not yet wired (positive-dimensional nonlinear
+  systems over the complexes) leaves the call unevaluated.
+- `Protected`. Symbolic, with no NDArray or `Compile[]` path.
+- See also: `Solve`, `Resolve`, `FindInstance`, `CylindricalDecomposition`,
+  `Refine`.

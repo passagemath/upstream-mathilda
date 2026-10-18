@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CompleteGraph[n] gives the complete graph on n vertices. CompleteGraph[{n1, n2, ...}] gives the complete multipartite graph with parts of sizes n1, n2, ....`**
+**`CompleteGraph[n]`**
+
+gives the complete graph on n vertices. CompleteGraph\[{n1, n2, ...}\] gives the complete multipartite graph with parts of sizes n1, n2, ....
 
 ## Examples (10)
 

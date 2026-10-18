@@ -82,7 +82,10 @@ packed-`List` presentation) and allocates only the returned `True`/`False` symbo
 
 - Source: [`src/ndarray.c`](https://github.com/stblake/mathilda/blob/main/src/ndarray.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
-- Tests: [`tests/test_logexp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_logexp.c)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
+- Tests: [`tests/test_dirichletl.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletl.c)
+- Tests: [`tests/test_elliptic_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic_machine.c)
+- Tests: [`tests/test_expint_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expint_machine.c)
 
 ## Notes & additional examples
 

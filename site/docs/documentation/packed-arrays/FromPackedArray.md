@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FromPackedArray[expr] is FromNDArray[expr]: it returns expr with any dense buffer storage undone, so a packed List becomes an ordinary List of separate elements and an NDArray[...] becomes the nested List of its entries. Provided under Mathematica's name for the same operation; see FromNDArray.`**
+**`FromPackedArray[expr]`**
+
+is FromNDArray\[expr\]: it returns expr with any dense buffer storage undone, so a packed List becomes an ordinary List of separate elements and an NDArray\[...\] becomes the nested List of its entries. Provided under Mathematica's name for the same operation; see FromNDArray.
 
 ## Examples (6)
 
@@ -74,7 +76,10 @@ unchanged; only the representation differs.
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
-- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_dirichletl.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletl.c)
+- Tests: [`tests/test_elliptic_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic_machine.c)
+- Tests: [`tests/test_erf.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erf.c)
+- Tests: [`tests/test_erfc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfc.c)
 
 ## Notes & additional examples
 

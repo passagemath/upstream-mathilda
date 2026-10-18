@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexQ[g, v] gives True if v is a vertex of the graph g (compared structurally, as by SameQ), and False otherwise.`**
+**`VertexQ[g, v]`**
+
+gives True if v is a vertex of the graph g (compared structurally, as by SameQ), and False otherwise.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeAdd[g, e] adds the edge e to g; EdgeAdd[g, {e1, ...}] adds several. Edges may be written u->v / DirectedEdge[u,v] or u<->v / UndirectedEdge[u,v]; endpoints not yet in g become new vertices (appended). A new edge gets weight 1 in a weighted graph. Adding a self-loop or an edge g already has (a multigraph) is left unevaluated.`**
+**`EdgeAdd[g, e]`**
+
+adds the edge e to g; EdgeAdd\[g, {e1, ...}\] adds several. Edges may be written u-\>v / DirectedEdge\[u,v\] or u\<-\>v / UndirectedEdge\[u,v\]; endpoints not yet in g become new vertices (appended). A new edge gets weight 1 in a weighted graph. Adding a self-loop or an edge g already has (a multigraph) is left unevaluated.
 
 ## Examples (10)
 

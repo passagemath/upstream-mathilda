@@ -5,11 +5,17 @@
 
 ## Description
 
-**`ClearAttributes[s, attr] removes attr from the list of attributes of s.`**
+**`ClearAttributes[s, attr]`**
 
-**`ClearAttributes[s, {attr1, attr2, ...}] removes several attributes at a time.`**
+removes attr from the list of attributes of s.
 
-**`ClearAttributes[{s1, s2, ...}, attrs] removes attributes from several symbols at a time.`**
+**`ClearAttributes[s, {attr1, attr2, ...}]`**
+
+removes several attributes at a time.
+
+**`ClearAttributes[{s1, s2, ...}, attrs]`**
+
+removes attributes from several symbols at a time.
 
 ## Examples (16)
 

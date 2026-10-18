@@ -61,7 +61,7 @@ accumulated run is emitted. Output is a list of run sublists.
 
 **See also:** [SameQ](../../comparisons/SameQ/), [Gather](../../data-structures/Gather/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_integer_exponent.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_exponent.c)
 - Tests: [`tests/test_split.c`](https://github.com/stblake/mathilda/blob/main/tests/test_split.c)

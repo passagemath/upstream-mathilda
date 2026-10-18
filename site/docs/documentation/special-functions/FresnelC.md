@@ -18,45 +18,89 @@ An entire, odd function with no branch cuts. FresnelC\[0\] = 0, Real and complex
 
 </details>
 
-## Examples (5)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (5)
-
-Odd and entire, so the value at zero is zero
+### Basic examples (4)
 
 ```mathematica
-In[1]:= FresnelC[0]
-Out[1]= 0
+In[1]:= FresnelC[1.8]
+Out[1]= 0.333633
+
+In[2]:= FresnelS[1.8]
+Out[2]= 0.450939
+
+In[3]:= FresnelC[2.5 + I]
+Out[3]= 116.648 - 105.229*I
+
+In[4]:= FresnelS[-I Infinity]
+Out[4]= 1/2*I
 ```
 
-The limit value is 1/2
+### Applications (9)
+
+Odd and entire, with limits 1/2 and I/2
 
 ```mathematica
-In[2]:= FresnelC[Infinity]
-Out[2]= 1/2
+In[5]:= {FresnelC[0], FresnelC[Infinity], FresnelC[I Infinity]}
+Out[5]= {0, 1/2, 1/2*I}
 ```
 
-Arbitrary precision via the MPFR series
+Machine real: auxiliary f, g tables with an exactly reduced phase
 
 ```mathematica
-In[3]:= N[FresnelC[1], 20]
-Out[3]= 0.779893400376822829476
+In[6]:= FresnelC[1.8]
+Out[6]= 0.333633
 ```
 
-The integrand Cos[Pi x^2/2]
+A huge argument is still accurate because the phase Pi x^2/2 is reduced exactly
 
 ```mathematica
-In[4]:= D[FresnelC[x], x]
-Out[4]= Cos[1/2 Pi x^2]
+In[7]:= FresnelC[123456.789]
+Out[7]= 0.499999
 ```
 
-Threads element-wise over the packed real list
+Machine complex through the exactly rotated erf kernel
 
 ```mathematica
-In[5]:= FresnelC[{0.5, 1.0, 1.5}]
-Out[5]= {0.492344, 0.779893, 0.445261}
+In[8]:= FresnelC[2.5 + I]
+Out[8]= 116.648 - 105.229*I
+```
+
+The scaled axis series handles a huge argument just off the real axis
+
+```mathematica
+In[9]:= FresnelC[1.*^10 + 1.*^-10 I]
+Out[9]= 0.5 + 3.67608e-10*I
+```
+
+Arbitrary precision through the guarded MPFR series
+
+```mathematica
+In[10]:= N[FresnelC[2], 50]
+Out[10]= 0.488253406075340754500223503357261037688367154509216
+```
+
+Threads element-wise over a packed real list
+
+```mathematica
+In[11]:= FresnelC[{0.5, 1.0, 1.5}]
+Out[11]= {0.492344, 0.779893, 0.445261}
+```
+
+The integrand, with the chain rule
+
+```mathematica
+In[12]:= D[FresnelC[x^2], x]
+Out[12]= 2 x Cos[1/2 Pi x^4]
+```
+
+The odd-symmetry fold
+
+```mathematica
+In[13]:= FresnelC[-x]
+Out[13]= -FresnelC[x]
 ```
 
 ## Algorithm
@@ -101,37 +145,58 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_fresnelc` handles `FresnelC[z] = Int_0^z cos(π t^2/2) dt` (the π/2-normalized / Wolfram convention), entire and odd. It shares one numeric kernel with `FresnelS`: the pair `(C, S)` is computed together and this builtin returns the `C` component. Exact special values first: `FresnelC[0] = 0`, `FresnelC[±Infinity] = ±1/2`, `FresnelC[±I Infinity] = ±I/2`, `ComplexInfinity`/`Indeterminate -> Indeterminate`. A **numeric real** argument (machine or arbitrary precision) uses the convergent Maclaurin series for small/moderate `|x|` (with `~(π/2)|x|^2/ln2` guard bits to absorb the `~e^{(π/2)|z|^2}` partial-sum cancellation), or the **asymptotic expansion** DLMF 7.12 (`C(x) = 1/2 + f(x) sin(π x^2/2) - g(x) cos(π x^2/2)`, summed to optimal truncation) for large `|x|` — the asymptotic constant `1/2` holds only in a sector around the real axis (Stokes), so it is used for real inputs only. A **complex** argument always uses the convergent paired `A/B` series (`A = C + iS`, `B = C - iS`) in the shared `ncpx` toolkit (correct everywhere). A symbolic negative-leading argument folds by oddness. A `USE_MPFR=0` build uses a double-complex `A/B` series.
+**Algorithm.** `builtin_fresnelc` returns `C(z) = ∫₀ᶻ cos(π t²/2) dt` (Mathematica's π/2 convention). `C` is entire and odd. `FresnelS` shares every kernel: the pair `(C, S)` is computed together and each builtin keeps its own component.
 
-**Data structures.** `Expr`; the shared complex-MPFR toolkit `ncpx` (`numeric_complex.h`), folding by oddness to `Re z >= 0`. The ND kernel is a real `REG_U` registration (`NDKU_FresnelC`, `ndk_FresnelC_r` → `sf_machine_fresnel_c` in `src/special_functions/sf_machine.c`): element-wise over a packed or visible real `NDArray`. `Compile[]` lowers `FresnelC` at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes.
+A machine call first goes to `fresnel_machine`, which uses the `sf_machine_scalar_args` gate and the kernels in `sf_machine_error.c`.
 
-**Complexity / limits.** `O(1)` per element at machine precision; MPFR term count and guard bits scale with `|z|^2` and precision. Entire function (no branch cuts). `D[FresnelC[x], x] = Cos[π x^2/2]`. Symbolic arguments stay symbolic. Attributes: `Listable`, `NumericFunction`, `Protected`.
+**Real argument** (`sf_fresnel_c_r`):
+
+- `|x| <= 1`: the Maclaurin series, with `x³` formed exactly.
+- `1 < |x| < 8`: `C = 1/2 + f sin(πx²/2) - g cos(πx²/2)`, with the auxiliary functions `f` and `g` read from 0.5-wide polynomial tables (the Cephes `fresnl` structure).
+- `|x| >= 8`: the nine-term asymptotic series for `f` and `g`.
+- `|x| > 2^54`: exactly `1/2`.
+
+The phase `πx²/2` is reduced exactly: `x²` is split as a Dekker double-double and reduced mod 4. A plain libm `sin(π x x/2)` would carry about `x²` ulps of phase error, so this keeps even `FresnelC[123456.789]` accurate to within a few ulp.
+
+**Complex argument** (`sf_fresnel_c_c`):
+
+- `|z| <= 1.3`: the Maclaurin series in `z⁴`.
+- Next to an axis (`π|xy| < 1/2`), and also for huge `|z|` with `π|xy| < 8`: a scaled Taylor series about the real axis. The imaginary axis is mapped onto it with `C(iz) = iC(z)`. This keeps the small component relatively accurate and stops `FresnelC[1.*^10 + 1.*^-10 I]` from overflowing.
+- Elsewhere: `C ± iS = ((1 ± i)/2) erf((√π/2)(1 ∓ i) z)` through the complex erf core. Every quantity that gets exponentiated (`X² = (π/4)(x+y)²`, `XY`, `Y² - X² = ∓πxy`) is built from the exact `x` and `y` rather than from a rounded rotated argument, which avoids about `π|z|²` ulps of error.
+
+**Declined and MPFR calls** go to `fresnel_one_arg`:
+
+- **Exact special values:** `0`, `±Infinity → ±1/2`, `±I Infinity → ±I/2`, and `ComplexInfinity` or `Indeterminate → Indeterminate`.
+- **Odd fold:** `FresnelC[-x] = -FresnelC[x]`.
+- **MPFR real:** the convergent series with about `(π/2)x²/ln2` guard bits, or the DLMF 7.12 asymptotic expansion at optimal truncation for large `|x|`. The asymptotic form is used on real inputs only, because the constant `1/2` changes across Stokes lines.
+- **MPFR complex:** the paired `A = C + iS`, `B = C - iS` series in the `ncpx` toolkit, which is valid everywhere.
+
+**Data structures.** `Expr`; `ncpx` (`numeric_complex.h`) for MPFR complex values. The machine side uses double-double helpers and the tables `FRF*_T` and `FRG*_T`. The ND kernel is `NDKU_FresnelC = { sf_fresnel_c_c, ndk_FresnelC_r }`, registered with `REG_U`, and covers real and complex buffers. `Compile[]` lowers `FresnelC` through it for real and complex scalars and for rank-1 arrays. Because every surface uses the same helper, scalar, packed, `NDArray` and `Compile[]` results match bit for bit.
+
+**Complexity / limits.** The machine kernels are `O(1)`: real error is at most 2.5 ulp (median 0.3), and complex error is at most 3.5 ulp away from the zeros. The MPFR cost grows with `|z|²` and with the requested precision. Exact non-special arguments (`FresnelC[2]`) stay unevaluated. `D[FresnelC[x], x] = Cos[π x²/2]`. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
-**See also:** [FresnelS](../../special-functions/FresnelS/), [Piecewise](../../control-flow/Piecewise/)
+**See also:** [FresnelS](../../special-functions/FresnelS/), [NDArray](../../linear-algebra/NDArray/), [Piecewise](../../control-flow/Piecewise/)
 
 - DLMF §7.2(iii) — the Fresnel integral C(z) = Int_0^z cos(π t^2/2) dt.
+- DLMF §7.3.22, §7.5.3–4 — Fresnel integrals through erf, and through the auxiliary functions f, g.
 - DLMF §7.12 — the asymptotic expansion of the Fresnel integrals.
+- T. J. Dekker, *A floating-point technique for extending the available precision*, Numer. Math. 18 (1971) 224–242.
 - Source: [`src/special_functions/fresnel.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/fresnel.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
+- Tests: [`tests/test_sf_machine_error.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sf_machine_error.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-Mathilda uses the Pi/2-normalized (Wolfram) convention
-`FresnelC[z] = Int_0^z Cos[Pi t^2/2] dt`. The function is entire and odd, with
-`FresnelC[±Infinity] = ±1/2` and `FresnelC[±I Infinity] = ±I/2`.
-
-`FresnelC` and `FresnelS` share one numeric kernel: the pair `(C, S)` is computed
-together and each builtin returns its component. The real path uses a convergent
-Maclaurin series for small/moderate arguments and an asymptotic expansion (DLMF
-7.12) for large ones; complex arguments always use the convergent paired `A/B`
-series, correct across the whole plane. `FresnelC` carries a real `NDArray`
-kernel and lowers under `Compile[]` at both scalar and rank-1 array shapes.
+- `FresnelC[z] = ∫₀ᶻ Cos[Pi t²/2] dt` (Mathematica's π/2 convention), entire and odd; `FresnelC[±Infinity] = ±1/2`, `FresnelC[±I Infinity] = ±I/2`.
+- Machine real and complex arguments use the `sf_machine_error.c` kernels — Maclaurin series, auxiliary-function tables with exact phase reduction, the axis Taylor series, and the complex erf core fed exactly rotated arguments — shared bit for bit with packed lists, `NDArray` and `Compile[]`.
+- Arbitrary precision uses the convergent series with `(π/2)|z|²/ln2` guard bits, or (real arguments only) the DLMF 7.12 asymptotic expansion.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `FresnelS`, `Erf`, `Erfi`.

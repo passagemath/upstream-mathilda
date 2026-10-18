@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BoxMatrix[r] gives a (2r+1) x (2r+1) matrix of 1s. It is NOT normalised, matching Mathematica, so ImageConvolve[image, BoxMatrix[1]] is nine times too bright; the normalised version is a mean filter. Kept faithful rather than helpfully rescaled, since a caller using BoxMatrix in arithmetic needs the ones.`**
+**`BoxMatrix[r]`**
+
+gives a (2r+1) x (2r+1) matrix of 1s. It is NOT normalised, matching Mathematica, so ImageConvolve\[image, BoxMatrix\[1\]\] is nine times too bright; the normalised version is a mean filter. Kept faithful rather than helpfully rescaled, since a caller using BoxMatrix in arithmetic needs the ones.
 
 ## Examples (4)
 

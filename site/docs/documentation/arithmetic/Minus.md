@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Minus[x] is the arithmetic negation of x, equivalent to -x (Times[-1, x]).`**
+**`Minus[x]`**
 
-Listable; Minus\[x, y\] (any count other than one) is left unevaluated with Minus::argx.
+is the arithmetic negation of x, equivalent to -x (Times\[-1, x\]). Listable; Minus\[x, y\] (any count other than one) is left unevaluated with Minus::argx.
 
 ## Examples (9)
 

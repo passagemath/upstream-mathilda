@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DirectedGraph[g] replaces each undirected edge u<->v of g by the pair u->v, v->u (weights duplicated). DirectedGraph[g, "Acyclic"] instead orients each undirected edge from the vertex earlier in VertexList to the later one, giving a DAG for undirected g.`**
+**`DirectedGraph[g]`**
+
+replaces each undirected edge u\<-\>v of g by the pair u-\>v, v-\>u (weights duplicated). DirectedGraph\[g, "Acyclic"\] instead orients each undirected edge from the vertex earlier in VertexList to the later one, giving a DAG for undirected g.
 
 ## Examples (7)
 

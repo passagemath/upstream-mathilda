@@ -5,9 +5,13 @@
 
 ## Description
 
-**`CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.`**
+**`CoefficientList[poly, var]`**
 
-**`CoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.`**
+gives a list of coefficients of powers of var in poly, starting with power 0.
+
+**`CoefficientList[poly, {var1, var2, ...}]`**
+
+gives an array of coefficients of the variables.
 
 ## Examples (9)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EccentricityCentrality[g] gives 1/VertexEccentricity[g, v] for each vertex v (0 when the eccentricity is 0). Uses EdgeWeight as lengths.`**
+**`EccentricityCentrality[g]`**
+
+gives 1/VertexEccentricity\[g, v\] for each vertex v (0 when the eccentricity is 0). Uses EdgeWeight as lengths.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphCorank[h] gives the smallest hyperedge arity of h (0 if h has no hyperedges).`**
+**`HypergraphCorank[h]`**
+
+gives the smallest hyperedge arity of h (0 if h has no hyperedges).
 
 ## Examples (8)
 

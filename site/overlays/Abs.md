@@ -2,29 +2,52 @@
 
 ```mathematica
 In[1]:= Abs[-5]
-Out[1]= 5
-
-In[2]:= Abs[3 + 4 I]
-Out[2]= 5
-
-In[3]:= Abs[-3/4]
-Out[3]= 3/4
-
-In[4]:= Abs[{-1, 2, -3}]
-Out[4]= {1, 2, 3}
 ```
 
 ```mathematica
-In[1]:= Abs[(1 + I)^10]
-Out[1]= 32
+In[1]:= Abs[3 + 4 I]  (* the modulus of a Gaussian integer, exactly *)
+```
 
-In[2]:= Abs[Sqrt[2] + Sqrt[3] I]
-Out[2]= Sqrt[5]
+```mathematica
+In[1]:= Abs[{-1, 2, -3/4}]  (* Listable *)
+```
 
-In[3]:= N[Abs[Gamma[1/3 + 2 I]], 30]
-Out[3]= 0.09665959425732664141022797859867
+```mathematica
+In[1]:= Abs[(1 + I)^10]  (* |1 + I|^10 = Sqrt[2]^10 *)
+```
+
+```mathematica
+In[1]:= Abs[Sqrt[2] + Sqrt[3] I]  (* the modulus of an exact complex expression *)
+```
+
+```mathematica
+In[1]:= Abs[-9223372036854775807 - 1]  (* |-2^63| does not fit an int64, so it becomes a bignum *)
+```
+
+```mathematica
+In[1]:= Abs[Root[#^3 - 2 # + 1 &, 1]]  (* a negative real Root stays an exact algebraic number *)
+```
+
+```mathematica
+In[1]:= Abs[Interval[{-2, 1}]]  (* interval arithmetic *)
+```
+
+```mathematica
+In[1]:= Abs[N[Gamma[1/3 + 2 I], 40]]  (* an MPFR complex goes through mpfr_hypot at 40 digits *)
+```
+
+```mathematica
+In[1]:= Abs[NDArray[{-1, 2, -3}, DataType -> "int64"]]  (* the int64 kernel keeps integers exact *)
+```
+
+```mathematica
+In[1]:= Abs[Sqrt[2]]  (* not yet evaluated: exact real constants other than rationals stay as they are *)
 ```
 
 ### Notes
 
-For complex `z`, `Abs[z]` returns the modulus `Sqrt[Re[z]^2 + Im[z]^2]`. Abs is Listable, so it threads element-wise over lists. Exact arguments give exact results: `Abs[(1 + I)^10]` is `32` (since `|1 + I| = Sqrt[2]` and `(Sqrt[2])^10 = 32`), and `Abs[Sqrt[2] + Sqrt[3] I]` collapses to `Sqrt[5]`. The modulus of a complex value of a special function such as `Gamma` is evaluated to the requested precision under MPFR.
+- `Abs[z]` is the absolute value of a real number and the modulus `Sqrt[Re[z]^2 + Im[z]^2]` of a complex one. Exact inputs give exact results.
+- Limitation: an exact real constant that is not rational, such as `Sqrt[2]`, `-Pi` or `Pi - 4`, stays unevaluated (Mathematica gives `Sqrt[2]`, `Pi`, `4 - Pi`). `Abs[N[...]]` is numeric.
+- Symbolic arguments stay unevaluated (`Abs[x]`). There is no `ComplexExpand`-style assumption that symbols are real.
+- `Listable`, `NumericFunction`, `Protected`. There is a packed/NDArray kernel with an exact int64 arm (and a `hypot` arm for real and complex data), and `Compile[]` lowers it at scalar and array shapes (`Abs` of a Complex is Real).
+- See also: `Sign`, `Arg`, `Norm`, `RealAbs`.

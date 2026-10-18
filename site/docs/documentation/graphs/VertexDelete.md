@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexDelete[g, v] removes the vertex v and its incident edges from g; VertexDelete[g, {v1, ...}] removes several (each must be a vertex of g, else the call stays unevaluated); VertexDelete[g, patt] removes every vertex matching patt. Vertex and edge order and edge weights are kept.`**
+**`VertexDelete[g, v]`**
+
+removes the vertex v and its incident edges from g; VertexDelete\[g, {v1, ...}\] removes several (each must be a vertex of g, else the call stays unevaluated); VertexDelete\[g, patt\] removes every vertex matching patt. Vertex and edge order and edge weights are kept.
 
 ## Examples (6)
 

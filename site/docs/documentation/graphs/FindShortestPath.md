@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindShortestPath[g,s,t] gives a shortest path from s to t as a list of vertices ({} if none).`**
+**`FindShortestPath[g,s,t]`**
+
+gives a shortest path from s to t as a list of vertices ({} if none).
 
 ## Examples (9)
 

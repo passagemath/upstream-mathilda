@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LocalClusteringCoefficient[g] gives for each vertex the fraction of pairs of its neighbours that are adjacent (exact); LocalClusteringCoefficient[g, v] gives it for v. For directed graphs, directed 3-cycles through v over in/out neighbour pairs.`**
+**`LocalClusteringCoefficient[g]`**
+
+gives for each vertex the fraction of pairs of its neighbours that are adjacent (exact); LocalClusteringCoefficient\[g, v\] gives it for v. For directed graphs, directed 3-cycles through v over in/out neighbour pairs.
 
 ## Examples (8)
 

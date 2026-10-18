@@ -5,15 +5,25 @@
 
 ## Description
 
-**`While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.`**
+**`While[test, body]`**
 
-**`While[test] does the loop with a Null body, which is useful when test has side-effects.`**
+evaluates test, then body, repeatedly, until test first fails to give True.
 
-**`Break[] inside body exits the loop.`**
+**`While[test]`**
 
-**`Continue[] inside body skips the rest of body and re-evaluates test.`**
+does the loop with a Null body, which is useful when test has side-effects.
 
-**`Return[v] inside body causes While to yield v; otherwise While returns Null.`**
+**`Break[]`**
+
+inside body exits the loop.
+
+**`Continue[]`**
+
+inside body skips the rest of body and re-evaluates test.
+
+**`Return[v]`**
+
+inside body causes While to yield v; otherwise While returns Null.
 
 <details>
 <summary>Notes</summary>

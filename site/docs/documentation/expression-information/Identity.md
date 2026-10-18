@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Identity[expr] gives expr unchanged (the identity function).`**
+**`Identity[expr]`**
+
+gives expr unchanged (the identity function).
 
 ## Examples (6)
 

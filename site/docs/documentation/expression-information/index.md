@@ -1,6 +1,6 @@
 # Expression Information
 
-64 built-in function(s) in this category.
+69 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -17,11 +17,13 @@
 - [`ClearAttributes`](ClearAttributes.md) — ClearAttributes[s, attr] removes attr from the list of attributes of s.  _(Stable)_
 - [`ComposeList`](ComposeList.md) — ComposeList[{f1, f2, ...}, x]  _(Stable)_
 - [`Composition`](Composition.md) — Composition[f1, f2, f3, ...]  _(Stable)_
+- [`Definition`](Definition.md) — Definition[s] prints the own-, down- and up-values associated with s.  _(Stable)_
 - [`Evaluate`](Evaluate.md) — Evaluate[expr]  _(Stable)_
 - [`EvenQ`](EvenQ.md) — EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.  _(Stable)_
 - [`Flat`](Flat.md) — Flat is an attribute that can be assigned to a symbol f to indicate that all expressions involving nested functions f should be flattened out. This property is accounted for in pattern matching.  _(Partial)_
 - [`FreeQ`](FreeQ.md) — FreeQ[expr, form]  _(Stable)_
 - [`FullForm`](FullForm.md) — FullForm[expr]  _(Stable)_
+- [`Hash`](Hash.md) — Hash[expr] gives an integer hash code for expr (the "Expression" hash).  _(Stable)_
 - [`Hold`](Hold.md) — Hold[expr]  _(Stable)_
 - [`HoldAll`](HoldAll.md) — HoldAll  _(Stable)_
 - [`HoldAllComplete`](HoldAllComplete.md) — HoldAllComplete  _(Experimental)_
@@ -57,12 +59,15 @@
 - [`Sequence`](Sequence.md) — Sequence[e1, e2, ...]  _(Stable)_
 - [`SequenceHold`](SequenceHold.md) — SequenceHold  _(Stable)_
 - [`SetAttributes`](SetAttributes.md) — SetAttributes[s, attr] sets the attributes for s.  _(Stable)_
+- [`StandardForm`](StandardForm.md) — StandardForm[expr]  _(Stable)_
 - [`StringQ`](StringQ.md) — StringQ[expr]  _(Stable)_
 - [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
 - [`TeXForm`](TeXForm.md) — TeXForm[expr]  _(Stable)_
 - [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_
 - [`ToString`](ToString.md) — ToString[expr]  _(Stable)_
 - [`Trace`](Trace.md) — Trace[expr]  _(Stable)_
+- [`TraditionalForm`](TraditionalForm.md) — TraditionalForm[expr]  _(Stable)_
 - [`Unevaluated`](Unevaluated.md) — Unevaluated[expr]  _(Stable)_
+- [`UpValues`](UpValues.md) — UpValues[s] gives a list of up-value rules for s (values for g[..,s,..] or g[..,s[..],..]).  _(Stable)_
 - [`ValueQ`](ValueQ.md) — ValueQ[expr]  _(Stable)_
 - [`VectorQ`](VectorQ.md) — VectorQ[expr]  _(Stable)_

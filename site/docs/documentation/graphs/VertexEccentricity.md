@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexEccentricity[g, v] gives the largest distance from v to any vertex reachable from v. With EdgeWeight the weights are lengths and, as in Wolfram, a vertex v cannot reach makes it Infinity.`**
+**`VertexEccentricity[g, v]`**
+
+gives the largest distance from v to any vertex reachable from v. With EdgeWeight the weights are lengths and, as in Wolfram, a vertex v cannot reach makes it Infinity.
 
 ## Examples (8)
 

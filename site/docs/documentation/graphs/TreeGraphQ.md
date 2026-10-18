@@ -5,7 +5,9 @@
 
 ## Description
 
-**`TreeGraphQ[g] gives True if g is a tree: at least one vertex, connected, and with no cycles, ignoring edge direction. A disconnected forest is not a tree.`**
+**`TreeGraphQ[g]`**
+
+gives True if g is a tree: at least one vertex, connected, and with no cycles, ignoring edge direction. A disconnected forest is not a tree.
 
 ## Examples (11)
 

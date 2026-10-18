@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphRestriction[h, {v1, ...}] intersects every hyperedge of h with the given vertices, dropping hyperedges that miss them (Berge's induced sub-hypergraph).`**
+**`HypergraphRestriction[h, {v1, ...}]`**
+
+intersects every hyperedge of h with the given vertices, dropping hyperedges that miss them (Berge's induced sub-hypergraph).
 
 ## Examples (8)
 

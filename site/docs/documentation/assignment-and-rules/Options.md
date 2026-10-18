@@ -5,24 +5,33 @@
 
 ## Description
 
-**`Options[f] gives the list of default option rules for the symbol f.`**
+**`Options[f]`**
 
-Options\[expr\] gives the options explicitly set in an expression such as a graphics object.  Options\[obj, name\] gives the setting for the named option; Options\[obj, {names}\] gives a list of settings.  Assign to Options\[f\] to redefine all default options at once.
+gives the list of default option rules for the symbol f. Options\[expr\] gives the options explicitly set in an expression such as a graphics object.  Options\[obj, name\] gives the setting for the named option; Options\[obj, {names}\] gives a list of settings.  Assign to Options\[f\] to redefine all default options at once.
 
-## Examples (5)
+## Examples (8)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]} {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
 
-In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
-Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+In[3]:= {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+Out[3]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+
+In[4]:= SetOptions[f, b -> 20]; f[]
+Out[4]= {1, 20}
+
+In[5]:= SetOptions[f, c -> 3]
+Out[5]= SetOptions[f, c -> 3]
+
+In[6]:= AppendTo[Options[f], c -> 3]
+Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 
 ### Applications (2)
@@ -30,15 +39,15 @@ Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOpt
 A single named option as a rule
 
 ```mathematica
-In[4]:= Options[NumberForm, DigitBlock]
-Out[4]= {DigitBlock -> Infinity}
+In[7]:= Options[NumberForm, DigitBlock]
+Out[7]= {DigitBlock -> Infinity}
 ```
 
 A symbol with no registered options has none
 
 ```mathematica
-In[5]:= Options[gsym]
-Out[5]= {}
+In[8]:= Options[gsym]
+Out[8]= {}
 ```
 
 ## Algorithm

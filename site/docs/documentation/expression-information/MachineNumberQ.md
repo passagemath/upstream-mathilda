@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.`**
+**`MachineNumberQ[expr]`**
+
+gives True if expr is a machine-precision real or complex number, and False otherwise.
 
 ## Examples (15)
 
@@ -124,7 +126,7 @@ This file implements `N[expr]` / `N[expr, prec]`. Phase 1 targets machine-precis
 - Tests: [`tests/test_hankelmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hankelmatrix.c)
 - Tests: [`tests/test_hilbertmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hilbertmatrix.c)
 - Tests: [`tests/test_machine_number_q.c`](https://github.com/stblake/mathilda/blob/main/tests/test_machine_number_q.c)
-- Tests: [`tests/test_toeplitzmatrix.c`](https://github.com/stblake/mathilda/blob/main/tests/test_toeplitzmatrix.c)
+- Tests: [`tests/test_meijerg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meijerg.c)
 
 ## Notes & additional examples
 

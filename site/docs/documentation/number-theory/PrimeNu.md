@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.`**
+**`PrimeNu[n]`**
+
+gives the number of distinct prime factors of n, nu(n). PrimeNu\[n, GaussianIntegers -\> True\] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z\[i\]. PrimeNu\[1\] is 0; PrimeNu\[0\] is left unevaluated.
 
 ## Examples (11)
 

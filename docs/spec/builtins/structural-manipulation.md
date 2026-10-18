@@ -1289,7 +1289,7 @@ In[3]:= FactorSquareFree[x^5 - x^3 y^2 - x^2 y^3 + y^5]
 Out[3]= (x - y)^2 (x^3 + 2 x^2 y + 2 x y^2 + y^3)
 
 In[4]:= FactorSquareFree[{(x^2 - 1)(x - 1), (x^4 - 1)(x^2 - 1)}]
-Out[4]= {(-1 + x)^2 (1 + x), (-1 + x^2)^2 (1 + x^2)}
+Out[4]= {(1 + x) (-1 + x)^2, (1 + x^2) (-1 + x^2)^2}
 ```
 
 ## FactorSquareFreeList
@@ -1337,16 +1337,25 @@ In[1]:= Factor[1 + 2x + x^2]
 Out[1]= (1 + x)^2
 
 In[2]:= Factor[x^10 - 1]
-Out[2]= (-1 + x) (1 + x) (1 - x + x^2 - x^3 + x^4) (1 + x + x^2 + x^3 + x^4)
+Out[2]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
 
 In[3]:= Factor[x^10 - y^10]
-Out[3]= (x - y) (x + y) (x^4 - x^3 y + x^2 y^2 - x y^3 + y^4) (x^4 + x^3 y + x^2 y^2 + x y^3 + y^4)
+Out[3]= (x + y) (x - y) (x^4 + x^3 y + x^2 y^2 + x y^3 + y^4) (x^4 - x^3 y + x^2 y^2 - x y^3 + y^4)
 
 In[4]:= Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]
-Out[4]= (a - x) (a + x) (3 a^2 - 2 x y)
+Out[4]= (a + x) (a - x) (3 a^2 - 2 x y)
 
 In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
-Out[5]= ((-1 + x) (1 + x) (2 + x)) / ((x - 2 y) (x + 2 y))
+Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
+
+In[6]:= Factor[x^4 + 1, Modulus -> 3]
+Out[6]= (2 + x + x^2) (2 + 2 x + x^2)
+
+In[7]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[7]= (1 + Sqrt[2] x + x^2) (1 - Sqrt[2] x + x^2)
+
+In[8]:= Factor[Integrate[f[x], x] x^2 - Integrate[f[x], x]]
+Out[8]= (-1 + x) (1 + x) Integrate[f[x], x]
 ```
 
 ## FactorList
@@ -1430,10 +1439,10 @@ Out[6]= 1 < 7 (5 - 3 x + 11 x^3) < 2
 In[7]:= f = 2 x^2 y z + 2 x^2 y + 4 x^2 z + 4 x^2 + 4 y^2 z^2 + 4 z y^2
         + 8 z^2 y + 2 z y - 6 y - 12 z - 12;
         FactorTerms[f, x]
-Out[7]= 2 (-3 + x^2 + 2 y z) (2 + y + 2 z + y z)
+Out[7]= 2 (2 + y + 2 z + y z) (-3 + x^2 + 2 y z)
 
 In[8]:= FactorTerms[f, {x, y}]
-Out[8]= 2 (1 + z) (2 + y) (-3 + x^2 + 2 y z)
+Out[8]= 2 (2 + y) (1 + z) (-3 + x^2 + 2 y z)
 ```
 
 ## FactorTermsList

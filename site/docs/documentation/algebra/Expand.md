@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Expand[expr] expands out products and powers in expr.`**
+**`Expand[expr]`**
 
-**`Expand[expr, patt] leaves unexpanded any parts of expr that are free of the pattern patt.`**
+expands out products and powers in expr.
+
+**`Expand[expr, patt]`**
+
+leaves unexpanded any parts of expr that are free of the pattern patt.
 
 ## Examples (12)
 
@@ -26,7 +30,7 @@ In[3]:= Expand[(x+1)^2 + (y+1)^2, x]
 Out[3]= 1 + 2 x + x^2 + (1 + y)^2
 
 In[4]:= Expand[(a+b)(x[1]+x[2])^2, x[_]]
-Out[4]= 2 (a + b) x[1] x[2] + (a + b) x[1]^2 + (a + b) x[2]^2
+Out[4]= (a + b) x[1]^2 + (a + b) x[2]^2 + 2 (a + b) x[1] x[2]
 
 In[5]:= Length[Expand[(1 + x + 5 x^3 + 8 x^17)^341]]
 Out[5]= 5758
@@ -76,7 +80,7 @@ Only the numerator expands: Expand leaves denominators alone
 
 ```mathematica
 In[12]:= Expand[(x + 1)^2/(y + 1)]
-Out[12]= 1/(1 + y) + 2 x/(1 + y) + x^2/(1 + y)
+Out[12]= 1/(1 + y) + (2 x)/(1 + y) + x^2/(1 + y)
 ```
 
 ## Performance

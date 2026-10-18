@@ -86,6 +86,7 @@ Out[10]= "abcX"
 
 - Source: [`src/strings/stringinsert.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringinsert.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
 
 ## Notes & additional examples

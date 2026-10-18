@@ -5,7 +5,9 @@
 
 ## Description
 
-**`With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.`**
+**`With[{x = x0, ...}, expr]`**
+
+specifies that x should be replaced by x0 throughout expr.
 
 ## Examples (5)
 

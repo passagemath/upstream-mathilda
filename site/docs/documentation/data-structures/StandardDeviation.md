@@ -5,7 +5,9 @@
 
 ## Description
 
-**`StandardDeviation[data] gives the standard deviation estimate of the elements in data.`**
+**`StandardDeviation[data]`**
+
+gives the standard deviation estimate of the elements in data.
 
 ## Examples (8)
 
@@ -53,7 +55,7 @@ Out[8]= 0
 
 **See also:** [Median](../../data-structures/Median/), [Variance](../../data-structures/Variance/), [Mean](../../data-structures/Mean/)
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

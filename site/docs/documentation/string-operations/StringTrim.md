@@ -11,13 +11,13 @@ Trims whitespace from the beginning and end of "string".
 
 **`StringTrim["string", patt]`**
 
-Trims substrings matching the string pattern patt from the beginning and end.
+Removes one substring matching the string pattern patt from the beginning and one from the end (use patt.. to remove runs).
 
 **`StringTrim[{s1, s2, ...}, ...]`**
 
-Gives the list of results for each of the si. Whitespace covers runs of spaces, tabs, and newlines. Each end is trimmed to a fixed point.
+Gives the list of results for each of the si. Whitespace covers runs of spaces, tabs, and newlines. Options: IgnoreCase -\> True.
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -27,7 +27,7 @@ Every input below was run against the current Mathilda build and its output reco
 In[1]:= StringTrim["   aaa bbb ccc   "]
 Out[1]= "aaa bbb ccc"
 
-In[2]:= StringTrim["++++aaa bbb ccc----", ("+" | "-") ...]
+In[2]:= StringTrim["++++aaa bbb ccc----", ("+" | "-") ..]
 Out[2]= "aaa bbb ccc"
 
 In[3]:= StringTrim["   aaa bbb ccc   ", RegularExpression["^ *"]]
@@ -37,27 +37,62 @@ In[4]:= StringTrim["007bond007", DigitCharacter ..]
 Out[4]= "bond"
 ```
 
-### Applications (3)
+### Applications (8)
 
-Default: trim whitespace from both ends
+Default: whitespace from both ends
 
 ```mathematica
 In[5]:= StringTrim["   hello   "]
 Out[5]= "hello"
 ```
 
-Each end is trimmed to a fixed point
+Tabs and newlines are whitespace too
 
 ```mathematica
-In[6]:= StringTrim["xxhelloxx", "x"]
-Out[6]= "hello"
+In[6]:= StringTrim["\n\t text \n"]
+Out[6]= "text"
 ```
 
-A literal pattern
+One match is removed at each end, as in Mathematica
 
 ```mathematica
-In[7]:= StringTrim["...data...", "."]
-Out[7]= "data"
+In[7]:= StringTrim["xxabxx", "x"]
+Out[7]= "xabx"
+```
+
+Use a repeated pattern to strip a whole run
+
+```mathematica
+In[8]:= StringTrim["xxabxx", "x"..]
+Out[8]= "ab"
+```
+
+Any string pattern works
+
+```mathematica
+In[9]:= StringTrim["123abc456", DigitCharacter..]
+Out[9]= "abc"
+```
+
+The two cuts never overlap
+
+```mathematica
+In[10]:= StringTrim["xxx", "xx"]
+Out[10]= "x"
+```
+
+Case-insensitive
+
+```mathematica
+In[11]:= StringTrim["XXhelloxx", "x", IgnoreCase -> True]
+Out[11]= "Xhellox"
+```
+
+Threads over a list of strings
+
+```mathematica
+In[12]:= StringTrim[{"  a ", " b  "}]
+Out[12]= {"a", "b"}
 ```
 
 ## Algorithm
@@ -66,33 +101,29 @@ stringtrim.c - StringTrim[...], trims matching substrings from both ends.
 
 ```text
   StringTrim["string"]           trims whitespace runs from start and end
-  StringTrim["string", patt]     trims substrings matching patt from both ends
+  StringTrim["string", patt]     trims a substring matching patt from each end
   StringTrim[{s1, s2, ...}, ...] threads over a list of subject strings
+  IgnoreCase -> True             case-insensitive pattern
 ```
 
-The trim pattern is translated to PCRE by the shared string-pattern engine (string_pattern.c: wl_pattern_to_regex), so it accepts literal strings, RegularExpression["re"], the character-class heads (Whitespace, ...), StringExpression (~~), Alternatives (|), Repeated (..), Except, and so on. The default pattern is Whitespace (a run of spaces / tabs / newlines).
+As in Mathematica, ONE match is removed at each end -- StringTrim is StringReplace[s, {StartOfString ~~ patt -> "", patt ~~ EndOfString -> ""}]: StringTrim["xxabcxx", "x"] is "xabcx" (use "x".. to strip runs). The back match must start at or after the end of the front match, so StringTrim["xxx", "xx"] is "x".
 
-Anchoring: rather than the whole-string \A...\z wrap the other regex builtins use, StringTrim needs the pattern anchored at just one end.
+Both ends go through the shared string-pattern engine (regex_common.c), so the full pattern language works, Condition and PatternTest included:
 
 ```text
-  - The front is stripped by matching `(?:src)` starting at the current
-    position and accepting only a match that begins exactly there.  PCRE's
-    `\A`/`^` anchor to absolute offset 0, so a start-relative anchor is done
-    by the ov[0] == start check, not by wrapping.
-  - The back is stripped by matching `(?:src)\z` while passing a truncated
-    subject length (the current end) to regex_match, so `\z` refers to the
-    current end rather than the absolute string end.
+  - front: the pattern compiled REGEX_ANCHORED, one match at offset 0 -- no
+    scan of the subject at all;
+  - back: the pattern compiled REGEX_ENDANCHORED, searched from the end of the
+    front match; PCRE rejects a candidate as soon as it cannot reach the end.
 ```
-
-Each end is stripped repeatedly to a fixed point (so StringTrim["xxabcxx", "x"] -> "abc"); a zero-width match ends the loop.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_stringtrim` accepts 1–2 arguments (else `StringTrim::argt`). The pattern (default `Whitespace`) is translated once by `wl_pattern_to_regex`, then compiled into two one-end-anchored programs (`st_compile`): a front matcher `(?:src)` and a back matcher `(?:src)\z`. `st_scalar` strips the leading run by repeated matches that must *begin exactly* at the current start (checked by `ov[0] == start`, since `\A`/`^` would anchor to absolute 0), and the trailing run by `\z`-anchored matches over a truncated subject length. Each end is stripped to a fixed point, and a zero-width match ends the loop — so only the two ends are trimmed, never the middle.
+**Algorithm.** As in Mathematica, `StringTrim[s, p]` is `StringReplace[s, {StartOfString ~~ p -> "", p ~~ EndOfString -> ""}]`: it removes one match at each end and does not strip to a fixed point. `builtin_stringtrim` takes the subject, an optional pattern (default `Whitespace`, i.e. `\s+`) and `IgnoreCase`. It builds the pattern twice through the shared engine (`regex_rules_build_opts`): once compiled `REGEX_ANCHORED` for the front and once `REGEX_ENDANCHORED` for the back. `st_scalar` runs one anchored match at offset 0 to find the front cut. It then searches for the back match from the end of the front match, which PCRE rejects as soon as a candidate cannot reach the end, so the two cuts never cross (`StringTrim["xxx", "xx"]` is `"x"`).
 
-**Data structures.** Two `RegexProgram` matchers (front, back); one output buffer for the trimmed window `[start, end)`.
+**Data structures.** Two cached `RegexRule` sets (front and back) and one output buffer for the window `[start, end)`. The full string-pattern language works here, `Condition` and `PatternTest` included.
 
-**Complexity / limits.** `O(len)` plus the cost of the trim-run matches. A single-character pattern still removes a whole run (fixed-point per end). A non-string subject, an unsupported pattern, or a build without PCRE2 leaves the call unevaluated. Byte-based; the pattern accepts the full shared string-pattern vocabulary.
+**Complexity / limits.** Two PCRE2 matches per subject, and the front one never scans. Strip a run with a repeated pattern such as `"x"..`: a single-character pattern removes only one character per end. A list of subjects threads. A non-string element in it emits `StringTrim::strse` and leaves the call unevaluated. A build without PCRE2 warns with `regavail`.
 
 **Attributes:** `Protected`.
 
@@ -100,18 +131,20 @@ Each end is stripped repeatedly to a fixed point (so StringTrim["xxabcxx", "x"] 
 
 - Source: [`src/strings/stringtrim.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringtrim.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringfns.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringfns.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`StringTrim` removes substrings matching the pattern from the *start and end*
-only (never the middle), stripping each end repeatedly to a fixed point — so a
-single-character pattern still removes a whole run. The default pattern is
-`Whitespace`.
-
-Anchoring is one-ended: the front is matched start-relative and the back with a
-`\z` anchor over a truncated length, rather than the whole-string `\A...\z` wrap
-the other regex builtins use. The pattern accepts the full shared string-pattern
-vocabulary.
+- `StringTrim[s, p]` is `StringReplace[s, {StartOfString ~~ p -> "", p ~~ EndOfString -> ""}]`.
+  It removes **one** match at each end and never touches the middle. Before
+  v0.455 it stripped each end to a fixed point, so `StringTrim["xxabxx", "x"]`
+  wrongly gave `"ab"`.
+- The default pattern `Whitespace` is itself a run (`\s+`), so the
+  one-argument form still removes all leading and trailing whitespace.
+- The front match is compiled anchored and the back match end-anchored, so
+  neither end needs a scan of the subject.
+- A list holding a non-string emits `StringTrim::strse` and stays unevaluated.
+- See also: `StringReplace`, `StringDelete`, `StringPadLeft`.

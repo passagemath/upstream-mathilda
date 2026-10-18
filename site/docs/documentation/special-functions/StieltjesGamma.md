@@ -40,7 +40,7 @@ In[4]:= N[StieltjesGamma[0], 40]
 Out[4]= 0.57721566490153286060651209008240243104214
 
 In[5]:= Series[Zeta[s], {s, 1, 2}]
-Out[5]= 1/(s - 1) + EulerGamma + -StieltjesGamma[1] (s - 1) + 1/2 StieltjesGamma[2] (s - 1)^2 + O[s - 1]^3
+Out[5]= 1/(s - 1) + EulerGamma - StieltjesGamma[1] (s - 1) + 1/2 StieltjesGamma[2] (s - 1)^2 + O[s - 1]^3
 ```
 
 ## Algorithm

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PetersenGraph[] gives the Petersen graph; PetersenGraph[n, k] the generalized Petersen graph: inner vertices 1..n with i joined to i+k (mod n), outer cycle n+1..2n, and spokes i to n+i.`**
+**`PetersenGraph[]`**
+
+gives the Petersen graph; PetersenGraph\[n, k\] the generalized Petersen graph: inner vertices 1..n with i joined to i+k (mod n), outer cycle n+1..2n, and spokes i to n+i.
 
 ## Examples (9)
 

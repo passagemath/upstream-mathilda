@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphRank[h] gives the largest hyperedge arity of h (0 if h has no hyperedges).`**
+**`HypergraphRank[h]`**
+
+gives the largest hyperedge arity of h (0 if h has no hyperedges).
 
 ## Examples (8)
 

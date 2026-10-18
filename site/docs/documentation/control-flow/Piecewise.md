@@ -13,7 +13,9 @@ represents a piecewise function with values val\_i in the regions defined by the
 
 uses the default value val if none of the cond\_i apply. The default for val is 0.
 
-**`Piecewise[conds] automatically evaluates to Piecewise[conds, 0].`**
+**`Piecewise[conds]`**
+
+automatically evaluates to Piecewise\[conds, 0\].
 
 <details>
 <summary>Notes</summary>

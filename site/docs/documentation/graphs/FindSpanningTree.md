@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindSpanningTree[g] gives a spanning tree (forest) of g as a graph: a minimum spanning tree when g has EdgeWeight (an arborescence for a directed graph), else a breadth-first one. FindSpanningTree[{g, v}] gives the tree grown from vertex v.`**
+**`FindSpanningTree[g]`**
+
+gives a spanning tree (forest) of g as a graph: a minimum spanning tree when g has EdgeWeight (an arborescence for a directed graph), else a breadth-first one. FindSpanningTree\[{g, v}\] gives the tree grown from vertex v.
 
 ## Examples (9)
 

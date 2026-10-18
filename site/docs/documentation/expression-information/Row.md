@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Row[{e1, e2, ...}] displays the ei concatenated together in a row.`**
+**`Row[{e1, e2, ...}]`**
 
-Row\[{e1, e2, ...}, s\] inserts the string s between successive elements.  Strings are shown without quotes.
+displays the ei concatenated together in a row. Row\[{e1, e2, ...}, s\] inserts the string s between successive elements.  Strings are shown without quotes.
 
 ## Examples (5)
 

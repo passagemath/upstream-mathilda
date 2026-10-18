@@ -9,7 +9,9 @@
 
 gives a numerical approximation to the product of f for i from imin to imax.
 
-**`NProduct[f, {i, imin, imax, di}] uses step di. imax may be Infinity. NProduct[f, {i, ...}, {j, ...}, ...] evaluates a multidimensional product (an inner bound may depend on an outer index). The index is localised (HoldAll). Evaluated as Exp[NSum[Log[f], ...]], so the NSum engine (Euler-Maclaurin for monotone factors, Wynn's epsilon otherwise) and its convergence test carry over. Machine or arbitrary precision via WorkingPrecision.`**
+**`NProduct[f, {i, imin, imax, di}]`**
+
+uses step di. imax may be Infinity. NProduct\[f, {i, ...}, {j, ...}, ...\] evaluates a multidimensional product (an inner bound may depend on an outer index). The index is localised (HoldAll). Evaluated as Exp\[NSum\[Log\[f\], ...\]\], so the NSum engine (Euler-Maclaurin for monotone factors, Wynn's epsilon otherwise) and its convergence test carry over. Machine or arbitrary precision via WorkingPrecision.
 
 <details>
 <summary>Notes</summary>

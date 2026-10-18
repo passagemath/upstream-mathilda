@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DownValues[s] gives a list of down-value rules for s.`**
+**`DownValues[s]`**
+
+gives a list of down-value rules for s.
 
 ## Examples (5)
 

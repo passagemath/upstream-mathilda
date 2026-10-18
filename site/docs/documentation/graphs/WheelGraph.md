@@ -5,7 +5,9 @@
 
 ## Description
 
-**`WheelGraph[n] gives the wheel graph with n vertices: vertex 1 joined to every vertex of the cycle 2, ..., n.`**
+**`WheelGraph[n]`**
+
+gives the wheel graph with n vertices: vertex 1 joined to every vertex of the cycle 2, ..., n.
 
 ## Examples (11)
 

@@ -9,14 +9,25 @@
 
 gives a list of the successive accumulated totals of elements in list. The result has the same length as list.
 
-**`Accumulate[list] is effectively equivalent to FoldList[Plus, list].`**
+**`Accumulate[list]`**
 
-**`Accumulate[list, Method -> "CompensatedSummation"] uses Kahan`**
+is effectively equivalent to FoldList\[Plus, list\].
+
+**`Accumulate[list, Method -> "CompensatedSummation"]`**
+
+uses Kahan
 
 <details>
 <summary>Notes</summary>
 
-Accumulate works with integers, arbitrary-precision bignums, machine doubles, and symbolic expressions, and threads naturally over rows (so for a matrix it accumulates within columns). The head of the input is preserved: Accumulate\[{a, b, c, d}\]    -\>  {a, a + b, a + b + c, a + b + c + d} Accumulate\[f\[a, b, c, d\]\]   -\>  f\[a, a + b, a + b + c, a + b + c + d\] compensated summation to reduce numerical error when every element of list is a machine number. For symbolic or mixed input the option is ignored and the standard symbolic accumulation is returned. Accumulate has the attribute Protected.
+Accumulate works with integers, arbitrary-precision bignums, machine doubles, and symbolic expressions, and threads naturally over rows (so for a matrix it accumulates within columns). The head of the input is preserved:
+
+```text
+Accumulate[{a, b, c, d}]    ->  {a, a + b, a + b + c, a + b + c + d}
+Accumulate[f[a, b, c, d]]   ->  f[a, a + b, a + b + c, a + b + c + d]
+```
+
+compensated summation to reduce numerical error when every element of list is a machine number. For symbolic or mixed input the option is ignored and the standard symbolic accumulation is returned. Accumulate has the attribute Protected.
 
 </details>
 
@@ -80,7 +91,7 @@ Out[9]= {{1, 2}, {4, 6}, {9, 12}}
 
 **See also:** [Plus](../../arithmetic/Plus/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)

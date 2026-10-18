@@ -5,24 +5,80 @@
 
 ## Description
 
-**`Integrate[f, x] gives the indefinite integral of f with respect to x.`**
+**`Integrate[f, x]`**
 
-**`Integrate[f, {x, xmin, xmax}] gives the definite integral by the`**
+gives the indefinite integral of f with respect to x.
 
-**`Integrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] gives the iterated`**
+**`Integrate[f, {x, xmin, xmax}]`**
 
-**`Integrate[f, x, Method -> "<name>"] dispatches directly to a single`**
+gives the definite integral by the
 
-**`Integrate[f, x, TimeConstraint -> t] gives the cascade a wall-clock budget`**
+**`Integrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...]`**
+
+gives the iterated
+
+**`Integrate[f, x, Method -> "<name>"]`**
+
+dispatches directly to a single
+
+**`Integrate[f, x, TimeConstraint -> t]`**
+
+gives the cascade a wall-clock budget
 
 <details>
 <summary>Notes</summary>
 
-fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names: "Automatic"          — the full dispatch cascade (default) "BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve) "LinearRadicals"     — Integrate\`LinearRadicals (rationalise radicals of a x + b) "QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem) "GoursatAlgebraic"   — Integrate\`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent) "Weierstrass"        — Integrate\`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution) "RischTranscendental"       — Integrate\`RischTranscendental (recursive transcendental Risch; correct by construction) "CRCTable"           — Integrate\`CRCTable (lazy-loaded CRC integral table) "ParallelMixedTower" — Integrate\`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II) "ParallelMixedSpecial" — Integrate\`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi) "Undefined"          — Integrate\`Undefined (unknown functions u\[x\], u'\[x\]; Roach §1.7) "NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form) "LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form) "Residue"             — improper/periodic real definite integrals by the residue theorem (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period, principal values, even half-lines); tried before NewtonLeibniz under Automatic "DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the ("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform / ("Mellin")              Ramanujan Master Theorem: Integrate\`RamanujanMasterTheorem; exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2 reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g) (Bose-Einstein / Fermi-Dirac -\> Gamma\*PolyLog), a Frullani pre-pass (f(a x)-f(b x))/x -\> (f(0)-f(Inf)) Log\[b/a\], and a Log\[x\]^k weight; strip-gated, yielding a ConditionalExpression when Assumptions do not prove convergence; after NewtonLeibniz under Automatic Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. of t seconds (default 3; Infinity for no budget).  It is checked BETWEEN stages, at every recursion depth, and inside the substitution stage's kernel and branch loops and its Eliminate/Solve calls -- so it stops the cascade progressing once spent, but it is not yet a hard bound: a single long-running evaluation inside one stage can overrun it.  It matters only for integrands Integrate cannot close; measured from inside the cascade (MATHILDA\_INTEGRATE\_PROFILE=1), two stages account for 90.8% of that cost -- the linearity split (43.5%) and the substitution search (47.3%) -- while the eight cheap exact stages ahead of them are together under 0.1%.  An explicit Method -\> name is a deliberate request for the full search and carries no budget unless you pass TimeConstraint yourself. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
+fundamental theorem of calculus (Method -\> "NewtonLeibniz"). multiple integral (innermost/last spec integrated first; inner bounds may depend on outer variables).  See also Integrate\`SingularPoints. subroutine, bypassing the default cascade.  Accepted method names:
+
+```text
+"Automatic"          — the full dispatch cascade (default)
+```
+
+"BronsteinRational"  — Integrate\`BronsteinRational (polynomial / rational) "DerivativeDivides"  — Integrate\`DerivativeDivides (substitution u(x); direct + Eliminate/Solve)
+
+```text
+"LinearRadicals"     — Integrate`LinearRadicals (rationalise radicals of a x + b)
+```
+
+"QuadraticRadicals"  — Integrate\`QuadraticRadicals (Euler substitution for Sqrt\[a x^2 + b x + c\]) "LinearRatioRadicals" — Integrate\`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d)) "ChebychevAlgebraic" — Integrate\`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)
+
+```text
+"GoursatAlgebraic"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)
+"Weierstrass"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)
+"RischTranscendental"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)
+"CRCTable"           — Integrate`CRCTable (lazy-loaded CRC integral table)
+```
+
+"ParallelMixedTower" — Integrate\`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II) "ParallelMixedSpecial" — Integrate\`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi)
+
+```text
+"Undefined"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)
+"NewtonLeibniz"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)
+"LineIntegral"        — complex contour integrals (implicit for the {x,z0,...,zn} form)
+"Residue"             — improper/periodic real definite integrals by the residue theorem
+                      (rational/Fourier on (-Inf,Inf), rational-in-Sin/Cos over a period,
+                      principal values, even half-lines); tried before NewtonLeibniz under Automatic
+"DiffUnderInt"         — parameter-dependent definite integrals by differentiation under the
+```
+
+("DifferentiationUnderIntegral") integral sign (Feynman's trick): Integrate\`DiffUnderInt; Laplace/Fourier, sinc, and even-rational half-line families; tried after Residue and NewtonLeibniz in the definite cascade "RamanujanMasterTheorem" — half-line Int\_0^Inf x^(s-1) f(x) dx by the Mellin transform /
+
+```text
+("Mellin")              Ramanujan Master Theorem: Integrate`RamanujanMasterTheorem;
+                      exp/Gaussian/algebraic/Cos/Sin/ArcTan/Log/BesselJ/pFq/PolyLog
+                      kernels (monomial x^k substitution; Erf, incomplete Gamma, BesselJ^2
+                      reduced to pFq); also the exp-geometric kernel 1/(E^(c x)+g)
+                      (Bose-Einstein / Fermi-Dirac -> Gamma*PolyLog), a Frullani pre-pass
+                      (f(a x)-f(b x))/x -> (f(0)-f(Inf)) Log[b/a], and a Log[x]^k weight;
+                      strip-gated, yielding a ConditionalExpression when
+                      Assumptions do not prove convergence; after NewtonLeibniz under Automatic
+```
+
+Method -\> {"DerivativeDivides", "Substitution" -\> u} pins the kernel u(x), trialing only that substitution. Named methods are strict: failure returns unevaluated, with no fallback. of t seconds (default 3; Infinity for no budget).  It is checked BETWEEN stages, at every recursion depth, and inside the substitution stage's kernel and branch loops and its Eliminate/Solve calls -- so it stops the cascade progressing once spent, but it is not yet a hard bound: a single long-running evaluation inside one stage can overrun it.  It matters only for integrands Integrate cannot close; measured from inside the cascade (MATHILDA\_INTEGRATE\_PROFILE=1), two stages account for 90.8% of that cost -- the linearity split (43.5%) and the substitution search (47.3%) -- while the eight cheap exact stages ahead of them are together under 0.1%.  An explicit Method -\> name is a deliberate request for the full search and carries no budget unless you pass TimeConstraint yourself. The CRCTable rules are loaded from disk on first use only. An applied 1-D InterpolatingFunction integrates to its antiderivative InterpolatingFunction (mirroring D).
 
 </details>
 
-## Examples (60)
+## Examples (73)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -59,8 +115,8 @@ Out[6]= ArcTan[x]
 Two quadratic factors
 
 ```mathematica
-In[7]:= Integrate[1/(x^4 + x^2 + 1), x] 1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] + 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
-Out[7]= 1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2] + 1/2 (ArcTan[(1 + 2 x)/Sqrt[3]] (1/4 Log[1 + x + x^2] + 1/2 ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] + 1/2 ArcTan[(1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/4 Log[1 - x + x^2]))/Sqrt[3]
+In[7]:= Integrate[1/(x^4 + x^2 + 1), x]
+Out[7]= 1/4 Log[1 + x + x^2] + ArcTan[(-1 + 2 x)/Sqrt[3]]/(2 Sqrt[3]) + ArcTan[(1 + 2 x)/Sqrt[3]]/(2 Sqrt[3]) - 1/4 Log[1 - x + x^2]
 ```
 
 ### Scope (38)
@@ -155,7 +211,7 @@ Even half-line
 
 ```mathematica
 In[24]:= Integrate[1/(1 + x^4), {x, 0, Infinity}]
-Out[24]= (1/2 Pi)/Sqrt[2]
+Out[24]= Pi/(2 Sqrt[2])
 ```
 
 ```mathematica
@@ -206,14 +262,14 @@ U = Sqrt[Tan[x]]
 
 ```mathematica
 In[35]:= Integrate[Sqrt[Tan[x]], x] - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2]) + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
-Out[35]= ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]
+Out[35]= ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]
 ```
 
 U = Sqrt[Cot[x]]
 
 ```mathematica
 In[36]:= Integrate[Sqrt[Cot[x]], x] - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2]) + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2])
-Out[36]= -ArcTan[-1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - ArcTan[1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]
+Out[36]= -ArcTan[-1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - ArcTan[1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]
 ```
 
 ```mathematica
@@ -238,22 +294,22 @@ Out[41]= -Log[-Sqrt[a] x + Sqrt[1 + a x^2]]/Sqrt[a]
 ```
 
 ```mathematica
-In[42]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x] 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
-Out[42]= 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]] (2 Sqrt[(1 + x)/(-1 + x)]/(-1 + (1 + x)/(-1 + x)) - 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]])
+In[42]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x]
+Out[42]= (2 Sqrt[(1 + x)/(-1 + x)])/(-1 + (1 + x)/(-1 + x)) - 2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
 ```
 
 Paper eq. (10)
 
 ```mathematica
 In[43]:= Integrate[3/(5 - 4 Cos[x]), x]
-Out[43]= 2 Pi Floor[(1/2 (-Pi + x))/Pi] + 2 ArcTan[3 Tan[1/2 x]]
+Out[43]= 2 Pi Floor[(-Pi + x)/(2 Pi)] + 2 ArcTan[3 Tan[1/2 x]]
 ```
 
 Continuous form
 
 ```mathematica
 In[44]:= Integrate[1/(2 + Cos[x]), x]
-Out[44]= 2 (Pi Floor[(1/2 (-Pi + x))/Pi])/Sqrt[3] + 2 ArcTan[Tan[1/2 x]/Sqrt[3]]/Sqrt[3]
+Out[44]= (2 Pi Floor[(-Pi + x)/(2 Pi)])/Sqrt[3] + (2 ArcTan[Tan[1/2 x]/Sqrt[3]])/Sqrt[3]
 ```
 
 Hyperbolic: no Floor
@@ -288,36 +344,157 @@ Out[50]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcCoth[Sqrt[3 + 2 x]/Sqrt[3]]
 In[51]:= Integrate[1/Sqrt[x^2 - 1], x, Method -> "QuadraticRadicals"]
 Out[51]= Log[2 x + 2 Sqrt[-1 + x^2]]
 
-In[52]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"] 5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]
-Out[52]= (5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]] (-5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) + 5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]))/Sqrt[2]
+In[52]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"]
+Out[52]= -(5 Sqrt[(1 + 2 x)/(3 + x)])/(-4 + (2 (1 + 2 x))/(3 + x)) + (5 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]])/(2 Sqrt[2])
 ```
 
-### Applications (8)
+### Applications (21)
+
+Rational: Hermite reduction + Lazard–Rioboo–Trager, real Log/ArcTan form
 
 ```mathematica
-In[53]:= Integrate[1/(1 + x^2), x]
-Out[53]= ArcTan[x]
+In[53]:= Integrate[1/(x^3 + 1), x]
+Out[53]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
+```
 
-In[54]:= Integrate[1/x, x]
-Out[54]= Log[x]
+The PolyLogLadder stage: R(x) Log[linear]^k to PolyLog of rising order
 
-In[55]:= Integrate[Cos[x], x]
-Out[55]= Sin[x]
+```mathematica
+In[54]:= Integrate[Log[x]^2/(1 + x), x]
+Out[54]= Log[x]^2 Log[1 + x] + 2 (-PolyLog[3, -x] + Log[x] PolyLog[2, -x])
+```
 
-In[56]:= Integrate[x^3 + x, x]
-Out[56]= 1/2 x^2 + 1/4 x^4
+Polynomial times trig rational: TrigToExp, then the exponential-tower polylog ladder
 
-In[57]:= Integrate[1/(x^3 + 1), x]
-Out[57]= 1/3 Log[1 + x] + ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/6 Log[1 - x + x^2]
+```mathematica
+In[55]:= Integrate[x/Sin[x], x]
+Out[55]= I (-I x Log[1 - E^(-I x)] + PolyLog[2, E^(-I x)]) + I (I x Log[1 + E^(-I x)] - PolyLog[2, -E^(-I x)])
+```
 
-In[58]:= Integrate[(x^2 + 1)/(x^4 + 1), x]
-Out[58]= ArcTan[x/Sqrt[2]]/Sqrt[2] + ArcTan[(x + x^3)/Sqrt[2]]/Sqrt[2]
+Symbolic exponent: the GammaPower recogniser gives the incomplete Gamma at once
 
-In[59]:= Integrate[x*Exp[x], x]
-Out[59]= E^x (-1 + x)
+```mathematica
+In[56]:= Integrate[x^n Exp[-x], x]
+Out[56]= -Gamma[1 + n, x]
+```
 
-In[60]:= Integrate[1/(x*Log[x]), x]
-Out[60]= Log[Log[x]]
+One integration by parts closes to CosIntegral
+
+```mathematica
+In[57]:= Integrate[Log[x] Sin[x], x]
+Out[57]= CosIntegral[x] - Cos[x] Log[x]
+```
+
+Non-elementary: the last stage, ParallelMixedSpecial, answers with an elliptic integral
+
+```mathematica
+In[58]:= Integrate[(1 + x^2)/Sqrt[1 - x^4], x]
+Out[58]= EllipticE[ArcSin[x], -1]
+```
+
+Residue theorem, Fourier (Jordan) family: upper half-plane pole at I
+
+```mathematica
+In[59]:= Integrate[Cos[x]/(1 + x^2), {x, -Infinity, Infinity}]
+Out[59]= Pi/E
+```
+
+Residue theorem on the unit circle for a periodic integrand
+
+```mathematica
+In[60]:= Integrate[1/(2 + Cos[x]), {x, 0, 2 Pi}]
+Out[60]= (2 Pi)/Sqrt[3]
+```
+
+Symbolic exponent: convergence for 0 < s < 1 is proved from the Assumptions
+
+```mathematica
+In[61]:= Integrate[x^(s - 1)/(1 + x), {x, 0, Infinity}, Assumptions -> 0 < s < 1]
+Out[61]= Pi Csc[Pi s]
+```
+
+The Mellin table gives the same value as Beta[s, 1 - s] = Pi Csc[Pi s]
+
+```mathematica
+In[62]:= Integrate[x^(s - 1)/(1 + x), {x, 0, Infinity}, Assumptions -> 0 < s < 1, Method -> "Mellin"]
+Out[62]= Beta[s, 1 - s]
+```
+
+Laplace transform of a Bessel function
+
+```mathematica
+In[63]:= Integrate[Exp[-a x] BesselJ[0, b x], {x, 0, Infinity}, Assumptions -> a > 0 && b > 0]
+Out[63]= 1/Sqrt[a^2 + b^2]
+```
+
+Recognised as the integral representation of BesselK
+
+```mathematica
+In[64]:= Integrate[Exp[-z Cosh[t]], {t, 0, Infinity}, Assumptions -> z > 0]
+Out[64]= BesselK[0, z]
+```
+
+Expand the geometric series, integrate term by term, resum to Catalan's constant
+
+```mathematica
+In[65]:= Integrate[Log[x]/(1 + x^2), {x, 0, 1}, Method -> "SeriesExpansion"]
+Out[65]= -Catalan
+```
+
+Frullani-type logarithm, by differentiating under the integral sign in the exponent
+
+```mathematica
+In[66]:= Integrate[(x^a - x^b)/Log[x], {x, 0, 1}, Assumptions -> a > 0 && b > 0]
+Out[66]= Log[1 + a] - Log[1 + b]
+```
+
+King reflection: f(x) + f(Pi/2 - x) = 1, with no elementary antiderivative needed
+
+```mathematica
+In[67]:= Integrate[1/(1 + Tan[x]^Sqrt[2]), {x, 0, Pi/2}]
+Out[67]= 1/4 Pi
+```
+
+Reflection x -> Pi - x removes the factor x
+
+```mathematica
+In[68]:= Integrate[x Sin[x]/(1 + Cos[x]^2), {x, 0, Pi}]
+Out[68]= 1/4 Pi^2
+```
+
+Piecewise: split at the breakpoint x = 1 and integrate each branch
+
+```mathematica
+In[69]:= Integrate[Max[x, x^2], {x, 0, 2}]
+Out[69]= 17/6
+```
+
+Cauchy principal value across the pole at x = 1
+
+```mathematica
+In[70]:= Integrate[1/(x^3 - 1), {x, 0, 2}, PrincipalValue -> True]
+Out[70]= 1/18 (-3 Log[7] + Pi Sqrt[3] - 6 Sqrt[3] ArcTan[5/Sqrt[3]])
+```
+
+Differentiation under the integral sign in a, then integration back
+
+```mathematica
+In[71]:= Integrate[Log[1 + a^2 x^2]/(1 + x^2), {x, 0, Infinity}, Assumptions -> a > 0]
+Out[71]= Pi Log[1 + a]
+```
+
+Two kernels, each a Meijer G of x^2, combined by the convolution theorem
+
+```mathematica
+In[72]:= Integrate[BesselJ[0, x] E^(-x^2), {x, 0, Infinity}, Method -> "MeijerConvolution"]
+Out[72]= (BesselI[0, 1/8] Sqrt[Pi])/(2 E^(1/8))
+```
+
+A known gap: the value is Pi/4 but no stage closes it, so the integral is returned unevaluated
+
+```mathematica
+In[73]:= Integrate[Exp[-x] Sin[x]/x, {x, 0, Infinity}]
+Out[73]= 1/2 MeijerG[{{1/2}, {1}}, {{0, 1/2}, {}}, 1]
 ```
 
 ## Options & behaviour
@@ -330,11 +507,56 @@ respect to a free parameter `p`, evaluates the resulting simpler definite
 integral `J(p) = Integrate[D[f,p], {x,a,b}]`, integrates `J(p)` back over the
 parameter, and fixes the constant of integration from an **exact** base value
 `I(p0)` (a `p` where `f` vanishes identically, or reduces to a directly-
-integrable form). Every case is the first-order ODE `I'(p) = J(p)`
-(Boulnois 2023). Verification is symbolic and correct-by-construction
-(`Simplify[D[I,p] - J] === 0` plus the exact base) — there is **no** numeric
-crosscheck. Assumptions (`a > 0`, …) are honoured and used to clean the closed
-forms.
+integrable form). The general case is the first-order linear ODE
+`I'(p) = lambda(p) I(p) + M(p)` (Boulnois 2023). Verification is symbolic and
+correct-by-construction (`Simplify[D[I,p] - (lambda I + M)] === 0` plus the exact
+base) — there is **no** numeric crosscheck. Assumptions (`a > 0`, …) are honoured
+and used to clean the closed forms.
+
+Two stages solve that ODE. **Stage A (`lambda = 0`, pure quadrature)**: when the
+inner integral `J` closes to an x-free form, `I = Integral J dp + const`. **Stage
+B (`lambda != 0`, integrating factor)**: when `J` does *not* close but equals
+`lambda(p) I + M(p)` — i.e. `D[f,p] - lambda(p) f = D[U,x]` by integration by
+parts in `x`, for an x-free `lambda` and a `U` in the span of `f`'s transcendental
+atoms — the integral is recovered as `I = (1/mu)(Integral mu M dp + C)` with
+`mu = Exp[-Integral lambda dp]`. The ansatz `U = Sum c_k B_k` (the `B_k` the
+atom-product shapes of `f` and `D[f,p]`) and `lambda` are found by matching
+coefficients of the independent atoms via `Solve`, and the IBP identity is then
+verified literally. This is what closes the classic Feynman Gaussian
+`Integrate[Exp[-a^2 x^2] Cos[b x], {x,0,Infinity}]`: differentiating in `b` gives
+`J = -(b/(2a^2)) I`, so `I = (Sqrt[Pi]/(2a)) Exp[-b^2/(4a^2)]`. All parameter
+antiderivatives route through the bounded back-integration (never the unbounded
+engine on a radical/trig/Gaussian-of-parameter form).
+
+A **self-similar** recognizer handles the Laurent-Gaussian
+`Exp[c0 + c2 x^2 + cm2/x^2]` (`c2, cm2 < 0`) that integration by parts in `x`
+cannot reach: the reciprocal substitution `x -> Sqrt[cm2/c2]/x` leaves the
+exponent invariant, so `J = lambda I` with `lambda` read off directly. This closes
+`Integrate[Exp[-a^2 x^2 - b^2/x^2], {x,0,Infinity}]`: differentiating in `b` gives
+`lambda = -2a`, so `I = (Sqrt[Pi]/(2a)) Exp[-2 a b]`.
+
+When neither the inner integral nor Stage B closes for a parameter, selection
+prefers a parameter with an **exact zero base** (`I(p0) = 0`) over one needing a
+sign-sensitive computed base, since the `D[I,p]` check cannot catch a wrong
+constant base.
+
+Two further closers run after the quadrature stages. **Repeated differentiation**:
+when a single differentiation of `trig^n/x^m` leaves a `1/x^{m-1}` the families
+cannot close, the integrand is differentiated `k` times until the inner integral
+closes, then back-integrated `k` times with the `k` lower derivatives pinned at an
+exact base (`Integrate[Sin[a x]^3/x^3, {x,0,Inf}] = 3 Pi a^2/8`: `k = 2`, `I''(a) =
+3 Pi/4`, `I(0) = I'(0) = 0`). **Reverse recognition**: when the integrand is itself
+a parameter-derivative of a known integral -- `f = Log[x]^k h` with `d/da h =
+Log[x] h` -- the value is `d^k/da^k Integrate[h, {x,a,b}]`
+(`Integrate[Exp[-x] x^(a-1) Log[x], {x,0,Inf}] = d/da Gamma[a] = Gamma[a]
+PolyGamma[0,a]`); the base integral `Integrate[h]` is taken from the families or,
+for a decaying Laplace/Gamma shape `C Exp[alpha x] x^(s-1)`, from the engine (gated
+to that shape so it cannot hang).
+
+The output is finalized by two equality-gated transforms: 1-arg `PowerExpand`
+(readability) and an assumption-aware `FullSimplify` (taken only when strictly
+simpler), which contracts a split Log the per-family Simplify leaves standing
+(`(Pi(-2Log[b]+Log[a b+b^2]))/b -> (Pi(Log[a+b]-Log[b]))/b`).
 
 Because the general integrator is slow/hangs on the parameter-dependent inner
 integrals Feynman's trick produces, `DiffUnderInt` evaluates the standard
@@ -346,7 +568,22 @@ is what closes a *decaying* sinc such as `∫₀^∞ e^{-p x} Sin[q x]/x dx = Ar
 whose Laplace image is non-even), and the **Gaussian moment** family
 `∫₀^∞ xⁿ e^{-p x²}{1,cos} dx` in `Sqrt[Pi]`/`e^{-q²/4p}`. The Gaussian
 parameter back-integration `∫ c e^{-k p²} dp` is supplied directly as an `Erf`
-(the engine does not produce it). Forms outside these families (finite-period
+(the engine does not produce it).
+
+The **parameter back-integration** `∫ J dp` is bounded by construction: `J` is
+first `PowerExpand`-ed (so a `Log[1/poly^rational]` image is pulled apart into
+plain `Log`s — the reciprocal-radical spelling otherwise drives the indefinite
+engine into an uninterruptible algebraic grind), then declined unless it is free
+of radical/trig/Gaussian *of the parameter*, leaving only the elementary
+`Log`/`ArcTan`/rational forms the families emit. A **product of trig-of-x**
+(`Sin[b x] Sin[c x]`, …) is `TrigReduce`-normalised to a sum of single trig terms
+before the families run, and parameter selection **prefers an exact zero base**
+(an integrand that vanishes at the base point, `I(p₀)=0`) over a sign-sensitive
+computed base — together these make `∫₀^∞ e^{-a x} Sin[b x] Sin[c x]/x dx` close
+to the clean, all-signs-real `(1/4) Log[(a²+(b+c)²)/(a²+(b−c)²)]` rather than a
+`b>c`-only form that goes non-real for `b<c`.
+
+Forms outside these families (finite-period
 trig, piecewise/`Min`-`Max` results, the Sin-Gaussian Dawson/Erfi moment) are
 declined — the integral is returned unevaluated, fast, never a wrong value. The
 two rational half-line families gate on the inner integrand being a **rational
@@ -355,7 +592,18 @@ function of `x`**: a differentiated exp-geometric/Mellin form (still carrying
 non-terminating rewrite — so such forms are declined up front and left for the
 Ramanujan/Mellin method.
 
-.
+  (Stage B)
+  (Stage B, self-similar)
+  (reverse recognition)
+  (repeated differentiation).
+
+Still **deferred**: finite-period log-trig integrals (`Integrate[Log[a^2 - 2a Cos[x]
++ 1], {x,0,π}]`, `Integrate[Log[1 - a^2 Sin[x]^2], {x,0,π/2}]`). Their differentiated
+inner integral (a rational function of Sin/Cos over a period) is reachable via the
+residue unit-circle engine, but the Feynman back-integration produces a
+complex-branch antiderivative singular at the natural base (`∝ 1/a` or
+`1/√(1-a^2)`), and `Limit` cannot resolve the canceling log-singularity there; a
+branch-correct back-integration is needed first.
 
 Three **finite-domain** families need neither a pre-existing parameter (the first
 two are purely numeric) nor an engine-safe inner integral (all three differentiate
@@ -406,6 +654,56 @@ power prefactor sets `s = ρ + 1`:
 | `pFq[{a}; {b}; -λ x]`, `λ>0` | `(∏Γ(b_j)/∏Γ(a_i)) Γ(s) (∏Γ(a_i-s)/∏Γ(b_j-s)) λ^{-s}` | `0<Re s<min Re a_i` |
 | `PolyLog[ν, -λ x]`, `λ>0` | `π (-s)^{-ν} λ^{-s} / Sin(π s)` | `-1<Re s<0` |
 | `1/(e^{c x}+γ)`, `c>0`, `γ≥-1` | `c^{-s} Γ(s) (-1/γ) PolyLog(s, -γ)` | `0<Re s` (`1<Re s` if `γ=-1`) |
+| `BesselK[ν, λ x]`, `λ>0` | `2^{s-2} λ^{-s} Γ((s+ν)/2) Γ((s-ν)/2)` | `Re s>\|Re ν\|` |
+| `AiryAi[λ x]`, `λ>0` | `λ^{-s} Γ(s) / (3^{(s+2)/3} Γ((s+2)/3))` | `0<Re s` |
+| `Erfc[λ x]`, `λ>0` | `λ^{-s} Γ((s+1)/2) / (√π s)` | `0<Re s` |
+| `SinIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Sin(πs/2) / s` | `-1<Re s<0` |
+| `CosIntegral[λ x]`, `λ>0` | `-λ^{-s} Γ(s) Cos(πs/2) / s` | `0<Re s<1` |
+| `ExpIntegralE[n, λ x]` (general `n`), `λ>0` | `λ^{-s} Γ(s) / (s+n-1)` | `Re s>0, Re(s+n)>1` |
+| `StruveH[0, λ x]`, `λ>0` | `π 2^{s-1} λ^{-s} / (Cos(πs/2) Γ(1-s/2)²)` | `-1<Re s<1` |
+| `Gamma[ν, λ x]` (upper incomplete), `λ>0` | `λ^{-s} Γ(s+ν) / s` | `Re s>0, Re(s+ν)>0` |
+| `Csch[λ x]`, `λ>0` | `2 λ^{-s} Γ(s) (1-2^{-s}) ζ(s)` | `1<Re s` |
+| `Sech[λ x]`, `λ>0` | `2^{1-s} λ^{-s} Γ(s) LerchPhi(-1, s, 1/2)` | `0<Re s` |
+| `Coth[λ x] - 1`, `λ>0` | `2^{1-s} λ^{-s} Γ(s) ζ(s)` | `1<Re s` |
+| `Sin[λ x]^k` (`k≥2` int), `λ>0` | linearize (`TrigReduce`) → Σ harmonics via `Sin/Cos` rows | `-k<Re s<` (`0` even `k`, `1` odd) |
+| `Cos[λ x]^k` (`k≥2` int), `λ>0` | linearize → Σ harmonics (mean dropped) | `0<Re s<` (`0` even → diverges, `1` odd) |
+| `ArcTan[λ x]^2`, `λ>0` | `(π λ^{-s}/(2s)) Csc(πs/2) (ψ((1-s)/2) − ψ(1/2))` | `-2<Re s<0` |
+
+The kernels below the exponential-geometric row are closed through three general
+layers rather than one-off entries. `BesselK` and `AiryAi` are **dedicated base
+transforms** (each a cancelling combination of individually-divergent series, so
+no single `pFq` exists). `SinIntegral` and `StruveH` are **reduced to a single
+entire `₁F₂`** (`Si(z)=z·₁F₂(½;3/2,3/2;−z²/4)`,
+`H_ν(z)=(z/2)^{ν+1}(2/(√π Γ(ν+3/2)))·₁F₂(1;3/2,ν+3/2;−z²/4)`) and closed by the
+`pFq` recognizer. `Erfc` and `CosIntegral` are closed by **Mellin operational
+calculus**: `∫₀^∞ x^{s-1} f = −(1/s) ∫₀^∞ x^s f'` by parts whenever `f'` is itself
+a recognized kernel (`Erfc'`=Gaussian, `Ci'`=cos/x), with the lower boundary
+`Re s>0` added from `f`'s constant-or-logarithmic value at the origin.
+`ExpIntegralE[n, λx]` is a **dedicated recognizer for general (symbolic) `n`**
+giving `λ^{-s} Γ(s)/(s+n-1)` — the operational-calculus `E_n'=−E_{n-1}` chain
+cannot bottom out for symbolic `n`. Its strip is `Re s>0` (the `E_n(0)` constant)
+**and** `Re(s+n)>1` (the `z^{n-1}` branch term, binding for small `n`); the latter
+is *not* implied by `{Re s>0, Re(s−n)<0}`, so under those assumptions the honest
+result is a `ConditionalExpression` carrying `Re(s+n)>1`. The **upper incomplete gamma**
+`Γ[ν, λx]` is a dedicated recognizer giving `λ^{-s} Γ(s+ν)/s` (the operational-
+calculus identity `Γ'(ν,x)=−x^{ν-1}e^{-x}`, with `x^{ν-1}` folded into the power).
+`Csch` and `Sech` are the two-exponential **hyperbolic Dirichlet** siblings of the
+exponential-geometric kernel: expanding `e^{-λx}` geometrically lands on an
+odd-argument Dirichlet series, `Csch[λx] → 2λ^{-s}Γ(s)(1-2^{-s})ζ(s)` (`Re s>1`)
+and `Sech[λx] → 2^{1-s}λ^{-s}Γ(s)·LerchPhi(-1,s,1/2)` (`= 2λ^{-s}Γ(s)β(s)`,
+`Re s>0`). The **Bose kernel** `Coth[λx] − 1 = 2/(e^{2λx}−1)` is reduced (before
+Expand, so the divergent-on-its-own `Coth` and `−1` are never split) to the
+exponential-geometric kernel and closed by it as `2^{1-s}λ^{-s}Γ(s)ζ(s)` (`Re s>1`)
+bare `Coth[λx]` (no strip — it diverges at both ends) is left unreduced and declines.
+
+The convergence strip is matched against the user `Assumptions` with `Simplify`
+and then `Refine`, which reasons about real parts where `Simplify` does not — so a
+`Re[s]>0` (or a sign `a>0`) assumption that pins the whole strip collapses the
+`ConditionalExpression` to the bare transform. A strip only partly proven is
+carried intact, so the reported convergence region is always complete. An
+integrand carrying an *arbitrary function of the integration variable* (`f[x]`
+with no definition) still skips this method; an x-free symbolic parameter does
+not.
 
 The last row is the **exponential-geometric** kernel of the statistical-mechanics
 integrals: expanding `1/(e^{cx}+γ) = (-1/γ) Σ_{j≥1} (-γ)^j e^{-jcx}` and
@@ -436,12 +734,31 @@ simply declines).
 Four operational layers extend the table:
 
 - **Monomial substitution** `g(x^k)` (`k≠1`) via `y = x^k`:
-  `∫ x^{s-1} g(x^k) = (1/k) ∫ y^{s/k-1} g(y)`, so `Sin[√x]`, `BesselJ[ν,2√x]`,
-  `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`.
+  `∫ x^{s-1} g(x^k) = (1/|k|) ∫ y^{s/k-1} g(y)`, so `Sin[√x]`, `BesselJ[ν,2√x]`,
+  `ArcTan[√x]`, `Cos[x²]` reduce to the linear table at `s/k`. The Jacobian is
+  `1/|k|`, **not** `1/k`: for `k<0` the substitution reverses the `(0,∞)` limits,
+  contributing the sign that keeps the factor positive — so a reciprocal argument
+  like `ArcTan[a/x]` (`k=−1`) gives the correct `+(π/2s) Sec(πs/2) a^s`.
+- **Trig powers** `Sin[λx]^k` / `Cos[λx]^k` (`k≥2` integer): `TrigReduce`
+  linearizes into a sum of harmonics `c_j {Cos,Sin}(b_j x)` plus a possible mean
+  each harmonic goes through the `Sin/Cos` base rows at symbolic `s` and the
+  scaleless mean is dropped (its Mellin transform is `0` on the `Re s<0` half
+  where the even-power mean lives). The strip is read off the whole function's
+  asymptotics — left edge `−k` for `Sin^k` (`∼(λx)^k` at 0), `0` for `Cos^k`
+  right edge `0` when a nonzero mean survives (even power), `1` when the mean is 0
+  (odd). An empty strip declines (`Cos^{even}`: `0<Re s<0`, genuinely divergent).
+- **`ArcTan[λx]^2`**: the Mellin convolution of `ArcTan` with itself, whose Barnes
+  residue sum closes to a digamma difference,
+  `(π λ^{-s}/(2s)) Csc(πs/2) (ψ((1−s)/2) − ψ(1/2))` on `−2<Re s<0` (Mathematica
+  returns this unevaluated).
 - **Hypergeometric reduction** (applied before Expand, so a cancellation kernel
   is never split): `Erf[u] → u·₁F₁`, `Γ[a]-Γ[a,x] → x^a/a·₁F₁` (lower incomplete
-  gamma), and the product `BesselJ[ν,·]² → ₁F₂` (a Mellin convolution closed via
-  the `J²` identity rather than a Barnes integral).
+  gamma), the product `BesselJ[ν,·]² → ₁F₂`, and the complete elliptic integrals
+  `EllipticK[z] → (π/2)·₂F₁(½,½;1;z)`, `EllipticE[z] → (π/2)·₂F₁(-½,½;1;z)`. The
+  Weber function reduces to a `cos/sin` combination of two `BesselJ`,
+  `BesselY[ν,z] → (cos(νπ) J_ν(z) − J_{-ν}(z))/sin(νπ)`, each half closed by the
+  `BesselJ` base transform (so `∫₀^∞ x^{s-1} Y_ν(ax)` closes on
+  `|Re ν|<Re s<3/2`).
 - **Parametric differentiation** for `Log[1+λx]^n (1+λx)^{-w₀}`:
   `M = (-1)^n ∂ⁿ_w[λ^{-s} B(s, w-s)]|_{w=w₀}`, strip `-n<Re s<w₀`.
 - **`Log[x]^k` weight** (a bare `Log[x]`, distinct from the `Log[1+λx]` kernel):
@@ -451,13 +768,41 @@ Four operational layers extend the table:
   `∫₀^∞ x Log[x] e^{-x} dx = Γ'(2) = 1-γ`.
 - The `pFq` transform is the master kernel — `1F1`, `2F1`, `3F2`, … close
   uniformly (`Hypergeometric1F1`/`2F1` are stored as `HypergeometricPFQ`).
+- **Mellin convolution** — a product of **two** transcendental kernels
+  `M[K₁K₂](s) = (1/2πi)∫ M[K₁](z) M[K₂](s-z) dz` is a Barnes integral of Gamma
+  ratios; it closes in two regimes. At **equal internal scale** the Barnes
+  integral is a pure Gamma ratio: two `BesselJ` give Weber–Schafheitlin (through
+  the `J_μ J_ν → ₂F₃` identity and `pFq`), two `BesselK` give Barnes' first
+  lemma, and `J_ν K_ν` (equal order) gives Kummer's theorem —
+
+  | product (scale `a`) | `∫₀^∞ x^{s-1} · dx` | strip |
+  |---------------------|---------------------|-------|
+  | `J_μ(ax) J_ν(ax)` | `2^{s-1} a^{-s} Γ(1-s) Γ(\tfrac{μ+ν+s}{2}) / (Γ(\tfrac{μ-ν-s}{2}+1)Γ(\tfrac{ν-μ-s}{2}+1)Γ(\tfrac{μ+ν-s}{2}+1))` | `Re(μ+ν+s)>0, Re s<1` |
+  | `K_μ(ax) K_ν(ax)` | `2^{s-3} a^{-s} Γ(\tfrac{s+μ+ν}{2})Γ(\tfrac{s+μ-ν}{2})Γ(\tfrac{s-μ+ν}{2})Γ(\tfrac{s-μ-ν}{2}) / Γ(s)` | `Re s>\|Re μ\|+\|Re ν\|` |
+  | `J_ν(ax) K_ν(ax)` | `2^{s-2} a^{-s} Γ(\tfrac{s}{2}) Γ(1+\tfrac{ν}{2}+\tfrac{s}{4}) / ((ν+\tfrac{s}{2})Γ(1+\tfrac{ν}{2}-\tfrac{s}{4}))` | `Re s>0, Re(s+2ν)>0` |
+
+  At **distinct scales** the convolution carries the scale ratio and lands on a
+  Gauss/Kummer hypergeometric: `e^{-ax} J_ν(bx) → (b/2)^ν Γ(s+ν)/(a^{s+ν}Γ(ν+1))·₂F₁(\tfrac{s+ν}{2},\tfrac{s+ν+1}{2};ν+1;-b²/a²)`
+  (`Re a>0`), and the Gaussian case (Weber's second exponential integral)
+  `e^{-a²x²} J_ν(bx) → b^ν Γ(\tfrac{s+ν}{2})/(2^{ν+1}(a²)^{(s+ν)/2}Γ(ν+1))·₁F₁(\tfrac{s+ν}{2};ν+1;-b²/(4a²))`,
+  both on `Re(s+ν)>0`. The **exponential × trigonometric** family
+  `e^{-ax} Sin(bx)` / `e^{-ax} Cos(bx)` (`a,b>0`) closes in elementary form via the
+  complex frequency `c = a − i b`, `M[e^{-cx}] = c^{-s}Γ(s)`:
+  `e^{-ax} Sin(bx) → Γ(s)(a²+b²)^{-s/2} Sin(s·ArcTan(b/a))` (`Re s>-1`) and
+  `e^{-ax} Cos(bx) → Γ(s)(a²+b²)^{-s/2} Cos(s·ArcTan(b/a))` (`Re s>0`) — a genuine
+  generalization (`a→0` recovers the `Sin/Cos` rows, `b→0` the `Exp` row).
 
 A **Frullani pre-pass** (run on the whole integrand before Expand, since each
 half is individually divergent) recognises `(f(a x)-f(b x))/x` and returns
 `(f(0⁺)-f(∞)) Log(b/a)` (`a,b>0`): the scale ratio is read structurally and the
 pairing verified by the exact identity `(t₁ /. x→ρx)+t₂ = 0`; the boundary values
 are the finite limits of `f`. So `∫₀^∞ (e^{-2x}-e^{-5x})/x dx = Log(5/2)` and
-`∫₀^∞ (ArcTan(5x)-ArcTan(2x))/x dx = (π/2) Log(5/2)`.
+`∫₀^∞ (ArcTan(5x)-ArcTan(2x))/x dx = (π/2) Log(5/2)`.  For a **bounded oscillatory**
+`f` whose ordinary limit at ∞ does not exist — `Cos[k x]`, `Sin[k x]` with `k`
+proved real and nonzero — the boundary value Frullani uses at ∞ is the **Cesàro
+mean, 0**, so `∫₀^∞ (Cos(a x)-Cos(b x))/x dx = Log(b/a)` (`a,b>0`).  This is gated
+to a single trig factor of a linear real argument, so `Cos[k x]²` (mean ½) and
+`Cosh` (`k` not provably real) are left to the ordinary cascade.
 
 Each application is **gated on its convergence strip** — checked by `Simplify`
 (numerically for a numeric `s`, or against the supplied `Assumptions` for a
@@ -469,8 +814,10 @@ provably-violated strip declines. Verification is symbolic; there is **no**
 numeric crosscheck (the trig/PolyLog transforms use reflection-formula forms
 regular at `s=0`, so e.g. `∫₀^∞ Sin[x]/x dx = π/2` falls out with no limit). A
 sum is integrated term by term (each term must converge on its own). Out of
-scope — products of three or more transcendental kernels, finite intervals, and
-two-sided reductions — return unevaluated, never a wrong value.
+scope — products of three or more transcendental kernels, two-kernel products
+outside the Bessel / exp·Bessel / Gaussian·Bessel families above (e.g.
+`AiryAi[x]²`, a genuine Meijer-G with 1/3-step Gamma coefficients), finite
+intervals, and two-sided reductions — return unevaluated, never a wrong value.
 
  (Ramanujan's canonical example)
 
@@ -478,7 +825,9 @@ two-sided reductions — return unevaluated, never a wrong value.
  (Fermi–Dirac)
 
  (Frullani)
-.
+
+ (Weber–Schafheitlin / Barnes)
+`Integrate[x^(s-1) Exp[-a x] BesselJ[ν,b x], {x,0,Infinity}, Assumptions→{s+ν>0,a>0,b>0}]` → a `₂F₁` in `-b²/a²`.
 
 ### Definite integration (Newton-Leibniz)
 
@@ -492,8 +841,13 @@ exposed explicitly as `Integrate\`NewtonLeibniz[f, {x, xmin, xmax}]` and as
    — never assigned a wrong value.
 2. Locate the real poles of the **integrand** `f` strictly inside
    `(xmin, xmax)` via `Integrate\`SingularPoints` (roots of
-   `Denominator[Together[f]]`).  A continuous `f` has an antiderivative that is
-   pole-free where `f` is, so only `f`'s own poles bound the segments.
+   `Denominator[Together[f]]`, **plus** the `Cos[u] == 0` / `Sin[u] == 0` zeros
+   under any `Tan`/`Cot`/`Sec`/`Csc` head — these are invisible to
+   `Denominator[Together[·]]` because the evaluator keeps the atomic trig head and
+   re-canonicalizes `Sin/Cos` back to it, so `Tan[x]` has denominator `1`). A
+   pole family that `Solve` returns periodically (`Pi/2 + C[1] Pi`) is enumerated
+   to its concrete interior members. A continuous `f` has an antiderivative that
+   is pole-free where `f` is, so only `f`'s own poles bound the segments.
 3. Split `[xmin, xmax]` at those poles and form the telescoping sum
    `Σ (F(p_{i+1}⁻) − F(p_i⁺))`, evaluating each boundary through the `Limit`
    engine: a plain limit at infinite endpoints, a one-sided limit
@@ -525,10 +879,13 @@ With no interior pole the option is a no-op. Examples: `∫₋₁¹ dx/x = 0`,
 cancelled by an accompanying `Floor` step — so `F(b) − F(a)` by direct
 substitution is the correct value with no interior split.  To stay correct when
 an antiderivative could instead carry a genuine *uncorrected* branch jump, a
-result built from a step head (`Floor`, `Sign`, …) or an inverse-trig node over
-a pole-bearing trig head is accepted only when a numeric `NIntegrate`
-cross-check agrees; otherwise the integral is left unevaluated rather than
-risking a wrong value.
+result built from a step head (`Floor`, `Sign`, …), an inverse-trig node over
+a pole-bearing trig head, or a **radical whose radicand vanishes inside the
+interval** (the real branch can kink there) is accepted only when a numeric
+`NIntegrate` cross-check agrees; otherwise the integral is left unevaluated
+rather than risking a wrong value. As a final net, a real-looking integrand
+whose folded value has a **provably-nonzero imaginary part** is treated as a
+branch-crossing artifact (`Integrate::idiv`), never returned as a complex number.
 
 ### Complex line / contour integration
 
@@ -588,15 +945,81 @@ recognizers:
   via `Re`/`Im` of the single decaying exponential, not split into two.
 - **Rational-in-`{Sin, Cos}` over a full period** `(0, 2π)` or `(-π, π)` — via
   `z = Exp[I x]` on the unit circle: value `= 2 π i · Σ Res` over the poles
-  inside the unit disk.
+  inside the unit disk.  The parameters may be **symbolic under assumptions**,
+  including a *coupled* constraint such as `a > b > 0`: the in-disk pole is
+  selected at a representative point of the assumption region (from the
+  independent bounds, or `FindInstance` when a parameter is bounded only by
+  another), and a higher-order parametric pole's residue is taken by the
+  analytic-part derivative `Res = (1/(m-1)!) d^{m-1}[N/(lead ∏_{r≠z₀}(z-r)^{m_r})]|_{z₀}`
+  — fast where a Laurent series of a symbolic radical pole is not.  E.g.
+  `Integrate[1/(a + b Cos[x])^3, {x,0,2π}, Assumptions -> a > b > 0]
+  = π(2a²+b²)/(a²−b²)^(5/2)`, and `1/(a + b Cos[x]) → 2π/√(a²−b²)`.  A combined
+  `b Cos[x] + c Sin[x]` is handled too: if the `FindInstance` representative is
+  degenerate (e.g. `b = c = 0` for `a > √(b²+c²)`, where the pole quadratic loses
+  degree), the family retries at a point with every parameter nonzero — sound
+  because the integral is analytic wherever no pole sits on the unit circle (a
+  circle pole still returns `Integrate::idiv`).  So
+  `Integrate[1/(a + b Cos[x] + c Sin[x])^2, {x,0,2π}, Assumptions -> a > √(b²+c²)]
+  = 2π a/(a²−b²−c²)^(3/2)`.
+- **Parametrized contour over a full period** — a *transcendental* integrand of
+  the form `g(Exp[I t]) · (I c Exp[I t])` (the Jacobian of `z = c Exp[I t]`):
+  the same `t → −I Log[u]` substitution leaves `G(u) = integrand/(I u)`, whose
+  period integral is the contour integral `∮_{|z|=c} g = 2 π i · Σ_{|u_k|<1}
+  Res[G, u_k]`.  This is the non-rational sibling of the unit-circle family,
+  covering an **essential singularity** at `0`: when the ordinary residue engine
+  declines there, the residue is read as the `w^1` coefficient of `G(1/w)` (the
+  Laurent `u^{-1}` coefficient), so `∮_{|z|=1} Exp[1/z] Sin[1/z] = 2 π i`,
+  `∮_{|z|=2} z^5 Cos[1/z²] = 0`, and `∮_{|z|=1} Exp[2z]/(z⁴(z−½)) =
+  2 π i (16 e − 128/3)` (order-4 pole at `0` plus a simple pole at `½`).  The
+  value is genuinely complex, so only the finite-scalar (not the real) gate
+  applies.  A pole on `|u| = 1` makes the period integral divergent.
 - **Removable axis singularity (Fourier)** — a **simple** real-axis pole of `R`
   at which the kernel vanishes (so `f = R·K` is analytic there, e.g. `Sin[x]/x`
   at `0`) contributes a **half residue** `π i · Res`, the indented-contour value,
   giving `∫ Sin[x]/x = π`.  A *genuine* axis pole (kernel nonzero there, e.g.
   `Cos[x]/x`) makes the ordinary integral diverge and returns unevaluated —
-  plain `Integrate` does not compute a principal value.
+  plain `Integrate` does not compute a principal value.  With **symbolic
+  parameters** the axis half-residue and an enclosed pole may carry opposite
+  signs of `I`; the `Re`/`Im` extraction uses `ComplexExpand` (parameters are
+  real) so both are conjugated correctly, e.g.
+  `∫ Sin[a x]/(x (x²+b²)) = (π/b²)(1 − e^{−a b})` for `a, b > 0`.
+- **Multi-frequency Fourier (difference of kernels) on `(-∞, ∞)`** — `f = R(x) ·
+  Σ_i C_i K[ω_i x]` with the `K` all one type (`Cos` or `Sin`), the `ω_i` of one
+  sign, and `R` rational.  The sum lifts to `Σ_i C_i e^{i ω_i x}` and the single
+  half-plane contour closes it; `∫ R·(Σ C_i Cos) = Re[π i Σ Res]`,
+  `Σ Sin → Im`.  The point is a **difference whose pieces diverge separately** but
+  whose sum is integrable because the numerator cancels the axis singularity: a
+  real-axis pole of `R` is admitted only when `Limit[f, x → z₀]` is finite there
+  (the cancellation has reduced the order), contributing the indented half
+  residue — so `∫₀^∞ (Cos[a x] − Cos[b x])/x² = π(b − a)/2` (the `x = 0` double
+  pole of `1/x²` is halved to a simple one by `Cos[a x] − Cos[b x] = O(x²)`),
+  while a single `Cos[a x]/x²` (no cancellation, genuine double pole) correctly
+  **declines** as divergent.
+- **Log-over-quadratic on `(-∞, ∞)`** — `f = C Log[A + x²]/(E x² + D)`, `A > 0`,
+  `D/E > 0`: the Feynman-parameter value `C (2π/√(D/E)) Log[√A + √(D/E)]`
+  (differentiate in the log parameter `A`, integrate the resulting rational).
+  The log argument is monic in `x²` with no linear term.  So
+  `∫₋∞^∞ Log[x²+a²]/(x²+b²) = (2π/b) Log(a+b)` and, via the even-fold,
+  `∫₀^∞ Log[1+x²]/(1+x²) = π Log 2`.  The companion **`Log[Abs[affine]]` over a
+  quadratic** `∫₋∞^∞ C Log[Abs[α x+β]]/(E x²+D) = (C/E)(π/p)(Log|α| +
+  ½ Log(r²+p²))`, `p=√(D/E)`, `r=−β/α` (`Log|x−r| = Re Log(x−r)`), is a dedicated
+  recognizer that runs *before* the piecewise splitter — which would otherwise
+  cut at `x=r` into two half-infinite pieces that do not close — so
+  `∫₋∞^∞ Log|x−a|/(x²+b²) = π Log(a²+b²)/(2b)`.
 
-A one-line **half-line** add-on covers even integrands:
+On the **half-line** `(0, ∞)` a closed-form **hyperbolic-kernel table** runs
+*first* (before the even-fold), covering
+`∫₀^∞ C x^k {1, Sin[p x], Cos[p x]} {Sech, Csch}[q x]^n dx` for `q > 0` (and `p`
+real on the trig arms): the five Gradshteyn–Ryzhik members
+`Cos[p x]/Cosh[q x] → (π/2q) Sech[pπ/2q]`,
+`Sin[p x]/Sinh[q x] → (π/2q) Tanh[pπ/2q]`,
+`x Sin[p x]/Cosh[q x]² → (π/2q²) Csch[pπ/2q](pπ/2q Coth[pπ/2q] − 1)`,
+`x/Sinh[q x] → π²/4q²`, `x²/Sinh[q x]² → π²/6q³`.  Only these exact tuples match
+(other shapes decline and fall through); running first is what prevents the
+Sinh/Csch members from otherwise hanging in the antiderivative search or the
+symbolic-parameter keyhole path.
+
+A one-line **half-line** add-on then covers even integrands:
 `∫₀^∞ f = ½ ∫₋∞^∞ f`.  Three further recognizers handle branch-cut and
 symbolic-exponent contours:
 
@@ -611,16 +1034,164 @@ symbolic-exponent contours:
   prefactor is the exact reduction of the keyhole jump `1/(1 − e^{2πi s})`,
   landing a numeric `s` on an algebraic multiple of `π` (e.g.
   `∫₀^∞ x^{1/3}/(x²+1) = π/√3`, `∫₀^∞ √x/(1+x)² = π/2`).  Requires
-  `0 < Re(s) < deg Q − deg P`.
-- **Sector on `(0, ∞)`** — `f = x^m/(c + x^n)` with the exponent `n` possibly a
-  **symbolic parameter**: the wedge of angle `2π/n` gives
-  `(π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`.  This is the one family admitting a
-  symbolic `n` (the keyhole cannot enumerate `n` poles), powering
-  `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)`.
-- **Rectangular / quasi-periodic on `(-∞, ∞)`** — `f = Exp[c x] R(Exp[x])`
-  (period `2πi`): reduced to the keyhole core by `w = Exp[x]`
-  (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw = ∫₀^∞ w^{c-1} R(w) dw`), so e.g.
-  `Integrate[Exp[a x]/(Exp[x]+1), {x, -∞, ∞}, Assumptions -> 0 < a < 1] = π csc(π a)`.
+  `0 < Re(s) < deg Q − deg P`.  The exponent may also be a **symbolic
+  parameter** `a` under an interval assumption — the convergence interval is read
+  off `s = a + 1` (e.g. `Integrate[x^a/(x+1)^3, {x,0,∞}, Assumptions -> -1 < a < 2]
+  = π a(1−a)/(2 sin π a)`).  The denominator coefficients may be symbolic too,
+  including under a *coupled* assumption that leaves them unbounded: the directly
+  bounded exponent still fills the convergence gate while the (complex-conjugate)
+  poles are classified at a `FindInstance` point, so `Integrate[x^a/(x²+2b x+c),
+  {x,0,∞}, Assumptions -> -1 < a < 1 && c > b² && b > 0]` closes.  (A symbolic
+  exponent is kept even when that representative point lands on an integer `s` —
+  the generic `Csc[π s]` form is the right generic-parameter answer.)  Under
+  `PrincipalValue -> True` a **simple pole on the positive axis** is admitted as a
+  Cauchy PV half-residue — the indented contour averages the pole's two
+  keyhole-branch values `z₀^p` (arg 0) and `z₀^p e^{2πi p}` (arg 2π) — so
+  `∫₀^∞ √x/(x²−a²) dx = π/(2√a)` and `∫₀^∞ x^{1/3}/(x²−1) dx = π/(2√3)`; a
+  higher-order axis pole (divergent PV) declines.
+- **Keyhole with a logarithm on `(0, ∞)`** — `f = x^p (Log x)^m R(x)`, `R`
+  rational, `m ≥ 1`.  Two complementary branches, by whether `x^p` jumps across
+  the cut:
+  - **`p` a non-negative integer** (folded in as `R' = x^p R`, so `a = 0`).  The
+    keyhole contour of `(Log z)^{k+1} R(z)` (branch `arg ∈ [0,2π)`) gives, for
+    each `k = 0..m`, a lower-triangular relation among `I_j = ∫₀^∞ (Log x)^j R dx`
+    and the pole-residue sums `S_{k+1} = Σ_l Res[(Log z)^{k+1} R, z_l]`; solving
+    it upward from `I_0` yields the requested `I_m` **entirely from residues**,
+    no auxiliary quadrature.  E.g. `∫₀^∞ Log[x]/(1+x⁶) = −√3 π²/18`,
+    `∫₀^∞ (Log x)²/(x²+x+1) = 16 π³/(81√3)`, `∫₀^∞ Log[x]/(1+x⁴) = −√2 π²/16`.
+  - **`p` non-integer** (so `z^p` itself jumps, `1 − e^{2πi p} ≠ 0`).  The
+    keyhole of `z^p (Log z)^m R(z)` gives the lower-triangular system
+    `(1 − e^{2πi p}) I_k = 2πi T_k + e^{2πi p} Σ_{j<k} C(k,j) (2πi)^{k−j} I_j`,
+    with `T_k = Σ_l Res[z^p (Log z)^k R, z_l]` on the branch; the `k=0` row is
+    the plain keyhole/Mellin value.  E.g.
+    `∫₀^∞ √x Log[x]/(x²+1)² = π(π−4)/(8√2)`.
+  A simple pole uses the direct `z_l^p (Log z_l)^{k} Res(R, z_l)`; an order-≥2
+  pole the shifted form.  Because the pole-residue sums carry the keyhole
+  logarithm `Log z_l = Log|z_l| + i·arg z_l` evaluated at the (algebraic) poles,
+  the closed form collapses only because `Arg` reduces exactly on roots of unity
+  (`Arg[(-1)^{1/6}] = π/6`); a numeric `p`/`m` lands on an algebraic multiple of
+  `π^{m+1}`.  A **simple pole on the branch cut `(0, ∞)`** (integer-`p` branch)
+  enters as a Cauchy principal value: the contour indents around it above and
+  below, so it contributes the *average* of its two keyhole-branch residues,
+  `½ Res(R, z₀)[(Log z₀)^k + (Log z₀ + 2πi)^k]`.  A branch-point pole at `z₀ = 1`
+  carrying the `Log` factor is **removable** (`Log 1 = 0` cancels it) and is
+  admitted with no option — `∫₀^∞ Log[x]/(x³−1) = 4π²/27` (the integrand is in
+  fact continuous at `x = 1`).  A genuine axis pole (`z₀ ≠ 1`) needs
+  `PrincipalValue -> True` and then returns the principal value, e.g.
+  `∫₀^∞ Log[x]/(x²−4) dx = π²/8`; a higher-order axis pole (divergent PV) declines.
+  Under a symbolic parameter the keyhole close skips `ComplexExpand` (which
+  balloons on the symbolic pole through the `(Log z)^m` powers and sends
+  `Simplify` into exponential matcher backtracking) and takes the plain
+  `Simplify` under the assumptions instead.
+- **Pure rational principal value on `(0, ∞)`** — the same `m = 0` keyhole, under
+  `PrincipalValue -> True`, closes a rational `R(x)` with a simple positive-axis
+  pole: `Integrate[1/(x³−a³), {x,0,∞}, PrincipalValue -> True, Assumptions ->
+  a>0] = −π/(3√3 a²)`, `∫₀^∞ x²/(x⁴−a⁴) = π/(4a)`.  It runs before the even-fold,
+  so the even members route to the keyhole rather than the rational family's
+  divergence preemption.  A scaled positive-axis pole (`z₀ = b ≠ 1`) is handled
+  too: the `(1 + e^{2πip})` branch average can leave a spurious imaginary part that
+  `Simplify` does not discharge for symbolic `b`, so a real-integrand on-axis PV is
+  projected onto its (provably real) real part — `∫₀^∞ x^(a−1)/(x²−b²) PV =
+  −(π/(2b^{2−a})) Cot[πa/2]`.
+- **Whole-line oscillatory principal value** — `Integrate[R(x){Cos,Sin,Exp[I a x]},
+  {x,−∞,∞}, PrincipalValue -> True]` with `R` rational and a **simple genuine**
+  pole on the real axis.  Closing in the half-plane Jordan's lemma selects (`a > 0`
+  upper, `a < 0` lower), the axis pole contributes the indented half-residue
+  `±iπ·Res` oriented by the closure: `∫ Exp[I a x]/(x−b) dx = iπ e^{iab}`,
+  `∫ Exp[I a x]/(x²−b²) = −π Sin[ab]/b`, `∫ x Exp[I a x]/(x²−b²) = iπ Cos[ab]`
+  `R·Cos`/`R·Sin` take the real/imaginary part (`R` real on the axis), and the
+  even members fold to the half-line — `∫₀^∞ Cos[a x]/(x²−b²) PV = −π Sin[ab]/(2b)`,
+  `∫₀^∞ x Sin[a x]/(x²−b²) PV = π Cos[ab]/2`.  A removable pole mixed with a genuine
+  PV pole declines (the Re/Im split is unreliable there), as does a double axis pole
+  (divergent PV).
+- **Log-weighted Mellin on `(0, ∞)`** — `Integrate[x^(c−1) Log[x]^k/(1 ∓ x^d), {x,
+  0,∞}]`, `k ≥ 1`: the `k`-th derivative in the Mellin exponent of the base value
+  (`(π/d)Cot[cπ/d]` for `1 − x^d`, taken as a principal value; `(π/d)Csc[cπ/d]` for
+  the convergent `1 + x^d`), evaluated at `s = c` — `∫₀^∞ Log[x] x^(a−1)/(x+1) =
+  −π² Csc[πa] Cot[πa]`, `∫₀^∞ Log[x]² x^(a−1)/(x+1) = π³ Csc[πa]³ (1 + Cos[πa]²)`,
+  `∫₀^∞ Log[x] x^(a−1)/(x−1) PV = π² Csc[πa]²`.  The strip `0 < c < d` is proved
+  against the assumptions.
+- **Finite interval `(-1, 1)` with the Chebyshev weight** — `Integrate[R(x) /
+  Sqrt[1 - x^2], {x, -1, 1}]`, `R` rational: `x = Cos[t]` maps it to
+  `(1/2) ∫₀^{2π} R(Cos t) dt`, evaluated by the unit-circle family.  It runs in
+  the residue stage, *before* Newton–Leibniz, so it also pre-empts the FTC
+  branch's wrong-sign antiderivative — `∫₋₁¹ dx/((1+x²)√(1−x²)) = π/√2` (FTC
+  alone returned `−π/√2`), `∫₋₁¹ dx/√(1−x²) = π`.
+- **Mellin–Barnes / Bromwich vertical line** — `Integrate[F(s) x^{-s}, {s, c−i∞,
+  c+i∞}]` with `F(s) = const · Γ(A + B s)` (`B > 0`): the inverse-Mellin contour,
+  closed to the left, equals `2πi · Σ_k Res` over the Γ-pole ladder `s = −(A+k)/B`
+  (`Res[Γ(A+Bs)] = (1/B)(−1)^k/k!`); the residue series closes to the transform's
+  closed form — `∫ Γ(s) x^{−s} ds = 2πi e^{−x}` (Case 11, formerly a silent `0`),
+  `∫ Γ(2s) x^{−s} ds = iπ e^{−√x}`.  The endpoint `c ± i∞` is recognised as a
+  directed infinity (it no longer collapses to a real `∞`); the orientation sets
+  the sign, and a non-Mellin–Barnes integrand or a non-closing series declines.
+- **Sector on `(0, ∞)`** — `f = C x^m/(c + x^n)` with the exponents `m`, `n`
+  possibly **symbolic parameters**: the wedge of angle `2π/n` gives
+  `C (π/n) c^{s/n − 1} csc(π s/n)`, `s = m + 1`, under `c > 0`, `n > 0`,
+  `0 < s < n` (proved over the assumed region).  This is the one family admitting
+  a symbolic `n` (the keyhole cannot enumerate `n` poles), powering
+  `Integrate[1/(1 + x^n), {x, 0, ∞}, Assumptions -> n > 1] = (π/n) csc(π/n)` and
+  `Integrate[x^{2m}/(1 + x^{2n}), …] = (π/(2n)) csc(π(2m+1)/(2n))` (state the
+  convergence as `n ≥ m + 1` — `Refine` does not take the integer step
+  `n > m ∧ ℤ ⟹ n ≥ m + 1`).
+- **Generalized Beta on `(0, ∞)`** — `C x^a (x + b)^{−c}` with a NON-integer `c`
+  (a branch point at `−b` the rational Mellin engine cannot take): `x = b t`
+  gives `C b^{a+1−c} B(a+1, c−a−1) = C b^{a+1−c} Γ(a+1) Γ(c−a−1)/Γ(c)`, under
+  `b > 0`, `a + 1 > 0`, `c − a − 1 > 0`.  So
+  `Integrate[x^a/(x+b)^c, {x, 0, ∞}, Assumptions -> b>0 && c>a+1 && a>-1] =
+  b^{a+1−c} Γ(a+1) Γ(c−a−1)/Γ(c)`.
+- **Mellin after a power substitution on `(0, ∞)`** — `C x^{μ−1} G(κ x^ν)` with
+  `G ∈ {Exp, Sin, Cos}` and `ν` a positive integer.  `u = x^ν` turns it into
+  `(C/ν)` times the Mellin transform of `G` at `s = μ/ν` — the
+  sector/wedge contour: `Exp[−c u] → Γ(s) c^{−s}` (`Re s > 0`),
+  `Sin[k u] → Γ(s) k^{−s} Sin[π s/2]`, `Cos[k u] → Γ(s) k^{−s} Cos[π s/2]`
+  (`0 < Re s < 1`).  The Gamma / generalized-Fresnel family:
+  `∫₀^∞ x^{s−1} e^{−a x²} = ½ a^{−s/2} Γ(s/2)` (state `s > 0`, not `Re[s] > 0`),
+  `∫₀^∞ x^p Sin[x²] = ½ Γ((p+1)/2) Sin[π(p+1)/4]`, `∫₀^∞ Sin[x³] = Γ(4/3)/2`.
+- **Rectangular / quasi-periodic on `(-∞, ∞)`** — reduced to the half-line core
+  by the exact substitution `w = Exp[x]`
+  (`∫_{-∞}^∞ f dx = ∫₀^∞ f(Log w)/w dw`).  Two shapes close: `f = Exp[c x] R(Exp[x])`
+  (period `2πi`) becomes the branch-power Mellin integrand `w^{c-1} R(w)`, so
+  `Integrate[Exp[a x]/(Exp[x]+1), {x, -∞, ∞}, Assumptions -> 0 < a < 1] = π csc(π a)`
+  and `f = x^k/Sinh x` and its hyperbolic relatives — the `Sinh`/`Cosh`/… of
+  `Log w` rationalise under `TrigToExp` (`Sinh[Log w] = (w − 1/w)/2`) while a
+  polynomial `x^k` factor becomes `(Log w)^k`, handing the **keyhole-log** family
+  the integrand `(Log w)^k R(w)` with its removable `w = 1` (i.e. `x = 0`) pole —
+  `∫_{-∞}^∞ x/Sinh[x] dx = π²/2`.
+- **Gaussian / shifted rectangle on `(-∞, ∞)`** — an *entire* integrand
+  `E^(A x² + B x + C)` times a Fourier/exponential kernel, `Re A < 0`.  `e^{A z²}`
+  is entire, so the line of integration shifts freely (a rectangle enclosing no
+  poles) — the pole-free degenerate case of the rectangular contour.  `TrigToExp`
+  turns any `Cos`/`Sin`/`Cosh`/`Sinh` kernel into a sum of `E^(linear)`, so the
+  integrand becomes `Σ_i C_i E^(A x² + B_i x + D_i)` and each Gaussian closes by
+  completing the square, `∫_{-∞}^∞ e^{A x² + B x + D} dx = √(−π/A)·e^{D − B²/(4A)}`:
+  `∫_{-∞}^∞ e^{−x²} Cos[2 a x] dx = √π e^{−a²}`.  The leading coefficient's sign is
+  verified over the whole assumption region — by `Refine[A < 0, assumptions]`, so
+  a *symbolic* coefficient such as `A = −a` under `a > 0` is admitted (the plain
+  interval test saw the compound `−a` as unbounded), while a positive one (a
+  divergent integral) declines.  With a symbolic `A` and a trig kernel the result
+  carries the parameters: `∫_{-∞}^∞ e^{−a x²} Cos[b x] dx = √(π/a) e^{−b²/(4a)}`
+  (`a > 0`), and the even half-line form is half of it.  Not a residue
+  computation (no poles), but the standard contour route for the family.
+- **Periodic-strip (hyperbolic) rectangle on `(-∞, ∞)`** — `N(x)/Cosh[b x]^n`,
+  integer `n ≥ 1`.  The quasi-period `Cosh[b(x + iπ/b)] = −Cosh[b x]` folds the
+  infinite ladder of (order-`n`) poles into the single enclosed pole at
+  `x = iπ/(2b)`: `∫_{-∞}^∞ e^{α x}/Cosh[b x] dx = (π/b) Sec[α π/(2b)]` for
+  `|Re α| < Re b`.  `TrigToExp` turns a `Cosh`/`Sinh`/`Exp` numerator into a sum of
+  such terms, so `∫ e^{a x}/Cosh[π x] = Sec[a/2]`,
+  `∫ Cosh[a x]/Cosh[b x] = (π/b) Sec[πa/(2b)]`, and
+  `∫ e^{i a x}/Cosh[b x] = (π/b) Sech[πa/(2b)]`.  For `n ≥ 2` the per-term value is
+  the Gamma reflection of the Mellin-Barnes integral (equivalently the order-`n`
+  residue of the fold), `2^{n−1}/(b (n−1)!)·R(w)·∏(w)`, `w = α/(2b)`, with
+  `R = π/Cos[πw]`, `∏_{j=0}^{m−1}((j+½)²−w²)` for odd `n = 2m+1` and
+  `R = πw/Sin[πw]`, `∏_{j=1}^{m−1}(j²−w²)` for even `n = 2m`; the convergence gate
+  widens to `|Re α| < n Re b`.  So the double pole
+  `∫_{-∞}^∞ Cos[a x]/Cosh[b x]² dx = π a Csch[πa/(2b)]/b²`, the triple pole
+  `Cos[a x]/Cosh[b x]³ → π(a²+b²) Sech[πa/(2b)]/(2b³)`, and the `Sin`/`Sinh`
+  numerators give a correct (unsimplified) `Csc`-sum.  Handles the symbolic
+  non-integer `b` the `Exp[x]` rectangular reduction cannot rationalise.  A common
+  positive scale on `x` in the hyperbolic arguments is normalised first
+  (`Sinh[a x] → Sinh[x]`), so `∫₀^∞ x/Sinh[a x] = π²/(4a²)`.
 
 **Assumptions and symbolic parameters.**  An `Integrate[f, {x, a, b},
 Assumptions -> …]` option lets the residue families evaluate integrals whose
@@ -633,10 +1204,28 @@ Convergence/applicability gates (`n > m + 1`, `0 < s < deg`-drop, `c > 0`) are
 verified against the assumption-**guaranteed** interval bounds, not the sample
 point, so an under-constrained problem (e.g. only `n > 0` for the sector family)
 is refused rather than guessed; a parameter the assumptions leave two-sided
-unbounded is likewise refused.  Radical pole locations are `PowerExpand`-cleaned
-under all-positive parameters (`Sqrt[-4 a²] → 2 I a`) so a rational answer closes
-to `π/a` rather than a `Sqrt[-4 a²]` surface, and real-parameter conjugation
-uses `I → −I` (the symbolic `Conjugate` would not reduce).
+unbounded is likewise refused.  A sign gate that an interval cannot settle (a
+compound coefficient like `−a`, or the open bound `a > 0` whose recorded lower
+end is `0`) is proved instead by `Refine[… , assumptions]` — so the Gaussian's
+`Re A < 0` admits `A = −a` under `a > 0`.  Radical pole locations are
+`PowerExpand`-cleaned under all-positive parameters (`Sqrt[-4 a²] → 2 I a`) and
+the closed form of a two-conjugate-pair rational is further collapsed with a
+positivity-aware `PowerExpand`/`Refine` pass (`Sqrt[(a+b)²(a−b)²] → (a+b)(a−b)`),
+so `∫₀^∞ 1/((x²+a²)(x²+b²)) = π/(2 a b (a+b))` rather than a nested-surd surface.
+Real/imaginary parts of a Fourier contour value are taken with
+`ComplexExpand[Re/Im[·]]` (parameters are real), which conjugates both `+I` and a
+stored `−I` atom correctly.  *Not yet simplified* (a `Simplify`/`Refine` gap, not
+a residue-method one): a keyhole-log answer with a symbolic positive parameter can
+retain `Arg[I a]` (e.g. `∫₀^∞ Log[x]/(x²+a²)`, value `π Log[a]/(2a)`) or a
+`(1 − E^(2 I π a))` factor.
+
+**A deliberate decline.**  `∫₀^∞ ArcTan[a x]/(x (1 + b² x²)) dx = (π/2) Log[1 + a/b]`
+returns unevaluated under `Method -> "Residue"`.  The integrand has a **branch
+cut** (`ArcTan`), not isolated poles; its value is reached by parametric
+differentiation (Feynman — `∂_a I = ∫₀^∞ dx/((1 + a²x²)(1 + b²x²)) = π/(2(a+b))`,
+then integrate in `a`), which is not the residue theorem.  No Feynman engine is
+wired onto the residue path, so this is an honest decline rather than a
+misclassification.
 
 The residue sums are closed with `RootReduce` (algebraic families) or the
 `Conjugate` identities for `Re[J]`/`Im[J]` (the Fourier family); a value that
@@ -649,11 +1238,30 @@ a mis-fire and returned unevaluated.  Negative controls such as
 (genuine axis pole, kernel nonzero),
 `Integrate[1/Sqrt[1 + x^4], {x, -Infinity, Infinity}]` (branch point, not
 rational), and `Integrate[1/(2 + Cos[x]), {x, 0, Pi}]` (not a full period) all
-stay unevaluated.  The keyhole/Mellin, sector and rectangular families
-described above extend the reach to branch-cut and symbolic-exponent contours
-a log-keyhole (`∫₀^∞ Log[x] R(x)`) with symbolic on-circle poles remains out of
-scope (it needs assumption-aware `Arg`/`Log` branch reasoning that Mathilda does
-not yet have).
+stay unevaluated.  The keyhole/Mellin, keyhole-with-log (integer *and*
+non-integer power, including a **principal-value** pole on the positive axis),
+Chebyshev-weight, Mellin–Barnes, sector, rectangular/hyperbolic and
+Gaussian/shifted-rectangle families described above extend the reach to
+branch-cut, log-weighted, principal-value, Gaussian and symbolic-exponent
+contours.  A few integrands remain **deliberate, documented declines** (returned
+unevaluated, never a forced or wrong value): `∫₀^∞ Log[x]/Cosh[x] dx` — its value
+is the Mellin transform of `sech` differentiated at `s = 1`, a Dirichlet-beta
+derivative (a `Γ(1/4)`-level constant), not a residue sum, and the `w = Exp[x]`
+reduction fails because `Log x` becomes `Log[Log w]`; and the Hankel-type
+`∫₁^{-∞} eˣ x^{-s} dx`, whose contour is ambiguous / divergent in the ordinary
+sense.
+
+**Output simplification.**  Every family's value is finally passed, once, through
+a sound assumption-aware cleanup: `Refine` collapses `Sqrt[a²]→a`, `Abs[a]→a`,
+`Arg[pos]→0`, `Arg[neg]→π` **only** where the assumptions prove the sign (never the
+unsound `PowerExpand`), a plain `Simplify` combines the terms, and — on a small,
+radical- and trig-free elementary rational-log form carrying a cancelling imaginary
+unit — a bounded `FullSimplify` finisher lands the real closed form.  The result
+replaces the raw form only when strictly smaller, so a legitimately-messy value
+(an `Arg[I a]` that `Refine` cannot reduce; a mixed-sign radical whose sign is not
+assumed; an already-clean `Sec` form) is never enlarged or corrupted.  This is what
+turns the principal-value `∫₀^∞ Log[x]/(x²−a²) dx` (`a > 0`) from a large
+`Arg`/`Abs`/`(a⁴)^{1/4}` expression into the clean `π²/(4a)`.
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
@@ -967,6 +1575,13 @@ also handles the derivative-annotated objects produced by `D` (integrating the
 sampled derivative recovers the lower-order antiderivative). Computations use
 machine doubles.
 
+### Soundness gates on symbolic and tower stages (v0.458)
+
+- **Symbolic-parameter residue families.** A pole's half-plane is classified at a sample point of the assumed region. The closed form is then re-derived with the poles classified at up to three further generic points of the same region, and it is withdrawn when they disagree. Radical root expressions can swap identities inside the region: `1/(1 + 2 a x^2 + b x^4)` across `a^2 = b`. A withdrawn value leaves the integral to the later stages.
+- **ParallelMixedTower** (cascade and `Method -> "ParallelMixedTower"`) declines an integrand in which a kernel outside its elementary class (anything other than `Plus`, `Times`, `Power`, `Exp`, `Log`, trig, hyperbolic, their inverses and radicals) is applied to an x-dependent argument. Both it and the ParallelMixedSpecial cascade stage reject a result that mentions a symbol absent from the integrand. ParallelMixedSpecial also rejects `$Aborted`.
+
+Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDefiniteIntegralsCorpus.m`, `tests/MatharIndefiniteIntegralsCorpus.m`.
+
 ## Algorithm
 
 integrate.c
@@ -1014,61 +1629,109 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Algorithm.** `Integrate[f, x]` computes an *indefinite, single-variable*
-antiderivative only; there is no constant of integration and no definite-bound
-support, and results are not guaranteed to be simplified. The dispatcher
-`builtin_integrate` (src/calculus/integrate.c) routes through a fixed cascade of
-context-qualified sub-integrators, each of which returns the antiderivative on
-success or comes back as its own unevaluated head (e.g.
-`Integrate\`BronsteinRational[...]`) to signal "fall through". The Automatic
-cascade order is:
+**Algorithm.** `builtin_integrate` (src/calculus/integrate.c) first threads over a `List`
+integrand, then splits on the second argument. A range or contour spec goes to
+`integrate_definite`; a symbol goes to the indefinite cascade. Before that cascade runs, an
+applied `InterpolatingFunction` gives a new antiderivative `InterpolatingFunction`, and a
+`SeriesData` is integrated term by term (`series_integrate`).
 
-1. **Undefined-function integrator** (`try_undefined` → src/calculus/integrate_unknown.c),
-   Roach 1992 §1.7: integrands rational in unknown `u[x]` and their derivatives
-   (e.g. `x f'[x] + f[x] -> x f[x]`). Cheaply gated.
-2. **Bronstein rational integration** (`try_rational` → src/calculus/intrat.c),
-   gated by `PolynomialQ`/rational-function tests. This is the mathematically
-   substantial stage: polynomial part by term-wise power rule, then **Mack's
-   linear Hermite reduction** (`HermiteReduce`) to split off the rational
-   (algebraic) part of the antiderivative, then the **Lazard–Rioboo–Trager
-   log part** (`IntRationalLogPart`) built on a subresultant PRS, with Rioboo's
-   recursive `LogToAtan`/`LogToReal` conversions producing real-elementary
-   `Log`/`ArcTan` forms (a `RootSum`-based `NaiveLogPart` is the universal
-   fallback). A pre-Hermite derivative-recognition fast path catches `c·D'/D^k`.
-3. **Radical substitutions**: linear-radical (`try_linrad`), quadratic-radical
-   Euler substitution (`try_quadrad`), and linear-ratio Möbius substitution
-   (`try_linratiorad`).
-4. **Derivative-divides** substitution (`try_derivdivides`): recognises
-   `c·h(u(x))·u'(x)` and reduces to `Integrate[h[u], u]`.
-5. **Risch–Norman heuristic** (`try_risch` → src/calculus/intrischnorman.c),
-   Bronstein's *pmint*: the parallel-Risch ansatz for transcendental
-   integrands (exp/log/trig via `tan` rewriting). Builds a candidate monomial
-   set, a vector field with `splitFactor`/deflation, a linear system solved by
-   `RowReduce`, plus a log-candidate sum; retries over `K = I`.
-6. **CRC integral table** (`try_crctable`): a large rule set lazily
-   `Get`-loaded from src/internal/CRCMathTablesIntegrals.m on first use only.
-   Recursion-capped at `MAX_CRC_DEPTH` (256); a leaked internal
-   `IntegrateTable[...]` head anywhere in the result counts as a miss.
+*Indefinite cascade.* Under `Method -> Automatic` each stage runs only if every earlier stage
+declined (`IP_STAGE`). The order is:
 
-An explicit `Method -> "<name>"` option (parsed by `parse_method_option`)
-bypasses the cascade and dispatches to one stage strictly (no fallback).
-Inexact integrands are force-rationalised by `common_rationalize_input`
-(min-precision-aware, ½-ulp fallback), integrated exactly, then numericalised
-back via `common_numericalize_result` for inexact-in/inexact-out semantics.
-Applied 1-D `InterpolatingFunction` objects integrate to a fresh antiderivative
-`InterpolatingFunction` before any rationalisation (`integrate_interp`).
+1. Undefined-function integrands (`try_undefined`, Roach §1.7).
+2. `BronsteinRational`: Hermite reduction, then the Lazard–Rioboo–Trager log part with
+   Rioboo's `LogToReal`.
+3. Radical substitutions: `LinearRadicals`, `QuadraticRadicals` (Euler), `LinearRatioRadicals`
+   (Möbius), and `ChebychevAlgebraic` (binomial differentials).
+4. Recognisers: `Fresnel` (Sin/Cos of a quadratic) and `GammaPower` (`x^p E^(a x^m)` with a
+   symbolic `p`, giving an incomplete Gamma).
+5. Linearity over a `Plus`, then linear-argument substitution.
+6. `Weierstrass`: the Jeffrey–Rich continuous half-angle form, with a secular
+   `K Floor[(x-b)/p]` term.
+7. `DerivativeDivides`.
+8. `RischTranscendental`: recursive transcendental Risch with Cherry's special-function
+   extensions (`Erf`, `ExpIntegralEi`, `LogIntegral`, `PolyLog`).
+9. `CRCTable`, loaded lazily.
+10. `PolyLogLadder`, loaded lazily from src/internal/PolyLogLadder.m. It covers `R(x) Log[a x + b]^k`
+    over partial fractions, and a polynomial times a trig rational via `TrigToExp`.
+11. `LogByParts`: `Log[g]` times a trig kernel, integrated by parts once.
+12. `ParallelMixedTower`: the parallel Risch–Norman method over a mixed radical tower, from
+    src/internal/mixed/ParallelMixed.m. It is skipped for pseudo-elliptic `F/R^p`.
+13. `GoursatAlgebraic`: pseudo-elliptic reductions, and their cube- and fourth-root versions,
+    to genus-0 curves.
+14. `ParallelMixedSpecial`: the only stage allowed to answer with non-elementary kernels
+    (`Erf`, `Gamma[s, z]`, `SinIntegral`/`CosIntegral`, `EllipticF`/`E`/`Pi`). It runs last
+    because an elementary answer is always preferred.
 
-**Data structures.** Everything is a Mathilda `Expr*` tree; the rational stage
-leans on Mathilda's own polynomial builtins (`Together`, `Numerator`,
-`Denominator`, `SubresultantPolynomialRemainders`, `PolynomialGCD`). Stages
-communicate by evaluating context-qualified heads (`call_stage`) and
-distinguishing success from passthrough by inspecting the result head
-(`result_is_unresolved`, `result_contains_head`).
+The heuristic stages are accepted only after a differentiate-back check.
+`Integrate::nonelem` is held until the cascade ends, and is emitted only if no later stage
+answers.
 
-**Complexity / limits.** Indefinite, single-variable only. The rational stage
-is complete for rational integrands (Hermite + LRT); transcendental coverage is
-heuristic (pmint may give up) backed by a finite table. No definite integrals,
-no multivariate integration, no constant of integration.
+*Definite driver.* `integrate_definite` folds the specs from the innermost outward. A complex
+or polyline spec goes to `integrate_line_from_spec`. A real interval runs the following chain;
+apart from step 1, every step is limited to `Automatic` or its own pinned method:
+
+1. Exact identities: an empty interval gives 0, and `DiracDelta` sifting gives a point value.
+2. Whole-line `Log[Abs[affine]]/quadratic`.
+3. `Piecewise`: split at the breakpoints of `Abs`, `Sign`, `UnitStep`, `Min`/`Max` and
+   `Piecewise`. Each branch's sign is proved.
+4. `Residue`: upper half-plane, unit circle and Fourier/Jordan families. A pole on the axis
+   gives `Integrate::idiv`.
+5. `Symmetry`: odd integrands give 0, and even ones halve the interval.
+6. The Mellin `Log`-power family, then `RationalLog` on [0, 1], `SeriesExpansion` (term by
+   term, resummed to Catalan / `DirichletBeta` / `Zeta`) and `FeynmanParameter` (Frullani-type
+   `(Σ c_i x^e_i)/Log[x]`).
+7. `Beta`: Euler Beta, Beta·₂F₁ and half-Beta.
+8. `TrigPower`, log-sine and Poisson log integrals.
+9. King reflection: `x g(x)`, and the general `f(x) + f(a+b-x) = const` case.
+10. Raabe's integral.
+11. `Mellin`: the Ramanujan Master Theorem table, with each convergence strip proved under
+    `Assumptions`.
+12. The principal-value `x^(c-1)/(1-x^d)` case.
+13. `IntegralRepresentation`: Laplace–Bessel, Bessel-K and Airy.
+    `MeijerConvolution` follows it: `C x^alpha K1(x) K2(x)` on (0, ∞) for two kernels from
+    `BesselJ`/`Y`/`K`, `E^(-p x)`, `E^(-p x^2)`, `Cos`, `Sin` and `(a^2 + x^2)^-r`. Each is written
+    as a Meijer G of x², and the convolution theorem (PBM 2.24.1.1) gives one `MeijerG`.
+    Convergence is proved under the assumptions; an unproved condition returns a
+    `ConditionalExpression` (`src/internal/MeijerConvolution.m`, v0.460).
+14. `NewtonLeibniz`: an indefinite antiderivative, split at the interior poles, with the
+    endpoints and poles evaluated by one-sided `Limit`. With `PrincipalValue -> True`, interior
+    poles are combined symmetrically.
+15. `DiffUnderInt`: differentiation under the integral sign as a first-order ODE in the
+    parameter. It is skipped under `PrincipalValue`.
+
+A result that still contains the integration variable is discarded. With an explicit
+`Assumptions`, the folded value is `Refine`d, and the refinement is rejected if it makes a
+real value complex.
+
+**Data structures.** Everything is an `Expr*` tree. Stages talk to each other through
+context-qualified heads (`call_stage` evaluating ``Integrate`Stage[f, x]``): a stage that returns its
+own head unevaluated, or `$Failed`, has declined. `IntegrateMethod` holds the parsed
+`Method`: `parse_method_option` handles the indefinite form, including
+`{"DerivativeDivides", "Substitution" -> u}`, and `definite_parse_method` handles the
+definite form. There are two kinds of per-evaluation state, both keyed on
+`eval_toplevel_id()` so they reset with each user command:
+- a 32-slot fail memo (`intg_fail_*`), so a fixed-point re-entry does not search the cascade
+  a second time;
+- one absolute `TimeConstraint` deadline, checked between stages at every depth.
+
+Inexact integrands are rationalised by `common_rationalize_input`, integrated exactly, and
+numericalised back at the input's minimum precision. Large `.m` stages (the CRC table,
+PolyLogLadder, ParallelMixed*) load on first use.
+
+**Complexity / limits.**
+- The rational stage is complete: Hermite reduction plus LRT.
+- Transcendental coverage is a decision procedure for the towers that
+  `RischTranscendental` models, and a heuristic beyond them.
+- The automatic indefinite cascade is bounded by `TimeConstraint` (default 3 s).
+  `DerivativeDivides` is measured as nearly all of the cost on integrands that fail. An
+  explicit `Method` is unbounded unless a `TimeConstraint` is given.
+- Definite stages are narrow, shape-gated recognisers. They either hold by construction (the
+  residue theorem, Beta and Mellin strips) or are checked with `NIntegrate` (King,
+  series, Feynman). Anything undecidable is left unevaluated.
+- `Integrate` is symbolic only. It has no packed, NDArray or `Compile[]` surface; the
+  numerical counterpart is `NIntegrate`.
+- Multivariate integration is supported only as iterated definite integrals.
 
 - `Protected`, `Listable`.
 - Eleven-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
@@ -1111,6 +1774,27 @@ no multivariate integration, no constant of integration.
   principal-branch convention `(-a x^m)^k == (-a)^k x^(m k)`: an exact `Simplify` pass
   first, then one under `PowerExpand`, which quotients out that convention and nothing
   else.
+
+  **`Log` times a trig/hyperbolic kernel (as of v0.343).** A `LogByParts` stage sits
+  after the cheap elementary stages (`DerivativeDivides` / `RischTranscendental` /
+  `CRCTable`) and before the `ParallelMixedTower` / `ParallelMixedSpecial` tail:
+
+      Integrate[Log[g] K, x]  ==  Log[g] V - Integrate[V (g'/g), x],   V = Integrate[K, x]
+
+  for an integrand `c Log[g(x)] K(x)` with exactly one `Log` factor, `K` free of `Log`
+  and carrying a trig/hyperbolic kernel of `x`.  On this family `V` is an elementary trig
+  antiderivative and `V (g'/g) = (trig)/x` closes to `SinIntegral`/`CosIntegral`.  It
+  exists because a `Log·trig` integrand is outside every cheap stage and the special
+  stage *searches*: `Integrate[Log[x] Sin[x], x]` cost ~4.7 s to close (the sibling
+  `x^3 Sin[x] Log[x]^2` ~12 s), so `DSolve[y'' + 4y == Log[x], y, x]` — whose VoP
+  particular is exactly `Integrate[Log[x] Sin[2x], x]` and `Integrate[Log[x] Cos[2x], x]`
+  — took ~9.4 s; both integrals are now ~0.09 s and the ODE 0.35 s, the answer unchanged.
+  The cascade's "first non-`NULL` wins" rule means the stage only ever sees integrands the
+  cheap stages declined (nothing already-fast is perturbed), and its recursive
+  sub-integrals suppress the heavy tail (`g_integrate_no_special`) so a `Log·trig` case
+  whose by-parts residual is itself non-elementary declines promptly rather than searching
+  `ParallelMixedSpecial` twice.  Emitted only behind an exact `Simplify` differentiate-back
+  certificate (`Sinc[z]` from `D[SinIntegral[z]]` rewritten to `Sin[z]/z` first).
 
   **Execution order (as of v0.238):** `ParallelMixedSpecial` (item 14) is now the
   **last** stage, after Goursat.  It is the only stage that may answer with a
@@ -1213,7 +1897,11 @@ no multivariate integration, no constant of integration.
   8. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution
-     (Jeffrey & Rich 1994).  Runs ahead of `DerivativeDivides`: it is
+     (Jeffrey & Rich 1994).  Its entry first applies the **reduction formula** to a
+     pure power `c Sec[x]^n` / `c Csc[x]^n` (`n ≥ 3`):
+     `∫Secⁿ = Secⁿ⁻² Tan/(n−1) + (n−2)/(n−1) ∫Secⁿ⁻²` (Csc analogue) — the one
+     trig-power family that previously spun past any budget in `DerivativeDivides`
+     (`Integrate[Sec[x]^4, x] → 2/3 Tan[x] + 1/3 Sec[x]^2 Tan[x]`, instant).  Runs ahead of `DerivativeDivides`: it is
      domain-specific, deterministic, correct by construction, and yields a real,
      continuous antiderivative rather than a complex-logarithm form.
   9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
@@ -1251,6 +1939,11 @@ no multivariate integration, no constant of integration.
      (`∫… = x e^(x e^(1+1/x))`) and a nested exp inside a circular kernel
      (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  Arithmetic warnings
      from transient internal singular expressions are muted (as in Mathematica).
+     When the integrand carries an inverse-trig factor it is exponentialised to
+     complex logs; the real reconstruction renders the arctangent part in the
+     clean **one-argument** `ArcTan` (not the two-argument `Arg`/`atan2` form
+     `ArcTan[1, u]`), so `∫x^(5/2) ArcTan[√x] = (−6x+3x²−2x³+6 log(1+x)+12 x^(7/2) ArcTan[√x])/42`
+     and `∫ArcTan[x] = x ArcTan[x] − ½ log(1+x²)`.
   12. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).  Integer-power
      reduction rules cover all six circular and six hyperbolic functions
@@ -1316,6 +2009,16 @@ no multivariate integration, no constant of integration.
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).
+    - *Automatic cascade only (no pinnable name):* immediately before Weierstrass,
+      a **linear-argument substitution** stage (`src/calculus/integrate_linarg.c`)
+      reduces a rational trig/hyperbolic integrand whose kernels all share one
+      non-trivial linear argument `a·x + b` (`a` a non-zero number, `a ≠ 1` or
+      `b ≠ 0`, with a kernel in a denominator) via `u = a·x + b` to the bare
+      integral `(1/a)·(Integrate[f(u), u] /. u -> a·x+b)`. Since Weierstrass always
+      substitutes `Tan[x/2]`, a scaled argument would otherwise be multiple-angle
+      expanded into a high-degree `Tan[x/2]` rational; this keeps `Integrate[Sec[3x]^2,
+      x] = Tan[3x]/3` clean. Declines on bare arguments and on polynomial trig (no
+      denominator kernel), so other integrands are untouched.
   - `"RischTranscendental"` — `Integrate\`RischTranscendental[f, x]`, the recursive
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
     A decision procedure over a differential transcendental tower.  (The parallel-Risch
@@ -1650,6 +2353,17 @@ no multivariate integration, no constant of integration.
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"MeijerConvolution"` (definite, (0, Infinity); v0.460): `C x^alpha K1(x) K2(x)` with two kernels from `BesselJ`, `BesselY`, `BesselK`, `E^(-p x)`, `E^(-p x^2)`, `Cos`, `Sin` and `(a^2 + x^2)^-r` at arbitrary scales (`src/internal/MeijerConvolution.m`).
+    - Each kernel is written as a Meijer G-function of x^2; exp, cos and sin of x get there through the duplication formula.
+    - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
+    - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
+    - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
+  - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
+    - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
+    - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.
+    - `P(x) Log[G]`, where P is a polynomial and G a rational function of trig/hyperbolic functions of linear arguments (v0.459). With T = E^(base x) and G = K T^e Prod (T - rho)^m, Log[G] = D + e base x + Sum m Log[1 - T/rho]. Here D = Log[K Prod (-rho)^m] + 2 Pi I n is an exact piecewise constant whose integer n is read at a sample point. Each `x^n Log[1 - T/rho]` is the exponential ladder. Examples: `Integrate[Log[Sin[x]], x] = (Log[1/2] + I Pi/2) x - I x^2/2 + I PolyLog[2, E^(I x)] + I PolyLog[2, -E^(I x)]`, and `Integrate[x Log[Sin[x]], {x, 0, Pi}] = -Pi^2 Log[2]/2`. Newton-Leibniz always cross-checks continuity for an antiderivative with PolyLog/Log of an exponential, because a branch jump of D inside the interval is caught there.
+    - Examples: `Integrate[Log[x]/(1 + x^2), x]` and `Integrate[x^2 Csc[x], x]` close. `Integrate[Log[x]/(1 + x^2), {x, 0, 1}]` is `-Catalan` and `Integrate[x Csc[x], {x, 0, Pi/2}]` is `2 Catalan`.
+    - In the automatic cascade it runs after `CRCTable`, before `LogByParts`.
   - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
     Risch-Norman over a simple radical in a mixed transcendental tower).
   - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
@@ -1689,6 +2403,13 @@ no multivariate integration, no constant of integration.
     (`Integrate\`TrigPower[f, {x, 0, c}]`): over `[0, Pi/2]` it is
     `Beta[(m+1)/2, (n+1)/2]/2`; over `[0, Pi]`/`[0, 2Pi]` the standard parity
     multipliers apply (an odd power integrates to `0`).
+    Under Automatic, `Beta`, `TrigPower` and the Mellin/Ramanujan method
+    (below) — all deterministic and correct-by-construction, gated by a cheap
+    interval/shape test — run **before** Newton-Leibniz (confidence-first
+    ordering, after residue/symmetry): a symbolic-exponent integrand they own
+    (`x^(s-1) f`, `Sin^a Cos^b`) closes at once, instead of first driving FTC
+    into a doomed elementary-antiderivative search. FTC still owns the
+    integer-power and genuinely-elementary cases they decline on.
   - `"NewtonLeibniz"` — the real-axis definite-integral mechanism (implicit for
     the `{x, a, b}` form); see **Definite integration** below.
   - `"LineIntegral"` — the complex contour mechanism (implicit for the
@@ -1707,8 +2428,93 @@ no multivariate integration, no constant of integration.
   - `"RamanujanMasterTheorem"` (alias `"Mellin"`) — half-line `∫₀^∞ x^{s-1} f(x) dx`
     by the Mellin-transform / Ramanujan Master Theorem method;
     `Integrate\`RamanujanMasterTheorem[f, {x, 0, Infinity}]`. Under Automatic it
-    runs after Newton-Leibniz and before DiffUnderInt. See **Mellin / Ramanujan
+    runs before Newton-Leibniz (and before DiffUnderInt). See **Mellin / Ramanujan
     Master Theorem** below.
+  - `"IntegralRepresentation"` — a half-line integrand that IS a classical
+    integral representation of a special function;
+    `Integrate\`IntegralRepresentation[f, {x, 0, Infinity}]`. Families:
+    `E^(-p x) BesselJ[nu, q x]` → Laplace-Bessel
+    `(Sqrt[q^2+p^2]-p)^nu/(q^nu Sqrt[q^2+p^2])` (`p>0`);
+    `BesselJ[0, a x] {Cos,Sin}[b x]` → the Weber–Schafheitlin discontinuous
+    integral, a branch chosen by the proved ordering — `Cos`: `1/Sqrt[a^2-b^2]`
+    (`a>b>0`) or `0` (`b>a>0`); `Sin`: `0` (`a>b>0`) or `1/Sqrt[b^2-a^2]`
+    (`b>a>0`); undecided / `a==b` (divergent) declines;
+    `E^(-A Cosh[x]) Cosh[n x]` → `BesselK[n, A]` (`A>0`);
+    `x^(nu-1) E^(-A x - B/x)` → `2 (B/A)^(nu/2) BesselK[nu, 2 Sqrt[A B]]`
+    (`A,B>0`; `nu` a half-integer gives an elementary form, e.g.
+    `E^(-A x - B/x)/Sqrt[x]` → `Sqrt[Pi/A] e^(-2 Sqrt[A B])`);
+    `Cos[p x^3 + q x]` → `Pi (3p)^(-1/3) AiryAi[q (3p)^(-1/3)]` (`p>0`, `q` real);
+    `x^(s-1) E^(-a x)/(1 - z E^(-c x))` → `c^(-s) Gamma[s] LerchPhi[z, s, a/c]`, and
+    `Gamma[s] HurwitzZeta[s, a/c]` when `z = 1` (the Lerch/Hurwitz representation;
+    `a,c>0` gated separately so the scaled `a/c>0` discharges, `Re s>1` when `z=1`
+    else `Re s>0`) — e.g. `E^(-a x) x^(s-1)/(1-E^(-x))` → `Gamma[s] HurwitzZeta[s, a]`.
+    Each gate is proved from Assumptions; correct-by-construction, no NIntegrate.
+    Under Automatic it runs after Ramanujan, before Newton-Leibniz.  (The Euler
+    finite-interval generalization `x^(a-1)(1-x)^(b-1)(alpha+beta x)^e` on `[0,1]`
+    → `alpha^e Beta[a,b] Hypergeometric2F1[-e, a, a+b, -beta/alpha]` runs under the
+    `"Beta"` mechanism — e.g. `x^(a-1)(1-x)^(b-1)/(x+c)^(a+b)` on `[0,1]`.)
+  - `"Piecewise"` — a piecewise integrand built from `Abs`, `Sign`,
+    `HeavisideTheta`, `UnitStep`, `Min`, `Max`, or `Piecewise` whose arguments
+    depend on `x` (`Integrate\`Piecewise[f, {x, a, b}]`). It collects the
+    breakpoints where a branch switches (root of the `Abs`/`Sign`/step argument,
+    `u == v` for `Min`/`Max`, a `Piecewise` condition boundary), keeps the ones
+    strictly interior to `(a, b)` — decided assumption-aware with `Refine` — and
+    sorts them; on each sub-interval the integrand reduces to its single active
+    branch (chosen by a *proved* sign of each governing argument at an interior
+    test point), integrates that with the ordinary cascade, and sums. A branch
+    is taken only when its governing inequality is proved under the assumptions,
+    so an undecidable breakpoint position or branch sign leaves the integral
+    unevaluated. Under Automatic it runs early — right after the `DiracDelta`
+    sifting, ahead of residue/FTC (none of which model a branch switch) — and
+    declines cheaply (no branch-defining head) for every other integrand. E.g.
+    `Integrate[Abs[x - a], {x, 0, 2a}, Assumptions -> a > 0] -> a^2`,
+    `Integrate[Min[x, a], {x, 0, 2a}, Assumptions -> a > 0] -> 3 a^2/2`,
+    `Integrate[HeavisideTheta[a - x], {x, 0, Infinity}, Assumptions -> a > 0] -> a`.
+    Two refinements extend its reach: a **perfect-square radical** is first
+    normalized to its `Abs` form under a real integration variable
+    (`Sqrt[1 - Cos[2x]] -> Sqrt[2] Abs[Sin x]`, so `∫₀^{2π} Sqrt[1-Cos[2x]] dx =
+    4 Sqrt[2]`); and a breakpoint `Solve` returns as a **periodic family**
+    (`ConditionalExpression[Pi + 2 C[1] Pi, …]`) is enumerated to its concrete
+    members inside the interval, so `∫₀^{2π} Abs[Sin x] dx = 4` splits at the
+    interior `x = π`. A sub-interval proved to lie in `x <= 0` is integrated under
+    the reflection `x -> -x`, keeping a resolved `Abs` branch real
+    (`∫_{-1}^{1} Sign[x] Abs[x]^a dx = 0`, not a complex `(-1)^(1+a)` artifact).
+  - `"SeriesExpansion"` (alias `"SeriesTermByTerm"`) — a log-weighted rational
+    integral `R(x) Log[x]^k` (`k >= 1`) on `[0,1]` with a root-of-unity
+    denominator `1 ± x^d` (`Integrate\`SeriesExpansion[f, {x, 0, 1}]`). Expands the
+    geometric series `1/(1 ∓ x^d) = Σ (±1)^n x^{dn}`, integrates term-by-term with
+    the exact identity `∫₀¹ x^m Log[x]^k dx = (-1)^k k!/(m+1)^(k+1)`, and resums
+    each residue class with `Sum[]` (→ `Catalan`, `DirichletBeta`, `Zeta`). The
+    general coefficient is produced by exact cyclotomic divisibility, not inferred
+    from samples, and the value is cross-checked against `NIntegrate`. It is the
+    alternating sibling of the `"Beta"`-family `integrate_ratlog01_try` (which owns
+    the `1 - x^m` HurwitzZeta case and runs first); this closes the `1 + x^d`
+    alternating case. E.g. `Integrate[Log[x]/(1+x^2), {x,0,1}] = -Catalan`,
+    `Integrate[Log[x]^2/(1+x^2), {x,0,1}] = Pi^3/16`,
+    `Integrate[Log[x]^2/(1+x), {x,0,1}] = (3/2) Zeta[3]`. Under Automatic it runs in
+    the pre-FTC `[0,1]` block (these integrands have non-elementary PolyLog
+    antiderivatives).
+  - `"King"` (alias `"Reflection"`) — the general King reflection `x -> a+b-x` on a
+    finite interval (`Integrate\`King[f, {x, a, b}]`):
+    `Integrate[f,{x,a,b}] = (1/2) Integrate[f(x)+f(a+b-x),{x,a,b}]`, and when the
+    reflected sum `f(x)+f(a+b-x)` is a constant `c` the value is `c (b-a)/2`. Closes
+    e.g. `Integrate[1/(1+Tan[x]^Sqrt[2]), {x,0,Pi/2}] = Pi/4` — and the whole
+    `1/(1+Tan[x]^s)` family for any real `s` — which has no elementary
+    antiderivative. The constant is read at the midpoint, screened numerically, and
+    cross-checked against `NIntegrate` (a mis-detected constancy fails the check and
+    declines, so no wrong answer). It is numeric-only: a parametric integrand is out
+    of scope. Complements the `x·g(x)`, `g`-invariant reflection already in the
+    `"Beta"` file. Under Automatic it runs before Newton-Leibniz.
+  - `"FeynmanParameter"` — the parameter / Frullani-logarithm family on `[0,1]`
+    (`Integrate\`FeynmanParameter[f, {x, 0, 1}]`), i.e. differentiation under the
+    integral sign w.r.t. the exponent:
+    `Integrate[(Σ cᵢ x^{eᵢ})/Log[x], {x,0,1}] = Σ cᵢ Log[eᵢ+1]`, valid when
+    `Σ cᵢ = 0` (so the `1/Log[x]` singularity at `x=1` is integrable) and each
+    `eᵢ+1 > 0` (proved from Assumptions). The inner `x`-power integral is taken
+    directly as `1/(e+1)`. E.g. `(x^a-1)/Log[x] → Log[a+1]` (`a>-1`),
+    `(x^a-x^b)/Log[x] → Log[(a+1)/(b+1)]`. Numerically cross-checked against
+    `NIntegrate`; `1/Log[x]` (coefficient sum `≠ 0`, divergent) declines. Under
+    Automatic it runs in the pre-FTC `[0,1]` block.
   The definite mechanisms name themselves only: the actual mechanism is
   chosen from the spec type, so on a definite integral any *other* method name
   is passed through to the inner indefinite integration that produces the
@@ -1726,10 +2532,15 @@ no multivariate integration, no constant of integration.
 - Bronstein, "Symbolic Integration I: Transcendental Functions", 2nd ed. (Springer, 2005).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (Kluwer, 1992), ch. 11–12.
 - M. Bronstein, *Symbolic Integration I: Transcendental Functions*, 2nd ed. (Springer, 2005).
-- M. Bronstein, "poor man's integrator" (pmint), 2004 — parallel Risch / Risch–Norman heuristic.
 - B. M. Trager, "Algebraic Factoring and Rational Function Integration", ACM SYMSAC 1976.
 - K. O. Geddes, S. R. Czapor, G. Labahn, *Algorithms for Computer Algebra* (Kluwer, 1992).
+- D. J. Jeffrey, A. D. Rich, "The Evaluation of Trigonometric Integrals Avoiding Spurious Discontinuities", ACM TOMS 20(1), 1994, 124–135.
+- G. W. Cherry, "Integration in Finite Terms with Special Functions: The Logarithmic Integral", SIAM J. Comput. 1986.
+- G. W. Cherry, "An Analysis of the Rational Exponential Integral", SIAM J. Comput. 18(5), 1989.
+- S. Blake, "Parallel Integration over Simple Radical Extensions II" (ParallelMixedTower / ParallelMixedSpecial).
+- S. Blake, "A Generalisation of Goursat's Algorithm for Integration in Finite Terms" and "A Fourth-Root Generalisation of Goursat's Algorithm".
 - K. Roach, "Symbolic Integration", 1992 (undefined-function integrands, §1.7).
+- Boulnois, arXiv:2308.09619 — differentiation under the integral sign framed as a first-order ODE in the parameter.
 - CRC Standard Mathematical Tables, 31st ed. — reference integral tables.
 - Source: [`src/calculus/integrate.c`](https://github.com/stblake/mathilda/blob/main/src/calculus/integrate.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
@@ -1742,4 +2553,10 @@ no multivariate integration, no constant of integration.
 
 ### Notes
 
-`Integrate[f, x]` computes the indefinite integral via a cascade: Bronstein's rational-function algorithm, then the Risch–Norman (`pmint`) heuristic, then the lazy-loaded CRC integral tables; `Method -> "<name>"` pins a single subroutine. Antiderivatives are returned without an integration constant and are not always simplified — for example `Integrate[Sin[x], x]` returns `-(1 + Cos[x])` rather than `-Cos[x]`. Definite integration is **not** supported in this build: `Integrate[x^2, {x, 0, 1}]` threads `Integrate` over the bound list and returns the garbage form `{1/3 x^3, Integrate[x^2, 0], Integrate[x^2, 1]}` instead of `1/3`. Restrict use to the indefinite, single-variable form.
+- **Forms.** `Integrate[f, x]` (indefinite, no constant of integration), `Integrate[f, {x, a, b}]` (definite, including improper bounds), iterated `Integrate[f, {x, a, b}, {y, c, d}]` (innermost spec last), and complex line integrals `Integrate[f, {z, z0, z1, …}]` along a polyline. A `List` integrand threads; `Integrate` itself is not `Listable`, so a range spec is never threaded over. Attributes: `Protected`.
+- **Options.** `Method -> Automatic | "name"` (a named method runs that one stage with no fallback), `Assumptions -> cond` (used by the definite stages to prove convergence strips and parameter signs; the result is then `Refine`d under it), `PrincipalValue -> True` (Cauchy principal value at interior poles), and `TimeConstraint -> 3` (seconds for the automatic indefinite cascade; `Infinity` removes the bound; a pinned `Method` is unbounded unless you pass one).
+- **Method names.** Indefinite: `"BronsteinRational"`, `"Undefined"`, `"LinearRadicals"`, `"QuadraticRadicals"`, `"LinearRatioRadicals"`, `"ChebychevAlgebraic"`, `"Weierstrass"`, `"DerivativeDivides"` (or `{"DerivativeDivides", "Substitution" -> u}`), `"RischTranscendental"`, `"CRCTable"`, `"PolyLogLadder"`, `"ParallelMixedTower"`, `"GoursatAlgebraic"`, `"ParallelMixedSpecial"`. Definite: `"NewtonLeibniz"`, `"Residue"`, `"Symmetry"`, `"Piecewise"`, `"Beta"`, `"TrigPower"`, `"SeriesExpansion"`, `"FeynmanParameter"`, `"King"`, `"Mellin"` (= `"RamanujanMasterTheorem"`), `"IntegralRepresentation"`, `"MeijerConvolution"`, `"SinPowerMonomial"`, `"OscillatoryPower"`, `"RationalLog"`, `"DiffUnderInt"`, `"LineIntegral"`.
+- **Answer quality.** The cascade prefers an elementary answer; special functions (`Erf`, `ExpIntegralEi`, `PolyLog`, `FresnelS`, the elliptic family, …) come only from stages that need them. Antiderivatives are not post-simplified, so the form can differ from Mathematica's by a constant or by an equivalent rearrangement. `Integrate::nonelem` reports a proof of non-elementarity only when no later stage answers.
+- **Soundness.** Every definite stage either is correct by construction behind proved gates (residue, Beta, Mellin strips) or is cross-checked numerically; a value still containing the integration variable is discarded, a pole on the path gives `Integrate::idiv` and stays unevaluated, and an undecidable case is left unevaluated rather than guessed.
+- **Inexact input.** Machine or arbitrary-precision coefficients are rationalised, integrated exactly, and numericalised back at the input precision. For a purely numeric definite integral, `NIntegrate` is usually the better tool.
+- See also: `NIntegrate`, `D`, `Sum`, `Limit`, `Residue`, `DSolve`.

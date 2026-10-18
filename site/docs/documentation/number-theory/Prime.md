@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.`**
+**`Prime[n]`**
+
+gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4\*10^12; non-positive-integer arguments give Prime::intpp.
 
 ## Examples (6)
 

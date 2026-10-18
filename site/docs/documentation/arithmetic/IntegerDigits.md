@@ -5,11 +5,17 @@
 
 ## Description
 
-**`IntegerDigits[n] gives a list of the decimal digits in the integer n.`**
+**`IntegerDigits[n]`**
 
-**`IntegerDigits[n, b] gives a list of the base b digits in the integer n.`**
+gives a list of the decimal digits in the integer n.
 
-**`IntegerDigits[n, b, len] pads the list on the left with zeros to give a list of length len; if n has more than len base-b digits, the last len least-significant digits are returned.`**
+**`IntegerDigits[n, b]`**
+
+gives a list of the base b digits in the integer n.
+
+**`IntegerDigits[n, b, len]`**
+
+pads the list on the left with zeros to give a list of length len; if n has more than len base-b digits, the last len least-significant digits are returned.
 
 ## Examples (10)
 

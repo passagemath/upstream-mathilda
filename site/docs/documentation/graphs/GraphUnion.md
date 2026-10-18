@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphUnion[g1, g2, ...] gives the graph whose vertices and edges are the unions of those of the gi (vertices in canonical order; an undirected edge equals its reversal). Weights are dropped.`**
+**`GraphUnion[g1, g2, ...]`**
+
+gives the graph whose vertices and edges are the unions of those of the gi (vertices in canonical order; an undirected edge equals its reversal). Weights are dropped.
 
 ## Examples (10)
 

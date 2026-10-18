@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Sort[list] sorts the elements of list into canonical order.`**
+**`Sort[list]`**
 
-**`Sort[list, p] sorts using the ordering function p.`**
+sorts the elements of list into canonical order.
+
+**`Sort[list, p]`**
+
+sorts using the ordering function p.
 
 ## Examples (14)
 

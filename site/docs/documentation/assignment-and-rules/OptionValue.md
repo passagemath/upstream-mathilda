@@ -5,24 +5,33 @@
 
 ## Description
 
-**`OptionValue[name] gives the value of an option named name in the`**
+**`OptionValue[name]`**
 
-options matched by OptionsPattern\[\] in the enclosing rule. OptionValue\[f, name\] uses options associated with the head f; OptionValue\[f, opts, name\] resolves from the explicit rules opts then the defaults from f; a trailing Hold wraps the result in Hold.
+gives the value of an option named name in the options matched by OptionsPattern\[\] in the enclosing rule. OptionValue\[f, name\] uses options associated with the head f; OptionValue\[f, opts, name\] resolves from the explicit rules opts then the defaults from f; a trailing Hold wraps the result in Hold.
 
-## Examples (6)
+## Examples (9)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]} {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
 
-In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
-Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+In[3]:= {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+Out[3]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+
+In[4]:= SetOptions[f, b -> 20]; f[]
+Out[4]= {1, 20}
+
+In[5]:= SetOptions[f, c -> 3]
+Out[5]= SetOptions[f, c -> 3]
+
+In[6]:= AppendTo[Options[f], c -> 3]
+Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 
 ### Applications (3)
@@ -30,22 +39,22 @@ Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOpt
 The default setting for one option
 
 ```mathematica
-In[4]:= OptionValue[NumberForm, DigitBlock]
-Out[4]= Infinity
+In[7]:= OptionValue[NumberForm, DigitBlock]
+Out[7]= Infinity
 ```
 
 Explicit options, no defaults to fall back on
 
 ```mathematica
-In[5]:= OptionValue[Automatic, {a -> 2}, a]
-Out[5]= 2
+In[8]:= OptionValue[Automatic, {a -> 2}, a]
+Out[8]= 2
 ```
 
 Explicit setting wins over the default
 
 ```mathematica
-In[6]:= OptionValue[Plot, {PlotRange -> All}, PlotRange]
-Out[6]= All
+In[9]:= OptionValue[Plot, {PlotRange -> All}, PlotRange]
+Out[9]= All
 ```
 
 ## Algorithm

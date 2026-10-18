@@ -70,6 +70,17 @@ magnitude past MPFR's range returns `Overflow[]`/`Indeterminate`. See
   exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
   unevaluated.
 
+```mathematica
+In[1]:= Gamma[7/2]
+Out[1]= 15/8 Sqrt[Pi]
+
+In[2]:= Gamma[2.3 + I]
+Out[2]= 0.719141 + 0.540614*I
+
+In[3]:= Gamma[3, x]
+Out[3]= E^(-x) (2 + 2 x + x^2)
+```
+
 ## Beta
 
 - `Beta[a, b]` — the Euler beta function B(a, b) = Γ(a)Γ(b)/Γ(a+b)
@@ -135,6 +146,17 @@ comes **first** in `Beta[z, a, b]`.
 > one ulp from the arbitrary-precision path, as every machine special-function
 > kernel does.
 
+```mathematica
+In[1]:= Beta[3, 5]
+Out[1]= 1/105
+
+In[2]:= Beta[-2, 1]
+Out[2]= -1/2
+
+In[3]:= Beta[2.5 + I, 1 - I]
+Out[3]= 0.0831078 + 0.142164*I
+```
+
 ## Erf
 
 - `Erf[z]` — the error function erf(z) = (2/√π) ∫₀^z e^(−t²) dt.
@@ -193,6 +215,17 @@ comes **first** in `Beta[z, a, b]`.
   `Series[Erf[x], {x, 0, 5}]` begins `2/Sqrt[Pi] x − 2/(3 Sqrt[Pi]) x^3 + …`.
 - All other arguments (symbolic `Erf[x]`, exact `Erf[2]`) stay unevaluated.
 
+```mathematica
+In[1]:= Erf[0.95]
+Out[1]= 0.820891
+
+In[2]:= Erf[1.*^-300 + 2. I]
+Out[2]= 6.16074e-299 + 18.5648*I
+
+In[3]:= Erf[1.5, 2]
+Out[3]= 0.0292171
+```
+
 ## Erfc
 
 - `Erfc[z]` — the complementary error function erfc(z) = 1 − erf(z).
@@ -227,6 +260,17 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   the origin Taylor series follows from the generic `D`-based fallback, e.g.
   `Series[Erfc[x], {x, 0, 3}]` begins `1 − 2/Sqrt[Pi] x + …`.
 - All other arguments (symbolic `Erfc[x]`, exact `Erfc[2]`) stay unevaluated.
+
+```mathematica
+In[1]:= Erfc[10.]
+Out[1]= 2.08849e-45
+
+In[2]:= Erfc[1.5 - I]
+Out[2]= -0.0783992 - 0.0279637*I
+
+In[3]:= Erfc[-x]
+Out[3]= Erfc[-x]
+```
 
 ## Erfi
 
@@ -271,6 +315,17 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   the generic `D`-based fallback, e.g. `Series[Erfi[x], {x, 0, 7}]` begins
   `2/Sqrt[Pi] x + 2/(3 Sqrt[Pi]) x^3 + …`.
 - All other arguments (symbolic `Erfi[x]`, exact `Erfi[2]`) stay unevaluated.
+
+```mathematica
+In[1]:= Erfi[I Infinity]
+Out[1]= I
+
+In[2]:= Erfi[2.5]
+Out[2]= 130.396
+
+In[3]:= Erfi[1.5 - I]
+Out[3]= -0.70136 - 1.84683*I
+```
 
 ## ExpIntegralEi
 
@@ -334,6 +389,17 @@ the principal value (the average of the two sides) is returned.
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `ExpIntegralEi::argx` and stays unevaluated.
 
+```mathematica
+In[1]:= ExpIntegralEi[2.]
+Out[1]= 4.95423
+
+In[2]:= ExpIntegralEi[-1.]
+Out[2]= -0.219384
+
+In[3]:= ExpIntegralEi[2. + I]
+Out[3]= 4.06998 + 3.40094*I
+```
+
 ## ExpIntegralE
 
 - `ExpIntegralE[n, z]` — the generalized exponential integral
@@ -367,6 +433,20 @@ the principal value (the average of the two sides) is returned.
 - Mellin transform: `∫₀^∞ x^(s-1) ExpIntegralE[n, a x] dx = a^(-s) Γ(s)/(s+n-1)`
   (`Re s > 0`), closed by the operational-calculus layer of `Method -> "Mellin"`.
 
+```mathematica
+In[1]:= ExpIntegralE[0, z]
+Out[1]= E^(-z)/z
+
+In[2]:= {ExpIntegralE[2, 3/2], N[ExpIntegralE[2, 3/2]]}
+Out[2]= {ExpIntegralE[2, 3/2], 0.0731008}
+
+In[3]:= ExpIntegralE[3, -1.]
+Out[3]= 1.77072 - 1.5708*I
+
+In[4]:= D[ExpIntegralE[n, z], z]
+Out[4]= -ExpIntegralE[-1 + n, z]
+```
+
 ## StruveH
 
 - `StruveH[nu, z]` — the Struve function H_ν(z), the particular solution of the
@@ -393,11 +473,23 @@ the principal value (the average of the two sides) is returned.
   narrow transition band z ∈ [~17, ~24] (small ν) both elementary series are
   intrinsically ill-conditioned and the result degrades to ~1e-9 absolute (as it
   does for every double implementation, scipy included) — the arb path above
-  gives full precision there. Complex or out-of-domain machine arguments fall
-  back to the symbolic ₁F₂.
+  gives full precision there. A real argument the kernel declines falls back to
+  the ₁F₂ template; a complex machine argument stays unevaluated (use `N` on an
+  exact argument: `N[StruveH[0, 1 + I], 20]` goes through arb).
 - Mellin transform: `∫₀^∞ x^(s-1) StruveH[0, a x] dx =
   π 2^(s-1) a^(-s)/(Cos(πs/2) Γ(1−s/2)²)`, closed by `Method -> "Mellin"` through
   the ₁F₂ reduction.
+
+```mathematica
+In[1]:= StruveH[0, 1.5]
+Out[1]= 0.736723
+
+In[2]:= N[StruveH[1, 13/10], 30]
+Out[2]= 0.3201231459764202395239403961771
+
+In[3]:= StruveH[1, {0.5, 1., 2.}]
+Out[3]= {0.0521737, 0.198457, 0.646764}
+```
 
 ## LogIntegral
 
@@ -485,6 +577,17 @@ and the f/g asymptotic series for |z| > 45. Accuracy vs mpmath: median 0.3 ulp, 
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `SinIntegral::argx` and stays unevaluated.
 
+```mathematica
+In[1]:= SinIntegral[2.8]
+Out[1]= 1.8321
+
+In[2]:= SinIntegral[2.5 + I]
+Out[2]= 1.99549 + 0.222995*I
+
+In[3]:= SinIntegral[-x]
+Out[3]= -SinIntegral[x]
+```
+
 ## CosIntegral
 
 - `CosIntegral[z]` — the cosine integral Ci(z) = −∫_z^∞ Cos[t]/t dt.
@@ -535,6 +638,17 @@ the sum near the real axis), max 1.8 ulp scaled.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `CosIntegral::argx` and stays unevaluated.
 
+```mathematica
+In[1]:= CosIntegral[2.8]
+Out[1]= 0.186488
+
+In[2]:= CosIntegral[-2.]
+Out[2]= 0.422981 + 3.14159*I
+
+In[3]:= CosIntegral[3. I]
+Out[3]= 4.96039 + 1.5708*I
+```
+
 ## SinhIntegral
 
 - `SinhIntegral[z]` — the hyperbolic sine integral Shi(z) = ∫₀ᶻ Sinh[t]/t dt.
@@ -579,6 +693,17 @@ Si(iz), an exact rotation of the `SinIntegral` kernel. Accuracy vs mpmath: media
 - Integrate: `Integrate[Sinh[a x]/x, x] = SinhIntegral[a x]`.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `SinhIntegral::argx` and stays unevaluated.
+
+```mathematica
+In[1]:= SinhIntegral[2.8]
+Out[1]= 4.34808
+
+In[2]:= SinhIntegral[2.5 + I]
+Out[2]= 2.84649 + 2.22177*I
+
+In[3]:= SinhIntegral[-2 x]
+Out[3]= -SinhIntegral[2 x]
+```
 
 ## CoshIntegral
 
@@ -626,6 +751,17 @@ scaled (the zero 0.5238); complex max 2.6 ulp.
 - Integrate: `Integrate[Cosh[a x]/x, x] = CoshIntegral[a x]`.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `CoshIntegral::argx` and stays unevaluated.
+
+```mathematica
+In[1]:= CoshIntegral[2.8]
+Out[1]= 4.33122
+
+In[2]:= CoshIntegral[-2.]
+Out[2]= 2.45267 + 3.14159*I
+
+In[3]:= CoshIntegral[3.5 + I]
+Out[3]= 5.36668 + 4.28423*I
+```
 
 ## FresnelC and FresnelS
 
@@ -683,6 +819,20 @@ inputs.
   Mod[n-1, 4] == 0 && n ≥ 1}}, 0]`.
 - `Listable`, `NumericFunction`, `Protected`. Wrong arity emits
   `FresnelC::argx` / `FresnelS::argx` and stays unevaluated.
+
+```mathematica
+In[1]:= FresnelC[1.8]
+Out[1]= 0.333633
+
+In[2]:= FresnelS[1.8]
+Out[2]= 0.450939
+
+In[3]:= FresnelC[2.5 + I]
+Out[3]= 116.648 - 105.229*I
+
+In[4]:= FresnelS[-I Infinity]
+Out[4]= 1/2*I
+```
 
 ## Sinc
 
@@ -752,6 +902,17 @@ inputs stay symbolic.
   (Pi^(3/2)/24) x³ + (7 Pi^(5/2)/960) x⁵ + (127 Pi^(7/2)/80640) x⁷ + O[x]^9`.
 - All other arguments (symbolic `InverseErf[x]`, exact `InverseErf[1/2]`,
   out-of-domain `InverseErf[2]`) stay unevaluated.
+
+```mathematica
+In[1]:= InverseErf[0.6]
+Out[1]= 0.595116
+
+In[2]:= InverseErf[0.4, 0.2]
+Out[2]= 0.631776
+
+In[3]:= InverseErf[1]
+Out[3]= Infinity
+```
 
 ## InverseErfc
 
@@ -858,10 +1019,12 @@ Behaviour:
 - **Exact at rational arguments (Gauss digamma theorem).** For order `n = 0` and
   a positive rational `p/q`, `PolyGamma[0, p/q]` closes into an elementary form
   `−EulerGamma − ln(2q) − (π/2) cot(πp/q) + 2 Σ cos(2πnp/q) ln(sin(nπ/q))`
-  (integer part folded back via `ψ(x+1) = ψ(x) + 1/x`), e.g.
+  (integer part folded back via `ψ(x+1) = ψ(x) + 1/x`). Only **half-integer**
+  arguments are auto-evaluated (`pg_gauss_digamma` declines other denominators,
+  to avoid the cancellation-prone general form), e.g.
   `PolyGamma[0, 1/2] = -EulerGamma - Log[4]`,
-  `PolyGamma[0, 3/4] - PolyGamma[0, 1/4] = Pi`,
-  `PolyGamma[0, 2/3] - PolyGamma[0, 1/3] = Pi/Sqrt[3]`.
+  `PolyGamma[0, 5/2] = 8/3 - EulerGamma - Log[4]`; `PolyGamma[0, 1/4]` and
+  `PolyGamma[0, 3/4] - PolyGamma[0, 1/4]` stay unevaluated.
 - **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (the log-gamma function;
   see below). Orders ≤ −2 stay unevaluated.
 - **Machine precision** (integer order `0 ≤ n ≤ 40`, real or complex `z`) →
@@ -900,6 +1063,17 @@ Behaviour:
 *Out of scope:* complex / fractional **order** `n` (so `PolyGamma[6 + I, z]`
 stays symbolic), `PolyGamma[n, z]` for `n ≤ −2`, and dedicated `Series`
 expansions (only the generic `D`-based Taylor fallback applies).
+
+```mathematica
+In[1]:= PolyGamma[5]
+Out[1]= 25/12 - EulerGamma
+
+In[2]:= PolyGamma[0, 1/2]
+Out[2]= -EulerGamma - Log[4]
+
+In[3]:= PolyGamma[3, 2.5 + I]
+Out[3]= 0.0415431 - 0.163057*I
+```
 
 ## LogGamma
 
@@ -949,6 +1123,17 @@ primitive for factorial ratios and asymptotics.
   Negative real arguments return the complex value `log|Γ(z)| - Pi Ceiling[-z] I`.
 - **Derivative.** `D[LogGamma[z], z] = PolyGamma[0, z]`; higher derivatives
   raise the `PolyGamma` order. Produced by `PolyGamma[-1, z]`.
+
+```mathematica
+In[1]:= LogGamma[-3/2]
+Out[1]= -(2*I) Pi + Log[4/3 Sqrt[Pi]]
+
+In[2]:= LogGamma[-2.5]
+Out[2]= -0.0562437 - 9.42478*I
+
+In[3]:= LogGamma[2. + 30. I]
+Out[3]= -41.1026 + 74.356*I
+```
 
 ## Pochhammer
 
@@ -1129,6 +1314,15 @@ Out[1]= Cosh[2 Sqrt[z]]
 ```mathematica
 In[1]:= Hypergeometric1F1[a, b, 0]
 Out[1]= 1
+
+In[2]:= Hypergeometric1F1[-2, 1, z]
+Out[2]= 1 - 2 z + 1/2 z^2
+
+In[3]:= Hypergeometric1F1[1., 2., -40.]
+Out[3]= 0.025
+
+In[4]:= Hypergeometric1F1[1 + I, 2, 0.5]
+Out[4]= 1.27058 + 0.322122*I
 ```
 
 ## Hypergeometric2F1
@@ -1162,6 +1356,15 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
 Out[1]= -Log[1 - z]/z
+
+In[2]:= Hypergeometric2F1[1, 1, 3/2, z]
+Out[2]= ArcSin[Sqrt[z]]/(Sqrt[z] Sqrt[1 - z])
+
+In[3]:= Hypergeometric2F1[1, 2, 3, 2.5]
+Out[3]= -0.929749 - 1.00531*I
+
+In[4]:= N[Hypergeometric2F1[1/3, 1/2, 1/5, 99/100], 50]
+Out[4]= 24.8565393133858972090022500136712230259988212774851
 ```
 
 ## HypergeometricU
@@ -1210,6 +1413,12 @@ Out[1]= 1/z
 
 In[2]:= HypergeometricU[1.5, 7, 4.5]
 Out[2]= 0.554931
+
+In[3]:= HypergeometricU[1/2, 1, 2.]
+Out[3]= 0.645694
+
+In[4]:= D[HypergeometricU[a, b, z], z]
+Out[4]= -a HypergeometricU[1 + a, 1 + b, z]
 ```
 
 ## Zeta
@@ -1277,6 +1486,12 @@ Out[1]= 1/6 Pi^2
 
 In[2]:= Series[Zeta[x], {x, 1, 2}] // Normal
 Out[2]= EulerGamma + 1/(-1 + x) - StieltjesGamma[1] (-1 + x) + 1/2 StieltjesGamma[2] (-1 + x)^2
+
+In[3]:= N[Zeta[2 + 3 I], 30]
+Out[3]= 0.7980219851462757206222945007251 - 0.1137443080529385002159133658573*I
+
+In[4]:= Zeta[-2.5, -0.5]
+Out[4]= 0.169765
 ```
 
 ## HurwitzZeta
@@ -1335,6 +1550,9 @@ Out[1]= (-1 + 2^s) Zeta[s]
 
 In[2]:= HurwitzZeta[3, -3.5]
 Out[2]= 0.0307784
+
+In[3]:= HurwitzZeta[-3, -2]
+Out[3]= -1079/120
 ```
 
 ## StieltjesGamma
@@ -1505,6 +1723,9 @@ Out[1]= 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]
 
 In[2]:= PolyLog[2, 0.9]
 Out[2]= 1.29971
+
+In[3]:= PolyLog[2, 3.0]
+Out[3]= 2.32018 - 3.45139*I
 ```
 
 ## LerchPhi
@@ -1602,6 +1823,9 @@ Out[1]= PolyLog[s, z]/z
 
 In[2]:= LerchPhi[0.5, 3, 2.5]
 Out[2]= 0.0794983
+
+In[3]:= LerchPhi[-1, 2, 1/2]
+Out[3]= 4 Catalan
 ```
 
 ## DirichletL
@@ -1682,6 +1906,20 @@ exact (`numericalize_rec`, as Mathematica's `NHoldAll` + N-rule does), so
   slot `VKERNN_R`/`_C`), typed Real only for literal labels of a real character
   at real s. Scalar, unpacked List, packed, `NDArray` and both Compile shapes
   agree bit-for-bit.
+
+```mathematica
+In[1]:= DirichletL[4, 2, 1]
+Out[1]= 1/4 Pi
+
+In[2]:= DirichletL[12, 3, 1]
+Out[2]= 1/3 Pi
+
+In[3]:= {DirichletL[4, 2, 0], DirichletL[4, 2, -2], DirichletL[4, 2, -3]}
+Out[3]= {1/2, -1/2, 0}
+
+In[4]:= N[DirichletL[4, 2, 2], 30]
+Out[4]= 0.9159655941772190150546035149325
+```
 
 ## AiryAi
 
@@ -1770,6 +2008,9 @@ Out[1]= 1/(3^(2/3) Gamma[2/3])
 
 In[2]:= AiryAi[1.8]
 Out[2]= 0.0470362
+
+In[3]:= AiryAi[2.5 + I]
+Out[3]= -0.00191209 - 0.0180329*I
 ```
 
 ## AiryBi
@@ -1857,6 +2098,9 @@ Out[1]= 1/(3^(1/6) Gamma[2/3])
 
 In[2]:= AiryBi[1.8]
 Out[2]= 2.59587
+
+In[3]:= AiryBi[2.5 + I]
+Out[3]= 0.512544 + 5.335*I
 ```
 
 ## BesselJ
@@ -1866,7 +2110,7 @@ Out[2]= 2.59587
   order it has a branch cut along the negative real z axis (from the (z/2)ⁿ
   factor).
 
-Implemented in `src/special_functions/besselj.c`. The complex-MPFR arithmetic
+Implemented in `src/special_functions/bessel.c`. The complex-MPFR arithmetic
 is the reusable `ncpx` toolkit (`src/numeric_complex.{c,h}`) — the shared
 successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
 `BesselY`/`BesselI`/`BesselK` reuse it.
@@ -1955,6 +2199,9 @@ Out[1]= -0.11029
 
 In[2]:= D[BesselJ[n, x], x]
 Out[2]= 1/2 (BesselJ[-1 + n, x] - BesselJ[1 + n, x])
+
+In[3]:= BesselJ[1, -2 x]
+Out[3]= -BesselJ[1, 2 x]
 ```
 
 ## BesselK
@@ -2044,6 +2291,9 @@ Out[1]= 0.0111597
 
 In[2]:= D[BesselK[n, x], x]
 Out[2]= -1/2 (BesselK[-1 + n, x] + BesselK[1 + n, x])
+
+In[3]:= BesselK[0, -1.0]
+Out[3]= 0.421024 - 3.97746*I
 ```
 
 ## BesselI
@@ -2148,6 +2398,9 @@ Out[1]= 2.27959
 
 In[2]:= D[BesselI[n, x], x]
 Out[2]= 1/2 (BesselI[-1 + n, x] + BesselI[1 + n, x])
+
+In[3]:= BesselI[1, -z]
+Out[3]= -BesselI[1, z]
 ```
 
 ## BesselY
@@ -2230,6 +2483,9 @@ Out[1]= 0.49807
 
 In[2]:= D[BesselY[n, x], x]
 Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
+
+In[3]:= BesselY[0, -1.0]
+Out[3]= 0.088257 + 1.5304*I
 ```
 
 ## Hyperfactorial
@@ -2381,6 +2637,15 @@ Out[1]= 0.567143
 
 In[2]:= ProductLog[-1/E]
 Out[2]= -1
+
+In[3]:= ProductLog[-1, -0.2]
+Out[3]= -2.54264
+
+In[4]:= ProductLog[-0.5]
+Out[4]= -0.794024 + 0.770112*I
+
+In[5]:= Series[ProductLog[x], {x, 0, 4}]
+Out[5]= x - x^2 + 3/2 x^3 - 8/3 x^4 + O[x]^5
 ```
 
 ## ChebyshevT
@@ -2432,7 +2697,10 @@ In[1]:= ChebyshevT[7, x]
 Out[1]= -7 x + 56 x^3 - 112 x^5 + 64 x^7
 
 In[2]:= Table[ChebyshevT[n, Pi/2], {n, 0, 3}]
-Out[2]= {1, Pi/2, -1 + Pi^2/2, -(3 Pi)/2 + Pi^3/2}
+Out[2]= {1, 1/2 Pi, -1 + 1/2 Pi^2, -3/2 Pi + 1/2 Pi^3}
+
+In[3]:= {ChebyshevT[60, 0.7], Cos[60 ArcCos[0.7]]}
+Out[3]= {-0.825313, -0.825313}
 ```
 
 ## ChebyshevU
@@ -2486,6 +2754,9 @@ Out[1]= -8 x + 80 x^3 - 192 x^5 + 128 x^7
 
 In[2]:= Table[ChebyshevU[n, Pi/2], {n, 0, 3}]
 Out[2]= {1, Pi, -1 + Pi^2, -2 Pi + Pi^3}
+
+In[3]:= ChebyshevU[3, 2. + I]
+Out[3]= 8.0 + 84.0*I
 ```
 
 ## LaguerreL
@@ -2550,11 +2821,10 @@ In[1]:= LaguerreL[7, x]
 Out[1]= 1 - 7 x + 21/2 x^2 - 35/6 x^3 + 35/24 x^4 - 7/40 x^5 + 7/720 x^6 - 1/5040 x^7
 
 In[2]:= Table[LaguerreL[n, a, x], {n, 0, 3}, {a, 0, 1}]
-Out[2]= {{1, 1}, {1 - x, 2 - x}, {1 - 2 x + 1/2 x^2, 3 - 3 x + 1/2 x^2},
-        {1 - 3 x + 3/2 x^2 - 1/6 x^3, 4 - 6 x + 2 x^2 - 1/6 x^3}}
+Out[2]= {{1, 1}, {1 - x, 2 - x}, {1 - 2 x + 1/2 x^2, 3 - 3 x + 1/2 x^2}, {1 - 3 x + 3/2 x^2 - 1/6 x^3, 4 - 6 x + 2 x^2 - 1/6 x^3}}
 
 In[3]:= LaguerreL[100, 0, N[5, 20]]
-Out[3]= 1.4555271625328812607
+Out[3]= 1.45552716253288126069
 ```
 
 ## HermiteH
@@ -2619,7 +2889,7 @@ In[2]:= Table[HermiteH[10, x], {x, 1, 5}]
 Out[2]= {8224, 200416, -3093984, 125984224, 3275529760}
 
 In[3]:= HermiteH[100, N[5, 16]]
-Out[3]= 8.19319371305915*10^98
+Out[3]= 8.1931937130591502e+98
 
 In[4]:= D[HermiteH[n, z], z]
 Out[4]= 2 n HermiteH[-1 + n, z]
@@ -2836,7 +3106,7 @@ Attributes: `NumericFunction`, `Protected`.
 
 ```mathematica
 In[1]:= N[MeijerG[{{},{2}},{{1/2,3/2},{}},3],50]
-Out[1]= 0.041591159875396983670330390749778758626529715159039
+Out[1]= 0.0415911598753969836703303907497787586265297151590396
 
 In[2]:= MeijerG[{{},{}},{{v},{-v}},z]
 Out[2]= BesselJ[2 v, 2 Sqrt[z]]
@@ -2869,6 +3139,12 @@ Attributes: `Protected`.
 ```mathematica
 In[1]:= FunctionExpand[MeijerG[{{1/2,1},{3,4}},{{1/5},{}},z]]
 Out[1]= 1/12 Gamma[1/5] Sqrt[Pi] HypergeometricPFQ[{1/5}, {1/2, 3, 4}, 1/z] - (256 Gamma[7/10] HypergeometricPFQ[{7/10}, {3/2, 7/2, 9/2}, 1/z])/(1575 Sqrt[Pi] Sqrt[z])
+
+In[2]:= FunctionExpand[Sin[x] + MeijerG[{{},{}},{{0},{}},z]]
+Out[2]= Sin[x] + E^(-z)
+
+In[3]:= FunctionExpand[MeijerG[{{},{2}},{{1/2,3/2},{}},z]]
+Out[3]= MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, z]
 ```
 
 ## LegendreP
@@ -2921,9 +3197,13 @@ default `1`).
   `LegendreQ`'s associated form shares the same path. The symbolic output of
   every form is unchanged (the Horner route is taken only for a numeric buffer).
 
+- **Derivative.** `D[LegendreP[n, x], x] = ((1+n) P_{n+1}(x) + (-1-n) x P_n(x)) /
+  (x² - 1)` for symbolic `n`; an integer order differentiates the explicit
+  polynomial.
+
 Non-integer associated/type forms, negative `m`, symbolic `Series` /
-`SeriesCoefficient`, `D[]` rules, and analytic continuation of the numeric
-series for `|(1-x)/2| ≥ 1` are left symbolic.
+`SeriesCoefficient`, and analytic continuation of the numeric series for
+`|(1-x)/2| ≥ 1` are left symbolic.
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
 
@@ -2933,6 +3213,15 @@ Out[1]= -3/2 x + 5/2 x^3
 
 In[2]:= LegendreP[10, 2, x]
 Out[2]= (1 - x^2) (3465/128 - 45045/32 x^2 + 675675/64 x^4 - 765765/32 x^6 + 2078505/128 x^8)
+
+In[3]:= LegendreP[5, 0.3 + 0.2 I]
+Out[3]= 0.594236 - 0.0178925*I
+
+In[4]:= LegendreP[2.5, 2]
+Out[4]= 9.58312
+
+In[5]:= D[LegendreP[n, x], x]
+Out[5]= ((1 + n) LegendreP[1 + n, x] + (-1 - n) x LegendreP[n, x])/(-1 + x^2)
 ```
 
 ## LegendreQ
@@ -3001,6 +3290,12 @@ Out[1]= -3/2 x + (1/2 Log[1 + x] - 1/2 Log[1 - x]) (-1/2 + 3/2 x^2)
 
 In[2]:= LegendreQ[2, 0.5]
 Out[2]= -0.818663
+
+In[3]:= LegendreQ[3, 2.]
+Out[3]= 0.00487112 - 26.7035*I
+
+In[4]:= LegendreQ[1/2, 0]
+Out[4]= -(Gamma[3/4] Sqrt[Pi])/(2 Sqrt[2] Gamma[5/4])
 ```
 
 ## EllipticK, EllipticF, EllipticE and EllipticPi
@@ -3181,7 +3476,8 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
   `EllipticE::argt` / `EllipticPi::argt` (the overloaded pair) and stays
   unevaluated.
 - Without FLINT (`USE_FLINT` undefined) the numeric path falls back to the
-  machine Carlson kernels for the real domain and otherwise declines, leaving the
+  machine kernels (Cephes-form / AGM for the complete integrals, Carlson for
+  the incomplete ones) and otherwise declines, leaving the
   call symbolic.
 
 ```mathematica
@@ -3189,11 +3485,17 @@ In[1]:= EllipticK[0]
 Out[1]= 1/2 Pi
 
 In[2]:= N[EllipticK[1/2], 25]
-Out[2]= 1.854074677301371918433850
+Out[2]= 1.8540746773013719184338503
 
 In[3]:= D[EllipticF[phi, m], phi]
 Out[3]= 1/Sqrt[1 - m Sin[phi]^2]
 
 In[4]:= N[EllipticPi[3/2, ArcSin[Sqrt[2] Sqrt[1/(1 + 7/5)]], 1/2], 20]
-Out[4]= 0.98773969972852208021 - 2.7206990463513267759 I
+Out[4]= 0.987739699728522080208 - 2.7206990463513267759*I
+
+In[5]:= EllipticK[2.]
+Out[5]= 1.31103 - 1.31103*I
+
+In[6]:= EllipticE[0.3 + 0.4 I]
+Out[6]= 1.46251 - 0.175161*I
 ```

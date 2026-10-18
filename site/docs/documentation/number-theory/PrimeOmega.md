@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.`**
+**`PrimeOmega[n]`**
+
+gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega\[n, GaussianIntegers -\> True\] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z\[i\]. PrimeOmega\[1\] is 0; PrimeOmega\[0\] is left unevaluated.
 
 ## Examples (11)
 

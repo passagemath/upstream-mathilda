@@ -9,15 +9,17 @@
 
 solves the ordinary differential equations eqns numerically for the function u over xmin \<= x \<= xmax, returning {{u -\> InterpolatingFunction\[...\]}}.
 
-**`NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}] solves a system.`**
+**`NDSolve[eqns, {u1, u2, ...}, {x, xmin, xmax}]`**
 
-**`NDSolve[eqns, u[x], {x, xmin, xmax}] gives u[x] -> InterpolatingFunction[...][x].`**
+solves a system.
 
-Higher-order equations (u''\[x\] == ...) are reduced to first order.
+**`NDSolve[eqns, u[x], {x, xmin, xmax}]`**
 
-**`NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}] solves a partial`**
+gives u\[x\] -\> InterpolatingFunction\[...\]\[x\]. Higher-order equations (u''\[x\] == ...) are reduced to first order.
 
-differential equation over a rectangular region by the method of lines, giving a 2-D InterpolatingFunction applied as u\[t, x\]. Options: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal, MaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize, InterpolationOrder, StepMonitor, EvaluationMonitor.
+**`NDSolve[eqns, u, {t, tmin, tmax}, {x, xmin, xmax}]`**
+
+solves a partial differential equation over a rectangular region by the method of lines, giving a 2-D InterpolatingFunction applied as u\[t, x\]. Options: Method, WorkingPrecision, AccuracyGoal, PrecisionGoal, MaxSteps, MaxStepSize, MaxStepFraction, StartingStepSize, InterpolationOrder, StepMonitor, EvaluationMonitor.
 
 ## Examples (11)
 

@@ -1,34 +1,35 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= BesselI[0, 0]
-Out[1]= 1
+In[1]:= BesselI[0, 0]  (* regular at the origin *)
+In[2]:= BesselI[-1/2, 0]  (* a negative fractional order diverges there *)
+In[3]:= BesselI[{0, 1, 2}, 1.]  (* listable over the order *)
 ```
 
-Half-integer orders close in hyperbolic functions:
-
 ```mathematica
-In[1]:= BesselI[1/2, z]
-Out[1]= Sinh[z] Sqrt[2/(Pi z)]
+In[1]:= BesselI[-1/2, x]  (* half-integer orders give hyperbolic closed forms; I is not even at half-integer order *)
+In[2]:= BesselI[-3, x]  (* even in an integer order *)
+In[3]:= BesselI[1, -z]  (* integer-order parity *)
+In[4]:= Series[BesselI[0, x], {x, 0, 8}]  (* all-positive Frobenius series *)
 ```
 
-The all-positive Frobenius series at the origin (contrast with the alternating series of `BesselJ`):
-
 ```mathematica
-In[1]:= Series[BesselI[0, x], {x, 0, 6}]
-Out[1]= 1 + 1/4 x^2 + 1/64 x^4 + 1/2304 x^6 + O[x]^7
+In[1]:= BesselI[2.5, -3.0]  (* on the cut the principal value e^{i nu pi} I_nu(3) is purely imaginary *)
+In[2]:= BesselI[3 + I, 1.5 - I]  (* complex order and argument through the MPFR core *)
+In[3]:= N[BesselI[0, 1], 50]  (* fifty digits *)
+In[4]:= BesselI[0, 800.]  (* beyond the double range the value comes back at arbitrary precision *)
 ```
 
-High-precision evaluation, and a Wronskian identity with `BesselK`: `I_0(z) K_1(z) + I_1(z) K_0(z) = 1/z`, which at `z = 2` gives exactly `1/2`:
-
 ```mathematica
-In[1]:= N[BesselI[0, 1], 40]
-Out[1]= 1.2660658777520083355982446252147175376077
-
-In[2]:= N[BesselI[0, 2] BesselK[1, 2] + BesselI[1, 2] BesselK[0, 2], 30]
-Out[2]= 0.5
+In[1]:= N[BesselI[0, 2] BesselK[1, 2] + BesselI[1, 2] BesselK[0, 2], 30]  (* the Wronskian I_0 K_1 + I_1 K_0 = 1/z, here 1/2 *)
+In[2]:= Integrate[BesselI[1, x], x]  (* from the integral tables *)
+In[3]:= Limit[BesselI[0, x], x -> Infinity]  (* exponential growth *)
 ```
 
 ### Notes
 
-`BesselI[n, z]` is the modified Bessel function of the first kind, regular at the origin, with `I_0(0) = 1` and `I_n(0) = 0` for integer `n != 0`. It grows like `e^z` and is even in `n` (`I_{-n} = I_n`). Real and complex order and argument evaluate at machine or MPFR precision; `D[BesselI[n, z], z] = (BesselI[n-1, z] + BesselI[n+1, z])/2`. Listable.
+- `BesselI[n, z]` is the modified Bessel function of the first kind. It grows like `e^z`, is even in an integer order, and has a cut along the negative real axis for non-integer order.
+- Machine-number calls with a real order use the raw-double kernel in `sf_machine_bessel.c`: Cephes-style `I_0`/`I_1` on the real line, and otherwise the ascending series or Miller's backward recurrence. Packed lists, `NDArray` and `Compile[]` (scalar real, scalar complex and rank-1) call the same helper. Overflow, complex order and arbitrary precision fall through to the MPFR power or asymptotic series.
+- `D[BesselI[n, z], z] = (BesselI[n-1, z] + BesselI[n+1, z])/2`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `BesselK`, `BesselJ`, `BesselY`.

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Check[expr, failexpr] returns failexpr if a message is generated while evaluating expr, otherwise the value of expr.`**
+**`Check[expr, failexpr]`**
+
+returns failexpr if a message is generated while evaluating expr, otherwise the value of expr.
 
 ## Examples (6)
 
@@ -81,10 +83,10 @@ the value first and lets the sentinel propagate unchanged, so a throw escapes
 
 - Source: [`src/message.c`](https://github.com/stblake/mathilda/blob/main/src/message.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
-- Tests: [`tests/test_files.c`](https://github.com/stblake/mathilda/blob/main/tests/test_files.c)
-- Tests: [`tests/test_findmin.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin.c)
-- Tests: [`tests/test_findmin_cobyla.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_cobyla.c)
-- Tests: [`tests/test_findmin_slsqp.c`](https://github.com/stblake/mathilda/blob/main/tests/test_findmin_slsqp.c)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
+- Tests: [`tests/test_dirichletl.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletl.c)
+- Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
+- Tests: [`tests/test_factorinteger.c`](https://github.com/stblake/mathilda/blob/main/tests/test_factorinteger.c)
 
 ## Notes & additional examples
 

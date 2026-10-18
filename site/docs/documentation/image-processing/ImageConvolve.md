@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageConvolve[image, kernel] convolves image with the rank-2 numeric kernel. This is true convolution: the kernel is REFLECTED before summing, so it differs from correlation on an asymmetric kernel (the two agree exactly on a symmetric one such as a Gaussian or a box). Out-of-range reads clamp to the nearest edge pixel, replicating the border, so a constant image convolved with a kernel summing to 1 comes back unchanged everywhere including the edges -- zero padding would darken them. The result is always a "Real" image of the same dimensions, since a filtered byte is not generally a byte. Each colour channel is convolved independently.`**
+**`ImageConvolve[image, kernel]`**
+
+convolves image with the rank-2 numeric kernel. This is true convolution: the kernel is REFLECTED before summing, so it differs from correlation on an asymmetric kernel (the two agree exactly on a symmetric one such as a Gaussian or a box). Out-of-range reads clamp to the nearest edge pixel, replicating the border, so a constant image convolved with a kernel summing to 1 comes back unchanged everywhere including the edges -- zero padding would darken them. The result is always a "Real" image of the same dimensions, since a filtered byte is not generally a byte. Each colour channel is convolved independently.
 
 ## Examples (5)
 

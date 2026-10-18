@@ -32,7 +32,7 @@ Out[3]= {{x -> ConditionalExpression[Log[5] + (2*I) C[1] Pi, Element[C[1], Integ
 
 ## References
 
-- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
+- Source: [`src/solve/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
 
 ## Notes & additional examples

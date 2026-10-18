@@ -5,13 +5,19 @@
 
 ## Description
 
-**`Factor[poly] factors a polynomial over the integers.`**
+**`Factor[poly]`**
 
-**`Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is`**
+factors a polynomial over the integers.
+
+**`Factor[poly, Extension -> alpha]`**
+
+factors over Q(alpha), where alpha is
 
 **`Sqrt[c], c^(1/n) (rational c), or I.  Implements Trager's algebraic-`**
 
-**`Factor[poly, Extension -> {alpha_1, ..., alpha_n}] factors over the`**
+**`Factor[poly, Extension -> {alpha_1, ..., alpha_n}]`**
+
+factors over the
 
 <details>
 <summary>Notes</summary>
@@ -20,11 +26,11 @@ factoring algorithm via norm + sqfr\_norm + alg\_factor. compositum Q(alpha\_1, 
 
 </details>
 
-## Examples (15)
+## Examples (21)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (5)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Factor[1 + 2x + x^2]
@@ -34,51 +40,111 @@ In[2]:= Factor[x^10 - 1]
 Out[2]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
 
 In[3]:= Factor[x^10 - y^10]
-Out[3]= (x + y) (x - y) (x^4 - x^3 y + x^2 y^2 - x y^3 + y^4) (x^4 + x^3 y + x^2 y^2 + x y^3 + y^4)
+Out[3]= (x + y) (x - y) (x^4 + x^3 y + x^2 y^2 + x y^3 + y^4) (x^4 - x^3 y + x^2 y^2 - x y^3 + y^4)
 
 In[4]:= Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]
 Out[4]= (a + x) (a - x) (3 a^2 - 2 x y)
 
 In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
+
+In[6]:= Factor[Integrate[f[x], x] x^2 - Integrate[f[x], x]]
+Out[6]= (-1 + x) (1 + x) Integrate[f[x], x]
+```
+
+### Options (2)
+
+```mathematica
+In[7]:= Factor[x^4 + 1, Modulus -> 3]
+Out[7]= (2 + x + x^2) (2 + 2 x + x^2)
+
+In[8]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[8]= (1 + Sqrt[2] x + x^2) (1 - Sqrt[2] x + x^2)
 ```
 
 ### Worked examples (3)
 
 ```mathematica
-In[6]:= Factor[y^2 - x^2]
-Out[6]= -(x + y) (x - y)
+In[9]:= Factor[y^2 - x^2]
+Out[9]= -(x + y) (x - y)
 
-In[7]:= Factor[E^x (x^2 - 1)]
-Out[7]= E^x (-1 + x) (1 + x)
+In[10]:= Factor[E^x (x^2 - 1)]
+Out[10]= E^x (-1 + x) (1 + x)
 
-In[8]:= Factor[Log[x] (x^2 - 1)]
-Out[8]= Log[x] (-1 + x) (1 + x)
+In[11]:= Factor[Log[x] (x^2 - 1)]
+Out[11]= Log[x] (-1 + x) (1 + x)
 ```
 
-### Applications (7)
+### Applications (10)
+
+Factorisation over the integers with a non-monic leading coefficient
 
 ```mathematica
-In[9]:= Factor[x^4 - 1]
-Out[9]= (-1 + x) (1 + x) (1 + x^2)
+In[12]:= Factor[6 x^2 + 7 x + 2]
+Out[12]= (1 + 2 x) (2 + 3 x)
+```
 
-In[10]:= Factor[6 x^2 + 7 x + 2]
-Out[10]= (1 + 2 x) (2 + 3 x)
+Cyclotomic factors of x^10 - 1
 
-In[11]:= Factor[x^2 + 1, Extension -> I]
-Out[11]= (-I + x) (I + x)
-
-In[12]:= Factor[x^2 - 2, Extension -> Sqrt[2]]
-Out[12]= (Sqrt[2] + x) (-Sqrt[2] + x)
-
+```mathematica
 In[13]:= Factor[x^10 - 1]
 Out[13]= (-1 + x) (1 + x) (1 + x + x^2 + x^3 + x^4) (1 - x + x^2 - x^3 + x^4)
+```
 
-In[14]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
-Out[14]= (1 - Sqrt[2] x + x^2) (1 + Sqrt[2] x + x^2)
+The multivariate FLINT path: one factor for each divisor of 99
 
-In[15]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
-Out[15]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+```mathematica
+In[14]:= Length[Factor[x^99 - y^99]]
+Out[14]= 6
+```
+
+A rational function: combined first, then numerator and denominator factored
+
+```mathematica
+In[15]:= Factor[(x^3 + 2 x^2)/(x^2 - 4 y^2) - (x + 2)/(x^2 - 4 y^2)]
+Out[15]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
+```
+
+An irreducible quartic splits over Q(Sqrt[2])
+
+```mathematica
+In[16]:= Factor[x^4 + 1, Extension -> Sqrt[2]]
+Out[16]= (1 + Sqrt[2] x + x^2) (1 - Sqrt[2] x + x^2)
+```
+
+A tower of extensions, reduced to one primitive element
+
+```mathematica
+In[17]:= Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]
+Out[17]= (Sqrt[2] + x) (Sqrt[3] + x) (-Sqrt[2] + x) (-Sqrt[3] + x)
+```
+
+The extension is detected from the coefficients
+
+```mathematica
+In[18]:= Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Automatic]
+Out[18]= (-Sqrt[2] + x)^2
+```
+
+Factorisation in F_3[x]
+
+```mathematica
+In[19]:= Factor[x^4 + 1, Modulus -> 3]
+Out[19]= (2 + x + x^2) (2 + 2 x + x^2)
+```
+
+A polynomial in the kernel E^x
+
+```mathematica
+In[20]:= Factor[E^(2 x) - 1]
+Out[20]= (-1 + E^x) (1 + E^x)
+```
+
+An unevaluated integral is carried as an opaque factor
+
+```mathematica
+In[21]:= Factor[Integrate[f[x], x] x^2 - Integrate[f[x], x]]
+Out[21]= (-1 + x) (1 + x) Integrate[f[x], x]
 ```
 
 ## Performance
@@ -98,10 +164,11 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **Algorithm.** `builtin_factor` lives in `src/poly/facpoly.c`, which is assembled from a set of `.inc` fragments (squarefree, Berlekamp–Zassenhaus univariate, bivariate/trivariate Hensel, the heuristic dispatcher, the memo cache, and the builtin entry point). The entry point (`facpoly_factor_builtin.inc`) is a cascade:
 
+0. **Modulus and FLINT fast paths.** `Modulus -> p` factors in `F_p[x]` through `flint_nmod_poly_factor_list`. The classical path declines on a composite or non-word modulus or on several variables, rather than ignoring the option. A free-symbol radicand `Sqrt[k]` is factored over `Q(t…)(Sqrt[k])` by `flint_parametric_sqrt_factor`. Once the memo and inexact checks pass, a univariate polynomial over Z goes to `flint_univariate_factor_auto` (`fmpz_poly_factor`, bignum-safe), and a multivariate polynomial over Q given as one plain argument goes to `flint_polynomial_factor` (`fmpq_mpoly_factor`; `x^99 - y^99` takes milliseconds). Both emit primitive, positive-leading factors and decline on any non-polynomial head, which then takes the classical cascade below.
 1. **Options / algebraic extensions.** A trailing `Extension -> α` (or `-> Automatic`, autodetected via `extension_autodetect`, or a `List` tower) routes to the algebraic-number factorer in `qafactor.c` (Trager's algorithm over `Q(α)`). The Simplify-scoped result memo (`factor_memo_*`) is bypassed in this branch.
 2. **Memo + inexact handling.** A per-`Simplify` result cache is consulted; inexact coefficients are sent through `internal_rationalize_then_numericalize`.
 3. **Threading.** `Factor` is `LISTABLE`; comparison/logic heads (`Less`, `Equal`, `Inequality`, `And`, …) are hand-threaded elementwise.
-4. **Radical generators.** If the input contains a fractional-power sub-expression `u^{p/q}`, it substitutes `u → g^m` (m = lcm of the q's), factors as a polynomial in `g`, and back-substitutes.
+4. **Radical generators.** If the input contains a fractional-power sub-expression `u^{p/q}`, it substitutes `u → g^m` (m = lcm of the q's), factors as a polynomial in `g`, and back-substitutes. Since v0.434 this substitution (`poly_subst_radical_to_gen`) treats binding operators (`poly_is_binding_operator`: unevaluated `Integrate`, `D`, `Sum`, `Hold*`, …) as opaque atoms, so a factor such as `Integrate[f[x], x]` is carried through untouched.
 5. **Rational normalisation.** `Together` → split into `Numerator`/`Denominator`; each is factored independently (in a direct call) or with a shared variable scope (inside Simplify).
 
 The numerator/denominator are factored by variable count: **univariate** → `bz_factor_to_expr` (the Berlekamp–Zassenhaus pipeline, `facpoly_bz_uni.inc`); **bivariate** → a direct bivariate Hensel lift fast path (`factor_bivariate_via_hensel`), falling back to `FactorSquareFree` + `heuristic_factor`; **≥ 3 variables** → `FactorSquareFree` followed by `heuristic_factor`'s recursive per-piece dispatch.
@@ -110,7 +177,7 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 
 **Data structures.** The univariate path uses a packed `UPoly { int deg; int64_t* c; }` with `__int128_t`-guarded modular arithmetic (`upoly_mul_mod`, `upoly_div_rem_mod`, `upoly_gcd_mod`, `mod_inverse_int`) and `UPolyList` collections. Multivariate paths use `Expr*` polynomials plus the `MPoly`/`BPoly` representations from `mpoly.c`/`bpoly.c` for Hensel lifting. The algebraic path uses `QATower` from `qafactor.c`.
 
-**Complexity / limits.** Modular coefficients are carried in `int64`/`int128`, so the chosen `p^k` is bounded below `10^15`; the Zassenhaus recombination is exponential in the number of modular factors (the classical worst case). The integer-arithmetic UPoly path caps degree at 10000. Multivariate factoring is heuristic (`heuristic_factor`) rather than a complete algorithm.
+**Complexity / limits.** With FLINT, plain integer and rational polynomials take the FLINT factorers, and the classical engine below handles the remaining cases. Modular coefficients are carried in `int64`/`int128`, so the chosen `p^k` is bounded below `10^15`. Since v0.434 the trial division `upoly_div_exact_z` checks every multiply and subtract for overflow (`ci_mul_i64`/`ci_sub_i64`) and skips a candidate divisor that would overflow. Skipping leaves a coarser but still exact factorisation; before the fix the corrupted remainder trapped with SIGFPE. the Zassenhaus recombination is exponential in the number of modular factors (the classical worst case). The integer-arithmetic UPoly path caps degree at 10000. Multivariate factoring is heuristic (`heuristic_factor`) rather than a complete algorithm.
 
 - `Listable`, `Protected`.
 - **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — the conventional normalisation), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
@@ -148,18 +215,23 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 
 ### Notes
 
-Over the integers, `Factor` returns irreducible factors and keeps an
-integer content split out front; `x^2 + 1` stays irreducible because it has
-no rational roots. Supplying `Extension -> I`, `Extension -> Sqrt[c]`, or
-`Extension -> c^(1/n)` factors over the corresponding algebraic number field
-via Trager's algorithm, so `x^2 + 1` splits over `Q(I)` and `x^2 - 2` over
-`Q(Sqrt[2])`. Factors are printed in canonical term order, which places the
-constant term before the leading term (`-1 + x` rather than `x - 1`).
-
-The cyclotomic factorisation of `x^10 - 1` recovers the degree-1, degree-4
-cyclotomic polynomials Φ₁, Φ₂, Φ₅, Φ₁₀ over the integers. `x^4 + 1` (the 8th
-cyclotomic, irreducible over Q) splits into two real quadratics over
-`Q(Sqrt[2])`. Passing a list to `Extension` factors over the compositum: over
-`Q(Sqrt[2], Sqrt[3])` the biquadratic `x^4 - 5 x^2 + 6` splits completely into
-four linear factors, the tower being reduced to a single primitive element via
-Trager's primitive-element algorithm.
+- Over the integers, `Factor` returns irreducible factors with the integer
+  content pulled out front. `x^2 + 1` stays as it is because it has no
+  rational factors. Factors print in canonical term order, constant term
+  first (`-1 + x`, not `x - 1`).
+- **Engines.** With FLINT, univariate integer polynomials go to
+  `fmpz_poly_factor` and multivariate rational polynomials to
+  `fmpq_mpoly_factor`. Otherwise the native Berlekamp–Zassenhaus and Hensel
+  code runs, with heuristics for three or more variables. `Extension -> α`
+  (or a list, or `Automatic`) factors over the number field with Trager's
+  algorithm. `Modulus -> p` factors over `F_p`. A composite modulus is left
+  unevaluated.
+- **Rational functions and kernels.** A rational expression is combined
+  with `Together` first. Exponentials, trig functions and fractional powers
+  are factored as polynomials in their kernels. Unevaluated `Integrate`,
+  `D` and `Sum` are opaque atoms.
+- **Threading.** `Listable`, and threads over equations, inequalities and
+  logical connectives as well.
+- `Protected`. Symbolic only.
+- See also: `FactorList`, `FactorSquareFree`, `FactorTerms`, `Expand`,
+  `Together`, `FactorInteger`.

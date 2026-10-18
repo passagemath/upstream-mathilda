@@ -4,7 +4,7 @@
 
 - [`Blank`](Blank.md) — _ or Blank[] represents any single expression.  _(Stable)_
 - [`BlankNullSequence`](BlankNullSequence.md) — ___ or BlankNullSequence[] represents a sequence of zero or more expressions.  _(Stable)_
-- [`BlankSequence`](BlankSequence.md) — __ or BlankSequence[] represents a sequence of one or more expressions.  _(Experimental)_
+- [`BlankSequence`](BlankSequence.md) — __ or BlankSequence[] represents a sequence of one or more expressions.  _(Stable)_
 - [`Default`](Default.md) — Default[f]  _(Experimental)_
 - [`FirstPosition`](FirstPosition.md) — FirstPosition[expr, pattern] gives the position of the first element in expr matching pattern (in depth-first order), or Missing["NotFound"] if no such element is found.  _(Stable)_
 - [`HoldPattern`](HoldPattern.md) — HoldPattern[expr]  _(Stable)_

@@ -62,7 +62,7 @@ Out[7]= True
 
 **See also:** [Expand](../../algebra/Expand/), [D](../../calculus/D/), [N](../../arithmetic/N/)
 
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/numbertheory/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory/numbertheory.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_compile_coverage.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_coverage.c)
 - Tests: [`tests/test_deriv_symbolic_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_deriv_symbolic_order.c)

@@ -93,8 +93,9 @@ Out[14]= {"h", "l", "o"}
 
 ## References
 
-- Source: [`src/picostrings.c`](https://github.com/stblake/mathilda/blob/main/src/picostrings.c)
+- Source: [`src/strings/strings_init.c`](https://github.com/stblake/mathilda/blob/main/src/strings/strings_init.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_strings.c`](https://github.com/stblake/mathilda/blob/main/tests/test_strings.c)
 
 ## Notes & additional examples

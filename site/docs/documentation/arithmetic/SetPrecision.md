@@ -40,9 +40,9 @@ Out[4]= 0.33333333333333333333333333333333333333332
 - Source: [`src/precision.c`](https://github.com/stblake/mathilda/blob/main/src/precision.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_elliptic.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic.c)
+- Tests: [`tests/test_elliptic_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic_machine.c)
 - Tests: [`tests/test_mateigen_direct.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mateigen_direct.c)
 - Tests: [`tests/test_matinv_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matinv_methods.c)
-- Tests: [`tests/test_matsol_methods.c`](https://github.com/stblake/mathilda/blob/main/tests/test_matsol_methods.c)
 
 ## Notes & additional examples
 

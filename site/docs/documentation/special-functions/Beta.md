@@ -24,33 +24,93 @@ Exact for rational arguments (a positive integer gives a rational via Pochhammer
 
 </details>
 
-## Examples (7)
+## Examples (13)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (7)
+### Basic examples (3)
 
 ```mathematica
 In[1]:= Beta[3, 5]
 Out[1]= 1/105
 
-In[2]:= Beta[1/2, 1/2]
-Out[2]= Pi
+In[2]:= Beta[-2, 1]
+Out[2]= -1/2
 
-In[3]:= Beta[1/3, 1/3]
-Out[3]= Gamma[1/3]^2/Gamma[2/3]
+In[3]:= Beta[2.5 + I, 1 - I]
+Out[3]= 0.0831078 + 0.142164*I
+```
 
-In[4]:= Beta[7, 3]
-Out[4]= 1/252
+### Applications (10)
 
-In[5]:= 1/Beta[7, 3] - 9 Binomial[8, 2]
-Out[5]= 0
+A positive-integer argument collapses to an exact rational
 
-In[6]:= Beta[5, 2, 3]
-Out[6]= 1025/12
+```mathematica
+In[4]:= Beta[3, 5]
+Out[4]= 1/105
+```
 
-In[7]:= N[Beta[2.5, 3.5], 30]
-Out[7]= 0.0368155
+Half-integers fold to Pi; other rationals keep a Gamma quotient
+
+```mathematica
+In[5]:= {Beta[1/2, 1/2], Beta[1/3, 1/3]}
+Out[5]= {Pi, Gamma[1/3]^2/Gamma[2/3]}
+```
+
+A cancelling pair of gamma poles has a finite limit; a surviving pole is ComplexInfinity
+
+```mathematica
+In[6]:= {Beta[-2, 1], Beta[0, b]}
+Out[6]= {-1/2, ComplexInfinity}
+```
+
+Machine real, computed directly in double
+
+```mathematica
+In[7]:= Beta[2.3, 3.2]
+Out[7]= 0.0540298
+```
+
+Machine complex: the three Gammas under one exponential
+
+```mathematica
+In[8]:= Beta[2.5 + I, 1 - I]
+Out[8]= 0.0831078 + 0.142164*I
+```
+
+Arbitrary precision through the Gamma ratio
+
+```mathematica
+In[9]:= N[Beta[22/10, 33/10], 50]
+Out[9]= 0.0564856913732825668070517540044914293695377770152413
+```
+
+The incomplete beta terminates when b is a positive integer
+
+```mathematica
+In[10]:= Beta[1/2, 3, 4]
+Out[10]= 7/640
+```
+
+A numeric incomplete beta through Hypergeometric2F1
+
+```mathematica
+In[11]:= Beta[0.3, 0.5, 2.5]
+Out[11]= 0.938813
+```
+
+Rank-1 Compile[] runs the same kernel as the packed map
+
+```mathematica
+In[12]:= cb = Compile[{{v, _Real, 1}}, Beta[v, 2.5]]; cb[{1.5, 2.5}] == Beta[{1.5, 2.5}, 2.5]
+Out[12]= True
+```
+
+Symbolic arguments stay unevaluated, as in Mathematica
+
+```mathematica
+In[13]:= Beta[a, b]
+Out[13]= Beta[a, b]
 ```
 
 ## Algorithm
@@ -63,7 +123,7 @@ beta.c -- the Euler beta function and its incomplete / generalized forms.
   Beta[z0, z1, a, b] = Beta[z1, a, b] - Beta[z0, a, b]         (generalized)
 ```
 
-Rather than re-deriving the transcendental machinery, Beta is assembled from functions that already exist and are well tested:
+A machine-precision Beta[a, b] (real or complex) is computed directly in double by sfg_beta / sfg_beta_c (sf_machine_gamma.c), the kernel the NDArray map and Compile[] share. Everything else is assembled from functions that already exist and are well tested:
 
 ```text
   - Beta[a, b] is reduced to a ratio of Gamma calls and handed back to the
@@ -85,29 +145,42 @@ Memory: builtin_beta takes ownership of res. It returns a freshly built tree (th
 
 ## Implementation notes
 
-**Algorithm.** `builtin_beta` assembles the beta function from primitives that already exist rather than re-deriving the transcendental machinery. `Beta[a, b] = Gamma(a) Gamma(b) / Gamma(a+b)` is reduced to a gamma ratio and handed back to the evaluator (inheriting `Gamma`'s exact integer/half-integer/rational and machine/arbitrary-precision/complex paths). Pole structure on the integer lattice is classified up front: counting `p = [a∈Z≤0] + [b∈Z≤0] - [a+b∈Z≤0]` gives a surviving pole (`ComplexInfinity`), a cancelling pair (a finite `(-1)^B k!(B-1)!/m!` limit), or a denominator-only pole (`0`). When one argument is a positive integer `n` the ratio collapses exactly to `(n-1)!/Pochhammer[b, n]` (so `Beta[3, 1/3] = 27/14`). The incomplete form `Beta[z, a, b] = z^a/a · 2F1(a, 1-b; a+1; z)` routes through `Hypergeometric2F1` (terminating to a closed form when `b` is a positive integer, numeric otherwise); `Beta[0, a, b] = 0`, `Beta[1, a, b] = Beta[a, b]`; and `Beta[z0, z1, a, b] = Beta[z1, a, b] - Beta[z0, a, b]`. A purely symbolic two-argument call stays unevaluated, matching the Wolfram Language.
+**Algorithm.** `builtin_beta` checks the machine case before anything else. When `sf_machine_scalar_args` accepts a two-argument call (machine `Real`, exact, or `Complex` leaves, with at least one inexact leaf and no MPFR), it computes the value directly in double:
 
-**Data structures.** `Expr` trees driven through `eval_and_free`. The ND kernel is a binary `REG_B` registration (`NDKB_Beta`): over real arrays it computes `tgamma(a) tgamma(b) / tgamma(a+b)` (libm), declining complex buffers to the `List` path. `Compile[]` lowers `Beta` (e.g. `Beta[2, x]`) at scalar (`Compiled -> True`, `ResultType -> Real`) and rank-1 array shapes via that kernel.
+- `sfg_beta` (real) takes `tgamma(a)/tgamma(a+b)·tgamma(b)`. Because `a + b` is rarely representable, it undoes that rounding to first order through `ψ(a+b)`, using `Γ(s+e) ≈ Γ(s)(1 + ψ(s) e)`.
+- `sfg_beta_c` (complex) combines the three Gammas under one exponential, summing their double-double exponents from the `sf_machine_gamma.c` tiles or Stirling series, with the same ψ correction.
 
-**Complexity / limits.** The two-argument reduction is as fast as the underlying `Gamma`/`Pochhammer`; the incomplete form costs a `2F1` evaluation. Symbolic arguments keep the call inert; non-cancelling gamma poles give `ComplexInfinity`. The four-argument generalized form reduces only when every argument is numeric (symbolic differentiation is handled in `deriv.c`). Attributes: `Listable`, `NumericFunction`, `Protected`.
+A decline falls through to the layered path below: a pole, `|a|`, `|b|` or `|a+b| > 170`, or underflow.
+
+The layered path builds on the `Gamma` machinery. `beta_lattice_case` first sorts out the gamma poles on the integer lattice: a pole that survives gives `ComplexInfinity`, a cancelling pair gives its finite limit (`Beta[-2, 1] = -1/2`), and a pole only in the denominator gives `0`. Purely symbolic arguments stay unevaluated. If one argument is a positive integer `n`, the call collapses to `(n-1)!/Pochhammer[b, n]`, which is exact for rational `b` (`Beta[3, 1/3] = 27/14`). Otherwise the call is rebuilt as `Gamma[a] Gamma[b]/Gamma[a+b]` and evaluated. That keeps half-integers exact (`Beta[1/2, 1/2] = Pi`), keeps other rationals as a Gamma quotient, and sends MPFR and complex arguments to `Gamma`'s arbitrary-precision paths.
+
+The incomplete form uses `Beta[z, a, b] = z^a/a · 2F1(a, 1-b; a+1; z)` through `Hypergeometric2F1`. The series terminates to a closed form when `b` is a positive integer, even for symbolic `z` and `a`. Otherwise it reduces only when every argument is numeric. Two special values are handled directly: `Beta[0, a, b] = 0` and `Beta[1, a, b] = Beta[a, b]`. The four-argument form `Beta[z0, z1, a, b]` evaluates as `Beta[z1, a, b] - Beta[z0, a, b]` when every argument is numeric.
+
+**Data structures.** `Expr` trees driven through `eval_and_free`. The machine kernel works on `(re, im)` doubles in `sf_machine_gamma.c` and shares that file's Gamma and digamma tables. The ND kernel is the binary `NDKB_Beta`, registered with `REG_B`; its `ndk_Beta_c` calls `sfg_beta_c` for real and complex buffers, including the case where both arguments are arrays. So packed arrays and `NDArray`s are handled directly, and the scalar, packed, `NDArray` and `Compile[]` answers agree bit for bit. `Compile[]` lowers `Beta` through that kernel at real and complex scalar shapes, and at rank-1 shapes when one argument is an array and the other a scalar (`Beta[v, 2.5]`). An array in both arguments is not yet lowered.
+
+**Complexity / limits.** The machine kernel is `O(1)`. Measured error: real median 0.8 ulp, max 4.1 ulp on `[0.3, 5]²`; complex median 1.3 ulp, max 6.3 ulp on `[0.5, 3] × ±2i`. The exact path costs what `Gamma`/`Pochhammer` cost, and the incomplete form costs one `2F1` evaluation. Symbolic two-argument calls, and the four-argument form with any symbolic argument, stay unevaluated; symbolic derivatives of the four-argument form are handled in `deriv.c`. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
-**See also:** [Gamma](../../special-functions/Gamma/), [Pi](../../mathematical-constants/Pi/), [Hypergeometric2F1](../../special-functions/Hypergeometric2F1/), [PolyGamma](../../special-functions/PolyGamma/)
+**See also:** [Gamma](../../special-functions/Gamma/), [Pi](../../mathematical-constants/Pi/), [NDArray](../../linear-algebra/NDArray/), [Hypergeometric2F1](../../special-functions/Hypergeometric2F1/), [PolyGamma](../../special-functions/PolyGamma/)
 
 - DLMF §5.12 — the Euler beta function B(a,b) = Gamma(a) Gamma(b)/Gamma(a+b).
+- DLMF §5.15 — the digamma function psi, used for the first-order rounding correction of a+b.
 - DLMF §8.17 — the incomplete beta function B_z(a,b) and its relation to the Gauss hypergeometric function.
 - Source: [`src/special_functions/beta.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/beta.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_beta.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_gamma_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_gamma_machine.c)
 - Tests: [`tests/test_integrate_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_beta.c)
-- Tests: [`tests/test_integrate_residue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_residue.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`Beta[a, b] = Gamma[a] Gamma[b]/Gamma[a+b]` is the Euler beta function. `Beta[z, a, b]` is the incomplete beta integral, and `Beta[z0, z1, a, b]` the generalized incomplete form. Exact for rational arguments via Pochhammer; non-positive integer poles give `ComplexInfinity`; the incomplete form reduces through `Hypergeometric2F1`. Real and complex inputs evaluate at machine or MPFR precision. Listable.
+- `Beta[a, b] = Gamma[a] Gamma[b]/Gamma[a+b]`; `Beta[z, a, b]` is the incomplete beta `∫₀ᶻ t^(a-1) (1-t)^(b-1) dt` (the integration limit comes first), and `Beta[z0, z1, a, b]` the generalized form `Beta[z1, a, b] - Beta[z0, a, b]`.
+- Machine-precision `Beta[a, b]` (real or complex) is computed in double by `sfg_beta`/`sfg_beta_c`, correcting the rounding of `a + b` through `PolyGamma`; poles and `|a|, |b|, |a+b| > 170` fall back to the exact/MPFR path.
+- Packed and `NDArray` arguments run element-wise — including both arguments arrays — and `Compile[]` lowers scalar and array-with-scalar calls.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `Gamma`, `Pochhammer`, `Hypergeometric2F1`.

@@ -1,35 +1,19 @@
 ### Worked examples
 
 ```mathematica
-In[1]:= FresnelS[0]  (* odd and entire, so the value at zero is zero *)
-```
-
-```mathematica
-In[1]:= FresnelS[Infinity]  (* the limit value is 1/2 *)
-```
-
-```mathematica
-In[1]:= N[FresnelS[1], 20]  (* arbitrary precision via the MPFR series *)
-```
-
-```mathematica
-In[1]:= D[FresnelS[x], x]  (* the integrand Sin[Pi x^2/2] *)
-```
-
-```mathematica
-In[1]:= FresnelS[{0.5, 1.0, 1.5}]  (* threads element-wise over the packed real list *)
+In[1]:= {FresnelS[0], FresnelS[Infinity], FresnelS[-I Infinity]}  (* note the sign flip on the imaginary directions *)
+In[2]:= FresnelS[1.8]  (* machine real on the shared Fresnel kernel *)
+In[3]:= FresnelS[123456.789]  (* the exactly reduced phase keeps a huge argument accurate *)
+In[4]:= FresnelS[2.5 + I]  (* machine complex *)
+In[5]:= FresnelS[1.*^10 + 1.*^-10 I]  (* the tiny imaginary component is accurate relative to itself *)
+In[6]:= N[FresnelS[2], 30]  (* arbitrary precision *)
+In[7]:= FresnelS[{0.5, 1., 1.5}] == Map[FresnelS, {0.5, 1., 1.5}]  (* the packed list and the scalar calls agree *)
+In[8]:= Series[FresnelS[x], {x, 0, 7}]  (* the Maclaurin series begins with Pi x^3/6 *)
+In[9]:= D[FresnelS[x], x]  (* the integrand *)
 ```
 
 ### Notes
 
-Mathilda uses the Pi/2-normalized (Wolfram) convention
-`FresnelS[z] = Int_0^z Sin[Pi t^2/2] dt`. The function is entire and odd, with
-`FresnelS[±Infinity] = ±1/2` and `FresnelS[±I Infinity] = ∓I/2`.
-
-`FresnelC` and `FresnelS` share one numeric kernel: the pair `(C, S)` is computed
-together and each builtin returns its component. The real path uses a convergent
-Maclaurin series for small/moderate arguments and an asymptotic expansion (DLMF
-7.12) for large ones; complex arguments always use the convergent paired `A/B`
-series (`S = (A - B)/(2 I)`), correct across the whole plane. `FresnelS` carries a
-real `NDArray` kernel and lowers under `Compile[]` at both scalar and rank-1
-array shapes.
+- `FresnelS[z] = ∫₀ᶻ Sin[Pi t²/2] dt`, entire and odd; `FresnelS[±Infinity] = ±1/2` but `FresnelS[±I Infinity] = ∓I/2`.
+- `FresnelS` and `FresnelC` share every kernel: the pair (C, S) is computed together. Machine arguments run on the `sf_machine_error.c` kernels, shared bit for bit with packed lists, `NDArray` and `Compile[]`; arbitrary precision uses the guarded MPFR series or the real-axis asymptotic expansion.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `FresnelC`, `Erf`, `Erfi`.

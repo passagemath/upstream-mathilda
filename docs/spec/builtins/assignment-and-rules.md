@@ -60,8 +60,8 @@ Out[1]= x
 In[2]:= f[x_] := x^2; f[x_] =.; f[3]
 Out[2]= f[3]
 
-In[3]:= fact[1] = 1; fact[n_] := n fact[n - 1]; fact[1] =.; fact[1]
-Out[3]= fact[1]
+In[3]:= fact[1] = 1; fact[n_] := n fact[n - 1]; fact[1] =.; DownValues[fact]
+Out[3]= {HoldPattern[fact[n_]] :> n fact[n - 1]}
 ```
 
 ## UpSet (^=), UpSetDelayed (^:=)
@@ -393,10 +393,16 @@ In[1]:= f[x_] := x^2; Protect[f]
 Out[1]= {"f"}
 
 In[2]:= f[x_, y_] := x + y
-SetDelayed::wrsym: Symbol f is Protected.
+(* SetDelayed::wrsym: Symbol f is Protected. *)
 
 In[3]:= Unprotect[f]
 Out[3]= {"f"}
+
+In[4]:= Protect[f]; Protect[f]
+Out[4]= {}
+
+In[5]:= Check[f[x_] := 0, "refused"]
+Out[5]= "refused"
 ```
 
 ## Options, SetOptions, OptionValue
@@ -457,14 +463,19 @@ and user symbols.
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= Options[f] = {a -> 1, b -> 2};
-        f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
-        {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
-Out[2]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
 
-In[3]:= SetOptions[f, c -> 3]
-SetOptions::optnf: c is not a known option for f.
-        AppendTo[Options[f], c -> 3]
-Out[3]= {a -> 1, b -> 2, c -> 3}
+In[3]:= {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+Out[3]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+
+In[4]:= SetOptions[f, b -> 20]; f[]
+Out[4]= {1, 20}
+
+In[5]:= SetOptions[f, c -> 3]
+(* SetOptions::optnf: c is not a known option for f. *)
+Out[5]= SetOptions[f, c -> 3]
+
+In[6]:= AppendTo[Options[f], c -> 3]
+Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 

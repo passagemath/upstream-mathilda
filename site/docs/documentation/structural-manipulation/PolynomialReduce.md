@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}] gives {{a1, ..., an}, b} with`**
+**`PolynomialReduce[poly, {p1, ..., pn}, {x1, ..., xk}]`**
+
+gives {{a1, ..., an}, b} with
 
 <details>
 <summary>Notes</summary>
@@ -41,7 +43,7 @@ Out[5]= {{0, 0}, x^2 + x^5 + 2 x y + y^2}
 
 ```mathematica
 In[6]:= gb1 = GroebnerBasis[{a x^2 + 5 y - 1, 2 x + x y - y^2}, {x, y}, CoefficientDomain -> RationalFunctions]; PolynomialReduce[a^2 x - x y + y^2 - 3, gb1, {x, y}][[1]]
-Out[6]= {1/4/a, 1/4 a - 1/4 y/a}
+Out[6]= {1/(4 a), 1/4 a - y/(4 a)}
 
 In[7]:= PolynomialReduce[x^3, {x^2 + 1}, {x}, Modulus -> 7]
 Out[7]= {{x}, 6 x}

@@ -13,11 +13,17 @@ converts an approximate number x to a nearby rational with small denominator.
 
 yields the rational number with smallest denominator that lies within dx of x.
 
-**`Rationalize[x] yields x unchanged if there is no rational number close enough to x to satisfy |p/q - x| < c/q^2, with c = 10^-4.`**
+**`Rationalize[x]`**
 
-**`Rationalize[x, dx] works with exact numbers x: the value is first numericalised, then rationalised.`**
+yields x unchanged if there is no rational number close enough to x to satisfy |p/q - x| \< c/q^2, with c = 10^-4.
 
-**`Rationalize[x, 0] forces conversion of any inexact number x to rational form, using a tolerance derived from the precision of x.`**
+**`Rationalize[x, dx]`**
+
+works with exact numbers x: the value is first numericalised, then rationalised.
+
+**`Rationalize[x, 0]`**
+
+forces conversion of any inexact number x to rational form, using a tolerance derived from the precision of x.
 
 <details>
 <summary>Notes</summary>

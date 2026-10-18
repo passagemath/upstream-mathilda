@@ -5,9 +5,13 @@
 
 ## Description
 
-**`Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.`**
+**`Apart[expr]`**
 
-**`Apart[expr, var] treats all variables other than var as constants.`**
+rewrites a rational expression as a sum of terms with minimal denominators.
+
+**`Apart[expr, var]`**
+
+treats all variables other than var as constants.
 
 <details>
 <summary>Notes</summary>
@@ -24,16 +28,16 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= Apart[1/((1+x)(5+x))]
-Out[1]= -1/4/(5 + x) + 1/4/(1 + x)
+Out[1]= -1/(4 (5 + x)) + 1/(4 (1 + x))
 
 In[2]:= Apart[(x^5-2)/((1+x+x^2)(2+x)(1-x))]
-Out[2]= 2 - x - 34/9/(2 + x) + 1/9/(-1 + x) + (-1 - 1/3 x)/(1 + x + x^2)
+Out[2]= 2 - x - 34/(9 (2 + x)) + 1/(9 (-1 + x)) + (-1 - 1/3 x)/(1 + x + x^2)
 
 In[3]:= Apart[(x+y)/((x+1)(y+1)(x-y)), x]
-Out[3]= -(-1 + y)/((1 + x) (1 + y)^2) + 2 y/((1 + y)^2 (x - y))
+Out[3]= -(-1 + y)/((1 + x) (1 + y)^2) + (2 y)/((1 + y)^2 (x - y))
 
 In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
-Out[4]= 1/3/(-1 + y^(1/3)) + (1/3 - 1/3 y^(1/3))/(1 + y^(1/3) + y^(2/3))
+Out[4]= 1/(3 (-1 + y^(1/3))) + (1/3 - 1/3 y^(1/3))/(1 + y^(1/3) + y^(2/3))
 
 In[5]:= Apart[1/((Sqrt[x] + 2) (Sqrt[x] + 3)), x]
 Out[5]= 1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])
@@ -43,7 +47,7 @@ Out[5]= 1/(2 + Sqrt[x]) - 1/(3 + Sqrt[x])
 
 ```mathematica
 In[6]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
-Out[6]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+Out[6]= -1/(2 Sqrt[2] (Sqrt[2] + x)) + 1/(2 Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ### Applications (6)
@@ -53,7 +57,7 @@ In[7]:= Apart[1/(x (x+1))]
 Out[7]= 1/x - 1/(1 + x)
 
 In[8]:= Apart[(x+2)/(x^2 - 1)]
-Out[8]= -1/2/(1 + x) + 3/2/(-1 + x)
+Out[8]= -1/(2 (1 + x)) + 3/(2 (-1 + x))
 
 In[9]:= Apart[1/(x^2 (x+1))]
 Out[9]= 1/x^2 - 1/x + 1/(1 + x)
@@ -62,10 +66,10 @@ In[10]:= Apart[(x^3 + 1)/(x^2 - 1)]
 Out[10]= x + 1/(-1 + x)
 
 In[11]:= Apart[(2 x + 3)/((x+1)^2 (x^2+1))]
-Out[11]= 1/2/(1 + x)^2 + 3/2/(1 + x) + (1 - 3/2 x)/(1 + x^2)
+Out[11]= 1/(2 (1 + x)^2) + 3/(2 (1 + x)) + (1 - 3/2 x)/(1 + x^2)
 
 In[12]:= Apart[1/(x^2 - 2), Extension -> Sqrt[2]]
-Out[12]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))
+Out[12]= -1/(2 Sqrt[2] (Sqrt[2] + x)) + 1/(2 Sqrt[2] (-Sqrt[2] + x))
 ```
 
 ## Implementation notes

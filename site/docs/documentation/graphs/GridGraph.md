@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GridGraph[{m, n}] gives the m x n grid graph; GridGraph[{n1, ..., nk}] the k-dimensional grid. The first coordinate varies fastest in the vertex numbering.`**
+**`GridGraph[{m, n}]`**
+
+gives the m x n grid graph; GridGraph\[{n1, ..., nk}\] the k-dimensional grid. The first coordinate varies fastest in the vertex numbering.
 
 ## Examples (11)
 

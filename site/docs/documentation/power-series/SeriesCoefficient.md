@@ -150,7 +150,7 @@ carries no NDArray/packed kernel and no `Compile[]` lowering.
 - Tests: [`tests/test_besselj.c`](https://github.com/stblake/mathilda/blob/main/tests/test_besselj.c)
 - Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
 - Tests: [`tests/test_fresnels.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnels.c)
-- Tests: [`tests/test_productlog.c`](https://github.com/stblake/mathilda/blob/main/tests/test_productlog.c)
+- Tests: [`tests/test_hermite_h.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hermite_h.c)
 
 ## Notes & additional examples
 

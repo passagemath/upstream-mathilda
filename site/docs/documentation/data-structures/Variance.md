@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Variance[data] gives the unbiased variance estimate of the elements in data.`**
+**`Variance[data]`**
+
+gives the unbiased variance estimate of the elements in data.
 
 ## Examples (6)
 
@@ -49,7 +51,7 @@ Out[6]= 19.571428571428571428571428571428571428568
 
 **See also:** [Median](../../data-structures/Median/), [StandardDeviation](../../data-structures/StandardDeviation/), [Mean](../../data-structures/Mean/)
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

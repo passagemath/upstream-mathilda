@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RegionCentroid[Polygon[{{x1, y1}, ...}]] gives the centroid {cx, cy} of a simple 2D polygon with nonzero area. Exact coordinates give an exact result; Real coordinates give a machine-precision result.`**
+**`RegionCentroid[Polygon[{{x1, y1}, ...}]]`**
+
+gives the centroid {cx, cy} of a simple 2D polygon with nonzero area. Exact coordinates give an exact result; Real coordinates give a machine-precision result.
 
 ## Examples (4)
 

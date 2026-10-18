@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FromNDArray[expr] returns expr with any dense buffer storage undone: a packed List becomes an ordinary List of separate elements, and an NDArray[...] becomes the nested List of its entries. Anything else is returned unchanged. Inverse of ToNDArray.`**
+**`FromNDArray[expr]`**
+
+returns expr with any dense buffer storage undone: a packed List becomes an ordinary List of separate elements, and an NDArray\[...\] becomes the nested List of its entries. Anything else is returned unchanged. Inverse of ToNDArray.
 
 ## Examples (5)
 
@@ -71,7 +73,10 @@ the buffer's.
 
 - Source: [`src/pack.c`](https://github.com/stblake/mathilda/blob/main/src/pack.c)
 - Specification: [`docs/spec/builtins/packed-arrays.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/packed-arrays.md)
-- Tests: [`tests/test_packed_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_packed_list.c)
+- Tests: [`tests/test_erf.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erf.c)
+- Tests: [`tests/test_erfc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfc.c)
+- Tests: [`tests/test_erfi.c`](https://github.com/stblake/mathilda/blob/main/tests/test_erfi.c)
+- Tests: [`tests/test_fresnelc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_fresnelc.c)
 
 ## Notes & additional examples
 

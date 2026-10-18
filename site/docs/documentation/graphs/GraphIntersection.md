@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphIntersection[g1, g2, ...] gives the graph on the union of the vertex sets whose edges are those common to all the gi, in canonical order. Weights are dropped.`**
+**`GraphIntersection[g1, g2, ...]`**
+
+gives the graph on the union of the vertex sets whose edges are those common to all the gi, in canonical order. Weights are dropped.
 
 ## Examples (9)
 

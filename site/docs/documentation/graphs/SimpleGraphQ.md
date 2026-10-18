@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SimpleGraphQ[g] gives True if g is a graph with no self-loops or parallel edges -- every valid Mathilda graph -- and False otherwise.`**
+**`SimpleGraphQ[g]`**
+
+gives True if g is a graph with no self-loops or parallel edges -- every valid Mathilda graph -- and False otherwise.
 
 ## Examples (5)
 

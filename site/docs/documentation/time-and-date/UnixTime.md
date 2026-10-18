@@ -13,12 +13,23 @@ gives the total number of seconds since the beginning of January 1, 1970, GMT.
 
 gives the Unix time corresponding to the given date specification.
 
-**`UnixTime[] gives the number of seconds elapsed since {1970, 1, 1, 0, 0, 0} GMT, not`**
+**`UnixTime[]`**
+
+gives the number of seconds elapsed since {1970, 1, 1, 0, 0, 0} GMT, not
 
 <details>
 <summary>Notes</summary>
 
-The supported date specifications are: {y, m, d, h, m, s}    DateList specification time            AbsoluteTime specification (a number of seconds since 1900) "string"        DateString specification {"string", {e1, ...}}    date string parsed with the given format elements counting leap seconds, and always returns the nearest whole second as an integer. In {y, m, ...} entries may be elided from the right ({y} is {y,1,1,0,0,0}, {y,m} is {y,m,1,0,0,0}, and so on); values outside their normal ranges are reduced and the result is rounded to the nearest second. The year and month must be integers. UnixTime interprets a date the same way DateList does and applies no correction for time zones, daylight saving time, or leap seconds; it is AbsoluteTime shifted by the fixed 1900-to-1970 epoch offset of 2208988800 seconds.
+The supported date specifications are:
+
+```text
+{y, m, d, h, m, s}    DateList specification
+time            AbsoluteTime specification (a number of seconds since 1900)
+"string"        DateString specification
+{"string", {e1, ...}}    date string parsed with the given format elements
+```
+
+counting leap seconds, and always returns the nearest whole second as an integer. In {y, m, ...} entries may be elided from the right ({y} is {y,1,1,0,0,0}, {y,m} is {y,m,1,0,0,0}, and so on); values outside their normal ranges are reduced and the result is rounded to the nearest second. The year and month must be integers. UnixTime interprets a date the same way DateList does and applies no correction for time zones, daylight saving time, or leap seconds; it is AbsoluteTime shifted by the fixed 1900-to-1970 epoch offset of 2208988800 seconds.
 
 </details>
 

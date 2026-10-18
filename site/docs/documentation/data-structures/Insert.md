@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Insert[expr, elem, n] inserts elem at position n in expr.`**
+**`Insert[expr, elem, n]`**
+
+inserts elem at position n in expr.
 
 ## Examples (9)
 

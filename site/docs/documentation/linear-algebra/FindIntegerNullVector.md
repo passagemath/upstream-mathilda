@@ -16,7 +16,12 @@ restricts the search to relations of norm \<= d.
 <details>
 <summary>Notes</summary>
 
-The xi may be real or complex, exact or inexact; for complex xi the ai are Gaussian integers.  Exact relations are validated with PossibleZeroQ; for inexact xi the relation holds to the precision of the input.  When no relation is found the call is returned unevaluated. Options: WorkingPrecision    Automatic, or a digit count for the search. ZeroTest            Automatic, or a function applied to the residual.
+The xi may be real or complex, exact or inexact; for complex xi the ai are Gaussian integers.  Exact relations are validated with PossibleZeroQ; for inexact xi the relation holds to the precision of the input.  When no relation is found the call is returned unevaluated. Options:
+
+```text
+WorkingPrecision    Automatic, or a digit count for the search.
+ZeroTest            Automatic, or a function applied to the residual.
+```
 
 </details>
 

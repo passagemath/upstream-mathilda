@@ -16,12 +16,17 @@ then the exact reductions `F(0, m) = 0`, `F(φ, 0) = φ`, `F(φ, ∞) = 0`,
 2. evaluate `F(r|m) = s · R_F(cos²r, 1 − m s², 1)` with `s = sin r` (DLMF 19.25.5, after
    using `R_F`'s homogeneity to clear the `csc²` scaling);
 3. restore the shift with the quasi-period `F(φ + kπ | m) = F(φ|m) + 2k K(m)`, which calls
-   `elliptic_machine_k` — so a shifted amplitude declines whenever the complete form does.
+   `elliptic_machine_k` — since v0.438 a thin wrapper over the Cephes-form kernel
+   `sf_machine_ellk_k` in `sf_machine_ellk.c` that `EllipticK` itself uses, so the
+   shifted value is consistent with `EllipticK[m]` and declines whenever it does.
 
 Outside the real principal domain (`1 − m sin²φ < 0`, or a complex amplitude, which
 `EllipticF[ArcSin[z], m]` produces as soon as `|z| > 1`) the kernel declines and
 `flint_num_elliptic_f` answers through Arb's `acb_elliptic_f`, which carries the
-quasi-period and the branch placement itself.
+quasi-period and the branch placement itself. Unlike the complete `EllipticK`/`EllipticE`,
+which have machine-complex kernels, `EllipticF` has none: a machine-complex argument is
+answered by Arb and comes back as a 53-bit arbitrary-precision number, not a machine
+`Complex`.
 
 **One spelling carries eight digits.** The first argument of `R_F` is `Cos[r]^2` and must
 be computed as `c*c`, never as `1 - s*s`: near `r = π/2` that subtraction's absolute error

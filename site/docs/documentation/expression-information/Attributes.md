@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Attributes[s] gives the list of attributes for s.`**
+**`Attributes[s]`**
+
+gives the list of attributes for s.
 
 ## Examples (4)
 

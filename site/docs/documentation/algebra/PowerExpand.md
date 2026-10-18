@@ -44,7 +44,7 @@ In[4]:= PowerExpand[Sqrt[z^2], Assumptions -> z < 0]
 Out[4]= -z
 
 In[5]:= PowerExpand[Log[x y], Assumptions -> True]
-Out[5]= Log[x] + Log[y] + (2*I) Pi Floor[1/2 - 1/2 (Arg[x] + Arg[y])/Pi]
+Out[5]= Log[x] + Log[y] + (2*I) Pi Floor[1/2 - (Arg[x] + Arg[y])/(2 Pi)]
 ```
 
 ### Applications (5)
@@ -63,7 +63,7 @@ In[9]:= PowerExpand[Sqrt[x^2], {x}]
 Out[9]= x
 
 In[10]:= PowerExpand[(a b)^n, Assumptions -> True]
-Out[10]= a^n b^n E^((2*I) Pi Floor[1/2 - 1/2 (Arg[a] + Arg[b])/Pi] n)
+Out[10]= a^n b^n E^((2*I) Pi Floor[1/2 - (Arg[a] + Arg[b])/(2 Pi)] n)
 ```
 
 ## Options & behaviour

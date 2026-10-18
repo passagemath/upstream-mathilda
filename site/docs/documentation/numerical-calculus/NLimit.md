@@ -36,7 +36,7 @@ In[4]:= NLimit[Tanh[Pi x]/(1 + x^2), x -> I] // Chop
 Out[4]= 0.0 - 1.5708*I
 
 In[5]:= NLimit[x Sin[x], x -> Infinity] NLimit::osc: The sampled values oscillate with a non-decaying envelope; ...
-Out[5]= RepeatedNull[Null]
+Out[5]= Null...
 ```
 
 Same oscillation, decaying envelope

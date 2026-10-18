@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Last[expr] gives the last element of expr.`**
+**`Last[expr]`**
+
+gives the last element of expr.
 
 ## Examples (4)
 

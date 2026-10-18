@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Closing[image, r] dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion <= Opening <= image <= Closing <= Dilation pointwise everywhere A "Bit" image stays "Bit"; other types give "Real".`**
+**`Closing[image, r]`**
+
+dilates then erodes with the same element, filling dark features smaller than it. Idempotent, like Opening, and the two bracket the image: Erosion \<= Opening \<= image \<= Closing \<= Dilation pointwise everywhere A "Bit" image stays "Bit"; other types give "Real".
 
 ## Examples (41)
 

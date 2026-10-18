@@ -5,11 +5,17 @@
 
 ## Description
 
-**`Context[] gives the current context ($Context).`**
+**`Context[]`**
 
-**`Context[sym] gives the context in which sym resides.`**
+gives the current context ($Context).
 
-**`Context["name"] gives the context of the symbol named "name" if it exists.`**
+**`Context[sym]`**
+
+gives the context in which sym resides.
+
+**`Context["name"]`**
+
+gives the context of the symbol named "name" if it exists.
 
 ## Examples (2)
 

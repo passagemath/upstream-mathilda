@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeRules[g] gives the edges of g as a list of rules u -> v (undirected edges too), in EdgeList order.`**
+**`EdgeRules[g]`**
+
+gives the edges of g as a list of rules u -\> v (undirected edges too), in EdgeList order.
 
 ## Examples (4)
 

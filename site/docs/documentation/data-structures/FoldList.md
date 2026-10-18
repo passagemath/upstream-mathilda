@@ -13,7 +13,9 @@ gives {x, f\[x, list\[\[1\]\]\], f\[f\[x, list\[\[1\]\]\], list\[\[2\]\]\], ...}
 
 gives {list\[\[1\]\], f\[list\[\[1\]\], list\[\[2\]\]\], ...}.
 
-**`FoldList[f, {}] returns an empty list {}. f may be a symbol or a`**
+**`FoldList[f, {}]`**
+
+returns an empty list {}. f may be a symbol or a
 
 <details>
 <summary>Notes</summary>

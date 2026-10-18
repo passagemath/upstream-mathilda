@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BitLength[n] gives the number of binary bits needed to represent the integer n.`**
+**`BitLength[n]`**
+
+gives the number of binary bits needed to represent the integer n.
 
 <details>
 <summary>Notes</summary>

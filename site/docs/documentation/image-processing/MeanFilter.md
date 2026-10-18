@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MeanFilter[image, r] averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution with a normalised box, and it is implemented as one rather than as a separate averaging loop -- two implementations of one identity is how the identity quietly stops holding. Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw * kh.`**
+**`MeanFilter[image, r]`**
+
+averages over a (2r+1) x (2r+1) neighbourhood. This IS a convolution with a normalised box, and it is implemented as one rather than as a separate averaging loop -- two implementations of one identity is how the identity quietly stops holding. Being a full rectangle the kernel is separable, so it costs kw + kh rather than kw \* kh.
 
 ## Examples (49)
 

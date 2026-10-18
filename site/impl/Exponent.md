@@ -10,7 +10,9 @@ pairs by `form_pairs` — a symbol or kernel gives `(form, 1)`, a `Power[b, e]`
 gives `(b, e)`, and a `Times` gives one pair per non-numeric factor. For each
 monomial term `exp_in_term` reads the power of each base (`base_exp_in_monomial`:
 1 if the base *is* the term, the exponent of a matching `Power`, the sum over a
-`Times`, else `0`); for a single-base form the term's exponent is that power
+`Times`, else `0`). Since v0.278 a nested non-flat `Times` factor, such as
+`Times[-1, Times[a, x^2]]` evaluated next to a complex sibling, is searched
+recursively, so `Exponent[-a x^2 + I x, x]` is `2` and no longer `1`. For a single-base form the term's exponent is that power
 divided by `fe`, and for a product form it is the `Min` over bases of
 `base-exponent / fe` — the largest `k` with `form^k` dividing the term. The
 exponents are insertion-sorted by `expr_compare`, de-duplicated with `expr_eq`,

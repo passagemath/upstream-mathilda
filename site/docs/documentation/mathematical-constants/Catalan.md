@@ -9,7 +9,9 @@
 
 is Catalan's constant, with numerical value ~= 0.915966.
 
-**`NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]`**
+**`NumericQ[Catalan]`**
+
+is True, and D\[Catalan, x\] is 0. N\[Catalan, prec\]
 
 <details>
 <summary>Notes</summary>

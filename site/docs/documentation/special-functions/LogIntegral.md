@@ -58,7 +58,10 @@ Evaluation is layered so each kind of argument takes the cheapest route:
 
 ```text
   exact special values     ->  0, -Infinity, Infinity, Indeterminate
-  numeric (inexact) z       ->  evaluate ExpIntegralEi[Log[z]]
+  machine real / complex z ->  the double kernels sf_machine_li(_c)
+                               (sf_machine_expint.c, shared with NDArray
+                               and Compile[]), no expression is built
+  arbitrary-precision z    ->  evaluate ExpIntegralEi[Log[z]]
   everything else           ->  stays symbolic (return NULL)
 ```
 
@@ -110,6 +113,14 @@ and rank-1 array shapes (`Compiled -> True`).
     series with guard bits, so machine-precision complex results are fully
     accurate, e.g. `LogIntegral[2. + I] = 1.41126 + 1.22471 I`,
     `N[Re[LogIntegral[2 + I]], 30] = 1.41125904201780100568439320706`.
+- **Machine precision** (real and complex) no longer builds and evaluates
+  `ExpIntegralEi[Log[z]]`: double kernels shared bit-for-bit with the packed/NDArray kernels and `Compile[]` (`src/special_functions/sf_machine_expint.c`; the scalar builtin calls the same function, so scalar == List == packed == NDArray == Compile). A decline (pole, overflow, an underflow to a subnormal) falls through to the MPFR path unchanged, and arbitrary precision is untouched. The real kernel evaluates
+  Ei(log x) with e^(log x) replaced by x itself in the large-argument forms, so
+  the rounding of log x is not amplified by an exponential; a real x < 0 returns
+  the complex value directly. The rounding of log x would otherwise cost ~log x
+  ulps (9 at x = 1e4) through the e^y in Ei(y); it is recovered as
+  dy = (x − e^y)/x and added back as (x/y)·dy. Accuracy vs mpmath: median 0.4 ulp,
+  max 1.9 ulp (real, off the zero μ = 1.4513); max 2.7 ulp (complex).
 - Derivative: `D[LogIntegral[z], z] = 1/Log[z]` (chain rule applies, e.g.
   `D[LogIntegral[x^2], x] = (2 x)/Log[x^2]`); the Taylor series at a regular
   point follows from the generic `D`-based fallback.
@@ -127,7 +138,7 @@ and rank-1 array shapes (`Compiled -> True`).
 - Tests: [`tests/test_cherry_li.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_li.c)
 - Tests: [`tests/test_cherry_sigma.c`](https://github.com/stblake/mathilda/blob/main/tests/test_cherry_sigma.c)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
-- Tests: [`tests/test_integrate_risch_transcendental.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_risch_transcendental.c)
+- Tests: [`tests/test_expint_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expint_machine.c)
 
 ## Notes & additional examples
 

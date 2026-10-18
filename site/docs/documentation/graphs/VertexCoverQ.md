@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexCoverQ[g, vlist] gives True if every edge of g has an endpoint in vlist.`**
+**`VertexCoverQ[g, vlist]`**
+
+gives True if every edge of g has an endpoint in vlist.
 
 ## Examples (9)
 

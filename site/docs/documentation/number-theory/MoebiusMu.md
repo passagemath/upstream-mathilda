@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].`**
+**`MoebiusMu[n]`**
+
+gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z\[i\].
 
 ## Examples (12)
 
@@ -27,7 +29,7 @@ In[4]:= MoebiusMu[{4, 10, 17, 20}]
 Out[4]= {0, 1, -1, 0}
 
 In[5]:= MoebiusMu[10^50 + 1]
-Out[5]= MoebiusMu[100000000000000000000000000000000000000000000000001]
+Out[5]= -1
 
 In[6]:= MoebiusMu[5 + 6 I]
 Out[6]= -1

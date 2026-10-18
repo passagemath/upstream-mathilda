@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IndependentVertexSetQ[g, vlist] gives True if no two vertices of vlist are adjacent in g.`**
+**`IndependentVertexSetQ[g, vlist]`**
+
+gives True if no two vertices of vlist are adjacent in g.
 
 ## Examples (9)
 

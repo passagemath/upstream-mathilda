@@ -9,7 +9,9 @@
 
 gives a numerical approximation to the integral of f with respect to x from xmin to xmax.
 
-**`NIntegrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] evaluates a multidimensional integral by adaptive cubature over a constant box, or iterated 1D quadrature when an inner bound depends on an outer variable. The variable is localised (HoldAll). xmin/xmax may be Infinity, -Infinity, or complex (a straight-line contour); extra nodes {x, x0, x1, ..., xk} give a piecewise-linear contour or mark interior singularities. Method -> Automatic chooses globally-adaptive Gauss-Kronrod for smooth finite integrands, double-exponential (tanh-sinh / sinh-sinh / exp-sinh) for endpoint singularities and infinite ranges and high precision, a Levin/zeros scheme for oscillatory integrands, an exponential endpoint map plus integration-between-the-zeros for an oscillatory endpoint singularity, and Monte-Carlo for high dimensions and region (Boole) integrands. Machine or arbitrary precision via WorkingPrecision.`**
+**`NIntegrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...]`**
+
+evaluates a multidimensional integral by adaptive cubature over a constant box, or iterated 1D quadrature when an inner bound depends on an outer variable. The variable is localised (HoldAll). xmin/xmax may be Infinity, -Infinity, or complex (a straight-line contour); extra nodes {x, x0, x1, ..., xk} give a piecewise-linear contour or mark interior singularities. Method -\> Automatic chooses globally-adaptive Gauss-Kronrod for smooth finite integrands, double-exponential (tanh-sinh / sinh-sinh / exp-sinh) for endpoint singularities and infinite ranges and high precision, a Levin/zeros scheme for oscillatory integrands, an exponential endpoint map plus integration-between-the-zeros for an oscillatory endpoint singularity, and Monte-Carlo for high dimensions and region (Boole) integrands. Machine or arbitrary precision via WorkingPrecision.
 
 <details>
 <summary>Notes</summary>

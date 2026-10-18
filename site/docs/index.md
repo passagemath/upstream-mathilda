@@ -20,9 +20,9 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of a modern symbolic programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**more than 1,000 built-in functions**.
+**more than 1,100 built-in functions**.
 
-It spans roughly **480,000 lines of C99**, uses **GMP** for arbitrary-precision
+It spans roughly **560,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
 **GPLv3**.
 

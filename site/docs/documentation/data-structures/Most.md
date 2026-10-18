@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Most[expr] gives all but the last element of expr.`**
+**`Most[expr]`**
+
+gives all but the last element of expr.
 
 ## Examples (4)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ConnectedGraphQ[g] gives True if g is connected (strongly connected when g has directed edges).`**
+**`ConnectedGraphQ[g]`**
+
+gives True if g is connected (strongly connected when g has directed edges).
 
 ## Examples (9)
 

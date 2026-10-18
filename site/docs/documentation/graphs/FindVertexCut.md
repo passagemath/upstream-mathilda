@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindVertexCut[g] gives a minimum set of vertices whose removal disconnects the underlying undirected graph of g (n-1 vertices for a complete graph); FindVertexCut[g, s, t] gives a minimum set separating s from t ({} when they are adjacent).`**
+**`FindVertexCut[g]`**
+
+gives a minimum set of vertices whose removal disconnects the underlying undirected graph of g (n-1 vertices for a complete graph); FindVertexCut\[g, s, t\] gives a minimum set separating s from t ({} when they are adjacent).
 
 ## Examples (8)
 

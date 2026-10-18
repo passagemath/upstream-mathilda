@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RootReduce[expr] canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, rules (Solve results), equations, inequalities and logic. Option: Method -> "Automatic" | "Recursive" | "NumberField".`**
+**`RootReduce[expr]`**
+
+canonicalises an algebraic expression: a constant algebraic number becomes a rational, a quadratic radical, or a Root object; a rational function over a radical tower has its denominator rationalised; a polynomial/rational function in a free variable has its constant-algebraic coefficients canonicalised. Threads over lists, rules (Solve results), equations, inequalities and logic. Option: Method -\> "Automatic" | "Recursive" | "NumberField".
 
 ## Examples (15)
 

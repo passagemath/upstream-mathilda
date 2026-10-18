@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeQ[g, e] gives True if e is an edge of the graph g. u->v means DirectedEdge[u,v] and u<->v UndirectedEdge[u,v]; an undirected edge matches in either orientation, and direction must agree.`**
+**`EdgeQ[g, e]`**
+
+gives True if e is an edge of the graph g. u-\>v means DirectedEdge\[u,v\] and u\<-\>v UndirectedEdge\[u,v\]; an undirected edge matches in either orientation, and direction must agree.
 
 ## Examples (12)
 

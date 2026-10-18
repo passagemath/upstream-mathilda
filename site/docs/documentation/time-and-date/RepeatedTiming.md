@@ -5,9 +5,13 @@
 
 ## Description
 
-**`RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.`**
+**`RepeatedTiming[expr]`**
 
-**`RepeatedTiming[expr, t] does repeated evaluation for at least t seconds.`**
+evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.
+
+**`RepeatedTiming[expr, t]`**
+
+does repeated evaluation for at least t seconds.
 
 ## Examples (3)
 
@@ -17,7 +21,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= RepeatedTiming[Sum[i, {i, 100}]]
-Out[1]= {1.20986e-05, 5050}
+Out[1]= {1.15532e-05, 5050}
 
 In[2]:= Last[RepeatedTiming[Factorial[100]]]
 Out[2]= 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000

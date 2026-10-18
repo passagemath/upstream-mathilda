@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Predict[data] fits a predictor to data and returns a PredictorFunction, which can be stored and applied to new inputs. Data is either a list of rules {features -> value, ...} or a matrix whose last column is the response. Method -> "LinearRegression" is the only method implemented and is the default; any other declines rather than silently linear-regressing. The returned object also answers "Method", "Coefficients" and "FeatureCount". A collinear feature set has no unique fit and returns unevaluated.`**
+**`Predict[data]`**
+
+fits a predictor to data and returns a PredictorFunction, which can be stored and applied to new inputs. Data is either a list of rules {features -\> value, ...} or a matrix whose last column is the response. Method -\> "LinearRegression" is the only method implemented and is the default; any other declines rather than silently linear-regressing. The returned object also answers "Method", "Coefficients" and "FeatureCount". A collinear feature set has no unique fit and returns unevaluated.
 
 ## Examples (8)
 

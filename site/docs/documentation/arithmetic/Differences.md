@@ -9,13 +9,21 @@
 
 gives the successive differences of the elements of list.
 
-**`Differences[list, n] gives the n-th differences (length l - n).`**
+**`Differences[list, n]`**
 
-**`Differences[list, n, s] takes differences of elements step s apart`**
+gives the n-th differences (length l - n).
 
-**`Differences[list, {n1, n2, ...}] gives the successive n_k-th differences`**
+**`Differences[list, n, s]`**
 
-**`FoldList[Plus, x, Differences[list]] inverts Differences.`**
+takes differences of elements step s apart
+
+**`Differences[list, {n1, n2, ...}]`**
+
+gives the successive n\_k-th differences
+
+**`FoldList[Plus, x, Differences[list]]`**
+
+inverts Differences.
 
 <details>
 <summary>Notes</summary>
@@ -85,7 +93,7 @@ Out[10]= {1, 4, 9, 16, 25}
 
 **See also:** [Accumulate](../../arithmetic/Accumulate/), [Plus](../../arithmetic/Plus/), [Times](../../arithmetic/Times/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

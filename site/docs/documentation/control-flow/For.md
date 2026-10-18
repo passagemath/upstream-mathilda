@@ -5,15 +5,25 @@
 
 ## Description
 
-**`For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.`**
+**`For[start, test, incr, body]`**
 
-**`For[start, test, incr] runs with an empty body, useful when incr or test carries the side-effect.`**
+executes start, then repeatedly evaluates body and incr until test fails to give True.
 
-**`Break[] inside body exits the loop.`**
+**`For[start, test, incr]`**
 
-**`Continue[] inside body skips the rest of body and re-evaluates incr then test.`**
+runs with an empty body, useful when incr or test carries the side-effect.
 
-**`Return[v] inside body causes the enclosing function to yield v; For itself returns Null.`**
+**`Break[]`**
+
+inside body exits the loop.
+
+**`Continue[]`**
+
+inside body skips the rest of body and re-evaluates incr then test.
+
+**`Return[v]`**
+
+inside body causes the enclosing function to yield v; For itself returns Null.
 
 <details>
 <summary>Notes</summary>

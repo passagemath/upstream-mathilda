@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindIndependentEdgeSet[g] gives a maximum independent edge set (maximum matching) of g, ignoring edge direction. Hopcroft-Karp for bipartite graphs, Edmonds' blossom algorithm otherwise.`**
+**`FindIndependentEdgeSet[g]`**
+
+gives a maximum independent edge set (maximum matching) of g, ignoring edge direction. Hopcroft-Karp for bipartite graphs, Edmonds' blossom algorithm otherwise.
 
 ## Examples (7)
 

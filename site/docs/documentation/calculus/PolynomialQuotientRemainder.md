@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}`**
+**`PolynomialQuotientRemainder[p, q, x]`**
+
+returns {Quotient, Remainder}
 
 <details>
 <summary>Notes</summary>

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Area[Polygon[{{x1, y1}, ...}]] gives the area of a simple 2D polygon. Exact (Integer/Rational) coordinates give an exact result; any Real coordinate gives a machine-precision result. A polygon with fewer than 3 distinct vertices has Undefined area.`**
+**`Area[Polygon[{{x1, y1}, ...}]]`**
+
+gives the area of a simple 2D polygon. Exact (Integer/Rational) coordinates give an exact result; any Real coordinate gives a machine-precision result. A polygon with fewer than 3 distinct vertices has Undefined area.
 
 ## Examples (8)
 

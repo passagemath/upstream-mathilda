@@ -5,13 +5,21 @@
 
 ## Description
 
-**`RealDigits[x] gives a list {digits, exp} of the digits in the approximate real number x together with the exponent such that the first digit is the coefficient of 10^(exp - 1).`**
+**`RealDigits[x]`**
 
-**`RealDigits[x, b] gives base-b digits.`**
+gives a list {digits, exp} of the digits in the approximate real number x together with the exponent such that the first digit is the coefficient of 10^(exp - 1).
 
-**`RealDigits[x, b, len] gives len digits.`**
+**`RealDigits[x, b]`**
 
-**`RealDigits[x, b, len, n] gives len digits starting from the coefficient of b^n.`**
+gives base-b digits.
+
+**`RealDigits[x, b, len]`**
+
+gives len digits.
+
+**`RealDigits[x, b, len, n]`**
+
+gives len digits starting from the coefficient of b^n.
 
 <details>
 <summary>Notes</summary>
@@ -20,11 +28,11 @@ For rationals with non-terminating expansions the digit list ends in a nested li
 
 </details>
 
-## Examples (12)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (6)
+### Basic examples (7)
 
 ```mathematica
 In[1]:= RealDigits[123.55555]
@@ -44,28 +52,81 @@ Out[5]= {{9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, -4}
 
 In[6]:= RealDigits[1.234, 2, 15]
 Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}
+
+In[7]:= {RealDigits[1000.], RealDigits[0.999]}
+Out[7]= {{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}, {{9, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}}
 ```
 
-### Applications (6)
+### Applications (10)
+
+A machine real: sixteen digits and the exponent 3
 
 ```mathematica
-In[7]:= RealDigits[123.456]
-Out[7]= {{1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
+In[8]:= RealDigits[123.456]
+Out[8]= {{1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
+```
 
-In[8]:= RealDigits[1/7]
-Out[8]= {{{1, 4, 2, 8, 5, 7}}, 0}
+Exact rationals end in a nested list holding the recurring block
 
+```mathematica
 In[9]:= RealDigits[22/7]
 Out[9]= {{3, {1, 4, 2, 8, 5, 7}}, 1}
+```
 
-In[10]:= RealDigits[N[Pi, 30]]
-Out[10]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3, 3, 8, 3, 2, 8}, 1}
+In base 3, 1/12 = 0.0020202..., a pure cycle starting at 3^-3
 
-In[11]:= RealDigits[N[Pi, 40], 10, 10]
-Out[11]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3}, 1}
+```mathematica
+In[10]:= RealDigits[1/12, 3]
+Out[10]= {{{2, 0}}, -2}
+```
 
-In[12]:= RealDigits[255, 2]
-Out[12]= {{1, 1, 1, 1, 1, 1, 1, 1}, 8}
+Symbolic constants are numericalised once a length fixes the precision
+
+```mathematica
+In[11]:= RealDigits[Pi, 10, 25]
+Out[11]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, 1}
+```
+
+Hexadecimal digits of E: 2.B7E151628...
+
+```mathematica
+In[12]:= RealDigits[E, 16, 10]
+Out[12]= {{2, 11, 7, 14, 1, 5, 1, 6, 2, 8}, 1}
+```
+
+Five digits starting at the coefficient of 10^-3
+
+```mathematica
+In[13]:= RealDigits[1/7, 10, 5, -3]
+Out[13]= {{2, 8, 5, 7, 1}, -2}
+```
+
+Past the 50 available digits the tail is Indeterminate
+
+```mathematica
+In[14]:= RealDigits[N[E, 50], 10, 60]
+Out[14]= {{2, 7, 1, 8, 2, 8, 1, 8, 2, 8, 4, 5, 9, 0, 4, 5, 2, 3, 5, 3, 6, 0, 2, 8, 7, 4, 7, 1, 3, 5, 2, 6, 6, 2, 4, 9, 7, 7, 5, 7, 2, 4, 7, 0, 9, 3, 7, 0, 0, 0, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate}, 1}
+```
+
+At and just below a power of the base the exponent stays consistent with the digits
+
+```mathematica
+In[15]:= {RealDigits[1000.], RealDigits[0.999]}
+Out[15]= {{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 4}, {{9, 9, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, 0}}
+```
+
+Any integer base works: here the digits are groups of three decimals
+
+```mathematica
+In[16]:= RealDigits[2^100, 1000]
+Out[16]= {{1, 267, 650, 600, 228, 229, 401, 496, 703, 205, 376}, 11}
+```
+
+Without a length there is no precision to pick, so the call stays unevaluated
+
+```mathematica
+In[17]:= RealDigits[Pi]
+Out[17]= RealDigits[Pi]
 ```
 
 ## Algorithm
@@ -114,9 +175,17 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 ## Implementation notes
 
-**Algorithm.** `builtin_realdigits` returns the digit list of a real number, in the standard `{digits, exponent}` form. It accepts `RealDigits[x]`, `RealDigits[x, b]`, `RealDigits[x, b, len]`, `RealDigits[x, b, len, p]` (1–4 args; wrong count emits `RealDigits::argb`). `x` is classified by `rd_classify`; concrete non-real `Complex` input emits `RealDigits::realx`, and symbolic constants (Pi, E, …) are numericalised only once enough precision context (base and length) is known. The base defaults to 10, must be an integer ≥ 2 (`RealDigits::ibase` otherwise) and fit in `unsigned long`. Digits are extracted by repeated scaled-floor / MPFR shifting in the requested base, honouring the optional length and starting-position arguments.
+**Algorithm.** `builtin_realdigits` accepts 1–4 arguments (any other count gives `RealDigits::argb`). It first classifies `x` with `rd_classify` into Integer/BigInt, Rational, machine Real or MPFR. Complex input, or any other numeric non-real, gives `RealDigits::realx`. It then validates the base: an integer `b >= 2` that fits in `unsigned long`, else `::ibase`. It validates the length (a non-negative integer up to `REAL_MAX_LEN = 10^6`, or `Automatic`, else `::intnn`) and the start position (a machine integer, else `::int`). A symbolic `x` such as `Pi`, `E` or `Sqrt[2] + Pi` is numericalised by `rd_try_numericalize` only when a length is given. It asks `numericalize` for MPFR at `len·log2 b + 32` guard bits, padded by `|n|` when a start position is given. With no length the call is left unevaluated. Three paths follow:
 
-**Data structures.** GMP `mpz_t` for the base and integer parts; MPFR for the fractional digit extraction when built. Output is a `List` of digits paired with an integer exponent.
+1. **Exact input, no length or start position.** `rd_rational_exact_form` runs remainder-tracked long division. It takes the integer-part digits by repeated `mpz_tdiv_qr`, then generates fractional digits and records each remainder. A repeated remainder marks the start of the period, which is emitted as a nested sublist. A zero remainder means the expansion terminates.
+2. **Exact input with a length or start position.** `rd_scaled_floor_exact` computes `N = floor(|x|·b^(-low))` in exact `mpq` arithmetic. `rd_digits_lsd` reads off the base-`b` digits of `N`, and the window is padded with leading zeros.
+3. **Inexact input.** `rd_inexact_canonical_digits` calls `mpfr_get_str` once, at the available digit count `rd_available_digits` (`prec_bits / log2 b`, rounded), with round-to-nearest. Those digits are placed at positions `exp_p-1 … exp_p-avail`. Positions above that range are `0` and positions below it are `Indeterminate`. The reported exponent comes from `rd_inexact_natural_exp`, which reads it from the same `mpfr_get_str` call at the same digit count. Because the exponent and the digit layout come from one source, they cannot disagree. Before v0.358 the exponent came from a `floor(log x / log b)` quotient and a 2-digit rounding, and both were wrong at a power of the base: `RealDigits[1000.]` lost its leading `1`, and `RealDigits[0.999]` reported exponent `1`. Without MPFR, a double-precision `floor(v·b^-pos) mod b` fallback is used.
+
+Zero is handled separately. Exact `0` gives `{{0}, 0}`. Inexact zero gives `{{0}, -Floor[Accuracy]}`, which is `-323` for a machine `0.`. Both are padded to `len` when a length is given.
+
+**Data structures.** Base, integer part and scaled floor are GMP `mpz_t`; rationals are `mpq_t`. Inexact values are copied into an `mpfr_t` at their own precision (53 bits for a machine real). Cycle detection keeps a growable array of `(remainder, position)` pairs. The result is a plain boxed `List`: the digit list (with a trailing nested `List` for a period), paired with an integer exponent.
+
+**Complexity / limits.** Path 3 costs one `mpfr_get_str` per call, which is quasi-linear in the precision. Path 2 costs one big-integer scaling and a digit loop of `O(len)` divisions. Cycle detection does a linear scan of the remainders seen so far, so a period of length `p` costs `O(p²)` comparisons. It is capped at `REAL_MAX_CYCLE_DIGITS = 10^5` digits; past the cap the expansion is returned flat. Only integer bases are implemented: Real/Rational bases such as `GoldenRatio` emit `::ibase`. `RealDigits` is `Listable` and `Protected`. It returns a nested structure rather than an element-wise array, so there is no ND kernel or `Compile[]` lowering. `tools/nd_fastpath_sweep.py` records it on the `OFF_BUFFER` list, so a packed machine-real list threads element by element.
 
 - `Protected`, `Listable`. Threads over lists in any argument position.
 - Works for `Integer`, `BigInt`, `Rational`, machine `Real`, and (under
@@ -159,9 +228,12 @@ Implementation only supports integer bases b >= 2.  Non-integer bases
 
 ### Notes
 
-`RealDigits[x]` gives `{digits, exp}` where the first digit is the coefficient of
-`10^(exp - 1)`. `RealDigits[x, b]` uses base `b`; `RealDigits[x, b, len]` returns
-`len` digits; `RealDigits[x, b, len, n]` starts from the coefficient of `b^n`.
-For rationals with non-terminating expansions the digit list ends in a nested
-list of the recurring block. For inexact reals, digits beyond the available
-precision are returned as `Indeterminate`. The sign of `x` is discarded.
+- `RealDigits[x]` returns `{digits, e}`; the first digit is the coefficient of `b^(e-1)`. The sign of `x` is discarded. `Listable`, `Protected`.
+- Exact `Integer`/`Rational` input with no length gives the full expansion; a non-terminating one ends in a nested list of the period (`{{3, {1, 4, 2, 8, 5, 7}}, 1}`).
+- For inexact input the default length is the available precision in base `b` (16 decimal digits for a machine real, more for an MPFR number). Positions below that precision come back as `Indeterminate`. Digits are the round-to-nearest digits of the stored value, so `RealDigits[123.55555]` gives the decimal digits you typed, not the binary tail.
+- `RealDigits[0.]` is `{{0}, -323}`, i.e. `-Floor[Accuracy[0.]]`. `RealDigits[0]` is `{{0}, 0}`.
+- The 4-argument form `RealDigits[x, b, len, n]` starts at the coefficient of `b^n`; `len = Automatic` keeps only the digits within the available precision.
+- Only integer bases `b >= 2` are supported. A Real or Rational base gives `RealDigits::ibase` and the call stays unevaluated, unlike Mathematica, which accepts non-integer bases. Complex input gives `RealDigits::realx`. All messages go through the message funnel, so `Quiet` and `Check` work on them.
+- `RealDigits` returns a nested `{digits, e}` structure, not an element-wise array, so it has no packed-array or `Compile[]` path. A machine-real list threads element by element through `Listable`.
+- To rebuild a number from its digits, use `FromDigits[d] b^(e - Length[d])` on a flat digit list `d`. The Mathematica form `FromDigits[{d, e}]` is not supported yet.
+- See also: `IntegerDigits`, `FromDigits`, `MantissaExponent`, `DigitCount`.

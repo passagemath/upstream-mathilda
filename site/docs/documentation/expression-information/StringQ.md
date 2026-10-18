@@ -16,7 +16,7 @@ string "" gives True. Called with any number of arguments other than one it leav
 
 </details>
 
-## Examples (14)
+## Examples (17)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -73,7 +73,9 @@ In[10]:= MachineNumberQ[1 + 2 I]
 Out[10]= False
 ```
 
-### Applications (4)
+### Applications (7)
+
+A string
 
 ```mathematica
 In[11]:= StringQ["AbC"]
@@ -87,6 +89,8 @@ In[12]:= StringQ[""]
 Out[12]= True
 ```
 
+A number is not a string
+
 ```mathematica
 In[13]:= StringQ[123]
 Out[13]= False
@@ -97,6 +101,27 @@ Not Listable: a list is not a string
 ```mathematica
 In[14]:= StringQ[{"a", "b"}]
 Out[14]= False
+```
+
+Map it for an element-wise test
+
+```mathematica
+In[15]:= StringQ /@ {"a", 1, x, "b"}
+Out[15]= {True, False, False, True}
+```
+
+As a predicate
+
+```mathematica
+In[16]:= Select[{1, "a", x, "bc"}, StringQ]
+Out[16]= {"a", "bc"}
+```
+
+ToString always returns a String
+
+```mathematica
+In[17]:= StringQ[ToString[42]]
+Out[17]= True
 ```
 
 ## Implementation notes
@@ -133,8 +158,10 @@ unevaluated. Attributes `Protected`.
 
 ### Notes
 
-`StringQ[expr]` is `True` exactly when `expr` is a string, including the empty
-string `""`. It is deliberately **not** `Listable`, so a list of strings is tested
-as a single object and gives `False` rather than threading element-wise — if you
-want the element-wise test, map it. Any arity other than one is a malformed call:
-`StringQ[]` emits `StringQ::argx` and stays unevaluated.
+- `StringQ[expr]` is `True` exactly when `expr` is a string, including `""`, and
+  `False` for everything else. The test is a single type-tag check.
+- It is deliberately **not** `Listable`, so a list is tested as a single object.
+  Map it for an element-wise answer.
+- Any arity other than one emits `StringQ::argx` through the message funnel and
+  leaves the call unevaluated. `Protected`.
+- See also: `StringMatchQ`, `NumberQ`, `MatchQ` with `_String`.

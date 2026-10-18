@@ -58,7 +58,7 @@ Out[8]= 2/3
 
 ```mathematica
 In[9]:= Product[1 - 1/k^2, {k, 2, n}]
-Out[9]= (1/2 (1 + n))/n
+Out[9]= (1 + n)/(2 n)
 
 In[10]:= Product[k, {k, 1, n}]
 Out[10]= Factorial[n]

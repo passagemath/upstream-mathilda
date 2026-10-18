@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphQ[h] gives True if h is a valid Hypergraph, and False otherwise.`**
+**`HypergraphQ[h]`**
+
+gives True if h is a valid Hypergraph, and False otherwise.
 
 ## Examples (7)
 

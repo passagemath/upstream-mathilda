@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeIndex[g, e] gives the position of the edge e in EdgeList[g] (an undirected edge matches either orientation; u->v and u<->v sugar are accepted); EdgeIndex[g, {e1, ...}] gives a list of positions.`**
+**`EdgeIndex[g, e]`**
+
+gives the position of the edge e in EdgeList\[g\] (an undirected edge matches either orientation; u-\>v and u\<-\>v sugar are accepted); EdgeIndex\[g, {e1, ...}\] gives a list of positions.
 
 ## Examples (9)
 

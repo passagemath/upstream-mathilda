@@ -5,7 +5,9 @@
 
 ## Description
 
-**`NeighborhoodGraph[g, v] gives the subgraph of g induced by v and its neighbours; NeighborhoodGraph[g, v, k] by the vertices within distance k of v (k a non-negative integer or Infinity), edge direction ignored. NeighborhoodGraph[g, {v1, ...}, k] uses several centres. Vertices: the centres, then each centre's new vertices in VertexList order.`**
+**`NeighborhoodGraph[g, v]`**
+
+gives the subgraph of g induced by v and its neighbours; NeighborhoodGraph\[g, v, k\] by the vertices within distance k of v (k a non-negative integer or Infinity), edge direction ignored. NeighborhoodGraph\[g, {v1, ...}, k\] uses several centres. Vertices: the centres, then each centre's new vertices in VertexList order.
 
 ## Examples (9)
 

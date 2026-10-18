@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.`**
+**`HoldForm[expr]`**
+
+prints as the expression expr, with expr maintained in an unevaluated form.
 
 ## Examples (4)
 

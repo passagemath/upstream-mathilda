@@ -5,13 +5,21 @@
 
 ## Description
 
-**`FromDigits[list] constructs an integer from a list of decimal digits, most-significant first.`**
+**`FromDigits[list]`**
 
-**`FromDigits[list, b] takes the digits to be given in base b.`**
+constructs an integer from a list of decimal digits, most-significant first.
 
-**`FromDigits["string"] constructs an integer from a string of digits, where letters a-z and A-Z denote digit values 10-35.`**
+**`FromDigits[list, b]`**
 
-**`FromDigits["string", b] takes the digits in the string to be given in base b.`**
+takes the digits to be given in base b.
+
+**`FromDigits["string"]`**
+
+constructs an integer from a string of digits, where letters a-z and A-Z denote digit values 10-35.
+
+**`FromDigits["string", b]`**
+
+takes the digits in the string to be given in base b.
 
 <details>
 <summary>Notes</summary>
@@ -94,6 +102,7 @@ Out[10]= d0 + b d1 + b^2 d2
 - Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_from_digits.c`](https://github.com/stblake/mathilda/blob/main/tests/test_from_digits.c)
+- Tests: [`tests/test_hash.c`](https://github.com/stblake/mathilda/blob/main/tests/test_hash.c)
 - Tests: [`tests/test_integer_string.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_string.c)
 
 ## Notes & additional examples

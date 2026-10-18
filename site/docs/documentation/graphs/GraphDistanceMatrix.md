@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDistanceMatrix[g] gives the matrix of shortest-path distances between all pairs of vertices of g, rows and columns in VertexList order; entry {i, j} is the distance from vertex i to vertex j (Infinity if unreachable). GraphDistanceMatrix[g, d] keeps only distances at most d. Integers for unweighted graphs, machine reals when g has EdgeWeight (edge weights as lengths).`**
+**`GraphDistanceMatrix[g]`**
+
+gives the matrix of shortest-path distances between all pairs of vertices of g, rows and columns in VertexList order; entry {i, j} is the distance from vertex i to vertex j (Infinity if unreachable). GraphDistanceMatrix\[g, d\] keeps only distances at most d. Integers for unweighted graphs, machine reals when g has EdgeWeight (edge weights as lengths).
 
 ## Examples (11)
 

@@ -17,7 +17,9 @@ returns the value Null.
 
 returns expr from the nearest enclosing construct whose head is h.
 
-**`Return[expr] exits control structures within the definition of a function,`**
+**`Return[expr]`**
+
+exits control structures within the definition of a function,
 
 <details>
 <summary>Notes</summary>

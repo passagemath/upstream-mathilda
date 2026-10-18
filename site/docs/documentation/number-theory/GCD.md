@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GCD[n1, n2, ...] gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.`**
+**`GCD[n1, n2, ...]`**
+
+gives the greatest common divisor of the integers ni, the largest integer dividing them all -- the quantity the Euclidean algorithm computes.
 
 <details>
 <summary>Notes</summary>
@@ -67,7 +69,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD computation over the integers and rationals.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_coprimeq.c`](https://github.com/stblake/mathilda/blob/main/tests/test_coprimeq.c)

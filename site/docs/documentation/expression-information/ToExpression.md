@@ -72,7 +72,7 @@ Out[8]= $Failed
 
 ## References
 
-**See also:** [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/)
+**See also:** [InputForm](../../expression-information/InputForm/), [FullForm](../../expression-information/FullForm/), [StandardForm](../../expression-information/StandardForm/)
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

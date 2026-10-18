@@ -13,7 +13,9 @@ gives the last element of FoldList\[f, x, list\]: f\[...f\[f\[f\[x, list\[\[1\]\
 
 is equivalent to Fold\[f, First\[list\], Rest\[list\]\].
 
-**`Fold[f, {a}] returns a. Fold[f, {}] remains unevaluated. f may be a`**
+**`Fold[f, {a}]`**
+
+returns a. Fold\[f, {}\] remains unevaluated. f may be a
 
 <details>
 <summary>Notes</summary>

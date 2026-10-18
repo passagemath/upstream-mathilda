@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageReflect[image] reflects top to bottom; ImageReflect[image, Left] or Right reflects left to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects the same axis, since reflecting to the top and reflecting to the bottom are one operation. For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; those two DECLINE on a plane, which has no depth axis, rather than being reinterpreted as some other axis and turning a mistake into a wrong picture. A reflection is a pure index permutation, so it interpolates nothing: reflecting twice about the same axis is the identity bit for bit, and reflections about different axes commute exactly.`**
+**`ImageReflect[image]`**
+
+reflects top to bottom; ImageReflect\[image, Left\] or Right reflects left to right, and Top or Bottom is the vertical reflection again -- either name of a pair selects the same axis, since reflecting to the top and reflecting to the bottom are one operation. For an Image3D, Front or Back selects the DEPTH axis, the pair Mathematica uses for volumes; those two DECLINE on a plane, which has no depth axis, rather than being reinterpreted as some other axis and turning a mistake into a wrong picture. A reflection is a pure index permutation, so it interpolates nothing: reflecting twice about the same axis is the identity bit for bit, and reflections about different axes commute exactly.
 
 ## Examples (41)
 

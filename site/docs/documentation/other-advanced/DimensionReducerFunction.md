@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension] is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.`**
+**`DimensionReducerFunction[method, {means, loadings...}, featureCount, reducedDimension]`**
+
+is the reusable reducer DimensionReduction returns. Apply it to a feature vector, or to a matrix of them, to project into the reduced space.
 
 ## Examples (2)
 

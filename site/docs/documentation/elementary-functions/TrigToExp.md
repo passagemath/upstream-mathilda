@@ -23,7 +23,7 @@ In[2]:= TrigToExp[ArcSin[x]]
 Out[2]= -I Log[I x + Sqrt[1 - x^2]]
 
 In[3]:= TrigToExp[{Sin[x], Cos[x], Tan[x]}]
-Out[3]= {(-1/2*I) E^(I x) + (1/2*I) E^(-I x), 1/2 E^(-I x) + 1/2 E^(I x), -I E^(I x)/(E^(-I x) + E^(I x)) + I E^(-I x)/(E^(-I x) + E^(I x))}
+Out[3]= {(-1/2*I) E^(I x) + (1/2*I) E^(-I x), 1/2 E^(-I x) + 1/2 E^(I x), -(I E^(I x))/(E^(-I x) + E^(I x)) + (I E^(-I x))/(E^(-I x) + E^(I x))}
 ```
 
 ### Applications (5)

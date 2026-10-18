@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Delete[expr, n] deletes the element at position n in expr.`**
+**`Delete[expr, n]`**
+
+deletes the element at position n in expr.
 
 ## Examples (6)
 

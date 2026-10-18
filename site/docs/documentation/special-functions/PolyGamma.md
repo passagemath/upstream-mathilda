@@ -22,49 +22,102 @@ Positive-integer arguments reduce to exact values: psi(m) to a rational minus Eu
 
 </details>
 
-## Examples (11)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
+
+### Basic examples (3)
+
+```mathematica
+In[1]:= PolyGamma[5]
+Out[1]= 25/12 - EulerGamma
+
+In[2]:= PolyGamma[0, 1/2]
+Out[2]= -EulerGamma - Log[4]
+
+In[3]:= PolyGamma[3, 2.5 + I]
+Out[3]= 0.0415431 - 0.163057*I
+```
 
 ### Worked examples (4)
 
 ```mathematica
-In[1]:= PolyGamma[n, -k]
-Out[1]= PolyGamma[n, -k]
+In[4]:= PolyGamma[n, -k]
+Out[4]= PolyGamma[n, -k]
 
-In[2]:= PolyGamma[0, Infinity]
-Out[2]= Infinity
+In[5]:= PolyGamma[0, Infinity]
+Out[5]= Infinity
 
-In[3]:= PolyGamma[n, Infinity]
-Out[3]= PolyGamma[n, Infinity]
+In[6]:= PolyGamma[n, Infinity]
+Out[6]= PolyGamma[n, Infinity]
 
-In[4]:= PolyGamma[n, Indeterminate]
-Out[4]= PolyGamma[n, Indeterminate]
+In[7]:= PolyGamma[n, Indeterminate]
+Out[7]= PolyGamma[n, Indeterminate]
 ```
 
-### Applications (7)
+### Applications (9)
+
+The digamma at a positive integer: a harmonic number minus EulerGamma
 
 ```mathematica
-In[5]:= PolyGamma[1]
-Out[5]= -EulerGamma
+In[8]:= PolyGamma[5]
+Out[8]= 25/12 - EulerGamma
+```
 
-In[6]:= PolyGamma[5]
-Out[6]= 25/12 - EulerGamma
+Odd orders at integers close through zeta at even arguments
 
-In[7]:= PolyGamma[1, 1]
-Out[7]= 1/6 Pi^2
+```mathematica
+In[9]:= {PolyGamma[1, 1], PolyGamma[3, 1]}
+Out[9]= {1/6 Pi^2, 1/15 Pi^4}
+```
 
-In[8]:= PolyGamma[3, 1]
-Out[8]= 1/15 Pi^4
+The Gauss digamma closed form at a half-integer
 
-In[9]:= N[PolyGamma[0, 3/2], 40]
-Out[9]= 0.036489973978576520559023667001244432806843
+```mathematica
+In[10]:= PolyGamma[0, 1/2]
+Out[10]= -EulerGamma - Log[4]
+```
 
-In[10]:= N[PolyGamma[2, 1 + I], 30]
-Out[10]= 0.3685529315879351717366345429807 + 0.7666528503450662124026953776316*I
+A machine argument is computed directly by the shared kernel
 
-In[11]:= PolyGamma[-1, z]
-Out[11]= LogGamma[z]
+```mathematica
+In[11]:= PolyGamma[2.5]
+Out[11]= 0.703157
+```
+
+Relatively accurate right at the positive zero of the digamma
+
+```mathematica
+In[12]:= PolyGamma[1.461632144968362]
+Out[12]= -3.07279e-16
+```
+
+Machine complex, order 3
+
+```mathematica
+In[13]:= PolyGamma[3, 2.5 + I]
+Out[13]= 0.0415431 - 0.163057*I
+```
+
+Arbitrary-precision complex through the Bernoulli asymptotic
+
+```mathematica
+In[14]:= N[PolyGamma[2, 1 + I], 30]
+Out[14]= 0.3685529315879351717366345429807 + 0.7666528503450662124026953776316*I
+```
+
+Order -1 is the log-gamma function
+
+```mathematica
+In[15]:= PolyGamma[-1, z]
+Out[15]= LogGamma[z]
+```
+
+Even orders at integers, and non-half-integer rationals, stay symbolic
+
+```mathematica
+In[16]:= {PolyGamma[2, 1], PolyGamma[0, 1/4]}
+Out[16]= {PolyGamma[2, 1], PolyGamma[0, 1/4]}
 ```
 
 ## Algorithm
@@ -88,6 +141,9 @@ Evaluation is layered so each kind of argument takes the cheapest exact or faste
                                                     (via zeta(n+1), even -> Bernoulli)
                                    n >= 1 even    : stays symbolic (zeta(odd), no
                                                     closed form)
+  machine real / complex z,   -> sfg_polygamma / sfg_polygamma_c (sf_machine_gamma.c),
+  integer 0 <= n <= 40           shared with the NDArray kernel and Compile[];
+                                 the one-argument form computes directly
   z inexact real (Real/MPFR)  -> numeric: mpfr_digamma for n = 0, otherwise the
                                    recurrence-shift + Bernoulli asymptotic series
   z inexact complex           -> the same asymptotic, in complex arithmetic
@@ -121,41 +177,37 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 ## Implementation notes
 
-**Algorithm.** `builtin_polygamma` evaluates `PolyGamma[n, z] = psi^(n)(z)`;
-`PolyGamma[z]` rewrites to `PolyGamma[0, z]`. Order `-1` emits the inert
-`LogGamma[z]`; `z` a non-positive integer is the pole `ComplexInfinity`. At a
-positive integer `z`: `n = 0` gives `H_{z-1} - EulerGamma`; odd `n >= 1` gives a
-rational plus rational·`Pi^(n+1)` (via exact Bernoulli / zeta); even `n >= 2`
-stays symbolic (zeta of an odd argument). At a positive rational the digamma
-(`n = 0`) uses the Gauss digamma theorem — but only half-integers auto-evaluate,
-general rationals being routed to the numeric path to avoid catastrophic
-cancellation. Numeric: an inexact real uses `mpfr_digamma` for `n = 0`, else the
-recurrence-shift + Bernoulli asymptotic series (A&S 6.4.11) in `mpfr`; an inexact
-complex argument runs the same asymptotic in complex arithmetic. Intervals route
-through `interval_polygamma`.
+**Algorithm.** `builtin_polygamma` evaluates `PolyGamma[n, z] = ψ⁽ⁿ⁾(z)`. It first tries `pg_machine`, the machine fast path. That path applies when `sf_machine_scalar_args` accepts the call and the order is an integer `0 <= n <= 40` (`SFG_POLYGAMMA_MAX_N`); the one-argument form counts as `n = 0`. It dispatches to `sf_machine_gamma.c`:
 
-**Data structures.** `Expr`; an exact `mpq` Bernoulli cache (process-lifetime);
-a local `pcx` (`mpfr_t` re/im) toolkit for the asymptotic; GMP. ND: unary kernel
-`NDKU_PolyGamma` (real digamma via `sf_machine_digamma`) **and** binary kernel
-`NDKB_PolyGamma = { ndk_PolyGamma_c, ... }` (order and argument), registered
-`REG_U` and `REG_B`, so `packed_aware` — the evaluator canonicalises
-`PolyGamma[x]` to `PolyGamma[0, x]`, so the binary kernel carries the real work.
-Attributes: `Listable`, `NumericFunction`, `Protected`.
+- **Real digamma** (`sfg_digamma`). On `[1, 2]`, a degree-22 Chebyshev interpolant of `ψ(x)/(x - x₀)` is multiplied back by `(x - x₀)`, with the zero `x₀ = 1.4616…` held as a double-double, so the answer stays relatively accurate right through the zero (the Cody–Strecok–Thacher technique). From `(0, 10)` the kernel reaches `[1, 2]` by integer shifts, which are exact in double. For `x >= 10` it uses the asymptotic series. For `x < 0` it uses reflection with an exactly reduced `π cot(π x)`.
+- **Real ψ⁽ⁿ⁾, n >= 1, x > 0** (`sfg_polygamma`). Upward recurrence to `x >= 10 + n/2`, then a Hurwitz-zeta asymptotic tail. Every term has one sign, each gets a first-order correction for the rounding of `x + j`, and the sum is compensated.
+- **Complex** (`sfg_polygamma_c`). For ψ, the kernel uses the Taylor tiles shared with `Gamma`/`LogGamma` (`-5 <= Re z < 10`, `|Im z| < 19/4`), a Taylor series about `x₀` within `0.35`, the asymptotic series after shifting to `Re z >= 10`, and reflection when `Re z < -5`. For `n >= 1`, it uses the recurrence plus the tail on `Re z >= 0`.
 
-**Complexity / limits.** Exact-argument cap `100000`, exact-order cap `256`,
-numeric-order cap `1024`. The asymptotic series needs the argument shifted up to
-`Re ~ 0.13 wp + n`; cost grows with the requested precision. `Compile[]` lowers
-both `PolyGamma[x]` and `PolyGamma[n, x]` at scalar and rank-1 array shapes
-(`Compiled -> True`).
+A machine `PolyGamma[x]` is answered directly and is identical to `PolyGamma[0, x]`. If the kernel declines (a pole, or `n >= 1` with `Re z < 0`), the layered path runs:
+
+1. `PolyGamma[z]` rewrites to `PolyGamma[0, z]`.
+2. `n = -1` gives the inert `LogGamma[z]`; `n <= -2` stays unevaluated.
+3. Special values: `Infinity` gives `Infinity` (n = 0) or `0` (n >= 1). `ComplexInfinity` and `Indeterminate` give `Indeterminate`. A non-positive integer `z` is a pole, `ComplexInfinity`.
+4. Positive-integer `z`: `n = 0` gives `H_{z-1} - EulerGamma`. Odd `n` gives a rational plus a rational multiple of `π^(n+1)` (through ζ(n+1) and Bernoulli numbers). Even `n` stays symbolic.
+5. `n = 0` at a positive half-integer: the Gauss digamma closed form, e.g. `-EulerGamma - Log[4]` at `1/2`. Other rationals stay unevaluated.
+6. Numeric: an inexact real uses `mpfr_digamma` for `n = 0`, otherwise a recurrence shift plus the A&S 6.4.11 Bernoulli asymptotic in MPFR. An inexact complex `z` uses the same asymptotic in the `pcx` toolkit.
+
+An `Interval` argument with an integer order goes to `interval_polygamma`.
+
+**Data structures.** `Expr`; a process-lifetime exact `mpq` Bernoulli cache; `pcx` (a pair of `mpfr_t`) for the complex asymptotic; `(re, im)` doubles and generated coefficient tables (`tools/sf_accuracy/gen_gamma_tables.py`) in the machine kernel. There are two ND kernels, both packed-aware. The unary `NDKU_PolyGamma = { ndk_PolyGamma_u, ndk_PolyGamma_r }` runs the real digamma or `sfg_polygamma_c(0, ·)`. The binary `NDKB_PolyGamma` runs `sfg_polygamma_c(n, ·)` and declines a non-integer, negative, or `> 40` order. `Compile[]` lowers `PolyGamma[x]` and `PolyGamma[n, x]` through these kernels, for real and complex scalars and for rank-1 arrays. The scalar, packed, `NDArray` and `Compile[]` answers agree bit for bit.
+
+**Complexity / limits.** The machine kernels are `O(1)`, about 0.14 µs real and 0.35 µs complex. Real ψ has a median error of 0.5 ulp and a maximum of 3.5 ulp; complex has a median of 0.7 ulp, with maxima beside ψ's real zero. The MPFR asymptotic needs the argument shifted up to `Re ~ 0.13 wp + n`, so its cost grows with the precision. Limits: exact argument cap `100000`, exact order cap `256`, numeric order cap `1024`. Complex or fractional orders stay unevaluated. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## References
 
-**See also:** [EulerGamma](../../mathematical-constants/EulerGamma/), [Real](../../other-advanced/Real/), [Series](../../power-series/Series/), [D](../../calculus/D/)
+**See also:** [EulerGamma](../../mathematical-constants/EulerGamma/), [NDArray](../../linear-algebra/NDArray/), [Gamma](../../special-functions/Gamma/), [Series](../../power-series/Series/), [D](../../calculus/D/)
 
 - DLMF §5.15 — the polygamma functions.
 - M. Abramowitz & I. A. Stegun, Handbook of Mathematical Functions, §6.4.11 — the asymptotic expansion.
+- W. J. Cody, A. J. Strecok and H. C. Thacher, *Chebyshev approximations for the psi function*, Math. Comp. 27 (1973) 123–127.
+- DLMF §25.11 — the Hurwitz zeta tail used for psi^(n), n >= 1.
 - Source: [`src/special_functions/polygamma.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/polygamma.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_beta.c)
@@ -167,10 +219,7 @@ both `PolyGamma[x]` and `PolyGamma[n, x]` at scalar and rank-1 array shapes
 
 ### Notes
 
-`PolyGamma[z]` is the digamma function ψ(z), stored internally as
-`PolyGamma[0, z]`; `PolyGamma[n, z]` is its n-th derivative ψ⁽ⁿ⁾(z). Positive
-integer arguments reduce exactly: ψ(m) to a rational minus `EulerGamma`, and
-ψ⁽ⁿ⁾(m) for odd `n` to a rational plus a rational multiple of `Pi^(n+1)` (even
-orders are left symbolic). Non-positive integer arguments give `ComplexInfinity`
-(the poles). Inexact real and complex arguments evaluate numerically at machine
-or MPFR precision, and `PolyGamma[-1, z]` returns `LogGamma[z]`. Listable.
+- `PolyGamma[z]` is the digamma ψ(z) (`PolyGamma[0, z]`); `PolyGamma[n, z]` is ψ⁽ⁿ⁾(z). Non-positive integers are poles (`ComplexInfinity`); `PolyGamma[-1, z]` returns `LogGamma[z]`.
+- Exact closed forms: ψ(m) = `H[m-1] - EulerGamma`, odd-order ψ⁽ⁿ⁾(m) as rational plus rational·`Pi^(n+1)`, and the Gauss digamma theorem at positive half-integers. `ζ(odd)` values (even order at integers) are left symbolic.
+- Machine real or complex `z` with integer order `0 ≤ n ≤ 40` runs on the `sf_machine_gamma.c` kernels, shared bit for bit with packed lists, `NDArray` and `Compile[]` (both `PolyGamma[x]` and `PolyGamma[n, x]` compile); otherwise MPFR (`mpfr_digamma`, or the recurrence-shifted Bernoulli asymptotic).
+- Complex or fractional orders stay unevaluated. Attributes: `Listable`, `NumericFunction`, `Protected`. See also `Gamma`, `LogGamma`, `HarmonicNumber`, `Zeta`.

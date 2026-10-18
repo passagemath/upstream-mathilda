@@ -5,11 +5,17 @@
 
 ## Description
 
-**`IntegerString[n] gives a string consisting of the decimal digits in the integer n.`**
+**`IntegerString[n]`**
 
-**`IntegerString[n, b] gives a string consisting of the base-b digits in n; digit values 10 to 35 use the letters a-z.`**
+gives a string consisting of the decimal digits in the integer n.
 
-**`IntegerString[n, b, len] pads the string on the left with zero digits to give a string of length len; if len is less than the number of digits in n, the len least-significant digits are returned.`**
+**`IntegerString[n, b]`**
+
+gives a string consisting of the base-b digits in n; digit values 10 to 35 use the letters a-z.
+
+**`IntegerString[n, b, len]`**
+
+pads the string on the left with zero digits to give a string of length len; if len is less than the number of digits in n, the len least-significant digits are returned.
 
 <details>
 <summary>Notes</summary>

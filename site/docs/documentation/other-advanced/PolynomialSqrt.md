@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialSqrt[p] gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt[p, x] treats p as a polynomial in x.`**
+**`PolynomialSqrt[p]`**
+
+gives a polynomial s with s^2 == p when p is a perfect square (every non-constant irreducible factor has even multiplicity; the numeric content is carried through Sqrt), and $Failed otherwise. PolynomialSqrt\[p, x\] treats p as a polynomial in x.
 
 ## Examples (3)
 

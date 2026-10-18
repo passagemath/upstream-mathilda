@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDiameter[g] gives the greatest distance between two vertices of g: the maximum vertex eccentricity. Infinity unless g is (strongly) connected.`**
+**`GraphDiameter[g]`**
+
+gives the greatest distance between two vertices of g: the maximum vertex eccentricity. Infinity unless g is (strongly) connected.
 
 ## Examples (11)
 

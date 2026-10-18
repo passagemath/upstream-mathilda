@@ -20,7 +20,18 @@ Solves over the domain dom.  Default Complexes; Reals filters down to real roots
 <details>
 <summary>Notes</summary>
 
-Options: Cubics              -\> False     (radical form for cubics) Quartics            -\> False     (radical form for quartics) InverseFunctions    -\> Automatic (use inverse-function peel) GeneratedParameters -\> C         (head for parameters C\[k\]) VerifySolutions     -\> Automatic (True: drop non-verifying) Modulus             -\> 0         (solve over Z/pZ when p\>0) Solves single polynomial equalities, radical equations, linear systems, zero-dimensional nonlinear polynomial systems (via a lexicographic Groebner basis and triangular back-substitution; positive-dimensional systems emit Solve::nsdim and stay unevaluated), a single non-affine equation in several variables (solved for the earliest variable it is polynomial in, e.g. x y == 1 -\> {{x -\> 1/y}}), equations that are a polynomial in one transcendental kernel g(x) (u = g(x); e.g. E^(2x)-3E^x+2 and single-variable equations whose outermost dependence is an elementary invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their hyperbolic counterparts, the inverse trig/hyperbolic forms, and Power\[g, n\] for integer n \>= 2).  Multi-branch heads introduce an integer parameter C\[k\] wrapped in Solve::ifun the first time inverse functions are used.
+Options:
+
+```text
+Cubics              -> False     (radical form for cubics)
+Quartics            -> False     (radical form for quartics)
+InverseFunctions    -> Automatic (use inverse-function peel)
+GeneratedParameters -> C         (head for parameters C[k])
+VerifySolutions     -> Automatic (True: drop non-verifying)
+Modulus             -> 0         (solve over Z/pZ when p>0)
+```
+
+Solves single polynomial equalities, radical equations, linear systems, zero-dimensional nonlinear polynomial systems (via a lexicographic Groebner basis and triangular back-substitution; positive-dimensional systems emit Solve::nsdim and stay unevaluated), a single non-affine equation in several variables (solved for the earliest variable it is polynomial in, e.g. x y == 1 -\> {{x -\> 1/y}}), equations that are a polynomial in one transcendental kernel g(x) (u = g(x); e.g. E^(2x)-3E^x+2 and single-variable equations whose outermost dependence is an elementary invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their hyperbolic counterparts, the inverse trig/hyperbolic forms, and Power\[g, n\] for integer n \>= 2).  Multi-branch heads introduce an integer parameter C\[k\] wrapped in Solve::ifun the first time inverse functions are used.
 
 </details>
 
@@ -151,7 +162,7 @@ In[37]:= Solve[x y == 6 && x + y == 5, {x, y}, Integers]
 Out[37]= {{x -> 3, y -> 2}, {x -> 2, y -> 3}}
 
 In[38]:= Solve[a x^2 + b x + c == 0, x]
-Out[38]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
+Out[38]= {{x -> (-b + Sqrt[b^2 - 4 a c])/(2 a)}, {x -> (-b - Sqrt[b^2 - 4 a c])/(2 a)}}
 
 In[39]:= Solve[x^4 - 1 == 0, x]
 Out[39]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
@@ -957,7 +968,7 @@ The `dom` third argument selects the solution domain: default `Complexes`; `Real
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra" (3rd ed.), Ch. 14 (polynomial roots and resolution).
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 9 (solving systems).
-- Source: [`src/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve.c)
+- Source: [`src/solve/solve.c`](https://github.com/stblake/mathilda/blob/main/src/solve/solve.c)
 - Specification: [`docs/spec/builtins/solutions-of-equations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/solutions-of-equations.md)
 - Tests: [`tests/test_dsolve.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dsolve.c)
 - Tests: [`tests/test_integrate_line.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_line.c)

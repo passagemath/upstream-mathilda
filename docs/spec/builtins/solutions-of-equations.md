@@ -1261,6 +1261,32 @@ Quantifiers (`Exists`, `ForAll`) embedded in a `Reduce` statement, and the
 `Resolve` head, are eliminated by the quantifier-elimination engine documented
 below.
 
+```mathematica
+In[1]:= Reduce[a x == b, x]
+Out[1]= a != 0 && x == b/a || a == 0 && b == 0
+
+In[2]:= Reduce[x^2 < 1]
+Out[2]= -1 < x < 1
+
+In[3]:= Reduce[1/x < 1, x, Reals]
+Out[3]= x < 0 || x > 1
+
+In[4]:= Reduce[Sin[x] == 1/2 && 0 < x < 2 Pi, x]
+Out[4]= x == 1/6 Pi || x == 5/6 Pi
+
+In[5]:= Reduce[x y z > 0, {x, y, z}, Reals]
+Out[5]= x < 0 && (y < 0 && z > 0 || y > 0 && z < 0) || x > 0 && (y < 0 && z < 0 || y > 0 && z > 0)
+
+In[6]:= Reduce[x + y + z == 1 && x > 0 && y > 0 && z > 0 && x y + x z + y z < 9 x y z]
+Out[6]= False
+
+In[7]:= Reduce[2 x + 3 y == 1, {x, y}, Integers]
+Out[7]= Element[C[1], Integers] && x == -1 + 3 C[1] && y == 1 - 2 C[1]
+
+In[8]:= Reduce[x^2 == 2, x, Modulus -> 7]
+Out[8]= x == 3 || x == 4
+```
+
 ## Exists
 
 `Exists[x, expr]` / `Exists[{x1, x2, ...}, expr]` / `Exists[x, cond, expr]` — the
@@ -1368,6 +1394,26 @@ coefficient (`Exists[x, a x^2 + b x + c == 0]`, mixing a degree drop with an
 irrational boundary), a transcendental body (`Exists[x, Sin[x] == a]`), a
 non-rational free-variable breakpoint the 1-D emitter cannot spell, or any
 undecidable sign — left unevaluated rather than guessed.
+
+```mathematica
+In[1]:= Resolve[ForAll[x, x^2 + a x + 1 > 0], Reals]
+Out[1]= -2 < a < 2
+
+In[2]:= Resolve[Exists[x, x^2 + b x + c == 0], Reals]
+Out[2]= c <= 1/4 b^2
+
+In[3]:= Resolve[ForAll[x, Abs[x] < d, x^2 < 9], Reals]
+Out[3]= d <= 3
+
+In[4]:= Resolve[ForAll[eps, eps > 0, Exists[del, del > 0, ForAll[x, 0 < Abs[x - 2] < del, Abs[(3 x - 1) - 5] < eps]]], Reals]
+Out[4]= True
+
+In[5]:= Resolve[ForAll[eps, eps > 0, Exists[nn, nn > 0, ForAll[x, x > nn, Abs[1/x] < eps]]], Reals]
+Out[5]= True
+
+In[6]:= Resolve[Exists[{x, y, z}, x + y + z == 1 && x >= 0 && y >= 0 && z >= 0 && x^2 + y^2 + z^2 > 4], Reals]
+Out[6]= False
+```
 
 ## LogicalExpand
 

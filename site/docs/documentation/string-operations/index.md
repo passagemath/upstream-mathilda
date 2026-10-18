@@ -1,12 +1,21 @@
 # String Operations
 
-27 built-in function(s) in this category.
+44 built-in function(s) in this category.
 
+- [`Alphabet`](Alphabet.md) — Alphabet[]  _(Stable)_
+- [`Capitalize`](Capitalize.md) — Capitalize["string"]  _(Stable)_
+- [`CharacterRange`](CharacterRange.md) — CharacterRange["c1", "c2"]  _(Stable)_
 - [`Characters`](Characters.md) — Characters["string"]  _(Stable)_
+- [`Decapitalize`](Decapitalize.md) — Decapitalize["string"]  _(Stable)_
+- [`DigitQ`](DigitQ.md) — DigitQ["string"]  _(Stable)_
+- [`FromCharacterCode`](FromCharacterCode.md) — FromCharacterCode[n]  _(Stable)_
+- [`LetterQ`](LetterQ.md) — LetterQ["string"]  _(Stable)_
+- [`LowerCaseQ`](LowerCaseQ.md) — LowerCaseQ["string"]  _(Stable)_
 - [`RegularExpression`](RegularExpression.md) — RegularExpression["regex"]  _(Stable)_
 - [`StringCases`](StringCases.md) — StringCases["string", patt]  _(Stable)_
 - [`StringContainsQ`](StringContainsQ.md) — StringContainsQ["string", patt]  _(Stable)_
 - [`StringCount`](StringCount.md) — StringCount["string", "sub"]  _(Stable)_
+- [`StringDelete`](StringDelete.md) — StringDelete["string", patt]  _(Stable)_
 - [`StringDrop`](StringDrop.md) — StringDrop["string", n]  _(Stable)_
 - [`StringEndsQ`](StringEndsQ.md) — StringEndsQ["string", patt]  _(Stable)_
 - [`StringExtract`](StringExtract.md) — StringExtract["string", n]  _(Stable)_
@@ -22,10 +31,18 @@
 - [`StringPosition`](StringPosition.md) — StringPosition["string", patt]  _(Stable)_
 - [`StringRepeat`](StringRepeat.md) — StringRepeat["string", n]  _(Stable)_
 - [`StringReplace`](StringReplace.md) — StringReplace["string", patt -> rep]  _(Stable)_
+- [`StringReplaceList`](StringReplaceList.md) — StringReplaceList["string", rules]  _(Stable)_
 - [`StringReplacePart`](StringReplacePart.md) — StringReplacePart["string", "snew", {m, n}]  _(Stable)_
 - [`StringReverse`](StringReverse.md) — StringReverse["string"]  _(Stable)_
 - [`StringRiffle`](StringRiffle.md) — StringRiffle[{s1, s2, ...}]  _(Stable)_
+- [`StringRotateLeft`](StringRotateLeft.md) — StringRotateLeft["string", n]  _(Stable)_
+- [`StringRotateRight`](StringRotateRight.md) — StringRotateRight["string", n]  _(Stable)_
 - [`StringSplit`](StringSplit.md) — StringSplit["string"]  _(Stable)_
 - [`StringStartsQ`](StringStartsQ.md) — StringStartsQ["string", patt]  _(Stable)_
 - [`StringTake`](StringTake.md) — StringTake["string", n]  _(Stable)_
+- [`StringTakeDrop`](StringTakeDrop.md) — StringTakeDrop["string", spec]  _(Stable)_
 - [`StringTrim`](StringTrim.md) — StringTrim["string"]  _(Stable)_
+- [`ToCharacterCode`](ToCharacterCode.md) — ToCharacterCode["string"]  _(Stable)_
+- [`ToLowerCase`](ToLowerCase.md) — ToLowerCase["string"]  _(Stable)_
+- [`ToUpperCase`](ToUpperCase.md) — ToUpperCase["string"]  _(Stable)_
+- [`UpperCaseQ`](UpperCaseQ.md) — UpperCaseQ["string"]  _(Stable)_

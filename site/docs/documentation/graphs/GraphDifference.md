@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDifference[g1, g2] gives the graph on the union of the vertex sets whose edges are those of g1 not in g2, in canonical order. Weights are dropped.`**
+**`GraphDifference[g1, g2]`**
+
+gives the graph on the union of the vertex sets whose edges are those of g1 not in g2, in canonical order. Weights are dropped.
 
 ## Examples (9)
 

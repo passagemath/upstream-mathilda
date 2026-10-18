@@ -16,32 +16,73 @@ Protect has attribute HoldAll.
 
 </details>
 
-## Examples (4)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (5)
 
 ```mathematica
 In[1]:= f[x_] := x^2; Protect[f]
 Out[1]= {"f"}
 
-In[2]:= Unprotect[f]
-Out[2]= {"f"}
+In[2]:= f[x_, y_] := x + y
+
+In[3]:= Unprotect[f]
+Out[3]= {"f"}
+
+In[4]:= Protect[f]; Protect[f]
+Out[4]= {}
+
+In[5]:= Check[f[x_] := 0, "refused"]
+Out[5]= "refused"
 ```
 
-### Applications (2)
+### Applications (7)
 
 Returns the names whose Protected attribute was newly set
 
 ```mathematica
-In[3]:= Protect[foo, bar]
-Out[3]= {"foo", "bar"}
+In[6]:= Protect[foo, bar]
+Out[6]= {"foo", "bar"}
 ```
 
 ```mathematica
-In[4]:= MemberQ[Attributes[foo], Protected]
-Out[4]= True
+In[7]:= MemberQ[Attributes[foo], Protected]
+Out[7]= True
+```
+
+Already protected: nothing changed
+
+```mathematica
+In[8]:= Protect[foo]
+Out[8]= {}
+```
+
+Assignment to a protected symbol emits Set::wrsym
+
+```mathematica
+In[9]:= Check[foo = 6, "refused"]
+Out[9]= "refused"
+```
+
+The value was not assigned
+
+```mathematica
+In[10]:= foo
+Out[10]= foo
+```
+
+A list of specs; strings name symbols
+
+```mathematica
+In[11]:= Protect[{"k1", k2}]
+Out[11]= {"k1", "k2"}
+```
+
+```mathematica
+In[12]:= Attributes[Protect]
+Out[12]= {HoldAll, Protected}
 ```
 
 ## Implementation notes
@@ -61,7 +102,10 @@ already-protected symbol yields `{}`. The `Protected` attribute is what the
 evaluator and `Set` consult to refuse redefinition of a symbol.
 
 **Attributes & limits.** `Protect` carries `HoldAll | Protected`, so its
-arguments reach the handler as unevaluated symbol names.
+arguments reach the handler as unevaluated symbol names. Assigning to a protected
+symbol emits `Set::wrsym` / `SetDelayed::wrsym` through the message funnel, so
+`Check` sees the refusal. `Protected` is the only sealing attribute (since
+v0.301), and `Unprotect` always lifts it.
 
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
 - The typical sequence for adding rules to an existing symbol is
@@ -81,11 +125,12 @@ arguments reach the handler as unevaluated symbol names.
 
 ### Notes
 
-`Protect[s1, s2, ...]` sets the `Protected` attribute on each symbol, which is
-what the evaluator and `Set` consult to refuse redefinition. It returns a list of
-the names (as strings) whose state actually *changed*, so re-protecting an
-already-protected symbol gives `{}`.
-
-Arguments may be symbols, strings, or a flat list of them. `Protected` is the
-attribute every built-in carries; `Unprotect`
-is its inverse and the usual first step before extending a built-in's behaviour.
+- `Protect[s1, s2, ...]` sets the `Protected` attribute on each symbol. That is
+  what `Set`, `SetDelayed`, `Unset`, `ClearAll`, `Remove` and `SetAttributes`
+  consult before changing a symbol.
+- It returns the names, as strings, whose state actually changed, so protecting
+  an already-protected symbol gives `{}`.
+- Arguments may be symbols, strings, or a flat list of them. `HoldAll | Protected`.
+- Every built-in carries `Protected`, and `Unprotect` always lifts it. No
+  attribute seals a symbol permanently (since v0.301).
+- See also: `Unprotect`, `Attributes`, `SetAttributes`.

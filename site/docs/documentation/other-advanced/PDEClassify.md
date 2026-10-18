@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PDEClassify[eqn, u, {v1, v2}] classifies a second-order linear PDE by the discriminant Δ = B² − 4 A C of its principal part A u_{v1 v1} + B u_{v1 v2} + C u_{v2 v2}: "Hyperbolic" (Δ > 0, e.g. the wave equation), "Parabolic" (Δ == 0, e.g. the heat equation), or "Elliptic" (Δ < 0, e.g. Laplace's equation). Only the highest-order terms determine the type. A discriminant whose sign is not a decidable constant (a mixed-type / parameter-dependent equation such as Tricomi's y u_xx + u_yy == 0) leaves the call unevaluated.`**
+**`PDEClassify[eqn, u, {v1, v2}]`**
+
+classifies a second-order linear PDE by the discriminant Δ = B² − 4 A C of its principal part A u\_{v1 v1} + B u\_{v1 v2} + C u\_{v2 v2}: "Hyperbolic" (Δ \> 0, e.g. the wave equation), "Parabolic" (Δ == 0, e.g. the heat equation), or "Elliptic" (Δ \< 0, e.g. Laplace's equation). Only the highest-order terms determine the type. A discriminant whose sign is not a decidable constant (a mixed-type / parameter-dependent equation such as Tricomi's y u\_xx + u\_yy == 0) leaves the call unevaluated.
 
 ## Examples (3)
 

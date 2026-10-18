@@ -5,9 +5,9 @@
 
 ## Description
 
-**`AddTo[x, dx] or x += dx`**
+**`AddTo[x, dx]`**
 
-adds dx to x and returns the new value of x. x += dx is equivalent to x = x + dx.
+or x += dx adds dx to x and returns the new value of x. x += dx is equivalent to x = x + dx.
 
 <details>
 <summary>Notes</summary>

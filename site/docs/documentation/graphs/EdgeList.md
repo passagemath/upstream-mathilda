@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeList[g] gives the list of edges of the graph g.`**
+**`EdgeList[g]`**
+
+gives the list of edges of the graph g.
 
 ## Examples (7)
 

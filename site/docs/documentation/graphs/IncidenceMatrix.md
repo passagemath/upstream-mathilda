@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IncidenceMatrix[g] gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).`**
+**`IncidenceMatrix[g]`**
+
+gives the vertex-edge incidence matrix of g (oriented: -1 tail, +1 head for directed edges).
 
 ## Examples (6)
 

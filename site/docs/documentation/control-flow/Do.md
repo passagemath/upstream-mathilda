@@ -5,25 +5,45 @@
 
 ## Description
 
-**`Do[expr, n] evaluates expr n times.`**
+**`Do[expr, n]`**
 
-**`Do[expr, {i, imax}] evaluates expr with i successively taking on values 1 through imax.`**
+evaluates expr n times.
 
-**`Do[expr, {i, imin, imax}] starts with i = imin.`**
+**`Do[expr, {i, imax}]`**
 
-**`Do[expr, {i, imin, imax, di}] uses steps di.`**
+evaluates expr with i successively taking on values 1 through imax.
 
-**`Do[expr, {i, {i1, i2, ...}}] uses the successive values i1, i2, ....`**
+**`Do[expr, {i, imin, imax}]`**
 
-**`Do[expr, {n}] evaluates expr n times with no iteration variable.`**
+starts with i = imin.
 
-**`Do[expr, iter1, iter2, ...] iterates over multiple variables, with the rightmost varying fastest.`**
+**`Do[expr, {i, imin, imax, di}]`**
 
-**`Break[] inside expr exits the innermost Do loop.`**
+uses steps di.
 
-**`Continue[] inside expr skips the rest of expr and proceeds to the next iteration.`**
+**`Do[expr, {i, {i1, i2, ...}}]`**
 
-**`Return[v] inside expr causes the enclosing function to yield v; Do itself returns Null.`**
+uses the successive values i1, i2, ....
+
+**`Do[expr, {n}]`**
+
+evaluates expr n times with no iteration variable.
+
+**`Do[expr, iter1, iter2, ...]`**
+
+iterates over multiple variables, with the rightmost varying fastest.
+
+**`Break[]`**
+
+inside expr exits the innermost Do loop.
+
+**`Continue[]`**
+
+inside expr skips the rest of expr and proceeds to the next iteration.
+
+**`Return[v]`**
+
+inside expr causes the enclosing function to yield v; Do itself returns Null.
 
 <details>
 <summary>Notes</summary>

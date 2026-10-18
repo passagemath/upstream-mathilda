@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DegreeCentrality[g] gives the list of vertex degrees of g; DegreeCentrality[g, "In"] and [g, "Out"] count incoming and outgoing edges. In a mixed graph an undirected edge counts as one edge in each direction.`**
+**`DegreeCentrality[g]`**
+
+gives the list of vertex degrees of g; DegreeCentrality\[g, "In"\] and \[g, "Out"\] count incoming and outgoing edges. In a mixed graph an undirected edge counts as one edge in each direction.
 
 ## Examples (10)
 

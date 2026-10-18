@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LearnedDistribution[method, parameters, dimension, extra] is the fitted distribution LearnDistribution returns. Use it with PDF. Unlike a SPECIFIED distribution such as NormalDistribution[mu, sigma], it prints elided, because its parameters are derived rather than user-supplied.`**
+**`LearnedDistribution[method, parameters, dimension, extra]`**
+
+is the fitted distribution LearnDistribution returns. Use it with PDF. Unlike a SPECIFIED distribution such as NormalDistribution\[mu, sigma\], it prints elided, because its parameters are derived rather than user-supplied.
 
 ## Examples (3)
 

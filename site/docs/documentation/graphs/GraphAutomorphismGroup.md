@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphAutomorphismGroup[g] gives the automorphism group of g as PermutationGroup[{Cycles[...], ...}] acting on vertex positions.`**
+**`GraphAutomorphismGroup[g]`**
+
+gives the automorphism group of g as PermutationGroup\[{Cycles\[...\], ...}\] acting on vertex positions.
 
 ## Examples (9)
 

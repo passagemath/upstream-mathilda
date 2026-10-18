@@ -50,7 +50,9 @@ DOC_OUT = SITE / "docs" / "documentation"
 ASSETS = SITE / "docs" / "assets"
 OVERLAYS = SITE / "overlays"
 IMPL = SITE / "impl"
-MATHILDA = ROOT / "Mathilda"
+# $MATHILDA_BIN overrides the binary, e.g. a clean build of HEAD when the working
+# tree carries another session's uncommitted changes.
+MATHILDA = Path(os.environ.get("MATHILDA_BIN", ROOT / "Mathilda"))
 
 # Every documented example is re-verified by running it, and some of them call Plot or Manipulate --
 # which opened a Raylib window each, dozens of them, over whatever the user was doing. The binary
@@ -231,7 +233,27 @@ def _parse_concatenated_literals(text, i):
     return "".join(pieces)
 
 
-DOC_CALL_RE = re.compile(r'symtab_set_docstring\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,')
+_IDENT_RE = re.compile(r'\s*([A-Za-z_]\w*)\s*\)')
+
+
+def _resolve_docstring_arg(text, i):
+    """Docstring argument starting at index i: concatenated literals, or -- when
+    the argument is a bare identifier -- the literals of that identifier's
+    same-file definition, ``#define NAME "..."`` or ``static const char NAME[] =
+    "...";`` (FactorInteger keeps its long docstring in such a constant)."""
+    doc = _parse_concatenated_literals(text, i)
+    if doc:
+        return doc
+    m = _IDENT_RE.match(text, i)
+    if not m:
+        return doc
+    ident = re.escape(m.group(1))
+    d = re.search(r'#define\s+' + ident + r'\b', text) or \
+        re.search(r'\b' + ident + r'\s*\[\s*\]\s*=', text)
+    return _parse_concatenated_literals(text, d.end()) if d else doc
+
+
+DOC_CALL_RE =re.compile(r'symtab_set_docstring\s*\(\s*"((?:[^"\\]|\\.)*)"\s*,')
 
 # Some modules register through a local helper -- ``static void reg(const char*
 # name, BuiltinFunc f, const char* doc)`` whose body calls
@@ -259,7 +281,7 @@ def discover_builtins():
             if "`" in raw_name:
                 continue
             name = raw_name.encode().decode("unicode_escape")
-            doc = _parse_concatenated_literals(text, m.end())
+            doc = _resolve_docstring_arg(text, m.end())
             rel = cfile.relative_to(ROOT).as_posix()
             # First registration wins (info.c is the canonical hub and is scanned
             # in sorted order; prefer a longer docstring if a later one is richer).
@@ -772,6 +794,28 @@ def load_impl(name):
 SIG_RE = re.compile(r"^[A-Z$][A-Za-z0-9$]*(\[|\s*$)")
 
 
+def _split_call(line):
+    """Split ``Name[args] gives ...`` into the call and the prose after it, for
+    docstrings that start the explanation on the signature line. A line that
+    is only a call (or has no balanced bracket) is returned unsplit."""
+    i = line.find("[")
+    if i < 0:
+        return line, ""
+    depth = 0
+    for j in range(i, len(line)):
+        if line[j] == "[":
+            depth += 1
+        elif line[j] == "]":
+            depth -= 1
+            if depth == 0:
+                rest = line[j + 1:].strip()
+                # Keep operator tails ("f[x] // g", "a[[i]] = v") in the call.
+                if rest[:1].isalpha():
+                    return line[:j + 1], rest
+                return line, ""
+    return line, ""
+
+
 def render_docstring(doc):
     """Render the docstring as a signature list, with trailing notes collapsed.
 
@@ -806,10 +850,16 @@ def render_docstring(doc):
         if not line.strip():
             continue
         if line.startswith("    "):
-            (expl if sig is not None else notes).append(line.strip())
+            # Notes keep indentation beyond the base level, so a column
+            # continuation can be recognised in _render_note_lines.
+            if sig is not None:
+                expl.append(line.strip())
+            else:
+                notes.append(line[4:])
         elif SIG_RE.match(line.strip()):
             flush()
-            sig, expl = line.strip(), []
+            sig, rest = _split_call(line.strip())
+            expl = [rest] if rest else []
         else:
             # Prose, not a call: everything from here is a note.
             flush()
@@ -824,12 +874,45 @@ def render_docstring(doc):
         if text:
             out.extend([esc(text), ""])
     if not forms:
-        out.append(esc(" ".join(notes)))
+        out.append(esc(" ".join(l.strip() for l in notes)))
         notes = []
     if notes:
-        out.extend(["<details>", "<summary>Notes</summary>", "",
-                    esc(" ".join(notes)), "", "</details>", ""])
+        out.extend(["<details>", "<summary>Notes</summary>", ""]
+                   + _render_note_lines(notes, esc) + ["</details>", ""])
     return "\n".join(out).strip()
+
+
+# A docstring line laid out in columns (a gap of 3+ spaces between tokens), e.g.
+# FactorInteger's method table: joining it into prose scrambles the columns.
+TABULAR_RE = re.compile(r"\S {3,}\S")
+
+
+def _render_note_lines(lines, esc):
+    """Prose lines join into one paragraph; each run of column-aligned lines
+    becomes a preformatted block so the alignment survives."""
+    out, prose, table = [], [], []
+
+    def flush_prose():
+        if prose:
+            out.extend([esc(" ".join(prose)), ""])
+            prose.clear()
+
+    def flush_table():
+        if table:
+            out.extend(["```text"] + table + ["```", ""])
+            table.clear()
+
+    for line in lines:
+        # A row, or an indented continuation of the row above it.
+        if TABULAR_RE.search(line.strip()) or (table and line.startswith("   ")):
+            flush_prose()
+            table.append(line.rstrip())
+        else:
+            flush_table()
+            prose.append(line.strip())
+    flush_prose()
+    flush_table()
+    return out
 
 
 OPTION_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*\s*->")
@@ -1833,8 +1916,16 @@ def main():
         source_module = builtins[name]["module"]
         if impl:
             im = impl["meta"]
-            if isinstance(im.get("source"), str) and im["source"].strip():
-                source_module = im["source"].strip()
+            # `source:` may be one path, a comma-separated string or a list, and
+            # the first EXISTING path wins: a card that names a file since moved
+            # keeps the registration module rather than publish a dead link.
+            src = im.get("source") or []
+            if isinstance(src, str):
+                src = src.split(",")
+            for s in src:
+                if isinstance(s, str) and s.strip() and (ROOT / s.strip()).is_file():
+                    source_module = s.strip()
+                    break
             if isinstance(im.get("references"), list) and im["references"]:
                 impl_refs = im["references"]
             impl_body = impl["body"] or None

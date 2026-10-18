@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- equal, by Euler's theorem, to the number of partitions into odd parts.`**
+**`PartitionsQ[n]`**
+
+gives the number q(n) of partitions of the integer n into distinct parts -- equal, by Euler's theorem, to the number of partitions into odd parts.
 
 <details>
 <summary>Notes</summary>

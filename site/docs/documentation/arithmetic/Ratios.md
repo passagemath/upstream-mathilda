@@ -9,11 +9,17 @@
 
 gives the successive ratios list\[\[k+1\]\]/list\[\[k\]\] of the elements of list (length l - 1).
 
-**`Ratios[list, n] gives the n-th iterated ratios (length l - n); n must`**
+**`Ratios[list, n]`**
 
-**`Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at`**
+gives the n-th iterated ratios (length l - n); n must
 
-**`FoldList[Times, x, Ratios[list]] inverts Ratios.`**
+**`Ratios[list, {n1, n2, ...}]`**
+
+gives the successive n\_k-th ratios at
+
+**`FoldList[Times, x, Ratios[list]]`**
+
+inverts Ratios.
 
 <details>
 <summary>Notes</summary>
@@ -88,7 +94,7 @@ Out[10]= {3, 6, 18, 36}
 
 **See also:** [Differences](../../arithmetic/Differences/), [Power](../../arithmetic/Power/), [Times](../../arithmetic/Times/), [Rational](../../arithmetic/Rational/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/arithmetic.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic.md)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)

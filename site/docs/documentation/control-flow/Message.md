@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Message[sym::tag, args] prints the named message unless messages are suppressed.`**
+**`Message[sym::tag, args]`**
+
+prints the named message unless messages are suppressed.
 
 ## Examples (4)
 

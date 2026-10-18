@@ -19,7 +19,9 @@ stops after at most n applications of f. If n is reached before convergence, the
 
 uses the binary predicate s instead of SameQ to test successive pairs.
 
-**`FixedPointList[f, expr] is equivalent to`**
+**`FixedPointList[f, expr]`**
+
+is equivalent to
 
 **`NestWhileList[f, expr, UnsameQ, 2].`**
 

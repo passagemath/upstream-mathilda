@@ -5,7 +5,9 @@
 
 ## Description
 
-**`SmoothKernelDistribution[data] gives a kernel density estimate as a LearnedDistribution, usable with PDF. The kernel is a product Gaussian with a per-dimension bandwidth from the multivariate normal-reference rule, which in one dimension is Silverman's 1.06 sigma n^(-1/5). SmoothKernelDistribution[data, h] sets the bandwidth explicitly, as one number or one per dimension. Being a normal-reference rule the default oversmooths strongly multimodal data -- a known property of the rule, and the reason the explicit form exists. A constant column has no scale and returns unevaluated.`**
+**`SmoothKernelDistribution[data]`**
+
+gives a kernel density estimate as a LearnedDistribution, usable with PDF. The kernel is a product Gaussian with a per-dimension bandwidth from the multivariate normal-reference rule, which in one dimension is Silverman's 1.06 sigma n^(-1/5). SmoothKernelDistribution\[data, h\] sets the bandwidth explicitly, as one number or one per dimension. Being a normal-reference rule the default oversmooths strongly multimodal data -- a known property of the rule, and the reason the explicit form exists. A constant column has no scale and returns unevaluated.
 
 ## Examples (6)
 

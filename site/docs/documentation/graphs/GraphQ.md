@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphQ[g] gives True if g is a valid graph, and False otherwise.`**
+**`GraphQ[g]`**
+
+gives True if g is a valid graph, and False otherwise.
 
 ## Examples (11)
 

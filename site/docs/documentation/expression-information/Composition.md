@@ -12,7 +12,15 @@ represents a composition of the functions f1, f2, f3, ....
 <details>
 <summary>Notes</summary>
 
-Composition allows you to build up compositions of functions which can later be applied to specific arguments. Applied to arguments, the composition acts innermost-first: Composition\[f, g, h\]\[x, y\]  -\>  f\[g\[h\[x, y\]\]\]. Composition has the attributes Flat and OneIdentity. Composition can be entered in the form f1 @\* f2 @\* .... Composition objects containing Identity or InverseFunction\[f\] are automatically simplified when possible: Composition\[\]                       -\>  Identity Composition\[f\]                      -\>  f Composition\[f, Identity, g\]         -\>  Composition\[f, g\] Composition\[f, InverseFunction\[f\]\]  -\>  Identity.
+Composition allows you to build up compositions of functions which can later be applied to specific arguments. Applied to arguments, the composition acts innermost-first: Composition\[f, g, h\]\[x, y\]  -\>  f\[g\[h\[x, y\]\]\]. Composition has the attributes Flat and OneIdentity. Composition can be entered in the form f1 @\* f2 @\* .... Composition objects containing Identity or InverseFunction\[f\] are automatically simplified when possible:
+
+```text
+Composition[]                       ->  Identity
+Composition[f]                      ->  f
+Composition[f, Identity, g]         ->  Composition[f, g]
+```
+
+Composition\[f, InverseFunction\[f\]\]  -\>  Identity.
 
 </details>
 

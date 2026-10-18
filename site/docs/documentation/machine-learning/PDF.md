@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PDF[dist, x] gives the probability density of dist at x, and threads over a list of x. Supports NormalDistribution and UniformDistribution.`**
+**`PDF[dist, x]`**
+
+gives the probability density of dist at x, and threads over a list of x. Supports NormalDistribution and UniformDistribution.
 
 ## Examples (8)
 

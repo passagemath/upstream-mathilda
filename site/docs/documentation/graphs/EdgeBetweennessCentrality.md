@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeBetweennessCentrality[g] gives for each edge, in EdgeList order, the sum over ordered pairs of vertices s, t of the fraction of shortest s-t paths using that edge. Uses EdgeWeight as lengths.`**
+**`EdgeBetweennessCentrality[g]`**
+
+gives for each edge, in EdgeList order, the sum over ordered pairs of vertices s, t of the fraction of shortest s-t paths using that edge. Uses EdgeWeight as lengths.
 
 ## Examples (6)
 

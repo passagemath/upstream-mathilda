@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Reverse[expr] reverses the order of elements in expr.`**
+**`Reverse[expr]`**
+
+reverses the order of elements in expr.
 
 ## Examples (2)
 
@@ -46,7 +48,7 @@ reversed depending on whether the current level is selected, and recursing into 
 
 ## References
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 - Tests: [`tests/test_assoc_read.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_read.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)

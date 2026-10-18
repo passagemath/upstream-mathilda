@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDistance[g, s, t] gives the length of a shortest path from s to t (Infinity if unreachable). GraphDistance[g, s] gives the list of distances from s to every vertex, in VertexList order. Edge weights are used as lengths when g has EdgeWeight.`**
+**`GraphDistance[g, s, t]`**
+
+gives the length of a shortest path from s to t (Infinity if unreachable). GraphDistance\[g, s\] gives the list of distances from s to every vertex, in VertexList order. Edge weights are used as lengths when g has EdgeWeight.
 
 ## Examples (10)
 

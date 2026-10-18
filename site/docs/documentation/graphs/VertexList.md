@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexList[g] gives the list of vertices of the graph g.`**
+**`VertexList[g]`**
+
+gives the list of vertices of the graph g.
 
 ## Examples (6)
 

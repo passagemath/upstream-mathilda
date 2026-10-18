@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Decrement[x] or x--`**
+**`Decrement[x]`**
 
-decreases the value of x by 1, returning the old value of x.
+or x-- decreases the value of x by 1, returning the old value of x.
 
 <details>
 <summary>Notes</summary>

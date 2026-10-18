@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphCenter[g] gives the vertices of g with minimum eccentricity; {} unless g is (strongly) connected.`**
+**`GraphCenter[g]`**
+
+gives the vertices of g with minimum eccentricity; {} unless g is (strongly) connected.
 
 ## Examples (6)
 

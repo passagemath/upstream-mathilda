@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphDisjointUnion[g1, g2, ...] gives the disjoint union of the gi, with vertices relabelled 1, 2, ..., n (g1's first, in VertexList order). Weights are dropped.`**
+**`GraphDisjointUnion[g1, g2, ...]`**
+
+gives the disjoint union of the gi, with vertices relabelled 1, 2, ..., n (g1's first, in VertexList order). Weights are dropped.
 
 ## Examples (6)
 

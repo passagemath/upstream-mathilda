@@ -105,9 +105,13 @@ it (and for complex or exact-rational `s`) the call stays symbolic.
   cancellation, so the kernel instead Newton-iterates directly on the
   cancellation-free `erfc`: `f(z) = erfc(z) − s`,
   `z ← z + (erfc(z) − s)(Sqrt[Pi]/2) e^{z²}`:
-  - Machine-precision real → a Winitzki seed polished by Newton on libm `erfc`,
-    e.g. `InverseErfc[0.6] = 0.370807`, `InverseErfc[1/{2.,3.,4.,5.}] =
-    {0.476936, 0.68407, 0.81342, 0.906194}`.
+  - Machine-precision real → `sf_inverse_erfc_r`, the `InverseErf` kernel fed
+    the exact complement q = min(s, 2 − s), so the tail (q down to the least
+    normal double, z ≈ 26.5) is resolved from q itself, never from 1 − s;
+    ≤ 2.2 ulp. A subnormal s (whose few bits the Halley residual cannot resolve)
+    is solved at 53 bits in MPFR — it used to answer `Indeterminate`. E.g.
+    `InverseErfc[0.6] = 0.370807`, `InverseErfc[1/{2.,3.,4.,5.}] =
+    {0.476936, 0.68407, 0.81342, 0.906194}`, `InverseErfc[1.*^-320] = 27.0732`.
   - Arbitrary precision (MPFR) real → Newton with precision doubling on
     `mpfr_erfc`, output precision tracking the input, e.g.
     `N[InverseErfc[33/100], 50] = 0.68880252811655645040250472890525783544948992349371`
@@ -134,6 +138,7 @@ it (and for complex or exact-rational `s`) the call stays symbolic.
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
 - Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)
 - Tests: [`tests/test_inverfc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_inverfc.c)
+- Tests: [`tests/test_sf_machine_error.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sf_machine_error.c)
 
 ## Notes & additional examples
 

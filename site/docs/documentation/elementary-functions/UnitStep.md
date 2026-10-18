@@ -13,7 +13,9 @@ gives 0 for x \< 0 and 1 for x \>= 0 (the value at 0 is 1).
 
 gives 1 only when none of the xi are negative, otherwise 0.
 
-**`UnitStep[] is 1. The result is always exact. Exact symbolic real`**
+**`UnitStep[]`**
+
+is 1. The result is always exact. Exact symbolic real
 
 <details>
 <summary>Notes</summary>

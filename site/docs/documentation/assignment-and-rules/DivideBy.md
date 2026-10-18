@@ -5,9 +5,9 @@
 
 ## Description
 
-**`DivideBy[x, dx] or x /= dx`**
+**`DivideBy[x, dx]`**
 
-divides x by dx and returns the new value of x. x /= dx is equivalent to x = x/dx.
+or x /= dx divides x by dx and returns the new value of x. x /= dx is equivalent to x = x/dx.
 
 <details>
 <summary>Notes</summary>

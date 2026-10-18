@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}] gives the smallest x >= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 <= x < LCM[m1, m2, ...].`**
+**`ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}]`**
+
+gives the smallest x \>= 0 satisfying the integer congruences x mod mi == ri mod mi for all i, lying in 0 \<= x \< LCM\[m1, m2, ...\].
 
 **`ChineseRemainder[{r1, r2, ...}, {m1, m2, ...}, d]`**
 

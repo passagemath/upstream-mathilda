@@ -5,7 +5,9 @@
 
 ## Description
 
-**`DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.`**
+**`DesignMatrix[data, {f1, ..., fn}, vars]`**
+
+gives the design matrix with entries f\_i evaluated at the data coordinates.
 
 <details>
 <summary>Notes</summary>

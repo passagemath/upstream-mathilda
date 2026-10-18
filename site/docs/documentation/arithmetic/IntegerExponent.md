@@ -5,9 +5,13 @@
 
 ## Description
 
-**`IntegerExponent[n, b] gives the highest power of b that divides n.`**
+**`IntegerExponent[n, b]`**
 
-**`IntegerExponent[n] is equivalent to IntegerExponent[n, 10] and gives the number of trailing zeros in the decimal digits of n.`**
+gives the highest power of b that divides n.
+
+**`IntegerExponent[n]`**
+
+is equivalent to IntegerExponent\[n, 10\] and gives the number of trailing zeros in the decimal digits of n.
 
 <details>
 <summary>Notes</summary>

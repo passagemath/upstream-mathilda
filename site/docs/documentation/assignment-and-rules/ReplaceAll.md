@@ -78,7 +78,7 @@ Out[10]= 5
 - Tests: [`tests/test_assoc_atomicity.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_atomicity.c)
 - Tests: [`tests/test_assoc_forms.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_forms.c)
 - Tests: [`tests/test_condition_downvalue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_condition_downvalue.c)
-- Tests: [`tests/test_match_extensive.c`](https://github.com/stblake/mathilda/blob/main/tests/test_match_extensive.c)
+- Tests: [`tests/test_integrate_residue.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_residue.c)
 
 ## Notes & additional examples
 

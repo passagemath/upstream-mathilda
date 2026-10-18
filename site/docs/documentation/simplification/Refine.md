@@ -20,7 +20,7 @@ Options: Assumptions (default $Assumptions) -- default assumptions to append to 
 
 </details>
 
-## Examples (14)
+## Examples (15)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -43,7 +43,7 @@ In[5]:= Assuming[x > 0, Refine[Sqrt[x^2 y^2], y < 0]]
 Out[5]= -x y
 ```
 
-### Applications (9)
+### Applications (10)
 
 The square root of a square collapses once the sign is known
 
@@ -52,60 +52,67 @@ In[6]:= Refine[Sqrt[x^2], x > 0]
 Out[6]= x
 ```
 
-Abs picks up the sign fact
+Radical reduction over a quotient: the denominator is exposed and |a| pulled out
 
 ```mathematica
-In[7]:= Refine[Abs[x], x < 0]
-Out[7]= -x
+In[7]:= Refine[Sqrt[1 + b^2/a^2], a > 0]
+Out[7]= Sqrt[a^2 + b^2]/a
 ```
 
-Log[x^p] -> p Log[x] for positive x
+Each squared factor resolved by a CAD sign proof
 
 ```mathematica
-In[8]:= Refine[Log[x^2], x > 0]
-Out[8]= 2 Log[x]
+In[8]:= Refine[Sqrt[(a + b)^2 (a - b)^2], a > b > 0]
+Out[8]= (a + b) (a - b)
 ```
 
-Sign resolved to +1 under the assumption
+Sign of a compound polynomial on an interval
 
 ```mathematica
-In[9]:= Refine[Sign[x], x > 0]
-Out[9]= 1
+In[9]:= Refine[Sign[x^3 - x], 0 < x < 1]
+Out[9]= -1
 ```
 
-A real symbol is its own conjugate
+Integer-assumption structural rules shared with Simplify
 
 ```mathematica
-In[10]:= Refine[Conjugate[x], Element[x, Reals]]
-Out[10]= x
+In[10]:= Refine[{Floor[n], Mod[2 n, 2], (-1)^(2 n), Sin[n Pi]}, Element[n, Integers]]
+Out[10]= {n, 0, 1, 0}
 ```
 
-An inequality decided by a Reduce/CAD entailment
+The argument of a negative real
 
 ```mathematica
-In[11]:= Refine[x > 0, x > 1]
-Out[11]= True
+In[11]:= Refine[Arg[x], x < 0]
+Out[11]= Pi
 ```
 
-Algebraic quantities in an inequality are assumed real
+A predicate decided by Reduce/CAD entailment
 
 ```mathematica
-In[12]:= Refine[Element[x, Reals], x > 0]
+In[12]:= Refine[x^2 + y^2 >= 2 x y, Element[{x, y}, Reals]]
 Out[12]= True
 ```
 
-Equality substitution drives the difference to zero
+An equation refuted by the assumption
 
 ```mathematica
-In[13]:= Refine[a - b, a == b]
-Out[13]= 0
+In[13]:= Refine[x == y, x > y]
+Out[13]= False
 ```
 
-Refine with no positional assumption reads $Assumptions
+With no positional assumption Refine reads $Assumptions
 
 ```mathematica
 In[14]:= Assuming[a > 0 && b > 0, Refine[Sqrt[a^2 b^2]]]
 Out[14]= a b
+```
+
+Undecided: true for x > 1 only, so the predicate is returned unchanged
+
+```mathematica
+In[15]:= Refine[x^2 > 1, x > 0]
+Out[15]= x^2 > 1
 ```
 
 ## Algorithm
@@ -167,10 +174,21 @@ logic go to a `Reduce`/CAD entailment over the reals, where `P` is `True` iff `R
 !P]` is unsatisfiable (literally `False`) and `False` iff `Reduce[A && P]` is. **(2) Rewrite
 path** (everything else): `apply_assumption_rules` rewrites the expression under the facts
 (the very rules `Simplify` applies — `Sqrt[x^2]->±x/Abs[x]`, `Log[x^p]->p Log[x]`, integer-`k`
-trig, `Abs`/`Sign`/`Conjugate` under sign facts, …), then a bottom-up `deep_positivity_walk`
-resolves `Sign[p]`, `Abs[p]` and `Sqrt[p^2]` for compound polynomials `p` the fast sign
-prover could not settle, each via a `deep_sign` CAD run, and the tree is evaluated. With no
-usable facts the call is the identity (it steals the positional expression out of `res`).
+trig, `Abs`/`Sign`/`Conjugate`/`Arg` under sign facts, and the structural rules in
+`assume_structural_rewrite`). Those structural rules cover the integer-assumption
+reductions (`Floor`/`Mod`/`(-1)^k`/`I^k` parity, `Sin[k Pi]`), the inverse-trig branch
+formulas such as `ArcSin[Sin[x]] -> Pi - x` on `(Pi/2, Pi)`, and `Arg` of a canonicalised
+exponential. Next, a bottom-up `deep_positivity_walk` resolves `Sign[p]`, `Abs[p]` and
+`Sqrt[p^2]` for compound polynomials `p` that the fast sign prover could not settle,
+each through a `deep_sign` CAD run. Since v0.379 the walk also reduces radicals over
+products and quotients: `sqrt_extract` splits
+`Sqrt[Π base_i^(2 k_i) · R] -> (Π |base_i|^k_i) Sqrt[R]`, with each `|base_i|` resolved by
+`deep_sign`. A `Plus` radicand is passed through `Together` first to expose its
+denominator, and the `^(-1/2)` form is handled too, so `Sqrt[1 + b^2/a^2]` becomes
+`Sqrt[a^2 + b^2]/a` under `a > 0`. The rule is sound because every factor pulled out is
+non-negative. `Integrate` calls this pass on a definite result whenever it was given
+`Assumptions`. The tree is then evaluated. With no usable facts the call is the
+identity: it takes the positional expression out of `res` unchanged.
 
 **Data structures.** Everything is `Expr` trees. Assumptions are held as an `AssumeCtx`
 (flat `Expr*` fact array) borrowed from `simp`. Entailment is threaded through a
@@ -230,28 +248,37 @@ expressions rather than machine numbers.
 
 - Source: [`src/refine.c`](https://github.com/stblake/mathilda/blob/main/src/refine.c)
 - Specification: [`docs/spec/builtins/simplification.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/simplification.md)
+- Tests: [`tests/test_possiblezeroq_assumptions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_possiblezeroq_assumptions.c)
 - Tests: [`tests/test_refine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_refine.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`Refine[expr, assum]` gives the form `expr` would take if its symbols were replaced by
-explicit values satisfying `assum`. It shares its whole assumption engine with `Simplify`
-(`AssumeCtx`, `apply_assumption_rules`): every rewrite `Refine` applies is one `Simplify`
-also applies. The difference is that `Refine` is the rewrite-and-decide pass *without*
-`Simplify`'s complexity-minimising search — so it will turn `Sqrt[x^2]` into `x` under
-`x > 0`, but it does not, for instance, factor.
-
-A predicate target (`Element[...]`, an equation, an inequality, or a logical combination) is
-decided to `True`/`False` when it provably follows from or contradicts the assumptions:
-domain membership through the assumption-aware prover, equations through the assumption-aware
-zero test plus equality substitution, and inequalities through a `Reduce`/CAD entailment over
-the reals (`P` is `True` exactly when `assum && !P` is unsatisfiable). Quantities appearing
-algebraically in inequalities are assumed real.
-
-`Refine[expr]` with no positional assumption uses the default assumptions — the current
-`$Assumptions`, as extended by any enclosing `Assuming`. An explicit `Assumptions -> X`
-option replaces `$Assumptions`; a positional assumption is conjoined with it. The
-`TimeConstraint` option (default 30 s) caps the time spent on any single condition check
-before that transformation is abandoned.
+- `Refine[expr, assum]` gives the form `expr` takes when its symbols are
+  given values that satisfy `assum`. It shares the assumption engine of
+  `Simplify` (`AssumeCtx`, `apply_assumption_rules`,
+  `assume_structural_rewrite`), so every rewrite `Refine` makes is one
+  `Simplify` can also make. `Refine` is the rewrite-and-decide pass without
+  `Simplify`'s complexity search: it turns `Sqrt[x^2]` into `x` under
+  `x > 0`, but it does not factor or expand. Conversely, a correct rewrite
+  that `Simplify`'s scorer would reject (`ArcSin[Sin[x]] -> Pi - x` on
+  `Pi/2 < x < Pi`) still comes through `Refine`.
+- **Predicates.** `Element[...]`, equations, inequalities and logical
+  combinations are decided to `True` or `False` when the assumptions prove
+  or refute them. Domain membership goes to the assumption-aware prover,
+  equations to the assumption-aware zero test plus equality substitution,
+  and inequalities to a `Reduce`/CAD entailment over the reals: `P` is
+  `True` exactly when `assum && !P` is unsatisfiable. A predicate that is
+  neither proved nor refuted comes back unchanged.
+- **Radicals.** Under the sign facts, a radical of a product or quotient of
+  squares loses each squared factor (as its absolute value, then resolved).
+  `Integrate` uses this pass to tidy a definite integral computed with
+  `Assumptions`.
+- **Defaults and budget.** `Refine[expr]` uses `$Assumptions`, including
+  whatever an enclosing `Assuming` adds. `Assumptions -> X` replaces
+  `$Assumptions`, and a positional assumption is conjoined with it.
+  `TimeConstraint` (default 30 s) caps the time spent on a condition check.
+  At most 24 `Reduce` entailments run per call, over at most 6 variables.
+- `Protected`. Symbolic only, with no NDArray or `Compile[]` path.
+- See also: `Simplify`, `Assuming`, `Reduce`, `PossibleZeroQ`.

@@ -9,7 +9,9 @@
 
 gives the q-Pochhammer symbol prod\_{k=0}^{n-1} (1 - a q^k).
 
-**`QPochhammer[a, q] gives the infinite q-Pochhammer (a;q)_Inf for |q|<1. The finite form is exact/symbolic for a non-negative integer n; the infinite form evaluates for machine-real a, q. Listable, NumericFunction.`**
+**`QPochhammer[a, q]`**
+
+gives the infinite q-Pochhammer (a;q)\_Inf for |q|\<1. The finite form is exact/symbolic for a non-negative integer n; the infinite form evaluates for machine-real a, q. Listable, NumericFunction.
 
 ## Examples (5)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`BesselJZero[n, k] gives the k-th positive zero of BesselJ[n, x]. Stays symbolic for symbolic arguments.`**
+**`BesselJZero[n, k]`**
+
+gives the k-th positive zero of BesselJ\[n, x\]. Stays symbolic for symbolic arguments.
 
 ## Examples (3)
 

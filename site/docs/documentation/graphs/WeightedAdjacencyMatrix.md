@@ -5,7 +5,9 @@
 
 ## Description
 
-**`WeightedAdjacencyMatrix[g] gives the adjacency matrix of g with each entry the corresponding edge's weight (0 where there is no edge). Equal to AdjacencyMatrix[g] when g has no EdgeWeight.`**
+**`WeightedAdjacencyMatrix[g]`**
+
+gives the adjacency matrix of g with each entry the corresponding edge's weight (0 where there is no edge). Equal to AdjacencyMatrix\[g\] when g has no EdgeWeight.
 
 ## Examples (6)
 

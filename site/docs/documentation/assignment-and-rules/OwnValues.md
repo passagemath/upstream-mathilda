@@ -5,7 +5,9 @@
 
 ## Description
 
-**`OwnValues[s] gives a list of own-value rules for s.`**
+**`OwnValues[s]`**
+
+gives a list of own-value rules for s.
 
 ## Examples (5)
 
@@ -56,6 +58,7 @@ Out[5]= {HoldPattern[a] :> 7}
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 - Tests: [`tests/test_unset.c`](https://github.com/stblake/mathilda/blob/main/tests/test_unset.c)
+- Tests: [`tests/test_upvalues.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upvalues.c)
 
 ## Notes & additional examples
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IntervalUnion[i1, i2, ...] gives the interval representing the union of the intervals ij.`**
+**`IntervalUnion[i1, i2, ...]`**
+
+gives the interval representing the union of the intervals ij.
 
 ## Examples (3)
 

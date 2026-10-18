@@ -9,7 +9,9 @@
 
 evaluates expr with assum appended to $Assumptions, so that assum is included in the default assumptions used by functions such as Simplify.
 
-**`Assuming[assum, expr] is effectively equivalent to Block[{$Assumptions = $Assumptions && assum}, expr], so nested invocations compose and the rebinding of $Assumptions is restored on exit.`**
+**`Assuming[assum, expr]`**
+
+is effectively equivalent to Block\[{$Assumptions = $Assumptions && assum}, expr\], so nested invocations compose and the rebinding of $Assumptions is restored on exit.
 
 <details>
 <summary>Notes</summary>

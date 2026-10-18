@@ -1,6 +1,6 @@
 # Assignment and Rules
 
-29 built-in function(s) in this category.
+34 built-in function(s) in this category.
 
 - [`AddTo`](AddTo.md) — AddTo[x, dx] or x += dx  _(Stable)_
 - [`Clear`](Clear.md) — Clear[s1, s2, ...]  _(Stable)_
@@ -28,6 +28,11 @@
 - [`SetDelayed`](SetDelayed.md) — lhs := rhs or SetDelayed[lhs, rhs]  _(Stable)_
 - [`SetOptions`](SetOptions.md) — SetOptions[s, name -> value, ...] sets default options for the symbol  _(Stable)_
 - [`SubtractFrom`](SubtractFrom.md) — SubtractFrom[x, dx] or x -= dx  _(Stable)_
+- [`TagSet`](TagSet.md) — f /: lhs = rhs assigns rhs and associates the assignment with the symbol f (as an up-, down- or own-value as appropriate).  _(Stable)_
+- [`TagSetDelayed`](TagSetDelayed.md) — f /: lhs := rhs assigns rhs as a delayed value associated with the symbol f.  _(Stable)_
+- [`TagUnset`](TagUnset.md) — f /: lhs =. removes the rule for lhs associated with the symbol f.  _(Stable)_
 - [`TimesBy`](TimesBy.md) — TimesBy[x, dx] or x *= dx  _(Stable)_
 - [`Unprotect`](Unprotect.md) — Unprotect[s1, s2, ...]  _(Stable)_
 - [`Unset`](Unset.md) — Unset[lhs] or lhs =.  _(Stable)_
+- [`UpSet`](UpSet.md) — lhs ^= rhs assigns rhs and associates the assignment with the symbols at level one of lhs (UpValues).  _(Stable)_
+- [`UpSetDelayed`](UpSetDelayed.md) — lhs ^:= rhs assigns rhs as a delayed value and associates it with the symbols at level one of lhs (UpValues).  _(Stable)_

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`GraphRadius[g] gives the minimum vertex eccentricity of g. Infinity unless g is (strongly) connected.`**
+**`GraphRadius[g]`**
+
+gives the minimum vertex eccentricity of g. Infinity unless g is (strongly) connected.
 
 ## Examples (9)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`HypergraphEdgeDelete[h, e] or [h, {e1, ...}] deletes every hyperedge identical (SameQ) to one given.`**
+**`HypergraphEdgeDelete[h, e]`**
+
+or \[h, {e1, ...}\] deletes every hyperedge identical (SameQ) to one given.
 
 ## Examples (9)
 

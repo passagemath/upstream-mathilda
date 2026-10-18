@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ImageChannels[image] gives the number of colour channels: 1 for a grey image, otherwise the length of each pixel's value list (3 for RGB, 4 with an alpha channel).`**
+**`ImageChannels[image]`**
+
+gives the number of colour channels: 1 for a grey image, otherwise the length of each pixel's value list (3 for RGB, 4 with an alpha channel).
 
 ## Examples (37)
 

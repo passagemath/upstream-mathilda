@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.`**
+**`Module[{x, y, ...}, expr]`**
+
+specifies that x, y, ... are local variables.
 
 ## Examples (7)
 

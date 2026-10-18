@@ -5,7 +5,9 @@
 
 ## Description
 
-**`RandomImage[] gives a 150x150 grey image of uniform noise on [0, 1]. RandomImage[max] scales the range to [0, max]; RandomImage[max, {w, h}] sets the size, and a single n means {n, n}. ColorSpace -> "RGB" gives three independent channels. Samples are drawn from the same stream as RandomReal, so SeedRandom makes the result reproducible.`**
+**`RandomImage[]`**
+
+gives a 150x150 grey image of uniform noise on \[0, 1\]. RandomImage\[max\] scales the range to \[0, max\]; RandomImage\[max, {w, h}\] sets the size, and a single n means {n, n}. ColorSpace -\> "RGB" gives three independent channels. Samples are drawn from the same stream as RandomReal, so SeedRandom makes the result reproducible.
 
 ## Examples (23)
 

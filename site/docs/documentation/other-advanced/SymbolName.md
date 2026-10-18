@@ -1,11 +1,13 @@
 # SymbolName
 
-!!! note "Status: Experimental"
-    present and registered, but lightly documented and not yet covered by dedicated tests.
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
 
 ## Description
 
-**`SymbolName[symbol] gives the name of symbol as a string, with any context prefix removed.`**
+**`SymbolName[symbol]`**
+
+gives the name of symbol as a string, with any context prefix removed.
 
 ## Examples (3)
 
@@ -60,6 +62,7 @@ Wrong arity declines.
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+- Tests: [`tests/test_mathar_regressions.c`](https://github.com/stblake/mathilda/blob/main/tests/test_mathar_regressions.c)
 
 ## Notes & additional examples
 

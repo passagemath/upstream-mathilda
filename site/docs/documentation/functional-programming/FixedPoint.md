@@ -19,7 +19,9 @@ stops after at most n applications of f, returning the last value obtained even 
 
 uses the binary predicate s instead of SameQ to test successive pairs.
 
-**`FixedPoint[f, expr] gives the last element of FixedPointList[f, expr].`**
+**`FixedPoint[f, expr]`**
+
+gives the last element of FixedPointList\[f, expr\].
 
 <details>
 <summary>Notes</summary>

@@ -57,6 +57,26 @@ Out[1]= Interval[{EllipticE[1/2], EllipticE[1/4]}]
 ```
 
 ```mathematica
+In[1]:= EllipticE[2.]  (* past m = 1 a machine argument gets a machine Complex, the limit from below the cut *)
+```
+
+```mathematica
+In[1]:= N[EllipticE[2], 20]  (* the arbitrary-precision Arb path agrees *)
+```
+
+```mathematica
+In[1]:= EllipticE[0.3 + 0.4 I]  (* complex parameter at machine precision, by the AGM *)
+```
+
+```mathematica
+In[1]:= NIntegrate[Sqrt[1 - (0.3 + 0.4 I) Sin[t]^2], {t, 0, Pi/2}]  (* the defining integral by quadrature *)
+```
+
+```mathematica
+In[1]:= f = Compile[{{z, _Complex}}, EllipticE[z]]; f[0.3 + 0.4 I] == EllipticE[0.3 + 0.4 I]  (* compiled and interpreted calls share one kernel *)
+```
+
+```mathematica
 In[1]:= EllipticE[{0.1, 0.2, 0.3}]  (* Listable; the unary kernel runs element-wise on the buffer *)
 Out[1]= {1.53076, 1.48904, 1.44536}
 ```
@@ -74,7 +94,15 @@ neighbour at `m = 1 − 10⁻¹⁸`. The reduction is now gated on the principal
 exact call stays symbolic — correct but not closed-form — and `N[]` routes it to Arb, where
 it agrees with `2 − Sin[2]` to every digit shown.
 
-Both arities carry `double` Carlson kernels, and the two share one duplication loop: every
-caller that wants `R_D` wants `R_F` at the same arguments, so computing them together buys
-three square roots per step instead of six. That is what paid for the tighter stopping
-tolerance behind the accuracy the examples above show (106 ulp → 6).
+Both arities have `double` kernels, but different ones. The **complete** `E[m]` uses
+`src/special_functions/sf_machine_ellk.c`: a Cephes-form `P(t) − t log(t) Q(t)` fit for
+real `m ≤ 1` (about 1 ulp), and the arithmetic-geometric mean for complex `m` or real
+`m > 1`, which returns a machine `Complex` on the principal branch (cut `[1, ∞)`, value on
+the cut from below). The same kernels serve packed `List`s, real and complex `NDArray`s and
+`Compile[]`, bit for bit. The **incomplete** `E[φ, m]` uses Carlson's `R_F` and `R_D`,
+computed from one shared duplication loop, on the real principal domain only; a complex
+amplitude or parameter is answered by Arb even at machine precision.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- See also: `EllipticK`, `EllipticF`, `EllipticPi`, `Hypergeometric2F1`
+  (`E(m) = (π/2) ₂F₁(−½, ½; 1; m)`).

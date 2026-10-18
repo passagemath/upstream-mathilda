@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimitiveRoot[n] gives the smallest primitive root of n -- a generator of the multiplicative group (Z/nZ)* of units modulo n.`**
+**`PrimitiveRoot[n]`**
+
+gives the smallest primitive root of n -- a generator of the multiplicative group (Z/nZ)\* of units modulo n.
 
 **`PrimitiveRoot[n, k]`**
 
@@ -97,8 +99,9 @@ Out[11]= PrimitiveRoot[8]
 
 - K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — primitive roots and the structure of `(Z/nZ)*` (Chapter 4).
 - G. H. Hardy and E. M. Wright, *An Introduction to the Theory of Numbers*, 6th ed., Oxford University Press, 2008.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+- Tests: [`tests/test_dirichletcharacter.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletcharacter.c)
 - Tests: [`tests/test_multiplicative_order.c`](https://github.com/stblake/mathilda/blob/main/tests/test_multiplicative_order.c)
 - Tests: [`tests/test_primitive_root.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primitive_root.c)
 

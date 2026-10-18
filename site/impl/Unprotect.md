@@ -16,4 +16,6 @@ the symbol, which is the usual prelude to redefining or extending a built-in's
 behaviour.
 
 **Attributes & limits.** `Unprotect` carries `HoldAll | Protected`, so its
-arguments arrive as unevaluated names.
+arguments arrive as unevaluated names. It works on built-ins too
+(`Unprotect[Sin]` gives `{"Sin"}`). Since v0.301 `Protected` is the only
+sealing attribute, so nothing is beyond `Unprotect`'s reach.

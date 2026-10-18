@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CompileDiagnostics[argspec, expr] reports whether expr compiles for the given Compile[] argument specification, and if not, the innermost subexpression that could not be lowered. Accepts the same WorkingPrecision -> n / "BigIntegers" -> True options as Compile[], so it also reports whether the arbitrary-precision subset lowers (ResultType MPFRReal/MPFRComplex/BigInteger). For a compiled body it also gives the result type and the instruction count with and without the optimiser.`**
+**`CompileDiagnostics[argspec, expr]`**
+
+reports whether expr compiles for the given Compile\[\] argument specification, and if not, the innermost subexpression that could not be lowered. Accepts the same WorkingPrecision -\> n / "BigIntegers" -\> True options as Compile\[\], so it also reports whether the arbitrary-precision subset lowers (ResultType MPFRReal/MPFRComplex/BigInteger). For a compiled body it also gives the result type and the instruction count with and without the optimiser.
 
 ## Examples (3)
 

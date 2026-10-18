@@ -9,9 +9,13 @@
 
 is a symbolic construct that represents expr when cond is True.
 
-**`ConditionalExpression[expr, True] evaluates to expr.`**
+**`ConditionalExpression[expr, True]`**
 
-**`ConditionalExpression[expr, False] evaluates to Undefined.`**
+evaluates to expr.
+
+**`ConditionalExpression[expr, False]`**
+
+evaluates to Undefined.
 
 <details>
 <summary>Notes</summary>
@@ -67,9 +71,9 @@ Out[8]= ConditionalExpression[e, a > 0 && b > 0]
 - Source: [`src/boolean.c`](https://github.com/stblake/mathilda/blob/main/src/boolean.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 - Tests: [`tests/test_boolean.c`](https://github.com/stblake/mathilda/blob/main/tests/test_boolean.c)
+- Tests: [`tests/test_extreme_definite_corpus.c`](https://github.com/stblake/mathilda/blob/main/tests/test_extreme_definite_corpus.c)
 - Tests: [`tests/test_integrate_beta.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_beta.c)
 - Tests: [`tests/test_integrate_diffunderint.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_diffunderint.c)
-- Tests: [`tests/test_integrate_ramanujan.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_ramanujan.c)
 
 ## Notes & additional examples
 

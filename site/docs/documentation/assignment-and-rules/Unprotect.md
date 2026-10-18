@@ -16,37 +16,73 @@ Unprotect has attribute HoldAll.
 
 </details>
 
-## Examples (5)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (2)
+### Basic examples (5)
 
 ```mathematica
 In[1]:= f[x_] := x^2; Protect[f]
 Out[1]= {"f"}
 
-In[2]:= Unprotect[f]
-Out[2]= {"f"}
+In[2]:= f[x_, y_] := x + y
+
+In[3]:= Unprotect[f]
+Out[3]= {"f"}
+
+In[4]:= Protect[f]; Protect[f]
+Out[4]= {}
+
+In[5]:= Check[f[x_] := 0, "refused"]
+Out[5]= "refused"
 ```
 
-### Applications (3)
+### Applications (7)
 
 ```mathematica
-In[3]:= Protect[baz]
-Out[3]= {"baz"}
+In[6]:= Protect[baz]
+Out[6]= {"baz"}
 ```
 
 Returns the names whose Protected attribute was actually cleared
 
 ```mathematica
-In[4]:= Unprotect[baz]
-Out[4]= {"baz"}
+In[7]:= Unprotect[baz]
+Out[7]= {"baz"}
 ```
 
 ```mathematica
-In[5]:= MemberQ[Attributes[baz], Protected]
-Out[5]= False
+In[8]:= MemberQ[Attributes[baz], Protected]
+Out[8]= False
+```
+
+Not protected any more: nothing changed
+
+```mathematica
+In[9]:= Unprotect[baz]
+Out[9]= {}
+```
+
+Assignment works again
+
+```mathematica
+In[10]:= baz = 6; baz
+Out[10]= 6
+```
+
+Built-ins can be unprotected too
+
+```mathematica
+In[11]:= Unprotect[Sin]
+Out[11]= {"Sin"}
+```
+
+And re-protected after extending them
+
+```mathematica
+In[12]:= Protect[Sin]
+Out[12]= {"Sin"}
 ```
 
 ## Implementation notes
@@ -66,7 +102,9 @@ the symbol, which is the usual prelude to redefining or extending a built-in's
 behaviour.
 
 **Attributes & limits.** `Unprotect` carries `HoldAll | Protected`, so its
-arguments arrive as unevaluated names.
+arguments arrive as unevaluated names. It works on built-ins too
+(`Unprotect[Sin]` gives `{"Sin"}`). Since v0.301 `Protected` is the only
+sealing attribute, so nothing is beyond `Unprotect`'s reach.
 
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
 - The typical sequence for adding rules to an existing symbol is
@@ -86,10 +124,13 @@ arguments arrive as unevaluated names.
 
 ### Notes
 
-`Unprotect[s1, s2, ...]` is the inverse of `Protect`: it clears the `Protected`
-attribute from each symbol and returns the list of names (as strings) whose state
-changed, so unprotecting a symbol that was never protected gives `{}`.
-
-Once a symbol is unprotected, `Set`/`SetDelayed` and the clearing heads accept it
-again — the standard way to override or extend a built-in's definition.
-Arguments may be symbols, strings, or a flat list.
+- `Unprotect[s1, s2, ...]` is the inverse of `Protect`. It clears the
+  `Protected` attribute and returns the names, as strings, whose state changed.
+  Unprotecting a symbol that was not protected gives `{}`.
+- Once a symbol is unprotected, `Set`/`SetDelayed` and the clearing heads
+  accept it again. The usual way to extend a built-in is
+  `Unprotect[f]; new rule; Protect[f]`.
+- Nothing is sealed beyond `Unprotect`'s reach: `Protected` is the only
+  sealing attribute (since v0.301).
+- Arguments may be symbols, strings, or a flat list. `HoldAll | Protected`.
+- See also: `Protect`, `Attributes`, `ClearAttributes`.

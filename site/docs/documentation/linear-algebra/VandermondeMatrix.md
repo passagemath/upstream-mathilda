@@ -5,9 +5,13 @@
 
 ## Description
 
-**`VandermondeMatrix[{x1, ..., xn}] gives the n x n Vandermonde matrix with entry (i, j) equal to xi^(j-1).`**
+**`VandermondeMatrix[{x1, ..., xn}]`**
 
-**`VandermondeMatrix[{x1, ..., xn}, k] gives the n x k Vandermonde matrix.`**
+gives the n x n Vandermonde matrix with entry (i, j) equal to xi^(j-1).
+
+**`VandermondeMatrix[{x1, ..., xn}, k]`**
+
+gives the n x k Vandermonde matrix.
 
 <details>
 <summary>Notes</summary>

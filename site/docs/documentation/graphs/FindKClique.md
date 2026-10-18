@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindKClique[g, k] gives {c} with c a largest k-clique of g: a vertex set whose members are pairwise within distance k.`**
+**`FindKClique[g, k]`**
+
+gives {c} with c a largest k-clique of g: a vertex set whose members are pairwise within distance k.
 
 ## Examples (5)
 

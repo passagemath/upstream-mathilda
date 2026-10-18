@@ -165,6 +165,12 @@ Out[1]= {HoldPattern[f[g[x_]]] :> h[x]}
 
 In[2]:= UpValues[k] = {HoldPattern[w[k]] :> done}; w[k]   (* set the whole list *)
 Out[2]= done
+
+In[3]:= UpValues[neverdefined]
+Out[3]= {}
+
+In[4]:= area[sq[s_]] ^:= s^2 /; s > 0; UpValues[sq]   (* the moved condition *)
+Out[4]= {HoldPattern[area[sq[s_]] /; s > 0] :> s^2}
 ```
 
 ## Definition
@@ -182,6 +188,12 @@ append these definitions after the symbol's usage message.
 ```mathematica
 In[1]:= g /: f[g[x_]] := h[x]; Definition[g]
 Out[1]= g /: f[g[x_]] := h[x]
+
+In[2]:= c0 = 3; Definition[c0]
+Out[2]= c0 = 3
+
+In[3]:= fd[x_] := x^2; FullForm[Definition[fd]]   (* display only *)
+Out[3]= Definition[fd]
 ```
 
 ## PossibleZeroQ
@@ -1005,6 +1017,22 @@ Out[3]= {a, b, b, b, c}
   notations (`StandardForm`, `TraditionalForm`), so it has nothing to render these in; the kernel
   sends no LaTeX for a result carrying one of these heads, anywhere in the tree. `HoldForm` is the
   exception — it is transparent to both printers and its argument typesets as usual.
+- Strings keep their quotes, with `"` and `\` escaped. An explicit `InputForm[...]` keeps them even
+  inside `Print`, which otherwise prints strings as bare characters. `SeriesData` prints in its
+  literal `SeriesData[...]` form.
+- The wrapper is inert (`Head[InputForm[x]]` is `InputForm`); `ToString[expr, InputForm]` gives
+  the same text as a `String`.
+
+```mathematica
+In[1]:= InputForm[{1, 1/2, "a", x}]
+Out[1]= {1, 1/2, "a", x}
+
+In[2]:= InputForm["say \"hi\""]
+Out[2]= "say \"hi\""
+
+In[3]:= InputForm[Series[Exp[x], {x, 0, 3}]]
+Out[3]= SeriesData[x, 0, {1, 1, 1/2, 1/6}, 0, 4, 1]
+```
 
 ## StandardForm
 - `StandardForm[expr]` displays `expr` in Mathilda's own typeset notation: the language's names
@@ -1031,6 +1059,17 @@ Out[3]= {a, b, b, b, c}
   switches the notation back for its argument; as text it prints as `expr` itself (it is kept
   under `InputForm`, so the result still re-reads).
 
+```mathematica
+In[1]:= StandardForm[1 + 1]
+Out[1]= 2
+
+In[2]:= FullForm[StandardForm[Sin[x]]]
+Out[2]= StandardForm[Sin[x]]
+
+In[3]:= InputForm[StandardForm[x^2]]
+Out[3]= StandardForm[x^2]
+```
+
 ## TraditionalForm
 - `TraditionalForm[expr]` displays `expr` in textbook notation: `sin(x)`, `ln(x)`, `e^x`,
   `x = 1`, `a ∧ b`, n-th roots as surds, `C[1]` as c₁ and Greek-named symbols as Greek letters.
@@ -1046,6 +1085,17 @@ Out[3]= {a, b, b, b, c}
   in the notebook is displayed in; StandardForm is the default. A result switched with its own
   *Convert To* keeps that choice. This is a display setting only: the kernel always sends all three
   forms, so changing it re-displays existing results without re-evaluating anything.
+
+```mathematica
+In[1]:= FullForm[TraditionalForm[x^2] + 1]   (* the wrapper survives arithmetic *)
+Out[1]= Plus[1, TraditionalForm[Power[x, 2]]]
+
+In[2]:= InputForm[TraditionalForm[Sin[x]]]
+Out[2]= TraditionalForm[Sin[x]]
+
+In[3]:= ToString[x^2, TraditionalForm]   (* not a ToString form *)
+Out[3]= ToString[x^2, TraditionalForm]
+```
 
 ## NumberForm
 - `NumberForm[expr, n]` prints the approximate real numbers in `expr` to `n`-digit precision.
@@ -1118,6 +1168,12 @@ Out[2]= "Plus[Power[x, 2], Power[y, 3]]"
 
 In[3]:= ToString[x^2 + y^3, TeXForm]
 Out[3]= "x^{2}+y^{3}"
+
+In[4]:= ToString[{"a", 1}]
+Out[4]= "{a, 1}"
+
+In[5]:= ToString["a\"b", InputForm]
+Out[5]= "\"a\\\"b\""
 ```
 
 ## ToExpression

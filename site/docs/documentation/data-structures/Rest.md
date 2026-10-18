@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Rest[expr] gives all but the first element of expr.`**
+**`Rest[expr]`**
+
+gives all but the first element of expr.
 
 ## Examples (4)
 

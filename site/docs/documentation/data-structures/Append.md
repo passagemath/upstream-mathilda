@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Append[expr, elem] adds elem to the end of expr.`**
+**`Append[expr, elem]`**
+
+adds elem to the end of expr.
 
 ## Examples (7)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ListQ[expr] gives True if expr is a list (head List), False otherwise.`**
+**`ListQ[expr]`**
+
+gives True if expr is a list (head List), False otherwise.
 
 ## Examples (2)
 
@@ -31,7 +33,7 @@ Out[2]= False
 
 **See also:** [VectorQ](../../expression-information/VectorQ/), [MatrixQ](../../expression-information/MatrixQ/), [List](../../other-advanced/List/)
 
-- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
 - Tests: [`tests/test_list.c`](https://github.com/stblake/mathilda/blob/main/tests/test_list.c)
 - Tests: [`tests/test_ndarray.c`](https://github.com/stblake/mathilda/blob/main/tests/test_ndarray.c)

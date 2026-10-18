@@ -9,7 +9,9 @@
 
 gives the numerical gradient of the sampled array f by finite differences: second-order central differences in the interior and one-sided differences at the edges, one array per axis. For a vector it returns a vector; for a rank-k array it returns {g1, ..., gk}.
 
-**`ListGradient[f, h] uses spacing h on every axis; ListGradient[f, {s1,`**
+**`ListGradient[f, h]`**
+
+uses spacing h on every axis; ListGradient\[f, {s1,
 
 <details>
 <summary>Notes</summary>

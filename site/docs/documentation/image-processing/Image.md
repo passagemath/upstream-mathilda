@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Image[data] is a raster image, normalising to the canonical Image[data, type]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data[[y, x]] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is "Bit", all-integer in 0..255 is "Byte", anything else is "Real". Image[data, type] states the type instead -- "Bit" (0 or 1), "Byte" (0..255), "Bit16" (0..65535) or "Real" ("Real32" and "Real64" are accepted as synonyms) -- and, as in Mathematica, COERCES the data to it: an integer type rounds each value to the nearest integer and clips it to the type's range, so Image[{{0, 300}}, "Byte"] stores {0, 255}; "Real" keeps any real value. Image[image, type] converts an image between types, preserving brightness. Data that is not a rectangular array of real numbers (ragged, non-numeric or complex) is left unevaluated.`**
+**`Image[data]`**
+
+is a raster image, normalising to the canonical Image\[data, type\]. The data is a rectangular height x width array of pixel values, or height x width x channels for a colour image, so it is indexed data\[\[y, x\]\] with rows running down the image -- note that ImageDimensions reports {width, height}, transposed relative to this. The type is inferred from the values: all-integer data in {0, 1} is "Bit", all-integer in 0..255 is "Byte", anything else is "Real". Image\[data, type\] states the type instead -- "Bit" (0 or 1), "Byte" (0..255), "Bit16" (0..65535) or "Real" ("Real32" and "Real64" are accepted as synonyms) -- and, as in Mathematica, COERCES the data to it: an integer type rounds each value to the nearest integer and clips it to the type's range, so Image\[{{0, 300}}, "Byte"\] stores {0, 255}; "Real" keeps any real value. Image\[image, type\] converts an image between types, preserving brightness. Data that is not a rectangular array of real numbers (ragged, non-numeric or complex) is left unevaluated.
 
 ## Examples (43)
 

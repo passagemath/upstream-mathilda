@@ -5,9 +5,9 @@
 
 ## Description
 
-**`NumberForm[expr, n] prints approximate real numbers in expr to n-digit`**
+**`NumberForm[expr, n]`**
 
-precision; NumberForm\[expr, {n, f}\] uses n digits with f to the right of the decimal point; NumberForm\[expr\] uses the default options. Works on integers as well.  It is an inert print wrapper: the head remains in the expression and only changes how it is displayed. Options: DefaultPrintPrecision, DigitBlock, ExponentFunction, ExponentStep, NumberFormat, NumberMultiplier, NumberPadding, NumberPoint, NumberSeparator, NumberSigns, ScientificNotationThreshold, SignPadding.
+prints approximate real numbers in expr to n-digit precision; NumberForm\[expr, {n, f}\] uses n digits with f to the right of the decimal point; NumberForm\[expr\] uses the default options. Works on integers as well.  It is an inert print wrapper: the head remains in the expression and only changes how it is displayed. Options: DefaultPrintPrecision, DigitBlock, ExponentFunction, ExponentStep, NumberFormat, NumberMultiplier, NumberPadding, NumberPoint, NumberSeparator, NumberSigns, ScientificNotationThreshold, SignPadding.
 
 ## Examples (8)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.`**
+**`PolynomialExtendedGCD[poly1, poly2, x]`**
+
+gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.
 
 ## Examples (5)
 

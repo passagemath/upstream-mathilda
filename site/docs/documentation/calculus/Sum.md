@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Sum[f, {i, imax}] gives the sum of f for i from 1 to imax. Sum[f, {i, imin, imax}], Sum[f, {i, imin, imax, di}] and Sum[f, {i, {i1, i2, ...}}] use the standard iterator forms; multiple iterators give nested sums. Sum[f, i] gives the indefinite sum (antidifference). Symbolic and infinite sums are evaluated in closed form via Method -> "Polynomial" | "Geometric" | "Gosper".`**
+**`Sum[f, {i, imax}]`**
+
+gives the sum of f for i from 1 to imax. Sum\[f, {i, imin, imax}\], Sum\[f, {i, imin, imax, di}\] and Sum\[f, {i, {i1, i2, ...}}\] use the standard iterator forms; multiple iterators give nested sums. Sum\[f, i\] gives the indefinite sum (antidifference). Symbolic and infinite sums are evaluated in closed form via Method -\> "Polynomial" | "Geometric" | "Gosper".
 
 ## Examples (36)
 
@@ -67,7 +69,7 @@ In[16]:= Sum[2^k/Binomial[2 k, k], {k, 1, Infinity}]
 Out[16]= 1 + 1/2 Pi
 
 In[17]:= Sum[1/Binomial[2 k, k], {k, 0, Infinity}]
-Out[17]= 4/3 + 2/9 Pi/Sqrt[3]
+Out[17]= 4/3 + (2 Pi)/(9 Sqrt[3])
 
 In[18]:= Sum[1/i^2, {i, 1, Infinity}]
 Out[18]= 1/6 Pi^2

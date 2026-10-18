@@ -5,37 +5,101 @@
 
 ## Description
 
-**`SetOptions[s, name -> value, ...] sets default options for the symbol`**
+**`SetOptions[s, name -> value, ...]`**
 
-s and returns the new Options\[s\].  It can change Protected symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
+sets default options for the symbol s and returns the new Options\[s\].  It can change Protected symbols, and only changes existing options -- an unknown name raises SetOptions::optnf.  Use AppendTo\[Options\[s\], ...\] to add one.
 
-## Examples (6)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Basic examples (3)
+### Basic examples (6)
 
 ```mathematica
 In[1]:= Options[LinearSolve]
 Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
 
-In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]} {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+In[2]:= Options[f] = {a -> 1, b -> 2}; f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
 
-In[3]:= SetOptions[f, c -> 3] SetOptions::optnf: c is not a known option for f. AppendTo[Options[f], c -> 3]
-Out[3]= Optional[{SetOptions::optnf (a -> 1), SetOptions::optnf (b -> 2), SetOptions::optnf (c -> 3)}, a c Dot[f, {a -> 1, b -> 2, c -> 3}] for is known not option]
+In[3]:= {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+Out[3]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+
+In[4]:= SetOptions[f, b -> 20]; f[]
+Out[4]= {1, 20}
+
+In[5]:= SetOptions[f, c -> 3]
+Out[5]= SetOptions[f, c -> 3]
+
+In[6]:= AppendTo[Options[f], c -> 3]
+Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 
-### Applications (3)
+### Applications (10)
 
 ```mathematica
-In[4]:= Options[FactorInteger]
-Out[4]= {GaussianIntegers -> False}
+In[7]:= Options[FactorInteger]
+Out[7]= {GaussianIntegers -> False, Method -> Automatic}
+```
 
-In[5]:= SetOptions[FactorInteger, GaussianIntegers -> True]
-Out[5]= {GaussianIntegers -> True}
+Returns the updated list
 
-In[6]:= Options[FactorInteger]
-Out[6]= {GaussianIntegers -> True}
+```mathematica
+In[8]:= SetOptions[FactorInteger, GaussianIntegers -> True]
+Out[8]= {GaussianIntegers -> True, Method -> Automatic}
+```
+
+```mathematica
+In[9]:= Options[FactorInteger]
+Out[9]= {GaussianIntegers -> True, Method -> Automatic}
+```
+
+Restore the default
+
+```mathematica
+In[10]:= SetOptions[FactorInteger, GaussianIntegers -> False]
+Out[10]= {GaussianIntegers -> False, Method -> Automatic}
+```
+
+The option keeps its position
+
+```mathematica
+In[11]:= Options[mf] = {alpha -> 1, beta -> 2}; SetOptions[mf, beta -> 20]
+Out[11]= {alpha -> 1, beta -> 20}
+```
+
+Option-reading code sees the new default
+
+```mathematica
+In[12]:= mf[OptionsPattern[]] := {OptionValue[alpha], OptionValue[beta]}; mf[]
+Out[12]= {1, 20}
+```
+
+An unknown option: SetOptions::optnf, left unevaluated
+
+```mathematica
+In[13]:= SetOptions[mf, gamma -> 3]
+Out[13]= SetOptions[mf, gamma -> 3]
+```
+
+Adding an option goes through Options[...] instead
+
+```mathematica
+In[14]:= AppendTo[Options[mf], gamma -> 3]
+Out[14]= {alpha -> 1, beta -> 20, gamma -> 3}
+```
+
+Built-ins read their defaults at call time
+
+```mathematica
+In[15]:= SetOptions[StringCases, IgnoreCase -> True]; StringCases["aAa", "a"]
+Out[15]= {"a", "A", "a"}
+```
+
+Restore the default
+
+```mathematica
+In[16]:= SetOptions[StringCases, IgnoreCase -> False]
+Out[16]= {IgnoreCase -> False, Overlaps -> False}
 ```
 
 ## Algorithm
@@ -70,16 +134,23 @@ vector and, for each trailing `name -> value` rule, finds the existing option of
 that name (context-insensitive match) and **replaces it in place**, preserving
 the option's original position.
 
-`SetOptions` cannot *add* an option: a name not already in the symbol's defaults
-raises `SetOptions::optnf` and the call aborts leaving the stored options
-unchanged; a malformed (non-rule) argument returns `NULL`. On success the new
+`SetOptions` cannot *add* an option. A name not already in the symbol's defaults
+raises `SetOptions::optnf` through `mth_message`, leaves the stored options
+unchanged, and leaves the call unevaluated. A malformed argument returns `NULL`:
+a non-rule, a list of rules, or a string in place of the symbol. On success the new
 list is stored with `symtab_set_options`, the evaluation cache is dropped
 (`eval_clock_bump`, since option changes can alter results), and a copy of the
 updated option list is returned.
 
 **Data structures & limits.** Options live on `SymbolDef.default_options` as
 `List[Rule[...]]`; the working vector holds `expr_copy`'d rules so nothing
-aliased is mutated before the atomic store. `SetOptions` is `Protected`.
+aliased is mutated before the atomic store. `SetOptions` is `Protected`, but it
+works on `Protected` targets: built-ins read their defaults from this store at
+call time. For example, the regex string functions (`StringCases`,
+`StringPosition`, `StringCount`, `StringSplit`, `StringReplace`, `StringMatchQ`,
+`StringContainsQ`, …) seed `IgnoreCase`/`Overlaps` from `Options[head]` before
+looking at explicit options. `builtin_setoptions` makes no attribute check on
+the target symbol.
 
 - `Options`, `SetOptions`, and `OptionValue` all have attribute `{Protected}`.
 - Default options survive `Clear[f]` (only rules are cleared) and are removed
@@ -122,11 +193,17 @@ aliased is mutated before the atomic store. `SetOptions` is `Protected`.
 
 ### Notes
 
-`SetOptions[s, name -> value, ...]` changes a symbol's *default* option settings
-and returns the full updated option list. The change is made in place: the
-matching option keeps its original position and only its value is replaced, so
-later `Options[s]` and option-reading builtins see the new default.
-
-`SetOptions` can only change options a symbol already has — a name that is not a
-known option raises `SetOptions::optnf` and leaves the settings untouched. The
-first argument must be a symbol.
+- `SetOptions[s, name -> value, ...]` changes a symbol's default option settings
+  and returns the full updated option list. Each changed option keeps its
+  original position. Later `Options[s]` calls, `OptionValue`, and the built-ins
+  that read their own defaults all see the new value.
+- It works on `Protected` symbols. Built-ins such as `StringCases`,
+  `StringPosition`, `StringSplit` and `StringMatchQ` seed `IgnoreCase` /
+  `Overlaps` from `Options[head]`.
+- It can only change options a symbol already has. An unknown name raises
+  `SetOptions::optnf` and leaves both the settings and the call unchanged. Use
+  `AppendTo[Options[s], ...]` or `Options[s] = {...}` to add options.
+- The first argument must be a symbol, and each option a separate rule argument.
+  A list of rules is not accepted.
+- The evaluation cache is dropped on every change.
+- See also: `Options`, `OptionValue`, `OptionsPattern`.

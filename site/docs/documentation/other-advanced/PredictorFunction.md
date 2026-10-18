@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PredictorFunction[method, coefficients, featureCount] is the fitted object Predict returns. Apply it to a feature vector to get a prediction, or to "Method", "Coefficients" or "FeatureCount" to read it. A one-feature model also accepts a bare scalar.`**
+**`PredictorFunction[method, coefficients, featureCount]`**
+
+is the fitted object Predict returns. Apply it to a feature vector to get a prediction, or to "Method", "Coefficients" or "FeatureCount" to read it. A one-feature model also accepts a bare scalar.
 
 ## Examples (4)
 

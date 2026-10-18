@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Perimeter[Polygon[{{x1, y1}, ...}]] gives the perimeter of a simple 2D polygon: the sum of its edge lengths, including the closing edge. Exact coordinates give an exact (possibly symbolic, e.g. 2 + Sqrt[2]) result; Real coordinates give a machine-precision result.`**
+**`Perimeter[Polygon[{{x1, y1}, ...}]]`**
+
+gives the perimeter of a simple 2D polygon: the sum of its edge lengths, including the closing edge. Exact coordinates give an exact (possibly symbolic, e.g. 2 + Sqrt\[2\]) result; Real coordinates give a machine-precision result.
 
 ## Examples (6)
 

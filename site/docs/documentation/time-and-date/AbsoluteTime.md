@@ -13,12 +13,21 @@ gives the total number of seconds since the beginning of January 1, 1900, in you
 
 gives the absolute time specification corresponding to the given date specification.
 
-**`AbsoluteTime[] uses whatever date and time have been set on your computer system. It`**
+**`AbsoluteTime[]`**
+
+uses whatever date and time have been set on your computer system. It
 
 <details>
 <summary>Notes</summary>
 
-The supported date specifications are: {y, m, d, h, m, s}    DateList specification time            AbsoluteTime specification (a number, returned unchanged) DateList entries may be elided from the right: {y}, {y, m}, {y, m, d}, etc. fill the missing fields with {\_, 1, 1, 0, 0, 0}. Day, hour, minute, and second values may be noninteger; the year and month must be integers. Date lists are converted to standard normalized form, so e.g. AbsoluteTime\[{2022, 2, 31}\] = AbsoluteTime\[{2022, 3, 3}\]. performs no corrections for time zones, daylight saving time, or leap seconds.
+The supported date specifications are:
+
+```text
+{y, m, d, h, m, s}    DateList specification
+time            AbsoluteTime specification (a number, returned unchanged)
+```
+
+DateList entries may be elided from the right: {y}, {y, m}, {y, m, d}, etc. fill the missing fields with {\_, 1, 1, 0, 0, 0}. Day, hour, minute, and second values may be noninteger; the year and month must be integers. Date lists are converted to standard normalized form, so e.g. AbsoluteTime\[{2022, 2, 31}\] = AbsoluteTime\[{2022, 3, 3}\]. performs no corrections for time zones, daylight saving time, or leap seconds.
 
 </details>
 
@@ -30,7 +39,7 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= AbsoluteTime[]
-Out[1]= 4.0001e+09
+Out[1]= 4.00134e+09
 ```
 
 ## Implementation notes

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Mean[data] gives the mean estimate of the elements in data.`**
+**`Mean[data]`**
+
+gives the mean estimate of the elements in data.
 
 ## Examples (5)
 
@@ -67,7 +69,7 @@ Against other systems, from the benchmark suite (same input, results cross-check
 
 **See also:** [Total](../../arithmetic/Total/), [Min](../../data-structures/Min/), [Max](../../data-structures/Max/)
 
-- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/data-structures.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/data-structures.md)
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PrimitiveRootList[n] gives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}; when n admits any, there are exactly EulerPhi[EulerPhi[n]] of them.`**
+**`PrimitiveRootList[n]`**
+
+gives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}; when n admits any, there are exactly EulerPhi\[EulerPhi\[n\]\] of them.
 
 <details>
 <summary>Notes</summary>
@@ -76,7 +78,7 @@ Out[9]= 40
 ## References
 
 - K. Ireland and M. Rosen, *A Classical Introduction to Modern Number Theory*, 2nd ed., Springer, 1990 — primitive roots and the structure of `(Z/nZ)*` (Chapter 4).
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_primitive_root.c`](https://github.com/stblake/mathilda/blob/main/tests/test_primitive_root.c)
 

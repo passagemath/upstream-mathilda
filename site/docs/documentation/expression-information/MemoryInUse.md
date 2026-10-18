@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MemoryInUse[] gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.`**
+**`MemoryInUse[]`**
+
+gives the number of bytes of memory currently resident for the Mathilda process. This is the process resident set size, so unlike Mathematica's MemoryInUse it also counts the binary, the shared libraries and whatever the allocator holds without returning it to the system -- it is the figure Activity Monitor and top report, not a count of session data alone. Returns unevaluated on a platform that offers no way to ask, rather than reporting zero.
 
 ## Examples (4)
 
@@ -15,10 +17,10 @@ Every input below was run against the current Mathilda build and its output reco
 
 ```mathematica
 In[1]:= MemoryInUse[]
-Out[1]= 8208384
+Out[1]= 8433664
 
 In[2]:= N[MemoryInUse[]/1024^2, 4]
-Out[2]= 7.8477
+Out[2]= 8.0742
 ```
 
 ### Applications (2)

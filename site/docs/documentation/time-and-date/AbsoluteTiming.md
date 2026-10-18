@@ -5,7 +5,9 @@
 
 ## Description
 
-**`AbsoluteTiming[expr] evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.`**
+**`AbsoluteTiming[expr]`**
+
+evaluates expr, and returns a list of the absolute number of seconds of elapsed wall-clock time, together with the result obtained.
 
 ## Examples (6)
 
@@ -92,6 +94,7 @@ packed/`Compile[]` surface.
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
 - Tests: [`tests/test_datetime.c`](https://github.com/stblake/mathilda/blob/main/tests/test_datetime.c)
+- Tests: [`tests/test_meijerg.c`](https://github.com/stblake/mathilda/blob/main/tests/test_meijerg.c)
 
 ## Notes & additional examples
 

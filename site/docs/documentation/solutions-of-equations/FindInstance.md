@@ -53,7 +53,7 @@ In[7]:= FindInstance[x^2 - 61 y^2 == 1 && x > 0 && y > 0, {x, y}, Integers]
 Out[7]= {{x -> 1766319049, y -> 226153980}}
 
 In[8]:= FindInstance[Sin[1/x] == 0 && 0 < x < 10^-5, x, Reals]
-Out[8]= {{x -> 1/31831/Pi}}
+Out[8]= {{x -> 1/(31831 Pi)}}
 
 In[9]:= FindInstance[a^3 + b^3 + c^3 == d^3 && a > 0 && b > 0 && c > 0 && d > 0, {a, b, c, d}, Integers]
 Out[9]= {{a -> 5, b -> 4, c -> 3, d -> 6}}

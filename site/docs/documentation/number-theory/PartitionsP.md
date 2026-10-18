@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).`**
+**`PartitionsP[n]`**
+
+gives the number p(n) of unrestricted partitions of the integer n, evaluated exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt\[2n/3\])).
 
 <details>
 <summary>Notes</summary>

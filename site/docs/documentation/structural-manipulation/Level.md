@@ -13,12 +13,23 @@ gives a list of all subexpressions of expr on levels specified by levelspec.
 
 applies f to the sequence of subexpressions.
 
-**`Level[expr, {-1}] gives a list of all "atomic" objects in expr.`**
+**`Level[expr, {-1}]`**
+
+gives a list of all "atomic" objects in expr.
 
 <details>
 <summary>Notes</summary>
 
-Level uses standard level specifications: n            levels 1 through n Infinity     levels 1 through Infinity {n}          level n only {n1, n2}     levels n1 through n2 A positive level n consists of all parts of expr specified by n indices. A negative level -n consists of all parts of expr with depth n. Level 0 corresponds to the whole expression. With the option setting Heads-\>True, Level includes heads of expressions and their parts. Level traverses expressions in depth-first order, so that the subexpressions in the final list are ordered lexicographically by their indices.
+Level uses standard level specifications:
+
+```text
+n            levels 1 through n
+Infinity     levels 1 through Infinity
+{n}          level n only
+{n1, n2}     levels n1 through n2
+```
+
+A positive level n consists of all parts of expr specified by n indices. A negative level -n consists of all parts of expr with depth n. Level 0 corresponds to the whole expression. With the option setting Heads-\>True, Level includes heads of expressions and their parts. Level traverses expressions in depth-first order, so that the subexpressions in the final list are ordered lexicographically by their indices.
 
 </details>
 

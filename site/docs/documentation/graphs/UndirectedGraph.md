@@ -5,7 +5,9 @@
 
 ## Description
 
-**`UndirectedGraph[g] gives the undirected graph underlying g: u->v and v->u become the single edge u<->v, whose weight is the sum of theirs. Edges are oriented and ordered by VertexList position. An undirected g is returned unchanged.`**
+**`UndirectedGraph[g]`**
+
+gives the undirected graph underlying g: u-\>v and v-\>u become the single edge u\<-\>v, whose weight is the sum of theirs. Edges are oriented and ordered by VertexList position. An undirected g is returned unchanged.
 
 ## Examples (6)
 

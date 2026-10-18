@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Interval[{min, max}] represents the range of real values between min and max, inclusive. Interval[{a1,b1}, {a2,b2}, ...] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.`**
+**`Interval[{min, max}]`**
+
+represents the range of real values between min and max, inclusive. Interval\[{a1,b1}, {a2,b2}, ...\] is the union of the ranges. Arithmetic and elementary functions thread through intervals, producing rigorous enclosures; exact endpoints are kept exact.
 
 ## Examples (5)
 
@@ -87,6 +89,7 @@ is fuzzed by `tools/interval_fuzz.py` (`make check-interval`).
 - R. E. Moore, R. B. Kearfott and M. J. Cloud, *Introduction to Interval Analysis* (SIAM, 2009).
 - Source: [`src/interval.c`](https://github.com/stblake/mathilda/blob/main/src/interval.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+- Tests: [`tests/test_dirichletl.c`](https://github.com/stblake/mathilda/blob/main/tests/test_dirichletl.c)
 - Tests: [`tests/test_elliptic.c`](https://github.com/stblake/mathilda/blob/main/tests/test_elliptic.c)
 - Tests: [`tests/test_interval.c`](https://github.com/stblake/mathilda/blob/main/tests/test_interval.c)
 - Tests: [`tests/test_limit.c`](https://github.com/stblake/mathilda/blob/main/tests/test_limit.c)

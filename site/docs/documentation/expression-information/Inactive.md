@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Inactive[f] represents f with evaluation of its own rules suppressed, so Inactive[f][args] stays unevaluated (its arguments still evaluate).  Used to hold an integral inert, e.g. Inactive[Integrate][g, x]; Activate reverses it.`**
+**`Inactive[f]`**
+
+represents f with evaluation of its own rules suppressed, so Inactive\[f\]\[args\] stays unevaluated (its arguments still evaluate).  Used to hold an integral inert, e.g. Inactive\[Integrate\]\[g, x\]; Activate reverses it.
 
 ## Examples (6)
 

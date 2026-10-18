@@ -5,7 +5,9 @@
 
 ## Description
 
-**`FindMinimumTransversal[h] gives a smallest set of vertices meeting every hyperedge of h (a minimum hitting set). Left unevaluated if some hyperedge is empty or the exact search exceeds its budget.`**
+**`FindMinimumTransversal[h]`**
+
+gives a smallest set of vertices meeting every hyperedge of h (a minimum hitting set). Left unevaluated if some hyperedge is empty or the exact search exceeds its budget.
 
 ## Examples (9)
 

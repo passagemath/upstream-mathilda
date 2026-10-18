@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeCount[g] gives the number of edges in the graph g.`**
+**`EdgeCount[g]`**
+
+gives the number of edges in the graph g.
 
 ## Examples (8)
 

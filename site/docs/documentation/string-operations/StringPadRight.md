@@ -21,7 +21,7 @@ Pads each string on the right with spaces to the length of the longest, making t
 
 Pads or truncates each string to length n.
 
-## Examples (7)
+## Examples (11)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -41,7 +41,7 @@ In[4]:= StringPadLeft[{"a", "ab", "abc", "abcd", "abcde"}, 3]
 Out[4]= {"  a", " ab", "abc", "bcd", "cde"}
 ```
 
-### Applications (3)
+### Applications (7)
 
 Right-pad to width 5 with zeros
 
@@ -50,18 +50,46 @@ In[5]:= StringPadRight["42", 5, "0"]
 Out[5]= "42000"
 ```
 
-A multi-character pad cycles
+Too long: truncation keeps the first n characters
 
 ```mathematica
-In[6]:= StringPadRight["abc", 7, ".-"]
-Out[6]= "abc.-.-"
+In[6]:= StringPadRight["abcdef", 3]
+Out[6]= "abc"
 ```
 
-Too long: truncation keeps the FIRST n
+The pad cycle is aligned to the result, so it continues past the text
 
 ```mathematica
-In[7]:= StringPadRight["abcdef", 3]
-Out[7]= "abc"
+In[7]:= StringPadRight["ab", 6, "xyz"]
+Out[7]= "abzxyz"
+```
+
+Result character i is the pad's character i mod 2
+
+```mathematica
+In[8]:= StringPadRight["x", 6, "ab"]
+Out[8]= "xbabab"
+```
+
+The one-argument list form pads to the longest element
+
+```mathematica
+In[9]:= StringPadRight[{"a", "bb", "ccc"}]
+Out[9]= {"a  ", "bb ", "ccc"}
+```
+
+Fixed-width fields
+
+```mathematica
+In[10]:= StringRiffle[StringPadRight[{"id", "name", "x"}, 6, "."], "|"]
+Out[10]= "id....|name..|x....."
+```
+
+An empty pad string is rejected
+
+```mathematica
+In[11]:= StringPadRight["abc", 5, ""]
+Out[11]= StringPadRight["abc", 5, ""]
 ```
 
 ## Algorithm
@@ -72,7 +100,7 @@ stringpad.c - StringPadLeft and StringPadRight builtins for Mathilda
 StringPadLeft["str", n]        - "str" of length n, padded on the left with
                                  spaces or truncated (keeping the last n chars).
 StringPadLeft["str", n, "p"]   - as above, padded by repeating copies of "p".
-StringPadLeft["str"]           - returns "str" unchanged (n = length of str).
+StringPadLeft["str"]           - unevaluated (StringPadLeft::strlist).
 StringPadLeft[{s1, s2, ...}]   - pads each string with spaces to the length of
                                  the longest, so all become the same length.
 StringPadLeft[{s1, ...}, n]    - pads or truncates each string to length n.
@@ -82,17 +110,17 @@ StringPadLeft[{s1, ...}, n, "p"] - as above, using padding string "p".
 
 StringPadRight is identical except padding is added on the right and truncation keeps the first n characters.
 
-Padding is laid down as cyclic copies of the pad string read left-to-right (pad[i] = p[i % plen]) on both sides, truncated when the target width is reached; this matches the Wolfram Language documentation and all documented examples (e.g. StringPadLeft["abcde", 10, "."] -> ".....abcde").
+Padding is the pad string repeated cyclically and ALIGNED to the result, as in Mathematica: on the right, result character i (0-based) is p[i mod plen]; on the left, it is p[(i - n) mod plen], i.e. the cycle is anchored at the result's end. So StringPadRight["ab", 6, "xyz"] is "abzxyz" and StringPadLeft["ab", 7, "xyz"] is "zxyzxab".
 
-Strings are treated as raw byte arrays (consistent with StringRepeat / StringTake / StringPartition across this subsystem); no UTF-8 codepoint decoding is performed, so lengths count bytes.
+Lengths count characters (Unicode code points); the pad string is cycled a character at a time.
 
 ## Implementation notes
 
-**Algorithm.** `StringPadRight` is the mirror of `StringPadLeft` and shares the same `pad_dispatch` (invoked with the `left` flag false). It pads on the right and, when the string is longer than `n`, truncates keeping the first `n` bytes. The pad string (a single space by default) is laid down cyclically from the left, `p[i mod plen]`, so a multi-character pad such as `".-"` repeats `.-.-…`. A `List` first argument pads every element to the explicit `n`, or to the longest element in the one-argument form.
+**Algorithm.** `StringPadRight` mirrors `StringPadLeft` through the same `pad_dispatch`, called with `left` false. It pads on the right, and when the string is longer than `n` it keeps the first `n` characters. The pad string (default `" "`) cycles one character at a time and is aligned to the result: result character `i` (0-based) is `p[i mod plen]`. So the cycle continues across the original text rather than restarting after it. `StringPadRight["ab", 6, "xyz"]` is `"abzxyz"` and `StringPadRight["x", 6, "ab"]` is `"xbabab"`. Before v0.456 these gave `"xababa"`-style answers. A `List` first argument pads every element to `n`, or, in the one-argument form, to the longest element.
 
-**Data structures.** One output buffer per string; a `List` result for a list input.
+**Data structures.** A `U8View` gives the pad string's code-point offsets. Lengths count Unicode characters. Each string gets one output buffer, and a list input gives a `List`.
 
-**Complexity / limits.** `O(n)` per string. An arity outside 1–3 emits `StringPadRight::argb`. A non-integer/negative `n`, a non-string or list-valued pad, or an empty pad when padding is required, leaves the call unevaluated. Not `Listable`; byte-length based.
+**Complexity / limits.** `O(n)` per string. A wrong arity gives `::argb`, a negative or non-integer `n` gives `::intnm`, an empty or non-string pad gives `::stringnz`, and a non-list or non-string element gives `::strlist`. All of these leave the call unevaluated. Not `Listable`.
 
 **Attributes:** `Protected`.
 
@@ -102,15 +130,19 @@ Strings are treated as raw byte arrays (consistent with StringRepeat / StringTak
 
 - Source: [`src/strings/stringpad.c`](https://github.com/stblake/mathilda/blob/main/src/strings/stringpad.c)
 - Specification: [`docs/spec/builtins/string-operations.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/string-operations.md)
+- Tests: [`tests/test_string_review.c`](https://github.com/stblake/mathilda/blob/main/tests/test_string_review.c)
 - Tests: [`tests/test_stringpad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_stringpad.c)
 
 ## Notes & additional examples
 
 ### Notes
 
-`StringPadRight` is the mirror of `StringPadLeft`: it pads on the right and, when
-truncating, keeps the first `n` bytes. The two share one implementation
-(`pad_dispatch`) selected by a `left` flag.
-
-The pad string is laid down cyclically from the left, so a multi-character pad
-such as `".-"` repeats `.-.-...`. Lengths are byte counts.
+- `StringPadRight[s, n, p]` mirrors `StringPadLeft`. It pads on the right, and
+  when truncating it keeps the first `n` characters.
+- The pad is aligned to the result: result character `i` (0-based) is
+  `p[[i mod Length[p]]]`. So the cycle does not restart after the original
+  text: `StringPadRight["x", 6, "ab"]` is `"xbabab"`. This matches Mathematica.
+  Before v0.456 Mathilda gave `"xababa"`.
+- Lengths count Unicode characters. Bad arguments emit `::intnm`, `::stringnz`
+  or `::strlist` and leave the call unevaluated.
+- See also: `StringPadLeft`, `StringRepeat`, `StringRiffle`.

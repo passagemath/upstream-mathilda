@@ -5,7 +5,9 @@
 
 ## Description
 
-**`ColorReplace[image, old -> new] replaces every pixel within a tolerance of `old` by `new`; ColorReplace[image, {r1, r2, ...}] applies several rules and ColorReplace[image, rules, tol] sets the tolerance (default 0.02 -- at 0 only bit-identical colours match, which after any filtering is nothing at all). Distance is Euclidean in RGB, and where rules overlap the NEAREST wins rather than the first, so the answer does not depend on the order they were written. Colours may be RGBColor[r, g, b], GrayLevel[v], a number or {r, g, b}. Replacing a grey image's colour with a non-grey one produces a three-channel image, since flattening the new colour to its luminance would give grey when the caller asked for red. An alpha channel passes through: transparency is not a colour.`**
+**`ColorReplace[image, old -> new]`**
+
+replaces every pixel within a tolerance of \`old\` by \`new\`; ColorReplace\[image, {r1, r2, ...}\] applies several rules and ColorReplace\[image, rules, tol\] sets the tolerance (default 0.02 -- at 0 only bit-identical colours match, which after any filtering is nothing at all). Distance is Euclidean in RGB, and where rules overlap the NEAREST wins rather than the first, so the answer does not depend on the order they were written. Colours may be RGBColor\[r, g, b\], GrayLevel\[v\], a number or {r, g, b}. Replacing a grey image's colour with a non-grey one produces a three-channel image, since flattening the new colour to its luminance would give grey when the caller asked for red. An alpha channel passes through: transparency is not a colour.
 
 ## Examples (13)
 

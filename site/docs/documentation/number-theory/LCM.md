@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LCM[n1, n2, ...] gives the least common multiple of the integers ni, the smallest positive integer they all divide; with the gcd it satisfies GCD[a, b] LCM[a, b] == a b.`**
+**`LCM[n1, n2, ...]`**
+
+gives the least common multiple of the integers ni, the smallest positive integer they all divide; with the gcd it satisfies GCD\[a, b\] LCM\[a, b\] == a b.
 
 <details>
 <summary>Notes</summary>
@@ -54,12 +56,12 @@ Out[6]= 13548070123626141
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
-- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
 - Tests: [`tests/test_chinese_remainder.c`](https://github.com/stblake/mathilda/blob/main/tests/test_chinese_remainder.c)
 - Tests: [`tests/test_compiledfunction.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compiledfunction.c)
 - Tests: [`tests/test_core.c`](https://github.com/stblake/mathilda/blob/main/tests/test_core.c)
-- Tests: [`tests/test_integrate_linrad.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integrate_linrad.c)
+- Tests: [`tests/test_integer_assume_simplify.c`](https://github.com/stblake/mathilda/blob/main/tests/test_integer_assume_simplify.c)
 
 ## Notes & additional examples
 

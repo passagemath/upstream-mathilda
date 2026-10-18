@@ -5,9 +5,9 @@
 
 ## Description
 
-**`Increment[x] or x++`**
+**`Increment[x]`**
 
-increases the value of x by 1, returning the old value of x.
+or x++ increases the value of x by 1, returning the old value of x.
 
 <details>
 <summary>Notes</summary>

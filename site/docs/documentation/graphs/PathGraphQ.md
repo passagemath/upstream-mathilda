@@ -5,7 +5,9 @@
 
 ## Description
 
-**`PathGraphQ[g] gives True if g is a path: connected with at least one vertex and, if undirected, every degree at most 2 and one edge fewer than vertices; if directed, every in- and out-degree at most 1. Mixed graphs are never paths.`**
+**`PathGraphQ[g]`**
+
+gives True if g is a path: connected with at least one vertex and, if undirected, every degree at most 2 and one edge fewer than vertices; if directed, every in- and out-degree at most 1. Mixed graphs are never paths.
 
 ## Examples (6)
 

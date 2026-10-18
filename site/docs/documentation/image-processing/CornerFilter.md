@@ -5,7 +5,9 @@
 
 ## Description
 
-**`CornerFilter[image] gives the corner strength at every pixel, from the eigenvalues of the Gaussian-weighted second-moment matrix of the gradient (the structure tensor). Both eigenvalues small is flat, one large is an edge, both large is a corner. CornerFilter[image, r] sets the window radius (default 2); CornerFilter[image, r, method] selects "MinimumEigenvalue" (the default -- Shi-Tomasi's lambda_min, which is directly "how much does the weaker direction vary" and is comparable across images) or "Harris" (det - 0.04 trace^2, cheaper since it needs no square root, and negative on edges). A STRAIGHT EDGE SCORES ZERO under both: every gradient in the window is parallel, so the matrix has rank 1 and its determinant and smaller eigenvalue vanish. Colour is reduced to luminance first, since a corner is a property of brightness.`**
+**`CornerFilter[image]`**
+
+gives the corner strength at every pixel, from the eigenvalues of the Gaussian-weighted second-moment matrix of the gradient (the structure tensor). Both eigenvalues small is flat, one large is an edge, both large is a corner. CornerFilter\[image, r\] sets the window radius (default 2); CornerFilter\[image, r, method\] selects "MinimumEigenvalue" (the default -- Shi-Tomasi's lambda\_min, which is directly "how much does the weaker direction vary" and is comparable across images) or "Harris" (det - 0.04 trace^2, cheaper since it needs no square root, and negative on edges). A STRAIGHT EDGE SCORES ZERO under both: every gradient in the window is parallel, so the matrix has rank 1 and its determinant and smaller eigenvalue vanish. Colour is reduced to luminance first, since a corner is a property of brightness.
 
 ## Examples (52)
 

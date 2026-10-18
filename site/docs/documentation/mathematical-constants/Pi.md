@@ -9,7 +9,9 @@
 
 is pi, with numerical value ~= 3.14159.
 
-**`NumericQ[Pi] is True, and D[Pi, x] is 0. N[Pi, prec] evaluates it to any`**
+**`NumericQ[Pi]`**
+
+is True, and D\[Pi, x\] is 0. N\[Pi, prec\] evaluates it to any
 
 <details>
 <summary>Notes</summary>

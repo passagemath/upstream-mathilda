@@ -5,9 +5,13 @@
 
 ## Description
 
-**`BeginPackage["ctx`"] sets the current context to "ctx`" and restricts`**
+**`BeginPackage["ctx`"]`**
 
-**`BeginPackage["ctx`", {"need1`", ...}] additionally prepends the`**
+sets the current context to "ctx\`" and restricts
+
+**`BeginPackage["ctx`", {"need1`", ...}]`**
+
+additionally prepends the
 
 <details>
 <summary>Notes</summary>

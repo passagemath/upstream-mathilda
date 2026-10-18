@@ -74,6 +74,7 @@ insertion order. No hash index — it is a structural read.
 - Tests: [`tests/test_assoc_ops.c`](https://github.com/stblake/mathilda/blob/main/tests/test_assoc_ops.c)
 - Tests: [`tests/test_association.c`](https://github.com/stblake/mathilda/blob/main/tests/test_association.c)
 - Tests: [`tests/test_compile_assoc.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile_assoc.c)
+- Tests: [`tests/test_upvalues.c`](https://github.com/stblake/mathilda/blob/main/tests/test_upvalues.c)
 
 ## Notes & additional examples
 

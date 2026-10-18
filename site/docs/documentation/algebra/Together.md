@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Together[expr] combines fractions over a common denominator, then cancels.`**
+**`Together[expr]`**
+
+combines fractions over a common denominator, then cancels.
 
 <details>
 <summary>Notes</summary>
@@ -14,7 +16,7 @@ Option Extension -\> alpha runs the final cancellation over Q(alpha) so algebrai
 
 </details>
 
-## Examples (13)
+## Examples (16)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
@@ -47,26 +49,69 @@ In[7]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
 Out[7]= (2 x)/(-2 + x^2)
 ```
 
-### Applications (6)
+### Applications (9)
+
+Distinct denominators are multiplied
 
 ```mathematica
 In[8]:= Together[1/x + 1/y]
 Out[8]= (x + y)/(x y)
+```
 
-In[9]:= Together[1/(x-1) + 1/(x+1)]
-Out[9]= (2 x)/(-1 + x^2)
+A common factor hidden across the denominators is cancelled
 
-In[10]:= Together[a/b + c/d]
-Out[10]= (b c + a d)/(b d)
+```mathematica
+In[9]:= Together[1/(x - 1) - 2/(x^2 - 1)]
+Out[9]= 1/(1 + x)
+```
 
-In[11]:= Together[1/x + 1/(x+1) + 1/(x+2)]
-Out[11]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
+A telescoping sum collapses to 1
 
-In[12]:= Together[a/(a-b) + b/(b-a)]
-Out[12]= 1
+```mathematica
+In[10]:= Together[a/(a - b) + b/(b - a)]
+Out[10]= 1
+```
 
-In[13]:= Together[1/(x-1) - 2/(x^2-1)]
-Out[13]= 1/(1 + x)
+The exponential kernel is a generator of the rational function field
+
+```mathematica
+In[11]:= Together[E^x/(E^x + 1) + 1/(E^x + 1)]
+Out[11]= 1
+```
+
+Combination over Q(Sqrt[2])
+
+```mathematica
+In[12]:= Together[1/(x - Sqrt[2]) + Sqrt[2]/(x^2 - 2), Extension -> Sqrt[2]]
+Out[12]= (2 Sqrt[2] + x)/(-2 + x^2)
+```
+
+Logarithms stay opaque: Log[x^2] is not rewritten to 2 Log[x]
+
+```mathematica
+In[13]:= Together[Log[x^2] + 1/x]
+Out[13]= (1 + x Log[x^2])/x
+```
+
+An unevaluated integral is an atom, never re-evaluated with a symbol inside
+
+```mathematica
+In[14]:= Together[E^Cos[x] Integrate[E^-Cos[x], x]]
+Out[14]= E^Cos[x] Integrate[E^(-Cos[x]), x]
+```
+
+Threads over lists and equations
+
+```mathematica
+In[15]:= Together[{1/x + 1, x == 1/y + 1}]
+Out[15]= {(1 + x)/x, x == (1 + y)/y}
+```
+
+Inexact input is rationalised, combined and numericalised again
+
+```mathematica
+In[16]:= Together[0.5/x + 1/(2 x)]
+Out[16]= 1/x
 ```
 
 ## Options & behaviour
@@ -84,7 +129,9 @@ Out[13]= 1/(1 + x)
 
 **Algorithm.** `builtin_together` is a `FactorMemo`-keyed memoisation wrapper around `builtin_together_compute`, so repeated `Together[arg, opts]` calls issued during one `Simplify` (which pushes a `FactorMemo`) hit the cache; standalone calls see no overhead. The compute routine puts everything over a common denominator and cancels.
 
-The core walker `together_recursive` recurses structurally. For a `Plus[t_1, ..., t_n]` it first `together`s each summand, splits each into numerator/denominator via `extract_num_den`, computes the iterated `PolynomialLCM` of the denominators, then for each term forms `lcm_den / den_i` using `cancel_exact_div_strict` (exact polynomial division in Q[vars]) — a *strict* combine: if any quotient is not exact (a sign that `PolynomialLCM` was only valid in some algebraic-extension ring, e.g. multi-radical sums), it bails cleanly and leaves the `Plus` uncombined rather than risk the `Power[Plus[...], -1]`-inside-numerator GCD blowup. When all quotients are exact, it sums the rescaled numerators, multiplies by `Power[lcm_den, -1]`, and runs `cancel_recursive` (PolynomialGCD-based cancellation) on the result. `List`/relational/logical heads thread through their args; other heads recurse and then cancel.
+**Dispatch, FLINT build.** `builtin_together_compute` first tries `rat_canon_normalize(arg, RCM_TOGETHER)` (`src/poly/ratcanon.c`) on exact, option-free input; `MATHILDA_RATCANON=off` turns this off. `rat_canon_build` replaces every kernel by a fresh indeterminate, giving one ordered generator tower. Transcendental kernels (`Log`, `E^f`, inverse trig) become free generators, and `rt_expand_exp_sums` first splits `E^(a+b)` so that commensurate exponentials share one fundamental. Algebraic generators (`I`, radicals, roots of unity) carry their minimal polynomial as a relation. `rat_canon_reduce` reduces num/den modulo those relations with `flint_tower_reduce`, maps back, and sign-normalises the result. It declines to the classical paths whenever a number-field common factor might be missed. Next come `flint_cancel_fraction` for algebraic extensions (including parametric `Q(a, b)(Sqrt[k])`) and then the plain-Q `fmpz_mpoly_q` fast path, both before the classical walker below. Since v0.434 two rules keep these paths value-preserving. **Binding operators are opaque**: `poly_is_binding_operator` marks unevaluated `Integrate`, `D`, `Sum`, `Limit`, `Function`, `Hold*`, `Inactive[op][…]` and similar heads as atoms, so the kernel substitution never descends into them and re-evaluates them with a symbol in place of the kernel. **Logs are never expanded**: `Log[x^2]` stays one generator rather than becoming `2 Log[x]`, which is false for `x < 0`.
+
+The classical walker `together_recursive` recurses structurally. For a `Plus[t_1, ..., t_n]` it first `together`s each summand, splits each into numerator/denominator via `extract_num_den`, computes the iterated `PolynomialLCM` of the denominators, then for each term forms `lcm_den / den_i` using `cancel_exact_div_strict` (exact polynomial division in Q[vars]) — a *strict* combine: if any quotient is not exact (a sign that `PolynomialLCM` was only valid in some algebraic-extension ring, e.g. multi-radical sums), it bails cleanly and leaves the `Plus` uncombined rather than risk the `Power[Plus[...], -1]`-inside-numerator GCD blowup. When all quotients are exact, it sums the rescaled numerators, multiplies by `Power[lcm_den, -1]`, and runs `cancel_recursive` (PolynomialGCD-based cancellation) on the result. `List`/relational/logical heads thread through their args; other heads recurse and then cancel.
 
 Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract_num_den` only splits products, powers (pushing negative integer/rational exponents into the denominator), exponentials, complexes, and literal rationals; expansion is left to downstream poly-GCD with size gates. `builtin_together_compute` additionally handles `Extension -> α` (and `Extension -> Automatic`, which calls `extension_autodetect`): single-generator extensions route through `together_recursive_ext` over Q(α)[x]; multi-generator towers route through `qa_cancel_with_tower`, with nested-radical α prefiltered out and a "best generator" guided fallback (`pick_best_tower_generator`) gated on leaf count. A `poly_find_radical_gen` pass substitutes a radical generator to a fresh symbol, runs the no-extension path, and substitutes back. Inexact inputs are rationalised then re-numericalised (`internal_rationalize_then_numericalize`).
 
@@ -94,6 +141,15 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 
 - `Protected`, `Listable`.
 - Makes a sum of terms into a single rational function.
+- **Value-preserving on every kernel** (2026-10-17). Transcendental kernels are
+  replaced by fresh generators only OUTSIDE variable-binding operators: an
+  unevaluated `Integrate`/`D`/`Sum`/`Product`/`Limit`/`Series`, a `Function`, an
+  `Inactive[op][...]` form or a `Hold` wrapper is an opaque atom (previously
+  `Together[E^Cos[x] Integrate[E^-Cos[x], x]]` returned `x`, the generator having been
+  substituted into the integrand and re-integrated). `Log[...]` arguments are never
+  rewritten: `Together[Log[x^2] + 1/x]` is `(1 + x Log[x^2])/x`, not `2 Log[x]` (false
+  for `x < 0`), and `Log[-w]` is not split into `I Pi + Log[w]` — matching Mathematica.
+  The same holds for `Cancel` and `Factor`.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).
@@ -104,7 +160,7 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 
 ## References
 
-**See also:** [PolynomialLCM](../../algebra/PolynomialLCM/), [PolynomialQuotient](../../algebra/PolynomialQuotient/), [PolynomialRemainder](../../algebra/PolynomialRemainder/), [PolynomialExtendedGCD](../../algebra/PolynomialExtendedGCD/), [AlgebraicNumber](../../algebra/AlgebraicNumber/), [Cancel](../../algebra/Cancel/), [Plus](../../arithmetic/Plus/)
+**See also:** [Integrate](../../calculus/Integrate/), [D](../../calculus/D/), [Sum](../../calculus/Sum/), [Product](../../calculus/Product/), [Limit](../../calculus/Limit/), [Series](../../power-series/Series/), [Function](../../functional-programming/Function/), [Hold](../../expression-information/Hold/)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function arithmetic and common denominators.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCDs used in cancellation.
@@ -119,10 +175,20 @@ Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract
 
 ### Notes
 
-Together combines a sum of fractions over a single common denominator, the inverse
-operation of `Apart`. It computes the least common denominator and cancels common
-polynomial factors via GCD, so `1/(x-1) + 1/(x+1)` collapses to `(2 x)/(x^2-1)`
-with the cross terms cleared. Distinct symbolic denominators are simply multiplied,
-giving `(b c + a d)/(b d)` for `a/b + c/d`. Unlike a raw expansion, Together keeps
-the denominator factored where possible and does not multiply out `Power[Plus, n]`
-factors unnecessarily.
+- `Together[expr]` puts a sum of terms over a single common denominator
+  and cancels the GCD of the result. It is the inverse of `Apart`. Unlike a
+  full expansion, it does not multiply out `Power[Plus, n]` factors that it
+  does not need to.
+- **Kernels.** Transcendental subexpressions (`Log[...]`, `E^f`, inverse
+  trig) and algebraic constants (`I`, radicals) are treated as generators
+  of the rational function field. Exponentials with commensurate exponents
+  share one generator. Logarithms are left as they are, because rewriting
+  `Log[x^2]` as `2 Log[x]` is false for `x < 0`.
+- **Binding operators are atoms.** Unevaluated `Integrate`, `D`, `Sum`,
+  `Limit`, `Function`, `Hold*` and `Inactive[op][...]` are never looked
+  inside.
+- **Extension.** `Extension -> α`, a list, or `Automatic` combines over the
+  number field. Plain algebraic constants are often handled without it.
+- `Listable`, `Protected`. Symbolic only.
+- See also: `Cancel`, `Apart`, `Factor`, `Numerator`, `Denominator`,
+  `Simplify`.

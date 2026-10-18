@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Dilation[image, r] gives the maximum over a (2r+1) x (2r+1) square neighbourhood; Dilation[image, elem] uses the SUPPORT of the matrix elem -- its nonzero positions -- as the neighbourhood. This is flat morphology: the element's values do not enter the maximum, which is what keeps Dilation[img, BoxMatrix[1]] and Dilation[img, 1] the same operation. Padding replicates the border, the same rule the convolutions use, which is what makes Dilation >= image hold at the edges too. A full rectangle is separable for the maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw * kh. A "Bit" image gives a "Bit" image; other types give "Real".`**
+**`Dilation[image, r]`**
+
+gives the maximum over a (2r+1) x (2r+1) square neighbourhood; Dilation\[image, elem\] uses the SUPPORT of the matrix elem -- its nonzero positions -- as the neighbourhood. This is flat morphology: the element's values do not enter the maximum, which is what keeps Dilation\[img, BoxMatrix\[1\]\] and Dilation\[img, 1\] the same operation. Padding replicates the border, the same rule the convolutions use, which is what makes Dilation \>= image hold at the edges too. A full rectangle is separable for the maximum exactly as for a sum, so it costs kw + kh comparisons rather than kw \* kh. A "Bit" image gives a "Bit" image; other types give "Real".
 
 ## Examples (43)
 

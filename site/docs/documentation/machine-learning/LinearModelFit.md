@@ -5,7 +5,9 @@
 
 ## Description
 
-**`LinearModelFit[data] fits a linear model with an intercept and returns a PredictorFunction carrying its coefficients. Wolfram's version returns a FittedModel with regression diagnostics (RSquared, standard errors, ANOVA); those are not implemented and are not approximated. The coefficients are the same ones Predict finds.`**
+**`LinearModelFit[data]`**
+
+fits a linear model with an intercept and returns a PredictorFunction carrying its coefficients. Wolfram's version returns a FittedModel with regression diagnostics (RSquared, standard errors, ANOVA); those are not implemented and are not approximated. The coefficients are the same ones Predict finds.
 
 ## Examples (7)
 

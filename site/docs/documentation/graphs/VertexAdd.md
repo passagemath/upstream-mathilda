@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexAdd[g, v] adds the vertex v to the graph g; VertexAdd[g, {v1, v2, ...}] adds several. Vertices already present are ignored; new ones are appended in order. Edge weights are kept.`**
+**`VertexAdd[g, v]`**
+
+adds the vertex v to the graph g; VertexAdd\[g, {v1, v2, ...}\] adds several. Vertices already present are ignored; new ones are appended in order. Edge weights are kept.
 
 ## Examples (8)
 

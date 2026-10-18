@@ -9,7 +9,9 @@
 
 is Khinchin's constant K (also Khintchine's constant), with numerical value ~= 2.68545.
 
-**`NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]`**
+**`NumericQ[Khinchin]`**
+
+is True, and D\[Khinchin, x\] is 0. N\[Khinchin, prec\]
 
 <details>
 <summary>Notes</summary>

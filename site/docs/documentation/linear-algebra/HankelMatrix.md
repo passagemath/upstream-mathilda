@@ -5,11 +5,17 @@
 
 ## Description
 
-**`HankelMatrix[n] gives the n x n Hankel matrix with first row and column the integers 1..n.`**
+**`HankelMatrix[n]`**
 
-**`HankelMatrix[{c1, ..., cm}] gives the m x m Hankel matrix with first column the given list.`**
+gives the n x n Hankel matrix with first row and column the integers 1..n.
 
-**`HankelMatrix[{c1, ..., cm}, {r1, ..., rn}] gives the m x n Hankel matrix with first column the first list and last row the second.`**
+**`HankelMatrix[{c1, ..., cm}]`**
+
+gives the m x m Hankel matrix with first column the given list.
+
+**`HankelMatrix[{c1, ..., cm}, {r1, ..., rn}]`**
+
+gives the m x n Hankel matrix with first column the first list and last row the second.
 
 <details>
 <summary>Notes</summary>

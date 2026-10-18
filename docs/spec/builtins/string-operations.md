@@ -20,7 +20,20 @@ Invalid arguments emit Mathematica's diagnostics through the message system
 ## StringQ
 
 - `StringQ[expr]`: `True` if `expr` is a string, `False` otherwise.
+- Not `Listable`: a list is tested as one object. Map `StringQ` for an
+  element-wise test.
 - **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= StringQ[""]
+Out[1]= True
+
+In[2]:= StringQ[{"a", "b"}]
+Out[2]= False
+
+In[3]:= StringQ /@ {"a", 1, x, "b"}
+Out[3]= {True, False, False, True}
+```
 
 ## StringLength
 
@@ -409,6 +422,12 @@ Out[1]= {"ade", "c"}
 
 In[2]:= StringCases["a23b4222c63333d80", RegularExpression["\\d+"]]
 Out[2]= {"23", "4222", "63333", "80"}
+
+In[3]:= StringReplace["John Smith", RegularExpression["(\\w+) (\\w+)"] -> "$2 $1"]
+Out[3]= "Smith John"
+
+In[4]:= StringCases["caf\:00e9 na\:00efve", RegularExpression["\\w+"]]
+Out[4]= {"café", "naïve"}
 ```
 
 ## StringMatchQ
@@ -433,6 +452,12 @@ Out[1]= True
 
 In[2]:= StringMatchQ[{"12", "x"}, RegularExpression["\\d+"]]
 Out[2]= {True, False}
+
+In[3]:= StringMatchQ["apple.txt", "*.txt"]
+Out[3]= True
+
+In[4]:= StringMatchQ["aXb", x_ ~~ "X" ~~ x_]
+Out[4]= False
 ```
 
 ## StringContainsQ
@@ -683,6 +708,15 @@ Out[1]= "a[13]b[12]c[1]da[32]efg"
 
 In[2]:= StringReplace["123 45 6 789", RegularExpression["\\b"] :> "X"]
 Out[2]= "X123X X45X X6X X789X"
+
+In[3]:= StringReplace["abc123", a__ ~~ "123" :> a <> "!"]
+Out[3]= "abc!"
+
+In[4]:= StringReplace["abc123", x:DigitCharacter :> ToExpression[x]]
+Out[4]= "abc"~~1~~2~~3
+
+In[5]:= StringReplace["aaaa", "a" -> "b", 2]
+Out[5]= "bbaa"
 ```
 
 ## StringSplit
@@ -1025,6 +1059,12 @@ tighter than `~~` (`x__ ~~ y:DigitCharacter..` is
 ```mathematica
 In[1]:= StringDelete["a1b22c", DigitCharacter..]
 Out[1]= "abc"
+
+In[2]:= StringDelete["Hello World", "l", IgnoreCase -> True]
+Out[2]= "Heo Word"
+
+In[3]:= StringDelete[{"x1", "y22"}, DigitCharacter]
+Out[3]= {"x", "y"}
 ```
 
 ## StringReplaceList
@@ -1038,6 +1078,12 @@ Out[1]= "abc"
 ```mathematica
 In[1]:= StringReplaceList["aaa", "a" -> "b"]
 Out[1]= {"baa", "aba", "aab"}
+
+In[2]:= StringReplaceList["aaa", "aa" -> "X"]
+Out[2]= {"Xa", "aX"}
+
+In[3]:= StringReplaceList["abc", {"a" -> "1", "b" -> "2"}]
+Out[3]= {"1bc", "a2c"}
 ```
 
 ## StringTakeDrop
@@ -1050,6 +1096,12 @@ Out[1]= {"baa", "aba", "aab"}
 ```mathematica
 In[1]:= StringTakeDrop["abcdef", {2, 4}]
 Out[1]= {"bcd", "aef"}
+
+In[2]:= StringTakeDrop["abcdef", 2]
+Out[2]= {"ab", "cdef"}
+
+In[3]:= StringTakeDrop[{"abcd", "wxyz"}, -1]
+Out[3]= {{"d", "abc"}, {"z", "wxy"}}
 ```
 
 ## StringRotateLeft / StringRotateRight
@@ -1062,6 +1114,12 @@ Out[1]= {"bcd", "aef"}
 ```mathematica
 In[1]:= StringRotateLeft["abcdef", 2]
 Out[1]= "cdefab"
+
+In[2]:= StringRotateRight["abcdef", 2]
+Out[2]= "efabcd"
+
+In[3]:= StringRotateLeft["abcdef", -8]
+Out[3]= "efabcd"
 ```
 
 ## ToUpperCase / ToLowerCase
@@ -1071,12 +1129,34 @@ Out[1]= "cdefab"
   `"\[Sigma]"`). Non-string arguments stay unevaluated.
 - **Attributes**: `Listable`, `Protected`.
 
+```mathematica
+In[1]:= ToUpperCase["straße"]
+Out[1]= "STRASSE"
+
+In[2]:= ToLowerCase[{"ABC", "ΣΟΦΙΑ"}]
+Out[2]= {"abc", "σοφια"}
+
+In[3]:= ToUpperCase[x]
+Out[3]= ToUpperCase[x]
+```
+
 ## Capitalize / Decapitalize
 
 - `Capitalize["string"]`: the first character in uppercase;
   `Decapitalize["string"]` in lowercase. A list of strings maps; anything else
   emits `::strse`.
 - **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= Capitalize["hello world"]
+Out[1]= "Hello world"
+
+In[2]:= Capitalize["élan"]
+Out[2]= "Élan"
+
+In[3]:= Decapitalize[{"Alpha", "Beta"}]
+Out[3]= {"alpha", "beta"}
+```
 
 ## LetterQ / DigitQ / UpperCaseQ / LowerCaseQ
 
@@ -1088,6 +1168,20 @@ Out[1]= "cdefab"
   uppercase / lowercase letter.
 - All are `True` for `""`. A non-string emits `::string`.
 - **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= LetterQ["αβγ"]
+Out[1]= True
+
+In[2]:= DigitQ["\:0662"]
+Out[2]= False
+
+In[3]:= UpperCaseQ["ABC"]
+Out[3]= True
+
+In[4]:= LowerCaseQ["abc1"]
+Out[4]= False
+```
 
 ## ToCharacterCode / FromCharacterCode
 
@@ -1103,6 +1197,12 @@ Out[1]= "cdefab"
 ```mathematica
 In[1]:= ToCharacterCode["h\:00e9"]
 Out[1]= {104, 233}
+
+In[2]:= FromCharacterCode[{72, 105}]
+Out[2]= "Hi"
+
+In[3]:= FromCharacterCode[{{72, 105}, {955, 8364}}]
+Out[3]= {"Hi", "λ€"}
 ```
 
 ## CharacterRange / Alphabet
@@ -1111,6 +1211,17 @@ Out[1]= {104, 233}
   `c2`'s; `CharacterRange[n1, n2]` by code. `{}` when the range is empty.
 - `Alphabet[]`: `{"a", ..., "z"}`.
 - **Attributes**: `Protected`.
+
+```mathematica
+In[1]:= CharacterRange["a", "e"]
+Out[1]= {"a", "b", "c", "d", "e"}
+
+In[2]:= CharacterRange[65, 70]
+Out[2]= {"A", "B", "C", "D", "E", "F"}
+
+In[3]:= Length[Alphabet[]]
+Out[3]= 26
+```
 
 ## Operator forms and occurrence limits
 

@@ -18,49 +18,86 @@ An entire, odd function with no branch cuts. SinhIntegral\[0\] = 0, Real and com
 
 </details>
 
-## Examples (7)
+## Examples (12)
 
 Every input below was run against the current Mathilda build and its output recorded.
 
-### Applications (7)
+### Basic examples (3)
 
 ```mathematica
-In[1]:= SinhIntegral[0]
-Out[1]= 0
+In[1]:= SinhIntegral[2.8]
+Out[1]= 4.34808
+
+In[2]:= SinhIntegral[2.5 + I]
+Out[2]= 2.84649 + 2.22177*I
+
+In[3]:= SinhIntegral[-2 x]
+Out[3]= -SinhIntegral[2 x]
+```
+
+### Applications (9)
+
+Exact special values
+
+```mathematica
+In[4]:= {SinhIntegral[0], SinhIntegral[Infinity], SinhIntegral[I Infinity]}
+Out[4]= {0, Infinity, (1/2*I) Pi}
 ```
 
 Odd in its argument
 
 ```mathematica
-In[2]:= SinhIntegral[-2 x]
-Out[2]= -SinhIntegral[2 x]
+In[5]:= SinhIntegral[-2 x]
+Out[5]= -SinhIntegral[2 x]
 ```
 
+Machine real
+
 ```mathematica
-In[3]:= SinhIntegral[Infinity]
-Out[3]= Infinity
+In[6]:= SinhIntegral[2.8]
+Out[6]= 4.34808
 ```
 
-The integrand of the defining integral
+On the imaginary axis, I SinIntegral[3]
 
 ```mathematica
-In[4]:= D[SinhIntegral[x], x]
-Out[4]= Sinh[x]/x
+In[7]:= SinhIntegral[3. I]
+Out[7]= 0.0 + 1.84865*I
 ```
 
-```mathematica
-In[5]:= Series[SinhIntegral[x], {x, 0, 7}]
-Out[5]= x + 1/18 x^3 + 1/600 x^5 + 1/35280 x^7 + O[x]^8
+Machine complex: an exact rotation of the Si kernel
 
-In[6]:= N[SinhIntegral[1], 20]
-Out[6]= 1.05725087537572851458
+```mathematica
+In[8]:= SinhIntegral[2.5 + I]
+Out[8]= 2.84649 + 2.22177*I
 ```
 
-A complex argument
+Past the double range the result is an extended-exponent number, not Infinity
 
 ```mathematica
-In[7]:= N[SinhIntegral[2.0 + 1.0 I]]
-Out[7]= 2.03968 + 1.67824*I
+In[9]:= SinhIntegral[10.^6]
+Out[9]= 1.516609215011776e+434288
+```
+
+Arbitrary precision
+
+```mathematica
+In[10]:= N[SinhIntegral[2], 50]
+Out[10]= 2.50156743335497564147337248272754239891627287369153
+```
+
+All-positive Taylor coefficients
+
+```mathematica
+In[11]:= Series[SinhIntegral[x], {x, 0, 7}]
+Out[11]= x + 1/18 x^3 + 1/600 x^5 + 1/35280 x^7 + O[x]^8
+```
+
+The integral that defines it
+
+```mathematica
+In[12]:= Integrate[Sinh[a x]/x, x]
+Out[12]= SinhIntegral[a x]
 ```
 
 ## Algorithm
@@ -111,29 +148,23 @@ Attributes: Listable, NumericFunction, Protected.
 
 ## Implementation notes
 
-**Algorithm.** `builtin_sinhintegral` evaluates `Shi(z) = Int_0^z Sinh[t]/t dt`,
-entire and odd, the imaginary-axis sibling of `Si` (`Shi(z) = -i Si(i z)`). Exact
-special values: `0 -> 0`, `±Infinity`, `±I Pi/2` (directed imaginary infinity),
-`ComplexInfinity`/`Indeterminate -> Indeterminate`; a negative-leading `Times`
-folds by odd symmetry. Numeric (MPFR): the convergent Maclaurin series — whose
-real-axis terms are all positive, so there is **no** catastrophic cancellation
-and only a small fixed guard is needed (complex inputs keep the `~ |z|/ln2`
-guard); and for large `|z|` the asymptotic `cosh(z) F(z) + sinh(z) G(z)` summed
-to its smallest term, with the Stokes constant `i (Pi/2) sign(Im z)` restored
-off the real axis. A machine-real result that overflows a `double`
-(`Shi` grows like `e^|x|`) is emitted as a 53-bit MPFR real. The machine kernel
-`sinhintegral_machine_complex` carries a `sf_series_usable` cancellation gate.
+**Algorithm.** `builtin_sinhintegral` evaluates `Shi(z) = ∫₀ᶻ sinh t/t dt`, which is entire and odd. It is the imaginary-axis sibling of `Si`: `Shi(z) = -i Si(iz)`. A machine call first passes the `sf_machine_scalar_args` gate and goes to the kernels in `sf_machine_expint.c`:
 
-**Data structures.** `Expr`; `mpfr_t` (real) and `ncpx` (`mpfr_t` re/im,
-complex); a `double complex` fallback for `USE_MPFR=0` builds. ND: unary kernel
-`NDKU_SinhIntegral = { sinhintegral_machine_complex, ndk_SinhIntegral_r, ... }`
-(the real kernel is `sf_machine_shi`), registered `REG_U`, so `packed_aware`.
-Attributes: `Listable`, `NumericFunction`, `Protected`.
+- **Real** (`sf_machine_shi`, the Cephes `shichi` structure). For `|x| <= 4` it uses `x·Sh(x²)` with positive coefficients. Beyond that it uses `(Ei(x) + E1(x))/2`, taking `Ei` and `E1` from the Cody–Thacher kernels. It declines `x > 720`, where the value overflows.
+- **Complex** (`sf_machine_shi_c`). It uses `-i Si(iz)`, an exact rotation of the `SinIntegral` kernel.
 
-**Complexity / limits.** Convergent regime needs no cancellation guard on the
-real axis; off-axis and asymptotic regimes behave like `Si`.
-`D[SinhIntegral[z], z] = Sinh[z]/z`. `Compile[]` lowers at both scalar and
-rank-1 array shapes (`Compiled -> True`).
+A declined call, or an MPFR call, goes to `shi_one_arg`:
+
+- **Exact values:** `0`, `±Infinity`, `±I Infinity → ±I π/2`, and `ComplexInfinity` or `Indeterminate → Indeterminate`.
+- **Odd fold.** A negative-leading argument folds out by oddness.
+- **MPFR, Maclaurin series.** On the real axis every term is positive, so only a small fixed guard is needed; off the axis it keeps `~|z|/ln2` guard bits.
+- **MPFR, large `|z|`.** The asymptotic `cosh(z) F(z) + sinh(z) G(z)`, plus the Stokes constant `i(π/2) sign(Im z)` off the real axis.
+
+When a machine-real result overflows a double (`SinhIntegral[10.^6]`), it comes back as a 53-bit MPFR real with an extended exponent instead of `Infinity`.
+
+**Data structures.** `Expr`; `mpfr_t` and `ncpx` on the MPFR side; `(re, im)` doubles and the refitted tables in `sf_machine_expint_coef.h` on the machine side. The ND kernel is `NDKU_SinhIntegral = { sinhintegral_machine_complex, ndk_SinhIntegral_r }`, registered with `REG_U`, so it is packed-aware. `Compile[]` lowers `SinhIntegral` through that kernel for real and complex scalars and for rank-1 arrays. Every surface uses the same helpers, so the results agree bit for bit.
+
+**Complexity / limits.** The machine kernels are `O(1)`. Against mpmath the real kernel has a median error of 0.4 ulp and a maximum of 2.3 ulp; the complex kernel's maximum is 2.4 ulp. The MPFR series costs grow with `|z|` and with the precision. Exact non-special arguments (`SinhIntegral[2]`) stay unevaluated. `D[SinhIntegral[z], z] = Sinh[z]/z`. Attributes: `Listable`, `NumericFunction`, `Protected`.
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
@@ -142,9 +173,12 @@ rank-1 array shapes (`Compiled -> True`).
 **See also:** [SinIntegral](../../special-functions/SinIntegral/)
 
 - DLMF §6.2 — the hyperbolic sine integral Shi.
+- S. L. Moshier, *Methods and Programs for Mathematical Functions* (Ellis Horwood, 1989) — the Cephes `shichi` structure of the real kernel.
+- W. J. Cody and H. C. Thacher, *Chebyshev approximations for the exponential integral Ei(x)*, Math. Comp. 23 (1969) 289–303.
 - Source: [`src/special_functions/sinhintegral.c`](https://github.com/stblake/mathilda/blob/main/src/special_functions/sinhintegral.c)
 - Specification: [`docs/spec/builtins/special-functions.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/special-functions.md)
 - Tests: [`tests/test_compile.c`](https://github.com/stblake/mathilda/blob/main/tests/test_compile.c)
+- Tests: [`tests/test_expint_machine.c`](https://github.com/stblake/mathilda/blob/main/tests/test_expint_machine.c)
 - Tests: [`tests/test_numeric_stress.c`](https://github.com/stblake/mathilda/blob/main/tests/test_numeric_stress.c)
 - Tests: [`tests/test_sinhintegral.c`](https://github.com/stblake/mathilda/blob/main/tests/test_sinhintegral.c)
 
@@ -152,14 +186,6 @@ rank-1 array shapes (`Compiled -> True`).
 
 ### Notes
 
-`SinhIntegral[z]` is the hyperbolic sine integral `Shi(z) = Int_0^z Sinh[t]/t
-dt`, an entire, odd function and the imaginary-axis sibling of `SinIntegral`
-(`Shi(z) = -I SinIntegral[I z]`). Its derivative is `Sinh[z]/z`, the integrand
-of its defining integral.
-
-Numeric evaluation sums the Maclaurin series for moderate `|z|` and switches to
-an asymptotic expansion for large `|z|`; because every real-axis term is
-positive there is no cancellation, and a real result that overflows a machine
-double (`Shi` grows like `e^|z|`) is returned at extended exponent range. The
-special values `SinhIntegral[±Infinity] = ±Infinity` and
-`SinhIntegral[±I Infinity] = ±I Pi/2` are returned directly.
+- `SinhIntegral[z] = ∫₀ᶻ Sinh[t]/t dt` is entire and odd, the imaginary-axis sibling of `SinIntegral` (`Shi(z) = -I Si(I z)`); `SinhIntegral[±I Infinity] = ±I Pi/2`.
+- Machine arguments use the `sf_machine_expint.c` kernels (Cephes `shichi` on the real line, `(Ei + E1)/2` beyond 4), shared bit for bit with packed lists, `NDArray` and `Compile[]`; overflow past `x ≈ 720` and arbitrary precision go to MPFR.
+- Attributes: `Listable`, `NumericFunction`, `Protected`. See also `CoshIntegral`, `SinIntegral`, `ExpIntegralEi`.

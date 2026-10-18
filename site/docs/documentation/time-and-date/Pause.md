@@ -5,7 +5,9 @@
 
 ## Description
 
-**`Pause[n] pauses for at least n seconds.`**
+**`Pause[n]`**
+
+pauses for at least n seconds.
 
 <details>
 <summary>Notes</summary>

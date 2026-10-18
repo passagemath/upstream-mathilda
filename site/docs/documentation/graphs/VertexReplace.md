@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexReplace[g, {v1 -> w1, ...}] replaces vertices of g according to the rules (applied to each vertex as by Replace, so patterns work). Vertices mapped together merge; a merge that would create a self-loop or a parallel edge leaves the call unevaluated. Edge weights are kept.`**
+**`VertexReplace[g, {v1 -> w1, ...}]`**
+
+replaces vertices of g according to the rules (applied to each vertex as by Replace, so patterns work). Vertices mapped together merge; a merge that would create a self-loop or a parallel edge leaves the call unevaluated. Edge weights are kept.
 
 ## Examples (9)
 

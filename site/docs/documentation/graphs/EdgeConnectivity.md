@@ -5,7 +5,9 @@
 
 ## Description
 
-**`EdgeConnectivity[g] gives the minimum total weight of edges whose removal disconnects g (strongly, for directed graphs); EdgeConnectivity[g, s, t] gives the minimum s-t edge cut weight. EdgeWeight is used when present, else each edge counts 1.`**
+**`EdgeConnectivity[g]`**
+
+gives the minimum total weight of edges whose removal disconnects g (strongly, for directed graphs); EdgeConnectivity\[g, s, t\] gives the minimum s-t edge cut weight. EdgeWeight is used when present, else each edge counts 1.
 
 ## Examples (8)
 

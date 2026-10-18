@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MeanClusteringCoefficient[g] gives the mean of the local clustering coefficients of g, exactly.`**
+**`MeanClusteringCoefficient[g]`**
+
+gives the mean of the local clustering coefficients of g, exactly.
 
 ## Examples (9)
 

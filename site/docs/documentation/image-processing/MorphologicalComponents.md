@@ -5,7 +5,9 @@
 
 ## Description
 
-**`MorphologicalComponents[image] labels the connected components of the foreground, giving an INTEGER MATRIX with background 0 and components numbered 1..k in raster order of first appearance. MorphologicalComponents[image, t] takes pixels above t as foreground (default 0, so nonzero is foreground). CornerNeighbors -> False uses 4-connectivity instead of the default 8. Two pixels touching only at a corner are ONE component under 8 and TWO under 4, which is the property that distinguishes the two rules -- every other property holds under either. A matrix rather than an Image, deliberately: Image type inference would call a label array of 1..12 a "Byte" image and ImageData would then divide every label by 255. Labels are indices, not brightnesses. Contiguous labels in scan order mean Max of the result is the component count.`**
+**`MorphologicalComponents[image]`**
+
+labels the connected components of the foreground, giving an INTEGER MATRIX with background 0 and components numbered 1..k in raster order of first appearance. MorphologicalComponents\[image, t\] takes pixels above t as foreground (default 0, so nonzero is foreground). CornerNeighbors -\> False uses 4-connectivity instead of the default 8. Two pixels touching only at a corner are ONE component under 8 and TWO under 4, which is the property that distinguishes the two rules -- every other property holds under either. A matrix rather than an Image, deliberately: Image type inference would call a label array of 1..12 a "Byte" image and ImageData would then divide every label by 255. Labels are indices, not brightnesses. Contiguous labels in scan order mean Max of the result is the component count.
 
 ## Examples (6)
 

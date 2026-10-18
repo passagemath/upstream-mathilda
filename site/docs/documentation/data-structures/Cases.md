@@ -5,17 +5,29 @@
 
 ## Description
 
-**`Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.`**
+**`Cases[{e1, e2, ...}, pattern]`**
 
-**`Cases[{e1, ...}, pattern -> rhs] gives a list of the values of rhs corresponding to the ei that match the pattern.`**
+gives a list of the ei that match the pattern.
 
-**`Cases[expr, pattern, levelspec] gives a list of all parts of expr on levels specified by levelspec that match the pattern.`**
+**`Cases[{e1, ...}, pattern -> rhs]`**
 
-**`Cases[expr, pattern -> rhs, levelspec] gives the values of rhs that match the pattern.`**
+gives a list of the values of rhs corresponding to the ei that match the pattern.
 
-**`Cases[expr, pattern, levelspec, n] gives the first n parts in expr that match the pattern.`**
+**`Cases[expr, pattern, levelspec]`**
 
-**`Cases[pattern] represents an operator form of Cases that can be applied to an expression.`**
+gives a list of all parts of expr on levels specified by levelspec that match the pattern.
+
+**`Cases[expr, pattern -> rhs, levelspec]`**
+
+gives the values of rhs that match the pattern.
+
+**`Cases[expr, pattern, levelspec, n]`**
+
+gives the first n parts in expr that match the pattern.
+
+**`Cases[pattern]`**
+
+represents an operator form of Cases that can be applied to an expression.
 
 ## Examples (10)
 

@@ -5,7 +5,9 @@
 
 ## Description
 
-**`IntervalIntersection[i1, i2, ...] gives the interval representing the intersection of the intervals ij (Interval[] if they are disjoint).`**
+**`IntervalIntersection[i1, i2, ...]`**
+
+gives the interval representing the intersection of the intervals ij (Interval\[\] if they are disjoint).
 
 ## Examples (4)
 

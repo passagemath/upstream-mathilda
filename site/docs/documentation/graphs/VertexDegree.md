@@ -5,7 +5,9 @@
 
 ## Description
 
-**`VertexDegree[g] gives the list of vertex degrees; VertexDegree[g,v] gives the degree of vertex v.`**
+**`VertexDegree[g]`**
+
+gives the list of vertex degrees; VertexDegree\[g,v\] gives the degree of vertex v.
 
 ## Examples (10)
 

@@ -34,8 +34,10 @@
  *         J_nu(z) ~ sqrt(2/(pi z)) [cos(w) A(z) - sin(w) B(z)],
  *         w = z - nu pi/2 - pi/4,
  *         A = Sum (-1)^m a_{2m}/z^{2m}, B = Sum (-1)^m a_{2m+1}/z^{2m+1},
- *     with a_0 = 1, a_k = a_{k-1} (mu - (2k-1)^2)/(8k), mu = 4 nu^2; summed to
- *     the optimal (smallest-term) truncation.
+ *     with a_0 = 1, a_k = a_{k-1} (mu - (2k-1)^2)/(8k), mu = 4 nu^2. Used
+ *     only where bessel_hankel_plan shows its terms stay below the leading
+ *     one and reach the target precision -- roughly nu^2 << |z|; a large
+ *     order otherwise takes the power series at any |z|.
  *
  * Integer order is reduced to non-negative order via J_{-n}(z) = (-1)^n J_n(z)
  * (the power series would otherwise hit Gamma poles); the mpfr_jn fast path
@@ -248,10 +250,62 @@ static void bj_series(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
 }
 
 /* ------------------------------------------------------------------ */
+/* When may the Hankel (large-argument) expansion be used?            */
+/* ------------------------------------------------------------------ */
+/* All four kernels J, Y, I, K share the Hankel coefficients
+ *   a_0 = 1,  a_k = a_{k-1} (4 nu^2 - (2k-1)^2) / (8k),
+ * summed as a_k / z^k (DLMF 10.17.3/4, 10.40.2/5). Their size depends on the
+ * ORDER as much as on |z|: the first ratio is |4 nu^2 - 1| / (8|z|), so for
+ * nu^2 >~ 2|z| the terms GROW from the start, peak near k ~ |nu|, and only fall
+ * past it -- or never reach the requested accuracy at all before the series'
+ * divergent tail turns them up again (k ~ 2|z|). The rule "|z| large enough
+ * for P bits" (2|z| > P ln 2) that used to pick the expansion ignores this
+ * entirely, and with the optimal-truncation break firing at k = 1 a large
+ * order gave A = 1, B = 0: N[BesselJ[51/2, 100], 20] was -0.2001 against the
+ * true 0.07458, and BesselJ[1000.5, 2000.] was -1.624 against 0.004703.
+ *
+ * The plan walks the term magnitudes in double precision (log domain, so no
+ * overflow) and accepts the expansion only when
+ *   - no term exceeds the leading one (|a_k/z^k| <= 1 throughout, so the sums
+ *     A, B are O(1) and nothing cancels catastrophically), and
+ *   - some term falls below 2^-(P+16) before the terms turn upward again --
+ *     or a coefficient vanishes exactly (half-integer order: the expansion
+ *     terminates and is exact).
+ * *kmax receives the index of the last term to sum. Otherwise the caller
+ * uses the convergent representation (power / logarithmic series, connection
+ * formula), which is valid for every order. The walk is O(kmax) double
+ * operations, negligible beside the MPFR sums it schedules. */
+static bool bessel_hankel_plan(const ncpx* nu, double rz, mpfr_prec_t P,
+                               unsigned long* kmax) {
+    if (!(rz > 0.0) || !isfinite(rz)) return false;
+    double nr = mpfr_get_d(nu->re, BRND), ni = mpfr_get_d(nu->im, BRND);
+    if (!isfinite(nr) || !isfinite(ni)) return false;
+    double mur = 4.0 * (nr * nr - ni * ni);       /* mu = 4 nu^2 */
+    double mui = 8.0 * nr * ni;
+    double target = -((double)P + 16.0);          /* log2 of the stopping term */
+    double l2 = 0.0;                              /* log2 |a_k / z^k| */
+    double l2z = log2(8.0 * rz);                  /* log2 (8|z|) */
+    for (unsigned long k = 1; k < 4000000UL; k++) {
+        double odd = (double)(2 * k - 1);
+        double dr = mur - odd * odd;
+        double num = hypot(dr, mui);
+        if (num == 0.0) { *kmax = k; return true; }   /* exact termination */
+        double step = log2(num) - log2((double)k) - l2z;  /* log2 of the ratio */
+        l2 += step;
+        if (l2 > 0.0) return false;                    /* grew past a_0: reject */
+        if (l2 < target) { *kmax = k; return true; }
+        if (step >= 0.0 && odd * odd > fabs(mur)) return false; /* turned up */
+    }
+    return false;
+}
+
+/* ------------------------------------------------------------------ */
 /* Asymptotic series (large |z|, |arg z| < pi), DLMF 10.17.3.         */
+/* Sums the terms k = 1..kmax scheduled by bessel_hankel_plan.         */
 /* Output J is init'd by the caller at precision wp.                   */
 /* ------------------------------------------------------------------ */
-static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
+static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp,
+                     unsigned long kmax) {
     ncpx mu, omega, cosw, sinw, invz, zpow, a, term, A, B, num, two, pref, t1, t2;
     ncpx_init(&mu, wp); ncpx_init(&omega, wp); ncpx_init(&cosw, wp); ncpx_init(&sinw, wp);
     ncpx_init(&invz, wp); ncpx_init(&zpow, wp); ncpx_init(&a, wp); ncpx_init(&term, wp);
@@ -292,11 +346,7 @@ static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_set_ui(&A, 1);
     ncpx_set_ui(&B, 0);
 
-    mpfr_t mag, prevmag;
-    mpfr_inits2(wp, mag, prevmag, (mpfr_ptr)0);
-    mpfr_set_inf(prevmag, 1);
-
-    for (unsigned long k = 1; k < 100000; k++) {
+    for (unsigned long k = 1; k <= kmax; k++) {
         /* a_k = a_{k-1} (mu - (2k-1)^2) / (8k). */
         unsigned long odd = 2 * k - 1;
         ncpx_set(&num, &mu);
@@ -308,9 +358,6 @@ static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
         ncpx_mul(&zpow, &zpow, &invz, wp);        /* z^{-k} */
         ncpx_mul(&term, &a, &zpow, wp);           /* a_k / z^k */
 
-        ncpx_abs(mag, &term);
-        if (mpfr_cmp(mag, prevmag) >= 0) break;   /* optimal truncation */
-        mpfr_set(prevmag, mag, BRND);
 
         /* sign = (-1)^{floor(k/2)}; even k -> A, odd k -> B. */
         bool negate = ((k / 2) & 1) != 0;
@@ -327,7 +374,6 @@ static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_sub(&t1, &t1, &t2);
     ncpx_mul(J, &pref, &t1, wp);
 
-    mpfr_clears(mag, prevmag, (mpfr_ptr)0);
     mpfr_clears(pi, half_pi, quarter_pi, (mpfr_ptr)0);
     ncpx_clear(&mu); ncpx_clear(&omega); ncpx_clear(&cosw); ncpx_clear(&sinw);
     ncpx_clear(&invz); ncpx_clear(&zpow); ncpx_clear(&a); ncpx_clear(&term);
@@ -335,10 +381,16 @@ static void bj_asymp(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_clear(&pref); ncpx_clear(&t1); ncpx_clear(&t2);
 }
 
+/* Large order AND large |z|: recurrence in the order from the Hankel values
+ * at the fractional order (defined after by_asymp; see there). */
+static bool bessel_recur(char kind, const ncpx* nu, const ncpx* z, double rd,
+                         ncpx* out, mpfr_prec_t P);
+
 /* ------------------------------------------------------------------ */
 /* Unified core: J_nu(z) at output precision P bits.                  */
-/* Picks the power series (small |z|) or asymptotic series (large |z|, */
-/* away from the negative-real axis). Output J init'd by the caller.   */
+/* Picks the asymptotic series (large |z|, small order, away from the  */
+/* negative-real axis), the order recurrence (large |z|, large order), */
+/* or the power series. Output J init'd by the caller.                 */
 /* ------------------------------------------------------------------ */
 static void bj_core(const ncpx* nu, const ncpx* z, ncpx* J, mpfr_prec_t P) {
     mpfr_t rm, am;
@@ -363,12 +415,17 @@ static void bj_core(const ncpx* nu, const ncpx* z, ncpx* J, mpfr_prec_t P) {
     double rmin = 0.5 * (double)P * M_LN2;
     if (rmin < 4.0) rmin = 4.0;
 
-    if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI) {
+    unsigned long kmax = 0;
+    if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI &&
+        bessel_hankel_plan(nu, rd, P, &kmax)) {
         mpfr_prec_t wp = P + 64;
         ncpx j; ncpx_init(&j, wp);
-        bj_asymp(&j, nu, z, wp);
+        bj_asymp(&j, nu, z, wp, kmax);
         ncpx_set(J, &j);
         ncpx_clear(&j);
+    } else if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI &&
+               bessel_recur('J', nu, z, rd, J, P)) {
+        /* done: Miller's backward recurrence, normalised by Hankel values */
     } else {
         /* Power series. Guard absorbs the ~e^{|z|} (up to e^{2|z/2|})
          * partial-sum cancellation; capped against pathological arguments. */
@@ -558,9 +615,10 @@ static void bk_iseries(ncpx* I, const ncpx* mu, const ncpx* z, mpfr_prec_t wp) {
 /* Asymptotic series (large |z|, |arg z| < 3pi/2), DLMF 10.40.2:
  *   K_nu(z) ~ sqrt(pi/(2z)) e^{-z} Sum_{k>=0} a_k / z^k,
  *   a_0 = 1, a_k = a_{k-1} (4 nu^2 - (2k-1)^2) / (8k).
- * Single sum (no cos/sin split); summed to optimal (smallest-term)
- * truncation. Output K is init'd by the caller at precision wp. */
-static void bk_asymp(ncpx* K, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
+ * Single sum (no cos/sin split); summed through the kmax terms that
+ * bessel_hankel_plan scheduled. Output K is init'd by the caller at precision wp. */
+static void bk_asymp(ncpx* K, const ncpx* nu, const ncpx* z, mpfr_prec_t wp,
+                     unsigned long kmax) {
     ncpx mu, invz, zpow, a, term, S, num, pref, negz, ez, halfpi;
     ncpx_init(&mu, wp); ncpx_init(&invz, wp); ncpx_init(&zpow, wp);
     ncpx_init(&a, wp); ncpx_init(&term, wp); ncpx_init(&S, wp);
@@ -595,11 +653,7 @@ static void bk_asymp(ncpx* K, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_set_ui(&zpow, 1);
     ncpx_set_ui(&S, 1);
 
-    mpfr_t mag, prevmag;
-    mpfr_inits2(wp, mag, prevmag, (mpfr_ptr)0);
-    mpfr_set_inf(prevmag, 1);
-
-    for (unsigned long k = 1; k < 100000; k++) {
+    for (unsigned long k = 1; k <= kmax; k++) {
         /* a_k = a_{k-1} (mu - (2k-1)^2) / (8k). */
         unsigned long odd = 2 * k - 1;
         ncpx_set(&num, &mu);
@@ -611,15 +665,11 @@ static void bk_asymp(ncpx* K, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
         ncpx_mul(&zpow, &zpow, &invz, wp);         /* z^{-k} */
         ncpx_mul(&term, &a, &zpow, wp);            /* a_k / z^k */
 
-        ncpx_abs(mag, &term);
-        if (mpfr_cmp(mag, prevmag) >= 0) break;    /* optimal truncation */
-        mpfr_set(prevmag, mag, BRND);
         ncpx_add(&S, &S, &term);
     }
 
     ncpx_mul(K, &pref, &S, wp);
 
-    mpfr_clears(mag, prevmag, (mpfr_ptr)0);
     mpfr_clear(pi);
     ncpx_clear(&mu); ncpx_clear(&invz); ncpx_clear(&zpow); ncpx_clear(&a);
     ncpx_clear(&term); ncpx_clear(&S); ncpx_clear(&num); ncpx_clear(&pref);
@@ -805,14 +855,17 @@ static void bk_core(const ncpx* nu, const ncpx* z, ncpx* K, mpfr_prec_t P,
     double rmin = 0.5 * (double)P * M_LN2;
     if (rmin < 4.0) rmin = 4.0;
 
-    if (rd > 1.3 * rmin) {
+    unsigned long kmax = 0;
+    if (rd > 1.3 * rmin && bessel_hankel_plan(nu, rd, P, &kmax)) {
         mpfr_prec_t wp = P + 64;
         ncpx k; ncpx_init(&k, wp);
-        bk_asymp(&k, nu, z, wp);
+        bk_asymp(&k, nu, z, wp, kmax);
         ncpx_set(K, &k);
         ncpx_clear(&k);
         return;
     }
+    /* Large order at large |z|: upward recurrence from K_mu, K_{mu+1}. */
+    if (rd > 1.3 * rmin && bessel_recur('K', nu, z, rd, K, P)) return;
 
     if (int_order) {
         /* Logarithmic series. Guard absorbs the ~e^{|z|} I_n cancellation. */
@@ -897,9 +950,10 @@ static Expr* bk_eval(const Expr* order, const Expr* z, mpfr_prec_t out_prec) {
  * sign s = +1 for arg z > -pi/2, else -1 (covers -pi < arg z <= pi).
  * The second (e^{-z}) term dominates on the left half-plane, so it is
  * required for correctness there, not merely a refinement. The two sums
- * share the a_k recurrence and z^{-k} powers and truncate together at the
- * optimal (smallest-term) point. Output I init'd by the caller at prec wp. */
-static void bi_asymp(ncpx* I, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
+ * share the a_k recurrence and z^{-k} powers and truncate together after
+ * the kmax terms bessel_hankel_plan scheduled. Output I init'd by the caller at prec wp. */
+static void bi_asymp(ncpx* I, const ncpx* nu, const ncpx* z, mpfr_prec_t wp,
+                     unsigned long kmax) {
     ncpx mu, invz, zpow, a, term, A, B, num, pref, ez, enz, phase, w, t1, t2;
     ncpx_init(&mu, wp); ncpx_init(&invz, wp); ncpx_init(&zpow, wp);
     ncpx_init(&a, wp); ncpx_init(&term, wp); ncpx_init(&A, wp);
@@ -954,11 +1008,7 @@ static void bi_asymp(ncpx* I, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_set_ui(&A, 1);
     ncpx_set_ui(&B, 1);
 
-    mpfr_t mag, prevmag;
-    mpfr_inits2(wp, mag, prevmag, (mpfr_ptr)0);
-    mpfr_set_inf(prevmag, 1);
-
-    for (unsigned long k = 1; k < 100000; k++) {
+    for (unsigned long k = 1; k <= kmax; k++) {
         /* a_k = a_{k-1} (mu - (2k-1)^2) / (8k). */
         unsigned long odd = 2 * k - 1;
         ncpx_set(&num, &mu);
@@ -970,9 +1020,6 @@ static void bi_asymp(ncpx* I, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
         ncpx_mul(&zpow, &zpow, &invz, wp);        /* z^{-k} */
         ncpx_mul(&term, &a, &zpow, wp);           /* a_k / z^k */
 
-        ncpx_abs(mag, &term);
-        if (mpfr_cmp(mag, prevmag) >= 0) break;   /* optimal truncation */
-        mpfr_set(prevmag, mag, BRND);
 
         ncpx_add(&B, &B, &term);                  /* + a_k/z^k */
         if (k & 1) ncpx_sub(&A, &A, &term);       /* (-1)^k */
@@ -986,7 +1033,6 @@ static void bi_asymp(ncpx* I, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_add(&t1, &t1, &t2);
     ncpx_mul(I, &pref, &t1, wp);
 
-    mpfr_clears(mag, prevmag, (mpfr_ptr)0);
     mpfr_clears(pi, argz, (mpfr_ptr)0);
     ncpx_clear(&mu); ncpx_clear(&invz); ncpx_clear(&zpow); ncpx_clear(&a);
     ncpx_clear(&term); ncpx_clear(&A); ncpx_clear(&B); ncpx_clear(&num);
@@ -1017,12 +1063,15 @@ static void bi_core(const ncpx* nu, const ncpx* z, ncpx* I, mpfr_prec_t P) {
     double rmin = 0.5 * (double)P * M_LN2;
     if (rmin < 4.0) rmin = 4.0;
 
-    if (rd > 1.3 * rmin) {
+    unsigned long kmax = 0;
+    if (rd > 1.3 * rmin && bessel_hankel_plan(nu, rd, P, &kmax)) {
         mpfr_prec_t wp = P + 64;
         ncpx i; ncpx_init(&i, wp);
-        bi_asymp(&i, nu, z, wp);
+        bi_asymp(&i, nu, z, wp, kmax);
         ncpx_set(I, &i);
         ncpx_clear(&i);
+    } else if (rd > 1.3 * rmin && bessel_recur('I', nu, z, rd, I, P)) {
+        /* done: Miller's backward recurrence, normalised by Hankel values */
     } else {
         /* Power series. Guard absorbs the ~e^{|z|} partial-sum cancellation
          * that can arise for complex z (real positive z does not cancel). */
@@ -1101,11 +1150,12 @@ static Expr* bi_eval(const Expr* order, const Expr* z, mpfr_prec_t out_prec) {
  *   Y_nu(z) ~ sqrt(2/(pi z)) [sin(w) A(z) + cos(w) B(z)],
  *   w = z - nu pi/2 - pi/4,
  *   A = Sum (-1)^m a_{2m}/z^{2m}, B = Sum (-1)^m a_{2m+1}/z^{2m+1},
- * with a_0 = 1, a_k = a_{k-1} (mu - (2k-1)^2)/(8k), mu = 4 nu^2; summed to
- * the optimal (smallest-term) truncation. This is the companion of bj_asymp:
+ * with a_0 = 1, a_k = a_{k-1} (mu - (2k-1)^2)/(8k), mu = 4 nu^2; summed
+ * through the kmax terms bessel_hankel_plan scheduled. This is the companion of bj_asymp:
  * identical A/B series, but the final combination uses (sin A + cos B)
  * instead of J's (cos A - sin B). Output Y init'd by the caller at prec wp. */
-static void by_asymp(ncpx* Y, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
+static void by_asymp(ncpx* Y, const ncpx* nu, const ncpx* z, mpfr_prec_t wp,
+                     unsigned long kmax) {
     ncpx mu, omega, cosw, sinw, invz, zpow, a, term, A, B, num, two, pref, t1, t2;
     ncpx_init(&mu, wp); ncpx_init(&omega, wp); ncpx_init(&cosw, wp); ncpx_init(&sinw, wp);
     ncpx_init(&invz, wp); ncpx_init(&zpow, wp); ncpx_init(&a, wp); ncpx_init(&term, wp);
@@ -1146,11 +1196,7 @@ static void by_asymp(ncpx* Y, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_set_ui(&A, 1);
     ncpx_set_ui(&B, 0);
 
-    mpfr_t mag, prevmag;
-    mpfr_inits2(wp, mag, prevmag, (mpfr_ptr)0);
-    mpfr_set_inf(prevmag, 1);
-
-    for (unsigned long k = 1; k < 100000; k++) {
+    for (unsigned long k = 1; k <= kmax; k++) {
         /* a_k = a_{k-1} (mu - (2k-1)^2) / (8k). */
         unsigned long odd = 2 * k - 1;
         ncpx_set(&num, &mu);
@@ -1162,9 +1208,6 @@ static void by_asymp(ncpx* Y, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
         ncpx_mul(&zpow, &zpow, &invz, wp);        /* z^{-k} */
         ncpx_mul(&term, &a, &zpow, wp);           /* a_k / z^k */
 
-        ncpx_abs(mag, &term);
-        if (mpfr_cmp(mag, prevmag) >= 0) break;   /* optimal truncation */
-        mpfr_set(prevmag, mag, BRND);
 
         /* sign = (-1)^{floor(k/2)}; even k -> A, odd k -> B. */
         bool negate = ((k / 2) & 1) != 0;
@@ -1181,7 +1224,6 @@ static void by_asymp(ncpx* Y, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     ncpx_add(&t1, &t1, &t2);
     ncpx_mul(Y, &pref, &t1, wp);
 
-    mpfr_clears(mag, prevmag, (mpfr_ptr)0);
     mpfr_clears(pi, half_pi, quarter_pi, (mpfr_ptr)0);
     ncpx_clear(&mu); ncpx_clear(&omega); ncpx_clear(&cosw); ncpx_clear(&sinw);
     ncpx_clear(&invz); ncpx_clear(&zpow); ncpx_clear(&a); ncpx_clear(&term);
@@ -1380,14 +1422,20 @@ static void by_core(const ncpx* nu, const ncpx* z, ncpx* Y, mpfr_prec_t P,
     double arg = mpfr_get_d(am, BRND);
     mpfr_clear(am);
 
-    if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI) {
+    unsigned long kmax = 0;
+    if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI &&
+        bessel_hankel_plan(nu, rd, P, &kmax)) {
         mpfr_prec_t wp = P + 64;
         ncpx y; ncpx_init(&y, wp);
-        by_asymp(&y, nu, z, wp);
+        by_asymp(&y, nu, z, wp, kmax);
         ncpx_set(Y, &y);
         ncpx_clear(&y);
         return;
     }
+    /* Large order at large |z|: upward recurrence from Y_mu, Y_{mu+1}. */
+    if (rd > 1.3 * rmin && fabs(arg) < 0.9 * M_PI &&
+        bessel_recur('Y', nu, z, rd, Y, P))
+        return;
 
     if (int_order) {
         /* Logarithmic series. Guard absorbs the ~e^{|z|} J_n cancellation. */
@@ -1423,6 +1471,243 @@ static void by_core(const ncpx* nu, const ncpx* z, ncpx* Y, mpfr_prec_t P,
     ncpx_clear(&y);
 }
 
+/* ------------------------------------------------------------------ */
+/* Large order at large |z|: recurrence in the order                  */
+/* ------------------------------------------------------------------ */
+/* Where bessel_hankel_plan rejects the order (nu^2 not small beside |z|)
+ * but |z| is large, the power series is correct but ruinous: it needs
+ * ~2|z|/ln 2 guard bits and ~|z| terms (BesselJ[1000.5, 5000.] took 22 s).
+ * The fractional order mu = nu - floor(Re nu) is small, so the Hankel
+ * expansion IS valid at mu and mu+1, and the three-term recurrence
+ *
+ *   C_{a-1}(z) + C_{a+1}(z) = (2a/z) C_a(z)       C = J, Y   (DLMF 10.6.1)
+ *   C_{a-1}(z) - C_{a+1}(z) = (2a/z) C_a(z)       C = I, e^{i pi a} K (10.29.1)
+ *
+ * carries those values to nu in floor(Re nu) steps, each in its STABLE
+ * direction:
+ *   Y, K -- dominant as the order grows: upward from (mu, mu+1).
+ *   J, I -- minimal as the order grows: Miller's backward recurrence from a
+ *           start N well past both nu and |z| (f_{N+1} = 0, f_N = 1), the
+ *           unnormalised f then scaled to the Hankel values at mu, mu+1 by
+ *           least squares,  s = (conj f_mu C_mu + conj f_{mu+1} C_{mu+1}) /
+ *           (|f_mu|^2 + |f_{mu+1}|^2), which no zero of C_mu can upset
+ *           (C_mu and C_{mu+1} have no common zero).
+ * The start N comes from Olver's forward test, run in double with
+ * exponent tracking: from q_nu = 0, q_{nu+1} = 1 iterate the recurrence up
+ * until |q_N| >= 2^(P+32); the relative error Miller leaves at nu is then
+ * ~|z| / q_N^2, far below 2^-P. Cost: O(max(nu, |z|)) complex steps at
+ * P + O(log N) bits -- milliseconds where the series took seconds.
+ *
+ * Returns false (the caller falls back to the power series) when Re nu < 2,
+ * the order is too large to step, or the Hankel plan rejects mu or mu+1
+ * (large Im nu, or a P too high for this |z|). `out` is init'd by the
+ * caller. A large NEGATIVE order goes through bessel_recur's reflection. */
+static bool bessel_recur_pos(char kind, const ncpx* nu, const ncpx* z, double rd,
+                             ncpx* out, mpfr_prec_t P) {
+    double nr = mpfr_get_d(nu->re, BRND);
+    if (!(nr >= 2.0) || nr > 5.0e6) return false;
+    unsigned long n = (unsigned long)floor(nr);
+
+    mpfr_prec_t bp = (P < 64 ? 64 : P);
+    ncpx mu, mu1;
+    ncpx_init(&mu, bp); ncpx_init(&mu1, bp);
+    ncpx_set(&mu, nu);
+    mpfr_sub_ui(mu.re, mu.re, n, BRND);                /* mu = nu - n, exact */
+    if (mpfr_sgn(mu.re) < 0) {                         /* floor rounding guard */
+        mpfr_add_ui(mu.re, mu.re, 1, BRND); n--;
+    }
+    ncpx_set(&mu1, &mu);
+    mpfr_add_ui(mu1.re, mu1.re, 1, BRND);
+
+    unsigned long k0 = 0, k1 = 0;
+    bool ok = bessel_hankel_plan(&mu, rd, P + 32, &k0) &&
+              bessel_hankel_plan(&mu1, rd, P + 32, &k1);
+
+    /* Miller's start (J, I only), from the forward test in double. */
+    unsigned long N = n + 1;
+    bool minimal = (kind == 'J' || kind == 'I');
+    if (ok && minimal) {
+        double zr = mpfr_get_d(z->re, BRND), zi = mpfr_get_d(z->im, BRND);
+        double d = zr * zr + zi * zi;
+        double wr = 2.0 * zr / d, wi = -2.0 * zi / d;  /* 2/z */
+        double mr = mpfr_get_d(mu.re, BRND), mi = mpfr_get_d(mu.im, BRND);
+        double sg = (kind == 'J') ? -1.0 : 1.0;
+        double pr = 0.0, pi_ = 0.0, qr = 1.0, qi = 0.0, lg = 0.0;  /* q_n, q_{n+1} */
+        double target = (double)P + 32.0;
+        ok = false;
+        for (unsigned long k = n + 1; k < n + 20000000UL; k++) {
+            /* q_{k+1} = (2(mu+k)/z) q_k + sg q_{k-1} */
+            double cr = (mr + (double)k) * wr - mi * wi;
+            double ci = (mr + (double)k) * wi + mi * wr;
+            double tr = cr * qr - ci * qi + sg * pr;
+            double ti = cr * qi + ci * qr + sg * pi_;
+            pr = qr; pi_ = qi; qr = tr; qi = ti;
+            double m = fabs(qr) + fabs(qi);
+            if (!isfinite(m)) break;
+            if (m > 1e250) {                           /* rescale, keep log2 */
+                qr *= 1e-250; qi *= 1e-250; pr *= 1e-250; pi_ *= 1e-250;
+                lg += 250.0 * 3.321928094887362;
+                m *= 1e-250;
+            }
+            if (lg + log2(m) >= target) { N = k + 1; ok = true; break; }
+        }
+    }
+    if (!ok) { ncpx_clear(&mu); ncpx_clear(&mu1); return false; }
+
+    mpfr_prec_t wp = P + 64 + 2 * (mpfr_prec_t)ceil(log2((double)N + 2.0));
+    ncpx b0, b1, rz2, c, t, fp, f, fm, f0, f1, fn;
+    ncpx_init(&b0, wp); ncpx_init(&b1, wp); ncpx_init(&rz2, wp);
+    ncpx_init(&c, wp); ncpx_init(&t, wp); ncpx_init(&fp, wp);
+    ncpx_init(&f, wp); ncpx_init(&fm, wp); ncpx_init(&f0, wp);
+    ncpx_init(&f1, wp); ncpx_init(&fn, wp);
+
+    /* The two Hankel base values C_mu(z), C_{mu+1}(z). */
+    switch (kind) {
+        case 'J': bj_asymp(&b0, &mu, z, wp, k0); bj_asymp(&b1, &mu1, z, wp, k1); break;
+        case 'Y': by_asymp(&b0, &mu, z, wp, k0); by_asymp(&b1, &mu1, z, wp, k1); break;
+        case 'I': bi_asymp(&b0, &mu, z, wp, k0); bi_asymp(&b1, &mu1, z, wp, k1); break;
+        default:  bk_asymp(&b0, &mu, z, wp, k0); bk_asymp(&b1, &mu1, z, wp, k1); break;
+    }
+
+    /* rz2 = 2/z. */
+    ncpx_set_ui(&t, 2);
+    ncpx_div(&rz2, &t, z, wp);
+
+    if (!minimal) {
+        /* Upward: C_{k+1} = (2(mu+k)/z) C_k -+ C_{k-1}  (Y: -, K: +). */
+        ncpx_set(&fm, &b0);                            /* C_{k-1} */
+        ncpx_set(&f, &b1);                             /* C_k, k = 1 */
+        for (unsigned long k = 1; k < n; k++) {
+            ncpx_set(&c, &mu);
+            mpfr_add_ui(c.re, c.re, k, BRND);          /* mu + k */
+            ncpx_mul(&c, &c, &rz2, wp);                /* 2(mu+k)/z */
+            ncpx_mul(&t, &c, &f, wp);
+            if (kind == 'Y') ncpx_sub(&t, &t, &fm); else ncpx_add(&t, &t, &fm);
+            ncpx_set(&fm, &f);
+            ncpx_set(&f, &t);
+        }
+        ncpx_set(out, &f);                             /* C_{mu+n} = C_nu */
+    } else {
+        /* Downward: f_{k-1} = (2(mu+k)/z) f_k -+ f_{k+1}  (J: -, I: +). */
+        ncpx_set_ui(&fp, 0);                           /* f_{N+1} */
+        ncpx_set_ui(&f, 1);                            /* f_N */
+        for (unsigned long k = N; k >= 1; k--) {
+            ncpx_set(&c, &mu);
+            mpfr_add_ui(c.re, c.re, k, BRND);
+            ncpx_mul(&c, &c, &rz2, wp);
+            ncpx_mul(&t, &c, &f, wp);
+            if (kind == 'J') ncpx_sub(&t, &t, &fp); else ncpx_add(&t, &t, &fp);
+            ncpx_set(&fp, &f);
+            ncpx_set(&f, &t);                          /* f_{k-1} */
+            if (k - 1 == n) ncpx_set(&fn, &f);
+            if (k - 1 == 1) ncpx_set(&f1, &f);
+        }
+        ncpx_set(&f0, &f);
+        /* s = (conj f0 b0 + conj f1 b1) / (|f0|^2 + |f1|^2) */
+        ncpx num, den;
+        ncpx_init(&num, wp); ncpx_init(&den, wp);
+        mpfr_neg(f0.im, f0.im, BRND); mpfr_neg(f1.im, f1.im, BRND);  /* conj */
+        ncpx_mul(&num, &f0, &b0, wp);
+        ncpx_mul(&t, &f1, &b1, wp);
+        ncpx_add(&num, &num, &t);
+        mpfr_t a2, s2;
+        mpfr_inits2(wp, a2, s2, (mpfr_ptr)0);
+        mpfr_sqr(a2, f0.re, BRND); mpfr_sqr(s2, f0.im, BRND); mpfr_add(a2, a2, s2, BRND);
+        mpfr_sqr(s2, f1.re, BRND); mpfr_add(a2, a2, s2, BRND);
+        mpfr_sqr(s2, f1.im, BRND); mpfr_add(a2, a2, s2, BRND);
+        mpfr_set(den.re, a2, BRND); mpfr_set_zero(den.im, +1);
+        ncpx_div(&num, &num, &den, wp);                /* s */
+        ncpx_mul(out, &num, &fn, wp);
+        mpfr_clears(a2, s2, (mpfr_ptr)0);
+        ncpx_clear(&num); ncpx_clear(&den);
+    }
+
+    ncpx_clear(&b0); ncpx_clear(&b1); ncpx_clear(&rz2); ncpx_clear(&c);
+    ncpx_clear(&t); ncpx_clear(&fp); ncpx_clear(&f); ncpx_clear(&fm);
+    ncpx_clear(&f0); ncpx_clear(&f1); ncpx_clear(&fn);
+    ncpx_clear(&mu); ncpx_clear(&mu1);
+    return true;
+}
+
+/* The order recurrence for any large |Re nu|. A large negative order a = -nu
+ * is reflected onto the positive one (DLMF 10.4.7/8, 10.27.2/3):
+ *   J_{-a} = cos(a pi) J_a - sin(a pi) Y_a,   Y_{-a} = sin(a pi) J_a + cos(a pi) Y_a,
+ *   I_{-a} = I_a + (2/pi) sin(a pi) K_a,      K_{-a} = K_a.
+ * The two terms can cancel (a near an integer, where sin(a pi) Y_a is a small
+ * multiple of a huge value), so the bits lost are measured on the result and
+ * the evaluation repeated with that many more, a few times at most -- the
+ * recurrence is cheap enough that a retry costs less than guessing high. */
+static bool bessel_recur(char kind, const ncpx* nu, const ncpx* z, double rd,
+                         ncpx* out, mpfr_prec_t P) {
+    double nr = mpfr_get_d(nu->re, BRND);
+    if (nr >= 0.0) return bessel_recur_pos(kind, nu, z, rd, out, P);
+    if (!(nr <= -2.0)) return false;
+
+    mpfr_prec_t bp = (P < 64 ? 64 : P);
+    ncpx a; ncpx_init(&a, bp);
+    ncpx_neg(&a, nu);                                   /* a = -nu, Re a >= 2 */
+    if (kind == 'K') {
+        bool ok = bessel_recur_pos('K', &a, z, rd, out, P);
+        ncpx_clear(&a);
+        return ok;
+    }
+
+    char k1 = (kind == 'I') ? 'I' : 'J';
+    char k2 = (kind == 'I') ? 'K' : 'Y';
+    bool ok = false;
+    mpfr_prec_t extra = 0;
+    for (int attempt = 0; attempt < 4; attempt++) {
+        mpfr_prec_t wp = P + extra + 64;
+        ncpx A, B, s, c, t1, t2, r;
+        ncpx_init(&A, wp); ncpx_init(&B, wp); ncpx_init(&s, wp); ncpx_init(&c, wp);
+        ncpx_init(&t1, wp); ncpx_init(&t2, wp); ncpx_init(&r, wp);
+        bool got = bessel_recur_pos(k1, &a, z, rd, &A, P + extra) &&
+                   bessel_recur_pos(k2, &a, z, rd, &B, P + extra);
+        if (got) {
+            mpfr_t pi, m1, m2, mr;
+            mpfr_inits2(wp, pi, m1, m2, mr, (mpfr_ptr)0);
+            mpfr_const_pi(pi, BRND);
+            ncpx_scale(&t1, &a, pi);                     /* a pi */
+            ncpx_sin(&s, &t1, wp);
+            ncpx_cos(&c, &t1, wp);
+            if (kind == 'J') {                           /* cos J - sin Y */
+                ncpx_mul(&t1, &c, &A, wp); ncpx_mul(&t2, &s, &B, wp);
+                ncpx_sub(&r, &t1, &t2);
+            } else if (kind == 'Y') {                    /* sin J + cos Y */
+                ncpx_mul(&t1, &s, &A, wp); ncpx_mul(&t2, &c, &B, wp);
+                ncpx_add(&r, &t1, &t2);
+            } else {                                     /* I + (2/pi) sin K */
+                ncpx_set(&t1, &A);
+                ncpx_mul(&t2, &s, &B, wp);
+                mpfr_ui_div(m1, 2, pi, BRND);
+                ncpx_scale(&t2, &t2, m1);
+                ncpx_add(&r, &t1, &t2);
+            }
+            ncpx_abs(m1, &t1); ncpx_abs(m2, &t2); ncpx_abs(mr, &r);
+            if (mpfr_cmp(m1, m2) < 0) mpfr_set(m1, m2, BRND);
+            /* bits lost to the cancellation */
+            long loss = 0;
+            if (mpfr_zero_p(mr)) loss = (long)wp;
+            else if (!mpfr_zero_p(m1))
+                loss = (long)(mpfr_get_exp(m1) - mpfr_get_exp(mr)) + 1;
+            if (loss <= (long)extra + 8) {
+                ncpx_set(out, &r);
+                ok = true;
+            } else if (loss < 100000) {
+                extra = (mpfr_prec_t)loss + 16;
+            } else {
+                got = false;                             /* hopeless: series */
+            }
+            mpfr_clears(pi, m1, m2, mr, (mpfr_ptr)0);
+        }
+        ncpx_clear(&A); ncpx_clear(&B); ncpx_clear(&s); ncpx_clear(&c);
+        ncpx_clear(&t1); ncpx_clear(&t2); ncpx_clear(&r);
+        if (ok || !got) break;
+    }
+    ncpx_clear(&a);
+    return ok;
+}
+
 /* Numeric evaluation of Y_order(z) at out_prec bits. */
 static Expr* by_eval(const Expr* order, const Expr* z, mpfr_prec_t out_prec) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec);
@@ -1440,7 +1725,30 @@ static Expr* by_eval(const Expr* order, const Expr* z, mpfr_prec_t out_prec) {
         Expr* r = NULL;
         if (bj_set_real(zr, z) && mpfr_sgn(zr) > 0) {
             long an = n < 0 ? -n : n;
-            mpfr_yn(out, an, zr, BRND);
+            if (an > 32) {
+                /* mpfr_yn is correct but its cost grows steeply with the
+                 * order (BesselY[1500., 5000.] took 27 s). Y is dominant as
+                 * the order grows, so the UPWARD recurrence
+                 * Y_{k+1} = (2k/x) Y_k - Y_{k-1} from Y_0, Y_1 is stable for
+                 * every x > 0; 2 log2(n) + 64 guard bits cover its rounding. */
+                mpfr_prec_t rp = wp + 64 + 2 * (mpfr_prec_t)ceil(log2((double)an));
+                mpfr_t x, y0, y1, c;
+                mpfr_inits2(rp, x, y0, y1, c, (mpfr_ptr)0);
+                mpfr_set(x, zr, BRND);
+                mpfr_y0(y0, x, BRND);
+                mpfr_y1(y1, x, BRND);
+                for (long k = 1; k < an; k++) {
+                    mpfr_mul_si(c, y1, 2 * k, BRND);    /* 2k Y_k */
+                    mpfr_div(c, c, x, BRND);            /* 2k Y_k / x */
+                    mpfr_sub(c, c, y0, BRND);           /* - Y_{k-1} */
+                    mpfr_swap(y0, y1);
+                    mpfr_swap(y1, c);
+                }
+                mpfr_set(out, y1, BRND);
+                mpfr_clears(x, y0, y1, c, (mpfr_ptr)0);
+            } else {
+                mpfr_yn(out, an, zr, BRND);
+            }
             if (n < 0 && (an & 1)) mpfr_neg(out, out, BRND);
             if (!mpfr_nan_p(out)) r = bj_real_result(out, out_prec);
         }

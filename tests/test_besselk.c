@@ -294,6 +294,43 @@ void test_besselk_stress() {
     assert_rel("BesselK[3, 40.0]", 9.378903724645e-19, 1e-9);
 }
 
+#ifdef USE_MPFR
+/* `input` must evaluate to an MPFR real within relative `rel` of `ref`. */
+static void assert_mpfr_rel(const char* input, const char* ref, double rel) {
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    ASSERT_MSG(r->type == EXPR_MPFR, "%s: expected an MPFR result", input);
+    mpfr_t want, d;
+    mpfr_init2(want, 200); mpfr_init2(d, 200);
+    mpfr_set_str(want, ref, 10, MPFR_RNDN);
+    mpfr_sub(d, r->data.mpfr, want, MPFR_RNDN);
+    mpfr_div(d, d, want, MPFR_RNDN);
+    double err = fabs(mpfr_get_d(d, MPFR_RNDN));
+    ASSERT_MSG(err <= rel, "%s: relative error %.3e vs %s", input, err, ref);
+    mpfr_clear(want); mpfr_clear(d);
+    expr_free(r);
+}
+#endif
+
+/* ---- large order: Hankel only where nu^2 << |z| ---------------------- */
+
+/* References: mpmath at 40 digits. */
+void test_besselk_large_order() {
+#ifdef USE_MPFR
+    /* was 1.98e-44 */
+    assert_mpfr_rel("N[BesselK[51/2, 100], 20]",
+                    "1.16357579166041248849331754038e-43", 1e-19);
+    assert_mpfr_rel("N[BesselK[1001/2, 5000], 25]",
+                    "4.41675255428010406162456695624e-2163", 1e-24);
+    assert_mpfr_rel("N[BesselK[1500, 1000], 25]",
+                    "0.000000713166313821389654902410156567", 1e-24);
+    assert_mpfr_rel("N[BesselK[7777/10, 1000], 30]",
+                    "8.3620836281658519440431087605e-311", 1e-29);
+#endif
+}
+
 /* ---- argument count ------------------------------------------------- */
 
 void test_besselk_argcount() {
@@ -327,6 +364,7 @@ int main() {
     TEST(test_besselk_series_zero);
     TEST(test_besselk_series_infinity);
     TEST(test_besselk_stress);
+    TEST(test_besselk_large_order);
     TEST(test_besselk_argcount);
     TEST(test_besselk_attributes);
 

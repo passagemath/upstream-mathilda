@@ -299,6 +299,46 @@ void test_bessely_stress() {
     assert_close("BesselY[0, 0.8935769662791675]", 0.0, 1e-12);
 }
 
+#ifdef USE_MPFR
+/* `input` must evaluate to an MPFR real within relative `rel` of `ref`. */
+static void assert_mpfr_rel(const char* input, const char* ref, double rel) {
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    ASSERT_MSG(r->type == EXPR_MPFR, "%s: expected an MPFR result", input);
+    mpfr_t want, d;
+    mpfr_init2(want, 200); mpfr_init2(d, 200);
+    mpfr_set_str(want, ref, 10, MPFR_RNDN);
+    mpfr_sub(d, r->data.mpfr, want, MPFR_RNDN);
+    mpfr_div(d, d, want, MPFR_RNDN);
+    double err = fabs(mpfr_get_d(d, MPFR_RNDN));
+    ASSERT_MSG(err <= rel, "%s: relative error %.3e vs %s", input, err, ref);
+    mpfr_clear(want); mpfr_clear(d);
+    expr_free(r);
+}
+#endif
+
+/* ---- large order: Hankel only where nu^2 << |z| ---------------------- */
+
+/* References: mpmath at 40 digits. */
+void test_bessely_large_order() {
+#ifdef USE_MPFR
+    assert_mpfr_rel("N[BesselY[51/2, 100], 20]",
+                    "-0.0319542101406050521847147713273", 1e-19);
+    assert_mpfr_rel("N[BesselY[1001/2, 2000], 25]",
+                    "0.00873361603359137031854329428492", 1e-24);
+    assert_mpfr_rel("N[BesselY[2001/2, 5000], 25]",
+                    "-0.000710995820570033900856631588166", 1e-24);
+    assert_mpfr_rel("N[BesselY[7777/10, 1000], 30]",
+                    "-0.0311186530721735905728213120445", 1e-29);
+    /* integer order, upward recurrence from Y_0, Y_1 (mpfr_yn took 30 s) */
+    assert_mpfr_rel("N[BesselY[1500, 5000], 25]",
+                    "-0.011506427123777466059197127395", 1e-24);
+#endif
+    assert_close("BesselY[1500., 5000.]", -0.011506427123777466059, 1e-15);
+}
+
 /* ---- argument count ------------------------------------------------- */
 
 void test_bessely_argcount() {
@@ -334,6 +374,7 @@ int main() {
     TEST(test_bessely_series_zero);
     TEST(test_bessely_series_infinity);
     TEST(test_bessely_stress);
+    TEST(test_bessely_large_order);
     TEST(test_bessely_argcount);
     TEST(test_bessely_attributes);
 

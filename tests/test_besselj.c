@@ -295,6 +295,57 @@ void test_besselj_stress() {
     assert_close("BesselJ[0, 2.404825557695773]", 0.0, 1e-12);
 }
 
+/* ---- large order: Hankel only where nu^2 << |z| ---------------------- */
+
+#ifdef USE_MPFR
+/* `input` must evaluate to an MPFR real within relative `rel` of `ref`. */
+static void assert_mpfr_rel(const char* input, const char* ref, double rel) {
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    ASSERT_MSG(r->type == EXPR_MPFR, "%s: expected an MPFR result", input);
+    mpfr_t want, d;
+    mpfr_init2(want, 200); mpfr_init2(d, 200);
+    mpfr_set_str(want, ref, 10, MPFR_RNDN);
+    mpfr_sub(d, r->data.mpfr, want, MPFR_RNDN);
+    mpfr_div(d, d, want, MPFR_RNDN);
+    double err = fabs(mpfr_get_d(d, MPFR_RNDN));
+    ASSERT_MSG(err <= rel, "%s: relative error %.3e vs %s", input, err, ref);
+    mpfr_clear(want); mpfr_clear(d);
+    expr_free(r);
+}
+#endif
+
+/* The Hankel expansion used to be picked on |z| alone; with nu^2 >~ |z| its
+ * terms grow from the first and the optimal-truncation break returned the
+ * leading term only. References: mpmath at 40 digits. */
+void test_besselj_large_order() {
+#ifdef USE_MPFR
+    /* was -0.2001 */
+    assert_mpfr_rel("N[BesselJ[51/2, 100], 20]",
+                    "0.0745832058174051566888803777872", 1e-19);
+    /* order recurrence (Miller), half-integer and generic fractional order */
+    assert_mpfr_rel("N[BesselJ[1001/2, 2000], 25]",
+                    "0.0158900881673703809202837021267", 1e-24);
+    assert_mpfr_rel("N[BesselJ[2001/2, 5000], 25]",
+                    "-0.0113774627665968196657700349662", 1e-24);
+    assert_mpfr_rel("N[BesselJ[7777/10, 1000], 30]",
+                    "0.00665756893748583102482031185582", 1e-29);
+    /* large negative order: reflection through J_a, Y_a */
+    assert_mpfr_rel("N[BesselJ[-1001/2, 2000], 25]",
+                    "-0.00873361603359137031854329428492", 1e-24);
+#endif
+    /* Machine inputs beyond the machine kernel's reach (it declines when
+     * Miller's start exceeds its table) fall back to the MPFR core, which
+     * gave 1.798, -4.15, 0.906 and -1.624 here. */
+    assert_close("BesselJ[500.5, 1000.]", -0.0068336079386977732057, 1e-15);
+    assert_close("BesselJ[999.5, 2000.]", 0.018445677735116329095, 1e-15);
+    assert_close("BesselJ[500.3, 1000.]", -0.012137284811094303564, 1e-15);
+    assert_close("BesselJ[450.5, 900.]", 0.015415485771607046717, 1e-15);
+    assert_close("BesselJ[1000.5, 2000.]", 0.0047029768358929349937, 1e-15);
+}
+
 /* ---- argument count ------------------------------------------------- */
 
 void test_besselj_argcount() {
@@ -330,6 +381,7 @@ int main() {
     TEST(test_besselj_series_infinity);
     TEST(test_besselj_seriescoefficient);
     TEST(test_besselj_stress);
+    TEST(test_besselj_large_order);
     TEST(test_besselj_argcount);
     TEST(test_besselj_attributes);
 

@@ -2172,8 +2172,24 @@ successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
     `t_k = t_{k-1}·(−(z/2)²)/(k(ν+k))`, one `Gamma(ν+1)` via `mpfr_gamma` for
     real order or the `Gamma` builtin for complex order, with ~`2r/ln2` guard
     bits to absorb the alternating-series cancellation);
-  - an **asymptotic series** for large `r` away from the negative-real axis
-    (DLMF 10.17.3, summed to the optimal smallest-term truncation).
+  - an **asymptotic (Hankel) series** for large `r` away from the negative-real
+    axis (DLMF 10.17.3), used only where a double-precision walk of its term
+    sizes shows that no term exceeds the leading one and some term reaches
+    2^-(P+16) (roughly ν² ≪ r; a half-integer order terminates and is exact);
+  - for a **large order at large `r`** (the Hankel walk rejects ν but accepts
+    its fractional part μ = ν − ⌊Re ν⌋), the **three-term recurrence in the
+    order** from the Hankel values at μ and μ+1: Miller's backward recurrence
+    for J and I (start chosen by Olver's forward test, normalised to the Hankel
+    pair by least squares), upward for Y and K; a large negative order goes
+    through the reflection formulas with a measured cancellation retry. This is
+    O(max(ν, r)) steps where the power series needed ~2r/ln2 guard bits.
+    Integer-order Y with a real argument and n > 32 uses the upward recurrence
+    from `mpfr_y0`/`mpfr_y1` instead of `mpfr_yn` (`BesselY[1500., 5000.]` took
+    27 s). The same routing applies to `BesselY`, `BesselI` and `BesselK`.
+    Through v0.460 the Hankel series was chosen on `r` alone: `N[BesselJ[51/2,
+    100], 20]` gave −0.2001 (true 0.0745832058174051566889) and
+    `BesselJ[500.5, 1000.]`, which the machine kernel hands to this path, gave
+    1.798 (true −0.00683360793869777).
 
   Examples: `BesselJ[0, 5.2] = -0.11029`, `BesselJ[7/3 + I, 4.5 - I] =
   1.18908 + 0.715653 I`, `N[BesselJ[0, 4], 50] =

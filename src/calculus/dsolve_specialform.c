@@ -12,7 +12,9 @@
  *   Kummer (1F1)    P = b/x-s,  Q = -a s/x      ->  Hypergeometric1F1[a,b,s x],
  *                                                   (s x)^(1-b) 1F1[a-b+1, 2-b, s x]
  *                                                   (integer b: HypergeometricU[a,b,s x]
- *                                                   replaces the dependent one)
+ *                                                   replaces the dependent one; when the
+ *                                                   1F1 is a polynomial, U is too, and the
+ *                                                   ExpIntegralEi partner is used instead)
  *   Gauss (2F1)     W = x(1-x), Q = -a b/W,
  *                   P = (c-(a+b+1)x)/W          ->  Hypergeometric2F1[a,b,c,x],
  *                                                   x^(1-c) 2F1[a-c+1,b-c+1,2-c,x]
@@ -194,6 +196,94 @@ static bool specialform_is_number(Expr* e) {
     bool r = (nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True);
     expr_free(nq);
     return r;
+}
+
+/* Exact rational q as an evaluated Expr (Integer or Rational). */
+static Expr* sf_mpq_expr(const mpq_t q) {
+    Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(q)));
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) return num;
+    Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(q)));
+    return eval_and_free(ds_call2(SYM_Times, num, powneg1_sf(den)));
+}
+
+/* Upper bound on n + B for the logarithmic Kummer partner below: the coefficient
+ * recurrence is O(n + B) exact rationals, but the emitted expression (and the
+ * back-substitution verify on it) grows linearly too, so an absurd degree
+ * declines to the rest of the cascade instead of building a huge closed form. */
+#define SF_KUMMER_LOG_MAX 400
+static bool sf_small_int(int64_t v) { return v >= -SF_KUMMER_LOG_MAX && v <= SF_KUMMER_LOG_MAX; }
+
+/* The logarithmic (ExpIntegralEi) second solution of the DEGENERATE Kummer
+ * equation  z w'' + (B - z) w' + n w == 0,  n >= 0, B >= 1 integers, i.e.
+ * a == -n.  There the polynomial p = 1F1[-n, B, z] (a Laguerre polynomial up to
+ * a constant) is one solution and Tricomi's U[-n, B, z] = (-1)^n (B)_n p is the
+ * SAME solution (Wronskian -Gamma(B) z^-B e^z / Gamma(a) == 0), so the textbook
+ * {1F1, U} basis collapses.  The independent partner is
+ *
+ *     w2 = p(z) Ei(z) + e^z R(z),   R = sum_{j=1-B}^{n-1} r_j z^j   (Laurent),
+ *
+ * found by substituting into the ODE: Ei' = e^z/z gives
+ *     L[p Ei]   = e^z (2 p' + (B-1) p / z)          (L[p] == 0),
+ *     L[e^z R]  = e^z (z R'' + (z + B) R' + (B + n) R),
+ * so R solves  z R'' + (z+B) R' + (B+n) R == -(2 p' + (B-1) p/z).  Matching z^j:
+ *     (j+B+n) r_j + (j+1)(j+B) r_{j+1} == -(2j+B+1) p_{j+1}     (p_k = 0, k < 0),
+ * a two-term recurrence solved top-down from r_n = 0.  j+B+n >= n+1 > 0 on the
+ * whole range, so every step is a plain division; the coupling vanishes at
+ * j = -B, which is why R stops at z^(1-B).  The Ei term makes w2 non-elementary,
+ * hence independent of p (Wronskian == e^z z^-B by Abel).  This is the closed
+ * form of e^z U[B+n, B, -z] up to a multiple of p, without its complex branch on
+ * real z > 0.  z borrowed; NULL when n + B exceeds SF_KUMMER_LOG_MAX. */
+static Expr* specialform_kummer_log_partner(int64_t n, int64_t B, const Expr* z) {
+    if (n < 0 || B < 1 || n + B > SF_KUMMER_LOG_MAX) return NULL;
+    /* p_k = prod_{i<k} (i - n) / ((B + i)(i + 1)),  k = 0..n */
+    mpq_t* p = (mpq_t*)malloc((size_t)(n + 1) * sizeof(mpq_t));
+    /* r_j stored at r[j + B - 1], j = 1-B .. n  (r_n = 0) */
+    mpq_t* r = (mpq_t*)malloc((size_t)(n + B) * sizeof(mpq_t));
+    if (!p || !r) { free(p); free(r); return NULL; }
+    mpq_t t, u;
+    mpq_init(t); mpq_init(u);
+    for (int64_t k = 0; k <= n; k++) {
+        mpq_init(p[k]);
+        if (k == 0) { mpq_set_ui(p[k], 1, 1); continue; }
+        int64_t i = k - 1;
+        mpz_set_si(mpq_numref(t), (long)(i - n));
+        mpz_set_si(mpq_denref(t), (long)((B + i) * (i + 1)));   /* <= 400^2, fits */
+        mpq_canonicalize(t);
+        mpq_mul(p[k], p[k - 1], t);
+    }
+    for (int64_t j = 0; j < n + B; j++) mpq_init(r[j]);   /* all 0, incl. r_n */
+    for (int64_t j = n - 1; j >= 1 - B; j--) {
+        /* rhs_j = -(2j+B+1) p_{j+1}  (zero when j+1 < 0) */
+        if (j + 1 >= 0) {
+            mpq_set_si(t, (long)(-(2 * j + B + 1)), 1);
+            mpq_mul(t, t, p[j + 1]);
+        } else mpq_set_ui(t, 0, 1);
+        /* - (j+1)(j+B) r_{j+1} */
+        mpq_set_si(u, (long)((j + 1) * (j + B)), 1);
+        mpq_mul(u, u, r[j + 1 + B - 1]);
+        mpq_sub(t, t, u);
+        mpq_set_si(u, (long)(j + B + n), 1);
+        mpq_div(r[j + B - 1], t, u);
+    }
+    /* assemble p(z) Ei(z) + e^z R(z) */
+    Expr* poly = expr_new_integer(0);
+    for (int64_t k = 0; k <= n; k++)
+        poly = ds_call2(SYM_Plus, poly, ds_call2(SYM_Times, sf_mpq_expr(p[k]),
+                   ds_call2(SYM_Power, expr_copy((Expr*)z), expr_new_integer(k))));
+    Expr* R = expr_new_integer(0);
+    for (int64_t j = 1 - B; j <= n - 1; j++) {
+        if (mpq_sgn(r[j + B - 1]) == 0) continue;
+        R = ds_call2(SYM_Plus, R, ds_call2(SYM_Times, sf_mpq_expr(r[j + B - 1]),
+                ds_call2(SYM_Power, expr_copy((Expr*)z), expr_new_integer(j))));
+    }
+    for (int64_t k = 0; k <= n; k++) mpq_clear(p[k]);
+    for (int64_t j = 0; j < n + B; j++) mpq_clear(r[j]);
+    mpq_clear(t); mpq_clear(u);
+    free(p); free(r);
+    Expr* ei = ds_call1(SYM_ExpIntegralEi, expr_copy((Expr*)z));
+    Expr* ez = ds_call2(SYM_Power, expr_new_symbol(SYM_E), expr_copy((Expr*)z));
+    return eval_and_free(ds_call2(SYM_Plus, ds_call2(SYM_Times, eval_and_free(poly), ei),
+                                            ds_call2(SYM_Times, ez, eval_and_free(R))));
 }
 
 /* Roots {*ra, *rb} of  t^2 - S t + Pr  (owned outputs; S, Pr borrowed).
@@ -1165,7 +1255,9 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      *   b integer <= 0:    z^(1-b) 1F1[a-b+1, 2-b, z], HypergeometricU[a, b, z]
      * The integer case is the DEGENERATE one -- the two 1F1 solutions coincide (or
      * one has a singular lower parameter) -- and Tricomi's U is the independent
-     * second solution for every b, exactly Mathematica's basis (Laguerre
+     * second solution unless the 1F1 solution is itself a polynomial (a == -n for
+     * b >= 1, a - b + 1 == -n for b <= 0), where U degenerates onto it and the
+     * logarithmic ExpIntegralEi partner below is emitted instead (Laguerre
      * x y'' + (1-x) y' + k y == 0, §2.2.46-4597, is b == 1).  The scale s reaches
      * x y'' - 2x y' - y == 0 (s == 2, §2.2.47-4603).  b must be a NUMBER: a symbolic
      * exponent z^(1-b) makes the verify residual a symbolic-power + pFq sum on which
@@ -1201,7 +1293,30 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
                                    (Expr*[]){ a2, b2, expr_copy(z) }, 3));
                     Mbar = eval_and_free(ds_call2(SYM_Times, zpow, h2));
                 }
-                if (!bint) general = combo(M, Mbar);
+                /* Degenerate integer case: U[a, b, z] collapses onto the 1F1
+                 * solution when that solution is a polynomial (times z^(1-b)):
+                 *   b >= 1, a == -n:            U = (-1)^n (b)_n 1F1[-n, b, z]
+                 *   b <= 0, a - b + 1 == -n:    U = z^(1-b) U[-n, 2-b, z] ~ Mbar
+                 * (Wronskian of {1F1, U} carries 1/Gamma(a) resp. 1/Gamma(a-b+1)).
+                 * Both reduce to the Kummer equation in (-n, B) with B = b resp.
+                 * 2-b >= 1 -- the second via w = z^(b-1) y -- whose logarithmic
+                 * partner specialform_kummer_log_partner supplies. */
+                int64_t dn = -1, dB = 0;
+                if (bint && kb->type == EXPR_INTEGER && ka->type == EXPR_INTEGER) {
+                    int64_t ia = ka->data.integer, ib = kb->data.integer;
+                    if (!sf_small_int(ia) || !sf_small_int(ib)) ;   /* decline below */
+                    else if (bpos && ia <= 0)              { dn = -ia;         dB = ib; }
+                    else if (!bpos && ia - ib + 1 <= 0) { dn = -(ia - ib + 1); dB = 2 - ib; }
+                }
+                if (dn >= 0) {
+                    Expr* w2 = specialform_kummer_log_partner(dn, dB, z);
+                    if (w2 && !bpos)
+                        w2 = eval_and_free(ds_call2(SYM_Times, eval_and_free(ds_call2(SYM_Power,
+                                 expr_copy(z), ds_call2(SYM_Subtract, expr_new_integer(1),
+                                 expr_copy(kb)))), w2));
+                    if (w2) general = combo(bpos ? M : Mbar, w2);
+                    else { expr_free(M); expr_free(Mbar); }   /* too large: decline */
+                } else if (!bint) general = combo(M, Mbar);
                 else {
                     Expr* U = eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricU),
                                   (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));

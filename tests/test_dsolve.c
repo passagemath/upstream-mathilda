@@ -392,6 +392,43 @@ static void t_hypergeometric_kummer(void) {
     check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x], "
                "HypergeometricPFQ]]");
 }
+/* Degenerate Kummer: when the 1F1 solution is a polynomial (b >= 1, a == -n, or
+ * b <= 0, a - b + 1 == -n), HypergeometricU[a, b, z] is a constant multiple of it,
+ * so the {1F1, U} basis is linearly DEPENDENT.  The recogniser must emit the
+ * logarithmic ExpIntegralEi partner instead.  Each case checks: the residual is
+ * zero, the Wronskian is the nonzero Abel value, and no U survives.  (Verified
+ * symbolically via D -- never through N[HypergeometricU[-n, ...]].) */
+static void t_hypergeometric_kummer_degenerate(void) {
+    static const char* const cases[][2] = {
+        /* {ODE lhs, expected Wronskian of {C[1], C[2]} parts} */
+        { "x y''[x] + (1 - x) y'[x] + 2 y[x]",  "E^x/x" },          /* Laguerre L_2, b = 1 */
+        { "x y''[x] + (1 - x) y'[x]",           "E^x/x" },          /* a = 0: {1, Ei}     */
+        { "x y''[x] + (3 - x) y'[x] + 2 y[x]",  "E^x/(3 x^3)" },    /* b = 3, a = -2      */
+        { "x y''[x] + (2 - 2 x) y'[x] + 4 y[x]", "E^(2 x)/(6 x^2)" }, /* scaled z = 2x     */
+        { "x y''[x] + (1 + x) y'[x] - 2 y[x]",  "E^(-x)/x" },       /* s = -1             */
+        { "x y''[x] + (-1 - x) y'[x] + 3 y[x]", "2/3 x E^x" },      /* b = -1, a' = -1    */
+        { "x y''[x] - x y'[x] + 2 y[x]",        "1/2 E^x" },        /* b = 0,  a' = -1    */
+    };
+    char buf[1024];
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        snprintf(buf, sizeof buf,
+            "Module[{g, y1, y2}, g = y[x] /. DSolve[%s == 0, y[x], x][[1]]; "
+            "y1 = g /. {C[1] -> 1, C[2] -> 0}; y2 = g /. {C[1] -> 0, C[2] -> 1}; "
+            "FreeQ[g, HypergeometricU] && !FreeQ[g, ExpIntegralEi] && "
+            "PossibleZeroQ[Together[(%s) /. y -> Function[x, Evaluate[g]]]] && "
+            "PossibleZeroQ[Together[y1 D[y2, x] - D[y1, x] y2 - (%s)]]]",
+            cases[i][0], cases[i][0], cases[i][1]);
+        check_true(buf);
+    }
+    /* the repro, verbatim */
+    check_form("DSolve[x y''[x] + (1 - x) y'[x] + 2 y[x] == 0, y[x], x]",
+               "{{y[x] -> C[1] (1 - 2 x + 1/2 x^2) + C[2] (E^x (3/2 - 1/2 x) + "
+               "ExpIntegralEi[x] (1 - 2 x + 1/2 x^2))}}");
+    /* symbolic a stays on the generic {1F1, U} basis (no degeneracy decidable) */
+    check_true("!FreeQ[DSolve[x y''[x] + (1 - x) y'[x] + k y[x] == 0, y[x], x], HypergeometricU]");
+    /* a non-degenerate integer b (a = 1 > 0) keeps U independent: unchanged */
+    check_true("FreeQ[DSolve[x y''[x] + (2 - x) y'[x] - y[x] == 0, y[x], x], ExpIntegralEi]");
+}
 static void t_hypergeometric_gauss(void) {
     /* x(1-x) y'' + (1/2 - 6 x) y' - 6 y == 0 -> Hypergeometric2F1[2, 3, 1/2, x] basis */
     check_true("PossibleZeroQ[(x (1 - x) y''[x] + (1/2 - 6 x) y'[x] - 6 y[x]) /. "
@@ -3370,6 +3407,7 @@ int main(void) {
     TEST(t_bessel_reducible);
     TEST(t_kovacic_highdegree_no_hang);
     TEST(t_hypergeometric_kummer);
+    TEST(t_hypergeometric_kummer_degenerate);
     TEST(t_hypergeometric_gauss);
     TEST(t_method_hypergeometric_kummer);
     TEST(t_hypergeometric_symbolic_a);

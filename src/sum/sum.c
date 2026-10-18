@@ -416,6 +416,15 @@ static bool sum_body_has_index_predicate(const Expr* e, const char* ivar) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
             if (expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
     }
+    /* The index as a Part position ({a, b}[[j]]): at a symbolic j the Part
+     * stays unevaluated and the rest of the body is evaluated against that
+     * opaque object -- D[a^2, {a, b}[[j]]] folds to 0 -- so the closed form
+     * is of a different summand.  Enumerate, as Mathematica does. */
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol.name, "Part") == 0) {
+        for (size_t i = 1; i < e->data.function.arg_count; i++)
+            if (expr_mentions_symbol(e->data.function.args[i], ivar)) return true;
+    }
     if (sum_body_has_index_predicate(e->data.function.head, ivar)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
         if (sum_body_has_index_predicate(e->data.function.args[i], ivar)) return true;

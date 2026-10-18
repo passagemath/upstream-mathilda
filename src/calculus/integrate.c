@@ -729,6 +729,64 @@ static Expr* try_polylogladder(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage: holonomic ansatz (src/internal/Holonomic.m).
+ *
+ * x^alpha L(x) times monomials in Bessel J/Y/I/K, Airy and Sin/Cos kernels of
+ * linear argument.  Each kernel family spans a 2-dimensional space closed
+ * under d/dx with Laurent-polynomial coefficients, so a product of kernels
+ * lives in a finite-dimensional differential module; the package seeks an
+ * antiderivative in that module with Laurent-polynomial coefficients by
+ * solving one linear system (Integrate[BesselJ[1, x]^4/x, x],
+ * Integrate[BesselJ[nu, x]^2/x^4, x], Integrate[x^(1 + mu + nu) BesselJ[mu, x]
+ * BesselY[nu, x], x] used to come back unevaluated).  Exact by construction
+ * and re-checked symbolically; anything else is $Failed and the cascade
+ * continues.  Gated on a Bessel or Airy head, so it costs nothing elsewhere. */
+static bool hol_load_attempted = false;
+static bool hol_load_succeeded = false;
+
+static bool hol_has_kernel(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL) {
+        const char* n = h->data.symbol.name;
+        if (strcmp(n, "BesselJ") == 0 || strcmp(n, "BesselY") == 0 ||
+            strcmp(n, "BesselI") == 0 || strcmp(n, "BesselK") == 0 ||
+            strcmp(n, "AiryAi") == 0 || strcmp(n, "AiryBi") == 0 ||
+            strcmp(n, "AiryAiPrime") == 0 || strcmp(n, "AiryBiPrime") == 0)
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (hol_has_kernel(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* try_holonomic(Expr* f, Expr* x) {
+    if (!hol_has_kernel(f)) return NULL;
+    if (!hol_load_attempted) {
+        hol_load_attempted = true;
+        mth_msg_suppress_push();
+        hol_load_succeeded = mathilda_load_module("Holonomic.m") != 0;
+        mth_msg_suppress_pop();
+        if (!hol_load_succeeded)
+            mth_message("Integrate`Holonomic", "nofile",
+                "cannot locate src/internal/Holonomic.m on disk.");
+    }
+    if (!hol_load_succeeded) return NULL;
+    mth_msg_suppress_push();
+    Expr* result = call_stage("Holonomic`Integrate", f, x);
+    mth_msg_suppress_pop();
+    if (!result) return NULL;
+    /* any atom is a decline (the package's $Failed), as for PolyLogLadder */
+    if (result_is_unresolved(result, "Holonomic`Integrate") ||
+        result->type != EXPR_FUNCTION ||
+        result_contains_head(result, "Integrate") ||
+        result_contains_head(result, "Return") || result_contains_head(result, "Throw")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Stage 2: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
@@ -1246,6 +1304,7 @@ typedef enum {
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
     METHOD_POLYLOG_LADDER,
+    METHOD_HOLONOMIC,
     METHOD_PARALLEL_MIXED_TOWER,
     METHOD_PARALLEL_MIXED_SPECIAL,
     METHOD_UNDEFINED,
@@ -1283,6 +1342,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "PolyLogLadder") == 0) return METHOD_POLYLOG_LADDER;
+    if (strcmp(s, "Holonomic") == 0) return METHOD_HOLONOMIC;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
     if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -1906,7 +1966,7 @@ typedef enum {
     IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
-    IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
+    IP_HOLONOMIC, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
     IP_NSTAGES
 } IntegrateProfStage;
 
@@ -1915,7 +1975,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
-    "14 CRCTable", "14b PolyLogLadder", "15 LogByParts",
+    "14 CRCTable", "14b PolyLogLadder", "14c Holonomic", "15 LogByParts",
     "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
@@ -2390,6 +2450,9 @@ Expr* builtin_integrate(Expr* res) {
              * grinding tower tail: cheap structural gate, exact construction,
              * diff-back accepted. */
             IP_STAGE(IP_POLYLOG,      try_polylogladder(effective_f, x));
+            /* Bessel / Airy kernel products: one linear system in the kernels'
+             * differential module, before the tower tail grinds on them. */
+            IP_STAGE(IP_HOLONOMIC,    try_holonomic(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
@@ -2486,6 +2549,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_POLYLOG_LADDER:
             result = try_polylogladder(effective_f, x);
+            break;
+        case METHOD_HOLONOMIC:
+            result = try_holonomic(effective_f, x);
             break;
         case METHOD_PARALLEL_MIXED_TOWER:
             result = try_parallelmixedtower(effective_f, x);

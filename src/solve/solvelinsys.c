@@ -447,6 +447,18 @@ Expr* solvelinsys_solve_linear_system(Expr* equations,
 
     for (size_t i = 0; i < m; i++) {
         Expr* eq = eq_arr[i];
+        /* A literal True (an identity such as 0 == 0 that evaluated away)
+         * constrains nothing: an all-zero row, which elimination leaves
+         * alone.  A literal False makes the system inconsistent.  Both used
+         * to decline the whole system as "not an Equal". */
+        if (eq->type == EXPR_SYMBOL && eq->data.symbol.name == SYM_True) {
+            for (size_t k = 0; k <= n; k++) A.rows[i][k] = mk_int(0);
+            continue;
+        }
+        if (eq->type == EXPR_SYMBOL && eq->data.symbol.name == SYM_False) {
+            am_free(&A);
+            return mk_list(NULL, 0);
+        }
         if (eq->type != EXPR_FUNCTION
             || eq->data.function.head->type != EXPR_SYMBOL
             || eq->data.function.head->data.symbol.name != SYM_Equal

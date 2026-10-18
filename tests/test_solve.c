@@ -276,7 +276,7 @@ static void test_trig_pre_pass_sin_plus_cos(void) {
                  "Times[2, C[1], Pi], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], "
+                 "Plus[Times[2, C[1], Pi], "
                        "Times[Rational[1, 2], Pi]], "
                  "Element[C[1], Integers]]]]]");
 }
@@ -400,7 +400,7 @@ static void test_inverse_exp(void) {
     run_test("Solve[Exp[x] == a, x]",
              "List[List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[Complex[0, 2], Times[C[1], Pi]], Log[a]], "
+                 "Plus[Times[Complex[0, 2], C[1], Pi], Log[a]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -483,11 +483,7 @@ static void test_trig_pair(void) {
  * multi-branch complex log. */
 static void test_inverse_power_const_base(void) {
     run_test("Solve[2^x == 5, x]",
-             "List[List[Rule[x, ConditionalExpression["
-                 "Plus[Times[Log[5], Power[Log[2], -1]], "
-                       "Times[Complex[0, 2], "
-                              "Times[C[1], Power[Log[2], -1], Pi]]], "
-                 "Element[C[1], Integers]]]]]");
+             "List[List[Rule[x, ConditionalExpression[Plus[Times[Log[5], Power[Log[2], -1]], Times[Complex[0, 2], C[1], Power[Log[2], -1], Pi]], Element[C[1], Integers]]]]]");
     /* b^x == 1 -> x == 2 Pi I C[k] / Log[b] (constant Log[1] drops). */
     run_test("Solve[3^x == 1, x]",
              "List[List[Rule[x, ConditionalExpression["
@@ -506,11 +502,11 @@ static void test_inverse_sin(void) {
     run_test("Solve[Sin[x] == a, x]",
              "List[List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Pi, Times[2, Times[C[1], Pi]], Times[-1, ArcSin[a]]], "
+                 "Plus[Pi, Times[2, C[1], Pi], Times[-1, ArcSin[a]]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], ArcSin[a]], "
+                 "Plus[Times[2, C[1], Pi], ArcSin[a]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -519,11 +515,11 @@ static void test_inverse_sin_concrete(void) {
     run_test("Solve[Sin[x] == 1/2, x]",
              "List[List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[5, 6], Pi]], "
+                 "Plus[Times[2, C[1], Pi], Times[Rational[5, 6], Pi]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[1, 6], Pi]], "
+                 "Plus[Times[2, C[1], Pi], Times[Rational[1, 6], Pi]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -543,11 +539,11 @@ static void test_inverse_isolation(void) {
     run_test("Solve[2 Sin[x] - 1 == 0, x]",
              "List[List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[5, 6], Pi]], "
+                 "Plus[Times[2, C[1], Pi], Times[Rational[5, 6], Pi]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[1, 6], Pi]], "
+                 "Plus[Times[2, C[1], Pi], Times[Rational[1, 6], Pi]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -587,7 +583,7 @@ static void test_inverse_sin_zero(void) {
     run_test("Solve[Sin[x] == 0, x]",
              "List[List[Rule[x, "
                "ConditionalExpression["
-                 "Plus[Pi, Times[2, Times[C[1], Pi]]], "
+                 "Plus[Pi, Times[2, C[1], Pi]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
                "ConditionalExpression["
@@ -1220,7 +1216,7 @@ static void test_linsys_symbolic_coefficients(void) {
              "List[List[Rule[x, Times[Power[a, -1], "
                               "Plus[1, Times[-1, c]]]], "
                        "Rule[y, Times[Power[a, -1], "
-                              "Plus[Times[-2, a], b, Times[-1, Times[b, c]]], "
+                              "Plus[Times[-2, a], b, Times[-1, b, c]], "
                               "Power[d, -1]]]]]");
 }
 
@@ -1315,6 +1311,24 @@ static void test_linsys_zero_row_consistent(void) {
 static void test_linsys_false_conjunct(void) {
     run_test("Solve[x + y == 3 && 1 == 0, {x, y}]",
              "List[]");
+}
+
+/* The same, written as a List: a literal True (0 == 0 evaluated away) is an
+ * all-zero row and a literal False an inconsistent system.  The List form used
+ * to decline the whole system ("not an Equal"). */
+static void test_linsys_list_true_false_entries(void) {
+    run_test("Solve[{x + y == 3, 0 == 0, x - y == 1}, {x, y}]",
+             "List[List[Rule[x, 2], Rule[y, 1]]]");
+    run_test("Solve[{x + y == 3, 1 == 0}, {x, y}]", "List[]");
+}
+
+/* More than 32 indexed (non-symbol) unknowns: the compound-variable table was
+ * a fixed 32 entries, the 33rd unknown stayed unsubstituted, and the
+ * symbol-only linear specialist declined the whole system. */
+static void test_linsys_many_indexed_unknowns(void) {
+    run_test("Module[{s = Solve[Join[Table[c[i] + c[i + 1] == 2 i + 1, {i, 39}], {c[40] == 40}], "
+             "Table[c[i], {i, 40}]]}, (Table[c[i], {i, 40}] /. First[s]) === Range[40]]",
+             "True");
 }
 
 /* Non-affine systems are now dispatched to the nonlinear (0-dimensional
@@ -1501,6 +1515,8 @@ int main(void) {
     TEST(test_linsys_single_eq_and_one);
     TEST(test_linsys_zero_row_consistent);
     TEST(test_linsys_false_conjunct);
+    TEST(test_linsys_list_true_false_entries);
+    TEST(test_linsys_many_indexed_unknowns);
     TEST(test_linsys_nonlinear_declined);
     TEST(test_linsys_qualified_builtin);
 

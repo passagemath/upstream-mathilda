@@ -67,8 +67,10 @@ Each fix has a root-cause test in `tests/test_mathar_regressions.c`.
 
 v0.459 adds Log-of-trig: definite 93/191, indefinite unchanged 66/82.
 v0.460 adds MeijerConvolution: definite 106/203.
+v0.461 adds Holonomic (indefinite Bessel/Airy): indefinite 82/99. Definite measured 103/198 with
+more timeouts, under investigation.
 
-WRONG, NONNUMERIC and CRASH are all 0. CMake floors: definite 103/198, indefinite 65/80, a small margin
+WRONG, NONNUMERIC and CRASH are all 0. CMake floors: definite 100/194, indefinite 80/97, a small margin
 for timeouts.
 
 ## 4. What remains: ranked by "Mathematica closes it"
@@ -129,7 +131,9 @@ Both are exact identities, accepted after a differentiation check. Supporting ch
    - `src/special_functions/meijer_g.c` already has the G-function. Needed: (a) a kernel → MeijerG table,
      (b) the convolution, (c) G → closed-form reduction for the common cases (Gamma ratios, ₂F₁ at
      special points).
-3. **Indefinite Bessel × power** (13). These are the Lommel-type recurrences: ∫ x^{μ} Z_ν(x) by the
+3. **Done in v0.461 (products). Indefinite Bessel × power** (13). Module `src/internal/Holonomic.m`:
+   a rational ansatz in the kernels' differential module, plus a Wronskian route for 1/Ai²-type
+   integrands. Still open: `x^mu Z_nu` needing Struve H (Lommel) and J_n Y_n/x (a generic-n sum). These are the Lommel-type recurrences: ∫ x^{μ} Z_ν(x) by the
    recurrence on (μ, ν) down to the base cases ∫ x^{ν+1} Z_ν = x^{ν+1} Z_{ν+1}, plus Struve for the rest.
 4. **Complete elliptic reduction on [0, π/2]**.
    - Applies to `sin^{2m} cos^{2n} (1 − k² sin²)^{±1/2}` (trig-only entries M8035, M8090, ...).

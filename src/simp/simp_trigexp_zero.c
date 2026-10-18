@@ -820,7 +820,18 @@ static Expr* expand_pi_phase(const Expr* e, const char* vn) {
             strcmp(hn, "Sech") == 0 || strcmp(hn, "Csch") == 0;
         if (is_circ || is_hyp) {
             Expr* A = NULL; Expr* C = NULL;
-            if (split_affine_phase(e->data.function.args[0], vn, &A, &C)) {
+            /* A multiple of a sum (Sin[2 (Pi/2 + x)], Cot[x - 2 (2 x - 3/2 Pi)])
+             * hides its constant phase inside a Times: expand the argument
+             * first, or the head stays an opaque generator independent of
+             * Sin[2 x] and the relaxed test proves a true identity NONZERO. */
+            const Expr* arg = e->data.function.args[0];
+            Expr* argx = NULL;
+            if (arg->type == EXPR_FUNCTION && (sym_is(arg->data.function.head, SYM_Times) ||
+                                               sym_is(arg->data.function.head, SYM_Plus)))
+                argx = eval_and_free(mk_fn1("Expand", expr_copy((Expr*)arg)));
+            bool split = split_affine_phase(argx ? argx : arg, vn, &A, &C);
+            if (argx) expr_free(argx);
+            if (split) {
                 bool ok = (is_circ && is_pi_rational_const(C, vn)) ||
                           (is_hyp && is_i_pi_rational_const(C, vn));
                 if (ok) {

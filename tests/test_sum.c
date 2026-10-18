@@ -225,6 +225,9 @@ int main(void) {
      * symbolically, collapsing the conditional and telescoping the wrong summand
      * (this gave Sum[If[EvenQ[k],k,-k],{k,1,10}] = -55 instead of 5). */
     check("Sum[If[EvenQ[k], k, -k], {k, 1, 10}]", "5");
+    /* The index as a Part position: at a symbolic j, D[a^2, {a, b}[[j]]] folds
+     * to 0 against the unevaluated Part, so the closed form summed 0. */
+    check("Sum[D[a^2 + b^2, {a, b}[[j]]], {j, 1, 2}]", "2 a + 2 b");
     check("Sum[If[OddQ[k], k, -k], {k, 1, 10}]", "-5");
     check("Sum[Boole[EvenQ[k]] k, {k, 1, 10}]", "30");
     check("Sum[Boole[PrimeQ[k]], {k, 1, 20}]", "8");

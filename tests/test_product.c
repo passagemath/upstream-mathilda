@@ -107,6 +107,8 @@ int main(void) {
      * evaluated at the symbolic index (EvenQ[k] folds to False there, collapsing
      * the conditional): this gave Product[If[EvenQ[k],k,1],{k,1,4}] = 1, not 8. */
     check("Product[If[EvenQ[k], k, 1], {k, 1, 4}]", "8");    /* 2*4 */
+    /* Part index: D[a^2 b, {a, b}[[j]]] folded to 0 at a symbolic j. */
+    check("Product[D[a^2 b, Part[{a, b}, j]], {j, 1, 2}]", "2 a^3 b");
     check("Product[If[PrimeQ[k], k, 1], {k, 2, 5}]", "30");  /* 2*3*5 */
     /* empty / reversed range -> multiplicative identity 1 (NOT 0) */
     check("Product[k, {k, 1, 0}]", "1");

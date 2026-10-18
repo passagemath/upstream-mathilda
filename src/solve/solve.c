@@ -253,11 +253,12 @@ static bool is_valid_solve_vars(const Expr* vars) {
  *  internal symbol (`Solve$var$N`) before dispatch, then reverses     *
  *  the substitution on the result so the user sees `{{g -> ...}}`.   *
  *                                                                     *
- *  Cap of 32 substitutions per call is more than enough -- a real    *
- *  Solve call rarely has more than a handful of distinct variables.   *
+ *  The substitution table is sized to the variable list (no cap: a   *
+ *  fixed 32-entry table used to leave the 33rd and later indexed      *
+ *  variables unsubstituted, and the symbol-only specialists then      *
+ *  declined the whole system -- Solve over c[m, k] unknowns came back *
+ *  unevaluated from 33 of them on).                                   *
  * ------------------------------------------------------------------ */
-
-#define SOLVE_MAX_VAR_SUBS 32
 
 typedef struct {
     Expr* original;     /* borrowed from caller (lives as long as `res`) */
@@ -374,7 +375,7 @@ static size_t collect_and_subst_compound_vars(
     Expr** new_args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
     for (size_t i = 0; i < n; i++) {
         Expr* v = vars_in->data.function.args[i];
-        if (v->type == EXPR_SYMBOL || n_subs >= SOLVE_MAX_VAR_SUBS) {
+        if (v->type == EXPR_SYMBOL) {
             new_args[i] = expr_copy(v);
             continue;
         }
@@ -889,7 +890,9 @@ Expr* builtin_solve(Expr* res) {
      * the dispatch specialists -- which only understand symbol
      * variables -- can run.  The substitution is reversed on the
      * result so the user sees `{{Dt[y] -> ...}}` (etc.) verbatim. */
-    SolveVarSub subs[SOLVE_MAX_VAR_SUBS];
+    /* One slot per variable (a bare compound variable needs one). */
+    size_t n_var_slots = (vars->type == EXPR_FUNCTION) ? vars->data.function.arg_count : 1;
+    SolveVarSub* subs = (SolveVarSub*)malloc(sizeof(SolveVarSub) * (n_var_slots ? n_var_slots : 1));
     Expr* vars_subst = NULL;
     size_t n_subs = collect_and_subst_compound_vars(
         vars, &expr, subs, &vars_subst);
@@ -930,12 +933,14 @@ Expr* builtin_solve(Expr* res) {
                                 (Expr*[]){ empty }, 1);
         expr_free(expr);
         expr_free(vars_subst);
+        free(subs);
         return out;
     }
     if (expr->type == EXPR_SYMBOL && expr->data.symbol.name == SYM_False) {
         out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         expr_free(expr);
         expr_free(vars_subst);
+        free(subs);
         return out;
     }
 
@@ -1059,6 +1064,7 @@ Expr* builtin_solve(Expr* res) {
         if (!classify_single_var(vars, &var)) {
             expr_free(expr);
             expr_free(vars_subst);
+            free(subs);
             expr_free(verify_eq);
             return NULL;
         }
@@ -1181,6 +1187,7 @@ solve_finish:
         && out->data.function.arg_count == 0) {
         expr_free(out);
         expr_free(vars_subst);
+        free(subs);
         return NULL;
     }
 
@@ -1194,6 +1201,7 @@ solve_finish:
         out = restored;
     }
     expr_free(vars_subst);
+    free(subs);
 
     /* If we rationalised the input, round-trip the bindings back to
      * floating-point at the original (minimum) precision.  The

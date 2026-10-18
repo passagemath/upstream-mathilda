@@ -1167,6 +1167,11 @@ Out[3]= {"alpha", "beta"}
 - `UpperCaseQ["string"]` / `LowerCaseQ["string"]`: every character is an
   uppercase / lowercase letter.
 - All are `True` for `""`. A non-string emits `::string`.
+- In a string pattern, `_?LetterQ`, `_?DigitQ`, `_?UpperCaseQ` and
+  `_?LowerCaseQ` compile to a character class that accepts exactly what the
+  predicate does: `StringMatchQ["\:0661", _?DigitQ]` is `False` like
+  `DigitQ["\:0661"]` (it used to be `True`), while
+  `StringMatchQ["\:0661", DigitCharacter]` stays `True`.
 - **Attributes**: `Protected`.
 
 ```mathematica

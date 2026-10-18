@@ -299,6 +299,26 @@ static void test_new_builtins_and_forms(void) {
                    "True", 0);
     assert_eval_eq("DigitQ[\"\\:0662\"]",
                    "False", 0);
+    /* _?DigitQ in a string pattern must agree with DigitQ: the regex engine
+     * runs in PCRE2 UCP mode, where [[:digit:]] is every Unicode decimal
+     * digit, so the class is the literal [0-9]. DigitCharacter stays Nd. */
+    assert_eval_eq("StringMatchQ[\"\\:0661\", _?DigitQ]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"\\:ff15\\:0966\", __?DigitQ]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"\\:0661\", DigitCharacter]",
+                   "True", 0);
+    assert_eval_eq("StringCases[\"a1\\:0662b23\", __?DigitQ]",
+                   "{\"1\", \"23\"}", 0);
+    /* The other mapped predicates already agree on non-ASCII letters. */
+    assert_eval_eq("StringMatchQ[\"\\:00e9\\:03b1\", __?LetterQ]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"\\:00c9\\:0391\", __?UpperCaseQ]",
+                   "True", 0);
+    assert_eval_eq("StringMatchQ[\"\\:01c5\", _?UpperCaseQ]",
+                   "False", 0);
+    assert_eval_eq("StringMatchQ[\"\\:00df\\:03b1\", __?LowerCaseQ]",
+                   "True", 0);
     assert_eval_eq("UpperCaseQ[\"ABC\"]",
                    "True", 0);
     assert_eval_eq("UpperCaseQ[\"AbC\"]",

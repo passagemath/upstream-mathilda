@@ -182,12 +182,20 @@ static long nonneg_int(const Expr* e) {
     return (e->type == EXPR_INTEGER && e->data.integer >= 0) ? (long)e->data.integer : -1;
 }
 
-/* Character class for a known predicate symbol, else NULL. */
+/* Character class for a known predicate symbol, else NULL. Each class must
+ * accept exactly the characters its predicate accepts on a one-character
+ * string (src/strings/stringcase.c), or `_?f` in a string pattern disagrees
+ * with f itself. The engine compiles in PCRE2_UCP mode, where the POSIX
+ * classes are Unicode properties: [[:alpha:]] = \p{L} (LetterQ: L*),
+ * [[:upper:]] = \p{Lu}, [[:lower:]] = \p{Ll} -- those agree. But
+ * [[:digit:]] = \p{Nd}, every Unicode decimal digit, while DigitQ is
+ * ASCII-only (DigitQ["\:0661"] is False, as in Mathematica), so DigitQ maps
+ * to the literal range [0-9]. */
 static const char* predicate_class(const Expr* f) {
     if (f->type != EXPR_SYMBOL) return NULL;
     const char* name = f->data.symbol.name;
     if (strcmp(name, "LetterQ") == 0)    return "[[:alpha:]]";
-    if (strcmp(name, "DigitQ") == 0)     return "[[:digit:]]";
+    if (strcmp(name, "DigitQ") == 0)     return "[0-9]";
     if (strcmp(name, "UpperCaseQ") == 0) return "[[:upper:]]";
     if (strcmp(name, "LowerCaseQ") == 0) return "[[:lower:]]";
     return NULL;

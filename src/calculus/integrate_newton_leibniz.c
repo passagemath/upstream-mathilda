@@ -622,7 +622,19 @@ void integrate_emit_idiv(Expr* f, Expr* a, Expr* b) {
  * inaccuracy.  Returns false (reject) if NIntegrate cannot produce a value. */
 static bool nl_crosscheck_ok(Expr* f, Expr* x, Expr* a, Expr* b, Expr* V) {
     double vd;
-    if (nl_numeric(V, &vd) != 1) return false;   /* V not a finite real */
+    if (nl_numeric(V, &vd) != 1) {
+        /* A real value telescoped from a complex-written antiderivative carries
+         * an imaginary rounding residue (~1e-16); accept its real part when the
+         * imaginary part is negligible, reject a genuinely complex value. */
+        Expr* nv = eval_take(mk_fn1("N", expr_copy(V)));
+        Expr *re = NULL, *im = NULL;
+        double rv, iv;
+        bool ok = nv && is_complex(nv, &re, &im) && nl_real_double(re, &rv) &&
+                  nl_real_double(im, &iv) && fabs(iv) <= 1e-9 * (1.0 + fabs(rv));
+        if (nv) expr_free(nv);
+        if (!ok) return false;                    /* V not a finite (real) value */
+        vd = rv;
+    }
 
     arith_warnings_mute_push();
     Expr* spec = mk_fn3("List", expr_copy(x), expr_copy(a), expr_copy(b));
@@ -978,6 +990,33 @@ static size_t nl_node_count_capped(const Expr* e, size_t cap) {
     return n;
 }
 
+/* True iff F holds a PolyLog or Log whose argument contains an exponential of
+ * x (E^(c x) or E^(I c x)).  The polylogarithm-ladder antiderivatives
+ * (src/internal/PolyLogLadder.m) are written in T = E^(I b x): as x runs
+ * along the real axis such an argument circles the origin and can cross the
+ * branch cut of Log/PolyLog, where F jumps although the integrand is smooth --
+ * so the telescoped value must be confirmed by the continuity cross-check. */
+static bool nl_arg_has_exp_of_x(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.args[0]->data.symbol.name, "E") == 0 &&
+        contains_symbol(e->data.function.args[1], (Expr*)x)) return true;
+    if (head_name_is(e, "Exp") && contains_symbol(e, (Expr*)x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_arg_has_exp_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static bool nl_has_exp_polylog(const Expr* F, const Expr* x) {
+    if (!F || F->type != EXPR_FUNCTION) return false;
+    if ((head_name_is(F, "PolyLog") || head_name_is(F, "Log")) &&
+        nl_arg_has_exp_of_x(F, x)) return true;
+    for (size_t i = 0; i < F->data.function.arg_count; i++)
+        if (nl_has_exp_polylog(F->data.function.args[i], x)) return true;
+    return false;
+}
+
 Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
                                       const char* method, bool principal_value,
                                       Expr* assumptions) {
@@ -1098,7 +1137,8 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * radicand vanishes inside (a,b) all mean F could carry an uncorrected
      * branch jump and must be cross-checked. */
     bool F_triggers = nl_has_step_head(F, x) || nl_has_arctrig_over_pole(F, x)
-                      || nl_find_radical_hazard(F, x, a, b);
+                      || nl_find_radical_hazard(F, x, a, b)
+                      || nl_has_exp_polylog(F, x);
     expr_free(F);
 
     if (failed || !total) { if (total) expr_free(total); return NULL; }

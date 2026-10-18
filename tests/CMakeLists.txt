@@ -5157,7 +5157,7 @@ add_test(NAME mse_trick_corpus_tests
 # Mathematica NIntegrate oracle.  One runner, two corpora; each record runs as a
 # symbolic integral and as a numeric instance (parallel fork pool, MATHAR_JOBS).
 # The trailing arguments are the ratcheting CORRECT floors (symbolic, instance),
-# set 1-3 below the measured v0.458 counts (80/166 definite, 66/82 indefinite)
+# set 1-3 below the measured counts (v0.459: 93/191 definite, 66/82 indefinite)
 # to absorb timeout jitter at the 30 s per-case limit;
 # WRONG and CRASH must be 0.  See docs/design/mathar_integrate_triage.md.
 add_executable(mathar_corpus_tests test_mathar_corpus.c $<TARGET_OBJECTS:mathilda_common>)
@@ -5169,7 +5169,7 @@ else()
     target_link_libraries(mathar_corpus_tests gmp m)
 endif()
 add_test(NAME mathar_definite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 78 163)
+         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 91 188)
 add_test(NAME mathar_indefinite_corpus_tests
          COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 65 80)
 

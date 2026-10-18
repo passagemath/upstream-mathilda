@@ -73,6 +73,18 @@ static void test_trig_route(void) {
     check_antideriv("x/(1 + Cosh[x])");
 }
 
+static void test_log_trig(void) {
+    check_antideriv("Log[Sin[x]]");
+    check_antideriv("x Log[Sin[x]]");
+    check_antideriv("Log[Cot[x]]");
+    check_antideriv("x^2 Log[2 Cos[x]]");
+    check_antideriv("Log[Cosh[x]]");
+    check_antideriv("Log[Tan[x]]");
+    check_eq("Integrate[x Log[Sin[x]], {x, 0, Pi}]", "-1/2 Log[2] Pi^2");
+    check_eq("Chop[N[Integrate[Log[Sin[x]], {x, 0, Pi/4}] + (2 Catalan + Pi Log[2])/4]]", "0");
+    check_eq("Chop[N[Integrate[Log[Cot[x/2]^2], {x, 0, Pi/2}] - 4 Catalan]]", "0");
+}
+
 static void test_definite(void) {
     check_eq("Integrate[Log[x]/(1 + x^2), {x, 0, 1}]", "-Catalan");
     check_eq("Integrate[Log[x]^2/(1 + x), {x, 0, 1}]", "3/2 Zeta[3]");
@@ -95,6 +107,7 @@ int main(void) {
 
     TEST(test_log_ladder);
     TEST(test_trig_route);
+    TEST(test_log_trig);
     TEST(test_definite);
     TEST(test_support);
 

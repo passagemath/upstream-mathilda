@@ -65,6 +65,8 @@ Each fix has a root-cause test in `tests/test_mathar_regressions.c`.
 | indefinite S | 63 | 63 | **66** |
 | indefinite N | 79 | 79 | **82** |
 
+v0.459 adds Log-of-trig: definite 93/191, indefinite unchanged 66/82.
+
 WRONG, NONNUMERIC and CRASH are all 0. CMake floors: 78/163 and 65/80, a small margin for timeouts.
 
 ## 4. What remains: ranked by "Mathematica closes it"
@@ -106,7 +108,7 @@ Both are exact identities, accepted after a differentiation check. Supporting ch
 
 ### Next, in rank order
 
-1. **Log of a trig rational: `P(x) Log[G(trig)]`** (log × trig, about 30 closable).
+1. **Done in v0.459. Log of a trig rational: `P(x) Log[G(trig)]`** (log × trig, about 30 closable).
    - Write `G` in T = E^(i b x) and factor it: G = K T^e Π(T − ρᵢ)^{mᵢ}.
    - Then d/dx Log G = e i b + Σ mᵢ i b T/(T − ρᵢ), so Log G = C + e i b x + Σ mᵢ Log(1 − T/ρᵢ) on each
      interval where no factor crosses a branch cut.

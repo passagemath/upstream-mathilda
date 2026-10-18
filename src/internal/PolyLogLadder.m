@@ -234,6 +234,71 @@ PolyLogLadder`TrigRun[f_, x_Symbol] := Module[
   If[! FreeQ[res, Integrate], Return[$Failed]];
   res];
 
+
+(* Log of a trig rational: P(x) Log[G], P a polynomial, G a rational function of
+   trig/hyperbolic functions of linear arguments with one base frequency.  With
+   T = E^(base x) and G = K T^e Prod (T - rho)^m, d/dx Log[G] equals
+   d/dx [e base x + Sum m Log[1 - T/rho]] exactly, so
+     Log[G] = D(x) + L(x),   L = e base x + Sum m Log[1 - T/rho],
+   with D = Log[G] - L piecewise constant (it jumps only where a factor crosses
+   a branch cut).  Hence
+     INT P Log[G] = D(x) INT P + INT P L,
+   exact wherever D is continuous -- D is kept symbolic, never sampled -- and
+   INT x^n Log[1 - T/rho] = -INT x^n PolyLog[1, T/rho] is the exponential ladder
+     INT x^n PolyLog[s, T/rho] = Sum (-1)^j n!/(n-j)! x^(n-j) PolyLog[s+1+j, T/rho]/base^(j+1).
+   A definite integral across a jump of D is caught by Newton-Leibniz's
+   continuity cross-check (it fires on PolyLog/Log of an exponential). *)
+(* INT x^n PolyLog[s, T/rho] dx, T = E^(base x) *)
+PolyLogLadder`LTRoots[p_, T_] := If[FreeQ[p, T], {}, PolyLogLadder`RootsMult[p, T]];
+PolyLogLadder`LTLiLadder[n_, s_, rho_, base_, x_] :=
+  Sum[(-1)^j n!/(n - j)! x^(n - j) PolyLog[s + 1 + j, E^(base x)/rho]/base^(j + 1), {j, 0, n}];
+PolyLogLadder`LTRun[f_, x_Symbol] := Catch[Module[{logs, Ls, g, P, G, args, cs, c0, ratios, q, base, T, GT, num, den, e, roots, L, LI, res = 0, Q, dexact},
+  logs = Union[Cases[f, Log[u_] /; ! FreeQ[u, x], {0, Infinity}]];
+  If[Length[logs] != 1, Throw[$Failed, PolyLogLadder`fail]];
+  G = logs[[1, 1]];
+  If[FreeQ[G, PolyLogLadder`TrigHeads], Throw[$Failed, PolyLogLadder`fail]];
+  P = Together[f/logs[[1]]];
+  If[! PolynomialQ[P, x], Throw[$Failed, PolyLogLadder`fail]];
+  args = Union[Cases[G, PolyLogLadder`TrigHeads[u_] :> u, {0, Infinity}]];
+  If[! AllTrue[args, PolynomialQ[#, x] && Exponent[#, x] == 1 && Coefficient[#, x, 0] === 0 &], Throw[$Failed, PolyLogLadder`fail]];
+  If[! FreeQ[G /. PolyLogLadder`TrigHeads[_] -> 1, x], Throw[$Failed, PolyLogLadder`fail]];
+  cs = Coefficient[#, x, 1] & /@ args; c0 = First[cs];
+  ratios = Simplify[cs/c0];
+  If[! AllTrue[ratios, Head[#] === Integer || Head[#] === Rational &], Throw[$Failed, PolyLogLadder`fail]];
+  q = LCM @@ (Denominator /@ ratios);
+  base = If[FreeQ[G, Sin | Cos | Tan | Cot | Sec | Csc], c0/q, I c0/q];
+  T = Unique["PolyLogLadder`T"];
+  GT = Together[TrigToExp[G] /. Power[E, z_] /; ! FreeQ[z, x] :> T^Simplify[z/(base x)]];
+  If[! FreeQ[GT, x], Throw[$Failed, PolyLogLadder`fail]];
+  num = Numerator[GT]; den = Denominator[GT];
+  (* e: net power of T as T -> 0 *)
+  e = Exponent[num, T, Min] - Exponent[den, T, Min];
+  roots = Join[{#[[1]], #[[2]]} & /@ PolyLogLadder`LTRoots[Expand[num/T^Exponent[num, T, Min]], T],
+               {#[[1]], -#[[2]]} & /@ PolyLogLadder`LTRoots[Expand[den/T^Exponent[den, T, Min]], T]];
+  If[! FreeQ[roots, $Failed], Throw[$Failed, PolyLogLadder`fail]];
+  L = e base x + Total[(#[[2]] Log[1 - E^(base x)/#[[1]]]) & /@ roots];
+  Q = Integrate[P, x];
+  (* INT P L dx *)
+  res = Integrate[Expand[P e base x], x];
+  Do[
+    With[{c = Coefficient[Expand[P], x, n]},
+      If[c =!= 0,
+        res += c Total[(-#[[2]] PolyLogLadder`LTLiLadder[n, 1, #[[1]], base, x]) & /@ roots]]],
+    {n, 0, Exponent[P, x]}];
+  (* D = Log[G] - L is piecewise constant: G = K T^e Prod (T - rho)^m and
+     (T - rho) = -rho (1 - T/rho) give D = Log[K Prod (-rho)^m] + 2 Pi I n.  The
+     integer n is read numerically at x = 37/100 (where the acceptance check
+     also differentiates); a symbolic G keeps D as Log[G] - L. *)
+  dexact = Module[{K, C0, Dn, n},
+    K = Coefficient[num, T, Exponent[num, T]]/Coefficient[den, T, Exponent[den, T]];
+    C0 = K Times @@ ((-#[[1]])^#[[2]] & /@ roots);
+    Dn = N[((Log[G] - L) /. x -> 37/100) - Log[C0], 20];
+    If[! NumericQ[Dn] || Abs[Re[Dn]] > 10^-8, Log[G] - L,
+      n = Round[Im[Dn]/(2 Pi)];
+      If[Abs[Im[Dn] - 2 Pi n] > 10^-8, Log[G] - L, Log[C0] + 2 Pi I n]]];
+  dexact Q + res], PolyLogLadder`fail];
+
+
 (* Acceptance check: D[F, x] - f vanishes at two points, every other free
    symbol fixed at a generic rational.  A differentiation check, not quadrature;
    the constructions above are exact, so this only guards against an
@@ -253,5 +318,6 @@ PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
 PolyLogLadder`Integrate[f_, x_Symbol] := Module[{r},
   r = PolyLogLadder`Run[f, x];
   If[r === $Failed, r = PolyLogLadder`TrigRun[f, x]];
+  If[r === $Failed, r = PolyLogLadder`LTRun[f, x]];
   If[r === $Failed || ! FreeQ[r, Integrate], Return[$Failed]];
   If[PolyLogLadder`Check[r, f, x], r, $Failed]];

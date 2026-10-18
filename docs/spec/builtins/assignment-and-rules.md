@@ -155,9 +155,31 @@ Out[3]= 1 + z
   taken only when no full-consumption match exists.
 - `MatchQ` stays a **whole-expression** test and does *not* do leftover matching:
   `MatchQ[mod[1,5] + mod[2,5] + x, mod[a_,p_] + mod[b_,p_]]` is `False`, as in Wolfram.
-- **Limitation**: for a Flat head that is **not** `Orderless` (e.g. `Dot`, `**`), the
-  matched operands must form a **leading (prefix) run** — an interior match does not
-  fire. `Plus` and `Times` are `Orderless`, so every position is reachable.
+- For a Flat head that is **not** `Orderless` (e.g. `Dot`, `**`, a user head with
+  only `Flat`), the matched operands must be a **contiguous run in order**, but the
+  run may sit anywhere — at the front, in the interior, or at the end. The
+  **leftmost** run is taken, and a single application rewrites **one** run (as
+  `ReplaceAll` rewrites each position once); `//.`, or a DownValue/UpValue
+  re-firing to a fixed point, rewrites the rest. `Plus` and `Times` are
+  `Orderless`, so there every subset of operands is reachable.
+
+```mathematica
+In[1]:= x ** y ** z /. y ** z -> w
+Out[1]= x ** w
+
+In[2]:= SetAttributes[ff, Flat]; ff[x, y, z] /. ff[y, z] -> w
+Out[2]= ff[x, w]
+
+In[3]:= ff[a, b, a, b] /. ff[a, b] -> w
+Out[3]= ff[w, a, b]               (* leftmost run, one rewrite *)
+
+In[4]:= ff[a, b, a, b] //. ff[a, b] -> w
+Out[4]= ff[w, w]
+
+In[5]:= op /: op[i_] ** op[j_] := op[i + j];
+        x ** op[1] ** op[2] ** y ** op[3] ** op[4]
+Out[5]= x ** op[3] ** y ** op[7]
+```
 
 ## Replace
 Applies a rule or list of rules to transform an expression.

@@ -312,13 +312,24 @@ static void test_flat_downvalue_leftover(void) {
     assert_eval_eq("g71[k71[1], k71[2], m71]", "g71[k71[3], m71]", 0);
 }
 
-static void test_flat_ordered_prefix_only(void) {
-    /* non-Orderless Flat: the trailing-only leftover catcher means matched
-     * elements must form a PREFIX run; an interior match does not fire. */
+static void test_flat_ordered_any_run(void) {
+    /* non-Orderless Flat: leading $FlatPre$___ + trailing $FlatRest$___ let the
+     * matched run sit at the front, in the interior, or at the end. */
     ev("SetAttributes[hh72, Flat]");
     ev("hh72[u72[a_], u72[b_]] := u72[a + b]");
-    assert_eval_eq("hh72[u72[1], u72[2], w72]", "hh72[u72[3], w72]", 0);        /* prefix fires */
-    assert_eval_eq("hh72[w72, u72[1], u72[2]]", "hh72[w72, u72[1], u72[2]]", 0);/* interior: unevaluated */
+    assert_eval_eq("hh72[u72[1], u72[2], w72]", "hh72[u72[3], w72]", 0);        /* prefix */
+    assert_eval_eq("hh72[w72, u72[1], u72[2]]", "hh72[w72, u72[3]]", 0);        /* suffix */
+    assert_eval_eq("hh72[w72, u72[1], u72[2], v72]", "hh72[w72, u72[3], v72]", 0); /* interior */
+    assert_eval_eq("hh72[w72, u72[1], v72, u72[2]]", "hh72[w72, u72[1], v72, u72[2]]", 0); /* not contiguous */
+    /* the order of the run is kept: no Orderless reordering */
+    ev("hh72[s72, t72] := st72");
+    assert_eval_eq("hh72[w72, t72, s72]", "hh72[w72, t72, s72]", 0);
+    assert_eval_eq("hh72[w72, s72, t72]", "hh72[w72, st72]", 0);
+    /* UpValue on NonCommutativeMultiply, run after a leading operand */
+    ev("op72 /: op72[i_] ** op72[j_] := op72[i + j]");
+    assert_eval_eq("x72 ** op72[1] ** op72[2]", "x72 ** op72[3]", 0);
+    assert_eval_eq("x72 ** op72[1] ** op72[2] ** y72 ** op72[3] ** op72[4]",
+                   "x72 ** op72[3] ** y72 ** op72[7]", 0);
 }
 
 static void test_flat_group_absorption_not_augment(void) {
@@ -388,7 +399,7 @@ int main(void) {
     /* Flat-head leftover matching + Protected (PR #87 review follow-ups) */
     TEST(test_flat_upvalue_longer_sum);
     TEST(test_flat_downvalue_leftover);
-    TEST(test_flat_ordered_prefix_only);
+    TEST(test_flat_ordered_any_run);
     TEST(test_flat_group_absorption_not_augment);
     TEST(test_upset_protected);
     TEST(test_flat_matchq_whole_expression);

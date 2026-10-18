@@ -450,7 +450,18 @@ Out[3]= {True, a ** b == b ** a}
 
 In[4]:= {0 ** a, 1 ** a}
 Out[4]= {0 ** a, 1 ** a}
+
+In[5]:= x ** y ** z /. y ** z -> w     (* a rule fires on any contiguous run *)
+Out[5]= x ** w
+
+In[6]:= op /: op[i_] ** op[j_] := op[i + j]; x ** op[1] ** op[2]
+Out[6]= x ** op[3]
 ```
+
+Behaviour is added with rules (UpValues on the operands are the usual way). Being
+`Flat`, a rule on `**` matches a contiguous, in-order run of operands anywhere in a
+longer product, leftmost first; see *Rules on Flat heads* in
+[assignment-and-rules.md](assignment-and-rules.md).
 
 ## Minus
 Arithmetic negation as a function.

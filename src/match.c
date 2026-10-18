@@ -1715,10 +1715,29 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
  *       BlankNullSequence binds the surplus operands, which rb_rec then splices
  *       back into the (Flat) head.
  *
- *  For a non-Orderless Flat head the matcher consumes a contiguous prefix, so a
- *  trailing-only catcher means the matched elements must form a PREFIX run
- *  (Dot[a,b] in a.b.c, not the interior b.c).  Plus/Times are Orderless, so
- *  their subset enumeration already reaches every position.
+ *  Orderless heads (Plus, Times): the subset enumeration already reaches every
+ *  position, so the one augmented match against the whole subject suffices.
+ *
+ *  Ordered Flat heads (Dot, **, And, Or, a user head with only Flat): the
+ *  matcher consumes arguments left to right, so the augmented pattern alone
+ *  finds only a PREFIX run.  The matched run may sit anywhere (b.c in a.b.c.d,
+ *  y**z in x**y**z), so the augmented match is retried at each start offset
+ *  i = 0, 1, ... against the suffix head[a_i, ..., a_n]; the first offset that
+ *  matches wins -- the LEFTMOST run, as in WL -- and the operands before it are
+ *  re-attached: head[a_1, ..., a_(i-1), <rewritten suffix>].  Offset 0 is
+ *  exactly the prefix-run match.  This is equivalent to the pattern
+ *  head[pre___, p1, ..., pk, rest___] with pre___ enumerated shortest-first,
+ *  but cheaper: when p1 can only ever match ONE operand (a literal, or a call
+ *  whose head is neither the Flat head nor a pattern construct -- op[i_] in
+ *  op[i_] ** op[j_]), an offset whose operand fails p1 on its own is skipped
+ *  without building the suffix, so a failing rule of that shape costs O(n)
+ *  single-operand tests.  A leading bare blank (ff[a_, b_]) cannot be
+ *  pre-screened and pays one full augmented match per offset.
+ *
+ *  One rewrite per application: like ReplaceAll at a single position, only the
+ *  first (leftmost) run is rewritten -- ff[a,b,a,b] /. ff[a,b] -> w gives
+ *  ff[w, a, b]; ReplaceRepeated (or a DownValue/UpValue re-firing to a fixed
+ *  point) rewrites the rest.  This mirrors the Plus/Times leftover behaviour.
  * ------------------------------------------------------------------ */
 
 /* Unwrap HoldPattern/Condition down to the inner flat-call node; return it when
@@ -1802,6 +1821,46 @@ static Expr* flat_augment_replacement(Expr* replacement, const char* flat_head) 
     return r;
 }
 
+/* True when pattern element `p` (an argument of a `flat_head` call pattern) can
+ * only ever match exactly ONE operand -- never a group, never zero.  Mirrors
+ * the matcher's own Flat-element span pruning in match_args_internal: a literal
+ * atom, or a call whose head is neither `flat_head` nor a pattern construct and
+ * which cannot OneIdentity-absorb a group.  Conservative: false when unsure. */
+static bool flat_elem_single_span(Expr* p, const char* flat_head) {
+    if (!p) return false;
+    if (p->type == EXPR_FUNCTION && p->data.function.head &&
+        p->data.function.head->type == EXPR_SYMBOL &&
+        p->data.function.head->data.symbol.name == SYM_Pattern &&
+        p->data.function.arg_count == 2)
+        p = p->data.function.args[1];              /* name:inner -> inner */
+    if (p->type != EXPR_FUNCTION) return true;     /* literal atom */
+    Expr* hd = p->data.function.head;
+    if (!hd || hd->type != EXPR_SYMBOL) return false;
+    const char* h = hd->data.symbol.name;
+    if (h == flat_head || h == SYM_Blank || h == SYM_BlankSequence ||
+        h == SYM_BlankNullSequence || h == SYM_Pattern || h == SYM_HoldPattern ||
+        h == SYM_Alternatives || h == SYM_Condition || h == SYM_PatternTest ||
+        h == SYM_Optional || h == SYM_Shortest || h == SYM_Longest ||
+        h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Except ||
+        h == SYM_Verbatim || h == SYM_OptionsPattern)
+        return false;
+    if ((get_attributes(h) & ATTR_ONEIDENTITY) && p->data.function.arg_count == 1)
+        return false;
+    return true;
+}
+
+/* The augmented match at one start offset: `sub` is the subject (the whole
+ * expression, or a suffix of it).  Returns the rewritten `sub`, or NULL. */
+static Expr* flat_try_augmented(Expr* sub, Expr* aug_pat, Expr* replacement,
+                                const char* flat_head, MatchEnv* env) {
+    env_rollback(env, 0);       /* drop the previous attempt's partial bindings */
+    if (!match(sub, aug_pat, env)) return NULL;
+    Expr* aug_rep = flat_augment_replacement(replacement, flat_head);
+    Expr* r = replace_bindings(aug_rep, env);      /* env left populated for caller */
+    expr_free(aug_rep);
+    return r;
+}
+
 Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv* env) {
     /* Called by a rule-dispatch site AFTER its own inline match() has failed
      * (that failed match may have left partial bindings in `env`, which must be
@@ -1811,7 +1870,7 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
      * The dispatch prefilters relax the arity key ONLY for Flat heads, so for a
      * non-Flat head the pattern arity equals the input arity and the (b) test
      * below bails before get_attributes(). */
-    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
+    if (!expr || expr->type != EXPR_FUNCTION || !env) return NULL;
     Expr* headnode = expr->data.function.head;
     if (!headnode || headnode->type != EXPR_SYMBOL) return NULL;
     const char* flat_head = headnode->data.symbol.name;
@@ -1821,21 +1880,48 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
     if (!inner) return NULL;
     /* (b) and the subject must carry strictly more operands than it specifies */
     size_t pat_arity = inner->data.function.arg_count;
-    if (pat_arity < 1 || expr->data.function.arg_count <= pat_arity) return NULL;
+    size_t n = expr->data.function.arg_count;
+    if (pat_arity < 1 || n <= pat_arity) return NULL;
     /* (c) only now, the attribute lookup: the head must actually be Flat */
-    if (!(get_attributes(flat_head) & ATTR_FLAT)) return NULL;
-
-    /* Discard any partial bindings the caller's failed primary match left. */
-    if (env) env_rollback(env, 0);
+    uint32_t attrs = get_attributes(flat_head);
+    if (!(attrs & ATTR_FLAT)) return NULL;
 
     Expr* aug_pat = flat_augment_pattern(pattern, flat_head);
     if (!aug_pat) return NULL;
 
-    Expr* result = NULL;
-    if (env && match(expr, aug_pat, env)) {
-        Expr* aug_rep = flat_augment_replacement(replacement, flat_head);
-        result = replace_bindings(aug_rep, env);   /* env left populated for caller */
-        expr_free(aug_rep);
+    /* Offset 0: the prefix run (the only offset an Orderless head needs). */
+    Expr* result = flat_try_augmented(expr, aug_pat, replacement, flat_head, env);
+
+    if (!result && !(attrs & ATTR_ORDERLESS)) {
+        /* Ordered head: slide the start offset rightwards, leftmost first. */
+        Expr* p1 = inner->data.function.args[0];
+        const bool p1_single = flat_elem_single_span(p1, flat_head);
+        Expr** args = expr->data.function.args;
+        for (size_t i = 1; i < n && !result; i++) {
+            if (p1_single) {
+                /* Necessary condition, sound because p1 is the first pattern
+                 * element (no prior bindings) and consumes exactly operand i. */
+                MatchEnv* probe = env_new();
+                bool ok = match(args[i], p1, probe);
+                env_free(probe);
+                if (!ok) continue;
+            }
+            size_t m = n - i;
+            Expr** sa = malloc(sizeof(Expr*) * m);
+            for (size_t j = 0; j < m; j++) sa[j] = expr_copy(args[i + j]);
+            Expr* sub = expr_new_function(expr_copy(headnode), sa, m);
+            free(sa);
+            Expr* rew = flat_try_augmented(sub, aug_pat, replacement, flat_head, env);
+            expr_free(sub);
+            if (!rew) continue;
+            /* head[a_1, ..., a_(i-1), <rewritten suffix>]; the Flat head
+             * re-flattens the nested call when the result is evaluated. */
+            Expr** ra = malloc(sizeof(Expr*) * (i + 1));
+            for (size_t j = 0; j < i; j++) ra[j] = expr_copy(args[j]);
+            ra[i] = rew;
+            result = expr_new_function(expr_copy(headnode), ra, i + 1);
+            free(ra);
+        }
     }
     expr_free(aug_pat);
     return result;

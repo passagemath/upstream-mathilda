@@ -138,6 +138,28 @@ int main() {
     run_test("modr[1, 5] + modr[2, 5] /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5]");
     run_test("modr[1, 5] + modr[2, 5] + xr /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5] + xr");
 
+    /* Ordered (non-Orderless) Flat heads: the matched run may sit anywhere --
+     * $FlatPre$___ + $FlatRest$___ -- leftmost run first, one rewrite per
+     * application (ReplaceAll does not re-traverse the result). */
+    run_test("x ** y ** z /. y ** z -> w", "x ** w");
+    run_test("x ** y ** z /. x ** y -> w", "w ** z");
+    run_test("a . b . c . d /. b . c -> w", "Dot[a, w, d]");
+    run_test("SetAttributes[ffr, Flat]; ffr[x, y, z] /. ffr[y, z] -> w", "ffr[x, w]");
+    run_test("ffr[x, y, z, q] /. ffr[y, z] -> w", "ffr[x, w, q]");
+    run_test("ffr[a, b, a, b] /. ffr[a, b] -> w", "ffr[w, a, b]");
+    run_test("ffr[x, a, b, a, b] /. ffr[a, b] -> w", "ffr[x, w, a, b]");
+    run_test("ffr[a, b, a, b] //. ffr[a, b] -> w", "ffr[w, w]");
+    run_test("ffr[x, b, a] /. ffr[a, b] -> w", "ffr[x, b, a]");          /* order kept */
+    run_test("ffr[x, y, z] /. ffr[a_, b_] -> g[a, b]", "g[x, ffr[y, z]]");  /* full match first */
+    run_test("ffr[x, gr[1], gr[2], y] /. ffr[gr[i_], gr[j_]] :> gr[i + j]", "ffr[x, gr[3], y]");
+    run_test("ffr[x, gr[1], gr[2], y] /. HoldPattern[ffr[gr[i_], gr[j_]] /; i < j] :> gr[i + j]", "ffr[x, gr[3], y]");
+    run_test("ffr[x, gr[2], gr[1], y] /. HoldPattern[ffr[gr[i_], gr[j_]] /; i < j] :> gr[i + j]", "ffr[x, gr[2], gr[1], y]");
+    run_test("MatchQ[ffr[x, y, z], ffr[y, z]]", "False");                  /* MatchQ stays whole */
+    /* a leading blank (no single-operand pre-screen) still finds the run */
+    run_test("ffr[1, -2, 3, 4] /. ffr[a_?Negative, b_] :> gr[a, b]", "ffr[1, gr[-2, 3], 4]");
+    run_test("ffr[1, 2, 2, 3] /. ffr[x_, x_] :> hr[x]", "ffr[1, hr[2], 3]");
+    run_test("(p && q && r && s) /. (r && s) -> t", "p && q && t");     /* And: Flat, ordered */
+
     printf("All Replace tests passed!\n");
     symtab_clear();
     return 0;

@@ -1112,7 +1112,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
             ? input_arg_head_canon(expr->data.function.args[0])
             : NULL;
     /* A Flat head rewrites a SUBSET of a longer operand sequence (Mathematica
-     * semantics; see match_rule_flataware). Its dispatch key is then a LOWER
+     * semantics; see match_flat_leftover). Its dispatch key is then a LOWER
      * bound, not an exact arity, and the matched run need not start at arg 0,
      * so both pre-filters relax for a Flat head. */
     const bool down_flat = (def->attributes & ATTR_FLAT) != 0;
@@ -1258,7 +1258,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
     const char* input_first_head =
         (input_arity > 0) ? input_arg_head_canon(expr->data.function.args[0]) : NULL;
     /* Enclosing head Flat => the upvalue may fire on a longer operand sequence
-     * than the pattern specifies (surplus -> leftover; see match_rule_flataware),
+     * than the pattern specifies (surplus -> leftover; see match_flat_leftover),
      * so the arity key is a lower bound and the matched run can sit anywhere. */
     const bool enclosing_flat =
         expr->data.function.head->type == EXPR_SYMBOL &&

@@ -1776,6 +1776,34 @@ static void test_reals_transcendental_root_isolation(void) {
 }
 
 /* Root[{f, x0}] objects: numeric, refinable, comparable, validated. */
+/* Reduce input normalisation: Not folds into binary relations (Refine sends
+ * A && !P), Re/Im/Conjugate of real variables are ComplexExpanded over Reals,
+ * and a residual that vanishes on a whole interval is decided cell by cell
+ * instead of burning the isolation budget. */
+static void test_reduce_input_normalisation(void) {
+    run_test("Reduce[-Pi/2 < x < Pi/2 && !(Cos[x] > 0), {x}, Reals]", "False");
+    run_test("Refine[Cos[x] > 0, -Pi/2 < x < Pi/2]", "True");
+    run_test("Reduce[-Pi/2 < x < Pi/2 && Not[-Pi < Im[2 I x] && Im[2 I x] <= Pi], {x}, Reals]",
+             "False");
+    run_test("Reduce[0 < x < 1/2 && ArcCos[1 - 2 x^2] != 2 ArcSin[x], x, Reals]", "False");
+    run_test("Simplify[ArcCos[1 - 2 x^2] - 2 ArcSin[x], 0 < x < 1/2]", "0");
+    run_test("Simplify[Sqrt[Exp[2 I x]] - Exp[I x], -Pi/2 < x < Pi/2]", "0");
+    run_test("Head[Reduce[Sin[x] > 0, x, Reals]]", "Reduce");
+}
+
+/* A Root printed at six digits (or typed by hand) still certifies: the
+ * window widens while interval Newton keeps the root unique, and the body is
+ * canonicalised so a re-read Root is SameQ to the original. */
+static void test_transcendental_root_readback(void) {
+    run_test("Abs[N[Root[{#1 - 2 Sin[#1] &, 1.89549}], 20] - 1.8954942670339809471`20] < 10^-18",
+             "True");
+    run_test("Abs[N[Root[{#1 - 2 Sin[#1] &, 1.9}], 20] - 1.8954942670339809471`20] < 10^-18",
+             "True");
+    run_test("Check[Root[{#1 - 2 Sin[#1] &, 1.5}], caught]", "caught");
+    run_test("With[{r = Reduce[Sin[x] > x/2, x, Reals]}, ToExpression[ToString[r, InputForm]] === r]",
+             "True");
+}
+
 static void test_transcendental_root_object(void) {
     run_test("NumericQ[Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}]]", "True");
     run_test("Root[{-Sin[#1] + #1/2 &, 1.8954942670339809}] > 1", "True");
@@ -1856,6 +1884,8 @@ int main(void) {
     TEST(test_reals_unknown_roots_decline);
     TEST(test_reals_transcendental_root_isolation);
     TEST(test_transcendental_root_object);
+    TEST(test_reduce_input_normalisation);
+    TEST(test_transcendental_root_readback);
     TEST(test_no_ifun_message);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);

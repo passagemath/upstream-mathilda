@@ -519,7 +519,126 @@ static Expr* reduce_impl(Expr* res);
  * distinct Solve re-entry points across the reduce_* engines; guarding here (one
  * push, one guaranteed pop) covers them all, and leaves genuine Solve
  * diagnostics (svars/nsdim/nongen) untouched.  See message.h. */
+/* The relation head that is the negation of binary relation `h`, or NULL. */
+static const char* reduce_negated_relation(const char* h) {
+    if (h == SYM_Less)         return SYM_GreaterEqual;
+    if (h == SYM_GreaterEqual) return SYM_Less;
+    if (h == SYM_Greater)      return SYM_LessEqual;
+    if (h == SYM_LessEqual)    return SYM_Greater;
+    if (h == SYM_Equal)        return SYM_Unequal;
+    if (h == SYM_Unequal)      return SYM_Equal;
+    return NULL;
+}
+
+/* Fold Not into binary relations through And/Or: Not[a > b] -> a <= b, as
+ * Mathematica's own Not evaluates it.  Mathilda keeps Not[a > b] literal, and
+ * several Reduce engines (the bounded trig-region enumerator among them) only
+ * recognise bare relations, so Refine's entailment query
+ * Reduce[A && !(Cos[x] > 0)] declined where Reduce[A && Cos[x] <= 0] is
+ * False.  Returns an owned rewrite, or NULL when nothing changes. */
+/* True iff `e` contains Re, Im or Conjugate. */
+static bool reduce_has_reim(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* h = hd->data.symbol.name;
+        if (h == SYM_Re || h == SYM_Im || h == SYM_Conjugate) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_has_reim(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Over Reals every variable is real, which is exactly ComplexExpand's
+ * assumption, so ComplexExpand of a relation side that carries Re/Im/
+ * Conjugate is an equivalence: Im[2 I x] -> 2 x.  Without it the sign
+ * diagram cannot root Im[2 I x] - Pi and declines (Simplify's branch-strip
+ * queries for Sqrt[E^(2 I x)] send exactly that). */
+static Expr* reduce_reals_side(const Expr* side) {
+    if (!reduce_has_reim(side)) return expr_copy((Expr*)side);
+    return eval_and_free(expr_new_function(expr_new_symbol("ComplexExpand"),
+        (Expr*[]){ expr_copy((Expr*)side) }, 1));
+}
+
+static bool reduce_is_relation_head(const char* h) {
+    return h == SYM_Less || h == SYM_LessEqual || h == SYM_Greater
+        || h == SYM_GreaterEqual || h == SYM_Equal || h == SYM_Unequal;
+}
+
+static Expr* reduce_fold_not_relations(const Expr* e, bool reals) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return NULL;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (reals && n == 2 && reduce_is_relation_head(h)
+        && (reduce_has_reim(e->data.function.args[0])
+            || reduce_has_reim(e->data.function.args[1])))
+        return eval_and_free(expr_new_function(expr_new_symbol(h),
+            (Expr*[]){ reduce_reals_side(e->data.function.args[0]),
+                       reduce_reals_side(e->data.function.args[1]) }, 2));
+    if (h == SYM_Not && n == 1) {
+        const Expr* r = e->data.function.args[0];
+        if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+            && r->data.function.arg_count == 2) {
+            const char* nh = reduce_negated_relation(r->data.function.head->data.symbol.name);
+            if (nh)
+                return eval_and_free(expr_new_function(expr_new_symbol(nh),
+                    (Expr*[]){ reals ? reduce_reals_side(r->data.function.args[0])
+                                     : expr_copy(r->data.function.args[0]),
+                               reals ? reduce_reals_side(r->data.function.args[1])
+                                     : expr_copy(r->data.function.args[1]) }, 2));
+        }
+        if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+            && (r->data.function.head->data.symbol.name == SYM_And
+                || r->data.function.head->data.symbol.name == SYM_Or)) {
+            /* De Morgan, so the negated relations inside fold too. */
+            const char* dual = r->data.function.head->data.symbol.name == SYM_And ? SYM_Or : SYM_And;
+            size_t m = r->data.function.arg_count;
+            Expr** k = (Expr**)calloc(m, sizeof(Expr*));
+            for (size_t i = 0; i < m; i++) {
+                Expr* ni = expr_new_function(expr_new_symbol(SYM_Not),
+                    (Expr*[]){ expr_copy(r->data.function.args[i]) }, 1);
+                Expr* fi = reduce_fold_not_relations(ni, reals);
+                if (fi) { expr_free(ni); k[i] = fi; } else k[i] = ni;
+            }
+            Expr* out = expr_new_function(expr_new_symbol(dual), k, m);
+            free(k);
+            return out;
+        }
+        return NULL;
+    }
+    if (h != SYM_And && h != SYM_Or) return NULL;
+    Expr** kids = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* k = reduce_fold_not_relations(e->data.function.args[i], reals);
+        if (!k) continue;
+        if (!kids) {
+            kids = (Expr**)calloc(n, sizeof(Expr*));
+            for (size_t j = 0; j < i; j++) kids[j] = expr_copy(e->data.function.args[j]);
+        }
+        kids[i] = k;
+    }
+    if (!kids) return NULL;
+    for (size_t i = 0; i < n; i++)
+        if (!kids[i]) kids[i] = expr_copy(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_new_symbol(h), kids, n);
+    free(kids);
+    return out;
+}
+
 Expr* builtin_reduce(Expr* res) {
+    if (res && res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1) {
+        bool reals = false;
+        for (size_t i = 1; i < res->data.function.arg_count; i++) {
+            const Expr* d = res->data.function.args[i];
+            if (d->type == EXPR_SYMBOL && d->data.symbol.name == SYM_Reals) reals = true;
+        }
+        Expr* folded = reduce_fold_not_relations(res->data.function.args[0], reals);
+        if (folded) {
+            expr_free(res->data.function.args[0]);
+            res->data.function.args[0] = folded;
+        }
+    }
     mth_msg_ifun_suppress_push();
     Expr* out = reduce_impl(res);
     mth_msg_ifun_suppress_pop();

@@ -261,36 +261,58 @@ static int unrooted_class_at(const Expr* poly, const Expr* x, double s) {
  * breakpoints, be numerically zero at all probes or non-real at all probes --
  * a cell where it is real and nonzero could hide a root (Sin[x] - x/2), and
  * then its roots must be isolated (isolate_unrooted) or the diagram declines. */
-static bool unrooted_cells_ok(const Expr* x, Expr** bp, int m, int u) {
-    {
-        for (int j = 0; j <= m; j++) {
-            bool ok_lo = true, ok_hi = true;
-            double lo = (j == 0) ? 0.0 : rru_approx_double(bp[j - 1], &ok_lo);
-            double hi = (j == m) ? 0.0 : rru_approx_double(bp[j], &ok_hi);
-            if (!ok_lo || !ok_hi) return false;
-            double probes[5];
-            if (j == 0 && j == m) {
-                double p[5] = { -10.5, -1.25, 0.375, 1.75, 11.25 };
-                for (int t = 0; t < 5; t++) probes[t] = p[t];
-            } else if (j == 0) {
-                double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
-                for (int t = 0; t < 5; t++) probes[t] = hi - p[t];
-            } else if (j == m) {
-                double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
-                for (int t = 0; t < 5; t++) probes[t] = lo + p[t];
-            } else {
-                for (int t = 0; t < 5; t++) probes[t] = lo + (hi - lo) * (t + 1) / 6.0;
-            }
-            int cls0 = -2;
-            for (int t = 0; t < 5; t++) {
-                int c = unrooted_class_at(g_rd_unrooted[u], x, probes[t]);
-                if (c < 0 || c == 2) return false;
-                if (cls0 == -2) cls0 = c;
-                else if (c != cls0) return false;
-            }
-        }
+/* Probe class of unrooted residual u on interval cell j (0..m) of the
+ * breakpoints: 0 numerically zero at all five probes, 1 non-real at all five,
+ * -1 otherwise (real and nonzero somewhere, mixed, or not evaluable). */
+static int unrooted_cell_class(const Expr* x, Expr** bp, int m, int j, int u) {
+    bool ok_lo = true, ok_hi = true;
+    double lo = (j == 0) ? 0.0 : rru_approx_double(bp[j - 1], &ok_lo);
+    double hi = (j == m) ? 0.0 : rru_approx_double(bp[j], &ok_hi);
+    if (!ok_lo || !ok_hi) return -1;
+    double probes[5];
+    if (j == 0 && j == m) {
+        double p[5] = { -10.5, -1.25, 0.375, 1.75, 11.25 };
+        for (int t = 0; t < 5; t++) probes[t] = p[t];
+    } else if (j == 0) {
+        double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
+        for (int t = 0; t < 5; t++) probes[t] = hi - p[t];
+    } else if (j == m) {
+        double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
+        for (int t = 0; t < 5; t++) probes[t] = lo + p[t];
+    } else {
+        for (int t = 0; t < 5; t++) probes[t] = lo + (hi - lo) * (t + 1) / 6.0;
     }
+    int cls0 = -2;
+    for (int t = 0; t < 5; t++) {
+        int c = unrooted_class_at(g_rd_unrooted[u], x, probes[t]);
+        if (c < 0 || c == 2) return -1;
+        if (cls0 == -2) cls0 = c;
+        else if (c != cls0) return -1;
+    }
+    return cls0;
+}
+
+/* Unrooted residual u must, on each open cell between consecutive
+ * breakpoints, be numerically zero at all probes or non-real at all probes --
+ * a cell where it is real and nonzero could hide a root (Sin[x] - x/2), and
+ * then its roots must be isolated (isolate_unrooted) or the diagram declines. */
+static bool unrooted_cells_ok(const Expr* x, Expr** bp, int m, int u) {
+    for (int j = 0; j <= m; j++)
+        if (unrooted_cell_class(x, bp, m, j, u) < 0) return false;
     return true;
+}
+
+/* Record that residual r vanishes at `sample` (owned copy taken). */
+static void rd_register_zero(const Expr* sample, const Expr* r) {
+    if (g_rd_nreg == g_rd_capreg) {
+        g_rd_capreg = g_rd_capreg ? 2 * g_rd_capreg : 8;
+        g_rd_regval = realloc(g_rd_regval, (size_t)g_rd_capreg * sizeof(Expr*));
+        g_rd_regres = (const Expr**)realloc((void*)g_rd_regres,
+                            (size_t)g_rd_capreg * sizeof(Expr*));
+    }
+    g_rd_regval[g_rd_nreg] = expr_copy((Expr*)sample);
+    g_rd_regres[g_rd_nreg] = r;
+    g_rd_nreg++;
 }
 
 /* True iff `e` carries an Element[...] (the C[k] in Integers of a family). */
@@ -717,6 +739,7 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
     g_rd_regval = NULL; g_rd_regres = NULL; g_rd_nreg = 0; g_rd_capreg = 0;
     g_rd_unknown = NULL;
     bool* unbounded = NULL;               /* per residual: roots unknown off-span */
+    bool* fallback = NULL;                /* per residual: decided cell by cell   */
     Expr *span_lo = NULL, *span_hi = NULL;/* known-breakpoint span (copies)      */
     Expr* result = NULL;
     for (int i = 0; ok && i < F->n; i++)
@@ -741,10 +764,36 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
         for (int u = 0; u < g_rd_nunrooted; u++)
             if (!unrooted_cells_ok(x, bp, m, u)) { need[u] = true; any = true; }
         if (any) {
+            /* Keep the known breakpoints: isolation may decline part-way. */
+            Expr** bp0 = malloc((size_t)(m > 0 ? m : 1) * sizeof(Expr*));
+            int m0 = m;
+            for (int i = 0; i < m; i++) bp0[i] = expr_copy(bp[i]);
             unbounded = calloc((size_t)g_rd_nunrooted, sizeof(bool));
             if (m > 0) { span_lo = expr_copy(bp[0]); span_hi = expr_copy(bp[m - 1]); }
             ok = isolate_unrooted(x, &bp, &m, &cap, need, unbounded);
             if (ok) ok = sort_dedup_bp(bp, &m);
+            if (!ok) {
+                /* Isolation declined -- typically a residual that VANISHES on
+                 * a whole interval (ArcCos[1 - 2 x^2] - 2 ArcSin[x] on [0, 1]),
+                 * where no root can be isolated.  Fall back to deciding each
+                 * cell separately: where the residual is zero at every probe
+                 * it is taken as zero; elsewhere it is unknown, and the cell
+                 * must be decided without it (Kleene) or the call declines. */
+                for (int i = 0; i < m; i++) expr_free(bp[i]);
+                m = 0;
+                for (int i = 0; i < m0; i++) {
+                    if (m == cap) { cap = cap ? 2 * cap : 8; bp = realloc(bp, (size_t)cap * sizeof(Expr*)); }
+                    bp[m++] = bp0[i];
+                }
+                m0 = 0;
+                if (span_lo) { expr_free(span_lo); span_lo = NULL; }
+                if (span_hi) { expr_free(span_hi); span_hi = NULL; }
+                free(unbounded); unbounded = NULL;
+                fallback = need; need = NULL;
+                ok = true;
+            }
+            for (int i = 0; i < m0; i++) expr_free(bp0[i]);
+            free(bp0);
         }
         free(need);
         if (!ok) goto out;
@@ -753,7 +802,8 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
     {
         int ncells = 2 * m + 1;
         int* truth = malloc((size_t)ncells * sizeof(int));
-        bool* unknown = unbounded ? calloc((size_t)g_rd_nunrooted, sizeof(bool)) : NULL;
+        bool* unknown = (unbounded || fallback)
+                      ? calloc((size_t)g_rd_nunrooted, sizeof(bool)) : NULL;
         for (int idx = 0; idx < ncells && ok; idx++) {
             Expr* sample;
             if (idx % 2 == 1) {                       /* point cell */
@@ -770,7 +820,7 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
              * The cell's truth is constant there only if it is decided
              * WITHOUT them (Kleene); else form_truth_general returns -1. */
             g_rd_unknown = NULL;
-            if (unknown) {
+            if (unknown && unbounded) {
                 bool outside = true;
                 if (span_lo) {
                     int c1 = cmp_bp(sample, span_lo), c2 = cmp_bp(sample, span_hi);
@@ -780,7 +830,35 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
                     unknown[u] = unbounded[u] && outside;
                 g_rd_unknown = unknown;
             }
-            int t = form_truth_general(F, x, sample, ccons, cncon);
+            int t;
+            if (fallback) {
+                if (idx % 2 == 0) {
+                    /* Interval cell: zero where every probe is zero, else unknown. */
+                    for (int u = 0; u < g_rd_nunrooted; u++) {
+                        if (!fallback[u]) continue;
+                        if (unrooted_cell_class(x, bp, m, idx / 2, u) == 0) {
+                            rd_register_zero(sample, g_rd_unrooted[u]);
+                            unknown[u] = false;
+                        } else {
+                            unknown[u] = true;
+                        }
+                    }
+                    g_rd_unknown = unknown;
+                    t = form_truth_general(F, x, sample, ccons, cncon);
+                } else {
+                    /* Breakpoint: decided without the residual if possible,
+                     * else by its exact value there. */
+                    for (int u = 0; u < g_rd_nunrooted; u++) unknown[u] = fallback[u];
+                    g_rd_unknown = unknown;
+                    t = form_truth_general(F, x, sample, ccons, cncon);
+                    if (t == -1) {
+                        g_rd_unknown = NULL;
+                        t = form_truth_general(F, x, sample, ccons, cncon);
+                    }
+                }
+            } else {
+                t = form_truth_general(F, x, sample, ccons, cncon);
+            }
             g_rd_unknown = NULL;
             expr_free(sample);
             if (t == -1) { ok = false; break; }
@@ -796,6 +874,7 @@ out:
     free(bp);
     free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
     free(unbounded);
+    free(fallback);
     if (span_lo) expr_free(span_lo);
     if (span_hi) expr_free(span_hi);
     for (int i = 0; i < g_rd_nreg; i++) expr_free(g_rd_regval[i]);

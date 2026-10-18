@@ -479,15 +479,33 @@ done:
  * On success `out` encloses the root.  Interval Newton: with f' != 0 on X,
  * N(X) = m - f(m)/f'(X) contains every root in X, and N(X) inside X proves
  * that X holds exactly one. */
+static bool rt_certify_win(const Expr* f, const Expr* df, const char* v,
+                           const arf_t x0, slong win_bits, slong target_bits,
+                           arb_t out);
+
+/* Certify around x0, widening the window when x0 is only a few digits from
+ * the root (a Root printed at six significant digits and read back, or typed
+ * by hand).  Interval Newton still proves the root unique in whichever window
+ * succeeds, so widening can never pick a different root silently: a window
+ * holding two roots has f' vanish somewhere in it and is rejected. */
 static bool rt_certify(const Expr* f, const Expr* df, const char* v,
                        const arf_t x0, slong target_bits, arb_t out) {
+    static const slong wins[] = { RT_WIN_BITS, 18, 14, 11, 8, 6 };
+    for (size_t i = 0; i < sizeof wins / sizeof wins[0]; i++)
+        if (rt_certify_win(f, df, v, x0, wins[i], target_bits, out)) return true;
+    return false;
+}
+
+static bool rt_certify_win(const Expr* f, const Expr* df, const char* v,
+                           const arf_t x0, slong win_bits, slong target_bits,
+                           arb_t out) {
     slong prec = target_bits + 64;
     arb_t X, m, fm, D, N;
     arb_init(X); arb_init(m); arb_init(fm); arb_init(D); arb_init(N);
     arf_t w; arf_init(w);
     arf_abs(w, x0);
     if (arf_cmp_si(w, 1) < 0) arf_one(w);
-    arf_mul_2exp_si(w, w, -RT_WIN_BITS);
+    arf_mul_2exp_si(w, w, -win_bits);
     arf_set(arb_midref(X), x0);
     arf_get_mag(arb_radref(X), w);
     bool certified = false, ok = false;
@@ -576,16 +594,25 @@ Expr* root_trans_canonicalize(const Expr* e, bool* invalid) {
     double d = ok ? arf_get_d(arb_midref(r), ARF_RND_NEAR) : 0.0;
     arb_clear(r);
     if (!ok) { *invalid = true; return NULL; }
-    if (x0->type == EXPR_MPFR) return NULL;          /* keep the given precision */
+    /* The body of a Function is held, so a Root that is typed or read back
+     * (`#1 - 2 Sin[#1] &`) keeps Plus[#1, Times[-1, Times[2, ...]]] while the
+     * one Reduce built is evaluated.  Evaluate it once so both are the same
+     * expression and compare equal under SameQ. */
+    Expr* cbody = eval_and_free(expr_copy((Expr*)body));
+    bool body_canon = expr_eq(cbody, (Expr*)body);
+    bool x0_canon = false;
+    if (x0->type == EXPR_MPFR) x0_canon = true;      /* keep the given precision */
     if (x0->type == EXPR_REAL) {
         /* Within one ulp counts as canonical: no flip-flop between neighbours. */
         double c = x0->data.real;
-        if (c == d || nextafter(c, d) == d) return NULL;
+        if (c == d || nextafter(c, d) == d) x0_canon = true;
     }
+    if (body_canon && x0_canon) { expr_free(cbody); return NULL; }
+    Expr* nx0 = x0_canon ? expr_copy((Expr*)x0) : expr_new_real(d);
     Expr* lst = expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Function),
-                       (Expr*[]){ expr_copy((Expr*)body) }, 1),
-                   expr_new_real(d) }, 2);
+                       (Expr*[]){ cbody }, 1),
+                   nx0 }, 2);
     return expr_new_function(expr_new_symbol(SYM_Root), (Expr*[]){ lst }, 1);
 }
 
@@ -881,13 +908,44 @@ bool root_trans_isolate(const Expr* f, const Expr* x, const Expr* lo,
     arb_get_ubound_arf(b, bh, RT_PREC);
     arb_clear(bl); arb_clear(bh);
 
+    /* Vanishing-on-an-interval screen.  A residual that is zero on a whole
+     * subinterval (ArcCos[1 - 2 x^2] - 2 ArcSin[x] vanishes on [0, 1], and
+     * Simplify's entailment queries send exactly such residuals here) has no
+     * isolable roots there: every piece contains zeros, so bisection burns
+     * its whole budget -- tens of seconds of arb evaluations -- and then
+     * declines anyway.  Sample f at 16 irrational interior points; a value
+     * that is zero to 200 bits means f vanishes identically near it (an
+     * isolated root landing on such a point to 2^-200 does not happen in
+     * practice), so decline at once.  This only ever turns an answer into a
+     * decline; it can never produce one. */
+    {
+        int tiny = 0;
+        arb_t pt, y, w; arb_init(pt); arb_init(y); arb_init(w);
+        arf_t fi; arf_init(fi);
+        for (int i = 0; i < 16 && !tiny; i++) {
+            double fr = (i + 0.6180339887498949) / 16.0;   /* golden offsets */
+            arf_set_d(fi, fr);
+            arb_set_arf(w, b);
+            arb_sub_arf(w, w, a, 256);
+            arb_mul_arf(w, w, fi, 256);
+            arb_add_arf(pt, w, a, 256);
+            arb_get_mid_arb(pt, pt);
+            if (flint_cert_eval_real(f, x->data.symbol.name, pt, y, 256)
+                && arb_contains_zero(y) && mag_cmp_2exp_si(arb_radref(y), -200) < 0)
+                tiny = 1;
+        }
+        arf_clear(fi);
+        arb_clear(pt); arb_clear(y); arb_clear(w);
+        if (tiny) { arf_clear(a); arf_clear(b); return false; }
+    }
+
     RTCtx c;
     memset(&c, 0, sizeof c);
     c.xsym = x;
     c.v = x->data.symbol.name;
     c.d[0] = expr_copy((Expr*)f);
     c.nd = 0;
-    c.budget = INT64_C(1) << 17;
+    c.budget = INT64_C(1) << 14;
     /* Rerun while a failed pass discovered a new exclusion zone: the zone
      * removes exactly the intervals around a multiple root that failed. */
     for (;;) {

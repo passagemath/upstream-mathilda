@@ -473,9 +473,15 @@ Out[4]= -ExpIntegralE[-1 + n, z]
   narrow transition band z ∈ [~17, ~24] (small ν) both elementary series are
   intrinsically ill-conditioned and the result degrades to ~1e-9 absolute (as it
   does for every double implementation, scipy included) — the arb path above
-  gives full precision there. A real argument the kernel declines falls back to
-  the ₁F₂ template; a complex machine argument stays unevaluated (use `N` on an
-  exact argument: `N[StruveH[0, 1 + I], 20]` goes through arb).
+  gives full precision there. A half-integer order makes both Hankel-type
+  series finite, so they are summed whole: `ν = −(n+½)` is exact to rounding at
+  every `z`, where `H_{−(n+½)}(z) = (−1)ⁿ J_{n+½}(z)` (DLMF 11.4.4) — the
+  convergent series drops the terms killed by the `Γ(ν+3/2)` poles and
+  `K_ν ≡ 0` (`StruveH[-3/2, 2.] = -0.491294 = −J_{3/2}(2)`; this returned
+  `0.0 HypergeometricPFQ[…]` previously). An argument the kernel declines —
+  a complex `z`, a real `z < 0` with a complex value — goes to the arb kernel at
+  53 bits and comes back as machine numbers
+  (`StruveH[-3/2, 2. + I] = -0.646752 - 0.172081 I`).
 - Mellin transform: `∫₀^∞ x^(s-1) StruveH[0, a x] dx =
   π 2^(s-1) a^(-s)/(Cos(πs/2) Γ(1−s/2)²)`, closed by `Method -> "Mellin"` through
   the ₁F₂ reduction.
@@ -489,6 +495,9 @@ Out[2]= 0.3201231459764202395239403961771
 
 In[3]:= StruveH[1, {0.5, 1., 2.}]
 Out[3]= {0.0521737, 0.198457, 0.646764}
+
+In[4]:= {StruveH[-3/2, 2.], StruveH[-5/2, 2.]}
+Out[4]= {-0.491294, 0.223925}
 ```
 
 ## LogIntegral
@@ -1393,13 +1402,21 @@ Out[4]= 24.8565393133858972090022500136712230259988212774851
   integral representation by double-exponential quadrature (exp-sinh rule, 50–90
   nodes, ~4 µs; FLINT took 280 µs there). Real `z < 0` returns the principal
   complex value; a complex machine `z` uses the complex twin of the same
-  regimes. Complex parameters or arbitrary precision use FLINT's rigorous
-  `acb_hypgeom_u`.
+  regimes. A terminating case — `a` or `a-b+1` a non-positive integer `-m` —
+  is a finite sum, `U = z^(-a) Σ_{k≤m} (a)_k (a-b+1)_k/k! (-1/z)^k` (for
+  `a = -m` the polynomial `(-1)^m (b)_m ₁F₁(-m; b; z)`), summed whole rather than
+  cut at a growing term, and declined to FLINT only on measured cancellation:
+  `HypergeometricU[-1, 2, 1.] = -1.0` (`z - 2`), `HypergeometricU[-2, 1, 1.37] =
+  -1.6031` (`z² - 4z + 2`); these previously returned `0.0`. Complex parameters
+  or arbitrary precision use FLINT's rigorous `acb_hypgeom_u`.
 - **Derivative.** `D[HypergeometricU[a, b, z], z] = -a HypergeometricU[a+1, b+1, z]`
   (DLMF 13.3.22); `d/da` and `d/db` stay as inert `Derivative[...]`.
 - **Performance (machine reals).** A real machine argument with `z > 0` shares a
   hardware-`double` kernel bit-for-bit with the NDArray / packed fast path and
-  `Compile[]`.
+  `Compile[]`, at the scalar and at the rank-1 array shape
+  (`Compile[{{v, _Real, 1}}, HypergeometricU[a, b, v]]`; the n-ary kernel threads
+  over its last argument, as for `WhittakerM`/`WhittakerW`, `Hypergeometric1F1`,
+  `Hypergeometric2F1`, `LerchPhi`).
 - **Listable.** `HypergeometricU[1, 2, {2., 4., 5.}] = {0.5, 0.25, 0.2}`.
 
 The general (two-branch) Series at the origin and `FunctionExpand` are not
@@ -1419,6 +1436,9 @@ Out[3]= 0.645694
 
 In[4]:= D[HypergeometricU[a, b, z], z]
 Out[4]= -a HypergeometricU[1 + a, 1 + b, z]
+
+In[5]:= {HypergeometricU[-1, 2, 1.], HypergeometricU[-2, 1, 1.37]}
+Out[5]= {-1.0, -1.6031}
 ```
 
 ## Zeta
@@ -3002,6 +3022,9 @@ Out[2]= -WhittakerW[1 + k, m, z]/z + (1/2 - k/z) WhittakerW[k, m, z]
 
 In[3]:= WhittakerW[k, 1/2, 0]
 Out[3]= 1/Gamma[1 - k]
+
+In[4]:= WhittakerW[2, 1/2, 1.]  (* -E^(-1/2): the U polynomial case *)
+Out[4]= -0.606531
 ```
 
 ## MeijerG

@@ -1229,11 +1229,17 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         else return false;
         return true;
     }
-    if (na >= 3 && na <= 8 && !c->vector_mode) {
+    if (na >= 3 && na <= 8) {
         /* N-ary machine kernel.  Arguments must land in CONSECUTIVE registers
          * because the instruction carries only their base and count, so the
          * block is reserved first and each argument lowered into it — the same
-         * shape OP_CALL uses. */
+         * shape OP_CALL uses.
+         *
+         * Inside a strip-mined loop the LAST argument may be a TILE (the
+         * Listable head threading over an array z, as compile_infer.c types
+         * it): the run then stops before it and VKERNN_* reads it per element,
+         * the leading arguments broadcast -- the MeijerG / DirichletL shape.
+         * A tile in any earlier position has no opcode and bails. */
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_nary_kernel) return false;
         const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
@@ -1252,17 +1258,31 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         for (size_t i = 1; i < na; i++) (void)alloc_temp(c);
         int after = c->temp_top;
         Slot z; memset(&z, 0, sizeof z);
-        for (size_t i = 0; i < na && c->ok; i++) {
+        for (size_t i = 0; i + 1 < na && c->ok; i++) {
             Val v;
             if (!emit(c, A[i], &v)) return false;
+            if (val_is_tile(v)) { c->ok = false; return false; }   /* broadcast only */
             coerce(c, &v, at);
             if (!c->ok) return false;
             ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
             c->temp_top = after;
         }
         if (!c->ok) return false;
-        c->temp_top = (base - c->nlocals) + 1;
+        Val vl;
+        if (!emit(c, A[na - 1], &vl)) return false;
+        coerce(c, &vl, at);
+        if (!c->ok) return false;
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
+        if (val_is_tile(vl)) {
+            int dst = alloc_tile(c);
+            ins_f(c, any_c ? OP_VKERNN_C : OP_VKERNN_R, (uint16_t)(na - 1), (uint32_t)dst,
+                  (uint32_t)base, (uint32_t)vl.reg, kp);
+            c->temp_top = (base - c->nlocals);
+            out->reg = dst; out->tmp = true; out->type = at;
+            return c->ok;
+        }
+        ins(c, OP_MOVE, (uint32_t)(base + (int)na - 1), (uint32_t)vl.reg, 0, z);
+        c->temp_top = (base - c->nlocals) + 1;
         ins_f(c, any_c ? OP_KERNN_C : OP_KERNN, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, kp);
         out->reg = base; out->tmp = true; out->type = at;
         return c->ok;

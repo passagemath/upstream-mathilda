@@ -127,6 +127,45 @@ void test_hyperu_compile() {
     assert_close(
         "Compile[{{a, _Real}, {b, _Real}, {z, _Real}}, HypergeometricU[a, b, z]][1.5, 7., 4.5]",
         0.5549311339066449, 1e-10);
+    /* rank-1 array shape: the n-ary kernel threads over its LAST argument as a
+     * VKERNN tile (it used to report Compiled -> False and take the body down). */
+    assert_eval_eq(
+        "CompileDiagnostics[{{v, _Real, 1}}, HypergeometricU[1, 2, v]][[1]]",
+        "\"Compiled\" -> True", 0);
+    assert_eval_eq(
+        "With[{zs = 0.37 N[Range[12]]}, Compile[{{v, _Real, 1}}, "
+        "HypergeometricU[0.7, 1.3, v]][zs] === HypergeometricU[0.7, 1.3, zs]]", "True", 0);
+}
+
+/* ---- terminating (polynomial) a = -m, or a - b + 1 = -m ------------- */
+
+/* Regression: the 2F0 sum of U(-m, b, z) is FINITE; its terms may grow before
+ * they stop (U(-1,2,z) = z - 2: 1, -2/z), which the machine kernel took for
+ * asymptotic divergence, then fell into the integer-b log formula whose two
+ * 1/Gamma prefactors both vanish at a = -m, and returned 0.0. References are the
+ * polynomials (-1)^m sum_k (-1)^k C(m,k) (b+k)_(m-k) z^k evaluated by hand, and
+ * mpmath 1.4 hyperu for the a-b+1 = -m case. */
+void test_hyperu_terminating() {
+    assert_close("HypergeometricU[-1, 2, 1.]", -1.0, 1e-15);          /* z - 2 */
+    assert_close("HypergeometricU[-1, 3, 1.]", -2.0, 1e-15);          /* z - 3 */
+    assert_close("HypergeometricU[-2, 2, 1.]", 1.0, 1e-14);           /* z^2-6z+6 */
+    assert_close("HypergeometricU[-2, 1, 1.37]", -1.6031, 1e-14);     /* z^2-4z+2 */
+    assert_close("N[HypergeometricU[-2, 1, 137/100]]", -1.6031, 1e-14);
+    assert_close("HypergeometricU[-3, 0.5, 1.37]", 2.032103, 1e-13);
+    assert_close("HypergeometricU[0.5, 3.5, 1.]", 2.75, 1e-14);       /* a-b+1 = -2 */
+    /* complex z: U(-1,2,z) = z - 2, U(-2,1,z) = z^2 - 4z + 2 */
+    assert_close("Re[HypergeometricU[-1, 2, 1. + 0.5 I]]", -1.0, 1e-15);
+    assert_close("Im[HypergeometricU[-1, 2, 1. + 0.5 I]]", 0.5, 1e-15);
+    assert_close("Re[HypergeometricU[-2, 1, 0.3 - 0.2 I]]", 0.85, 1e-14);
+    assert_close("Im[HypergeometricU[-2, 1, 0.3 - 0.2 I]]", 0.68, 1e-14);
+    /* every surface agrees bit-for-bit: scalar, packed List, NDArray, Compile */
+    assert_eval_eq(
+        "With[{zs = 0.37 N[Range[12]]}, "
+        "Table[HypergeometricU[-2, 1, z], {z, zs}] === HypergeometricU[-2, 1, zs] === "
+        "Normal[HypergeometricU[-2, 1, NDArray[zs]]] === "
+        "Compile[{{v, _Real, 1}}, HypergeometricU[-2, 1, v]][zs] === "
+        "Table[Compile[{{x, _Real}}, HypergeometricU[-2, 1, x]][z], {z, zs}]]",
+        "True", 0);
 }
 
 /* ---- derivative ----------------------------------------------------- */
@@ -172,6 +211,7 @@ int main() {
     TEST(test_hyperu_listable);
     TEST(test_hyperu_ndarray);
     TEST(test_hyperu_compile);
+    TEST(test_hyperu_terminating);
     TEST(test_hyperu_derivative);
     TEST(test_hyperu_argcount);
     TEST(test_hyperu_attributes);

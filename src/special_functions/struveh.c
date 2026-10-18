@@ -5,8 +5,11 @@
  *
  * Evaluation:
  *   StruveH[nu, 0] = 0            exact, for a real nu > -1
- *   numeric nu and inexact z      via the 1F2 representation (reusing the tested
- *                                 HypergeometricPFQ numeric evaluator)
+ *   machine precision, real nu,z  the shared double kernel sf_machine_struve_h
+ *                                 (bit-for-bit with NDArray / Compile[])
+ *   anything else numeric         arb's regularized 1F2 (flint_num_struveh),
+ *                                 demoted to machine numbers for machine input;
+ *                                 the unregularized 1F2 template only without FLINT
  *   everything else               stays symbolic (return NULL)
  *
  * The 1F2 identity is also the reduction used by the half-line Mellin transform
@@ -29,6 +32,10 @@
 #include "sf_machine.h"         /* sf_machine_struve_h (shared double kernel)   */
 
 #include <stdbool.h>
+
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* Small expr builders (local idiom). */
 static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
@@ -61,6 +68,37 @@ static Expr* struveh_numeric(const Expr* nu, const Expr* z) {
     if (r && expr_is_numeric_quantity(r)) return r;
     if (r) expr_free(r);
     return NULL;
+}
+
+/* A machine Real, or Complex of machine Reals. */
+static bool sh_is_machine_number(const Expr* e) {
+    Expr *re, *im;
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    return is_complex((Expr*)e, &re, &im) &&
+           re->type == EXPR_REAL && im->type == EXPR_REAL;
+}
+
+/* A real numeric leaf (machine/MPFR Real, Integer, Rational) as a double. */
+static bool sh_leaf_d(const Expr* e, double* out) {
+#ifdef USE_MPFR
+    if (e && e->type == EXPR_MPFR) { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
+    return common_machine_real_value(e, out);
+}
+
+/* Demote an arb result (53-bit MPFR leaves, possibly Complex) to machine Reals.
+ * Takes ownership of `e`; returns it unchanged if it is not a plain number. */
+static Expr* sh_demote_machine(Expr* e) {
+    double d;
+    if (sh_leaf_d(e, &d)) { expr_free(e); return expr_new_real(d); }
+    Expr *re, *im;
+    double dr, di;
+    if (is_complex(e, &re, &im) && sh_leaf_d(re, &dr) && sh_leaf_d(im, &di)) {
+        expr_free(e);
+        return make_complex(expr_new_real(dr), expr_new_real(di));
+    }
+    return e;
 }
 
 /* Minimum precision (bits) of e's inexact components (machine Real / MPFR,
@@ -116,13 +154,21 @@ Expr* builtin_struveh(Expr* res) {
                 double h;
                 if (sf_machine_struve_h(nuv, zv, &h)) return expr_new_real(h);
             }
-            /* Kernel declined (the hard middle band, or a complex argument):
-             * fall back to the symbolic 1F2 template for a real z. */
+            /* Kernel declined (large nu, a real z < 0 with a complex value, a
+             * complex z, a non-finite double): the rigorous arb kernel at 53 bits,
+             * demoted to machine numbers (machine in -> machine out). arb works
+             * from the REGULARIZED 1F2, so the Gamma(nu+3/2) poles cost nothing. */
+            Expr* v = flint_num_struveh(nu, z);
+            if (v) return sh_demote_machine(v);
+            /* No FLINT: the 1F2 template, kept only when it collapsed to a
+             * machine number (it is unregularized: at a Gamma(nu+3/2) pole it
+             * yields 0. * HypergeometricPFQ[...], which must not be returned). */
             if (z->type == EXPR_REAL) {
                 double nuv2;
                 if (common_machine_real_value(nu, &nuv2)) {
-                    Expr* v = struveh_numeric(nu, z);
-                    if (v) return v;
+                    Expr* t = struveh_numeric(nu, z);
+                    if (t && sh_is_machine_number(t)) return t;
+                    expr_free(t);
                 }
             }
         }

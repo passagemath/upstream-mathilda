@@ -269,6 +269,26 @@ void test_whittaker_w_compile() {
         11.306294801893110, 1e-6);
 }
 
+/* Regression: W_{k,m} with m - k + 1/2 = -n is elementary (U is the polynomial
+ * U(-n, 2m+1, z)), and returned 0.0 at machine precision because the U kernel
+ * did. W_{2,1/2}(z) = (z - 2) z e^(-z/2) ... at z = 1 that is -e^(-1/2).
+ * References: mpmath 1.4 whitw. */
+void test_whittaker_w_terminating() {
+    assert_close("WhittakerW[2, 1/2, 1.]", -0.606530659712633, 1e-14);
+    assert_close("WhittakerW[2, 1/2, 1.5]", -0.354274914555761, 1e-14);
+    assert_close("WhittakerW[3, 1/2, 1.]", 0.606530659712633, 1e-14);
+    assert_close("WhittakerW[3, 1/2, 1.5]", -0.531412371833642, 1e-14);
+    assert_close("N[WhittakerW[2, 1/2, 1]]", -0.606530659712633, 1e-14);
+    assert_eval_eq(
+        "With[{zs = 0.37 N[Range[12]]}, "
+        "Table[WhittakerW[2, 1/2, z], {z, zs}] === WhittakerW[2, 1/2, zs] === "
+        "Normal[WhittakerW[2, 1/2, NDArray[zs]]] === "
+        "Compile[{{v, _Real, 1}}, WhittakerW[2, 1/2, v]][zs]]", "True", 0);
+    assert_eval_eq(
+        "CompileDiagnostics[{{v, _Real, 1}}, WhittakerM[2, 1/2, v]][[1]]",
+        "\"Compiled\" -> True", 0);
+}
+
 void test_whittaker_w_derivative() {
     assert_eval_eq("D[WhittakerW[k, m, z], z]",
         "-WhittakerW[1 + k, m, z]/z + (1/2 - k/z) WhittakerW[k, m, z]", 0);
@@ -330,6 +350,7 @@ int main() {
     TEST(test_whittaker_w_listable);
     TEST(test_whittaker_w_ndarray);
     TEST(test_whittaker_w_compile);
+    TEST(test_whittaker_w_terminating);
     TEST(test_whittaker_w_derivative);
     TEST(test_whittaker_w_series);
     TEST(test_whittaker_w_argcount);

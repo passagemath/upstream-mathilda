@@ -816,13 +816,25 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (d && d->ndarray_nary_kernel) {
             const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
             if (k->cplx && k->nargs == na) {
+                /* Scalar leading arguments; the LAST one (z of WhittakerM/W,
+                 * HypergeometricU, 1F1, 2F1, ...) may be an ARRAY, over which the
+                 * Listable head threads -- the fused loop then feeds it as a tile
+                 * to VKERNN_* with the others broadcast (compile.c), exactly as
+                 * MeijerG / DirichletL. Complex anywhere -> KERNN_C. */
                 bool any_c = false;            /* complex argument -> KERNN_C */
+                int rank = 0;
                 for (size_t i = 0; i < na; i++) {
                     CompileType t;
-                    if (!infer_type(c, A[i], &t) || CT_IS_ARRAY(t) || t == CT_BOOL) return false;
+                    if (!infer_type(c, A[i], &t) || t == CT_BOOL) return false;
+                    if (CT_IS_ARRAY(t)) {
+                        if (i + 1 != na || CT_ELEM(t) == CT_BOOL) return false;
+                        rank = CT_RANK(t);
+                        t = CT_ELEM(t);
+                    }
                     if (t == CT_COMPLEX) any_c = true;
                 }
-                *out = any_c ? CT_COMPLEX : CT_REAL; return true;
+                CompileType et = any_c ? CT_COMPLEX : CT_REAL;
+                *out = rank ? CT_ARRAY(et, rank) : et; return true;
             }
         }
     }

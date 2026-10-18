@@ -868,8 +868,8 @@ bool sf_machine_whittaker_m(double k, double m, double z, double* out) {
  * summed to its least term. The series is divergent (asymptotic), so acceptance
  * is MEASURED, not assumed: we stop when a term exceeds its predecessor and keep
  * the result only when that least term is negligible against the partial sum.
- * Terminating cases (a or a-b+1 a non-positive integer) drive the next term to
- * exactly 0 and are returned exactly here. */
+ * Terminating cases (a or a-b+1 a non-positive integer) are a finite sum, not an
+ * asymptotic one, and are handed to hyperu_terminating before any truncation. */
 /* z^-a; a = 1 and 2 by division (<= 1 ulp, like pow, and far cheaper -- U(1,2,z)
  * = 1/z is the common terminating case). */
 static double hyperu_zpow(double z, double a) {
@@ -878,9 +878,47 @@ static double hyperu_zpow(double z, double a) {
     return pow(z, -a);
 }
 
+/* Is x a non-positive integer (a pole of Gamma / a terminating Pochhammer)? */
+static bool hyperu_nonpos_int(double x) { return x <= 0.0 && x == floor(x); }
+
+/* The TERMINATING case, a or a-b+1 = -m (m a non-negative integer): U is then
+ * exactly z^(-a) times the finite sum sum_{k=0}^m (a)_k (a-b+1)_k / k! (-1/z)^k
+ * -- for a = -m the polynomial (-1)^m (b)_m 1F1(-m; b; z) (DLMF 13.2.7), for
+ * a-b+1 = -m its Kummer image z^(1-b) U(-m, 2-b, z). It is NOT an asymptotic
+ * series here, so it must not be cut at its "least term": the terms of
+ * U(-1, 2, z) = z - 2 grow (1, -2/z) for z < 2, and treating that growth as
+ * divergence used to discard the series and fall into the confluent log formula,
+ * whose two 1/Gamma prefactors both vanish at a = -m and returned 0.0. Every
+ * term is summed (compensated); the only error is cancellation, measured as
+ * peak term over result and declined (-> FLINT) beyond sf_series_usable. */
+static bool hyperu_terminating(double a, double a2, double z, double* out) {
+    double m = hyperu_nonpos_int(a) ? -a : -a2;  /* the shorter terminating side */
+    if (hyperu_nonpos_int(a) && hyperu_nonpos_int(a2) && -a2 < m) m = -a2;
+    if (m > 100000.0) return false;
+    int mi = (int)m;
+    double term = 1.0, sum = 1.0, comp = 0.0, peak = 1.0;
+    for (int k = 0; k < mi; k++) {
+        term = term * ((a + k) * (a2 + k)) / ((k + 1.0) * -z);
+        if (!isfinite(term)) return false;
+        double at = fabs(term);
+        if (at > peak) peak = at;
+        double s2 = sum + term, bb = s2 - sum;
+        comp += (sum - (s2 - bb)) + (term - bb);
+        sum = s2;
+    }
+    double s = sum + comp;
+    if (!sf_series_usable(peak, fabs(s))) return false;
+    double v = hyperu_zpow(z, a) * s;
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
 static bool hyperu_asymptotic(double a, double b, double z, double* out) {
     if (!(z > 0.0)) return false;
     double a2 = a - b + 1.0;
+    if (hyperu_nonpos_int(a) || hyperu_nonpos_int(a2))
+        return hyperu_terminating(a, a2, z, out);
     /* Compensated (TwoSum) summation: the series alternates and runs to ~z
      * terms before its least one. Each ratio divides by -z itself rather than
      * multiplying by a once-rounded -1/z, whose error would repeat in every
@@ -957,8 +995,13 @@ static bool hyperu_connection(double a, double b, double z, double* out) {
  *              + (n-1)!/Gamma(a) z^(-n)
  *                  sum_{k=0}^{n-1} (a-n)_k/((1-n)_k k!) z^k         (empty for n=0).
  * The 1/Gamma factors vanish on the terminating sub-cases (a or a-n a non-positive
- * integer), so those collapse to the finite polynomial correctly. */
+ * integer), so those collapse to the finite polynomial correctly -- EXCEPT a
+ * itself a non-positive integer: then a-n is one too, BOTH prefactors vanish and
+ * the formula degenerates to 0 (the limit needs l'Hopital; DLMF 13.2.9 excludes
+ * a = 0, -1, ...). That case is the polynomial hyperu_terminating sums; reaching
+ * here means it declined on cancellation, so decline too (-> FLINT). */
 static bool hyperu_integer_b(double a, int n, double z, double* out) {
+    if (hyperu_nonpos_int(a)) return false;
     double finite = 0.0;
     if (n >= 1) {
         double rga = hyperu_rgamma(a);                   /* 1/Gamma(a) (0 at a pole) */
@@ -1106,24 +1149,40 @@ bool sf_series_usable(double peak, double result) {
  * bottoms out at ~2e-11 -- the intrinsic floor there (scipy's struve loses
  * accuracy in the same band), so the kernel returns the best double answer and
  * declines ONLY when even the better regime is worse than STRUVE_ACCEPT: the
- * large-nu uniform regime, a Gamma(nu+3/2) pole, a complex (z<0, non-integer
- * nu+1) prefactor, or a non-finite result. The caller then falls to the rigorous
+ * large-nu uniform regime, a complex (z<0, non-integer nu+1) prefactor, or a
+ * non-finite result. (nu = -3/2, -5/2, ..., where Gamma(nu+3/2) has a pole, is
+ * NOT a decline: the series drops its vanishing 1/Gamma terms and K_nu == 0.) The caller then falls to the rigorous
  * arb bridge. Shared bit-for-bit with the NDArray kernel and the Compile VM. */
 
 #define STRUVE_ACCEPT 1.0e-7   /* decline if even the better regime exceeds this */
 
 /* The convergent 1F2-form series. Sets *val and the predicted relative error
- * *relerr (cancellation). Returns false only for a Gamma pole, a complex
+ * *relerr (cancellation). Returns false only for a Gamma overflow, a complex
  * prefactor, non-convergence, or a non-finite result. */
 static bool struve_series(double nu, double z, double* val, double* relerr) {
-    double g = tgamma(nu + 1.5);
-    if (!isfinite(g) || g == 0.0) return false;        /* nu+3/2 at a Gamma pole */
     double w = 0.25 * z * z;                            /* (z/2)^2 >= 0           */
     double hump = 0.5 * fabs(z);                         /* term peak ~ |z|/2      */
-    double t = (2.0 / sqrt(M_PI)) / g;                  /* t_0 = 1/(G(3/2)G(nu+3/2)) */
+    double t;
+    int k0 = 0;
+    double c = nu + 1.5;
+    if (c <= 0.0 && c == floor(c)) {
+        /* nu = -(n+1/2), n >= 1: Gamma(k+nu+3/2) = Gamma(k+1-n) has poles at
+         * k = 0..n-1, so those terms are 1/Gamma = 0 and the series starts at
+         * k0 = n with Gamma(1) = 1:  t_n = (-w)^n / Gamma(n+3/2), built as a
+         * product (no overflowing w^n or Gamma). The resulting sum is
+         * H_{-(n+1/2)} = (-1)^n J_{n+1/2} (DLMF 11.4.4). */
+        k0 = (int)(-(nu + 0.5) + 0.5);
+        if (k0 > 4000) return false;
+        t = 2.0 / sqrt(M_PI);                           /* 1/Gamma(3/2)           */
+        for (int j = 1; j <= k0; j++) t *= -w / (j + 0.5);
+    } else {
+        double g = tgamma(c);
+        if (!isfinite(g) || g == 0.0) return false;     /* overflow / underflow   */
+        t = (2.0 / sqrt(M_PI)) / g;                     /* t_0 = 1/(G(3/2)G(nu+3/2)) */
+    }
     double sum = t, maxabs = fabs(t);
     int k;
-    for (k = 1; k < 8000; k++) {
+    for (k = k0 + 1; k < 8000; k++) {
         double denom = (k + 0.5) * (k + nu + 0.5);
         if (denom == 0.0) return false;                 /* nu a negative half-int */
         t *= -w / denom;
@@ -1154,32 +1213,59 @@ static bool struve_asymp(double nu, double z, double* val, double* relerr) {
     double omega = z - (0.5 * nu + 0.25) * M_PI;
     double a = 1.0, invzk = 1.0, P = 1.0, Q = 0.0;      /* k=0 adds a_0 to P      */
     double yfloor = 1.0, prevy = 1.0;
+    /* Half-integer nu: the factor mu - (2k-1)^2 vanishes at k = |nu| + 1/2, so the
+     * Hankel series is a FINITE, exact sum (Y_{n+1/2} is elementary). Its terms
+     * may grow before they stop (nu = -13/2 at z = 20), which is not divergence:
+     * sum them all and charge only the rounding, eps * sum |a_k / z^k|. Cutting
+     * at the growth instead left an 8e-10 floor where the elementary form is
+     * exact to the last bit. */
+    double twonu = 2.0 * nu;
+    bool yterm = fabs(nu) < 390.0 && twonu == floor(twonu) && fmod(fabs(twonu), 2.0) == 1.0;
+    double yabs = 1.0;
     for (int k = 1; k < 400; k++) {
         a *= (mu - (double)(2 * k - 1) * (2 * k - 1)) / ((double)k * 8.0);
         invzk /= z;
         double tk = a * invzk, atk = fabs(tk);          /* a_k / z^k              */
-        if (atk > prevy) break;                         /* divergent: smallest term */
-        prevy = atk; yfloor = atk;
+        if (yterm) {
+            if (tk == 0.0) break;                       /* terminated: exact      */
+            if (!isfinite(tk)) return false;
+            yabs += atk;
+        } else {
+            if (atk > prevy) break;                     /* divergent: smallest term */
+            prevy = atk; yfloor = atk;
+        }
         int m = k / 2;
         double sgn = (m % 2 == 0) ? 1.0 : -1.0;         /* (-1)^floor(k/2)        */
         if (k % 2 == 0) P += sgn * tk;                  /* even k -> P            */
         else            Q += sgn * tk;                  /* odd k  -> Q            */
     }
+    if (yterm) yfloor = 2.0 * DBL_EPSILON * yabs;      /* rounding of a finite sum */
     double scale = sqrt(2.0 / (M_PI * z));
     double Y = scale * (sin(omega) * P + cos(omega) * Q);
 
     double w = 0.25 * z * z;
-    double gk = tgamma(nu + 0.5);
-    double term = sqrt(M_PI) * pow(0.5 * z, nu - 1.0) / gk;   /* term_0: 0 if gk=+inf */
-    if (!isfinite(term)) return false;                  /* nu+1/2 a negative-int pole */
-    double Ksum = term, kfloor = fabs(term), prevk = fabs(term);
-    for (int k = 1; k < 400; k++) {
-        term *= (k - 0.5) * (nu + 0.5 - k) / w;
-        if (term == 0.0) { kfloor = 0.0; break; }       /* terminated (half-int nu) */
-        double at = fabs(term);
-        if (at > prevk) break;                          /* divergent: smallest term */
-        prevk = at; kfloor = at;
-        Ksum += term;
+    double c = nu + 0.5;
+    double Ksum = 0.0, kfloor = 0.0;
+    /* K_nu = (1/pi) sum_k Gamma(k+1/2) (z/2)^(nu-2k-1) / Gamma(nu+1/2-k): for
+     * nu+1/2 = 0, -1, ... EVERY 1/Gamma(nu+1/2-k) vanishes, so K_nu == 0 exactly
+     * and H_nu = Y_nu (= (-1)^n J_{n+1/2} for nu = -(n+1/2)). */
+    if (!(c <= 0.0 && c == floor(c))) {
+        double gk = tgamma(c);
+        double term = sqrt(M_PI) * pow(0.5 * z, nu - 1.0) / gk;
+        if (!isfinite(term)) return false;                  /* overflow               */
+        double prevk = fabs(term), kabs = fabs(term);
+        Ksum = term; kfloor = fabs(term);
+        for (int k = 1; k < 400; k++) {
+            term *= (k - 0.5) * (nu + 0.5 - k) / w;
+            if (term == 0.0) {                              /* terminated (half-int nu) */
+                kfloor = 2.0 * DBL_EPSILON * kabs;          /* exact up to rounding     */
+                break;
+            }
+            double at = fabs(term);
+            if (!yterm && at > prevk) break;                /* divergent: smallest term */
+            prevk = at; kfloor = at; kabs += at;
+            Ksum += term;
+        }
     }
     double K = Ksum / M_PI;
 

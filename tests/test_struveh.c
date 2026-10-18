@@ -123,6 +123,52 @@ void test_struveh_halfinteger_oracle() {
     }
 }
 
+/* ---- nu = -(n+1/2): the Gamma(nu+3/2) poles ------------------------- */
+/* H_{-(n+1/2)}(x) = (-1)^n J_{n+1/2}(x) (DLMF 11.4.4): the 1F2 series loses its
+ * first n terms to 1/Gamma(k+1-n) = 0 and K_nu vanishes identically. The machine
+ * kernel used to decline at the pole and the unregularized fallback template
+ * returned `0.0 HypergeometricPFQ[...]`. Oracle: the elementary J_{3/2}, J_{5/2};
+ * spot values from mpmath 1.4 (mp.struveh). */
+void test_struveh_negative_halfinteger() {
+    for (int t = 1; t <= 40; t++) {
+        double x = t * 0.5;
+        char in[64];
+        double s = sqrt(2.0 / (M_PI * x)), sn = sin(x), cs = cos(x);
+        double j32 = s * (sn / x - cs);
+        double j52 = s * ((3.0 / (x * x) - 1.0) * sn - 3.0 * cs / x);
+
+        snprintf(in, sizeof(in), "StruveH[-3/2, %.4f]", x);
+        double got = eval_real(in);
+        ASSERT_MSG(fabs(got + j32) <= 1e-13 * (1.0 + fabs(j32)),
+                   "StruveH[-3/2, %.4f]: %.16g vs -J_{3/2} %.16g", x, got, -j32);
+
+        snprintf(in, sizeof(in), "StruveH[-5/2, %.4f]", x);
+        got = eval_real(in);
+        ASSERT_MSG(fabs(got - j52) <= 1e-13 * (1.0 + fabs(j52)),
+                   "StruveH[-5/2, %.4f]: %.16g vs J_{5/2} %.16g", x, got, j52);
+    }
+    assert_close("StruveH[-3/2, 2.]", -0.491293778687162, 1e-14);
+    assert_close("StruveH[-5/2, 2.]", 0.223924531468916, 1e-14);
+    assert_close("StruveH[-7/2, 2.]", -0.0685175499851271, 1e-15);
+    assert_close("StruveH[-3/2, 30.]", 0.0272679457111777, 1e-15);
+    /* the Hankel series of a half-integer order is finite: summed whole, not
+     * cut at its first growing term (that left an 8e-10 floor here) */
+    assert_close("StruveH[-13/2, 20.]", -0.147368651190097, 1e-14);
+    assert_close("StruveH[9/2, 20.]", 75.9102805710853, 1e-12);
+    /* kernel declines (complex value) -> arb at 53 bits, demoted to machine */
+    assert_close("Re[StruveH[-3/2, 2. + I]]", -0.646752436117891, 1e-14);
+    assert_close("Im[StruveH[-3/2, 2. + I]]", -0.172080645894644, 1e-14);
+    assert_close("Im[StruveH[-3/2, -2.]]", 0.491293778687162, 1e-14);
+    assert_eval_eq("FreeQ[StruveH[-3/2, -2.], HypergeometricPFQ]", "True", 0);
+    /* scalar == packed == NDArray == Compile, bit for bit */
+    assert_eval_eq(
+        "With[{zs = 0.37 N[Range[40]]}, "
+        "Table[StruveH[-7/2, z], {z, zs}] === StruveH[-7/2, zs] === "
+        "Normal[StruveH[-7/2, NDArray[zs]]] === "
+        "Compile[{{v, _Real, 1}}, StruveH[-7/2, v]][zs] === "
+        "Table[Compile[{{x, _Real}}, StruveH[-7/2, x]][z], {z, zs}]]", "True", 0);
+}
+
 /* ---- negative-argument parity (integer nu is real) ------------------ */
 /* H_nu(-z) = (-1)^(nu+1) H_nu(z); for integer nu this is a real value. */
 void test_struveh_negative_arg() {
@@ -195,6 +241,7 @@ int main() {
     TEST(test_struveh_asymptotic);
     TEST(test_struveh_transition_band);
     TEST(test_struveh_halfinteger_oracle);
+    TEST(test_struveh_negative_halfinteger);
     TEST(test_struveh_negative_arg);
     TEST(test_struveh_arbitrary_real);
     TEST(test_struveh_complex);

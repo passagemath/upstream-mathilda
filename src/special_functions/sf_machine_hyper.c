@@ -1743,19 +1743,37 @@ static bool hyu_asym_c(double a, double b, double zr, double zi, double li,
     c_div(-1.0, 0.0, zr, zi, &tr, &ti);
     double cr = 1.0, ci = 0.0, sr = 1.0, si = 0.0, last = 1.0;
     bool ok = false;
-    for (int k = 0; k < 400; k++) {
+    /* a or a-b+1 = -m: the series is a FINITE sum (exactly U), so it must not be
+     * cut at a growing term as if divergent -- sum all m+1 terms and decline only
+     * on measured cancellation (peak term over result, sf_series_usable). */
+    bool term = hy_is_nonpos_int(a) || hy_is_nonpos_int(a2);
+    double peak = 1.0;
+    int kmax = 400;
+    if (term) {
+        double m = hy_is_nonpos_int(a) ? -a : -a2;
+        if (hy_is_nonpos_int(a) && hy_is_nonpos_int(a2) && -a2 < m) m = -a2;
+        if (m > 100000.0) return false;
+        kmax = (int)m + 1;
+    }
+    for (int k = 0; k < kmax; k++) {
         double f = (a + k) * (a2 + k) / (k + 1.0);
         if (f == 0.0) { ok = true; break; }
         double nr, ni;
         c_mul(cr, ci, tr * f, ti * f, &nr, &ni);
         double an = c_abs(nr, ni);
         if (!isfinite(an)) return false;
+        if (term) {                                  /* finite sum: no truncation */
+            if (an > peak) peak = an;
+            sr += nr; si += ni; cr = nr; ci = ni;
+            continue;
+        }
         if (an > last) { ok = (last <= c_abs(sr, si) * HY_TOL); break; }
         sr += nr; si += ni;
         cr = nr; ci = ni; last = an;
         if (an <= c_abs(sr, si) * HY_TOL) { ok = true; break; }
     }
     if (!ok) return false;
+    if (term && !sf_series_usable(peak, c_abs(sr, si))) return false;
     double pr, pi;
     c_pow_ma(c_abs(zr, zi), li, -a, &pr, &pi);
     c_mul(sr, si, pr, pi, rr, ri);
@@ -1792,6 +1810,10 @@ static bool hyu_conn_c(double a, double b, double zr, double zi, double li,
  *              + (n-1)!/G(a) z^-n sum_{k<n} (a-n)_k/((1-n)_k k!) z^k. */
 static bool hyu_intb_c(double a, int n, double zr, double zi, double lr, double li,
                        double* rr, double* ri) {
+    /* a = 0, -1, ...: both 1/Gamma prefactors vanish and this formula degenerates
+     * to 0 (DLMF 13.2.9 excludes it); the polynomial is hyu_asym_c's finite sum,
+     * so reaching here means that declined on cancellation -- decline too. */
+    if (hy_is_nonpos_int(a)) return false;
     double finr = 0.0, fini = 0.0, peak = 0.0;
     if (n >= 1) {
         double rga = hy_rgamma(a);
@@ -1813,7 +1835,6 @@ static bool hyu_intb_c(double a, int n, double zr, double zi, double lr, double 
     double logr = 0.0, logi = 0.0;
     double rgan = hy_rgamma(a - (double)n);
     if (rgan != 0.0) {
-        if (hy_is_nonpos_int(a)) return false;
         double pref = ((n & 1) ? 1.0 : -1.0) / tgamma((double)n + 1.0) * rgan;
         double pa, pk, pnk;
         if (!sf_machine_digamma(a, &pa) || !sf_machine_digamma(1.0, &pk) ||

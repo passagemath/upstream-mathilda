@@ -30,6 +30,9 @@ Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a);/* HurwitzZeta[s, a] 
 Expr* flint_num_polygamma(const Expr* n, const Expr* z);   /* PolyGamma[n, z]    */
 Expr* flint_num_polylog(const Expr* s, const Expr* z);     /* PolyLog[s, z]      */
 Expr* flint_num_airy_ai(const Expr* z);                    /* AiryAi[z]          */
+Expr* flint_num_erf(const Expr* z);                        /* Erf[z]  (entire)   */
+Expr* flint_num_erfc(const Expr* z);                       /* Erfc[z] (entire)   */
+Expr* flint_num_erfi(const Expr* z);                       /* Erfi[z] (entire)   */
 Expr* flint_num_airy_ai_prime(const Expr* z);              /* AiryAiPrime[z]     */
 Expr* flint_num_airy_bi(const Expr* z);                    /* AiryBi[z]          */
 Expr* flint_num_airy_bi_prime(const Expr* z);              /* AiryBiPrime[z]     */

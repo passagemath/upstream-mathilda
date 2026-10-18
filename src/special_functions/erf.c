@@ -39,6 +39,7 @@
 
 #include "arithmetic.h"   /* is_rational, make_complex, is_complex */
 #include "numeric.h"      /* numeric_min_inexact_bits */
+#include "flint_num_bridge.h" /* flint_num_erf: arb kernel for large |z| */
 #include "attr.h"
 #include "eval.h"         /* eval_and_free */
 #include "expr.h"
@@ -50,6 +51,10 @@
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
+
+/* |z|^2 above which a complex Erf goes to arb instead of the MPFR
+ * series (|z| > 20: 577+ guard bits, ~1100+ terms). */
+#define ERF_ARB_Z2 400.0
 
 /* M_PI / M_LN2 are POSIX, not C99 -- provide fallbacks (see CLAUDE.md). */
 #ifndef M_PI
@@ -267,8 +272,12 @@ static bool ecx_erf_series(ecx* out, const ecx* z, mpfr_prec_t wp, double z2abs)
     mpfr_set_ui(eps, 1, ERND);
     mpfr_div_2ui(eps, eps, (unsigned long)(wp > 8 ? wp - 4 : 1), ERND); /* 2^-(wp-4) */
 
-    /* Cap generously: term peak is near n ~ |z|^2, plus precision-driven tail. */
-    unsigned long cap = (unsigned long)(2.0 * z2abs) + (unsigned long)wp + 1000;
+    /* Cap: the terms peak near n ~ |z|^2 and must then fall by the
+     * |z|^2/ln2 guard bits (|S| ~ |e^{z^2}| can sit e^{|z|^2} below the peak
+     * when Re(z^2) < 0) plus the target: Sum_{n > |z|^2} ln(n/|z|^2) >= |z|^2
+     * needs n ~ e |z|^2.  A 2|z|^2 cap ran out for |z| ~ 100 (Erf[0.5 + 100 I]
+     * stayed unevaluated). */
+    unsigned long cap = (unsigned long)(3.0 * z2abs) + (unsigned long)wp + 1000;
     bool ok = false;
     for (unsigned long n = 1; n <= cap; n++) {
         ecx_mul(&tmp, &t, &two_z2, wp);
@@ -416,6 +425,20 @@ static Expr* erf_one_arg(Expr* arg) {
              * Real parts with full accuracy; higher precision yields MPFR. */
             long bits = numeric_min_inexact_bits(arg);
             mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            /* Large |z|: the Maclaurin series below needs |z|^2/ln2 guard
+             * bits and ~e|z|^2 terms (16 s at |z| = 100); arb's kernel is
+             * rigorous and milliseconds there.  A 53-bit answer is lowered to
+             * machine Reals unless it lies outside the double range (kept as
+             * the extended-exponent MPFR value). */
+            {
+                double rd = 0.0, id = 0.0;
+                (void)erf_to_double(re, &rd);
+                (void)erf_to_double(im, &id);
+                if (rd * rd + id * id > ERF_ARB_Z2) {
+                    Expr* v = flint_num_erf(arg);
+                    if (v) return out_prec <= 53 ? numeric_lower_mpfr_to_machine(v) : v;
+                }
+            }
             Expr* out = erf_mpfr_complex(re, im, out_prec);
             if (out) return out;
 #else
@@ -495,7 +518,11 @@ Expr* builtin_erf(Expr* res) {
     if (argc == 1 && is_interval(args[0])) {
         Expr* r = interval_apply_function("Erf", args[0]); if (r) return r;
     }
-    if (argc == 1) return erf_one_arg(args[0]);
+    /* A machine complex result can exceed the double range (|erf(3 + 30 I)|
+     * ~ 1.7e385) after sf_erf_c declines |Im z| > 26: re-run the call in MPFR
+     * at machine precision (extended exponent) instead of letting the
+     * evaluator's net turn the Inf into Overflow[] -- as Erfc / Erfi do. */
+    if (argc == 1) return numeric_promote_result_if_degenerate(erf_one_arg(args[0]), res);
     if (argc == 2) return erf_two_arg(args[0], args[1]);
     return erf_emit_argt(argc);
 }

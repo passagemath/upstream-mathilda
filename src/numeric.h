@@ -305,6 +305,12 @@ Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call);
  * (Erfc/Erfi/ExpIntegralEi/...). Always compiled; a no-op without MPFR. */
 Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
 
+/* Lower a (consumed) 53-bit MPFR / Complex[MPFR, MPFR] value to machine Reals
+ * when every part fits a normal double; otherwise return it unchanged (the
+ * extended-exponent form). For machine calls a head evaluates through arb.
+ * Without MPFR it returns `r`. */
+Expr* numeric_lower_mpfr_to_machine(Expr* r);
+
 /* Registers N (and, in Phase 2, Precision/Accuracy/SetPrecision/SetAccuracy
  * and MachinePrecision) with the symbol table. */
 void numeric_init(void);

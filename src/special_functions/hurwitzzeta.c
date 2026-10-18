@@ -524,7 +524,7 @@ static Expr* hz_numeric(Expr* s, Expr* a) {
     hz_decompose(a, zero, &are, &aim);
 
     mpfr_prec_t out_prec = hz_out_prec(s, a);
-    mpfr_prec_t wp = out_prec + 64;
+    mpfr_prec_t wp = out_prec + 64;      /* raised below for Re(s) < 0 */
 
     /* Arbitrary precision: arb's acb_dirichlet_hurwitz is far faster than the
      * hand-rolled complex Euler-Maclaurin kernel below (~3x at 50 digits).
@@ -535,12 +535,58 @@ static Expr* hz_numeric(Expr* s, Expr* a) {
         if (v) { expr_free(zero); return v; }
     }
 
+    /* Machine precision with Re(s) < 0: the Euler-Maclaurin head sum cancels
+     * ~(-Re s) log2 N bits (guarded below), which makes it slow for large -s
+     * -- and the LerchPhi |z| > 1 continuation asks for HurwitzZeta[s - n, a]
+     * at n = 0, 1, ..., 100+.  arb's kernel climbs its own precision ladder
+     * and is ~5x faster there; its 53-bit answer is lowered to machine Reals
+     * unless it lies outside the double range (kept as a 53-bit MPFR, the
+     * extended-exponent convention).  A decline falls through. */
+    if (out_prec <= 53) {
+        mpfr_t t;
+        mpfr_init2(t, 64);
+        bool neg = hz_set_mpfr(t, sre) && mpfr_sgn(t) < 0;
+        mpfr_clear(t);
+        Expr* v = neg ? flint_num_hurwitz_zeta(s, a) : NULL;
+        if (v) { expr_free(zero); return numeric_lower_mpfr_to_machine(v); }
+    }
+
+    /* Guard bits for Re(s) < 0.  The head terms |(a+k)^-s| grow like
+     * (N+|a|)^(-Re s) while the value itself is O(Gamma(1-s)/(2pi)^(1-s)), so
+     * the Euler-Maclaurin sum cancels ~(-Re s) log2(N+|a|) bits.  Without these
+     * HurwitzZeta[-48.5, 0.5] came out ~1e60 too large (and the LerchPhi |z|>1
+     * continuation, which sums HurwitzZeta[s-n, a] for n = 0, 1, ..., with it). */
+    {
+        double sre_d = 0.0, are_d = 0.0, aim_d = 0.0;
+        mpfr_t t;
+        mpfr_init2(t, 64);
+        if (hz_set_mpfr(t, sre)) sre_d = mpfr_get_d(t, HZRND);
+        if (hz_set_mpfr(t, are)) are_d = mpfr_get_d(t, HZRND);
+        if (hz_set_mpfr(t, aim)) aim_d = mpfr_get_d(t, HZRND);
+        mpfr_clear(t);
+        if (sre_d < 0.0 && isfinite(sre_d)) {
+            /* An upper bound on the N hz_em_terms picks once the guard is
+             * added (the guard raises the digit count by ~0.3 bits per bit,
+             * bounded here by 4|s| + 64), so the guard is never short. */
+            double digits = (double)wp * 0.30103 + 5.0;
+            double nest = digits + 5.0 * fabs(sre_d) + 74.0;
+            double guard = -sre_d * log2(nest + hypot(are_d, aim_d) + 1.0) + 16.0;
+            if (guard < 1e7) wp += (mpfr_prec_t)guard;
+        }
+    }
+
+    /* The principal-branch powers (k+a)^-s are complex for k + a < 0 unless s
+     * is an integer, so a real result is forced only when every summand is
+     * real: real s and a, and either a > 0 or s integer-valued.  HurwitzZeta[
+     * -2.5, -0.5] = -0.00701133 + 0.176777 I (the k = 0 term (-1/2)^(5/2)). */
     bool real_only = (sim == zero) && (aim == zero);
 
     hcx sc, ac, res;
     hcx_init(&sc, wp); hcx_init(&ac, wp); hcx_init(&res, wp);
     bool ok = hz_set_mpfr(sc.re, sre) && hz_set_mpfr(sc.im, sim) &&
               hz_set_mpfr(ac.re, are) && hz_set_mpfr(ac.im, aim);
+    if (ok && real_only && mpfr_sgn(ac.re) <= 0 && !mpfr_integer_p(sc.re))
+        real_only = false;
     Expr* out = NULL;
     if (ok) {
         int code = hz_hurwitz_cx(&res, &sc, &ac, wp);

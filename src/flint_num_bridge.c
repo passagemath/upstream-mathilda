@@ -189,12 +189,21 @@ static slong pick_out_bits(const Expr* const* args, int n) {
  *                             of them correct.
  */
 
+/* True when the ball's absolute radius (either part) is at least 2^-outb, i.e.
+ * the ball is not tight around zero in absolute terms either. */
+static int nb_radius_not_tiny(const acb_t z, slong outb) {
+    return mag_cmp_2exp_si(arb_radref(acb_realref(z)), -outb) >= 0 ||
+           mag_cmp_2exp_si(arb_radref(acb_imagref(z)), -outb) >= 0;
+}
+
 /* Significant bits worth rendering from `z` when `outb` were asked for, or -1 to
  * mean "not finite -- bail". */
 static slong nb_emit_bits(const acb_t z, slong outb) {
     if (!acb_is_finite(z)) return -1;
     slong acc = acb_rel_accuracy_bits(z);
-    if (acc >= outb || acb_contains_zero(z)) return outb;
+    if (acc >= outb) return outb;
+    if (acb_contains_zero(z))   /* tight: emit the midpoint; wide: no digits known */
+        return nb_radius_not_tiny(z, outb) ? -1 : outb;
     return acc > 2 ? acc : outb;   /* acc <= 2: nothing to report; keep old shape */
 }
 
@@ -202,7 +211,13 @@ static slong nb_emit_bits(const acb_t z, slong outb) {
 static int nb_should_retry(const acb_t z, slong outb, int attempt) {
     if (attempt >= NB_MAX_DOUBLINGS) return 0;
     if (!acb_is_finite(z)) return 0;              /* pole: hopeless */
-    if (acb_contains_zero(z)) return 0;           /* relative target unattainable */
+    /* A ball containing zero: relative accuracy is unattainable when the true
+     * value may BE zero, so a TIGHT ball (radius < 2^-outb) is accepted.  A
+     * WIDE one is a cancellation loss, not a zero -- HurwitzZeta[-38.5`25,
+     * 1/2`25] came back from acb_dirichlet_hurwitz at 116 bits as
+     * 2.5e24 +/- 1.1e25 (true value -1.36e14), and emitting that midpoint is
+     * how LerchPhi's |z| > 1 continuation went wrong at 25 digits.  Climb. */
+    if (acb_contains_zero(z)) return nb_radius_not_tiny(z, outb);
     return acb_rel_accuracy_bits(z) < outb;
 }
 
@@ -284,6 +299,12 @@ static void nb_airy_bi(acb_t r, const acb_t z, slong prec)  { acb_hypgeom_airy(N
 static void nb_airy_bip(acb_t r, const acb_t z, slong prec) { acb_hypgeom_airy(NULL, NULL, NULL, r, z, prec); }
 
 Expr* flint_num_airy_ai(const Expr* z)       { return nb_eval1(z, nb_airy_ai);  }
+/* The error functions are entire, so arb's values need no branch adjustment.
+ * Used for large complex |z|, where the MPFR Maclaurin series needs |z|^2/ln2
+ * guard bits and ~e|z|^2 terms (16 s at |z| = 100 vs milliseconds here). */
+Expr* flint_num_erf(const Expr* z)  { return nb_eval1(z, acb_hypgeom_erf);  }
+Expr* flint_num_erfc(const Expr* z) { return nb_eval1(z, acb_hypgeom_erfc); }
+Expr* flint_num_erfi(const Expr* z) { return nb_eval1(z, acb_hypgeom_erfi); }
 Expr* flint_num_airy_ai_prime(const Expr* z) { return nb_eval1(z, nb_airy_aip); }
 Expr* flint_num_airy_bi(const Expr* z)       { return nb_eval1(z, nb_airy_bi);  }
 Expr* flint_num_airy_bi_prime(const Expr* z) { return nb_eval1(z, nb_airy_bip); }
@@ -1647,6 +1668,9 @@ Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; r
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) { (void)n; (void)z; return NULL; }
 Expr* flint_num_polylog(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
 Expr* flint_num_airy_ai(const Expr* z) { (void)z; return NULL; }
+Expr* flint_num_erf(const Expr* z)  { (void)z; return NULL; }
+Expr* flint_num_erfc(const Expr* z) { (void)z; return NULL; }
+Expr* flint_num_erfi(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_ai_prime(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi_prime(const Expr* z) { (void)z; return NULL; }

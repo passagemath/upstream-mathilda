@@ -206,6 +206,13 @@ Out[3]= 0.0831078 + 0.142164*I
     `Erf[1.5 - I] = 1.0784 + 0.0279637 I`,
     `N[Erf[1/2 + I], 30] = 1.20484755831421800270211268210 + 1.02440088160844588172486045441 I`.
     A `double complex` series is the fallback for `USE_MPFR=0` builds.
+  - **Large complex |z| (> 20)** → arb's `acb_hypgeom_erf` (likewise
+    `Erfc`/`Erfi`): the series would need |z|²/ln2 guard bits and ~e|z|² terms
+    (16 s at |z| = 100). A machine call whose value leaves the double range
+    returns the extended-exponent value, as `Erfc`/`Erfi` already did:
+    `Erf[3. + 30. I] = -1.248977832667308×10³⁸⁵ - 1.143536811453673×10³⁸⁵ I`
+    (formerly `Overflow[]`), `Erf[0.5 + 100. I] = -1.976×10⁴³⁴⁰ + 3.327×10⁴³⁴⁰ I`
+    (formerly unevaluated: the series' term cap was 2|z|², now 3|z|²).
 - The two-argument form `Erf[z0, z1]` reduces to `erf(z1) − erf(z0)` only when
   both reduce to something concrete, e.g. `Erf[1.5, 2] = 0.0292171`,
   `Erf[-Infinity, Infinity] = 2`; exact/symbolic pairs such as `Erf[2, 3]` and
@@ -1558,6 +1565,17 @@ follow: the functions disagree for non-positive real `a` (e.g.
   `HurwitzZeta[3, .2] = 125.739`, `HurwitzZeta[7., 5] = 1.84949×10⁻⁵`,
   `HurwitzZeta[2.3, 8 + I] = 0.0544701 - 0.00944852 I`,
   `N[HurwitzZeta[1/3, 8/7], 50] = -1.1389367444490991746548674334535727810961919460755…`.
+- **Re s < 0.** The Euler–Maclaurin head terms grow like (N+|a|)^(−Re s) while
+  the value is far smaller, so the kernel adds ~(−Re s)·log₂(N+|a|) guard bits;
+  at machine precision such a call goes to arb (rigorous, ~5× faster for large
+  −s) and is lowered to machine Reals, or kept as an extended-exponent value
+  outside the double range: `HurwitzZeta[-38.5, 0.5] = -1.36481×10¹⁴`,
+  `HurwitzZeta[-300.5, 0.5] = 1.675678219245527×10³⁷⁵` (formerly `1.2×10⁴²`
+  and `Overflow[]`). For non-integer `s` and `a < 0` the principal-branch
+  summands with k + a < 0 are complex, so the value is too:
+  `HurwitzZeta[-2.5, -0.5] = -0.00701133 + 0.176777 I` (the imaginary part used
+  to be dropped). The same guard applies to `Zeta[s, a]`
+  (`Zeta[-38.5, 2.3] = -1.71976×10¹⁴`, formerly `-1.45×10²²`).
 - **Derivatives.** `D[HurwitzZeta[s, a], a] = -s HurwitzZeta[1+s, a]` (the
   `s`-derivative is the generic `Derivative[1,0][HurwitzZeta][s, a]`); higher
   `a`-derivatives follow the rising-factorial pattern
@@ -1815,15 +1833,21 @@ keeps the series.
   complex), e.g. `LerchPhi[0.5, 3, 2.5] = 0.0794983`,
   `LerchPhi[0.3 + 0.2 I, 2, 1.5] = 0.495505 + 0.0444653 I`,
   `N[LerchPhi[1/2, 2, 5/2], 30] = 0.219693113434910235649039949138…`.
-  For `|z| > 1` (off the branch cut `[1, ∞)`, with `s` not a positive integer,
-  `a` not a non-positive integer, and `|Log z| < 2π`) the value comes from the
-  Lerch/Erdélyi continuation
-  `Φ(z,s,a) = z^(-a)[Γ(1-s)(-Log z)^(s-1) + Σ_{n≥0} HurwitzZeta(s-n,a)(Log z)^n/n!]`,
-  summed with optimal truncation: `LerchPhi[5. + I, I, I + 2] =
-  -0.581502 + 0.384767 I` (cross-checked against `z LerchPhi[z,s,1] =
-  PolyLog[s,z]`). Outside that domain — integer `s`, or `z` on the cut
-  `[1, ∞)` (e.g. `LerchPhi[2, 3, -1.5]`, which needs the logarithmic confluent
-  form) — `|z| > 1` stays symbolic.
+  For `|z| > 1` off the branch cut `[1, ∞)` the analytic continuation comes
+  from arb's rigorous `acb_dirichlet_lerch_phi` (any `s`, any `|Log z|`), with
+  the Lerch/Erdélyi expansion
+  `Φ(z,s,a) = z^(-a)[Γ(1-s)(-Log z)^(s-1) + Σ_{n≥0} HurwitzZeta(s-n,a)(Log z)^n/n!]`
+  as the fallback where it is valid (`s` not a positive integer, `|Log z| < 2π`).
+  Both are principal-branch, so for `Re a < 0` the symmetric head
+  `Σ_{k<m} zᵏ ((k+a)²)^(-s/2)` is summed first and the continuation applied to
+  `zᵐ Φ(z, s, a+m)`, `m = ⌈-Re a⌉`. On the negative real axis the value is real:
+  `LerchPhi[-3.0, 1.5, 0.5] = 2.06336`,
+  `N[LerchPhi[-3, 3/2, 1/2], 25] = 2.063359848206451659906464…`,
+  `LerchPhi[-1.5, 1.5, -0.5] = -0.653307`, `LerchPhi[5. + I, I, I + 2] =
+  -0.581502 + 0.384767 I`. (The real-axis values used to be wrong —
+  `6.35096 + 1.44603 I` — because the Erdélyi terms `HurwitzZeta[s-n, a]` had
+  lost their digits to cancellation, and `Re a < 0` returned the principal
+  value.) `z` on the cut `(1, ∞)` (e.g. `LerchPhi[2, 3, -1.5]`) stays symbolic.
 - **Series at `z = 0`.** `Series[LerchPhi[z, s, a], {z, 0, n}]` returns the
   defining power series, coefficient of `z^k` being `((k+a)^2)^(-s/2)`:
   `Series[LerchPhi[z, s, a], {z, 0, 5}] // Normal =

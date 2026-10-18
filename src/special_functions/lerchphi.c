@@ -24,8 +24,10 @@
  *       IncludeSingularTerm->True at a non-positive integer a  ->  ComplexInfinity
  *       DoublyInfinite->True   ->  Phi(z,s,a) + z^-1 Phi(1/z, s, 1-a)
  *   numeric (>= 1 inexact operand):
- *       |z| < 1                ->  complex-MPFR power series
- *       |z| > 1                ->  diverges, stays symbolic (no continuation)
+ *       |z| <= 1               ->  arb (arbitrary precision) / complex-MPFR series
+ *       |z| > 1, off [1, Inf)  ->  analytic continuation: arb, else Erdelyi
+ *                                  (Re a < 0 shifted to the symmetric convention)
+ *       z on the cut (1, Inf)  ->  stays symbolic
  *   everything else            ->  stays symbolic (return NULL)
  *
  * Attributes: Listable, NumericFunction, Protected.
@@ -564,11 +566,12 @@ static bool lp_eval_to_lcx(Expr* e, long digits, lcx* out) {
  * working-precision noise dominates and we stop -- which at the working
  * precision already yields full accuracy.  HurwitzZeta and Gamma are evaluated
  * through the ordinary numeric kernels (via N).  The caller has verified
- * |z| > 1 and that z is off the branch cut [1, Infinity).  Returns NULL to stay
- * symbolic on any failure. */
-static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
-                                const lcx* Z, const lcx* S, const lcx* A,
-                                mpfr_prec_t out_prec, mpfr_prec_t wp) {
+ * |z| > 1 and that z is off the branch cut [1, Infinity).  This is the
+ * principal-branch Phi (HurwitzZeta sums (k+a)^-s), so the caller shifts a into
+ * Re(a) >= 0 first.  Writes `res` and returns true, or false on any failure. */
+static bool lp_erdelyi_large_z(lcx* res, Expr* s_e, Expr* a_e,
+                               const lcx* Z, const lcx* S, const lcx* A,
+                               mpfr_prec_t out_prec, mpfr_prec_t wp) {
     long digits = (long)(out_prec / 3.3219) + 12;
     if (digits < 20) digits = 20;
     const long NMAX = 2000;
@@ -587,8 +590,12 @@ static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
     mpfr_inits2(wp, fact, mag, minmag, smag, eps, lim, (mpfr_ptr)0);
     mpfr_set_ui(fact, 1, LRND);
     mpfr_set_inf(minmag, 1);
+    /* Stop at 2^-(out_prec + 24) of the sum: the terms fall only like
+     * (|Log z|/2pi)^n (>= 1/2 on the negative real axis), so converging to the
+     * full working precision would cost ~2x the HurwitzZeta evaluations for
+     * bits that lp_result rounds away. */
     mpfr_set_ui(eps, 1, LRND);
-    mpfr_div_2ui(eps, eps, (unsigned long)(wp > 12 ? wp - 8 : 1), LRND);
+    mpfr_div_2ui(eps, eps, (unsigned long)(out_prec + 24), LRND);
 
     bool ok = true;
     int patience = 0;
@@ -627,7 +634,7 @@ static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
         mpfr_mul_ui(fact, fact, (unsigned long)(n + 1), LRND);  /* advance n! */
     }
 
-    Expr* out = NULL;
+    bool out = false;
     if (ok) {
         /* gpart = Gamma[1-s] * (-Log z)^(s-1). */
         Expr* oneMs = expr_new_function(expr_new_symbol(SYM_Subtract),
@@ -644,8 +651,10 @@ static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
             mpfr_neg(negA.re, A->re, LRND); mpfr_neg(negA.im, A->im, LRND);
             lcx_pow(&zpow, Z, &negA, wp);           /* z^-a */
             lcx_mul(&result, &zpow, &inner, wp);
-            if (mpfr_number_p(result.re) && mpfr_number_p(result.im))
-                out = lp_result(result.re, result.im, out_prec, false);
+            if (mpfr_number_p(result.re) && mpfr_number_p(result.im)) {
+                lcx_set(res, &result);
+                out = true;
+            }
         }
         lcx_clear(&gval);
     }
@@ -655,6 +664,107 @@ static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
     lcx_clear(&tmp); lcx_clear(&sumz); lcx_clear(&negLz);
     lcx_clear(&sm1); lcx_clear(&zpow); lcx_clear(&negA); lcx_clear(&inner);
     lcx_clear(&result);
+    return out;
+}
+
+/* A complex-MPFR value as an Expr at precision p: an MPFR Real, or
+ * Complex[MPFR, MPFR] when the imaginary part is non-zero. */
+static Expr* lp_lcx_to_expr(const lcx* v, mpfr_prec_t p) {
+    Expr* re = expr_new_mpfr_bits(p);
+    mpfr_set(re->data.mpfr, v->re, LRND);
+    if (mpfr_zero_p(v->im)) return re;
+    Expr* im = expr_new_mpfr_bits(p);
+    mpfr_set(im->data.mpfr, v->im, LRND);
+    return make_complex(re, im);
+}
+
+/* |z| > 1 continuation in Mathematica's convention.  For Re(a) < 0 the
+ * defining sum uses the symmetric power ((k+a)^2)^(-s/2), which the analytic
+ * continuations below (principal (k+a)^-s) do not see.  Shift a by
+ * m = ceil(-Re a) first (one more if a + m lands on 0):
+ *   Phi(z, s, a) = Sum_{k<m, k+a != 0} z^k ((k+a)^2)^(-s/2) + z^m Phi(z, s, a+m),
+ * with Re(a+m) >= 0, where both conventions agree.  (LerchPhi[-1.5, 1.5, -0.5]
+ * returned the principal -3.48173 instead of -0.653307.)
+ *
+ * The tail Phi(z, s, a+m) comes from arb's acb_dirichlet_lerch_phi, which is
+ * rigorous (its precision ladder sees any cancellation) and covers every z off
+ * the cut [1, Infinity) -- integer s and |Log z| >= 2pi included -- in a few ms.
+ * Without it (no FLINT, or a decline) the Erdelyi expansion is used where valid
+ * (`erdelyi_ok`).  Returns the result Expr, or NULL to stay symbolic. */
+static Expr* lp_large_z_shifted(Expr* s_e, Expr* a_e,
+                                const lcx* Z, const lcx* S, const lcx* A,
+                                mpfr_prec_t out_prec, mpfr_prec_t wp,
+                                bool erdelyi_ok, bool real_only) {
+    long m = 0;
+    if (mpfr_sgn(A->re) < 0 || (mpfr_zero_p(A->re) && mpfr_zero_p(A->im))) {
+        mpfr_t c; mpfr_init2(c, wp);
+        mpfr_neg(c, A->re, LRND);
+        mpfr_ceil(c, c);
+        if (!mpfr_fits_slong_p(c, LRND) || mpfr_cmp_ui(c, 1000000UL) > 0) {
+            mpfr_clear(c); return NULL;
+        }
+        m = mpfr_get_si(c, LRND);
+        mpfr_clear(c);
+        /* a a non-positive integer: k = -a is the excluded singular term, so
+         * the head sum covers it and the tail starts at a + m = 1. */
+        if (mpfr_integer_p(A->re) && mpfr_zero_p(A->im)) m++;
+    }
+
+    lcx head, zk, base, b2, val, hexpo, Am, tail;
+    lcx_init(&head, wp); lcx_init(&zk, wp); lcx_init(&base, wp); lcx_init(&b2, wp);
+    lcx_init(&val, wp); lcx_init(&hexpo, wp); lcx_init(&Am, wp); lcx_init(&tail, wp);
+    mpfr_set_ui(head.re, 0, LRND); mpfr_set_ui(head.im, 0, LRND);
+    mpfr_set_ui(zk.re, 1, LRND);   mpfr_set_ui(zk.im, 0, LRND);       /* z^0 */
+    mpfr_neg(hexpo.re, S->re, LRND); mpfr_div_2ui(hexpo.re, hexpo.re, 1, LRND);
+    mpfr_neg(hexpo.im, S->im, LRND); mpfr_div_2ui(hexpo.im, hexpo.im, 1, LRND);
+    for (long k = 0; k < m; k++) {
+        mpfr_add_si(base.re, A->re, k, LRND);
+        mpfr_set(base.im, A->im, LRND);
+        if (!(mpfr_zero_p(base.re) && mpfr_zero_p(base.im))) {
+            lcx_mul(&b2, &base, &base, wp);
+            lcx_pow(&val, &b2, &hexpo, wp);        /* ((k+a)^2)^(-s/2) */
+            lcx_mul(&val, &val, &zk, wp);
+            lcx_add(&head, &head, &val);
+        }
+        lcx_mul(&zk, &zk, Z, wp);                  /* ends at z^m */
+    }
+    mpfr_add_si(Am.re, A->re, m, LRND);
+    mpfr_set(Am.im, A->im, LRND);
+
+    Expr* am_e = (m == 0) ? expr_copy(a_e)
+        : eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+              (Expr*[]){ expr_copy(a_e), expr_new_integer(m) }, 2));
+    Expr* out = NULL;
+    bool have_tail = false;
+    {
+        /* Hand arb the operands at the WORKING precision (their values taken
+         * as exact): the head sum can cancel the tail, so a tail good to only
+         * out_prec bits would cost the result its last few. */
+        Expr* zw = lp_lcx_to_expr(Z, wp);
+        Expr* sw = lp_lcx_to_expr(S, wp);
+        Expr* aw = lp_lcx_to_expr(&Am, wp);
+        Expr* fv = flint_num_lerchphi(zw, sw, aw);
+        expr_free(zw); expr_free(sw); expr_free(aw);
+        if (fv) {
+            Expr* zero = expr_new_integer(0);
+            Expr *fre, *fim;
+            lp_decompose(fv, zero, &fre, &fim);
+            have_tail = lp_set_mpfr(tail.re, fre) && lp_set_mpfr(tail.im, fim);
+            expr_free(zero);
+            expr_free(fv);
+        }
+    }
+    if (!have_tail && erdelyi_ok)
+        have_tail = lp_erdelyi_large_z(&tail, s_e, am_e, Z, S, &Am, out_prec, wp);
+    if (have_tail) {
+        lcx_mul(&tail, &tail, &zk, wp);            /* z^m Phi(z, s, a+m) */
+        lcx_add(&tail, &tail, &head);
+        if (mpfr_number_p(tail.re) && mpfr_number_p(tail.im))
+            out = lp_result(tail.re, tail.im, out_prec, real_only);
+    }
+    expr_free(am_e);
+    lcx_clear(&head); lcx_clear(&zk); lcx_clear(&base); lcx_clear(&b2);
+    lcx_clear(&val); lcx_clear(&hexpo); lcx_clear(&Am); lcx_clear(&tail);
     return out;
 }
 
@@ -711,12 +821,9 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
              * LerchPhi[2, 3, -1.5] -- has a logarithmic confluent form not
              * implemented here). */
             double sre_d = mpfr_get_d(sc.re, LRND), sim_d = mpfr_get_d(sc.im, LRND);
-            double are_d = mpfr_get_d(ac.re, LRND), aim_d = mpfr_get_d(ac.im, LRND);
             double zre_d = mpfr_get_d(Z.re, LRND),  zim_d = mpfr_get_d(Z.im, LRND);
             long sr = (long)floor(sre_d + 0.5);
-            long ar = (long)floor(are_d + 0.5);
             bool s_posint    = fabs(sim_d) < 1e-9 && sr >= 1 && fabs(sre_d - sr) < 1e-9;
-            bool a_nonposint = fabs(aim_d) < 1e-9 && ar <= 0 && fabs(are_d - ar) < 1e-9;
             bool on_cut      = fabs(zim_d) < 1e-12 && zre_d > 1.0;
 
             mpfr_t lzmag; mpfr_init2(lzmag, wp);
@@ -727,8 +834,13 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
             lcx_clear(&Lz);
             mpfr_clear(lzmag);
 
-            if (!s_posint && !a_nonposint && !on_cut && small_logz)
-                out = lp_erdelyi_large_z(s, a, &Z, &sc, &ac, out_prec, wp);
+            /* Real z < -1 with real s, a: Phi is real-analytic along
+             * (-Infinity, 1), so the continuation is real; drop the
+             * working-precision imaginary residue. */
+            if (!on_cut)
+                out = lp_large_z_shifted(s, a, &Z, &sc, &ac, out_prec, wp,
+                                         !s_posint && small_logz,
+                                         real_only && zre_d < 0.0);
         }
     }
     lcx_clear(&Z); lcx_clear(&sc); lcx_clear(&ac); lcx_clear(&res);

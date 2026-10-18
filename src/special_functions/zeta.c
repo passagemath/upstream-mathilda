@@ -547,6 +547,28 @@ static Expr* zeta_numeric(Expr* s, Expr* a) {
     mpfr_prec_t out_prec = zeta_out_prec(s, a);
     mpfr_prec_t wp = out_prec + 64;
 
+    /* Guard bits for Re(s) < 0 (mirrors hz_numeric in hurwitzzeta.c): the
+     * head terms grow like (N+|a|)^(-Re s) while the value is far smaller, so
+     * the Euler-Maclaurin sum cancels ~(-Re s) log2(N+|a|) bits.  Without them
+     * Zeta[-38.5, 2.3] came out as -1.45e22 (true value -1.72e14) at every
+     * precision.  `nest` bounds the N zeta_em_terms picks once the guard is
+     * added (it also covers the Re(a) < 0 extension of N). */
+    {
+        double sre_d = 0.0, are_d = 0.0, aim_d = 0.0;
+        mpfr_t t;
+        mpfr_init2(t, 64);
+        if (zeta_set_mpfr(t, sre)) sre_d = mpfr_get_d(t, ZRND);
+        if (zeta_set_mpfr(t, are)) are_d = mpfr_get_d(t, ZRND);
+        if (zeta_set_mpfr(t, aim)) aim_d = mpfr_get_d(t, ZRND);
+        mpfr_clear(t);
+        if (sre_d < 0.0 && isfinite(sre_d)) {
+            double digits = (double)wp * 0.30103 + 5.0;
+            double nest = digits + 5.0 * fabs(sre_d) + 74.0;
+            double guard = -sre_d * log2(nest + hypot(are_d, aim_d) + 9.0) + 16.0;
+            if (guard < 1e7) wp += (mpfr_prec_t)guard;
+        }
+    }
+
     bool real_only = (sim == zero) && (aim == zero);
 
     zcx sc, ac, res;

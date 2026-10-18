@@ -213,6 +213,30 @@ void test_hz_argcount() {
     assert_eval_eq("HurwitzZeta[1, 2, 3]", "HurwitzZeta[1, 2, 3]", 0);
 }
 
+/* ---- Re(s) < 0: the principal-branch imaginary part, and cancellation --- */
+
+void test_hz_negative_s() {
+    /* Negative non-integer a: the k = 0 summand (-1/2)^(5/2) is imaginary, so
+     * the value is complex (mpmath zeta(-2.5, -0.5)). It used to be forced
+     * real, dropping 0.176777 I. */
+    assert_complex_close("HurwitzZeta[-2.5, -0.5]",
+                         -0.007011334254425124715, 0.1767766952966368811, 1e-12);
+    assert_eval_startswith("HurwitzZeta[-2.5`25, -0.5`25]",
+                           "-0.00701133425442512471520");
+    /* Integer s keeps every summand real: still a Real. */
+    assert_close("HurwitzZeta[3, -3.5]", 0.0307784106605138472745, 1e-9);
+    /* Large -s: the Euler-Maclaurin head sum cancels ~(-s) log2 N bits. These
+     * came out as 1.2e42 (machine) and 1.05e28 (25 digits); mpmath reference
+     * -136480636625537.3949011079. */
+    assert_close("Abs[HurwitzZeta[-38.5, 0.5]/(-136480636625537.3949011079) - 1]",
+                 0.0, 1e-13);
+    assert_eval_startswith("HurwitzZeta[-38.5`25, 0.5`25]", "-136480636625537.3949011");
+    /* Beyond the double range: the extended-exponent value, not Overflow[]
+     * (mpmath zeta(-300.5, 0.5) = 1.67567821924552743936e375). */
+    assert_eval_eq("Abs[HurwitzZeta[-300.5, 0.5]/(1.6756782192455274394 10^375) - 1] < 10^-13",
+                   "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -223,6 +247,7 @@ int main() {
     TEST(test_hz_nonpositive_integer_a);
     TEST(test_hz_machine_real);
     TEST(test_hz_negative_axis_branch);
+    TEST(test_hz_negative_s);
     TEST(test_hz_machine_complex);
     TEST(test_hz_arbitrary_precision);
     TEST(test_hz_arbitrary_complex);

@@ -135,6 +135,25 @@ void test_erf_arbitrary_complex() {
         "1.2048475583142180027021126820");
 }
 
+/* ---- |Im z| beyond the machine kernel: extended exponent, not Overflow -- */
+
+void test_erf_large_complex() {
+    /* The machine kernel declines |Im z| > 26 and |erf| ~ 1.7e385 exceeds the
+     * double range; Erf returned Overflow[] while Erfc/Erfi did not. mpmath:
+     * erf(3+30i) = -1.24897783266730786e385 - 1.14353681145367294e385 i. */
+    assert_eval_eq("Abs[Erf[3. + 30. I]/(-1.24897783266730786 10^385 - "
+                   "1.14353681145367294 10^385 I) - 1] < 10^-13", "True", 0);
+    /* |z| = 100 (arb kernel; the series cap used to run out): mpmath
+     * erf(0.5+100i) = -1.97618773074101295e4340 + 3.32714786217951006e4340 i. */
+    assert_eval_eq("Abs[Erf[0.5 + 100. I]/(-1.97618773074101295 10^4340 + "
+                   "3.32714786217951006 10^4340 I) - 1] < 10^-13", "True", 0);
+    assert_eval_eq("Abs[Erfi[100. + 0.5 I]/(3.32714786217951006 10^4340 - "
+                   "1.97618773074101295 10^4340 I) - 1] < 10^-13", "True", 0);
+    /* Moderate |z| through arb still lands on machine Reals. */
+    assert_complex_close("Erf[3. + 20. I]", 8.15453402888295e167, 1.60442324870228e168, 1e154);
+    assert_eval_eq("MachineNumberQ[Re[Erf[3. + 20. I]]]", "True", 0);
+}
+
 /* ---- two-argument generalized form ---------------------------------- */
 
 void test_erf_two_arg() {
@@ -227,6 +246,7 @@ int main() {
     TEST(test_erf_arbitrary_precision);
     TEST(test_erf_machine_complex);
     TEST(test_erf_arbitrary_complex);
+    TEST(test_erf_large_complex);
     TEST(test_erf_two_arg);
     TEST(test_erf_derivatives);
     TEST(test_erf_listable);

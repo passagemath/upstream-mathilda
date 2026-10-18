@@ -20,6 +20,7 @@
 #include "ndarray.h"    /* ndt_get_i / ndarray_to_nested_list: N over a packed
                          * integer buffer widens it to float64 in place. */
 
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -1507,6 +1508,34 @@ static Expr* demote_to_machine_if_fits(Expr* r) {
     return r;
 }
 
+/* Public: lower a (consumed) MPFR or Complex[MPFR|Real, MPFR|Real] value to
+ * machine Reals when every part fits a normal double (a part that is exactly
+ * zero is fine); otherwise return it unchanged -- the extended-exponent
+ * convention for a machine call whose value lies outside the double range.
+ * For heads that compute a machine-precision call through arb (53-bit MPFR
+ * out). */
+Expr* numeric_lower_mpfr_to_machine(Expr* r) {
+    if (!r) return r;
+    Expr *re, *im;
+    bool cx = is_complex(r, &re, &im);
+    if (!cx) { re = r; im = NULL; }
+    Expr* parts[2] = { re, im };
+    double d[2] = { 0.0, 0.0 };
+    for (int i = 0; i < 2; i++) {
+        Expr* p = parts[i];
+        if (!p) continue;
+        if (p->type == EXPR_REAL) { d[i] = p->data.real; continue; }
+        if (p->type == EXPR_INTEGER && p->data.integer == 0) continue;
+        if (p->type != EXPR_MPFR) return r;
+        if (mpfr_zero_p(p->data.mpfr)) continue;
+        d[i] = mpfr_get_d(p->data.mpfr, MPFR_RNDN);
+        if (!isfinite(d[i]) || fabs(d[i]) < DBL_MIN) return r;
+    }
+    expr_free(r);
+    if (!cx) return expr_new_real(d[0]);
+    return make_complex(expr_new_real(d[0]), expr_new_real(d[1]));
+}
+
 Expr* numeric_promote_machine_call(const Expr* call) {
     if (!call || call->type != EXPR_FUNCTION) return NULL;
     size_t n = call->data.function.arg_count;
@@ -1560,6 +1589,7 @@ Expr* numeric_promote_machine_call(const Expr* call) {
 }
 #else  /* !USE_MPFR: no arbitrary-precision path to promote into */
 Expr* numeric_promote_machine_call(const Expr* call) { (void)call; return NULL; }
+Expr* numeric_lower_mpfr_to_machine(Expr* r) { return r; }
 #endif /* USE_MPFR */
 
 /* Wrap the pure-real machine result `v` of a unary numeric `call` (head[x]),

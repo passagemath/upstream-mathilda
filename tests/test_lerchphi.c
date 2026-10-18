@@ -179,6 +179,30 @@ void test_lp_large_z_continuation() {
                  "- PolyLog[0.7+0.3 I, 2.+0.5 I]]", 0.0, 1e-12);
 }
 
+/* ---- z < -1 on the real axis, and Re(a) < 0 with |z| > 1 ------------- */
+
+void test_lp_negative_real_axis() {
+    /* Phi is real-analytic on (-Infinity, 1): mpmath lerchphi(-3, 1.5, 0.5) =
+     * 2.06335984820645165990646446. Was 6.35096 + 1.44603 I (machine) and
+     * 2.0633586... - 6.05e-7 I (25 digits): the HurwitzZeta[s - n, a] terms of
+     * the Erdelyi sum lost all their digits to cancellation. */
+    assert_close("LerchPhi[-3.0, 1.5, 0.5]", 2.06335984820645166, 1e-13);
+    assert_eval_startswith("N[LerchPhi[-3, 3/2, 1/2], 25]", "2.06335984820645165990646");
+    assert_eval_startswith("LerchPhi[-3`25, 3/2`25, 1/2`25]", "2.06335984820645165990646");
+    assert_close("LerchPhi[-10.0, 0.5, 2.3]", 0.0754626296279654455, 1e-13);
+    /* Re(a) < 0: Mathematica's symmetric power ((k+a)^2)^(-s/2); the
+     * principal-branch Erdelyi value (-3.48173) was returned before. */
+    assert_close("LerchPhi[-1.5, 1.5, -0.5]", -0.653306507726677385, 1e-13);
+    assert_complex_close("LerchPhi[-3.0 + 0.5 I, 1.5, -1.7]",
+                         39.979707276160178, -13.525941409766727, 1e-11);
+    /* Domains the Erdelyi expansion cannot reach, through arb: integer s on
+     * the negative axis, |Log z| > 2 Pi, and a machine non-positive integer a
+     * (its singular k = -a term excluded). mpmath references. */
+    assert_close("LerchPhi[-3., 2, 0.5]", 3.2816975460586266583, 1e-13);
+    assert_close("LerchPhi[-500., 1.5, 0.5]", 0.380640321216828478, 1e-13);
+    assert_close("LerchPhi[-3., 1.5, -2.]", -17.758254183950179456, 1e-12);
+}
+
 /* ---- |z| > 1 stays symbolic where no continuation is implemented ----- */
 
 void test_lp_large_z_symbolic() {
@@ -274,6 +298,7 @@ int main() {
     TEST(test_lp_arbitrary_precision);
     TEST(test_lp_arbitrary_complex);
     TEST(test_lp_large_z_continuation);
+    TEST(test_lp_negative_real_axis);
     TEST(test_lp_large_z_symbolic);
     TEST(test_lp_doubly_infinite);
     TEST(test_lp_include_singular_term);

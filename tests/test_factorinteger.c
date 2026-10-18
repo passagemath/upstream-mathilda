@@ -113,6 +113,21 @@ static void test_methods(void) {
           "{{1000000000039, 1}, {1000000000000037, 1}}");
     check("FactorInteger`Fermat[1000000007*1000000009]", "{{1000000007, 1}, {1000000009, 1}}");
     check("FactorInteger`Lehman[1000003*1000033]", "{{1000003, 1}, {1000033, 1}}");
+    /* Bignum Lehman reaches multipliers k >= 2 above ~45 digits: p/q near a
+     * small rational u/v is found at k = uv.  Before the (k, fraction) sweep
+     * the k = 1 window alone (n^(1/6)/4 values) used the whole budget. */
+    check("With[{p = NextPrime[10^25]}, FactorInteger`Lehman[p NextPrime[3 p]]]",
+          "{{10000000000000000000000013, 1}, {30000000000000000000000067, 1}}");
+    check("With[{p = NextPrime[10^30]}, FactorInteger`Lehman[p NextPrime[3 p]]]",
+          "{{1000000000000000000000000000057, 1}, {3000000000000000000000000000181, 1}}");
+    check("With[{p = NextPrime[10^30]}, FactorInteger`Lehman[p NextPrime[Floor[5 p/7]]]]",
+          "{{714285714285714285714285714443, 1}, {1000000000000000000000000000057, 1}}");
+    /* Near-square factors (k = 1, plain Fermat's case) are still found. */
+    check("FactorInteger`Lehman[NextPrime[10^25] NextPrime[10^25 + 10^16]]",
+          "{{10000000000000000000000013, 1}, {10000000010000000000000003, 1}}");
+    /* "Iterations" is honoured: 100 steps cannot reach k = 3. */
+    check("Quiet[Length[With[{p = NextPrime[10^25]}, "
+          "FactorInteger`Lehman[p NextPrime[3 p], \"Iterations\" -> 100]]]]", "1");
     check("FactorInteger`ShanksSquareForms[1000000000000037*2000000000000021]",
           "{{1000000000000037, 1}, {2000000000000021, 1}}");
     check("FactorInteger`SQUFOF[1000003*1000033]", "{{1000003, 1}, {1000033, 1}}");

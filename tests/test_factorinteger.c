@@ -125,6 +125,22 @@ static void test_methods(void) {
     /* Near-square factors (k = 1, plain Fermat's case) are still found. */
     check("FactorInteger`Lehman[NextPrime[10^25] NextPrime[10^25 + 10^16]]",
           "{{10000000000000000000000013, 1}, {10000000010000000000000003, 1}}");
+    check("With[{p = NextPrime[10^30]}, FactorInteger`Lehman[p NextPrime[Floor[2 p/3]]]]",
+          "{{666666666666666666666666666899, 1}, {1000000000000000000000000000057, 1}}");
+    /* A near-square factor at 3/4 of the k = 1 window (4 10^7 values of a):
+     * found at the default budget (2^28; v0.463's unweighted sweep missed it
+     * even at 2^26), and budget-monotone -- a smaller "Iterations" stops
+     * short, a larger one finds it. */
+    check("FactorInteger`Lehman[NextPrime[10^25] NextPrime[10^25 + 4 10^16]]",
+          "{{10000000000000000000000013, 1}, {10000000040000000000000117, 1}}");
+    check("Quiet[Length[FactorInteger`Lehman[NextPrime[10^25] NextPrime[10^25 + 4 10^16], "
+          "\"Iterations\" -> 2^24]]]", "1");
+    check("Length[FactorInteger`Lehman[NextPrime[10^25] NextPrime[10^25 + 4 10^16], "
+          "\"Iterations\" -> 2^26]]", "2");
+    /* Bignum Fermat: the 64-wide residue filter (a block of 64 values of a
+     * per nine mask lookups) against a 1.25 10^6-value offset. */
+    check("FactorInteger`Fermat[NextPrime[10^25] NextPrime[10^25 + 10^16]]",
+          "{{10000000000000000000000013, 1}, {10000000010000000000000003, 1}}");
     /* "Iterations" is honoured: 100 steps cannot reach k = 3. */
     check("Quiet[Length[With[{p = NextPrime[10^25]}, "
           "FactorInteger`Lehman[p NextPrime[3 p], \"Iterations\" -> 100]]]]", "1");

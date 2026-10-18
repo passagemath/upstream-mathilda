@@ -696,7 +696,26 @@ static Expr* parse_number(ParserState* s) {
             return NULL;
         }
         if (exp_neg) exp_val = -exp_val;
-        result = apply_pow10_scale(result, exp_val);
+        /* A machine-real mantissa is rescaled from its decimal text in one
+         * correctly rounded strtod: d * 10^e rounds twice, so `1.5*^-5`
+         * would not be the double nearest 1.5e-5 and printed forms of
+         * reals would not re-read to the same value. */
+        size_t mlen = 0;
+        while (mantissa_start + mlen < save
+               && (isdigit((unsigned char)mantissa_start[mlen])
+                   || mantissa_start[mlen] == '.' || mantissa_start[mlen] == '-'
+                   || mantissa_start[mlen] == '+'))
+            mlen++;
+        if (result && result->type == EXPR_REAL && mlen > 0 && mlen < 96
+            && (mantissa_start[mlen] == '`' || mantissa_start + mlen == save)) {
+            char tbuf[128];
+            snprintf(tbuf, sizeof tbuf, "%.*se%ld", (int)mlen, mantissa_start, exp_val);
+            double d = strtod(tbuf, NULL);
+            expr_free(result);
+            result = expr_new_real(d);
+        } else {
+            result = apply_pow10_scale(result, exp_val);
+        }
     }
 
     return result;

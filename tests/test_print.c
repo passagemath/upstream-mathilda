@@ -426,6 +426,39 @@ void test_texform_fraction_parenthesisation() {
  * that itself prints as a quotient (a negative Power, a Rational) must be
  * parenthesised, or the text re-reads as a different value -- "1/1/x" is
  * (1/1)/x = 1/x, not x. */
+/* InputForm / ToString[_, InputForm] print machine reals with the shortest
+ * digits that read back to the same double (a 17-digit mantissa carries the
+ * machine mark `), and *^ literals parse with one correct rounding, so a
+ * printed expression re-reads to an identical one. */
+void test_inputform_real_roundtrip() {
+    static const struct { const char* in; const char* out; } cases[] = {
+        {"ToString[{-1.8954942670339809, 2.123456789123, 0.1, 3.}, InputForm]",
+         "{-1.8954942670339809, 2.123456789123, 0.1, 3.0}"},
+        {"ToString[{N[Pi], 1/3., 1.5*^-5, 6.02*^23}, InputForm]",
+         "{3.141592653589793, 0.3333333333333333, 1.5*^-5, 6.02*^23}"},
+        {"ToString[1.5000000000000002`*^-5, InputForm]", "1.5000000000000002`*^-5"},
+        {"With[{v = {N[Pi], 1/3., 0.1, 1.2345678901234567*^-5, 2.^70, N[E]^-40}}, "
+         "ToExpression[ToString[v, InputForm]] === v]", "True"},
+        {"1.5*^-5 == 0.000015 && 6.02*^23 === 6.02`*^23 && 6.02*^23 == 6.02*10^23", "True"},
+        {"ToString[{2.5, \"a\\\"b\"}, InputForm]", "{2.5, \"a\\\"b\"}"},
+        {"ToString[{1.5, N[Pi]}]", "{1.5, 3.14159}"},
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = (res->type == EXPR_STRING) ? strdup(res->data.string) : expr_to_string(res);
+        if (!str || strcmp(str, cases[i].out) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].out);
+        ASSERT(str && strcmp(str, cases[i].out) == 0);
+        free(str);
+        expr_free(e);
+        expr_free(res);
+    }
+    printf("PASS: InputForm machine reals round-trip\n");
+}
+
 void test_quotient_denominator_parenthesised() {
     static const struct { const char* in; const char* out; } cases[] = {
         {"HoldForm[Power[Power[x, -1], -1]]",          "1/(1/x)"},
@@ -468,6 +501,7 @@ int main() {
     TEST(test_radical_body_unbracketed);
     TEST(test_texform_fraction_parenthesisation);
     TEST(test_quotient_denominator_parenthesised);
+    TEST(test_inputform_real_roundtrip);
 
     printf("All print tests passed!\n");
     return 0;

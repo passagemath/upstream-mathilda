@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include <inttypes.h>
+#include <math.h>
 
 /* ---------------------------------------------------------------------------
  * Output sink.  Every output primitive in this file writes through g_print_sink
@@ -249,11 +250,43 @@ static void print_function_fullform(Expr* e) {
     printf("]");
 }
 
+/* InputForm/FullForm text of a machine real: the shortest decimal that reads
+ * back to the same double, so the printed form re-parses to the same value
+ * (OutputForm's %g keeps six digits and does not).  The parser makes a
+ * literal of 17+ significant digits arbitrary precision, so a 17-digit
+ * mantissa carries Mathematica's machine-precision mark "`".  Exponents use
+ * the input syntax *^. */
+static void print_real_roundtrip(double d) {
+    char buf[64];
+    int digits = 15;
+    for (; digits <= 17; digits++) {
+        snprintf(buf, sizeof(buf), "%.*g", digits, d);
+        if (strtod(buf, NULL) == d) break;
+    }
+    if (digits > 17) digits = 17;
+    char* epos = strpbrk(buf, "eE");
+    char mant[64], expo[16] = "";
+    if (epos) {
+        size_t n = (size_t)(epos - buf);
+        memcpy(mant, buf, n); mant[n] = '\0';
+        int ev = atoi(epos + 1);
+        snprintf(expo, sizeof(expo), "*^%d", ev);
+    } else {
+        snprintf(mant, sizeof(mant), "%s", buf);
+    }
+    if (!strchr(mant, '.')) strcat(mant, ".0");   /* Mathilda writes 3.0, not 3. */
+    printf("%s%s%s", mant, digits >= 17 ? "`" : "", expo);
+}
+
 void expr_print_fullform(Expr* e) {
     if (!e) { printf("Null"); return; }
     switch (e->type) {
         case EXPR_INTEGER: printf("%" PRId64, e->data.integer); break;
         case EXPR_REAL: {
+            if (g_inputform_depth > 0 && isfinite(e->data.real)) {
+                print_real_roundtrip(e->data.real);
+                break;
+            }
             char buf[64];
             snprintf(buf, sizeof(buf), "%g", e->data.real);
             if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL && strchr(buf, 'E') == NULL) printf("%s.0", buf);

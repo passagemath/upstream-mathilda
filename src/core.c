@@ -4114,8 +4114,14 @@ Expr* builtin_tostring(Expr* res) {
         /* A string is its own OutputForm: no render, no quotes. */
         if (expr->type == EXPR_STRING) return expr_copy(expr);
         str = expr_to_string_outputform(expr);
-    } else if (form_name == SYM_InputForm
-               || strcmp(form_name, "StandardForm") == 0) {
+    } else if (form_name == SYM_InputForm) {
+        /* Print under the InputForm wrapper so the text re-parses: literal
+         * heads (SeriesData), quoted strings, round-trip machine reals. */
+        Expr* wrapper = expr_new_function(expr_new_symbol(SYM_InputForm),
+                                          (Expr*[]){ expr_copy(expr) }, 1);
+        str = expr_to_string(wrapper);
+        expr_free(wrapper);
+    } else if (strcmp(form_name, "StandardForm") == 0) {
         str = expr_to_string(expr);
     } else {
         return NULL;

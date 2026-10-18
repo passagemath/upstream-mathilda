@@ -213,7 +213,7 @@ static void test_series_loggamma_at_infinity(void) {
     setup_full();
     assert_outputform(
         "Normal[Series[LogGamma[x], {x, Infinity, 5}]]",
-        "1/2 Log[2 Pi] - x - 1/360/x^3 + 1/1260/x^5 + 1/12/x + Log[x] (-1/2 + x)");
+        "1/2 Log[2 Pi] - x - 1/(360 x^3) + 1/(1260 x^5) + 1/(12 x) + Log[x] (-1/2 + x)");
 }
 
 /* 10c. Stirling asymptotic expansions of PolyGamma[m, x] at Infinity
@@ -230,7 +230,7 @@ static void test_series_polygamma_at_infinity(void) {
     /* PolyGamma[x] (unindexed) normalises to PolyGamma[0, x] -> same head. */
     assert_outputform(
         "Normal[Series[PolyGamma[x], {x, Infinity, 4}]]",
-        "Log[x] - 1/2/x - 1/12/x^2 + 1/120/x^4");
+        "Log[x] - 1/(2 x) - 1/(12 x^2) + 1/(120 x^4)");
     /* Trigamma (m=1): 1/x + 1/(2x^2) + 1/(6x^3) - 1/(30x^5). */
     assert_fullform(
         "Series[PolyGamma[1, x], {x, Infinity, 5}]",
@@ -568,7 +568,7 @@ static void test_series_arctan_at_infinity(void) {
     /* Composes under Times: x (Pi/2 - ArcTan[x]) -> 1 - 1/(3x^2) + ... */
     assert_outputform(
         "Normal[Series[x (Pi/2 - ArcTan[x]), {x, Infinity, 4}]]",
-        "1 - 1/3/x^2 + 1/5/x^4");
+        "1 - 1/(3 x^2) + 1/(5 x^4)");
 }
 static void test_series_arctanh(void) {
     setup_full();

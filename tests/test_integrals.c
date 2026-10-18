@@ -28,13 +28,13 @@ void test_integrals() {
     assert_eval_eq("Integrate[(1 + 2x)^3/(3 + 4x)^2, x]", "1/4 x^2 + 1/(96 + 128 x) + 3/32 Log[3 + 4 x]", 0);
     
     printf("Formula 60\n");
-    assert_eval_eq("Integrate[1/(3 + 4x^2), x]", "(1/2 ArcTan[(2 x)/Sqrt[3]])/Sqrt[3]", 0);
+    assert_eval_eq("Integrate[1/(3 + 4x^2), x]", "ArcTan[(2 x)/Sqrt[3]]/(2 Sqrt[3])", 0);
     
     printf("Formula 61\n");
     /* Integrate[1/(a^2 - x^2), x] = ArcTanh[x/a]/a. The three-stage
      * Integrate cascade emits this directly rather than the equivalent
      * Log-decomposition that the previous Bronstein-only path produced. */
-    assert_eval_eq("Integrate[1/(3 - 4x^2), x]", "(1/2 ArcTanh[(2 x)/Sqrt[3]])/Sqrt[3]", 0);
+    assert_eval_eq("Integrate[1/(3 - 4x^2), x]", "ArcTanh[(2 x)/Sqrt[3]]/(2 Sqrt[3])", 0);
     
     printf("Formula 62\n");
     assert_eval_eq("Integrate[1/(9 + 16x^2), x]", "1/12 ArcTan[4/3 x]", 0);

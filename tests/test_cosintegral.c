@@ -187,7 +187,7 @@ void test_ci_series_at_infinity() {
 void test_ci_series_at_point() {
     /* Generic-point Taylor via the Cos[x]/x derivative rule. */
     assert_eval_eq("Series[CosIntegral[x], {x, Pi, 2}]",
-        "CosIntegral[Pi] + -1/Pi (x - Pi) + 1/2/Pi^2 (x - Pi)^2 + O[x - Pi]^3", 0);
+        "CosIntegral[Pi] - (x - Pi)/Pi + (x - Pi)^2/(2 Pi^2) + O[x - Pi]^3", 0);
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

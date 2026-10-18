@@ -146,7 +146,7 @@ void test_fs_derivatives() {
 
 void test_fs_series_at_zero() {
     assert_eval_eq("Series[FresnelS[x], {x, 0, 11}]",
-        "1/6 Pi x^3 + -1/336 Pi^3 x^7 + 1/42240 Pi^5 x^11 + O[x]^12", 0);
+        "1/6 Pi x^3 - 1/336 Pi^3 x^7 + 1/42240 Pi^5 x^11 + O[x]^12", 0);
     assert_eval_eq("Series[FresnelS[x], {x, 0, 20}]",
         "1/6 Pi x^3 + -1/336 Pi^3 x^7 + 1/42240 Pi^5 x^11 + -1/9676800 Pi^7 x^15 + "
         "1/3530096640 Pi^9 x^19 + O[x]^21", 0);

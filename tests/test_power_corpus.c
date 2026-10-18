@@ -70,14 +70,14 @@ static void test_bug3_imag_times_positive(void) {
 /* Bug 4: integer-part extraction for negative rational exponents. */
 static void test_bug4_negative_integer_part(void) {
     /* Print form: 1/2/2^(2/3) (Times-print of Rational[1,2] * Power[2,-2/3]). */
-    assert_eval_eq("Power[2, -5/3]",       "1/2/2^(2/3)", 0);
+    assert_eval_eq("Power[2, -5/3]",       "1/(2 2^(2/3))", 0);
     /* FullForm pinpoints the Times[Rational[1,2], Power[2, Rational[-2,3]]]. */
     assert_eval_eq("FullForm[Power[2, -5/3]]",
                    "Times[Rational[1, 2], Power[2, Rational[-2, 3]]]", 0);
     /* Negative-half exponent: 2^(-3/2) = 1/2 * 2^(-1/2). */
-    assert_eval_eq("Power[2, -3/2]", "1/2/Sqrt[2]", 0);
+    assert_eval_eq("Power[2, -3/2]", "1/(2 Sqrt[2])", 0);
     /* Sqrt[2]/4 must canonicalise to the same proper-fraction form. */
-    assert_eval_eq("Sqrt[2]/4", "1/2/Sqrt[2]", 0);
+    assert_eval_eq("Sqrt[2]/4", "1/(2 Sqrt[2])", 0);
     /* Positive side still works (regression). */
     assert_eval_eq("Power[2, 5/3]", "2 2^(2/3)", 0);
     /* Proper-fraction stays as-is. */
@@ -107,7 +107,7 @@ static void test_bug5_zero_to_zero(void) {
  * extraction (Sqrt[2/3], (4/9)^(2/3)) stay unevaluated. */
 static void test_rational_base_rational_exp(void) {
     /* Numerator-only trigger (|n| == 1). */
-    assert_eval_eq("Power[1/54, 2/3]", "1/9/2^(2/3)", 0);
+    assert_eval_eq("Power[1/54, 2/3]", "1/(9 2^(2/3))", 0);
     assert_eval_eq("Power[1/8, 2/3]",  "1/4", 0);
     assert_eval_eq("Power[1/4, 1/2]",  "1/2", 0);
 
@@ -142,7 +142,7 @@ static void test_power_of_times_positives(void) {
 
     /* Chains with rational-base distribution: Sqrt[(1/54)^(2/3)] cascades
      * (1/54)^(2/3) -> 1/9 * 2^(-2/3), then Sqrt of that distributes. */
-    assert_eval_eq("Sqrt[Power[1/54, 2/3]]", "1/3/2^(1/3)", 0);
+    assert_eval_eq("Sqrt[Power[1/54, 2/3]]", "1/(3 2^(1/3))", 0);
 
     /* Nested clean extraction. */
     assert_eval_eq("Sqrt[4 Sqrt[3]]", "2 3^(1/4)", 0);

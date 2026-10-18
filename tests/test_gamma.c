@@ -181,7 +181,7 @@ void test_gamma_incomplete_int_closed() {
     assert_eval_eq("Gamma[2, 3]", "4/E^3", 0);            /* exact stays exact */
     assert_eval_eq("Gamma[2, x]", "(1 + x) E^(-x)", 0);   /* symbolic reduces  */
     assert_eval_eq("Gamma[3, x]", "E^(-x) (2 + 2 x + x^2)", 0);
-    assert_eval_eq("Gamma[2, 1/2]", "3/2/Sqrt[E]", 0);    /* exact rational z  */
+    assert_eval_eq("Gamma[2, 1/2]", "3/(2 Sqrt[E])", 0);    /* exact rational z  */
     /* Gamma[4, 2] = 38 e^-2. */
     assert_eval_eq("Gamma[4, 2]", "38/E^2", 0);
     /* Numerically consistent with the incomplete-gamma integral. */

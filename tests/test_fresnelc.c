@@ -147,13 +147,13 @@ void test_fc_derivatives() {
 
 void test_fc_series_at_zero() {
     assert_eval_eq("Series[FresnelC[x], {x, 0, 9}]",
-        "x + -1/40 Pi^2 x^5 + 1/3456 Pi^4 x^9 + O[x]^10", 0);
+        "x - 1/40 Pi^2 x^5 + 1/3456 Pi^4 x^9 + O[x]^10", 0);
     assert_eval_eq("Series[FresnelC[x], {x, 0, 20}]",
         "x + -1/40 Pi^2 x^5 + 1/3456 Pi^4 x^9 + -1/599040 Pi^6 x^13 + "
         "1/175472640 Pi^8 x^17 + O[x]^21", 0);
     /* Composed argument. */
     assert_eval_eq("Series[FresnelC[x^2], {x, 0, 10}]",
-        "x^2 + -1/40 Pi^2 x^10 + O[x]^11", 0);
+        "x^2 - 1/40 Pi^2 x^10 + O[x]^11", 0);
 }
 
 void test_fc_series_at_infinity() {

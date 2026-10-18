@@ -115,7 +115,7 @@ static void test_sqrt_of_cbrt_quotient_squared(void) {
      * of 2^(1/3)/6 = 2^(1/3 - log_2 6) = ...; verify it's a 2^(-2/3)
      * form proportional to 1/3). */
     assert_eval_eq("Simplify[Sqrt[Power[2, 1/3]/6] Sqrt[Power[2, 1/3]/6]]",
-                   "1/3/2^(2/3)", 0);
+                   "1/(3 2^(2/3))", 0);
 }
 
 /* =========================== Phase F: canonical-dedup =========================== */

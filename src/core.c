@@ -4245,7 +4245,7 @@ Expr* builtin_symbol(Expr* res) {
  *      thread accrues CPU no faster than wall time, so the timer fires at
  *      (or just after) the deadline, while N busy threads (the parallel
  *      QS / ECM in src/numbertheory/factorinteger/) make it fire ~N times
- *      early -- which the deadline check absorbs.  (Until v0.461 the CPU
+ *      early -- which the deadline check absorbs.  (Until v0.463 the CPU
  *      timer WAS the budget, so a threaded FactorInteger aborted 10-16x
  *      early in elapsed time.)  SIGPROF is used rather than SIGALRM /
  *      ITIMER_REAL so other SIGALRM users -- notably the test-harness

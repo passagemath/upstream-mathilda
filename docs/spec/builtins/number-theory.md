@@ -557,7 +557,7 @@ seeded by `n`, so the answer, the time taken and any `nofac` depend on `n` alone
 | `"TrialDivision"` | Primes are tested in word-sized products, one bignum remainder per 2–4 primes; a segmented sieve takes over above 2^20. The default bound is sqrt(n) when that is below 10^7, else 10^7. | `"Bound"` (≤ 2^40) |
 | `"PollardRho"` | Brent's variant with batched gcds and backtracking; Montgomery arithmetic on one and two words, GMP above that. | `"Iterations"`, `"Starts"` |
 | `"Fermat"` | Fermat's method with quadratic-residue filters modulo nine small moduli. | `"Iterations"` |
-| `"Lehman"` | Lehman's O(n^(1/3)) method; complete below 2^42, budgeted above (2^24 steps by default). On bignums the multipliers are interleaved: each round scans multiplier k to the fraction min(1, c/k) of its window, and c grows 4× per round, so factors with p/q near a small rational u/v (multiplier k = uv) are found at any size (v0.461; above ~45 digits the k = 1 window used to take the whole budget). | `"Iterations"` |
+| `"Lehman"` | Lehman's O(n^(1/3)) method; complete below 2^42, budgeted above (2^24 steps by default). On bignums the multipliers are interleaved: each round scans multiplier k to the fraction min(1, c/k) of its window, and c grows 4× per round, so factors with p/q near a small rational u/v (multiplier k = uv) are found at any size (v0.463; above ~45 digits the k = 1 window used to take the whole budget). | `"Iterations"` |
 | `"ShanksSquareForms"` (alias `"SQUFOF"`) | SQUFOF over the 16 Gower–Wagstaff multipliers, in word arithmetic for kN < 2^124. | `"Iterations"` |
 | `"CFRAC"` | Morrison–Brillhart: Knuth–Schroeppel multiplier, early-abort trial division, single large primes, GF(2) elimination. Relation collection is pipelined across threads: one thread extends the continued fraction into the next batch while every thread trial-divides the current one, and the hits are replayed in term order. The relations, restarts and divisor are therefore those of the serial method for any thread count. | `"Iterations"` |
 | `"Dixon"` | Random squares drawn near sqrt(kN), so the residues are square-root sized, with the same relation machinery as CFRAC. The draws are taken in batches; the candidates are built and trial-divided in parallel, and the hits are replayed in draw order. Results and the random stream are those of the serial method. | `"Iterations"` |
@@ -572,7 +572,7 @@ native mpz ECM, p-1 and p+1. The quadratic sieve and every other method are nati
 dependency.
 
 Threads: the quadratic sieve, ECM, p+1, CFRAC, Dixon and BlakeRationalBaseDescent use every online CPU (up to 16) in builds with
-`MATHILDA_THREADS`. `TimeConstrained` budgets are elapsed time (v0.461; they were process CPU time, so a
+`MATHILDA_THREADS`. `TimeConstrained` budgets are elapsed time (v0.463; they were process CPU time, so a
 16-thread region used a budget up 16 times too fast). An abort is taken on the main thread as soon as the
 current region ends. Long units of work stop early when the deadline passes: ECM curves and p±1 seeds through
 GMP-ECM's `stop_asap` hook, QS families every 16 polynomials, and BlakeRationalBaseDescent per candidate. A

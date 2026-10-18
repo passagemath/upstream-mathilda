@@ -162,6 +162,16 @@ Out[3]= 1 + z
   `ReplaceAll` rewrites each position once); `//.`, or a DownValue/UpValue
   re-firing to a fixed point, rewrites the rest. `Plus` and `Times` are
   `Orderless`, so there every subset of operands is reachable.
+- **Cost.** Offsets and spans that cannot match are skipped before any work, using
+  the pattern's first single-operand element (`op[j_]`, `Not[x_]`) as an anchor and
+  rejecting a group that cannot equal an already-bound name (`ff[x_, x_]`) without
+  building it. A failing `And[x_, Not[x_]]` over an n-term conjunction costs O(n)
+  operand tests; `ff[x_, x_]` and `ff[x_, y_, x_]` cost about what the prefix-only
+  match did before v0.462. The exception is a test on a group-absorbing first
+  element, as in `ff[a_?Negative, b_]`: every (offset, span) group is a separate
+  call to the test, so a failing rule of that shape makes about n²/2 test calls.
+- `PatternSequence[...]` as an element of such a rule now also matches an interior
+  run: `ff[x, a, b, y] /. ff[PatternSequence[a, b]] -> w` gives `ff[x, w, y]`.
 
 ```mathematica
 In[1]:= x ** y ** z /. y ** z -> w

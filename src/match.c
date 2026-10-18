@@ -239,6 +239,167 @@ static bool pat_has_optional(Expr* p) {
     return false;
 }
 
+/* ------------------------------------------------------------------
+ *  Span analysis for elements of an ordered Flat call pattern
+ *  (Dot, **, And, Or, StringJoin, a user head with only Flat).
+ *
+ *  In a Flat head a non-sequence element normally absorbs a GROUP of 1..n
+ *  operands (shortest first), so `ff[x_, y_]` against ff[a1..an] tries every
+ *  split.  These predicates let the matcher -- and the rule-application
+ *  leftover search (match_flat_leftover) -- skip splits that provably cannot
+ *  succeed WITHOUT changing which split is found first:
+ *
+ *   - flat_elem_single_span: the element can only ever consume exactly ONE
+ *     operand (a literal, or a call like op[j_] whose head is not the Flat
+ *     head nor a pattern construct).  It is an "anchor": in an ordered head it
+ *     sits at one known operand position.
+ *   - flat_elem_screenable: an anchor whose standalone match (fresh, empty
+ *     env) is a NECESSARY condition for its match under any earlier bindings.
+ *     Pattern-variable reuse only adds equality constraints and a PatternTest
+ *     sees only the element, so this holds unless the element contains a
+ *     construct that is not monotone in the bindings: a Condition (its guard
+ *     can read an earlier binding) or an Except (more bindings make its inner
+ *     pattern STRICTER, i.e. the Except looser).
+ *   - flat_elem_min_span: a lower bound on the operands an element consumes.
+ * ------------------------------------------------------------------ */
+
+/* True when pattern element `p` (an argument of a `flat_head` call pattern) can
+ * only ever match exactly ONE operand -- never a group, never zero.  Mirrors
+ * the matcher's own Flat-element span pruning in match_args_internal: a literal
+ * atom, or a call whose head is neither `flat_head` nor a pattern construct and
+ * which cannot OneIdentity-absorb a group.  Conservative: false when unsure.
+ * PatternSequence / OrderlessPatternSequence are spliced or reordered by the
+ * matcher rather than matched against one operand, so they are excluded. */
+static bool flat_elem_single_span(Expr* p, const char* flat_head) {
+    if (!p) return false;
+    if (p->type == EXPR_FUNCTION && p->data.function.head &&
+        p->data.function.head->type == EXPR_SYMBOL &&
+        p->data.function.head->data.symbol.name == SYM_Pattern &&
+        p->data.function.arg_count == 2)
+        p = p->data.function.args[1];              /* name:inner -> inner */
+    if (p->type != EXPR_FUNCTION) return true;     /* literal atom */
+    Expr* hd = p->data.function.head;
+    if (!hd || hd->type != EXPR_SYMBOL) return false;
+    const char* h = hd->data.symbol.name;
+    if (h == flat_head || h == SYM_Blank || h == SYM_BlankSequence ||
+        h == SYM_BlankNullSequence || h == SYM_Pattern || h == SYM_HoldPattern ||
+        h == SYM_Alternatives || h == SYM_Condition || h == SYM_PatternTest ||
+        h == SYM_Optional || h == SYM_Shortest || h == SYM_Longest ||
+        h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Except ||
+        h == SYM_Verbatim || h == SYM_OptionsPattern ||
+        h == SYM_PatternSequence || h == SYM_OrderlessPatternSequence)
+        return false;
+    if ((get_attributes(h) & ATTR_ONEIDENTITY) && p->data.function.arg_count == 1)
+        return false;
+    return true;
+}
+
+/* True when `p` contains (at any depth, heads included) a call whose head is
+ * the symbol `h1` or `h2` (h2 may be NULL). */
+static bool pat_contains_head(const Expr* p, const char* h1, const char* h2) {
+    if (!p || p->type != EXPR_FUNCTION) return false;
+    const Expr* hd = p->data.function.head;
+    if (hd && hd->type == EXPR_SYMBOL &&
+        (hd->data.symbol.name == h1 || (h2 && hd->data.symbol.name == h2)))
+        return true;
+    if (pat_contains_head(hd, h1, h2)) return true;
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (pat_contains_head(p->data.function.args[i], h1, h2)) return true;
+    return false;
+}
+
+/* Condition and Except: the constructs whose match is not monotone in the
+ * earlier bindings. */
+static bool pat_has_nonmonotone(const Expr* p) {
+    return pat_contains_head(p, SYM_Condition, SYM_Except);
+}
+
+static bool flat_elem_screenable(Expr* p, const char* flat_head) {
+    return flat_elem_single_span(p, flat_head) && !pat_has_nonmonotone(p);
+}
+
+/* An anchor that is a call op[...] (after its name) can only match a call
+ * with head op -- unless op is OneIdentity or the pattern carries an Optional
+ * default (x^n_., op[x_:d, y_] may match a non-op operand).  Returns op when
+ * that head shortcut is sound, else NULL.  Computed once per anchor, not per
+ * operand, since it costs an attribute lookup and a pattern walk. */
+static const char* flat_anchor_head(Expr* anchor) {
+    Expr* a = anchor;
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_Pattern &&
+        a->data.function.arg_count == 2)
+        a = a->data.function.args[1];
+    if (a->type != EXPR_FUNCTION || !a->data.function.head ||
+        a->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* h = a->data.function.head->data.symbol.name;
+    if ((get_attributes(h) & ATTR_ONEIDENTITY) || pat_contains_head(a, SYM_Optional, NULL))
+        return NULL;
+    return h;
+}
+
+/* Standalone (fresh-env) match of one operand against an anchor element, with
+ * the head shortcut `fast_head` (from flat_anchor_head, or NULL) tried first. */
+static bool flat_anchor_accepts(Expr* operand, Expr* anchor, const char* fast_head) {
+    if (fast_head) {
+        switch (operand->type) {
+            case EXPR_INTEGER: case EXPR_BIGINT: case EXPR_REAL:
+            case EXPR_SYMBOL:  case EXPR_STRING:
+#ifdef USE_MPFR
+            case EXPR_MPFR:
+#endif
+                return false;      /* an atom is never a fast_head[...] call */
+            case EXPR_FUNCTION:
+                if (!operand->data.function.head ||
+                    operand->data.function.head->type != EXPR_SYMBOL ||
+                    operand->data.function.head->data.symbol.name != fast_head)
+                    return false;
+                break;
+            default:               /* packed arrays, associations, ...: ask match() */
+                break;
+        }
+    }
+    MatchEnv* probe = env_new();
+    bool ok = match(operand, anchor, probe);
+    env_free(probe);
+    return ok;
+}
+
+/* Lower bound on the number of operands element `p` consumes in a Flat call:
+ * 1 for an anchor, a (named / tested / guarded) Blank or BlankSequence; 0 for
+ * anything else (BlankNullSequence, Optional, Repeated, PatternSequence, ...),
+ * which is always a sound bound. */
+static size_t flat_elem_min_span(Expr* p, const char* flat_head) {
+    if (flat_elem_single_span(p, flat_head)) return 1;
+    for (;;) {
+        if (!p || p->type != EXPR_FUNCTION || !p->data.function.head ||
+            p->data.function.head->type != EXPR_SYMBOL) return 0;
+        const char* h = p->data.function.head->data.symbol.name;
+        if (h == SYM_Pattern && p->data.function.arg_count == 2)
+            p = p->data.function.args[1];
+        else if ((h == SYM_PatternTest || h == SYM_Condition) &&
+                 p->data.function.arg_count == 2)
+            p = p->data.function.args[0];
+        else
+            return (h == SYM_Blank || h == SYM_BlankSequence) ? 1 : 0;
+    }
+}
+
+/* Could the k-operand group  pat_head[subset[0..k)]  (k > 1) be SameQ to the
+ * existing binding `existing`?  Exactly expr_eq(existing, <that group>) except
+ * that it never builds the group, and it answers "maybe" (true) for a packed /
+ * NDArray binding, which expr_eq compares by its own rules.  NULL (unbound)
+ * is "maybe" too. */
+static bool flat_group_may_equal(const Expr* existing, const Expr* pat_head,
+                                 Expr** subset, size_t k) {
+    if (!existing || existing->type == EXPR_NDARRAY) return true;
+    if (existing->type != EXPR_FUNCTION) return false;   /* group is a call */
+    if (existing->data.function.arg_count != k) return false;
+    if (!expr_eq(existing->data.function.head, pat_head)) return false;
+    for (size_t i = 0; i < k; i++)
+        if (!expr_eq(existing->data.function.args[i], subset[i])) return false;
+    return true;
+}
+
 /* Cap on the top-level pattern-element count for which the Orderless
  * constraint-reordering buffer is stack-allocated. Real patterns have a
  * handful of top-level elements; above this we skip the (purely
@@ -1339,11 +1500,35 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         max_k = (n_exprs > 0) ? 1 : 0;
     }
 
+    /* Anchor screen (ordered Flat head only).  When this element can take a
+     * variable span and the NEXT element is a screenable anchor (it consumes
+     * exactly the one operand that follows this element's span, and its
+     * standalone match is necessary -- see flat_elem_screenable), a span k is
+     * viable only if exprs[k] exists and passes the anchor on its own.  Skipping
+     * the other spans removes the group build + downstream match for each, so
+     * `And[x_, Not[x_]]` against a long conjunction costs one cheap operand
+     * test per span instead of an And[...] group per span.  Only spans that
+     * would fail anyway are skipped, in the same order, so the first match --
+     * and therefore the result -- is unchanged. */
+    Expr* anchor_next = NULL;
+    const char* anchor_head = NULL;
+    if (is_flat && !is_orderless && n_pats >= 2 && min_k < max_k &&
+        pat_head && pat_head->type == EXPR_SYMBOL &&
+        flat_elem_screenable(pats[1], pat_head->data.symbol.name)) {
+        anchor_next = pats[1];
+        anchor_head = flat_anchor_head(anchor_next);
+        if (max_k >= n_exprs) {
+            if (n_exprs == 0) { min_k = 1; max_k = 0; }  /* no operand for the anchor */
+            else max_k = n_exprs - 1;
+        }
+    }
+
     if (min_k <= max_k) {
         for (size_t step = 0; step <= max_k - min_k; step++) {
             size_t k = is_longest ? (max_k - step) : (min_k + step);
             if (k > n_exprs) continue;
-            
+            if (anchor_next && !flat_anchor_accepts(exprs[k], anchor_next, anchor_head)) continue;
+
             /* comb (the index combination) is only consumed by extract_subset
              * and advanced by next_combination -- both Orderless-only below.
              * For an ordered head the consumed run is always the prefix, so skip
@@ -1393,7 +1578,20 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 
             if (is_seq || is_rep) {
                 bool type_ok = true;
-                if (is_seq) {
+                if (p_sym) {
+                    /* Already-bound sequence name of a different length: the
+                     * Sequence built below can never equal it -- reject before
+                     * the per-element tests and the O(k) build. */
+                    Expr* ex = env_get(env, p_sym->data.symbol.name);
+                    if (ex && ex->type == EXPR_FUNCTION && ex->data.function.head &&
+                        ex->data.function.head->type == EXPR_SYMBOL &&
+                        ex->data.function.head->data.symbol.name == SYM_Sequence &&
+                        ex->data.function.arg_count != k)
+                        type_ok = false;
+                }
+                if (!type_ok) {
+                    /* fall through to the rollback below */
+                } else if (is_seq) {
                     if (b_head) {
                         for (size_t i = 0; i < k; i++) {
                             if (!blank_head_matches(subset[i], b_head)) { type_ok = false; break; }
@@ -1445,7 +1643,14 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 }
             } else {
                 Expr* matched_val = NULL;
-                if (k == 1) {
+                if (k > 1 && p_sym && !flat_group_may_equal(
+                        env_get(env, p_sym->data.symbol.name), pat_head, subset, k)) {
+                    /* Already-bound name (x_ ... x_): the group head[subset]
+                     * cannot equal the binding, so bind_ok below would fail.
+                     * Skip it without building the k-operand group -- for a
+                     * repeated name in a Flat head this turns the per-split
+                     * O(k) build into an O(1) reject. */
+                } else if (k == 1) {
                     matched_val = expr_copy(subset[0]);
                 } else if (k > 1) {
                     matched_val = expr_new_function(expr_copy(pat_head), NULL, k);
@@ -1727,12 +1932,21 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
  *  re-attached: head[a_1, ..., a_(i-1), <rewritten suffix>].  Offset 0 is
  *  exactly the prefix-run match.  This is equivalent to the pattern
  *  head[pre___, p1, ..., pk, rest___] with pre___ enumerated shortest-first,
- *  but cheaper: when p1 can only ever match ONE operand (a literal, or a call
- *  whose head is neither the Flat head nor a pattern construct -- op[i_] in
- *  op[i_] ** op[j_]), an offset whose operand fails p1 on its own is skipped
- *  without building the suffix, so a failing rule of that shape costs O(n)
- *  single-operand tests.  A leading bare blank (ff[a_, b_]) cannot be
- *  pre-screened and pays one full augmented match per offset.
+ *  but cheaper, because offsets and spans that cannot succeed are skipped
+ *  before any work is done (see the span-analysis helpers near the top):
+ *    - the first ANCHOR (an element that consumes exactly one operand, e.g.
+ *      op[i_] or Not[x_]) bounds the viable offsets: exactly when every
+ *      element before it is single-operand, else by the last operand the
+ *      anchor accepts; a failing rule whose anchor accepts nothing costs O(n)
+ *      operand tests;
+ *    - inside the matcher, a variable-span element followed by an anchor
+ *      only tries spans whose next operand passes the anchor, and an
+ *      already-bound name (ff[x_, x_]) rejects a group of the wrong size or
+ *      contents without building it.
+ *  What remains is the work the semantics requires: a test on a
+ *  group-absorbing first element (ff[a_?Negative, b_]) is a distinct call for
+ *  every (offset, span) group, so a failing rule of that shape still makes
+ *  ~n^2/2 test calls.
  *
  *  One rewrite per application: like ReplaceAll at a single position, only the
  *  first (leftmost) run is rewritten -- ff[a,b,a,b] /. ff[a,b] -> w gives
@@ -1821,34 +2035,6 @@ static Expr* flat_augment_replacement(Expr* replacement, const char* flat_head) 
     return r;
 }
 
-/* True when pattern element `p` (an argument of a `flat_head` call pattern) can
- * only ever match exactly ONE operand -- never a group, never zero.  Mirrors
- * the matcher's own Flat-element span pruning in match_args_internal: a literal
- * atom, or a call whose head is neither `flat_head` nor a pattern construct and
- * which cannot OneIdentity-absorb a group.  Conservative: false when unsure. */
-static bool flat_elem_single_span(Expr* p, const char* flat_head) {
-    if (!p) return false;
-    if (p->type == EXPR_FUNCTION && p->data.function.head &&
-        p->data.function.head->type == EXPR_SYMBOL &&
-        p->data.function.head->data.symbol.name == SYM_Pattern &&
-        p->data.function.arg_count == 2)
-        p = p->data.function.args[1];              /* name:inner -> inner */
-    if (p->type != EXPR_FUNCTION) return true;     /* literal atom */
-    Expr* hd = p->data.function.head;
-    if (!hd || hd->type != EXPR_SYMBOL) return false;
-    const char* h = hd->data.symbol.name;
-    if (h == flat_head || h == SYM_Blank || h == SYM_BlankSequence ||
-        h == SYM_BlankNullSequence || h == SYM_Pattern || h == SYM_HoldPattern ||
-        h == SYM_Alternatives || h == SYM_Condition || h == SYM_PatternTest ||
-        h == SYM_Optional || h == SYM_Shortest || h == SYM_Longest ||
-        h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Except ||
-        h == SYM_Verbatim || h == SYM_OptionsPattern)
-        return false;
-    if ((get_attributes(h) & ATTR_ONEIDENTITY) && p->data.function.arg_count == 1)
-        return false;
-    return true;
-}
-
 /* The augmented match at one start offset: `sub` is the subject (the whole
  * expression, or a suffix of it).  Returns the rewritten `sub`, or NULL. */
 static Expr* flat_try_augmented(Expr* sub, Expr* aug_pat, Expr* replacement,
@@ -1893,18 +2079,58 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
     Expr* result = flat_try_augmented(expr, aug_pat, replacement, flat_head, env);
 
     if (!result && !(attrs & ATTR_ORDERLESS)) {
-        /* Ordered head: slide the start offset rightwards, leftmost first. */
-        Expr* p1 = inner->data.function.args[0];
-        const bool p1_single = flat_elem_single_span(p1, flat_head);
+        /* Ordered head: slide the start offset rightwards, leftmost first.
+         *
+         * Offset screen.  Let p_t be the first anchor of the pattern (an
+         * element that consumes exactly one operand; for t > 0 it must also be
+         * screenable, since p_0..p_(t-1) are bound before it).  At offset i
+         * the anchor lands on operand i + t when every element before it is
+         * single-span ("exact"), else at some operand >= i + minpre.  An
+         * offset is viable only if that operand (exact) or SOME operand at or
+         * after i + minpre (inexact: <= the last accepting operand, jmax)
+         * passes the anchor standalone.  Independently, the suffix must hold
+         * at least `minall` operands.  Every skipped offset would fail the full
+         * match, so the leftmost viable match -- the result -- is unchanged;
+         * a failing rule whose anchor accepts no operand now costs O(n)
+         * operand tests instead of n full matches. */
+        Expr** pargs = inner->data.function.args;
+        size_t t = pat_arity, minpre = 0, minall = 0;
+        bool exact = true, has_ops = false;
+        for (size_t e = 0; e < pat_arity; e++) {
+            Expr* bnd = NULL;
+            if (ops_unwrap(pargs[e], &bnd)) has_ops = true;
+            minall += flat_elem_min_span(pargs[e], flat_head);
+        }
+        if (!has_ops) {
+            for (size_t e = 0; e < pat_arity && t == pat_arity; e++) {
+                bool single = flat_elem_single_span(pargs[e], flat_head);
+                if (single && (e == 0 || flat_elem_screenable(pargs[e], flat_head))) {
+                    t = e;
+                    break;
+                }
+                exact = exact && single;
+                minpre += flat_elem_min_span(pargs[e], flat_head);
+            }
+        }
         Expr** args = expr->data.function.args;
+        const char* thead = (t < pat_arity) ? flat_anchor_head(pargs[t]) : NULL;
+        /* inexact anchor: the last operand it accepts bounds the viable offsets */
+        size_t jmax = 0;
+        bool have_jmax = false;
+        if (t < pat_arity && !exact) {
+            for (size_t j = n; j-- > minpre + 1; ) {
+                if (flat_anchor_accepts(args[j], pargs[t], thead)) { jmax = j; have_jmax = true; break; }
+            }
+            if (!have_jmax) { expr_free(aug_pat); return NULL; }  /* no offset >= 1 viable */
+        }
         for (size_t i = 1; i < n && !result; i++) {
-            if (p1_single) {
-                /* Necessary condition, sound because p1 is the first pattern
-                 * element (no prior bindings) and consumes exactly operand i. */
-                MatchEnv* probe = env_new();
-                bool ok = match(args[i], p1, probe);
-                env_free(probe);
-                if (!ok) continue;
+            if (n - i < minall) break;            /* suffix too short, and shrinking */
+            if (t < pat_arity) {
+                if (exact) {
+                    if (i + t >= n || !flat_anchor_accepts(args[i + t], pargs[t], thead)) continue;
+                } else if (i + minpre > jmax) {
+                    break;                        /* anchor cannot land at or after i+minpre */
+                }
             }
             size_t m = n - i;
             Expr** sa = malloc(sizeof(Expr*) * m);

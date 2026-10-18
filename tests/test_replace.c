@@ -160,6 +160,26 @@ int main() {
     run_test("ffr[1, 2, 2, 3] /. ffr[x_, x_] :> hr[x]", "ffr[1, hr[2], 3]");
     run_test("(p && q && r && s) /. (r && s) -> t", "p && q && t");     /* And: Flat, ordered */
 
+    /* Offset / span screens (anchor = first single-operand element; bound
+     * names fix the group span).  These must leave every result unchanged. */
+    run_test("ffr[q, a, b, a, b] /. ffr[x_, x_] :> sq[x]", "ffr[q, sq[ffr[a, b]]]");
+    run_test("(p && q && !q && r) /. And[x_, Not[x_]] :> False", "False");
+    run_test("(p && q && r && !s) /. And[x_, Not[x_]] :> False", "p && q && r && Not[s]");
+    run_test("ffr[a, b, c, b, c] /. ffr[x__, x__] :> sq[x]", "ffr[a, sq[b, c]]");
+    run_test("ffr[k, a, b, c, op[3], m] /. ffr[x_, y_, op[j_]] :> h[x, y, j]",
+             "ffr[h[k, ffr[a, b, c], 3], m]");
+    run_test("ffr[k, a, b, c, d] /. ffr[b, x_, d] :> h[x]", "ffr[k, a, h[c]]");
+    /* an anchor with an Optional default may match a non-call operand */
+    run_test("ffr[u, x, v] /. ffr[y_, x^n_.] :> g[y, n]", "ffr[g[u, 1], v]");
+    /* a Condition inside the anchor is not used to screen */
+    run_test("ffr[z, a, op[1], b, op[2], c] /. ffr[x_, op[j_ /; j > 1]] :> h[x, j]",
+             "ffr[h[ffr[z, a, op[1], b], 2], c]");
+    run_test("MatchQ[ffr[q, a, a], ffr[x_, x_]]", "False");
+    /* PatternSequence is spliced, not a single operand: it must not pre-screen */
+    run_test("ffr[x, a, b, y] /. ffr[PatternSequence[a, b]] -> w", "ffr[x, w, y]");
+    /* scale: a failing And[x_, Not[x_]] over a long chain is O(n), not O(n^3) */
+    run_test("Length[(And @@ Array[av, 1500]) /. And[x_, Not[x_]] :> False]", "1500");
+
     printf("All Replace tests passed!\n");
     symtab_clear();
     return 0;

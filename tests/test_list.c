@@ -1024,8 +1024,9 @@ void test_nearest() {
          * is what this row exists to prevent. */
         {"Nearest[{1, a, 3}, 2]", "Nearest[{1, a, 3}, 2]"},
         {"Nearest[{1, 2, 3}, a]", "Nearest[{1, 2, 3}, a]"},
-        /* A symbolic REAL is rejected too: Abs[Pi - 3] stays as Abs[-3 + Pi].
-         * Numericalizing it (as RankedMin's ranked_numeric_key would) is a
+        /* A symbolic REAL is rejected too: the distance Abs[Pi - 3] now
+         * evaluates (to -3 + Pi), but it is still not a number, so the numeric
+         * gate declines.  Numericalizing it (as RankedMin's ranked_numeric_key would) is a
          * deliberate follow-up, not current behaviour. */
         {"Nearest[{Pi, 4}, 3]", "Nearest[{Pi, 4}, 3]"},
         /* A rational with a BIGINT component used to decline, for a reason

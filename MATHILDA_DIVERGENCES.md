@@ -38,7 +38,7 @@ historical record. Verified against the live binary, most of section A is now fi
 | A17 `RowReduce[m, Method -> "OneStepRowReduction"]` with parametric entries | **OPEN** | does not finish on a 20 x 15 system linear in two parameters; `.m` uses the default method when parameters are present |
 | A18 a `Do` iterator inside a package captures a caller's same-named symbol | **FIXED** (v0.238) | and it was never only `Do` -- `Sum` and `Product` too; only `Table` was registered as a scoping construct. `is_iterator_scope_head` (`src/modular.c`) now covers all four, so the `.m` renames `ma`/`ent`/`ne` are no longer needed. See F3. |
 | A19 `FreeQ[e, Complex]` is True on a complex atom | **OPEN** | found 2026-09-28 porting logrewrite; `logrewrite.m` tests `_Complex` everywhere |
-| A20 `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]`, `Arg[1 - Sqrt[5]]` unevaluated | **OPEN** | `logrewrite.m` puts constants in rectangular form by rules (`RectPow`); `RRad` of the package inherits the hazard |
+| A20 `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]`, `Arg[1 - Sqrt[5]]` unevaluated | **FIXED** (certified-sign Arg/Abs, see below) | `logrewrite.m` puts constants in rectangular form by rules (`RectPow`); `RRad` of the package inherits the hazard |
 | A21 `CountRoots` not implemented | **OPEN** | `SturmCount` in `logrewrite.m` |
 | A22 `$InputFileName`, `DirectoryName` not implemented | **OPEN** | a package cannot `Get` a sibling file; `LoadModule["mixed/logrewrite.m"]` instead |
 | A23 `NumericQ[Root[...]]` is False; `ToRadicals` gives the Ferrari form for every quartic | **OPEN** | `RootRadicals` in `logrewrite.m` (biquadratic / palindromic forms, root picked numerically) |
@@ -323,7 +323,12 @@ ComplexExpand[Sqrt[1 - Sqrt[5]]]      (* (6 - 2 Sqrt[5])^(1/4) Cos[1/2 Arg[1 - S
 Arg[1 - Sqrt[5]]                      (* unevaluated;  Mathematica: Pi *)
 ComplexExpand[(-1)^(1/3)]             (* 1/2 + (I/2) Sqrt[3]: correct *)
 ```
-The sign of a real algebraic number under a radical is not decided. `logrewrite.m` puts a constant in
+**Fixed:** `Arg`/`Abs`/`Sign`/`Re`/`Im` of an exact numeric constant now decide the sign by a
+certified Arb ball evaluation, so `Arg[1 - Sqrt[5]]` is `Pi`, `ComplexExpand[Sqrt[2 + Sqrt[3]]]` is
+`(7 + 4 Sqrt[3])^(1/4)` and `ComplexExpand[Sqrt[1 - Sqrt[5]]]` is `I (6 - 2 Sqrt[5])^(1/4)` (equal
+values to Mathematica's, in a different radical form). The history below is kept for the package.
+
+The sign of a real algebraic number under a radical was not decided. `logrewrite.m` puts a constant in
 rectangular form by rules (`RectConst`/`RectPow`: the sign of a real base from 30 digits, the principal
 square root of a non-real base written by hand) and applies `ComplexExpand` to `(-1)^k` only. The
 package's `RRad` (`ComplexExpand[ToRadicals[RootReduce[e]]]`) inherits the hazard on nested radicals.

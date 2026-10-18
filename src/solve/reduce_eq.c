@@ -237,13 +237,294 @@ RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
  *  Transcendental single equation -> logical formula                  *
  * ------------------------------------------------------------------ */
 
-/* True iff Im[e] is provably zero (e is real). */
-static bool im_is_zero(const Expr* e) {
+/* ------------------------------------------------------------------ *
+ *  Reality of a solution value over Reals                             *
+ * ------------------------------------------------------------------ */
+
+static Expr* rc_fn2(const char* h, Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2);
+}
+static Expr* rc_fn3(const char* h, Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b, c }, 3);
+}
+/* And[a, b] (both adopted; either may be NULL meaning "no condition"). */
+static Expr* rc_and(Expr* a, Expr* b) {
+    if (!a) return b;
+    if (!b) return a;
+    return rc_fn2(SYM_And, a, b);
+}
+
+/* True iff `e` has a leaf symbol that is not a numeric constant (Pi, E, ...):
+ * a free parameter such as `a`.  Head symbols (ArcSin, Log) are not leaves. */
+static bool has_free_symbol(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+            (Expr*[]){ expr_copy((Expr*)e) }, 1));
+        bool free_sym = !(q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True);
+        expr_free(q);
+        return free_sym;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_FUNCTION
+        && has_free_symbol(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_free_symbol(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Unevaluated EXACT condition (owned) on the real parameters of `e` under which
+ * the value `e` is real, or NULL when no exact condition is known.  Over Reals
+ * every parameter is real (Mathematica's Reduce convention), so the condition
+ * is the conjunction of the domain restrictions of the real-valued branches of
+ * the heads in `e`: Log[u] needs u > 0, ArcSin/ArcCos[u] need -1 <= u <= 1, a
+ * fractional power needs a non-negative base, ArcCosh[u] needs u >= 1, ...;
+ * heads that are real on the whole real line (Sin, Exp, ArcTan, ArcSinh, ...)
+ * contribute only their argument's condition.  A complex literal or an unknown
+ * head yields NULL: the caller then falls back to a provable decision or
+ * declines -- it never guesses. */
+static Expr* real_value_cond_rec(const Expr* e) {
+    if (!e) return NULL;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT:
+            return expr_new_symbol(SYM_True);
+        case EXPR_SYMBOL: {
+            const char* n = e->data.symbol.name;
+            if (n == SYM_I || n == SYM_ComplexInfinity || n == SYM_Indeterminate)
+                return NULL;
+            return expr_new_symbol(SYM_True);         /* real parameter / constant */
+        }
+        case EXPR_FUNCTION: break;
+        default: return NULL;
+    }
+    const Expr* hd = e->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return NULL;
+    const char* h = hd->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Rational) return expr_new_symbol(SYM_True);
+    if (h == SYM_Complex) return NULL;
+
+    if (h == SYM_Plus || h == SYM_Times) {
+        Expr* acc = NULL;
+        for (size_t i = 0; i < n; i++) {
+            Expr* c = real_value_cond_rec(e->data.function.args[i]);
+            if (!c) { expr_free(acc); return NULL; }
+            acc = rc_and(acc, c);
+        }
+        return acc ? acc : expr_new_symbol(SYM_True);
+    }
+
+    if (h == SYM_Power && n == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* x = e->data.function.args[1];
+        if (x->type == EXPR_INTEGER) {
+            Expr* cb = real_value_cond_rec(b);
+            if (!cb) return NULL;
+            if (x->data.integer < 0)
+                cb = rc_and(cb, rc_fn2(SYM_Unequal, expr_copy((Expr*)b),
+                                       expr_new_integer(0)));
+            return cb;
+        }
+        if (is_head(x, SYM_Rational) && x->data.function.arg_count == 2) {
+            /* Principal fractional power: real iff the base is >= 0 (> 0 for a
+             * negative exponent); (-8)^(1/3) is NOT real. */
+            Expr* cb = real_value_cond_rec(b);
+            if (!cb) return NULL;
+            const Expr* num = x->data.function.args[0];
+            bool neg = (num->type == EXPR_INTEGER && num->data.integer < 0);
+            return rc_and(cb, rc_fn2(neg ? SYM_Greater : SYM_GreaterEqual,
+                                     expr_copy((Expr*)b), expr_new_integer(0)));
+        }
+        /* b^x with a positive constant base (E, 2, Pi, ...): real iff x is. */
+        if (!has_free_symbol(b)) {
+            Expr* pos = eval_and_free(rc_fn2(SYM_Greater, expr_copy((Expr*)b),
+                                             expr_new_integer(0)));
+            bool bpos = (pos->type == EXPR_SYMBOL && pos->data.symbol.name == SYM_True);
+            expr_free(pos);
+            if (bpos) return real_value_cond_rec(x);
+        }
+        return NULL;
+    }
+
+    if (n == 2 && h == SYM_ArcTan) {
+        Expr* c0 = real_value_cond_rec(e->data.function.args[0]);
+        if (!c0) return NULL;
+        Expr* c1 = real_value_cond_rec(e->data.function.args[1]);
+        if (!c1) { expr_free(c0); return NULL; }
+        return rc_and(c0, c1);
+    }
+    if (n != 1) return NULL;
+
+    const Expr* u = e->data.function.args[0];
+    Expr* cu = real_value_cond_rec(u);
+    if (!cu) return NULL;
+    Expr* uc = expr_copy((Expr*)u);
+    Expr* dom = NULL;                                  /* NULL: whole real line */
+    if (h == SYM_Sin || h == SYM_Cos || h == SYM_Tan || h == SYM_Cot
+        || h == SYM_Sec || h == SYM_Csc || h == SYM_Exp || h == SYM_Sinh
+        || h == SYM_Cosh || h == SYM_Tanh || h == SYM_ArcTan || h == SYM_ArcCot
+        || h == SYM_ArcSinh || h == SYM_Abs) {
+        expr_free(uc);
+    } else if (h == SYM_Log) {
+        dom = rc_fn2(SYM_Greater, uc, expr_new_integer(0));
+    } else if (h == SYM_Sqrt) {
+        dom = rc_fn2(SYM_GreaterEqual, uc, expr_new_integer(0));
+    } else if (h == SYM_ArcSin || h == SYM_ArcCos) {
+        dom = rc_fn3(SYM_LessEqual, expr_new_integer(-1), uc, expr_new_integer(1));
+    } else if (h == SYM_ArcCosh) {
+        dom = rc_fn2(SYM_GreaterEqual, uc, expr_new_integer(1));
+    } else if (h == SYM_ArcTanh) {
+        dom = rc_fn3(SYM_Less, expr_new_integer(-1), uc, expr_new_integer(1));
+    } else if (h == SYM_ArcSec || h == SYM_ArcCsc) {
+        dom = rc_fn2(SYM_Or,
+                     rc_fn2(SYM_LessEqual, expr_copy(uc), expr_new_integer(-1)),
+                     rc_fn2(SYM_GreaterEqual, uc, expr_new_integer(1)));
+    } else if (h == SYM_ArcCoth) {
+        dom = rc_fn2(SYM_Or,
+                     rc_fn2(SYM_Less, expr_copy(uc), expr_new_integer(-1)),
+                     rc_fn2(SYM_Greater, uc, expr_new_integer(1)));
+    } else if (h == SYM_ArcSech) {
+        dom = rc_fn2(SYM_And,
+                     rc_fn2(SYM_Greater, expr_copy(uc), expr_new_integer(0)),
+                     rc_fn2(SYM_LessEqual, uc, expr_new_integer(1)));
+    } else if (h == SYM_ArcCsch) {
+        dom = rc_fn2(SYM_Unequal, uc, expr_new_integer(0));
+    } else if (h == SYM_ProductLog) {
+        /* Principal branch W0: real iff u >= -1/E. */
+        dom = rc_fn2(SYM_GreaterEqual, uc,
+                     rc_fn2(SYM_Times, expr_new_integer(-1),
+                            rc_fn2(SYM_Power, expr_new_symbol(SYM_E),
+                                   expr_new_integer(-1))));
+    } else {
+        expr_free(uc); expr_free(cu);
+        return NULL;
+    }
+    return rc_and(cu, dom);
+}
+
+/* Realness of a solution value over Reals: 1 real, 0 never real, 2 real
+ * exactly when the owned, evaluated *cond_out holds (a condition on the real
+ * parameters), -1 undecidable (the caller must decline).
+ *
+ * A value carrying free parameters is decided by its exact reality condition
+ * (real_value_cond_rec), NOT by the numeric zero test: Im[ArcSin[a]] is
+ * nonzero for a generically sampled `a`, and trusting that verdict is
+ * precisely what made Reduce[Sin[x] == a, x, Reals] drop both families and
+ * return False.  A parameter-free value is decided by the zero test, with the
+ * reality condition (which then evaluates to True/False) tried first. */
+int reduce_value_reality(const Expr* v, Expr** cond_out) {
+    *cond_out = NULL;
+    bool params = has_free_symbol(v);
+    Expr* rc = real_value_cond_rec(v);
+    if (rc) {
+        rc = eval_and_free(rc);
+        if (rc->type == EXPR_SYMBOL && rc->data.symbol.name == SYM_True) {
+            expr_free(rc); return 1;
+        }
+        if (rc->type == EXPR_SYMBOL && rc->data.symbol.name == SYM_False) {
+            expr_free(rc); return 0;
+        }
+        if (params) {
+            /* Restate the condition in its solved form over the parameters
+             * (ArcSin[-1 - a] gives -1 <= -1 - a <= 1, i.e. -2 <= a <= 0) when
+             * Reduce decides it; otherwise keep it as built. */
+            Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+                (Expr*[]){ expr_copy(rc), expr_new_symbol(SYM_Reals) }, 2));
+            if (is_head(red, SYM_Reduce)) {
+                expr_free(red);
+            } else {
+                expr_free(rc);
+                rc = red;
+                if (rc->type == EXPR_SYMBOL && rc->data.symbol.name == SYM_True) {
+                    expr_free(rc); return 1;
+                }
+                if (rc->type == EXPR_SYMBOL && rc->data.symbol.name == SYM_False) {
+                    expr_free(rc); return 0;
+                }
+            }
+            *cond_out = rc;
+            return 2;
+        }
+        expr_free(rc);                 /* numeric but unevaluated: zero-test below */
+    } else if (params && is_head(v, SYM_Plus)) {
+        /* c + r with a parameter-free non-real constant c and an
+         * UNCONDITIONALLY real rest r (Sinh's offset I Pi - ArcSinh[a]) is never
+         * real.  A rest that is only conditionally real is not decided here: a
+         * complex rest could cancel Im[c]. */
+        size_t n = v->data.function.arg_count;
+        Expr** cs = (Expr**)malloc(n * sizeof(Expr*));
+        Expr** rs = (Expr**)malloc(n * sizeof(Expr*));
+        size_t nc = 0, nr = 0;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* t = v->data.function.args[i];
+            if (has_free_symbol(t)) rs[nr++] = expr_copy((Expr*)t);
+            else                    cs[nc++] = expr_copy((Expr*)t);
+        }
+        Expr* csum = expr_new_function(expr_new_symbol(SYM_Plus), cs, nc);
+        Expr* rsum = expr_new_function(expr_new_symbol(SYM_Plus), rs, nr);
+        free(cs); free(rs);
+        Expr* rrc = real_value_cond_rec(rsum);
+        bool rest_real = false;
+        if (rrc) {
+            rrc = eval_and_free(rrc);
+            rest_real = (rrc->type == EXPR_SYMBOL && rrc->data.symbol.name == SYM_True);
+            expr_free(rrc);
+        }
+        int verdict = -1;
+        if (rest_real && nc > 0) {
+            Expr* imc = eval_and_free(expr_new_function(expr_new_symbol("Im"),
+                (Expr*[]){ csum }, 1));
+            csum = NULL;
+            if (zero_test_decide(imc) == ZERO_TEST_FALSE) verdict = 0;
+            expr_free(imc);
+        }
+        expr_free(csum); expr_free(rsum);
+        if (verdict == 0) return 0;
+    }
     Expr* im = eval_and_free(expr_new_function(expr_new_symbol("Im"),
-        (Expr*[]){ expr_copy((Expr*)e) }, 1));
-    bool z = (zero_test_decide(im) == ZERO_TEST_TRUE);
+        (Expr*[]){ expr_copy((Expr*)v) }, 1));
+    ZeroTestResult z = zero_test_decide(im);
     expr_free(im);
-    return z;
+    if (z == ZERO_TEST_TRUE) return 1;
+    if (z == ZERO_TEST_FALSE && !params) return 0;
+    return -1;
+}
+
+/* A Solve side condition restated for REAL parameters (owned, evaluated; NULL
+ * when it reduces to True): Im[u] -> 0 and Re[u] -> u wherever u is provably
+ * real.  Log's branch strip -Pi < Im[a] <= Pi is vacuous for a real `a`. */
+static Expr* realify_rec(const Expr* c) {
+    if (c->type != EXPR_FUNCTION) return expr_copy((Expr*)c);
+    if ((is_head(c, SYM_Im) || is_head(c, SYM_Re)) && c->data.function.arg_count == 1) {
+        Expr* rc = NULL;
+        if (reduce_value_reality(c->data.function.args[0], &rc) == 1)
+            return is_head(c, SYM_Im) ? expr_new_integer(0)
+                                      : expr_copy(c->data.function.args[0]);
+        expr_free(rc);
+        return expr_copy((Expr*)c);
+    }
+    size_t n = c->data.function.arg_count;
+    Expr** a = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = realify_rec(c->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(c->data.function.head), a, n);
+    free(a);
+    return out;
+}
+static Expr* realify_cond(const Expr* c) {
+    if (!c) return NULL;
+    Expr* r = eval_and_free(realify_rec(c));
+    if (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True) {
+        expr_free(r); return NULL;
+    }
+    return r;
+}
+
+/* A `{lhs -> ConditionalExpression[value, cond]}` row (`value` and `cond`
+ * adopted; a NULL cond gives the plain `{lhs -> value}` row). */
+static Expr* cond_row(const Expr* lhs, Expr* value, Expr* cond) {
+    Expr* v = cond ? rc_fn2(SYM_ConditionalExpression, value, cond) : value;
+    Expr* r = rc_fn2(SYM_Rule, expr_copy((Expr*)lhs), v);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ r }, 1);
 }
 
 /* Over Reals, collapse each periodic solution family to its real members.
@@ -254,13 +535,21 @@ static bool im_is_zero(const Expr* e) {
  * Reduce[Sin[x]==2,x,Reals] -> False.  A non-real period (imaginary, e.g.
  * Sinh/Exp's 2 I Pi C[k]) has a single candidate real member at C[k]=0 (kept if
  * real, else dropped): Reduce[Sinh[y]==0,y,Reals] -> y==0 and
- * Reduce[Exp[y]==3,y,Reals] -> y==Log[3].  Consumes `sols`. */
-static Expr* collapse_reals_families(Expr* sols) {
+ * Reduce[Exp[y]==3,y,Reals] -> y==Log[3].
+ *
+ * A PARAMETRIC offset (ArcSin[a], Log[a]) is real exactly when its reality
+ * condition on the real parameters holds, and that condition is conjoined onto
+ * the row: Reduce[Sin[x]==a,x,Reals] -> -1 <= a <= 1 && C[1] in Integers &&
+ * ..., Reduce[Exp[x]==a,x,Reals] -> a > 0 && x == Log[a].  Returns NULL
+ * (decline) when the reality of some value can be neither proved nor
+ * conditioned.  Consumes `sols`. */
+Expr* reduce_collapse_reals_families(Expr* sols) {
     if (!is_head(sols, SYM_List)) return sols;
     size_t n = sols->data.function.arg_count;
     Expr** kept = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
     size_t nk = 0;
-    for (size_t i = 0; i < n; i++) {
+    bool declined = false;
+    for (size_t i = 0; i < n && !declined; i++) {
         Expr* row = sols->data.function.args[i];
         if (!is_head(row, SYM_List) || row->data.function.arg_count != 1) {
             kept[nk++] = expr_copy(row);   /* {{}} (all reals) or unusual: keep */
@@ -275,15 +564,16 @@ static Expr* collapse_reals_families(Expr* sols) {
         Expr* val = rule->data.function.args[1];
         const Expr* value = val;
         const Expr* param = NULL;
+        const Expr* row_cond = NULL;      /* the row's own (non-family) condition */
         if (is_head(val, SYM_ConditionalExpression)
             && val->data.function.arg_count == 2) {
             value = val->data.function.args[0];
             Expr* cond = val->data.function.args[1];
             if (is_head(cond, SYM_Element) && cond->data.function.arg_count == 2)
                 param = cond->data.function.args[0];
+            else
+                row_cond = cond;
         }
-        bool keep_family = false;
-        Expr* single_val = NULL;
         if (param) {
             Expr* coeff = eval_and_free(expr_new_function(
                 expr_new_symbol("Coefficient"),
@@ -295,30 +585,54 @@ static Expr* collapse_reals_families(Expr* sols) {
                            expr_new_function(expr_new_symbol(SYM_Rule),
                                (Expr*[]){ expr_copy((Expr*)param),
                                           expr_new_integer(0) }, 2) }, 2));
-            if (im_is_zero(coeff)) {
-                /* Real period: keep the whole family only if the offset is also
-                 * real -- else every member a + b*C[k] is non-real (a real
-                 * period cannot cancel a complex offset). */
-                if (im_is_zero(v0)) keep_family = true;
-                expr_free(v0);
-            } else {                                      /* non-real period */
-                if (im_is_zero(v0)) single_val = v0; else expr_free(v0);
-            }
+            Expr* pc = NULL;
+            int period = reduce_value_reality(coeff, &pc);
             expr_free(coeff);
-        } else if (im_is_zero(value)) {
-            single_val = expr_copy((Expr*)value);
+            if (period == 2 || period == -1) {   /* parametric / unknown period */
+                expr_free(pc); expr_free(v0);
+                declined = true; break;
+            }
+            Expr* oc = NULL;
+            int off = reduce_value_reality(v0, &oc);
+            if (off == -1) { expr_free(v0); declined = true; break; }
+            if (period == 1) {
+                /* Real period: the whole family is real iff the offset is (a
+                 * real period cannot cancel a complex offset). */
+                expr_free(v0);
+                if (off == 1)
+                    kept[nk++] = expr_copy(row);
+                else if (off == 2)
+                    kept[nk++] = cond_row(lhs, expr_copy((Expr*)value),
+                        rc_and(oc, expr_copy(val->data.function.args[1])));
+            } else {                                   /* non-real period */
+                if (off == 1)      kept[nk++] = cond_row(lhs, v0, NULL);
+                else if (off == 2) kept[nk++] = cond_row(lhs, v0, oc);
+                else               expr_free(v0);
+            }
+        } else {
+            Expr* vc = NULL;
+            int r = reduce_value_reality(value, &vc);
+            if (r == -1) { declined = true; break; }
+            Expr* extra = realify_cond(row_cond);
+            if (extra && extra->type == EXPR_SYMBOL
+                && extra->data.symbol.name == SYM_False) {
+                expr_free(extra); expr_free(vc);    /* side condition fails */
+                continue;
+            }
+            if (r == 1)
+                kept[nk++] = cond_row(lhs, expr_copy((Expr*)value), extra);
+            else if (r == 2)
+                kept[nk++] = cond_row(lhs, expr_copy((Expr*)value), rc_and(vc, extra));
+            else
+                expr_free(extra);              /* no real member -> drop */
         }
-        if (keep_family) {
-            kept[nk++] = expr_copy(row);
-        } else if (single_val) {
-            Expr* r = expr_new_function(expr_new_symbol(SYM_Rule),
-                (Expr*[]){ expr_copy(lhs), single_val }, 2);
-            kept[nk++] = expr_new_function(expr_new_symbol(SYM_List),
-                (Expr*[]){ r }, 1);
-        }
-        /* else: no real member -> drop */
     }
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), kept, nk);
+    Expr* out = NULL;
+    if (declined) {
+        for (size_t i = 0; i < nk; i++) expr_free(kept[i]);
+    } else {
+        out = expr_new_function(expr_new_symbol(SYM_List), kept, nk);
+    }
     free(kept);
     expr_free(sols);
     return out;
@@ -343,8 +657,10 @@ Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
     if (!is_head(sols, SYM_List)) { expr_free(sols); return NULL; }
 
     /* Over Reals, keep only the real members of each periodic family. */
-    if (dom && dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals)
-        sols = collapse_reals_families(sols);
+    if (dom && dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals) {
+        sols = reduce_collapse_reals_families(sols);
+        if (!sols) return NULL;          /* a value of undecidable reality */
+    }
 
     size_t nsol = sols->data.function.arg_count;
     Expr** terms = (Expr**)malloc((nsol ? nsol : 1) * sizeof(Expr*));

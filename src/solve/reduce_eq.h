@@ -51,4 +51,20 @@ RForm* reduce_eq_univariate(const Expr* poly, const Expr* var,
 Expr* reduce_eq_transcendental(const Expr* poly, const Expr* var,
                                const Expr* dom, const ReduceOpts* opts);
 
+/* Realness of a solution value `v` over Reals, with every free parameter real:
+ * 1 real, 0 never real, 2 real exactly when *cond_out (owned, evaluated; a
+ * condition on the parameters such as -1 <= a <= 1 for ArcSin[a]) holds, -1
+ * undecidable.  *cond_out is set only for the result 2. */
+int reduce_value_reality(const Expr* v, Expr** cond_out);
+
+/* Over Reals, reduce a Solve rule list `{{var -> v}, ...}` (consumed) to its
+ * real members: a periodic family a + b C[k] is kept whole when its period and
+ * offset are real, collapsed to its C[k] = 0 member when the period is not
+ * real, and dropped when it has no real member.  A value that is real only for
+ * some values of the (real) parameters -- ArcSin[a], Log[a] -- is kept with
+ * its exact reality condition conjoined onto the row's ConditionalExpression.
+ * Returns NULL (the caller declines) when the reality of a value can be
+ * neither decided nor expressed as a condition. */
+Expr* reduce_collapse_reals_families(Expr* sols);
+
 #endif /* REDUCE_EQ_H */

@@ -293,6 +293,27 @@ static Expr* inequality_to_and(const Expr* e) {
     return out;
 }
 
+/* A chained relation Less[e0, e1, e2, ...] (likewise LessEqual / Greater /
+ * GreaterEqual / Equal with three or more arguments, e.g. the evaluated
+ * LessEqual[-1, a, 1]) means op[e0,e1] && op[e1,e2] && ...  Rewrite it to that
+ * unevaluated And (freshly owned); NULL when `e` is not such a chain. */
+static Expr* relchain_to_and(const Expr* e) {
+    if (!(is_head(e, SYM_Less) || is_head(e, SYM_LessEqual)
+          || is_head(e, SYM_Greater) || is_head(e, SYM_GreaterEqual)
+          || is_head(e, SYM_Equal)))
+        return NULL;
+    size_t n = e->data.function.arg_count;
+    if (n < 3) return NULL;
+    Expr** rels = malloc((n - 1) * sizeof(Expr*));
+    for (size_t k = 0; k + 1 < n; k++)
+        rels[k] = expr_new_function(expr_copy(e->data.function.head),
+            (Expr*[]){ expr_copy(e->data.function.args[k]),
+                       expr_copy(e->data.function.args[k + 1]) }, 2);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_And), rels, n - 1);
+    free(rels);
+    return out;
+}
+
 static RForm* build_pos(const Expr* e, Expr** vars, int nv, bool* ok) {
     if (is_sym(e, SYM_True))  return rform_true();
     if (is_sym(e, SYM_False)) return rform_false();
@@ -332,6 +353,14 @@ static RForm* build_pos(const Expr* e, Expr** vars, int nv, bool* ok) {
         RForm* f = build_pos(conj, vars, nv, ok);
         expr_free(conj);
         return f;
+    }
+    {
+        Expr* chain = relchain_to_and(e);
+        if (chain) {
+            RForm* f = build_pos(chain, vars, nv, ok);
+            expr_free(chain);
+            return f;
+        }
     }
 
     /* Relational leaf. */
@@ -387,6 +416,14 @@ static RForm* build_neg(const Expr* e, Expr** vars, int nv, bool* ok) {
         RForm* f = build_neg(conj, vars, nv, ok);
         expr_free(conj);
         return f;
+    }
+    {
+        Expr* chain = relchain_to_and(e);
+        if (chain) {
+            RForm* f = build_neg(chain, vars, nv, ok);
+            expr_free(chain);
+            return f;
+        }
     }
 
     if (is_head(e, SYM_Equal) || is_head(e, SYM_Unequal)

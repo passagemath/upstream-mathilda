@@ -10,6 +10,7 @@
 
 #include "eval.h"
 #include "expr.h"
+#include "reduce_eq.h"
 #include "reduce_opts.h"
 #include "sym_names.h"
 #include "zero_test.h"
@@ -222,6 +223,270 @@ static int cand_cmp(const void* pa, const void* pb) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Parametric families (Cos[x] == a && 0 < x < Pi)                    *
+ * ------------------------------------------------------------------ */
+
+/* Is `s` a free parameter (a symbol that is not a numeric constant)? */
+static bool tr_is_free_sym(const Expr* s) {
+    if (!s || s->type != EXPR_SYMBOL) return false;
+    Expr* q = eval_and_free(mk_fn1(SYM_NumericQ, expr_copy((Expr*)s)));
+    bool f = !is_true_sym(q);
+    expr_free(q);
+    return f;
+}
+
+/* Collect the distinct free parameters of `e` other than `var` (borrowed
+ * pointers into `e`) into *arr. */
+static void tr_collect_params(const Expr* e, const Expr* var,
+                              const Expr*** arr, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (var->type == EXPR_SYMBOL && e->data.symbol.name == var->data.symbol.name)
+            return;
+        for (size_t i = 0; i < *n; i++)
+            if ((*arr)[i]->data.symbol.name == e->data.symbol.name) return;
+        if (!tr_is_free_sym(e)) return;
+        if (*n == *cap) {
+            *cap = *cap ? *cap * 2 : 4;
+            *arr = (const Expr**)realloc((void*)*arr, *cap * sizeof(Expr*));
+        }
+        (*arr)[(*n)++] = e;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_FUNCTION)
+        tr_collect_params(e->data.function.head, var, arr, n, cap);
+    /* Inequality[a, Less, b, ...] carries its relation symbols at the odd
+     * positions; they are operators, not parameters. */
+    bool ineq = head_is(e, SYM_Inequality);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!(ineq && (i % 2 == 1)))
+            tr_collect_params(e->data.function.args[i], var, arr, n, cap);
+}
+
+/* `off` with every parameter-bearing inverse-circular subterm replaced by the
+ * Interval of its real range (ArcSin/ArcTan/ArcCot/ArcCsc -> [-Pi/2, Pi/2],
+ * ArcCos/ArcSec -> [0, Pi]).  *ok = false when a parameter survives outside
+ * such a subterm (no finite range is known).  Owned, unevaluated. */
+static Expr* tr_range_subst(const Expr* off, bool* ok) {
+    if (!off) { *ok = false; return NULL; }
+    if (off->type == EXPR_SYMBOL) {
+        if (tr_is_free_sym(off)) *ok = false;
+        return expr_copy((Expr*)off);
+    }
+    if (off->type != EXPR_FUNCTION) return expr_copy((Expr*)off);
+    const Expr* hd = off->data.function.head;
+    if (hd->type == EXPR_SYMBOL && off->data.function.arg_count == 1) {
+        const char* h = hd->data.symbol.name;
+        int kind = 0;
+        if (h == SYM_ArcSin || h == SYM_ArcTan || h == SYM_ArcCot || h == SYM_ArcCsc)
+            kind = 1;
+        else if (h == SYM_ArcCos || h == SYM_ArcSec)
+            kind = 2;
+        if (kind) {
+            const Expr*  *ps = NULL; size_t np = 0, pc = 0;
+            Expr* dummy = expr_new_symbol("$ReduceRegionNoVar");
+            tr_collect_params(off, dummy, &ps, &np, &pc);
+            expr_free(dummy);
+            free((void*)ps);
+            if (np > 0) {
+                Expr* lo = (kind == 1)
+                    ? mk_fn2(SYM_Times, expr_new_integer(-1),
+                             mk_fn2(SYM_Times, expr_new_symbol(SYM_Pi),
+                                    mk_fn2(SYM_Power, expr_new_integer(2),
+                                           expr_new_integer(-1))))
+                    : expr_new_integer(0);
+                Expr* hi = (kind == 1)
+                    ? mk_fn2(SYM_Times, expr_new_symbol(SYM_Pi),
+                             mk_fn2(SYM_Power, expr_new_integer(2), expr_new_integer(-1)))
+                    : expr_new_symbol(SYM_Pi);
+                return mk_fn1(SYM_Interval, mk_fn2(SYM_List, lo, hi));
+            }
+        }
+    }
+    size_t n = off->data.function.arg_count;
+    Expr** a = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = tr_range_subst(off->data.function.args[i], ok);
+    Expr* out = expr_new_function(expr_copy((Expr*)hd), a, n);
+    free(a);
+    return out;
+}
+
+/* Numeric range [*lo, *hi] of a family offset over all real parameter values
+ * (see tr_range_subst).  false if no finite range is known. */
+static bool tr_offset_range(const Expr* off, double* lo, double* hi) {
+    bool ok = true;
+    Expr* r = tr_range_subst(off, &ok);
+    if (!ok) { expr_free(r); return false; }
+    Expr* n = eval_and_free(mk_fn1(SYM_N, r));
+    bool got = false;
+    if (head_is(n, SYM_Interval) && n->data.function.arg_count == 1
+        && head_is(n->data.function.args[0], SYM_List)
+        && n->data.function.args[0]->data.function.arg_count == 2) {
+        got = tr_to_double(n->data.function.args[0]->data.function.args[0], lo)
+           && tr_to_double(n->data.function.args[0]->data.function.args[1], hi);
+    } else if (tr_to_double(n, lo)) {
+        *hi = *lo;
+        got = true;
+    }
+    expr_free(n);
+    return got && *lo <= *hi;
+}
+
+typedef struct { Expr** a; size_t n, cap; } TermVec;
+
+static void term_push(TermVec* v, Expr* t /* adopted */) {
+    if (v->n == v->cap) {
+        v->cap = v->cap ? v->cap * 2 : 8;
+        v->a = (Expr**)realloc(v->a, v->cap * sizeof(Expr*));
+    }
+    v->a[v->n++] = t;
+}
+
+/* One candidate member `cand` (adopted) of a PARAMETRIC family: the parameter
+ * condition under which it is a real solution inside the region is
+ *   Reduce[realcond(cand) && full /. var -> cand, params, Reals],
+ * pushed as `cond && var == cand`.  false (decline) when its reality cannot be
+ * conditioned or that parameter Reduce does not decide. */
+static bool tr_param_candidate(Expr* cand, const Expr* full, const Expr* var,
+                               const Expr* plist, TermVec* terms) {
+    Expr* rc = NULL;
+    int r = reduce_value_reality(cand, &rc);
+    if (r == -1) { expr_free(cand); return false; }
+    if (r == 0)  { expr_free(cand); return true; }      /* never real: no member */
+    Expr* at = tr_subst(full, var, expr_copy(cand));
+    Expr* stmt = rc ? mk_fn2(SYM_And, rc, at) : at;
+    Expr* red = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+        (Expr*[]){ stmt, expr_copy((Expr*)plist), expr_new_symbol(SYM_Reals) }, 3));
+    if (head_is(red, SYM_Reduce)) { expr_free(red); expr_free(cand); return false; }
+    if (is_false_sym(red)) { expr_free(red); expr_free(cand); return true; }
+    Expr* eq = mk_fn2(SYM_Equal, expr_copy((Expr*)var), cand);
+    term_push(terms, is_true_sym(red) ? (expr_free(red), eq) : mk_fn2(SYM_And, red, eq));
+    return true;
+}
+
+/* Bounded region + a periodic equation whose solution families carry free
+ * parameters: Reduce[Cos[x] == a && 0 < x < Pi, x, Reals] -> -1 < a < 1 &&
+ * x == ArcCos[a].  The family offset's real RANGE (ArcCos[a] in [0, Pi]) bounds
+ * the finitely many members k that can meet the parameter-free region; each
+ * candidate is then conditioned exactly on the parameters by
+ * tr_param_candidate.  NULL to decline (parametric region, unknown offset
+ * range, undecided parameter condition). */
+static Expr* tr_periodic_region_parametric(const Expr* sols, const Expr* peq,
+                                           const Expr* region_stmt, const Expr* var,
+                                           const Expr** ps, size_t np) {
+    /* The conjuncts that mention var must pin it to parameter-free bounds.
+     * Pure parameter conjuncts (a > 0) need no bound: they stay in `full` and
+     * so reach every candidate's parameter condition. */
+    size_t nconj = head_is(region_stmt, SYM_And) ? region_stmt->data.function.arg_count : 1;
+    Expr** vconj = (Expr**)malloc(nconj * sizeof(Expr*));
+    size_t nvc = 0;
+    for (size_t i = 0; i < nconj; i++) {
+        const Expr* c = head_is(region_stmt, SYM_And)
+                      ? region_stmt->data.function.args[i] : region_stmt;
+        if (tr_contains_var(c, var)) vconj[nvc++] = expr_copy((Expr*)c);
+    }
+    Expr* vregion = (nvc == 1) ? vconj[0]
+                  : expr_new_function(expr_new_symbol(SYM_And), vconj, nvc);
+    free(vconj);
+    const Expr** rp = NULL; size_t nrp = 0, rcap = 0;
+    tr_collect_params(vregion, var, &rp, &nrp, &rcap);
+    free((void*)rp);
+    if (nvc == 0 || nrp > 0) { expr_free(vregion); return NULL; }
+    Expr* regionX = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+        (Expr*[]){ vregion, expr_copy((Expr*)var), expr_new_symbol(SYM_Reals) }, 3));
+    IvlVec rv = {0};
+    bool rok = tr_region_intervals(regionX, var, &rv);
+    expr_free(regionX);
+    if (!rok) { free(rv.a); return NULL; }
+
+    Expr** pl = (Expr**)malloc(np * sizeof(Expr*));
+    for (size_t i = 0; i < np; i++) pl[i] = expr_copy((Expr*)ps[i]);
+    Expr* plist = expr_new_function(expr_new_symbol(SYM_List), pl, np);
+    free(pl);
+    Expr* full = mk_fn2(SYM_And, expr_copy((Expr*)peq), expr_copy((Expr*)region_stmt));
+
+    TermVec terms = {0};
+    bool declined = false;
+    for (size_t i = 0; i < sols->data.function.arg_count && !declined; i++) {
+        Expr* row = sols->data.function.args[i];
+        if (!head_is(row, SYM_List) || row->data.function.arg_count != 1) {
+            declined = true; break;
+        }
+        Expr* rule = row->data.function.args[0];
+        if (!head_is(rule, SYM_Rule) || rule->data.function.arg_count != 2
+            || !expr_eq(rule->data.function.args[0], var)) {
+            declined = true; break;
+        }
+        Expr* val = rule->data.function.args[1];
+        const Expr* value = val;
+        const Expr* param = NULL;
+        if (head_is(val, SYM_ConditionalExpression) && val->data.function.arg_count == 2) {
+            const Expr* cond = val->data.function.args[1];
+            if (!(head_is(cond, SYM_Element) && cond->data.function.arg_count == 2)) {
+                declined = true; break;          /* an unrecognised side condition */
+            }
+            value = val->data.function.args[0];
+            param = cond->data.function.args[0];
+        }
+        if (!param) {
+            declined = !tr_param_candidate(eval_and_free(expr_copy((Expr*)value)),
+                                           full, var, plist, &terms);
+            continue;
+        }
+        Expr* p = eval_and_free(mk_fn2(SYM_Coefficient,
+                        expr_copy((Expr*)value), expr_copy((Expr*)param)));
+        Expr* a = tr_subst(value, param, expr_new_integer(0));
+        Expr* pcond = NULL;
+        int preal = reduce_value_reality(p, &pcond);
+        expr_free(pcond);
+        double pd = 0.0;
+        if (preal == 0) {
+            /* Non-real period: the k = 0 member is the only real candidate. */
+            expr_free(p);
+            declined = !tr_param_candidate(a, full, var, plist, &terms);
+            continue;
+        }
+        bool have_pd = (preal == 1) && tr_to_double(p, &pd) && pd != 0.0;
+        expr_free(p);
+        double olo, ohi;
+        if (!have_pd || !tr_offset_range(a, &olo, &ohi)) {
+            expr_free(a); declined = true; break;
+        }
+        expr_free(a);
+        double ap = fabs(pd);
+        for (size_t j = 0; j < rv.n && !declined; j++) {
+            /* Members a + pd k meeting [rlo, rhi] need pd k in
+             * [rlo - ohi, rhi - olo]; widen by one so none is missed (each
+             * candidate is conditioned exactly afterwards). */
+            double klo = (rv.a[j].lo - ohi) / ap, khi = (rv.a[j].hi - olo) / ap;
+            long kmin = (long)floor(klo) - 1, kmax = (long)ceil(khi) + 1;
+            if (kmax < kmin || (kmax - kmin) > TRIGREGION_MAX_MEMBERS) {
+                declined = true; break;
+            }
+            for (long kk = kmin; kk <= kmax && !declined; kk++) {
+                long ks = (pd > 0) ? kk : -kk;
+                Expr* cand = tr_subst(value, param, expr_new_integer((int64_t)ks));
+                declined = !tr_param_candidate(cand, full, var, plist, &terms);
+            }
+        }
+    }
+    free(rv.a);
+    expr_free(full);
+    expr_free(plist);
+    if (declined) {
+        for (size_t i = 0; i < terms.n; i++) expr_free(terms.a[i]);
+        free(terms.a);
+        return NULL;
+    }
+    if (terms.n == 0) { free(terms.a); return expr_new_symbol(SYM_False); }
+    Expr* out = (terms.n == 1) ? terms.a[0]
+              : expr_new_function(expr_new_symbol(SYM_Or), terms.a, terms.n);
+    free(terms.a);
+    return eval_and_free(out);
+}
+
+/* ------------------------------------------------------------------ *
  *  Driver                                                             *
  * ------------------------------------------------------------------ */
 
@@ -236,6 +501,24 @@ Expr* reduce_periodic_region(const Expr* peq, const Expr* region_stmt,
     base[2] = expr_new_symbol(SYM_Reals);
     Expr* sols = eval_and_free(reduce_opts_build_solve(base, 3, opts));
     if (!head_is(sols, SYM_List)) { expr_free(sols); return NULL; }
+
+    /* Free parameters (Cos[x] == a): the numeric enumeration below cannot
+     * place a parametric offset, and dropping it as "not provably real" made
+     * Reduce[Cos[x] == a && 0 < x < Pi, x, Reals] return False.  Condition each
+     * member on the parameters instead. */
+    {
+        const Expr** ps = NULL; size_t np = 0, pcap = 0;
+        tr_collect_params(peq, var, &ps, &np, &pcap);
+        tr_collect_params(region_stmt, var, &ps, &np, &pcap);
+        if (np > 0) {
+            Expr* out = tr_periodic_region_parametric(sols, peq, region_stmt, var,
+                                                      ps, np);
+            free((void*)ps);
+            expr_free(sols);
+            return out;
+        }
+        free((void*)ps);
+    }
 
     /* The full statement, for the exact re-check of every candidate. */
     Expr* full = mk_fn2(SYM_And, expr_copy((Expr*)peq),

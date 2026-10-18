@@ -1285,7 +1285,24 @@ Out[7]= Element[C[1], Integers] && x == -1 + 3 C[1] && y == 1 - 2 C[1]
 
 In[8]:= Reduce[x^2 == 2, x, Modulus -> 7]
 Out[8]= x == 3 || x == 4
+
+In[9]:= Reduce[Exp[x] == a, x, Reals]
+Out[9]= a > 0 && x == Log[a]
+
+In[10]:= Reduce[Cos[x] == a && 0 < x < Pi, x, Reals]
+Out[10]= -1 < a < 1 && x == ArcCos[a]
+
+In[11]:= Reduce[Sin[x] > x/2, x, Reals]
+Out[11]= Reduce[Sin[x] > 1/2 x, x, Reals]
 ```
+
+Over Reals every parameter is real, so a solution family whose offset is real
+only for some parameter values (`ArcSin[a]`, `Log[a]`, `ArcCosh[a]`) is kept
+under its exact reality condition (`-1 <= a <= 1`, `a > 0`, `a >= 1`); a bounded
+region selects the finitely many members by the offset's range and conditions
+each on the parameters. A univariate sign diagram whose breakpoints Solve
+cannot find (`Sin[x] == x/2`), or which would need infinitely many of them
+(`Sin[x] > 0`), is left unevaluated rather than decided from one sample cell.
 
 ## Exists
 

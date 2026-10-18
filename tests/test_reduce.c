@@ -1678,6 +1678,52 @@ static void test_trig_ineq_region(void) {
     run_contains("Reduce[Sin[x] > 1/2 && x > 0, x]", "Reduce[");
 }
 
+/* Regression: a solution family whose offset is real only for SOME values of a
+ * real parameter (ArcSin[a], Log[a], ArcCos[a]) was dropped as "not provably
+ * real" by the Reals family collapse, so these all returned a wrong False.  The
+ * offset's exact reality condition now guards the family instead. */
+static void test_reals_parametric_families(void) {
+    run_test("Reduce[Sin[x] == a, x, Reals]",
+             "Or[And[Inequality[-1, LessEqual, a, LessEqual, 1], Element[C[1], Integers], "
+                 "Equal[x, Plus[Pi, Times[2, C[1], Pi], Times[-1, ArcSin[a]]]]], "
+                "And[Inequality[-1, LessEqual, a, LessEqual, 1], Element[C[1], Integers], "
+                 "Equal[x, Plus[Times[2, C[1], Pi], ArcSin[a]]]]]");
+    run_test("Reduce[Exp[x] == a, x, Reals]", "And[Greater[a, 0], Equal[x, Log[a]]]");
+    run_test("Reduce[Cosh[x] == a, x, Reals]",
+             "Or[And[GreaterEqual[a, 1], Equal[x, Times[-1, ArcCosh[a]]]], "
+                "And[GreaterEqual[a, 1], Equal[x, ArcCosh[a]]]]");
+    /* Unconditionally real / provably non-real offsets are unchanged. */
+    run_test("Reduce[Sinh[x] == a, x, Reals]", "Equal[x, ArcSinh[a]]");
+    run_test("Reduce[Log[x] == a, x, Reals]", "Equal[x, Power[E, a]]");
+    run_test("Reduce[Sin[x] == 2, x, Reals]", "False");
+    /* Bounded region with a parametric family: members conditioned on `a`. */
+    run_test("Reduce[Cos[x] == a && 0 < x < Pi, x, Reals]",
+             "And[Inequality[-1, Less, a, Less, 1], Equal[x, ArcCos[a]]]");
+    run_test("Reduce[Cos[x] == a && 0 < x < Pi && a > 0, x, Reals]",
+             "And[Inequality[0, Less, a, Less, 1], Equal[x, ArcCos[a]]]");
+    /* A chained relation head (evaluated LessEqual[-1, a, 1]) is understood. */
+    run_test("Reduce[LessEqual[-1, a, 1], a, Reals]",
+             "Inequality[-1, LessEqual, a, LessEqual, 1]");
+}
+
+/* Regression: the general sign diagram silently skipped breakpoints it could
+ * not find (Solve left Sin[x] == x/2 unevaluated; Sin[x] == 0 is an infinite
+ * family), leaving ONE cell decided at x = 0 -- a wrong False for each of
+ * these.  Unknown roots now decline (unevaluated); an imaginary-period
+ * exponential family contributes its one real member. */
+static void test_reals_unknown_roots_decline(void) {
+    run_contains("Reduce[Sin[x] > x/2, x, Reals]", "Reduce[");
+    run_contains("Reduce[x + Sin[x] > 0, x, Reals]", "Reduce[");
+    run_contains("Reduce[Sin[x] > 0, x, Reals]", "Reduce[");
+    run_contains("Reduce[Cos[x] <= 0, x, Reals]", "Reduce[");
+    run_test("Reduce[Exp[x] > 2, x, Reals]", "Greater[x, Log[2]]");
+    /* Refine decides through Reduce: the wrong False made these True/False. */
+    run_test("Refine[Cos[x] > 0]", "Greater[Cos[x], 0]");
+    run_test("Refine[Sin[x] > 0]", "Greater[Sin[x], 0]");
+    run_test("Refine[Sin[x] > 0, 0 < x < 4]", "Greater[Sin[x], 0]");
+    run_test("Refine[Cos[x] > 0, x > 0]", "Greater[Cos[x], 0]");
+}
+
 /* Evaluate `input`, capturing the real stderr fd into a temp file, and report
  * whether the `Solve::ifun` advisory was emitted.  Restores stderr before
  * returning so a later assertion failure still prints.  Uses POSIX dup/dup2
@@ -1741,6 +1787,8 @@ int main(void) {
     TEST(test_trig_pair);
     TEST(test_periodic_conj_region);
     TEST(test_trig_ineq_region);
+    TEST(test_reals_parametric_families);
+    TEST(test_reals_unknown_roots_decline);
     TEST(test_no_ifun_message);
     TEST(test_real_inequalities);
     TEST(test_rational_inequalities);

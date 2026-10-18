@@ -15,6 +15,8 @@
 #include "reduce_realdiag.h"
 #include "reduce_realfn.h"
 #include "reduce_real_util.h"
+#include "reduce_eq.h"
+#include "zero_test.h"
 
 #include "eval.h"
 #include "sym_names.h"
@@ -166,35 +168,152 @@ static bool has_free_parameter(const RForm* F, const Expr* x) {
  *  Breakpoint collection (soft Solve)                                 *
  * ------------------------------------------------------------------ */
 
-/* Append the real roots of `poly` to (*arr,*n,*cap) IFF Solve returns a clean
- * finite list of numeric-real constants; otherwise append nothing (an identity
- * region or a parametric/conditional answer is tolerated, not fatal). */
-static void soft_roots(const Expr* poly, const Expr* x, Expr*** arr, int* n, int* cap) {
+/* Residuals whose real roots Solve could not find (borrowed from the current
+ * call's RForm; per-call scratch, reset by reduce_univar_general). */
+static const Expr** g_rd_unrooted    = NULL;
+static int          g_rd_nunrooted   = 0;
+static int          g_rd_capunrooted = 0;
+
+/* Class of N[poly /. x -> s]: 0 numerically zero, 1 non-real, 2 real nonzero,
+ * -1 not a finite number. */
+static int unrooted_class_at(const Expr* poly, const Expr* x, double s) {
+    Expr* v = subst_eval(poly, x, expr_new_real(s));
+    Expr* n = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ v }, 1));
+    int cls = -1;
+    double re = 0.0, im = 0.0;
+    bool ok = true;
+    if (n->type == EXPR_REAL) re = n->data.real;
+    else if (n->type == EXPR_INTEGER) re = (double)n->data.integer;
+    else if (is_head(n, SYM_Complex) && n->data.function.arg_count == 2) {
+        bool o1, o2;
+        re = rru_approx_double(n->data.function.args[0], &o1);
+        im = rru_approx_double(n->data.function.args[1], &o2);
+        ok = o1 && o2;
+    } else ok = false;
+    expr_free(n);
+    if (ok && isfinite(re) && isfinite(im)) {
+        double tol = 1e-9 * (1.0 + fabs(s));
+        if (fabs(im) > tol)      cls = 1;
+        else if (fabs(re) > tol) cls = 2;
+        else                     cls = 0;
+    }
+    return cls;
+}
+
+/* Every unrooted residual must, on each open cell between consecutive
+ * breakpoints, be numerically zero at all probes or non-real at all probes --
+ * a cell where it is real and nonzero could hide a root (Sin[x] - x/2), so the
+ * diagram declines. */
+static bool unrooted_cells_ok(const Expr* x, Expr** bp, int m) {
+    for (int u = 0; u < g_rd_nunrooted; u++) {
+        for (int j = 0; j <= m; j++) {
+            bool ok_lo = true, ok_hi = true;
+            double lo = (j == 0) ? 0.0 : rru_approx_double(bp[j - 1], &ok_lo);
+            double hi = (j == m) ? 0.0 : rru_approx_double(bp[j], &ok_hi);
+            if (!ok_lo || !ok_hi) return false;
+            double probes[5];
+            if (j == 0 && j == m) {
+                double p[5] = { -10.5, -1.25, 0.375, 1.75, 11.25 };
+                for (int t = 0; t < 5; t++) probes[t] = p[t];
+            } else if (j == 0) {
+                double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
+                for (int t = 0; t < 5; t++) probes[t] = hi - p[t];
+            } else if (j == m) {
+                double p[5] = { 0.125, 0.5, 1.5, 7.0, 40.0 };
+                for (int t = 0; t < 5; t++) probes[t] = lo + p[t];
+            } else {
+                for (int t = 0; t < 5; t++) probes[t] = lo + (hi - lo) * (t + 1) / 6.0;
+            }
+            int cls0 = -2;
+            for (int t = 0; t < 5; t++) {
+                int c = unrooted_class_at(g_rd_unrooted[u], x, probes[t]);
+                if (c < 0 || c == 2) return false;
+                if (cls0 == -2) cls0 = c;
+                else if (c != cls0) return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* True iff `e` carries an Element[...] (the C[k] in Integers of a family). */
+static bool contains_element(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, SYM_Element)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_element(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Append the real roots of `poly` to (*arr,*n,*cap).  Returns false -- the
+ * caller must DECLINE -- when the real roots are not all known: Solve left the
+ * equation unevaluated (Sin[x] - x/2 == 0), or a periodic family has infinitely
+ * many real members (Sin[x] == 0) that no finite breakpoint list can carry.
+ * Silently skipping either was a wrong answer, not a decline: with no
+ * breakpoints the sign diagram is ONE cell decided at the single sample x = 0,
+ * which made Reduce[Sin[x] > x/2, x, Reals], Reduce[x + Sin[x] > 0, x, Reals]
+ * and Reduce[Sin[x] > 0, x, Reals] all return False.
+ *
+ * The rows are first collapsed to their real members exactly as the equation
+ * path does (reduce_collapse_reals_families), so an exponential's imaginary-
+ * period family contributes its one real member (Exp[x] == 2 -> Log[2]).  An
+ * empty identity row {{}} is tolerated (it adds no breakpoint), and a
+ * non-family ConditionalExpression contributes its value: an extra breakpoint
+ * only refines the cells, so it is always sound. */
+static bool soft_roots(const Expr* poly, const Expr* x, Expr*** arr, int* n, int* cap) {
     Expr* eqn = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy((Expr*)poly), expr_new_integer(0) }, 2);
     Expr* base[3] = { eqn, expr_copy((Expr*)x), expr_new_symbol(SYM_Reals) };
     Expr* sols = eval_and_free(reduce_opts_build_solve(base, 3, g_rd_opts));
-    if (!is_head(sols, SYM_List)) { expr_free(sols); return; }
+    if (!is_head(sols, SYM_List)) {
+        expr_free(sols);
+        /* Solve cannot express an identity (ArcSin[x] + ArcCos[x] - Pi/2): a
+         * residual that is identically zero has no isolated roots to miss. */
+        if (zero_test_decide(poly) == ZERO_TEST_TRUE) return true;
+        /* Roots unknown.  Record the residual: the driver accepts it only if,
+         * on every cell of the known breakpoints, it is identically zero or
+         * nowhere real (Log[x^2] - 2 Log[-x]: zero for x < 0, non-real for
+         * x > 0), where it cannot change sign; else it declines. */
+        if (g_rd_nunrooted == g_rd_capunrooted) {
+            g_rd_capunrooted = g_rd_capunrooted ? 2 * g_rd_capunrooted : 4;
+            g_rd_unrooted = (const Expr**)realloc((void*)g_rd_unrooted,
+                                    (size_t)g_rd_capunrooted * sizeof(Expr*));
+        }
+        g_rd_unrooted[g_rd_nunrooted++] = poly;           /* borrowed */
+        return true;
+    }
+    sols = reduce_collapse_reals_families(sols);
+    if (!sols) return false;
 
-    /* Keep each row that pins x to a numeric-real constant; silently skip the
-     * rest (an empty identity row {{}}, a ConditionalExpression, a parametric or
-     * complex value).  Collecting the clean rows individually recovers isolated
-     * roots (e.g. x == 1/2 from a squared factor) even when the same Solve also
-     * returns an interval it cannot express as a rule. */
+    /* Keep each row that pins x to a numeric-real constant.  Collecting the
+     * clean rows individually recovers isolated roots (e.g. x == 1/2 from a
+     * squared factor) even when the same Solve also returns an interval it
+     * cannot express as a rule. */
+    bool ok_all = true;
     size_t nr = sols->data.function.arg_count;
-    for (size_t i = 0; i < nr; i++) {
+    for (size_t i = 0; i < nr && ok_all; i++) {
         Expr* row = sols->data.function.args[i];
         if (!is_head(row, SYM_List) || row->data.function.arg_count != 1) continue;
         Expr* rule = row->data.function.args[0];
         if (!is_head(rule, SYM_Rule) || rule->data.function.arg_count != 2) continue;
         Expr* val = rule->data.function.args[1];
-        if (is_head(val, SYM_ConditionalExpression)) continue;
+        if (is_head(val, SYM_ConditionalExpression)
+            && val->data.function.arg_count == 2) {
+            const Expr* cond = val->data.function.args[1];
+            if (contains_element(cond)) {
+                ok_all = false;              /* a real family: infinitely many roots */
+                break;
+            }
+            val = val->data.function.args[0];
+        }
         bool ok; double d = rru_approx_double(val, &ok);
         if (!ok || !isfinite(d)) continue;
         if (*n == *cap) { *cap = *cap ? *cap * 2 : 8; *arr = realloc(*arr, (size_t)*cap * sizeof(Expr*)); }
         (*arr)[(*n)++] = expr_copy(val);
     }
     expr_free(sols);
+    return ok_all;
 }
 
 /* Collect equation-root breakpoints of an atom expression, descending its
@@ -203,20 +322,21 @@ static void soft_roots(const Expr* poly, const Expr* x, Expr*** arr, int* n, int
  * isolated root of a polynomial factor (e.g. x==1/2 from (2x-1)^2) even when
  * Solve on the whole product returns the identity-region {{}} it cannot express
  * as rules. */
-static void collect_factor_roots(const Expr* poly, const Expr* x,
+static bool collect_factor_roots(const Expr* poly, const Expr* x,
                                  Expr*** arr, int* n, int* cap) {
+    if (!rd_contains_x(poly, x)) return true;          /* constant factor: no roots */
     if (is_head(poly, SYM_Times)) {
         for (size_t i = 0; i < poly->data.function.arg_count; i++)
-            collect_factor_roots(poly->data.function.args[i], x, arr, n, cap);
-        return;
+            if (!collect_factor_roots(poly->data.function.args[i], x, arr, n, cap))
+                return false;
+        return true;
     }
     if (is_head(poly, SYM_Power) && poly->data.function.arg_count == 2
         && poly->data.function.args[1]->type == EXPR_INTEGER
         && poly->data.function.args[1]->data.integer > 0) {
-        collect_factor_roots(poly->data.function.args[0], x, arr, n, cap);
-        return;
+        return collect_factor_roots(poly->data.function.args[0], x, arr, n, cap);
     }
-    soft_roots(poly, x, arr, n, cap);
+    return soft_roots(poly, x, arr, n, cap);
 }
 
 /* Insertion-sort the breakpoints with cmp_bp, dropping structural duplicates.
@@ -429,17 +549,26 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
      * boundaries stay a UNION across all conjuncts -- extra breakpoints only refine
      * the cell decomposition and are always sound. */
     Expr** bp = NULL; int m = 0, cap = 0;
-    for (int i = 0; i < F->n; i++)
-        for (int k = 0; k < F->c[i]->n; k++) {
+    bool ok = true;
+    /* Per-call scratch (see soft_roots).  Solve may re-enter Reduce and so this
+     * function: save the caller's list and restore it on every exit. */
+    const Expr** saved_unrooted = g_rd_unrooted;
+    int saved_nunrooted = g_rd_nunrooted, saved_capunrooted = g_rd_capunrooted;
+    g_rd_unrooted = NULL; g_rd_nunrooted = 0; g_rd_capunrooted = 0;
+    for (int i = 0; ok && i < F->n; i++)
+        for (int k = 0; ok && k < F->c[i]->n; k++) {
             const RAtom* a = &F->c[i]->a[k];
-            collect_factor_roots(a->poly, x, &bp, &m, &cap);
-            if (a->denom) soft_roots(a->denom, x, &bp, &m, &cap);
+            ok = collect_factor_roots(a->poly, x, &bp, &m, &cap);
+            if (ok && a->denom) ok = collect_factor_roots(a->denom, x, &bp, &m, &cap);
         }
-    for (int i = 0; i < F->n; i++)
-        for (int t = 0; t < cncon[i]; t++) soft_roots(ccons[i][t].poly, x, &bp, &m, &cap);
-
-    bool ok = sort_dedup_bp(bp, &m);
+    for (int i = 0; ok && i < F->n; i++)
+        for (int t = 0; ok && t < cncon[i]; t++)
+            ok = collect_factor_roots(ccons[i][t].poly, x, &bp, &m, &cap);
     if (!ok) goto decline;
+
+    ok = sort_dedup_bp(bp, &m);
+    if (!ok) goto decline;
+    if (g_rd_nunrooted > 0 && !unrooted_cells_ok(x, bp, m)) { ok = false; goto decline; }
 
     {
         int ncells = 2 * m + 1;
@@ -467,6 +596,9 @@ Expr* reduce_univar_general(const RForm* F, const Expr* x, Expr** vars, int nv,
         for (int i = 0; i < m; i++) expr_free(bp[i]);
         free(bp);
         free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
+        free((void*)g_rd_unrooted);
+        g_rd_unrooted = saved_unrooted;
+        g_rd_nunrooted = saved_nunrooted; g_rd_capunrooted = saved_capunrooted;
         return result;
     }
 
@@ -474,5 +606,8 @@ decline:
     for (int i = 0; i < m; i++) expr_free(bp[i]);
     free(bp);
     free_per_conj_cons(ccons, cncon, F->n); free(cncon); free(cccap);
+    free((void*)g_rd_unrooted);
+    g_rd_unrooted = saved_unrooted;
+    g_rd_nunrooted = saved_nunrooted; g_rd_capunrooted = saved_capunrooted;
     return NULL;
 }

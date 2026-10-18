@@ -253,6 +253,19 @@ static bool reduce_is_ineq_over_var(const Expr* atom, const Expr* var) {
     return is_ineq && reduce_contains_var(atom, var);
 }
 
+/* True iff `atom` is a relation free of `var`: a side condition on the
+ * parameters (the `a > 0` of Cos[x] == a && 0 < x < Pi && a > 0), which the
+ * periodic-region enumerator carries into every member's parameter condition. */
+static bool reduce_is_param_relation(const Expr* atom, const Expr* var) {
+    if (!atom || atom->type != EXPR_FUNCTION
+        || atom->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* hn = atom->data.function.head->data.symbol.name;
+    bool is_rel = (hn == SYM_Less || hn == SYM_LessEqual || hn == SYM_Greater
+                || hn == SYM_GreaterEqual || hn == SYM_Inequality
+                || hn == SYM_Equal || hn == SYM_Unequal);
+    return is_rel && !reduce_contains_var(atom, var);
+}
+
 /* Recognise `And[<one periodic equation over var>, <inequalities over var>…]`.
  * On success sets *peq_out to the (borrowed) periodic-equation atom and returns
  * a NEW `And` of the remaining constraint atoms (owned; a lone atom is returned
@@ -267,7 +280,8 @@ static Expr* reduce_periodic_conj_split(const Expr* conj, const Expr* var,
         if (reduce_is_periodic_eq(a, var)) {
             if (peq) return NULL;               /* more than one periodic eq */
             peq = a;
-        } else if (!reduce_is_ineq_over_var(a, var)) {
+        } else if (!reduce_is_ineq_over_var(a, var)
+                   && !reduce_is_param_relation(a, var)) {
             return NULL;                        /* an atom we do not handle */
         }
     }

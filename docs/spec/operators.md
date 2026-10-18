@@ -28,6 +28,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `/`      | `Divide`| 5000 | Left |
 | `*`      | `Times` | 4500 | Left |
 | `+`, `-` | `Plus`  | 3500 | Left |
+| `+` (prefix) | `Plus` (one argument: `+x` is `Plus[x]`, which evaluates to `x`) | 3500 | Right |
 | `==`, `<`, `<=`, `;;` | `Equal`, `Less`, `LessEqual`, `Span` | 3200 | None |
 | `===`    | `SameQ` | 3200 | None |
 | `!` (prefix) | `Not` | 3000 | Right |

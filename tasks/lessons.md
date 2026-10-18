@@ -4681,3 +4681,10 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   log with pointers/refcounts. Guard Malloc and a plain no-pool build did NOT
   reproduce it (timing). Find a deterministic reproducer first (M6534's
   numeric instance, ~20 s) and use it as the acceptance test.
+
+## 2026-10-19 — parser changes: run the parser suite only (issue #101)
+- Correction: started the full `*_tests` loop after the prefix-`+` parser fix.
+  The user considers `parse_tests` + `parser_precision_tests` comprehensive for
+  any parser change, including changes to how valid input parses.
+- Rule: for a `src/parse.c` change, add cases to `tests/test_parse.c` and run
+  only the two parser binaries.

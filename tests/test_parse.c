@@ -373,6 +373,19 @@ void test_operator_precedence_ladder() {
     assert_parse_eq("-a^2",         "Times[-1, Power[a, 2]]");
     assert_parse_eq("-f[x]",        "Times[-1, f[x]]");
 
+    /* --- prefix unary plus: a one-argument Plus, as in WL (issue #101);
+     *     binds tighter than binary +, looser than Times/Power --- */
+    assert_parse_eq("+x",           "Plus[x]");
+    assert_parse_eq("+ x",          "Plus[x]");
+    assert_parse_eq("+a b",         "Plus[Times[a, b]]");
+    assert_parse_eq("+a^2",         "Plus[Power[a, 2]]");
+    assert_parse_eq("+x == y",      "Equal[Plus[x], y]");
+    assert_parse_eq("+-x",          "Plus[Times[-1, x]]");
+    assert_parse_eq("f[+x]",        "f[Plus[x]]");
+    assert_parse_eq("{+x, -y}",     "List[Plus[x], Times[-1, y]]");
+    assert_parse_eq("+5",           "5");                 /* signed literal */
+    assert_parse_eq("++x",          "PreIncrement[x]");
+
     /* --- associativity --- */
     assert_parse_eq("a - b - c",    "Plus[a, Times[-1, b], Times[-1, c]]"); /* + left */
     assert_parse_eq("a^b^c",        "Power[a, Power[b, c]]");               /* ^ right */

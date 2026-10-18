@@ -1484,7 +1484,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
      * without parse_primary printing a spurious "Unexpected character"
      * message. The chars below never start a primary or a prefix operator;
      * `+`, `-`, `.`, `!`, `?`, `'` are intentionally excluded because they
-     * either begin numbers (`+5`, `-5`, `.5`) or prefix forms (`!x`, `-x`,
+     * either begin numbers (`+5`, `-5`, `.5`) or prefix forms (`!x`, `-x`, `+x`,
      * `?sym`, `++x`, `--x`); a leading `;;` is the implicit-LHS Span
      * prefix and is also left alone. */
     if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',' ||
@@ -1573,6 +1573,19 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         Expr* minus_one = expr_new_integer(-1);
         Expr* args[2] = { minus_one, right };
         left = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
+    } else if (*s->pos == '+' && !isdigit((unsigned char)s->pos[1]) &&
+               !(s->pos[1] == '.' && isdigit((unsigned char)s->pos[2]))) {
+        /* Prefix `+` (the "++" PreIncrement case is consumed above; a signed
+         * literal `+5` / `+.5` is left to parse_number). As in the Wolfram
+         * Language it parses to a one-argument Plus -- `Hold[+x]` is
+         * `Hold[Plus[x]]` -- which the evaluator then reduces to `x`. The
+         * operand binds tighter than binary Plus, so `+a b` is
+         * Plus[Times[a, b]] and `+a == b` is Equal[Plus[a], b]. */
+        s->pos++;
+        Expr* right = parse_expression_prec(s, 3501);
+        if (!right) return NULL;
+        Expr* args[1] = { right };
+        left = expr_new_function(expr_new_symbol(SYM_Plus), args, 1);
     } else if (*s->pos == '!' && s->pos[1] != '=') {
         s->pos++;
         Expr* right = parse_expression_prec(s, 3000); // Not precedence is 3000

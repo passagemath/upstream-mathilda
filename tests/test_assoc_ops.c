@@ -129,7 +129,7 @@ static void test_listable_regression(void) {
 static void test_packed_and_ndarray(void) {
     CHECK("<|a->Range[3]|> + 1", "<|a -> {2, 3, 4}|>");
     CHECK("Range[2] + <|a->1|>", "{<|a -> 2|>, <|a -> 3|>}");
-    CHECK("Sin[<|a -> NDArray[{0.5}]|>]", "<|a -> NDArray[{0.479426}]|>");
+    CHECK("Sin[<|a -> NDArray[{0.5}]|>]", "<|a -> NDArray[{0.479425538604203}]|>");
     CHECK("{0, Splice[Range[3]]}", "{0, 1, 2, 3}");
     CHECK("CountDistinct[Range[10]]", "10");
     CHECK("CountDistinct[NDArray[{1.5, 2.5, 1.5}]]", "2");

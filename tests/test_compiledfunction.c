@@ -1133,8 +1133,9 @@ void test_cf_runtime_options(void) {
                    "{cf[1000], cf[3000000]}]", "{1000000000, 8553255926290448384}", 0);
     /* Wrap must not change a POWI_I result that FITS. */
     assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][100]", "1000000", 0);
-    assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][2000000] "
-                   "=== 2000000^3", "False", 0);                    /* overflows -> wraps, != exact */
+    /* 3000000^3 > 2^63 (2000000^3 = 8*10^18 still fits -- see the checked case above). */
+    assert_eval_eq("Compile[{{n, _Integer}}, n^3, RuntimeOptions -> \"Speed\"][3000000] "
+                   "=== 3000000^3", "False", 0);                    /* overflows -> wraps, != exact */
     /* And the DEFAULT (checked) POWI_I is untouched by the fix: exact via bignum. */
     assert_eval_eq("Compile[{{n, _Integer}}, n^3][3000000] === 3000000^3", "True", 0);
 

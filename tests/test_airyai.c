@@ -169,16 +169,16 @@ void test_airyai_derivatives() {
     assert_eval_eq("AiryAiPrime[0]", "-1/(3^(1/3) Gamma[1/3])", 0);
     /* Taylor series at 0 (closed-form coefficients). */
     assert_eval_eq("Series[AiryAi[x], {x, 0, 4}]",
-        "1/(3^(2/3) Gamma[2/3]) + -1/(3^(1/3) Gamma[1/3]) x + "
-        "1/6/(3^(2/3) Gamma[2/3]) x^3 + -1/12/(3^(1/3) Gamma[1/3]) x^4 + O[x]^5", 0);
+        "1/(3^(2/3) Gamma[2/3]) - x/(3^(1/3) Gamma[1/3])"
+        " + x^3/(6 3^(2/3) Gamma[2/3]) - x^4/(12 3^(1/3) Gamma[1/3]) + O[x]^5", 0);
 }
 
 /* ---- asymptotic series at Infinity ---------------------------------- */
 
 void test_airyai_series_infinity() {
     assert_eval_eq("Series[AiryAi[x], {x, Infinity, 2}]",
-        "E^(-2/3 x^(3/2)) (1/2/Sqrt[Pi] (1/x)^(1/4) + "
-        "-5/96/Sqrt[Pi] (1/x)^(7/4) + O[1/x]^(13/4))", 0);
+        "E^(-2/3 x^(3/2)) ((1/x)^(1/4)/(2 Sqrt[Pi])"
+        " - (5 (1/x)^(7/4))/(96 Sqrt[Pi]) + O[1/x]^(13/4))", 0);
     assert_eval_eq("Series[AiryAi[x], {x, Infinity, 1}]",
         "E^(-2/3 x^(3/2)) ((1/x)^(1/4)/(2 Sqrt[Pi]) + O[1/x]^(7/4))", 0);
 }
@@ -317,17 +317,17 @@ void test_airyaiprime_series() {
     /* Taylor at 0 (closed-form coefficients, via the generic Taylor-via-D
      * path on AiryAiPrime[0] and the Ai'' = z Ai derivative rules). */
     assert_eval_eq("Series[AiryAiPrime[x], {x, 0, 4}]",
-        "-1/(3^(1/3) Gamma[1/3]) + 1/2/(3^(2/3) Gamma[2/3]) x^2 + "
-        "-1/3/(3^(1/3) Gamma[1/3]) x^3 + O[x]^5", 0);
+        "-1/(3^(1/3) Gamma[1/3]) + x^2/(2 3^(2/3) Gamma[2/3])"
+        " - x^3/(3 3^(1/3) Gamma[1/3]) + O[x]^5", 0);
     /* Asymptotic at Infinity (DLMF 9.7.6): leading -1/(2 Sqrt[Pi]) x^(1/4),
      * coefficients -7/96/Sqrt[Pi], 455/9216/Sqrt[Pi]. */
     assert_eval_eq("Series[AiryAiPrime[x], {x, Infinity, 2}]",
-        "E^(-2/3 x^(3/2)) ((-1/2/Sqrt[Pi])/(1/x)^(1/4) + "
-        "-7/96/Sqrt[Pi] (1/x)^(5/4) + O[1/x]^(11/4))", 0);
+        "E^(-2/3 x^(3/2)) (-1/(2 Sqrt[Pi] (1/x)^(1/4))"
+        " - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + O[1/x]^(11/4))", 0);
     assert_eval_eq("Series[AiryAiPrime[x], {x, Infinity, 3}]",
-        "E^(-2/3 x^(3/2)) ((-1/2/Sqrt[Pi])/(1/x)^(1/4) + "
-        "-7/96/Sqrt[Pi] (1/x)^(5/4) + 455/9216/Sqrt[Pi] (1/x)^(11/4) + "
-        "O[1/x]^(17/4))", 0);
+        "E^(-2/3 x^(3/2)) (-1/(2 Sqrt[Pi] (1/x)^(1/4))"
+        " - (7 (1/x)^(5/4))/(96 Sqrt[Pi]) + (455 (1/x)^(11/4))/(9216 Sqrt[Pi])"
+        " + O[1/x]^(17/4))", 0);
 }
 
 /* ---- derivative rule ------------------------------------------------ */

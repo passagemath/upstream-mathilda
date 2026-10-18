@@ -197,16 +197,16 @@ void test_airybi_derivatives() {
     assert_eval_eq("AiryBiPrime[0]", "3^(1/6)/Gamma[1/3]", 0);
     /* Taylor series at 0 (closed-form coefficients). */
     assert_eval_eq("Series[AiryBi[x], {x, 0, 4}]",
-        "1/(3^(1/6) Gamma[2/3]) + 3^(1/6)/Gamma[1/3] x + "
-        "1/6/(3^(1/6) Gamma[2/3]) x^3 + 1/4/(3^(5/6) Gamma[1/3]) x^4 + O[x]^5", 0);
+        "1/(3^(1/6) Gamma[2/3]) + (3^(1/6) x)/Gamma[1/3]"
+        " + x^3/(6 3^(1/6) Gamma[2/3]) + x^4/(4 3^(5/6) Gamma[1/3]) + O[x]^5", 0);
 }
 
 /* ---- asymptotic series at Infinity ---------------------------------- */
 
 void test_airybi_series_infinity() {
     assert_eval_eq("Series[AiryBi[x], {x, Infinity, 2}]",
-        "E^(2/3 x^(3/2)) ((1/x)^(1/4)/Sqrt[Pi] + "
-        "5/48/Sqrt[Pi] (1/x)^(7/4) + O[1/x]^(13/4))", 0);
+        "E^(2/3 x^(3/2)) ((1/x)^(1/4)/Sqrt[Pi] + (5 (1/x)^(7/4))/(48 Sqrt[Pi])"
+        " + O[1/x]^(13/4))", 0);
     assert_eval_eq("Series[AiryBi[x], {x, Infinity, 1}]",
         "((1/x)^(1/4)/Sqrt[Pi] + O[1/x]^(7/4)) E^(2/3 x^(3/2))", 0);
 }
@@ -325,13 +325,13 @@ void test_airybiprime_series() {
     /* Taylor at 0 via the generic Taylor-via-D path on AiryBiPrime[0] and the
      * Bi'' = z Bi derivative rules. */
     assert_eval_eq("Series[AiryBiPrime[x], {x, 0, 5}]",
-        "3^(1/6)/Gamma[1/3] + 1/2/(3^(1/6) Gamma[2/3]) x^2 + "
-        "1/(3^(5/6) Gamma[1/3]) x^3 + 1/30/(3^(1/6) Gamma[2/3]) x^5 + O[x]^6", 0);
+        "3^(1/6)/Gamma[1/3] + x^2/(2 3^(1/6) Gamma[2/3])"
+        " + x^3/(3^(5/6) Gamma[1/3]) + x^5/(30 3^(1/6) Gamma[2/3]) + O[x]^6", 0);
     /* Asymptotic at Infinity (DLMF 9.7.8): leading x^(1/4)/Sqrt[Pi],
      * next coefficient -7/(48 Sqrt[Pi]). */
     assert_eval_eq("Series[AiryBiPrime[x], {x, Infinity, 2}]",
-        "E^(2/3 x^(3/2)) (1/(Sqrt[Pi] (1/x)^(1/4)) + "
-        "-7/48/Sqrt[Pi] (1/x)^(5/4) + O[1/x]^(11/4))", 0);
+        "E^(2/3 x^(3/2)) (1/(Sqrt[Pi] (1/x)^(1/4))"
+        " - (7 (1/x)^(5/4))/(48 Sqrt[Pi]) + O[1/x]^(11/4))", 0);
 }
 
 /* ---- derivative rule ------------------------------------------------ */

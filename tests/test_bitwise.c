@@ -107,7 +107,7 @@ static void test_negatives(void) {
     assert_eval_eq("BitLength[-1]", "0", 0);   /* BitNot[-1] = 0  */
     assert_eval_eq("BitLength[-2]", "1", 0);   /* BitNot[-2] = 1  */
     assert_eval_eq("BitLength[-3]", "2", 0);   /* BitNot[-3] = 2  */
-    assert_eval_eq("BitLength[-4]", "3", 0);   /* BitNot[-4] = 3  */
+    assert_eval_eq("BitLength[-4]", "2", 0);   /* BitNot[-4] = 3, BitLength[3] = 2 (WL: 2) */
     assert_eval_eq("BitLength[-8]", "3", 0);   /* BitNot[-8] = 7  */
     assert_eval_eq("BitLength[-256]", "8", 0); /* BitNot[-256] = 255 */
 }

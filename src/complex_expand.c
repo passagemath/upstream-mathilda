@@ -41,6 +41,7 @@
 #include "sym_names.h"
 #include "match.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "flint_num_bridge.h"  /* flint_cert_parts_sign */
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand.  mk_* take ownership of pointer      *
@@ -88,6 +89,12 @@ static bool cx_is_pos_numeric(const Expr* e) {
         const char* s = e->data.symbol.name;
         if (s == SYM_Pi || s == SYM_E) return true;
     }
+    /* Exact numeric constant (Sqrt[2] + 2, Pi - 3, ...): a certified Arb ball
+     * sign, so an exact zero that does not autosimplify is never taken as
+     * positive. */
+    int rs, is;
+    if (e->type == EXPR_FUNCTION && flint_cert_parts_sign(e, &rs, &is))
+        return rs > 0 && is == 0;
     return false;
 }
 
@@ -454,6 +461,22 @@ static void cx_power(const Expr* base, const Expr* exp, const CxCtx* ctx,
         *re = ev(mk_pow(expr_copy(bu), expr_copy(eu)));
         *im = mk_int(0);
         goto done;
+    }
+
+    /* Real negative numeric base, real exponent: |b| = -b and Arg[b] = Pi,
+     * so the modulus stays a plain radical (Sqrt[1 - Sqrt[3]] ->
+     * I Sqrt[-1 + Sqrt[3]], not I (4 - 2 Sqrt[3])^(1/4)). */
+    if (base_real && exp_real) {
+        int rs, is;
+        if (bu->type == EXPR_FUNCTION && flint_cert_parts_sign(bu, &rs, &is) &&
+            rs < 0 && is == 0) {
+            Expr* mod = ev(mk_pow(ev(mk_fn1("Expand", mk_fn2("Times", mk_int(-1), expr_copy(bu)))),
+                                  expr_copy(eu)));
+            Expr* ph = mk_fn2("Times", mk_sym("Pi"), expr_copy(eu));
+            *re = ev(mk_fn2("Times", expr_copy(mod), mk_fn1("Cos", expr_copy(ph))));
+            *im = ev(mk_fn2("Times", mod, mk_fn1("Sin", ph)));
+            goto done;
+        }
     }
 
     /* General polar master formula.

@@ -39,10 +39,10 @@ void test_cx_trig(void) {
     assert_eval_eq("ComplexExpand[Sinh[x + I y]]",
                    "I Cosh[x] Sin[y] + Sinh[x] Cos[y]", 0);
     assert_eval_eq("ComplexExpand[Tan[x + I y]]",
-                   "Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + I Sinh[2 y]/(Cos[2 x] + Cosh[2 y])", 0);
+                   "Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + (I Sinh[2 y])/(Cos[2 x] + Cosh[2 y])", 0);
     /* A complex variable given via the second argument. */
     assert_eval_eq("ComplexExpand[Cosh[x + I y] + Tanh[z], {z}]",
-                   "Cosh[x] Cos[y] + I Sinh[x] Sin[y] + I Sin[2 Im[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
+                   "Cosh[x] Cos[y] + I Sinh[x] Sin[y] + (I Sin[2 Im[z]])/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
     /* Single complex variable given bare (not in a list). */
     assert_eval_eq("ComplexExpand[Sin[x], x]",
                    "Cosh[Im[x]] Sin[Re[x]] + I Cos[Re[x]] Sinh[Im[x]]", 0);
@@ -117,11 +117,19 @@ void test_cx_wrappers(void) {
     assert_eval_eq("ComplexExpand[Abs[z], {z}]", "Sqrt[Im[z]^2 + Re[z]^2]", 0);
     /* Sign of a complex variable -> z/Abs[z]. */
     assert_eval_eq("ComplexExpand[Sign[x], x]",
-                   "Re[x]/Sqrt[Im[x]^2 + Re[x]^2] + I Im[x]/Sqrt[Im[x]^2 + Re[x]^2]", 0);
+                   "Re[x]/Sqrt[Im[x]^2 + Re[x]^2] + (I Im[x])/Sqrt[Im[x]^2 + Re[x]^2]", 0);
     /* Real variables pass through the real-valued wrappers. */
     assert_eval_eq("ComplexExpand[Re[x + y]]", "x + y", 0);
     assert_eval_eq("ComplexExpand[Im[x + y]]", "0", 0);
     assert_eval_eq("ComplexExpand[Conjugate[x + y]]", "x + y", 0);
+    /* Real radicals of exact constants keep their plain form: a certified
+     * positive base is left alone, a certified negative one becomes
+     * (-b)^e (Cos[Pi e] + I Sin[Pi e]). */
+    assert_eval_eq("ComplexExpand[Sqrt[2 + Sqrt[3]]]", "Sqrt[2 + Sqrt[3]]", 0);
+    assert_eval_eq("ComplexExpand[(1 + Sqrt[2])^(1/3)]", "(1 + Sqrt[2])^(1/3)", 0);
+    assert_eval_eq("ComplexExpand[Sqrt[1 - Sqrt[3]]]", "I Sqrt[-1 + Sqrt[3]]", 0);
+    assert_eval_eq("ComplexExpand[(Pi - 4)^(1/3)]",
+                   "1/2 (4 - Pi)^(1/3) + (1/2*I) Sqrt[3] (4 - Pi)^(1/3)", 0);
 }
 
 /* ------------------------------------------------------------------ */

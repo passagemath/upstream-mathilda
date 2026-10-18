@@ -39,6 +39,7 @@
 #include "graphics_json.h"
 #include "image.h"
 #include "meminfo.h"
+void mth_block_graveyard_flush(void);   /* modular.c: free Block values parked by a TimeConstrained unwind */
 
 /* One-time init guard. The kernel's global symbol table is process-wide, so a
  * second symtab_init()/core_init() would leak or corrupt it. */
@@ -99,6 +100,7 @@ static Expr* ffi_parse_eval(const char* input, int* parse_failed) {
     if (!parsed) { *parse_failed = 1; return NULL; }
 
     Expr* evaluated = evaluate(parsed);
+    mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
     expr_free(parsed);
     return evaluated; /* may be NULL: "evaluated to nothing" */
 }
@@ -557,6 +559,7 @@ static void ffi_eval_statement(const FfiSink* s, Expr* parsed, int id,
     FfiCapture cap;
     if (cell) ffi_capture_begin(&cap);
     Expr* evaluated = evaluate(parsed);
+    mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
     if (cell) ffi_capture_end(s, &cap, id);
 
     if (cell) ffi_store_out(line, evaluated);

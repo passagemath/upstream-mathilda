@@ -476,6 +476,7 @@ Exponentiation.
 **Features**:
 - `Listable`.
 - Simplifies integer powers of integers.
+- `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and Mathematica does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - Supports complex results for negative bases (e.g., `(-1)^(1/2)` becomes `I`).

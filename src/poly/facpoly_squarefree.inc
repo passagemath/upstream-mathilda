@@ -155,7 +155,12 @@ static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
         expr_free(prod);
         Expr* missing = exact_poly_div(P, expanded_prod, vars, var_count);
         expr_free(expanded_prod);
-        if (!missing) missing = expr_new_integer(1);
+        if (!missing) {
+            /* The product does not divide P: the factorization is wrong (see
+             * the matching guard at the end of this function). */
+            expr_free(res_cont); expr_free(res_pp);
+            return expr_expand(P);
+        }
 
         Expr** final_args = malloc(sizeof(Expr*) * 3);
         final_args[0] = missing;
@@ -284,7 +289,19 @@ static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
     Expr* missing = exact_poly_div(P, expanded_prod, vars, var_count);
     expr_free(expanded_prod);
     
-    if (!missing) missing = expr_new_integer(1);
+    /* `missing` is P / (content * squarefree factors); it must divide exactly.
+     * When it does not, the gcds the Yun loop relied on were not true common
+     * divisors -- which happens when the "variables" are transcendental atoms
+     * (Arg[..], Log[..]) over a coefficient ring the classical PRS does not
+     * model (Pi, I).  Substituting 1 for the missing cofactor used to return a
+     * product UNEQUAL to P, i.e. a silently wrong FactorSquareFree, and through
+     * Simplify a wrong closed form (Mathar/singular corpus:
+     * Integrate[Log[x]^2/(a^2 + x^2), {x, 0, Infinity}, Assumptions -> a > 0]
+     * gave -Pi/(6 a)).  Return P unfactored instead: always correct. */
+    if (!missing) {
+        expr_free(res_cont); expr_free(res_pp);
+        return expr_expand(P);
+    }
     
     Expr** final_args = malloc(sizeof(Expr*) * 3);
     final_args[0] = missing; final_args[1] = res_cont; final_args[2] = res_pp;

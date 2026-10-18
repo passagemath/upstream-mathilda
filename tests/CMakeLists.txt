@@ -5156,7 +5156,9 @@ add_test(NAME mse_trick_corpus_tests
 # (arXiv:1207.5845) by tools/mathar/ -- every reference value checked by a
 # Mathematica NIntegrate oracle.  One runner, two corpora; each record runs as a
 # symbolic integral and as a numeric instance (parallel fork pool, MATHAR_JOBS).
-# The trailing arguments are the ratcheting CORRECT floors (symbolic, instance);
+# The trailing arguments are the ratcheting CORRECT floors (symbolic, instance),
+# set 1-3 below the measured v0.458 counts (80/166 definite, 66/82 indefinite)
+# to absorb timeout jitter at the 30 s per-case limit;
 # WRONG and CRASH must be 0.  See docs/design/mathar_integrate_triage.md.
 add_executable(mathar_corpus_tests test_mathar_corpus.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mathar_corpus_tests PRIVATE ../src)
@@ -5167,9 +5169,33 @@ else()
     target_link_libraries(mathar_corpus_tests gmp m)
 endif()
 add_test(NAME mathar_definite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 0 0)
+         COMMAND mathar_corpus_tests ../MatharDefiniteIntegralsCorpus.m 78 163)
 add_test(NAME mathar_indefinite_corpus_tests
-         COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 0 0)
+         COMMAND mathar_corpus_tests ../MatharIndefiniteIntegralsCorpus.m 65 80)
+
+# Root-cause regression tests for the bugs the Mathar corpus exposed (series
+# ArcTan sign, bigint FactorSquareFree, unverified squarefree factorization,
+# symbolic-residue region classification).
+add_executable(mathar_regression_tests test_mathar_regressions.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mathar_regression_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(mathar_regression_tests gmp m ${ECM_LIB})
+    add_dependencies(mathar_regression_tests build_ecm)
+else()
+    target_link_libraries(mathar_regression_tests gmp m)
+endif()
+add_test(NAME mathar_regression_tests COMMAND mathar_regression_tests)
+
+# PolyLogLadder Integrate stage (src/internal/PolyLogLadder.m).
+add_executable(integrate_polylog_tests test_integrate_polylog.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_polylog_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_polylog_tests gmp m ${ECM_LIB})
+    add_dependencies(integrate_polylog_tests build_ecm)
+else()
+    target_link_libraries(integrate_polylog_tests gmp m)
+endif()
+add_test(NAME integrate_polylog_tests COMMAND integrate_polylog_tests)
 
 # Cauchy principal-value definite-integral stress battery (fractional branch cuts
 # over real poles, log branch cuts, trig/oscillatory poles, higher-order poles).

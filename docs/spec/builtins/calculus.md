@@ -1827,6 +1827,11 @@ monotonically down.
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
+    - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
+    - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.
+    - Examples: `Integrate[Log[x]/(1 + x^2), x]` and `Integrate[x^2 Csc[x], x]` close. `Integrate[Log[x]/(1 + x^2), {x, 0, 1}]` is `-Catalan` and `Integrate[x Csc[x], {x, 0, Pi/2}]` is `2 Catalan`.
+    - In the automatic cascade it runs after `CRCTable`, before `LogByParts`.
   - `"ParallelMixedTower"` — `Integrate\`ParallelMixedTower[f, x]` (parallel
     Risch-Norman over a simple radical in a mixed transcendental tower).
   - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
@@ -3295,6 +3300,13 @@ an `InterpolatingFunction` and is left to the cascade above. The construction
 also handles the derivative-annotated objects produced by `D` (integrating the
 sampled derivative recovers the lower-order antiderivative). Computations use
 machine doubles.
+
+### Soundness gates on symbolic and tower stages (v0.458)
+
+- **Symbolic-parameter residue families.** A pole's half-plane is classified at a sample point of the assumed region. The closed form is then re-derived with the poles classified at up to three further generic points of the same region, and it is withdrawn when they disagree. Radical root expressions can swap identities inside the region: `1/(1 + 2 a x^2 + b x^4)` across `a^2 = b`. A withdrawn value leaves the integral to the later stages.
+- **ParallelMixedTower** (cascade and `Method -> "ParallelMixedTower"`) declines an integrand in which a kernel outside its elementary class (anything other than `Plus`, `Times`, `Power`, `Exp`, `Log`, trig, hyperbolic, their inverses and radicals) is applied to an x-dependent argument. Both it and the ParallelMixedSpecial cascade stage reject a result that mentions a symbol absent from the integrand. ParallelMixedSpecial also rejects `$Aborted`.
+
+Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDefiniteIntegralsCorpus.m`, `tests/MatharIndefiniteIntegralsCorpus.m`.
 
 ## Integrate`IntRationalLogPart
 

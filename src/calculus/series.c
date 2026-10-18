@@ -445,6 +445,35 @@ static void so_align_den(SeriesObj* a, SeriesObj* b, SeriesObj** ra, SeriesObj**
 }
 
 /* Constant series c + O[(x-x0)^order_over_den]. */
+/* Sign of a real-valued constant `c` for branch decisions: -1 / +1 when it is
+ * known, 0 when it cannot be decided.  A numeric constant (radicals, Pi, ...)
+ * is settled by its N value -- the case a literal-negative test misses, e.g.
+ * 1/(1 - Sqrt[3]) -- and a symbolic one by the assumptions.  A complex or
+ * non-finite numeric value is reported as +1, the legacy convention, so this
+ * never changes a branch it cannot justify. */
+static int series_real_sign(Expr* c, const AssumeCtx* assume) {
+    Expr* nv = simp(mk_fn1("N", expr_copy(c)));
+    int sg = 0;
+    if (nv) {
+        if (nv->type == EXPR_REAL) sg = nv->data.real < 0 ? -1 : 1;
+        else if (nv->type == EXPR_INTEGER) sg = nv->data.integer < 0 ? -1 : 1;
+        else if (nv->type == EXPR_FUNCTION && nv->data.function.head->type == EXPR_SYMBOL &&
+                 nv->data.function.head->data.symbol.name == SYM_Complex) sg = 1;
+        expr_free(nv);
+    }
+    if (sg != 0) return sg;
+    if (!assume) return 0;
+    if (assume_known_negative(assume, c)) return -1;
+    Expr* gt = mk_fn2("Greater", expr_copy(c), expr_new_integer(0));
+    int pos = assume_reduce_entails(assume, gt);
+    expr_free(gt);
+    if (pos == 1) return 1;
+    Expr* lt = mk_fn2("Less", expr_copy(c), expr_new_integer(0));
+    int neg = assume_reduce_entails(assume, lt);
+    expr_free(lt);
+    return neg == 1 ? -1 : 0;
+}
+
 static SeriesObj* so_from_constant(Expr* c, Expr* x, Expr* x0, int64_t order, int64_t den) {
     SeriesObj* s = so_alloc(x, x0, 0, order, den);
     if (s->coef_count > 0) {
@@ -2783,28 +2812,38 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
                     SeriesObj* inv = so_inv(inner);
                     if (inv) { r = so_apply_arccot(inv); so_free(inv); }
                     /* so_apply_arccot assumes the argument -> +Infinity and emits
-                     * +Pi/2. If the argument's leading coefficient is provably
-                     * negative (argument -> -Infinity), ArcTan limits to -Pi/2:
-                     * subtract Pi from the constant term. For a positive/unknown
-                     * leading coefficient this never fires, so the legacy answer
-                     * (and the numeric-coefficient path via odd_fold) is unchanged. */
-                    if (r && ctx->assume && inner->coef_count > 0) {
+                     * +Pi/2.  The true constant is Sign[lead] Pi/2, lead being the
+                     * argument's leading coefficient:
+                     *   - numeric lead (e.g. 1/(1 - Sqrt[3])): its numeric sign --
+                     *     a negative radical constant is NOT a literal negative, so
+                     *     it used to slip through as +Pi/2 and every definite
+                     *     integral telescoping an ArcTan[x/c] with c < 0 came out
+                     *     wrong (Mathar M6968: Integrate[1/(1+2a x^2+b x^4)]);
+                     *   - symbolic lead the assumptions sign: that sign;
+                     *   - otherwise Mathematica's Sqrt[lead^2]/lead factor, which
+                     *     is the sign for every real lead and never assumes one.
+                     * A positive lead needs no correction. */
+                    if (r && inner->coef_count > 0) {
                         Expr* lead = NULL;
                         for (size_t li = 0; li < inner->coef_count; li++)
                             if (!is_lit_zero(inner->coefs[li])) { lead = inner->coefs[li]; break; }
-                        bool neg = false;
-                        if (lead) {
-                            neg = assume_known_negative(ctx->assume, lead);
-                            if (!neg) {
-                                Expr* lt = mk_fn2("Less", expr_copy(lead), expr_new_integer(0));
-                                neg = (assume_reduce_entails(ctx->assume, lt) == 1);
-                                expr_free(lt);
-                            }
+                        int sg = lead ? series_real_sign(lead, ctx->assume) : 1;
+                        Expr* shift = NULL;          /* added to the constant term */
+                        if (sg < 0) {
+                            shift = simp(mk_times(expr_new_integer(-1), mk_symbol("Pi")));
+                        } else if (sg == 0) {
+                            /* (Sqrt[lead^2]/lead - 1) Pi/2 */
+                            Expr* sq = mk_fn1("Sqrt", mk_fn2("Power", expr_copy(lead), expr_new_integer(2)));
+                            Expr* fac = mk_fn2("Plus",
+                                mk_times(sq, mk_fn2("Power", expr_copy(lead), expr_new_integer(-1))),
+                                expr_new_integer(-1));
+                            shift = simp(mk_times(fac, mk_times(mk_fn2("Rational", expr_new_integer(1),
+                                                                         expr_new_integer(2)),
+                                                                mk_symbol("Pi"))));
                         }
-                        if (neg) {
-                            Expr* negpi = simp(mk_times(expr_new_integer(-1), mk_symbol("Pi")));
-                            SeriesObj* pis = so_from_constant(negpi, r->x, r->x0, r->order, r->den);
-                            expr_free(negpi);
+                        if (shift) {
+                            SeriesObj* pis = so_from_constant(shift, r->x, r->x0, r->order, r->den);
+                            expr_free(shift);
                             SeriesObj* r2 = so_add(r, pis);
                             so_free(r); so_free(pis); r = r2;
                         }

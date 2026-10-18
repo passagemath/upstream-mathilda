@@ -4040,6 +4040,7 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
          * old one — preserves the existing-test invariant when the
          * walker already produced a positive-exponent natural form. */
         if (!expr_eq(new_surface, (Expr*)surface)) {
+            if (owned[i]) expr_free(owned[i]);   /* surface no longer referenced */
             owned[i] = new_surface;
             gens[i].render = new_surface;
 
@@ -4052,8 +4053,23 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
              * so step 2's compaction drops it. */
             if (!autodetect_is_atomic_radical_surface(new_surface)) {
                 bool harvest_bail = false;
+                size_t before = *n;
                 autodetect_walk(new_surface, gens, n,
                                 QA_AUTODETECT_MAX_GENS, &harvest_bail);
+                /* The harvested entries' renders are BORROWED pointers into
+                 * new_surface -- which this entry owns, and which step 2's
+                 * compaction frees the moment it drops this ABSORBED entry.
+                 * Give each harvested render its own reference (expr_copy is
+                 * a refcount bump) so it outlives new_surface; without this
+                 * autodetect_build_tower read freed nodes (a use-after-free
+                 * that surfaced as wrong residue values, e.g.
+                 * Integrate[Log[x]^2/(a^2 + x^2), {x, 0, Infinity}] -> -Pi/(6 a)). */
+                for (size_t j = before; j < *n; j++) {
+                    if (gens[j].render && !owned[j]) {
+                        owned[j] = expr_copy((Expr*)gens[j].render);
+                        gens[j].render = owned[j];
+                    }
+                }
                 gens[i].kind = GEN_ABSORBED;
                 /* harvest_bail (cap full) is non-fatal here: the
                  * generator is still dropped, we just won't surface

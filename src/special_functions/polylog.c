@@ -943,6 +943,26 @@ static Expr* polylog_two_arg(Expr* n, Expr* z) {
             if (m == 2) return pl_two_half();
             if (m == 3) return pl_three_half();
         }
+        /* PolyLog[2, +-I] = -Pi^2/48 +- I Catalan (as Mathematica evaluates it;
+         * Re Li_2(i) = Li_2(-1)/4, Im Li_2(i) = DirichletBeta[2]).  Polylog
+         * ladders evaluated at x = Pi/2 or at the poles +-I land here. */
+        if (m == 2 && z->type == EXPR_FUNCTION && z->data.function.head->type == EXPR_SYMBOL &&
+            z->data.function.head->data.symbol.name == SYM_Complex && z->data.function.arg_count == 2) {
+            Expr* zr = z->data.function.args[0];
+            Expr* zi = z->data.function.args[1];
+            if (zr->type == EXPR_INTEGER && zr->data.integer == 0 &&
+                zi->type == EXPR_INTEGER && (zi->data.integer == 1 || zi->data.integer == -1)) {
+                Expr* pi2 = expr_new_function(expr_new_symbol(SYM_Power),
+                                (Expr*[]){ expr_new_symbol(SYM_Pi), expr_new_integer(2) }, 2);
+                Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ make_rational(-1, 48), pi2 }, 2);
+                Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ expr_copy(zi), expr_new_symbol(SYM_I),
+                                           expr_new_symbol(SYM_Catalan) }, 3);
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                (Expr*[]){ t1, t2 }, 2));
+            }
+        }
     }
 
 #ifdef USE_MPFR

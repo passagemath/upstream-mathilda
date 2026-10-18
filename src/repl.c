@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+void mth_block_graveyard_flush(void);   /* modular.c: free Block values parked by a TimeConstrained unwind */
 
 /* Portable isatty + fileno for pipe-mode detection */
 #ifdef _WIN32
@@ -173,6 +174,7 @@ void process_input(const char* input, int line_number) {
     Expr* pre_input = repl_apply_pre(expr_copy(parsed));
     Expr* evaluated = evaluate(pre_input);
     expr_free(pre_input);
+    mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
 
     /* $Post: applied to the evaluator's result. Consumes our reference
      * to `evaluated`. */
@@ -979,6 +981,7 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
     PipeCapture cap;
     if (cell) pipe_capture_begin(&cap);
     Expr* evaluated = evaluate(parsed);
+    mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
     if (cell) pipe_capture_end(&cap, id);
 
     /* Out[line] BEFORE every early return below: a result that is suppressed by
@@ -1462,6 +1465,7 @@ static int run_script_file(const char* path) {
          * ours to free. The result is discarded: a script speaks via
          * Print[], not via echoed values. */
         Expr* evaluated = evaluate(parsed);
+        mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
         expr_free(evaluated);
         expr_free(parsed);
     }

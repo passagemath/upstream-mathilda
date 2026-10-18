@@ -4641,3 +4641,43 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
     (14,000 `mpz_kronecker` calls);
   - named methods on words were dominated by a perfect-power test trying every
     exponent up to 63.
+
+## 2026-10-18 — Mathar integral corpus: what mining an external table found
+
+- **A "missing cofactor = 1" fallback is a silent wrong answer.** FactorSquareFree
+  computed `missing = P / (content * factors)` and, when that division was not
+  exact, substituted 1 -- returning a product unequal to its input. Any routine
+  that reconstructs its input from computed pieces must treat an inexact
+  reconstruction as failure and return the input unchanged.
+- **"Is it a number?" predicates must know about bigints.** `is_number` in
+  poly.c accepted int64/Rational/Real but not EXPR_BIGINT, so a coefficient above
+  2^63 was enrolled as a polynomial VARIABLE and every downstream decision
+  (squarefree, gcd, content) was made on a bogus multivariate polynomial. Test
+  every structural predicate with a > 2^63 literal.
+- **One sample point does not classify a symbolic root over a region.** Radical
+  root expressions swap identities across a curve inside the assumed region
+  (a^2 = b for 1/(1 + 2a x^2 + b x^4)). Re-derive at a few more points of the
+  region and require agreement.
+- **A stage must decline integrands outside its class.** ParallelMixedTower
+  "integrated" g[Cos[t]] by treating it as a constant and leaked its tower
+  variable. Gate on the kernel set the method actually models, and reject a
+  result that names a symbol absent from the input.
+- **Never type a reference value from memory, even one just seen.** The first
+  regression test failed on a recalled 0.850109347 (true 0.8501088462); take
+  references from Mathematica every time ([[feedback_verify_reference_values_never_recall_them]]).
+- **Shared tree: a concurrent session's commit can swallow your hunks.** The
+  v0.457 FactorInteger commit included my CMake registration of a test whose
+  source was still untracked -- a clean checkout would not configure. Commit a
+  CMake registration together with the file it names, early.
+- **A TimeConstrained unwind must not free values that in-flight code may still hold.**
+  `mth_block_depth_unwind` restored the Blocks it jumped over and freed their
+  installed values immediately; a ParallelMixedSpecial memo Association freed
+  that way was read again later in the same Integrate call, which caused segfaults on eight
+  corpus integrals, timing-dependent. Fix: park unwind-restored rule lists and
+  free them at the next top-level statement (`mth_block_graveyard_flush`).
+  Diagnosis that worked: a debug copy with the node pool never reused, freed
+  nodes poisoned (type 99, refcount 0) and the top-level free site recorded in
+  the node; then a `DEBUG dead arg` print in evaluate_step and a Block-restore
+  log with pointers/refcounts. Guard Malloc and a plain no-pool build did NOT
+  reproduce it (timing). Find a deterministic reproducer first (M6534's
+  numeric instance, ~20 s) and use it as the acceptance test.

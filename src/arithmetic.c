@@ -35,6 +35,21 @@ Expr* make_rational(int64_t n, int64_t d) {
     if (d == 0) return NULL; // Error
     if (n == 0) return expr_new_integer(0);
 
+    /* INT64_MIN has no positive int64 counterpart: llabs() in gcd() and the
+     * sign flip below overflow, and n / -1 raises a hardware divide trap
+     * (SIGFPE) -- Mathar M7801 crashed the kernel this way.  Exact via GMP. */
+    if (n == INT64_MIN || d == INT64_MIN) {
+        mpz_t zn, zd;
+        mpz_init(zn); mpz_init(zd);
+        mpz_import(zn, 1, 1, sizeof(uint64_t), 0, 0, &(uint64_t){ n < 0 ? (uint64_t)0 - (uint64_t)n : (uint64_t)n });
+        if (n < 0) mpz_neg(zn, zn);
+        mpz_import(zd, 1, 1, sizeof(uint64_t), 0, 0, &(uint64_t){ d < 0 ? (uint64_t)0 - (uint64_t)d : (uint64_t)d });
+        if (d < 0) mpz_neg(zd, zd);
+        Expr* r = make_rational_mpz(zn, zd);
+        mpz_clear(zn); mpz_clear(zd);
+        return r;
+    }
+
     int64_t common = gcd(n, d);
     n /= common;
     d /= common;

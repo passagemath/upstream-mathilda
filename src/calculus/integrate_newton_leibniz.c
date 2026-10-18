@@ -921,6 +921,21 @@ Expr* integrate_newton_leibniz_try(Expr* f, Expr* x, Expr* a, Expr* b,
  * it is context-independent.  An undecided limit (x survives / Indeterminate) is
  * treated as integrable -- never force a divergence that isn't proven. */
 static bool nl_nonintegrable_at(Expr* f, Expr* x, Expr* pt, Expr* as) {
+    /* f finite at pt by direct substitution: not a pole.  (The limit test below
+     * on a radical endpoint, e.g. b = 2 - Sqrt[3], can return an unsimplified
+     * zero whose N value is a rounding residue, which read as a simple pole and
+     * declared Integrate[Log[x]/(1 + x^2), {x, 0, 2 - Sqrt[3]}] divergent.) */
+    {
+        arith_warnings_mute_push();
+        Expr* at = eval_take(mk_fn1("Quiet", mk_fn1("N",
+                       mk_fn2("ReplaceAll", expr_copy(f),
+                              mk_fn2("Rule", expr_copy(x), expr_copy(pt))))));
+        arith_warnings_mute_pop();
+        double v;
+        bool finite = at && nl_numeric(at, &v) == 1 && isfinite(v);
+        if (at) expr_free(at);
+        if (finite) return false;
+    }
     Expr* shift = mk_fn2("Plus", expr_copy(x),
                       mk_fn2("Times", expr_new_integer(-1), expr_copy(pt)));
     Expr* g = mk_fn2("Times", shift, expr_copy(f));
@@ -934,11 +949,33 @@ static bool nl_nonintegrable_at(Expr* f, Expr* x, Expr* pt, Expr* as) {
         double v;
         bool is_zero = (lim->type == EXPR_INTEGER && lim->data.integer == 0) ||
                        (lim->type == EXPR_REAL && lim->data.real == 0.0) ||
-                       (nl_numeric(lim, &v) == 1 && v == 0.0);
+                       (nl_numeric(lim, &v) == 1 && fabs(v) < 1e-12);
         nonint = !is_zero;                              /* nonzero finite -> simple pole */
     }
     expr_free(lim);
     return nonint;
+}
+
+/* True iff e contains the symbol named `name`. */
+static bool contains_symbol_named(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (contains_symbol_named(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_symbol_named(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* Node count of e, stopping once it exceeds cap (returns a value > cap). */
+static size_t nl_node_count_capped(const Expr* e, size_t cap) {
+    if (!e) return 0;
+    size_t n = 1;
+    if (e->type != EXPR_FUNCTION) return n;
+    n += nl_node_count_capped(e->data.function.head, cap);
+    for (size_t i = 0; i < e->data.function.arg_count && n <= cap; i++)
+        n += nl_node_count_capped(e->data.function.args[i], cap - (n < cap ? n : cap));
+    return n;
 }
 
 Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
@@ -1097,6 +1134,38 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
         integrate_emit_idiv(f, a, b);
         expr_free(total);
         return NULL;
+    }
+
+    /* 4b''. Real form.  A real integrand's value, telescoped from a complex-
+     * written antiderivative (a polylogarithm ladder in E^(I x), Log[1 + I x]),
+     * arrives as a combination like I (Log[1 - I] - Log[1 + I]) Pi + PolyLog
+     * values whose imaginary parts cancel.  ComplexExpand + Simplify expose
+     * the real closed form (x Csc[x] on [0, Pi/2] -> 2 Catalan); it is adopted
+     * only if it is free of I and numerically equal to the original.  Gated to
+     * small PolyLog-bearing values: Simplify[ComplexExpand[..]] on a large
+     * complex-exponential value (DSolve's variation of parameters over
+     * Sin[t] + DiracDelta[t - 3 Pi]) ran past the 8 s corpus budget. */
+    if (!contains_head(f, "Complex") && contains_head(total, "Complex") &&
+        (contains_head(total, "PolyLog") || contains_symbol_named(total, "Catalan") ||
+         contains_head(total, "Log")) &&
+        nl_node_count_capped(total, 400) <= 400) {
+        Expr* ce = eval_take(mk_fn1("Quiet", mk_fn1("Simplify", mk_fn1("ComplexExpand", expr_copy(total)))));
+        if (ce && !contains_head(ce, "Complex") && !contains_symbol(ce, x)) {
+            Expr* dif = eval_take(mk_fn1("N", mk_fn2("Plus", expr_copy(ce),
+                                     mk_fn2("Times", expr_new_integer(-1), expr_copy(total)))));
+            double dre;
+            bool same = dif && ((nl_numeric(dif, &dre) == 1 && fabs(dre) < 1e-9) ||
+                                (dif->type == EXPR_INTEGER && dif->data.integer == 0));
+            if (!same && dif && head_name_is(dif, "Complex") && dif->data.function.arg_count == 2) {
+                double r0, i0;
+                same = nl_numeric(dif->data.function.args[0], &r0) == 1 &&
+                       nl_numeric(dif->data.function.args[1], &i0) == 1 &&
+                       fabs(r0) < 1e-9 && fabs(i0) < 1e-9;
+            }
+            if (dif) expr_free(dif);
+            if (same) { expr_free(total); total = ce; ce = NULL; }
+        }
+        if (ce) expr_free(ce);
     }
 
     /* 4c. Continuity guard.  A finite value is trusted only if a numeric

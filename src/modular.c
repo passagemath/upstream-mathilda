@@ -698,8 +698,44 @@ typedef struct BlockFrame {
 static BlockFrame* block_stack = NULL;
 static int         block_depth = 0;
 
-/* Free one rule list wholesale (the values written inside the Block). */
+/* Rule lists restored during a TimeConstrained UNWIND are parked here instead
+ * of being freed, and released at the next top-level statement boundary
+ * (mth_block_graveyard_flush, called by the REPL / script / pipe / FFI loops).
+ *
+ * Why.  The siglongjmp that brings us here skipped C frames mid-evaluation,
+ * and code above the jump target can still be holding nodes that belong to a
+ * Block-local value: a ParallelMixedSpecial memo Association restored (and
+ * freed) by the unwind was read again later in the same Integrate call -- a
+ * use-after-free that crashed eight Mathar corpus integrals and was timing-
+ * dependent.  Deferring the free until no evaluation is in flight removes the
+ * window; the cost is that the values of Blocks interrupted by a timeout live
+ * until the statement finishes. */
+typedef struct BlkGrave { Rule* rules; struct BlkGrave* next; } BlkGrave;
+static BlkGrave* blk_graveyard = NULL;
+static int       blk_unwinding = 0;
+
+static void blk_free_rules_now(Rule* r);
+
 static void blk_free_rules(Rule* r) {
+    if (!r) return;
+    if (blk_unwinding) {
+        BlkGrave* g = malloc(sizeof *g);
+        if (g) { g->rules = r; g->next = blk_graveyard; blk_graveyard = g; return; }
+    }
+    blk_free_rules_now(r);
+}
+
+void mth_block_graveyard_flush(void) {
+    while (blk_graveyard) {
+        BlkGrave* g = blk_graveyard;
+        blk_graveyard = g->next;
+        blk_free_rules_now(g->rules);
+        free(g);
+    }
+}
+
+/* Free one rule list wholesale (the values written inside the Block). */
+static void blk_free_rules_now(Rule* r) {
     while (r) {
         Rule* next = r->next;
         expr_free(r->pattern);
@@ -740,12 +776,14 @@ int mth_block_depth_save(void) { return block_depth; }
  * after a timeout siglongjmp, where the frames between here and the deadline
  * never got to run their own restore. */
 void mth_block_depth_unwind(int depth) {
+    blk_unwinding++;
     while (block_depth > depth && block_stack) {
         BlockFrame* f = block_stack;
         block_stack = f->next;
         block_depth--;
         blk_restore_frame(f);
     }
+    blk_unwinding--;
     /* Defensive: a mismatched count must not leave the counter drifting. */
     if (!block_stack) block_depth = 0;
 }

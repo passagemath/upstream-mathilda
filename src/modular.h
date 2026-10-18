@@ -28,6 +28,9 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
  * async-defer count and the message-suppression depth. */
 int  mth_block_depth_save(void);
 void mth_block_depth_unwind(int depth);
+/* Free the Block rule lists parked by a TimeConstrained unwind (see modular.c).
+ * Call only at a top-level statement boundary, with no evaluation in flight. */
+void mth_block_graveyard_flush(void);
 
 void modular_init(void);
 

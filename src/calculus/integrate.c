@@ -680,6 +680,55 @@ static Expr* try_logbyparts(Expr* f, Expr* x) {
     return integrate_logbyparts_try(f, x);
 }
 
+/* Stage: polylogarithm ladders (src/internal/PolyLogLadder.m).
+ *
+ * Two exact constructions, loaded lazily on first use:
+ *   - R(x) Log[a x + b]^k (rational R, poles anywhere -- algebraic or complex
+ *     roots of any multiplicity -- and any log power, one linear log kernel per
+ *     term): partial fractions in the kernel variable W = a x + b closed by the
+ *     polylogarithm ladder INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] +
+ *     k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c];
+ *   - a polynomial in x times a rational function of trig/hyperbolic functions
+ *     of linear arguments: TrigToExp in one exponential kernel T = E^(base x),
+ *     partial fractions in T, and the exponential ladder for x^n/(T - rho)
+ *     (rho-derivatives of it for repeated roots).
+ * Both used to be missing: Integrate[Log[x]/(1 + x^2), x],
+ * Integrate[Log[x]^2/(1 + x), x] and Integrate[x^2 Csc[x], x] all came back
+ * unevaluated (Mathar corpus, the largest failure class).  The package accepts
+ * a result only after a differentiation check; anything outside the class
+ * returns $Failed and the cascade continues. */
+static bool pll_load_attempted = false;
+static bool pll_load_succeeded = false;
+
+static Expr* try_polylogladder(Expr* f, Expr* x) {
+    if (!pll_load_attempted) {
+        pll_load_attempted = true;
+        mth_msg_suppress_push();
+        pll_load_succeeded = mathilda_load_module("PolyLogLadder.m") != 0;
+        mth_msg_suppress_pop();
+        if (!pll_load_succeeded)
+            mth_message("Integrate`PolyLogLadder", "nofile",
+                "cannot locate src/internal/PolyLogLadder.m on disk.");
+    }
+    if (!pll_load_succeeded) return NULL;
+    mth_msg_suppress_push();
+    Expr* result = call_stage("PolyLogLadder`Integrate", f, x);
+    mth_msg_suppress_pop();
+    if (!result) return NULL;
+    /* Any atom is a decline: the package answers $Failed, and a symbol read in
+     * while loading a module can carry a context prefix (`...`$Failed), so the
+     * name is not compared at all -- an antiderivative is never a bare symbol
+     * here (the stage only accepts integrands that depend on x). */
+    if (result_is_unresolved(result, "PolyLogLadder`Integrate") ||
+        result->type != EXPR_FUNCTION ||
+        result_contains_head(result, "Integrate") ||
+        result_contains_head(result, "Return") || result_contains_head(result, "Throw")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Stage 2: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
@@ -893,6 +942,63 @@ static bool pmt_is_rational_structure(const Expr* e) {
     }
 }
 
+/* True iff `e` contains the symbol `x` anywhere (structural). */
+static bool pmt_depends(const Expr* e, const Expr* x) {
+    if (!e) return false;
+    if (expr_eq((Expr*)e, (Expr*)x)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (pmt_depends(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (pmt_depends(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* ParallelMixedTower decides ELEMENTARY integrands: a tower of exp/log over the
+ * rational functions, with trig/hyperbolic (and their inverses) and radicals
+ * rewritten into it.  A kernel outside that class applied to an x-dependent
+ * argument -- LegendreP[n, m, Cos[x]], an unknown g[Cos[x]] -- is not modelled:
+ * the package used to treat it as a CONSTANT after substituting a tower variable
+ * for its argument, returning a confident wrong antiderivative with the tower
+ * variable leaked into it (Mathar M13537: (2 g[r25])/(n + n Tan[...]^2) for
+ * Integrate[g[Cos[t]] Sin[n (z - t)], t]).  Such an integrand is outside the
+ * stage's class, so it declines. */
+static bool pmt_has_foreign_kernel(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!pmt_depends(e, x)) return false;
+    if (e->data.function.head->type != EXPR_SYMBOL) return true;
+    static const char* const ELEM[] = {
+        "Plus", "Times", "Power", "Sqrt", "Exp", "Log", "Rational", "Complex",
+        "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+        "Sinh", "Cosh", "Tanh", "Coth", "Sech", "Csch",
+        "ArcSin", "ArcCos", "ArcTan", "ArcCot", "ArcSec", "ArcCsc",
+        "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth", "ArcSech", "ArcCsch", NULL };
+    const char* h = e->data.function.head->data.symbol.name;
+    bool ok = false;
+    for (int i = 0; ELEM[i]; i++) if (strcmp(h, ELEM[i]) == 0) { ok = true; break; }
+    if (!ok) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (pmt_has_foreign_kernel(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* True iff `r` mentions a user-level symbol that occurs in neither `f` nor `x`
+ * -- a variable leaked out of an internal substitution.  System symbols (Pi, E,
+ * I, builtin heads) are exempt. */
+static bool pmt_leaks_symbol(const Expr* r, const Expr* f, const Expr* x) {
+    if (!r) return false;
+    if (r->type == EXPR_SYMBOL) {
+        if (pmt_depends(f, r) || expr_eq((Expr*)r, (Expr*)x)) return false;
+        SymbolDef* d = symtab_lookup(r->data.symbol.name);
+        if (d && (d->is_system || d->builtin_func || d->attributes)) return false;
+        return true;
+    }
+    if (r->type != EXPR_FUNCTION) return false;
+    if (pmt_leaks_symbol(r->data.function.head, f, x)) return true;
+    for (size_t i = 0; i < r->data.function.arg_count; i++)
+        if (pmt_leaks_symbol(r->data.function.args[i], f, x)) return true;
+    return false;
+}
+
 /* Automatic-cascade / Method -> "ParallelMixedTower" stage: evaluate the method
  * symbol and decline (continue the cascade) unless it returned an
  * antiderivative.  ParallelIntegrateMixed signals "no result" with $Failed (a
@@ -902,6 +1008,7 @@ static bool pmt_is_rational_structure(const Expr* e) {
 static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
     /* Skip pure rational functions -- BronsteinRational owns them (see above). */
     if (pmt_is_rational_structure(f)) return NULL;
+    if (pmt_has_foreign_kernel(f, x)) return NULL;   /* outside the elementary class */
     Expr* result = call_stage("Integrate`ParallelMixedTower", f, x);
     if (!result) return NULL;
 
@@ -911,7 +1018,8 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x) {
          strcmp(result->data.symbol.name, "$Failed") == 0) ||
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
-         strcmp(result->data.function.head->data.symbol.name, "List") == 0);
+         strcmp(result->data.function.head->data.symbol.name, "List") == 0) ||
+        pmt_leaks_symbol(result, f, x);
     if (decline) {
         expr_free(result);
         return NULL;
@@ -1102,13 +1210,20 @@ static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
     pms_in_cascade = 0;                 /* belt-and-braces: the builtin consumed it */
     if (!result) return NULL;
 
+    /* An antiderivative never mentions a symbol absent from the integrand: the
+     * pms_leaks check rejects a partially-evaluated package body that escaped
+     * with Module locals (fp$NNN, T$NNN) -- Mathar M8041's
+     * {ParallelIntegrateSpecial[fp$58989, ...], AllTrue[None, False &]} reached
+     * the user that way -- and $Aborted is a timeout, not an answer. */
     bool decline =
         result_is_unresolved(result, "Integrate`ParallelMixedSpecial") ||
         (result->type == EXPR_SYMBOL &&
-         strcmp(result->data.symbol.name, "$Failed") == 0) ||
+         (strcmp(result->data.symbol.name, "$Failed") == 0 ||
+          strcmp(result->data.symbol.name, "$Aborted") == 0)) ||
         (result->type == EXPR_FUNCTION &&
          result->data.function.head->type == EXPR_SYMBOL &&
-         result->data.function.head->data.symbol.name == SYM_List);
+         result->data.function.head->data.symbol.name == SYM_List) ||
+        pmt_leaks_symbol(result, f, x);
     if (decline) {
         expr_free(result);
         return NULL;
@@ -1130,6 +1245,7 @@ typedef enum {
     METHOD_WEIERSTRASS,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
+    METHOD_POLYLOG_LADDER,
     METHOD_PARALLEL_MIXED_TOWER,
     METHOD_PARALLEL_MIXED_SPECIAL,
     METHOD_UNDEFINED,
@@ -1165,6 +1281,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    if (strcmp(s, "PolyLogLadder") == 0) return METHOD_POLYLOG_LADDER;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
     if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -1742,8 +1859,8 @@ MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
 typedef enum {
     IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
-    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_LOGBYPARTS,
-    IP_PMT, IP_GOURSAT, IP_PMS,
+    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
+    IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
     IP_NSTAGES
 } IntegrateProfStage;
 
@@ -1752,8 +1869,8 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
-    "14 CRCTable", "15 LogByParts", "16 ParallelMixedTower",
-    "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
+    "14 CRCTable", "14b PolyLogLadder", "15 LogByParts",
+    "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -2222,6 +2339,11 @@ Expr* builtin_integrate(Expr* res) {
              * which otherwise costs ParallelMixedSpecial 3.8-12 s -- closes to a
              * Log*trig + SinIntegral/CosIntegral form.  Diff-back verified;
              * declines (cascade continues) on any mis-match. */
+            /* Polylogarithm ladders: R(x) Log[a x + b]^k and polynomial x trig
+             * rationals -> PolyLog closed forms.  Before LogByParts and the
+             * grinding tower tail: cheap structural gate, exact construction,
+             * diff-back accepted. */
+            IP_STAGE(IP_POLYLOG,      try_polylogladder(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
@@ -2315,6 +2437,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_CRCTABLE:
             result = try_crctable(effective_f, x);
+            break;
+        case METHOD_POLYLOG_LADDER:
+            result = try_polylogladder(effective_f, x);
             break;
         case METHOD_PARALLEL_MIXED_TOWER:
             result = try_parallelmixedtower(effective_f, x);

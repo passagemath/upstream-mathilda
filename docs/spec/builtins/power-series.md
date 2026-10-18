@@ -119,6 +119,7 @@ Produces the power-series expansion of an expression about a point.
 - `Series[f, {x, x0, n}]` — Taylor/Laurent/Puiseux expansion up to order `(x - x0)^n`.
 - `Series[f, x -> x0]` — leading-term form. The engine scans the internal expansion for the first non-zero coefficient at exponent `e1` and the next non-zero at `e2 > e1`; the reported `O`-term lands at exponent `e2` (or `e1 + 1` when no further non-zero term exists). So `Series[Sin[x] - x, x -> 0]` returns `-x^3/6 + O[x]^5`, `Series[f[x], x -> 0]` returns `f[0] + O[x]^1`, and analytic-at-x0 inputs collapse to their constant plus `O[x - x0]^1`.
 - `Series[f, {x, x0, nx}, {y, y0, ny}, ...]` — iterated multivariate expansion. Each inner coefficient is itself a `SeriesData` in the next variable.
+- `ArcTan`/`ArcCot` of an argument that blows up at the expansion point take the constant `Sign[k] Pi/2`, where `k` is the argument's leading coefficient. The sign comes from the N value of a numeric `k` (so `1/(1 - Sqrt[3])` gives `-Pi/2`), from the assumptions for a symbolic `k`, and otherwise from Mathematica's `Sqrt[k^2]/k` factor (v0.458). `Limit` inherits this, so `Limit[2 ArcTan[x/(1 - Sqrt[3])], x -> Infinity]` is `-Pi`.
 - `Series[f, {x, Infinity, n}]` — expansion at infinity, substituting `x -> 1/u` internally. The emitted `SeriesData` uses `Power[x, -1]` as its variable, so the series prints with `1/x` as the base and an `O[1/x]^(n+1)` term.
 
 **Features**:

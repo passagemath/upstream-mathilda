@@ -1,0 +1,4565 @@
+{
+ "M1226i": {
+  "lhs": "Integrate[FactorialPower[x, n], {x, 0, 1}]",
+  "rhs": [
+   "Sum[StirlingS1[n, \\[FormalK]]/(\\[FormalK] + 1), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "inline definition of Cauchy numbers of the first kind b_n = int_0^1 x^(falling n); value from the displayed sum of Stirling numbers"
+ },
+ "M1321i": {
+  "lhs": "Integrate[Pochhammer[x, n], {x, 0, 1}]",
+  "rhs": [
+   "Sum[Abs[StirlingS1[n, \\[FormalK]]]/(\\[FormalK] + 1), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "inline definition of Cauchy numbers of the second kind c_n = int_0^1 (x)_n; value from the displayed sum with unsigned Stirling numbers"
+ },
+ "M1510": {
+  "skip": "n-fold nested integral (polytope volume) with kernels K_1, K_2",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M1513i": {
+  "skip": "inline recursive definition of kernels K_n(u,v); no independent value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M1518": {
+  "lhs": "(-1)^n*(Pi^(2*n + 1)/(4*(2*n)!))*Integrate[EulerE[2*n, t]*(2*z*(1 + z^2)*Sin[Pi*t]/(1 - 2*z^2*Cos[2*Pi*t] + z^4)), {t, 0, 1}]",
+  "rhs": [
+   "(PolyLog[2*n + 1, z] - PolyLog[2*n + 1, -z])/2"
+  ],
+  "conds": [
+   "0 < z < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "chi_{2n+1}(z) = Legendre chi = (Li(z)-Li(-z))/2; delta = 1 chosen"
+ },
+ "M1522": {
+  "lhs": "(-1)^n*(Pi^(2*n)/(4*(2*n - 1)!))*Integrate[EulerE[2*n - 1, t]*(2*z*(1 - z^2)*Cos[Pi*t]/(1 - 2*z^2*Cos[2*Pi*t] + z^4)), {t, 0, 1}]",
+  "rhs": [
+   "(PolyLog[2*n, z] - PolyLog[2*n, -z])/2"
+  ],
+  "conds": [
+   "0 < z < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "chi_{2n}(z) = Legendre chi = (Li(z)-Li(-z))/2; delta = 1 chosen"
+ },
+ "M1679": {
+  "skip": "multiple integral over x_1, x_2, ... with no value given",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M2014": {
+  "lhs": "Integrate[(1 + (m - 1)*t^n*(1 - t)^(m - n))/(1 - t^n*(1 - t)^(m - n))^2, {t, 0, 1}]",
+  "rhs": [
+   "Sum[1/Binomial[m*\\[FormalK], n*\\[FormalK]], {\\[FormalK], 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && Element[n, Integers] && m > n >= 1"
+  ],
+  "note": "formal summation index; integer conds"
+ },
+ "M4941i": {
+  "skip": "inline definition a_0 = int B_0 for a generic function B_0",
+  "status": "SKIP-DEFINITION"
+ },
+ "M4942": {
+  "skip": "recursive definition B_n via integrals of the generic B_{n-1}",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M4946": {
+  "skip": "generating function in terms of the generic B_0 and B_0prime",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M5689": {
+  "lhs": "Integrate[1/(a^4 - x^4), x]",
+  "rhs": [
+   "(1/(4*a^3))*Log[((a + x)/(a - x))^2]/2 + (1/(2*a^3))*ArcTan[x/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "Log|u| written as Log[u^2]/2 (Abs not differentiable symbolically)"
+ },
+ "M5712": {
+  "lhs": "Integrate[x/(a^4 - x^4), x]",
+  "rhs": [
+   "(1/(4*a^2))*Log[((a^2 + x^2)/(a^2 - x^2))^2]/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5718": {
+  "lhs": "Integrate[x^2/(a^4 - x^4), x]",
+  "rhs": [
+   "(1/(4*a))*Log[((a + x)/(a - x))^2]/2 - (1/(2*a))*ArcTan[x/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5725": {
+  "lhs": "Integrate[x^3/(a^4 - x^4), x]",
+  "rhs": [
+   "-(1/4)*Log[(a^4 - x^4)^2]/2"
+  ],
+  "conds": [],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5730": {
+  "lhs": "Integrate[1/(x*(a + b*x^m)), x]",
+  "rhs": [
+   "(1/(a*m))*Log[(x^m/(a + b*x^m))^2]/2"
+  ],
+  "conds": [],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5739": {
+  "lhs": "Integrate[1/((a^2 - b^2*x)*x^(1/2)), x]",
+  "rhs": [
+   "(1/(a*b))*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "typo: paper has 1/(2ab), corrected to 1/(ab) (oracle-verified); Log|u| -> Log[u^2]/2"
+ },
+ "M5752": {
+  "lhs": "Integrate[x^(1/2)/(a^2 - b^2*x), x]",
+  "rhs": [
+   "-2*x^(1/2)/b^2 + (a/b^3)*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5764": {
+  "lhs": "Integrate[x^(3/2)/(a^2 - b^2*x), x]",
+  "rhs": [
+   "-(2/3)*(x^(3/2)/b^2) - 2*a^2*x^(1/2)/b^4 + (a^3/b^5)*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5774": {
+  "lhs": "Integrate[1/((a^2 - b^2*x)^2*x^(1/2)), x]",
+  "rhs": [
+   "x^(1/2)/(a^2*(a^2 - b^2*x)) + (1/(2*a^3*b))*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5784": {
+  "lhs": "Integrate[x^(1/2)/(a^2 - b^2*x)^2, x]",
+  "rhs": [
+   "x^(1/2)/(b^2*(a^2 - b^2*x)) - (1/(2*a*b^3))*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5793": {
+  "lhs": "Integrate[x^(3/2)/(a^2 - b^2*x)^2, x]",
+  "rhs": [
+   "(3*a^2*x^(1/2) - 2*b^2*x^(3/2))/(b^4*(a^2 - b^2*x)) - (3*a/(2*b^5))*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5802": {
+  "lhs": "Integrate[1/((a^2 - b^2*x)*x^(3/2)), x]",
+  "rhs": [
+   "-2/(a^2*x^(1/2)) + (b/a^3)*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5813": {
+  "lhs": "Integrate[1/((a^2 - b^2*x)^2*x^(3/2)), x]",
+  "rhs": [
+   "-2/(a^2*(a^2 - b^2*x)*x^(1/2)) + 3*b^2*x^(1/2)/(a^4*(a^2 - b^2*x)) + (3*b/(2*a^5))*Log[((a + b*x^(1/2))/(a - b*x^(1/2)))^2]/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5825": {
+  "lhs": "Integrate[1/((a^4 - x^2)*x^(1/2)), x]",
+  "rhs": [
+   "(1/(2*a^3))*Log[((a + x^(1/2))/(a - x^(1/2)))^2]/2 + (1/a^3)*ArcTan[x^(1/2)/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5837": {
+  "lhs": "Integrate[x^(1/2)/(a^4 - x^2), x]",
+  "rhs": [
+   "(1/(2*a))*Log[((a + x^(1/2))/(a - x^(1/2)))^2]/2 - (1/a)*ArcTan[x^(1/2)/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "Log|u| -> Log[u^2]/2"
+ },
+ "M5843": {
+  "lhs": "Integrate[x^n/Sqrt[a + b*x], x]",
+  "rhs": [
+   "(2*Sqrt[a + b*x]/b^(n + 1))*(-a)^n*Sum[Binomial[n, \\[FormalK]]*((-(a + b*x)/a)^\\[FormalK]/(2*\\[FormalK] + 1)), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "z = a + b x substituted (defined in the neighbouring entry); formal summation index"
+ },
+ "M5850": {
+  "lhs": "Integrate[(alpha + beta*x)^n*(a + b*x)^(m - 1/2), x]",
+  "rhs": [
+   "2*Sqrt[(a + b*x)^(2*m + 1)]*(1/b^(n + 1))*Sum[Binomial[n, \\[FormalK]]*(-(a*beta - b*alpha))^\\[FormalK]*((beta*(a + b*x))^(n - \\[FormalK])/(2*n + 2*m - 2*\\[FormalK] + 1)), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "substituted z = a + b x and Delta = a beta - b alpha; formal summation index"
+ },
+ "M5860": {
+  "skip": "substitution formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M5874": {
+  "skip": "reduction formula with an integral on the right and ellipsis products",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M5888": {
+  "lhs": "Integrate[(4*z + 2)/Sqrt[z^4 + 8*(z + 1)], z]",
+  "rhs": [
+   "Log[z^4 - 2*z^3 + 2*z^2 + 4*z - 4 + (z^2 - 2*z + 2)*Sqrt[z^4 + 8*(z + 1)]]"
+  ],
+  "conds": [],
+  "note": "generic f_m, D_m, x_m, y_m replaced by the concrete example given right after the display (f=4z+2, D=z^4+8(z+1), x, y)"
+ },
+ "M5912": {
+  "lhs": "Integrate[Exp[-beta*x]/x^n, x]",
+  "rhs": [
+   "-Exp[-beta*x]*Sum[(-1)^(n - 2 - \\[FormalJ])*(\\[FormalJ]!/(n - 1)!)*(beta^(n - 2 - \\[FormalJ])/x^(\\[FormalJ] + 1)), {\\[FormalJ], 0, n - 2}] + (-beta)^(n - 1)*ExpIntegralEi[-beta*x]/(n - 1)!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "typo: paper lacks the overall minus sign in front of the finite sum (n=2 contradicts the next entry); sum re-indexed j = n-2-k so Mathematica sums it in closed form (oracle-verified)"
+ },
+ "M5920": {
+  "lhs": "Integrate[Exp[-beta*x]/x^2, x]",
+  "rhs": [
+   "-Exp[-beta*x]/x - beta*ExpIntegralEi[-beta*x]"
+  ],
+  "conds": [],
+  "note": "condition beta != 0 split off"
+ },
+ "M5925": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M5937": {
+  "skip": "reduction/substitution formula with integrals on both sides (also +-)",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M5944": {
+  "skip": "substitution formula with an integral on the right",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M5950": {
+  "lhs": "Integrate[Exp[a^x], x]",
+  "rhs": [
+   "ExpIntegralEi[a^x]/Log[a]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "condition ln a > 0 split off"
+ },
+ "M5956": {
+  "lhs": "Integrate[a^x/x^b, x]",
+  "rhs": [
+   "((-1)^b/Log[a]^(1 - b))*Gamma[1 - b, -x*Log[a]]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "condition ln a > 0 split off"
+ },
+ "M5966": {
+  "lhs": "Integrate[a^(x^n), x]",
+  "rhs": [
+   "-(1/(n*(-Log[a])^(1/n)))*Gamma[1/n, -x^n*Log[a]]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "note": "condition split off"
+ },
+ "M5971": {
+  "lhs": "Integrate[x^m*a^(x^n), x]",
+  "rhs": [
+   "-(1/(n*(-Log[a])^((m + 1)/n)))*Gamma[(m + 1)/n, -x^n*Log[a]]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "typo: paper has (ln a)^((m+1)/n), corrected to (-ln a)^((m+1)/n) as in the neighbouring entries (oracle-verified)"
+ },
+ "M5976": {
+  "lhs": "Integrate[1/a^(x^n), x]",
+  "rhs": [
+   "-(1/(n*Log[a]^(1/n)))*Gamma[1/n, x^n*Log[a]]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "condition split off"
+ },
+ "M5981": {
+  "lhs": "Integrate[a^(x^2), x]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi/Log[a]]*Erfi[Sqrt[Log[a]]*x]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "condition split off"
+ },
+ "M5986": {
+  "lhs": "Integrate[1/a^(x^2), x]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi/Log[a]]*Erf[Sqrt[Log[a]]*x]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "note": "condition split off"
+ },
+ "M6032": {
+  "lhs": "Integrate[x*Cosh[x]/(Cosh[2*x] - Cos[2*t]), {x, 0, y}]",
+  "rhs": [
+   "(Csc[t]/4)*(-4*Im[PolyLog[2, Exp[I*(Pi + t)]]] - Im[PolyLog[2, Exp[2*I*ArcTan[1 + Exp[y]*Cos[t], Exp[y]*Sin[t]]]]] + Im[PolyLog[2, Exp[2*I*(ArcTan[1 + Exp[y]*Cos[t], Exp[y]*Sin[t]] - t)]]] + Im[PolyLog[2, Exp[2*I*t]]] - Im[PolyLog[2, Exp[2*I*ArcTan[1 - Exp[y]*Cos[t], Exp[y]*Sin[t]]]]] + Im[PolyLog[2, Exp[2*I*(ArcTan[1 - Exp[y]*Cos[t], Exp[y]*Sin[t]] + t)]]])"
+  ],
+  "conds": [
+   "y > 0",
+   "0 < t < Pi"
+  ],
+  "note": "Cl_2 (one missing backslash) = Im Li2(e^{i.}); omega_1, omega_3 substituted from their definitions (two-argument ArcTan)"
+ },
+ "M6041": {
+  "skip": "reduction formula: integrals on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6131": {
+  "lhs": "Integrate[Sin[n*t]/Sin[t], {t, 0, theta}]",
+  "rhs": [
+   "Sum[2*Sin[(n - 1 - 2*\\[FormalJ])*theta]/(n - 1 - 2*\\[FormalJ]), {\\[FormalJ], 0, Floor[(n - 2)/2]}] + Mod[n, 2]*theta"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < theta < Pi"
+  ],
+  "note": "antiderivative with lower limit 0; ellipsis written as Sum, c = 1 for odd n and 0 for even n"
+ },
+ "M6140": {
+  "lhs": "Integrate[Cos[(2*n - 1)*t]/Cos[t], {t, 0, theta}]",
+  "rhs": [
+   "Sum[(-1)^(\\[FormalJ] - 1)*2*Sin[(2*n - 2*\\[FormalJ])*theta]/(2*n - 2*\\[FormalJ]), {\\[FormalJ], 1, n - 1}] + (-1)^(n - 1)*theta"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < theta < Pi"
+  ],
+  "note": "lower limit 0; ellipsis written as Sum"
+ },
+ "M6148": {
+  "lhs": "Integrate[Sin[2*n*t]/Cos[t], {t, Pi/2, theta}]",
+  "rhs": [
+   "Sum[(-1)^\\[FormalJ]*2*Cos[(2*n - 2*\\[FormalJ] + 1)*theta]/(2*n - 2*\\[FormalJ] + 1), {\\[FormalJ], 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < theta < Pi"
+  ],
+  "note": "lower limit pi/2; ellipsis written as Sum"
+ },
+ "M6156": {
+  "lhs": "Integrate[(1 - Cos[2*n*t])/Sin[t], {t, Pi/2, theta}]",
+  "rhs": [
+   "-Sum[2*Cos[(2*\\[FormalJ] + 1)*theta]/(2*\\[FormalJ] + 1), {\\[FormalJ], 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < theta < Pi"
+  ],
+  "note": "lower limit pi/2; ellipsis written as Sum (re-indexed from the low end: Mathematica closes the top-down form of this sum with the wrong sign)"
+ },
+ "M6189": {
+  "skip": "value disagrees: a=3/8,b=5/4 NIntegrate 0.758297 vs paper -1.42326+0.22299 I; a=5/8,b=3: 3.58583 vs 0.10696+6.00545 I; no sign/branch variant of phi, u_pm, the i b terms fits",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M6200": {
+  "skip": "value garbled (missing operator between bracket groups); a=3/8,b=5/4 NIntegrate 0.571407 vs literal reading 1.10277+2.03631 I; a=1/5,b=1/5: 0.061207 vs -0.15832+0.07819 I",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M6234": {
+  "lhs": "Integrate[t*Sin[a*t]/(Cos[b*t] - Cos[a*t]), {t, 0, z}]",
+  "rhs": [
+   "(2*a*z/(a^2 - b^2))*Log[2*Pi] + (2*Pi/(a + b)^2)*Log[BarnesG[1 - ((a + b)/(2*Pi))*z]/BarnesG[1 + ((a + b)/(2*Pi))*z]] + (2*Pi/(a - b)^2)*Log[BarnesG[1 - ((a - b)/(2*Pi))*z]/BarnesG[1 + ((a - b)/(2*Pi))*z]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "z > 0",
+   "(a + b)*z < 2*Pi"
+  ],
+  "note": "paper (a+b/2pi) read as (a+b)/(2pi) (translator took b/2 * pi); z below the first pole"
+ },
+ "M6280": {
+  "lhs": "Integrate[Log[Log[x]^n], x]",
+  "rhs": [
+   "x*Log[Log[x]^n] - n*LogIntegral[x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "typo: paper has x ln(ln x)^2, corrected to x ln((ln x)^n); li x = Ei(ln x) = LogIntegral"
+ },
+ "M6296": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6304": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6312": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6320": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6337": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6356": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6363": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6377": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6385": {
+  "lhs": "Integrate[x^n*Log[a - Log[x]], x]",
+  "rhs": [
+   "(1/(n + 1))*(x^(n + 1)*Log[a - Log[x]] - Exp[(n + 1)*a]*ExpIntegralEi[(n + 1)*(Log[x] - a)])"
+  ],
+  "conds": [],
+  "note": "typo: paper has ln^m(a - ln x) on the right, corrected to ln(a - ln x)"
+ },
+ "M6393": {
+  "lhs": "Integrate[Log[a - Log[x]]/x, x]",
+  "rhs": [
+   "(Log[x] - a)*Log[a - Log[x]] - Log[x]"
+  ],
+  "conds": [],
+  "note": "stray trailing period"
+ },
+ "M6399": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6405": {
+  "lhs": "Integrate[1/(a - Log[x]), x]",
+  "rhs": [
+   "-Exp[a]*ExpIntegralEi[Log[x] - a]"
+  ],
+  "conds": [],
+  "note": "upper sign of \\mp chosen (the lower sign would need e^{-a})"
+ },
+ "M6411": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6431": {
+  "lhs": "Integrate[x^n/(a + Log[x])^m, x]",
+  "rhs": [
+   "-x^(n + 1)*Sum[(\\[FormalJ]!/(m - 1)!)*((n + 1)^(m - 2 - \\[FormalJ])/(a + Log[x])^(\\[FormalJ] + 1)), {\\[FormalJ], 0, m - 2}] + Exp[-(n + 1)*a]*((n + 1)^(m - 1)/(m - 1)!)*ExpIntegralEi[(n + 1)*(a + Log[x])]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "note": "unbalanced paren (m-1)! fixed; sum re-indexed j = m-2-k"
+ },
+ "M6438": {
+  "lhs": "Integrate[x^n/(a + Log[x]), x]",
+  "rhs": [
+   "Exp[-(n + 1)*a]*ExpIntegralEi[(n + 1)*(Log[x] + a)]"
+  ],
+  "conds": [],
+  "note": "upper sign of \\pm chosen"
+ },
+ "M6445": {
+  "lhs": "Integrate[Log[x]/(a + Log[x])^2, x]",
+  "rhs": [
+   "a*x/(a + Log[x]) + (1 - a)*Exp[-a]*ExpIntegralEi[Log[x] + a]"
+  ],
+  "conds": [],
+  "note": "upper sign of \\pm chosen"
+ },
+ "M6452": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6487": {
+  "lhs": "Integrate[Log[x]/Sqrt[a + b*x], x]",
+  "rhs": [
+   "(2/b)*((Log[x] - 2)*Sqrt[a + b*x] + Sqrt[a]*Log[(Sqrt[a + b*x] + Sqrt[a])/(Sqrt[a + b*x] - Sqrt[a])])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "piecewise: a>0 branch chosen"
+ },
+ "M6508": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M6548": {
+  "lhs": "Integrate[Log[(Sin[x]^2 - Sin[alpha]^2)^2]/2, {x, 0, u}]",
+  "rhs": [
+   "(1/2)*(Im[PolyLog[2, Exp[I*(2*alpha - 2*u)]]] - Im[PolyLog[2, Exp[I*(2*alpha + 2*u)]]]) - 2*u*Log[2]"
+  ],
+  "conds": [
+   "0 < alpha < Pi/2",
+   "u > 0"
+  ],
+  "note": "paper log of a negative argument means ln|sin^2 x - sin^2 alpha| (real part); written Log[(..)^2]/2"
+ },
+ "M6554": {
+  "lhs": "Integrate[Log[(u + a)/(u - a)]/(1 + u^2), {u, b, Infinity}]",
+  "rhs": [
+   "Im[PolyLog[2, Exp[I*(Pi - ArcCos[(1 - a^2)/(1 + a^2)])]]] - (1/2)*(Im[PolyLog[2, Exp[2*I*ArcTan[1 - ((b + a)/(b - a))*Cos[ArcCos[(1 - a^2)/(1 + a^2)]], ((b + a)/(b - a))*Sin[ArcCos[(1 - a^2)/(1 + a^2)]]]]]] + Im[PolyLog[2, Exp[2*I*(Pi - ArcCos[(1 - a^2)/(1 + a^2)] - ArcTan[1 - ((b + a)/(b - a))*Cos[ArcCos[(1 - a^2)/(1 + a^2)]], ((b + a)/(b - a))*Sin[ArcCos[(1 - a^2)/(1 + a^2)]]])]]])"
+  ],
+  "conds": [
+   "b > a > 0"
+  ],
+  "note": "theta, r, omega, chi substituted from their definitions (tan omega via two-argument ArcTan)"
+ },
+ "M6565": {
+  "lhs": "Integrate[Log[(b + x)/(b - x)]^2, x]",
+  "rhs": [
+   "(b + x)*Log[b + x]^2 - (b - x)*Log[b - x]^2 - 2*(b + x)*Log[b + x]*Log[b - x] + 4*b*Log[2*b]*Log[b - x] - 4*b*PolyLog[2, (b - x)/(2*b)]",
+   "(b + x)*Log[b + x]^2 - (b - x)*Log[b - x]^2 - 2*(b + x)*Log[b + x]*Log[b - x] + 4*b*Log[2*b]*Log[b - x] - 4*b*Sum[((b - x)/(2*b))^\\[FormalN]/\\[FormalN]^2, {\\[FormalN], 1, Infinity}]"
+  ],
+  "conds": [
+   "b > 3/2"
+  ],
+  "note": "typo: paper has 4 log(2b) log(b-x), corrected to 4b log(2b) log(b-x) (oracle-verified); |x|<|b| enforced via b>3/2 (test points x<1.5)"
+ },
+ "M6615": {
+  "lhs": "Integrate[Log[2 + 2*Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "(2*z - 2*Pi)*Log[Cos[z/2]/Pi] + 4*Pi*Log[BarnesG[1/2 + z/(2*Pi)]/BarnesG[3/2 - z/(2*Pi)]]"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "z/2pi read as z/(2 pi) (translator took (z/2)*pi)"
+ },
+ "M6626": {
+  "skip": "generic F (Glasser master theorem, u = x - sum)",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6633": {
+  "skip": "generic f; integral on both sides",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6644": {
+  "skip": "generic phi(x) = sum A_k x^k with unspecified A_k",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6657": {
+  "skip": "generic phi with unspecified coefficients A_k",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6670": {
+  "skip": "generic phi with unspecified coefficients A_k",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6679": {
+  "skip": "generic F (Ramanujan master theorem)",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6685": {
+  "skip": "generic F",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6690": {
+  "skip": "generic F",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6695": {
+  "skip": "generic F",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6700": {
+  "skip": "generic F",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6742": {
+  "lhs": "Integrate[x/Sqrt[(x - a)*(x - b)*(x - c)], {x, a, u}]",
+  "rhs": [
+   "(2/Sqrt[a - c])*((a - b)*EllipticPi[1, ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)] + b*EllipticF[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)])"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "note": "mu, q not defined in the paper; standard Byrd-Friedman parametrisation sin^2 mu=(u-a)/(u-b), q^2=(b-c)/(a-c) identified numerically; Pi(phi,n,k) amplitude first; hand-verified with NIntegrate (diff < 1e-27) at (a,b,c,u)=(7/4,5/6,1/5,3) and (5/4,5/8,3/8,7/3); oracle NOCONV only because its random pool never satisfies u>a>b>c"
+ },
+ "M6748": {
+  "lhs": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(c - x)]), {x, u, c}]",
+  "rhs": [
+   "(2*(c - b)/((r - b)*(r - c)*Sqrt[a - c]))*EllipticPi[(r - b)/(r - c), ArcSin[Sqrt[(c - u)/(b - u)]], (a - b)/(a - c)] + (2/((r - b)*Sqrt[a - c]))*EllipticF[ArcSin[Sqrt[(c - u)/(b - u)]], (a - b)/(a - c)]"
+  ],
+  "conds": [
+   "a > b > c > u",
+   "r > c"
+  ],
+  "note": "beta, p not defined in the paper; sin^2 beta=(c-u)/(b-u), p^2=(a-b)/(a-c) identified numerically; hand-verified with NIntegrate (diff < 1e-27) at (a,b,c,u,r)=(3,7/4,5/6,1/5,5/4) and (7/3,5/4,5/8,3/8,3); oracle NOCONV only because its random pool never satisfies a>b>c>u"
+ },
+ "M6758": {
+  "lhs": "Integrate[1/((x - r)*Sqrt[(x - a)*(x - b)*(x - c)]), {x, a, u}]",
+  "rhs": [
+   "(2/((b - r)*(a - r)*Sqrt[a - c]))*((b - a)*EllipticPi[(b - r)/(a - r), ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)] + (a - r)*EllipticF[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)])"
+  ],
+  "conds": [
+   "u > a > b > c",
+   "r < b"
+  ],
+  "note": "mu, q not defined in the paper; standard Byrd-Friedman parametrisation sin^2 mu=(u-a)/(u-b), q^2=(b-c)/(a-c) identified numerically; Pi(phi,n,k) amplitude first; typo: paper characteristic (b-r)/(a-b), corrected to (b-r)/(a-r) (hand-verified with NIntegrate at (a,b,c,u,r)=(7/4,5/6,1/5,3,-1/3) and (5/4,5/8,3/8,7/3,1/5); the oracle cannot sample u>a>b>c)"
+ },
+ "M6771": {
+  "lhs": "Integrate[Sqrt[(x - c)*(b - x)/(a - x)], {x, u, b}]",
+  "rhs": [
+   "(2/3)*Sqrt[a - c]*(2*(b - a)*EllipticF[ArcSin[Sqrt[(a - c)*(b - u)/((b - c)*(a - u))]], (b - c)/(a - c)] + (2*a - b - c)*EllipticE[ArcSin[Sqrt[(a - c)*(b - u)/((b - c)*(a - u))]], (b - c)/(a - c)]) + (2/3)*(b + c - a - u)*Sqrt[(b - u)*(u - c)/(a - u)]"
+  ],
+  "conds": [
+   "a > b > u >= c"
+  ],
+  "note": "delta, q not defined in the paper; sin^2 delta=(a-c)(b-u)/((b-c)(a-u)), q^2=(b-c)/(a-c) identified numerically"
+ },
+ "M6783": {
+  "lhs": "Integrate[Sqrt[(x - b)*(x - c)/(x - a)], {x, a, u}]",
+  "rhs": [
+   "(2/3)*Sqrt[a - c]*(2*(a - b)*EllipticF[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)] + (b + c - 2*a)*EllipticE[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)]) + (2/3)*(u + 2*a - 2*b - c)*Sqrt[(u - a)*(u - c)/(u - b)]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "note": "mu, q not defined in the paper; standard Byrd-Friedman parametrisation sin^2 mu=(u-a)/(u-b), q^2=(b-c)/(a-c) identified numerically; Pi(phi,n,k) amplitude first; hand-verified with NIntegrate (diff < 1e-27) at (a,b,c,u)=(7/4,5/6,1/5,3) and (5/4,5/8,3/8,7/3); oracle NOCONV only because its random pool never satisfies u>a>b>c"
+ },
+ "M6795": {
+  "lhs": "Integrate[Sqrt[(x - a)*(x - c)/(x - b)], {x, a, u}]",
+  "rhs": [
+   "(2/3)*Sqrt[a - c]*((a + c - 2*b)*EllipticE[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)] - (a - b)*EllipticF[ArcSin[Sqrt[(u - a)/(u - b)]], (b - c)/(a - c)]) + (2/3)*(u + b - a - c)*Sqrt[(u - a)*(u - c)/(u - b)]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "note": "mu, q not defined in the paper; standard Byrd-Friedman parametrisation sin^2 mu=(u-a)/(u-b), q^2=(b-c)/(a-c) identified numerically; Pi(phi,n,k) amplitude first; hand-verified with NIntegrate (diff < 1e-27) at (a,b,c,u)=(7/4,5/6,1/5,3) and (5/4,5/8,3/8,7/3); oracle NOCONV only because its random pool never satisfies u>a>b>c"
+ },
+ "M6807": {
+  "skip": "valid only for integer alpha>=0 and positive integers beta,gamma (A_r, B_s finite sums); the oracle samples alpha, beta, gamma from non-integer reals, so no admissible instantiation exists without renaming",
+  "status": "SKIP-NOCONV"
+ },
+ "M6913": {
+  "lhs": "Integrate[z^(2*n)/(z^4 + 2*d1*z^2 + 1)^(m + 1), {z, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2^(3*m + 3/2)*(1 + d1)^(m + 1/2)))*Sum[2^\\[FormalJ]*(1 + d1)^\\[FormalJ]*Binomial[2*m - 2*\\[FormalJ], m - \\[FormalJ]]*Binomial[m - n + \\[FormalJ], 2*\\[FormalJ]]*Binomial[2*\\[FormalJ], \\[FormalJ]]/Binomial[m, \\[FormalJ]], {\\[FormalJ], 0, m - n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && 0 <= n <= m",
+   "d1 > -1"
+  ],
+  "note": "typo: paper has binom(2m-2j-1, m-j) (value off by a factor 2), corrected to binom(2m-2j, m-j) as in the general formula of the next entry (oracle-verified); branch 0<=n<=m"
+ },
+ "M6923": {
+  "lhs": "Integrate[z^(2*n)/(b*z^4 + 2*a*z^2 + c)^(m + 1), {z, 0, Infinity}]",
+  "rhs": [
+   "Pi*(c*(c/b)^(m - n)*(8*(a + Sqrt[b*c]))^(2*m + 1))^(-1/2)*Sum[2^\\[FormalK]*Binomial[2*m - 2*\\[FormalK], m - \\[FormalK]]*Binomial[m - n + \\[FormalK], 2*\\[FormalK]]*Binomial[2*\\[FormalK], \\[FormalK]]/Binomial[m, \\[FormalK]]*(a/Sqrt[b*c] + 1)^\\[FormalK], {\\[FormalK], 0, m - n}]",
+   "Pi*(c*(c/b)^(m - n)*(8*(a + Sqrt[b*c]))^(2*m + 1))^(-1/2)*Sum[2^\\[FormalK]*Binomial[2*m - 2*\\[FormalK] - 1, m - \\[FormalK]]*Binomial[m - n + \\[FormalK], 2*\\[FormalK]]*Binomial[2*\\[FormalK], \\[FormalK]]/Binomial[m, \\[FormalK]]*(a/Sqrt[b*c] + 1)^\\[FormalK], {\\[FormalK], 0, m - n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && 0 <= n <= m",
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "typo: paper exponent (c/b)^(m-h), h read as n (scaling z -> (c/b)^(1/4) z); branch 0<=n<=m"
+ },
+ "M6938": {
+  "lhs": "Integrate[z^(2*n)/(z^8 + a2*z^6 + 2*a1*z^4 + a2*z^2 + 1)^(m + 1), {z, 0, Infinity}]",
+  "rhs": [
+   "Sum[Pi*2^(-(3*m + 2 + \\[FormalK] + \\[FormalJ])/2)*(1 + a1 + a2)^((m - \\[FormalK] - \\[FormalJ])/2)*(a2 + 4 + Sqrt[8*(1 + a1 + a2)])^(\\[FormalJ] - m - 1/2)*Binomial[4*m - n - \\[FormalK] + 2, \\[FormalK] - n]*Binomial[2*m - 2*\\[FormalJ], m - \\[FormalJ]]*Binomial[m - \\[FormalK] + \\[FormalJ], 2*\\[FormalJ]]*Binomial[2*\\[FormalJ], \\[FormalJ]]/Binomial[m, \\[FormalJ]], {\\[FormalK], n, 2*m + 1}, {\\[FormalJ], 0, \\[FormalK] - m - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && m + 1 <= n <= 2*m + 1",
+   "1 + a1 + a2 > 0",
+   "a2 + 4 > -8*Sqrt[8*(1 + a1 + a2)]"
+  ],
+  "note": "t_{k,j}(m,n;a1,a2) and c1=a2+4, c2=1+a1+a2 substituted from the definitions below the display; branch m+1<=n<=2m+1"
+ },
+ "M6963i": {
+  "skip": "inline remark on int P(x)/Q(x) for generic polynomials",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6965i": {
+  "skip": "inline remark on int P^+/Q^+ for generic symmetric polynomials (the following display is a separate entry)",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M6973": {
+  "lhs": "Integrate[1/(x^4 + 2*a*x^2 + 1)^(m + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)*Sum[2^(-2*m)*Sum[2^\\[FormalK]*Binomial[2*m - 2*\\[FormalK], m - \\[FormalK]]*Binomial[m + \\[FormalK], m]*Binomial[\\[FormalK], \\[FormalL]], {\\[FormalK], \\[FormalL], m}]*a^\\[FormalL], {\\[FormalL], 0, m}]/(2*(a + 1))^(m + 1/2)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "a > -1"
+  ],
+  "note": "d_l(m) substituted from its definition below the display"
+ },
+ "M6996": {
+  "lhs": "Integrate[x^m*(1 - x)^n/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "(Sqrt[Pi]*Gamma[m + 1]*Gamma[n + 1]/2^(m + n + 1))*HypergeometricPFQRegularized[{1, (m + 1)/2, (m + 2)/2}, {(m + n + 2)/2, (m + n + 3)/2}, -1]"
+  ],
+  "conds": [
+   "m > -1",
+   "n > -1"
+  ],
+  "note": "the 3F2 must be read as the regularized one (divided by Gamma((m+n+2)/2) Gamma((m+n+3)/2)); with the ordinary 3F2 the value is off by that factor"
+ },
+ "M7007": {
+  "skip": "R_{m,n}, A_{m,n}, B_{m,n} defined only implicitly through a partial-fraction decomposition with an unspecified polynomial Q_{m,n}",
+  "status": "SKIP-OTHER"
+ },
+ "M7025": {
+  "lhs": "Integrate[1/Sqrt[x + x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "4*3^(-3/4)*EllipticK[((Sqrt[6] - Sqrt[2])/4)^2]"
+  ],
+  "conds": [],
+  "note": "typo: paper gives K((sqrt6-sqrt2)/4) = 1.5981 but the integral is 2.80436 = 4*3^(-3/4)*K (missing prefactor; oracle-verified)"
+ },
+ "M7030": {
+  "lhs": "Integrate[1/(1 - x^2)^(1/4), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[2]*(2*EllipticE[1/2] - EllipticK[1/2])"
+  ],
+  "conds": [],
+  "note": "typo: paper has sqrt(3) and an unclosed paren, corrected to sqrt(2)[2E(1/sqrt2)-K(1/sqrt2)] (oracle-verified; modulus 1/sqrt2 -> parameter 1/2)"
+ },
+ "M7065": {
+  "skip": "relation between two integrals (integral on both sides)",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M7070": {
+  "skip": "product of two different integrals equals a closed form; not a single integral",
+  "status": "SKIP-OTHER"
+ },
+ "M7105": {
+  "lhs": "Integrate[1/((x^n + a)*(x^n + b))^(1/m), {x, 1, Infinity}]",
+  "rhs": [
+   "(m/(2*n - m))*AppellF1[(2*n - m)/(m*n), 1/m, 1/n, (2*n - m + m*n)/(m*n), -a, -b]",
+   "(m/(2*n - m))*AppellF1[(2*n - m)/(m*n), 1/m, 1/m, (2*n - m + m*n)/(m*n), -a, -b]"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && 2*n - m > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "F_1 = AppellF1"
+ },
+ "M7112": {
+  "lhs": "Integrate[1/((x^n + a)*(x^n + b))^(1/m), {x, 0, 1}]",
+  "rhs": [
+   "(1/(a*b)^(1/m))*AppellF1[1/n, 1/m, 1/m, 1 + 1/n, -1/a, -1/b]"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && n >= 1 && m >= 1",
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "F_1 = AppellF1"
+ },
+ "M7127": {
+  "lhs": "Integrate[Exp[-x^2/(4*beta) - gamma*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*beta]*Exp[beta*gamma^2]*(1 - Erf[gamma*Sqrt[beta] + u/(2*Sqrt[beta])])"
+  ],
+  "conds": [
+   "beta > 0",
+   "u >= 0"
+  ],
+  "note": "Phi = error function Erf (translator mapped it to LerchPhi)"
+ },
+ "M7135": {
+  "lhs": "Integrate[Exp[-p^2*x^2 + q*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Exp[q^2/(4*p^2)]*(Sqrt[Pi]/Abs[p])"
+  ],
+  "conds": [],
+  "note": "upper sign of \\pm chosen"
+ },
+ "M7156": {
+  "lhs": "Integrate[t^w*Exp[-u*t^s]/(1 - Exp[-v*t^s]), {t, 0, Infinity}]",
+  "rhs": [
+   "((-1)^((w + 1)/s)/(Abs[s]*v^((w + 1)/s)))*PolyGamma[(w + 1)/s - 1, u/v]"
+  ],
+  "conds": [
+   "Element[(w + 1)/s, Integers]",
+   "(w + 1)/s >= 2",
+   "s > 0",
+   "u > 0",
+   "v > 0"
+  ],
+  "note": "m = (w+1)/s (substitution x=t^s, cf. preceding entry), must be an integer"
+ },
+ "M7181": {
+  "skip": "value is an unspecified polynomial P_m in O_n, ..., O_n^(m) (ellipsis)",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M7192": {
+  "lhs": "Integrate[x^(nu - 1)*Exp[-mu*x]/(1 - beta*Exp[-x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(mu + \\[FormalN])^(-nu)*beta^\\[FormalN], {\\[FormalN], 0, Infinity}]",
+   "Gamma[nu]*LerchPhi[beta, nu, mu]"
+  ],
+  "conds": [
+   "0 < beta < 1",
+   "mu > 0",
+   "nu > 0"
+  ],
+  "note": "typo: paper has beta^mu inside the sum, corrected to beta^n (oracle-verified)"
+ },
+ "M7253": {
+  "skip": "relation among three integrals",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M7264": {
+  "lhs": "p*Integrate[x^(beta - 1)*Exp[a*x - x^p], {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[(a^\\[FormalK]/\\[FormalK]!)*Gamma[(\\[FormalK] + beta)/p], {\\[FormalK], 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 1",
+   "beta > 0"
+  ],
+  "note": "formal index; p>1 for convergence of the series"
+ },
+ "M7270": {
+  "lhs": "p^2*Integrate[t^(p - 1)*Exp[a*t - t^p], {t, 0, Infinity}]",
+  "rhs": [
+   "Sum[(a^\\[FormalK]/(\\[FormalK] - 1)!)*Gamma[\\[FormalK]/p], {\\[FormalK], 1, Infinity}]"
+  ],
+  "conds": [
+   "p > 1"
+  ],
+  "note": "formal index"
+ },
+ "M7276": {
+  "lhs": "Integrate[x^(beta - 1)*Exp[-x - x^p], {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[((-1)^\\[FormalJ]/\\[FormalJ]!)*Gamma[beta + \\[FormalJ]*p], {\\[FormalJ], 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "beta > 0"
+  ],
+  "note": "formal index; 0<p<1 for convergence"
+ },
+ "M7289": {
+  "lhs": "Integrate[(Exp[-x^2] - 1/(1 + x^(2^n)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-EulerGamma/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "C is Euler's constant (-0.288607 = -gamma/2); dropped \\approx"
+ },
+ "M7296": {
+  "lhs": "Integrate[Exp[n*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*((2*beta*(1/4)*Total[Table[n*(n - \\[FormalK] - 1)!/\\[FormalK]!*(2/beta)^(n - 2*\\[FormalK] + 1), {\\[FormalK], 0, Floor[n/2]}]] - 2*Cos[n*Pi/2]^2)/n - Pi*WeberE[n, beta] - Pi*BesselY[n, beta])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "beta > 0"
+  ],
+  "note": "S_n = Schlaefli polynomial (2 z O_n(z) - 2cos^2(n pi/2))/n via Neumann polynomial O_n; E_n Weber, N_n = BesselY"
+ },
+ "M7303": {
+  "lhs": "Integrate[Exp[nu*ArcSinh[x] - I*a*x]/Sqrt[1 + x^2], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Exp[-I*nu*Pi/2]*BesselK[nu, a]"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 < nu < 1"
+  ],
+  "note": "a>0 branch of the piecewise value"
+ },
+ "M7321": {
+  "lhs": "Integrate[1/((b^2 + u^2)*Cosh[a*u]), {u, 0, Infinity}]",
+  "rhs": [
+   "(1/(2*b))*(PolyGamma[a*b/(2*Pi) + 3/4] - PolyGamma[a*b/(2*Pi) + 1/4])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "typo: paper has sinh(au) in the integrand (divergent at u=0), corrected to cosh(au) (oracle-verified)"
+ },
+ "M7328": {
+  "lhs": "Integrate[u/((b^2 + u^2)*Sinh[a*u]), {u, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*(PolyGamma[a*b/(2*Pi) + 1/2] - PolyGamma[a*b/(2*Pi)]) - Pi/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "typo: paper has -pi^2/(4a^2 b), corrected to -pi/(2ab) (oracle-verified)"
+ },
+ "M7335": {
+  "lhs": "Integrate[y^(s - 1)*(1 - Tanh[a*y]), {y, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - s)*Gamma[s]*Zeta[s]*(1 - 2^(1 - s))/a^s"
+  ],
+  "conds": [
+   "a > 0",
+   "s > 0"
+  ],
+  "note": "typo: Gamma(x) -> Gamma(s); stray factor a before dy dropped (value scales as a^{-s} only without it) (oracle-verified)"
+ },
+ "M7357": {
+  "lhs": "Integrate[x^(beta - 1)*Exp[-x]*Sinh[Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[Gamma[beta + \\[FormalK] - 1/2]/Gamma[2*\\[FormalK]], {\\[FormalK], 1, Infinity}]"
+  ],
+  "conds": [
+   "beta > -1/2"
+  ],
+  "note": "typo: paper has Gamma(beta+k), corrected to Gamma(beta+k-1/2) (oracle-verified)"
+ },
+ "M7380": {
+  "skip": "integral as printed (constant sin 2a times cos^2(bx) tanh x on [0,inf)) diverges; garbled, no plausible reconstruction",
+  "status": "SKIP-OTHER"
+ },
+ "M7388": {
+  "skip": "integral as printed (constant sin 2a times cos^2(ax) tanh x on [0,inf)) diverges; garbled, no plausible reconstruction",
+  "status": "SKIP-OTHER"
+ },
+ "M7402": {
+  "lhs": "Integrate[ArcTanh[x]^m/x, {x, 0, 1}]",
+  "rhs": [
+   "m!/2^(m - 1)*(1 - 2^(-m - 1))*Zeta[m + 1]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "note": "definition H(m,n); captured the stated special case H(m,1) = m!/2^(m-1) lambda(m+1)"
+ },
+ "M7437": {
+  "lhs": "Integrate[Cos[theta]^alpha*Cos[2*n*theta], {theta, -Pi/2, Pi/2}]",
+  "rhs": [
+   "(-1)^(n + 1)*(2/Sqrt[Pi])*Sin[alpha*Pi/2]*Gamma[(1 + alpha)/2]*Gamma[1 - alpha/2]/(2*n + alpha)*Product[(2*(n - \\[FormalK]) - alpha)/(2*(n - \\[FormalK]) + alpha), {\\[FormalK], 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "alpha > -1"
+  ],
+  "note": "piecewise n=1 / n>=2 merged via empty product"
+ },
+ "M7459": {
+  "lhs": "Integrate[Sin[theta]^m*Cos[theta]^n, {theta, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*((1 + (-1)^m)/2)*((1 + (-1)^n)/2)*Factorial2[m - 1]*Factorial2[n - 1]/Factorial2[m + n]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "epsilon_j = 1 for even j, 0 for odd j"
+ },
+ "M7465": {
+  "lhs": "Integrate[Cos[t]^2*Sin[t]^(2*k), {t, Pi/4, Pi/2}]",
+  "rhs": [
+   "DifferenceRoot[Function[{y, j}, {4*(j + 3)*y[j + 2] - 2*(3*j + 5)*y[j + 1] + (2*j + 1)*y[j] == 0, y[0] == -1/4, y[1] == 0}]][k] + Pochhammer[1/2, k]/(8*Pochhammer[2, k])*Pi"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0"
+  ],
+  "note": "alpha_k from the stated 3-term recurrence (DifferenceRoot), beta_k = (1/2)_k/(8 (2)_k) solves its 2-term recurrence"
+ },
+ "M7475": {
+  "lhs": "Integrate[Cos[q*theta]^(p*r)*Cos[p*theta]^(q*r), {theta, 0, Pi}]",
+  "rhs": [
+   "(Pi/2^(r*(p + q)))*Sum[Binomial[q*r, q*\\[FormalL]]*Binomial[p*r, p*\\[FormalL]], {\\[FormalL], 0, r}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1",
+   "Element[r, Integers] && r >= 1"
+  ],
+  "note": "bound sum index made formal; p,q,r positive integers; integer p,q,r unreachable from oracle pool (NOCONV); checked by hand at p=2,q=3,r=2 (20 digits)"
+ },
+ "M7482": {
+  "lhs": "Integrate[Cos[p*phi]^m*Cos[q*phi]^n*Cos[(m*p - n*q)*phi], {phi, 0, Pi}]",
+  "rhs": [
+   "(Pi/2^(m + n))*Sum[Binomial[m, q*\\[FormalL]]*Binomial[n, p*\\[FormalL]], {\\[FormalL], 0, Min[Floor[m/q], Floor[n/p]]}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "cos(mp-nq)phi read as cos((mp-nq)phi); H = min(floor(m/q), floor(n/p)) substituted; integer p,q unreachable from oracle pool (NOCONV); checked by hand at p=2,q=3,m=4,n=5 (20 digits)"
+ },
+ "M7496": {
+  "lhs": "Integrate[Cos[phi]^(p*q)*Sin[q*(p + 1)*phi]/Sin[q*phi], {phi, 0, Pi}]",
+  "rhs": [
+   "(Pi/2^(p*q))*Sum[Binomial[p*q, \\[FormalK]*q], {\\[FormalK], 0, p}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1"
+  ],
+  "note": "sin q(p+1)phi read as sin(q(p+1)phi); typo: paper has 2pi/2^{pq}, corrected to pi/2^{pq} (hand-checked p=2,q=3 numerically and p=1,q=2 exactly; integer p,q unreachable from oracle pool -> NOCONV)"
+ },
+ "M7508": {
+  "lhs": "Integrate[(Cos[n*alpha] - Cos[n*theta])*Cos[r*theta]/(Cos[alpha] - Cos[theta]), {theta, 0, Pi}]",
+  "rhs": [
+   "Pi*Sin[(n - r)*alpha]/Sin[alpha]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[r, Integers] && 0 <= r < n",
+   "0 < alpha < Pi"
+  ],
+  "note": "sin(n-r)alpha read as sin((n-r)alpha); r integer below n; integer r unreachable from oracle pool except r=3 (NOCONV); checked by hand at n=4,r=1,alpha=5/8 (20 digits)"
+ },
+ "M7512": {
+  "lhs": "Integrate[(1 - Cos[n*theta])*Cos[r*theta]/(1 - Cos[theta]), {theta, 0, Pi}]",
+  "rhs": [
+   "(n - r)*Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[r, Integers] && 0 < r < n"
+  ],
+  "note": "missing ( restored; integer r unreachable from oracle pool except r=3 (NOCONV); checked by hand at n=4,r=1 (20 digits)"
+ },
+ "M7526": {
+  "lhs": "Integrate[Cos[n*theta]/(1 - Cos[beta]*Cos[theta]), {theta, 0, Pi}]",
+  "rhs": [
+   "(Pi/Sin[beta])*((1 - Tan[beta/2])/(1 + Tan[beta/2]))^n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < beta < Pi"
+  ],
+  "note": "t = tan(beta/2) substituted"
+ },
+ "M7531": {
+  "lhs": "Integrate[Cos[n*theta]/(1 + Cos[beta]*Cos[theta]), {theta, 0, Pi}]",
+  "rhs": [
+   "(-1)^n*(Pi/Sin[beta])*((1 - Tan[beta/2])/(1 + Tan[beta/2]))^n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < beta < Pi"
+  ],
+  "note": "t = tan(beta/2) substituted"
+ },
+ "M7538": {
+  "lhs": "Integrate[1/(a*Cos[x]^2 + b*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*Sqrt[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "definition of I_n is garbled (exponent 2 for n, b missing); captured the stated I_1 = pi/(2 sqrt(ab)) for 1/(a cos^2 + b sin^2)"
+ },
+ "M7551": {
+  "lhs": "Integrate[Sin[t]^mu*Sin[z - t]^nu, {t, 0, z}]",
+  "rhs": [
+   "(Sqrt[Pi]*Gamma[mu + 1]*Gamma[nu + 1]/(2^((mu + nu + 1)/2)*Gamma[mu/2 + nu/2 + 1]))*Sin[z]^((mu + nu + 1)/2)*LegendreP[(mu - nu - 1)/2, -(mu + nu + 1)/2, Cos[z]]"
+  ],
+  "conds": [
+   "mu > -1",
+   "nu > -1",
+   "0 < z < Pi"
+  ],
+  "note": "translator bound P into sin's argument; sin^{p} z P(...) fixed"
+ },
+ "M7559": {
+  "lhs": "(2^m*Gamma[m + 1/2]/(Sqrt[Pi]*Gamma[m + n + 1]*Gamma[m - n]))*Integrate[Sin[t]^(m + n)*Sin[z - t]^(m - n - 1), {t, 0, z}]",
+  "rhs": [
+   "Sin[z]^m*LegendreP[n, -m, Cos[z]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && Element[n, Integers] && 0 <= n < m",
+   "0 < z < Pi"
+  ],
+  "note": "translator bound P into sin's argument; fixed"
+ },
+ "M7570": {
+  "skip": "right-hand side is \\ldots (no value given)",
+  "status": "SKIP-OTHER"
+ },
+ "M7595": {
+  "lhs": "Integrate[Cos[Sum[n/(n - \\[FormalK])*Binomial[n - \\[FormalK], \\[FormalK]]*(-x)^\\[FormalK]*t^(n - 2*\\[FormalK]), {\\[FormalK], 0, Floor[(n)/2]}]], {t, 0, Infinity}]",
+  "rhs": [
+   "(Pi*Sqrt[x]/(2*n*Sin[Pi/(2*n)]))*(BesselJ[1/n, 2*x^(n/2)] + BesselJ[-1/n, 2*x^(n/2)])"
+  ],
+  "conds": [
+   "Element[n, Integers] && 2 <= n <= 3",
+   "x > 0"
+  ],
+  "note": "T_n(t,x) = t^n 2F1(-n/2,(1-n)/2;1-n;-4x/t^2) written as its terminating sum (T_2=t^2+2x, T_3=t^3+3tx); typo: paper has J_{1/n} - J_{-1/n}, corrected to J_{1/n} + J_{-1/n} (oracle-verified; n=2 checks against Fresnel closed form); test points n<=3"
+ },
+ "M7599": {
+  "lhs": "Integrate[Cos[Sum[2*m/(2*m - \\[FormalK])*Binomial[2*m - \\[FormalK], \\[FormalK]]*(x)^\\[FormalK]*t^(2*m - 2*\\[FormalK]), {\\[FormalK], 0, Floor[(2*m)/2]}]], {t, 0, Infinity}]",
+  "rhs": [
+   "(Pi*Sqrt[x]/(4*m*Sin[Pi/(4*m)]))*(BesselJ[-1/(2*m), 2*x^m] - BesselJ[1/(2*m), 2*x^m])"
+  ],
+  "conds": [
+   "Element[m, Integers] && 1 <= m <= 2",
+   "x > 0"
+  ],
+  "note": "T_n(t,x) written as its terminating sum; test points restricted to m<=2 (oracle NIntegrate unreliable for high-degree phases; m=1..3 checked with LevinRule); oracle NOCONV expected for cos(polynomial) on [0,inf)"
+ },
+ "M7603": {
+  "skip": "NOCONV/oracle-unreliable: value correct (Airy closed form for m=1; LevinRule NIntegrate matches m=1..4 at x=5/8,3/8,5/6 to 14+ digits) but the oracle's default NIntegrate converges silently to wrong values for cos(T_{2m+1}) on [0,inf)",
+  "status": "SKIP-NOCONV"
+ },
+ "M7642": {
+  "lhs": "Integrate[(Exp[-r*x]*Cos[p*x] - Exp[-s*x]*Cos[q*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Log[(q^2 + s^2)/(p^2 + r^2)]"
+  ],
+  "conds": [
+   "r > 0",
+   "s > 0"
+  ],
+  "note": ""
+ },
+ "M7649": {
+  "lhs": "Integrate[Sin[x^2]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*Gamma[3/4]*Cos[Pi/8])"
+  ],
+  "conds": [],
+  "note": "typo: paper has cos(3pi/8), corrected to cos(pi/8) (oracle-verified)"
+ },
+ "M7662": {
+  "lhs": "(3/4)*Integrate[x/Sin[x], {x, 0, Pi/6}]",
+  "rhs": [
+   "Catalan - (Pi/8)*Log[2 + Sqrt[3]]"
+  ],
+  "conds": [],
+  "note": "typo: paper has log(1+sqrt3), corrected to log(2+sqrt3) (oracle-verified)"
+ },
+ "M7677": {
+  "lhs": "(2^(s + 2)/Pi)*Integrate[x*Cos[x]^s*Sin[s*x], {x, 0, Pi/2}] - EulerGamma",
+  "rhs": [
+   "PolyGamma[s + 1]"
+  ],
+  "conds": [
+   "s > -1"
+  ],
+  "note": "gamma is Euler's constant outside the integral"
+ },
+ "M7683": {
+  "skip": "PAPER-ERROR: int_0^{pi/4} x^2 tan x = 0.1111888 but 2 pi G - 7/2 zeta(3) = 1.5479824 (that value is int_0^{pi/2} x^2/sin x); no single-slip fix",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M7698": {
+  "lhs": "Integrate[x^n*Cot[Pi*x], {x, 0, 1/2}]",
+  "rhs": [
+   "(n!/2^n)*Total[Table[(-1)^((\\[FormalK] - 1)/2)/Pi^\\[FormalK]*(-PolyLog[\\[FormalK], -1])/(n - \\[FormalK] + 1)!, {\\[FormalK], 1, n, 2}]] + ((-1)^n + 1)/2*4*n!*(1 - 2^(-n - 1))/(2*Pi)^(n + 1)*Zeta[n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "sum over odd k as step-2 Sum; eta(k) = -Li_k(-1) (eta(1)=log 2)"
+ },
+ "M7708": {
+  "lhs": "Integrate[x^n*Cot[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(1/2)*(Pi/4)^n*(2/n - Sum[Zeta[2*\\[FormalK]]/(4^(2*\\[FormalK] - 1)*(n + 2*\\[FormalK])), {\\[FormalK], 1, Infinity}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "bound sum index made formal"
+ },
+ "M7715": {
+  "lhs": "Integrate[x^n*Cot[x], {x, 0, p*Pi/q}]",
+  "rhs": [
+   "(p*Pi/q)^n*Log[2*Sin[p*Pi/q]] + (-1)^Floor[n/2]*(1 + (-1)^n)*2^(-n - 1)*n!*Zeta[n + 1] + 2*n!*(p*Pi/q)^(n + 1)*(Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK] + 1)!)*(1/(2*p*Pi)^(2*\\[FormalK]))*Sin[2*\\[FormalL]*p*Pi/q]*HurwitzZeta[2*\\[FormalK], \\[FormalL]/q], {\\[FormalK], 1, Floor[(n + 1)/2]}, {\\[FormalL], 1, q}], 2] + Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK])!)*(1/(2*p*Pi)^(2*\\[FormalK] + 1))*Cos[2*\\[FormalL]*p*Pi/q]*HurwitzZeta[2*\\[FormalK] + 1, \\[FormalL]/q], {\\[FormalK], 1, Floor[n/2]}, {\\[FormalL], 1, q}], 2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1",
+   "0 < p/q < 1"
+  ],
+  "note": "formal sum indices; requires integer p,q (fails for non-integer p) -- oracle pool has no admissible integer pair -> NOCONV; checked by hand with NIntegrate at (n,p,q)=(1,1,3),(2,1,3),(3,2,5),(2,1,4) to 20 digits"
+ },
+ "M7735": {
+  "lhs": "Integrate[x^n*Tan[x], {x, 0, p*Pi/q}]",
+  "rhs": [
+   "-(p*Pi/q)^n*Log[2*Cos[p*Pi/q]] + (-1)^Floor[n/2]*(1 + (-1)^n)*2^(-n - 1)*(1 - 2^(-n))*n!*Zeta[n + 1] + 2*n!*(p*Pi/q)^(n + 1)*(Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK] + 1)!)*((-1)^(\\[FormalL] - 1)/(2*p*Pi)^(2*\\[FormalK]))*Sin[2*\\[FormalL]*p*Pi/q]*If[OddQ[q], (HurwitzZeta[2*\\[FormalK], \\[FormalL]/(2*q)] - HurwitzZeta[2*\\[FormalK], \\[FormalL]/(2*q) + 1/2])/2^(2*\\[FormalK]), HurwitzZeta[2*\\[FormalK], \\[FormalL]/q]], {\\[FormalK], 1, Floor[(n + 1)/2]}, {\\[FormalL], 1, q}], 2] + Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK])!)*((-1)^(\\[FormalL] - 1)/(2*p*Pi)^(2*\\[FormalK] + 1))*Cos[2*\\[FormalL]*p*Pi/q]*If[OddQ[q], (HurwitzZeta[2*\\[FormalK] + 1, \\[FormalL]/(2*q)] - HurwitzZeta[2*\\[FormalK] + 1, \\[FormalL]/(2*q) + 1/2])/2^(2*\\[FormalK] + 1), HurwitzZeta[2*\\[FormalK] + 1, \\[FormalL]/q]], {\\[FormalK], 1, Floor[n/2]}, {\\[FormalL], 1, q}], 2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1",
+   "0 < p/q < 1/2"
+  ],
+  "note": "Z_q(s,a) = eta(s,a) for q odd, zeta(s,a) for q even; typo: paper's eta(s,a)=[zeta(s,a/2)-zeta(s,a/2+1/2)]/2 must be /2^s. Requires integer p (oracle pool has no admissible integer p,q -> NOCONV); checked by hand with NIntegrate at (n,p,q)=(1,1,3),(3,1,3),(2,2,5),(2,1,4),(1,1,4) to 20 digits"
+ },
+ "M7757": {
+  "lhs": "Integrate[x^n*Csc[x], {x, 0, p*Pi/q}]",
+  "rhs": [
+   "(p*Pi/q)^n*Log[Tan[p*Pi/(2*q)]] + (-1)^Floor[n/2]*(1 + (-1)^n)*n!*(1 - 2^(-n - 1))*Zeta[n + 1] + 2*n!*(p*Pi/q)^(n + 1)*(Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK] + 1)!)*(1/(2*p*Pi)^(2*\\[FormalK]))*Sin[(2*\\[FormalL] - 1)*p*Pi/q]*HurwitzZeta[2*\\[FormalK], (2*\\[FormalL] - 1)/(2*q)], {\\[FormalK], 1, Floor[(n + 1)/2]}, {\\[FormalL], 1, q}], 2] + Total[Table[((-1)^(\\[FormalK] - 1)/(n - 2*\\[FormalK])!)*(1/(2*p*Pi)^(2*\\[FormalK] + 1))*Cos[(2*\\[FormalL] - 1)*p*Pi/q]*HurwitzZeta[2*\\[FormalK] + 1, (2*\\[FormalL] - 1)/(2*q)], {\\[FormalK], 1, Floor[n/2]}, {\\[FormalL], 1, q}], 2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "Element[q, Integers] && q >= 1",
+   "0 < p/q < 1/2"
+  ],
+  "note": "formal sum indices; requires integer p,q (fails for non-integer p) -- oracle pool has no admissible integer pair -> NOCONV; checked by hand with NIntegrate at (n,p,q)=(2,1,3),(3,2,5) to 20 digits"
+ },
+ "M7783": {
+  "skip": "for b^2>4ac the denominator has real zeros: integral is a principal value",
+  "status": "SKIP-PV"
+ },
+ "M7788": {
+  "lhs": "Integrate[(x^nu/(a^2 + x^2)^(mu + 1))*Cos[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(a^(nu - 2*mu - 1)/2)*Beta[1/2 + nu/2, mu - nu/2 + 1/2]*HypergeometricPFQ[{(nu + 1)/2}, {(nu + 1)/2 - mu, 1/2}, a^2*y^2/4] + Sqrt[Pi]*(2^(-2*mu + nu - 2)/Gamma[1 + mu - nu/2])*y^(2*mu - nu + 1)*Gamma[nu/2 - mu - 1/2]*HypergeometricPFQ[{mu + 1 - nu/2}, {mu - nu/2 + 3/2, mu - nu/2 + 1}, a^2*y^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "y > 0",
+   "nu > -1",
+   "nu < 2*mu + 1"
+  ],
+  "note": "1F2 parameter separators fixed; second 1F2 missing lower parameter mu-nu/2+1 supplied"
+ },
+ "M7801": {
+  "lhs": "Integrate[x^(2*m)*Cos[a*x]/(beta^2 + x^2)^(n + 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "((-1)^m*Sqrt[Pi]/(2^n*beta^n*Gamma[n + 1/2]))*Derivative[2*m][Function[\\[FormalT], \\[FormalT]^n*BesselK[n, \\[FormalT]*beta]]][a]"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0",
+   "Element[m, Integers] && Element[n, Integers] && 0 <= m <= n"
+  ],
+  "note": "d^{2m}/da^{2m} written as Derivative of a pure function"
+ },
+ "M7811": {
+  "lhs": "Integrate[Sin[x*y]/(x*(a^2 + x^2)^(nu + 1/2)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi*y/(2*a^(2*nu)))*(BesselK[nu, a*y]*StruveL[nu - 1, a*y] + StruveL[nu, a*y]*BesselK[nu - 1, a*y])"
+  ],
+  "conds": [
+   "a > 0",
+   "y > 0",
+   "nu > -1/2"
+  ],
+  "note": "missing argument (ay) of K_nu supplied; L = StruveL"
+ },
+ "M7820": {
+  "lhs": "Integrate[Sin[(2*k + 1)*t]*2*z*(1 + z^2)*Sin[t]/(1 - 2*z^2*Cos[2*t] + z^4), {t, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*z^(2*k + 1)"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0",
+   "0 < z < 1"
+  ],
+  "note": "sin(2k+1)t read as sin((2k+1)t); delta=1/2 branch"
+ },
+ "M7824": {
+  "skip": "PAPER-ERROR: at delta=1/2 the integral is 0.385324 (k=1,z=3/8) vs delta pi z^{2k+1} = 0.082835; at delta=1 it is 0 (paper itself flags (??)); no fix found",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M7883": {
+  "lhs": "Integrate[x^(-p)*Cos[x + b]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(Gamma[1 - p]/2^(2*n))*Total[Table[Binomial[2*n + 1, n - \\[FormalK]]*Sin[Pi*p/2 - (2*\\[FormalK] + 1)*b]/(2*\\[FormalK] + 1)^(1 - p), {\\[FormalK], 0, n}]]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "formal sum index; 0<p<1"
+ },
+ "M7891": {
+  "lhs": "Integrate[x^(-p)*Sin[x + b]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(Gamma[1 - p]/2^(2*n))*Total[Table[(-1)^\\[FormalK]*Binomial[2*n + 1, n - \\[FormalK]]*Cos[Pi*p/2 - (2*\\[FormalK] + 1)*b]/(2*\\[FormalK] + 1)^(1 - p), {\\[FormalK], 0, n}]]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "typo: paper lacks the factor (-1)^k in the sum (sin^{2n+1} expansion), corrected (oracle-verified)"
+ },
+ "M7898": {
+  "lhs": "Integrate[x^(-p)*Cos[x]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(Gamma[1 - p]/2^(2*n))*Sin[Pi*p/2]*Sum[Binomial[2*n + 1, n - \\[FormalK]]/(2*\\[FormalK] + 1)^(1 - p), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "formal sum index"
+ },
+ "M7915i": {
+  "lhs": "(2/Pi)*Integrate[(Sin[x]/x)^n*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(n/2^(n - 1))*Sum[(-1)^\\[FormalR]*(b + n - 2*\\[FormalR])^(n - 1)/(\\[FormalR]!*(n - \\[FormalR])!), {\\[FormalR], 0, Ceiling[(b + n)/2] - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "0 <= b < n"
+  ],
+  "note": "I_n(b) defined inline; value from the Medhurst closed form displayed below it (0<=b<n)"
+ },
+ "M7944": {
+  "lhs": "Integrate[x^(-p)*Sin[x]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(Gamma[1 - p]/2^(2*n))*Cos[Pi*p/2]*Sum[(-1)^\\[FormalK]*Binomial[2*n + 1, n - \\[FormalK]]/(2*\\[FormalK] + 1)^(1 - p), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "formal sum index"
+ },
+ "M7951": {
+  "lhs": "Integrate[Cos[x^p]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2^(2*n))*Gamma[(p + 1)/p]*Cos[Pi/(2*p)]*Sum[Binomial[2*n + 1, n - \\[FormalK]]/(2*\\[FormalK] + 1)^(1/p), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "p > 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "formal sum index"
+ },
+ "M7959": {
+  "lhs": "Integrate[Sin[x^p]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2^(2*n))*Gamma[(p + 1)/p]*Sin[Pi/(2*p)]*Sum[(-1)^\\[FormalK]*Binomial[2*n + 1, n - \\[FormalK]]/(2*\\[FormalK] + 1)^(1/p), {\\[FormalK], 0, n}]"
+  ],
+  "conds": [
+   "p > 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "formal sum index"
+ },
+ "M7967": {
+  "skip": "coefficients a_{n,p,.} are nested multiple sums over k_1<=...<=k_j and a*_{n,p} is unspecified",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M7981": {
+  "lhs": "Integrate[x*Sin[x]/(a + b*Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "(Pi/Sqrt[a*b])*ArcTan[Sqrt[b/a]]"
+  ],
+  "conds": [
+   "a > b",
+   "b > 0"
+  ],
+  "note": "\\sqrt{b}{a} read as sqrt(b/a)"
+ },
+ "M7996": {
+  "lhs": "Integrate[Cos[x]^(2*m)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2^(2*m + 1)*a))*Binomial[2*m, m] + (Pi/(2^(2*m)*a))*Sum[Binomial[2*m, m + \\[FormalK]]*Exp[-2*\\[FormalK]*a], {\\[FormalK], 1, m}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "note": "typo: paper has x dx in the numerator (log-divergent), corrected to dx (oracle-verified)"
+ },
+ "M8130": {
+  "lhs": "Integrate[Cos[((2*m - 1)*Pi/(2*alpha) - 1)*theta]/Cos[theta]^(2 + (2*m - 1)*Pi/(2*alpha) - 1), {theta, -alpha, alpha}]",
+  "rhs": [
+   "2*(-1)^(m + 1)*Cos[alpha]^(-1 - ((2*m - 1)*Pi/(2*alpha) - 1))/(1 + ((2*m - 1)*Pi/(2*alpha) - 1))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "0 < alpha < Pi/2"
+  ],
+  "note": "lambda_m = (2m-1)pi/(2 alpha) - 1 substituted; typo: paper has (-)^{m+2}, corrected to (-)^{m+1} (oracle-verified)"
+ },
+ "M8138i": {
+  "lhs": "Integrate[x^(-a)*(1 - Sin[x]^b/x^b), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi*Sec[Pi*a/2]/(2^b*Gamma[a + b]))*Sum[(-1)^(\\[FormalK] + 1)*Binomial[b, \\[FormalK]]*(b - 2*\\[FormalK])^(a + b - 1), {\\[FormalK], 0, Floor[(b - 1)/2]}]"
+  ],
+  "conds": [
+   "Element[b, Integers] && b >= 1",
+   "1 < a < 3",
+   "a != 2"
+  ],
+  "note": "I(a,b) defined inline; general closed form displayed after it; oracle NOCONV (b must be integer, slow x^{-a} tail); checked by hand at (a,b)=(7/4,3),(7/3,3),(5/2,5) to 12+ digits"
+ },
+ "M8152": {
+  "lhs": "Integrate[x^(-a)*(1 - Sin[x]/x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Sec[Pi*a/2]/(2*Gamma[1 + a])"
+  ],
+  "conds": [
+   "1 < a < 3",
+   "a != 2"
+  ],
+  "note": "I(a,1) special case (contains the stated a=3/2 instance 2 sqrt(2 pi)/3)"
+ },
+ "M8156": {
+  "lhs": "Integrate[x^(-a)*(1 - Sin[x]^2/x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*2^(a - 1)*Sec[Pi*a/2]/Gamma[2 + a]"
+  ],
+  "conds": [
+   "1 < a < 3",
+   "a != 2"
+  ],
+  "note": "I(a,2) special case (contains the stated a=3/2 instance 16 sqrt(pi)/15)"
+ },
+ "M8160": {
+  "lhs": "Integrate[x^(-a)*(1 - Sin[x]^3/x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "(3 - 3^(2 + a))*Pi*Sec[Pi*a/2]/(8*Gamma[3 + a])"
+  ],
+  "conds": [
+   "1 < a < 3",
+   "a != 2"
+  ],
+  "note": "I(a,3) special case (contains the stated a=3/2 instance)"
+ },
+ "M8203": {
+  "lhs": "(-1)^(n/2)*(2^n/Pi)*Integrate[Exp[-x*Cos[4*phi]]*Cos[x*Sin[4*phi] + n*phi]*Sin[phi]^n, {phi, 0, Pi}]",
+  "rhs": [
+   "Sum[(-1)^\\[FormalK]/\\[FormalK]!*Binomial[n, 2*\\[FormalK]]*x^\\[FormalK], {\\[FormalK], 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 2"
+  ],
+  "note": "p_n(z,1) = sum_k (-1)^k/k! C(n,2k) z^k substituted; n even"
+ },
+ "M8209": {
+  "lhs": "(-1)^((n - 1)/2)*(2^n/Pi)*Integrate[Exp[-x*Cos[4*phi]]*Sin[x*Sin[4*phi] + n*phi]*Sin[phi]^n, {phi, 0, Pi}]",
+  "rhs": [
+   "Sum[(-1)^\\[FormalK]/\\[FormalK]!*Binomial[n, 2*\\[FormalK]]*x^\\[FormalK], {\\[FormalK], 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 1"
+  ],
+  "note": "p_n(z,1) substituted; n odd"
+ },
+ "M8238": {
+  "lhs": "Integrate[Exp[-x*z]*Sin[a*x]^(2*m)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "((-1)^(m + 1)/2^(2*m))*Sum[(-1)^\\[FormalJ]*Binomial[2*m, \\[FormalJ]]*Log[z^2 + (2*m - 2*\\[FormalJ])^2*a^2], {\\[FormalJ], 0, m - 1}] - (1/2^(2*m))*Binomial[2*m, m]*Log[z]",
+   "((-1)^(m + 1)/2^(2*m))*Sum[(-1)^\\[FormalJ]*Binomial[2*m, \\[FormalJ]]*Log[z^2 + (2*m - 2*\\[FormalJ])*a^2], {\\[FormalJ], 0, m - 1}] - (1/2^(2*m))*Binomial[2*m, m]*Log[z]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "z > 0",
+   "a > 0"
+  ],
+  "note": "sin^{2m}(az) read as sin^{2m}(ax); typo: (2m-2j)a^2 -> (2m-2j)^2 a^2"
+ },
+ "M8244": {
+  "lhs": "Integrate[Exp[-x*z]*x^(n - 1)/(1 - Exp[-x])*(Sin[a*x]^(2*m) - Sin[b*x]^(2*m)), {x, 0, Infinity}]",
+  "rhs": [
+   "((-1)^m/2^(2*m))*(n - 1)!*Sum[(-1)^\\[FormalJ]*Binomial[2*m, \\[FormalJ]]*(HurwitzZeta[n, z - I*a*(2*m - 2*\\[FormalJ])] + HurwitzZeta[n, z + I*a*(2*m - 2*\\[FormalJ])] - HurwitzZeta[n, z - I*b*(2*m - 2*\\[FormalJ])] - HurwitzZeta[n, z + I*b*(2*m - 2*\\[FormalJ])]), {\\[FormalJ], 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 2",
+   "z > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "formal sum index; typo: paper has (-)^{m+1}, corrected to (-)^m (oracle-verified, overall sign)"
+ },
+ "M8254": {
+  "lhs": "Integrate[x^k*Log[x]/Sqrt[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "DifferenceRoot[Function[{y, j}, {(2*j + 5)^2*y[j + 2] - 2*(4*(j + 2)^2 - 2*(j + 2) + 1)*y[j + 1] + 4*(j + 1)^2*y[j] == 0, y[0] == -4, y[1] == -20/9}]][k] + 4*Pochhammer[1, k]/Pochhammer[3/2, k]*Log[2]"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0"
+  ],
+  "note": "definition of I_k; value from the stated I_k = alpha_k + beta_k ln2 recurrences (alpha via DifferenceRoot, beta_k = 4 k!/(3/2)_k)"
+ },
+ "M8268": {
+  "lhs": "Integrate[Sin[phi]^k*Cos[phi]^2, {phi, 0, Pi/2}]",
+  "rhs": [
+   "DifferenceRoot[Function[{y, j}, {(j + 4)*y[j + 2] - (j + 1)*y[j] == 0, y[0] == Pi/4, y[1] == 1/3}]][k]"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0"
+  ],
+  "note": "definition of S_k; value from the stated S_0, S_1 and (k+2)S_k=(k-1)S_{k-2}"
+ },
+ "M8316i": {
+  "lhs": "Integrate[x^(alpha - 1)*Log[x]^m, {x, 0, 1}]",
+  "rhs": [
+   "(-1)^m*m!/alpha^(m + 1)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "inline recursion for I(alpha,m,k); captured the stated base case I(alpha,i,0)=(-)^i i!/alpha^{i+1} (index i written m)"
+ },
+ "M8344": {
+  "lhs": "Integrate[(1/u)*Log[(1 + u)/(1 - u)]^(s - 1), {u, 0, 1}]",
+  "rhs": [
+   "2*Gamma[s]*(1 - 2^(-s))*Zeta[s]",
+   "2*Gamma[s]*Sum[1/(2*\\[FormalK] + 1)^s, {\\[FormalK], 0, Infinity}]"
+  ],
+  "conds": [
+   "s > 1"
+  ],
+  "note": "1 + 3^-s + 5^-s + ... = (1-2^-s) zeta(s)"
+ },
+ "M8347": {
+  "lhs": "Integrate[(Log[u]/u)*Log[1 + u]*Log[1 - u], {u, 0, 1}]",
+  "rhs": [
+   "-(1/2)*(-4*PolyLog[4, 1/2] + 13*Pi^4/288 + Log[2]*(-(7/2)*Zeta[3] + (Pi^2/6)*Log[2] - Log[2]^3/6)) + (11/2880)*Pi^4"
+  ],
+  "conds": [],
+  "note": "A_4 substituted from its definition (eq.A4def)"
+ },
+ "M8350": {
+  "lhs": "Integrate[(Log[u]/u)*Log[1 + u]^2, {u, 0, 1}]",
+  "rhs": [
+   "(-4*PolyLog[4, 1/2] + 13*Pi^4/288 + Log[2]*(-(7/2)*Zeta[3] + (Pi^2/6)*Log[2] - Log[2]^3/6)) - Pi^4/288"
+  ],
+  "conds": [],
+  "note": "A_4 substituted from its definition (eq.A4def)"
+ },
+ "M8356": {
+  "lhs": "Integrate[(Log[u]/u)*Log[(1 + u)/(1 - u)]^2, {u, 0, 1}]",
+  "rhs": [
+   "2*(-4*PolyLog[4, 1/2] + 13*Pi^4/288 + Log[2]*(-(7/2)*Zeta[3] + (Pi^2/6)*Log[2] - Log[2]^3/6)) - Pi^4/60"
+  ],
+  "conds": [],
+  "note": "A_4 substituted from its definition (eq.A4def)"
+ },
+ "M8359": {
+  "lhs": "Integrate[(1/u)*Log[1 + u]^3, {u, 0, 1}]",
+  "rhs": [
+   "(3/2)*(-4*PolyLog[4, 1/2] + 13*Pi^4/288 + Log[2]*(-(7/2)*Zeta[3] + (Pi^2/6)*Log[2] - Log[2]^3/6)) - Pi^4/960"
+  ],
+  "conds": [],
+  "note": "A_4 substituted from its definition (eq.A4def)"
+ },
+ "M8405": {
+  "lhs": "(-1)^n*Integrate[Log[Sin[theta]^p*Cos[theta]^q]^n, {theta, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*Det[Table[Which[\\[FormalJ] <= \\[FormalI], Function[\\[FormalR], If[\\[FormalR] == 1, (p + q)*Log[2], ((p^\\[FormalR] + q^\\[FormalR])*(1 - 2^(-\\[FormalR])) - (p + q)^\\[FormalR]*2^(-\\[FormalR]))*Zeta[\\[FormalR]]]][\\[FormalI] - \\[FormalJ] + 1], \\[FormalJ] == \\[FormalI] + 1, -\\[FormalI], True, 0], {\\[FormalI], n}, {\\[FormalJ], n}]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p > 0",
+   "q > 0"
+  ],
+  "note": "n x n Hessenberg determinant written via Table/Det; t_r summed in closed form with zeta. typo: first t_r sum must start at m=0 (paper m=1) and the last row starts with t_n (paper t_2) (oracle-verified)"
+ },
+ "M8431": {
+  "lhs": "(1/4)*Integrate[Log[Cot[x/2]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "note": "G = Catalan; integrand (1+cos x)/(1-cos x) written identically as cot^2(x/2) (the printed form overflows in machine NIntegrate at x->0)"
+ },
+ "M8469": {
+  "lhs": "Integrate[Sum[KroneckerSymbol[-4, \\[FormalN]]*x^(\\[FormalN] - 1), {\\[FormalN], 1, 3}]/(1 - x^4)*Log[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[Gamma[3/4]/Pi^(1/4)]"
+  ],
+  "conds": [],
+  "note": "Delta=4 branch; chi_{-4} = KroneckerSymbol[-4, n]"
+ },
+ "M8484": {
+  "lhs": "(1/4)*Integrate[((x^4 - 6*x^2 + 1)/(1 + x^2)^3)*Log[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-(EulerGamma + Log[4])*(HurwitzZeta[-1, 1/4] - HurwitzZeta[-1, 3/4]) + Derivative[1, 0][HurwitzZeta][-1, 1/4] - Derivative[1, 0][HurwitzZeta][-1, 3/4]"
+  ],
+  "conds": [],
+  "note": "zeta'(s,a) is the s-derivative of Hurwitz zeta"
+ },
+ "M8502": {
+  "lhs": "Integrate[Log[1 + t*x]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/4)*Log[1 + t^2] - Log[t]*ArcTan[t] + (PolyLog[2, I*t] - PolyLog[2, -I*t])/(2*I)"
+  ],
+  "conds": [
+   "0 < t <= 1"
+  ],
+  "note": "G(t) = t - t^3/3^2 + ... = Ti_2(t) (0<=t<=1 branch)"
+ },
+ "M8527": {
+  "lhs": "Integrate[Log[t]/(1 - (1 - t)*(1 - u)), {t, 0, 1}]",
+  "rhs": [
+   "(1/(1 - u))*PolyLog[2, (u - 1)/u]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "note": "typo: paper has Li_2(-(u-1)/u), corrected to Li_2((u-1)/u) (oracle-verified)"
+ },
+ "M8533": {
+  "lhs": "Integrate[Log[t]/(1 + t)^(n + 1), {t, 0, b}]",
+  "rhs": [
+   "(1/n)*(1 - (1 + b)^(-n))*Log[b] - (1/n)*Log[1 + b] - (1/(n*(1 + b)^(n - 1)))*Sum[(1/\\[FormalJ]!)*Binomial[n - 1, \\[FormalJ]]*Abs[StirlingS1[\\[FormalJ] + 1, 2]]*b^\\[FormalJ], {\\[FormalJ], 1, n - 1}]",
+   "(1/n)*(1 - (1 + b)^(-n))*Log[b] - (1/n)*Log[1 + b] - (1/(n*(1 + b)^(n - 1)))*Sum[(1/\\[FormalJ]!)*Binomial[n - 1, \\[FormalJ]]*StirlingS2[\\[FormalJ] + 1, 2]*b^\\[FormalJ], {\\[FormalJ], 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "b > 0"
+  ],
+  "note": "|S^{(2)}_{j+1}| read as unsigned Stirling number of the first kind"
+ },
+ "M8541": {
+  "lhs": "Integrate[(Log[1 - x]/x)*((1 - x)^p - 1), {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^(\\[FormalN] + 1)*Binomial[p, \\[FormalN]]*HarmonicNumber[\\[FormalN]]/\\[FormalN], {\\[FormalN], 1, p}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1"
+  ],
+  "note": "H_n^{(1)} = HarmonicNumber[n]; formal sum index"
+ },
+ "M8554": {
+  "skip": "integral stated to diverge (= infinity); no finite value",
+  "status": "SKIP-PV"
+ },
+ "M8571i": {
+  "lhs": "Integrate[Log[x]*Log[1 - x]/(x + 1), {x, 0, 1}]",
+  "rhs": [
+   "(13/8)*Zeta[3] - (3/2)*Zeta[2]*Log[2]"
+  ],
+  "conds": [],
+  "note": "table of int_0^1 f(x); captured row f = log x log(1-x)/(x+1) (alpha_1=13/8, alpha_2=-3/2)"
+ },
+ "M8602i": {
+  "lhs": "Integrate[Log[x]^2*Log[1 + x]/(x + 1), {x, 0, 1}]",
+  "rhs": [
+   "-(3/2)*Zeta[2]^2 + 4*PolyLog[4, 1/2] + (7/2)*Zeta[3]*Log[2] - Zeta[2]*Log[2]^2 + Log[2]^4/6"
+  ],
+  "conds": [],
+  "note": "table of int_0^1 f(x); captured row f = log^2 x log(1+x)/(x+1); a_4 = Li_4(1/2)"
+ },
+ "M8626": {
+  "skip": "pointer to Koelbig's tables: right-hand side empty (no value given)",
+  "status": "SKIP-OTHER"
+ },
+ "M8630": {
+  "skip": "pointer to Koelbig's tables: right-hand side empty (no value given)",
+  "status": "SKIP-OTHER"
+ },
+ "M8633": {
+  "skip": "pointer to Koelbig's tables: right-hand side empty (no value given)",
+  "status": "SKIP-OTHER"
+ },
+ "M8640": {
+  "lhs": "(z^p/(p - 1)!)*Integrate[(t^(z - 1)/(1 - t)^z)*Log[1/t]^(p - 1), {t, 0, 1}]",
+  "rhs": [
+   "HypergeometricPFQ[ConstantArray[z, p + 1], ConstantArray[z + 1, p], 1]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1",
+   "0 < z < 1"
+  ],
+  "note": "p+1Fp with p+1 upper z's and p lower z+1's"
+ },
+ "M8651": {
+  "skip": "value is Adamchik's generalized Stirling-cycle bracket [z p] for non-integer z, not defined in the paper and not a Mathematica function",
+  "status": "SKIP-OTHER"
+ },
+ "M8659": {
+  "lhs": "Integrate[Log[t]/(1 + t^2)^(n + 1), {t, 0, x}]",
+  "rhs": [
+   "(Binomial[2*n, n]/2^(2*n))*((Log[x]*ArcTan[x] - (PolyLog[2, I*x] - PolyLog[2, -I*x])/(2*I)) + Sum[2^(2*\\[FormalJ])*x/(2*\\[FormalJ]*Binomial[2*\\[FormalJ], \\[FormalJ]]*(1 + x^2)^\\[FormalJ]), {\\[FormalJ], 1, n}]*Log[x] - Sum[(ArcTan[x] + Sum[2^(2*\\[FormalJ])*x/(2*\\[FormalJ]*Binomial[2*\\[FormalJ], \\[FormalJ]]*(1 + x^2)^\\[FormalJ]), {\\[FormalJ], 1, \\[FormalK]}])/(2*\\[FormalK] + 1), {\\[FormalK], 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "x > 0"
+  ],
+  "note": "g_0(x) = ln x atan x - Ti_2(x) from its definition; p_k(x) = sum_{j=1}^k 4^j x/(2j C(2j,j)(1+x^2)^j) (reconstructed: reduces to the paper's p_k(1))"
+ },
+ "M8665": {
+  "skip": "defines the auxiliary function g_0(x); no independent value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M8671": {
+  "skip": "PAPER-ERROR: at a=5/6,k=1,m=3,u=5/8 NIntegrate gives 62.0089 vs printed value ~ -7.4e9-8.9e9 i (also stray e^{i pi 3}, e^{4 pi m/(3u)} without i); no plausible fix",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M8692": {
+  "lhs": "Integrate[Log[x]^(n - 1)/((x - 1)*(x + a)), {x, 0, Infinity}]",
+  "rhs": [
+   "((n - 1)!/(1 + a))*((1 + (-1)^n)*Zeta[n] - (1/n!)*Total[Table[Binomial[n, 2*\\[FormalJ]]*(2^(2*\\[FormalJ]) - 2)*(-1)^\\[FormalJ]*BernoulliB[2*\\[FormalJ]]*Pi^(2*\\[FormalJ])*Log[a]^(n - 2*\\[FormalJ]), {\\[FormalJ], 0, Floor[n/2]}]])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "a > 0"
+  ],
+  "note": "typo: paper has prefactor (-)^n (n-1)! and no 1/n! on the Bernoulli sum; corrected to (n-1)!/(1+a){[1+(-)^n]zeta(n) - (1/n!) sum ...} (derived from the Mellin transform, oracle-verified)"
+ },
+ "M8706": {
+  "lhs": "-2*t*Integrate[(1 - x)^(j + 1)*Log[1 - x]/(1 - t*x*(1 - x))^3, {x, 0, 1}]",
+  "rhs": [
+   "NSum[t^\\[FormalN]*(\\[FormalN] + 1)/Binomial[2*\\[FormalN] + j, \\[FormalN]]*(HarmonicNumber[2*\\[FormalN] + j] - HarmonicNumber[\\[FormalN] + j]), {\\[FormalN], 1, Infinity}, WorkingPrecision -> 30]"
+  ],
+  "conds": [
+   "Element[j, Integers] && j >= 0",
+   "0 < t < 4"
+  ],
+  "note": "C_n(j) = C(2n+j,n)/(n+1) substituted; formal sum indices; inner sum written as H_{2n+j} - H_{n+j}, outer series summed with NSum (symbolic double Sum timed out)"
+ },
+ "M8714": {
+  "lhs": "Integrate[Log[1 + x]/(1 + x + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(3/2)*((PolyGamma[1, 1/3] - PolyGamma[1, 2/3])/9)"
+  ],
+  "conds": [],
+  "note": "typo: paper has -3/2 L_{-3}(2), corrected to +3/2 L_{-3}(2) (integrand positive; oracle-verified); L_{-3}(2) = (psi'(1/3)-psi'(2/3))/9"
+ },
+ "M8723": {
+  "lhs": "Integrate[Log[t]/(1 + t^2)^(n + 1), {t, 0, 1}]",
+  "rhs": [
+   "-2^(-2*n)*Binomial[2*n, n]*(Catalan + Sum[(Pi/4 + Sum[2^\\[FormalJ]/(2*\\[FormalJ]*Binomial[2*\\[FormalJ], \\[FormalJ]]), {\\[FormalJ], 1, \\[FormalK]}])/(2*\\[FormalK] + 1), {\\[FormalK], 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "p_k(1) = sum_{j=1}^k 2^j/(2j C(2j,j)) substituted"
+ },
+ "M8733": {
+  "lhs": "Integrate[(2/(x^2 - 4*x + 8) - 3/(x^2 + 2*x + 2))*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "note": "C is Catalan's constant G"
+ },
+ "M8738": {
+  "lhs": "(-1)^(p + 1)*n*Integrate[(1 - t)^(n - 1)*Log[t]^p, {t, 0, 1}]",
+  "rhs": [
+   "p!*Sum[Binomial[n, \\[FormalK]]*(-1)^\\[FormalK]/\\[FormalK]^p, {\\[FormalK], 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1"
+  ],
+  "note": "formal sum index"
+ },
+ "M8773i": {
+  "lhs": "-Integrate[Log[Sin[Pi*x]], {x, 0, 1}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "note": "inline recursion for S_n; captured the stated base case S_1 = log 2"
+ },
+ "M8792": {
+  "lhs": "Integrate[Log[x^2 + Log[2*Exp[-a]*Cos[x]]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[a/(Exp[Min[a, Log[2]]] - 1)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "typo: paper's leading factor x is pi; b = min(a, ln 2) substituted (oracle-verified)"
+ },
+ "M8797": {
+  "lhs": "Integrate[Log[x^2 + Log[2*Exp[-a]*Cos[x]]^2]*Cos[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*(1 - 1/a - Exp[Min[a, Log[2]]] + 1/(Exp[Min[a, Log[2]]] - 1))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "b = min(a, ln 2) substituted"
+ },
+ "M8805": {
+  "lhs": "Integrate[Log[x^2 + Log[Cos[x]]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[Log[2]]"
+  ],
+  "conds": [],
+  "note": "typo: paper has (pi/2) ln ln 2, corrected to pi ln ln 2 (= the a=ln2 case of the preceding formula; oracle-verified)"
+ },
+ "M8811": {
+  "lhs": "Integrate[Log[x^2 + Log[Cos[x]]^2]*Cos[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/(2*Log[2])"
+  ],
+  "conds": [],
+  "note": "typo: paper has -pi/ln2, corrected to -pi/(2 ln2) (= the a=ln2 case of the preceding formula; oracle-verified)"
+ },
+ "M8838": {
+  "lhs": "Integrate[(1 + Exp[-2*I*x])^beta/(Log[1 + Exp[-2*I*x]] - a), {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "-Pi/a + Pi*(Exp[(beta + 1)*a]/(Exp[a] - 1))*UnitStep[Log[2] - a]"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > -1"
+  ],
+  "note": "H = unit step"
+ },
+ "M8844": {
+  "lhs": "Integrate[x*Sin[2*x]/(x^2 + Log[2*Exp[-a]*Cos[x]]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a^2) + (Pi*Exp[a]/4)*(1 - 1/(Exp[a] - 1)^2)*UnitStep[Log[2] - a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "H = unit step; typo: paper has x sin x, corrected to x sin 2x (matches both branches numerically and the a=ln2 neighbour pi/(4 ln^2 2); oracle-verified)"
+ },
+ "M8866": {
+  "lhs": "(4/Pi)*Integrate[x^2/(x^2 + Log[2*Exp[-a]*Cos[x]]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "EulerGamma/a + (a + Log[1 - Exp[-a]] - EulerGamma - Log[a])/(1 - Exp[-a]) + (a/(1 - Exp[-a]))*NIntegrate[Exp[-a*\\[FormalT]]*LogGamma[\\[FormalT]], {\\[FormalT], 0, 1}]"
+  ],
+  "conds": [
+   "0 < a < Log[2]"
+  ],
+  "note": "gamma = Euler; the remaining integral on the right is evaluated numerically; condition 0<a<ln2 from the paper"
+ },
+ "M8872": {
+  "lhs": "(4/Pi)*Integrate[x^2/(x^2 + Log[2*Exp[-a]*Cos[x]]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "EulerGamma/a + (a + Log[1 - Exp[-a]] + Gamma[0, a])/(1 - Exp[-a]) + (1/(1 - Exp[-a]))*NIntegrate[Exp[-a*\\[FormalT]]*PolyGamma[\\[FormalT] + 1], {\\[FormalT], 0, 1}]"
+  ],
+  "conds": [
+   "0 < a < Log[2]"
+  ],
+  "note": "continuation line: lhs restored from the preceding display; gamma = Euler; right-hand integral numeric"
+ },
+ "M8880": {
+  "lhs": "(4/Pi)*Integrate[x^2/(x^2 + Log[2*Exp[-a]*Cos[x]]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "EulerGamma/a + NIntegrate[Exp[-a*\\[FormalT]]*PolyGamma[\\[FormalT] + 1], {\\[FormalT], 0, Infinity}]"
+  ],
+  "conds": [
+   "a > Log[2]"
+  ],
+  "note": "gamma = Euler; right-hand integral numeric"
+ },
+ "M8934": {
+  "lhs": "Integrate[y^m*Log[Sin[y]], {y, 0, Pi/4}]",
+  "rhs": [
+   "((m!/2^(m + 1))*(1 - 2^(-m - 1))*Zeta[m + 2]*Sin[(m + 2)*Pi/2] + Total[Table[(-1)^\\[FormalJ]*FactorialPower[m, 2*\\[FormalJ]]/2^(2*\\[FormalJ] + 1)*(Pi/4)^(m - 2*\\[FormalJ])*DirichletBeta[2*\\[FormalJ] + 2], {\\[FormalJ], 0, Floor[m/2]}]] - Log[2]/(m + 1)*(Pi/4)^(m + 1) - Total[Table[(-1)^\\[FormalJ]*FactorialPower[m, 2*\\[FormalJ] - 1]/2^(4*\\[FormalJ] + 1)*(Pi/4)^(m + 1 - 2*\\[FormalJ])*(1 - 2^(-2*\\[FormalJ]))*Zeta[2*\\[FormalJ] + 1], {\\[FormalJ], 1, Floor[(m + 1)/2]}]]) + ((m!/2^m)*(1 - 2^(-m - 2))*Zeta[m + 2]*Sin[m*Pi/2] - Total[Table[(-1)^\\[FormalJ]*FactorialPower[m, 2*\\[FormalJ]]/2^(2*\\[FormalJ])*(Pi/4)^(m - 2*\\[FormalJ])*DirichletBeta[2*\\[FormalJ] + 2], {\\[FormalJ], 0, Floor[m/2]}]])"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "Theta(m), Lambda(m) substituted from eq.LiTheta/eq.LiLambda; eta(s)=(1-2^{1-s})zeta(s), lambda(s)=(1-2^{-s})zeta(s)"
+ },
+ "M8937": {
+  "lhs": "Integrate[y^m*Log[Tanh[y]], {y, 0, Infinity}]",
+  "rhs": [
+   "-(1/(m + 1))*((m + 1)!/2^m)*(1 - 2^(-m - 2))*Zeta[m + 2]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "H(m+1,1) = (m+1)!/2^m lambda(m+2) from eq.LiH"
+ },
+ "M8959": {
+  "skip": "multiple nested sum over n_1>n_2>...>n_{k+1} with symbolic depth k (and \\pm variants)",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M8967": {
+  "skip": "multiple nested sum over n_1>n_2>...>n_k with symbolic depth k (and \\pm variants)",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M8975": {
+  "skip": "reduction formula: I^- on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M8982": {
+  "lhs": "Integrate[Log[1 - x]*Log[1 + x]/x, {x, 0, 1}]",
+  "rhs": [
+   "-(5/8)*Zeta[3]"
+  ],
+  "conds": [],
+  "note": "typo: paper has upper limit 2 (log(1-x) complex beyond 1), corrected to 1 (oracle-verified; classical result)"
+ },
+ "M8988": {
+  "lhs": "-Integrate[Log[1 - x]*(-Log[x])^l, {x, 0, 1}]",
+  "rhs": [
+   "l!*(l + 1 - Sum[Zeta[\\[FormalI]], {\\[FormalI], 2, l + 1}])",
+   "l!*Sum[1/((\\[FormalN] + 1)^(l + 1)*\\[FormalN]), {\\[FormalN], 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "note": "typo: closed form sum over zeta(i) must start at i=2 (zeta(1) diverges) -- to be checked"
+ },
+ "M8995": {
+  "lhs": "-Integrate[Log[1 + x]*(-Log[x])^l, {x, 0, 1}]",
+  "rhs": [
+   "l!*Sum[(-1)^\\[FormalN]/((\\[FormalN] + 1)^(l + 1)*\\[FormalN]), {\\[FormalN], 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "note": "typo: paper has -l! sum, corrected to +l! sum (term-by-term expansion; oracle-verified)"
+ },
+ "M9043": {
+  "lhs": "((-1)^(n + p - 1)/((n - 1)!*p!))*Integrate[Log[t]^(n - 1)*Log[1 - y*t]^p/t, {t, 0, 1}]",
+  "rhs": [
+   "PolyLog[n, p, y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "y < 1"
+  ],
+  "note": "definition of Nielsen S_{n,p}(y) = PolyLog[n,p,y]; typo: upper limit 2 -> 1 (oracle-verified)"
+ },
+ "M9052": {
+  "lhs": "Integrate[Log[t]*Log[1 - y*t]/t, {t, 0, 1}]",
+  "rhs": [
+   "PolyLog[3, y]"
+  ],
+  "conds": [
+   "y < 1"
+  ],
+  "note": "typo: paper has a minus sign before the integral, corrected to + (consistent with S_{2,1} definition; oracle-verified)"
+ },
+ "M9056": {
+  "lhs": "(1/2)*Integrate[Log[1 - y*t]^2/t, {t, 0, 1}]",
+  "rhs": [
+   "PolyLog[1, 2, y]"
+  ],
+  "conds": [
+   "y < 1"
+  ],
+  "note": "S_{1,2}(y) = Nielsen PolyLog[1,2,y]"
+ },
+ "M9060": {
+  "lhs": "Integrate[PolyLog[n, p, t]/t, {t, 0, y}]",
+  "rhs": [
+   "PolyLog[n + 1, p, y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "0 < y < 1"
+  ],
+  "note": "S_{n,p} = Nielsen PolyLog[n,p,.]"
+ },
+ "M9085": {
+  "lhs": "2^n*(-1)^(n + p - 1)/((n - 1)!*p!)*Integrate[Log[z/x]^(n - 1)*Log[1 - z^2]^p/z, {z, 0, x}]",
+  "rhs": [
+   "PolyLog[n, p, x^2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[p, Integers] && p >= 1",
+   "0 < x < 1"
+  ],
+  "note": "binomial sum over l folded into the integrand: sum_l binom(p,l) ln^{p-l}(1-z) ln^l(1+z) = ln^p(1-z^2)"
+ },
+ "M9090": {
+  "lhs": "(-1)^p/p!*Integrate[(Log[1 - z^2*x^2]^p - Log[1 - z*x]^p - Log[1 + z*x]^p)/z, {z, 0, 1}]",
+  "rhs": [
+   "PolyLog[1, p, x^2]/2 - PolyLog[1, p, x] - PolyLog[1, p, -x]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1",
+   "0 < x < 1"
+  ],
+  "note": "typo: paper sums l=0..p-1 and integrates over (0,x); the l=0 term is S_{1,p}(x) itself, so the sum runs l=1..p-1, and with arguments zx the range is (0,1) (oracle-verified). Binomial sum folded: ln^p(1-z^2x^2)-ln^p(1-zx)-ln^p(1+zx)"
+ },
+ "M9096": {
+  "lhs": "Integrate[t^w*Log[t]^m*Exp[-t^s], {t, 0, Infinity}]",
+  "rhs": [
+   "Sign[s]*s^(-m - 1)*Derivative[m][Gamma][(w + 1)/s]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "s > 0",
+   "w > -1"
+  ],
+  "note": "d^m/dz^m Gamma at z=(w+1)/s"
+ },
+ "M9101": {
+  "lhs": "Integrate[t^w*Log[t]^m*Exp[-t^s]/(1 - Exp[-t^s]), {t, 0, Infinity}]",
+  "rhs": [
+   "If[Element[m, Integers], Sign[s]*s^(-m - 1)*Derivative[m][Gamma[#]*Zeta[#] &][(w + 1)/s], Indeterminate]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "s > 0",
+   "w + 1 > s"
+  ],
+  "note": "d^m/dz^m (Gamma Zeta) at z=(w+1)/s; If-guard delays the m-th derivative until m is numeric"
+ },
+ "M9107": {
+  "skip": "value uses Kolbig coefficients C_k(a;alpha) whose generating c_k is not defined in the paper (only C_0=1 and a recurrence in undefined c_k); the middle member is another integral",
+  "status": "SKIP-OTHER"
+ },
+ "M9127": {
+  "skip": "value uses Kolbig C_k(mu;1,0,0) whose c_k are undefined in the paper; middle member is another (garbled) integral",
+  "status": "SKIP-OTHER"
+ },
+ "M9139": {
+  "skip": "value uses Kolbig C_k(4mu;2,0,1) whose c_k are undefined in the paper; middle member is another integral",
+  "status": "SKIP-OTHER"
+ },
+ "M9149": {
+  "lhs": "Integrate[x^n*Log[x]^m/(1 + beta*x)^l, {x, 0, Infinity}]",
+  "rhs": [
+   "If[Element[{n, m, l}, Integers], (-1)^(l + m)*m!/(beta^(n + 1)*(l - 1)!)*Sum[StirlingS1[n + 1, \\[FormalI] + 1]*Sum[(-1)^\\[FormalJ]*StirlingS1[l - n - 1, \\[FormalJ] + 1]*Sum[Abs[2^\\[FormalK] - 2]*Abs[BernoulliB[\\[FormalK]]]/(\\[FormalK]!*(m - \\[FormalI] - \\[FormalJ] - \\[FormalK])!)*Pi^\\[FormalK]*Log[beta]^(m - \\[FormalI] - \\[FormalJ] - \\[FormalK]), {\\[FormalK], 0, m - \\[FormalI] - \\[FormalJ]}], {\\[FormalJ], 0, Min[m - \\[FormalI], l - n - 2]}], {\\[FormalI], 0, Min[m, n]}], Indeterminate]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[l, Integers] && l >= n + 2",
+   "Element[m, Integers] && m >= 0",
+   "beta > 0"
+  ],
+  "note": "signed Stirling S1; summation indices m1,m2,m3 as formal symbols (bound); If-guard"
+ },
+ "M9162": {
+  "skip": "integrand x^n ln^m x/(1-x)^l on (0,inf) has a non-integrable pole at x=1 (principal value / regularised); value also contains beta and m_3 absent from the integrand",
+  "status": "SKIP-PV"
+ },
+ "M9176": {
+  "lhs": "Integrate[x^(n - 1/2)*Log[x]^m/(1 + beta*x)^l, {x, 0, Infinity}]",
+  "rhs": [
+   "If[Element[{n, m, l}, Integers], (-1)^(l + m + 1)*m!/(beta^(n + 1/2)*(l - 1)!)*Sum[(-1)^\\[FormalI]*Sum[(-1)^\\[FormalL]*StirlingS1[n, \\[FormalL]]*Binomial[\\[FormalL], \\[FormalI]]*2^(\\[FormalI] - \\[FormalL]), {\\[FormalL], \\[FormalI], n}]*Sum[Sum[(-1)^\\[FormalL]*StirlingS1[l - n - 1, \\[FormalL]]*Binomial[\\[FormalL], \\[FormalJ]]*2^(\\[FormalJ] - \\[FormalL]), {\\[FormalL], \\[FormalJ], l - n - 1}]*Sum[Abs[EulerE[\\[FormalK]]]*Pi^(\\[FormalK] + 1)/(\\[FormalK]!*(m - \\[FormalI] - \\[FormalJ] - \\[FormalK])!)*Log[beta]^(m - \\[FormalI] - \\[FormalJ] - \\[FormalK]), {\\[FormalK], 0, m - \\[FormalI] - \\[FormalJ]}], {\\[FormalJ], 0, Min[m - \\[FormalI], l - n - 1]}], {\\[FormalI], 0, Min[m, n]}], Indeterminate]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[l, Integers] && l >= n + 1",
+   "Element[m, Integers] && m >= 0",
+   "beta > 0"
+  ],
+  "note": "typo: inner factor tilde S(m_1,l-n-1) should be tilde S(m_2,l-n-1) (oracle-verified); tilde S(p,q)=sum_j (-)^j S_q^{(j)} binom(j,p) 2^{p-j} with signed Stirling S1; summation indices as formal symbols; If-guard"
+ },
+ "M9189": {
+  "skip": "integrand x^{n-1/2} ln^m x/(1-x)^l on (0,inf) has a pole at x=1 (principal value / regularised)",
+  "status": "SKIP-PV"
+ },
+ "M9202": {
+  "skip": "value uses Kolbig C_k(beta/4;1,-2,-1) whose c_k are undefined in the paper",
+  "status": "SKIP-OTHER"
+ },
+ "M9213": {
+  "skip": "reflection formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M9219": {
+  "lhs": "Integrate[x^(nu - 1)*Log[x]^m/(1 - x)^lambda, {x, 0, 1}]",
+  "rhs": [
+   "Derivative[m][Beta[1 - lambda, #] &][nu]",
+   "Gamma[1 - lambda]*Derivative[m][Gamma[#]/Gamma[1 + # - lambda] &][nu]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "nu > 0",
+   "lambda < 1"
+  ],
+  "note": "(d/dnu)^m written as Derivative[m] of a pure function"
+ },
+ "M9226": {
+  "lhs": "Integrate[x^(nu - 1)*Log[x]^m/(1 - x)^l, {x, 0, 1}]",
+  "rhs": [
+   "If[Element[m, Integers], (-1)^l/(l - 1)!*Derivative[m][PolyGamma[#]*Pochhammer[# - l + 1, l - 1] &][nu], Indeterminate]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1",
+   "Element[m, Integers] && m >= l",
+   "nu > 0"
+  ],
+  "note": "(d/dnu)^m [psi(nu) prod_{j=1}^{l-1}(nu-j)]; product as Pochhammer; m>=l for convergence; If-guard delays derivative"
+ },
+ "M9232": {
+  "lhs": "Integrate[x^(nu - 1)*Log[x]^m/(x^mu + z^mu)^lambda, {x, 0, Infinity}]",
+  "rhs": [
+   "If[Element[m, Integers], (1/mu)*Derivative[m][z^(# - lambda*mu)*Beta[#/mu, lambda - #/mu] &][nu], Indeterminate]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "z > 0",
+   "mu > 0",
+   "nu > 0",
+   "lambda*mu > nu"
+  ],
+  "note": "integration variable X/dx unified to x; (d/dnu)^m as Derivative of pure function (If-guard delays it)"
+ },
+ "M9238": {
+  "lhs": "Integrate[(x^2/(x^4 - x^2 + 1))^r*Log[x^2/(x^4 - x^2 + 1)]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[Pi]/2)*((Gamma[r]*Derivative[1][Gamma][r - 1/2] - Gamma[r - 1/2]*Derivative[1][Gamma][r])/Gamma[r]^2)"
+  ],
+  "conds": [
+   "r > 1/2"
+  ],
+  "note": "typo: paper base [1/(x^4-x^2+1)]^r makes the integral diverge at 0; intended [x^2/(x^4-x^2+1)]^r (oracle-verified)"
+ },
+ "M9248": {
+  "lhs": "Integrate[(x^2/(x^4 - x^2 + 1))*Log[x^2/(x^4 - x^2 + 1)]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)*(Pi^2/3 + 4*Log[2]^2)"
+  ],
+  "conds": [],
+  "note": "typo: paper factor 1/(x^4-x^2+1) makes the integral diverge at 0; intended x^2/(x^4-x^2+1) (r=1 case of the preceding entry, oracle-verified)"
+ },
+ "M9258": {
+  "lhs": "Integrate[(x/(x^2 + 1))^(2*r)*Log[x/(x^2 + 1)]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[Pi]/4)*(2^(1 - 2*r)*Beta[r - 1/2, 1/2]/Sqrt[Pi])*(PolyGamma[r - 1/2] - PolyGamma[r] - 2*Log[2])"
+  ],
+  "conds": [
+   "r > 1/2"
+  ],
+  "note": "G(r) is the paper-local 2^{1-2r}B(r-1/2,1/2)/sqrt(pi), not BarnesG"
+ },
+ "M9269": {
+  "lhs": "Integrate[x^(-1/2)*(1 - x)^(2*a + 1)*(4 - x)^a*Log[(1 - x)^2*(4 - x)]^n, {x, 0, 1}]",
+  "rhs": [
+   "If[Element[n, Integers], (2*Sqrt[Pi]/3)*Derivative[n][2^(2*#)*Gamma[# + 1]/Gamma[# + 3/2] &][a], Indeterminate]"
+  ],
+  "conds": [
+   "a > -1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "typo: log argument (1-x)^2/(4-x) should be (1-x)^2(4-x) = d/da of the base integrand; D_a^n = n-th a-derivative (If-guard delays it) (oracle-verified)"
+ },
+ "M9276": {
+  "lhs": "Integrate[x^(-1/2)*(1 - x)^(2*a + 1)*(4 - x)^a*Log[(1 - x)^2*(4 - x)], {x, 0, 1}]",
+  "rhs": [
+   "(2*Sqrt[Pi]/3)*(2^(2*a)*Gamma[a + 1]/Gamma[a + 3/2])*(2*Log[2] + PolyGamma[a + 1] - PolyGamma[a + 3/2])"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "note": "typo: log argument (1-x)^2/(4-x) -> (1-x)^2(4-x) and prefactor sqrt(pi)/3 -> 2 sqrt(pi)/3 (n=1 case of the preceding D_a^n entry; oracle-verified)"
+ },
+ "M9283": {
+  "lhs": "Integrate[x^(-1/2)*(1 - x)^(2*a + 1)*(4 - x)^a*Log[(1 - x)^2*(4 - x)]^2, {x, 0, 1}]",
+  "rhs": [
+   "(2*Sqrt[Pi]/3)*(2^(2*a)*Gamma[a + 1]/Gamma[a + 3/2])*((2*Log[2] + PolyGamma[a + 1] - PolyGamma[a + 3/2])^2 + PolyGamma[1, a + 1] - PolyGamma[1, a + 3/2])"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "note": "typo: log argument (1-x)^2/(4-x) -> (1-x)^2(4-x) and prefactor sqrt(pi)/3 -> 2 sqrt(pi)/3 (n=2 case; oracle-verified)"
+ },
+ "M9292": {
+  "lhs": "Integrate[(x/(x^2 + 1))^(2*r)*Log[x/(x^2 + 1)]*(x^2 + 1)/(x^2*(x^b + 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[Pi]/4)*Derivative[1][2^(1 - 2*#)*Beta[# - 1/2, 1/2]/Sqrt[Pi] &][r]"
+  ],
+  "conds": [
+   "r > 1/2",
+   "b > 0"
+  ],
+  "note": "G(r)=2^{1-2r}B(r-1/2,1/2)/sqrt(pi); G' as derivative"
+ },
+ "M9303": {
+  "lhs": "Integrate[(x/(x^2 + 1))^(2*r)*Log[x/(x^2 + 1)]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[Pi]/8)*Derivative[2][2^(1 - 2*#)*Beta[# - 1/2, 1/2]/Sqrt[Pi] &][r]",
+   "(Sqrt[Pi]/8)*(2^(1 - 2*r)*Beta[r - 1/2, 1/2]/Sqrt[Pi])*(PolyGamma[1, r - 1/2] - PolyGamma[1, r] + (PolyGamma[r - 1/2] - PolyGamma[r] - 2*Log[2])^2)"
+  ],
+  "conds": [
+   "r > 1/2"
+  ],
+  "note": "G''(r) as derivative and as the paper's explicit expression"
+ },
+ "M9329": {
+  "lhs": "(a^nu/Gamma[nu])*Integrate[Exp[-a*x]*x^(nu - 1)*Log[x]^m, {x, 0, Infinity}]",
+  "rhs": [
+   "If[Element[m, Integers], (PolyGamma[nu] - Log[a])^m + Sum[Binomial[m, x]*Sum[BellY[x, \\[FormalK], Array[If[# == 1, 0, (-1)^#*(# - 1)!*HurwitzZeta[#, nu]] &, x]], {\\[FormalK], 1, x}]*(PolyGamma[nu] - Log[a])^(m - x), {x, 1, m}], Indeterminate]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "a > 0",
+   "nu > 0"
+  ],
+  "note": "phi=psi(nu)-ln a; eta_j = (-1)^j sum over partitions (j;0,k_2..)^* prod zeta^{k_i}(i,nu) read as the complete Bell polynomial B_j(0,kappa_2..kappa_j), kappa_k=(-1)^k (k-1)! zeta(k,nu); summation indices renamed to bound x / formal symbol; If-guard"
+ },
+ "M9349": {
+  "lhs": "Integrate[Log[x]*Cos[x^2]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Sqrt[Pi]/2^(2*n + 3))*(Pi + 2*EulerGamma + 4*Log[2])*Sum[Binomial[2*n + 1, n - x]/Sqrt[4*x + 2], {x, 0, n}] - (Sqrt[Pi]/2^(2*n + 2))*Sum[Binomial[2*n + 1, n - x]*Log[2*x + 1]/Sqrt[4*x + 2], {x, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "summation index renamed to the (bound) integration variable so the value has no free dummy"
+ },
+ "M9424i": {
+  "lhs": "Pi^2*Integrate[x*Log[2*Sin[Pi*x/2]], {x, 0, alpha}]",
+  "rhs": [
+   "Zeta[3] - Re[PolyLog[3, Exp[I*Pi*alpha]]] - alpha*Pi*Im[PolyLog[2, Exp[I*Pi*alpha]]]"
+  ],
+  "conds": [
+   "0 < alpha < 2"
+  ],
+  "note": "Coppo L_2(alpha); Fourier sums sum cos(pi n a)/n^3, sum sin(pi n a)/n^2 as Re/Im PolyLog"
+ },
+ "M9449": {
+  "lhs": "Integrate[ArcTan[t]/t, {t, 0, x}]",
+  "rhs": [
+   "(PolyLog[2, I*x] - PolyLog[2, -I*x])/(2*I)"
+  ],
+  "conds": [
+   "x > 0"
+  ],
+  "note": "inverse tangent integral Ti_2(x) = Im Li_2(ix)"
+ },
+ "M9492": {
+  "lhs": "Integrate[x^(p - 1)*Log[Log[1/x]]/(1 + x^n), {x, 0, 1}]",
+  "rhs": [
+   "(1/(2*n))*(Log[2*n] + EulerGamma)*(PolyGamma[p/(2*n)] - PolyGamma[(n + p)/(2*n)]) + (1/(2*n))*(StieltjesGamma[1, (n + p)/(2*n)] - StieltjesGamma[1, p/(2*n)])"
+  ],
+  "conds": [
+   "n > 0",
+   "p > 0"
+  ],
+  "note": "zeta'(1,a)-zeta'(1,b): derivative in s of Hurwitz zeta at the pole; the pole parts cancel, leaving -gamma_1(a)+gamma_1(b) (StieltjesGamma)"
+ },
+ "M9509": {
+  "skip": "value correct (NIntegrate split at y=1 gives -0.5208856126+2.4674011003 i, matching), but the oracle's unsplit NIntegrate over (0,inf) does not converge cleanly through the log log singularity at y=1",
+  "status": "SKIP-NOCONV"
+ },
+ "M9515": {
+  "lhs": "Integrate[x^(n*r - 1)*Log[Log[1/x]]/(1 + x^n), {x, 0, 1}]",
+  "rhs": [
+   "(1/(2*n))*(Log[2*n] + EulerGamma)*(PolyGamma[r/2] - PolyGamma[(r + 1)/2]) + (1/(2*n))*(StieltjesGamma[1, (r + 1)/2] - StieltjesGamma[1, r/2])"
+  ],
+  "conds": [
+   "n > 0",
+   "r > 0"
+  ],
+  "note": "zeta'(1,a)-zeta'(1,b): derivative in s of Hurwitz zeta at the pole; the pole parts cancel, leaving -gamma_1(a)+gamma_1(b) (StieltjesGamma)"
+ },
+ "M9531": {
+  "lhs": "Integrate[x^(p - 1)*(1 - x)*Log[Log[1/x]]/(1 - x^n), {x, 0, 1}]",
+  "rhs": [
+   "(1/n)*(Log[n] + EulerGamma)*(PolyGamma[p/n] - PolyGamma[(p + 1)/n]) + (1/n)*(StieltjesGamma[1, (p + 1)/n] - StieltjesGamma[1, p/n])"
+  ],
+  "conds": [
+   "n > 0",
+   "p > 0"
+  ],
+  "note": "zeta'(1,a)-zeta'(1,b): derivative in s of Hurwitz zeta at the pole; the pole parts cancel, leaving -gamma_1(a)+gamma_1(b) (StieltjesGamma)"
+ },
+ "M9557": {
+  "skip": "defines R_{m,j}(a); no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M9565": {
+  "skip": "defines E_m; no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M9602": {
+  "skip": "defines D_{m,j}(r,theta); no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M9627": {
+  "lhs": "Integrate[Log[1 - x]*Log[Log[1/x]]/x, {x, 0, 1}]",
+  "rhs": [
+   "EulerGamma*Pi^2/6 - Derivative[1][Zeta][2]"
+  ],
+  "conds": [],
+  "note": "log log 1/x parsed"
+ },
+ "M9632": {
+  "lhs": "Integrate[Log[1 + x]*Log[Log[1/x]]/x, {x, 0, 1}]",
+  "rhs": [
+   "(Pi^2/12)*(Log[2] - EulerGamma) + Derivative[1][Zeta][2]/2"
+  ],
+  "conds": [],
+  "note": "log log 1/x parsed"
+ },
+ "M9638": {
+  "lhs": "Integrate[q^n*Log[Sin[Pi*q]], {q, 0, 1}]",
+  "rhs": [
+   "If[Element[n, Integers], -Log[2]/(n + 1) + n!*Sum[(-1)^q*Zeta[2*q + 1]/((2*Pi)^(2*q)*(n + 1 - 2*q)!), {q, 1, Floor[n/2]}], Indeterminate]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "unbalanced parenthesis in paper dropped; summation index renamed to bound integration variable; If-guard avoids a symbolic Sum"
+ },
+ "M9654": {
+  "lhs": "Integrate[Sin[x]*Log[x]^2/x^s, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(Derivative[1][Gamma][s]*Sin[s*Pi/2] + (Pi/2)*Gamma[s]*Cos[Pi*s/2])^2/(Gamma[s]*Sin[Pi*s/2])^3 - (Pi/2)*(Derivative[2][Gamma][s]*Sin[s*Pi/2] + Pi*Derivative[1][Gamma][s]*Cos[Pi*s/2] - (Pi^2/4)*Gamma[s]*Sin[s*Pi/2])/(Gamma[s]*Sin[Pi*s/2])^2",
+   "Derivative[2][Pi/(2*Gamma[#]*Sin[Pi*#/2]) &][s]"
+  ],
+  "conds": [
+   "0 < s < 2"
+  ],
+  "note": "typo: paper has {g'}/g^3 and g''/g^3 (g=Gamma(s)sin(pi s/2)); second derivative of pi/(2g) is pi g'^2/g^3 - (pi/2) g''/g^2 (oracle-verified)"
+ },
+ "M9682": {
+  "skip": "defines s_{n,p}; no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M9708": {
+  "lhs": "Integrate[Log[Cos[x]]^2*Log[Sin[x]]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*(Pi^4/160 + Log[2]^4 - Zeta[3]*Log[2])"
+  ],
+  "conds": [],
+  "note": "r_{22} instance of the defined r_{np}"
+ },
+ "M9722": {
+  "skip": "relation between r_{n,n+1}, r_{n,n} and other integrals",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M9741": {
+  "lhs": "-Integrate[PolyLog[q - 1, 1 - t]*Log[t]/(1 - t), {t, 0, 1}]",
+  "rhs": [
+   "Sum[HarmonicNumber[t]/t^q, {t, 1, Infinity}]"
+  ],
+  "conds": [
+   "q >= 2"
+  ],
+  "note": "H_n^{(1)} = HarmonicNumber; summation index renamed to the bound integration variable; q>=2 subset of q>1 for reliable numerics"
+ },
+ "M9747": {
+  "lhs": "Integrate[PolyLog[2, 1 - t]*Log[t]/(1 - t), t]",
+  "rhs": [
+   "(1/2)*PolyLog[2, 1 - t]^2"
+  ],
+  "conds": [],
+  "note": "integration constant dropped"
+ },
+ "M9752": {
+  "lhs": "Integrate[PolyLog[2*p, 1 - t]*Log[t]/(1 - t), {t, 0, 1}]",
+  "rhs": [
+   "-(1/2)*Sum[(-1)^t*Zeta[t]*Zeta[2*p - t + 2], {t, 2, 2*p}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 1"
+  ],
+  "note": "typo: overall sign; paper has +1/2 sum, integral is -1/2 sum (log t<0 makes the integrand negative; oracle-verified). Summation index renamed to bound integration variable"
+ },
+ "M9772": {
+  "lhs": "(1/2)*Integrate[Log[(1 + Sin[x])/(1 - Sin[x])]/(Cos[x]*Sqrt[Cos[2*x]]), {x, 0, Pi/4}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "note": "translator glued sqrt into cos argument"
+ },
+ "M9778": {
+  "lhs": "Integrate[(x + 1)*Log[x]/(4*x*Sqrt[6*x - x^2 - 1]), {x, 1, (Sqrt[2] + 1)/(Sqrt[2] - 1)}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "note": "typo: lower limit 0 makes sqrt(6x-x^2-1) imaginary on (0,3-2sqrt2); integrand is odd under x->1/x so the intended range is (1, 3+2sqrt2) (oracle-verified)"
+ },
+ "M9845": {
+  "lhs": "Integrate[Log[Sin[x]]*x^(mu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-((Pi/2)^mu/mu)*(1/mu - Log[Pi/2] + mu*Sum[Zeta[2*x]/(x*4^x*(mu + 2*x)), {x, 1, Infinity}])"
+  ],
+  "conds": [
+   "mu > 0"
+  ],
+  "note": "\\left[ \\right] parsed; summation index renamed to the bound integration variable"
+ },
+ "M9856": {
+  "lhs": "Integrate[Log[Sin[t]], {t, 0, Pi/4}]",
+  "rhs": [
+   "-(Pi/4)*Log[2] - Catalan/2"
+  ],
+  "conds": [],
+  "note": "main formula is a recurrence; took its stated initial value I_0 (k=0 of the sin-form)"
+ },
+ "M9864": {
+  "skip": "recurrence for S_{2k}",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M9870": {
+  "skip": "relation among integrals J,K,L,M",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M9874i": {
+  "lhs": "Integrate[x^n/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "2^(n - 1)*Beta[(n + 1)/2, (n + 1)/2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "J(n) definition with its closed form given in the same paragraph"
+ },
+ "M9875i": {
+  "lhs": "Integrate[Log[x]/(1 - x^2)^(3/2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/2"
+  ],
+  "conds": [],
+  "note": "L(n) definition; took the stated value L(0)=-pi/2"
+ },
+ "M9876i": {
+  "lhs": "Integrate[Log[x]^2/(1 - x^2)^(3/2), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2]"
+  ],
+  "conds": [],
+  "note": "M(n) definition; took the stated value M(0)=pi log 2"
+ },
+ "M9878i": {
+  "lhs": "Integrate[Sin[t]^n, {t, 0, Pi/2}]",
+  "rhs": [
+   "2^(n - 1)*Beta[(n + 1)/2, (n + 1)/2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "J(n) sine form"
+ },
+ "M9926": {
+  "lhs": "Integrate[ArcTan[x]^4/x, {x, 0, 1}]",
+  "rhs": [
+   "(1/16)*Pi^3*Catalan + (93/32)*Zeta[5] - (3/2)*Pi*DirichletBeta[4]"
+  ],
+  "conds": [],
+  "note": "typo: paper has -93/32 zeta(5) + 3/2 pi beta(4); signs of both are flipped (integer relation found at 40 digits, oracle-verified)"
+ },
+ "M9949": {
+  "lhs": "Integrate[ArcTan[z]^2/(z^2 + a^2), {z, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(4*a))*(Pi^2/6 - Log[(1 + a)/2]^2 - 2*PolyLog[2, (1 - a)/2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "I_n(a) is only a definition; took the I_1(a) value stated right after it (not otherwise in the corpus)"
+ },
+ "M9969": {
+  "lhs": "Integrate[ArcTan[z]^2/(z^4 - 6*z^2 + 25), {z, 0, Infinity}]",
+  "rhs": [
+   "(Pi/40)*(13*Pi^2/48 - (1/4)*Log[2]^2 + Pi*Log[2]/8 - Catalan)"
+  ],
+  "conds": [],
+  "note": "paper error: paper has 7 pi^2/48 and +pi ln2/4; integer relation at 40 digits gives 13 pi^2/48 and +pi ln2/8 (oracle-verified)"
+ },
+ "M9973": {
+  "lhs": "Integrate[z^2*ArcTan[z]^2/(z^4 - 6*z^2 + 25), {z, 0, Infinity}]",
+  "rhs": [
+   "(Pi/8)*(13*Pi^2/48 - (1/4)*Log[2]^2 - Pi*Log[2]/8 + Catalan)"
+  ],
+  "conds": [],
+  "note": "paper error: paper has 7 pi^2/48 and +pi ln2/4; integer relation at 40 digits gives 13 pi^2/48 and -pi ln2/8 (oracle-verified)"
+ },
+ "M9979": {
+  "lhs": "Integrate[x^(p + 1)*Csc[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(p + 1)*(Pi/2)^p*(1/p - 2*Sum[2^(-2*x)*Zeta[2*x]/(p + 2*x), {x, 1, Infinity}])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "note": "summation index renamed to the bound integration variable"
+ },
+ "M9987": {
+  "skip": "defines T(m,n); no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M10026": {
+  "lhs": "Integrate[y^m*Log[Tan[y]], {y, 0, Pi/4}]",
+  "rhs": [
+   "If[Element[m, Integers], (m!/2^m)*(1 - 2^(-m - 2))*Zeta[m + 2]*Sin[m*Pi/2] - Sum[(-1)^y*FactorialPower[m, 2*y]/2^(2*y)*(Pi/4)^(m - 2*y)*DirichletBeta[2*y + 2], {y, 0, Floor[m/2]}], Indeterminate]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "Lambda(m); lambda(s)=(1-2^{-s})zeta(s) Dirichlet lambda; <m>_{2j} falling factorial; summation index renamed to bound integration variable; If-guard"
+ },
+ "M10039": {
+  "skip": "defines S(m,n); no value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M10086": {
+  "skip": "at a=5/8,b=7/4 NIntegrate=0.6060046919 but [g(a,b)+g(b,a)]/2 (Cl_2 = Im Li_2(e^{it}), eta as stated) = 0.9119900784; no single-term typo found (the ln[...] coefficient fitted from a=b cases matches no simple form)",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M10130": {
+  "skip": "NIntegrate=-0.2844354192495487 vs paper -(pi/2)(log 4 - 1)=-0.6067897635; variants (sech x, sech(pi x/2), full line) and integer-relation search over {1,pi,log2,pi log2,log pi,1/pi} found nothing",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M10136": {
+  "skip": "NIntegrate=0.0105964092412255 vs paper log(2pi/e)/(4pi^2)=0.0212236740288; ratio 0.4993 (not 1/2); integer-relation search found no corrected value",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M10169": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10183": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10201": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10211": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10297": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10320": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10352": {
+  "skip": "product of two separate integrals",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10359": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10365": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10371": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10377": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10699": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10704": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10710": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10716": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10722": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10729": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10735": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10740": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10746": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10754": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10759": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10768": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10851": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10862": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10877": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10895": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10900": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10921": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10930": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10939": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10954": {
+  "skip": "multiple (iterated) integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M10978": {
+  "lhs": "Integrate[SinIntegral[a*x + b], x]",
+  "rhs": [
+   "((a*x + b)/a)*SinIntegral[a*x + b] + Cos[a*x + b]/a"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Si = SinIntegral"
+ },
+ "M10982": {
+  "lhs": "Integrate[CosIntegral[a*x + b], x]",
+  "rhs": [
+   "((a*x + b)/a)*CosIntegral[a*x + b] - Sin[a*x + b]/a"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Ci = CosIntegral"
+ },
+ "M10986": {
+  "lhs": "Integrate[SinIntegral[a*x]*Sin[b*x], x]",
+  "rhs": [
+   "(1/(2*b))*(SinIntegral[(a + b)*x] + SinIntegral[(a - b)*x] - 2*SinIntegral[a*x]*Cos[b*x])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Si(a+b)x read as Si((a+b)x)"
+ },
+ "M10990": {
+  "lhs": "Integrate[SinIntegral[a*x]*Cos[b*x], x]",
+  "rhs": [
+   "(1/(2*b))*(2*SinIntegral[a*x]*Sin[b*x] + CosIntegral[(a + b)*x] - CosIntegral[Abs[b - a]*x])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "note": "Ci(b-a)x read as Ci(|b-a|x) (differs by a constant i pi otherwise)"
+ },
+ "M10994": {
+  "lhs": "Integrate[CosIntegral[a*x]*Sin[b*x], x]",
+  "rhs": [
+   "(1/(2*b))*(CosIntegral[(a + b)*x] + CosIntegral[Abs[b - a]*x] - 2*CosIntegral[a*x]*Cos[b*x])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "note": "Ci(b-a)x read as Ci(|b-a|x)"
+ },
+ "M10998": {
+  "lhs": "Integrate[CosIntegral[a*x]*Cos[b*x], x]",
+  "rhs": [
+   "(1/(2*b))*(2*CosIntegral[a*x]*Sin[b*x] - SinIntegral[(a + b)*x] + SinIntegral[(a - b)*x])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "Si(a+b)x read as Si((a+b)x)"
+ },
+ "M11002": {
+  "lhs": "Integrate[x^n*SinIntegral[a*x], x]",
+  "rhs": [
+   "(x^n/(n + 1))*(x*SinIntegral[a*x] + Cos[a*x]/a) - (n/(a*(n + 1)))*(-(1/2)*((-I*a)^(-n)*Gamma[n, -I*a*x] + (I*a)^(-n)*Gamma[n, I*a*x]))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "note": "I_0=int Si(ax)dx = x Si(ax)+cos(ax)/a and C_{n-1}=int x^{n-1}cos(ax)dx in incomplete-Gamma closed form substituted"
+ },
+ "M11005i": {
+  "skip": "running-text definitions I_0=int Si(ax)dx, C_n=int x^n cos(ax)dx (used in M11002/M11008)",
+  "status": "SKIP-DEFINITION"
+ },
+ "M11008": {
+  "lhs": "Integrate[x^n*CosIntegral[a*x], x]",
+  "rhs": [
+   "(x^n/(n + 1))*(x*CosIntegral[a*x] - Sin[a*x]/a) + (n/(a*(n + 1)))*((1/(2*I))*((I*a)^(-n)*Gamma[n, I*a*x] - (-I*a)^(-n)*Gamma[n, -I*a*x]))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "note": "int Ci(ax)dx = x Ci(ax)-sin(ax)/a and S_{n-1}=int x^{n-1}sin(ax)dx in incomplete-Gamma closed form substituted"
+ },
+ "M11011i": {
+  "skip": "running-text definitions I_0=int Ci(ax)dx, S_n=int x^n sin(ax)dx (used in M11008)",
+  "status": "SKIP-DEFINITION"
+ },
+ "M11014": {
+  "skip": "recurrence I_n in terms of I_{n-1} and C_{n-1}",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11017": {
+  "skip": "recurrence I_n in terms of I_{n-1} and S_{n-1}",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11024": {
+  "skip": "generic Bessel function Z_nu; recurrence",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M11027i": {
+  "skip": "generic Bessel function Z_nu; recurrence",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M11031": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11034i": {
+  "skip": "running-text fragment of the M11031 reduction formula",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11038": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11042": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11045i": {
+  "skip": "running-text fragment (tail of M11042, head of M11049); the displayed formulas are separate entries",
+  "status": "SKIP-OTHER"
+ },
+ "M11049": {
+  "lhs": "Integrate[Sin[x]*BesselJ[nu,x]/x^(3/2), x]",
+  "rhs": [
+   "2*((2*nu+1)*Sin[x]-2*x*Cos[x])/(x^(1/2)*(2*nu-1)*(2*nu+1))*BesselJ[nu,x] - 4*x^(1/2)*Sin[x]/((2*nu-1)*(2*nu+1))*BesselJ[nu+1,x]"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11057": {
+  "lhs": "Integrate[Cos[x]*BesselJ[nu,x]/x^(3/2), x]",
+  "rhs": [
+   "2*((2*nu+1)*Cos[x]+2*x*Sin[x])/(x^(1/2)*(2*nu-1)*(2*nu+1))*BesselJ[nu,x] - 4*x^(1/2)*Cos[x]/((2*nu-1)*(2*nu+1))*BesselJ[nu+1,x]"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11065": {
+  "lhs": "Integrate[BesselJ[mu,x]*BesselY[nu,x]/x^2, x]",
+  "rhs": [
+   "-(1+mu+nu+2*mu*nu+mu*nu^2+mu^2*nu-mu^2-mu^3-nu^2-nu^3+2*x^2)/(x*(-1+mu-nu)*(-1+mu+nu)*(1+mu-nu)*(1+mu+nu))*BesselJ[mu,x]*BesselY[nu,x] + 1/((1-mu-nu)*(1-mu+nu))*BesselJ[mu,x]*BesselY[nu+1,x] + 1/((1-mu-nu)*(1+mu-nu))*BesselJ[mu+1,x]*BesselY[nu,x] - 2*x/((1-mu-nu)*(1-mu+nu)*(1+mu-nu)*(1+mu+nu))*BesselJ[mu+1,x]*BesselY[nu+1,x]"
+  ],
+  "conds": [],
+  "note": "Z_mu instantiated as J_mu and bar Z_nu as Y_nu (formula holds for any pair of cylinder functions)"
+ },
+ "M11078": {
+  "lhs": "Integrate[BesselJ[mu,x]*BesselY[nu,x]/x^3, x]",
+  "rhs": [
+   "-(2+mu+nu)*(4*mu+4*nu+mu*nu^2+mu^2*nu-mu^3-nu^3+4*x^2)/(x^2*(mu+nu)*(nu^2-(2-mu)^2)*(nu^2-(2+mu)^2))*BesselJ[mu,x]*BesselY[nu,x] - (4*mu*nu^2+2*mu^2*nu^2-4*mu^2-4*mu^3-mu^4+4*nu^2-nu^4+8*x^2)/(x*(mu^2-nu^2)*(nu^2-(2-mu)^2)*(nu^2-(2+mu)^2))*BesselJ[mu,x]*BesselY[nu+1,x] + (4*mu^2*nu+2*mu^2*nu^2+4*mu^2-mu^4-4*nu^2-4*nu^3-nu^4+8*x^2)/(x*(mu^2-nu^2)*(nu^2-(2-mu)^2)*(nu^2-(2+mu)^2))*BesselJ[mu+1,x]*BesselY[nu,x] - 4/((-nu^2+(2-mu)^2)*(-nu^2+(2+mu)^2))*BesselJ[mu+1,x]*BesselY[nu+1,x]"
+  ],
+  "conds": [],
+  "note": "Z_mu instantiated as J_mu and bar Z_nu as Y_nu (formula holds for any pair of cylinder functions); unbalanced paren in first numerator closed; typo: paper has -4nu^3 in the Z_mu barZ_{nu+1} numerator, corrected to -4mu^3 (mirror of the Z_{mu+1}barZ_nu numerator; oracle-verified)"
+ },
+ "M11094": {
+  "lhs": "Integrate[BesselJ[nu,x]^2/x^2, x]",
+  "rhs": [
+   "(1+2*nu+2*x^2)/((4*nu^2-1)*x)*BesselJ[nu,x]^2 - 2/(-1+2*nu)*BesselJ[nu,x]*BesselJ[nu+1,x] - 2*x/(1-4*nu^2)*BesselJ[nu+1,x]^2"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11103": {
+  "lhs": "Integrate[BesselJ[nu,x]^2/x^4, x]",
+  "rhs": [
+   "(-9-6*nu+x^2*(6+16*nu+8*nu^2)+36*nu^2+24*nu^3+16*x^4)/(3*x^3*(1-4*nu^2)*(9-4*nu^2))*BesselJ[nu,x]^2 - 2*(-3+4*nu+4*nu^2+8*x^2)/(3*x^2*(1-2*nu)*(9-4*nu^2))*BesselJ[nu,x]*BesselJ[nu+1,x] - 2*(1-4*nu^2-8*x^2)/(3*x*(1-4*nu^2)*(9-4*nu^2))*BesselJ[nu+1,x]^2"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11113": {
+  "lhs": "Integrate[x^2*BesselJ[1/3,x]^3, x]",
+  "rhs": [
+   "(-4*x/9-16/(81*x))*BesselJ[1/3,x]^3 - 4*x/3*BesselJ[1/3,x]*BesselJ[4/3,x]^2 + (8/9+x^2)*BesselJ[1/3,x]^2*BesselJ[4/3,x] + 2/3*x^2*BesselJ[4/3,x]^3"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11123": {
+  "lhs": "Integrate[BesselJ[1,x]^4/x, x]",
+  "rhs": [
+   "x^2/4*BesselJ[2,x]^4 + (3/4+x^2/4)*BesselJ[1,x]^4 - 3*x/2*BesselJ[1,x]*BesselJ[2,x]^3 + 6*(1/2+x^2/12)*BesselJ[1,x]^2*BesselJ[2,x]^2 + 4*(-3*x/8-1/(2*x))*BesselJ[1,x]^3*BesselJ[2,x]"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11133": {
+  "lhs": "Integrate[BesselJ[3,x]^4/x^3, x]",
+  "rhs": [
+   "(1/24+1/(2*x^2)+2/x^4+x^2/378)*BesselJ[3,x]^4 + (5/216+2/(27*x^2)+x^2/378)*BesselJ[4,x]^4 + 4*(-x/108-5/(54*x)-1/(3*x^3))*BesselJ[3,x]*BesselJ[4,x]^3 + 6*(7/216+1/(3*x^2)+4/(3*x^4)+x^2/1134)*BesselJ[3,x]^2*BesselJ[4,x]^2 + 4*(-x/108-1/(8*x)-1/x^3-4/x^5)*BesselJ[3,x]^3*BesselJ[4,x]"
+  ],
+  "conds": [],
+  "note": "Z_nu instantiated as J_nu (the formula holds for any cylinder function)"
+ },
+ "M11147": {
+  "skip": "coefficient functions A_{ij}(x) are not given in closed form (defined only by a recurrence/linear system in the text)",
+  "status": "SKIP-OTHER"
+ },
+ "M11216": {
+  "skip": "coefficient functions A_{ij}(x) are not given in closed form (defined only by a recurrence/linear system in the text)",
+  "status": "SKIP-OTHER"
+ },
+ "M11242": {
+  "lhs": "Integrate[x^(-mu-nu-1)*BesselJ[mu+1,x]*BesselY[nu+1,x], x]",
+  "rhs": [
+   "-x^(-mu-nu)/(2*(mu+nu+1))*(BesselJ[mu,x]*BesselY[nu,x]+BesselJ[mu+1,x]*BesselY[nu+1,x])"
+  ],
+  "conds": [],
+  "note": "C instantiated as J and D as Y (formula holds for any pair of cylinder functions); variable z renamed x"
+ },
+ "M11252": {
+  "lhs": "Integrate[x^(mu+nu+1)*BesselJ[mu,x]*BesselY[nu,x], x]",
+  "rhs": [
+   "x^(mu+nu+2)/(2*(mu+nu+1))*(BesselJ[mu,x]*BesselY[nu,x]+BesselJ[mu+1,x]*BesselY[nu+1,x])"
+  ],
+  "conds": [],
+  "note": "C instantiated as J and D as Y (formula holds for any pair of cylinder functions); variable z renamed x"
+ },
+ "M11290": {
+  "lhs": "Integrate[BesselJ[n,x]*BesselY[n,x]/x, x]",
+  "rhs": [
+   "-1/(2*n)*(BesselJ[0,x]*BesselY[0,x] + 2*Sum[BesselJ[\\[FormalM],x]*BesselY[\\[FormalM],x],{\\[FormalM],1,n-1}, Method->\"Procedural\"] + BesselJ[n,x]*BesselY[n,x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "C instantiated as J and D as Y (formula holds for any pair of cylinder functions); variable z renamed x"
+ },
+ "M11302": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11320": {
+  "skip": "reduction formula: integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11332": {
+  "lhs": "Integrate[x*BesselJ[1,x], x]",
+  "rhs": [
+   "Pi/2*x*(BesselJ[1,x]*StruveH[0,x]-BesselJ[0,x]*StruveH[1,x])"
+  ],
+  "conds": [],
+  "note": "bold H = Struve H"
+ },
+ "M11338": {
+  "lhs": "(1/(2*Pi))*Integrate[k^(-2*I*t)*BesselK[mu+I*t,a]/a^(mu+I*t)*BesselK[nu-I*t,b]/b^(nu-I*t), {t,-Infinity,Infinity}]",
+  "rhs": [
+   "(1/2)*k^(mu-nu)*((k+1/k)/(a^2*k+b^2/k))^((mu+nu)/2)*BesselK[mu+nu, Sqrt[(k+1/k)*(a^2*k+b^2/k)]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "k > 0"
+  ],
+  "note": "Mellin-Barnes contour integral along the imaginary axis, parametrized zeta = I t (dzeta/(2 Pi I) = dt/(2 Pi))"
+ },
+ "M11344i": {
+  "skip": "running text defining I_e(k,z)=int_0^z e^{-x}I_0(kx)dx (incomplete Lipschitz-Hankel integral); the displayed formula is M11345",
+  "status": "SKIP-DEFINITION"
+ },
+ "M11345": {
+  "skip": "integrand I_e(k,x) is itself an integral int_0^x e^{-t}I_0(kt)dt with no closed form in Mathematica (nested integral)",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M11352": {
+  "skip": "integrand I_e(k,x) is itself an integral int_0^x e^{-t}I_0(kt)dt with no closed form in Mathematica (nested integral)",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M11365": {
+  "skip": "integrand I_e(k,x) is itself an integral int_0^x e^{-t}I_0(kt)dt with no closed form in Mathematica (nested integral)",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M11375": {
+  "skip": "integrand I_e(k,x) is itself an integral int_0^x e^{-t}I_0(kt)dt with no closed form in Mathematica (nested integral)",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M11390": {
+  "skip": "integrand I_e(k,x) is itself an integral; value is a Humbert Phi_2 function (not in Mathematica) and is independent of the upper limit z, i.e. the formula is garbled",
+  "status": "SKIP-OTHER"
+ },
+ "M11401": {
+  "lhs": "Integrate[Log[1+x]*LegendreP[nu,x], x]",
+  "rhs": [
+   "(-x/nu*Log[1+x]+1/(nu*(nu+1))-x/nu^2)*LegendreP[nu,x] + (1/nu*Log[1+x]+1/(nu^2*(nu+1)))*LegendreP[nu+1,x]"
+  ],
+  "conds": [],
+  "note": "upper sign of \\pm taken"
+ },
+ "M11410": {
+  "lhs": "Integrate[LegendreP[mu,x]*LegendreQ[nu,x], x]",
+  "rhs": [
+   "-x/(1+mu+nu)*LegendreP[mu,x]*LegendreQ[nu,x] - (1+nu)/((mu-nu)*(1+mu+nu))*LegendreP[mu,x]*LegendreQ[nu+1,x] + (1+mu)/((mu-nu)*(1+mu+nu))*LegendreP[mu+1,x]*LegendreQ[nu,x]"
+  ],
+  "conds": [],
+  "note": "P_mu instantiated as LegendreP, bar P_nu as LegendreQ (any Legendre functions)"
+ },
+ "M11438": {
+  "lhs": "Integrate[LegendreP[3/2,x]^2, x]",
+  "rhs": [
+   "(x*(93-480*x^2+512*x^4)/18)*LegendreP[3/2,x]^2 + (25*x*(-3+8*x^2)/18)*LegendreP[5/2,x]^2 - (5/9)*(3-42*x^2+64*x^4)*LegendreP[3/2,x]*LegendreP[5/2,x]"
+  ],
+  "conds": [],
+  "note": "typo: paper has a stray extra factor x on the [P_{3/2}]^2 term, removed (oracle-verified)"
+ },
+ "M11448": {
+  "skip": "derivative of the paper's antiderivative differs from x^5 P_{1/3}P_{2/3} (residual ~0.016); no single-coefficient misprint repairs it (e.g. -512x^2/392 is unreduced but fixing it alone fails)",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M11483": {
+  "skip": "coefficient functions A_{ij}(x) are not given in closed form (defined only by a recurrence/linear system in the text)",
+  "status": "SKIP-OTHER"
+ },
+ "M11511": {
+  "lhs": "Integrate[Exp[-x^2]*HermiteH[mu,x]*HermiteH[nu,x], x]",
+  "rhs": [
+   "Exp[-x^2]/(2*(mu-nu))*(-HermiteH[mu,x]*HermiteH[nu+1,x]+HermiteH[mu+1,x]*HermiteH[nu,x])"
+  ],
+  "conds": [],
+  "note": "Hermite H_mu, bar H_nu instantiated as HermiteH[mu,x], HermiteH[nu,x] (any solutions of the Hermite equation)"
+ },
+ "M11519": {
+  "lhs": "Integrate[x*Exp[-x^2]*HermiteH[mu,x]*HermiteH[nu,x], x]",
+  "rhs": [
+   "Exp[-x^2]/2*(-(1+mu+nu)/((1-mu+nu)*(1+mu-nu))*HermiteH[mu,x]*HermiteH[nu,x] + x/(1+mu-nu)*HermiteH[mu+1,x]*HermiteH[nu,x] + x/(1-mu+nu)*HermiteH[mu,x]*HermiteH[nu+1,x] - 1/((1-mu+nu)*(1+mu-nu))*HermiteH[mu+1,x]*HermiteH[nu+1,x])"
+  ],
+  "conds": [],
+  "note": "Hermite H_mu, bar H_nu instantiated as HermiteH[mu,x], HermiteH[nu,x] (any solutions of the Hermite equation); typo: paper's first term has H_mu barH_{nu+1}, corrected to H_mu barH_nu (oracle-verified)"
+ },
+ "M11532": {
+  "lhs": "Integrate[x^2*Exp[-x^2]*HermiteH[mu,x]*HermiteH[nu,x], x]",
+  "rhs": [
+   "Exp[-x^2]*(-HermiteH[mu,x]*HermiteH[nu,x]*x*(mu+nu)/((2-mu+nu)*(2+mu-nu)) + HermiteH[mu+1,x]*HermiteH[nu,x]*(2+mu+3*nu+2*mu*x^2-2*nu*x^2-mu^2*x^2-nu^2*x^2+2*mu*nu*x^2)/(2*(mu-nu)*((2-mu+nu)*(2+mu-nu))) + HermiteH[mu,x]*HermiteH[nu+1,x]*(2+3*mu+nu-2*mu*x^2+2*nu*x^2-mu^2*x^2-nu^2*x^2+2*mu*nu*x^2)/(2*(nu-mu)*((2-mu+nu)*(2+mu-nu))) - HermiteH[mu+1,x]*HermiteH[nu+1,x]*x/((2-mu+nu)*(2+mu-nu)))"
+  ],
+  "conds": [],
+  "note": "Hermite H_mu, bar H_nu instantiated as HermiteH[mu,x], HermiteH[nu,x]; e^{-x^2} factored over all terms; typo: paper has denominator 2(mu-nu) on the H_mu barH_{nu+1} term, corrected to 2(nu-mu) (sign; oracle-verified)"
+ },
+ "M11551": {
+  "lhs": "Integrate[Exp[-3*x^2]*x^2*HermiteH[2/3,x]^3, x]",
+  "rhs": [
+   "Exp[-3*x^2]*(-1/12*x*(5+6*x^2)*HermiteH[2/3,x]^3 + 1/8*(1+6*x^2)*HermiteH[2/3,x]^2*HermiteH[5/3,x] - 3/8*x*HermiteH[2/3,x]*HermiteH[5/3,x]^2 + 1/16*HermiteH[5/3,x]^3)"
+  ],
+  "conds": [],
+  "note": "H_nu instantiated as HermiteH[nu,x]"
+ },
+ "M11578": {
+  "lhs": "Integrate[Exp[-x]*LaguerreL[mu,x]*LaguerreL[nu,x], x]",
+  "rhs": [
+   "Exp[-x]*(LaguerreL[mu,x]*LaguerreL[nu,x] + (1+nu)/(mu-nu)*LaguerreL[mu,x]*LaguerreL[nu+1,x] - (1+mu)/(mu-nu)*LaguerreL[mu+1,x]*LaguerreL[nu,x])"
+  ],
+  "conds": [],
+  "note": "L_mu, bar L_nu instantiated as LaguerreL[mu,x], LaguerreL[nu,x] (any Laguerre solutions)"
+ },
+ "M11588": {
+  "lhs": "Integrate[x*Exp[-x]*LaguerreL[mu,x]*LaguerreL[nu,x], x]",
+  "rhs": [
+   "Exp[-x]*(-(1+mu+nu-x+2*mu*nu+mu^2*x+nu^2*x-2*mu*nu*x)/((1-mu+nu)*(1+mu-nu))*LaguerreL[mu,x]*LaguerreL[nu,x] + (1+nu)*(1+2*mu-mu*x+nu*x)/((mu-nu)*(1-mu+nu))*LaguerreL[mu,x]*LaguerreL[nu+1,x] - (1+mu)*(1+2*nu+mu*x-nu*x)/((mu-nu)*(1+mu-nu))*LaguerreL[mu+1,x]*LaguerreL[nu,x] - 2*(1+mu)*(1+nu)/((1-mu+nu)*(1+mu-nu))*LaguerreL[mu+1,x]*LaguerreL[nu+1,x])"
+  ],
+  "conds": [],
+  "note": "L_mu, bar L_nu instantiated as LaguerreL[mu,x], LaguerreL[nu,x] (any Laguerre solutions)"
+ },
+ "M11602": {
+  "lhs": "Integrate[Exp[-3*x]*x*LaguerreL[2/3,x]^3, x]",
+  "rhs": [
+   "Exp[-3*x]*(LaguerreL[2/3,x]^3*(125/24-625*x/24+853*x^2/16-675*x^3/16+225*x^4/16-27*x^5/16) + LaguerreL[5/3,x]^3*(-125/24+125*x/12-125*x^2/16) + 3*(125/24-125*x/8+275*x^2/16-75*x^3/16)*LaguerreL[2/3,x]*LaguerreL[5/3,x]^2 + 3*(-125/24+125*x/6-515*x^2/16+135*x^3/8-45*x^4/16)*LaguerreL[2/3,x]^2*LaguerreL[5/3,x])"
+  ],
+  "conds": [],
+  "note": "L_nu instantiated as LaguerreL[nu,x]"
+ },
+ "M11634": {
+  "lhs": "Integrate[(1-x^2)^(n/2)*x^m*EllipticK[x^2], {x,0,1}]",
+  "rhs": [
+   "(Pi/4)*Gamma[(m+1)/2]*Gamma[(n+2)/2]/Gamma[(m+n+3)/2]*HypergeometricPFQ[{1/2,1/2,(m+1)/2},{1,(m+n+3)/2},1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "x^{'n} read as x'^n=(1-x^2)^(n/2); K modulus convention"
+ },
+ "M11642": {
+  "lhs": "Integrate[(1-x^2)^(n/2)*x^m*EllipticE[x^2], {x,0,1}]",
+  "rhs": [
+   "(Pi/4)*Gamma[(m+1)/2]*Gamma[(n+2)/2]/Gamma[(m+n+3)/2]*HypergeometricPFQ[{-1/2,1/2,(m+1)/2},{1,(m+n+3)/2},1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "x^{'n} read as x'^n=(1-x^2)^(n/2); E modulus convention"
+ },
+ "M11649": {
+  "skip": "identity between two integrals with generic exponents a,b,c,d; no closed-form value",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11656": {
+  "lhs": "Integrate[Sqrt[1-x^2]*EllipticK[x^2]^2, {x,0,1}]",
+  "rhs": [
+   "(Pi^3/16)*(2*HypergeometricPFQ[{1/2,1/2,1/2,1/2},{1,1,1},1]-1)"
+  ],
+  "conds": [],
+  "note": "x' = sqrt(1-x^2); first equality (second integral form dropped)"
+ },
+ "M11663": {
+  "lhs": "Integrate[x^n*((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2])^2, {x,0,1}]",
+  "rhs": [
+   "2^(4*n)*(n+1)^3*(n+3)^2/(16*(n+2)^3*(n+4))*Gamma[(n+1)/2]^8/Gamma[n+1]^4*HypergeometricPFQ[{-1/2,1/2,1/2,3/2,(n+3)/2,(n+3)/2,(n+7)/4},{1,(n+3)/4,(n+2)/2,(n+4)/2,(n+4)/2,(n+6)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "7F6 array parsed; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11675": {
+  "lhs": "Integrate[x^n*EllipticK[x^2]*(2*EllipticK[((1-x)/(1+x))^2]/(1+x)), {x,0,1}]",
+  "rhs": [
+   "(Pi^2/8)*Gamma[(n+1)/2]^2/Gamma[(n+2)/2]^2*HypergeometricPFQ[{1/2,1/2,(n+1)/2,(n+1)/2},{1,(n+2)/2,(n+2)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "missing comma in 4F3 lower list '1\\frac{n+2}{2}' -> {1,(n+2)/2,(n+2)/2}; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11689": {
+  "lhs": "Integrate[x^n*EllipticE[x^2]*(2*EllipticK[((1-x)/(1+x))^2]/(1+x)), {x,0,1}]",
+  "rhs": [
+   "(Pi^2/8)*Gamma[(n+1)/2]^2/Gamma[(n+2)/2]^2*HypergeometricPFQ[{-1/2,1/2,(n+1)/2,(n+1)/2},{1,(n+2)/2,(n+2)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "missing comma in 4F3 lower list; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11696": {
+  "lhs": "Integrate[x^n*EllipticK[x^2]*((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2]), {x,0,1}]",
+  "rhs": [
+   "(Pi^2/8)*(n+1)*Gamma[(n+1)/2]^2/((n+2)*Gamma[(n+2)/2]^2)*HypergeometricPFQ[{1/2,1/2,(n+1)/2,(n+3)/2},{1,(n+2)/2,(n+4)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "missing comma in 4F3 lower list; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11703": {
+  "lhs": "Integrate[x^n*EllipticE[x^2]*((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2]), {x,0,1}]",
+  "rhs": [
+   "(Pi^2/8)*(n+1)*Gamma[(n+1)/2]^2/((n+2)*Gamma[(n+2)/2]^2)*HypergeometricPFQ[{-1/2,1/2,(n+1)/2,(n+3)/2},{1,(n+2)/2,(n+4)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "missing comma in 4F3 lower list; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11710": {
+  "lhs": "Integrate[x^n*((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2])*(2*EllipticK[((1-x)/(1+x))^2]/(1+x)), {x,0,1}]",
+  "rhs": [
+   "2^(4*n)*(n+1)^2/(16*(n+2))*Gamma[(n+1)/2]^8/Gamma[n+1]^4*HypergeometricPFQ[{-1/2,1/2,1/2,1/2,(n+1)/2,(n+1)/2,(n+5)/4},{1,(n+1)/4,(n+2)/2,(n+2)/2,(n+2)/2,(n+4)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "7F6 array parsed; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11726i": {
+  "skip": "running text: recurrences for moments K_n, E_n",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11731i": {
+  "skip": "running-text fragment; the displayed integrals are separate entries M11734 and M11738",
+  "status": "SKIP-OTHER"
+ },
+ "M11749": {
+  "lhs": "Integrate[x^n*(2*EllipticK[((1-x)/(1+x))^2]/(1+x))^2, {x,0,1}]",
+  "rhs": [
+   "2^(4*n)*(n+1)/16*Gamma[(n+1)/2]^8/Gamma[n+1]^4*HypergeometricPFQ[{1/2,1/2,1/2,1/2,(n+1)/2,(n+1)/2,(n+5)/4},{1,(n+1)/4,(n+2)/2,(n+2)/2,(n+2)/2,(n+2)/2},1]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "note": "typo: paper has last lower 7F6 parameter (n+4)/2, corrected to (n+2)/2 (very-well-poised: 1+a-1/2 with a=(n+1)/2; n=1 gives 7/4 zeta(3); oracle-verified); 7F6 array parsed; K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11766": {
+  "lhs": "Integrate[(2*EllipticK[((1-x)/(1+x))^2]/(1+x))/(1-t^2*x^2), {x,0,1}]",
+  "rhs": [
+   "(Pi/2)*EllipticK[t^2]"
+  ],
+  "conds": [
+   "0 < t < 1"
+  ],
+  "note": "K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11783": {
+  "lhs": "Integrate[((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2])/(1+x)^3, {x,0,1}]",
+  "rhs": [
+   "Catalan/8 + 5/16"
+  ],
+  "conds": [],
+  "note": "typo: paper has G/8+6/16, corrected to G/8+5/16 (oracle-verified, NIntegrate 0.4269956992721524); K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11788": {
+  "lhs": "Integrate[(EllipticK[x^2]-EllipticE[x^2])/(x*Sqrt[1-x^2]), {x,0,1}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [],
+  "note": "x x' = x sqrt(1-x^2); modulus convention"
+ },
+ "M11808": {
+  "lhs": "Integrate[(2*EllipticK[((1-x)/(1+x))^2]/(1+x))/Sqrt[1+x], {x,0,1}]",
+  "rhs": [
+   "(1/2)*(Gamma[1/8]^2*Gamma[3/8]^2/(16*Pi) - HypergeometricPFQ[{3/4,1,1,5/4},{3/2,3/2,3/2},1])"
+  ],
+  "conds": [],
+  "note": "K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11817": {
+  "lhs": "Integrate[(2*EllipticK[((1-x)/(1+x))^2]/(1+x))/Sqrt[1-x], {x,0,1}]",
+  "rhs": [
+   "(1/2)*(Gamma[1/8]^2*Gamma[3/8]^2/(16*Pi) + HypergeometricPFQ[{3/4,1,1,5/4},{3/2,3/2,3/2},1])"
+  ],
+  "conds": [],
+  "note": "K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11826": {
+  "lhs": "Integrate[(2*EllipticK[((1-x)/(1+x))^2]/(1+x))^3, {x,0,1}]",
+  "rhs": [
+   "Gamma[1/4]^8/(128*Pi^2)"
+  ],
+  "conds": [],
+  "note": "first integral only (the middle form 3 int_0^2 K^2K' is a typo for int_0^1, numerically confirmed); K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11835": {
+  "skip": "oracle machine-precision NIntegrate cannot converge (x^-1/2 log^3 at 0 and (1-x^2)^-3/4 at 1); at WorkingPrecision 30 NIntegrate = 200.54190381115125 matches paper value 200.54190381115117",
+  "status": "SKIP-NOCONV"
+ },
+ "M11840": {
+  "lhs": "Integrate[EllipticE[x^2]*(2*EllipticK[((1-x)/(1+x))^2]/(1+x))^2, {x,0,1}]",
+  "rhs": [
+   "Pi^3/12 + Gamma[1/4]^8/(384*Pi^2)"
+  ],
+  "conds": [],
+  "note": "K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11859": {
+  "lhs": "Integrate[(n+k+1)*x^k*EllipticE[x^2]^n - n*x^k*EllipticE[x^2]^(n-1)*EllipticK[x^2], {x,0,1}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[k, Integers] && k >= 0"
+  ],
+  "note": "typo: paper has (n+k+1) multiplying the whole bracket; it multiplies only x^k E^n (integrand is d/dx[x^(k+1)E^n], E(1)=1; oracle-verified)"
+ },
+ "M11864": {
+  "lhs": "Integrate[5*x^2*EllipticE[x^2]^2 - 2*x^2*EllipticE[x^2]*EllipticK[x^2], {x,0,1}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "note": "typo: paper has 2E(x)K(x), corrected to 2x^2E(x)K(x) (n=k=2 case of the previous formula; oracle-verified)"
+ },
+ "M11868": {
+  "lhs": "Integrate[2*((1+x)*EllipticE[((1-x)/(1+x))^2] - (2*x/(1+x))*EllipticK[((1-x)/(1+x))^2])*EllipticK[x^2] - (1-x^2)*EllipticK[x^2]*(2*EllipticK[((1-x)/(1+x))^2]/(1+x)), {x,0,1}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [],
+  "note": "K'(x)=K(sqrt(1-x^2)) written via descending Landen 2/(1+x) K((1-x)/(1+x)) [E' likewise] so machine NIntegrate does not overflow at x->0 (1-x^2 rounds to 1); modulus convention, EllipticK[k^2]"
+ },
+ "M11874": {
+  "lhs": "Integrate[ArcTanh[x]/x*(2*EllipticK[((1-x)/(1+x))^2]/(1+x)), {x,0,1}]",
+  "rhs": [
+   "Pi*Catalan"
+  ],
+  "conds": [],
+  "note": "typo: paper has arctan x, corrected to artanh x: the paper's value pi G equals int_0^1 artanh(x)/x K'(x) dx exactly (termwise: int x^{2j}K' = (pi^2/4)binom(2j,j)^2/16^j and sum binom(2j,j)^2/(16^j(2j+1)) = 4G/pi), while the arctan integral is 2.30924019735354910901584822547 (no closed form found by PSLQ); K'(x) written via descending Landen 2/(1+x) K((1-x)/(1+x)) for machine NIntegrate (oracle-verified)"
+ },
+ "M11880": {
+  "skip": "paper value 7/8 pi zeta(3)=3.30432649414269 disagrees with NIntegrate 1.54798240215774230465607676775; PSLQ (35 digits) identifies the integral as 2 pi G - 7 zeta(3)/2, not a plausible misprint",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M11907": {
+  "lhs": "Integrate[lambda^(l-1)*BesselK[m,lambda]*BesselK[n,z/lambda], {lambda,0,Infinity}]",
+  "rhs": [
+   "(Gamma[(l+m+n)/2]*Gamma[(l-m+n)/2]*Gamma[n]*2^(l+2*n-3)*z^(-n)*HypergeometricPFQ[{},{1-n,1-l/2-m/2-n/2,1-l/2+m/2-n/2},z^2/16]) + (Gamma[(l+m+(-n))/2]*Gamma[(l-m+(-n))/2]*Gamma[(-n)]*2^(l+2*(-n)-3)*z^(-(-n))*HypergeometricPFQ[{},{1-(-n),1-l/2-m/2-(-n)/2,1-l/2+m/2-(-n)/2},z^2/16]) + (Gamma[(-l-m-n)/2]*Gamma[(-l-m+n)/2]*Gamma[-m]*2^(-l-2*m-3)*z^(l+m)*HypergeometricPFQ[{},{1+m,1+l/2+m/2+n/2,1+l/2+m/2-n/2},z^2/16]) + (Gamma[(-l-(-m)-n)/2]*Gamma[(-l-(-m)+n)/2]*Gamma[-(-m)]*2^(-l-2*(-m)-3)*z^(l+(-m))*HypergeometricPFQ[{},{1+(-m),1+l/2+(-m)/2+n/2,1+l/2+(-m)/2-n/2},z^2/16])"
+  ],
+  "conds": [
+   "Not[Element[n, Integers]]",
+   "Not[Element[m, Integers]]",
+   "z > 0"
+  ],
+  "note": "sum_{n,-n} expanded as the term plus the term with n -> -n; F(;b1,b2,b3;x) = 0F3"
+ },
+ "M11942": {
+  "skip": "value contains another integral of the same integrand (int_0^1 2^{-t} ln Gamma(t) dt): integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11948": {
+  "skip": "value contains another integral of the same integrand (int_0^1 2^{-t} ln Gamma(t) dt): integral on both sides",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M11954": {
+  "lhs": "Integrate[Log[Gamma[q]]*Cos[(2*n+1)*Pi*q], {q,0,1}]",
+  "rhs": [
+   "(2/Pi^2)*((EulerGamma+2*Log[Sqrt[2*Pi]])/(2*n+1)^2 + 2*Sum[Log[\\[FormalK]]/(4*\\[FormalK]^2-(2*n+1)^2), {\\[FormalK],1,Infinity}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "summation index written as formal symbol"
+ },
+ "M11973": {
+  "lhs": "Integrate[BernoulliB[2*m-1,q]*Log[Gamma[q]], {q,0,1}]",
+  "rhs": [
+   "BernoulliB[2*m]/(2*m)*(Zeta'[2*m]/Zeta[2*m] - (2*Log[Sqrt[2*Pi]]+EulerGamma))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "note": "A = 2 ln sqrt(2 pi) + gamma substituted"
+ },
+ "M11983": {
+  "lhs": "Integrate[q^n*Log[Gamma[q]], {q,0,1}]",
+  "rhs": [
+   "1/(n+1)*Sum[(-1)^\\[FormalK]*Binomial[n+1,2*\\[FormalK]-1]*(2*\\[FormalK])!/(\\[FormalK]*(2*Pi)^(2*\\[FormalK]))*((2*Log[Sqrt[2*Pi]]+EulerGamma)*Zeta[2*\\[FormalK]]-Zeta'[2*\\[FormalK]]), {\\[FormalK],1,Floor[(n+1)/2]}, Method->\"Procedural\"] - 1/(n+1)*Sum[(-1)^\\[FormalK]*Binomial[n+1,2*\\[FormalK]]*(2*\\[FormalK])!/(2*(2*Pi)^(2*\\[FormalK]))*Zeta[2*\\[FormalK]+1], {\\[FormalK],1,Floor[n/2]}, Method->\"Procedural\"] + Log[Sqrt[2*Pi]]/(n+1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "(2k!) read as (2k)!; A substituted; formal summation index"
+ },
+ "M12016": {
+  "lhs": "Integrate[q^n*PolyGamma[m,q], {q,0,1}]",
+  "rhs": [
+   "(-1)^m*n!/(n-m)!*(EulerGamma/(n-m+1) + (n-m)!*Sum[Gamma[m-\\[FormalK]]*Zeta[m-\\[FormalK]]/(n-\\[FormalK])!, {\\[FormalK],0,m-2}] + Sum[(-1)^\\[FormalK]*Binomial[n-m,\\[FormalK]]*(HarmonicNumber[\\[FormalK]]*Zeta[-\\[FormalK]]+Zeta'[-\\[FormalK]]), {\\[FormalK],0,n-m-1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && Element[m, Integers] && n > m && m >= 1"
+  ],
+  "note": "H_k = HarmonicNumber; formal summation index"
+ },
+ "M12030": {
+  "lhs": "Integrate[q^n*PolyGamma[q], {q,0,1}]",
+  "rhs": [
+   "Zeta'[0] + Sum[(-1)^\\[FormalK]*Binomial[n,\\[FormalK]]*(HarmonicNumber[\\[FormalK]]*Zeta[-\\[FormalK]]+Zeta'[-\\[FormalK]]), {\\[FormalK],1,n-1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "H_k = HarmonicNumber; formal summation index"
+ },
+ "M12044": {
+  "skip": "integrand ~ i pi sin(2ax)cos^2(bx) as x->oo (psi(z+ix)-psi(z-ix) -> i pi), not decaying: only Abel-summable; also 'sin 2a' means sin(2ax) and the last term should read e^{-2(b-a)z}/(1-e^{-2(b-a)}) for a<b",
+  "status": "SKIP-NOCONV"
+ },
+ "M12052": {
+  "skip": "integrand ~ i pi sin(2ax)cos^2(ax) as x->oo, not decaying: only Abel-summable ('sin 2a' means sin(2ax)); value agrees with the termwise sine-transform derivation",
+  "status": "SKIP-NOCONV"
+ },
+ "M12059": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12075": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12081": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12090": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12104": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12112": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12121": {
+  "skip": "value involves the Volterra functions nu(t,alpha)/mu(t,beta,alpha), themselves integrals of the same type (integral on both sides); M12081 also an inverse Laplace transform",
+  "status": "SKIP-RECURRENCE"
+ },
+ "M12135i": {
+  "skip": "running text defining Laplace transform and Volterra functions",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12137": {
+  "skip": "definition of a Volterra function nu/mu by an integral",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12140": {
+  "skip": "definition of a Volterra function nu/mu by an integral",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12143": {
+  "skip": "definition of a Volterra function nu/mu by an integral",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12147": {
+  "skip": "definition of a Volterra function nu/mu by an integral",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12169": {
+  "skip": "Laplace-transform relation for a generic f",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M12174": {
+  "skip": "Laplace-transform relation for a generic f",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M12179": {
+  "skip": "Laplace-transform relation for a generic f",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M12184": {
+  "skip": "Laplace-transform relation for a generic f",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M12189": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12197": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12204": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12211": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12218": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12226": {
+  "skip": "integrand is a Volterra function nu/mu, itself an integral (no Mathematica closed form): nested integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M12247": {
+  "lhs": "Integrate[BesselJ[0,lambda*Sin[theta]]^2, {theta,0,Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-lambda^2/4)^\\[FormalJ]*Gamma[(3+2*\\[FormalJ])/2]/((1+2*\\[FormalJ])*Gamma[1+\\[FormalJ]]^3)*HypergeometricPFQ[{1/2+\\[FormalJ]},{1,1+\\[FormalJ]},-lambda^2/4], {\\[FormalJ],0,Infinity}]"
+  ],
+  "conds": [],
+  "note": "formal summation index"
+ },
+ "M12255": {
+  "lhs": "Integrate[BesselJ[nu,lambda*Cos[theta]]^2, {theta,0,Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-1)^\\[FormalJ]*2^(-1-2*\\[FormalJ]-2*nu)*lambda^(2*\\[FormalJ]+2*nu)*Gamma[(1+2*\\[FormalJ]+2*nu)/2]/(Gamma[1+\\[FormalJ]]*Gamma[1+nu]*Gamma[1+\\[FormalJ]+nu]^2)*HypergeometricPFQ[{1/2+\\[FormalJ]+nu},{1+nu,1+\\[FormalJ]+nu},-lambda^2/4], {\\[FormalJ],0,Infinity}]"
+  ],
+  "conds": [
+   "nu > -1/2"
+  ],
+  "note": "typo: paper has lambda^(2j+2mu), corrected to lambda^(2j+2nu) (mu does not occur); formal summation index"
+ },
+ "M12264": {
+  "lhs": "Integrate[BesselJ[1,x*Sin[theta]]*BesselI[1,x*Cos[theta]], {theta,0,Pi/2}]",
+  "rhs": [
+   "(BesselI[1,x]-BesselJ[1,x])/x"
+  ],
+  "conds": [
+   "x > 0"
+  ],
+  "note": "last member taken (middle member is a second integral)"
+ },
+ "M12301": {
+  "skip": "no value given in the paper ('...')",
+  "status": "SKIP-OTHER"
+ },
+ "M12308": {
+  "lhs": "Integrate[BesselJ[mu,c*t*Sin[phi]*Cos[psi]]*BesselJ[nu,c*t*Cos[phi]*Sin[psi]]*BesselJ[rho,c*t], {t,0,Infinity}]",
+  "rhs": [
+   "Gamma[(1+mu+nu+rho)/2]*Sin[phi]^mu*Cos[psi]^mu*Cos[phi]^nu*Sin[psi]^nu/(c*Gamma[mu+1]*Gamma[nu+1]*Gamma[(1-mu-nu+rho)/2])*Hypergeometric2F1[(1+mu+nu-rho)/2,(1+mu+nu+rho)/2,mu+1,Sin[phi]^2]*Hypergeometric2F1[(1+mu+nu-rho)/2,(1+mu+nu+rho)/2,nu+1,Sin[psi]^2]"
+  ],
+  "conds": [
+   "phi > 0",
+   "psi > 0",
+   "phi + psi < Pi/2",
+   "c > 0",
+   "mu + nu + rho > -1"
+  ],
+  "note": "Bailey's formula. typo: paper has J_mu(ct sin phi sin Phi), corrected to J_mu(ct sin phi cos Phi) (as the sin^mu phi cos^mu Phi factor of the value requires); typo: c^{mu+nu+1} in the denominator corrected to c (dimension: a^mu b^nu/c^{mu+nu+1}); Phi renamed psi (oracle-verified)"
+ },
+ "M12321": {
+  "lhs": "Integrate[BesselJ[nu,lambda*Sin[theta]]*BesselJ[mu,lambda*Sin[theta]]*Cos[theta]^beta*Sin[theta]^m, {theta,0,Pi/2}]",
+  "rhs": [
+   "Sum[(-1)^\\[FormalJ]*2^(-1-2*\\[FormalJ]-nu-mu)*lambda^(2*\\[FormalJ]+nu+mu)*Gamma[(1+beta)/2]*Gamma[(1+2*\\[FormalJ]+m+nu+mu)/2]/(Gamma[1+\\[FormalJ]]*Gamma[1+\\[FormalJ]+nu]*Gamma[1+mu]*Gamma[(2+2*\\[FormalJ]+m+nu+beta+mu)/2])*HypergeometricPFQ[{\\[FormalJ]+(1+m+nu+mu)/2},{1+\\[FormalJ]+(m+nu+beta+mu)/2,1+mu},-lambda^2/4], {\\[FormalJ],0,Infinity}]"
+  ],
+  "conds": [
+   "beta > 0",
+   "m > 0"
+  ],
+  "note": "formal summation index"
+ },
+ "M12339": {
+  "skip": "orthogonality relation over roots lambda_n of x J'_nu(x)+H J_nu(x)=0 with Kronecker delta; not a closed-form integral",
+  "status": "SKIP-OTHER"
+ },
+ "M12349": {
+  "lhs": "Integrate[x^(2+l+2*n)*SphericalBesselJ[l,2*Pi*sigma*x], {x,0,1}]",
+  "rhs": [
+   "1/(2*Pi*sigma)*Sum[Pochhammer[-n,\\[FormalK]]/(Pi*sigma)^\\[FormalK]*SphericalBesselJ[l+\\[FormalK]+1,2*Pi*sigma], {\\[FormalK],0,n}]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "(-n)_k = Pochhammer; formal summation index"
+ },
+ "M12357": {
+  "skip": "distributional result (Dirac delta); divergent as an ordinary integral",
+  "status": "SKIP-PV"
+ },
+ "M12362": {
+  "skip": "conditionally convergent oscillatory integral (tail ~ 1/x); oracle NOCONV; formula checked to agree for l=(0,0,0),(1,1,0) but high-precision tails for l=(1,2,3) were unstable",
+  "status": "SKIP-NOCONV"
+ },
+ "M12404": {
+  "skip": "value defined through triangle geometry (area A, angles alpha_i) of k_1,k_2,k_3 with integer orders n_1+n_2+n_3=0; not instantiable by the oracle",
+  "status": "SKIP-OTHER"
+ },
+ "M12423": {
+  "lhs": "Integrate[BesselK[0,x]^3, {x,0,Infinity}]",
+  "rhs": [
+   "(Pi/2)*(EllipticK[Exp[-I*Pi/3]]^2 + EllipticK[Exp[I*Pi/3]]^2)"
+  ],
+  "conds": [],
+  "note": "phi_a = pi/3, modulus e^{+-i pi/6} -> parameter m = e^{+-i pi/3}"
+ },
+ "M12448": {
+  "skip": "paper gives only a short decimal approximation, no closed form",
+  "status": "SKIP-OTHER"
+ },
+ "M12453": {
+  "skip": "paper gives only a short decimal approximation, no closed form",
+  "status": "SKIP-OTHER"
+ },
+ "M12457": {
+  "skip": "paper gives only a short decimal approximation, no closed form",
+  "status": "SKIP-OTHER"
+ },
+ "M12464": {
+  "lhs": "Integrate[AiryAi[x]^(n-1)*AiryBi[x]^(n-1)/(AiryAi[x]^n+AiryBi[x]^n)^2, x]",
+  "rhs": [
+   "(Pi/n)*AiryBi[x]^n/(AiryAi[x]^n+AiryBi[x]^n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "Ai, Bi are Airy functions (translator split them into A*I)"
+ },
+ "M12469": {
+  "lhs": "Integrate[1/(AiryAi[x]^2+2*AiryAi[x]*AiryBi[x]+AiryBi[x]^2), x]",
+  "rhs": [
+   "Pi*AiryBi[x]/(AiryAi[x]+AiryBi[x])"
+  ],
+  "conds": [],
+  "note": "Ai, Bi are Airy functions (translator split them into A*I)"
+ },
+ "M12474": {
+  "lhs": "Integrate[1/AiryAi[x]^2, x]",
+  "rhs": [
+   "Pi*AiryBi[x]/AiryAi[x]"
+  ],
+  "conds": [],
+  "note": "Ai/Bi are Airy functions, misparsed as A*I"
+ },
+ "M12479": {
+  "lhs": "Integrate[1/AiryBi[x]^2, x]",
+  "rhs": [
+   "-Pi*AiryAi[x]/AiryBi[x]"
+  ],
+  "conds": [],
+  "note": "Airy functions"
+ },
+ "M12484": {
+  "lhs": "Integrate[1/(AiryAi[x]*AiryBi[x]), x]",
+  "rhs": [
+   "Pi*Log[AiryBi[x]/AiryAi[x]]"
+  ],
+  "conds": [],
+  "note": "Airy functions"
+ },
+ "M12489": {
+  "lhs": "Integrate[AiryBi[x]^n/AiryAi[x]^(n + 2), x]",
+  "rhs": [
+   "(Pi/(n + 1))*(AiryBi[x]/AiryAi[x])^(n + 1)"
+  ],
+  "conds": [],
+  "note": "Airy functions"
+ },
+ "M12495": {
+  "lhs": "Integrate[t^(lambda - 1)*BesselI[mu, t]*BesselK[nu, t]*BesselK[rho, t], {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[(lambda+mu+nu-rho)/2]*Gamma[(lambda+mu+nu+rho)/2]*Gamma[(lambda+mu-nu-rho)/2]*Gamma[(lambda+mu-nu+rho)/2]/(Gamma[1+mu]*2^(mu+2)*Gamma[(lambda+mu)/2]*Gamma[(1+lambda+mu)/2])*HypergeometricPFQ[{(lambda+mu+nu-rho)/2,(lambda+mu+nu+rho)/2,(lambda+mu-nu-rho)/2,(lambda+mu-nu+rho)/2},{(lambda+mu)/2,(1+lambda+mu)/2,mu+1},1/4]"
+  ],
+  "conds": [
+   "lambda + mu > Abs[nu] + Abs[rho]"
+  ],
+  "note": "4F3 array notation; convergence condition added"
+ },
+ "M12519": {
+  "lhs": "Integrate[BesselI[0, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/4*HypergeometricPFQ[{1/2,1/2,1/2},{1,1},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12535": {
+  "lhs": "Integrate[BesselI[1, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*HypergeometricPFQ[{1,1,1},{3/2,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12547": {
+  "lhs": "Integrate[BesselI[1, x]*BesselK[0, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/16*HypergeometricPFQ[{1/2,1/2,3/2},{1,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12553": {
+  "lhs": "Integrate[x*BesselI[0, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*2*Pi/3^(3/2)"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12556": {
+  "lhs": "Integrate[x*BesselI[0, x]*BesselK[0, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/8*HypergeometricPFQ[{1/2,1/2,3/2},{1,1},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12562": {
+  "lhs": "Integrate[x*BesselI[1, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/64*HypergeometricPFQ[{3/2,3/2,3/2},{2,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12568": {
+  "lhs": "Integrate[x*BesselI[1, x]*BesselK[0, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/4)*2*Pi/3^(3/2)"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12572": {
+  "lhs": "Integrate[x*BesselI[1, x]*BesselK[1, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "3*Pi^2/64*HypergeometricPFQ[{1/2,3/2,5/2},{2,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12578": {
+  "lhs": "Integrate[x^2*BesselI[0, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/32*HypergeometricPFQ[{3/2,3/2,3/2},{1,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12584": {
+  "lhs": "Integrate[x^2*BesselI[0, x]*BesselK[0, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Hypergeometric2F1[1,2,3/2,1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12590": {
+  "lhs": "Integrate[x^2*BesselI[0, x]*BesselK[1, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "3*Pi^2/32*HypergeometricPFQ[{1/2,3/2,5/2},{1,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12596": {
+  "lhs": "Integrate[x^2*BesselI[1, x]*BesselK[0, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/6*Hypergeometric2F1[2,2,5/2,1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12602": {
+  "lhs": "Integrate[x^2*BesselI[1, x]*BesselK[0, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "3*Pi^2/128*HypergeometricPFQ[{3/2,3/2,5/2},{2,2},1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12608": {
+  "lhs": "Integrate[x^2*BesselI[1, x]*BesselK[1, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/3*Hypergeometric2F1[1,3,5/2,1/4]"
+  ],
+  "conds": [],
+  "note": "pFq array notation"
+ },
+ "M12620": {
+  "lhs": "Integrate[BesselJ[nu, x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(1/a)*(-a/(1 - nu^2)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, a^2/4] + (Pi/2)*Sec[nu*Pi/2]*BesselI[nu, a])"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 < nu < 3"
+  ],
+  "note": "second form; Lommel s_{0,nu}(z)=z/(1-nu^2) 1F2(1;(3-nu)/2,(3+nu)/2;-z^2/4) at z=i a; nu<3 avoids removable sec pole at nu=3"
+ },
+ "M12627": {
+  "lhs": "Integrate[x^(1 - 2*n)*BesselJ[nu, a*x]*BesselJ[nu, b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*c^(-2*n)*(BesselI[nu, b*c]*BesselK[nu, a*c] - (1/2)*(b/a)^nu*(Pi/Sin[Pi*nu])*Sum[((a*c/2)^(2*\\[FormalP])/(\\[FormalP]!*Gamma[1 - nu + \\[FormalP]]))*Sum[(b*c/2)^(2*\\[FormalK])/(\\[FormalK]!*Gamma[1 + nu + \\[FormalK]]), {\\[FormalK], 0, n - 1 - \\[FormalP]}], {\\[FormalP], 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < b < a",
+   "c > 0",
+   "nu > n - 1"
+  ],
+  "note": "branch 0<b<a; sum indices as formal symbols"
+ },
+ "M12645": {
+  "lhs": "Integrate[x^mu*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^mu*Gamma[1/2 + mu/2 + nu/2]/(a^(mu + 1)*Gamma[nu/2 + 1/2 - mu/2]) + a^(-mu)*((mu + nu - 1)*BesselJ[nu, a]*(#3^(#1+1)/((#1+1)^2-#2^2)*HypergeometricPFQ[{1},{(#1-#2+3)/2,(#1+#2+3)/2},-#3^2/4] + 2^(#1-1)*Gamma[(#1-#2+1)/2]*Gamma[(#1+#2+1)/2]*(Sin[(#1-#2)*Pi/2]*BesselJ[#2,#3] - Cos[(#1-#2)*Pi/2]*BesselY[#2,#3]))&[mu - 1, nu - 1, a] - BesselJ[nu - 1, a]*(#3^(#1+1)/((#1+1)^2-#2^2)*HypergeometricPFQ[{1},{(#1-#2+3)/2,(#1+#2+3)/2},-#3^2/4] + 2^(#1-1)*Gamma[(#1-#2+1)/2]*Gamma[(#1+#2+1)/2]*(Sin[(#1-#2)*Pi/2]*BesselJ[#2,#3] - Cos[(#1-#2)*Pi/2]*BesselY[#2,#3]))&[mu, nu, a])"
+  ],
+  "conds": [
+   "a > 0",
+   "mu + nu > -1"
+  ],
+  "note": "Lommel S_{mu,nu} written out via s_{mu,nu} (1F2) plus J/Y terms"
+ },
+ "M12658": {
+  "lhs": "Integrate[x^nu*BesselK[nu, x], {x, 0, u}]",
+  "rhs": [
+   "(2^(nu - 1)/(1 + 2*nu))*((1 + 2*nu)*Gamma[nu]*u*HypergeometricPFQ[{1/2}, {3/2, 1 - nu}, u^2/4] + 2*(u/2)^(1 + 2*nu)*Gamma[-nu]*HypergeometricPFQ[{nu + 1/2}, {1 + nu, 3/2 + nu}, u^2/4])"
+  ],
+  "conds": [
+   "u > 0",
+   "0 < nu < 1"
+  ],
+  "note": "typo: paper has z^nu (integrand) and 2^nu-1, corrected to x^nu and 2^(nu-1)"
+ },
+ "M12676": {
+  "lhs": "Integrate[x^mu*BesselJ[nu, x*y]*Sqrt[x*y], {x, 0, 1}]",
+  "rhs": [
+   "y^(-mu - 1)*((nu + mu - 1/2)*y*BesselJ[nu, y]*(#3^(#1+1)/((#1+1)^2-#2^2)*HypergeometricPFQ[{1},{(#1-#2+3)/2,(#1+#2+3)/2},-#3^2/4] + 2^(#1-1)*Gamma[(#1-#2+1)/2]*Gamma[(#1+#2+1)/2]*(Sin[(#1-#2)*Pi/2]*BesselJ[#2,#3] - Cos[(#1-#2)*Pi/2]*BesselY[#2,#3]))&[mu - 1/2, nu - 1, y] - y*BesselJ[nu - 1, y]*(#3^(#1+1)/((#1+1)^2-#2^2)*HypergeometricPFQ[{1},{(#1-#2+3)/2,(#1+#2+3)/2},-#3^2/4] + 2^(#1-1)*Gamma[(#1-#2+1)/2]*Gamma[(#1+#2+1)/2]*(Sin[(#1-#2)*Pi/2]*BesselJ[#2,#3] - Cos[(#1-#2)*Pi/2]*BesselY[#2,#3]))&[mu + 1/2, nu, y] + 2^(mu + 1/2)*Gamma[mu/2 + nu/2 + 3/4]/Gamma[nu/2 - mu/2 + 1/4])"
+  ],
+  "conds": [
+   "y > 0",
+   "mu + nu > -3/2"
+  ],
+  "note": "Lommel S written out"
+ },
+ "M12690": {
+  "skip": "definition of an auxiliary function (\\equiv, no value)",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12764": {
+  "lhs": "Integrate[BesselJ[n + 1, k]*BesselJ[m + 1, k]/(k*(k^2 + k0^2)^(1 + gamma/2)), {k, 0, Infinity}]",
+  "rhs": [
+   "k0^(n + m - gamma)*Gamma[(gamma - n - m)/2]*Gamma[(n + m)/2 + 1]/(2^(n + m + 3)*Gamma[n + 2]*Gamma[m + 2]*Gamma[1 + gamma/2])*HypergeometricPFQ[{(n + m)/2 + 1, (n + m)/2 + 2, (n + m + 3)/2}, {n + 2, m + 2, n + m + 3, 1 + (n + m - gamma)/2}, k0^2] + Gamma[(n + m - gamma)/2]*Gamma[3 + gamma]/(2^(3 + gamma)*Gamma[3 + (gamma + n + m)/2]*Gamma[2 + (gamma + n - m)/2]*Gamma[2 + (gamma + m - n)/2])*HypergeometricPFQ[{2 + gamma/2, 1 + gamma/2, (3 + gamma)/2}, {2 + (gamma + n - m)/2, 2 + (gamma + m - n)/2, 3 + (gamma + n + m)/2, 1 + (gamma - n - m)/2}, k0^2]"
+  ],
+  "conds": [
+   "k0 > 0",
+   "gamma > -2",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "note": "n' renamed m; exponent 1+gamma/2 (paper: 1+\\gamma2)"
+ },
+ "M12796": {
+  "lhs": "Integrate[x^m*(1 + c*x^p)^beta*BesselJ[nu, x*lambda]*BesselJ[mu, x*rho]*Log[1/(a*x)]^k, {x, 0, b}]",
+  "rhs": [
+   "(lambda^nu*rho^mu/(2^(nu + mu)*a^(1 + m + nu + mu)))*Sum[((-1)^(\\[FormalJ] + \\[FormalL])*c^\\[FormalH]*lambda^(2*\\[FormalJ])*rho^(2*\\[FormalL])*Binomial[beta, \\[FormalH]]/(2^(2*\\[FormalJ] + 2*\\[FormalL])*a^(2*\\[FormalJ] + 2*\\[FormalL] + \\[FormalH]*p)*(1 + 2*\\[FormalJ] + 2*\\[FormalL] + m + \\[FormalH]*p + nu + mu)^(k + 1)))*(Gamma[1 + k, (1 + 2*\\[FormalJ] + 2*\\[FormalL] + m + \\[FormalH]*p + nu + mu)*Log[1/(a*b)]]/(\\[FormalJ]!*\\[FormalL]!*Gamma[1 + \\[FormalJ] + nu]*Gamma[1 + \\[FormalL] + mu])), {\\[FormalJ], 0, 30}, {\\[FormalL], 0, 30}, {\\[FormalH], 0, 40}]"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0",
+   "Element[m, Integers] && m >= 0",
+   "a*b < 1",
+   "c*b^p < 1/2",
+   "beta > 0",
+   "b > 0",
+   "lambda*b < 3",
+   "rho*b < 3",
+   "nu > 0",
+   "mu > 0",
+   "a > 0",
+   "c > 0",
+   "p > 0"
+  ],
+  "note": "triple series truncated at j,l<=30, h<=40 (terms decay factorially / geometrically under the conds); sum indices formal; convergence conds a*b<1, c*b^p<1/2 added"
+ },
+ "M12811": {
+  "lhs": "Integrate[BesselJ[nu + n, a*t]*BesselJ[nu - n - 1, b*t], {t, 0, Infinity}]",
+  "rhs": [
+   "b^(nu - n - 1)*Gamma[nu]/(a^(nu - n)*n!*Gamma[nu - n])*Hypergeometric2F1[nu, -n, nu - n, b^2/a^2]"
+  ],
+  "conds": [
+   "0 < b < a",
+   "nu > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "branch 0<b<a"
+ },
+ "M12825": {
+  "lhs": "Integrate[BesselJ[nu, a*t]*BesselJ[nu + 1, b*t], {t, 0, Infinity}]",
+  "rhs": [
+   "a^nu*b^(-nu - 1)"
+  ],
+  "conds": [
+   "0 < a < b",
+   "nu > -1"
+  ],
+  "note": "typo: paper assigns a^nu b^(-nu-1) to 0<b<a (and 0 to 0<a<b); the cases are swapped -- value holds for 0<a<b (oracle-verified)"
+ },
+ "M12839": {
+  "lhs": "Integrate[BesselJ[mu, a*t]*BesselJ[nu, a*t]/t, {t, 0, Infinity}]",
+  "rhs": [
+   "(2/Pi)*(Sin[((nu - mu)/2)*Pi]/(nu^2 - mu^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "nu + mu > 0",
+   "mu != nu"
+  ],
+  "note": "typo: paper omits the 1/t in the integrand (without it the integral diverges logarithmically); with dt/t the stated value holds (oracle-verified); mu!=nu (removable)"
+ },
+ "M12847": {
+  "lhs": "Integrate[x^(-p)*(1 - 4*BesselJ[1, x]^2/x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Gamma[p + 2]/(2^p*Gamma[(p + 3)/2]^2*Gamma[(p + 5)/2]*Gamma[(p + 1)/2]*Sin[Pi*(p - 1)/2])"
+  ],
+  "conds": [
+   "1 < p < 3"
+  ],
+  "note": "J_1^2(x) misparsed; P renamed p; convergence 1<p<3"
+ },
+ "M12857": {
+  "skip": "value is a truncated expansion in a/c, b/c, not exact: e.g. mu=5/6,nu=3,rho=7/3,a=3/8,b=5/8,c=5/4: NIntegrate 5.957e-4 vs paper 5.40e-4 (5.374e-4 even with (mu-1)->(mu+1)); rho=4,c=3/4: 0.338 vs 3.03",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M12868": {
+  "skip": "definition of an auxiliary function (\\equiv, no value)",
+  "status": "SKIP-DEFINITION"
+ },
+ "M12953": {
+  "skip": "Appell F4(...;1,b^2) evaluated at x=1, outside the double series' convergence region (sqrt|x|+sqrt|y|<1); Mathematica cannot evaluate AppellF4 there",
+  "status": "SKIP-OTHER"
+ },
+ "M12984": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[1/2, b*x]/x^(3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[2]/(Sqrt[Pi*b]*a))*((((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)/2)*Sqrt[a^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2] + (a^2/2)*ArcSin[((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)/a] + c*(Sqrt[b^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2] - b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M12992": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[1/2, b*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[2]/(Sqrt[Pi*b]*a))*(b - Sqrt[b^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M12999": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[1/2, b*x]*Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[2]/(Sqrt[Pi*b]*a))*(((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)*Sqrt[a^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2]/(((Sqrt[(a+b)^2+c^2]+Sqrt[(a-b)^2+c^2])/2)^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M13006": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[3/2, b*x]*Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2*Sqrt[b^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2]/(Sqrt[2*Pi]*b^(3/2)*a*(((Sqrt[(a+b)^2+c^2]+Sqrt[(a-b)^2+c^2])/2)^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M13013": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[3/2, b*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/(Sqrt[2*Pi]*b^(3/2)*a))*(-((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)*Sqrt[a^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2] + a^2*ArcSin[((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)/a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M13020": {
+  "lhs": "Integrate[Exp[-c*x]*BesselJ[1, a*x]*BesselJ[5/2, b*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(-1/2)*c/(Sqrt[Pi]*b^(5/2)*a))*(((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)*Sqrt[a^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2] + 2*a^2*((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)/Sqrt[a^2 - ((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)^2] - 3*a^2*ArcSin[((Sqrt[(a+b)^2+c^2]-Sqrt[(a-b)^2+c^2])/2)/a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "l1,l2 substituted from their definitions (l1=(sqrt((a+b)^2+c^2)-sqrt((a-b)^2+c^2))/2, l2 with +)"
+ },
+ "M13030": {
+  "lhs": "Integrate[x^nu*Exp[-x/2]*BesselJ[nu, mu*x]*LaguerreL[n, 2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*Gamma[nu + 1/2]/Sqrt[Pi*mu]*(mu/(mu^2 + 1/4))^(nu + 1/2)*GegenbauerC[n, nu + 1/2, (mu^2 - 1/4)/(mu^2 + 1/4)]"
+  ],
+  "conds": [
+   "mu > 0",
+   "nu > -1/2"
+  ],
+  "note": "cos(theta)=(mu^2-1/4)/(mu^2+1/4), sin(theta)=mu/(mu^2+1/4) substituted; L_n^{2nu} Laguerre, C_n Gegenbauer"
+ },
+ "M13040": {
+  "lhs": "Integrate[x^(nu + 1)/(a^2 + x^2)*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "a^nu*BesselK[nu, a*y]"
+  ],
+  "conds": [
+   "a > 0",
+   "y > 0",
+   "1 < nu < 3/2"
+  ],
+  "note": "typo: paper has extra factor 1/Sqrt[y], corrected to a^nu K_nu(a y) (oracle-verified)"
+ },
+ "M13052": {
+  "skip": "value (Lommel s via 1F2, Gamma(1-mu)/(1-nu) as printed) disagrees with NIntegrate: a=7/3,mu=5/4,nu=3,y=5/6: 0.004153 vs -0.03407; a=5/4,mu=7/3,nu=3,y=1/5: 3.41e-5 vs -3.63e-4; prefactor itself looks garbled (Gamma(1-mu) printed as Gamma(1-mu)/(1-nu))",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M13067": {
+  "skip": "integrand decays like x^(beta-3/2) with beta<1/2 (needed for convergence); oracle NIntegrate does not converge at any admissible instantiation",
+  "status": "SKIP-NOCONV"
+ },
+ "M13074": {
+  "lhs": "Integrate[x^(2*n + 1)*Exp[-x^2/(4*a)]*BesselI[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*n + 1)*a^(n + 1)*n!*Exp[a]*LaguerreL[n, -a]",
+   "2^(2*n + 1)*a^(n + 1)*n!*Hypergeometric1F1[n + 1, 1, a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "exponent is -x^2/(4a), misparsed"
+ },
+ "M13080": {
+  "lhs": "Integrate[x^3*Exp[-x^2/(4*a)]*BesselI[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "8*a^2*(1 + a)*Exp[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "note": "exponent is -x^2/(4a)"
+ },
+ "M13114": {
+  "skip": "definition of an auxiliary function (\\equiv, no value)",
+  "status": "SKIP-DEFINITION"
+ },
+ "M13119": {
+  "lhs": "Integrate[BesselJ[n, a*t]*BesselJ[n, b*t]*Exp[-c*t], {t, 0, Infinity}]",
+  "rhs": [
+   "((-1)^n*Sqrt[4*a*b/((a + b)^2 + c^2)]/(Pi*Sqrt[a*b]))*(-1)^n*(Pi/2)*Sum[Pochhammer[1/2, \\[FormalJ]]/\\[FormalJ]!*Sqrt[4*a*b/((a + b)^2 + c^2)]^(2*\\[FormalJ])*Binomial[2*\\[FormalJ], \\[FormalJ] + n]/4^\\[FormalJ], {\\[FormalJ], n, Infinity}]",
+   "((-1)^n*Sqrt[4*a*b/((a + b)^2 + c^2)]/(Pi*Sqrt[a*b]))*NIntegrate[Cos[2*n*\\[FormalPsi]]/Sqrt[1 - Sqrt[4*a*b/((a + b)^2 + c^2)]^2*Sin[\\[FormalPsi]]^2], {\\[FormalPsi], 0, Pi/2}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "I(n,n;0) of the preceding definition (Eason); k^2=4ab/((a+b)^2+c^2) (Eason's modulus, consistent with the paper's I(0,0;0)=k F_0(k)/(2 sqrt(ab))); psi-integral given as its term-wise series (and as NIntegrate)"
+ },
+ "M13123": {
+  "lhs": "Integrate[BesselJ[n, a*t]*BesselJ[n, b*t]*Exp[-c*t]*t, {t, 0, Infinity}]",
+  "rhs": [
+   "((-1)^n*c*Sqrt[4*a*b/((a + b)^2 + c^2)]^3/(4*Pi*(a*b)^(3/2)))*(-1)^n*(Pi/2)*Sum[Pochhammer[3/2, \\[FormalJ]]/\\[FormalJ]!*Sqrt[4*a*b/((a + b)^2 + c^2)]^(2*\\[FormalJ])*Binomial[2*\\[FormalJ], \\[FormalJ] + n]/4^\\[FormalJ], {\\[FormalJ], n, Infinity}]",
+   "((-1)^n*c*Sqrt[4*a*b/((a + b)^2 + c^2)]^3/(4*Pi*(a*b)^(3/2)))*NIntegrate[Cos[2*n*\\[FormalPsi]]/(1 - Sqrt[4*a*b/((a + b)^2 + c^2)]^2*Sin[\\[FormalPsi]]^2)^(3/2), {\\[FormalPsi], 0, Pi/2}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "note": "I(n,n;1) of the preceding definition (Eason); k^2=4ab/((a+b)^2+c^2); psi-integral as term-wise series (and NIntegrate)"
+ },
+ "M13162": {
+  "lhs": "Integrate[Exp[-lambda]*lambda^(k - 2)*BesselK[m, lambda]*BesselK[n, z/lambda], {lambda, 0, Infinity}]",
+  "rhs": [
+   "((Gamma[1/2]*Gamma[k + m + #]*Gamma[k - m + #]/(Gamma[k + # + 1/2]*2^(k + 1))*Gamma[#]*z^(-#)*HypergeometricPFQ[{3/4 - k/2 - #/2, 1/4 - k/2 - #/2}, {1 - #, 1 - k/2 - m/2 - #/2, 1 - k/2 + m/2 - #/2, 1/2 - k/2 - m/2 - #/2, 1/2 - k/2 + m/2 - #/2}, z^2/4])&[n] + (Gamma[1/2]*Gamma[k + m + #]*Gamma[k - m + #]/(Gamma[k + # + 1/2]*2^(k + 1))*Gamma[#]*z^(-#)*HypergeometricPFQ[{3/4 - k/2 - #/2, 1/4 - k/2 - #/2}, {1 - #, 1 - k/2 - m/2 - #/2, 1 - k/2 + m/2 - #/2, 1/2 - k/2 - m/2 - #/2, 1/2 - k/2 + m/2 - #/2}, z^2/4])&[-n] + (Gamma[-k/2 - #/2 + n/2]*Gamma[-k/2 - #/2 - n/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k)*HypergeometricPFQ[{3/4 + #/2, 1/4 + #/2}, {1 + k/2 + #/2 - n/2, 1 + k/2 + #/2 + n/2, 1/2, 1/2 + #, 1 + #}, z^2/4])&[m] + (Gamma[-k/2 - #/2 + n/2]*Gamma[-k/2 - #/2 - n/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k)*HypergeometricPFQ[{3/4 + #/2, 1/4 + #/2}, {1 + k/2 + #/2 - n/2, 1 + k/2 + #/2 + n/2, 1/2, 1/2 + #, 1 + #}, z^2/4])&[-m] - (Gamma[-k/2 - #/2 - n/2 - 1/2]*Gamma[-k/2 - #/2 + n/2 - 1/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k + 1)*HypergeometricPFQ[{5/4 + #/2, 3/4 + #/2}, {3/2 + k/2 + #/2 - n/2, 3/2 + k/2 + #/2 + n/2, 3/2, 1 + #, 3/2 + #}, z^2/4])&[m] - (Gamma[-k/2 - #/2 - n/2 - 1/2]*Gamma[-k/2 - #/2 + n/2 - 1/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k + 1)*HypergeometricPFQ[{5/4 + #/2, 3/4 + #/2}, {3/2 + k/2 + #/2 - n/2, 3/2 + k/2 + #/2 + n/2, 3/2, 1 + #, 3/2 + #}, z^2/4])&[-m]) /. k -> k - 1",
+   "((Gamma[1/2]*Gamma[k + m + #]*Gamma[k - m + #]/(Gamma[k + # + 1/2]*2^(k + 1))*Gamma[#]*z^(-#)*HypergeometricPFQ[{3/4 - k/2 - #/2, 1/4 - k/2 - #/2}, {1 - #, 1 - k/2 - m/2 - #/2, 1 - k/2 + m/2 - #/2, 1/2 - k/2 - m/2 - #/2, 1/2 - k/2 + m/2 - #/2}, z^2/4])&[n] + (Gamma[1/2]*Gamma[k + m + #]*Gamma[k - m + #]/(Gamma[k + # + 1/2]*2^(k + 1))*Gamma[#]*z^(-#)*HypergeometricPFQ[{3/4 - k/2 - #/2, 1/4 - k/2 - #/2}, {1 - #, 1 - k/2 - m/2 - #/2, 1 - k/2 + m/2 - #/2, 1/2 - k/2 - m/2 - #/2, 1/2 - k/2 + m/2 - #/2}, z^2/4])&[-n] + (Gamma[-k/2 - #/2 + n/2]*Gamma[-k/2 - #/2 - n/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k)*HypergeometricPFQ[{3/4 + #/2, 1/4 + #/2}, {1 + k/2 + #/2 - n/2, 1 + k/2 + #/2 + n/2, 1/2, 1/2 + #, 1 + #}, z^2/4])&[m] + (Gamma[-k/2 - #/2 + n/2]*Gamma[-k/2 - #/2 - n/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k)*HypergeometricPFQ[{3/4 + #/2, 1/4 + #/2}, {1 + k/2 + #/2 - n/2, 1 + k/2 + #/2 + n/2, 1/2, 1/2 + #, 1 + #}, z^2/4])&[-m] - (Gamma[-k/2 - #/2 - n/2 - 1/2]*Gamma[-k/2 - #/2 + n/2 - 1/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k + 1)*HypergeometricPFQ[{5/4 + #/2, 3/4 + #/2}, {3/2 + k/2 + #/2 - n/2, 3/2 + k/2 + #/2 + n/2, 3/2, 1 + #, 3/2 + #}, z^2/4])&[m] - (Gamma[-k/2 - #/2 - n/2 - 1/2]*Gamma[-k/2 - #/2 + n/2 - 1/2]*Gamma[-#]*2^(-# - 3)*(z/2)^(# + k + 1)*HypergeometricPFQ[{5/4 + #/2, 3/4 + #/2}, {3/2 + k/2 + #/2 - n/2, 3/2 + k/2 + #/2 + n/2, 3/2, 1 + #, 3/2 + #}, z^2/4])&[-m])"
+  ],
+  "conds": [
+   "Not[Element[m, Integers]]",
+   "Not[Element[n, Integers]]",
+   "z > 0",
+   "Not[Element[k, Integers]]"
+  ],
+  "note": "sum_{n,-n} = term plus same term with n->-n; F = 2F5; typo: the printed value corresponds to lambda^(k-1) (leading small-z term check), so the value is taken with k->k-1"
+ },
+ "M13197": {
+  "skip": "MacRobert E-function with Delta(n;alpha) parameter blocks of symbolic length n",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M13216": {
+  "skip": "MacRobert E-function with Delta(n;alpha) parameter blocks of symbolic length n",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M13248": {
+  "skip": "product of m-1 integrals with a coupled kernel: a multiple integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M13269": {
+  "skip": "product of m-1 integrals with a coupled kernel: a multiple integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M13292": {
+  "skip": "product of m-1 integrals with a coupled kernel: a multiple integral",
+  "status": "SKIP-MULTIPLE"
+ },
+ "M13312": {
+  "lhs": "Integrate[Cos[c*x]*x^(nu - mu - 3)*BesselJ[mu, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Gamma[nu]*a^mu*b^(-nu)/(2^(mu - nu + 3)*Gamma[mu + 1]))*(b^2/(nu - 1) - a^2/(mu + 1) - 2*c^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0",
+   "b > a + c",
+   "nu > 1",
+   "mu > -1",
+   "nu < mu + 4"
+  ],
+  "note": "condition b>a+c (Fabrikant) added; checked numerically"
+ },
+ "M13322": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13326": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13330": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13334": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13338": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13342": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13345": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13348": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13352": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13356": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13360": {
+  "skip": "paper gives no value ('=\\ldots'; only cites Okui for elliptic-integral representations)",
+  "status": "SKIP-OTHER"
+ },
+ "M13369": {
+  "skip": "value correct after typo fix (I/K arguments b(sqrt(p^2+a^2)-+p)/2, paper has -+a; confirmed vs NIntegrate WP30 at 3 points), but the oracle's NIntegrate (AccuracyGoal->12) returns 0. for this integrand at every instantiation",
+  "status": "SKIP-NOCONV"
+ },
+ "M13383": {
+  "lhs": "Integrate[BesselJ[2*n, a*Sqrt[t^2 + 2*b*t]]*Exp[-p*t], {t, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*(Exp[b*(p - Sqrt[p^2 + a^2])]/Sqrt[p^2 + a^2] + 2*n*Sum[((n - 1 + \\[FormalL])!/(\\[FormalL]!*(n - \\[FormalL])!))*(1/(b^(2*\\[FormalL] - 1)*a^(2*\\[FormalL])))*Sum[((2*\\[FormalL] - 2 - \\[FormalM])!/(\\[FormalM]!*(\\[FormalL] - 1 - \\[FormalM])!))*(2*b*Sqrt[p^2 + a^2])^\\[FormalM]*(Exp[b*(p - Sqrt[p^2 + a^2])] - Sum[(b*(p - Sqrt[p^2 + a^2]))^\\[FormalN]/\\[FormalN]!, {\\[FormalN], 0, 2*\\[FormalL] - 2 - \\[FormalM]}]), {\\[FormalM], 0, \\[FormalL] - 1}], {\\[FormalL], 1, n}])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "sum indices lambda,mu,nu as formal symbols; NB oracle's NIntegrate (AccuracyGoal 12) returns 0 for this integrand, so the oracle check is weak; value independently confirmed against NIntegrate[...,WorkingPrecision->30] at 4 instantiations (agree to 1e-12)"
+ },
+ "M13412": {
+  "skip": "value disagrees with NIntegrate, no consistent typo found: alpha=3,beta=3/8,k=3/8,l=4,p=5/8: NIntegrate -5.683e-4 vs -4.884e-4; k=1/5,l=6,p=3/8: 2.517e-4 vs 2.220e-4",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M13445": {
+  "skip": "value disagrees with NIntegrate (with and without Condon-Shortley phase): k=4,l=1,m=1,n=4,p=7/4: NIntegrate -251.61 vs formula -0.983",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M13497": {
+  "lhs": "Integrate[LegendreP[l, m, x]*LegendreP[k, m, x], {x, -1, 1}]",
+  "rhs": [
+   "2/(2*l + 1)*(l + m)!/(l - m)!*KroneckerDelta[k, l]"
+  ],
+  "conds": [
+   "l >= m >= 0",
+   "k >= m"
+  ],
+  "note": "missing dx; delta_kl as KroneckerDelta"
+ },
+ "M13504": {
+  "lhs": "Integrate[LegendreP[l, m, x]*LegendreP[k, m, x]*(1 - x^2), {x, -1, 1}]",
+  "rhs": [
+   "4*(-1)^((k - l)/2)*(l + m)!*(l*(l + 1) + (m - 1)*(m + 1) + (1/2)*(k - l)*(m + 1)*(k + l + 1))/((l - m)!*((k - l)/2 + 1)!*Gamma[(l - k)/2 + 2]*(k + l - 1)*(k + l + 1)*(k + l + 3))"
+  ],
+  "conds": [
+   "k >= l >= m >= 0",
+   "Element[(k - l)/2, Integers]"
+  ],
+  "note": "typo: paper value is too small by a factor 4 (exact integrals for k,l,m<=4 are 4x the printed formula); corrected (oracle-verified); k-l even (odd case vanishes by parity)"
+ },
+ "M13520": {
+  "lhs": "Integrate[LegendreP[n, Cos[z - t]]*LegendreP[n, -m, Cos[t]]/Sin[t], {t, 0, z}]",
+  "rhs": [
+   "LegendreP[n, -m, Cos[z]]/m"
+  ],
+  "conds": [
+   "m > 0",
+   "0 < z < Pi"
+  ],
+  "note": "P_n[cos(z-t)] misparsed; missing paren in value"
+ },
+ "M13523": {
+  "lhs": "Integrate[Sin[t]^m*LegendreP[n - m - 1, Cos[z - t]]*LegendreP[n, -m, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Gamma[m + 1/2]/(2^(1/2)*Gamma[m + 1])*Sin[z]^(m + 1/2)*LegendreP[n - 1/2, -m - 1/2, Cos[z]]"
+  ],
+  "conds": [
+   "m > -1/2",
+   "0 < z < Pi"
+  ],
+  "note": "complex subscripts"
+ },
+ "M13526": {
+  "lhs": "Integrate[Sin[t]^(m + 1)*LegendreP[n - m - 2, Cos[z - t]]*LegendreP[n, -m, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Gamma[m + 3/2]/(2^(1/2)*Gamma[m + 2])*Sin[z]^(m + 3/2)*LegendreP[n - 1/2, -m - 1/2, Cos[z]]"
+  ],
+  "conds": [
+   "m > -1",
+   "0 < z < Pi"
+  ],
+  "note": "complex subscripts"
+ },
+ "M13529": {
+  "lhs": "Integrate[Sin[t]^(-1 - k)*Sin[z - t]^k*LegendreP[n, -m, Cos[t]]*LegendreP[n, -k, Cos[z - t]], {t, 0, z}]",
+  "rhs": [
+   "2^k*Gamma[m - k]*Gamma[k + 1/2]/(Sqrt[Pi]*Gamma[k + m + 1])*Sin[z]^k*LegendreP[n, -m, Cos[z]]"
+  ],
+  "conds": [
+   "m > k > -1/2",
+   "0 < z < Pi"
+  ],
+  "note": "missing dt"
+ },
+ "M13533": {
+  "lhs": "Integrate[Sin[t]^m*Sin[z - t]^(-m)*LegendreP[n, -m, Cos[t]]*LegendreP[n - 1, m, Cos[z - t]], {t, 0, z}]",
+  "rhs": [
+   "Sin[(m + n)*z]/((m + n)*Cos[m*Pi])"
+  ],
+  "conds": [
+   "-1/2 < m < 1/2",
+   "0 < z < Pi"
+  ],
+  "note": "missing dt; complex subscript"
+ },
+ "M13537": {
+  "lhs": "Integrate[LegendreP[n + 1, -m, Cos[t]]*Sin[n*(z - t)], {t, 0, z}]",
+  "rhs": [
+   "n*2^(3/2)*Sin[z]^(1/2)*Sum[(-1)^\\[FormalR]*Pochhammer[m + n + 2, 2*\\[FormalR]]*Pochhammer[3/2, \\[FormalR]]*Gamma[m + \\[FormalR] + 3/2]/(\\[FormalR]!*Gamma[m + \\[FormalR] + 1])*(m + 2*\\[FormalR] + 3/2)/((m + 2*\\[FormalR] + 1)*(m + 2*\\[FormalR] + 2))*LegendreP[n - 1/2, -(m + 3/2 + 2*\\[FormalR]), Cos[z]], {\\[FormalR], 0, 60}]"
+  ],
+  "conds": [
+   "m > -1",
+   "0 < z < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "Pochhammer (m+n+2)_{2r}; typo: value lacks an overall factor n (checked n=1,2,4 against NIntegrate: ratio exactly n); series converges for small z only (diverges at z=7/4), conds 0<z<1; truncated at r<=60 (geometric convergence); sum index formal"
+ },
+ "M13546": {
+  "lhs": "Integrate[Sin[t]^m*LegendreP[n - m - 1, Cos[z - t]]*LegendreP[n, -m, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Gamma[m + 1/2]/(Sqrt[2]*Gamma[m + 1])*Sin[z]^(m + 1/2)*LegendreP[n - 1/2, -m - 1/2, Cos[z]]"
+  ],
+  "conds": [
+   "m > -1/2",
+   "0 < z < Pi"
+  ],
+  "note": "complex subscripts"
+ },
+ "M13551": {
+  "lhs": "Integrate[Sin[t]^(m + 1)*LegendreP[n - m - 2, Cos[z - t]]*LegendreP[n, -m, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Gamma[m + 3/2]/(2^(1/2)*Gamma[m + 2])*Sin[z]^(m + 3/2)*LegendreP[n - 1/2, -m - 1/2, Cos[z]]"
+  ],
+  "conds": [
+   "m > -1",
+   "0 < z < Pi"
+  ],
+  "note": "typo: paper has Gamma(m+1/2) in the numerator (cf. the identical entry with Gamma(m+3/2)); corrected to Gamma(m+3/2) (oracle-verified)"
+ },
+ "M13556": {
+  "lhs": "Integrate[LegendreP[n, Cos[z - t]]*LegendreP[n - 1, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Sin[n*z]/n"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "P_n[cos(z-t)] misparsed"
+ },
+ "M13561": {
+  "lhs": "Integrate[LegendreP[n - 2, Cos[z - t]]*Sin[n*t], {t, 0, z}]",
+  "rhs": [
+   "n*Sin[z]*LegendreP[n - 1, -1, Cos[z]]"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "complex subscript"
+ },
+ "M13566": {
+  "lhs": "Integrate[Sin[t]*LegendreP[n - 2, Cos[z - t]]*LegendreP[n, Cos[t]], {t, 0, z}]",
+  "rhs": [
+   "Sin[z]*Sin[n*z]/(2*n)"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "complex subscript"
+ },
+ "M13571": {
+  "lhs": "Integrate[Sin[t]*LegendreP[n - 3, Cos[z - t]]*Sin[n*t], {t, 0, z}]",
+  "rhs": [
+   "(2/3)*n*Sin[z]^2*LegendreP[n - 1, -1, Cos[z]]"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "complex subscript"
+ },
+ "M13576": {
+  "lhs": "Integrate[LegendreP[n - 2, Cos[z - t]]*Cos[n*t], {t, 0, z}]",
+  "rhs": [
+   "Sin[z]*LegendreP[n - 1, Cos[z]]"
+  ],
+  "conds": [
+   "0 < z < Pi"
+  ],
+  "note": "typo: paper has \\sin^z, read as sin z"
+ },
+ "M13582": {
+  "lhs": "Integrate[Sin[theta]^(m + 1)*Exp[I*r*Cos[theta]]*LegendreP[n, m, Cos[theta]], {theta, 0, Pi}]",
+  "rhs": [
+   "2*I^(n + m)*(n + m)!/(n - m)!*SphericalBesselJ[n, r]/r^m",
+   "2*(-1)^m*I^(n + m)*(n + m)!/(n - m)!*SphericalBesselJ[n, r]/r^m"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= m",
+   "r > 0"
+  ],
+  "note": "upper sign of +-; |m| -> m>=0; R renamed r"
+ },
+ "M13602": {
+  "lhs": "Integrate[Exp[-c^2*x^2]*HermiteH[2*m, a*x]*HermiteH[2*k, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + k)*2^(2*m + 2*k - 1)*Gamma[m + 1/2]*Gamma[k + 1/2]/(Sqrt[Pi]*c^(2*m + 2*k + 1))*(c^2 - a^2)^m*(c^2 - b^2)^k*Hypergeometric2F1[-m, -k, 1/2, a^2*b^2/((c^2 - a^2)*(c^2 - b^2))]"
+  ],
+  "conds": [
+   "c^2 - a^2 - b^2 > 0",
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "missing paren; typo: paper has pi in the denominator, corrected to sqrt(pi) (oracle-verified: ratio was exactly sqrt(pi))"
+ },
+ "M13612": {
+  "lhs": "Integrate[Exp[-c^2*x^2]*HermiteH[2*m + 1, a*x]*HermiteH[2*k + 1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + k)*2^(2*m + 2*k + 1)*Gamma[m + 3/2]*Gamma[k + 3/2]/Gamma[3/2]*a*b*(c^2 - a^2)^m*(c^2 - b^2)^k/c^(2*m + 2*k + 3)*Hypergeometric2F1[-m, -k, 3/2, a^2*b^2/((c^2 - a^2)*(c^2 - b^2))]"
+  ],
+  "conds": [
+   "c^2 - a^2 - b^2 > 0",
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "note": "missing paren"
+ },
+ "M13645": {
+  "lhs": "Integrate[x^(nu + 1)*Exp[-alpha*x^2]*LaguerreL[m, nu - sigma, alpha*x^2]*LaguerreL[n, sigma, alpha*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "((-1)^(m + n)/(2*alpha))*(y/(2*alpha))^nu*Exp[-y^2/(4*alpha)]*LaguerreL[m, sigma - m + n, y^2/(4*alpha)]*LaguerreL[n, nu - sigma + m - n, y^2/(4*alpha)]"
+  ],
+  "conds": [
+   "y > 0",
+   "alpha > 0",
+   "nu > -1"
+  ],
+  "note": "Laguerre L_m^a(x) misparsed"
+ },
+ "M13656": {
+  "lhs": "Integrate[x^((alpha + beta)/2)*Exp[-x]*LaguerreL[m, alpha, x]*LaguerreL[n, beta, x]*BesselJ[alpha + beta, 2*Sqrt[a*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Exp[-a]*(-1)^(m + n)*a^((alpha + beta)/2)*LaguerreL[m, beta - m + n, a]*LaguerreL[n, alpha + m - n, a]"
+  ],
+  "conds": [
+   "alpha + beta > -1",
+   "a > 0"
+  ],
+  "note": "Laguerre misparsed; typo: paper omits the factor e^{-a}, corrected (oracle-verified)"
+ },
+ "M13665": {
+  "lhs": "Integrate[LegendreQ[1/2, 0, 3, (1 + r^2 + x^2)/(2*r*Sqrt[1 + x^2])]/(1 + x^2)^(3/4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(1 - Sqrt[1 - r^2])/Sqrt[r]"
+  ],
+  "conds": [
+   "0 < r < 1"
+  ],
+  "note": "argument>1: Legendre Q of type 3; typo: paper value pi/sqrt(2)(1-sqrt(1-r^2)) is too small by sqrt(2/r); corrected to pi(1-sqrt(1-r^2))/sqrt(r) (oracle-verified)"
+ },
+ "M13680": {
+  "lhs": "(1/Gamma[2*lambda + 2*nu])*Integrate[Exp[-p*t]*t^(2*lambda + 2*nu - 1)*HypergeometricPFQ[{nu}, {lambda + nu, lambda + nu + 1/2}, -(1/4)*a^2*t^2], {t, 0, Infinity}]",
+  "rhs": [
+   "1/p^(2*lambda)/(p^2 + a^2)^nu"
+  ],
+  "conds": [
+   "lambda + nu > 0",
+   "p > 0",
+   "a > 0"
+  ],
+  "note": "trailing condition text removed"
+ },
+ "M13694": {
+  "lhs": "(1/Gamma[2*nu])*Integrate[Exp[-p*t]*t^(2*nu - 1)*Hypergeometric0F1[nu + 1/2, -(1/4)*a^2*t^2], {t, 0, Infinity}]",
+  "rhs": [
+   "1/(p^2 + a^2)^nu"
+  ],
+  "conds": [
+   "nu > 0",
+   "p > 0",
+   "a > 0"
+  ],
+  "note": "0F1 with empty upper list; first of the chained equalities"
+ },
+ "M13716": {
+  "skip": "value disagrees with NIntegrate, no constant ratio: mu=7/3,nu=3/8,rho=1/5,sigma=3: -0.3468 vs -0.2937; mu=5/6: -0.0480 vs -0.1049 (side conditions not stated in paper)",
+  "status": "SKIP-PAPER-ERROR"
+ },
+ "M13727": {
+  "skip": "companion of M13716 (same unstated conditions, which fails); oracle times out on the oscillatory J^2 J 3F2 integrand",
+  "status": "SKIP-NOCONV"
+ },
+ "M13764": {
+  "lhs": "Integrate[Exp[-x]*LaguerreL[j, x]*LaguerreL[k, x]*LaguerreL[l, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-2)^(j + k + l)*Sum[2^(-2*\\[FormalN])*\\[FormalN]!/((\\[FormalN] - j)!*(\\[FormalN] - k)!*(\\[FormalN] - l)!*(j + k + l - 2*\\[FormalN])!), {\\[FormalN], Max[j, k, l], Floor[(j + k + l)/2]}]"
+  ],
+  "conds": [
+   "Element[j, Integers] && j >= 0",
+   "Element[k, Integers] && k >= 0",
+   "Element[l, Integers] && l >= 0"
+  ],
+  "note": "C_{r,s,t}: r,s,t renamed j,k,l (integer); sum over max(r,s,t)<=n<=(r+s+t)/2, where the factorials are finite"
+ },
+ "M13818": {
+  "skip": "'If ... then' statement: the equations define the auxiliary r(x), theta(x) used afterwards",
+  "status": "SKIP-DEFINITION"
+ },
+ "M14440": {
+  "lhs": "(p^mu*q^nu/Pi)*Integrate[Exp[I*(mu - nu)*theta]*(Sqrt[2*Cos[theta]]/Sqrt[p^2*Exp[I*theta] + q^2*Exp[-I*theta]])^(mu + nu)*BesselJ[mu + nu, z*Sqrt[2*Cos[theta]]*Sqrt[p^2*Exp[I*theta] + q^2*Exp[-I*theta]]], {theta, -Pi/2, Pi/2}]",
+  "rhs": [
+   "BesselJ[mu, p*z]*BesselJ[nu, q*z]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "z > 0",
+   "mu > -1/2",
+   "nu > -1/2"
+  ],
+  "note": "X,x renamed p,q; lambda_1=sqrt(e^{i theta}+e^{-i theta})=sqrt(2cos theta), lambda_2=(p^2 e^{i theta}+q^2 e^{-i theta})^{1/2} substituted"
+ },
+ "M14901": {
+  "skip": "generic function f(t) (moment inversion)",
+  "status": "SKIP-GENERIC-FUNCTION"
+ },
+ "M15475": {
+  "lhs": "Integrate[z/(a + b*z^3), z]",
+  "rhs": [
+   "-(1/(3*b*(a/b)^(1/3)))*((1/2)*Log[(z + (a/b)^(1/3))^2/(z^2 - (a/b)^(1/3)*z + (a/b)^(1/3)^2)] - Sqrt[3]*ArcTan[(2*z - (a/b)^(1/3))/(Sqrt[3]*(a/b)^(1/3))])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "note": "alpha=(a/b)^(1/3) substituted"
+ },
+ "M18049": {
+  "skip": "generalized pFq with vector parameter lists (a),(b) / a_1..a_p of symbolic length",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M18057": {
+  "lhs": "(Gamma[c]/(Gamma[b]*Gamma[c - b]))*Integrate[t^(b - 1)*(1 - t)^(c - b - 1)*(1 - x*t^m)^(-a), {t, 0, 1}]",
+  "rhs": [
+   "HypergeometricPFQ[Table[If[\\[FormalI] == 0, a, (b + \\[FormalI] - 1)/m], {\\[FormalI], 0, m}], Table[(c + \\[FormalI])/m, {\\[FormalI], 0, m - 1}], x]",
+   "(Gamma[c]/(Gamma[b]*Gamma[c - b]))*Sum[Binomial[c - b - 1, \\[FormalK]]*((-1)^\\[FormalK]/(b + \\[FormalK]))*Hypergeometric2F1[a, (b + \\[FormalK])/m, 1 + (b + \\[FormalK])/m, x], {\\[FormalK], 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "c > b > 0",
+   "0 < x < 1"
+  ],
+  "note": "q renamed m (integer); ellipsis lists via Table; sum index formal"
+ },
+ "M18094": {
+  "lhs": "k*Integrate[x^j*(1 - x)^(k - 1)/(1 - x^k), {x, 0, 1}]",
+  "rhs": [
+   "1/Binomial[k + j, k]*HypergeometricPFQ[Table[If[\\[FormalI] <= k, (\\[FormalI] + j)/k, 1], {\\[FormalI], 1, k + 1}], Table[(\\[FormalI] + j + k)/k, {\\[FormalI], 1, k}], 1]"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 2",
+   "Element[j, Integers] && j >= 0"
+  ],
+  "note": "ellipsis parameter lists written with Table"
+ },
+ "M18104": {
+  "skip": "generalized pFq with vector parameter lists (a),(b) / a_1..a_p of symbolic length",
+  "status": "SKIP-SYMBOLIC-ORDER"
+ },
+ "M19042": {
+  "lhs": "(1/Gamma[s])*Integrate[x^(s - 1)/(Exp[x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Zeta[s]"
+  ],
+  "conds": [
+   "s > 1"
+  ],
+  "note": "sigma = Re s"
+ },
+ "M19152": {
+  "lhs": "(v^z/Gamma[z])*Integrate[x^(z - 1)*Exp[-q*v*x]/(1 - Exp[-v*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "HurwitzZeta[z, q]"
+  ],
+  "conds": [
+   "z > 1",
+   "q > 0",
+   "v > 0"
+  ],
+  "note": "typo: paper has v^x prefactor, corrected to v^z; exp misparsed"
+ },
+ "M19473": {
+  "skip": "value correct (NIntegrate with default goals 0.693538 vs value 0.693539 at z=3/8,w=1/5) but q^{-z-w} endpoint singularity makes the oracle's NIntegrate emit convergence messages at every admissible point",
+  "status": "SKIP-NOCONV"
+ },
+ "M19482": {
+  "lhs": "Integrate[q^n*HurwitzZeta[z, q], {q, 0, 1}]",
+  "rhs": [
+   "-n!*Sum[Zeta[z - \\[FormalJ]]/(Pochhammer[z - \\[FormalJ], \\[FormalJ]]*(n - \\[FormalJ] + 1)!), {\\[FormalJ], 1, n}]"
+  ],
+  "conds": [
+   "z < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "note": "Pochhammer (z-j)_j; z<1"
+ },
+ "M19620": {
+  "skip": "defines Coppo's alpha_k(s); no independent value",
+  "status": "SKIP-DEFINITION"
+ },
+ "M19624": {
+  "skip": "defines Coppo's poly-beta function beta_k(s) (depends on k), not Dirichlet's beta(s); oracle mismatch against DirichletBeta confirms",
+  "status": "SKIP-DEFINITION"
+ },
+ "M19658": {
+  "skip": "value correct (NIntegrate with split point x=1/2: -3.28986813370 vs -pi^2/3) but the interior log^2 singularity at x=1/2 makes the oracle's NIntegrate on [0,1] emit slwcon",
+  "status": "SKIP-NOCONV"
+ },
+ "M19663": {
+  "skip": "Li2(sec(pi x)) has sec>1 on (0,1/2), on the branch cut; Mathematica's branch gives -i(pi/2)log2 (paper's +i uses the other side), and the interior singularity at 1/2 defeats the oracle's NIntegrate anyway",
+  "status": "SKIP-OTHER"
+ }
+}

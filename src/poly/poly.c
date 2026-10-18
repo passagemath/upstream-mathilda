@@ -567,8 +567,24 @@ static bool is_constant_symbol(Expr* e) {
             s == SYM_Infinity || s == SYM_ComplexInfinity);
 }
 
+/* A numeric literal.  Bigints (and MPFR reals, and Rational/Complex built from
+ * them) count: is_rational/is_complex only accept int64 parts, and a bigint
+ * coefficient that fell through to collect_variables used to be enrolled as a
+ * polynomial VARIABLE -- FactorSquareFree[3^45 (1 + t)^2] then saw a
+ * "multivariate" polynomial, whose cheap squarefree probe substituted integers
+ * for the coefficients and declared it squarefree (Mathar M5695: a resultant
+ * K (16 + 625 t^2)^2 with K > 2^63 lost its square, and Integrate returned 0). */
 static bool is_number(Expr* e) {
-    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        (e->data.function.head->data.symbol.name == SYM_Rational ||
+         e->data.function.head->data.symbol.name == SYM_Complex) &&
+        e->data.function.arg_count == 2) {
+        return is_number(e->data.function.args[0]) && is_number(e->data.function.args[1]);
+    }
     if (is_rational(e, NULL, NULL)) return true;
     if (is_complex(e, NULL, NULL)) return true;
     return is_constant_symbol(e);

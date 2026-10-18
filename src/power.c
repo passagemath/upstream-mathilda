@@ -631,6 +631,28 @@ Expr* builtin_power(Expr* res) {
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
 
+    /* E^(I q Pi) with q an integer or half-integer: +-1 or +-I, as Exp[] and
+     * Mathematica give (E^(I Pi) = -1, E^(-I Pi/2) = -I).  Exp[] already did
+     * this, but the identical Power[E, ..] -- the form every antiderivative
+     * written with E^(..) produces, and a polylogarithm ladder evaluated at
+     * x = Pi/2 -- stayed unevaluated.  Other rational q stay symbolic, matching
+     * Mathematica (E^(I Pi/4) is not rewritten). */
+    if (base->type == EXPR_SYMBOL && base->data.symbol.name == SYM_E &&
+        exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
+        exp->data.function.head->data.symbol.name == SYM_Times &&
+        exp->data.function.arg_count == 2) {
+        Expr *a0 = exp->data.function.args[0], *a1 = exp->data.function.args[1];
+        Expr* c = (a1->type == EXPR_SYMBOL && a1->data.symbol.name == SYM_Pi) ? a0 :
+                  (a0->type == EXPR_SYMBOL && a0->data.symbol.name == SYM_Pi) ? a1 : NULL;
+        Expr *re, *im;
+        int64_t qn, qd;
+        if (c && is_complex(c, &re, &im) && re->type == EXPR_INTEGER && re->data.integer == 0 &&
+            (im->type == EXPR_INTEGER || (is_rational(im, &qn, &qd) && qd == 2))) {
+            Expr* pow_args[2] = { expr_new_integer(-1), expr_copy(im) };
+            return expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
+        }
+    }
+
     /* AlgebraicNumber^integer: number-field power (negative exponents invert in
      * the field). Fractional exponents (Sqrt etc.) are left symbolic, matching
      * WL — those do not auto-reduce over an AlgebraicNumber. */

@@ -1638,7 +1638,15 @@ static double pick_representative(double lo, double hi, size_t idx) {
  * classification would be a guess.  A one-sided or interval constraint pins the
  * relevant sign on a connected region, which a single interior point reads off
  * correctly. */
+static Expr* build_instantiation_v(Expr* f, Expr* x, Expr* assumptions, size_t variant);
 static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
+    return build_instantiation_v(f, x, assumptions, 0);
+}
+
+/* `variant` > 0 picks a different generic point of the same per-parameter
+ * intervals (see res_verify_regions); the coupled FindInstance mode has only
+ * one point and returns NULL for any variant > 0. */
+static Expr* build_instantiation_v(Expr* f, Expr* x, Expr* assumptions, size_t variant) {
     ParamBound pb[16];
     size_t np = collect_params(f, x, pb, 16, 0);
     if (np == 0) return NULL;
@@ -1660,7 +1668,7 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
          * though b, c are only coupled -- while g_coupled marks the mode for the
          * trig family's degenerate-point retry.  g_all_pos stays off (no global
          * positivity proof), so the radical-cleaning PowerExpand is not licensed. */
-        if (!assumptions) return NULL;
+        if (!assumptions || variant > 0) return NULL;
         Expr** vs = malloc(np * sizeof(*vs));
         for (size_t i = 0; i < np; i++) vs[i] = mk_sym(pb[i].sym);
         Expr* vars = expr_new_function(mk_sym("List"), vs, np);
@@ -1706,7 +1714,7 @@ static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
 
     Expr** rules = malloc(np * sizeof(*rules));
     for (size_t i = 0; i < np; i++) {
-        double v = pick_representative(pb[i].lo, pb[i].hi, i);
+        double v = pick_representative(pb[i].lo, pb[i].hi, i + 3 * variant);
         rules[i] = mk_fn2("Rule", mk_sym(pb[i].sym), expr_new_real(v));
     }
     Expr* lst = expr_new_function(mk_sym("List"), rules, np);
@@ -3720,28 +3728,9 @@ static Expr* residue_family_logquad(Expr* f, Expr* x, Expr* a, Expr* b) {
     return out;
 }
 
-Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
-                            Expr* assumptions, bool* diverges,
-                            bool principal_value) {
-    if (diverges) *diverges = false;
-    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
-
-    /* PrincipalValue context for the keyhole-log family (restored on exit so a
-     * nested frame cannot leak its setting back to the caller). */
-    bool pv_prev = g_pv;
-    g_pv = principal_value;
-
-    /* Enter symbolic-parameter mode when assumptions are supplied and we are the
-     * outermost call (g_inst not already set by an enclosing call -- the even
-     * half-line family recurses through here).  Only the frame that built the
-     * instantiation frees it. */
-    bool built_here = false;
-    if (assumptions && !g_inst) {
-        g_inst = build_instantiation(f, x, assumptions);
-        built_here = (g_inst != NULL);
-        if (built_here) g_assume = expr_copy(assumptions);
-    }
-
+/* The family dispatch for one interval shape (the body of integrate_residue_try,
+ * factored out so res_verify_regions can re-run it at another instantiation). */
+static Expr* residue_dispatch(Expr* f, Expr* x, Expr* a, Expr* b, bool* diverges) {
     Expr* value = NULL;
     double vlc; int vlo;
     if (is_vertical_line(a, b, &vlc, &vlo)) {
@@ -3785,6 +3774,80 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (!value) value = residue_family_sector(f, x, a, b);
         if (!value) value = residue_family_mellin_power(f, x, a, b);
         if (!value) value = residue_family_beta(f, x, a, b);
+    }
+
+    return value;
+}
+
+/* Symbolic-parameter soundness check.  The families classify each pole at ONE
+ * representative point of the assumed region and keep the matching symbolic
+ * residues.  That is only valid while every symbolic root expression keeps
+ * naming the same physical root, and a radical root expression does not: for
+ * 1/(1 + 2 a x^2 + b x^4) the roots Sqrt[(-a +- Sqrt[a^2 - b])/b] trade places
+ * across a^2 = b, a curve inside a > 0, b > 0.  So the poles classified at
+ * (a, b) = (1.32, 2.74) gave a closed form that is wrong wherever a^2 > b
+ * (Mathar M6968: 2.36 instead of 0.924).  Re-derive the value with the poles
+ * classified at a few other generic points of the same region and require the
+ * closed form to agree there; a disagreement means the classification does not
+ * extend over the region and the value is withdrawn.  Each comparison is the
+ * residue theorem evaluated twice -- still no numeric quadrature.  A point at
+ * which no family closes proves nothing either way and is skipped. */
+static bool res_verify_regions(Expr* value, Expr* f, Expr* x, Expr* a, Expr* b,
+                               Expr* assumptions) {
+    if (!value || g_coupled || !g_inst) return true;
+    bool ok = true;
+    Expr* saved = g_inst;
+    for (size_t variant = 1; variant <= 3 && ok; variant++) {
+        Expr* alt = build_instantiation_v(f, x, assumptions, variant);
+        if (!alt) continue;
+        g_inst = alt;
+        bool d2 = false;
+        Expr* v2 = residue_dispatch(f, x, a, b, &d2);
+        if (v2) {
+            Expr* n1 = apply_inst(value);
+            Expr* n2 = apply_inst(v2);
+            double r1, i1, r2, i2;
+            if (n1 && n2 && res_reim(n1, &r1, &i1) && res_reim(n2, &r2, &i2)) {
+                double scale = 1.0 + fabs(r2) + fabs(i2);
+                if (fabs(r1 - r2) > 1e-7 * scale || fabs(i1 - i2) > 1e-7 * scale) ok = false;
+            }
+            if (n1) expr_free(n1);
+            if (n2) expr_free(n2);
+            expr_free(v2);
+        }
+        g_inst = saved;
+        expr_free(alt);
+    }
+    g_inst = saved;
+    return ok;
+}
+
+Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
+                            Expr* assumptions, bool* diverges,
+                            bool principal_value) {
+    if (diverges) *diverges = false;
+    if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
+
+    /* PrincipalValue context for the keyhole-log family (restored on exit so a
+     * nested frame cannot leak its setting back to the caller). */
+    bool pv_prev = g_pv;
+    g_pv = principal_value;
+
+    /* Enter symbolic-parameter mode when assumptions are supplied and we are the
+     * outermost call (g_inst not already set by an enclosing call -- the even
+     * half-line family recurses through here).  Only the frame that built the
+     * instantiation frees it. */
+    bool built_here = false;
+    if (assumptions && !g_inst) {
+        g_inst = build_instantiation(f, x, assumptions);
+        built_here = (g_inst != NULL);
+        if (built_here) g_assume = expr_copy(assumptions);
+    }
+
+    Expr* value = residue_dispatch(f, x, a, b, diverges);
+    if (built_here && value && !res_verify_regions(value, f, x, a, b, assumptions)) {
+        expr_free(value);
+        value = NULL;
     }
 
     /* Sound assumption-aware cleanup, once, at the outermost frame (where this

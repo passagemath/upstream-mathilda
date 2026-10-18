@@ -1438,6 +1438,7 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
     rational function.)
   - For integer `n ≥ 2`: `PolyLog[n, 1] = Zeta[n]` (e.g. `PolyLog[2, 1] = Pi²/6`)
     and `PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n]` (e.g. `PolyLog[2, -1] = -Pi²/12`).
+  - `PolyLog[2, I] = I Catalan - Pi²/48` and `PolyLog[2, -I] = -I Catalan - Pi²/48`, as Mathematica evaluates them (v0.458).
   - The dilogarithm and trilogarithm at ½:
     `PolyLog[2, 1/2] = Pi²/12 - Log[2]²/2`,
     `PolyLog[3, 1/2] = Log[2]³/6 - Pi² Log[2]/12 + 7 Zeta[3]/8`.

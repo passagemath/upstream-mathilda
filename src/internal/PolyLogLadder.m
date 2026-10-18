@@ -1,0 +1,257 @@
+(* PolyLogLadder.m -- polylogarithmic antiderivatives of R(x) Log[a x + b]^k.
+
+   Loaded lazily by the Integrate cascade stage "PolyLogLadder"
+   (src/calculus/integrate_polylog.c).  All symbols are fully qualified in the
+   PolyLogLadder` context; the file is not a package.
+
+   CLASS.  f = R0(x) + Sum_i Sum_k R_ik(x) Log[w_i]^k, where every R is a
+   rational function of x and every w_i = a_i x + b_i is LINEAR in x (a single
+   log kernel per term: products of two distinct log kernels decline).  The
+   denominators may have algebraic or complex roots of any multiplicity (degree
+   <= 4, so the roots are radicals), and the parameters may be symbolic.
+
+   METHOD.  Work in the kernel variable W = w_i itself (x = (W - b)/a): then
+   Log[w_i] IS Log[W] -- no splitting of a logarithm into a sum, so no branch
+   bookkeeping -- and the antiderivative of R(W) Log[W]^k is assembled from
+   partial fractions over the roots of R's denominator by four exact identities:
+
+     INT W^n Log[W]^k  = Sum_j (-1)^j k!/(k-j)! W^(n+1) Log[W]^(k-j)/(n+1)^(j+1)
+     INT Log[W]^k / W  = Log[W]^(k+1)/(k+1)
+     INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c]
+                            + k Sum_t (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t)
+                                    PolyLog[t+2, W/c]                 (c != 0)
+     INT Log[W]^k (W - c)^-m = Log[W]^k (W-c)^(1-m)/(1-m)
+                               - k/(1-m) INT Log[W]^(k-1) (W-c)^(1-m)/W   (m >= 2)
+
+   (the last recurses on a lower log power).  The third is the polylogarithm
+   ladder: d/dW PolyLog[s+1, W/c] = PolyLog[s, W/c]/W and
+   d/dW Log[1 - W/c] = 1/(W - c), so every term differentiates back exactly.
+   The C stage re-checks the result by differentiation regardless.
+
+   TRIG ROUTE.  A polynomial in x times a rational function of trig/hyperbolic
+   functions of linear arguments (x^2 Csc[x], x/(1 + E^x) Cos[x], ...) is
+   rewritten with TrigToExp and handed to the exponential-tower Risch stage,
+   whose polylogarithm ladder (cherry_polylog_exp.c) closes it.  Without the
+   rewrite that ladder never sees trig input.
+
+   Returns the antiderivative, or $Failed when the integrand is outside the
+   class (the stage then declines and the cascade continues). *)
+
+PolyLogLadder`$maxDenDegree = 4;
+
+(* INT W^n Log[W]^k dW, integer n != -1. *)
+PolyLogLadder`PowLog[n_, k_, W_] :=
+  Sum[(-1)^j k!/(k - j)! W^(n + 1) Log[W]^(k - j)/(n + 1)^(j + 1), {j, 0, k}];
+
+(* INT Log[W]^k/(W - c) dW, c != 0: the polylogarithm ladder. *)
+PolyLogLadder`SimpleLog[c_, k_, W_] :=
+  Log[W]^k Log[1 - W/c] +
+    k Sum[(-1)^t (k - 1)!/(k - 1 - t)! Log[W]^(k - 1 - t) PolyLog[t + 2, W/c], {t, 0, k - 1}];
+
+PolyLogLadder`ZeroQ[e_] := TrueQ[Simplify[e] == 0];
+
+(* Distinct roots of the polynomial d in W with multiplicities, or $Failed.
+   Factor first: each irreducible factor of degree <= 4 is solved in radicals and
+   contributes its roots with the factor's exponent as multiplicity. *)
+PolyLogLadder`RootsMult[d_, W_] := Catch[Module[{fl, out = {}, sol, rs},
+  If[! PolynomialQ[d, W] || Exponent[d, W] < 1, Return[$Failed]];
+  fl = FactorList[d];
+  Do[
+    With[{p = fe[[1]], e = fe[[2]]},
+      If[FreeQ[p, W], Continue[]];
+      If[Exponent[p, W] > PolyLogLadder`$maxDenDegree, Throw[$Failed, PolyLogLadder`fail]];
+      sol = Quiet[Solve[p == 0, W]];
+      If[! ListQ[sol] || Length[sol] != Exponent[p, W], Throw[$Failed, PolyLogLadder`fail]];
+      rs = W /. sol;
+      If[! FreeQ[rs, Root | W], Throw[$Failed, PolyLogLadder`fail]];
+      Do[AppendTo[out, {r, e}], {r, rs}]],
+    {fe, fl}];
+  If[Total[out[[All, 2]]] =!= Exponent[d, W], Return[$Failed]];
+  out], PolyLogLadder`fail];
+
+(* INT R(W) Log[W]^k dW for rational R. *)
+PolyLogLadder`Ladder[R_, W_, k_] := Catch[Module[
+  {rr, num, den, poly, rem, roots, res = 0, q, h, cb, sub},
+  If[k == 0,
+    sub = Integrate[R, W];
+    Return[If[FreeQ[sub, Integrate], sub, $Failed]]];
+  rr = Together[R];
+  num = Numerator[rr]; den = Denominator[rr];
+  If[! PolynomialQ[num, W] || ! PolynomialQ[den, W], Return[$Failed]];
+  poly = PolynomialQuotient[num, den, W];
+  rem = PolynomialRemainder[num, den, W];
+  (* polynomial part *)
+  poly = Expand[poly];
+  Do[
+    If[Coefficient[poly, W, n] =!= 0,
+      res += Coefficient[poly, W, n] PolyLogLadder`PowLog[n, k, W]],
+    {n, 0, Exponent[poly, W]}];
+  If[PolyLogLadder`ZeroQ[rem], Return[res]];
+  If[Exponent[den, W] == 0, Return[res + PolyLogLadder`PowLog[0, k, W] rem/den]];
+  roots = PolyLogLadder`RootsMult[den, W];
+  If[roots === $Failed, Return[$Failed]];
+  Do[
+    With[{b = rt[[1]], m = rt[[2]]},
+      q = PolynomialQuotient[den, Expand[(W - b)^m], W];
+      If[! PolyLogLadder`ZeroQ[PolynomialRemainder[den, Expand[(W - b)^m], W]], Throw[$Failed, PolyLogLadder`fail]];
+      h = rem/q;
+      Do[
+        cb = Simplify[(D[h, {W, m - j}] /. W -> b)/(m - j)!];
+        If[! PolyLogLadder`ZeroQ[cb],
+          res += cb PolyLogLadder`PoleTerm[b, j, k, W];
+          If[! FreeQ[res, $Failed], Throw[$Failed, PolyLogLadder`fail]]],
+        {j, 1, m}]],
+    {rt, roots}];
+  res], PolyLogLadder`fail];
+
+(* INT Log[W]^k/(W - b)^j dW. *)
+PolyLogLadder`PoleTerm[b_, j_, k_, W_] := Module[{sub},
+  Which[
+    PolyLogLadder`ZeroQ[b] && j == 1, Log[W]^(k + 1)/(k + 1),
+    PolyLogLadder`ZeroQ[b], PolyLogLadder`PowLog[-j, k, W],
+    j == 1, PolyLogLadder`SimpleLog[b, k, W],
+    True,
+      sub = PolyLogLadder`Ladder[(W - b)^(1 - j)/W, W, k - 1];
+      If[sub === $Failed, $Failed,
+        Log[W]^k (W - b)^(1 - j)/(1 - j) - k/(1 - j) sub]]];
+
+(* Main entry: the log-kernel class. *)
+PolyLogLadder`Run[f_, x_Symbol] := Catch[Module[
+  {logs, Ls, g, rules, deg, res = 0, r0, w, a, b, W, piece, coeffs, chk},
+  logs = Union[Cases[f, Log[u_] /; ! FreeQ[u, x], {0, Infinity}]];
+  If[logs === {}, Return[$Failed]];
+  (* every log kernel linear in x *)
+  If[! AllTrue[logs, PolynomialQ[#[[1]], x] && Exponent[#[[1]], x] == 1 &], Return[$Failed]];
+  Ls = Table[Unique["PolyLogLadder`L"], {Length[logs]}];
+  rules = Thread[logs -> Ls];
+  g = f /. rules;
+  (* rational in x, polynomial in the kernels *)
+  If[! FreeQ[g /. Thread[Ls -> 1], Log | Exp | Power[E, _] | Sin | Cos | Tan | Cot | Sec | Csc |
+        Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcTan | ArcSin | ArcCos | PolyLog], Return[$Failed]];
+  g = Expand[g];
+  If[! AllTrue[Ls, PolynomialQ[g, #] &], Return[$Failed]];
+  coeffs = {};
+  r0 = g /. Thread[Ls -> 0];
+  Do[
+    deg = Exponent[g, Ls[[i]]];
+    Do[
+      AppendTo[coeffs, {i, kk, Coefficient[g /. Thread[Delete[Ls, i] -> 0], Ls[[i]], kk]}],
+      {kk, 1, deg}],
+    {i, Length[Ls]}];
+  (* no cross terms between different kernels *)
+  chk = Together[g - r0 - Total[(Ls[[#[[1]]]]^#[[2]] #[[3]]) & /@ coeffs]];
+  If[! PolyLogLadder`ZeroQ[chk], Return[$Failed]];
+  Do[
+    With[{i = c[[1]], kk = c[[2]], R = c[[3]]},
+      w = logs[[i, 1]];
+      a = Coefficient[w, x, 1]; b = Coefficient[w, x, 0];
+      W = Unique["PolyLogLadder`W"];
+      piece = PolyLogLadder`Ladder[Together[(R /. x -> (W - b)/a)/a], W, kk];
+      If[piece === $Failed, Throw[$Failed, PolyLogLadder`fail]];
+      res += piece /. W -> w],
+    {c, coeffs}];
+  If[! PolyLogLadder`ZeroQ[r0],
+    piece = Integrate[r0, x];
+    If[! FreeQ[piece, Integrate], Return[$Failed]];
+    res += piece];
+  res], PolyLogLadder`fail];
+
+(* Trig route: polynomial x-weight times trig/hyperbolic of linear arguments.
+   Every argument must be a rational multiple of one base frequency; the
+   exponentials of TrigToExp are written as powers of the single kernel
+   T = E^(base x), so the integrand is Sum_n x^n N_n(T)/Den(T).  Partial
+   fractions in T over the roots of Den give three kinds of term:
+     x^n T^k                    elementary (an exponential polynomial),
+     x^n/(T - rho)              the exponential polylogarithm ladder
+        INT = Sum_k -(1/rho) n!/(n-k)! / base^(k+1) x^(n-k) PolyLog[k+1, rho/T],
+     x^n/(T - rho)^m, m >= 2    (1/(m-1)!) d^(m-1)/drho^(m-1) of the m = 1 form,
+   each an exact identity (re-checked by the C stage by differentiation). *)
+PolyLogLadder`TrigHeads = Sin | Cos | Tan | Cot | Sec | Csc | Sinh | Cosh | Tanh | Coth | Sech | Csch;
+
+(* INT x^n/(E^(base x) - rho) dx, rho != 0 (symbolic rho allowed). *)
+PolyLogLadder`ExpLadder[n_, rho_, base_, x_] :=
+  Sum[-(1/rho) n!/(n - k)!/base^(k + 1) x^(n - k) PolyLog[k + 1, rho/E^(base x)], {k, 0, n}];
+
+PolyLogLadder`TrigRun[f_, x_Symbol] := Module[
+  {args, cs, c0, ratios, q, base, g, T, num, den, res = 0, nmax, Nn, poly, rem, roots, qq, h, cb, rs, F1, term, sub},
+  If[FreeQ[f, PolyLogLadder`TrigHeads], Return[$Failed]];
+  If[! FreeQ[f, Log | PolyLog], Return[$Failed]];
+  args = Union[Cases[f, PolyLogLadder`TrigHeads[u_] :> u, {0, Infinity}]];
+  If[! AllTrue[args, PolynomialQ[#, x] && Exponent[#, x] == 1 && Coefficient[#, x, 0] === 0 &], Return[$Failed]];
+  (* an explicit polynomial weight in x: a pure trig rational belongs to Weierstrass *)
+  If[FreeQ[f /. PolyLogLadder`TrigHeads[_] -> 1, x], Return[$Failed]];
+  If[! FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc] && ! FreeQ[f, Sinh | Cosh | Tanh | Coth | Sech | Csch], Return[$Failed]];
+  cs = Coefficient[#, x, 1] & /@ args;
+  c0 = First[cs];
+  ratios = Simplify[cs/c0];
+  If[! AllTrue[ratios, Head[#] === Integer || Head[#] === Rational &], Return[$Failed]];
+  q = LCM @@ (Denominator /@ ratios);
+  base = If[FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc], c0/q, I c0/q];
+  T = Unique["PolyLogLadder`T"];
+  g = TrigToExp[f] /. Power[E, z_] /; ! FreeQ[z, x] :> T^Simplify[z/(base x)];
+  If[! FreeQ[Cases[g, Power[E, z_] :> z, {0, Infinity}], x], Return[$Failed]];
+  g = Together[g];
+  num = Expand[Numerator[g]]; den = Expand[Denominator[g]];
+  If[! FreeQ[den, x] || ! PolynomialQ[num, x], Return[$Failed]];
+  If[! PolynomialQ[num, T] || ! PolynomialQ[den, T], Return[$Failed]];
+  (* pull the T^j factor of the denominator out as negative powers *)
+  nmax = Exponent[num, x];
+  roots = Select[PolyLogLadder`RootsMult[den, T] /. $Failed -> {}, ! PolyLogLadder`ZeroQ[#[[1]]] &];
+  If[PolyLogLadder`RootsMult[den, T] === $Failed, Return[$Failed]];
+  rs = Unique["PolyLogLadder`rho"];
+  Do[
+    Nn = Coefficient[num, x, n];
+    If[Nn === 0, Continue[]];
+    (* exponential-polynomial part: Laurent terms in T around 0 and the
+       polynomial quotient, via the partial-fraction remainder *)
+    poly = PolynomialQuotient[Nn, den, T];
+    rem = PolynomialRemainder[Nn, den, T];
+    res += Integrate[Expand[x^n (poly /. T -> E^(base x))], x];
+    Do[
+      With[{b = rt[[1]], m = rt[[2]]},
+        qq = PolynomialQuotient[den, Expand[(T - b)^m], T];
+        h = rem/qq;
+        Do[
+          cb = Simplify[(D[h, {T, m - j}] /. T -> b)/(m - j)!];
+          If[! PolyLogLadder`ZeroQ[cb],
+            F1 = PolyLogLadder`ExpLadder[n, rs, base, x];
+            term = If[j == 1, F1, D[F1, {rs, j - 1}]/(j - 1)!] /. rs -> b;
+            res += cb term],
+          {j, 1, m}]],
+      {rt, roots}];
+    (* a root T = 0 of the denominator: the remainder over T^j T-part *)
+    With[{z = Select[PolyLogLadder`RootsMult[den, T], PolyLogLadder`ZeroQ[#[[1]]] &]},
+      If[z =!= {},
+        With[{m0 = z[[1, 2]]},
+          qq = PolynomialQuotient[den, T^m0, T];
+          h = rem/qq;
+          Do[
+            cb = Simplify[(D[h, {T, m0 - j}] /. T -> 0)/(m0 - j)!];
+            If[! PolyLogLadder`ZeroQ[cb],
+              res += cb Integrate[x^n E^(-j base x), x]],
+            {j, 1, m0}]]]],
+    {n, 0, nmax}];
+  If[! FreeQ[res, Integrate], Return[$Failed]];
+  res];
+
+(* Acceptance check: D[F, x] - f vanishes at two points, every other free
+   symbol fixed at a generic rational.  A differentiation check, not quadrature;
+   the constructions above are exact, so this only guards against an
+   implementation slip. *)
+PolyLogLadder`Check[F_, f_, x_Symbol] := Module[{syms, inst, d, ok = True},
+  (* parameters: the non-numeric atoms other than x (Pi, E, Catalan, ... are
+     NumericQ; Context[] is not usable to separate system symbols here) *)
+  syms = DeleteCases[Union[Cases[{F, f}, s_Symbol /; ! NumericQ[s] && s =!= x, {0, Infinity}]], x];
+  inst = Thread[syms -> Take[{23/29, 31/37, 13/17, 41/43, 7/11, 19/23, 29/31, 3/7}, UpTo[Length[syms]]]];
+  If[Length[inst] < Length[syms], Return[False]];
+  Do[
+    d = N[(D[F, x] - f) /. inst /. x -> pt, 30];
+    If[! NumericQ[d] || Abs[d] > 10^-12 (1 + Abs[N[f /. inst /. x -> pt, 30]]), ok = False],
+    {pt, {37/100, 71/100}}];
+  ok];
+
+PolyLogLadder`Integrate[f_, x_Symbol] := Module[{r},
+  r = PolyLogLadder`Run[f, x];
+  If[r === $Failed, r = PolyLogLadder`TrigRun[f, x]];
+  If[r === $Failed || ! FreeQ[r, Integrate], Return[$Failed]];
+  If[PolyLogLadder`Check[r, f, x], r, $Failed]];

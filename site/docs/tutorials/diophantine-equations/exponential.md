@@ -44,7 +44,7 @@ cases give the complete list.
 
 ---
 
-## 2. The Ramanujan–Nagell equation \(2^n - 7 = x^2\)
+## 2. The Ramanujan–Nagell equation 2ⁿ − 7 = *x*²
 
 In 1913 Ramanujan asked which \(2^n - 7\) are perfect squares; Nagell proved in
 1948 that there are **exactly five**. It is the prototypical equation of the shape

@@ -61,7 +61,7 @@ message `FactorInteger::nofac`.
 
 ## The automatic pipeline
 
-### Below \(2^{64}\): the word engine
+### Below 2⁶⁴: the word engine
 
 A machine integer takes a fast path straight into `fi_u64.c`, with no bignums
 and no heap allocation until the result list:
@@ -80,7 +80,7 @@ In[3]:= FactorInteger[2^64 - 1]
 Out[3]= {{3, 1}, {5, 1}, {17, 1}, {257, 1}, {641, 1}, {65537, 1}, {6700417, 1}}
 ```
 
-### Above \(2^{64}\): the tier table
+### Above 2⁶⁴: the tier table
 
 Larger inputs are trial-divided once to \(2^{16}\). Then every composite on
 the work stack is tested for primality (BPSW) and perfect powers, and handed

@@ -72,7 +72,7 @@ diff-back before it is emitted.
 
 ---
 
-## 2. The exponential integral, \(\mathrm{Ei}\)
+## 2. The exponential integral, Ei
 
 The exponential integral \(\operatorname{Ei}(x) = \int_{-\infty}^{x}
 e^{t}/t\,dt\) is the special function for rational multiples of \(e^{f}\) whose
@@ -104,7 +104,7 @@ In `Out[3]` the algorithm found the rational \(y = -1/x\) *and* the residual
 
 ---
 
-## 3. The error function, \(\mathrm{erf}\)
+## 3. The error function, erf
 
 The same 1989 exponential-integral engine emits the **error-function** term of
 the extended Liouville form when the exponent is a perfect square. This is the
@@ -126,7 +126,7 @@ closed form — the decision and the construction are two faces of Cherry's theo
 
 ---
 
-## 4. The logarithmic integral, \(\mathrm{li}\)
+## 4. The logarithmic integral, li
 
 The logarithmic integral \(\operatorname{li}(x) = \int_0^{x} dt/\log t\) is the
 special function for the *dual* tower — integrands rational in \(x\) over a single
@@ -161,7 +161,7 @@ Differentiating back, \(\frac{d}{dx}\!\left(-x/\log x +
 
 ---
 
-## 5. The sine and cosine integrals, \(\mathrm{Si}\) and \(\mathrm{Ci}\)
+## 5. The sine and cosine integrals, Si and Ci
 
 Because \(\sin\) and \(\cos\) are exponentials of an imaginary argument, the
 oscillatory integrals \(\int \sin x/x\) and \(\int \cos x/x\) are the

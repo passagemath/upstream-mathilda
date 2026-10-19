@@ -17,7 +17,7 @@ Fermat claimed, and Euler proved, that \(y^2 = x^3 - 2\) has only the solutions
 
 ---
 
-## 1. Mordell curves \(y^2 = x^3 + k\)
+## 1. Mordell curves *y*² = *x*³ + *k*
 
 For \(k < 0\) with \(|k|\) squarefree and a class-number condition met, the
 equation factors in the quadratic ring \(\mathbb{Z}[\sqrt{k}]\): writing \(y^2 - k
@@ -47,7 +47,7 @@ has exactly \((17, \pm 70)\), since \(17^3 - 13 = 4913 - 13 = 4900 = 70^2\).
 
 ---
 
-## 2. Sum of three cubes \(x^3 + y^3 + z^3 = k\)
+## 2. Sum of three cubes *x*³ + *y*³ + *z*³ = *k*
 
 The three-cubes problem is famously delicate: some \(k\) have no representation
 at all, while others have one whose entries are astronomically large. Mathilda
@@ -118,7 +118,7 @@ possibly-incomplete list.
 
 ---
 
-## 3. Thue equations \(F(x, y) = m\)
+## 3. Thue equations *F*(*x*, *y*) = *m*
 
 ### 3.1 The Tzanakis–de Weger method
 

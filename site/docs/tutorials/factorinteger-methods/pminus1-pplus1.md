@@ -247,7 +247,7 @@ Out[17]= {{38762964947654904130431610953601, 1}, {100000000000000000000000000000
 
 ## 5. Where they struggle
 
-### \(B_1\) too small
+### *B*₁ too small
 
 With \(B_1 = 40\), stage 1 leaves out the primes 41, 43, 47, 53 and 59 of
 \(p - 1\), and one factor of 2 (\(2^6 > 40\)). Stage 2 can supply at most one

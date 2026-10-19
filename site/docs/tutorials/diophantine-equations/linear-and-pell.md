@@ -154,7 +154,7 @@ continued fraction produces it directly. (This is precisely the case where a
 naive integer-search fallback times out — see the [performance
 page](performance.md).)
 
-### 2.3 Negative Pell and general \(N\)
+### 2.3 Negative Pell and general *N*
 
 The **negative Pell** equation \(x^2 - D y^2 = -1\) is solvable only for special
 \(D\) — exactly when the continued-fraction period of \(\sqrt D\) is odd. Mathilda

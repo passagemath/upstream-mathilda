@@ -184,7 +184,7 @@ In[7]:= FactorInteger`ECM[n]
 Out[7]= {{40000000000000000019, 1}, {100000000000000000000000000000000000000000000000000000000000000000000000000012397, 1}}
 ```
 
-### One curve, three sizes of \(n\): the cost follows the factor
+### One curve, three sizes of *n*: the cost follows the factor
 
 Suyama's \(\sigma = 18\) at \(B_1 = 11000\) happens to give a curve whose
 order modulo \(p_{20}\) is smooth enough. (It was found by scanning
@@ -253,7 +253,7 @@ PARI and FLINT timing out at 30–35 digits.
 
 ## 5. Where it struggles
 
-### \(B_1\) too low for the factor
+### *B*₁ too low for the factor
 
 The 15-digit level (\(B_1 = 2000\), whose 25 curves `"B1" -> 2000` selects)
 is very unlikely to find a 20-digit factor. The probability that one curve's

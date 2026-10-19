@@ -370,7 +370,7 @@ Out[28]= {{24473, 1}, {195311, 1}, {32592575621351777380295131014550050576823494
 Finding such an \(m\) without knowing \(p\) costs about as much as the base search
 it replaces. This is a demonstration, not a shortcut.
 
-### 4.7 `"Lattice"`: a miss of \(2^{28}\)
+### 4.7 `"Lattice"`: a miss of 2²⁸
 
 The companion paper's experiment is a balanced 197-bit semiprime. Its 98-bit \(p\)
 is pushed away from \(\lfloor 3(22/7)^{59}\rfloor\), so the descent at depth 59

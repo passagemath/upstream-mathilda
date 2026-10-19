@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message_gated: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,10 +42,44 @@ static Expr* gcd_rational_mpz_fold(Expr* res, size_t count) {
     mpz_clears(running_n, running_d, n, d, NULL);
     return result;
 }
+
+/* GCD over the Gaussian rationals, used when some argument is a non-real
+ * exact complex number: writing each argument as w/d (w in Z[i], d a positive
+ * integer), the gcd is gcd(w_1, w_2, ...) / lcm(d_1, d_2, ...) with the
+ * Gaussian gcd normalised to its first-quadrant associate -- GCD[3 + I, 2] is
+ * 1 + I and GCD[1/2 + I/3, 2] is 1/6, as in Mathematica. NULL if some argument
+ * is not a Gaussian rational (GCD[2, 3 + I, x] stays unevaluated). */
+static Expr* gcd_gaussian(Expr* res, size_t count) {
+    mpz_t wr, wi, d, xr, xi, xd, gr, gi;
+    mpz_inits(wr, wi, d, xr, xi, xd, gr, gi, NULL);
+    mpz_set_ui(d, 1);
+    bool ok = true;
+    for (size_t i = 0; i < count && ok; i++) {
+        if (!gq_from_expr(res->data.function.args[i], xr, xi, xd)) { ok = false; break; }
+        gi_gcd(gr, gi, wr, wi, xr, xi);
+        mpz_swap(wr, gr); mpz_swap(wi, gi);
+        mpz_lcm(d, d, xd);
+    }
+    Expr* out = ok ? gq_to_expr(wr, wi, d) : NULL;
+    mpz_clears(wr, wi, d, xr, xi, xd, gr, gi, NULL);
+    return out;
+}
+
 Expr* builtin_gcd(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
     if (count == 0) return expr_new_integer(0);
+
+    /* GCD::exact -- an inexact number has no gcd (GCD[2.5, 5]). */
+    Expr* inexact = nt_first_inexact_arg(res);
+    if (inexact) return nt_emit_exact("GCD", inexact, res);
+
+    /* Any non-real exact complex argument switches to Z[i] (a lone one is
+     * normalised: GCD[-1 - I] is 1 + I, GCD[2 I] is 2). */
+    for (size_t i = 0; i < count; i++)
+        if (is_gaussian_rational(res->data.function.args[i]))
+            return gcd_gaussian(res, count);
+
     if (count == 1) return single_arg_abs_or_copy(res->data.function.args[0]);
 
     // Single pass: detect any bigint while confirming all args are integer-like

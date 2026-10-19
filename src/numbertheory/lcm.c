@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message_gated: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,10 +45,52 @@ static Expr* lcm_rational_mpz_fold(Expr* res, size_t count) {
     mpz_clears(running_n, running_d, n, d, NULL);
     return result;
 }
+
+/* LCM over the Gaussian rationals, used when some argument is a non-real
+ * exact complex number: lcm(w_1, w_2, ...) / gcd(d_1, d_2, ...) for arguments
+ * w_i/d_i, normalised to the first-quadrant associate -- LCM[3 + I, 2] is
+ * 2 + 4 I and LCM[2 + I, 2 - I] is 5, as in Mathematica. Any zero argument
+ * gives 0. NULL if some argument is not a Gaussian rational. */
+static Expr* lcm_gaussian(Expr* res, size_t count) {
+    mpz_t wr, wi, d, xr, xi, xd, lr, li;
+    mpz_inits(wr, wi, d, xr, xi, xd, lr, li, NULL);
+    bool ok = true;
+    for (size_t i = 0; i < count && ok; i++) {
+        if (!gq_from_expr(res->data.function.args[i], xr, xi, xd)) { ok = false; break; }
+        if (i == 0) {
+            mpz_set(wr, xr); mpz_set(wi, xi); mpz_set(d, xd);
+            gi_normalize(wr, wi, NULL);
+        } else {
+            gi_lcm(lr, li, wr, wi, xr, xi);
+            mpz_swap(wr, lr); mpz_swap(wi, li);
+            mpz_gcd(d, d, xd);
+        }
+    }
+    if (ok && mpz_sgn(wr) == 0 && mpz_sgn(wi) == 0) mpz_set_ui(d, 1);
+    Expr* out = ok ? gq_to_expr(wr, wi, d) : NULL;
+    mpz_clears(wr, wi, d, xr, xi, xd, lr, li, NULL);
+    return out;
+}
+
 Expr* builtin_lcm(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
-    if (count == 0) return expr_new_integer(1);
+    /* LCM::argm -- unlike GCD[] (0), LCM[] has no value in Mathematica. */
+    if (count == 0) {
+        mth_message_gated(g_arith_warnings_muted, "LCM", "argm",
+                          "LCM called with 0 arguments; 1 or more arguments are expected.");
+        return NULL;
+    }
+
+    /* LCM::exact -- an inexact number has no lcm (LCM[2.5, 5]). */
+    Expr* inexact = nt_first_inexact_arg(res);
+    if (inexact) return nt_emit_exact("LCM", inexact, res);
+
+    /* Any non-real exact complex argument switches to Z[i]. */
+    for (size_t i = 0; i < count; i++)
+        if (is_gaussian_rational(res->data.function.args[i]))
+            return lcm_gaussian(res, count);
+
     if (count == 1) return single_arg_abs_or_copy(res->data.function.args[0]);
 
     /* Mirror builtin_gcd: when every arg is integer-like and any one is a

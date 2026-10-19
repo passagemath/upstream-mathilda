@@ -9,6 +9,11 @@ Integer and number-theoretic functions: greatest common divisor and least common
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+- **Rationals**: `gcd(p1/q1, p2/q2) = gcd(p1, p2)/lcm(q1, q2)` and `lcm(p1/q1, p2/q2) = lcm(p1, p2)/gcd(q1, q2)`.
+- **Gaussian integers and rationals**: any non-real exact complex argument switches to `Z[i]`. Each argument is written `w/d` (`w` in `Z[i]`, `d` a positive integer). The gcd is `gcd(w_i)/lcm(d_i)` and the lcm is `lcm(w_i)/gcd(d_i)`, normalised to the first-quadrant associate (`Re > 0`, `Im >= 0`). This matches Mathematica on 400 of 400 random pairs: `GCD[3 + I, 2]` → `1 + I`, `GCD[1/2 + I/3, 2]` → `1/6`, `LCM[3 + I, 2]` → `2 + 4 I`, `GCD[-1 - I]` → `1 + I`.
+- **Attributes**: `Flat`, `Listable`, `OneIdentity`, `Orderless`, `Protected`, as in Mathematica. `NumericFunction` was dropped in v0.471.
+- **Messages**: an inexact argument draws `GCD::exact` / `LCM::exact`. `LCM[]` draws `LCM::argm` and stays unevaluated; it used to return `1`. `GCD[]` is `0`, as in Mathematica.
+
 > **Packed arrays.** Over an `int64` buffer both run on the machine words —
 > `GCD[list, n]`, `LCM[list, n]` and the two-array forms — and answer with a
 > packed result. A product that would overflow `int64` abandons the buffer so
@@ -22,11 +27,14 @@ Both fold through GMP when any argument is a bigint, so results that exceed `int
 `n` is divisible by `m` when `n` is an integer multiple of `m`; this is effectively `Mod[n, m] == 0`. `Divisible[n, m]` returns `False` unless `n` and `m` are manifestly divisible.
 
 **Features**:
-- Machine integers and GMP bigints: tested directly with `mpz_divisible_p`, so large cases such as `Divisible[10^3000 + 1, 16001]` → `True` are exact. By the GMP convention, divisibility by `0` holds iff `n == 0` (`Divisible[0, 0]` → `True`, `Divisible[6, 0]` → `False`); sign is ignored (`Divisible[10, -2]` → `True`).
+- Machine integers and GMP bigints: tested directly with `mpz_divisible_p`, so large cases such as `Divisible[10^3000 + 1, 16001]` → `True` are exact. Sign is ignored (`Divisible[10, -2]` → `True`).
+- A zero divisor draws `Divisible::divz` and leaves the call unevaluated, as in Mathematica (`Divisible[6, 0]` and `Divisible[0, 0]`). This happens only when every argument is a number, so `Divisible[x, 0]` stays unevaluated silently. An inexact argument draws `Divisible::exact`.
+- `Divisible[n, m1, m2, ...]` is a **chain**, as in Mathematica 14: `n` divisible by `m1`, `m1` by `m2`, and so on. So `Divisible[12, 2, 3]` → `False` and `Divisible[8, 2, 2]` → `True`.
+- Packed `int64` buffers (against an exact Integer, or an equal-shape buffer) answer straight off the buffer with a packed `True`/`False` List (`ndint_binary_predicate`). `Divisible[Range[10^6], 7]` takes 9 ms (Mathematica 0.28 s). A zero divisor degrades to the element path, so `::divz` still fires.
 - Gaussian integers, rationals, and exact numeric quantities: the quotient `n/m` is formed and evaluated; the result is `True` iff it reduces to an integer or a Gaussian integer. So `Divisible[3 + I, 1 - I]` → `True`, `Divisible[3/2, 1/2]` → `True`, `Divisible[2 Pi, Pi/2]` → `True`, while `Divisible[Sqrt[6], Sqrt[2]]` → `False`.
 - `Listable`: threads element-wise over lists, e.g. `Divisible[{1, 2, 3, 4, 5, 6}, 2]` → `{False, True, False, True, False, True}`.
 - Symbolic, non-numeric arguments leave the call unevaluated (e.g. `Divisible[x, 2]`).
-- Diagnostics: too few arguments emit `Divisible::argm`, too many emit `Divisible::argt`; both leave the call unevaluated.
+- Diagnostics: one argument emits `Divisible::argmu`, none `Divisible::argm`; both leave the call unevaluated.
 
 ```
 In[1]:= Divisible[10, 2]
@@ -57,10 +65,12 @@ Integers are relatively prime when their greatest common divisor is `1`. `Coprim
 **Features**:
 - Machine integers and GMP bigints, handled uniformly through `mpz_gcd`, so large cases are exact: `CoprimeQ[2^100 - 1, 3^100 - 1]` → `False` (both even), `CoprimeQ[2^127 - 1, 2^61 - 1]` → `True`. Sign is ignored; `GCD(0, n) = |n|`, so `CoprimeQ[0, 1]` → `True` but `CoprimeQ[0, 5]` → `False`.
 - More than two arguments are tested *pairwise*: `CoprimeQ[6, 35, 143]` → `True`, while `CoprimeQ[2, 3, 4]` → `False` (2 and 4 share a factor).
-- Gaussian integers: with `GaussianIntegers -> True`, or when any argument is an exact Gaussian integer, coprimality is tested over `Z[i]` via the Gaussian Euclidean algorithm (round-to-nearest division). `CoprimeQ[5 + I, 1 - I]` → `False` (both divisible by `1 + I`); `CoprimeQ[2, 5, GaussianIntegers -> True]` → `True`, while `CoprimeQ[2, 10, GaussianIntegers -> True]` → `False`.
-- `Orderless`: argument order is irrelevant, and the `GaussianIntegers` option may appear at any position.
+- Gaussian integers: when any argument is an exact Gaussian integer, coprimality is tested over `Z[i]` (the gcd from the shared `gi_gcd` must be a unit). `CoprimeQ[5 + I, 1 - I]` → `False` (both divisible by `1 + I`).
+- **No options** (Mathematica 14). A `GaussianIntegers -> …` rule is just a non-integer argument, so `CoprimeQ[2, 5, GaussianIntegers -> True]` → `False`. The option was removed in v0.471.
+- `Orderless`: argument order is irrelevant.
+- Packed `int64` buffers answer straight off the buffer with a packed `True`/`False` List. `CoprimeQ[Range[10^6], 30]` takes 37 ms (Mathematica 0.37 s). `CoprimeQ[a, b]` compiles as `GCD == 1`.
 - `Listable`: threads element-wise over lists, e.g. `CoprimeQ[{1, 2, 3, 4, 5}, 6]` → `{True, False, False, False, True}`.
-- As a `*Q` predicate it always returns a Boolean: `CoprimeQ[]` → `False`, `CoprimeQ[n]` → `True` (no pairs), and anything not a manifestly coprime integer or Gaussian integer — rationals, reals, symbols, malformed options — yields `False` (e.g. `CoprimeQ[a, b]` → `False`).
+- As a `*Q` predicate it always returns a Boolean. `CoprimeQ[]` → `False`. `CoprimeQ[n]` asks whether `n` is a **unit**, as in Mathematica 14: `CoprimeQ[1]`, `CoprimeQ[-1]` and `CoprimeQ[I]` → `True`, while `CoprimeQ[3]` and `CoprimeQ[0]` → `False`. It used to answer `True` for every single argument. Anything that is not an integer or Gaussian integer (rationals, reals, symbols, rules) yields `False` (e.g. `CoprimeQ[a, b]` → `False`).
 
 ```
 In[1]:= CoprimeQ[8, 11]
@@ -84,7 +94,10 @@ Out[5]= {True, False, False, False, True}
 - `ExtendedGCD[n1, n2, ...]`: returns `{g, {r1, r2, ...}}` where `g == GCD[n1, ...]` and `g == r1 n1 + r2 n2 + ...` (a multi-argument Bézout / extended GCD). Attributes: `Listable`, `Protected` (deliberately *not* `Flat`/`Orderless`/`OneIdentity`, since the cofactor list is positional).
 
 **Features**:
-- Integer-only; both machine integers and GMP bigints are accepted, and cofactors demote back to machine integers when they fit.
+- Integers: both machine integers and GMP bigints are accepted, and cofactors demote back to machine integers when they fit. Two machine integers skip GMP entirely, and the int64 path reproduces `mpz_gcdext`'s unique cofactors exactly (checked against the GMP fold on 500 random 10¹⁵-sized pairs).
+- **Gaussian integers** (any non-real Gaussian argument): a Euclidean algorithm in `Z[i]` that starts from the operand of larger norm and rounds each quotient component to the nearest integer, ties to even (Mathematica's `Round`). `g` is first-quadrant normalised. `ExtendedGCD[3 + I, 2]` → `{1 + I, {-I, 2 I}}`.
+  - **Deliberate difference:** the cofactors match Mathematica's on 99% of random pairs (397 of 400 in one sample, 399 of 400 in another). The rest are different, equally valid Bézout pairs.
+  - A non-integer Gaussian rational draws `ExtendedGCD::egcd`.
 - Computed by folding GMP's `mpz_gcdext` pairwise: `gcd(running_g, n_i) = s·running_g + t·n_i`, scaling the accumulated cofactors by `s` and appending `t` each step. The running gcd stays non-negative, so `g` is exactly `GCD` and the sign convention is the conventional one.
 - Threads element-wise over lists, e.g. `ExtendedGCD[3, {5, 15}]` → `{{1, {2, -1}}, {3, {1, 0}}}`.
 - Edge cases: `ExtendedGCD[]` → `{0, {}}`; `ExtendedGCD[n]` → `{|n|, {±1}}`; zeros and negatives handled (`g` non-negative).
@@ -100,8 +113,11 @@ Out[5]= {True, False, False, False, True}
 - The moduli need **not** be pairwise coprime: a solution exists iff every pair of congruences agrees modulo the gcd of their moduli. When the system is inconsistent, `ChineseRemainder` is left unevaluated, e.g. `ChineseRemainder[{1, 2}, {6, 10}]` (since `1 ≢ 2 (mod gcd(6, 10) = 2)`).
 - Computed by a streaming pairwise CRT fold: an accumulator congruence `x ≡ x_acc (mod m_acc)` is merged with each `(ri, |mi|)` via `mpz_gcdext` (`x_acc += ((ri − x_acc)/g)·u·m_acc`, `m_acc = lcm`), reducing modulo the running lcm each step. The final `x = d + ((x_acc − d) mod L)` gives the smallest `x ≥ d` and handles a negative `d` and empty lists (`L = 1`).
 - If all `0 ≤ ri < mi` the result satisfies `x mod mi == ri`; unreduced or negative residues are handled (the result gives `x mod mi == ri mod mi`).
-- Edge cases: `ChineseRemainder[{}, {}]` → `0`; a zero modulus, a length mismatch between the two lists, and non-integer or symbolic arguments leave the call unevaluated.
-- Diagnostic: `ChineseRemainder::argt` when called with other than 2 or 3 arguments.
+- Edge cases and messages (as in Mathematica 14):
+  - Two lists of numbers that are not equal-length integers with **positive** moduli draw `ChineseRemainder::pilist`. That covers a zero or negative modulus, a length mismatch, and a rational, real or complex entry. Symbolic entries leave the call unevaluated silently.
+  - A non-integer offset `d` draws `ChineseRemainder::int`.
+  - Empty lists stay unevaluated. They used to give `0`; Mathematica itself gives `ChineseRemainder[{}, {}, 5]` an `argrx` message, which Mathilda does not copy.
+  - A wrong argument count draws `ChineseRemainder::argr` (one argument) or `::argrx`, with Mathematica's "2 arguments are expected" wording.
 
 ```
 In[1]:= ChineseRemainder[{3, 4}, {4, 5}]
@@ -137,8 +153,19 @@ Gives modular exponentiations, inverses, and roots.
   lifting, and CRT over the factorisation of `m`. The
   Adleman–Manders–Miller branch (`gcd(q, p-1) > 1` for `q > 2` over a
   large prime) is not yet supported.
-- Returns unevaluated if the corresponding inverse or root does not exist
-  (or cannot be computed by the implemented algorithms).
+- Messages, as in Mathematica 14 (each leaves the call unevaluated):
+  - `PowerMod::ninv` when the base is not invertible;
+  - `PowerMod::root` when no modular root exists;
+  - `PowerMod::divz` for a zero modulus;
+  - `PowerMod::pmod` for an inexact argument, a non-integer base or modulus, or a non-rational exponent;
+  - `PowerMod::argr` / `::argrx` for a wrong argument count.
+- **A negative integer modulus** stays unevaluated, as in Mathematica. It used to be read as `|m|`. The packed path declines it, and `Compile` already bailed.
+- **Gaussian integers** (integer exponent): a Gaussian base and/or modulus is reduced with `Mod`'s nearest quotient after every product (`gi_powmod`): `PowerMod[1 + I, 3, 5]` → `-2 + 2 I`, `PowerMod[2, 10, 2 + I]` → `-1`.
+  - This agrees with Mathematica on 399 of 400 random cases. The remaining one is a rounding tie in the final reduction, with an equally valid representative.
+  - A machine route covers modulus components below 2¹⁶.
+  - **Deliberate difference:** Mathematica leaves a few invertible Gaussian bases unevaluated under a negative exponent; Mathilda answers them.
+- Machine fast path: a machine base, a non-negative exponent and a modulus below 2³² square-and-multiply in `uint64`. The `Do`-loop of 10^5 calls went from 0.050 s to 0.022 s (Mathematica 0.034 s).
+- `Compile`: the scalar form lowers to `OP_POWMOD_I`, and the array form `PowerMod[v, e, m]` delegates to `ndint_powermod` through `A_NDFN`. That takes it out of the coverage BASELINE.
 - Allows threading over lists natively.
 
 ```mathematica
@@ -189,11 +216,16 @@ Pohlig–Hellman, index calculus).
 - `Protected`.
 - All arithmetic uses GMP `mpz_t`, so `k`, `n`, and any `r_i` may be
   arbitrary-precision bignums.
-- Negative `n` is treated as `|n|`; `k` (and each `r_i`) is reduced modulo
-  `n` before the search, so negative or out-of-range inputs work
-  transparently.
-- Returns unevaluated when `gcd(k, n) != 1`, when `n` is zero, or when
-  no power of `k` lands in the residue set (3-arg form).
+- `k` (and each `r_i`) is reduced modulo `n` before the search, so negative
+  or out-of-range `k` works.
+- Returns unevaluated when `gcd(k, n) != 1`, when `n <= 0` (as in
+  Mathematica 14; a negative `n` used to be read as `|n|`), or when no power
+  of `k` lands in the residue set (3-arg form).
+- Machine path: for a machine `k` and `1 < n < 2^32` the order is found
+  entirely in `uint64`, with `phi(n)` and its factorisation from the int64
+  helpers the NDArray kernels use. The `Do`-loop of 10^4 calls went from
+  0.15 s to 0.012 s (Mathematica 0.056 s), and agrees with Mathematica on a
+  3000-entry table.
 - The 2-arg form factors `phi(n)` and successively strips prime factors
   from `phi(n)` whose corresponding exponent still maps `k` to 1 — so
   the work is dominated by factoring `phi(n)`, not by walking the orbit.
@@ -202,8 +234,8 @@ Pohlig–Hellman, index calculus).
   if the order exceeds `10^8` or does not fit in an unsigned long.
 - Non-integer numeric inputs (`Real`, `Complex`, `Rational`) and symbolic
   arguments flow through unevaluated with no diagnostic.
-- Diagnostic: `MultiplicativeOrder::argt` when called with anything other
-  than 2 or 3 arguments.
+- Diagnostic: `MultiplicativeOrder::argtu` for one argument and `::argt`
+  for other counts, as in Mathematica.
 
 ```mathematica
 In[1]:= MultiplicativeOrder[5, 8]
@@ -246,7 +278,8 @@ Gives the Jacobi symbol $(n/m)$.
   may be arbitrary-precision bignums.
 - Non-integer numeric inputs and symbolic arguments flow through
   unevaluated with no diagnostic.
-- Diagnostic: `JacobiSymbol::argrx` when called with other than 2 arguments.
+- Diagnostic: `JacobiSymbol::argr` for one argument and `::argrx` otherwise, as in Mathematica.
+- Machine surfaces: two machine integers use an int64 Kronecker symbol (`ndint_kronecker_i64`, Cohen Alg. 1.4.10). That same function serves the packed / `NDArray` kernel (on `AWARE` and `INT64_OK`) and `Compile` (`OP_JACOBI_I`, at scalar and array shapes), so all of them agree with `mpz_kronecker`. `JacobiSymbol[Range[10^6], 1009]` takes 63 ms (Mathematica 0.29 s).
 
 ```mathematica
 In[1]:= JacobiSymbol[10, 5]
@@ -377,8 +410,9 @@ residues $\{1, \ldots, n-1\}$.
 
 **Features**:
 - `Protected`, `Listable`.
-- Returns `{}` if `n` is not 2, 4, an odd prime power, or twice an odd
-  prime power.
+- Returns `{}` if `|n|` is not 2, 4, an odd prime power, or twice an odd
+  prime power. The sign of `n` is ignored, as in Mathematica:
+  `PrimitiveRootList[-7]` → `{3, 5}` (it used to give `{}`).
 - Enumerates the $\varphi(\varphi(n))$ primitive roots as $g^i \bmod n$
   for $i \in \{1, \ldots, \varphi(n)\}$ with $\gcd(i, \varphi(n)) = 1$,
   where $g$ is the smallest primitive root of `n`. The list is sorted
@@ -911,8 +945,16 @@ Out[11]= DivisorSigma[1, 6, GaussianIntegers -> Automatic]
 - A non-real Gaussian-integer argument `Complex[a, b]` is handled over `Z[i]`:
   the input is factored into Gaussian primes (the unit factor does not count),
   giving `0` for a repeated Gaussian prime factor and `(-1)^m` otherwise.
-- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
-  `MoebiusMu::argx` message.
+- `MoebiusMu[0]` is `0` (every square divides 0), as in Mathematica. It was
+  left unevaluated before v0.471. A non-integer `n` is left unevaluated; a
+  wrong argument count issues a `MoebiusMu::argx` message.
+- Machine surfaces share one int64 helper (`ndint_moebius_mu_i64`): the scalar
+  path for `|n| <= 2^20`, the packed / `NDArray` kernel, and `Compile`
+  (`OP_MU_I`).
+  - A large buffer factors off one smallest-prime-factor sieve
+    (`NDUnaryKernel.whole_i`), so `MoebiusMu[Range[10^7]]` takes 0.44 s and
+    scales linearly.
+  - The `Do`-loop of 10^5 calls takes 38 ms (Mathematica 36 ms).
 
 ```mathematica
 In[1]:= MoebiusMu[11]
@@ -1079,6 +1121,14 @@ Gives the Euler totient function $\phi(n)$.
 - `Listable`, `Protected`.
 - Counts the number of positive integers less than or equal to $n$ that are relatively prime to $n$.
 - Returns 0 for $n = 0$, and handles negative integers via $\phi(-n) = \phi(n)$.
+- Messages, as in Mathematica: a non-integer number (`EulerPhi[1/2]`,
+  `EulerPhi[2.]`, `EulerPhi[3 + I]`) draws `EulerPhi::int`, and a wrong
+  argument count draws `EulerPhi::argx`. Symbolic arguments stay unevaluated
+  silently.
+- Machine surfaces share one int64 helper (`ndint_euler_phi_i64`): the scalar
+  path for `|n| <= 2^20`, the packed / `NDArray` kernel, and `Compile`
+  (`OP_PHI_I`, at scalar and array shapes). A large buffer factors off one
+  smallest-prime-factor sieve, so `EulerPhi[Range[10^7]]` takes 0.57 s.
 - Accepts arbitrary-precision integers (`BigInt`). Factorization runs in GMP
   through the same trial-division / Pollard-rho / ECM cascade used by
   `FactorInteger`, so inputs of cryptographic size are tractable.

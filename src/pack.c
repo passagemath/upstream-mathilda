@@ -824,7 +824,7 @@ static void pack_mark_aware_heads(void) {
          * materialising, so their buffer now arrives where an integer test
          * fails -- they degrade through ndarray_delist_and_reeval explicitly
          * instead of falling out unevaluated. */
-        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
+        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
         "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
         /* The elementwise sign predicates. Now buffer on BOTH sides (§13 gap C.1
          * closed): the input is read straight off the buffer and the answer is a
@@ -835,6 +835,11 @@ static void pack_mark_aware_heads(void) {
          * same packed NDT_BOOL List (ndint_prime_power_predicate); every other
          * dtype degrades element by element so ::exact fires per element. */
         "PrimePowerQ",
+        /* CoprimeQ and Divisible read int64 buffers (against an Integer or an
+         * equal-shape buffer) and answer with the same packed NDT_BOOL List
+         * (ndint_binary_predicate); a zero divisor or any other shape degrades
+         * element by element, so Divisible::divz still fires per element. */
+        "CoprimeQ", "Divisible",
         /* Boole maps a bool buffer straight to an int64 one (True -> 1); its
          * buffer path answers with a single head (Integer), matching Boole of the
          * List element for element. */
@@ -1174,10 +1179,11 @@ static void pack_mark_aware_heads(void) {
          * kernel is written in int64 end to end through the ci_*_i64 helpers
          * and abandons the whole array on overflow, on a factor past the
          * trial-division ceiling, or on an argument the scalar builtin leaves
-         * unevaluated (MoebiusMu[0], DivisorSigma[k, 0]) -- so the List path
+         * unevaluated (DivisorSigma[k, 0]) -- so the List path
          * and GMP still answer every case the buffer cannot. */
-        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu",
+        "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
         "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
+        "CoprimeQ", "Divisible",
         /* The sign predicates answer with True/False, which no dtype holds --
          * but they READ an int64 buffer exactly, by comparison, and comparison
          * is the one operation on integers that needs no arithmetic to be

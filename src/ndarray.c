@@ -1687,7 +1687,9 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
             int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
             if (!out) return NULL;
             bool ok = true;
-            if (from_int) {
+            if (from_int && k->whole_i && k->whole_i((const int64_t*)in, sz, out)) {
+                /* a whole-buffer arm (a sieve) answered; see NDUnaryKernel */
+            } else if (from_int) {
                 const int64_t* src = (const int64_t*)in;
                 for (size_t i = 0; i < sz && ok; i++)
                     ok = k->to_int_i(src[i], &out[i]);

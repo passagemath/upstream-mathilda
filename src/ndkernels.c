@@ -61,7 +61,7 @@
         *rr = creal(w); *ri = cimag(w);                                        \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, ndk_##NAME##_r, true, false, NULL, NULL, false }
+        { ndk_##NAME##_c, ndk_##NAME##_r, true, false, NULL, NULL, false, NULL }
 
 /* Escaping unary: real input may leave the real axis (Log/ArcSin/...). Complex
  * kernel only; the engine promotes the result dtype iff any element is complex. */
@@ -71,7 +71,7 @@
         *rr = creal(w); *ri = cimag(w);                                        \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false }
+        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false, NULL }
 
 /* Escaping unary with a branch-cut fix: on the real (1, inf) cut, C99's casin /
  * cacos / catanh land on the opposite side from the scalar builtins (which
@@ -85,7 +85,7 @@
         if (ai == 0.0 && ar > 1.0) *ri = -*ri;                                 \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false }
+        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false, NULL }
 
 /* Same fix for the reciprocal inverses (ArcSec/ArcCsc/ArcCoth): here it is
  * 1/x that lands on a cut, so the condition is on the input being real with
@@ -100,7 +100,7 @@
         if (ai == 0.0 && ar != 0.0 && fabs(ar) < 1.0) *ri = -*ri;              \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false }
+        { ndk_##NAME##_c, NULL, false, false, NULL, NULL, false, NULL }
 
 /* Projection: always a real result (Abs/Re/Im/Arg), even for complex input.
  * VEXPR (in `ar`, `ai`) is the real-valued result. */
@@ -109,7 +109,7 @@
         (void)ar; (void)ai;                                                    \
         double v = (VEXPR); *rr = v; *ri = 0.0; return isfinite(v); }          \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, NULL, false, true, NULL, NULL, false }
+        { ndk_##NAME##_c, NULL, false, true, NULL, NULL, false, NULL }
 
 /* ---- trigonometric (real-closed) ---------------------------------------- */
 UK_CLOSED(Sin, sin(x),        csin(z));
@@ -151,7 +151,7 @@ UK_ESC(Log, clog(z));
         if (!(x > 0.0)) return false;                                          \
         *o = RFN(x); return isfinite(*o); }                                    \
     static const NDUnaryKernel NDKU_##NAME =                                   \
-        { ndk_##NAME##_c, ndk_##NAME##_r, false, false, NULL, NULL, false }
+        { ndk_##NAME##_c, ndk_##NAME##_r, false, false, NULL, NULL, false, NULL }
 UK_FIXED_LOG(Log10, log10, ND_LN10);
 UK_FIXED_LOG(Log2,  log2,  ND_LN2);
 
@@ -193,7 +193,7 @@ static bool ndk_Abs_ii(int64_t x, int64_t* o) {
     return true;
 }
 static const NDUnaryKernel NDKU_AbsInt =
-    { ndk_Abs_c, NULL, false, true, NULL, ndk_Abs_ii, true };
+    { ndk_Abs_c, NULL, false, true, NULL, ndk_Abs_ii, true, NULL };
 UK_PROJ(Re,  ar);
 /* Im: the imaginary part. Written by hand rather than via UK_PROJ because it
  * needs a NARROWING pair and must not leave an unused projection descriptor.
@@ -209,7 +209,7 @@ static bool ndk_Im_c(double ar, double ai, double* rr, double* ri) {
 static bool ndk_Im_ir(double x, int64_t* o) { (void)x; *o = 0; return true; }
 static bool ndk_Im_ii(int64_t x, int64_t* o) { (void)x; *o = 0; return true; }
 static const NDUnaryKernel NDKU_ImInt =
-    { ndk_Im_c, NULL, false, true, ndk_Im_ir, ndk_Im_ii, true };
+    { ndk_Im_c, NULL, false, true, ndk_Im_ir, ndk_Im_ii, true, NULL };
 UK_PROJ(Arg, atan2(ai, ar));
 UK_CLOSED(Conjugate, x, conj(z));
 /* Sign: real -> {-1,0,1}; complex -> z/|z| (0 at the origin). */
@@ -233,7 +233,7 @@ static bool ndk_Sign_i(double x, int64_t* o) {
 }
 static bool ndk_Sign_ii(int64_t x, int64_t* o) { *o = (x > 0) - (x < 0); return true; }
 static const NDUnaryKernel NDKU_Sign =
-    { ndk_Sign_c, ndk_Sign_r, true, false, ndk_Sign_i, ndk_Sign_ii, true };
+    { ndk_Sign_c, ndk_Sign_r, true, false, ndk_Sign_i, ndk_Sign_ii, true, NULL };
 
 /* ---- rounding / integer-part (real-closed, real-only) ------------------- */
 /* Floor/Ceiling/Round/IntegerPart/FractionalPart over a real array via libc.
@@ -321,18 +321,18 @@ static bool ndk_UnitBox_ii(int64_t x, int64_t* o)  { *o = (x == 0) ? 1 : 0; retu
  * 0/1), and there is no complex form of either. They are reachable only through
  * the narrowing path. */
 static const NDUnaryKernel NDKU_UnitStep =
-    { NULL, NULL, false, false, ndk_UnitStep_i, ndk_UnitStep_ii, true };
+    { NULL, NULL, false, false, ndk_UnitStep_i, ndk_UnitStep_ii, true, NULL };
 static const NDUnaryKernel NDKU_UnitBox =
-    { NULL, NULL, false, false, ndk_UnitBox_i, ndk_UnitBox_ii, true };
+    { NULL, NULL, false, false, ndk_UnitBox_i, ndk_UnitBox_ii, true, NULL };
 
 /* The other five keep their existing real-closed kernels untouched -- the
  * Compile VM and the scalar consumers still use those -- and gain the narrowing
  * pair, which only ndarray_map_unary prefers. */
-static const NDUnaryKernel NDKU_Floor          = { NULL, ndk_Floor_r,          true, false, ndk_Floor_i,       ndk_ident_ii, true };
-static const NDUnaryKernel NDKU_Ceiling        = { NULL, ndk_Ceiling_r,        true, false, ndk_Ceiling_i,     ndk_ident_ii, true };
-static const NDUnaryKernel NDKU_Round          = { NULL, ndk_Round_r,          true, false, ndk_Round_i,       ndk_ident_ii, true };
-static const NDUnaryKernel NDKU_IntegerPart    = { NULL, ndk_IntegerPart_r,    true, false, ndk_IntegerPart_i, ndk_ident_ii, true };
-static const NDUnaryKernel NDKU_FractionalPart = { ndk_FractionalPart_c, ndk_FractionalPart_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Floor          = { NULL, ndk_Floor_r,          true, false, ndk_Floor_i,       ndk_ident_ii, true, NULL };
+static const NDUnaryKernel NDKU_Ceiling        = { NULL, ndk_Ceiling_r,        true, false, ndk_Ceiling_i,     ndk_ident_ii, true, NULL };
+static const NDUnaryKernel NDKU_Round          = { NULL, ndk_Round_r,          true, false, ndk_Round_i,       ndk_ident_ii, true, NULL };
+static const NDUnaryKernel NDKU_IntegerPart    = { NULL, ndk_IntegerPart_r,    true, false, ndk_IntegerPart_i, ndk_ident_ii, true, NULL };
+static const NDUnaryKernel NDKU_FractionalPart = { ndk_FractionalPart_c, ndk_FractionalPart_r, true, false, NULL, NULL, false, NULL };
 
 /* Ramp: the positive part, and the reason it belongs HERE rather than with the
  * narrowing six above is its exactness rule. Floor and UnitStep answer with an
@@ -357,7 +357,7 @@ static bool ndk_Ramp_r(double x, double* o) {
     *o = (x < 0.0) ? 0.0 : x;
     return true;
 }
-static const NDUnaryKernel NDKU_Ramp = { NULL, ndk_Ramp_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Ramp = { NULL, ndk_Ramp_r, true, false, NULL, NULL, false, NULL };
 
 /* ---- binary (scalar-index) ---------------------------------------------- */
 
@@ -372,7 +372,7 @@ static bool ndk_LogB_c(double bre, double bim, double zre, double zim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false, NULL, NULL, false };
+static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false, NULL, NULL, false, NULL };
 
 /* ArcTan[x, y] = arg(x + I y). Real for real inputs (real_closed). */
 static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
@@ -398,7 +398,7 @@ static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false, NULL };
 
 /* Mod[m, n] = m - n floor(m/n) and Quotient[m, n] = floor(m/n) over real
  * arrays (floored division, result carrying the divisor's sign — matches
@@ -459,6 +459,35 @@ static bool ndk_Mod_ii(int64_t m, int64_t n, int64_t* o) {
     return true;
 }
 
+/* Mod[arr, n] over a whole int64 buffer for a constant n >= 2: the quotient is
+ * estimated from a precomputed double reciprocal and corrected exactly in
+ * integer arithmetic, so the loop has no hardware division and no per-element
+ * call -- it vectorises. For |x| < 2^52 the estimate floor(x * (1/n)) is off by
+ * at most one, which the two conditional corrections absorb; a larger element
+ * takes the % path. Bit-identical to ndk_Mod_ii (floored remainder in [0, n)).
+ * Declines (per-element loop) for n < 2 and for Mod[n, arr]. */
+static bool ndk_Mod_whole(const int64_t* in, size_t sz, int64_t n, bool arr_first,
+                          int64_t* out) {
+    if (!arr_first || n < 2) return false;
+    const double inv = 1.0 / (double)n;
+    const int64_t lim = (int64_t)1 << 52;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t x = in[i];
+        int64_t r;
+        if (x > -lim && x < lim) {
+            int64_t q = (int64_t)floor((double)x * inv);
+            r = x - q * n;
+            r += (r < 0) ? n : 0;
+            r -= (r >= n) ? n : 0;
+        } else {
+            r = x % n;
+            if (r < 0) r += n;
+        }
+        out[i] = r;
+    }
+    return true;
+}
+
 static bool ndk_Quotient_ii(int64_t m, int64_t n, int64_t* o) {
     if (n == 0) return false;
     if (n == -1 && m == INT64_MIN) return false;      /* overflows int64 */
@@ -478,9 +507,9 @@ static bool ndk_Quotient_ri(double m, double n, int64_t* o) {
 }
 
 static const NDBinaryKernel NDKB_Mod =
-    { ndk_Mod_c,      true, NULL,             ndk_Mod_ii,      true };
+    { ndk_Mod_c,      true, NULL,             ndk_Mod_ii,      true, ndk_Mod_whole };
 static const NDBinaryKernel NDKB_Quotient =
-    { ndk_Quotient_c, true, ndk_Quotient_ri,  ndk_Quotient_ii, true };
+    { ndk_Quotient_c, true, ndk_Quotient_ri,  ndk_Quotient_ii, true, NULL };
 
 /* ---- special functions: real machine kernels ---------------------------- */
 /* These cover the common real-array case at C speed via libc; a complex NDArray
@@ -491,12 +520,12 @@ static bool ndk_Gamma_r(double x, double* o) { double v = tgamma(x); *o = v; ret
 /* Complex Gamma is the interpreter's own Lanczos series, shared rather than
  * reimplemented — see gamma.h.  real_closed stays true, so a real argument
  * still takes tgamma above and only a complex one reaches the Lanczos path. */
-static const NDUnaryKernel NDKU_Gamma = { gamma_machine_complex, ndk_Gamma_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Gamma = { gamma_machine_complex, ndk_Gamma_r, true, false, NULL, NULL, false, NULL };
 
 /* Factorial[x] = Gamma[x + 1] over a real array (matches builtin_factorial's
  * real path). A pole (negative integer) yields non-finite -> declines. */
 static bool ndk_Factorial_r(double x, double* o) { double v = tgamma(x + 1.0); *o = v; return isfinite(v); }
-static const NDUnaryKernel NDKU_Factorial = { NULL, ndk_Factorial_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Factorial = { NULL, ndk_Factorial_r, true, false, NULL, NULL, false, NULL };
 
 /* LogGamma is real only for x > 0; for x <= 0 it is complex (lgamma loses the
  * imaginary part), so decline and let the List path handle it. */
@@ -508,15 +537,15 @@ static bool ndk_LogGamma_r(double x, double* o) {
  * Im z), shared with the interpreter so the branch structure has one home.
  * real_closed stays true: the real kernel above declines for x <= 0, where the
  * true value is complex and a CT_REAL program cannot carry it. */
-static const NDUnaryKernel NDKU_LogGamma = { loggamma_machine_complex, ndk_LogGamma_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_LogGamma = { loggamma_machine_complex, ndk_LogGamma_r, true, false, NULL, NULL, false, NULL };
 
 static bool ndk_Erf_r(double x, double* o)  { return sf_erf_r(x, o); }
 static bool ndk_Erfc_r(double x, double* o) { return sf_erfc_r(x, o); }
 /* Both arms are the sf_machine_error.c kernels (the scalar builtin and the
  * Compile opcodes OP_ERF_R / OP_ERFC_R / OP_VERF_R / OP_VERFC_R call the same
  * helpers, so every surface agrees bit for bit). */
-static const NDUnaryKernel NDKU_Erf  = { sf_erf_c,  ndk_Erf_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_Erfc = { sf_erfc_c, ndk_Erfc_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Erf  = { sf_erf_c,  ndk_Erf_r,  true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_Erfc = { sf_erfc_c, ndk_Erfc_r, true, false, NULL, NULL, false, NULL };
 
 /* Bessel J/Y/I/K over real AND complex arrays (real order): the shared
  * dispatch in special_functions/sf_machine_bessel.c, which the scalar builtins
@@ -530,10 +559,10 @@ static bool ndk_BesselI_c(double nre, double nim, double zre, double zim, double
 { return sf_bessel_nd(SF_BESSEL_I, nre, nim, zre, zim, rr, ri); }
 static bool ndk_BesselK_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
 { return sf_bessel_nd(SF_BESSEL_K, nre, nim, zre, zim, rr, ri); }
-static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_BesselI = { ndk_BesselI_c, true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_BesselK = { ndk_BesselK_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_BesselI = { ndk_BesselI_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_BesselK = { ndk_BesselK_c, true, NULL, NULL, false, NULL };
 
 /* Beta[a, b], real and complex: the Gamma family's kernel (sf_machine_gamma.c),
  * shared with the scalar builtin so the surfaces agree bit for bit. */
@@ -541,7 +570,7 @@ static bool ndk_Beta_c(double are, double aim, double bre, double bim,
                        double* rr, double* ri) {
     return sfg_beta_c(are, aim, bre, bim, rr, ri);
 }
-static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false, NULL };
 
 /* The Legendre elliptic integrals over real arrays, by Carlson's symmetric
  * forms (src/special_functions/elliptic.c). PARAMETER convention m = k^2.
@@ -566,8 +595,8 @@ static bool ndk_EllipticE_r(double m, double* o) { return elliptic_machine_e_com
  * EllipticK[z] / EllipticE[z] call for a machine-complex z. A REAL buffer keeps
  * real_closed: its real arm declines m > 1 (complex value), which abandons the
  * buffer to the List path, whose scalar call then takes the complex kernel. */
-static const NDUnaryKernel NDKU_EllipticK = { sf_machine_ellk_k_c, ndk_EllipticK_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_EllipticE = { sf_machine_ellk_e_c, ndk_EllipticE_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_EllipticK = { sf_machine_ellk_k_c, ndk_EllipticK_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_EllipticE = { sf_machine_ellk_e_c, ndk_EllipticE_r, true, false, NULL, NULL, false, NULL };
 
 static bool ndk_EllipticF_c(double pre, double pim, double mre, double mim,
                             double* rr, double* ri) {
@@ -581,8 +610,8 @@ static bool ndk_EllipticEInc_c(double pre, double pim, double mre, double mim,
     if (!elliptic_machine_e_inc(pre, mre, rr)) return false;
     *ri = 0.0; return isfinite(*rr);
 }
-static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false, NULL };
 
 static bool ndk_EllipticPi_c(double nre, double nim, double mre, double mim,
                              double* rr, double* ri) {
@@ -590,7 +619,7 @@ static bool ndk_EllipticPi_c(double nre, double nim, double mre, double mim,
     if (!elliptic_machine_pi(nre, mre, rr)) return false;
     *ri = 0.0; return isfinite(*rr);
 }
-static const NDBinaryKernel NDKB_EllipticPi = { ndk_EllipticPi_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_EllipticPi = { ndk_EllipticPi_c, true, NULL, NULL, false, NULL };
 
 static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
                                 double* rr, double* ri) {
@@ -618,15 +647,15 @@ static bool ndk_Sinc_r(double x, double* o)          { return sf_sinc_r(x, o); }
  * poles +-1 / 0, 2 and outside the real domain). */
 static bool ndk_InverseErf_r(double x, double* o)    { return sf_inverse_erf_r(x, o); }
 static bool ndk_InverseErfc_r(double x, double* o)   { return sf_inverse_erfc_r(x, o); }
-static const NDUnaryKernel NDKU_ExpIntegralEi = { expintegralei_machine_complex, ndk_ExpIntegralEi_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_LogIntegral   = { logintegral_machine_complex, ndk_LogIntegral_r,   true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_SinIntegral   = { sinintegral_machine_complex, ndk_SinIntegral_r,   true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_CosIntegral   = { cosintegral_machine_complex, ndk_CosIntegral_r,   true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_SinhIntegral  = { sinhintegral_machine_complex, ndk_SinhIntegral_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_CoshIntegral  = { coshintegral_machine_complex, ndk_CoshIntegral_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_Sinc          = { sf_sinc_c, ndk_Sinc_r,     true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_ExpIntegralEi = { expintegralei_machine_complex, ndk_ExpIntegralEi_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_LogIntegral   = { logintegral_machine_complex, ndk_LogIntegral_r,   true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_SinIntegral   = { sinintegral_machine_complex, ndk_SinIntegral_r,   true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_CosIntegral   = { cosintegral_machine_complex, ndk_CosIntegral_r,   true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_SinhIntegral  = { sinhintegral_machine_complex, ndk_SinhIntegral_r,  true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_CoshIntegral  = { coshintegral_machine_complex, ndk_CoshIntegral_r,  true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_Sinc          = { sf_sinc_c, ndk_Sinc_r,     true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_InverseErf    = { NULL, ndk_InverseErf_r,    true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_InverseErfc   = { NULL, ndk_InverseErfc_r,   true, false, NULL, NULL, false, NULL };
 
 static bool ndk_Erfi_r(double x, double* o)          { return sf_erfi_r(x, o); }
 static bool ndk_ProductLog_r(double x, double* o)    { return sf_machine_productlog(x, o); }
@@ -640,26 +669,26 @@ static bool ndk_HarmonicNumber_r(double x, double* o){ return sf_machine_harmoni
 static bool ndk_Zeta_r(double x, double* o)          { return sf_machine_zeta(x, o); }
 static bool ndk_Fibonacci_r(double x, double* o)     { return sf_machine_fibonacci(x, o); }
 static bool ndk_LucasL_r(double x, double* o)        { return sf_machine_lucasl(x, o); }
-static const NDUnaryKernel NDKU_Erfi           = { sf_erfi_c, ndk_Erfi_r,      true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_ProductLog     = { sf_machine_productlog_c, ndk_ProductLog_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_FresnelC       = { sf_fresnel_c_c, ndk_FresnelC_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_FresnelS       = { sf_fresnel_s_c, ndk_FresnelS_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_PolyGamma      = { ndk_PolyGamma_u, ndk_PolyGamma_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Erfi           = { sf_erfi_c, ndk_Erfi_r,      true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_ProductLog     = { sf_machine_productlog_c, ndk_ProductLog_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_FresnelC       = { sf_fresnel_c_c, ndk_FresnelC_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_FresnelS       = { sf_fresnel_s_c, ndk_FresnelS_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_PolyGamma      = { ndk_PolyGamma_u, ndk_PolyGamma_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_HarmonicNumber = { NULL, ndk_HarmonicNumber_r, true, false, NULL, NULL, false, NULL };
 /* Zeta's complex arm: the same sf_zeta_c the scalar builtin calls. */
 static bool ndk_Zeta_c(double sr, double si, double* rr, double* ri) { return sf_zeta_c(sr, si, rr, ri); }
-static const NDUnaryKernel NDKU_Zeta           = { ndk_Zeta_c, ndk_Zeta_r,     true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_Zeta           = { ndk_Zeta_c, ndk_Zeta_r,     true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_Fibonacci      = { NULL, ndk_Fibonacci_r,      true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_LucasL         = { NULL, ndk_LucasL_r,         true, false, NULL, NULL, false, NULL };
 /* Airy: real and complex arms of the shared kernels (sf_machine_bessel.c). */
 static bool ndk_AiryAi_c(double a, double b, double* r, double* i)      { return sf_airy_nd(SF_AIRY_AI, a, b, r, i); }
 static bool ndk_AiryBi_c(double a, double b, double* r, double* i)      { return sf_airy_nd(SF_AIRY_BI, a, b, r, i); }
 static bool ndk_AiryAiPrime_c(double a, double b, double* r, double* i) { return sf_airy_nd(SF_AIRY_AIP, a, b, r, i); }
 static bool ndk_AiryBiPrime_c(double a, double b, double* r, double* i) { return sf_airy_nd(SF_AIRY_BIP, a, b, r, i); }
-static const NDUnaryKernel NDKU_AiryAi      = { ndk_AiryAi_c,      sf_airy_ai_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryBi      = { ndk_AiryBi_c,      sf_airy_bi_r,  true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryAiPrime = { ndk_AiryAiPrime_c, sf_airy_aip_r, true, false, NULL, NULL, false };
-static const NDUnaryKernel NDKU_AiryBiPrime = { ndk_AiryBiPrime_c, sf_airy_bip_r, true, false, NULL, NULL, false };
+static const NDUnaryKernel NDKU_AiryAi      = { ndk_AiryAi_c,      sf_airy_ai_r,  true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_AiryBi      = { ndk_AiryBi_c,      sf_airy_bi_r,  true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_AiryAiPrime = { ndk_AiryAiPrime_c, sf_airy_aip_r, true, false, NULL, NULL, false, NULL };
+static const NDUnaryKernel NDKU_AiryBiPrime = { ndk_AiryBiPrime_c, sf_airy_bip_r, true, false, NULL, NULL, false, NULL };
 
 /* PolyGamma[n, x] and HurwitzZeta[s, a].  PolyGamma matters as a BINARY kernel
  * even when written unary: the evaluator canonicalises PolyGamma[x] to
@@ -710,10 +739,10 @@ static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
     }
     return sf_machine_legendre_q_c(nre, xre, xim, rr, ri);
 }
-static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false, NULL };
 
 /* ExpIntegralE[n, z]: integer order n >= 0 (sf_machine_expint.c, the kernels
  * the scalar builtin calls). Real x > 0 stays real; complex z, and real x < 0
@@ -729,7 +758,7 @@ static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
     }
     return sf_machine_expn_c(nre, xre, xim, rr, ri);
 }
-static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false, NULL };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -738,7 +767,7 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
     double v; if (!FN(are, bre, &v)) return false;                             \
     *rr = v; *ri = 0.0; return true;                                           \
 }                                                                              \
-static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL };
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(StruveH,           sf_machine_struve_h)
 #undef NDK_BIN2
@@ -755,7 +784,7 @@ static bool ndk_PolyLog_c(double sre, double sim, double zre, double zim,
     }
     return sf_polylog_c(sre, sim, zre, zim, rr, ri);
 }
-static const NDBinaryKernel NDKB_PolyLog = { ndk_PolyLog_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_PolyLog = { ndk_PolyLog_c, true, NULL, NULL, false, NULL };
 /* Hypergeometric0F1[b, z]: written out (not NDK_BIN2) for its machine COMPLEX
  * arm -- a complex z or b goes to sf_machine_hyper0f1_c instead of declining, so
  * a complex buffer computes on the buffer. Same helpers as the scalar builtin. */
@@ -768,7 +797,7 @@ static bool ndk_Hypergeometric0F1_c(double are, double aim, double bre, double b
     return sf_machine_hyper0f1_c(are, aim, bre, bim, ore, oim);
 }
 static const NDBinaryKernel NDKB_Hypergeometric0F1 =
-    { ndk_Hypergeometric0F1_c, true, NULL, NULL, false };
+    { ndk_Hypergeometric0F1_c, true, NULL, NULL, false, NULL };
 
 /* ChebyshevT and ChebyshevU are written out rather than generated by NDK_BIN2
  * because each has a machine COMPLEX arm as well (the generated form declines
@@ -785,7 +814,7 @@ static bool ndk_ChebyshevT_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_chebyshev_t_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_ChebyshevT = { ndk_ChebyshevT_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_ChebyshevT = { ndk_ChebyshevT_c, true, NULL, NULL, false, NULL };
 
 static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
                              double* ore, double* oim) {
@@ -796,7 +825,7 @@ static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_chebyshev_u_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false, NULL };
 
 /* HermiteH[n, x] (physicists'). Hand-written rather than via NDK_BIN2 because it
  * carries a machine COMPLEX arm: the order `a` must be a real integer, but the
@@ -812,7 +841,7 @@ static bool ndk_HermiteH_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_hermite_h_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false, NULL };
 
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
@@ -829,7 +858,7 @@ static bool ndk_LaguerreL_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_laguerre_l_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_LaguerreL = { ndk_LaguerreL_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_LaguerreL = { ndk_LaguerreL_c, true, NULL, NULL, false, NULL };
 
 /* N-ary kernels: arity >= 3, which the unary/binary descriptors cannot express.
  * Consumed by the Compile[] VM; the NDArray element-wise path still degrades for
@@ -943,8 +972,8 @@ static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true
 static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
-static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false };
-static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false };
+static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL };
 
 /* ---- registration ------------------------------------------------------- */
 

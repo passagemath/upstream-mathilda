@@ -44,11 +44,13 @@ void test_divisible_negative() {
     check("Divisible[-9, 3]", "True");
 }
 
-/* ---- Zero edge cases (GMP semantics: divisible by 0 iff n == 0) ---- */
+/* ---- Zero edge cases: a zero divisor draws Divisible::divz and stays
+ * unevaluated, as in Mathematica 14. ---- */
 void test_divisible_zero() {
     check("Divisible[0, 5]", "True");
-    check("Divisible[0, 0]", "True");
-    check("Divisible[6, 0]", "False");
+    check("Quiet[Divisible[0, 0]]", "Divisible[0, 0]");
+    check("Quiet[Divisible[6, 0]]", "Divisible[6, 0]");
+    check("Check[Divisible[6, 0], m, Divisible::divz]", "m");
 }
 
 /* ---- BigInt integers and large-integer divisibility ---- */
@@ -125,7 +127,21 @@ void test_divisible_symbolic_unevaluated() {
 void test_divisible_arg_errors() {
     check("Divisible[]", "Divisible[]");
     check("Divisible[7]", "Divisible[7]");
-    check("Divisible[6, 5, 4, 3]", "Divisible[6, 5, 4, 3]");
+}
+
+/* ---- Three or more arguments form a CHAIN (Mathematica 14): n divisible by
+ * m1, m1 by m2, ... ---- */
+void test_divisible_chain() {
+    check("Divisible[6, 5, 4, 3]", "False");
+    check("Divisible[12, 2, 3]", "False");
+    check("Divisible[6, 2, 1]", "True");
+    check("Divisible[8, 2, 2]", "True");
+    check("Divisible[36, 6, 3]", "True");
+    check("Quiet[Divisible[6, 2, 0]]", "Divisible[6, 2, 0]");
+    check("Divisible[x, 0]", "Divisible[x, 0]");      /* symbolic: silent */
+    check("Quiet[Divisible[10., 5]]", "Divisible[10.0, 5]");
+    check("Check[Divisible[10., 5], m, Divisible::exact]", "m");
+    check("Check[Divisible[7], m, Divisible::argmu]", "m");
 }
 
 /* ---- Cross-checks against related primitives ---- */
@@ -161,6 +177,7 @@ int main() {
     TEST(test_divisible_listable);
     TEST(test_divisible_symbolic_unevaluated);
     TEST(test_divisible_arg_errors);
+    TEST(test_divisible_chain);
     TEST(test_divisible_consistency);
     TEST(test_divisible_attributes);
 

@@ -581,6 +581,15 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
+  - Real operands use the floored quotient: `n - m Floor[n/m]`. `Mod[n, m, d]` uses `n - m Floor[(n - d)/m]`.
+  - Since v0.471 Mod also follows Mathematica 14 beyond integers, rationals and reals:
+    - **Complex or Gaussian operands** use the nearest quotient, `n - m Round[(n - d)/m]`, with ties to even: `Mod[3 + 4 I, 2]` → `-1`, `Mod[7, 3 + I, 1/2]` → `I`. Gaussian integers take a direct `Z[i]` route (`nt_gaussian_mod`), in int64 when the modulus components are below 2¹⁶.
+      - **Printing difference:** an inexact complex result whose imaginary part rounds to `0.` prints as a Real. Mathilda's arithmetic drops `0.` imaginary parts everywhere; Mathematica keeps `-0.5 + 0.*I`.
+    - **Other exact numerics** use `Floor`: `Mod[Pi, 1]` → `Pi - 3`.
+    - **A zero modulus** gives `Indeterminate` with `Mod::indet` (it used to stay unevaluated), on every surface: scalar, packed, and `Compile`, which hands the zero back to the interpreter.
+    - **An infinite dividend** gives `Indeterminate` with `Infinity::indet`. A real infinite modulus returns `n` (`Mod[-3, Infinity]` → `-3`), and `ComplexInfinity` gives `Indeterminate`.
+    - **Arity**: one argument draws `Mod::argtu`, other counts `Mod::argt`.
+  - Packed `Mod[buffer, k]` with a constant `k >= 2` uses a reciprocal-multiply arm (`NDBinaryKernel.whole_i`) with an exact integer correction, so the loop has no hardware division. On a pre-built `Range[10^7]` it went from 0.116 s to 0.037 s (Mathematica 0.047 s), and the results are bit-identical to the `%` path.
 - `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
   rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
   `Quotient[n, m, d]` is `Floor[(n - d)/m]`. For **complex** `n` or `m` it is

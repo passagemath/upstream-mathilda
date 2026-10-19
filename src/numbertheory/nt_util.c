@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message_gated: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,4 +121,48 @@ int64_t lcm_checked(int64_t a, int64_t b, bool *overflow) {
         return 0;
     }
     return (int64_t)prod;
+}
+
+/* ---- shared diagnostics -------------------------------------------------- */
+
+/* The first argument of res that is an inexact number -- a Real, an MPFR
+ * real, or a Complex with an inexact part -- or NULL. */
+Expr* nt_first_inexact_arg(Expr* res) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        Expr* a = res->data.function.args[i];
+        Expr *re, *im;
+        if (a->type == EXPR_REAL
+#ifdef USE_MPFR
+            || a->type == EXPR_MPFR
+#endif
+            ) return a;
+        if (is_complex(a, &re, &im) &&
+            (re->type == EXPR_REAL || im->type == EXPR_REAL
+#ifdef USE_MPFR
+             || re->type == EXPR_MPFR || im->type == EXPR_MPFR
+#endif
+             )) return a;
+    }
+    return NULL;
+}
+
+/* head::exact -- "Argument a in call is not an exact number."  Returns NULL so
+ * the caller can `return nt_emit_exact(...)` and leave the call unevaluated. */
+Expr* nt_emit_exact(const char* head, Expr* arg, Expr* res) {
+    char* a = expr_to_string(arg);
+    char* call = expr_to_string(res);
+    mth_message_gated(g_arith_warnings_muted, head, "exact",
+                      "Argument %s in %s is not an exact number.",
+                      a ? a : "?", call ? call : "?");
+    free(a); free(call);
+    return NULL;
+}
+
+/* head::int -- "Integer expected at position k in call." */
+Expr* nt_emit_int(const char* head, size_t pos, Expr* res) {
+    char* call = expr_to_string(res);
+    mth_message_gated(g_arith_warnings_muted, head, "int",
+                      "Integer expected at position %zu in %s.", pos, call ? call : "?");
+    free(call);
+    return NULL;
 }

@@ -63,6 +63,20 @@ bool ndint_divisor_sigma_i64(int64_t k, int64_t n, int64_t* out);
 bool ndint_sigma_from_factors(int64_t k, const int64_t* p, const int* e, int np,
                               int64_t* out);
 
+/* EulerPhi / MoebiusMu / JacobiSymbol machine helpers, shared the same way
+ * by the element kernels, Compile (OP_PHI_I / OP_MU_I / OP_JACOBI_I) and the
+ * scalar builtins. The first two decline (false) past the trial-division
+ * ceiling or for INT64_MIN; EulerPhi[0] and MoebiusMu[0] are 0. The Kronecker
+ * symbol is total on int64. */
+bool ndint_euler_phi_i64(int64_t n, int64_t* out);
+/* Factor |n| (n != 0, |n| <= 10^12) by int64 trial division into distinct
+ * primes p[0..*np) with exponents e[]; arrays need NDINT_MAX_FACTORS slots.
+ * false for 0, INT64_MIN or past the ceiling. */
+#define NDINT_MAX_FACTORS 64
+bool ndint_factor_i64(int64_t n, int64_t* p, int* e, int* np);
+bool ndint_moebius_mu_i64(int64_t n, int64_t* out);
+int64_t ndint_kronecker_i64(int64_t a, int64_t n);
+
 Expr* ndint_prime(Expr* res);          /* Prime[arr] */
 Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */
@@ -87,5 +101,12 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which);
  * contract). NULL for a non-int64 dtype, rank > 1, an empty buffer, or an
  * option argument -- the caller degrades through ndarray_delist_and_reeval. */
 Expr* ndint_prime_power_predicate(Expr* res);
+
+/* CoprimeQ[a, b] / Divisible[n, m] over int64 buffers (one side may be an
+ * exact Integer), answering with a packed NDT_BOOL List, as the sign
+ * predicates and PrimePowerQ do. NULL for any shape it does not handle -- including a zero
+ * divisor, whose ::divz message the element path must emit. */
+typedef enum { NDBP_COPRIME, NDBP_DIVISIBLE } NDBinPred;
+Expr* ndint_binary_predicate(Expr* res, NDBinPred which);
 
 #endif /* MATHILDA_NDINTEGER_H */

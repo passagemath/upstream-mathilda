@@ -242,11 +242,10 @@ static void test_mod_quotient(void) {
     /* A REAL scalar over an integer buffer has no int64 answer; the kernel
      * declines and the List path supplies the Real elements. */
     chk_eq("Mod[NDArray[{1, 2, 3}, DataType -> \"int64\"], 2.]", "{1.0, 0.0, 1.0}");
-    /* Zero divisor: the kernel declines and the List path answers, which for a
-     * Listable head is a List of unevaluated Mod calls -- exactly what
-     * Mod[{1, 2, 3}, 0] gives. The point is the agreement, not the shape. */
-    chk_eq("Mod[NDArray[{1, 2, 3}, DataType -> \"int64\"], 0]",
-           "{Mod[1, 0], Mod[2, 0], Mod[3, 0]}");
+    /* Zero divisor: the kernel declines and the List path answers -- exactly
+     * what Mod[{1, 2, 3}, 0] gives. The point is the agreement, not the shape. */
+    chk_eq("Quiet[Mod[NDArray[{1, 2, 3}, DataType -> \"int64\"], 0]]",
+           "{Indeterminate, Indeterminate, Indeterminate}");   /* Mod::indet, as Mathematica */
 
     /* An int64 buffer with a scalar that is not an exact Integer must NOT take
      * Quotient's REAL arm: that arm reads elements through ndt_get, which is

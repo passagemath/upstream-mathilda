@@ -76,8 +76,8 @@ static void test_mo_trivial_modulus(void) {
 
 static void test_mo_negative_n(void) {
     /* Negative n is treated as |n|; same group structure. */
-    check_eq("MultiplicativeOrder[5, -8]", "2");
-    check_eq("MultiplicativeOrder[5, -7]", "6");
+    check_eq("MultiplicativeOrder[5, -8]", "MultiplicativeOrder[5, -8]");  /* Mathematica: n <= 0 unevaluated */
+    check_eq("MultiplicativeOrder[5, -7]", "MultiplicativeOrder[5, -7]");
 }
 
 static void test_mo_small_primes(void) {

@@ -105,6 +105,13 @@ SHAPES = [
 # parameter LISTS around the numeric argument -- get their own probes, so the
 # tool enforces their lowering instead of carrying them in BASELINE.
 HEAD_SHAPES = {
+    # PowerMod[x, e, m]: ternary, so no generic template spells it. The scalar
+    # form lowers to OP_POWMOD_I, the array form delegates to ndint_powermod
+    # through A_NDFN (two trailing integers).
+    "PowerMod": [
+        ("pm_s", "scalar", "{{x, _Integer}}",    "PowerMod[x, 5, 1009]"),
+        ("pm_v", "array",  "{{v, _Integer, 1}}", "PowerMod[v, 5, 1009]"),
+    ],
     # DirichletL[k, j, s]: integer labels broadcast, s scalar or a tile; a real
     # character (5, 3) types Real, a complex one (5, 2) Complex.
     "DirichletL": [
@@ -353,13 +360,6 @@ BASELINE = {
     # A callback lowering, as Map / Select / Fold already have.
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
-    # SCALAR forms of the integer-only kernels.  Their ARRAY forms landed on
-    # 2026-08-02; the scalar side wants an int -> int opcode that can ABORT
-    # (EulerPhi of a negative has no answer) rather than a K_UN kernel opcode,
-    # which writes NaN.  DivisorSigma closed 2026-10-19 with OP_DSIG_I, a
-    # dedicated K_BIN opcode that jumps to vm_fail on decline -- the template
-    # for the other two.
-    "MoebiusMu", "EulerPhi", "PowerMod",
     # LerchPhi[z, s, a]: a machine N-ary kernel that compiles via OP_KERNN
     # (real) and OP_KERNN_C (complex z/s/a) -- verify with a 3-scalar-arg
     # CompileDiagnostics -- but the SHAPES table tops out at two scalar args,
@@ -394,6 +394,12 @@ BASELINE = {
     # PrimePowerQ[v] is the same missing int -> bool elementwise array lowering
     # (A_STORE_B) as the sign predicates above and EvenQ.
     "PrimePowerQ",
+    # CoprimeQ and Divisible (v0.471): the SCALAR forms compile (Divisible as
+    # MOD_I == 0, CoprimeQ[a, b] as GCD_I == 1), and their packed buffers answer
+    # straight off int64 with a packed bool List (ndint_binary_predicate).  The
+    # direct ARRAY form is the same missing int -> bool elementwise lowering
+    # (A_STORE_B) as PrimePowerQ and the sign predicates.
+    "CoprimeQ", "Divisible",
 }
 
 

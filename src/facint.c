@@ -679,10 +679,45 @@ bool facint_factor_complete(const mpz_t n, mpz_t* primes, int64_t* exps,
     return complete;
 }
 
+/* EulerPhi[n]: the number of 1 <= k <= n coprime to n. EulerPhi[0] is 0 and
+ * the sign of n is ignored, as in Mathematica. A small machine n goes through
+ * ndint_euler_phi_i64 -- the helper behind the NDArray kernel and Compile's
+ * OP_PHI_I -- so the three agree and no GMP is touched; otherwise FactorInteger
+ * and GMP. A non-integer NUMBER (EulerPhi[1/2], EulerPhi[2.], EulerPhi[3 + I])
+ * draws EulerPhi::int and a wrong argument count EulerPhi::argx, both leaving
+ * the call unevaluated; a symbolic argument stays unevaluated silently. */
+#define PHI_MACHINE_TRIAL_MAX ((int64_t)1 << 20)
+
 Expr* builtin_eulerphi(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) {
+        mth_message_gated(g_arith_warnings_muted, "EulerPhi", "argx",
+            "EulerPhi called with %zu arguments; 1 argument is expected.", argc);
+        return NULL;
+    }
     Expr* arg = res->data.function.args[0];
-    if (!expr_is_integer_like(arg)) return NULL;
+    if (arg->type == EXPR_INTEGER && arg->data.integer >= -PHI_MACHINE_TRIAL_MAX &&
+        arg->data.integer <= PHI_MACHINE_TRIAL_MAX) {
+        int64_t r;
+        if (ndint_euler_phi_i64(arg->data.integer, &r)) return expr_new_integer(r);
+    }
+    if (!expr_is_integer_like(arg)) {
+        Expr *re, *im;
+        bool number = arg->type == EXPR_REAL || is_rational_like(arg) ||
+                      is_complex(arg, &re, &im)
+#ifdef USE_MPFR
+                      || arg->type == EXPR_MPFR
+#endif
+                      ;
+        if (number) {
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "EulerPhi", "int",
+                "Integer expected at position 1 in %s.", call ? call : "?");
+            free(call);
+        }
+        return NULL;
+    }
 
     mpz_t n;
     expr_to_mpz(arg, n);

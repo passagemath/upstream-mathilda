@@ -59,6 +59,12 @@ static bool ndi_factor(int64_t n, int64_t* p, int* e, int* np) {
     return true;
 }
 
+/* Exported for the scalar number-theory builtins (MultiplicativeOrder's
+ * machine path): the same trial-division factorisation, same ceiling. */
+bool ndint_factor_i64(int64_t n, int64_t* p, int* e, int* np) {
+    return ndi_factor(n, p, e, np);
+}
+
 /* ---- unary integer kernels ---------------------------------------------- */
 
 /* IntegerLength[n]: decimal digits of |n|. IntegerLength[0] is 0, matching
@@ -88,28 +94,45 @@ static bool ndk_BitLength_ii(int64_t n, int64_t* out) {
 /* EulerPhi[n] = |n| * prod (1 - 1/p). EulerPhi[0] is 0 and the sign of n is
  * ignored, both matching the scalar builtin. Divide before multiplying so the
  * running value never exceeds |n| and cannot overflow. */
-static bool ndk_EulerPhi_ii(int64_t n, int64_t* out) {
+static int64_t ndi_phi_from_factors(int64_t m, const int64_t* p, int np) {
+    int64_t phi = m;
+    for (int i = 0; i < np; i++) phi = phi / p[i] * (p[i] - 1);
+    return phi;
+}
+
+/* Shared by the scalar builtin and Compile's OP_PHI_I. */
+bool ndint_euler_phi_i64(int64_t n, int64_t* out) {
     if (n == 0) { *out = 0; return true; }
     int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np;
     if (!ndi_factor(n, p, e, &np)) return false;
     int64_t m;
     if (ci_abs_i64(n, &m)) return false;
-    int64_t phi = m;
-    for (int i = 0; i < np; i++) phi = phi / p[i] * (p[i] - 1);
-    *out = phi;
+    *out = ndi_phi_from_factors(m, p, np);
     return true;
 }
 
-/* MoebiusMu[n]: 0 if any exponent >= 2, else (-1)^(distinct primes). Declines
- * n == 0, where the scalar builtin leaves the call unevaluated -- so the whole
- * array degrades and the List path reproduces that exactly. Sign ignored. */
-static bool ndk_MoebiusMu_ii(int64_t n, int64_t* out) {
-    if (n == 0) return false;
+static bool ndk_EulerPhi_ii(int64_t n, int64_t* out) {
+    return ndint_euler_phi_i64(n, out);
+}
+
+/* MoebiusMu[n]: 0 if any exponent >= 2, else (-1)^(distinct primes).
+ * MoebiusMu[0] is 0, as in Mathematica (0 is divisible by every square). Sign
+ * ignored. Shared by the scalar builtin and Compile's OP_MU_I. */
+static int64_t ndi_mu_from_exps(const int* e, int np) {
+    for (int i = 0; i < np; i++) if (e[i] >= 2) return 0;
+    return (np % 2 == 0) ? 1 : -1;
+}
+
+bool ndint_moebius_mu_i64(int64_t n, int64_t* out) {
+    if (n == 0) { *out = 0; return true; }
     int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np;
     if (!ndi_factor(n, p, e, &np)) return false;
-    for (int i = 0; i < np; i++) if (e[i] >= 2) { *out = 0; return true; }
-    *out = (np % 2 == 0) ? 1 : -1;
+    *out = ndi_mu_from_exps(e, np);
     return true;
+}
+
+static bool ndk_MoebiusMu_ii(int64_t n, int64_t* out) {
+    return ndint_moebius_mu_i64(n, out);
 }
 
 /* ---- binary integer kernels --------------------------------------------- */
@@ -194,17 +217,16 @@ static bool ndk_DivisorSigma_ii(int64_t k, int64_t n, int64_t* out) {
 #define NDI_SPF_FREE  ((int64_t)4000000)    /* 2 MB, always worth building */
 #define NDI_SPF_MAX   ((int64_t)50000000)   /* 25 MB, the hard ceiling     */
 
-static bool ndk_DivisorSigma_whole(const int64_t* in, size_t sz, int64_t scal,
-                                   bool arr_first, int64_t* out) {
-    /* Only DivisorSigma[k, arr]: an array of k is not a factoring workload. */
-    if (arr_first) return false;
-    int64_t k = scal;
-    if (k < 0 || sz == 0) return false;
-
+/* Plan a sieve for the buffer: the largest |element|, and whether a sieve to
+ * it is worth building (see the measured break-even below). Declines an
+ * INT64_MIN element (no |n|), and a zero one unless `allow_zero`. */
+static bool ndi_spf_plan(const int64_t* in, size_t sz, bool allow_zero,
+                         int64_t* nmax_out) {
+    if (sz == 0) return false;
     int64_t nmax = 0;
     for (size_t i = 0; i < sz; i++) {
         int64_t v = in[i];
-        if (v == 0 || v == INT64_MIN) return false;      /* per-element path decides */
+        if (v == INT64_MIN || (v == 0 && !allow_zero)) return false;
         if (v < 0) v = -v;
         if (v > nmax) nmax = v;
     }
@@ -216,38 +238,130 @@ static bool ndk_DivisorSigma_whole(const int64_t* in, size_t sz, int64_t scal,
      * 30000 elements at the 5*10^7 ceiling, where it is a 0.3 s build. */
     if (nmax > NDI_SPF_FREE && (double)sz < 4.0 * sqrt((double)nmax))
         return false;
+    *nmax_out = nmax;
+    return true;
+}
 
-    size_t half = (size_t)(nmax / 2) + 1;               /* odd m -> m >> 1 */
+/* The smallest-prime-factor table over the odd numbers up to nmax (index
+ * m >> 1), 0 for a prime. NULL on allocation failure. Caller frees. */
+static uint16_t* ndi_spf_build(int64_t nmax) {
+    size_t half = (size_t)(nmax / 2) + 1;
     uint16_t* spf = (uint16_t*)calloc(half, sizeof(uint16_t));
-    if (!spf) return false;
+    if (!spf) return NULL;
     for (int64_t q = 3; q * q <= nmax; q += 2) {
         if (spf[q >> 1]) continue;                        /* q composite */
         for (int64_t j = q * q; j <= nmax; j += 2 * q)
             if (!spf[j >> 1]) spf[j >> 1] = (uint16_t)q;
     }
+    return spf;
+}
 
+/* Factor m (1 <= m <= the table's nmax) off the table: distinct primes in
+ * ascending order with their exponents. Walks the smallest-factor chain, one
+ * exact division per prime factor (with multiplicity) and never a trial one. */
+static int ndi_spf_factor(const uint16_t* spf, int64_t m, int64_t* p, int* e) {
+    int np = 0;
+    if ((m & 1) == 0) {
+        p[np] = 2; e[np] = 0;
+        while ((m & 1) == 0) { e[np]++; m >>= 1; }
+        np++;
+    }
+    while (m > 1) {
+        int64_t q = spf[m >> 1] ? (int64_t)spf[m >> 1] : m;
+        m /= q;
+        if (np > 0 && p[np - 1] == q) e[np - 1]++;
+        else { p[np] = q; e[np] = 1; np++; }
+    }
+    return np;
+}
+
+static bool ndk_DivisorSigma_whole(const int64_t* in, size_t sz, int64_t scal,
+                                   bool arr_first, int64_t* out) {
+    /* Only DivisorSigma[k, arr]: an array of k is not a factoring workload. */
+    if (arr_first || scal < 0) return false;
+    int64_t nmax;
+    if (!ndi_spf_plan(in, sz, false, &nmax)) return false;
+    uint16_t* spf = ndi_spf_build(nmax);
+    if (!spf) return false;
     bool ok = true;
     for (size_t i = 0; i < sz && ok; i++) {
-        int64_t m = in[i] < 0 ? -in[i] : in[i];
-        int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np = 0;
-        if ((m & 1) == 0) {
-            p[np] = 2; e[np] = 0;
-            while ((m & 1) == 0) { e[np]++; m >>= 1; }
-            np++;
-        }
-        /* Walk the smallest-factor chain: one exact division per prime
-         * factor (with multiplicity), never a trial one. Factors arrive in
-         * ascending order, so a repeat of the last prime bumps its exponent. */
-        while (m > 1) {
-            int64_t q = spf[m >> 1] ? (int64_t)spf[m >> 1] : m;
-            m /= q;
-            if (np > 0 && p[np - 1] == q) e[np - 1]++;
-            else { p[np] = q; e[np] = 1; np++; }
-        }
-        ok = ndint_sigma_from_factors(k, p, e, np, &out[i]);
+        int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS];
+        int np = ndi_spf_factor(spf, in[i] < 0 ? -in[i] : in[i], p, e);
+        ok = ndint_sigma_from_factors(scal, p, e, np, &out[i]);
     }
     free(spf);
     return ok;
+}
+
+/* EulerPhi and MoebiusMu over a whole buffer, off the same sieve. Both are
+ * total on int64 bar INT64_MIN (phi(n) <= |n|, mu in {-1, 0, 1}), so once the
+ * plan accepts the buffer every element answers. */
+static bool ndk_EulerPhi_whole(const int64_t* in, size_t sz, int64_t* out) {
+    int64_t nmax;
+    if (!ndi_spf_plan(in, sz, true, &nmax)) return false;
+    uint16_t* spf = ndi_spf_build(nmax);
+    if (!spf) return false;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t m = in[i] < 0 ? -in[i] : in[i];
+        if (m == 0) { out[i] = 0; continue; }
+        int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS];
+        int np = ndi_spf_factor(spf, m, p, e);
+        out[i] = ndi_phi_from_factors(m, p, np);
+    }
+    free(spf);
+    return true;
+}
+
+static bool ndk_MoebiusMu_whole(const int64_t* in, size_t sz, int64_t* out) {
+    int64_t nmax;
+    if (!ndi_spf_plan(in, sz, true, &nmax)) return false;
+    uint16_t* spf = ndi_spf_build(nmax);
+    if (!spf) return false;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t m = in[i] < 0 ? -in[i] : in[i];
+        if (m == 0) { out[i] = 0; continue; }
+        int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS];
+        int np = ndi_spf_factor(spf, m, p, e);
+        out[i] = ndi_mu_from_exps(e, np);
+    }
+    free(spf);
+    return true;
+}
+
+/* JacobiSymbol[a, n] in int64: the full Kronecker symbol, exactly what the
+ * scalar builtin's mpz_kronecker computes (Cohen, Alg. 1.4.10), so it is
+ * total -- every int64 pair has an answer in {-1, 0, 1}. Shared by the
+ * element kernel and Compile's OP_JACOBI_I. */
+int64_t ndint_kronecker_i64(int64_t a, int64_t n) {
+    static const int tab2[8] = { 0, 1, 0, -1, 0, -1, 0, 1 };
+    if (n == 0) return (a == 1 || a == -1) ? 1 : 0;
+    if ((a & 1) == 0 && (n & 1) == 0) return 0;
+    uint64_t un = n < 0 ? (uint64_t)0 - (uint64_t)n : (uint64_t)n;
+    int k = 1;
+    int v = 0;
+    while ((un & 1) == 0) { un >>= 1; v++; }
+    if (v & 1) k = tab2[(uint64_t)a & 7];
+    if (n < 0 && a < 0) k = -k;
+    /* un is now odd and positive: (a/un) depends only on a mod un. */
+    uint64_t ua;
+    if (a >= 0) ua = (uint64_t)a % un;
+    else {
+        uint64_t r = ((uint64_t)0 - (uint64_t)a) % un;
+        ua = r ? un - r : 0;
+    }
+    while (ua != 0) {
+        v = 0;
+        while ((ua & 1) == 0) { ua >>= 1; v++; }
+        if (v & 1) k *= tab2[un & 7];
+        if (ua & un & 2) k = -k;                        /* reciprocity */
+        uint64_t t = un % ua; un = ua; ua = t;
+    }
+    return un == 1 ? k : 0;
+}
+
+static bool ndk_JacobiSymbol_ii(int64_t a, int64_t n, int64_t* out) {
+    *out = ndint_kronecker_i64(a, n);
+    return true;
 }
 
 /* Integer-only descriptors: no `cplx`, no `real`, `real_closed` false. Every
@@ -255,17 +369,19 @@ static bool ndk_DivisorSigma_whole(const int64_t* in, size_t sz, int64_t scal,
  * so a Real buffer degrades to the List path — which is what these heads want
  * anyway (EulerPhi[3.] is not EulerPhi[3]). */
 static const NDUnaryKernel NDKU_IntegerLength =
-    { NULL, NULL, false, false, NULL, ndk_IntegerLength_ii, true };
+    { NULL, NULL, false, false, NULL, ndk_IntegerLength_ii, true, NULL };
 static const NDUnaryKernel NDKU_BitLength =
-    { NULL, NULL, false, false, NULL, ndk_BitLength_ii, true };
+    { NULL, NULL, false, false, NULL, ndk_BitLength_ii, true, NULL };
 static const NDUnaryKernel NDKU_EulerPhi =
-    { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true };
+    { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true, ndk_EulerPhi_whole };
 static const NDUnaryKernel NDKU_MoebiusMu =
-    { NULL, NULL, false, false, NULL, ndk_MoebiusMu_ii, true };
+    { NULL, NULL, false, false, NULL, ndk_MoebiusMu_ii, true, ndk_MoebiusMu_whole };
 static const NDBinaryKernel NDKB_GCD =
     { NULL, false, NULL, ndk_GCD_ii, true, NULL };
 static const NDBinaryKernel NDKB_LCM =
     { NULL, false, NULL, ndk_LCM_ii, true, NULL };
+static const NDBinaryKernel NDKB_JacobiSymbol =
+    { NULL, false, NULL, ndk_JacobiSymbol_ii, true, NULL };
 static const NDBinaryKernel NDKB_DivisorSigma =
     { NULL, false, NULL, ndk_DivisorSigma_ii, true, ndk_DivisorSigma_whole };
 
@@ -387,9 +503,11 @@ Expr* ndint_powermod(Expr* res) {
     int64_t e, m;
     if (!ndi_exact_int(res->data.function.args[1], &e) || e < 0) return NULL;
     if (!ndi_exact_int(res->data.function.args[2], &m)) return NULL;
-    if (m == 0) return NULL;
-    int64_t am;
-    if (ci_abs_i64(m, &am) || am > NDI_POWERMOD_MAX) return NULL;
+    /* A negative modulus is left unevaluated by the builtin (as in
+     * Mathematica), so the buffer declines and the List path reproduces it. */
+    if (m <= 0) return NULL;
+    int64_t am = m;
+    if (am > NDI_POWERMOD_MAX) return NULL;
 
     size_t sz = ndarray_size(a);
     const void* in = a->data.ndarray.data;
@@ -404,10 +522,6 @@ Expr* ndint_powermod(Expr* res) {
             k >>= 1;
             if (k > 0) b = (b * b) % am;
         }
-        /* builtin_powermod takes mpz_abs of the modulus before it starts, so a
-         * negative modulus gives the same non-negative residue: PowerMod[3, 2,
-         * -5] is 4, not -1. Verified against the scalar path rather than
-         * assumed, since Mod's own sign convention is the opposite one. */
         out[i] = r;
     }
     return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
@@ -546,6 +660,65 @@ Expr* ndint_prime_power_predicate(Expr* res) {
     return out;
 }
 
+/* ---- CoprimeQ / Divisible ---------------------------------------------- *
+ * Binary integer predicates: read an int64 buffer against an exact Integer (on
+ * either side), or two equal-shape int64 buffers, and answer with the same
+ * packed NDT_BOOL List as the sign predicates and PrimePowerQ. Declines -- so
+ * the List path answers element by element, with its messages -- a zero
+ * divisor (Divisible::divz), INT64_MIN (no |n|), and every other shape. */
+static int64_t ndi_gcd_abs(int64_t a, int64_t b) {
+    uint64_t x = a < 0 ? (uint64_t)0 - (uint64_t)a : (uint64_t)a;
+    uint64_t y = b < 0 ? (uint64_t)0 - (uint64_t)b : (uint64_t)b;
+    while (y) { uint64_t t = x % y; x = y; y = t; }
+    return (int64_t)x;                     /* x <= 2^63 only for INT64_MIN pairs, declined */
+}
+
+Expr* ndint_binary_predicate(Expr* res, NDBinPred which) {
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    const Expr* a0 = res->data.function.args[0];
+    const Expr* a1 = res->data.function.args[1];
+    bool nd0 = is_ndarray(a0), nd1 = is_ndarray(a1);
+    if (!nd0 && !nd1) return NULL;
+    const Expr* shape = nd0 ? a0 : a1;
+    if (nd0 && a0->data.ndarray.dtype != NDT_INT64) return NULL;
+    if (nd1 && a1->data.ndarray.dtype != NDT_INT64) return NULL;
+    if (!nd0 && a0->type != EXPR_INTEGER) return NULL;
+    if (!nd1 && a1->type != EXPR_INTEGER) return NULL;
+    size_t sz = ndarray_size(shape);
+    if (sz == 0) return NULL;
+    if (nd0 && nd1) {
+        if (a0->data.ndarray.rank != a1->data.ndarray.rank) return NULL;
+        for (int d = 0; d < a0->data.ndarray.rank; d++)
+            if (a0->data.ndarray.dims[d] != a1->data.ndarray.dims[d]) return NULL;
+    }
+    const int64_t* in0 = nd0 ? (const int64_t*)a0->data.ndarray.data : NULL;
+    const int64_t* in1 = nd1 ? (const int64_t*)a1->data.ndarray.data : NULL;
+    int64_t s0 = nd0 ? 0 : a0->data.integer, s1 = nd1 ? 0 : a1->data.integer;
+
+    /* Validate first, so a decline costs no allocation. */
+    for (size_t i = 0; i < sz; i++) {
+        int64_t x = nd0 ? in0[i] : s0, y = nd1 ? in1[i] : s1;
+        if (x == INT64_MIN || y == INT64_MIN) return NULL;
+        if (which == NDBP_DIVISIBLE && y == 0) return NULL;
+        if (!nd0 && !nd1) break;
+    }
+
+    void* buf = NULL;
+    Expr* out = ndbuild_open_like(shape, shape->data.ndarray.rank,
+                                  shape->data.ndarray.dims, NDT_BOOL, &buf);
+    if (!out) return NULL;
+    out->data.ndarray.present_as = NDA_HEAD_LIST;   /* a List of True/False, as the sign predicates */
+    pack_g_any_created = true;
+    uint8_t* ob = (uint8_t*)buf;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t x = nd0 ? in0[i] : s0, y = nd1 ? in1[i] : s1;
+        ob[i] = (which == NDBP_DIVISIBLE)
+                    ? (y == -1 || x % y == 0)
+                    : (ndi_gcd_abs(x, y) == 1);
+    }
+    return out;
+}
+
 /* ---- registration ------------------------------------------------------- */
 
 void ndinteger_init(void) {
@@ -556,4 +729,5 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("GCD",          &NDKB_GCD);
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
+    symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);
 }

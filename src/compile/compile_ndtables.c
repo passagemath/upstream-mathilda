@@ -23,6 +23,7 @@
 #include "../sort.h"               /* builtin_reverse_sort */
 #include "../convolutions.h"       /* builtin_list_convolve / _correlate */
 #include "../fourier.h"            /* fourier_compile / inverse_fourier_compile, DCT/DST */
+#include "../ndinteger.h"          /* ndint_powermod */
 #include <string.h>
 #include <stddef.h>
 #include <math.h>     /* INFINITY / NAN — the V_NORM p encoding */
@@ -122,6 +123,11 @@ static Expr* nd_leastsquares(Expr* call) {     /* direct-args, real float64 only
 }
 
 static const NdFnSpec ND_FNS[] = {
+    /* PowerMod[v, e, m] (v an int64 array, e and m Integers): the interpreter's
+     * own buffer path, so the two agree element for element. It declines (NULL
+     * -> the VM aborts to the interpreter) for a negative exponent, a
+     * non-positive modulus or one past its no-overflow bound. */
+    { "PowerMod",   ndint_powermod,     2, 0, false, NDF_INT, false },
     { "Reverse",    ndstruct_reverse,   0, 0, false, 0, false },
     { "Sort",       ndstruct_sort,      0, 0, false, 0, false },   /* 1-arg only: a comparator is a
                                                    * function value the ND path

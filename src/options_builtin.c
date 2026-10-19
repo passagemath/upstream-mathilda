@@ -890,9 +890,13 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("GaussianIntegers", "Automatic"));
     ob_commit(&b, "PrimePowerQ");
 
+    /* CoprimeQ has NO options in Mathematica 14 -- a GaussianIntegers rule is
+     * just a non-integer argument, so CoprimeQ[2, 5, GaussianIntegers -> True]
+     * is False -- and none are registered here. */
+
     ob_init(&b);
     ob_add(&b, r_sym("GaussianIntegers", "False"));
-    ob_commit(&b, "CoprimeQ");
+    ob_commit(&b, "DivisorSigma");
 
     ob_init(&b);
     ob_add(&b, r_sym("GaussianIntegers", "False"));

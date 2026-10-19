@@ -116,8 +116,10 @@ bool int_only_head(const char* h, size_t na, bool* pred) {
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
     if (na == 1 && strcmp(h, "BitLength") == 0) return true;
     if (na == 1 && strcmp(h, "PrimePowerQ") == 0) { *pred = true; return true; }
+    if (na == 2 && strcmp(h, "CoprimeQ") == 0) { *pred = true; return true; }
     if (na == 3 && strcmp(h, "PowerMod") == 0) return true;
-    if (na == 2 && strcmp(h, "DivisorSigma") == 0) return true;
+    if (na == 2 && (strcmp(h, "DivisorSigma") == 0 || strcmp(h, "JacobiSymbol") == 0)) return true;
+    if (na == 1 && (strcmp(h, "EulerPhi") == 0 || strcmp(h, "MoebiusMu") == 0)) return true;
     if ((na == 1 && (strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0))
         || (na == 2 && strcmp(h, "Divisible") == 0)) { *pred = true; return true; }
     return false;

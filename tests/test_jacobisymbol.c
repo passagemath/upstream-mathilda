@@ -213,7 +213,7 @@ static void test_argrx_one(void) {
     ASSERT(result != NULL);
     ASSERT(strstr(result, "JacobiSymbol[5]") != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "JacobiSymbol::argrx") != NULL);
+    ASSERT(strstr(err, "JacobiSymbol::argr:") != NULL);   /* argr for one argument */
     ASSERT_MSG(strstr(err, "1 argument;") != NULL,
                "expected singular 'argument', got: %s", err);
     free(result);

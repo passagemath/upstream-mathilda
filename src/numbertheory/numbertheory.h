@@ -18,6 +18,11 @@
  * subsystem initialisers. */
 void numbertheory_init(void);
 
+/* Mod[m, n] / Mod[m, n, d] for Gaussian integers (at least one non-real), with
+ * Mathematica's nearest-quotient convention m - n Round[(m - d)/n]. NULL when
+ * an argument is not a Gaussian integer or n is 0. Used by builtin_mod. */
+Expr* nt_gaussian_mod(Expr* m, Expr* n, Expr* d);
+
 Expr* builtin_gcd(Expr* res);
 Expr* builtin_lcm(Expr* res);
 Expr* builtin_extendedgcd(Expr* res);

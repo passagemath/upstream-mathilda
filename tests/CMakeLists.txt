@@ -1385,6 +1385,14 @@ add_executable(divisorsigma_tests test_divisorsigma.c $<TARGET_OBJECTS:mathilda_
 target_include_directories(divisorsigma_tests PRIVATE ../src)
 add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
 
+add_executable(divisibility_review_tests test_divisibility_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(divisibility_review_tests PRIVATE ../src)
+add_test(NAME divisibility_review_tests COMMAND divisibility_review_tests)
+
+add_executable(congruence_review_tests test_congruence_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(congruence_review_tests PRIVATE ../src)
+add_test(NAME congruence_review_tests COMMAND congruence_review_tests)
+
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)

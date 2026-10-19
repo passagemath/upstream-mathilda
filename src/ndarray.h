@@ -280,6 +280,14 @@ typedef struct {
     bool (*to_int_r)(double x, int64_t* out);
     bool (*to_int_i)(int64_t x, int64_t* out);
     bool to_int;
+
+    /* Optional WHOLE-BUFFER twin of `to_int_i` -- the unary counterpart of
+     * NDBinaryKernel.whole_i (see there). EulerPhi and MoebiusMu over
+     * Range[10^7] want one smallest-prime-factor sieve, not 10^7 trial
+     * divisions. Fills out[0..sz) and returns true, or declines (false) and
+     * the per-element `to_int_i` loop runs as before; its answers must be
+     * bit-identical to `to_int_i`'s. NULL means "no such arm". */
+    bool (*whole_i)(const int64_t* in, size_t sz, int64_t* out);
 } NDUnaryKernel;
 
 /* Binary scalar-index kernel: f[scalar, array] or f[array, scalar] — one

@@ -7,6 +7,7 @@
 #include "arithmetic.h"
 #include "expr.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "ndinteger.h" /* ndint_kronecker_i64 */
 #include <stdio.h>
 #include <gmp.h>
 
@@ -15,9 +16,13 @@
 /* Emit the wrong-argument-count diagnostic for JacobiSymbol and return NULL so
  * the call is left unevaluated. */
 static Expr* jacobisymbol_emit_argrx(size_t npos) {
-    if (!arith_warnings_muted()) {
-        mth_message("JacobiSymbol", "argrx", "JacobiSymbol called with %zu argument%s; 2 arguments are expected.", npos, npos == 1 ? "" : "s");
-    }
+    /* Mathematica's tag is argr for one argument, argrx otherwise. */
+    if (npos == 1)
+        mth_message_gated(g_arith_warnings_muted, "JacobiSymbol", "argr",
+            "JacobiSymbol called with 1 argument; 2 arguments are expected.");
+    else
+        mth_message_gated(g_arith_warnings_muted, "JacobiSymbol", "argrx",
+            "JacobiSymbol called with %zu arguments; 2 arguments are expected.", npos);
     return NULL;
 }
 
@@ -41,6 +46,12 @@ Expr* builtin_jacobisymbol(Expr* res) {
     Expr* m_expr = res->data.function.args[1];
     if (!expr_is_integer_like(n_expr) || !expr_is_integer_like(m_expr))
         return NULL;
+
+    /* Machine pair: the int64 Kronecker symbol the NDArray kernel and
+     * Compile's OP_JACOBI_I use. */
+    if (n_expr->type == EXPR_INTEGER && m_expr->type == EXPR_INTEGER)
+        return expr_new_integer(ndint_kronecker_i64(n_expr->data.integer,
+                                                    m_expr->data.integer));
 
     mpz_t n, m;
     expr_to_mpz(n_expr, n);

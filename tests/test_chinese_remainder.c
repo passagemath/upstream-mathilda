@@ -18,13 +18,14 @@
  *   - No-solution / inconsistent systems -> unevaluated, no diagnostic.
  *   - Edge cases: empty lists -> 0; single congruence; length mismatch;
  *     symbolic and non-integer arguments -> unevaluated.
- *   - Argument-count error -> ChineseRemainder::argt.
+ *   - Argument-count error -> ChineseRemainder::argr / ::argrx (as Mathematica 14).
  *   - Attribute (Protected, NOT Listable), docstring, interned-symbol
  *     introspection.
  *   - Repeated-evaluation stress loop to catch double-frees / leaks under
  *     valgrind.
  */
 
+#define _POSIX_C_SOURCE 200809L   /* dup / dup2 / fileno */
 #include "expr.h"
 #include "eval.h"
 #include "core.h"
@@ -37,6 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 /* Capture stderr while `input` is parsed + evaluated.  Returns the
  * collected stderr text as a heap string (caller frees) and writes the
@@ -44,8 +46,14 @@
  * fixed temp file path; safe because tests run serially. */
 static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     const char* path = "/tmp/mathilda_chinese_remainder_stderr.log";
+    /* Save the real stderr descriptor and restore it afterwards. Reopening
+     * "/dev/tty" instead (as this used to) fails when there is no terminal --
+     * under xargs, CI or a pipe -- and leaves stderr closed for every later
+     * test, which then aborts on an assertion it cannot even print. */
     fflush(stderr);
-    if (!freopen(path, "w+", stderr)) {
+    int saved = dup(fileno(stderr));
+    if (saved < 0 || !freopen(path, "w+", stderr)) {
+        if (saved >= 0) close(saved);
         if (out_result_str) *out_result_str = NULL;
         return NULL;
     }
@@ -57,7 +65,9 @@ static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     expr_free(e);
 
     fflush(stderr);
-    freopen("/dev/tty", "w", stderr);
+    dup2(saved, fileno(stderr));
+    close(saved);
+    clearerr(stderr);
 
     FILE* f = fopen(path, "r");
     if (!f) return NULL;
@@ -214,27 +224,22 @@ static void test_no_solution_variants(void) {
 /* --- Edge cases ---------------------------------------------------- */
 
 static void test_empty_lists(void) {
-    /* LCM of nothing is 1; the unique x in [0, 1) is 0. */
-    assert_eval_eq("ChineseRemainder[{}, {}]", "0", 0);
-    /* Empty with an offset: smallest x >= 5 in [5, 6). */
-    assert_eval_eq("ChineseRemainder[{}, {}, 5]", "5", 0);
+    /* Mathematica 14 leaves empty lists unevaluated. */
+    assert_eval_eq("ChineseRemainder[{}, {}]", "ChineseRemainder[{}, {}]", 0);
+    assert_eval_eq("ChineseRemainder[{}, {}, 5]", "ChineseRemainder[{}, {}, 5]", 0);
 }
 
 static void test_zero_modulus_unevaluated(void) {
-    /* A zero modulus is rejected; left unevaluated. */
-    assert_eval_eq("ChineseRemainder[{1}, {0}]", "ChineseRemainder[{1}, {0}]", 0);
+    /* Moduli must be positive: ChineseRemainder::pilist, unevaluated. */
+    assert_eval_eq("Quiet[ChineseRemainder[{1}, {0}]]", "ChineseRemainder[{1}, {0}]", 0);
+    assert_eval_eq("Check[ChineseRemainder[{1, 2}, {-3, 5}], m, ChineseRemainder::pilist]", "m", 0);
 }
 
 static void test_length_mismatch_unevaluated(void) {
-    char* result = NULL;
-    char* err = eval_capturing_stderr("ChineseRemainder[{1, 2}, {3}]", &result);
-    ASSERT(result != NULL);
-    ASSERT(strstr(result, "ChineseRemainder[{1, 2}, {3}]") != NULL);
-    ASSERT_MSG(err == NULL || strstr(err, "ChineseRemainder::") == NULL,
-               "expected no diagnostic for length mismatch, got: %s",
-               err ? err : "(null)");
-    free(result);
-    free(err);
+    /* Unequal lengths draw ChineseRemainder::pilist (checked with Check, since
+     * General::stop may already have muted the printed copy in this process). */
+    assert_eval_eq("Quiet[ChineseRemainder[{1, 2}, {3}]]", "ChineseRemainder[{1, 2}, {3}]", 0);
+    assert_eval_eq("Check[ChineseRemainder[{1, 2}, {3}], m, ChineseRemainder::pilist]", "m", 0);
 }
 
 static void test_symbolic_unevaluated(void) {
@@ -266,9 +271,9 @@ static void test_arg_error_zero(void) {
     ASSERT(result != NULL);
     ASSERT(strstr(result, "ChineseRemainder") != NULL);
     ASSERT(err != NULL);
-    ASSERT_MSG(strstr(err, "ChineseRemainder::argt") != NULL,
-               "expected argt diagnostic, got: %s", err);
-    ASSERT(strstr(err, "2 or 3 arguments are expected") != NULL);
+    ASSERT_MSG(strstr(err, "ChineseRemainder::argrx") != NULL,
+               "expected argrx diagnostic, got: %s", err);
+    ASSERT(strstr(err, "2 arguments are expected") != NULL);
     free(result);
     free(err);
 }
@@ -278,7 +283,7 @@ static void test_arg_error_one(void) {
     char* err = eval_capturing_stderr("ChineseRemainder[{1, 2}]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "ChineseRemainder::argt") != NULL);
+    ASSERT(strstr(err, "ChineseRemainder::argr:") != NULL);
     free(result);
     free(err);
 }
@@ -316,7 +321,7 @@ static void test_repeated_evaluation_does_not_corrupt(void) {
         assert_eval_eq("ChineseRemainder[{3, 4}, {4, 5}]", "19", 0);
         assert_eval_eq("ChineseRemainder[{2, 3, 5}, {3, 5, 7}, 100]", "173", 0);
         assert_eval_eq("ChineseRemainder[{2, 2}, {4, 6}]", "2", 0);
-        assert_eval_eq("ChineseRemainder[{}, {}]", "0", 0);
+        assert_eval_eq("ChineseRemainder[{}, {}]", "ChineseRemainder[{}, {}]", 0);
         assert_eval_eq("ChineseRemainder[{1, 2}, {6, 10}]",
                        "ChineseRemainder[{1, 2}, {6, 10}]", 0);
         assert_eval_eq(

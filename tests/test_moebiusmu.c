@@ -111,7 +111,7 @@ void test_moebiusmu_unevaluated() {
     check("MoebiusMu[x]", "MoebiusMu[x]");
     check("MoebiusMu[5/2]", "MoebiusMu[5/2]");
     check("MoebiusMu[2.5]", "MoebiusMu[2.5]");
-    check("MoebiusMu[0]", "MoebiusMu[0]");
+    check("MoebiusMu[0]", "0");                 /* every square divides 0 */
 }
 
 /* ---- Attributes ---- */

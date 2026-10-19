@@ -24,7 +24,7 @@
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
 #include "../facint.h"           /* mth_prime_power_base_u64 — OP_PPQ_I */
-#include "../ndinteger.h"        /* ndint_divisor_sigma_i64 — OP_DSIG_I */
+#include "../ndinteger.h"        /* ndint_* machine helpers — OP_DSIG_I / PHI_I / MU_I / JACOBI_I */
 #include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
@@ -209,6 +209,22 @@ static long long int_ppq(long long n) {
 static bool int_dsig(long long k, long long n, long long* out) {
     int64_t r;
     if (!ndint_divisor_sigma_i64((int64_t)k, (int64_t)n, &r)) return true;
+    *out = (long long)r;
+    return false;
+}
+
+/* EulerPhi / MoebiusMu through the interpreter's own int64 helpers.  Return
+ * true to BAIL (past the trial-division ceiling, INT64_MIN). */
+static bool int_phi(long long n, long long* out) {
+    int64_t r;
+    if (!ndint_euler_phi_i64((int64_t)n, &r)) return true;
+    *out = (long long)r;
+    return false;
+}
+
+static bool int_mu(long long n, long long* out) {
+    int64_t r;
+    if (!ndint_moebius_mu_i64((int64_t)n, &r)) return true;
     *out = (long long)r;
     return false;
 }
@@ -1118,6 +1134,9 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             /* Not IOP: a decline is "no machine answer" (DivisorSigma[k, 0]),
              * not an overflow check that IF_NOCHK may waive. */
             OP(DSIG_I):  if (int_dsig(RA.i, RB.i, &RD.i)) goto vm_fail; NEXT();
+            OP(PHI_I):   if (int_phi(RA.i, &RD.i)) goto vm_fail; NEXT();
+            OP(MU_I):    if (int_mu(RA.i, &RD.i)) goto vm_fail; NEXT();
+            OP(JACOBI_I): RD.i = (long long)ndint_kronecker_i64((int64_t)RA.i, (int64_t)RB.i); NEXT();
             /* Ternary, so the operands are a RUN of registers starting at `a`
              * (the K_NARY shape KERNN uses), not the two operand fields. */
             OP(POWMOD_I): IOP(int_powmod(R[c->a].i, R[c->a + 1].i, R[c->a + 2].i, &RD.i));

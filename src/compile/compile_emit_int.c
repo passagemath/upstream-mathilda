@@ -60,18 +60,40 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_BLEN_I, a, CT_INT); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "CoprimeQ") == 0) {
+                /* CoprimeQ[a, b] is GCD[a, b] == 1; GCD_I's own guard hands
+                 * an INT64_MIN operand back to the interpreter. */
+                Val a, b;
+                if (!emit(c, A[0], &a)) return -1;
+                if (!emit(c, A[1], &b)) return -1;
+                Val g = binop(c, OP_GCD_I, a, b, CT_INT);
+                if (!c->ok) return -1;
+                memset(&imm, 0, sizeof imm); imm.i = 1;
+                Val one = emit_const(c, imm, CT_INT);
+                if (!c->ok) return -1;
+                *out = binop(c, OP_EQ_I, g, one, CT_BOOL);
+                return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "PrimePowerQ") == 0) {
                 /* Unary integer -> boolean; OP_PPQ_I never bails. */
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_PPQ_I, a, CT_BOOL); return c->ok ? 1 : -1;
             }
-            if (strcmp(h, "DivisorSigma") == 0) {
+            if (strcmp(h, "DivisorSigma") == 0 || strcmp(h, "JacobiSymbol") == 0) {
                 /* Binary integer -> integer; OP_DSIG_I bails to the
-                 * interpreter wherever there is no int64 answer. */
-                Val k, n;
-                if (!emit(c, A[0], &k)) return -1;
-                if (!emit(c, A[1], &n)) return -1;
-                *out = binop(c, OP_DSIG_I, k, n, CT_INT); return c->ok ? 1 : -1;
+                 * interpreter wherever there is no int64 answer, OP_JACOBI_I
+                 * never needs to. */
+                uint16_t op = (h[0] == 'D') ? OP_DSIG_I : OP_JACOBI_I;
+                Val a, b;
+                if (!emit(c, A[0], &a)) return -1;
+                if (!emit(c, A[1], &b)) return -1;
+                *out = binop(c, op, a, b, CT_INT); return c->ok ? 1 : -1;
+            }
+            if (strcmp(h, "EulerPhi") == 0 || strcmp(h, "MoebiusMu") == 0) {
+                /* Unary integer -> integer; bails past the int64 helper. */
+                Val a; if (!emit(c, A[0], &a)) return -1;
+                *out = unop(c, h[0] == 'E' ? OP_PHI_I : OP_MU_I, a, CT_INT);
+                return c->ok ? 1 : -1;
             }
             if (strcmp(h, "PowerMod") == 0) {
                 /* Ternary: three CONSECUTIVE registers, the K_NARY shape. Same

@@ -83,19 +83,13 @@ void test_coprimeq_gaussian_auto() {
     check("CoprimeQ[3, 1 + I]", "True");       /* 3 is a Gaussian prime, norm 9 */
 }
 
-/* ---- GaussianIntegers -> True forces the ring even for plain integers ---- */
+/* ---- CoprimeQ has no options (Mathematica 14): a rule is a non-integer
+ * argument, so the answer is False whatever the rule says. ---- */
 void test_coprimeq_gaussian_option() {
-    /* 5 = (2+I)(2-I), 7 is a Gaussian prime: no common factor -> coprime. */
-    check("CoprimeQ[5, 7, GaussianIntegers -> True]", "True");
-    /* 2 = -I(1+I)^2 and 10 = 2*5 share the (1+I) factor. */
-    check("CoprimeQ[2, 10, GaussianIntegers -> True]", "False");
-    /* Over Z[i], 2 and 5 are coprime (different primes). */
-    check("CoprimeQ[2, 5, GaussianIntegers -> True]", "True");
-    /* GaussianIntegers -> False keeps the ordinary integer test. */
-    check("CoprimeQ[8, 11, GaussianIntegers -> False]", "True");
-    check("CoprimeQ[6, 10, GaussianIntegers -> False]", "False");
-    /* Option may sit anywhere thanks to Orderless. */
-    check("CoprimeQ[GaussianIntegers -> True, 3, 7]", "True");
+    check("Options[CoprimeQ]", "{}");
+    check("CoprimeQ[5, 7, GaussianIntegers -> True]", "False");
+    check("CoprimeQ[8, 11, GaussianIntegers -> False]", "False");
+    check("CoprimeQ[GaussianIntegers -> True, 3, 7]", "False");
 }
 
 /* ---- Listable: threads element-wise over lists ---- */
@@ -114,9 +108,13 @@ void test_coprimeq_listable() {
 /* ---- Single argument and empty call (documented contract) ---- */
 void test_coprimeq_arity() {
     check("CoprimeQ[]", "False");
-    check("CoprimeQ[7]", "True");
-    check("CoprimeQ[12]", "True");
-    check("CoprimeQ[0]", "True");
+    /* One argument: is it a unit? (Mathematica 14.) */
+    check("CoprimeQ[7]", "False");
+    check("CoprimeQ[12]", "False");
+    check("CoprimeQ[0]", "False");
+    check("CoprimeQ[1]", "True");
+    check("CoprimeQ[-1]", "True");
+    check("CoprimeQ[I]", "True");
 }
 
 /* ---- Symbolic / non-integer arguments: never coprime -> False ---- */

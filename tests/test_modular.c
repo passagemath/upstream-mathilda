@@ -92,7 +92,7 @@ void test_powermod_identities() {
     run_test("PowerMod[0, 5, 7]", "0");                 // 0^positive = 0
     run_test("PowerMod[123, 1, 100]", "23");            // reduction without power
     run_test("PowerMod[-5, 2, 7]", "4");                // negative base reduces correctly
-    run_test("PowerMod[5, 2, -7]", "4");                // negative modulus treated as |m|
+    run_test("PowerMod[5, 2, -7]", "PowerMod[5, 2, -7]");  // Mathematica leaves a negative modulus unevaluated
     /* The modulus 0 case has no sensible value; PowerMod stays unevaluated. */
     run_test("PowerMod[3, 2, 0]", "PowerMod[3, 2, 0]");
     /* Modular inverse path. */

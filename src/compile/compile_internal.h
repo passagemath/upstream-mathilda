@@ -222,9 +222,13 @@ enum {
      *                                                                          \
      * DSIG_I is DivisorSigma[k, n], through ndint_divisor_sigma_i64 -- the     \
      * helper behind the interpreter and the NDArray kernel.  It bails, even    \
-     * under IF_NOCHK, when that declines (n == 0, k < 0, overflow).            */ \
+     * under IF_NOCHK, when that declines (n == 0, k < 0, overflow).  PHI_I    \
+     * (EulerPhi) and MU_I (MoebiusMu) follow the same template through       \
+     * ndint_euler_phi_i64 / ndint_moebius_mu_i64; JACOBI_I (JacobiSymbol)     \
+     * through ndint_kronecker_i64, which is total and never bails.             */ \
     X(GCD_I, K_BIN)   X(LCM_I, K_BIN)  X(ILEN_I, K_BIN) X(IEXP_I, K_BIN)   \
     X(POWMOD_I, K_NARY) X(BLEN_I, K_UN) X(PPQ_I, K_UN) X(DSIG_I, K_BIN)     \
+    X(PHI_I, K_UN)    X(MU_I, K_UN)    X(JACOBI_I, K_BIN)                   \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \

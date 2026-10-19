@@ -10,12 +10,18 @@
 #include "symtab.h"
 #include "attr.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "ndinteger.h" /* ndint_moebius_mu_i64: the shared machine helper */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <gmp.h>
 
 /* ---- MoebiusMu ---------------------------------------------------------- */
+
+/* |n| at or below which a machine n is factored by int64 trial division (at
+ * most 512 odd divisors, no GMP) rather than by FactorInteger. Measured for
+ * DivisorSigma (v0.470): past 2^20 FactorInteger's ladder is faster. */
+#define MU_MACHINE_TRIAL_MAX ((int64_t)1 << 20)
 
 /* Emit the wrong-argument-count diagnostic for MoebiusMu and return NULL so the
  * call is left unevaluated.  WL expects exactly one argument. */
@@ -41,7 +47,8 @@ static Expr* moebiusmu_from_exps(const unsigned long* exps, size_t n) {
  * mu(-n) = mu(n).  A non-real Gaussian-integer argument Complex[a, b] is handled
  * over Z[i] by factoring into Gaussian primes (the unit factor does not count).
  * MoebiusMu is Listable, so list arguments are threaded by the evaluator first.
- * Non-integer or zero n is left unevaluated; a wrong argument count emits
+ * MoebiusMu[0] is 0 (0 is divisible by every square), as in Mathematica; a
+ * non-integer n is left unevaluated; a wrong argument count emits
  * MoebiusMu::argx. */
 Expr* builtin_moebiusmu(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -66,11 +73,19 @@ Expr* builtin_moebiusmu(Expr* res) {
         return out;
     }
 
+    /* A small machine n: the int64 helper the NDArray kernel and Compile use,
+     * so all three agree (and no GMP is touched). */
+    if (n->type == EXPR_INTEGER && n->data.integer >= -MU_MACHINE_TRIAL_MAX &&
+        n->data.integer <= MU_MACHINE_TRIAL_MAX) {
+        int64_t r;
+        if (ndint_moebius_mu_i64(n->data.integer, &r)) return expr_new_integer(r);
+    }
+
     /* Ordinary integer path (covers EXPR_INTEGER and EXPR_BIGINT). */
     if (!expr_is_integer_like(n)) return NULL;           /* symbolic n stays put */
     mpz_t v;
     expr_to_mpz(n, v);                                   /* inits v */
-    if (mpz_sgn(v) == 0) { mpz_clear(v); return NULL; }  /* MoebiusMu[0] undefined */
+    if (mpz_sgn(v) == 0) { mpz_clear(v); return expr_new_integer(0); }  /* every square divides 0 */
     mpz_abs(v, v);                                       /* sign of n is ignored */
 
     mpz_t* primes;

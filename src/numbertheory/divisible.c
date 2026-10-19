@@ -12,6 +12,8 @@
 #include "symtab.h"
 #include "attr.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "ndarray.h"
+#include "ndinteger.h" /* ndint_binary_predicate */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,18 +23,16 @@
 /* Registration, attributes, and docstrings for the number-theory builtins.
  * Called from core_init(); replaces the inline block that previously lived
  * in core.c. */
-/* Emit the wrong-argument-count diagnostic for Divisible and return NULL so
- * the call is left unevaluated.  Too few arguments use Mathematica's `argm`
- * tag; too many use `argt`. */
+/* Divisible::argmu / ::argm -- fewer than two arguments. */
 static Expr* divisible_emit_argcount(size_t argc) {
-    if (argc < 2) {
-        mth_message("Divisible", "argm", "Divisible called with %zu argument%s; 2 or more arguments are expected.", argc, argc == 1 ? "" : "s");
-    } else {
-        mth_message("Divisible", "argt", "Divisible called with %zu arguments; 2 arguments are expected.", argc);
-    }
+    if (argc == 1)
+        mth_message_gated(g_arith_warnings_muted, "Divisible", "argmu",
+            "Divisible called with 1 argument; 2 or more arguments are expected.");
+    else
+        mth_message_gated(g_arith_warnings_muted, "Divisible", "argm",
+            "Divisible called with %zu arguments; 2 or more arguments are expected.", argc);
     return NULL;
 }
-
 
 /* True when e is a concrete numeric quantity (exact number, recognised
  * constant such as Pi or E, or a NumericFunction applied to numeric
@@ -69,35 +69,23 @@ static bool divisible_is_numeric_quantity(const Expr* e) {
     return false;
 }
 
-/* Divisible[n, m] yields True when n is an integer multiple of m and False
- * for numeric quantities that manifestly are not.  Over the integers this is
- * Mod[n, m] == 0, computed directly with GMP's mpz_divisible_p (handling
- * BigInts and the m == 0 edge: divisible by 0 iff n == 0).  For everything
- * else — Gaussian integers, rationals, and exact numeric quantities such as
- * 2 Pi or Sqrt[6] — it forms the quotient n/m, evaluates it exactly, and
- * reports True iff that quotient collapses to an integer or Gaussian integer.
- * Symbolic, non-numeric arguments leave the call unevaluated.  Divisible is
- * Listable, so list arguments are threaded by the evaluator before reaching
- * this builtin. */
-Expr* builtin_divisible(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
-    if (argc != 2) return divisible_emit_argcount(argc);
+typedef enum { DIV_FALSE, DIV_TRUE, DIV_UNKNOWN } DivAnswer;
 
-    Expr* n = res->data.function.args[0];
-    Expr* m = res->data.function.args[1];
-
-    /* Fast path: both integer-like.  mpz_divisible_p is exact at arbitrary
+/* Is n an integer (or Gaussian-integer) multiple of m? DIV_UNKNOWN for a
+ * symbolic pair, which leaves the call unevaluated. m must be nonzero. */
+static DivAnswer divisible_pair(Expr* n, Expr* m) {
+    /* Fast path: both integer-like. mpz_divisible_p is exact at arbitrary
      * precision, so this also covers the large-integer cases. */
+    if (n->type == EXPR_INTEGER && m->type == EXPR_INTEGER &&
+        m->data.integer != -1 && m->data.integer != 0)
+        return (n->data.integer % m->data.integer == 0) ? DIV_TRUE : DIV_FALSE;
     if (expr_is_integer_like(n) && expr_is_integer_like(m)) {
         mpz_t a, b;
-        mpz_init(a);
-        mpz_init(b);
         expr_to_mpz(n, a);
         expr_to_mpz(m, b);
         bool divisible = mpz_divisible_p(a, b) != 0;
         mpz_clears(a, b, NULL);
-        return expr_new_symbol(divisible ? SYM_True : SYM_False);
+        return divisible ? DIV_TRUE : DIV_FALSE;
     }
 
     /* General path: build and evaluate the quotient n * m^-1. */
@@ -106,16 +94,73 @@ Expr* builtin_divisible(Expr* res) {
     Expr* q_args[2] = { expr_copy(n), inv };
     Expr* q = expr_new_function(expr_new_symbol(SYM_Times), q_args, 2);
     Expr* quotient = eval_and_free(q);
-
     bool divisible = expr_is_integer_like(quotient) || is_gaussian_integer(quotient);
     expr_free(quotient);
-    if (divisible) return expr_new_symbol(SYM_True);
+    if (divisible) return DIV_TRUE;
 
-    /* Not an integer.  When both arguments are concrete numeric quantities
-     * they are manifestly not divisible (False); otherwise (symbolic args)
-     * leave Divisible unevaluated so user rules / pattern matching apply. */
-    if (divisible_is_numeric_quantity(n) && divisible_is_numeric_quantity(m)) {
-        return expr_new_symbol(SYM_False);
+    /* Not an integer. Concrete numeric quantities are manifestly not
+     * divisible (False); symbolic ones stay unevaluated so rules apply. */
+    if (divisible_is_numeric_quantity(n) && divisible_is_numeric_quantity(m))
+        return DIV_FALSE;
+    return DIV_UNKNOWN;
+}
+
+static bool divisible_is_zero(const Expr* e) {
+    return (e->type == EXPR_INTEGER && e->data.integer == 0) ||
+           (e->type == EXPR_BIGINT && mpz_sgn(e->data.bigint) == 0);
+}
+
+/* Divisible[n, m] yields True when n is an integer multiple of m and False for
+ * numeric quantities that manifestly are not. Over the integers this is
+ * mpz_divisible_p; for Gaussian integers, rationals and exact numeric
+ * quantities such as 2 Pi or Sqrt[6] it evaluates the quotient n/m and asks
+ * whether that is an integer or Gaussian integer.
+ *
+ * Divisible[n, m1, m2, ...] is a CHAIN, as in Mathematica: n divisible by m1,
+ * m1 by m2, and so on (Divisible[12, 2, 3] is False, Divisible[8, 2, 2] True).
+ *
+ * Messages, as in Mathematica, each leaving the call unevaluated: a zero
+ * divisor draws ::divz, an inexact argument ::exact, fewer than two arguments
+ * ::argmu / ::argm. Symbolic arguments stay unevaluated silently. Listable, so
+ * the evaluator threads list arguments first. */
+Expr* builtin_divisible(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) return divisible_emit_argcount(argc);
+    Expr** args = res->data.function.args;
+
+    /* A packed / visible int64 buffer: one pass, answering with a packed bool
+     * List; any shape the kernel declines (a zero divisor included, so ::divz
+     * still fires per element) degrades element by element. */
+    for (size_t i = 0; i < argc; i++) {
+        if (is_ndarray(args[i])) {
+            Expr* nd = ndint_binary_predicate(res, NDBP_DIVISIBLE);
+            return nd ? nd : ndarray_delist_and_reeval(res);
+        }
     }
-    return NULL;
+
+    Expr* inexact = nt_first_inexact_arg(res);
+    if (inexact) return nt_emit_exact("Divisible", inexact, res);
+
+    for (size_t i = 1; i < argc; i++) {
+        if (divisible_is_zero(args[i])) {
+            /* ::divz only when every argument is a number; a symbolic call
+             * (Divisible[x, 0]) stays unevaluated silently, as in Mathematica. */
+            for (size_t j = 0; j < argc; j++)
+                if (!divisible_is_numeric_quantity(args[j])) return NULL;
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "Divisible", "divz",
+                "The argument 0 in %s should be nonzero.", call ? call : "?");
+            free(call);
+            return NULL;
+        }
+    }
+
+    bool unknown = false;
+    for (size_t i = 0; i + 1 < argc; i++) {
+        DivAnswer a = divisible_pair(args[i], args[i + 1]);
+        if (a == DIV_FALSE) return expr_new_symbol(SYM_False);
+        if (a == DIV_UNKNOWN) unknown = true;
+    }
+    return unknown ? NULL : expr_new_symbol(SYM_True);
 }

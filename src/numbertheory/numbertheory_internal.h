@@ -24,6 +24,11 @@ void    rational_like_to_mpz_pair(const Expr* e, mpz_t num, mpz_t den);
 bool    rational_like_needs_bigint(const Expr* e);
 Expr*   mpz_pair_to_rational_expr(const mpz_t num_in, const mpz_t den_in);
 int64_t lcm_checked(int64_t a, int64_t b, bool *overflow);
+/* Shared diagnostics (nt_util.c), routed through the Quiet/Check funnel and
+ * gated on the arithmetic probe mute. Both return NULL. */
+Expr*   nt_first_inexact_arg(Expr* res);
+Expr*   nt_emit_exact(const char* head, Expr* arg, Expr* res);
+Expr*   nt_emit_int(const char* head, size_t pos, Expr* res);
 
 /* --- primitiveroot.c (shared with multiplicativeorder.c) -------------- */
 /* Gather the distinct prime factors of m_in into out[0..*count); out must
@@ -43,5 +48,30 @@ bool    df_gaussian_prime_factor(const mpz_t a_in, const mpz_t b_in,
 void    df_normalize_quadrant(mpz_t re, mpz_t im);
 Expr*   divisors_ordinary(const mpz_t nabs);
 Expr*   divisors_gaussian(const mpz_t a_in, const mpz_t b_in);
+
+/* Gaussian GCD arithmetic (nt_gaussian.c). Every output is init'd by the
+ * caller. gcd / lcm / the xgcd gcd are first-quadrant normalised (Re > 0,
+ * Im >= 0); gi_xgcd gives g = s a + t b with Mathematica's coefficients
+ * (nearest-rounding Euclid, ties to even). gi_normalize reports the power of
+ * i it multiplied by; gi_rotate_by multiplies by i^k. */
+void    gi_xgcd(mpz_t gr, mpz_t gi, mpz_t sr, mpz_t si, mpz_t tr, mpz_t ti,
+                const mpz_t ar, const mpz_t ai, const mpz_t br, const mpz_t bi);
+void    gi_gcd(mpz_t gr, mpz_t gi, const mpz_t ar, const mpz_t ai,
+               const mpz_t br, const mpz_t bi);
+void    gi_lcm(mpz_t lr, mpz_t li, const mpz_t ar, const mpz_t ai,
+               const mpz_t br, const mpz_t bi);
+void    gi_normalize(mpz_t re, mpz_t im, int* unit_power);
+void    gi_rotate_by(mpz_t re, mpz_t im, int unit_power);
+/* x mod m = x - m Round[x/m] (ties to even), and a^e mod m for integer e
+ * (false when e < 0 and a is not invertible). Outputs init'd by the caller. */
+void    gi_mod(mpz_t rr, mpz_t ri, const mpz_t xr, const mpz_t xi,
+               const mpz_t mr, const mpz_t mi);
+bool    gi64_powmod(Expr* a, int64_t e, Expr* m, Expr** out);
+bool    gi_powmod(mpz_t rr, mpz_t ri, const mpz_t ar, const mpz_t ai,
+                  const mpz_t e, const mpz_t mr, const mpz_t mi);
+/* Gaussian rationals (re + im i) / den with den > 0 (outputs init'd). */
+bool    gq_from_expr(Expr* e, mpz_t re, mpz_t im, mpz_t den);
+Expr*   gq_to_expr(const mpz_t re, const mpz_t im, const mpz_t den);
+bool    is_gaussian_rational(Expr* e);
 
 #endif

@@ -900,7 +900,7 @@ void test_gcd_lcm(void) {
     assert_eval_eq("LCM[12, 18, 24]", "72", 1);
     assert_eval_eq("LCM[1/2, 1/3]", "1", 1);
     assert_eval_eq("LCM[0, 5]", "0", 1);
-    assert_eval_eq("LCM[]", "1", 1);
+    assert_eval_eq("Quiet[LCM[]]", "LCM[]", 1);   /* LCM::argm, as in Mathematica */
     assert_eval_eq("LCM[-5]", "5", 1);
     assert_eval_eq("LCM[x]", "x", 1);
 

@@ -13,6 +13,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message_gated: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -338,11 +339,108 @@ static int modular_root(mpz_t x, const mpz_t c, const mpz_t r, const mpz_t m) {
 
 /* PowerMod[a, b, m].  b may be an integer (incl. negative for the modular
  * inverse path) or Rational[p,q] (modular q-th root of a^p mod m). */
+/* A number of any kind (what separates ::pmod from a symbolic call). */
+static bool pm_is_number(Expr* e) {
+    Expr *re, *im;
+    return is_rational_like(e) || e->type == EXPR_REAL || is_complex(e, &re, &im)
+#ifdef USE_MPFR
+        || e->type == EXPR_MPFR
+#endif
+        ;
+}
+
+static bool pm_is_gaussian_int(Expr* e) {
+    return expr_is_integer_like(e) || is_gaussian_integer(e);
+}
+
+static Expr* pm_emit_ninv(Expr* a, Expr* m) {
+    char* sa = expr_to_string(a);
+    char* sm = expr_to_string(m);
+    mth_message_gated(g_arith_warnings_muted, "PowerMod", "ninv",
+                      "%s is not invertible modulo %s.", sa ? sa : "?", sm ? sm : "?");
+    free(sa); free(sm);
+    return NULL;
+}
+
+/* PowerMod[a, b, m] over Z[i]: a Gaussian base or modulus, integer b. */
+static Expr* pm_gaussian(Expr* a_expr, Expr* b_expr, Expr* m_expr) {
+    Expr* fast;
+    if (b_expr->type == EXPR_INTEGER && gi64_powmod(a_expr, b_expr->data.integer, m_expr, &fast))
+        return fast;
+    mpz_t ar, ai, mr, mi, b, rr, ri;
+    if (!df_to_gaussian(a_expr, ar, ai)) return NULL;
+    if (!df_to_gaussian(m_expr, mr, mi)) { mpz_clears(ar, ai, NULL); return NULL; }
+    expr_to_mpz(b_expr, b);
+    mpz_inits(rr, ri, NULL);
+    Expr* out = NULL;
+    if (gi_powmod(rr, ri, ar, ai, b, mr, mi)) {
+        mpz_t one;
+        mpz_init_set_ui(one, 1);
+        out = gq_to_expr(rr, ri, one);
+        mpz_clear(one);
+    } else {
+        pm_emit_ninv(a_expr, m_expr);
+    }
+    mpz_clears(ar, ai, mr, mi, b, rr, ri, NULL);
+    return out;
+}
+
+/* PowerMod[a, b, m]: a^b mod m.
+ *   integer b       square-and-multiply in GMP (mpz_powm); b < 0 inverts a
+ *                   first, and a non-invertible a draws PowerMod::ninv;
+ *   rational p/q    a q-th root of a^p mod m (PowerMod::root when none);
+ *   Gaussian a or m the same over Z[i] for integer b, reducing with Mathematica's
+ *                   nearest-quotient Mod after every product.
+ * As in Mathematica 14: an inexact argument, a non-integer base or modulus, or a
+ * non-rational exponent draws PowerMod::pmod; a zero modulus PowerMod::divz; a
+ * negative integer modulus leaves the call unevaluated; a wrong argument count
+ * draws PowerMod::argr / ::argrx. Symbolic arguments stay unevaluated silently.
+ * Listable, so the evaluator threads lists; an int64 buffer of bases takes the
+ * ndint_powermod fast path. */
 Expr* builtin_powermod(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 3) {
+        if (argc == 1)
+            mth_message_gated(g_arith_warnings_muted, "PowerMod", "argr",
+                "PowerMod called with 1 argument; 3 arguments are expected.");
+        else
+            mth_message_gated(g_arith_warnings_muted, "PowerMod", "argrx",
+                "PowerMod called with %zu arguments; 3 arguments are expected.", argc);
+        return NULL;
+    }
     Expr* a_expr = res->data.function.args[0];
     Expr* b_expr = res->data.function.args[1];
     Expr* m_expr = res->data.function.args[2];
+
+    if (!is_ndarray(a_expr)) {
+        /* Symbolic anywhere: silent. Numbers of the wrong kind: ::pmod. */
+        if (!pm_is_number(a_expr) || !pm_is_number(b_expr) || !pm_is_number(m_expr))
+            return NULL;
+        if (!pm_is_gaussian_int(a_expr) || !pm_is_gaussian_int(m_expr) ||
+            !is_rational_like(b_expr)) {
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "PowerMod", "pmod",
+                "The base and modulus arguments in %s must be Gaussian integers "
+                "and the power must be an integer or rational.", call ? call : "?");
+            free(call);
+            return NULL;
+        }
+        bool m_zero = (m_expr->type == EXPR_INTEGER && m_expr->data.integer == 0);
+        if (m_zero) {
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "PowerMod", "divz",
+                "The argument 0 in %s should be nonzero.", call ? call : "?");
+            free(call);
+            return NULL;
+        }
+        /* Mathematica leaves a negative integer modulus unevaluated. */
+        if ((m_expr->type == EXPR_INTEGER && m_expr->data.integer < 0) ||
+            (m_expr->type == EXPR_BIGINT && mpz_sgn(m_expr->data.bigint) < 0))
+            return NULL;
+        if (is_gaussian_integer(a_expr) || is_gaussian_integer(m_expr))
+            return expr_is_integer_like(b_expr) ? pm_gaussian(a_expr, b_expr, m_expr) : NULL;
+    }
 
     /* Buffer of bases, scalar exponent and modulus: square-and-multiply in
      * int64, no mpz_init per element. Anything it declines -- a negative
@@ -355,6 +453,23 @@ Expr* builtin_powermod(Expr* res) {
     }
 
     if (!expr_is_integer_like(a_expr) || !expr_is_integer_like(m_expr)) return NULL;
+
+    /* Machine base, non-negative exponent, modulus below 2^32: every product
+     * of two residues fits uint64, so no GMP. */
+    if (a_expr->type == EXPR_INTEGER && b_expr->type == EXPR_INTEGER &&
+        m_expr->type == EXPR_INTEGER && b_expr->data.integer >= 0 &&
+        m_expr->data.integer > 0 && m_expr->data.integer < ((int64_t)1 << 32)) {
+        uint64_t mm = (uint64_t)m_expr->data.integer;
+        int64_t av = a_expr->data.integer % (int64_t)mm;
+        uint64_t base = (uint64_t)(av < 0 ? av + (int64_t)mm : av);
+        uint64_t r = 1 % mm, e = (uint64_t)b_expr->data.integer;
+        while (e) {
+            if (e & 1) r = r * base % mm;
+            e >>= 1;
+            if (e) base = base * base % mm;
+        }
+        return expr_new_integer((int64_t)r);
+    }
 
     mpz_t a, m;
     expr_to_mpz(a_expr, a);
@@ -372,7 +487,7 @@ Expr* builtin_powermod(Expr* res) {
             mpz_inits(inv, b_neg, NULL);
             if (mpz_invert(inv, a, m) == 0) {
                 mpz_clears(inv, b_neg, b, a, m, r, NULL);
-                return NULL;
+                return pm_emit_ninv(a_expr, m_expr);
             }
             mpz_neg(b_neg, b);
             mpz_powm(r, inv, b_neg, m);
@@ -408,7 +523,7 @@ Expr* builtin_powermod(Expr* res) {
             mpz_inits(inv, p_neg, NULL);
             if (mpz_invert(inv, a, m) == 0) {
                 mpz_clears(inv, p_neg, p, q, c, root, a, m, NULL);
-                return NULL;
+                return pm_emit_ninv(a_expr, m_expr);
             }
             mpz_neg(p_neg, p);
             mpz_powm(c, inv, p_neg, m);
@@ -418,6 +533,15 @@ Expr* builtin_powermod(Expr* res) {
         }
 
         if (!modular_root(root, c, q, m)) {
+            /* PowerMod::root -- x^q == a^p (mod m) has no solution. */
+            char* sq = mpz_get_str(NULL, 10, q);
+            char* sc = mpz_get_str(NULL, 10, c);
+            char* sm = mpz_get_str(NULL, 10, m);
+            mth_message_gated(g_arith_warnings_muted, "PowerMod", "root",
+                "The equation x^%s = %s (mod %s) has no integer solutions.", sq, sc, sm);
+            void (*gmp_free)(void*, size_t);
+            mp_get_memory_functions(NULL, NULL, &gmp_free);
+            gmp_free(sq, strlen(sq) + 1); gmp_free(sc, strlen(sc) + 1); gmp_free(sm, strlen(sm) + 1);
             mpz_clears(p, q, c, root, a, m, NULL);
             return NULL;
         }

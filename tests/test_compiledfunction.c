@@ -925,9 +925,9 @@ void test_cf_integer_overflow(void) {
 
     /* Integer division traps the hardware rather than merely answering wrongly:
      * a zero divisor and INT64_MIN/-1 both used to take the process down with
-     * SIGFPE.  The interpreter leaves Mod[5, 0] unevaluated, so the compiled
-     * path must hand it back and let it do that. */
-    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Mod[a, b]][5, 0]", "Mod[5, 0]", 0);
+     * SIGFPE.  The compiled path must hand a zero divisor back to the
+     * interpreter, which answers Mod[5, 0] with Indeterminate (Mod::indet). */
+    assert_eval_eq("Quiet[Compile[{{a, _Integer}, {b, _Integer}}, Mod[a, b]][5, 0]]", "Indeterminate", 0);
     assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Quotient[a, b]][5, 0]",
                    "Quotient[5, 0]", 0);
     assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, Quotient[a, b]]"

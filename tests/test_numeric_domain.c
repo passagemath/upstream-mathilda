@@ -89,7 +89,7 @@ void test_mod_regressions(void) {
     assert_eval_eq("Mod[7, 3]", "1", 0);
     assert_eval_eq("Mod[7/3, 1/2]", "1/3", 0);      /* both exact -> rational path */
     assert_close("Mod[2.5, 0.5]", 0.0, 1e-12);      /* both machine */
-    assert_eval_eq("Head[Mod[2.0, 1 + I]]", "Mod", 0);  /* complex modulus stays symbolic */
+    assert_eval_eq("Head[Mod[2.0, 1 + I]]", "Real", 0); /* nearest quotient: 0., as in Mathematica */
 }
 
 void test_divide_rational_mpfr_complex(void) {

@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "ndinteger.h" /* int64 phi / factor helpers */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include <stdio.h>
 #include <stdlib.h>
@@ -170,8 +171,49 @@ static bool mo_search_residues(const mpz_t k_in, const mpz_t n,
 }
 
 static Expr* mo_emit_argt(size_t argc) {
-    mth_message("MultiplicativeOrder", "argt", "MultiplicativeOrder called with %zu argument%s; 2 or 3 arguments are expected.", argc, argc == 1 ? "" : "s");
+    /* Mathematica's tag is argtu for one argument, argt otherwise. */
+    if (argc == 1)
+        mth_message("MultiplicativeOrder", "argtu", "MultiplicativeOrder called with 1 argument; 2 or 3 arguments are expected.");
+    else
+        mth_message("MultiplicativeOrder", "argt", "MultiplicativeOrder called with %zu arguments; 2 or 3 arguments are expected.", argc);
     return NULL;
+}
+
+/* The order of k modulo n for a machine 1 < n < 2^32 with gcd(k, n) == 1,
+ * entirely in uint64 (every product of two residues fits). Same algorithm as
+ * mo_order_mpz -- strip each prime of phi(n) while k^(order/p) stays 1 --
+ * with phi and its factorisation from the int64 helpers the NDArray kernels
+ * use. Returns 0 when it declines (the GMP path then answers). */
+#define MO_MACHINE_MAX ((int64_t)1 << 32)
+
+static uint64_t mo_powmod_u64(uint64_t b, uint64_t e, uint64_t m) {
+    uint64_t r = 1 % m;
+    b %= m;
+    while (e) {
+        if (e & 1) r = r * b % m;
+        e >>= 1;
+        if (e) b = b * b % m;
+    }
+    return r;
+}
+
+static int64_t mo_order_machine(int64_t k, int64_t n) {
+    if (n <= 1 || n >= MO_MACHINE_MAX) return 0;
+    int64_t kk = k % n;
+    if (kk < 0) kk += n;
+    uint64_t a = (uint64_t)kk, b = (uint64_t)n;
+    while (b) { uint64_t t = a % b; a = b; b = t; }
+    if (a != 1) return 0;                        /* not a unit: GMP path decides */
+    int64_t phi;
+    if (!ndint_euler_phi_i64(n, &phi)) return 0;
+    int64_t p[NDINT_MAX_FACTORS]; int e[NDINT_MAX_FACTORS]; int np;
+    if (!ndint_factor_i64(phi, p, e, &np)) return 0;
+    uint64_t order = (uint64_t)phi;
+    for (int i = 0; i < np; i++)
+        while (order % (uint64_t)p[i] == 0 &&
+               mo_powmod_u64((uint64_t)kk, order / (uint64_t)p[i], (uint64_t)n) == 1)
+            order /= (uint64_t)p[i];
+    return (int64_t)order;
 }
 
 Expr* builtin_multiplicativeorder(Expr* res) {
@@ -187,10 +229,18 @@ Expr* builtin_multiplicativeorder(Expr* res) {
      * MultiplicativeOrder[10., 21] -> MultiplicativeOrder[10., 21]. */
     if (!expr_is_integer_like(k_expr) || !expr_is_integer_like(n_expr)) return NULL;
 
+    /* The common call: two machine integers, a modulus below 2^32. */
+    if (argc == 2 && k_expr->type == EXPR_INTEGER && n_expr->type == EXPR_INTEGER) {
+        int64_t o = mo_order_machine(k_expr->data.integer, n_expr->data.integer);
+        if (o > 0) return expr_new_integer(o);
+    }
+
     mpz_t k, n;
     expr_to_mpz(k_expr, k);
     expr_to_mpz(n_expr, n);
-    if (mpz_sgn(n) == 0) { mpz_clears(k, n, NULL); return NULL; }
+    /* A zero or negative modulus stays unevaluated, as in Mathematica
+     * (MultiplicativeOrder[2, -7] is not 3). */
+    if (mpz_sgn(n) <= 0) { mpz_clears(k, n, NULL); return NULL; }
 
     mpz_t order;
     mpz_init(order);

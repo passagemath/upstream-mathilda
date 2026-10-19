@@ -207,15 +207,16 @@ is what a loop like `Do[s += MoebiusMu[k], {k, n}]` needs.
 
 | head | kernel |
 |---|---|
-| `MoebiusMu`, `EulerPhi` | unary, `to_int_i` only |
+| `PowerMod` | ternary, has `OP_POWMOD_I`; see the coverage tool's BASELINE note |
 
 The obstacle is not the table but the opcode kinds: the `K_UN` / `K_BIN` scalar
 kernel opcodes write `NaN` on failure, and these must **abort** —
 `EulerPhi[-5]` has no machine answer, and the program has to hand back to the
 interpreter rather than invent one.
 
-**`DivisorSigma` closed 2026-10-19**, and how it closed is the recipe for the
-other two. It needed no new opcode *kind*: `OP_DSIG_I` is a plain integer
+**`DivisorSigma`, `EulerPhi` and `MoebiusMu` closed 2026-10-19**
+(`OP_DSIG_I`, `OP_PHI_I`, `OP_MU_I`), and how they closed is the recipe for
+what is left. It needed no new opcode *kind*: `OP_DSIG_I` is a plain integer
 `K_BIN` opcode, like `GCD_I`, whose VM arm calls the shared helper
 (`ndint_divisor_sigma_i64`, which the interpreter and the NDArray kernel also
 call) and jumps to `vm_fail` when that declines. The jump is unconditional,

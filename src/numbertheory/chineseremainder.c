@@ -11,6 +11,7 @@
 #include "print.h"
 #include "symtab.h"
 #include "attr.h"
+#include "message.h"   /* mth_message_gated: Quiet/Check funnel */
 #include "common.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,31 +57,65 @@
  * handles a negative d and the empty-list case (L = 1) correctly.
  * ------------------------------------------------------------------- */
 
+/* A number of any kind: what separates ::pilist from a symbolic call. */
+static bool cr_is_number(Expr* e) {
+    Expr *re, *im;
+    return is_rational_like(e) || e->type == EXPR_REAL || is_complex(e, &re, &im)
+#ifdef USE_MPFR
+        || e->type == EXPR_MPFR
+#endif
+        ;
+}
+
 Expr* builtin_chineseremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2 || argc > 3)
-        return builtin_arg_error("ChineseRemainder", argc, 2, 3);
+    /* Mathematica says "2 arguments are expected" even though 3 are accepted:
+     * argr for one argument, argrx otherwise. */
+    if (argc < 2 || argc > 3) {
+        if (argc == 1)
+            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argr",
+                "ChineseRemainder called with 1 argument; 2 arguments are expected.");
+        else
+            mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "argrx",
+                "ChineseRemainder called with %zu arguments; 2 arguments are expected.", argc);
+        return NULL;
+    }
 
     Expr* rlist = res->data.function.args[0];
     Expr* mlist = res->data.function.args[1];
 
-    /* The residues and moduli must be Lists of equal length; anything else
-     * (symbolic arguments, a visible NDArray, mismatched lengths) leaves the
-     * call unevaluated so symbolic flow and rules still apply. */
+    /* Optional offset d must be an exact integer (ChineseRemainder::int). */
+    Expr* d_expr = (argc == 3) ? res->data.function.args[2] : NULL;
+    if (d_expr && !expr_is_integer_like(d_expr))
+        return nt_emit_int("ChineseRemainder", 3, res);
+
+    /* Symbolic arguments leave the call unevaluated silently, so symbolic flow
+     * and rules still apply. */
     if (!head_is(rlist, SYM_List) || !head_is(mlist, SYM_List)) return NULL;
     size_t n = rlist->data.function.arg_count;
-    if (mlist->data.function.arg_count != n) return NULL;
+    if (n == 0 && mlist->data.function.arg_count == 0) return NULL;
+    for (size_t k = 0; k < 2; k++) {
+        Expr* l = k ? mlist : rlist;
+        for (size_t i = 0; i < l->data.function.arg_count; i++)
+            if (!cr_is_number(l->data.function.args[i])) return NULL;
+    }
 
-    /* Optional offset d must be an exact integer. */
-    Expr* d_expr = (argc == 3) ? res->data.function.args[2] : NULL;
-    if (d_expr && !expr_is_integer_like(d_expr)) return NULL;
-
-    /* Every residue and modulus must be an exact integer. */
-    for (size_t i = 0; i < n; i++) {
-        if (!expr_is_integer_like(rlist->data.function.args[i]) ||
-            !expr_is_integer_like(mlist->data.function.args[i]))
-            return NULL;
+    /* Numbers, but not two equal-length lists of integers with positive moduli
+     * -- ChineseRemainder::pilist, as in Mathematica. */
+    bool valid = mlist->data.function.arg_count == n;
+    for (size_t i = 0; i < n && valid; i++) {
+        Expr* r = rlist->data.function.args[i];
+        Expr* m = mlist->data.function.args[i];
+        if (!expr_is_integer_like(r) || !expr_is_integer_like(m)) valid = false;
+        else if (m->type == EXPR_INTEGER ? m->data.integer <= 0
+                                         : mpz_sgn(m->data.bigint) <= 0) valid = false;
+    }
+    if (!valid) {
+        mth_message_gated(g_arith_warnings_muted, "ChineseRemainder", "pilist",
+            "The arguments to ChineseRemainder must be two lists of integers of "
+            "identical length, with the second list containing only positive integers.");
+        return NULL;
     }
 
     /* --- Streaming pairwise CRT fold (all GMP). --- */

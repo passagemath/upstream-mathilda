@@ -3216,7 +3216,143 @@ static bool mod_set_mpfr(mpfr_t out, const Expr* e) {
 }
 #endif
 
+static Expr* mod_fast(Expr* res);
+
+/* An infinite quantity: Infinity, -Infinity, ComplexInfinity, DirectedInfinity[_]. */
+static bool mod_is_infinite(const Expr* e) {
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_Infinity || e->data.symbol.name == SYM_ComplexInfinity;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == SYM_DirectedInfinity) return true;
+        if (h == SYM_Times && e->data.function.arg_count == 2)   /* -Infinity */
+            return mod_is_infinite(e->data.function.args[0]) ||
+                   mod_is_infinite(e->data.function.args[1]);
+    }
+    return false;
+}
+
+static bool mod_is_exact_or_real_zero(const Expr* e) {
+    return (e->type == EXPR_INTEGER && e->data.integer == 0) ||
+           (e->type == EXPR_REAL && e->data.real == 0.0)
+#ifdef USE_MPFR
+        || (e->type == EXPR_MPFR && mpfr_zero_p(e->data.mpfr))
+#endif
+        ;
+}
+
+static bool mod_is_gaussian_int(Expr* e) {
+    Expr *re, *im;
+    return is_complex(e, &re, &im) && expr_is_integer_like(re) && expr_is_integer_like(im);
+}
+
+static Expr* mod_indeterminate(const char* head, const char* tag, const char* what) {
+    mth_message(head, tag, "Indeterminate expression %s encountered.", what);
+    return expr_new_symbol(SYM_Indeterminate);
+}
+
+/* Mod beyond the machine/rational fast paths, as in Mathematica 14:
+ *   - a zero modulus with a numeric dividend is Indeterminate (Mod::indet);
+ *   - an infinite dividend is Indeterminate (Infinity::indet), a real
+ *     infinite modulus returns m unchanged, ComplexInfinity is Indeterminate;
+ *   - complex (Gaussian, or inexact complex) operands use the nearest
+ *     quotient, m - n Round[(m - d)/n] -- Mod[3 + 4 I, 2] is -1;
+ *   - other exact numeric quantities use the floored one,
+ *     m - n Floor[(m - d)/n] -- Mod[Pi, 1] is Pi - 3.
+ * Symbolic operands, and anything whose quotient will not round, stay
+ * unevaluated. */
+static Expr* mod_general(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+    Expr* m = a[0];
+    Expr* n = a[1];
+    Expr* d = (argc == 3) ? a[2] : NULL;
+
+    for (size_t i = 0; i < argc; i++)
+        if (a[i]->type == EXPR_SYMBOL && a[i]->data.symbol.name == SYM_Indeterminate)
+            return expr_new_symbol(SYM_Indeterminate);
+
+    if (mod_is_infinite(m)) {
+        if (!is_numeric_quantity(n) && !mod_is_infinite(n)) return NULL;
+        char* s = expr_to_string(m);
+        char buf[256];
+        snprintf(buf, sizeof buf, "%s - %s", s ? s : "Infinity", s ? s : "Infinity");
+        free(s);
+        return mod_indeterminate("Infinity", "indet", buf);
+    }
+    if (!is_numeric_quantity(m) || (d && !is_numeric_quantity(d))) return NULL;
+    if (mod_is_infinite(n)) {
+        if (n->type == EXPR_SYMBOL && n->data.symbol.name == SYM_ComplexInfinity)
+            return mod_indeterminate("Infinity", "indet", "0 ComplexInfinity");
+        return expr_copy(m);
+    }
+    if (!is_numeric_quantity(n)) return NULL;
+    if (mod_is_exact_or_real_zero(n)) {
+        char* call = expr_to_string(res);
+        Expr* out = mod_indeterminate("Mod", "indet", call ? call : "Mod[_, 0]");
+        free(call);
+        return out;
+    }
+
+    /* Gaussian integers: the direct Z[i] reduction (machine, else GMP). */
+    {
+        Expr *re, *im;
+        bool any_complex = false;
+        for (size_t i = 0; i < argc; i++)
+            if (is_complex(a[i], &re, &im)) any_complex = true;
+        if (any_complex) {
+            Expr* g = nt_gaussian_mod(m, n, d);
+            if (g) return g;
+        }
+    }
+
+    /* Nearest (Round) for anything complex-valued, floored (Floor) otherwise. */
+    bool complex = false;
+    for (size_t i = 0; i < argc && !complex; i++) {
+        int sign;
+        Expr *re, *im;
+        if (is_complex(a[i], &re, &im)) complex = true;
+        else if (numeric_real_sign(a[i], &sign) == 0) complex = true;
+    }
+    /* m - n * R[(m - d) / n] */
+    Expr* num = d ? expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(m),
+                                   expr_new_function(expr_new_symbol(SYM_Times),
+                                       (Expr*[]){ expr_new_integer(-1), expr_copy(d) }, 2) }, 2)
+                  : expr_copy(m);
+    Expr* quot = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ num, expr_new_function(expr_new_symbol(SYM_Power),
+                                   (Expr*[]){ expr_copy(n), expr_new_integer(-1) }, 2) }, 2);
+    Expr* q = eval_and_free(expr_new_function(
+                  expr_new_symbol(complex ? SYM_Round : SYM_Floor), &quot, 1));
+    /* A quotient that would not round stays symbolic: leave Mod alone. */
+    if (!(expr_is_integer_like(q) || mod_is_gaussian_int(q))) {
+        expr_free(q);
+        return NULL;
+    }
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ expr_new_integer(-1), expr_copy(n), q }, 3);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                             (Expr*[]){ expr_copy(m), prod }, 2));
+}
+
 Expr* builtin_mod(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) {
+        /* Mathematica's tags: argtu for one argument, argt otherwise. */
+        if (argc == 1)
+            mth_message("Mod", "argtu", "Mod called with 1 argument; 2 or 3 arguments are expected.");
+        else
+            mth_message("Mod", "argt", "Mod called with %zu arguments; 2 or 3 arguments are expected.", argc);
+        return NULL;
+    }
+    Expr* fast = mod_fast(res);
+    return fast ? fast : mod_general(res);
+}
+
+/* The machine / bignum / rational / MPFR paths. NULL when none applies. */
+static Expr* mod_fast(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 2 && res->data.function.arg_count != 3)) {
         return NULL;
     }

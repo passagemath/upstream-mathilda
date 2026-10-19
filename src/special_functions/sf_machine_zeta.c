@@ -371,6 +371,67 @@ static bool zm_hurwitz_em_c(double sr, double si, double ar, double ai,
 }
 
 /* ------------------------------------------------------------------------ */
+/* a <= 0: the symmetric convention, shifted into (0, 1]                     */
+/* ------------------------------------------------------------------------ */
+
+/* Largest shift m the head sum below is run for; past it the
+ * arbitrary-precision path answers. */
+#define ZM_SHIFT_MAX 1.0e7
+
+/* For a real a <= 0 the sums are taken in the symmetric form ((k+a)^2)^(-s/2),
+ * i.e. |k+a|^-s, so with m = floor(-a) + 1 (a + m in (0, 1])
+ *   Sum_k z^k |k+a|^-s = H + z^m T,   H = Sum_{k<m} z^k |k+a|^-s,
+ * and T the principal-branch sum at a + m. This forms H and z^m. The k + a = 0
+ * term of an integer a is 0^-s: dropped for Re s > 0, z^k at s = 0, and 0 for
+ * Re s < 0 (declined at Re s = 0 != s, which has no value). |k+a| is formed by
+ * TwoSum and its power corrected to first order; z^k is a double-double power;
+ * the sum is Neumaier-compensated. */
+static bool zm_shift_head(double zr, double zi, double sr, double si, double a,
+                          double m, double* Hr, double* Hi, double* Pr, double* Pi) {
+    bool real = (zi == 0.0 && si == 0.0);
+    double hr = 1.0, hi = 0.0, lr = 0.0, li = 0.0;     /* z^k = h + l */
+    double Sr = 0.0, Si = 0.0, cr = 0.0, ci = 0.0;
+    for (double k = 0.0; k < m; k += 1.0) {
+        double e, wk = zm_two_sum(k, a, &e);
+        double tr = 0.0, ti = 0.0;
+        if (wk == 0.0 && e == 0.0) {                   /* the 0^-s term */
+            if (sr == 0.0 && si != 0.0) return false;
+            if (sr == 0.0) { tr = hr + lr; ti = hi + li; }   /* s = 0: 0^0 = 1 */
+        } else {
+            double w = -wk, ew = -e;                   /* |k+a| = w + ew, w > 0 */
+            double fr, fi;
+            if (si == 0.0) {
+                fr = pow(w, -sr); fi = 0.0;
+                if (ew != 0.0) fr *= 1.0 - sr * ew / w;
+            } else {
+                zm_pow_neg(w, 0.0, sr, si, &fr, &fi);
+                if (ew != 0.0) zm_mul(fr, fi, 1.0 - sr * ew / w, -si * ew / w, &fr, &fi);
+            }
+            if (real) { tr = (hr + lr) * fr; ti = 0.0; }
+            else zm_mul(hr + lr, hi + li, fr, fi, &tr, &ti);
+        }
+        double nr = Sr + tr;
+        cr += fabs(Sr) >= fabs(tr) ? (Sr - nr) + tr : (tr - nr) + Sr;
+        Sr = nr;
+        double ni = Si + ti;
+        ci += fabs(Si) >= fabs(ti) ? (Si - ni) + ti : (ti - ni) + Si;
+        Si = ni;
+        if (zr != 1.0 || zi != 0.0) zm_dd_mul(&hr, &hi, &lr, &li, zr, zi);
+    }
+    *Hr = Sr + cr; *Hi = Si + ci;
+    *Pr = hr + lr; *Pi = hi + li;
+    return isfinite(*Hr) && isfinite(*Hi);
+}
+
+/* m = floor(-a) + 1 for a <= 0, or false past ZM_SHIFT_MAX. */
+static bool zm_shift_count(double a, double* m) {
+    double mf = floor(-a) + 1.0;
+    if (!(mf <= ZM_SHIFT_MAX)) return false;
+    *m = mf;
+    return true;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Riemann zeta                                                              */
 /* ------------------------------------------------------------------------ */
 
@@ -469,6 +530,42 @@ bool sf_hurwitz_c(double sr, double si, double ar, double ai,
     return zm_hurwitz_em_c(sr, si, ar, ai, vr, vi);
 }
 
+/* Zeta[s, a]: the Hurwitz sum in the symmetric convention, which is the
+ * principal one for a > 0 and, for a real a <= 0, the shifted form of
+ * zm_shift_head. Shared by the Zeta builtin, its NDArray / packed / Compile[]
+ * kernel and LerchPhi at z = 1. HurwitzZeta keeps the principal powers and so
+ * calls sf_hurwitz_* directly. */
+bool sf_zeta2_r(double s, double a, double* out) {
+    if (!isfinite(s) || !isfinite(a) || s == 1.0) return false;
+    if (a > 0.0) return sf_hurwitz_r(s, a, out);
+    double m, H, Hi, P, Pi, T;
+    if (!zm_shift_count(a, &m)) return false;
+    double r = a + m;                                  /* (0, 1], exact for m >= 2 */
+    if (!(r == 1.0 ? sf_zeta_r(s, &T) : sf_hurwitz_r(s, r, &T))) return false;
+    if (!zm_shift_head(1.0, 0.0, s, 0.0, a, m, &H, &Hi, &P, &Pi)) return false;
+    double v = H + T;
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+bool sf_zeta2_c(double sr, double si, double ar, double ai, double* vr, double* vi) {
+    if (!isfinite(sr) || !isfinite(si) || !isfinite(ar) || !isfinite(ai)) return false;
+    if (ai != 0.0 || ar > 0.0) return sf_hurwitz_c(sr, si, ar, ai, vr, vi);
+    if (si == 0.0) {                                   /* real s, real a <= 0 */
+        double v;
+        if (!sf_zeta2_r(sr, ar, &v)) return false;
+        *vr = v; *vi = 0.0;
+        return true;
+    }
+    double m, Hr, Hi, Pr, Pi, Tr, Ti;                  /* complex s, real a <= 0 */
+    if (!zm_shift_count(ar, &m)) return false;
+    if (!sf_hurwitz_c(sr, si, ar + m, 0.0, &Tr, &Ti)) return false;
+    if (!zm_shift_head(1.0, 0.0, sr, si, ar, m, &Hr, &Hi, &Pr, &Pi)) return false;
+    *vr = Hr + Tr; *vi = Hi + Ti;
+    return isfinite(*vr) && isfinite(*vi);
+}
+
 /* ------------------------------------------------------------------------ */
 /* LerchPhi, complex arguments                                               */
 /* ------------------------------------------------------------------------ */
@@ -539,9 +636,18 @@ static bool zm_lerch_series(double zr, double zi, double sr, double si,
 
 bool sf_lerch_r(double z, double s, double a, double* out) {
     if (!isfinite(z) || !isfinite(s) || !isfinite(a)) return false;
-    if (!(a > 0.0)) return false;   /* a <= 0: the ((k+a)^2)^(s/2) convention, MPFR */
-    if (z == 1.0) return sf_hurwitz_r(s, a, out);
+    if (z == 1.0) return sf_zeta2_r(s, a, out);
     if (!(fabs(z) < 1.0)) return false;
+    if (!(a > 0.0)) {                 /* a <= 0: the ((k+a)^2)^(s/2) convention */
+        double m, H, Hi, P, Pi, T;
+        if (!zm_shift_count(a, &m) || m > 1.0e5) return false;
+        if (!zm_shift_head(z, 0.0, s, 0.0, a, m, &H, &Hi, &P, &Pi)) return false;
+        if (!sf_lerch_r(z, s, a + m, &T)) return false;
+        double v = H + P * T;
+        if (!isfinite(v)) return false;
+        *out = v;
+        return true;
+    }
     if (z == 0.0) { *out = pow(a, -s); return isfinite(*out); }
     double vi;
     return zm_lerch_series(z, 0.0, s, 0.0, a, 0.0, out, &vi);
@@ -557,11 +663,12 @@ bool sf_lerch_c(double zr, double zi, double sr, double si, double ar, double ai
         *vr = v; *vi = 0.0;
         return true;
     }
-    /* Re a > 0: then (k+a)^s is the principal power for every k, which is what
-     * both conventions (Mathematica's ((k+a)^2)^(s/2) and the principal one)
-     * agree on. Anything else is left to the MPFR path. */
+    /* z = 1 is Zeta[s, a], symmetric convention included. Otherwise Re a > 0:
+     * then (k+a)^s is the principal power for every k, which is what both
+     * conventions (the symmetric ((k+a)^2)^(s/2) and the principal one) agree
+     * on. Anything else is left to the MPFR path. */
+    if (zi == 0.0 && zr == 1.0) return sf_zeta2_c(sr, si, ar, ai, vr, vi);
     if (!(ar > 0.0)) return false;
-    if (zi == 0.0 && zr == 1.0) return sf_hurwitz_c(sr, si, ar, ai, vr, vi);
     double zm2 = zr * zr + zi * zi;
     if (!(zm2 < 1.0)) return false;
     if (zm2 == 0.0) {                                  /* a^-s */

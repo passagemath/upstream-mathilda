@@ -187,7 +187,7 @@ void test_expint_special() {
     ASSERT(!sf_machine_chi(-1.0, &v));
     ASSERT(!sf_machine_ei(0.0, &v));
     ASSERT(!sf_machine_li(1.0, &v));
-    ASSERT(!sf_machine_li(0.0, &v));
+    ASSERT(sf_machine_li(0.0, &v) && v == 0.0);   /* li(0) = 0 */
     ASSERT(!sf_machine_li(-2.0, &v));
     ASSERT(!sf_machine_e1(0.0, &v));
     ASSERT(!sf_machine_si(NAN, &v));
@@ -202,7 +202,7 @@ void test_expint_special() {
     /* ... and the interpreter answers them as before */
     assert_eval_eq("CosIntegral[0.]", "-Infinity", 0);
     assert_eval_eq("ExpIntegralEi[0.]", "-Infinity", 0);
-    assert_eval_eq("LogIntegral[0.]", "Indeterminate", 0);
+    assert_eval_eq("LogIntegral[0.]", "0.0", 0);           /* li(0) = 0 */
     assert_true("ExpIntegralEi[800.] > 10^344");
     assert_true("ExpIntegralEi[-800.] < 0 && ExpIntegralEi[-800.] > -1.*^-300");
     assert_eval_eq("ExpIntegralE[2, 800.]", "0.0", 0);       /* IEEE underflow, as before */

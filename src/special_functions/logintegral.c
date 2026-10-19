@@ -101,8 +101,13 @@ static Expr* li_one_arg(Expr* arg) {
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
         return li_make_neg_infinity();                       /* li(1) = -Inf   */
     if (li_is_symbol(arg, "Infinity"))         return expr_new_symbol(SYM_Infinity);
-    if (li_is_symbol(arg, "ComplexInfinity"))  return expr_new_symbol(SYM_Indeterminate);
     if (li_is_symbol(arg, "Indeterminate"))    return expr_new_symbol(SYM_Indeterminate);
+    /* LogIntegral[ComplexInfinity] has no limit (it depends on the direction)
+     * and stays unevaluated. An inexact zero is li(0) = 0, at its precision. */
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR && mpfr_zero_p(arg->data.mpfr)) return expr_copy(arg);
+#endif
+    if (arg->type == EXPR_REAL && arg->data.real == 0.0) return expr_new_real(0.0);
 
     /* 2. Numeric (inexact) arguments: li(z) = Ei(Log z). Build
      * ExpIntegralEi[Log[z]] and evaluate it through the existing kernels. */
@@ -175,8 +180,8 @@ void logintegral_init(void) {
 /* li(z) for a machine complex z, in the shared kernel ABI (NDArray and
  * Compile[]): the same kernel the scalar builtin uses. li(z) = Ei(Log z) with
  * the PRINCIPAL log, which puts the cut on the negative real axis and makes
- * li[-1.] complex (Ei(i Pi)), exactly as the interpreter returns. Declines at
- * z = 0 (the interpreter answers Indeterminate) and at the pole z = 1. */
+ * li[-1.] complex (Ei(i Pi)), exactly as the interpreter returns. li(0) = 0;
+ * declines at the pole z = 1. */
 bool logintegral_machine_complex(double are, double aim, double* ore, double* oim) {
     return sf_machine_li_c(are, aim, ore, oim);
 }

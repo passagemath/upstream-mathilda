@@ -994,7 +994,7 @@ int main(void) {
             { "CosIntegral[x]",   -1.0 }, { "CosIntegral[x]",    0.0 },
             { "CoshIntegral[x]",  -2.0 }, { "CoshIntegral[x]",   0.0 },
             { "LogIntegral[x]",   -1.0 }, { "LogIntegral[x]",    1.0 },
-            { "LogIntegral[x]",    0.0 }, { "ExpIntegralEi[x]",  0.0 },
+            { "ExpIntegralEi[x]",  0.0 },   /* LogIntegral[0.] is 0. on every surface */
             { "InverseErf[x]",     1.0 }, { "InverseErf[x]",    -1.0 },
             { "InverseErfc[x]",    0.0 }, { "InverseErfc[x]",    2.0 },
             { "ProductLog[x]",    -0.5 },          /* below the branch point */

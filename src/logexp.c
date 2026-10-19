@@ -237,6 +237,13 @@ Expr* builtin_log(Expr* res) {
 
         if (is_interval(z)) { Expr* r = interval_apply_function("Log", z); if (r) return r; }
 
+        // Log[ComplexInfinity] = Infinity (|Log z| ~ Log|z|); Log[Indeterminate]
+        // = Indeterminate.
+        if (z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_ComplexInfinity)
+            return expr_new_symbol(SYM_Infinity);
+        if (z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_Indeterminate)
+            return expr_new_symbol(SYM_Indeterminate);
+
         // Exact evaluations for special constants
         if (z->type == EXPR_INTEGER && z->data.integer == 0) {
             Expr* ret = make_minus_infinity(); // Log[0] = -Infinity
@@ -573,7 +580,36 @@ Expr* builtin_exp(Expr* res) {
  * log10(1000.) is exactly 3. Everything else -- exact, symbolic, complex,
  * arbitrary precision, zero and the negative axis -- is Log[b, z]'s business,
  * so the two spellings cannot disagree.
+ *
+ * Two shortcuts ahead of Log[b, z]: an exact power of the base, b^k or b^-k
+ * (Log2[2^1000] -> 1000 in a bit scan, where Log[b, z]'s general power
+ * detection cost ~0.2 ms), and the limits Infinity / ComplexInfinity ->
+ * Infinity and Indeterminate -> Indeterminate, which the quotient form would
+ * leave as Infinity/Log[2].
  */
+
+/* k when the exact positive integer `z` (Integer or BigInt) is base^k, k >= 0;
+ * -1 otherwise. base is 2 or 10. */
+static int64_t fixed_base_exponent(const Expr* z, int64_t base) {
+    if (z->type == EXPR_INTEGER) {
+        int64_t u = z->data.integer, k = 0;
+        if (u <= 0) return -1;
+        while (u % base == 0) { u /= base; k++; }
+        return u == 1 ? k : -1;
+    }
+    if (z->type != EXPR_BIGINT || mpz_sgn(z->data.bigint) <= 0) return -1;
+    const mpz_srcptr v = z->data.bigint;
+    mp_bitcnt_t tz = mpz_scan1(v, 0);                  /* trailing zero bits */
+    if (base == 2) return mpz_popcount(v) == 1 ? (int64_t)tz : -1;
+    /* 10^k = 2^k 5^k: k is the trailing-zero count, then one comparison. */
+    mpz_t p;
+    mpz_init(p);
+    mpz_ui_pow_ui(p, 10, (unsigned long)tz);
+    int64_t k = mpz_cmp(p, v) == 0 ? (int64_t)tz : -1;
+    mpz_clear(p);
+    return k;
+}
+
 static Expr* fixed_base_log(Expr* res, const char* name, int64_t base,
                             double (*machine)(double)) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -582,6 +618,24 @@ static Expr* fixed_base_log(Expr* res, const char* name, int64_t base,
     Expr* z = res->data.function.args[0];
     if (z->type == EXPR_REAL && z->data.real > 0.0 && isfinite(z->data.real))
         return expr_new_real(machine(z->data.real));
+    if (z->type == EXPR_SYMBOL) {
+        const char* nm = z->data.symbol.name;
+        if (nm == SYM_Infinity || nm == SYM_ComplexInfinity) return expr_new_symbol(SYM_Infinity);
+        if (nm == SYM_Indeterminate) return expr_new_symbol(SYM_Indeterminate);
+    }
+    {
+        int64_t k = fixed_base_exponent(z, base);
+        if (k >= 0) return expr_new_integer(k);
+        /* 1/base^k: Rational[1, d]. */
+        if (z->type == EXPR_FUNCTION && z->data.function.arg_count == 2 &&
+            z->data.function.head->type == EXPR_SYMBOL &&
+            z->data.function.head->data.symbol.name == SYM_Rational &&
+            z->data.function.args[0]->type == EXPR_INTEGER &&
+            z->data.function.args[0]->data.integer == 1) {
+            k = fixed_base_exponent(z->data.function.args[1], base);
+            if (k >= 0) return expr_new_integer(-k);
+        }
+    }
     Expr* args[2] = { expr_new_integer(base), expr_copy(z) };
     return expr_new_function(expr_new_symbol(SYM_Log), args, 2);
 }

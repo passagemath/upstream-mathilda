@@ -3,7 +3,10 @@
 #include "options.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "message.h"
+#include "print.h"
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
@@ -135,6 +138,89 @@ bool options_extract(const Expr* res, const char* head_name,
                 if (strcmp(nm, entries[j].name) == 0) { *entries[j].out = vv; break; }
             }
         }
+    }
+    return true;
+}
+
+/* ---- validated Boolean options (see options.h) ----------------------------- */
+
+/* Split a Rule/RuleDelayed argument into its key and value; false when `e` is
+ * not a two-argument rule. */
+static bool opt_bool_rule(const Expr* e, const Expr** key, const Expr** val) {
+    if (!e || e->type != EXPR_FUNCTION || !e->data.function.head) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return false;
+    if (hd->data.symbol.name != SYM_Rule && hd->data.symbol.name != SYM_RuleDelayed)
+        return false;
+    if (e->data.function.arg_count != 2) return false;
+    *key = e->data.function.args[0];
+    *val = e->data.function.args[1];
+    return true;
+}
+
+/* Index of `key` in names[], or -1. */
+static int opt_bool_index(const Expr* key, const char* const* names, size_t n) {
+    for (size_t j = 0; j < n; j++) {
+        if (key->type == EXPR_SYMBOL && key->data.symbol.name == names[j]) return (int)j;
+        if (key->type == EXPR_STRING && strcmp(key->data.string, names[j]) == 0) return (int)j;
+    }
+    return -1;
+}
+
+bool options_parse_bools(Expr* res, const char* head, size_t max_pos,
+                         const char* const* names, bool* vals, size_t n_names,
+                         size_t* npos) {
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+    const Expr *key = NULL, *val = NULL;
+
+    size_t first = argc;
+    while (first > 0 && opt_bool_rule(args[first - 1], &key, &val)) first--;
+    *npos = first;
+    if (first > max_pos) {
+        char* bad = expr_to_string(args[first - 1]);
+        char* call = expr_to_string(res);
+        mth_message(head, "nonopt",
+                    "Options expected (instead of %s) beyond position %zu in %s. "
+                    "An option must be a rule or a list of rules.",
+                    bad ? bad : "?", max_pos, call ? call : "?");
+        free(bad); free(call);
+        return false;
+    }
+
+    /* Defaults from Options[head], so SetOptions takes effect. */
+    Expr* defs = symtab_get_options(head);
+    if (defs && defs->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < defs->data.function.arg_count; i++) {
+            if (!opt_bool_rule(defs->data.function.args[i], &key, &val)) continue;
+            int j = opt_bool_index(key, names, n_names);
+            if (j >= 0 && val->type == EXPR_SYMBOL)
+                vals[j] = (val->data.symbol.name == SYM_True);
+        }
+    }
+
+    bool seen[8] = { false };             /* n_names <= 8 */
+    for (size_t i = first; i < argc; i++) {
+        opt_bool_rule(args[i], &key, &val);
+        int j = opt_bool_index(key, names, n_names);
+        if (j < 0) {
+            char* kname = key->type == EXPR_STRING ? NULL : expr_to_string((Expr*)key);
+            char* call = expr_to_string(res);
+            mth_message(head, "optx", "Unknown option %s in %s.",
+                        key->type == EXPR_STRING ? key->data.string : (kname ? kname : "?"),
+                        call ? call : "?");
+            free(kname); free(call);
+            return false;
+        }
+        const char* v = val->type == EXPR_SYMBOL ? val->data.symbol.name : NULL;
+        if (v != SYM_True && v != SYM_False) {
+            char* bad = expr_to_string(args[i]);
+            mth_message(head, "opttf", "Value of option %s should be True or False.",
+                        bad ? bad : "?");
+            free(bad);
+            return false;
+        }
+        if ((size_t)j < 8 && !seen[j]) { vals[j] = (v == SYM_True); seen[j] = true; }
     }
     return true;
 }

@@ -301,9 +301,8 @@ bool sf_machine_chi(double x, double* out) {
  * E1(t) = e^-t/t J(t), the factor e^{+-y} IS x: using x itself keeps the
  * rounding of y = log x from being amplified by an exponential. */
 bool sf_machine_li(double x, double* out) {
-    /* li(0) = 0 by the limit, but the interpreter answers Indeterminate there,
-     * so the machine path declines rather than be the only one to give a
-     * number; li(1) is the pole. */
+    /* li(0) = 0 (the limit, from either side); li(1) is the pole. */
+    if (x == 0.0) { *out = 0.0; return true; }
     if (!(x > 0.0) || x == 1.0 || isinf(x)) return false;
     double y = log(x), v;
     if (y > 0.0) {
@@ -716,7 +715,7 @@ bool sf_machine_chi_c(double re, double im, double* ore, double* oim) {
 /* li(z) = Ei(log z), principal log (the identity the interpreter uses). */
 bool sf_machine_li_c(double re, double im, double* ore, double* oim) {
     if (!isfinite(re) || !isfinite(im)) return false;
-    if (re == 0.0 && im == 0.0) return false;              /* Indeterminate */
+    if (re == 0.0 && im == 0.0) { *ore = 0.0; *oim = 0.0; return true; }   /* li(0) = 0 */
     if (re == 1.0 && im == 0.0) return false;              /* pole */
     ExC z = exc(re, im);
     ExC l = ex_log(z);

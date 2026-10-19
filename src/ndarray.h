@@ -246,7 +246,13 @@ Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr);
  * input is guaranteed a real output); NULL means "use cplx and take the real
  * part". When `real_closed` is false (Sqrt/Log/ArcSin/... which can leave the
  * real axis on real input) the engine computes via `cplx` and promotes the
- * result dtype to complex iff any element came out non-real. */
+ * result dtype to complex iff any element came out non-real. An escaping kernel
+ * MAY still set `real`, provided it declines exactly where the value leaves
+ * the real axis (Log2 and Log10 decline x <= 0): a float64 buffer then tries
+ * `real` over the whole buffer first and keeps that result if no element
+ * declined -- bit-identical, since `cplx` uses the same formula on the
+ * positive axis, and 2.5x faster than computing every element complex and
+ * narrowing back. */
 typedef struct {
     bool (*cplx)(double ire, double iim, double* ore, double* oim);
     bool (*real)(double in, double* out);

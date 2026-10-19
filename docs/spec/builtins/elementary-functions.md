@@ -161,10 +161,25 @@ Out[8]= 1/3
 - A positive machine real is evaluated with libm `log10` / `log2` rather than
   `log(z)/log(b)`, so an exact power stays exact: `Log10[1000.]` is `3.`, not
   `2.9999999999999996`.
+- **Exact powers by bit scan** (v0.476). An exact integer `b^k` or `1/b^k` is
+  recognised directly (base 2: one popcount; base 10: the trailing-zero count k
+  and one comparison with 10^k), so `Log2[2^1000] = 1000` costs 0.6 µs where the
+  general `Log[b, z]` power detection cost ~0.24 ms (Log2 of 2^k for k ≤ 10⁴: 2.37 s
+  → 6.5 ms, the reference 0.11 s).
+- **Limits** (v0.476): `Log2[Infinity] = Log2[ComplexInfinity] = Infinity`,
+  `Log2[Indeterminate] = Indeterminate` (the quotient form left `Infinity/Log[2]`),
+  and the same for `Log10`. `Log[ComplexInfinity]` is now `Infinity` and
+  `Log[Indeterminate]` is `Indeterminate`.
+- **Precision tracking** of an arbitrary-precision argument does not use the
+  condition number (`Log2[3.`30]` carries 30.1 digits where the reference says
+  30.04); this is the general big-float precision model, not specific to `Log2`.
 - **Fast paths.** Each has an escaping NDArray kernel (libm `log10`/`log2` on
   the positive axis, `clog(z)/Log[b]` elsewhere, promoting to complex only
   when an element leaves the real axis), so `Log10` threads over a visible
-  `NDArray[...]` and a packed real array stays packed. Both lower in
+  `NDArray[...]` and a packed real array stays packed. A float64 buffer tries
+  the real arm over the whole buffer first and only takes the complex route
+  when an element is ≤ 0 (v0.476: packed `Log2` of 10⁶ reals 3.4 ms → 1.4 ms,
+  the reference 1.2 ms; `Log10` 3.3 → 2.0 ms). Both lower in
   `Compile[]` (hence auto-compile) at scalar and rank-1 array shape; the
   scalar lowering bails to the interpreter off the positive axis.
 

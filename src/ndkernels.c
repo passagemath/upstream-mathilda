@@ -706,6 +706,12 @@ static bool ndk_HurwitzZeta_c(double sre, double sim, double are, double aim,
                               double* rr, double* ri) {
     return sf_hurwitz_c(sre, sim, are, aim, rr, ri);
 }
+/* Zeta[s, a]: sf_zeta2_c, the symmetric convention the scalar builtin uses
+ * (it differs from HurwitzZeta for a <= 0). */
+static bool ndk_Zeta2_c(double sre, double sim, double are, double aim,
+                        double* rr, double* ri) {
+    return sf_zeta2_c(sre, sim, are, aim, rr, ri);
+}
 static bool ndk_Pochhammer_c(double are, double aim, double nre, double nim,
                              double* rr, double* ri) {
     return sfg_pochhammer_c(are, aim, nre, nim, rr, ri);
@@ -974,6 +980,7 @@ static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
 static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL };
 static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_Zeta        = { ndk_Zeta2_c, true, NULL, NULL, false, NULL };
 
 /* ---- registration ------------------------------------------------------- */
 
@@ -1036,6 +1043,7 @@ void ndkernels_init(void) {
     REG_U(Zeta);          REG_U(Fibonacci);    REG_U(LucasL);
     REG_B(PolyGamma,   NDKB_PolyGamma);
     REG_B(HurwitzZeta, NDKB_HurwitzZeta);
+    REG_B(Zeta,        NDKB_Zeta);        /* Zeta[s, a] (array s or a) */
     REG_B(Pochhammer,  NDKB_Pochhammer);
     REG_B(Binomial,    NDKB_Binomial);
     REG_B(LegendreP,   NDKB_LegendreP);

@@ -520,8 +520,11 @@ the branch cut runs along (−∞, +1).
 
 **Features**:
 - Exact special values: `LogIntegral[0] = 0`, `LogIntegral[1] = -Infinity`,
-  `LogIntegral[Infinity] = Infinity`; `ComplexInfinity` and `Indeterminate` map
-  to `Indeterminate`.
+  `LogIntegral[Infinity] = Infinity`, `LogIntegral[Indeterminate] =
+  Indeterminate`; `LogIntegral[ComplexInfinity]` stays unevaluated (the limit
+  depends on the direction). An inexact zero is li(0) = 0 (v0.476:
+  `LogIntegral[0.] = LogIntegral[-0.] = 0.`, `LogIntegral[0.`30] = 0.`, also in
+  packed, `NDArray` and compiled code; it was `Indeterminate`).
 - Exact non-special arguments stay symbolic (`LogIntegral[2]`,
   `LogIntegral[1/2]`); numeric values follow from a `Real`/MPFR argument or from
   `N`.
@@ -1452,9 +1455,12 @@ Out[5]= {-1.0, -1.6031}
 
 - `Zeta[s]` — the Riemann zeta function ζ(s) = Σ_{k≥1} k⁻ˢ (Re s > 1; analytic
   continuation elsewhere).
-- `Zeta[s, a]` — the Hurwitz (generalized) zeta function ζ(s, a) = Σ_{k≥0} (k+a)⁻ˢ.
+- `Zeta[s, a]` — the Hurwitz (generalized) zeta function ζ(s, a) = Σ_{k≥0} (k+a)⁻ˢ,
+  summed as ((k+a)²)^(−s/2) with the term k + a = 0 dropped.
+- `Zeta[s, a, IncludeSingularTerm -> True]` — keeps that term.
 
-Attributes: `Listable`, `NumericFunction`, `Protected`.
+Attributes: `Listable`, `NumericFunction`, `Protected`. Options:
+`IncludeSingularTerm -> False`.
 
 - **Exact integer arguments** (via Bernoulli numbers):
   - Even positive integers are rational multiples of πⁿ:
@@ -1468,9 +1474,37 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
   `Zeta[s] - Σ_{k=1}^{m-1} k⁻ˢ`, valid for symbolic / exact `s`, e.g.
   `Zeta[3, 2] = -1 + Zeta[3]` and `Zeta[4, 5] = Pi^4/90 - 22369/20736`.
   `Zeta[s, 1] = Zeta[s]` and `Zeta[s, 1/2] = (2^s - 1) Zeta[s]`
-  (e.g. `Zeta[2, 1/2] = Pi^2/2`, `Zeta[3, 1/2] = 7 Zeta[3]`).
+  (e.g. `Zeta[2, 1/2] = Pi^2/2`, `Zeta[3, 1/2] = 7 Zeta[3]`). For a symbolic or
+  non-integer `s` only `a = 2` expands (its one extra term is `1^-s`):
+  `Zeta[x, 2] = -1 + Zeta[x]`, while `Zeta[x, 3]` and `Zeta[3/2, 3]` stay; past
+  `a = 2`, an integer `s` must also have a closed form `Zeta[s]`, so `Zeta[3, 4]`
+  stays too.
+- **Exact Hurwitz at `a ≤ 0`** (v0.476). With m = ⌊−a⌋ + 1 shifts,
+  `Zeta[s, a] = Σ_{k<m, k+a≠0} |k+a|⁻ˢ + Zeta[s, a+m]`; the dropped term is 0⁻ˢ,
+  except at `s = 0`, where 0⁰ = 1 counts. Expanded on the same rules as `a > 0`:
+  `a = 0` and `a = −1` for any `s` (`Zeta[x, 0] = Zeta[x]`,
+  `Zeta[x, -1] = 1 + Zeta[x]`, `Zeta[2 + I, -1] = 1 + Zeta[2 + I]`); a more
+  negative integer `a` when `Zeta[s]` has a closed form
+  (`Zeta[2, -10] = 1968329/1270080 + Pi^2/6`, `Zeta[-1, -2] = 35/12`,
+  `Zeta[0, -1] = 3/2`, `Zeta[3, -2]` stays); a non-integer rational `a`, either
+  sign, when `s` is an exact integer and the shifted `Zeta[s, r]`, r ∈ (0, 1),
+  evaluates (`Zeta[2, -3/2] = 40/9 + Pi^2/2`, `Zeta[3, -1/2] = 8 + 7 Zeta[3]`,
+  `Zeta[3, 5/2] = -224/27 + 7 Zeta[3]`, `Zeta[-1, -1/2] = 13/24`; `Zeta[2, -2/3]`
+  stays). The finite part is one exact GMP rational, so `Zeta[2, -200]` costs a
+  sum and a two-term `Plus`. `Zeta[0, a] = 1/2 - a` for a rational `a > 0`.
+  Shifts stop at 10⁵ terms (`Zeta[2, -100001]` stays; the reference expands it).
+- **`IncludeSingularTerm -> True`.** At an integer `a ≤ 0` (exact or inexact)
+  the kept term is 0⁻ˢ: `ComplexInfinity` for `Re s > 0`
+  (`Zeta[2, -1, IncludeSingularTerm -> True]`, `Zeta[2., -1., …]`); no change at
+  `s = 0` or a negative integer `s` (`Zeta[-1, -1, …] = 11/12`); an exact
+  non-integer `s < 0` or a symbolic `s` stays unevaluated (with the option). At a
+  non-integer `a` the option changes nothing. `Rule` and `RuleDelayed`, symbol
+  and string keys are accepted, and the first setting wins. An unknown option is
+  `Zeta::optx`, a non-Boolean value `Zeta::opttf`, a third positional argument
+  `Zeta::nonopt` (naming the last one); no arguments is `Zeta::argt`.
+  `Options[Zeta]`/`SetOptions` hold the default.
 - **Machine numerics.** A machine-precision call (real or complex `s`; for
-  `Zeta[s, a]` with `Re a > 0`) is answered by the raw-`double` kernels of
+  `Zeta[s, a]` with `Re a > 0` or a real `a ≤ 0`) is answered by the raw-`double` kernels of
   `src/special_functions/sf_machine_zeta.c` — the same helpers the packed /
   `NDArray` kernels and `Compile[]` use, so all surfaces agree bit for bit:
   - integer `s`: tabulated ζ(2…64) and ζ(0…−60) (`Zeta[2.]` is π²/6 to the
@@ -1486,6 +1520,17 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
   against mpmath (2000 points): real s ∈ [1.5, 9] median 0.3 / max 1.0 ulp;
   complex s ∈ [1.5, 5] × [−3, 3] median 0.3 / max 1.5 ulp; real s ∈ [−40, ½]
   max ≈ 4.6 ulp. Net latency ≈ 0.35 µs real, 0.85 µs complex (from 75 / 403 µs).
+  - real `a ≤ 0` (v0.476, `sf_zeta2_r/_c`): the head Σ_{k<m} |k+a|⁻ˢ
+    (TwoSum-formed |k+a|, first-order power correction, Neumaier sum, up to
+    m = 10⁷) plus the Hurwitz kernel at a + m ∈ (0, 1]. Within 1.6 ulp of a
+    40-digit reference on the probe set (`Zeta[2., -100000.5]` 0.6 ulp);
+    `Zeta[2.5, -1.5 - k/10⁴]` costs 1.1 µs (0.34 ms before, through MPFR; the
+    reference 13 µs). `HurwitzZeta` keeps the principal powers and calls the
+    unshifted kernels. `Zeta[s, a]` with an array in either slot has a binary
+    `NDArray` kernel and compiles at scalar and rank-1 shapes.
+  - exact even `s`: B₂ₙ from FLINT's `arith_bernoulli_number` (cold `Zeta[400]`
+    0.5 ms, from 31 ms through the O(n²) recurrence), and the finished
+    `rational · Pi^(2n)` memoised per n.
 - **Arbitrary precision.** One-argument zeta routes through arb's
   `acb_dirichlet_zeta` (the `flint_num_zeta` bridge), ~4× faster than `mpfr_zeta`
   and faster than Mathematica at 50 digits. Two-argument (Hurwitz) inputs, and
@@ -1773,6 +1818,11 @@ Out[3]= 2.32018 - 3.45139*I
   the principal value uses the symmetric power ((k+a)²)^(−s/2) and excludes any
   term with k + a = 0.
 
+Options: `DoublyInfinite -> False`, `IncludeSingularTerm -> False`. Both are
+validated (v0.476): an unknown name is `LerchPhi::optx`, a non-Boolean value
+`LerchPhi::opttf`, a non-option beyond position 3 `LerchPhi::nonopt`; the first
+setting of a name wins.
+
 `LerchPhi` is the common generalization of `Zeta`, `HurwitzZeta` and `PolyLog`:
 `LerchPhi[1, s, a] = Zeta[s, a]` and `z LerchPhi[z, s, 1] = PolyLog[s, z]`.
 Implemented in `src/special_functions/lerchphi.c`, registered via
@@ -1847,7 +1897,20 @@ keeps the series.
   -0.581502 + 0.384767 I`. (The real-axis values used to be wrong —
   `6.35096 + 1.44603 I` — because the Erdélyi terms `HurwitzZeta[s-n, a]` had
   lost their digits to cancellation, and `Re a < 0` returned the principal
-  value.) `z` on the cut `(1, ∞)` (e.g. `LerchPhi[2, 3, -1.5]`) stays symbolic.
+  value.) On the cut `(1, ∞)` (v0.476) arb's continuation gives the limit
+  from below, Φ(x − i0, s, a), the convention `PolyLog` uses
+  (`LerchPhi[2., 2., 1.] = Pi^2/8 - I Pi Log[2]/2`, `LerchPhi[3., 2., 0.5] =
+  4.30831 - 1.99266 I`, `LerchPhi[2., 3, 0.5] = 8.92139 - 0.533649 I`). These
+  agree with the reference within 0.46 ulp of a 40-digit value, where the
+  reference's own machine values are off by up to 2130 ulp (complex `a`).
+  Machine cost ≈ 1.1 ms (arb's |z| > 1 algorithm; 0.75 ms is its floor at 60
+  bits), about 3× the reference; `DoublyInfinite` at |z| < 1 adds one such call.
+  Without a head shift the operands go to arb at their own precision.
+  Exact `z > 1` stays symbolic (`LerchPhi[2, 2, 1/2]`), as in the reference.
+- **`a ≤ 0` on the machine path** (v0.476): the same shifted head as `Zeta`,
+  Σ_{k<m} zᵏ |k+a|⁻ˢ + zᵐ Φ(z, s, a+m), in the real kernel (m ≤ 10⁵), so
+  `LerchPhi[0.5, 2., -1.5]` no longer goes through MPFR, and `z = 1` is
+  `Zeta[s, a]` including `a ≤ 0` (`LerchPhi[1., 2., -1.5] = 9.37925`).
 - **Series at `z = 0`.** `Series[LerchPhi[z, s, a], {z, 0, n}]` returns the
   defining power series, coefficient of `z^k` being `((k+a)^2)^(-s/2)`:
   `Series[LerchPhi[z, s, a], {z, 0, 5}] // Normal =
@@ -1856,8 +1919,16 @@ keeps the series.
   - a LerchPhi[z, s, a])/z` and `D[LerchPhi[z, s, a], a] = -s LerchPhi[z, 1+s, a]`;
   the `s`-derivative is the generic `Derivative[0, 1, 0][LerchPhi][z, s, a]`.
 - **Diagnostics.** Fewer than three arguments emit `LerchPhi::argrx`; a
-  non-option beyond position 3 emits `LerchPhi::nonopt`; both leave the call
-  unevaluated.
+  non-option beyond position 3 emits `LerchPhi::nonopt`, an unknown option
+  `LerchPhi::optx`, a non-Boolean option value `LerchPhi::opttf`; all leave the
+  call unevaluated.
+- **Deliberate differences.** An exact `DoublyInfinite` call with a closed form
+  evaluates (`LerchPhi[1, 2, 1/2, DoublyInfinite -> True] = Pi^2`) where the
+  reference leaves it unevaluated; the value agrees with its `N`. An exact
+  irrational operand next to an inexact one (`LerchPhi[Exp[I], 2., 1.5]`) stays
+  unevaluated, as for every special function here (no mixed-argument
+  numericization yet). The compiled form is scalar-only, like every N-ary
+  kernel (`WhittakerM`, `HypergeometricU`, …).
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
 
@@ -1881,9 +1952,17 @@ Out[3]= 4 Catalan
 
 Implemented in `src/special_functions/dirichlet_l.c` on the character engine
 `dirichlet.{c,h}`, registered via `dirichletl_init()` in `core_init()`.
-Attributes `Listable`, `NumericFunction`, `Protected`. `N` keeps the labels k, j
+Attributes `Listable`, `NHoldAll`, `Protected` (v0.476; it was `NumericFunction`, so `NumericQ[DirichletL[4, 2, 3]]` is now `False` and `1. + DirichletL[4, 2, 3]` stays unevaluated, as in the reference). `N` keeps the labels k, j
 exact (`numericalize_rec`, as Mathematica's `NHoldAll` + N-rule does), so
 `N[DirichletL[3, 2, 1/2], 50]` evaluates at s = 0.5`50.
+
+Machine accuracy against a 40-digit reference is within 3.4 ulp
+(`DirichletL[5, 2, 1.5]` 3.0 ulp; the reference itself is about 11 ulp off
+there). Two deliberate differences: `DirichletL[4, 2, 1.]` gives `0.785398`
+(π/4) and `DirichletL[4, 2, 1.000001]` is correct to the last digit where the
+reference leaves the first unevaluated and is off by 2·10⁻¹¹ on the second;
+`DirichletL[1, 1, 1.]` is `ComplexInfinity` (as `Zeta[1.]` is) where the
+reference stays unevaluated.
 
 - **Messages.** `argrx` (arity), `intp` (a number that is not a positive integer
   at position 1 or 2), `invl` (j > EulerPhi[k]); all through `mth_message`.

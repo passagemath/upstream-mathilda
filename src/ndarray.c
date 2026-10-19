@@ -1786,6 +1786,15 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
         return expr_new_ndarray_like(a, rank, dims, out, dta);
     }
 
+    /* An escaping kernel whose real arm marks its own domain: try it first. */
+    if (k->real && dta == NDT_FLOAT64) {
+        void* out = malloc(ndt_elem_size(dta) * sz);
+        ndu_hot_ctx ctx = { (const double*)in, (double*)out, k };
+        if (out && nd_parallel_for(sz, ndu_hot_chunk, &ctx))
+            return expr_new_ndarray_like(a, rank, dims, out, dta);
+        free(out);
+    }
+
     /* Real input, function may leave the real axis (Sqrt/Log/ArcSin/...):
      * compute complex, then narrow to real dtype iff every element is real,
      * else promote (mirrors real_power_escapes in ndarray_scalar_power). */

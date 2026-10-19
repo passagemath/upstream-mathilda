@@ -27,9 +27,11 @@
  *       |z| <= 1               ->  arb (arbitrary precision) / complex-MPFR series
  *       |z| > 1, off [1, Inf)  ->  analytic continuation: arb, else Erdelyi
  *                                  (Re a < 0 shifted to the symmetric convention)
- *       z on the cut (1, Inf)  ->  stays symbolic
+ *       z on the cut (1, Inf)  ->  arb: the limit from below, Phi(x - i0, s, a)
+ *                                  (so z Phi(z, s, 1) = PolyLog[s, z] there too)
  *   everything else            ->  stays symbolic (return NULL)
  *
+ * Options: DoublyInfinite -> False, IncludeSingularTerm -> False.
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "lerchphi.h"
@@ -45,7 +47,6 @@
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
 #include "numeric.h"      /* numeric_min_inexact_bits */
-#include "print.h"        /* expr_to_string (nonopt diagnostic) */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -55,6 +56,7 @@
 #include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
 #include "flint_num_bridge.h" /* flint_num_lerchphi (arb acb_dirichlet_lerch_phi) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "options.h"   /* options_parse_bools */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -687,11 +689,12 @@ static Expr* lp_lcx_to_expr(const lcx* v, mpfr_prec_t p) {
  * returned the principal -3.48173 instead of -0.653307.)
  *
  * The tail Phi(z, s, a+m) comes from arb's acb_dirichlet_lerch_phi, which is
- * rigorous (its precision ladder sees any cancellation) and covers every z off
- * the cut [1, Infinity) -- integer s and |Log z| >= 2pi included -- in a few ms.
+ * rigorous (its precision ladder sees any cancellation) and covers every
+ * |z| > 1 -- integer s and |Log z| >= 2pi included, and the cut (1, Infinity),
+ * where it returns the limit from below -- in a few ms.
  * Without it (no FLINT, or a decline) the Erdelyi expansion is used where valid
  * (`erdelyi_ok`).  Returns the result Expr, or NULL to stay symbolic. */
-static Expr* lp_large_z_shifted(Expr* s_e, Expr* a_e,
+static Expr* lp_large_z_shifted(Expr* z_e, Expr* s_e, Expr* a_e,
                                 const lcx* Z, const lcx* S, const lcx* A,
                                 mpfr_prec_t out_prec, mpfr_prec_t wp,
                                 bool erdelyi_ok, bool real_only) {
@@ -737,14 +740,21 @@ static Expr* lp_large_z_shifted(Expr* s_e, Expr* a_e,
     Expr* out = NULL;
     bool have_tail = false;
     {
-        /* Hand arb the operands at the WORKING precision (their values taken
-         * as exact): the head sum can cancel the tail, so a tail good to only
-         * out_prec bits would cost the result its last few. */
-        Expr* zw = lp_lcx_to_expr(Z, wp);
-        Expr* sw = lp_lcx_to_expr(S, wp);
-        Expr* aw = lp_lcx_to_expr(&Am, wp);
-        Expr* fv = flint_num_lerchphi(zw, sw, aw);
-        expr_free(zw); expr_free(sw); expr_free(aw);
+        /* With a head sum, hand arb the operands at the WORKING precision
+         * (their values taken as exact): the head can cancel the tail, so a
+         * tail good to only out_prec bits would cost the result its last few.
+         * Without one (m = 0) the call's own operands set arb's precision, half
+         * the cost at machine precision. */
+        Expr* fv;
+        if (m == 0) {
+            fv = flint_num_lerchphi(z_e, s_e, a_e);
+        } else {
+            Expr* zw = lp_lcx_to_expr(Z, wp);
+            Expr* sw = lp_lcx_to_expr(S, wp);
+            Expr* aw = lp_lcx_to_expr(&Am, wp);
+            fv = flint_num_lerchphi(zw, sw, aw);
+            expr_free(zw); expr_free(sw); expr_free(aw);
+        }
         if (fv) {
             Expr* zero = expr_new_integer(0);
             Expr *fre, *fim;
@@ -792,9 +802,8 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
 
     Expr* out = NULL;
     if (ok) {
-        /* |z| > 1: the defining series diverges and there is no analytic
-         * continuation here -- leave symbolic.  (|z| = 1 is attempted; it
-         * converges when Re(s) > 1.) */
+        /* |z| <= 1: the defining series (|z| = 1 converges when Re(s) > 1);
+         * |z| > 1: the analytic continuation below. */
         mpfr_t zmag; mpfr_init2(zmag, wp);
         lcx_abs(zmag, &Z);
         bool diverges = mpfr_cmp_d(zmag, 1.0 + 1e-12) > 0;
@@ -814,12 +823,10 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
                 else if (code == LP_SINGULAR) out = expr_new_symbol(SYM_ComplexInfinity);
             }
         } else {
-            /* |z| > 1: try the Lerch/Erdelyi analytic continuation, valid for
-             * s not a positive integer, a not a non-positive integer, z off the
-             * branch cut [1, Infinity), and |Log z| < 2pi.  Otherwise stay
-             * symbolic (in particular integer s on the cut -- e.g.
-             * LerchPhi[2, 3, -1.5] -- has a logarithmic confluent form not
-             * implemented here). */
+            /* |z| > 1: arb's continuation, which on the cut (1, Infinity) gives
+             * the limit from below (the PolyLog convention). Without arb, the
+             * Lerch/Erdelyi expansion, valid for s not a positive integer, z
+             * off the cut and |Log z| < 2pi; otherwise stay symbolic. */
             double sre_d = mpfr_get_d(sc.re, LRND), sim_d = mpfr_get_d(sc.im, LRND);
             double zre_d = mpfr_get_d(Z.re, LRND),  zim_d = mpfr_get_d(Z.im, LRND);
             long sr = (long)floor(sre_d + 0.5);
@@ -837,10 +844,9 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
             /* Real z < -1 with real s, a: Phi is real-analytic along
              * (-Infinity, 1), so the continuation is real; drop the
              * working-precision imaginary residue. */
-            if (!on_cut)
-                out = lp_large_z_shifted(s, a, &Z, &sc, &ac, out_prec, wp,
-                                         !s_posint && small_logz,
-                                         real_only && zre_d < 0.0);
+            out = lp_large_z_shifted(z, s, a, &Z, &sc, &ac, out_prec, wp,
+                                     !s_posint && small_logz && !on_cut,
+                                     real_only && zre_d < 0.0);
         }
     }
     lcx_clear(&Z); lcx_clear(&sc); lcx_clear(&ac); lcx_clear(&res);
@@ -956,30 +962,6 @@ static Expr* lp_emit_argrx(size_t argc) {
     return NULL;
 }
 
-/* Mirror Wolfram's nonopt surface text for a bad option beyond position 3. */
-static Expr* lp_emit_nonopt(Expr* bad, Expr* res) {
-    char* bad_str  = expr_to_string(bad);
-    char* call_str = expr_to_string(res);
-    mth_message("LerchPhi", "nonopt", "Options expected (instead of %s) beyond position 3 in %s. An option must be a rule or a list of rules.", bad_str ? bad_str : "?", call_str ? call_str : "?");
-    free(bad_str);
-    free(call_str);
-    return NULL;
-}
-
-/* True if `opt` is Rule[symbol, value]; fills *name and *val when so. */
-static bool lp_as_option(Expr* opt, const char** name, Expr** val) {
-    if (opt->type == EXPR_FUNCTION &&
-        opt->data.function.head->type == EXPR_SYMBOL &&
-        opt->data.function.head->data.symbol.name == SYM_Rule &&
-        opt->data.function.arg_count == 2 &&
-        opt->data.function.args[0]->type == EXPR_SYMBOL) {
-        *name = opt->data.function.args[0]->data.symbol.name;
-        *val  = opt->data.function.args[1];
-        return true;
-    }
-    return false;
-}
-
 /* Thread sf_machine_lerchphi over a single NDArray argument (the other two are
  * machine-real scalars), mirroring whittaker_w_ndarray. Returns a packed result,
  * or NULL to let the caller delist: more than one array arg, an int64/bool/complex
@@ -1045,17 +1027,16 @@ Expr* builtin_lerchphi(Expr* res) {
         }
     }
 
-    bool doubly_infinite = false, include_singular = false;
-    Expr* last_bad = NULL;
-    for (size_t i = 3; i < argc; i++) {
-        const char* name; Expr* val;
-        if (!lp_as_option(args[i], &name, &val)) { last_bad = args[i]; continue; }
-        bool is_true = (val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_True);
-        if (name == SYM_DoublyInfinite)            doubly_infinite = is_true;
-        else if (name == SYM_IncludeSingularTerm)  include_singular = is_true;
-        else                                       last_bad = args[i];
+    /* Trailing options: DoublyInfinite, IncludeSingularTerm (True/False),
+     * with LerchPhi::nonopt / ::optx / ::opttf on a bad one. */
+    bool flags[2] = { false, false };
+    if (argc > 3) {
+        const char* names[2] = { SYM_DoublyInfinite, SYM_IncludeSingularTerm };
+        size_t npos;
+        if (!options_parse_bools(res, "LerchPhi", 3, names, flags, 2, &npos)) return NULL;
+        if (npos < 3) return lp_emit_argrx(npos);
     }
-    if (last_bad) return lp_emit_nonopt(last_bad, res);
+    bool doubly_infinite = flags[0], include_singular = flags[1];
 
     /* An NDArray (or packed buffer) in any slot: thread the double kernel over it
      * (fast path), else delist and re-evaluate so Listable threads each element
@@ -1078,5 +1059,12 @@ void lerchphi_init(void) {
     symtab_add_builtin("LerchPhi", builtin_lerchphi);
     symtab_get_def("LerchPhi")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
+    symtab_set_options("LerchPhi", expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rule),
+                       (Expr*[]){ expr_new_symbol(SYM_DoublyInfinite),
+                                  expr_new_symbol(SYM_False) }, 2),
+                   expr_new_function(expr_new_symbol(SYM_Rule),
+                       (Expr*[]){ expr_new_symbol(SYM_IncludeSingularTerm),
+                                  expr_new_symbol(SYM_False) }, 2) }, 2));
     /* Docstring lives in info.c (info_init). */
 }

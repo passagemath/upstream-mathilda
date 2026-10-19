@@ -203,12 +203,15 @@ void test_lp_negative_real_axis() {
     assert_close("LerchPhi[-3., 1.5, -2.]", -17.758254183950179456, 1e-12);
 }
 
-/* ---- |z| > 1 stays symbolic where no continuation is implemented ----- */
+/* ---- the branch cut z > 1: the limit from below (verified values) ----- */
 
 void test_lp_large_z_symbolic() {
-    /* Integer s on the branch cut needs the logarithmic confluent form. */
-    assert_eval_eq("LerchPhi[2, 3, -1.5]", "LerchPhi[2, 3, -1.5]", 0);
-    assert_eval_eq("LerchPhi[2.0, 3, 0.5]", "LerchPhi[2.0, 3, 0.5]", 0);
+    /* Integer s on the cut included; an exact z > 1 stays symbolic. */
+    assert_eval_eq("Abs[LerchPhi[2, 3, -1.5] - (51.981861922538712127 - 2.1345964981239411780 I)] < 1.*^-12",
+                   "True", 0);
+    assert_eval_eq("Abs[LerchPhi[2.0, 3, 0.5] - (8.921391406560604 - 0.5336491245309867 I)] < 1.*^-13",
+                   "True", 0);
+    assert_eval_eq("LerchPhi[2, 2, 1/2]", "LerchPhi[2, 2, 1/2]", 0);
 }
 
 /* ---- options -------------------------------------------------------- */

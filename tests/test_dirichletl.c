@@ -259,8 +259,10 @@ void test_dl_messages() {
 }
 
 void test_dl_attributes() {
-    assert_eval_eq("Attributes[DirichletL]", "{Listable, NumericFunction, Protected}", 0);
-    T("NumericQ[DirichletL[3, 2, 1/2]]");
+    /* NHoldAll, not NumericFunction: NumericQ is False, N still evaluates. */
+    assert_eval_eq("Attributes[DirichletL]", "{Listable, NHoldAll, Protected}", 0);
+    T("!NumericQ[DirichletL[3, 2, 1/2]]");
+    T("NumberQ[N[DirichletL[3, 2, 1/2]]]");
 }
 
 int main() {

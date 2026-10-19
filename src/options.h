@@ -141,4 +141,25 @@ void options_builtin_init(void);
 Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
                                  const Expr* opts);
 
+/* ---- validated Boolean options ---------------------------------------------
+ *
+ * For a head whose options are all True/False switches (Zeta's
+ * IncludeSingularTerm, LerchPhi's DoublyInfinite and IncludeSingularTerm).
+ * The trailing Rule/RuleDelayed arguments are the options; *npos receives the
+ * count of positional arguments before them. Each name in `names` (interned
+ * SYM_* pointers) seeds vals[j] from the registered defaults (Options[head]),
+ * then the call's own settings apply, the FIRST occurrence of a name winning.
+ * A key may be the symbol or its string name.
+ *
+ * Returns false, after emitting the message and leaving the call to stay
+ * unevaluated, on:
+ *   more than max_pos positional arguments  head::nonopt (naming the last one)
+ *   an unknown option name                  head::optx
+ *   a value other than True / False         head::opttf
+ * The first faulty option in argument order is the one reported. Fewer than
+ * the minimum positional arguments is the caller's argument-count message. */
+bool options_parse_bools(Expr* res, const char* head, size_t max_pos,
+                         const char* const* names, bool* vals, size_t n_names,
+                         size_t* npos);
+
 #endif /* MATHILDA_OPTIONS_H */

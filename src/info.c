@@ -1027,12 +1027,13 @@ void info_init(void) {
         "D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2. Listable.");
     symtab_set_docstring("LogIntegral",
         "LogIntegral[z]\n"
-        "\tgives the logarithmic integral li(z), the principal value of\n"
-        "\tIntegral_0^z dt/ln t, equal to ExpIntegralEi[Log[z]], with a branch cut\n"
-        "\ton (-Infinity, 1). LogIntegral[0] = 0, LogIntegral[1] = -Infinity,\n"
-        "LogIntegral[Infinity] = Infinity. Real and complex inputs evaluate\n"
-        "numerically at machine or arbitrary (MPFR) precision; D[LogIntegral[z], z] =\n"
-        "1/Log[z]. Listable.");
+        "\tThe logarithmic integral li(z), the principal value of Integral_0^z dt/Log[t],\n"
+        "\tequal to ExpIntegralEi[Log[z]], with a branch cut on (-Infinity, 1).\n"
+        "\tLogIntegral[0] = 0 (also for 0.), LogIntegral[1] = -Infinity, LogIntegral[Infinity] = Infinity;\n"
+        "\tLogIntegral[ComplexInfinity] stays unevaluated.\n"
+        "\tReal and complex arguments evaluate at machine or arbitrary precision; packed arrays,\n"
+        "\tNDArray and Compile share the machine kernel. D[LogIntegral[z], z] = 1/Log[z].\n"
+        "\tListable, NumericFunction.");
     symtab_set_docstring("InverseErf",
         "InverseErf[s]\n"
         "\tgives the inverse error function: the z solving s = Erf[z].\n"
@@ -1089,16 +1090,18 @@ void info_init(void) {
         "complex arguments evaluate too. Other arguments stay symbolic. Listable.");
     symtab_set_docstring("Zeta",
         "Zeta[s]\n"
-        "\tis the Riemann zeta function zeta(s) = Sum_{k>=1} k^-s.\n"
+        "\tThe Riemann zeta function zeta(s) = Sum_{k>=1} k^-s, continued analytically.\n"
         "Zeta[s, a]\n"
-        "\tis the Hurwitz zeta function zeta(s, a) = Sum_{k>=0} (k+a)^-s.\n"
-        "Even positive integers give rational multiples of Pi^(2n), negative\n"
-        "integers give rationals, Zeta[0] is -1/2, and Zeta[1] is ComplexInfinity;\n"
-        "odd positive integers stay symbolic. Hurwitz zeta at a positive integer a\n"
-        "reduces to Zeta[s] minus a finite power sum, and Zeta[s, 1/2] is\n"
-        "(2^s - 1) Zeta[s]. Real, complex, machine and\n"
-        "arbitrary-precision (MPFR) numeric arguments evaluate numerically via\n"
-        "mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.");
+        "\tThe Hurwitz zeta function Sum_{k>=0} ((k + a)^2)^(-s/2); the term with k + a = 0 is dropped.\n"
+        "Zeta[s, a, IncludeSingularTerm -> True]\n"
+        "\tKeeps that term, so an integer a <= 0 with Re s > 0 gives ComplexInfinity.\n"
+        "\tExact values: rational * Pi^(2n) at even s = 2n > 0, rationals at s <= 0, Zeta[1] = ComplexInfinity;\n"
+        "\todd s >= 3 stays symbolic. Zeta[s, a] at rational a shifts a into (0, 1] with a finite\n"
+        "\tpower sum when the shifted value has a closed form (Zeta[2, -1/2] = 4 + Pi^2/2), and\n"
+        "\tZeta[s, 1/2] = (2^s - 1) Zeta[s], Zeta[0, a] = 1/2 - a.\n"
+        "\tMachine, arbitrary-precision and complex arguments evaluate numerically; packed arrays,\n"
+        "\tNDArray and Compile share the machine kernel.\n"
+        "\tOption: IncludeSingularTerm -> False (default) | True. Listable, NumericFunction.");
     symtab_set_docstring("HurwitzZeta",
         "HurwitzZeta[s, a]\n"
         "\tis the Hurwitz zeta function zeta(s, a) = Sum_{k>=0} (k + a)^-s.\n"
@@ -1149,15 +1152,16 @@ void info_init(void) {
         "Infinity. Listable.");
     symtab_set_docstring("LerchPhi",
         "LerchPhi[z, s, a]\n"
-        "\tis the Lerch transcendent Phi(z, s, a) = Sum_{k>=0} z^k/(k + a)^s.\n"
-        "It generalizes Zeta, HurwitzZeta and PolyLog: LerchPhi[1, s, a] is\n"
-        "Zeta[s, a] and z LerchPhi[z, s, 1] is PolyLog[s, z]. Exact reductions\n"
-        "cover z = 0 (a^-s), s = 0 (1/(1-z)), z = +-1, positive integer a (a\n"
-        "PolyLog form) and negative integer s (a rational function of z). The\n"
-        "options DoublyInfinite -> True (sum k from -Infinity to Infinity) and\n"
-        "IncludeSingularTerm -> True (keep the k + a = 0 term) are supported.\n"
-        "Inexact arguments with |z| < 1 evaluate numerically at machine or\n"
-        "arbitrary (MPFR) precision; |z| > 1 stays symbolic. Listable.");
+        "\tThe Lerch transcendent Phi(z, s, a) = Sum_{k>=0} z^k ((k + a)^2)^(-s/2), continued analytically;\n"
+        "\tthe term with k + a = 0 is dropped.\n"
+        "LerchPhi[z, s, a, DoublyInfinite -> True]\n"
+        "\tSums k from -Infinity to Infinity: Phi(z, s, a) + Phi(1/z, s, 1 - a)/z.\n"
+        "LerchPhi[z, s, a, IncludeSingularTerm -> True]\n"
+        "\tKeeps the k + a = 0 term, giving ComplexInfinity at an integer a <= 0.\n"
+        "\tLerchPhi[1, s, a] = Zeta[s, a] and z LerchPhi[z, s, 1] = PolyLog[s, z]. Exact reductions cover\n"
+        "\tz = 0, s = 0, z = +-1, integer a and negative integer s. Numeric arguments evaluate for every\n"
+        "\tz; on the branch cut z > 1 the value is the limit from below (as for PolyLog).\n"
+        "\tOptions: DoublyInfinite -> False, IncludeSingularTerm -> False. Listable, NumericFunction.");
     symtab_set_docstring("DirichletCharacter",
         "DirichletCharacter[k, j, n]\n"
         "\tgives the Dirichlet character chi_{k,j}(n) with modulus k and index j.\n"
@@ -1169,13 +1173,13 @@ void info_init(void) {
         "be below 2^63.");
     symtab_set_docstring("DirichletL",
         "DirichletL[k, j, s]\n"
-        "\tgives the Dirichlet L-function L(chi, s) for the character\n"
-        "chi = DirichletCharacter[k, j, .]; for Re s > 1 it is\n"
-        "Sum_{n>=1} chi(n) n^-s. DirichletL[1, 1, s] is Zeta[s]. Exact values\n"
-        "are generated for non-positive integer s (generalized Bernoulli\n"
-        "numbers) and for s = 1 with a non-principal character. Evaluates to any\n"
-        "precision for real or complex s, and encloses Interval arguments for\n"
-        "real characters. Listable.");
+        "\tThe Dirichlet L-function L(chi, s) of chi = DirichletCharacter[k, j, .]: for Re s > 1,\n"
+        "\tSum_{n>=1} chi(n) n^-s, continued analytically.\n"
+        "\tDirichletL[1, 1, s] = Zeta[s]. Exact values at integer s <= 0 (generalized Bernoulli numbers)\n"
+        "\tand at s = 1 for a non-principal character. Real and complex s evaluate to any precision;\n"
+        "\tInterval s gives an enclosure for a real character.\n"
+        "\tk and j must be positive integers with j <= EulerPhi[k] (DirichletL::intp, ::invl).\n"
+        "\tN keeps k and j exact. Attributes: Listable, NHoldAll (not NumericFunction).");
     symtab_set_docstring("ProductLog",
         "ProductLog[z]\n"
         "\tgives the principal solution w of z == w e^w (the Lambert W function).\n"
@@ -3150,9 +3154,11 @@ void info_init(void) {
         "gives Log[z]/Log[10]. Listable; maps packed arrays and compiles.");
     symtab_set_docstring("Log2",
         "Log2[z]\n"
-        "\tgives the base-2 logarithm of z, Log[2, z] = Log[z] / Log[2].\n"
-        "Exact powers of 2 give exact results (Log2[1024] = 10); a symbolic z\n"
-        "gives Log[z]/Log[2]. Listable; maps packed arrays and compiles.");
+        "\tThe base-2 logarithm of z, Log[2, z] = Log[z]/Log[2].\n"
+        "\tExact powers of 2 give integers (Log2[2^1000] = 1000, Log2[1/8] = -3); other exact or symbolic\n"
+        "\tz gives Log[z]/Log[2]. Log2[Infinity] = Log2[ComplexInfinity] = Infinity.\n"
+        "\tA positive machine real uses log2 itself, so Log2[8.] is exactly 3.; negative reals give\n"
+        "\tcomplex values. Packed arrays, NDArray and Compile share that kernel. Listable, NumericFunction.");
     symtab_set_docstring("Exp",
         "Exp[z]\n"
         "\tgives the exponential E^z.\n"
@@ -4577,13 +4583,13 @@ void info_init(void) {
         "\tThreads over lists.  Requires FLINT.  Attributes: Listable, Protected.");
     symtab_set_docstring("AlgebraicNumberNorm",
         "AlgebraicNumberNorm[a]\n"
-        "\tgives the field norm of the algebraic number a: the product of the\n"
-        "\tconjugates of a over the rationals, equivalently the product of the\n"
-        "\troots of a's minimal polynomial.  a may be an integer, a rational, a\n"
-        "\tradical, GoldenRatio, a Root object, or an AlgebraicNumber object.\n"
-        "\tAlgebraicNumberNorm[a, Extension -> theta] gives the norm relative to\n"
-        "\tthe field Q(theta), for a an element of Q(theta).  Threads over lists.\n"
-        "\tRequires FLINT.  Attributes: Listable, Protected.");
+        "\tThe field norm of the algebraic number a over the rationals: the product of its\n"
+        "\tconjugates, i.e. of the roots of its minimal polynomial.\n"
+        "AlgebraicNumberNorm[a, Extension -> theta]\n"
+        "\tThe norm relative to Q(theta), for a in Q(theta) (else ToNumberField::nnfel).\n"
+        "\ta may be a rational, a radical expression, GoldenRatio, a Root or an AlgebraicNumber;\n"
+        "\tanything else gives AlgebraicNumberNorm::nalg and stays unevaluated.\n"
+        "\tOption: Extension -> None (default) | Automatic | theta. Listable.");
     symtab_set_docstring("AlgebraicNumberTrace",
         "AlgebraicNumberTrace[a]\n"
         "\tgives the field trace of the algebraic number a: the sum of the\n"

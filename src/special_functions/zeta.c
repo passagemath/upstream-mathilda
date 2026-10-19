@@ -13,6 +13,9 @@
  *                                 s = -m < 0   : rational            (Bernoulli)
  *                                 s = 2n+1 > 0 : stays symbolic (no closed form)
  *   exact Hurwitz, integer a -> Zeta[s] - Sum_{k=1}^{a-1} k^-s
+ *   exact Hurwitz, a <= 0    -> Sum_{k+a<0} |k+a|^-s + Zeta[s, a+m]
+ *                               (the symmetric convention; see below)
+ *   Zeta[0, a], rational a>0 -> 1/2 - a
  *   machine / MPFR real s    -> MPFR mpfr_zeta (Riemann only)
  *   complex s, or any a != 1 -> Euler-Maclaurin complex-MPFR kernel
  *   everything else          -> stays symbolic (return NULL)
@@ -29,6 +32,13 @@
  * with (s)_{2j-1} the rising factorial. N is chosen from the working precision
  * and |s|; the correction series is truncated at its optimal (smallest) term.
  *
+ * For a <= 0 the defining sum is taken in the symmetric form
+ * Sum_k ((k+a)^2)^(-s/2), and the k + a = 0 term is dropped unless
+ * IncludeSingularTerm -> True, which makes Zeta[s, a] ComplexInfinity at a
+ * non-positive integer a whenever Re s > 0. (At s = 0 that term is 0^0 = 1 and
+ * is always counted; for Re s < 0 it is 0.)
+ *
+ * Options: IncludeSingularTerm -> False.
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "zeta.h"
@@ -50,12 +60,19 @@
 #include "symtab.h"
 #include "flint_num_bridge.h" /* flint_num_zeta (arb acb_dirichlet_zeta) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "options.h"   /* options_parse_bools */
+#include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
 #include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
-#include "sf_machine_zeta.h" /* sf_zeta_r/_c, sf_hurwitz_r/_c: the shared kernels */
+#include "sf_machine_zeta.h" /* sf_zeta_r/_c, sf_zeta2_r/_c: the shared kernels */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
 #define ZRND MPFR_RNDN
+#endif
+
+#ifdef USE_FLINT
+#include <flint/fmpq.h>
+#include <flint/arith.h>       /* arith_bernoulli_number */
 #endif
 
 /* M_PI is POSIX, not C99 -- provide a fallback (see CLAUDE.md). */
@@ -150,9 +167,46 @@ static void zbern_ensure(size_t upto) {
     mpq_clears(sum, term, factor, (mpq_ptr)0);
 }
 
+#ifdef USE_FLINT
+/* With FLINT each requested B_idx is computed directly (arith_bernoulli_number:
+ * tabulated, zeta-based or multi-modular by size) instead of by the O(n^2)
+ * recurrence over every smaller index, and kept in a sparse cache: Zeta[400]
+ * cold went from 31 ms to well under 1 ms. */
+static mpq_t* g_zbq = NULL;
+static unsigned char* g_zbq_set = NULL;
+static size_t g_zbq_len = 0;
+
+static bool zbern_flint(mpq_t out, size_t idx) {
+    if (idx >= g_zbq_len) {
+        size_t newlen = idx + 1 > 2 * g_zbq_len ? idx + 1 : 2 * g_zbq_len;
+        mpq_t* q = (mpq_t*)realloc(g_zbq, newlen * sizeof(mpq_t));
+        if (!q) return false;
+        g_zbq = q;
+        unsigned char* f = (unsigned char*)realloc(g_zbq_set, newlen);
+        if (!f) return false;
+        g_zbq_set = f;
+        for (size_t i = g_zbq_len; i < newlen; i++) { mpq_init(g_zbq[i]); g_zbq_set[i] = 0; }
+        g_zbq_len = newlen;
+    }
+    if (!g_zbq_set[idx]) {
+        fmpq_t b;
+        fmpq_init(b);
+        arith_bernoulli_number(b, (ulong)idx);
+        fmpq_get_mpq(g_zbq[idx], b);
+        fmpq_clear(b);
+        g_zbq_set[idx] = 1;
+    }
+    mpq_set(out, g_zbq[idx]);
+    return true;
+}
+#endif
+
 /* B_idx into `out`. Odd indices above 1 are exactly zero. */
 static void zbern_get_q(mpq_t out, size_t idx) {
     if (idx > 1 && (idx & 1u)) { mpq_set_ui(out, 0, 1); return; }
+#ifdef USE_FLINT
+    if (zbern_flint(out, idx)) return;
+#endif
     zbern_ensure(idx);
     if (idx < g_zbern_len) mpq_set(out, g_zbern[idx]);
     else mpq_set_ui(out, 0, 1);
@@ -162,49 +216,57 @@ static void zbern_get_q(mpq_t out, size_t idx) {
 /* Exact-value builders                                                */
 /* ------------------------------------------------------------------ */
 
-/* (2j)! into out. */
+/* n! into out. */
 static void zeta_factorial(mpz_t out, long n) {
-    mpz_set_ui(out, 1);
-    for (long i = 2; i <= n; i++) mpz_mul_ui(out, out, (unsigned long)i);
+    mpz_fac_ui(out, (unsigned long)n);
 }
 
-/* Build a canonical Integer/BigInt/Rational from an mpq via Times[num,
- * Power[den,-1]] so the evaluator normalises arbitrary-size components. */
+/* A canonical Integer/BigInt/Rational from a canonical mpq. */
 static Expr* zeta_expr_from_mpq(const mpq_t q) {
     mpz_t num, den;
     mpz_init(num); mpz_init(den);
     mpq_get_num(num, q);
     mpq_get_den(den, q);
-    Expr* en = expr_bigint_normalize(expr_new_bigint_from_mpz(num));
-    Expr* out;
-    if (mpz_cmp_ui(den, 1) == 0) {
-        out = en;
-    } else {
-        Expr* ed = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
-        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
-                        (Expr*[]){ ed, expr_new_integer(-1) }, 2);
-        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
-                        (Expr*[]){ en, inv }, 2));
-    }
+    Expr* out = make_rational_mpz(num, den);   /* q is canonical: no gcd work */
     mpz_clear(num); mpz_clear(den);
     return out;
 }
 
 /* zeta(2n) = (-1)^(n+1) B_{2n} 2^(2n-1) Pi^(2n) / (2n)!,  for n >= 1.
  * Returns rational * Pi^(2n), or NULL if 2n exceeds the cap. */
+/* The built zeta(2n) values, by n: an expression is immutable and expr_copy
+ * is a reference bump, so a repeated Zeta[2n] costs no rebuilding of
+ * rational * Pi^(2n). Process-lifetime, like the Bernoulli cache. */
+static Expr** g_zeven = NULL;
+static size_t g_zeven_len = 0;
+
+static Expr* zeta_exact_even_build(long two_n);
+
 static Expr* zeta_exact_even(long two_n) {
-    long n = two_n / 2;
     if (two_n > ZETA_EXACT_INT_CAP) return NULL;
+    size_t n = (size_t)(two_n / 2);
+    if (n >= g_zeven_len) {
+        size_t newlen = n + 1 > 2 * g_zeven_len ? n + 1 : 2 * g_zeven_len;
+        Expr** grown = (Expr**)realloc(g_zeven, newlen * sizeof(Expr*));
+        if (!grown) return zeta_exact_even_build(two_n);
+        for (size_t i = g_zeven_len; i < newlen; i++) grown[i] = NULL;
+        g_zeven = grown;
+        g_zeven_len = newlen;
+    }
+    if (!g_zeven[n]) g_zeven[n] = zeta_exact_even_build(two_n);
+    return g_zeven[n] ? expr_copy(g_zeven[n]) : NULL;
+}
+
+static Expr* zeta_exact_even_build(long two_n) {
+    long n = two_n / 2;
 
     mpq_t c, tmp;
-    mpz_t pw, f2n;
+    mpz_t f2n;
     mpq_inits(c, tmp, (mpq_ptr)0);
-    mpz_inits(pw, f2n, (mpz_ptr)0);
+    mpz_init(f2n);
 
     zbern_get_q(c, (size_t)two_n);                 /* B_{2n} */
-    mpz_ui_pow_ui(pw, 2, (unsigned long)(two_n - 1));   /* 2^(2n-1) */
-    mpq_set_z(tmp, pw);
-    mpq_mul(c, c, tmp);
+    mpq_mul_2exp(c, c, (mp_bitcnt_t)(two_n - 1));  /* 2^(2n-1) */
     zeta_factorial(f2n, two_n);                    /* (2n)! */
     mpq_set_z(tmp, f2n);
     mpq_div(c, c, tmp);
@@ -218,7 +280,7 @@ static Expr* zeta_exact_even(long two_n) {
                     (Expr*[]){ crat, pipow }, 2));
 
     mpq_clears(c, tmp, (mpq_ptr)0);
-    mpz_clears(pw, f2n, (mpz_ptr)0);
+    mpz_clear(f2n);
     return out;
 }
 
@@ -677,10 +739,6 @@ static Expr* zeta_one_arg(Expr* s) {
 /* Zeta[s, a]  (Hurwitz zeta)                                          */
 /* ------------------------------------------------------------------ */
 
-/* Exact Hurwitz at a positive integer a = m:
- *   zeta(s, m) = Zeta[s] - Sum_{k=1}^{m-1} k^-s.
- * Valid for symbolic / exact / integer s (gives Zeta[3,2] -> -1+Zeta[3],
- * Zeta[4,5] -> Pi^4/90 - 22369/20736). Returns NULL past the cap. */
 /* Zeta[s, 1/2] = (2^s - 1) Zeta[s].  Valid because a = 1/2 > 0, so the symmetric
  * power ((k+1/2)^2)^(-s/2) coincides with the principal (k+1/2)^-s. */
 static Expr* zeta_half(Expr* s) {
@@ -695,11 +753,72 @@ static Expr* zeta_half(Expr* s) {
     return eval_and_free(prod);
 }
 
+/* out = v, for a non-negative int64 v (unsigned long may be 32 bits). */
+static void zeta_mpz_set_u64(mpz_t out, uint64_t v) {
+    mpz_import(out, 1, 1, sizeof v, 0, 0, &v);
+}
+
+/* acc += sign (p/q)^-s for p, q > 0 and an exact integer s: the head terms of
+ * a shifted Hurwitz sum, kept as one exact rational so that Zeta[2, -200] is a
+ * GMP sum and a two-term Plus rather than 200 evaluated powers. */
+static void zeta_head_add(mpq_t acc, int64_t p, int64_t q, long s, int sign) {
+    unsigned long e = (unsigned long)(s >= 0 ? s : -s);
+    mpz_t num, den;
+    mpz_inits(num, den, (mpz_ptr)0);
+    zeta_mpz_set_u64(s >= 0 ? den : num, (uint64_t)p);
+    zeta_mpz_set_u64(s >= 0 ? num : den, (uint64_t)q);
+    mpz_pow_ui(num, num, e);
+    mpz_pow_ui(den, den, e);
+    mpq_t t;
+    mpq_init(t);
+    mpq_set_num(t, num);
+    mpq_set_den(t, den);
+    mpq_canonicalize(t);
+    if (sign < 0) mpq_sub(acc, acc, t); else mpq_add(acc, acc, t);
+    mpq_clear(t);
+    mpz_clears(num, den, (mpz_ptr)0);
+}
+
+/* rest + h, evaluated; `rest` is consumed. */
+static Expr* zeta_plus_rational(Expr* rest, const mpq_t h) {
+    mpz_t num, den;
+    mpz_inits(num, den, (mpz_ptr)0);
+    mpq_get_num(num, h);
+    mpq_get_den(den, h);
+    Expr* r = make_rational_mpz(num, den);
+    mpz_clears(num, den, (mpz_ptr)0);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                           (Expr*[]){ r, rest }, 2));
+}
+
+/* True when Zeta[s] has a closed form: s an exact integer other than an odd
+ * s >= 3. Integer-a shifts past the trivial a in {-1, 0, 1, 2} (whose extra
+ * terms are all 1^-s) are taken only then, so Zeta[3, 4] stays folded. */
+static bool zeta_closed_int_s(Expr* s) {
+    long n;
+    return zeta_exact_int(s, &n) && !(n >= 3 && (n & 1L));
+}
+
+/* Exact Hurwitz at a positive integer a = m:
+ *   zeta(s, m) = Zeta[s] - Sum_{k=1}^{m-1} k^-s.
+ * For any s when m <= 2 (Zeta[x, 2] -> -1 + Zeta[x]); past that only when
+ * Zeta[s] has a closed form (Zeta[4,5] -> Pi^4/90 - 22369/20736, while
+ * Zeta[3, 4] and Zeta[x, 3] stay). Returns NULL past the cap. */
 static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
     if (m < 1 || m > ZETA_HURWITZ_A_CAP) return NULL;
+    if (m >= 3 && !zeta_closed_int_s(s)) return NULL;
 
     Expr* zs = expr_new_function(expr_new_symbol(SYM_Zeta), (Expr*[]){ expr_copy(s) }, 1);
     if (m == 1) return eval_and_free(zs);          /* zeta(s, 1) = zeta(s) */
+    long si;
+    if (zeta_exact_int(s, &si)) {                  /* exact rational head */
+        mpq_t h;
+        mpq_init(h);
+        for (long k = 1; k < m; k++) zeta_head_add(h, k, 1, si, -1);
+        Expr* out = zeta_plus_rational(eval_and_free(zs), h);
+        mpq_clear(h);
+        return out;
+    }
 
     /* Build Zeta[s] - Sum_{k=1}^{m-1} k^-s. */
     size_t terms = (size_t)m;                       /* zs + (m-1) subtracted terms */
@@ -720,6 +839,112 @@ static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
     return eval_and_free(sum);
 }
 
+/* Plus[parts[0..n-1]] evaluated; `parts` and its entries are consumed. */
+static Expr* zeta_plus_free(Expr** parts, size_t n) {
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, n);
+    free(parts);
+    return eval_and_free(sum);
+}
+
+/* b^-s for an exact rational b > 0, unevaluated (Power[b, Times[-1, s]]). */
+static Expr* zeta_pow_negs(Expr* b, Expr* s) {
+    Expr* negs = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ expr_new_integer(-1), expr_copy(s) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ b, negs }, 2);
+}
+
+/* Zeta[s, r] for the shift target r, evaluated; NULL (freed) when it stays
+ * unevaluated, which is when a shifted form would only restate the input. */
+static Expr* zeta_shift_target(Expr* s, Expr* r) {
+    Expr* v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Zeta),
+                  (Expr*[]){ expr_copy(s), r }, 2));
+    if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+        v->data.function.head->data.symbol.name == SYM_Zeta) {
+        expr_free(v);
+        return NULL;
+    }
+    return v;
+}
+
+/* Exact Hurwitz at a rational a > 1, a not an integer, for an exact integer s:
+ * shift down to r = a - m in (0, 1),
+ *   zeta(s, a) = zeta(s, r) - Sum_{k<m} (r + k)^-s,
+ * when Zeta[s, r] evaluates (r = 1/2). NULL otherwise. */
+static Expr* zeta_hurwitz_shift_down(Expr* s, long si, int64_t n, int64_t d) {
+    int64_t m = n / d;
+    if (m > ZETA_HURWITZ_A_CAP) return NULL;
+    int64_t rn = n - m * d;
+    Expr* shifted = zeta_shift_target(s, make_rational(rn, d));
+    if (!shifted) return NULL;
+    mpq_t h;
+    mpq_init(h);
+    for (int64_t k = 0; k < m; k++) zeta_head_add(h, rn + k * d, d, si, -1);
+    Expr* out = zeta_plus_rational(shifted, h);
+    mpq_clear(h);
+    return out;
+}
+
+/* Exact Hurwitz at a <= 0 (integer or rational), symmetric convention:
+ *   zeta(s, a) = Sum_{0<=k<m, k+a<0} |k+a|^-s  [+ 1 when s = 0, a integer]
+ *                + zeta(s, a + m),
+ * with m the number of k for which k + a <= 0. For integer a = -m the shifted
+ * term is Zeta[s] (the dropped k = m term is 0^-s); otherwise a + m = r lies in
+ * (0, 1). Expanded where the reference expands: a = 0 or -1 for any s; a <= -2
+ * when Zeta[s] has a closed form; non-integer a for an exact integer s whose shifted
+ * Zeta[s, r] evaluates. NULL otherwise, or past ZETA_HURWITZ_A_CAP terms.
+ * A rational a > 1 is shifted down the same way (zeta_hurwitz_shift_down). */
+static Expr* zeta_hurwitz_shift(Expr* s, Expr* a) {
+    int64_t n, d;
+    if (!is_rational(a, &n, &d)) return NULL;
+    long sint;
+    bool s_int = zeta_exact_int(s, &sint);
+    if (n > 0) {
+        if (d > 1 && n > d && s_int) return zeta_hurwitz_shift_down(s, sint, n, d);
+        return NULL;
+    }
+
+    if (d == 1) {                                   /* a = -m */
+        int64_t m = -n;
+        if (m >= 2 && !zeta_closed_int_s(s)) return NULL;
+        if (m > ZETA_HURWITZ_A_CAP) return NULL;
+        bool s_zero = s_int && sint == 0;
+        if (s_int) {                                /* exact rational head */
+            mpq_t h;
+            mpq_init(h);
+            for (int64_t j = 1; j <= m; j++) zeta_head_add(h, j, 1, sint, 1);
+            if (s_zero) mpq_set_ui(h, (unsigned long)m + 1, 1);   /* m ones, and 0^0 = 1 */
+            Expr* out = zeta_plus_rational(eval_and_free(expr_new_function(
+                            expr_new_symbol(SYM_Zeta), (Expr*[]){ expr_copy(s) }, 1)), h);
+            mpq_clear(h);
+            return out;
+        }
+        size_t terms = (size_t)m + 1 + (s_zero ? 1 : 0);
+        Expr** parts = (Expr**)malloc(terms * sizeof(Expr*));
+        if (!parts) return NULL;
+        size_t t = 0;
+        parts[t++] = expr_new_function(expr_new_symbol(SYM_Zeta),
+                                       (Expr*[]){ expr_copy(s) }, 1);
+        for (int64_t j = 1; j <= m; j++)
+            parts[t++] = zeta_pow_negs(expr_new_integer(j), s);
+        if (s_zero) parts[t++] = expr_new_integer(1);   /* 0^0 */
+        return zeta_plus_free(parts, t);
+    }
+
+    /* a = n/d, d > 1: m = ceil(-a) terms with k + a < 0, then r = a + m. */
+    if (!s_int) return NULL;
+    int64_t m = (-n + d - 1) / d;
+    if (m > ZETA_HURWITZ_A_CAP) return NULL;
+    Expr* shifted = zeta_shift_target(s, make_rational(n + m * d, d));
+    if (!shifted) return NULL;
+    mpq_t h;
+    mpq_init(h);
+    for (int64_t k = 0; k < m; k++)                 /* |k + a| = (-n - k d)/d */
+        zeta_head_add(h, -n - k * d, d, sint, 1);
+    Expr* out = zeta_plus_rational(shifted, h);
+    mpq_clear(h);
+    return out;
+}
+
 static Expr* zeta_two_arg(Expr* s, Expr* a) {
     /* 1. zeta(s, 1) = zeta(s). */
     if (a->type == EXPR_INTEGER && a->data.integer == 1)
@@ -737,6 +962,17 @@ static Expr* zeta_two_arg(Expr* s, Expr* a) {
             Expr* closed = zeta_hurwitz_int_a(s, m);
             if (closed) return closed;
         }
+        /* 3a. a <= 0, or a rational a > 1, shifted into (0, 1]. */
+        Expr* np = zeta_hurwitz_shift(s, a);
+        if (np) return np;
+        /* 3b. zeta(0, a) = 1/2 - a for a rational a > 0. */
+        int64_t n, d;
+        if (s->type == EXPR_INTEGER && s->data.integer == 0 &&
+            is_rational(a, &n, &d) && n > 0)
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ make_rational(1, 2),
+                                  expr_new_function(expr_new_symbol(SYM_Times),
+                                      (Expr*[]){ expr_new_integer(-1), expr_copy(a) }, 2) }, 2));
     }
 
 #ifdef USE_MPFR
@@ -768,19 +1004,95 @@ static Expr* zeta_emit_argt(size_t argc) {
     return NULL;
 }
 
+/* True if `e` is a two-argument Rule or RuleDelayed (a trailing option). */
+static bool zeta_is_rule(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rule ||
+            e->data.function.head->data.symbol.name == SYM_RuleDelayed);
+}
+
+/* The real part of a numeric `e` as a double, and whether `e` is exact. False
+ * when `e` is not a number (or a complex number with a non-numeric part). */
+static bool zeta_re_part(const Expr* e, double* re, bool* exact) {
+    Expr *r, *i;
+    const Expr* x = is_complex((Expr*)e, &r, &i) ? r : e;
+    *exact = !zeta_is_inexact(x) && !(x != e && zeta_is_inexact(i));
+#ifdef USE_MPFR
+    mpfr_t t;
+    mpfr_init2(t, 64);
+    bool ok = zeta_set_mpfr(t, x);
+    if (ok) *re = mpfr_get_d(t, ZRND);
+    mpfr_clear(t);
+    return ok;
+#else
+    if (x->type == EXPR_REAL) { *re = x->data.real; return true; }
+    int64_t n, d;
+    if (is_rational(x, &n, &d)) { *re = (double)n / (double)d; return true; }
+    return false;
+#endif
+}
+
+/* Zeta[s, a, IncludeSingularTerm -> True] at an integer-valued a <= 0: the
+ * k = -a term is 0^-s. Sets *out to ComplexInfinity when Re s > 0 and returns
+ * true; returns true with *out NULL for an exact non-integer s with Re s < 0
+ * (stays unevaluated) or a non-numeric s; false when the option changes
+ * nothing (non-integer a, s = 0, a negative integer s, or inexact Re s <= 0). */
+static bool zeta_singular_term(Expr* s, Expr* a, Expr** out) {
+    *out = NULL;
+    double av, sv;
+    bool aex, sex;
+    Expr *ar, *ai;
+    if (is_complex(a, &ar, &ai) || !zeta_re_part(a, &av, &aex)) return false;
+    if (!(av <= 0.0) || av != floor(av)) return false;
+    if (!zeta_re_part(s, &sv, &sex)) return true;          /* symbolic s */
+    if (sv > 0.0) { *out = expr_new_symbol(SYM_ComplexInfinity); return true; }
+    long si;
+    if (sex && !zeta_exact_int(s, &si)) return true;       /* exact, non-integer */
+    return false;
+}
+
 Expr* builtin_zeta(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** args = res->data.function.args;
+
+    /* Trailing options: validate, apply IncludeSingularTerm, then evaluate the
+     * option-free call (so every numeric path below sees plain arguments). */
+    if (argc > 2 || (argc == 2 && zeta_is_rule(args[1]))) {
+        const char* names[1] = { SYM_IncludeSingularTerm };
+        bool ist = false;
+        size_t npos;
+        if (!options_parse_bools(res, "Zeta", 2, names, &ist, 1, &npos)) return NULL;
+        if (npos == 0) return zeta_emit_argt(argc);
+        if (ist && npos == 2) {
+            /* A buffer argument: thread element by element, so each integer
+             * a <= 0 meets the option (the kernel knows nothing of it). */
+            if (is_ndarray(args[0]) || is_ndarray(args[1]))
+                return ndarray_delist_and_reeval(res);
+            Expr* sing;
+            if (zeta_singular_term(args[0], args[1], &sing)) return sing;
+        }
+        Expr* plain = expr_new_function(expr_new_symbol(SYM_Zeta),
+                          (Expr*[]){ expr_copy(args[0]), npos == 2 ? expr_copy(args[1]) : NULL },
+                          npos);
+        Expr* v = eval_and_free(plain);
+        if (v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+            v->data.function.head->data.symbol.name == SYM_Zeta) {
+            expr_free(v);                                  /* stays unevaluated */
+            return NULL;
+        }
+        return v;
+    }
 
     if (argc == 1 && is_interval(args[0])) {
         Expr* r = interval_apply_function("Zeta", args[0]); if (r) return r;
     }
     /* Machine-precision call: the raw-double kernels shared with the NDArray /
      * packed / Compile[] surfaces (sf_machine_zeta.c), so all surfaces agree
-     * bit-for-bit. Zeta[s, a] coincides with the principal-branch Hurwitz sum
-     * for Re a > 0, which is all the kernel accepts. A decline (pole, domain,
-     * overflow) falls through to the arbitrary-precision paths unchanged. */
+     * bit-for-bit. For a real a <= 0 the kernel shifts a into (0, 1] in the
+     * symmetric convention. A decline (pole, domain, overflow) falls through
+     * to the arbitrary-precision paths unchanged. */
     {
         SFMachineArgs ma;
         if ((argc == 1 || argc == 2) && sf_machine_scalar_args(res, &ma)) {
@@ -791,15 +1103,15 @@ Expr* builtin_zeta(Expr* res) {
                                     : sf_zeta_r(ma.re[0], &vr);
             else
                 ok = ma.any_complex
-                         ? sf_hurwitz_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi)
-                         : sf_hurwitz_r(ma.re[0], ma.re[1], &vr);
+                         ? sf_zeta2_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], &vr, &vi)
+                         : sf_zeta2_r(ma.re[0], ma.re[1], &vr);
             if (ok) return ma.any_complex ? sf_machine_complex_result(vr, vi)
                                           : expr_new_real(vr);
         }
     }
     if (argc == 1) return zeta_one_arg(args[0]);
     if (argc == 2) return zeta_two_arg(args[0], args[1]);
-    return zeta_emit_argt(argc);
+    return zeta_emit_argt(argc);                           /* argc == 0 */
 }
 
 /* ------------------------------------------------------------------ */
@@ -810,5 +1122,9 @@ void zeta_init(void) {
     symtab_add_builtin("Zeta", builtin_zeta);
     symtab_get_def("Zeta")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
+    symtab_set_options("Zeta", expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_new_symbol(SYM_IncludeSingularTerm),
+                       expr_new_symbol(SYM_False) }, 2) }, 1));
     /* Docstring lives in info.c (info_init). */
 }

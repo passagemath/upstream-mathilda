@@ -31,8 +31,14 @@ bool sf_hurwitz_r(double s, double a, double* out);
 bool sf_hurwitz_c(double sr, double si, double ar, double ai,
                   double* vr, double* vi);
 
+/* Zeta[s, a]: Hurwitz zeta in the symmetric convention -- for a real a <= 0
+ * the terms are |k+a|^-s and the k + a = 0 term is dropped (0^0 = 1 at s = 0).
+ * Equal to sf_hurwitz_* for Re a > 0 / complex a. */
+bool sf_zeta2_r(double s, double a, double* out);
+bool sf_zeta2_c(double sr, double si, double ar, double ai, double* vr, double* vi);
+
 /* LerchPhi(z, s, a) = Sum_{k>=0} z^k / (k+a)^s, real z in (-1, 1) or z = 1,
- * real s, real a > 0. */
+ * real s; a <= 0 in the symmetric convention. */
 bool sf_lerch_r(double z, double s, double a, double* out);
 /* LerchPhi(z, s, a) = Sum_{k>=0} z^k / (k+a)^s, complex z (|z| < 1, or z = 1),
  * complex s, complex a with Re a > 0. A wholly real call delegates to the real

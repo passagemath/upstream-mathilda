@@ -67,7 +67,7 @@ void test_li_exact() {
     assert_eval_eq("LogIntegral[0]", "0", 0);
     assert_eval_eq("LogIntegral[1]", "-Infinity", 0);
     assert_eval_eq("LogIntegral[Infinity]", "Infinity", 0);
-    assert_eval_eq("LogIntegral[ComplexInfinity]", "Indeterminate", 0);
+    assert_eval_eq("LogIntegral[ComplexInfinity]", "LogIntegral[ComplexInfinity]", 0);
     assert_eval_eq("LogIntegral[Indeterminate]", "Indeterminate", 0);
     /* Listable over the special list. */
     assert_eval_eq("LogIntegral[{0, 1, Infinity}]", "{0, -Infinity, Infinity}", 0);

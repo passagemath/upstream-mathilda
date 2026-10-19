@@ -1,8 +1,9 @@
 /* dirichlet_l.c -- DirichletL[k, j, s], the Dirichlet L-function L(chi, s) of
  * the character chi = DirichletCharacter[k, j, .].
  *
- * Attributes: Listable | NumericFunction | Protected. N keeps k and j exact
- * (numericalize_rec in src/numeric.c), as Mathematica's NHoldAll + N rule does.
+ * Attributes: Listable | NHoldAll | Protected. Not NumericFunction: NumericQ
+ * is False and 1. + DirichletL[4, 2, 3] stays unevaluated, while an explicit N
+ * keeps k and j exact and numericalizes s (numericalize_rec in src/numeric.c).
  *
  * Evaluation order:
  *   1. arity (argrx); an NDArray / packed s -> the buffer loop below.
@@ -668,6 +669,6 @@ done:
 void dirichletl_init(void) {
     symtab_add_builtin("DirichletL", builtin_dirichletl);
     symtab_get_def("DirichletL")->attributes |=
-        (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
+        (ATTR_LISTABLE | ATTR_NHOLDALL | ATTR_PROTECTED);
     /* Docstring lives in info.c (info_init). */
 }

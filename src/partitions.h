@@ -36,6 +36,13 @@ int partitionsq_recurrence(unsigned long n, mpz_t out);
  * converge (or MPFR is unavailable). Exposed for cross-validation. */
 int partitionsq_hrr(unsigned long n, mpz_t out);
 
+/* Exact p(n) / q(n) as int64 where it fits (n < 0 gives 0); false past the
+ * int64 range (p beyond n = 405). The one machine answer shared by the
+ * scalar builtins, the packed / NDArray kernels and Compile
+ * (OP_PARTP_I / OP_PARTQ_I), so the surfaces agree bit for bit. */
+bool partitions_p_i64(int64_t n, int64_t* out);
+bool partitions_q_i64(int64_t n, int64_t* out);
+
 /* Register IntegerPartitions, PartitionsP and PartitionsQ with attributes. */
 void partitions_init(void);
 

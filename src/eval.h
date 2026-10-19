@@ -131,6 +131,13 @@ void     eval_rule_epoch_bump(void);
 uint64_t eval_node_stamp(const Expr* e);
 bool     eval_node_is_ground(const Expr* e);
 
+/* For a builtin returning a freshly built tree of Lists over literal atoms
+ * (Integer/Real/BigInt/String): stamp it as an evaluated GROUND fixed point so
+ * the evaluator does not re-walk it. A no-op (returns false) when List carries
+ * rules; sub-trees that are not pure literal Lists are left unstamped. Borrows
+ * `e`; it must not yet be shared with an expression that was evaluated. */
+bool     eval_stamp_list_literal(Expr* e);
+
 // Helper to evaluate and free the input expression
 static inline Expr* eval_and_free(Expr* e) {
     if (!e) return NULL;

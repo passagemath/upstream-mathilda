@@ -1286,24 +1286,47 @@ Out[11]= True
 
 ## IntegerPartitions
 
-- `IntegerPartitions[n]`: all partitions of `n` in reverse-lexicographic order. `Length[IntegerPartitions[n]] == PartitionsP[n]`.
-- `IntegerPartitions[n, k]`: partitions into at most `k` parts.
+- `IntegerPartitions[n]`: all partitions of `n` in reverse-lexicographic order, parts descending. `Length[IntegerPartitions[n]] == PartitionsP[n]`.
+- `IntegerPartitions[n, k]`: partitions into at most `k` parts. `All` or `Infinity`: any number.
 - `IntegerPartitions[n, {k}]`: exactly `k` parts.
 - `IntegerPartitions[n, {kmin, kmax}]`: between `kmin` and `kmax` parts.
-- `IntegerPartitions[n, {kmin, kmax, dk}]`: into `kmin, kmin+dk, …` parts.
-- `IntegerPartitions[n, kspec, sspec]`: parts drawn only from `sspec` (a list of allowed values). `kspec` of `All` is `{0, Infinity}`; `sspec` of `All` is `Range[n]`.
-- `IntegerPartitions[n, kspec, sspec, m]`: the first `m` partitions (`m > 0`) or the last `|m|` (`m < 0`); `m` of `All` is `Infinity`.
+- `IntegerPartitions[n, {kmin, kmax, dk}]`: `kmin, kmin + dk, …` parts. A negative `dk` counts down from `kmin` to `kmax`: `{6, 2, -2}` is lengths 6, 4 and 2, and `{2, 4, -1}` is empty. The rows stay in one reverse-lexicographic order; they are not grouped by length.
+- `IntegerPartitions[n, kspec, sspec]`: parts drawn only from `sspec`.
+  - A list: each entry is its own part, in the reversed order of the list, so `{3, 1, 2}` and `{1, 1, 2}` give the corresponding orders and duplicates.
+  - A number `s`: `Range[s]`, so `IntegerPartitions[6, All, 5/2]` uses parts 1 and 2.
+  - `All`: `Range[n]`.
+- `IntegerPartitions[n, kspec, sspec, m]`:
+  - `m > 0`: the first `m` rows; `m < 0`: the last `|m|`.
+  - `None` or `0`: `{}`.
+  - A sequence `{i}`, `{i, j}` or `{i, j, step}`, as in `Take`: `{1, -1, 3}` is every third row, and `{-1, 1, -1}` is all rows reversed.
+  - A sequence that runs past either end emits `IntegerPartitions::take` and answers what is there: `{2, 30}` of 11 rows is rows 2–11, and `{20}` is `{}`. An index `0` gives `{}` silently.
 
-`n` and the `s_i` may be rational and/or negative. Attributes: `Protected`.
+`n` and the parts may be rational or negative. `n` may be a bignum when a length bound or a positive `m` keeps the answer finite: `IntegerPartitions[10^20, {3}, All, 2]` is `{{99999999999999999998, 1, 1}, {99999999999999999997, 2, 1}}`. Attributes: `Protected`.
 
-**Implementation**: a single count-vector enumerator (`src/partitions.c`) over `P = reverse(sspec)`, assigning a count to each allowed part in descending order with exact GMP-rational (`mpq_t`) arithmetic. The default `Range[n]` path is the classic descending-part recursion (bounded by `remaining/part`); explicit `sspec` becomes a coin-problem enumeration bounded by `kmax`. Within each partition, parts appear in `P` order (descending for the default form).
+**Messages.** All go through the `Quiet`/`Check` funnel, and the first bad position is reported:
+- `rat`: position 1 not rational, symbols included.
+- `nninfseq`: a bad length spec (negative, non-integer, `{Infinity}`, or a zero step).
+- `rseq`: a part spec that is not `All`, a rational, or a list of rationals.
+- `seq`: a bad fourth argument.
+- `undef`: an infinitely large answer, from a zero part, or parts of both signs with no length bound.
+- `take`: a sequence past the end.
+- `argb`: fewer than 1 or more than 4 arguments.
 
-**Edge cases & messages**:
-- `IntegerPartitions[1/2]` → `{}` (no integer parts); `IntegerPartitions[1/2, All, {1/6, 1/3}]` → `{{1/3, 1/6}, {1/6, 1/6, 1/6}}`.
-- `IntegerPartitions[0]` → `{{}}` (the empty partition).
-- `IntegerPartitions::undef` — an unbounded part set (mixed signs or a zero part) with no finite length cap and no positive `m` would be infinitely large; the call is left unevaluated.
-- `IntegerPartitions::take` — fewer partitions exist than the requested `m`; the available ones are returned.
-- `IntegerPartitions::argb` — fewer than 1 or more than 4 arguments.
+**Implementation** (`src/partitions.c`). Four engines, picked by the shape of the part spec; all produce the same order:
+- **Range mode** (`sspec` is `All` or a number): a word-sized depth-first walk with no part list. At depth `d` with remainder `r`, the candidate parts are the integers `max(1, ⌈r/(hi−d)⌉) … min(previous, r, smax, r−(lo−d−1))`, largest first. The length bounds prune exactly, and the stack grows only with the depth reached. A GMP twin handles bignum `n`.
+- **Ascending part list** of positive machine integers: the same walk over the list's entries. It uses binary search for the first candidate, and a reachability table (`r` a sum of the remaining parts) when the smallest part exceeds 1.
+- **Any other list of positive machine integers**: an int64 count-vector walk (the count of each priority part, largest first), pruned by reachability and by the suffix extremes of the parts.
+- **Rational or negative parts**: the exact `mpq_t` count-vector enumerator.
+
+Each row is one `List` node over shared Integer nodes. The finished result is stamped as an evaluated fixed point (`eval_stamp_list_literal`), so the evaluator does not re-walk millions of literal nodes.
+
+| workload | before | after | reference |
+|---|---|---|---|
+| `Length[IntegerPartitions[50]]` | 2.0 s | 0.072 s | 0.053 s |
+| `Length[IntegerPartitions[60]]` | 10.7 s | 0.36 s | 0.27 s |
+| `IntegerPartitions[100, {4}]` | 1.33 s | 0.0011 s | 0.0011 s |
+| `IntegerPartitions[60, All, {11, 7, 5, 3, 2, 1}]` | 0.128 s | 0.0031 s | 0.0022 s |
+| `IntegerPartitions[300, {5}, Prime[Range[30]]]` | 0.99 s | 0.00024 s | 0.0015 s |
 
 ```
 In[1]:= IntegerPartitions[5]
@@ -1312,8 +1335,11 @@ Out[1]= {{5}, {4, 1}, {3, 2}, {3, 1, 1}, {2, 2, 1}, {2, 1, 1, 1}, {1, 1, 1, 1, 1
 In[2]:= IntegerPartitions[50, All, {6, 9, 20}]
 Out[2]= {{20, 9, 9, 6, 6}, {20, 6, 6, 6, 6, 6}}
 
-In[3]:= IntegerPartitions[5, 10, {1, -1}]
-Out[3]= {{-1, -1, 1, 1, 1, 1, 1, 1, 1}, {-1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}}
+In[3]:= IntegerPartitions[8, {6, 2, -2}, All, 3]
+Out[3]= {{7, 1}, {6, 2}, {5, 3}}
+
+In[4]:= IntegerPartitions[6, All, All, {2, 4}]
+Out[4]= {{5, 1}, {4, 2}, {4, 1, 1}}
 ```
 
 ## PartitionsP
@@ -1327,27 +1353,29 @@ ignored. `PartitionsP[n] == Length[IntegerPartitions[n]]`.
 
 **Features**:
 - `Protected`, `Listable` — `PartitionsP[{2, 4, 6}]` → `{2, 5, 11}`.
-- Two engines, dispatched by the size of `n` (threshold `n = 1000`):
-  - **Small `n`** — Euler's pentagonal-number-theorem recurrence
-    `p(m) = Σ_k (-1)^(k-1) [p(m - g_k) + p(m - g_k')]` over the generalized
-    pentagonal numbers `g_k = k(3k∓1)/2`, using exact GMP integers only.
-    O(n^1.5) integer additions; O(n·√n)-bit table.
-  - **Large `n`** — the non-recursive **Hardy–Ramanujan–Rademacher** exact
-    formula evaluated in MPFR (Johansson, arXiv:1205.5991): a convergent
-    series `p(n) = Σ_{k=1}^N √(3/k)·(4/(24n−1))·A_k(n)·U(C/k)` with
-    `U(x) = cosh x − sinh x / x`, `C = (π/6)√(24n−1)`. The exponential sums
-    `A_k(n)` use Selberg's cosine-sum identity (no Dedekind sums). The number
-    of terms `N` is chosen from Rademacher's rigorous remainder bound so the
-    rounded sum is provably exact; working precision is `≈ C/ln 2` bits plus
-    guard bits. Uses only O(√n)-bit precision, so memory stays tiny while the
-    recurrence's table would be prohibitive.
-- Both engines are cross-validated to agree exactly (see
-  `tests/test_partitionsp.c`). The result auto-promotes to a big integer
-  (`p(4096)` has 67 digits; `p(10000)` has 106).
-- `p(0) = 1`; `p(n) = 0` for `n < 0`.
-- Non-integer, symbolic, or astronomically large (big-integer) arguments are
-  left unevaluated; `PartitionsP` called with other than one argument emits
-  `PartitionsP::argx` and is left unevaluated.
+- **`n < 1000`**: a table of `p(0..999)` filled at startup by Euler's
+  pentagonal-number-theorem recurrence
+  `p(m) = Σ_k (-1)^(k-1) [p(m - g_k) + p(m - g_k')]`, with `g_k = k(3k∓1)/2`
+  (about 40k GMP additions). A loop over small `n` is therefore a copy:
+  `Do[PartitionsP[i], {i, 300}]` takes 0.05 ms, against 7 ms before.
+- **`n ≥ 1000`**: the **Hardy–Ramanujan–Rademacher** exact formula evaluated in
+  MPFR (Johansson, arXiv:1205.5991):
+  `p(n) = Σ_{k=1}^N √(3/k)·(4/(24n−1))·A_k(n)·U(C/k)`, with
+  `U(x) = cosh x − sinh x / x` and `C = (π/6)√(24n−1)`.
+  - The `A_k(n)` use Selberg's cosine-sum identity.
+  - `N` comes from Rademacher's rigorous remainder bound, so the rounded sum is
+    provably exact. Without MPFR the recurrence answers.
+- **Machine surfaces**: the int64 prefix of the table (`p(n)` fits for
+  `n ≤ 405`) is the one machine answer, shared by:
+  - the scalar builtin;
+  - the packed/NDArray kernel (`NDKU_PartitionsP`, on `AWARE` and `INT64_OK`),
+    which takes 12 ms for 10⁶ elements;
+  - `Compile[]` (`OP_PARTP_I`) at scalar and rank-1 shapes.
+
+  Past `n = 405` the packed path declines and the List path answers in
+  bignums, and the Compile VM bails to the interpreter.
+- `p(0) = 1`; `p(n) = 0` for `n < 0`. A non-integer, symbolic or bignum argument
+  stays unevaluated; the wrong number of arguments emits `PartitionsP::argx`.
 
 ```
 In[1]:= Table[PartitionsP[k], {k, 0, 12}]
@@ -1358,50 +1386,45 @@ Out[2]= 190569292
 
 In[3]:= PartitionsP[4096]
 Out[3]= 6927233917602120527467409170319882882996950147283323368445315320451
-
-In[4]:= Table[Times @@ PartitionsP[Last /@ FactorInteger[n]], {n, 12}]
-Out[4]= {1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2}
 ```
 
 ## PartitionsQ
 
 Gives the number `q(n)` of partitions of the integer `n` into **distinct**
-parts — equivalently (Euler), into **odd** parts (OEIS A000009). It is the
-counting companion to `IntegerPartitions` with non-repeating parts.
+parts — equivalently (Euler), into **odd** parts (OEIS A000009).
 
 - `PartitionsQ[n]`: the distinct-parts partition count `q(n)` as an exact
   (arbitrary-precision) integer.
 
 **Features**:
 - `Protected`, `Listable` — `PartitionsQ[{2, 4, 6}]` → `{1, 2, 4}`.
-- Two engines, dispatched by the size of `n` (threshold `n = 1000`):
-  - **Small `n`** — an exact GMP recurrence derived from the Euler identity
-    `∏(1−x^k)·∏(1+x^k) = ∏(1−x^{2k})`:
-    `q(m) = r(m) + Σ_k (−1)^(k−1) [q(m − g_k) + q(m − g_k')]` over the same
-    generalized pentagonal numbers `g_k = k(3k∓1)/2` as `PartitionsP`, with an
-    inhomogeneous term `r(m) = (−1)^k` when `m/2` is the generalized pentagonal
-    number `g_k` (else `0`). O(n^1.5) integer additions; O(n·√n)-bit table.
-  - **Large `n`** — the **Hardy–Ramanujan–Rademacher / Hagis** exact convergent
-    series evaluated in MPFR (Hagis, *Amer. J. Math.* 85 (1963) 213–222):
-    `q(n) = (π/√(24n+1)) · Σ_{k odd} (1/k)·A_k(n)·I₁(π√(48n+2)/(12k))`, summing
-    over **odd `k` only**, with the modified Bessel function `I₁` (computed by
-    its everywhere-positive power series, as MPFR has no `I₁`) and the character
-    sum `A_k(n) = Σ_{gcd(h,k)=1} cos(π(s(h,k) − s(2h,k)) − 2πnh/k)` built from
-    exact Dedekind sums `s(h,k)`. Working precision `≈ π√(n/3)/ln 2` bits plus
-    guard bits; memory stays tiny where the recurrence's table would be
-    prohibitive.
-- Unlike `PartitionsP`, the q-series has no clean closed-form Rademacher
-  remainder bound, so the HRR engine's term count is convergence-driven (sum
-  `≈√n` odd terms; accept only when the sum lies within `1/4` of an integer and
-  the last term is below `1/8`, growing terms/precision otherwise). Correctness
-  is pinned by an exhaustive HRR-equals-recurrence cross-check (every `n` up to
-  1500 plus a strided sample and large spot values to `n = 100000`; see
-  `tests/test_partitionsq.c`).
-- `q(0) = 1`; `q(n) = 0` for `n < 0`. The result auto-promotes to a big integer
-  (`q(1000)` has 22 digits; `q(100000)` has 245).
-- Non-integer, symbolic, or astronomically large (big-integer) arguments are
-  left unevaluated; `PartitionsQ` called with other than one argument emits
-  `PartitionsQ::argx` and is left unevaluated.
+- **`n < 1000`**: a table filled at startup by the recurrence from
+  `∏(1−x^k)·∏(1+x^k) = ∏(1−x^{2k})`:
+  `q(m) = r(m) + Σ_k (−1)^(k−1) [q(m − g_k) + q(m − g_k')]`. Here
+  `r(m) = (−1)^k` when `m/2` is the generalized pentagonal number `g_k`, and
+  `0` otherwise.
+- **`n ≥ 1000`**: the **Hardy–Ramanujan–Rademacher / Hagis** exact series in
+  MPFR (Hagis, *Amer. J. Math.* 85 (1963) 213–222):
+  `q(n) = (π/√(24n+1)) · Σ_{k odd} (1/k)·A_k(n)·I₁(π√(48n+2)/(12k))`, with
+  `A_k(n) = Σ_{gcd(h,k)=1} cos(π(s(h,k) − s(2h,k)) − 2πnh/k)`.
+  - **Exact angles.** `6k·s(h,k)` is an integer, so each Dedekind sum is run by
+    reciprocity in double precision and rounded. An exact GMP fallback takes
+    over if the rounding is not clean. Every angle is then the exact rational
+    `πR/(6k)`.
+  - **Per-term precision.** `|term_k| ≤ pref·e^(B/k)`, so each term is computed
+    at its own magnitude plus guard bits. Most terms are summed in double, and
+    only the first few dozen `k` need MPFR.
+  - **Speed.** `q(10^4)` takes 0.0027 s and `q(10^5)` 0.024 s, against 0.125 s
+    and 1.72 s before (0.034 s and 0.73 s for the reference). Over the same
+    range the series now beats the recurrence from `n ≈ 700`.
+  - **Termination.** As before, it is convergence-driven: the sum must lie
+    within `1/4` of an integer and the last term must be below `1/8`.
+    Correctness is pinned by the exhaustive series-equals-recurrence check up to
+    `n = 1500` in `tests/test_partitionsq.c`; that suite went from 83 s to 4 s.
+- **Machine surfaces**: as for `PartitionsP`. `q(n)` fits int64 for `n ≤ 769`
+  (`OP_PARTQ_I`, `NDKU_PartitionsQ`).
+- `q(0) = 1`; `q(n) = 0` for `n < 0`; a non-integer, symbolic or bignum
+  argument stays unevaluated; `PartitionsQ::argx` for the wrong arity.
 
 ```
 In[1]:= Table[PartitionsQ[k], {k, 0, 20}]
@@ -1409,9 +1432,6 @@ Out[1]= {1, 1, 1, 2, 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 22, 27, 32, 38, 46, 54, 6
 
 In[2]:= PartitionsQ[100]
 Out[2]= 444793
-
-In[3]:= PartitionsQ[{2, 4, 6}]
-Out[3]= {1, 2, 4}
 ```
 
 ## ContinuedFraction

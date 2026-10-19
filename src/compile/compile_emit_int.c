@@ -100,6 +100,12 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 *out = unop(c, h[0] == 'E' ? OP_PHI_I : OP_MU_I, a, CT_INT);
                 return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "PartitionsP") == 0 || strcmp(h, "PartitionsQ") == 0) {
+                /* Unary integer -> integer; bails past the int64 table. */
+                Val a; if (!emit(c, A[0], &a)) return -1;
+                *out = unop(c, h[10] == 'P' ? OP_PARTP_I : OP_PARTQ_I, a, CT_INT);
+                return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "PowerMod") == 0) {
                 /* Ternary: three CONSECUTIVE registers, the K_NARY shape. Same
                  * allocate-then-MOVE dance as the n-ary kernel path, and for the

@@ -224,6 +224,46 @@ static bool node_compute_ground(const Expr* e) {
     return true;
 }
 
+/* Stamp a List-of-literals tree a builtin has just built as an evaluated
+ * fixed point, so the evaluator's re-walk of the returned value is O(1)
+ * instead of O(size). Bottom-up, exactly the stamp the fixed-point exit
+ * writes: each List node whose arguments are all ground gets the live clock
+ * plus the GROUND bit; anything else is left unstamped and evaluates as usual.
+ *
+ * Sound because such a node IS a fixed point -- unless List itself carries
+ * rules, in which case nothing is stamped. A rule added later advances the
+ * rule epoch past these stamps and invalidates them, as for any GROUND node.
+ * Returns whether `e` ended up stamped. */
+static bool stamp_list_literal_rec(Expr* e) {
+    if (e->type != EXPR_FUNCTION || !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List) return false;
+    bool all = true;
+    Expr* const* args = e->data.function.args;
+    for (size_t i = 0, n = e->data.function.arg_count; i < n; i++) {
+        const Expr* a = args[i];
+        if (!a) { all = false; continue; }
+        switch (a->type) {           /* atoms inline: no call per element */
+            case EXPR_INTEGER: case EXPR_REAL: case EXPR_BIGINT: case EXPR_STRING:
+                break;
+            case EXPR_FUNCTION:
+                if (!stamp_list_literal_rec(args[i])) all = false;
+                break;
+            default:
+                all = false;
+        }
+    }
+    if (all) e->last_evaluated_at = g_eval_clock | EVAL_GROUND_BIT;
+    return all;
+}
+
+bool eval_stamp_list_literal(Expr* e) {
+    if (!e) return false;
+    SymbolDef* d = symtab_get_def(SYM_List);
+    if (d && (d->down_values || d->up_values || d->own_values)) return false;
+    return stamp_list_literal_rec(e);
+}
+
 /* ---- Trace collector (nested) --------------------------------------------
  * Trace[expr] returns a list that mirrors the *structure* of expr's
  * evaluation: each argument sub-evaluation that takes >=1 step appears as a

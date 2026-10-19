@@ -1,6 +1,7 @@
 /* ndinteger.c — exact-integer NDArray kernels for the number-theoretic heads.
  * See ndinteger.h for what separates these from ndkernels.c's `double` set. */
 
+#include "partitions.h"      /* partitions_p_i64 / partitions_q_i64 */
 #include "ndinteger.h"
 #include "ndarray.h"
 #include "expr.h"
@@ -376,6 +377,15 @@ static const NDUnaryKernel NDKU_EulerPhi =
     { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true, ndk_EulerPhi_whole };
 static const NDUnaryKernel NDKU_MoebiusMu =
     { NULL, NULL, false, false, NULL, ndk_MoebiusMu_ii, true, ndk_MoebiusMu_whole };
+/* PartitionsP / PartitionsQ: an exact int64 table lookup, through the helper
+ * the scalar builtins and Compile share. Past the int64 range (p beyond
+ * n = 405) it declines and the whole array takes the List path to GMP. */
+static bool ndk_PartitionsP_ii(int64_t n, int64_t* out) { return partitions_p_i64(n, out); }
+static bool ndk_PartitionsQ_ii(int64_t n, int64_t* out) { return partitions_q_i64(n, out); }
+static const NDUnaryKernel NDKU_PartitionsP =
+    { NULL, NULL, false, false, NULL, ndk_PartitionsP_ii, true, NULL };
+static const NDUnaryKernel NDKU_PartitionsQ =
+    { NULL, NULL, false, false, NULL, ndk_PartitionsQ_ii, true, NULL };
 static const NDBinaryKernel NDKB_GCD =
     { NULL, false, NULL, ndk_GCD_ii, true, NULL };
 static const NDBinaryKernel NDKB_LCM =
@@ -785,6 +795,8 @@ void ndinteger_init(void) {
     symtab_set_ndarray_unary_kernel("BitLength",     &NDKU_BitLength);
     symtab_set_ndarray_unary_kernel("EulerPhi",      &NDKU_EulerPhi);
     symtab_set_ndarray_unary_kernel("MoebiusMu",     &NDKU_MoebiusMu);
+    symtab_set_ndarray_unary_kernel("PartitionsP",   &NDKU_PartitionsP);
+    symtab_set_ndarray_unary_kernel("PartitionsQ",   &NDKU_PartitionsQ);
     symtab_set_ndarray_binary_kernel("GCD",          &NDKB_GCD);
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);

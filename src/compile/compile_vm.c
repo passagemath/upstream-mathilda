@@ -25,6 +25,7 @@
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
 #include "../facint.h"           /* mth_prime_power_base_u64 — OP_PPQ_I */
 #include "../ndinteger.h"        /* ndint_* machine helpers — OP_DSIG_I / PHI_I / MU_I / JACOBI_I */
+#include "../partitions.h"       /* partitions_p_i64 / _q_i64 — OP_PARTP_I / PARTQ_I */
 #include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
@@ -218,6 +219,22 @@ static bool int_dsig(long long k, long long n, long long* out) {
 static bool int_phi(long long n, long long* out) {
     int64_t r;
     if (!ndint_euler_phi_i64((int64_t)n, &r)) return true;
+    *out = (long long)r;
+    return false;
+}
+
+/* PartitionsP / PartitionsQ through the shared int64 tables.  Return true
+ * to BAIL (the answer does not fit in int64). */
+static bool int_partp(long long n, long long* out) {
+    int64_t r;
+    if (!partitions_p_i64((int64_t)n, &r)) return true;
+    *out = (long long)r;
+    return false;
+}
+
+static bool int_partq(long long n, long long* out) {
+    int64_t r;
+    if (!partitions_q_i64((int64_t)n, &r)) return true;
     *out = (long long)r;
     return false;
 }
@@ -1139,6 +1156,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(DSIG_I):  if (int_dsig(RA.i, RB.i, &RD.i)) goto vm_fail; NEXT();
             OP(PHI_I):   if (int_phi(RA.i, &RD.i)) goto vm_fail; NEXT();
             OP(MU_I):    if (int_mu(RA.i, &RD.i)) goto vm_fail; NEXT();
+            OP(PARTP_I): if (int_partp(RA.i, &RD.i)) goto vm_fail; NEXT();
+            OP(PARTQ_I): if (int_partq(RA.i, &RD.i)) goto vm_fail; NEXT();
             OP(JACOBI_I): RD.i = (long long)ndint_kronecker_i64((int64_t)RA.i, (int64_t)RB.i); NEXT();
             /* Ternary, so the operands are a RUN of registers starting at `a`
              * (the K_NARY shape KERNN uses), not the two operand fields. */

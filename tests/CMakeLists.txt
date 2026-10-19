@@ -1401,6 +1401,10 @@ add_executable(factor_digits_review_tests test_factor_digits_review.c $<TARGET_O
 target_include_directories(factor_digits_review_tests PRIVATE ../src)
 add_test(NAME factor_digits_review_tests COMMAND factor_digits_review_tests)
 
+add_executable(partitions_review_tests test_partitions_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(partitions_review_tests PRIVATE ../src)
+add_test(NAME partitions_review_tests COMMAND partitions_review_tests)
+
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)

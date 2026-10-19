@@ -55,24 +55,40 @@ void info_init(void) {
         "the sign onto the numerator, and collapses to an Integer when d == 1.\n"
         "Rationals propagate through Plus / Times exactly via GMP.");
     symtab_set_docstring("IntegerPartitions",
-        "IntegerPartitions[n] gives the partitions of the integer n -- the ways to write n as a "
-        "sum of positive parts (equivalently, its Young diagrams) -- in reverse-lexicographic order.\n"
-        "IntegerPartitions[n, k] gives partitions into at most k parts;\n"
-        "{k} exactly k; {kmin, kmax} between; {kmin, kmax, dk} stepped.\n"
-        "A third argument restricts the parts (sspec; All = Range[n]); a\n"
-        "fourth limits the result to the first m (m>0) or last |m| (m<0).\n"
-        "n and the parts may be rational and negative; Length equals\n"
-        "PartitionsP[n] for the plain form.");
+        "IntegerPartitions[n]\n"
+        "\tthe partitions of n -- the ways to write n as a sum of positive integer parts,\n"
+        "\torder ignored -- in reverse-lexicographic order, parts descending.\n"
+        "IntegerPartitions[n, kspec]\n"
+        "\tpartitions with a number of parts given by kspec: k (at most k), {k} (exactly k),\n"
+        "\t{kmin, kmax}, or {kmin, kmax, dk} (kmin, kmin + dk, ...; a negative dk counts\n"
+        "\tdown from kmin to kmax); All or Infinity for any number.\n"
+        "IntegerPartitions[n, kspec, sspec]\n"
+        "\tparts drawn only from sspec: a list of values (each entry its own part, in\n"
+        "\tthe reversed order of the list), or a number s for Range[s]; All is Range[n].\n"
+        "IntegerPartitions[n, kspec, sspec, m]\n"
+        "\tthe first m (m > 0) or last |m| (m < 0), None for none, or a sequence\n"
+        "\tspecification {i}, {i, j} or {i, j, step} as in Take.\n"
+        "n and the parts may be rational or negative (Length[IntegerPartitions[n]] is\n"
+        "\tPartitionsP[n]). Bad arguments draw IntegerPartitions::rat, ::nninfseq, ::rseq or\n"
+        "\t::seq; an infinitely large answer ::undef; a sequence past the end ::take.");
     symtab_set_docstring("PartitionsP",
-        "PartitionsP[n] gives the number p(n) of unrestricted partitions of the integer n, evaluated "
-        "exactly through the Hardy-Ramanujan-Rademacher series (p(n) grows like exp(Pi Sqrt[2n/3])).\n\n"
-        "n must be an integer; p(n) = 0 for n < 0. Threads over lists.\n"
-        "For the partitions themselves use IntegerPartitions[n].");
+        "PartitionsP[n]\n"
+        "\tthe number p(n) of unrestricted partitions of the integer n: p(0) = 1, p(n) = 0\n"
+        "\tfor n < 0, PartitionsP[100] is 190569292. Exact for any machine-integer n, by a\n"
+        "\ttable below 1000 and the Hardy-Ramanujan-Rademacher series above.\n"
+        "Listable; a packed integer list and Compile answer from the same int64 table\n"
+        "\twhile p(n) fits (n <= 405). A non-integer or symbolic n stays unevaluated;\n"
+        "\tthe wrong number of arguments draws PartitionsP::argx.\n"
+        "IntegerPartitions[n] lists the partitions themselves.");
     symtab_set_docstring("PartitionsQ",
-        "PartitionsQ[n] gives the number q(n) of partitions of the integer n into distinct parts -- "
-        "equal, by Euler's theorem, to the number of partitions into odd parts.\n\n"
-        "n must be an integer; q(n) = 0 for n < 0. Threads over lists. For the partitions themselves "
-        "use IntegerPartitions.");
+        "PartitionsQ[n]\n"
+        "\tthe number q(n) of partitions of the integer n into distinct parts -- by Euler's\n"
+        "\ttheorem also the number into odd parts: q(0) = 1, q(n) = 0 for n < 0,\n"
+        "\tPartitionsQ[100] is 444793. Exact for any machine-integer n, by a table below\n"
+        "\t1000 and Hagis' Rademacher-type series above.\n"
+        "Listable; a packed integer list and Compile answer from the same int64 table\n"
+        "\twhile q(n) fits (n <= 769). A non-integer or symbolic n stays unevaluated; the wrong\n"
+        "\tnumber of arguments draws PartitionsQ::argx.");
     symtab_set_docstring("Mod",
         "Mod[m, n]\n"
         "\tthe remainder of m on division by n, carrying the sign of n (a floored\n"

@@ -17,6 +17,26 @@
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+/* See facint.h. The 64-bit arm skips GMP entirely: no limb allocation, one
+ * Montgomery setup and at most seven witnesses, versus mpz_probab_prime_p's
+ * trial division + BPSW on an mpz. Both are exact below 2^64 (BPSW has no
+ * counterexample there; the witness sets are proven), so PrimeQ's answers are
+ * unchanged -- only its cost on machine integers drops. */
+int mth_is_prime_u64(uint64_t n) {
+    return fi_u64_is_prime(n);
+}
+
+int mth_is_prime_mpz(const mpz_t n) {
+    if (mpz_sgn(n) <= 0) return 0;
+    if (mpz_sizeinbase(n, 2) <= 64) {
+        /* mpz_export, not mpz_get_ui: unsigned long is 32 bits on LLP64. */
+        uint64_t v = 0;
+        mpz_export(&v, NULL, -1, sizeof v, 0, 0, n);
+        return fi_u64_is_prime(v);
+    }
+    return mpz_probab_prime_p(n, 25) != 0;
+}
+
 /* Gaussian-integer primality test for a complex number a + b*I with
  * integer parts. Sets *out_is_gprime to 1/0. Inputs `a` and `b` may carry
  * any sign; they are taken in absolute value internally. */
@@ -117,7 +137,7 @@ Expr* builtin_primeq(Expr* res) {
         } else {
             mpz_abs(n, n);
             if (mpz_sgn(n) > 0) {
-                is_prime = mpz_probab_prime_p(n, 25);
+                is_prime = mth_is_prime_mpz(n);
             }
         }
         mpz_clear(n);

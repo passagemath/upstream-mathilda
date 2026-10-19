@@ -6,6 +6,8 @@
 #include "test_utils.h"
 #include "parse.h"
 #include "print.h"
+#include "facint.h"   /* mth_is_prime_u64/_mpz: RandomPrime's (and PrimeQ's) test */
+#include <gmp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -1161,6 +1163,202 @@ void test_randomsample_sample_zero(void) {
     free(s);
 }
 
+/* ======================================================================
+ * RandomPrime
+ * ====================================================================== */
+
+/* Evaluate and compare the InputForm string. */
+static void rp_check(const char* input, const char* expected) {
+    char* s = eval_to_str(input);
+    ASSERT_MSG(strcmp(s, expected) == 0, "%s => %s, expected %s", input, s, expected);
+    free(s);
+}
+
+/* ---- RandomPrime[imax]: always a prime in [2, imax] ---- */
+void test_randomprime_single(void) {
+    for (int i = 0; i < 200; i++) {
+        int64_t v = eval_to_int("RandomPrime[100]");
+        ASSERT_MSG(v >= 2 && v <= 100, "RandomPrime[100] gave %lld", (long long)v);
+    }
+    rp_check("Module[{l = RandomPrime[100, 500]}, And @@ PrimeQ[l] && Max[l] <= 100]", "True");
+    rp_check("RandomPrime[2]", "2");
+    rp_check("Union[RandomPrime[3, 200]]", "{2, 3}");
+}
+
+/* ---- RandomPrime[{imin, imax}] ---- */
+void test_randomprime_range(void) {
+    rp_check("Module[{p = RandomPrime[{10^9, 10^10}]}, PrimeQ[p] && 10^9 <= p <= 10^10]", "True");
+    rp_check("Module[{l = RandomPrime[{1000, 1100}, 300]}, And @@ PrimeQ[l] && Min[l] >= 1009 && Max[l] <= 1097]", "True");
+    rp_check("RandomPrime[{1, 2}]", "2");
+    rp_check("RandomPrime[{2, 2}, 3]", "{2, 2, 2}");
+    rp_check("RandomPrime[{7, 7}]", "7");
+    /* A reversed pair is accepted, as in Mathematica. */
+    rp_check("Union[RandomPrime[{10, 5}, 200]]", "{5, 7}");
+    rp_check("Union[RandomPrime[{3, 1}, 200]]", "{2, 3}");
+    /* Wide machine span: the rejection sampler (span > the table cut-off). */
+    rp_check("Module[{l = RandomPrime[{10^6, 10^7}, 2000]}, And @@ PrimeQ[l] && Min[l] >= 10^6 && Max[l] <= 10^7]", "True");
+    rp_check("Module[{l = RandomPrime[{1, 10^18}, 2000]}, And @@ PrimeQ[l] && Max[l] <= 10^18]", "True");
+    /* Largest int64 bound: still machine-width and packed. */
+    rp_check("Module[{l = RandomPrime[{2^63 - 10^6, 2^63 - 1}, 100]}, And @@ PrimeQ[l] && Min[l] >= 2^63 - 10^6 && PackedArrayQ[l]]", "True");
+}
+
+/* ---- Shapes and packing ---- */
+void test_randomprime_shapes(void) {
+    rp_check("Length[RandomPrime[100, 10]]", "10");
+    rp_check("Dimensions[RandomPrime[10, {4, 5}]]", "{4, 5}");
+    rp_check("Complement[Flatten[RandomPrime[10, {4, 5}]], {2, 3, 5, 7}]", "{}");
+    rp_check("Dimensions[RandomPrime[100, {2, 3, 1}]]", "{2, 3, 1}");
+    rp_check("Dimensions[RandomPrime[100, {5}]]", "{5}");
+    /* Mathematica answers an empty dimension list with a one-element list. */
+    rp_check("Length[RandomPrime[100, {}]]", "1");
+    rp_check("PrimeQ[First[RandomPrime[100, {}]]]", "True");
+    /* Machine-width ranges hand back a packed buffer. */
+    rp_check("PackedArrayQ[RandomPrime[1000, 50]]", "True");
+    rp_check("PackedArrayQ[RandomPrime[1000, {20, 30}]]", "True");
+    rp_check("Module[{a = RandomPrime[1000, {20, 30}]}, And @@ Flatten[PrimeQ[a]]]", "True");
+    rp_check("Dimensions[RandomPrime[{10^9, 10^10}, {3, 4, 5}]]", "{3, 4, 5}");
+}
+
+/* ---- Bignum ranges ---- */
+void test_randomprime_bignum(void) {
+    rp_check("Module[{pq = RandomPrime[{2^639, 2^640}, 2]}, {Length[pq], And @@ PrimeQ[pq], IntegerLength[#, 2] & /@ pq, Total[DigitCount[First[pq], 2]]}]",
+             "{2, True, {640, 640}, 640}");
+    rp_check("Module[{p = RandomPrime[{2^70, 2^70 + 100}]}, PrimeQ[p] && 2^70 <= p <= 2^70 + 100]", "True");
+    rp_check("Module[{p = RandomPrime[{2^1023, 2^1024}]}, PrimeQ[p] && IntegerLength[p, 2] == 1024]", "True");
+    /* Straddling 2^63 and 2^64: mixed machine/bignum values, all in range. */
+    rp_check("Module[{l = RandomPrime[{2^62, 2^64 + 1000}, 50]}, And @@ PrimeQ[l] && Min[l] >= 2^62 && Max[l] <= 2^64 + 1000]", "True");
+    /* Lower end includes 2 with a bignum upper end: 2 still reachable. */
+    rp_check("Module[{l = RandomPrime[{2, 2^70}, 20]}, And @@ PrimeQ[l] && Length[l] == 20]", "True");
+    rp_check("Dimensions[RandomPrime[{2^100, 2^101}, {2, 3}]]", "{2, 3}");
+    rp_check("RandomPrime[{2^89 - 1, 2^89 - 1}]", "618970019642690137449562111");
+}
+
+/* ---- Uniformity over primes ---- */
+void test_randomprime_uniform(void) {
+    /* Table sampler: the 10 primes <= 30, each expected 2000 times. */
+    rp_check("SeedRandom[7]", "Null");
+    char* s = eval_to_str("Module[{t = Tally[RandomPrime[30, 20000]]}, {Length[t], Min[t[[All, 2]]] > 1700, Max[t[[All, 2]]] < 2300}]");
+    ASSERT_STR_EQ(s, "{10, True, True}");
+    free(s);
+    /* 2 must be as likely as any odd prime (it is its own candidate slot). */
+    s = eval_to_str("Module[{l = RandomPrime[{2, 5}, 30000]}, Abs[Count[l, 2] - 10000] < 600 && Abs[Count[l, 5] - 10000] < 600]");
+    ASSERT_STR_EQ(s, "True");
+    free(s);
+    /* Rejection sampler: primes in [10^6, 2*10^6] split by halves follow the
+     * prime counts of each half, not the widths. */
+    s = eval_to_str("Module[{l = RandomPrime[{10^6, 2 10^6}, 40000], lo, exp},"
+                    " lo = Count[l, _?(# < 1500000 &)];"
+                    " exp = 40000 (PrimePi[1500000] - PrimePi[10^6])/(PrimePi[2 10^6] - PrimePi[10^6]);"
+                    " Abs[lo - exp] < 600]");
+    ASSERT_STR_EQ(s, "True");
+    free(s);
+}
+
+/* ---- SeedRandom makes it reproducible ---- */
+void test_randomprime_seed(void) {
+    rp_check("SeedRandom[42]; a = RandomPrime[10^12, 20]; SeedRandom[42]; a === RandomPrime[10^12, 20]", "True");
+    rp_check("SeedRandom[42]; a = RandomPrime[{2^200, 2^201}, 3]; SeedRandom[42]; a === RandomPrime[{2^200, 2^201}, 3]", "True");
+    rp_check("SeedRandom[1]; a = RandomPrime[50, 30]; SeedRandom[2]; a =!= RandomPrime[50, 30]", "True");
+    rp_check("Clear[a]", "Null");
+}
+
+/* ---- noprime: unevaluated, and the message is a real message ---- */
+void test_randomprime_noprime(void) {
+    rp_check("Quiet[RandomPrime[{14, 16}]]", "RandomPrime[{14, 16}]");
+    rp_check("Quiet[RandomPrime[{24, 28}]]", "RandomPrime[{24, 28}]");
+    rp_check("Quiet[RandomPrime[1]]", "RandomPrime[1]");
+    rp_check("Quiet[RandomPrime[{1, 1}]]", "RandomPrime[{1, 1}]");
+    rp_check("Quiet[RandomPrime[{14, 16}, 3]]", "RandomPrime[{14, 16}, 3]");
+    rp_check("Check[RandomPrime[{14, 16}], fail]", "fail");
+    rp_check("Check[RandomPrime[{14, 17}], fail]", "17");
+    /* Largest prime gap below 2^64 (1550, after 18361375334787046697): the
+     * bignum sampler's existence scan must cover the whole gap and say no. */
+    rp_check("Quiet[RandomPrime[{18361375334787046698, 18361375334787048246}]]",
+             "RandomPrime[{18361375334787046698, 18361375334787048246}]");
+    rp_check("RandomPrime[{18361375334787046698, 18361375334787048247}]", "18361375334787048247");
+    /* A genuinely bignum gap: 30!+2 .. 30!+30 are all composite. */
+    rp_check("Check[RandomPrime[{30! + 2, 30! + 30}], fail]", "fail");
+}
+
+/* ---- Argument errors: exact WL messages, input left unevaluated ---- */
+void test_randomprime_errors(void) {
+    rp_check("Quiet[RandomPrime[]]", "RandomPrime[]");
+    rp_check("Check[RandomPrime[], fail]", "fail");
+    rp_check("Quiet[RandomPrime[100, 3, 4]]", "RandomPrime[100, 3, 4]");
+    rp_check("Quiet[RandomPrime[0]]", "RandomPrime[0]");
+    rp_check("Quiet[RandomPrime[-5]]", "RandomPrime[-5]");
+    rp_check("Quiet[RandomPrime[x]]", "RandomPrime[x]");
+    rp_check("Quiet[RandomPrime[3/2]]", "RandomPrime[3/2]");
+    rp_check("Quiet[RandomPrime[10.5]]", "RandomPrime[10.5]");
+    rp_check("Quiet[RandomPrime[{0, 10}, 3]]", "RandomPrime[{0, 10}, 3]");
+    rp_check("Quiet[RandomPrime[{-3, -2}]]", "RandomPrime[{-3, -2}]");
+    rp_check("Quiet[RandomPrime[{a, b}]]", "RandomPrime[{a, b}]");
+    rp_check("Quiet[RandomPrime[{1.5, 10}]]", "RandomPrime[{1.5, 10}]");
+    rp_check("Quiet[RandomPrime[{1, 2, 3}]]", "RandomPrime[{1, 2, 3}]");
+    rp_check("Quiet[RandomPrime[{5}]]", "RandomPrime[{5}]");
+    rp_check("Quiet[RandomPrime[100, 0]]", "RandomPrime[100, 0]");
+    rp_check("Quiet[RandomPrime[100, -1]]", "RandomPrime[100, -1]");
+    rp_check("Quiet[RandomPrime[100, 2.5]]", "RandomPrime[100, 2.5]");
+    rp_check("Quiet[RandomPrime[100, x]]", "RandomPrime[100, x]");
+    rp_check("Quiet[RandomPrime[100, {2, 0}]]", "RandomPrime[100, {2, 0}]");
+    rp_check("Quiet[RandomPrime[100, {2, x}]]", "RandomPrime[100, {2, x}]");
+    /* Every one of them is a real message (Check sees it). */
+    rp_check("Check[RandomPrime[{a, b}], fail]", "fail");
+    rp_check("Check[RandomPrime[{1, 2, 3}], fail]", "fail");
+    rp_check("Check[RandomPrime[100, 0], fail]", "fail");
+    /* The exact message texts (intp/prmrng/posdim/noprime/argt) match
+     * Mathematica 14 verbatim; they go to stderr through mth_message, so they
+     * are asserted by the REPL-level golden check in the changelog's
+     * verification, not here -- Mathilda has no $MessageList to read back. */
+}
+
+/* ---- Attributes and Information ---- */
+void test_randomprime_attributes(void) {
+    rp_check("Attributes[RandomPrime]", "{Protected}");
+    Expr* e = parse_expression("Information[RandomPrime]");
+    Expr* r = evaluate(e);
+    ASSERT(r->type == EXPR_STRING);
+    expr_free(e);
+    expr_free(r);
+}
+
+/* ---- The shared PrimeQ test agrees with GMP everywhere it is used ---- */
+void test_randomprime_primality_helper(void) {
+    mpz_t z;
+    mpz_init(z);
+    /* Exhaustive below 2*10^6. */
+    for (uint64_t n = 0; n < 2000000; n++) {
+        mpz_set_ui(z, (unsigned long)n);
+        int ref = mpz_probab_prime_p(z, 25) != 0;
+        ASSERT_MSG(mth_is_prime_u64(n) == ref, "mth_is_prime_u64(%llu)", (unsigned long long)n);
+        ASSERT_MSG(mth_is_prime_mpz(z) == ref, "mth_is_prime_mpz(%llu)", (unsigned long long)n);
+    }
+    /* Random 64-bit odd n (a fixed LCG: reproducible). */
+    uint64_t x = UINT64_C(0x9E3779B97F4A7C15);
+    for (int i = 0; i < 100000; i++) {
+        x = x * UINT64_C(6364136223846793005) + UINT64_C(1442695040888963407);
+        uint64_t n = x | 1u;
+        mpz_import(z, 1, -1, sizeof n, 0, 0, &n);
+        int ref = mpz_probab_prime_p(z, 25) != 0;
+        ASSERT_MSG(mth_is_prime_u64(n) == ref, "mth_is_prime_u64(%llu)", (unsigned long long)n);
+    }
+    /* Strong pseudoprimes and edge values. */
+    ASSERT(!mth_is_prime_u64(2047));
+    ASSERT(!mth_is_prime_u64(561));
+    ASSERT(!mth_is_prime_u64(UINT64_C(3215031751)));
+    ASSERT(!mth_is_prime_u64(UINT64_C(3825123056546413051)));
+    ASSERT(mth_is_prime_u64(UINT64_C(18446744073709551557)));   /* 2^64 - 59 */
+    ASSERT(!mth_is_prime_u64(UINT64_C(18446744073709551615)));
+    mpz_set_str(z, "318665857834031151167461", 10);              /* spsp to bases 2..37 */
+    ASSERT(!mth_is_prime_mpz(z));
+    mpz_set_si(z, -7);
+    ASSERT(!mth_is_prime_mpz(z));
+    mpz_clear(z);
+    /* PrimeQ itself still agrees, through the helper. */
+    rp_check("PrimeQ[{-7, 0, 1, 2, 2047, 3825123056546413051, 18446744073709551557, 2^89 - 1, 318665857834031151167461}]",
+             "{True, False, False, True, False, False, True, True, False}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1170,6 +1368,18 @@ int main(void) {
     TEST(test_randominteger_packed_seeds_itself);
 
     TEST(test_randominteger_no_args);
+
+    /* RandomPrime tests */
+    TEST(test_randomprime_single);
+    TEST(test_randomprime_range);
+    TEST(test_randomprime_shapes);
+    TEST(test_randomprime_bignum);
+    TEST(test_randomprime_uniform);
+    TEST(test_randomprime_seed);
+    TEST(test_randomprime_noprime);
+    TEST(test_randomprime_errors);
+    TEST(test_randomprime_attributes);
+    TEST(test_randomprime_primality_helper);
     TEST(test_randominteger_single_arg);
     TEST(test_randominteger_range);
     TEST(test_randominteger_flat_list);

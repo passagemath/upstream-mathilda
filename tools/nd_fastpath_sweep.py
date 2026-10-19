@@ -284,7 +284,8 @@ SKIP_EXPLOSIVE = {
 SKIP_DIMS = {
     "ConstantArray", "Array", "ArrayReshape", "Table", "SparseArray",
     "RandomReal", "RandomInteger", "RandomComplex", "RandomVariate",
-    "RandomChoice", "RandomSample", "Range", "Subdivide", "ArrayPad",
+    "RandomChoice", "RandomSample", "RandomPrime", "Range", "Subdivide",
+    "ArrayPad",
     # PadLeft[list, n] takes n as a full dimension spec, so PadLeft[vi, wi]
     # over two 200000-long integer vectors asks for an array of prod(wi)
     # elements.  This is the one that hung the first full run.

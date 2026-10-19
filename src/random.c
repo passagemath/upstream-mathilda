@@ -26,6 +26,11 @@
  * RandomChoice[wts->elems, n]  - list of n weighted choices
  * RandomChoice[wts->elems, {n1,...}] - array of weighted choices
  *
+ * RandomPrime[{imin, imax}]    - pseudorandom prime in [imin, imax], uniform over primes
+ * RandomPrime[imax]            - pseudorandom prime in [2, imax]
+ * RandomPrime[range, n]        - list of n pseudorandom primes
+ * RandomPrime[range, {n1, ...}] - n1*n2*... array of primes
+ *
  * SeedRandom[n]                - seeds the RNG with integer n
  * SeedRandom[]                 - reseeds from system entropy
  *
@@ -43,6 +48,10 @@
 #include "numeric.h"
 #include "ndarray.h"
 #include "pack.h"
+#include "facint.h"   /* mth_is_prime_u64/_mpz -- RandomPrime shares PrimeQ's test */
+#include "message.h"
+#include "common.h"   /* builtin_arg_error */
+#include "print.h"    /* expr_to_string, for intp/posdim message text */
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -2185,6 +2194,323 @@ Expr* builtin_randomsample(Expr* res) {
     return list;
 }
 
+/* --------------------------------------------------------------------------
+ * RandomPrime
+ * --------------------------------------------------------------------------
+ *
+ * UNIFORM OVER PRIMES, BY REJECTION. A draw picks uniformly from the candidate
+ * set C = {2 if 2 is in range} U {odd k in range} and rejects composites. Every
+ * prime in [lo, hi] occurs in C exactly once, so the accepted value is exactly
+ * uniform over the primes in the interval -- the Mathematica contract -- and
+ * skipping the even numbers halves the expected number of draws to ~ln(N)/2.
+ *
+ * Primality is PrimeQ's own test (mth_is_prime_u64 / mth_is_prime_mpz in
+ * facint.c), so RandomPrime can never return a number PrimeQ rejects.
+ *
+ * Three sampler shapes, chosen once per call and reused for every element:
+ *
+ *   RP_TABLE  span <= RP_TABLE_SPAN, machine-width. The primes are enumerated
+ *             once and each draw is a single xs_below(count). This is also the
+ *             exact noprime test for the only spans that can be prime-free in
+ *             machine range, and it cannot loop.
+ *   RP_U64    wider machine-width span: xoshiro rejection. No existence scan is
+ *             needed -- the largest prime gap below 2^64 is 1550 (after
+ *             18361375334787046697), well under RP_TABLE_SPAN, so a span this
+ *             wide always contains a prime.
+ *   RP_MPZ    a bound past int64: GMP rejection, after an upward scan from lo
+ *             that finds one prime (as a witness only -- returning it would bias
+ *             the draw) or proves the interval empty. Bignum gaps can exceed any
+ *             fixed span, so here existence must be checked.
+ * -------------------------------------------------------------------------- */
+
+#define RP_TABLE_SPAN 4096
+
+typedef enum { RP_TABLE, RP_U64, RP_MPZ } RpKind;
+
+typedef struct {
+    RpKind    kind;
+    /* RP_TABLE */
+    uint64_t* table;
+    uint64_t  tcount;
+    /* RP_U64: candidates are {2}? then odd_lo, odd_lo+2, ..., n_cand total */
+    int       has_two;
+    uint64_t  odd_lo;
+    uint64_t  n_cand;
+    /* RP_MPZ: same layout in mpz; scratch hoisted out of the draw loop */
+    mpz_t     z_odd_lo, z_n_cand, z_draw;
+    bool      z_ready;
+} RpSampler;
+
+static void rp_sampler_clear(RpSampler* S) {
+    free(S->table);
+    S->table = NULL;
+    if (S->z_ready) {
+        mpz_clear(S->z_odd_lo);
+        mpz_clear(S->z_n_cand);
+        mpz_clear(S->z_draw);
+        S->z_ready = false;
+    }
+}
+
+/* Build the sampler for [lo, hi] (lo >= 1 and lo <= hi, as parsed). Returns
+ * false iff the interval holds no prime; S then needs no clear. */
+static bool rp_sampler_init(RpSampler* S, const mpz_t lo_in, const mpz_t hi) {
+    memset(S, 0, sizeof *S);
+    ensure_rand_init();
+
+    mpz_t lo;
+    mpz_init_set(lo, lo_in);
+    if (mpz_cmp_ui(lo, 2) < 0) mpz_set_ui(lo, 2);        /* 1 is not prime */
+    if (mpz_cmp(hi, lo) < 0) { mpz_clear(lo); return false; }
+
+    if (mpz_sizeinbase(hi, 2) <= 63) {
+        /* Machine-width: every candidate fits int64, and so packs. Read out
+         * with mpz_export, not mpz_get_si: long is 32 bits on LLP64. */
+        uint64_t l = 0, h = 0;
+        mpz_export(&l, NULL, -1, sizeof l, 0, 0, lo);
+        mpz_export(&h, NULL, -1, sizeof h, 0, 0, hi);
+        mpz_clear(lo);
+
+        S->has_two = (l == 2);
+        uint64_t ol = (l <= 3) ? 3 : (l | 1u);
+        uint64_t oh = (h & 1u) ? h : h - 1;
+        uint64_t n_odd = (oh >= ol) ? (oh - ol) / 2 + 1 : 0;
+        S->odd_lo = ol;
+        S->n_cand = n_odd + (uint64_t)S->has_two;
+
+        if (h - l + 1 <= RP_TABLE_SPAN) {
+            S->kind = RP_TABLE;
+            S->table = malloc(sizeof(uint64_t) * (size_t)(S->n_cand ? S->n_cand : 1));
+            if (!S->table) return false;
+            if (S->has_two) S->table[S->tcount++] = 2;
+            for (uint64_t i = 0; i < n_odd; i++) {
+                uint64_t k = ol + 2 * i;
+                if (mth_is_prime_u64(k)) S->table[S->tcount++] = k;
+            }
+            if (S->tcount == 0) { rp_sampler_clear(S); return false; }
+            return true;
+        }
+        S->kind = RP_U64;
+        return true;
+    }
+
+    /* Bignum bound. */
+    S->kind = RP_MPZ;
+    mpz_init(S->z_odd_lo);
+    mpz_init(S->z_n_cand);
+    mpz_init(S->z_draw);
+    S->z_ready = true;
+
+    S->has_two = (mpz_cmp_ui(lo, 2) == 0);
+    if (mpz_cmp_ui(lo, 3) <= 0) mpz_set_ui(S->z_odd_lo, 3);
+    else { mpz_set(S->z_odd_lo, lo); if (mpz_even_p(lo)) mpz_add_ui(S->z_odd_lo, lo, 1); }
+    /* n_odd = (oh - ol)/2 + 1 with oh the largest odd <= hi; hi > 2^63 here,
+     * so oh >= ol always. */
+    mpz_t oh;
+    mpz_init_set(oh, hi);
+    if (mpz_even_p(oh)) mpz_sub_ui(oh, oh, 1);
+    if (mpz_cmp(oh, S->z_odd_lo) >= 0) {
+        mpz_sub(S->z_n_cand, oh, S->z_odd_lo);
+        mpz_fdiv_q_2exp(S->z_n_cand, S->z_n_cand, 1);
+        mpz_add_ui(S->z_n_cand, S->z_n_cand, 1);
+    } else {
+        mpz_set_ui(S->z_n_cand, 0);
+    }
+    mpz_add_ui(S->z_n_cand, S->z_n_cand, (unsigned long)S->has_two);
+
+    /* Existence: 2 is a witness on its own; otherwise scan odd k upward. */
+    bool found = S->has_two;
+    if (!found) {
+        mpz_set(S->z_draw, S->z_odd_lo);
+        while (mpz_cmp(S->z_draw, oh) <= 0) {
+            if (mth_is_prime_mpz(S->z_draw)) { found = true; break; }
+            mpz_add_ui(S->z_draw, S->z_draw, 2);
+        }
+    }
+    mpz_clear(oh);
+    mpz_clear(lo);
+    if (!found) { rp_sampler_clear(S); return false; }
+    return true;
+}
+
+/* One prime from a machine-width sampler (RP_TABLE / RP_U64). */
+static int64_t rp_draw_i64(RpSampler* S) {
+    if (S->kind == RP_TABLE) return (int64_t)S->table[xs_below(S->tcount)];
+    for (;;) {
+        uint64_t j = xs_below(S->n_cand);
+        uint64_t k;
+        if (S->has_two) { if (j == 0) return 2; k = S->odd_lo + 2 * (j - 1); }
+        else k = S->odd_lo + 2 * j;
+        if (mth_is_prime_u64(k)) return (int64_t)k;
+    }
+}
+
+/* One prime as an Expr, for any sampler kind. */
+static Expr* rp_draw_expr(RpSampler* S) {
+    if (S->kind != RP_MPZ) return expr_new_integer(rp_draw_i64(S));
+    for (;;) {
+        mpz_urandomm(S->z_draw, g_rand_state, S->z_n_cand);
+        if (S->has_two) {
+            if (mpz_sgn(S->z_draw) == 0) return expr_new_integer(2);
+            mpz_sub_ui(S->z_draw, S->z_draw, 1);
+        }
+        mpz_mul_2exp(S->z_draw, S->z_draw, 1);
+        mpz_add(S->z_draw, S->z_draw, S->z_odd_lo);
+        if (mth_is_prime_mpz(S->z_draw))
+            return expr_bigint_normalize(expr_new_bigint_from_mpz(S->z_draw));
+    }
+}
+
+/* RandomPrime::intp naming `e`. Always returns false, for one-line use. */
+static bool rp_intp(Expr* e) {
+    char* s = expr_to_string(e);
+    mth_message("RandomPrime", "intp", "%s is not a positive integer.", s ? s : "");
+    free(s);
+    return false;
+}
+
+static bool rp_is_positive_integer(Expr* e) {
+    return (e->type == EXPR_INTEGER && e->data.integer >= 1) ||
+           (e->type == EXPR_BIGINT && mpz_sgn(e->data.bigint) > 0);
+}
+
+/* Parse the range argument into lo <= hi (both >= 1), emitting intp/prmrng
+ * on failure. A reversed pair is accepted, as in Mathematica. */
+static bool rp_parse_range(Expr* arg, mpz_t lo, mpz_t hi) {
+    if (arg->type == EXPR_FUNCTION &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_List) {
+        if (arg->data.function.arg_count != 2) {
+            char* s = expr_to_string(arg);
+            mth_message("RandomPrime", "prmrng",
+                        "First argument %s is not a positive integer or a list of two positive integers.",
+                        s ? s : "");
+            free(s);
+            return false;
+        }
+        Expr* a = arg->data.function.args[0];
+        Expr* b = arg->data.function.args[1];
+        if (!rp_is_positive_integer(a)) return rp_intp(a);
+        if (!rp_is_positive_integer(b)) return rp_intp(b);
+        expr_to_mpz(a, lo);
+        expr_to_mpz(b, hi);
+        if (mpz_cmp(lo, hi) > 0) mpz_swap(lo, hi);
+        return true;
+    }
+    if (!rp_is_positive_integer(arg)) return rp_intp(arg);
+    mpz_set_ui(lo, 1);
+    expr_to_mpz(arg, hi);
+    return true;
+}
+
+/* Parse the dimension spec: n >= 1, or a list of such (possibly empty, which
+ * Mathematica answers with a one-element list). Fills dims[0..*rank) and the
+ * element total; emits posdim on failure. */
+static bool rp_parse_dims(Expr* d, int64_t* dims, int* rank, int64_t* total) {
+    bool ok = true;
+    if (d->type == EXPR_INTEGER) {
+        ok = d->data.integer >= 1;
+        if (ok) { dims[0] = d->data.integer; *rank = 1; *total = dims[0]; }
+    } else if (d->type == EXPR_FUNCTION &&
+               d->data.function.head->type == EXPR_SYMBOL &&
+               d->data.function.head->data.symbol.name == SYM_List &&
+               d->data.function.arg_count < NDARRAY_MAX_RANK) {
+        size_t r = d->data.function.arg_count;
+        int64_t t = 1;
+        for (size_t i = 0; i < r && ok; i++) {
+            Expr* di = d->data.function.args[i];
+            ok = di->type == EXPR_INTEGER && di->data.integer >= 1 &&
+                 !ci_mul_i64(t, di->data.integer, &t);
+            if (ok) dims[i] = di->data.integer;
+        }
+        if (ok && r == 0) { dims[0] = 1; r = 1; }
+        if (ok) { *rank = (int)r; *total = t; }
+    } else {
+        ok = false;
+    }
+    if (!ok) {
+        char* s = expr_to_string(d);
+        mth_message("RandomPrime", "posdim",
+                    "The dimensions parameter %s is expected to be a positive integer or a list of positive integers.",
+                    s ? s : "");
+        free(s);
+    }
+    return ok;
+}
+
+/* Nest a flat row-major Expr* array into Lists per dims; consumes flat[]. */
+static Expr* rp_nest(Expr** flat, const int64_t* dims, int rank, int level, size_t* pos) {
+    size_t n = (size_t)dims[level];
+    Expr** elems = malloc(sizeof(Expr*) * n);
+    if (!elems) return NULL;
+    for (size_t i = 0; i < n; i++)
+        elems[i] = (level == rank - 1) ? flat[(*pos)++]
+                                       : rp_nest(flat, dims, rank, level + 1, pos);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
+    free(elems);
+    return list;
+}
+
+/*
+ * builtin_randomprime - implements RandomPrime[...]
+ *
+ *   RandomPrime[imax]                  -> prime in [2, imax]
+ *   RandomPrime[{imin, imax}]          -> prime in [imin, imax]
+ *   RandomPrime[range, n]              -> list of n primes
+ *   RandomPrime[range, {n1, n2, ...}]  -> n1 x n2 x ... array of primes
+ *
+ * A machine-width range writes straight into a packed int64 buffer, like
+ * RandomInteger's producer; a bignum range builds Lists and offers them.
+ */
+Expr* builtin_randomprime(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("RandomPrime", argc, 1, 2);
+
+    mpz_t lo, hi;
+    mpz_init(lo);
+    mpz_init(hi);
+    Expr* out = NULL;
+    int64_t dims[NDARRAY_MAX_RANK];
+    int rank = 0;
+    int64_t total = 1;
+    RpSampler S;
+
+    if (!rp_parse_range(res->data.function.args[0], lo, hi)) goto done;
+    if (argc == 2 && !rp_parse_dims(res->data.function.args[1], dims, &rank, &total))
+        goto done;
+    if (!rp_sampler_init(&S, lo, hi)) {
+        mth_message("RandomPrime", "noprime", "There are no primes in the specified interval.");
+        goto done;
+    }
+
+    if (argc == 1) {
+        out = rp_draw_expr(&S);
+    } else {
+        void* buf = NULL;
+        if (S.kind != RP_MPZ &&
+            (out = ndbuild_open(rank, dims, NDT_INT64, &buf)) != NULL) {
+            int64_t* b = (int64_t*)buf;
+            for (int64_t i = 0; i < total; i++) b[i] = rp_draw_i64(&S);
+        } else {
+            Expr** flat = malloc(sizeof(Expr*) * (size_t)total);
+            if (flat) {
+                for (int64_t i = 0; i < total; i++) flat[i] = rp_draw_expr(&S);
+                size_t pos = 0;
+                out = rp_nest(flat, dims, rank, 0, &pos);
+                free(flat);
+                if (out) out = pack_offer(out);
+            }
+        }
+    }
+    rp_sampler_clear(&S);
+
+done:
+    mpz_clear(lo);
+    mpz_clear(hi);
+    return out;
+}
+
 void random_init(void) {
     symtab_add_builtin("RandomInteger", builtin_randominteger);
     symtab_get_def("RandomInteger")->attributes |= ATTR_PROTECTED;
@@ -2203,4 +2529,7 @@ void random_init(void) {
 
     symtab_add_builtin("RandomSample", builtin_randomsample);
     symtab_get_def("RandomSample")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("RandomPrime", builtin_randomprime);
+    symtab_get_def("RandomPrime")->attributes |= ATTR_PROTECTED;
 }

@@ -757,6 +757,7 @@ const char* SYM_PreDecrement = NULL;
 const char* SYM_PreIncrement = NULL;
 const char* SYM_Quartiles = NULL;
 const char* SYM_RandomInteger = NULL;
+const char* SYM_RandomPrime = NULL;
 const char* SYM_RandomSeeding = NULL;
 const char* SYM_RegularExpression = NULL;
 const char* SYM_ReplaceAll = NULL;
@@ -1774,6 +1775,7 @@ void sym_names_init(void) {
     SYM_PreIncrement               = intern_symbol("PreIncrement");
     SYM_Quartiles                  = intern_symbol("Quartiles");
     SYM_RandomInteger              = intern_symbol("RandomInteger");
+    SYM_RandomPrime                = intern_symbol("RandomPrime");
     SYM_RandomSeeding              = intern_symbol("RandomSeeding");
     SYM_RegularExpression          = intern_symbol("RegularExpression");
     SYM_ReplaceAll                 = intern_symbol("ReplaceAll");

@@ -240,3 +240,52 @@ Out[10]= RandomSample[x]
 > list or an `NDArray` directly, drawing from the **same generator sequence**
 > the ordinary path uses — so `SeedRandom[n]` gives the same answer whether
 > the argument is packed or not.
+
+## RandomPrime
+Gives pseudorandom prime numbers.
+- `RandomPrime[{imin, imax}]`: gives a pseudorandom prime number in the range imin to imax.
+- `RandomPrime[imax]`: gives a pseudorandom prime number in the range 2 to imax. It is equivalent to `RandomPrime[{2, imax}]`.
+- `RandomPrime[range, n]`: gives a list of n pseudorandom primes.
+- `RandomPrime[range, {n1, n2, ...}]`: gives an n1 × n2 × ... array of primes.
+
+**Features**:
+- `Protected`.
+- **Uniform over primes.** Every prime in the range is chosen with equal probability. A draw takes a candidate uniformly from {2, if it is in range} ∪ {odd k in range} and rejects composites. Each prime has exactly one candidate slot, so the accepted value is exactly uniform. Skipping the even numbers halves the expected draws to about ln(N)/2.
+- **PrimeQ's test.** Candidates go through `mth_is_prime_u64` / `mth_is_prime_mpz` (`src/facint.c`), the same helper `PrimeQ` calls. Below 2^64 that is deterministic Miller–Rabin in Montgomery form. Above it is `mpz_probab_prime_p(n, 25)`. RandomPrime can never return a number that PrimeQ rejects.
+- **Three sampler shapes**, chosen once per call:
+  - A machine-width span of at most 4096 integers enumerates its primes once, so each draw is a single index. This also decides `noprime` exactly.
+  - A wider machine-width span uses xoshiro rejection. No existence scan is needed, because the largest prime gap below 2^64 is 1550.
+  - A bound past int64 uses GMP rejection. An upward scan from imin first proves at least one prime exists, since a bignum gap can be any length.
+- `imin` may be 1 (`RandomPrime[{1, 2}]` is `2`), and a reversed pair `{imax, imin}` is accepted, as in Mathematica.
+- `RandomPrime[range, {}]` gives a one-element list, as in Mathematica.
+- **Packed output.** When imax < 2^63, a list or array is written straight into a packed int64 buffer, like `RandomInteger`. It runs at about 8 ns per prime for `RandomPrime[100, 10^6]` and 4 µs per prime up to 10^18. Mathematica 14 on the same machine takes 240 ns and 69 µs.
+- **No NDArray kernel and no `Compile[]` lowering, deliberately.** RandomPrime is a generator, not an element-wise numeric map, and its dimension argument is a shape, not data. It is listed with the other `Random*` heads in `SKIP_DIMS` of `tools/nd_fastpath_sweep.py`.
+- `SeedRandom[n]` makes the sequence reproducible.
+- Messages, all through the message funnel, so `Quiet`/`Check` apply. The input is returned unevaluated in every case:
+  - `RandomPrime::noprime`: There are no primes in the specified interval.
+  - `RandomPrime::intp`: *e* is not a positive integer. Issued for a bound that is not an integer ≥ 1.
+  - `RandomPrime::prmrng`: First argument *r* is not a positive integer or a list of two positive integers.
+  - `RandomPrime::posdim`: The dimensions parameter *d* is expected to be a positive integer or a list of positive integers.
+  - `RandomPrime::argt`: issued for zero or more than two arguments.
+
+```mathematica
+In[1]:= RandomPrime[100]
+Out[1]= 97
+
+In[2]:= RandomPrime[{10^9, 10^10}]
+Out[2]= 7401738761
+
+In[3]:= RandomPrime[10, {4, 5}]
+Out[3]= {{2, 5, 2, 3, 2}, {7, 3, 5, 2, 2}, {5, 7, 7, 5, 7}, {3, 5, 5, 7, 2}}
+
+In[4]:= {p, q} = RandomPrime[{2^639, 2^640}, 2]; IntegerLength[p, 2]
+Out[4]= 640
+
+In[5]:= RandomPrime[{14, 16}]
+RandomPrime::noprime: There are no primes in the specified interval.
+Out[5]= RandomPrime[{14, 16}]
+
+In[6]:= RandomPrime[]
+RandomPrime::argt: RandomPrime called with 0 arguments; 1 or 2 arguments are expected.
+Out[6]= RandomPrime[]
+```

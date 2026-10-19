@@ -5023,6 +5023,13 @@ void info_init(void) {
         "RandomSample[list, UpTo[n]]\n\tgives a sample of n of the ei, or as many as are available.\n"
         "RandomSample never samples any element more than once.\n"
         "Use SeedRandom to seed the pseudorandom generator for reproducible results.");
+    symtab_set_docstring("RandomPrime",
+        "RandomPrime[{imin, imax}]\n\tgives a pseudorandom prime number in the range imin to imax.\n"
+        "RandomPrime[imax]\n\tgives a pseudorandom prime number in the range 2 to imax.\n"
+        "RandomPrime[range, n]\n\tgives a list of n pseudorandom primes.\n"
+        "RandomPrime[range, {n1, n2, ...}]\n\tgives an n1 x n2 x ... array of pseudorandom primes.\n"
+        "Primes in the range are chosen with equal probability; primality is PrimeQ's test.\n"
+        "If no prime exists in the range, a RandomPrime::noprime message is issued and the input is returned unevaluated.");
 
     // Optimisation switches (registered in eval.c's eval_init).
     symtab_set_docstring("$AutoCompilation",

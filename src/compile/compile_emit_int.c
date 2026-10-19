@@ -74,6 +74,11 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 *out = binop(c, OP_EQ_I, g, one, CT_BOOL);
                 return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "PrimeQ") == 0) {
+                /* Unary integer -> boolean; OP_PRIMEQ_I never bails. */
+                Val a; if (!emit(c, A[0], &a)) return -1;
+                *out = unop(c, OP_PRIMEQ_I, a, CT_BOOL); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "PrimePowerQ") == 0) {
                 /* Unary integer -> boolean; OP_PPQ_I never bails. */
                 Val a; if (!emit(c, A[0], &a)) return -1;

@@ -120,7 +120,7 @@ static SymbolAttr builtin_attrs[] = {
     {"PossibleZeroQ", ATTR_PROTECTED},
     {"PrimePi", ATTR_PROTECTED | ATTR_LISTABLE},
     {"FactorInteger", ATTR_PROTECTED | ATTR_LISTABLE},
-    {"NextPrime", ATTR_LISTABLE | ATTR_PROTECTED},
+    {"NextPrime", ATTR_PROTECTED},        /* not Listable, as in Mathematica */
     {"Fibonacci", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"LucasL", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Re", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},

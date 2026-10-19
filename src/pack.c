@@ -840,6 +840,9 @@ static void pack_mark_aware_heads(void) {
          * (ndint_binary_predicate); a zero divisor or any other shape degrades
          * element by element, so Divisible::divz still fires per element. */
         "CoprimeQ", "Divisible",
+        /* PrimeQ: the same packed bool List off an int64 buffer (ndint_primeq:
+         * a byte sieve for dense small values, Miller-Rabin otherwise). */
+        "PrimeQ",
         /* Boole maps a bool buffer straight to an int64 one (True -> 1); its
          * buffer path answers with a single head (Integer), matching Boole of the
          * List element for element. */
@@ -1183,7 +1186,7 @@ static void pack_mark_aware_heads(void) {
          * and GMP still answer every case the buffer cannot. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
         "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
-        "CoprimeQ", "Divisible",
+        "CoprimeQ", "Divisible", "PrimeQ",
         /* The sign predicates answer with True/False, which no dtype holds --
          * but they READ an int64 buffer exactly, by comparison, and comparison
          * is the one operation on integers that needs no arithmetic to be

@@ -947,7 +947,7 @@ void test_primeq(void) {
     assert_eval_eq("PrimeQ[x]", "False", 1);
     assert_eval_eq("PrimeQ[Sqrt[2]]", "False", 1);
     assert_eval_eq("PrimeQ[Exp[2 Pi I / 3]]", "False", 1);
-    assert_eval_eq("PrimeQ[]", "False", 1);
+    assert_eval_eq("Quiet[PrimeQ[]]", "PrimeQ[]", 1);   /* PrimeQ::argx, as Mathematica */
 
     // Large prime (from user request)
     assert_eval_eq("PrimeQ[-59]", "True", 1);
@@ -1133,7 +1133,7 @@ void test_nextprime(void) {
     assert_eval_eq("NextPrime[10, 2]", "13", 1);
     assert_eval_eq("NextPrime[5, -1]", "3", 1);
     assert_eval_eq("NextPrime[5, -2]", "2", 1);
-    assert_eval_eq("NextPrime[2, -1]", "NextPrime[2, -1]", 1);
+    assert_eval_eq("NextPrime[2, -1]", "-2", 1);   /* negative primes count, as Mathematica */
 }
 
 void test_primepi(void) {

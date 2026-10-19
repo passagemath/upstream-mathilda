@@ -228,7 +228,7 @@ enum {
      * through ndint_kronecker_i64, which is total and never bails.             */ \
     X(GCD_I, K_BIN)   X(LCM_I, K_BIN)  X(ILEN_I, K_BIN) X(IEXP_I, K_BIN)   \
     X(POWMOD_I, K_NARY) X(BLEN_I, K_UN) X(PPQ_I, K_UN) X(DSIG_I, K_BIN)     \
-    X(PHI_I, K_UN)    X(MU_I, K_UN)    X(JACOBI_I, K_BIN)                   \
+    X(PHI_I, K_UN)    X(MU_I, K_UN)    X(JACOBI_I, K_BIN) X(PRIMEQ_I, K_UN) \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \

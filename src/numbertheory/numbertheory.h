@@ -23,6 +23,14 @@ void numbertheory_init(void);
  * an argument is not a Gaussian integer or n is 0. Used by builtin_mod. */
 Expr* nt_gaussian_mod(Expr* m, Expr* n, Expr* d);
 
+/* Parse the GaussianIntegers -> True | False option from args[first ..] with
+ * head::nonopt / ::optx / ::opttf on error (returns false; leave the call
+ * unevaluated). *set reports whether it appeared; the first setting wins. */
+#include <stdbool.h>
+#include <stddef.h>
+bool nt_parse_gaussian_options(Expr* res, size_t first, const char* head,
+                               bool* gaussian, bool* set);
+
 Expr* builtin_gcd(Expr* res);
 Expr* builtin_lcm(Expr* res);
 Expr* builtin_extendedgcd(Expr* res);

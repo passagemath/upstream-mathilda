@@ -400,6 +400,10 @@ BASELINE = {
     # direct ARRAY form is the same missing int -> bool elementwise lowering
     # (A_STORE_B) as PrimePowerQ and the sign predicates.
     "CoprimeQ", "Divisible",
+    # PrimeQ (v0.472): same story -- the scalar form compiles (OP_PRIMEQ_I,
+    # the interpreter's mth_is_prime_u64), the packed buffer answers off int64
+    # (ndint_primeq), the direct array form wants the bool elementwise lowering.
+    "PrimeQ",
 }
 
 

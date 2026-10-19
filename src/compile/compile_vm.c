@@ -1131,6 +1131,9 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
             OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
+            /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
+            OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i
+                                                 : 0ULL - (uint64_t)RA.i) ? 1 : 0; NEXT();
             /* Not IOP: a decline is "no machine answer" (DivisorSigma[k, 0]),
              * not an overflow check that IF_NOCHK may waive. */
             OP(DSIG_I):  if (int_dsig(RA.i, RB.i, &RD.i)) goto vm_fail; NEXT();

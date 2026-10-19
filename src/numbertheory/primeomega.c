@@ -52,33 +52,18 @@ Expr* builtin_primeomega(Expr* res) {
     Expr** args = res->data.function.args;
     if (argc < 1 || argc > 2) return primeomega_emit_argt(argc);
 
-    /* Separate the positional argument (n) from a GaussianIntegers option. */
+    /* One positional argument, then options (GaussianIntegers only), with
+     * Mathematica's nonopt / optx / opttf messages. */
     bool gaussian = false, gaussian_set = false;
-    Expr* posargs[2] = { NULL, NULL };
-    size_t npos = 0;
-    for (size_t i = 0; i < argc; i++) {
-        Expr* a = args[i];
-        if (a->type == EXPR_FUNCTION &&
-            a->data.function.head->type == EXPR_SYMBOL &&
-            a->data.function.head->data.symbol.name == SYM_Rule &&
-            a->data.function.arg_count == 2) {
-            Expr* key = a->data.function.args[0];
-            Expr* val = a->data.function.args[1];
-            if (key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_GaussianIntegers &&
-                val->type == EXPR_SYMBOL &&
-                (val->data.symbol.name == SYM_True || val->data.symbol.name == SYM_False)) {
-                gaussian = (val->data.symbol.name == SYM_True);
-                gaussian_set = true;
-                continue;
-            }
-            return NULL;  /* malformed / unknown option: leave unevaluated */
-        }
-        if (npos < 2) posargs[npos] = a;
-        npos++;
-    }
+    if (!nt_parse_gaussian_options(res, 1, "PrimeOmega", &gaussian, &gaussian_set))
+        return NULL;
+    Expr* n = args[0];
 
-    if (npos != 1) return NULL;   /* not exactly one positional: leave unevaluated */
-    Expr* n = posargs[0];
+    /* PrimeOmega::exact -- an inexact number has no prime factorisation. */
+    {
+        Expr* inexact = nt_first_inexact_arg(res);
+        if (inexact && inexact == n) return nt_emit_exact("PrimeOmega", n, res);
+    }
 
     /* Explicit option wins; otherwise auto-enable Z[i] for non-real input. */
     bool use_gaussian = gaussian_set ? gaussian : is_gaussian_integer(n);

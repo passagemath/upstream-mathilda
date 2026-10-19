@@ -37,4 +37,11 @@ void     primecount_init(void);             /* build the table (idempotent) */
 int64_t  primecount_small_table_size(void); /* count of primes in the table */
 uint32_t primecount_small_prime(int64_t n); /* nth prime, 1-indexed (n in range) */
 
+/* The n-th prime, given c = pi(x) for an anchor x near it: sieves the gap
+ * (forward if n > c, backward otherwise). -1 on failure. */
+int64_t primecount_nth_from(int64_t x, int64_t c, int64_t n);
+
+/* Force Deleglise-Rivat's alpha (> 0) for tests; < 0 (default) is automatic. */
+extern double primecount_dr_alpha;
+
 #endif

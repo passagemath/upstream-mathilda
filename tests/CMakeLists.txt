@@ -1393,6 +1393,10 @@ add_executable(congruence_review_tests test_congruence_review.c $<TARGET_OBJECTS
 target_include_directories(congruence_review_tests PRIVATE ../src)
 add_test(NAME congruence_review_tests COMMAND congruence_review_tests)
 
+add_executable(primes_review_tests test_primes_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(primes_review_tests PRIVATE ../src)
+add_test(NAME primes_review_tests COMMAND primes_review_tests)
+
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)

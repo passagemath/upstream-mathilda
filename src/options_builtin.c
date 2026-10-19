@@ -434,6 +434,14 @@ void options_register_defaults(void) {
     /* ---- Number theory ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
+    {   /* ProgressReporting :> $ProgressReporting, as in Mathematica (accepted,
+         * no progress is reported) */
+        Expr** ra = malloc(2 * sizeof(Expr*));
+        ra[0] = expr_new_symbol("ProgressReporting");
+        ra[1] = expr_new_symbol("$ProgressReporting");
+        ob_add(&b, expr_new_function(expr_new_symbol(SYM_RuleDelayed), ra, 2));
+        free(ra);
+    }
     ob_commit(&b, "PrimePi");
 
     ob_init(&b);
@@ -897,6 +905,14 @@ void options_register_defaults(void) {
     ob_init(&b);
     ob_add(&b, r_sym("GaussianIntegers", "False"));
     ob_commit(&b, "DivisorSigma");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("GaussianIntegers", "False"));
+    ob_commit(&b, "PrimeNu");
+
+    ob_init(&b);
+    ob_add(&b, r_sym("GaussianIntegers", "False"));
+    ob_commit(&b, "PrimeOmega");
 
     ob_init(&b);
     ob_add(&b, r_sym("GaussianIntegers", "False"));

@@ -189,7 +189,7 @@ void test_primepi_method_errors() {
 
 /* Default options are registered. */
 void test_primepi_options() {
-    check("Options[PrimePi]", "{Method -> Automatic}");
+    check("Options[PrimePi]", "{Method -> Automatic, ProgressReporting :> $ProgressReporting}");
 }
 
 /* ---- Out-of-range but valid inputs stay unevaluated (no crash) ---- */

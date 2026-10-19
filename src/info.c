@@ -2875,16 +2875,14 @@ void info_init(void) {
     symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("PrimeQ",
-        "PrimeQ[n] gives True if n is a prime integer and False otherwise, using a Baillie-PSW and "
-        "Miller-Rabin probabilistic primality test (no known counterexample, and definite below "
-        "2^64).\n"
+        "PrimeQ[n] gives True if n is a prime integer (the sign is ignored), and False otherwise.\n"
         "PrimeQ[z]\n"
         "\tfor a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.\n"
         "PrimeQ[n, GaussianIntegers -> True]\n"
-        "\ttests primality of n in Z[i] rather than in Z.\n"
-        "Primality is tested with GMP's mpz_probab_prime_p using 25 Miller-Rabin "
-        "rounds on top of a Baillie-PSW pre-screen, so composite false positives "
-        "have probability below 4^-25 (definite for n < 2^64).");
+        "\ttests the integer n as a Gaussian prime (|n| prime and |n| = 3 mod 4).\n"
+        "\tDeterministic Miller-Rabin below 2^64, Baillie-PSW above. A packed list is answered\n"
+        "\tin one pass (a sieve for dense small values). A malformed call draws PrimeQ::argx /\n"
+        "\t::nonopt / ::optx / ::opttf and stays unevaluated. Listable.");
     symtab_set_docstring("PrimePowerQ",
         "PrimePowerQ[expr]\n"
         "\tyields True if expr is a power of a prime number, and yields False otherwise.\n"
@@ -4976,8 +4974,19 @@ void info_init(void) {
         "\tA non-real Gaussian integer is factored over Z[i] (units do not count).\n"
         "\tNon-integers stay unevaluated. Listable.");
     symtab_set_docstring("LiouvilleLambda", "LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].");
-    symtab_set_docstring("PrimeOmega", "PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.");
-    symtab_set_docstring("PrimeNu", "PrimeNu[n] gives the number of distinct prime factors of n, nu(n). PrimeNu[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts distinct Gaussian prime factors over Z[i]. PrimeNu[1] is 0; PrimeNu[0] is left unevaluated.");
+    symtab_set_docstring("PrimeOmega",
+        "PrimeOmega[n] gives Omega(n), the number of prime factors of n counted with multiplicity.\n"
+        "PrimeOmega[n, GaussianIntegers -> True]\n"
+        "\tcounts Gaussian prime factors (automatic for a non-real Gaussian integer n).\n"
+        "\tPrimeOmega[1] is 0; PrimeOmega[0] and non-integers stay unevaluated. An inexact\n"
+        "\targument draws PrimeOmega::exact. Listable;\n"
+        "\tOptions: GaussianIntegers -> False.");
+    symtab_set_docstring("PrimeNu",
+        "PrimeNu[n] gives nu(n), the number of distinct prime factors of n.\n"
+        "PrimeNu[n, GaussianIntegers -> True]\n"
+        "\tcounts distinct Gaussian prime factors (automatic for a non-real Gaussian integer n).\n"
+        "\tPrimeNu[1] is 0; PrimeNu[0] stays unevaluated. An inexact argument draws\n"
+        "\tPrimeNu::exact. Listable; Options: GaussianIntegers -> False.");
     /* FactorInteger and FactorInteger`<Method>: docstrings set in fi_init()
      * (src/numbertheory/factorinteger/fi_builtin.c), next to the method table. */
     symtab_set_docstring("EulerPhi",
@@ -4985,9 +4994,27 @@ void info_init(void) {
         "\tthe order of the unit group (Z/nZ)*, so a^phi(n) == 1 (mod n) when gcd(a, n) == 1.\n"
         "\tphi(0) = 0 and the sign of n is ignored. A non-integer number draws EulerPhi::int;\n"
         "\tsymbolic arguments stay unevaluated. Listable.");
-    symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), \"Sieve\", \"Legendre\", \"Meissel\", \"Lehmer\", \"LMO\" (Lagarias-Miller-Odlyzko), \"DelegliseRivat\", or \"LucyHedgehog\".");
-    symtab_set_docstring("Prime", "Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.");
-    symtab_set_docstring("NextPrime", "NextPrime[x] gives the next prime after x.");
+    symtab_set_docstring("PrimePi",
+        "PrimePi[x] gives the number of primes p <= x, for any real x.\n"
+        "\tA non-integer x is floored (exactly, for Pi or E^10); PrimePi[Infinity] is Infinity.\n"
+        "\tExact for x up to 5*10^13 (larger x stays unevaluated), by a tuned Deleglise-Rivat\n"
+        "\t(PrimePi[10^12] in about 0.2 s).\n"
+        "\tOptions: Method -> Automatic | \"DelegliseRivat\" | \"LMO\" | \"Lehmer\" | \"Meissel\" |\n"
+        "\t\"Legendre\" | \"LucyHedgehog\" | \"Sieve\"; ProgressReporting (accepted). Listable.");
+    symtab_set_docstring("Prime",
+        "Prime[n] gives the n-th prime.\n"
+        "\tSmall n is read from a table; larger n estimates p_n from Riemann's R, counts the\n"
+        "\tprimes there exactly (PrimePi) and sieves the short gap. Defined up to\n"
+        "\tp_n <= 5*10^13 (n ~ 1.6*10^12); beyond that the call stays unevaluated.\n"
+        "\tA non-positive or non-integer argument draws Prime::intpp. Listable; a packed\n"
+        "\tlist of indices is answered from one sieve.");
+    symtab_set_docstring("NextPrime",
+        "NextPrime[x] gives the smallest prime above x.\n"
+        "NextPrime[x, k]\n"
+        "\tgives the k-th prime above x (k > 0) or below x (k < 0).\n"
+        "\tNegative primes count, as in Mathematica: NextPrime[-10] is -7, NextPrime[3, -2] is -2.\n"
+        "\tx may be any real number; NextPrime[x, 0] is x for a (signed) prime and stays\n"
+        "\tunevaluated otherwise. Lists are threaded (NextPrime is not Listable).");
     symtab_set_docstring("Distribute",
         "Distribute[f[x1, x2, ...]]\n"
         "\tdistributes f over Plus appearing in any of the xi, building the sum\n"

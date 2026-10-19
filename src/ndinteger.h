@@ -102,6 +102,10 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which);
  * option argument -- the caller degrades through ndarray_delist_and_reeval. */
 Expr* ndint_prime_power_predicate(Expr* res);
 
+/* PrimeQ[int64 buffer]: a packed bool List (a sieve for dense small values,
+ * deterministic Miller-Rabin otherwise). NULL for any other shape. */
+Expr* ndint_primeq(Expr* res);
+
 /* CoprimeQ[a, b] / Divisible[n, m] over int64 buffers (one side may be an
  * exact Integer), answering with a packed NDT_BOOL List, as the sign
  * predicates and PrimePowerQ do. NULL for any shape it does not handle -- including a zero

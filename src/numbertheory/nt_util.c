@@ -166,3 +166,58 @@ Expr* nt_emit_int(const char* head, size_t pos, Expr* res) {
     free(call);
     return NULL;
 }
+
+/* ---- the GaussianIntegers -> True | False option ------------------------- *
+ * Shared by the heads whose only option it is (DivisorSigma, PrimeQ, PrimeNu,
+ * PrimeOmega). Reads args[first ..] as options, left to right, with
+ * Mathematica's messages: a non-rule is head::nonopt, a name other than
+ * GaussianIntegers head::optx, a value other than True / False head::opttf.
+ * Rule and RuleDelayed both count; of repeated settings the first wins.
+ * Returns false (message emitted, caller leaves the call unevaluated) on any
+ * error; *set reports whether the option appeared. */
+bool nt_parse_gaussian_options(Expr* res, size_t first, const char* head,
+                               bool* gaussian, bool* set) {
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+    *set = false;
+    for (size_t i = first; i < argc; i++) {
+        Expr* opt = args[i];
+        bool is_rule = opt->type == EXPR_FUNCTION
+            && opt->data.function.head->type == EXPR_SYMBOL
+            && (opt->data.function.head->data.symbol.name == SYM_Rule
+                || opt->data.function.head->data.symbol.name == SYM_RuleDelayed)
+            && opt->data.function.arg_count == 2;
+        if (!is_rule) {
+            char* bad = expr_to_string(opt);
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, head, "nonopt",
+                "Options expected (instead of %s) beyond position %zu in %s. "
+                "An option must be a rule or a list of rules.",
+                bad ? bad : "?", first, call ? call : "?");
+            free(bad); free(call);
+            return false;
+        }
+        Expr* key = opt->data.function.args[0];
+        Expr* val = opt->data.function.args[1];
+        if (!(key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_GaussianIntegers)) {
+            char* kname = key->type == EXPR_STRING ? NULL : expr_to_string(key);
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, head, "optx",
+                "Unknown option %s in %s.",
+                key->type == EXPR_STRING ? key->data.string : (kname ? kname : "?"),
+                call ? call : "?");
+            free(kname); free(call);
+            return false;
+        }
+        const char* v = val->type == EXPR_SYMBOL ? val->data.symbol.name : NULL;
+        if (v != SYM_True && v != SYM_False) {
+            char* bad = expr_to_string(opt);
+            mth_message_gated(g_arith_warnings_muted, head, "opttf",
+                "Value of option %s should be True or False.", bad ? bad : "?");
+            free(bad);
+            return false;
+        }
+        if (!*set) { *gaussian = (v == SYM_True); *set = true; }
+    }
+    return true;
+}

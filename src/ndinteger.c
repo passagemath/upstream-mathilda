@@ -660,6 +660,51 @@ Expr* ndint_prime_power_predicate(Expr* res) {
     return out;
 }
 
+/* ---- PrimeQ ---------------------------------------------------------------- *
+ * PrimeQ[buffer]: a packed bool List, as PrimePowerQ. A dense buffer of small
+ * values (max |n| <= 2^26 and at least max/64 elements -- Range-like) is
+ * answered off one byte sieve; anything else per element by the deterministic
+ * Miller-Rabin the scalar builtin uses (mth_is_prime_u64). Sign ignored, as in
+ * the scalar PrimeQ. Only rank-1 int64 buffers; the caller degrades the rest. */
+Expr* ndint_primeq(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    const Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a) || a->data.ndarray.dtype != NDT_INT64 || a->data.ndarray.rank != 1)
+        return NULL;
+    size_t sz = ndarray_size(a);
+    if (sz == 0) return NULL;
+    const int64_t* in = (const int64_t*)a->data.ndarray.data;
+
+    uint64_t nmax = 0;
+    for (size_t i = 0; i < sz; i++) {
+        uint64_t m = in[i] < 0 ? (uint64_t)0 - (uint64_t)in[i] : (uint64_t)in[i];
+        if (m > nmax) nmax = m;
+    }
+    uint8_t* comp = NULL;
+    if (nmax <= ((uint64_t)1 << 26) && (uint64_t)sz >= nmax / 64) {
+        comp = calloc((size_t)nmax + 1, 1);
+        if (comp) {
+            comp[0] = 1; if (nmax >= 1) comp[1] = 1;
+            for (uint64_t p = 2; p * p <= nmax; p++)
+                if (!comp[p]) for (uint64_t m = p * p; m <= nmax; m += p) comp[m] = 1;
+        }
+    }
+
+    void* buf = NULL;
+    int64_t dims[1] = { (int64_t)sz };
+    Expr* out = ndbuild_open_like(a, 1, dims, NDT_BOOL, &buf);
+    if (!out) { free(comp); return NULL; }
+    out->data.ndarray.present_as = NDA_HEAD_LIST;
+    pack_g_any_created = true;
+    uint8_t* ob = (uint8_t*)buf;
+    for (size_t i = 0; i < sz; i++) {
+        uint64_t m = in[i] < 0 ? (uint64_t)0 - (uint64_t)in[i] : (uint64_t)in[i];
+        ob[i] = comp ? !comp[m] : (mth_is_prime_u64(m) ? 1 : 0);
+    }
+    free(comp);
+    return out;
+}
+
 /* ---- CoprimeQ / Divisible ---------------------------------------------- *
  * Binary integer predicates: read an int64 buffer against an exact Integer (on
  * either side), or two equal-shape int64 buffers, and answer with the same

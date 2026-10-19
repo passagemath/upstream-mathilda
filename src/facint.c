@@ -4,6 +4,7 @@
  * FactorInteger`Method) lives in src/numbertheory/factorinteger/.
  */
 #include "facint.h"
+#include "numbertheory.h"   /* nt_parse_gaussian_options */
 #include "fi_internal.h"
 #include "arithmetic.h"
 #include "expr.h"
@@ -86,49 +87,29 @@ static void gaussian_prime_test(const mpz_t a_in, const mpz_t b_in, int* out_is_
  * filling *out_gaussian. Returns false if any option is unrecognized or
  * malformed (caller should return False from the predicate in that case
  * to honour the *Q always-boolean contract). */
-static bool primeq_parse_options(const Expr* res, size_t first_opt,
-                                 bool* out_gaussian) {
-    *out_gaussian = false;
-    size_t argc = res->data.function.arg_count;
-    for (size_t i = first_opt; i < argc; i++) {
-        Expr* a = res->data.function.args[i];
-        if (a->type != EXPR_FUNCTION ||
-            a->data.function.head->type != EXPR_SYMBOL ||
-            a->data.function.head->data.symbol.name != SYM_Rule ||
-            a->data.function.arg_count != 2) {
-            return false;
-        }
-        Expr* key = a->data.function.args[0];
-        Expr* val = a->data.function.args[1];
-        if (key->type != EXPR_SYMBOL) return false;
-        if (key->data.symbol.name == SYM_GaussianIntegers) {
-            if (val->type != EXPR_SYMBOL) return false;
-            if (strcmp(val->data.symbol.name, "True") == 0) *out_gaussian = true;
-            else if (strcmp(val->data.symbol.name, "False") == 0) *out_gaussian = false;
-            else return false;
-        } else {
-            return false;  /* unknown option */
-        }
-    }
-    return true;
-}
-
+/* PrimeQ[n] / PrimeQ[n, GaussianIntegers -> True]. True or False for every
+ * well-formed call -- anything that is not a prime integer (or, in Z[i], a
+ * Gaussian prime) is False. A MALFORMED call is not a question about n: as in
+ * Mathematica, PrimeQ[] draws PrimeQ::argx and a bad option ::nonopt / ::optx
+ * / ::opttf, and those calls stay unevaluated. */
 Expr* builtin_primeq(Expr* res) {
-    /* *Q predicates must always evaluate to True or False — never remain
-     * unevaluated. Zero-arg or non-function res (the latter unreachable
-     * via the evaluator, kept defensive) is therefore not prime. */
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) {
-        return expr_new_symbol(SYM_False);
+    if (res->type != EXPR_FUNCTION) return expr_new_symbol(SYM_False);
+    if (res->data.function.arg_count < 1) {
+        mth_message_gated(g_arith_warnings_muted, "PrimeQ", "argx",
+                          "PrimeQ called with 0 arguments; 1 argument is expected.");
+        return NULL;
     }
     Expr* arg = res->data.function.args[0];
 
-    /* Parse optional GaussianIntegers->True/False. A malformed option list
-     * makes the call evaluate to False (per *Q always-boolean contract). */
-    bool gaussian = false;
-    if (res->data.function.arg_count > 1) {
-        if (!primeq_parse_options(res, 1, &gaussian)) {
-            return expr_new_symbol(SYM_False);
-        }
+    bool gaussian = false, gaussian_set = false;
+    if (!nt_parse_gaussian_options(res, 1, "PrimeQ", &gaussian, &gaussian_set))
+        return NULL;
+
+    /* A packed / visible int64 buffer: one pass, a packed bool List. The
+     * Gaussian question, and every shape the kernel declines, degrades. */
+    if (is_ndarray(arg)) {
+        Expr* nd = (!gaussian && res->data.function.arg_count == 1) ? ndint_primeq(res) : NULL;
+        return nd ? nd : ndarray_delist_and_reeval(res);
     }
 
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT) {
@@ -594,55 +575,112 @@ Expr* builtin_primepowerq(Expr* res) {
     return expr_new_symbol(ok ? SYM_True : SYM_False);
 }
 
-Expr* builtin_nextprime(Expr* res) {
-    if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
+/* The signed primes, in Mathematica's ordering: ..., -7, -5, -3, -2, 2, 3,
+ * 5, 7, ... (|p| prime). np_up sets cur to the least such prime > cur,
+ * np_down to the greatest < cur. */
+static void np_up(mpz_t cur) {
+    if (mpz_cmp_si(cur, 2) >= 0) { mpz_nextprime(cur, cur); return; }
+    if (mpz_cmp_si(cur, -2) >= 0) { mpz_set_ui(cur, 2); return; }   /* -2 .. 1 -> 2 */
+    mpz_neg(cur, cur);                                             /* cur < -2 */
+    mathilda_mpz_prevprime(cur, cur);                              /* largest prime < |cur| */
+    mpz_neg(cur, cur);
+}
 
-    Expr* x_expr = res->data.function.args[0];
-    int64_t k = 1;
-    if (res->data.function.arg_count == 2) {
-        if (res->data.function.args[1]->type != EXPR_INTEGER) return NULL;
-        k = res->data.function.args[1]->data.integer;
+static void np_down(mpz_t cur) {
+    if (mpz_cmp_si(cur, 2) > 0) { mathilda_mpz_prevprime(cur, cur); return; }
+    if (mpz_cmp_si(cur, -2) > 0) { mpz_set_si(cur, -2); return; }  /* -1 .. 2 -> -2 */
+    mpz_neg(cur, cur);                                             /* cur <= -2 */
+    mpz_nextprime(cur, cur);
+    mpz_neg(cur, cur);
+}
+
+/* NextPrime[x] / NextPrime[x, k]: the k-th prime after x (k > 0) or before it
+ * (k < 0), counting the NEGATIVE primes too, as Mathematica does --
+ * NextPrime[-10] is -7, NextPrime[3, -2] is -2. NextPrime[x, 0] is x when x is
+ * a (signed) prime and unevaluated otherwise. x may be any real number (a
+ * non-integer starts from Floor[x] going up and Ceiling[x] going down); k must
+ * be an integer. Not Listable -- as in Mathematica -- but a List in either
+ * position is threaded explicitly. A wrong argument count draws
+ * NextPrime::argt. */
+Expr* builtin_nextprime(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) {
+        mth_message_gated(g_arith_warnings_muted, "NextPrime", "argt",
+            "NextPrime called with %zu arguments; 1 or 2 arguments are expected.", argc);
+        return NULL;
+    }
+    Expr** args = res->data.function.args;
+
+    /* Thread over a List in either position. (Not on pack.c's AWARE list, so a
+     * packed buffer has already been unpacked by the gate.) */
+    for (size_t i = 0; i < argc; i++) {
+        if (args[i]->type == EXPR_FUNCTION && args[i]->data.function.head->type == EXPR_SYMBOL &&
+            args[i]->data.function.head->data.symbol.name == SYM_List) {
+            size_t len = args[i]->data.function.arg_count;
+            for (size_t j = 0; j < argc; j++) {
+                Expr* o = args[j];
+                if (j != i && o->type == EXPR_FUNCTION && o->data.function.head->type == EXPR_SYMBOL &&
+                    o->data.function.head->data.symbol.name == SYM_List &&
+                    o->data.function.arg_count != len) return NULL;
+            }
+            Expr** items = malloc((len ? len : 1) * sizeof(Expr*));
+            for (size_t e = 0; e < len; e++) {
+                Expr* call_args[2];
+                for (size_t j = 0; j < argc; j++) {
+                    Expr* o = args[j];
+                    bool lst = o->type == EXPR_FUNCTION && o->data.function.head->type == EXPR_SYMBOL &&
+                               o->data.function.head->data.symbol.name == SYM_List;
+                    call_args[j] = expr_copy(lst ? o->data.function.args[e] : o);
+                }
+                items[e] = expr_new_function(expr_new_symbol(SYM_NextPrime), call_args, argc);
+            }
+            Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), items, len));
+            free(items);
+            return out;
+        }
     }
 
-    if (k == 0) return expr_copy(x_expr);
+    Expr* x_expr = args[0];
+    int64_t k = 1;
+    if (argc == 2) {
+        if (args[1]->type != EXPR_INTEGER) return NULL;    /* k must be an integer */
+        k = args[1]->data.integer;
+    }
 
-    mpz_t current;
+    /* x as an integer start: Floor going up, Ceiling going down. */
+    mpz_t cur;
+    bool x_int = false;
     if (x_expr->type == EXPR_INTEGER || x_expr->type == EXPR_BIGINT) {
-        expr_to_mpz(x_expr, current);
-    } else if (x_expr->type == EXPR_REAL) {
-        mpz_init_set_d(current, floor(x_expr->data.real));
+        expr_to_mpz(x_expr, cur);
+        x_int = true;
+    } else if (x_expr->type == EXPR_REAL && isfinite(x_expr->data.real)) {
+        mpz_init_set_d(cur, k >= 0 ? floor(x_expr->data.real) : ceil(x_expr->data.real));
     } else {
         int64_t n, d;
-        if (is_rational(x_expr, &n, &d)) {
-            int64_t start_val = n / d;
-            if (n < 0 && n % d != 0) start_val--; 
-            mpz_init_set_si(current, start_val);
-        } else {
-            return NULL;
-        }
+        if (!is_rational(x_expr, &n, &d)) return NULL;     /* symbolic / complex */
+        int64_t f = n / d;
+        if (n % d != 0 && ((n < 0) == (k >= 0))) f += (k >= 0) ? -1 : 1;
+        mpz_init_set_si(cur, f);
     }
 
-    if (k > 0) {
-        for (int64_t i = 0; i < k; i++) {
-            mpz_nextprime(current, current);
-        }
-    } else {
-        int64_t count = -k;
-        for (int64_t i = 0; i < count; i++) {
-            if (mpz_cmp_ui(current, 2) <= 0) {
-                mpz_clear(current);
-                return NULL;
-            }
-            int found = mathilda_mpz_prevprime(current, current);
-            if (!found) {
-                mpz_clear(current);
-                return NULL;
-            }
-        }
+    if (k == 0) {
+        /* Only a (signed) prime is its own 0-th next prime. */
+        if (!x_int) { mpz_clear(cur); return NULL; }
+        mpz_t a;
+        mpz_init(a);
+        mpz_abs(a, cur);
+        bool prime = mpz_cmp_ui(a, 2) >= 0 && mpz_probab_prime_p(a, 25) > 0;
+        mpz_clear(a);
+        mpz_clear(cur);
+        return prime ? expr_copy(x_expr) : NULL;
     }
 
-    Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(current));
-    mpz_clear(current);
+    if (k > 0) for (int64_t i = 0; i < k; i++) np_up(cur);
+    else       for (int64_t i = 0; i > k; i--) np_down(cur);
+
+    Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(cur));
+    mpz_clear(cur);
     return result;
 }
 
@@ -763,7 +801,8 @@ void facint_init(void) {
     ppq_trial_primes_init();
     /* PrimePi is registered in numbertheory_init() (src/numbertheory/prime.c). */
     symtab_get_def("EulerPhi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
-    symtab_get_def("NextPrime")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
+    /* NextPrime is NOT Listable in Mathematica (it threads lists explicitly). */
+    symtab_get_def("NextPrime")->attributes |= ATTR_PROTECTED;
 
     /* FactorInteger and FactorInteger`<Method> (src/numbertheory/factorinteger/). */
     fi_init();

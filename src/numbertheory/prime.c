@@ -29,8 +29,8 @@
 #include <stdint.h>
 #include <math.h>
 #include <gmp.h>
-#include "../gmp_compat.h"   /* mpz_prevprime fallback for GMP < 6.3.0 */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"
 
 /* During the Newton search for p_n, stop iterating once pi(x) is within this
  * many primes of n, then finish with a nextprime/prevprime walk. */
@@ -61,34 +61,69 @@ static int prime_parse_method(const Expr* val, PrimeCountMethod *out) {
     return 1;
 }
 
+/* PrimePi[x]: the number of primes <= x, for any real x (a non-integer is
+ * floored; an exact numeric such as Pi or E^10 is floored exactly; Infinity
+ * is Infinity and -Infinity, like any x < 2, gives 0). As in Mathematica:
+ * PrimePi[] draws PrimePi::argx, a non-rule extra argument ::nonopt and an
+ * unknown option ::optx, all leaving the call unevaluated; an unrecognised
+ * Method value leaves it unevaluated silently; ProgressReporting is accepted
+ * and ignored. Symbolic and complex x stay unevaluated. */
 Expr* builtin_primepi(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 1) return NULL;
+    if (argc < 1) {
+        mth_message_gated(g_arith_warnings_muted, "PrimePi", "argx",
+                          "PrimePi called with 0 arguments; 1 argument is expected.");
+        return NULL;
+    }
     Expr* x_expr = res->data.function.args[0];
 
-    /* Parse trailing Method -> _ options; anything else leaves it unevaluated. */
     PrimeCountMethod method = PC_AUTOMATIC;
     for (size_t i = 1; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if ((head_is(opt, SYM_Rule) || head_is(opt, SYM_RuleDelayed))
-            && opt->type == EXPR_FUNCTION && opt->data.function.arg_count == 2) {
-            Expr* lhs = opt->data.function.args[0];
-            Expr* rhs = opt->data.function.args[1];
-            if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_Method) {
-                if (!prime_parse_method(rhs, &method)) {
-                    if (!arith_warnings_muted()) {
-                        char* s = expr_to_string(rhs);
-                        mth_message("PrimePi", "method", "%s is not a recognised setting for Method.", s ? s : "?");
-                        free(s);
-                    }
-                    return NULL;
-                }
-                continue;
-            }
+        bool is_rule = (head_is(opt, SYM_Rule) || head_is(opt, SYM_RuleDelayed))
+                       && opt->data.function.arg_count == 2;
+        if (!is_rule) {
+            char* bad = expr_to_string(opt);
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "PrimePi", "nonopt",
+                "Options expected (instead of %s) beyond position 1 in %s. "
+                "An option must be a rule or a list of rules.", bad ? bad : "?", call ? call : "?");
+            free(bad); free(call);
+            return NULL;
         }
-        return NULL;   /* unrecognised extra argument */
+        Expr* lhs = opt->data.function.args[0];
+        Expr* rhs = opt->data.function.args[1];
+        const char* name = lhs->type == EXPR_SYMBOL ? lhs->data.symbol.name : NULL;
+        if (name == SYM_Method) {
+            if (!prime_parse_method(rhs, &method)) return NULL;
+        } else if (!(name && strcmp(name, "ProgressReporting") == 0)) {
+            char* kname = expr_to_string(lhs);
+            char* call = expr_to_string(res);
+            mth_message_gated(g_arith_warnings_muted, "PrimePi", "optx",
+                "Unknown option %s in %s.", kname ? kname : "?", call ? call : "?");
+            free(kname); free(call);
+            return NULL;
+        }
     }
+
+    /* Infinity and -Infinity. */
+    if (x_expr->type == EXPR_SYMBOL && x_expr->data.symbol.name == SYM_Infinity)
+        return expr_new_symbol(SYM_Infinity);
+    if (head_is(x_expr, SYM_DirectedInfinity) && x_expr->data.function.arg_count == 1) {
+        int64_t dir = 0;
+        Expr* d = x_expr->data.function.args[0];
+        if (d->type == EXPR_INTEGER) dir = d->data.integer;
+        if (dir == 1) return expr_new_symbol(SYM_Infinity);
+        if (dir == -1) return expr_new_integer(0);
+        return NULL;
+    }
+    if (head_is(x_expr, SYM_Times) && x_expr->data.function.arg_count == 2 &&
+        x_expr->data.function.args[0]->type == EXPR_INTEGER &&
+        x_expr->data.function.args[0]->data.integer == -1 &&
+        x_expr->data.function.args[1]->type == EXPR_SYMBOL &&
+        x_expr->data.function.args[1]->data.symbol.name == SYM_Infinity)
+        return expr_new_integer(0);
 
     /* Resolve x to an int64 floor. */
     int64_t x_val;
@@ -109,6 +144,16 @@ Expr* builtin_primepi(Expr* res) {
         if (is_rational(x_expr, &n, &d)) {
             x_val = n / d;
             if (n < 0 && n % d != 0) x_val--;
+        } else if (expr_is_numeric_quantity(x_expr)) {
+            /* An exact real numeric (Pi, E^10): its exact Floor. A complex
+             * value leaves Floor unevaluated or non-integer, so the call
+             * stays as it is. */
+            Expr* fl_args[1] = { expr_copy(x_expr) };
+            Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor), fl_args, 1));
+            bool ok = fl->type == EXPR_INTEGER;
+            x_val = ok ? fl->data.integer : 0;
+            expr_free(fl);
+            if (!ok) return NULL;
         } else {
             return NULL;
         }
@@ -125,41 +170,43 @@ Expr* builtin_primepi(Expr* res) {
 /* ------------------------------------------------------------------ */
 
 /* Portable mpz <- int64 (avoids assuming a 64-bit long). */
-static void mpz_set_i64(mpz_t r, int64_t v) {
-    int neg = (v < 0);
-    uint64_t u = neg ? (uint64_t)(-(v + 1)) + 1u : (uint64_t)v;
-    mpz_set_ui(r, (unsigned long)(u >> 32));
-    mpz_mul_2exp(r, r, 32);
-    mpz_add_ui(r, r, (unsigned long)(u & 0xFFFFFFFFULL));
-    if (neg) mpz_neg(r, r);
-}
 
 /* Cipolla's asymptotic approximation to p_n (accurate for large n). */
+/* li(x) by Ramanujan's series, fast-converging for x > 1. */
+static double prime_li(double x) {
+    const double gamma = 0.57721566490153286061;
+    double L = log(x), sum = 0.0, term = 1.0, inner = 0.0;
+    for (int k = 1; k < 200; k++) {
+        term *= L / (double)k;                              /* L^k / k! */
+        if ((k - 1) % 2 == 0) inner += 1.0 / (double)k;     /* sum_{j <= (k-1)/2} 1/(2j+1) */
+        double t = ((k % 2) ? 1.0 : -1.0) * term / ldexp(1.0, k - 1) * inner;
+        sum += t;
+        if (fabs(t) < 1e-17 * fabs(sum)) break;
+    }
+    return gamma + log(L) + sqrt(x) * sum;
+}
+
+/* Riemann's R(x) to three terms: li(x) - li(x^1/2)/2 - li(x^1/3)/3. Its error
+ * against pi(x) is O(sqrt(x)/ln x), far below li's own bias, so the n-th prime
+ * it predicts is a few sqrt(p_n) numbers from the true one. */
+static double prime_R(double x) {
+    double r = prime_li(x);
+    if (x > 4.0) r -= prime_li(sqrt(x)) / 2.0;
+    if (x > 8.0) r -= prime_li(cbrt(x)) / 3.0;
+    return r;
+}
+
+/* p_n estimated by Newton on R(x) = n, from the classical asymptotic start. */
 static double prime_estimate(double n) {
     double L  = log(n);
     double LL = log(L);
-    return n * (L + LL - 1.0
-                + (LL - 2.0) / L
-                - (LL * LL - 6.0 * LL + 11.0) / (2.0 * L * L));
-}
-
-/* Given an anchor x with pi(x) == c, walk to the exact nth prime via GMP. */
-static Expr* prime_walk(int64_t x, int64_t c, int64_t n) {
-    mpz_t cur;
-    mpz_init(cur);
-    mpz_set_i64(cur, x);
-
-    if (n > c) {
-        for (int64_t k = n - c; k > 0; k--) mpz_nextprime(cur, cur);
-    } else {
-        mpz_add_ui(cur, cur, 1);
-        mathilda_mpz_prevprime(cur, cur);
-        for (int64_t k = c - n; k > 0; k--) mathilda_mpz_prevprime(cur, cur);
+    double x = n * (L + LL - 1.0 + (LL - 2.0) / L);
+    for (int i = 0; i < 8; i++) {
+        double nx = x - (prime_R(x) - n) * log(x);
+        if (fabs(nx - x) < 0.5) { x = nx; break; }
+        x = nx;
     }
-
-    Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(cur));
-    mpz_clear(cur);
-    return out;
+    return x;
 }
 
 /* Emit `Prime::intpp: Positive integer argument expected in <call>.` */
@@ -221,7 +268,8 @@ Expr* builtin_prime(Expr* res) {
     if (n <= table_size)
         return expr_new_integer((int64_t)primecount_small_prime(n));
 
-    /* Large n: estimate, Newton-refine against the exact counter, then walk. */
+    /* Large n: estimate p_n from Riemann's R, count exactly there (a second
+     * count only if the estimate was unexpectedly far off), then sieve. */
     double est = prime_estimate((double)n);
     if (!(est <= (double)PI_COUNT_MAX)) return NULL;   /* out of range / NaN */
 
@@ -246,5 +294,7 @@ Expr* builtin_prime(Expr* res) {
         if (c < 0) return NULL;
     }
 
-    return prime_walk(x, c, n);
+    /* Sieve the gap (O(sqrt x) numbers from the R estimate) to the n-th prime. */
+    int64_t p = primecount_nth_from(x, c, n);
+    return p > 0 ? expr_new_integer(p) : NULL;
 }

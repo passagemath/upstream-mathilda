@@ -460,6 +460,7 @@ extern const char* SYM_NonCommutativeMultiply;
 extern const char* SYM_NonNegative;
 extern const char* SYM_NonPositive;
 extern const char* SYM_NegativeDefiniteMatrixQ;
+extern const char* SYM_NextPrime;
 extern const char* SYM_NonConstants;
 extern const char* SYM_None;
 extern const char* SYM_Normalize;

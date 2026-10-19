@@ -456,6 +456,7 @@ const char* SYM_NonCommutativeMultiply = NULL;
 const char* SYM_NonNegative = NULL;
 const char* SYM_NonPositive = NULL;
 const char* SYM_NegativeDefiniteMatrixQ = NULL;
+const char* SYM_NextPrime = NULL;
 const char* SYM_NonConstants = NULL;
 const char* SYM_None = NULL;
 const char* SYM_NormFunction = NULL;
@@ -1476,6 +1477,7 @@ void sym_names_init(void) {
     SYM_NonNegative                = intern_symbol("NonNegative");
     SYM_NonPositive                = intern_symbol("NonPositive");
     SYM_NegativeDefiniteMatrixQ    = intern_symbol("NegativeDefiniteMatrixQ");
+    SYM_NextPrime                  = intern_symbol("NextPrime");
     SYM_NonConstants               = intern_symbol("NonConstants");
     SYM_None                       = intern_symbol("None");
     SYM_NormFunction               = intern_symbol("NormFunction");

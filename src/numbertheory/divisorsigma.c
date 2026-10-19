@@ -46,54 +46,6 @@ static bool ds_is_rule(const Expr* a) {
         && a->data.function.arg_count == 2;
 }
 
-/* Read the options after the two positional arguments. Every option is
- * validated, left to right, with Mathematica's messages: a non-rule is
- * `nonopt`, a name other than GaussianIntegers is `optx`, and a value other
- * than True / False is `opttf`; any of them leaves the call unevaluated
- * (returns false). Of repeated GaussianIntegers settings the FIRST wins, as in
- * Mathematica. An absent option leaves *set false. */
-static bool ds_parse_options(Expr* res, size_t first, bool* gaussian, bool* set) {
-    size_t argc = res->data.function.arg_count;
-    Expr** args = res->data.function.args;
-    *set = false;
-    for (size_t i = first; i < argc; i++) {
-        Expr* opt = args[i];
-        if (!ds_is_rule(opt)) {
-            char* bad = expr_to_string(opt);
-            char* call = expr_to_string(res);
-            mth_message_gated(g_arith_warnings_muted, "DivisorSigma", "nonopt",
-                "Options expected (instead of %s) beyond position %zu in %s. "
-                "An option must be a rule or a list of rules.",
-                bad ? bad : "?", first, call ? call : "?");
-            free(bad); free(call);
-            return false;
-        }
-        Expr* key = opt->data.function.args[0];
-        Expr* val = opt->data.function.args[1];
-        if (!(key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_GaussianIntegers)) {
-            /* Mathematica names a string option without its quotes. */
-            char* kname = key->type == EXPR_STRING ? NULL : expr_to_string(key);
-            char* call = expr_to_string(res);
-            mth_message_gated(g_arith_warnings_muted, "DivisorSigma", "optx",
-                "Unknown option %s in %s.",
-                key->type == EXPR_STRING ? key->data.string : (kname ? kname : "?"),
-                call ? call : "?");
-            free(kname); free(call);
-            return false;
-        }
-        const char* v = val->type == EXPR_SYMBOL ? val->data.symbol.name : NULL;
-        if (v != SYM_True && v != SYM_False) {
-            char* bad = expr_to_string(opt);
-            mth_message_gated(g_arith_warnings_muted, "DivisorSigma", "opttf",
-                "Value of option %s should be True or False.", bad ? bad : "?");
-            free(bad);
-            return false;
-        }
-        if (!*set) { *gaussian = (v == SYM_True); *set = true; }
-    }
-    return true;
-}
-
 /* Prime atom for the multiplicative sigma_k formula: a rational integer (when
  * v == 0) or the Gaussian integer Complex[u, v]. */
 static Expr* ds_prime_atom(const mpz_t u, const mpz_t v) {
@@ -315,7 +267,8 @@ Expr* builtin_divisorsigma(Expr* res) {
     if (npos != 2) return divisorsigma_emit_argcount(npos);
 
     bool gaussian = false, gaussian_set = false;
-    if (!ds_parse_options(res, 2, &gaussian, &gaussian_set)) return NULL;
+    if (!nt_parse_gaussian_options(res, 2, "DivisorSigma", &gaussian, &gaussian_set))
+        return NULL;
 
     Expr* k = args[0];
     Expr* n = args[1];

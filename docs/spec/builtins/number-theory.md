@@ -449,9 +449,17 @@ Out[4]= {1, 2, 4, 5, 7, 8}
 
 **Features**:
 - `Listable`, `Protected`.
-- Always returns `True` or `False`. For non-integer / non-Gaussian
-  inputs (symbols, `Sqrt[2]`, `Exp[2 Pi I/3]`, strings, etc.) returns
-  `False` — `*Q` predicates never remain symbolic.
+- Every well-formed call returns `True` or `False`. Non-integer and non-Gaussian
+  inputs (symbols, `Sqrt[2]`, `Exp[2 Pi I/3]`, strings, etc.) give `False`.
+- A **malformed** call stays unevaluated with Mathematica's message: `PrimeQ[]` →
+  `PrimeQ::argx`, `PrimeQ[1, 2]` → `::nonopt`, an unknown option → `::optx`, and
+  `GaussianIntegers -> Automatic` → `::opttf`. (Before v0.472 these gave `False`.)
+- Packed `int64` buffers answer in one pass with a packed `True`/`False` List
+  (`ndint_primeq`). Dense small values (max ≤ 2²⁶ with at least max/64 elements)
+  use a byte sieve; anything else uses the scalar's deterministic Miller–Rabin.
+  `PrimeQ[Range[10^6]]` went from 0.53 s to 0.004 s (Mathematica 0.32 s).
+  `PrimeQ[n]` compiles to `OP_PRIMEQ_I`; the direct array form is in the
+  coverage BASELINE with the other boolean predicates.
 - A Gaussian integer `a + b I` is a Gaussian prime if:
   - Both `a` and `b` are nonzero and `a^2 + b^2` is an ordinary prime, or
   - One of `a`, `b` is zero and the absolute value of the other is a prime congruent to 3 mod 4.
@@ -546,10 +554,12 @@ Out[5]= PrimePowerQ[3.2912]
 **Features**:
 - `Listable`, `Protected`.
 - Small `n` is read directly from a sieve table of the primes below $10^6$.
-- Large `n` inverts `PrimePi`: a Cipolla asymptotic estimate for $p_n$ is refined
-  by a Newton step against the exact prime counter, then `NextPrime`/`PrevPrime`
-  steps land exactly on $p_n$.  Exact for `n` up to about $1.4 \times 10^{12}$
-  ($p_n \le 5 \times 10^{13}$); beyond that the call is left unevaluated.
+- Large `n` (v0.472):
+  - $p_n$ is estimated by Newton on Riemann's $R(x) \approx \mathrm{li}(x) - \mathrm{li}(\sqrt x)/2 - \mathrm{li}(x^{1/3})/3$, which is within $O(\sqrt{p_n})$.
+  - **One** exact `PrimePi` is taken there; a second only if the estimate is far off.
+  - The short gap to $p_n$ is closed with a segmented sieve (`primecount_nth_from`) instead of stepping `NextPrime` over up to $10^6$ primes.
+  - Timings: `Prime[10^9]` went from 0.24 s to 0.018 s, `Prime[10^11]` takes 0.41 s and `Prime[10^12]` 2.4 s. Mathematica takes 1.4 ms for `Prime[10^9]` (from tables), but 3.0 s for `Prime[10^11]` and 15.7 s for `Prime[10^12]`.
+  - Exact for $p_n \le 5 \times 10^{13}$ ($n \approx 1.6 \times 10^{12}$); beyond that the call is left unevaluated.
 - A non-positive-integer argument emits `Prime::intpp`; a wrong argument count
   emits `Prime::argx`; both leave the call unevaluated.
 
@@ -576,20 +586,19 @@ Out[3]= 252097800623
 
 **Features**:
 - `Listable`, `Protected`.  Default `Method -> Automatic`.
-- Several recognised prime-counting algorithms are available via `Method`:
-  `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`,
-  `"Lehmer"`, `"LMO"` (Lagarias-Miller-Odlyzko, segmented special leaves),
-  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `"DelegliseRivat"` refines `"LMO"`
-  by classifying special leaves as trivial / easy / hard and answering the
-  trivial and easy ones with $O(1)$ prime-count lookups, sending only the hard
-  leaves through the segmented sieve; it is the fastest combinatorial method here
-  (≈ 1.6 s at $10^{12}$, 9.9 s at $10^{13}$).  `Automatic` selects an efficient
-  method for the magnitude of `x` (a direct sieve table below $10^6$,
-  `"LucyHedgehog"` up to $10^9$, then `"DelegliseRivat"`).  The combinatorial
-  methods exact-count up to $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are
-  intended for smaller `x`.
-- An unrecognised `Method` setting emits `PrimePi::method` and leaves the call
-  unevaluated.
+- Several recognised prime-counting algorithms are available via `Method`: `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`, `"Lehmer"`, `"LMO"` (Lagarias–Miller–Odlyzko, segmented special leaves), `"DelegliseRivat"` and `"LucyHedgehog"`. They are independent implementations, and the tests cross-check them.
+- **`"DelegliseRivat"` is the `Automatic` method** (v0.472), above the $10^6$ table. It is tuned:
+  - $y = \alpha x^{1/3}$ with $\alpha = 0.0008 \ln^3 x$, which shrinks the sieve range $z = x/y$ by $\alpha$.
+  - Trivial leaves ($v < p_b$) are counted, not visited.
+  - Easy leaves ($v < p_{b-1}^2$) are answered from the $\pi$ table, and above $\sqrt z$ only prime $m$ are walked.
+  - Hard leaves (levels with $p_{b-1} \le \sqrt z$ only) use a bitset sieve with monotone popcount sweeps in place of a Fenwick tree.
+  - Leaf quotients come from a precomputed $1/m$ with an exact correction.
+  - Fixing the "easy" formula for general $y$ ($\varphi = 1$ when $v < p_b$) is what made $\alpha > 1$ correct.
+  - Timings, against the untuned $y = x^{1/3}$ version (one core): $10^{11}$ 0.54 → 0.04 s, $10^{12}$ 4.4 → 0.20 s, $10^{13}$ 40 → 1.06 s, $5\cdot10^{13}$ 3.4 s.
+  - Mathematica answers `PrimePi[10^12]` in 0.088 s in a fresh kernel, and near $10^{14}$ to $10^{15}$ in under half a second, which points to precomputed checkpoints. Mathilda has no tables and stops at $5 \times 10^{13}$.
+- `x` may be any real: a non-integer is floored (an exact numeric such as `Pi` or `E^10` exactly). `PrimePi[Infinity]` is `Infinity` and `PrimePi[-Infinity]` is 0. Complex and symbolic `x` stay unevaluated.
+- Messages (v0.472, as in Mathematica): `PrimePi::argx` for no argument, `::nonopt` for a non-rule extra argument, `::optx` for an unknown option. An unrecognised `Method` value leaves the call unevaluated silently (it used to draw `PrimePi::method`).
+- Options: `{Method -> Automatic, ProgressReporting :> $ProgressReporting}`. `ProgressReporting` is accepted and has no effect.
 
 ```mathematica
 In[1]:= PrimePi[10^9]
@@ -608,9 +617,12 @@ Out[3]= {4, 25}
 - `NextPrime[x, k]`: $k$-th next prime above `x` (or previous if $k$ is negative).
 
 **Features**:
-- `Protected`.
-- Supports negative $k$ for finding previous primes.
-- Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
+- `Protected`, **not** `Listable` (as in Mathematica), but a list in either argument is threaded explicitly: `NextPrime[{4, 10}, 2]` → `{7, 13}`, `NextPrime[4, {1, 2}]` → `{5, 7}`.
+- **Negative primes count**, as in Mathematica (v0.472). The primes are ordered …, −7, −5, −3, −2, 2, 3, 5, 7, …, so `NextPrime[-10]` → `-7`, `NextPrime[2, -1]` → `-2` and `NextPrime[3, -2]` → `-2`. Before v0.472, `NextPrime[-10]` was `2` and `NextPrime[2, -1]` stayed unevaluated.
+- `NextPrime[x, 0]` is `x` when `x` is a (signed) prime, and unevaluated otherwise.
+- A real or rational `x` starts from `Floor[x]` going up and `Ceiling[x]` going down: `NextPrime[2.5, -1]` → `2`.
+- A non-integer `k` leaves the call unevaluated. A wrong argument count draws `NextPrime::argt`.
+- Checked against Mathematica on the full grid $x \in [-15, 15]$, $k \in [-3, 3]$, plus non-integer starts.
 
 ## FactorInteger
 
@@ -1025,6 +1037,12 @@ Out[6]= 1
 
 ## PrimeOmega
 
+> v0.472: `Options[PrimeOmega]` is `{GaussianIntegers -> False}`, as in
+> Mathematica. An inexact argument draws `PrimeOmega::exact`, and option
+> errors draw `::nonopt` / `::optx` / `::opttf` through the shared
+> `nt_parse_gaussian_options`. Non-integers such as `PrimeOmega[1/12]` stay
+> unevaluated, as in Mathematica.
+
 - `PrimeOmega[n]`: the number of prime factors of `n` counted **with
   multiplicity**, `Omega(n)`. For `n = u p_1^k_1 ... p_m^k_m` with `u` a unit
   and `p_i` primes, `PrimeOmega[n] = k_1 + ... + k_m`. This is the exponent sum
@@ -1066,6 +1084,14 @@ Out[6]= 5
 ```
 
 ## PrimeNu
+
+> v0.472: `Options[PrimeNu]` is `{GaussianIntegers -> False}`. An inexact
+> argument draws `PrimeNu::exact`, and option errors draw `::nonopt` /
+> `::optx` / `::opttf`.
+>
+> **Deliberate difference:** for `PrimeNu[5, Foo -> 1]` Mathematica returns
+> `1` with `OptionValue::nodef`, which looks like a Mathematica bug; Mathilda
+> draws `PrimeNu::optx` and stays unevaluated.
 
 - `PrimeNu[n]`: the number of **distinct** prime factors of `n`, `nu(n)`. For
   `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` distinct primes,

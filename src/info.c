@@ -4956,7 +4956,17 @@ void info_init(void) {
 
     // Primes
     symtab_set_docstring("Divisors", "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.");
-    symtab_set_docstring("DivisorSigma", "DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.");
+    symtab_set_docstring("DivisorSigma",
+        "DivisorSigma[k, n]\n"
+        "\tThe divisor function sigma_k(n): the sum of d^k over the positive divisors d of n.\n"
+        "DivisorSigma[k, n, GaussianIntegers -> True]\n"
+        "\tSums over the Gaussian-integer divisors of n (first-quadrant associates).\n"
+        "\tInteger k gives an exact Integer (k >= 0) or Rational (k < 0); k = 0 counts the divisors.\n"
+        "\tMachine-real k gives a Real; rational, symbolic or complex k gives the closed form\n"
+        "\tProduct over p^e || n of (p^((e+1) k) - 1)/(p^k - 1).\n"
+        "\tn must be a nonzero integer (its sign is ignored); a Gaussian integer n switches to Z[i]\n"
+        "\tautomatically. Other n, and n = 0, stay unevaluated.\n"
+        "\tOption: GaussianIntegers -> False (default) | True. Listable.");
     symtab_set_docstring("MoebiusMu", "MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].");
     symtab_set_docstring("LiouvilleLambda", "LiouvilleLambda[n] gives the Liouville function lambda(n) = (-1)^Omega(n), where Omega(n) counts the prime factors of n with multiplicity. Completely multiplicative. A non-real Gaussian-integer argument, or GaussianIntegers -> True, is handled over Z[i].");
     symtab_set_docstring("PrimeOmega", "PrimeOmega[n] gives the number of prime factors of n counted with multiplicity, Omega(n). PrimeOmega[n, GaussianIntegers -> True] (or a non-real Gaussian-integer n) counts Gaussian prime factors over Z[i]. PrimeOmega[1] is 0; PrimeOmega[0] is left unevaluated.");

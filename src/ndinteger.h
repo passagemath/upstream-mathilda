@@ -51,6 +51,18 @@ void ndinteger_init(void);
  *              read the buffer directly instead of materialising 10^6 Integers
  *              only to read each one back out again.
  */
+/* ---- DivisorSigma's machine helper -------------------------------------- *
+ * sigma_k(n) in int64, shared by every machine surface of DivisorSigma (the
+ * NDArray kernel and its sieve, Compile's OP_DSIG_I, the scalar builtin), so
+ * all four agree by construction. Both return false -- DECLINE, never wrap --
+ * for k < 0, for any overflow, and (ndint_divisor_sigma_i64) for n == 0 or
+ * |n| past the trial-division ceiling; the caller then answers through GMP.
+ * ndint_sigma_from_factors takes a factorisation the caller already has
+ * (distinct primes p[0..np) with exponents e[0..np)). */
+bool ndint_divisor_sigma_i64(int64_t k, int64_t n, int64_t* out);
+bool ndint_sigma_from_factors(int64_t k, const int64_t* p, const int* e, int np,
+                              int64_t* out);
+
 Expr* ndint_prime(Expr* res);          /* Prime[arr] */
 Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */

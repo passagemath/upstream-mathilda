@@ -327,6 +327,20 @@ typedef struct {
     bool (*to_int_r)(double m, double n, int64_t* out);
     bool (*to_int_i)(int64_t m, int64_t n, int64_t* out);
     bool to_int;
+
+    /* Optional WHOLE-BUFFER twin of `to_int_i`, for a head whose best
+     * algorithm over an array is not its per-element one -- DivisorSigma over
+     * Range[10^7] wants one smallest-prime-factor sieve, not 10^7 trial
+     * divisions. Called by ndarray_map_binary in place of the `to_int_i` loop
+     * when the buffer is int64 and the broadcast scalar an exact Integer, with
+     * the same CALL-order convention (`arr_first` says which side the buffer
+     * was on). Fills out[0..sz) and returns true, or returns false to DECLINE,
+     * in which case the per-element `to_int_i` loop runs exactly as before --
+     * so a whole-buffer arm is purely a performance choice, never a semantic
+     * one, and its answers must be bit-identical to `to_int_i`'s. NULL (the
+     * default for every positional initialiser) means "no such arm". */
+    bool (*whole_i)(const int64_t* in, size_t sz, int64_t scal, bool arr_first,
+                    int64_t* out);
 } NDBinaryKernel;
 
 /* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,

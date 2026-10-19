@@ -138,30 +138,116 @@ static bool ndk_LCM_ii(int64_t a, int64_t b, int64_t* out) {
     return !ci_mul_i64(x / g, y, out);
 }
 
-/* DivisorSigma[k, n] = prod_i (1 + p^k + ... + p^(e_i k)).
+/* DivisorSigma[k, n] = prod_i (1 + q_i + q_i^2 + ... + q_i^e_i),  q_i = p_i^k.
  *
- * Argument order is the CALL order, which ndarray_map_binary composes for
- * either operand position -- so `k` is always the first argument and `n` the
- * second, whichever of the two was the array. Declines n == 0 (unevaluated in
- * the scalar builtin) and k < 0 (sigma_-1[6] is 2, a Rational, which no int64
- * buffer holds). The sign of n is ignored, matching the builtin. */
-static bool ndk_DivisorSigma_ii(int64_t k, int64_t n, int64_t* out) {
-    if (n == 0 || k < 0) return false;
-    int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np;
-    if (!ndi_factor(n, p, e, &np)) return false;
+ * The shared helper behind every machine surface of DivisorSigma: the element
+ * kernel below, its sieve twin, the Compile VM's OP_DSIG_I and the scalar
+ * builtin's machine path all reach this one function, so the four answers are
+ * the same int64 by construction. q is raised once per prime and the geometric
+ * sum is Horner's, so a prime of multiplicity e costs e multiply-adds rather
+ * than e powerings. Declines k < 0 (sigma_-1[6] is 2 only by luck: sigma_-2[10]
+ * is 13/10, a Rational, which no int64 holds) and any overflow. */
+bool ndint_sigma_from_factors(int64_t k, const int64_t* p, const int* e, int np,
+                              int64_t* out) {
+    if (k < 0) return false;
     int64_t total = 1;
     for (int i = 0; i < np; i++) {
-        int64_t term = 1, pk = 1;
+        int64_t q, term = 1;
+        if (ci_powi_i64(p[i], k, &q)) return false;
         for (int j = 0; j < e[i]; j++) {
-            int64_t step;
-            if (ci_powi_i64(p[i], k, &step)) return false;
-            if (ci_mul_i64(pk, step, &pk)) return false;
-            if (ci_add_i64(term, pk, &term)) return false;
+            if (ci_mul_i64(term, q, &term)) return false;
+            if (ci_add_i64(term, 1, &term)) return false;
         }
         if (ci_mul_i64(total, term, &total)) return false;
     }
     *out = total;
     return true;
+}
+
+/* Argument order is the CALL order, which ndarray_map_binary composes for
+ * either operand position -- so `k` is always the first argument and `n` the
+ * second, whichever of the two was the array. Declines n == 0 (unevaluated in
+ * the scalar builtin) as well as everything ndint_sigma_from_factors declines.
+ * The sign of n is ignored, matching the builtin. */
+bool ndint_divisor_sigma_i64(int64_t k, int64_t n, int64_t* out) {
+    if (n == 0 || k < 0) return false;
+    int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np;
+    if (!ndi_factor(n, p, e, &np)) return false;
+    return ndint_sigma_from_factors(k, p, e, np, out);
+}
+
+static bool ndk_DivisorSigma_ii(int64_t k, int64_t n, int64_t* out) {
+    return ndint_divisor_sigma_i64(k, n, out);
+}
+
+/* ---- DivisorSigma over a whole buffer: one smallest-prime-factor sieve ----- *
+ * Per element, ndi_factor is trial division, O(sqrt(n)): over Range[10^7] that
+ * is ~10^3 divisions an element and the array cost grows as N^1.5 (18 s at
+ * 10^7 against 0.66 s at 10^6). A smallest-prime-factor table to max|n| makes
+ * every factorisation O(Omega(n)) table reads after one O(max log log max)
+ * pass, so the array costs about what the sieve does.
+ *
+ * The table covers ODD m only, and stores the smallest prime factor of a
+ * composite m (or 0 for a prime). That factor is at most sqrt(max) < 2^16 for
+ * every max this ever sieves to, so a uint16 suffices: one byte per integer of
+ * range, the same footprint as Prime's byte sieve, under the same ceilings. */
+#define NDI_SPF_FREE  ((int64_t)4000000)    /* 2 MB, always worth building */
+#define NDI_SPF_MAX   ((int64_t)50000000)   /* 25 MB, the hard ceiling     */
+
+static bool ndk_DivisorSigma_whole(const int64_t* in, size_t sz, int64_t scal,
+                                   bool arr_first, int64_t* out) {
+    /* Only DivisorSigma[k, arr]: an array of k is not a factoring workload. */
+    if (arr_first) return false;
+    int64_t k = scal;
+    if (k < 0 || sz == 0) return false;
+
+    int64_t nmax = 0;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t v = in[i];
+        if (v == 0 || v == INT64_MIN) return false;      /* per-element path decides */
+        if (v < 0) v = -v;
+        if (v > nmax) nmax = v;
+    }
+    if (nmax > NDI_SPF_MAX) return false;
+    /* Past _FREE the sieve must be paid for by the elements. Measured (Apple
+     * M-series, 2026-10-19): the sieve costs ~6.5 ns per integer of range and
+     * trial division ~1.5 ns per unit of sqrt(n) per element (10.6 us an
+     * element near 5*10^7), so the sieve wins once sz >= ~4.3 sqrt(max) --
+     * 30000 elements at the 5*10^7 ceiling, where it is a 0.3 s build. */
+    if (nmax > NDI_SPF_FREE && (double)sz < 4.0 * sqrt((double)nmax))
+        return false;
+
+    size_t half = (size_t)(nmax / 2) + 1;               /* odd m -> m >> 1 */
+    uint16_t* spf = (uint16_t*)calloc(half, sizeof(uint16_t));
+    if (!spf) return false;
+    for (int64_t q = 3; q * q <= nmax; q += 2) {
+        if (spf[q >> 1]) continue;                        /* q composite */
+        for (int64_t j = q * q; j <= nmax; j += 2 * q)
+            if (!spf[j >> 1]) spf[j >> 1] = (uint16_t)q;
+    }
+
+    bool ok = true;
+    for (size_t i = 0; i < sz && ok; i++) {
+        int64_t m = in[i] < 0 ? -in[i] : in[i];
+        int64_t p[NDI_MAX_FACTORS]; int e[NDI_MAX_FACTORS]; int np = 0;
+        if ((m & 1) == 0) {
+            p[np] = 2; e[np] = 0;
+            while ((m & 1) == 0) { e[np]++; m >>= 1; }
+            np++;
+        }
+        /* Walk the smallest-factor chain: one exact division per prime
+         * factor (with multiplicity), never a trial one. Factors arrive in
+         * ascending order, so a repeat of the last prime bumps its exponent. */
+        while (m > 1) {
+            int64_t q = spf[m >> 1] ? (int64_t)spf[m >> 1] : m;
+            m /= q;
+            if (np > 0 && p[np - 1] == q) e[np - 1]++;
+            else { p[np] = q; e[np] = 1; np++; }
+        }
+        ok = ndint_sigma_from_factors(k, p, e, np, &out[i]);
+    }
+    free(spf);
+    return ok;
 }
 
 /* Integer-only descriptors: no `cplx`, no `real`, `real_closed` false. Every
@@ -177,11 +263,11 @@ static const NDUnaryKernel NDKU_EulerPhi =
 static const NDUnaryKernel NDKU_MoebiusMu =
     { NULL, NULL, false, false, NULL, ndk_MoebiusMu_ii, true };
 static const NDBinaryKernel NDKB_GCD =
-    { NULL, false, NULL, ndk_GCD_ii, true };
+    { NULL, false, NULL, ndk_GCD_ii, true, NULL };
 static const NDBinaryKernel NDKB_LCM =
-    { NULL, false, NULL, ndk_LCM_ii, true };
+    { NULL, false, NULL, ndk_LCM_ii, true, NULL };
 static const NDBinaryKernel NDKB_DivisorSigma =
-    { NULL, false, NULL, ndk_DivisorSigma_ii, true };
+    { NULL, false, NULL, ndk_DivisorSigma_ii, true, ndk_DivisorSigma_whole };
 
 /* ---------------------------------------------------------------------------
  *  Head-level buffer paths.

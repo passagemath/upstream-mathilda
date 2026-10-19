@@ -24,6 +24,7 @@
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
 #include "../facint.h"           /* mth_prime_power_base_u64 — OP_PPQ_I */
+#include "../ndinteger.h"        /* ndint_divisor_sigma_i64 — OP_DSIG_I */
 #include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
@@ -201,6 +202,15 @@ static long long int_ppq(long long n) {
     unsigned long long m = (n >= 0) ? (unsigned long long)n
                                     : 0ULL - (unsigned long long)n;
     return mth_prime_power_base_u64((uint64_t)m, NULL) ? 1 : 0;
+}
+
+/* DivisorSigma[k, n] in int64 (Slot registers are long long, the shared helper
+ * takes int64_t -- same width, distinct types on glibc).  Returns true to BAIL. */
+static bool int_dsig(long long k, long long n, long long* out) {
+    int64_t r;
+    if (!ndint_divisor_sigma_i64((int64_t)k, (int64_t)n, &r)) return true;
+    *out = (long long)r;
+    return false;
 }
 
 /* Largest e with base^e dividing n.  IntegerExponent[0, b] is Infinity in the
@@ -1105,6 +1115,9 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
             OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
+            /* Not IOP: a decline is "no machine answer" (DivisorSigma[k, 0]),
+             * not an overflow check that IF_NOCHK may waive. */
+            OP(DSIG_I):  if (int_dsig(RA.i, RB.i, &RD.i)) goto vm_fail; NEXT();
             /* Ternary, so the operands are a RUN of registers starting at `a`
              * (the K_NARY shape KERNN uses), not the two operand fields. */
             OP(POWMOD_I): IOP(int_powmod(R[c->a].i, R[c->a + 1].i, R[c->a + 2].i, &RD.i));

@@ -797,26 +797,47 @@ Out[6]= {1, 3}
 - `DivisorSigma[k, n, GaussianIntegers -> True]`: the sum over Gaussian-integer
   divisors.
 
-**Options**:
+**Options** (`Options[DivisorSigma]` is `{GaussianIntegers -> False}`):
 - `GaussianIntegers -> False` (default): ordinary integer divisors. Set to
   `True` to sum over the divisors in `Z[i]`. A non-real Gaussian-integer input
-  (e.g. `3 + I`) auto-enables Gaussian mode.
+  (e.g. `3 + I`) auto-enables Gaussian mode. `Rule` and `RuleDelayed` are both
+  accepted; of repeated settings the first wins.
 
 **Features**:
-- `Listable`, `NHoldAll`, `Protected`.
-- Computed from the multiplicative formula
-  `sigma_k(n) = Product_i (p_i^((e_i+1) k) - 1) / (p_i^k - 1)` for
-  `n = Product_i p_i^e_i`, so a single path serves every exponent type: exact
-  integers and rationals for integer `k`, and symbolic / radical forms for
-  symbolic or rational `k`. `k == 0` returns the divisor count `sigma_0(n)`.
+- `Listable`, `NHoldAll`, `Protected` (as in Mathematica 14, so
+  `N[DivisorSigma[2, n]]` keeps the exact `2`).
+- Three evaluation paths, chosen by `k` (`n` an ordinary integer):
+  - **Machine `Integer` `k`** — exact, straight from the prime factorisation:
+    an `Integer` for `k >= 0` and, through `sigma_-k(n) = sigma_k(n)/n^k`, a
+    `Rational` in lowest terms for `k < 0`. A machine answer for
+    `|n| <= 2^20` comes from the same int64 helper as the packed kernel and
+    `Compile` (`ndint_divisor_sigma_i64`); otherwise GMP, by a Horner sum per
+    prime.
+  - **Machine `Real` `k`** — in `double`, summing `1 + q + ... + q^e`
+    (`q = p^k`) by Horner per prime. That is more accurate than the closed
+    form: at most 5.8 ulp from a 40-digit reference over `n <= 3000`, against
+    31 ulp for the closed form at `k = 3.7`. It also differs from Mathematica in
+    one place: `DivisorSigma[0., n]` is the divisor count (`4.` for `n = 6`),
+    where Mathematica's closed form evaluates `0/0` and gives `Indeterminate`.
+    `n = 1` is the exact `1` (the empty product), as in Mathematica.
+  - **Anything else** (rational, symbolic, complex or arbitrary-precision `k`)
+    — the multiplicative formula
+    `sigma_k(n) = Product_i (p_i^((e_i+1) k) - 1) / (p_i^k - 1)` for
+    `n = Product_i p_i^e_i`, built as an expression and evaluated, giving
+    radical and symbolic forms.
 - The sign of `n` is ignored; machine integers and GMP bigints are handled
   uniformly.
 - In Gaussian mode the product runs over the first-quadrant associates
   (`Re > 0`, `Im >= 0`) of the Gaussian prime factors of `n`. This is the
   multiplicative definition — note it differs from naively summing
   `d^k` over `Divisors[n, GaussianIntegers -> True]`.
-- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
-  `DivisorSigma::argrx` message.
+- Non-integer or zero `n` is left unevaluated.
+- Messages (all through the `Quiet`/`Check` funnel, call left unevaluated):
+  - `argr` for one argument, `argrx` for none;
+  - `nonopt` for a non-rule after the second argument;
+  - `optx` for an unknown option name;
+  - `opttf` for a `GaussianIntegers` value other than `True` or `False`
+    (including `Automatic`).
 
 ```mathematica
 In[1]:= DivisorSigma[1, 20]
@@ -845,12 +866,34 @@ Out[8]= 2 + 6 I
 
 In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
 Out[9]= -30 + 20 I
+
+In[10]:= DivisorSigma[2., 6]
+Out[10]= 50.
+
+In[11]:= DivisorSigma[1, 6, GaussianIntegers -> Automatic]
+DivisorSigma::opttf: Value of option GaussianIntegers -> Automatic should be True or False.
+Out[11]= DivisorSigma[1, 6, GaussianIntegers -> Automatic]
 ```
 
-> **Packed arrays.** `DivisorSigma[k, list]` over an `int64` buffer factors
-> each element by trial division in `int64`, with no GMP allocation per
-> element. A non-negative integer `k` only: `DivisorSigma[-1, n]` is a
-> `Rational`, which no buffer holds.
+> **Packed arrays, NDArray and Compile.** `DivisorSigma[k, list]` over an
+> `int64` buffer never boxes its elements.
+>
+> - **Element kernel.** Each element is factored by trial division in `int64`,
+>   with no GMP allocation.
+> - **Sieve.** A large buffer instead builds one table of smallest prime factors
+>   up to `max |n|`, at one byte per integer. That is always done below 4·10⁶,
+>   is done up to 5·10⁷ once the buffer has at least `4 sqrt(max)` elements,
+>   and is never done above 5·10⁷. Every element then factors in O(Ω(n)), so
+>   `DivisorSigma[1, Range[10^7]]` scales linearly: 0.56 s, where it used to
+>   take 18 s and Mathematica 14 takes 30 s.
+> - **No int64 answer.** If any element has none (`k < 0`, overflow, `n = 0`),
+>   the buffer goes back to the List path, which is itself fast now.
+> - **Compile.** `Compile` lowers the scalar form to `OP_DSIG_I` and the array
+>   form to the kernel. Both bail to the interpreter where there is no machine
+>   answer.
+>
+> All of these surfaces, plus the scalar builtin, call one helper
+> (`ndint_divisor_sigma_i64`), so they agree bit for bit.
 
 ## MoebiusMu
 

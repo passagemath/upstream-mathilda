@@ -354,10 +354,12 @@ BASELINE = {
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
     # SCALAR forms of the integer-only kernels.  Their ARRAY forms landed on
-    # 2026-08-02; the scalar side wants an int -> int kernel opcode that can
-    # ABORT (EulerPhi of a negative has no answer), which the K_UN opcodes
-    # cannot currently do — they write NaN.
-    "MoebiusMu", "EulerPhi", "DivisorSigma", "PowerMod",
+    # 2026-08-02; the scalar side wants an int -> int opcode that can ABORT
+    # (EulerPhi of a negative has no answer) rather than a K_UN kernel opcode,
+    # which writes NaN.  DivisorSigma closed 2026-10-19 with OP_DSIG_I, a
+    # dedicated K_BIN opcode that jumps to vm_fail on decline -- the template
+    # for the other two.
+    "MoebiusMu", "EulerPhi", "PowerMod",
     # LerchPhi[z, s, a]: a machine N-ary kernel that compiles via OP_KERNN
     # (real) and OP_KERNN_C (complex z/s/a) -- verify with a 3-scalar-arg
     # CompileDiagnostics -- but the SHAPES table tops out at two scalar args,

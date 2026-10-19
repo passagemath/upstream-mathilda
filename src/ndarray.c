@@ -1850,6 +1850,11 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
         if (use_i || use_r) {
             int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
             if (!out) return NULL;
+            /* A whole-buffer arm (a sieve, say) gets first refusal; declining
+             * leaves the per-element loop below to answer as it always did. */
+            if (use_i && k->whole_i &&
+                k->whole_i((const int64_t*)in, sz, nsi, arr_first, out))
+                return expr_new_ndarray_like(arr, rank, dims, out, NDT_INT64);
             bool ok = true;
             for (size_t i = 0; i < sz && ok; i++) {
                 if (use_i) {

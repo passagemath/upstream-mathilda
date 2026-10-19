@@ -9,6 +9,7 @@
 #include "numbertheory.h"
 #include "symtab.h"
 #include "attr.h"
+#include "expr.h"
 
 void numbertheory_init(void) {
     symtab_add_builtin("GCD", builtin_gcd);
@@ -54,6 +55,11 @@ void numbertheory_init(void) {
     symtab_get_def("CoprimeQ")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_ORDERLESS);
     symtab_get_def("Divisors")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("DivisorSigma")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_NHOLDALL);
+    {   /* Options[DivisorSigma] = {GaussianIntegers -> False}, as in Mathematica. */
+        Expr* rule_args[2] = { expr_new_symbol("GaussianIntegers"), expr_new_symbol("False") };
+        Expr* rule = expr_new_function(expr_new_symbol("Rule"), rule_args, 2);
+        symtab_set_options("DivisorSigma", expr_new_function(expr_new_symbol("List"), &rule, 1));
+    }
     symtab_get_def("MoebiusMu")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("LiouvilleLambda")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PrimeOmega")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);

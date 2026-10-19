@@ -65,6 +65,14 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_PPQ_I, a, CT_BOOL); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "DivisorSigma") == 0) {
+                /* Binary integer -> integer; OP_DSIG_I bails to the
+                 * interpreter wherever there is no int64 answer. */
+                Val k, n;
+                if (!emit(c, A[0], &k)) return -1;
+                if (!emit(c, A[1], &n)) return -1;
+                *out = binop(c, OP_DSIG_I, k, n, CT_INT); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "PowerMod") == 0) {
                 /* Ternary: three CONSECUTIVE registers, the K_NARY shape. Same
                  * allocate-then-MOVE dance as the n-ary kernel path, and for the

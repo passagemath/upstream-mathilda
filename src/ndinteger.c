@@ -8,6 +8,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "checked_int.h"
+#include "facint.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -421,6 +422,40 @@ Expr* ndint_sign_predicate(Expr* res, NDSignPred which) {
                                               : (re <= 0.0);
         }
         ob[i] = val ? 1 : 0;
+    }
+    return out;
+}
+
+/* ---- PrimePowerQ ---------------------------------------------------------- */
+
+Expr* ndint_prime_power_predicate(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    /* An option argument (GaussianIntegers -> ...) changes the question; let
+     * the element-by-element path answer it. */
+    if (res->data.function.arg_count != 1) return NULL;
+    const Expr* a = res->data.function.args[0];
+    if (!is_ndarray(a)) return NULL;
+    /* Only an exact integer buffer has an answer here: a real or complex
+     * element draws PrimePowerQ::exact, which the List path emits per element. */
+    if (a->data.ndarray.dtype != NDT_INT64) return NULL;
+    if (a->data.ndarray.rank != 1) return NULL;
+    size_t sz = ndarray_size(a);
+    if (sz == 0) return NULL;
+    const void* in = a->data.ndarray.data;
+
+    /* Same output contract as ndint_sign_predicate: a packed NDT_BOOL List. */
+    void* buf = NULL;
+    int64_t dims[1] = { (int64_t)sz };
+    Expr* out = ndbuild_open_like(a, 1, dims, NDT_BOOL, &buf);
+    if (!out) return NULL;
+    out->data.ndarray.present_as = NDA_HEAD_LIST;
+    pack_g_any_created = true;
+    uint8_t* ob = (uint8_t*)buf;
+    for (size_t i = 0; i < sz; i++) {
+        int64_t v = ndt_get_i(in, i, NDT_INT64);
+        /* Magnitude in uint64, so INT64_MIN = -2^63 is answered (True). */
+        uint64_t m = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+        ob[i] = mth_prime_power_base_u64(m, NULL) ? 1 : 0;
     }
     return out;
 }

@@ -23,6 +23,7 @@
 #include "../linalg/ndlinalg.h"  /* ndla_norm — V_NORM delegate */
 #include "../ndarray_internal.h" /* nd_parallel_for — threading the fused map loop */
 #include "../sym_names.h"        /* SYM_Association / SYM_All / SYM_Span / SYM_List */
+#include "../facint.h"           /* mth_prime_power_base_u64 — OP_PPQ_I */
 #include "../special_functions/sf_machine_error.h"  /* sf_erf_r / sf_erfc_r: Erf, Erfc opcodes */
 #ifdef USE_MPFR
 #include "../numeric_complex.h"  /* ncpx / numeric_mpfr_* — the managed containers */
@@ -191,6 +192,15 @@ static bool int_blen(long long n, long long* out) {
     while (m) { k++; m >>= 1; }
     *out = k;
     return false;
+}
+
+/* PrimePowerQ[n] over a machine integer: the interpreter's own test on the
+ * unsigned magnitude (so INT64_MIN = -2^63 answers True), hence bit-for-bit
+ * the interpreter's answer.  Every n has one, so this never bails. */
+static long long int_ppq(long long n) {
+    unsigned long long m = (n >= 0) ? (unsigned long long)n
+                                    : 0ULL - (unsigned long long)n;
+    return mth_prime_power_base_u64((uint64_t)m, NULL) ? 1 : 0;
 }
 
 /* Largest e with base^e dividing n.  IntegerExponent[0, b] is Infinity in the
@@ -1094,6 +1104,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ILEN_I):  IOP(int_ilen(RA.i, RB.i, &RD.i));
             OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
             OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
+            OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* Ternary, so the operands are a RUN of registers starting at `a`
              * (the K_NARY shape KERNN uses), not the two operand fields. */
             OP(POWMOD_I): IOP(int_powmod(R[c->a].i, R[c->a + 1].i, R[c->a + 2].i, &RD.i));

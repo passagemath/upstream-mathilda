@@ -386,6 +386,12 @@ BASELINE = {
     # which the probe list cannot express (no _Boolean array shape), so the tool
     # reports it at the real/int shapes it can — either way, no lowering yet.
     "Boole",
+    # PrimePowerQ: the SCALAR form compiles (OP_PPQ_I, int -> CT_BOOL, the
+    # interpreter's own mth_prime_power_base_u64), so loops over PrimePowerQ[k]
+    # and Table[PrimePowerQ[v[[i]]], ...] stay compiled.  The direct ARRAY form
+    # PrimePowerQ[v] is the same missing int -> bool elementwise array lowering
+    # (A_STORE_B) as the sign predicates above and EvenQ.
+    "PrimePowerQ",
 }
 
 

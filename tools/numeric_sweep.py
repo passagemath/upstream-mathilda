@@ -643,6 +643,7 @@ P("powermod", "integer", "PowerMod[cv, 3, 1009]", "pow(3, 1, 1009)*0 + "
 P("evenq_int", "integer", "Map[EvenQ, cv]", "cv % 2 == 0", chk="ckt[r]")
 P("divisible", "integer", "Map[Divisible[#, 3] &, cv]", "cv % 3 == 0", chk="ckt[r]")
 P("primeq", "integer", "Map[PrimeQ, cv]", None, chk="ckt[r]")
+P("primepowerq", "integer", "PrimePowerQ[cv]", None, chk="ckt[r]")
 P("eulerphi", "integer", "EulerPhi[Take[cv, 20000]]", None)
 P("moebiusmu", "integer", "MoebiusMu[Take[cv, 20000]]", None)
 P("divisorsigma", "integer", "DivisorSigma[1, Take[cv, 20000]]", None)

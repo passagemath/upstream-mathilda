@@ -1,4 +1,4 @@
-/* Mathilda — Compile[]: integer-closed and integer-only heads (Factorial/Gamma/Binomial/Pochhammer/Fibonacci/LucasL; GCD/LCM/IntegerLength/IntegerExponent/PowerMod/EvenQ/OddQ/Divisible).
+/* Mathilda — Compile[]: integer-closed and integer-only heads (Factorial/Gamma/Binomial/Pochhammer/Fibonacci/LucasL; GCD/LCM/IntegerLength/IntegerExponent/PowerMod/EvenQ/OddQ/Divisible/PrimePowerQ).
  *
  * One of emit_node's per-category dispatch functions: 1 = handled (ok iff
  * c->ok), -1 = handled but not lowerable, 0 = not one of these heads. */
@@ -59,6 +59,11 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 /* Unary: no base operand (BitLength is base 2 only). */
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_BLEN_I, a, CT_INT); return c->ok ? 1 : -1;
+            }
+            if (strcmp(h, "PrimePowerQ") == 0) {
+                /* Unary integer -> boolean; OP_PPQ_I never bails. */
+                Val a; if (!emit(c, A[0], &a)) return -1;
+                *out = unop(c, OP_PPQ_I, a, CT_BOOL); return c->ok ? 1 : -1;
             }
             if (strcmp(h, "PowerMod") == 0) {
                 /* Ternary: three CONSECUTIVE registers, the K_NARY shape. Same

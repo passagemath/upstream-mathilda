@@ -2883,6 +2883,21 @@ void info_init(void) {
         "Primality is tested with GMP's mpz_probab_prime_p using 25 Miller-Rabin "
         "rounds on top of a Baillie-PSW pre-screen, so composite false positives "
         "have probability below 4^-25 (definite for n < 2^64).");
+    symtab_set_docstring("PrimePowerQ",
+        "PrimePowerQ[expr]\n"
+        "\tyields True if expr is a power of a prime number, and yields False otherwise.\n"
+        "A prime power is a prime or a positive integer power of a prime, up to sign: "
+        "PrimePowerQ[-8] is True; 0, 1 and -1 are not prime powers. A rational is a prime "
+        "power when its reciprocal is one (PrimePowerQ[1/25] is True).\n"
+        "PrimePowerQ[m + n I]\n"
+        "\tautomatically works over the Gaussian integers: True iff the argument is a unit "
+        "times a power of a single Gaussian prime (or the reciprocal of one).\n"
+        "PrimePowerQ[n, GaussianIntegers -> True]\n"
+        "\ttests whether n is a Gaussian prime power (PrimePowerQ[5, GaussianIntegers -> True] "
+        "is False, as 5 = (2 + I)(2 - I)). The default is GaussianIntegers -> Automatic.\n"
+        "Any other exact expression gives False; an inexact number gives PrimePowerQ::exact. "
+        "Listable. Trial division by the primes below 2^10, reduction to the primitive root "
+        "(FLINT fmpz_is_perfect_power), then one PrimeQ test on that root.");
     symtab_set_docstring("SquareFreeQ",
         "SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or "
         "irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- "

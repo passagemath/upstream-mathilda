@@ -106,7 +106,7 @@ const IntClosed* int_closed_head(const char* h, size_t na) {
  * above there is no kernel behind them to fall through to — non-integer
  * arguments simply bail, exactly as they did before.
  *
- * `*pred` distinguishes the three that answer True/False (CT_BOOL) from the ones
+ * `*pred` distinguishes the ones that answer True/False (CT_BOOL) from the ones
  * that answer an Integer.  GCD and LCM are Flat and n-ary in the interpreter, so
  * any arity from 2 up is accepted and folded left. */
 bool int_only_head(const char* h, size_t na, bool* pred) {
@@ -115,6 +115,7 @@ bool int_only_head(const char* h, size_t na, bool* pred) {
     if ((na == 1 || na == 2)
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
     if (na == 1 && strcmp(h, "BitLength") == 0) return true;
+    if (na == 1 && strcmp(h, "PrimePowerQ") == 0) { *pred = true; return true; }
     if (na == 3 && strcmp(h, "PowerMod") == 0) return true;
     if ((na == 1 && (strcmp(h, "EvenQ") == 0 || strcmp(h, "OddQ") == 0))
         || (na == 2 && strcmp(h, "Divisible") == 0)) { *pred = true; return true; }

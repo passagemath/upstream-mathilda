@@ -1409,6 +1409,10 @@ add_executable(prime_tests test_prime.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(prime_tests PRIVATE ../src)
 add_test(NAME prime_tests COMMAND prime_tests)
 
+add_executable(primepowerq_tests test_primepowerq.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(primepowerq_tests PRIVATE ../src)
+add_test(NAME primepowerq_tests COMMAND primepowerq_tests)
+
 add_executable(iter_tests test_iter.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

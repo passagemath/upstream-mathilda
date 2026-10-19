@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`, `ChineseRemainder`), primality and factorization (`PrimeQ`, `Prime`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`, `ChineseRemainder`), primality and factorization (`PrimeQ`, `PrimePowerQ`, `Prime`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -449,6 +449,60 @@ Out[8]= True
 
 In[9]:= PrimeQ[Exp[2 Pi I/3]]
 Out[9]= False
+```
+
+
+## PrimePowerQ
+
+- `PrimePowerQ[expr]`: `True` if `expr` is a power of a prime number, `False` otherwise.
+- `PrimePowerQ[m + n I]`: works over the Gaussian integers automatically. It is `True` when the argument is a unit times a power of a single Gaussian prime.
+- `PrimePowerQ[n, GaussianIntegers -> True]`: tests whether `n` is a Gaussian prime power. The default is `GaussianIntegers -> Automatic`.
+
+**Semantics** (each checked against Mathematica 14):
+- A prime power is a prime or a positive integer power of a prime, up to sign. `PrimePowerQ[-8]` is `True`; `0` and `±1` are not prime powers.
+- A rational or Gaussian rational is a prime power when its reciprocal is one. `1/25`, `-1/8`, `1/(2+I)` and `I/2` (that is, `1/(-2 I)`) give `True`. `2/3` and `3/(2+I)` give `False`.
+- **Gaussian integers.**
+  - On an axis, `z = unit·m`. Then `z` is a Gaussian prime power when `m = 2^k`, or when `m = q^j` with `q ≡ 3 (mod 4)`.
+  - Off the axes, the norm must be `p^k`. With `p = 2` the answer is always `True`. With `p ≡ 1 (mod 4)` it is `True` only when `p` does not divide both parts.
+  - So `3 + 4 I = -I (2 + I)^2` is `True`, but `5 (2 + I)` is `False`.
+  - With `GaussianIntegers -> True`, `5` and `25` give `False`, while `2`, `3`, `8` and `9` give `True`.
+- `GaussianIntegers -> False` with a complex argument gives `PrimePowerQ::par` and stays unevaluated.
+- A well-formed `GaussianIntegers :> v` answers `False`, as Mathematica 14 does.
+- Any other exact expression (`x`, `Pi`, `"s"`) gives `False`.
+- An inexact number gives `PrimePowerQ::exact` and stays unevaluated.
+- Argument and option errors (`argt`, `nonopt`, `optx`, `opttfa`) also stay unevaluated.
+- Every message routes through the funnel, so `Quiet` and `Check` see them.
+- Attributes: `Listable`, `Protected`. Options: `{GaussianIntegers -> Automatic}`.
+
+**Algorithm** (`mth_prime_power_base_u64` / `_mpz` in `src/facint.c`):
+- **Machine integers** need no GMP:
+  1. Even numbers: a power of 2 if exactly one bit is set.
+  2. Trial division by the odd primes below 64. A hit strips that prime and checks for 1.
+  3. One deterministic Miller–Rabin test.
+  4. If composite, try exact k-th roots for k ∈ {2, 3, 5, 7}. Once no prime below 64 divides `n`, the base is at least 67, so `k ≤ 10`.
+- **Bignums:**
+  1. Trial division by the primes below 2^10. A hit costs one `mpz_remove`.
+  2. Reduction to the primitive root: FLINT `fmpz_is_perfect_power`, or GMP `mpz_perfect_power_p` + `mpz_root` without FLINT.
+  3. One `PrimeQ` test (BPSW + 25 Miller–Rabin rounds) on that root, the smallest candidate.
+- **Buffers.** A packed or visible `int64` buffer is read directly (`ndint_prime_power_predicate`, `src/ndinteger.c`) and answers with a packed boolean List.
+- **Compile.** `Compile[{{n, _Integer}}, PrimePowerQ[n]]` lowers to `OP_PPQ_I`, which calls the same helper.
+
+```mathematica
+In[1]:= {PrimePowerQ[8], PrimePowerQ[6], PrimePowerQ[2 + I], PrimePowerQ[1/25]}
+Out[1]= {True, False, True, True}
+
+In[2]:= PrimePowerQ[5, GaussianIntegers -> True]
+Out[2]= False
+
+In[3]:= PrimePowerQ[10^300 + 3]
+Out[3]= False
+
+In[4]:= Select[Range[100], PrimePowerQ[#] && !PrimeQ[#] &]
+Out[4]= {4, 8, 9, 16, 25, 27, 32, 49, 64, 81}
+
+In[5]:= PrimePowerQ[3.2912]
+PrimePowerQ::exact: Argument 3.2912 in PrimePowerQ is not an exact number.
+Out[5]= PrimePowerQ[3.2912]
 ```
 
 ## Prime

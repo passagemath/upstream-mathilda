@@ -215,9 +215,12 @@ enum {
      * BitNot/BitShiftLeft/BitShiftRight remain deliberately absent: not         \
      * implemented in the INTERPRETER (they come back unevaluated), and a        \
      * compiled path that answered them would answer where the interpreter       \
-     * declines. */                                                              \
+     * declines.                                                               \
+     *                                                                          \
+     * PPQ_I is PrimePowerQ: CT_INT -> CT_BOOL (0/1 in .i), answered by the     \
+     * interpreter's own mth_prime_power_base_u64 on |n|, so it never bails.    */ \
     X(GCD_I, K_BIN)   X(LCM_I, K_BIN)  X(ILEN_I, K_BIN) X(IEXP_I, K_BIN)   \
-    X(POWMOD_I, K_NARY) X(BLEN_I, K_UN)                                     \
+    X(POWMOD_I, K_NARY) X(BLEN_I, K_UN) X(PPQ_I, K_UN)                      \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \

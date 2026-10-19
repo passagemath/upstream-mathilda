@@ -887,6 +887,10 @@ void options_register_defaults(void) {
     ob_commit(&b, "PrimeQ");
 
     ob_init(&b);
+    ob_add(&b, r_sym("GaussianIntegers", "Automatic"));
+    ob_commit(&b, "PrimePowerQ");
+
+    ob_init(&b);
     ob_add(&b, r_sym("GaussianIntegers", "False"));
     ob_commit(&b, "CoprimeQ");
 

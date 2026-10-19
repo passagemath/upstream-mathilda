@@ -70,4 +70,10 @@ typedef enum {
 } NDSignPred;
 Expr* ndint_sign_predicate(Expr* res, NDSignPred which);
 
+/* PrimePowerQ over a rank-1 int64 buffer: one mth_prime_power_base_u64 per
+ * element, answered as a packed NDT_BOOL List (the sign predicates' output
+ * contract). NULL for a non-int64 dtype, rank > 1, an empty buffer, or an
+ * option argument -- the caller degrades through ndarray_delist_and_reeval. */
+Expr* ndint_prime_power_predicate(Expr* res);
+
 #endif /* MATHILDA_NDINTEGER_H */

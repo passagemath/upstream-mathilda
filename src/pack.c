@@ -831,6 +831,10 @@ static void pack_mark_aware_heads(void) {
          * packed NDT_BOOL array of True/False, never 10^6 Real comparisons nor
          * 10^6 True/False Expr nodes (see ndint_sign_predicate). */
         "Positive", "Negative", "NonNegative", "NonPositive",
+        /* PrimePowerQ reads an int64 buffer straight off and answers with the
+         * same packed NDT_BOOL List (ndint_prime_power_predicate); every other
+         * dtype degrades element by element so ::exact fires per element. */
+        "PrimePowerQ",
         /* Boole maps a bool buffer straight to an int64 one (True -> 1); its
          * buffer path answers with a single head (Integer), matching Boole of the
          * List element for element. */
@@ -1179,6 +1183,10 @@ static void pack_mark_aware_heads(void) {
          * is the one operation on integers that needs no arithmetic to be
          * exact about. */
         "Positive", "Negative", "NonNegative", "NonPositive",
+        /* PrimePowerQ: int64 is its whole machine domain (a real element is
+         * PrimePowerQ::exact), read exactly via the unsigned magnitude, so
+         * INT64_MIN = -2^63 is answered too; never abandons the array. */
+        "PrimePowerQ",
         /* Pure element MOVES over an int64 buffer, exact for the same reason
          * Join and Take are: whole elements travel by memcpy and there is no
          * arithmetic to be exact about. Append/Prepend additionally refuse any

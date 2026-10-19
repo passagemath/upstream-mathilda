@@ -352,6 +352,7 @@ const char* SYM_LinearSolve = NULL;
 const char* SYM_LiouvilleLambda = NULL;
 const char* SYM_PrimeOmega = NULL;
 const char* SYM_PrimeNu = NULL;
+const char* SYM_PrimePowerQ = NULL;
 const char* SYM_List = NULL;
 const char* SYM_NDArray = NULL;
 const char* SYM_PackedArrayQ = NULL;
@@ -1369,6 +1370,7 @@ void sym_names_init(void) {
     SYM_LiouvilleLambda            = intern_symbol("LiouvilleLambda");
     SYM_PrimeOmega                 = intern_symbol("PrimeOmega");
     SYM_PrimeNu                    = intern_symbol("PrimeNu");
+    SYM_PrimePowerQ                = intern_symbol("PrimePowerQ");
     SYM_List                       = intern_symbol("List");
     SYM_NDArray                     = intern_symbol("NDArray");
     SYM_PackedArrayQ                = intern_symbol("PackedArrayQ");

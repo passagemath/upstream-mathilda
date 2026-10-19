@@ -29,6 +29,11 @@ typedef struct {
                         // notebook's structural selection. NULL on the normal
                         // parse/eval path -- all existing {..} initializers omit
                         // it, so C99 zero-fills it and that path is unchanged.
+    int colon_hold;     // bracket_depth+1 while parsing the right operand of
+                        // `sym:p` (0 = none): at that bracket level a further
+                        // `:` ends the pattern and becomes its Optional default
+                        // (`a:b:c` is Optional[a:b, c]), so parse_colon_suffix
+                        // must not claim it for an inner token.
 } ParserState;
 
 /* Record the half-open byte range [start, end) of one subexpression into the
@@ -1013,6 +1018,17 @@ static Expr* parse_function(ParserState* s, Expr* head) {
 
 /* ------------------- Main Parser ------------------- */
 
+/* `:` precedences, in the reference's relative order
+ * (Pattern 150 > Optional 140 > StringExpression 135 > Condition 130):
+ *   sym : p   Pattern  -- above `~~` (2100), below `|` (2300) and `..`
+ *                         (2500), so `x:a|b` and `x:p..` bind into the
+ *                         pattern while `x:a ~~ b` splits at `~~`;
+ *   p : v     Optional -- below Pattern, so `x:_:1` is
+ *                         Optional[Pattern[x,_],1].
+ * The right operand is read at prec+1 (left-associative). */
+#define PREC_PATTERN  2200
+#define PREC_OPTIONAL 2150
+
 static Expr* parse_expression_prec(ParserState* s, int min_prec);
 
 typedef enum {
@@ -1188,11 +1204,13 @@ static OperatorDef get_operator(const char* pos) {
          * string) by the binary loop, not parsed as an expression. */
         def.type = OP_MESSAGENAME; def.prec = 8600; def.head_name = "MessageName"; def.len = 2;
     } else if (*pos == ':') {
-        /* `:` is Pattern (sym:p) or Optional (p:v); which one -- and so its
-         * precedence -- depends on the LEFT operand, so the binary loop
-         * re-rates it once `left` is known (see the OP_COLON fix-up there).
-         * The value here is only the Pattern rating. */
-        def.type = OP_COLON; def.prec = 2200; def.right_assoc = 0; def.head_name = "Pattern"; def.len = 1;
+        /* `:` normally never reaches the binary loop: a symbol or blank
+         * token followed by `:` is consumed at atom level by
+         * parse_colon_suffix. What remains is the lenient fallback for a
+         * left operand the reference rejects (`(a):_g`, `f[x]:0`, `x_.:0`); the binary
+         * loop re-rates it once `left` is known (see the OP_COLON fix-up
+         * there). The value here is only the Pattern rating. */
+        def.type = OP_COLON; def.prec = PREC_PATTERN; def.right_assoc = 0; def.head_name = "Pattern"; def.len = 1;
     } else if (strncmp(pos, "=.", 2) == 0 && !isdigit((unsigned char)pos[2])) {
         /* Unset (postfix `lhs =.`). Guarded against `=.5` etc. (a real
          * literal on the RHS of Set) by requiring the char after `.` not be
@@ -1273,6 +1291,68 @@ static OperatorDef get_operator(const char* pos) {
 }
 
 // Parses primary expressions (atoms, lists, functions, parens)
+/* True when `p` is a lone `:` -- not `::` (MessageName), `:=` (SetDelayed)
+ * or `:>` (RuleDelayed). */
+static bool is_single_colon(const char* p) {
+    return p[0] == ':' && p[1] != ':' && p[1] != '=' && p[1] != '>';
+}
+
+typedef enum { COLON_LHS_SYMBOL, COLON_LHS_BLANK } ColonLhsKind;
+
+/* Attach a `:` suffix to the token just read, at ATOM level.
+ *
+ * The left operand of `:` is the single token
+ * immediately before it -- a bare symbol (`a:p` is Pattern) or a blank
+ * token (`x_:v` is Optional) -- not the whole expression built so far. So
+ * `n_.*a:_g` is Times[n_., a:_g], `n x_:0` is Times[n, x_:0], `x+a:_g==b`
+ * is Plus[x, a:(_g==b)] and `x?f:_` is PatternTest[x, f:_]. Reading `:` as
+ * an ordinary low-precedence infix operator instead built
+ * Optional[n_.*a, _g] -- a silently wrong pattern (issue #102).
+ *
+ * While `p` is read, a `:` at the same bracket level is not claimed by an
+ * inner token (see ParserState.colon_hold): it ends `p`. So after `sym:p`
+ * one further `:` supplies a default (`a:_g:1` is
+ * Optional[a:_g, 1]); the default itself may again start with `sym:`
+ * (`x:a:b:c:d` is Optional[x:a, Optional[b:c, d]], read recursively through
+ * parse_primary). Consumes `tok`; returns NULL (with `tok` freed) on a
+ * malformed right operand. If no `:` follows, `tok` is returned unchanged
+ * and the position is left where it was. */
+static Expr* parse_colon_suffix(ParserState* s, Expr* tok, ColonLhsKind kind) {
+    if (s->colon_hold == s->bracket_depth + 1) return tok;
+    const char* save_pos = s->pos;
+    int save_newline = s->saw_newline;
+    skip_whitespace(s);
+    if (!is_single_colon(s->pos)) {
+        s->pos = save_pos;
+        s->saw_newline = save_newline;
+        return tok;
+    }
+    s->pos++;
+    if (kind == COLON_LHS_SYMBOL) {
+        int save_hold = s->colon_hold;
+        s->colon_hold = s->bracket_depth + 1;
+        Expr* patt = parse_expression_prec(s, PREC_PATTERN + 1);
+        s->colon_hold = save_hold;
+        if (!patt) { expr_free(tok); return NULL; }
+        Expr* args[2] = { tok, patt };
+        tok = expr_new_function(expr_new_symbol(SYM_Pattern), args, 2);
+
+        save_pos = s->pos;
+        save_newline = s->saw_newline;
+        skip_whitespace(s);
+        if (!is_single_colon(s->pos)) {
+            s->pos = save_pos;
+            s->saw_newline = save_newline;
+            return tok;
+        }
+        s->pos++;
+    }
+    Expr* def = parse_expression_prec(s, PREC_OPTIONAL + 1);
+    if (!def) { expr_free(tok); return NULL; }
+    Expr* args[2] = { tok, def };
+    return expr_new_function(expr_new_symbol(SYM_Optional), args, 2);
+}
+
 static Expr* parse_primary(ParserState* s) {
     skip_whitespace(s);
     if (!*s->pos) return NULL;
@@ -1420,10 +1500,14 @@ static Expr* parse_primary(ParserState* s) {
                         s->pos++;
                         Expr* opt_args[1] = { head };
                         head = expr_new_function(expr_new_symbol(SYM_Optional), opt_args, 1);
+                        /* `x_.` already carries its default; a following `:`
+                         * is left to the binary loop's lenient fallback. */
+                        return head;
                     }
+                    return parse_colon_suffix(s, head, COLON_LHS_BLANK);
                 }
-                
-                return head;
+
+                return parse_colon_suffix(s, head, COLON_LHS_SYMBOL);
 
             }
             if (isdigit(*s->pos) || ((*s->pos == '-' || *s->pos == '+') && (isdigit(s->pos[1]) || (s->pos[1] == '.' && isdigit(s->pos[2])))) || (*s->pos == '.' && isdigit(s->pos[1]))) {
@@ -1622,18 +1706,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         skip_whitespace(s);
         OperatorDef op_def = get_operator(s->pos);
 
-        /* `:` precedence is context-dependent, mirroring Mathematica
-         * (Pattern 150 > Optional 140 > StringExpression 135 > Condition 130):
-         *   sym : p   Pattern  2200 -- above `~~` (2100), below `|` (2300) and
-         *                              `..` (2500), so `x:a|b`, `x:p..` bind
-         *                              into the pattern while `x:a ~~ b` and
-         *                              `a ~~ x:b` split at `~~`;
-         *   p : v     Optional 2150 -- below Pattern, so `x:_:1` is
-         *                              Optional[Pattern[x,_],1] and
-         *                              `a:b:c:d` is Optional[a:b, c:d].
-         * Both are left-associative (right operand at prec+1). */
+        /* Lenient `:` fallback (the standard forms are handled at atom level by
+         * parse_colon_suffix): Pattern when `left` is still a bare symbol
+         * (e.g. `(a):p`), Optional otherwise. See PREC_PATTERN. */
         if (op_def.type == OP_COLON && left->type != EXPR_SYMBOL) {
-            op_def.prec = 2150;
+            op_def.prec = PREC_OPTIONAL;
             op_def.head_name = "Optional";
         }
         
@@ -2049,7 +2126,7 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input, 0, 0, NULL};
+    ParserState state = {input, input, 0, 0, NULL, 0};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
@@ -2065,7 +2142,7 @@ Expr* parse_expression(const char* input) {
 
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
@@ -2106,7 +2183,7 @@ MthSpanSink* mth_parse_spans(const char* input) {
     if (!sink || !input) return sink;
     const char* p = input;
     while (*p) {
-        ParserState state = {input, p, 0, 0, sink};
+        ParserState state = {input, p, 0, 0, sink, 0};
         /* Skip leading whitespace, comments, and empty ';' separators. */
         for (;;) {
             skip_whitespace(&state);

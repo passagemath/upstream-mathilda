@@ -4,6 +4,18 @@
 - `lhs = rhs`: `Set`. Immediate evaluation of `rhs`.
 - `lhs := rhs`: `SetDelayed`. Delayed evaluation of `rhs`.
 - `lhs := rhs /; condition`: When the RHS of `SetDelayed` is a `Condition`, it is automatically moved to the LHS pattern. This makes `f[x_] := body /; test` equivalent to `f[x_] /; test := body`.
+- **Redefinition.** A new rule replaces an existing one whose left-hand side
+  (together with any `/;` condition) is the same up to renaming of pattern
+  variables. The replacement covers both the pattern and the right-hand side:
+  `f[x_] := x^2; f[y_] := y^3` leaves one rule, so `f[2]` is `8`. Rules with
+  different conditions coexist (`f[x_] := a /; x > 0; f[y_] := b /; y < 0` keeps
+  both). Each rule stores an alpha-invariant hash, so a definition costs one
+  integer compare per stored rule unless the hashes agree (v0.475).
+- A `PatternSequence`, `OrderlessPatternSequence`, `Longest`/`Shortest` of a
+  sequence, or an `Alternatives` with a sequence branch in a definition's
+  arguments makes its arity variable for DownValue dispatch:
+  `q[PatternSequence[a_, b_], c_] := {a, b, c}` now fires for `q[1, 2, 3]`
+  (v0.475).
 
 ## AddTo (+=), SubtractFrom (-=), TimesBy (*=), DivideBy (/=)
 

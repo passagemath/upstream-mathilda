@@ -85,6 +85,23 @@ static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
     return max_d + 1;
 }
 
+/* Is `e`, found at `level` (0 = the whole expression), inside the levelspec
+ * {min_l, max_l}? A non-negative bound counts levels down from the top; a
+ * negative bound -k counts by Depth (atoms have depth 1). The two kinds
+ * combine independently, so a mixed spec like {2, -1} means "level >= 2 and
+ * depth >= 1" (everything from level 2 down to the leaves). The depth walk is
+ * only paid when a bound is negative. */
+static bool in_level_spec(Expr* e, int64_t level, int64_t min_l, int64_t max_l,
+                          bool heads) {
+    if (min_l >= 0 && level < min_l) return false;
+    if (max_l >= 0 && level > max_l) return false;
+    if (min_l >= 0 && max_l >= 0) return true;
+    int64_t d = get_expr_depth_patterns(e, heads);
+    if (min_l < 0 && d > -min_l) return false;
+    if (max_l < 0 && d < -max_l) return false;
+    return true;
+}
+
 static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr* replacement, bool delayed, Expr*** results, size_t* count, size_t* cap, int64_t max_results) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
 
@@ -102,15 +119,7 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
     if (min_l >= 0 && max_l >= 0 && current_level > max_l) return;
 
-    int64_t d = get_expr_depth_patterns(e, heads);
-
-    bool match_level = true;
-    if (min_l >= 0) {
-        if (current_level < min_l || current_level > max_l) match_level = false;
-    } else {
-        if (min_l < 0 && max_l == min_l && d != -min_l) match_level = false;
-        else if (min_l < 0 && max_l < 0 && (d < -max_l || d > -min_l)) match_level = false;
-    }
+    bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
 
     if (match_level) {
         MatchEnv* env = env_new();
@@ -479,14 +488,7 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
 
     /* Decide whether `e` should be removed from its parent. */
     if (*count_remaining != 0) {
-        int64_t d = get_expr_depth_patterns(e, heads);
-        bool match_level = true;
-        if (min_l >= 0) {
-            if (current_level < min_l || current_level > max_l) match_level = false;
-        } else {
-            if (min_l < 0 && max_l == min_l && d != -min_l) match_level = false;
-            else if (min_l < 0 && max_l < 0 && (d < -max_l || d > -min_l)) match_level = false;
-        }
+        bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
         if (match_level) {
             MatchEnv* env = env_new();
             if (match(e, pattern, env)) {
@@ -610,15 +612,7 @@ static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, 
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
     if (min_l >= 0 && max_l >= 0 && current_level > max_l) return;
 
-    int64_t d = get_expr_depth_patterns(e, heads);
-
-    bool match_level = true;
-    if (min_l >= 0) {
-        if (current_level < min_l || current_level > max_l) match_level = false;
-    } else {
-        if (min_l < 0 && max_l == min_l && d != -min_l) match_level = false;
-        else if (min_l < 0 && max_l < 0 && (d < -max_l || d > -min_l)) match_level = false;
-    }
+    bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
 
     if (match_level) {
         MatchEnv* env = env_new();
@@ -739,15 +733,7 @@ static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int
 
     if (min_l >= 0 && max_l >= 0 && current_level > max_l) return;
 
-    int64_t d = get_expr_depth_patterns(e, heads);
-
-    bool match_level = true;
-    if (min_l >= 0) {
-        if (current_level < min_l || current_level > max_l) match_level = false;
-    } else {
-        if (min_l < 0 && max_l == min_l && d != -min_l) match_level = false;
-        else if (min_l < 0 && max_l < 0 && (d < -max_l || d > -min_l)) match_level = false;
-    }
+    bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
 
     if (match_level) {
         MatchEnv* env = env_new();
@@ -830,15 +816,7 @@ Expr* builtin_count(Expr* res) {
 static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern) {
     if (min_l >= 0 && max_l >= 0 && current_level > max_l) return false;
 
-    int64_t d = get_expr_depth_patterns(e, heads);
-
-    bool match_level = true;
-    if (min_l >= 0) {
-        if (current_level < min_l || current_level > max_l) match_level = false;
-    } else {
-        if (min_l < 0 && max_l == min_l && d != -min_l) match_level = false;
-        else if (min_l < 0 && max_l < 0 && (d < -max_l || d > -min_l)) match_level = false;
-    }
+    bool match_level = in_level_spec(e, current_level, min_l, max_l, heads);
 
     if (match_level) {
         MatchEnv* env = env_new();

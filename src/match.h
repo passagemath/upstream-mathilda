@@ -13,6 +13,8 @@ typedef struct MatchEnv {
     size_t capacity;
     bool (*callback)(struct MatchEnv*, void*);
     void* callback_data;
+    Expr* top_pattern;   /* the pattern of the innermost match() in progress
+                            (borrowed); used to bind leftover names on success */
 } MatchEnv;
 
 // Create a new empty match environment

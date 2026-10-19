@@ -37,7 +37,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `..`, `...` | `Repeated`, `RepeatedNull` (postfix; a single token that wins over a decimal point, so `0..` is `Repeated[0]`) | 2500 | None |
 | `\|`     | `Alternatives` | 2300 | Left |
 | `~~`     | `StringExpression` | 2100 | Left |
-| `:`      | `Optional` | 1900 | Right |
+| `:`      | `Pattern` (`sym:p`) / `Optional` (`p:v`) — see below | 2200 / 2150 | Left |
 | `/;`     | `Condition` | 1700 | Right |
 | `->`, `→` | `Rule` | 1500 | Right |
 | `:>`     | `RuleDelayed` | 1500 | Right |
@@ -53,6 +53,29 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 
 (`_`/`__`/`___` blanks are recognised structurally in `parse_primary`, not via
 the operator table; the value above is their documented rank.)
+
+**`:` binds its left operand at atom level.** As in the Wolfram Language, the
+left operand of `:` is the single token right before it: a bare symbol gives
+`Pattern` (`a:p`), a blank token gives `Optional` (`x_:v`, `_h:v`). It is never
+the expression built so far. The right operand is read at the Pattern (2200) or
+Optional (2150) rank, so it takes in everything that binds tighter, `|`, `..`,
+`==` and `+` included. One further `:` after `sym:p` supplies a default:
+
+| Input | FullForm |
+|-------|----------|
+| `n_.*a:_g` | `Times[Optional[Pattern[n, Blank[]]], Pattern[a, Blank[g]]]` |
+| `n x_:0` | `Times[n, Optional[Pattern[x, Blank[]], 0]]` |
+| `x + a:_g == b` | `Plus[x, Pattern[a, Equal[Blank[g], b]]]` |
+| `x?f:_` | `PatternTest[x, Pattern[f, Blank[]]]` |
+| `x|a:b` | `Alternatives[x, Pattern[a, b]]` |
+| `a:_g:1` | `Optional[Pattern[a, Blank[g]], 1]` |
+| `x:a:b:c:d:e` | `Optional[Pattern[x, a], Optional[Pattern[b, c], Pattern[d, e]]]` |
+| `a:_g -> 1`, `a:_ /; c` | `Rule[Pattern[a, Blank[g]], 1]`, `Condition[Pattern[a, Blank[]], c]` |
+
+Before v0.475 `:` was an ordinary low-precedence infix operator, so `n_.*a:_g`
+parsed as `Optional[n_.*a, _g]`, which is a silently wrong pattern (issue #102).
+A left operand that WL rejects (`(a):_g`, `f[x]:0`) is still accepted, as
+`Pattern`/`Optional` of the whole left expression.
 
 The Unicode rightwards arrow `→` (U+2192, Wolfram `\[Rule]`) is accepted as a
 synonym for `->`, so Wolfram-Language rules and associations paste and parse

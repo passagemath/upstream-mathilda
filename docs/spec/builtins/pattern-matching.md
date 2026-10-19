@@ -18,7 +18,17 @@
   tried, as in Mathematica (v0.451): `MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]` is
   `True` (`a -> z`), where the matcher previously committed to the nested match's
   first split (`a -> x^k`) and failed.
-- `p1 | p2 | ...`: `Alternatives`, matches any one of the `pi`.
+- `p1 | p2 | ...`: `Alternatives`, matches any one of the `pi`. A name that
+  appears only in a branch that was not taken stays unbound during the match,
+  and is bound to `Sequence[]` once the whole match succeeds, so it stands for
+  nothing on the right-hand side: `1 /. (x_ | y_) :> {x, y}` is `{1}`. A later
+  occurrence can still bind the name: `f[1, 2] /. f[x_ | y_, y_] :> {x, y}` is
+  `{1, 2}` (v0.475).
+- `sym:p`: `Pattern[sym, p]`. The `:` binds only the token just before it (see
+  [Operators](../operators.md)), so `n_.*a:_g` is `n_. * (a:_g)`. The name is
+  bound first and `p` is then matched with the rest of the match as its
+  continuation, so a later failure backtracks into `p`'s other assignments:
+  `ReplaceList[2 x, p:x_.*y_ :> {x, y}]` lists all three matches (v0.475).
 - `Except[c]`, `Except[c, p]`: matches anything not matching `c` (and, in the
   two-argument form, also matching `p`).
 - `HoldPattern[p]`: matches as `p` but keeps `p` unevaluated when the rule is
@@ -30,11 +40,16 @@
 - `PatternSequence[p1, ..., pm]`: matches a run of arguments each matching
   `p1..pm`; `PatternSequence[]` matches zero arguments, and `x:PatternSequence[
   ...]` binds `x` to the matched `Sequence`.
-- `OrderlessPatternSequence[p1, ..., pm]`: matches any subset of the arguments,
-  in any order and position (even under a non-`Orderless` head) — each `pi` binds
-  a distinct argument; the remaining pattern elements match the leftover
-  arguments in order. `x:OrderlessPatternSequence[...]` binds `x` to the matched
-  `Sequence`.
+- `OrderlessPatternSequence[p1, ..., pm]`: matches a **contiguous run** of
+  arguments at its own position, as any sequence element does, with the `pi`
+  matching the run's elements in any order (even under a non-`Orderless` head).
+  `f[2, 1, b]` matches `f[OrderlessPatternSequence[1, 2], ___]` but `f[1, b, 2]`
+  does not. A `pi` may be a sequence pattern (`f[OrderlessPatternSequence[x__,
+  c]]` matches `f[a, b, c]` with `x -> Sequence[a, b]`). Literal `pi` are placed
+  first, on the first equal element. `x:OrderlessPatternSequence[...]` binds `x`
+  to the run in its original order. Before v0.475 the `pi` could take any
+  argument anywhere, which matched too much (`f[1, 2, 3]` matched
+  `f[3, OrderlessPatternSequence[1, 2]]`).
 - `Longest[p]` / `Shortest[p]`: prefer the longest / shortest match for a
   sequence pattern `p`; transparent at a non-sequence position.
 - A sequence pattern used at the **top level** matches the single subject as a
@@ -60,7 +75,11 @@ Gives a list of elements that match a pattern.
 - `Cases[pattern]`
 
 **Features**:
-- Uses standard level specifications.
+- Uses standard level specifications. A positive bound counts levels from the
+  top and a negative bound `-k` counts by `Depth`. The two combine
+  independently, so a mixed spec such as `{2, -1}` (level 2 down to the leaves)
+  works in `Cases`, `Count`, `Position`, `DeleteCases`, `MemberQ` and `FreeQ`.
+  Before v0.475 it matched nothing.
 - Defaults to level `{1}`.
 - Option `Heads -> True` includes heads of expressions.
 - Operates in depth-first post-order traversal.
@@ -129,6 +148,10 @@ Gives the number of elements or subexpressions that match a pattern.
 - `Repeated[p, max]`, `Repeated[p, {min, max}]`, `Repeated[p, {n}]`: match sequences of length bounded by `max` or `{min, max}` (`max` may be `Infinity`). Equivalent properties exist for `RepeatedNull`. The bounds count *repetitions*, so they are argument counts only when `p` matches one argument at a time. A malformed spec (negative or non-integer count, `{min, max}` with `min > max`, `Repeated[p, 0]`) issues `Repeated::range` or `Repeated::order` and matches nothing. A bound too large for any argument list (`10^30`) acts as unbounded. `Repeated` and `RepeatedNull` are `Protected`.
 - **Tokenization.** `..` and `...` are single tokens that take precedence over a decimal point: `0..` is `Repeated[0]`, `0...` is `RepeatedNull[0]`, and `1.5..` is `Repeated[1.5]`. After a headed or sequence blank the dots are the repeat operator (`_Integer..`, `x__..`). After a bare single blank `_.` is formed first, as in WL, so `_...` is `(_.)..` and `_..` is a syntax error; write `(_)..` (that is also how it prints).
 - **Unnamed sub-patterns** inside a repeat must bind the same value in every repetition: `{1, 1}` matches `{(x_ /; x > 0)..}`, `{1, 2}` does not. An unconstrained `x:p..` followed by more patterns takes the *shortest* run (`{1, 1, 2} /. {x:1.., y___} :> {{x}, {y}}` is `{{1}, {1, 2}}`); wrap it in `Longest` for the longest run.
+- **Backtracking into units.** When the rest of the match fails, or
+  `ReplaceList` asks for more matches, the unit search tries the next way to
+  split the run: `ReplaceList[f[a, a], f[x__..] :> {x}]` is `{{a}, {a, a}}`
+  (v0.475).
 - **Multi-argument units.** The repeated pattern may span several arguments: `{a, b, a, b}` matches `{PatternSequence[a, b]..}`, `{c, a, b}` matches `{(PatternSequence[a, b] | c)..}`, and `{1, 2, 1, 2} /. {x__..} :> {x}` is `{1, 2}`. A unit of fixed width is checked in one linear pass. A variable-width unit is searched over its feasible widths without recursion, so a 40 000-argument subject stays linear even when the match fails.
 - **Sequence alternatives.** An `Alternatives` whose branches span other than one argument matches as a sequence, named or not: `{a, b, d}` matches `{PatternSequence[a, b] | c, d}`, and `{a, b, d} /. {x:(PatternSequence[a, b] | c), y___} :> {{x}, {y}}` is `{{a, b}, {d}}`.
 
@@ -136,6 +159,23 @@ Gives the number of elements or subexpressions that match a pattern.
 - `Default[f] = val`: Sets the default value for arguments of `f`.
 - Built-in default values include `0` for `Plus` and `1` for `Times` and `Power`.
 - Used automatically by the pattern matcher when `_.` is present in the pattern.
+
+## Attributes in matching
+- **Orderless.** Pattern arguments may take the subject's arguments in any
+  order. A literal argument (no pattern construct) is matched to the first
+  equal argument only, because every equal choice leaves the same bindings:
+  `ReplaceList[o[a, a], o[a, x_] :> x]` is `{a}`.
+- **OneIdentity.** `f[p1, ..., pn]` matches a lone `x` as though it were
+  `f[x]` only through **defaults**: some `pi` must be Optional, so that the
+  others match `x` while it takes its default (`x` matches `Times[n_., x_]`
+  with `n -> 1`). Without an Optional, `f[x_]` matches neither `x` nor
+  `f[a, b]`, and `f[]` under Flat+OneIdentity does not match `f[x_]` (before
+  v0.475 all three matched). Under Flat, a subject that already has head `f`
+  is covered by the ordinary path, so its default match is listed once.
+- **Flat without OneIdentity** differs from WL in `ReplaceList` enumeration.
+  WL binds a one-operand slice both as `h[b]` and as `b` and repeats matches;
+  Mathilda binds `b` once. These cases are recorded, report-only, in
+  `tests/match_exhaustive_observe.m`.
 
 ## OptionsPattern
 - `OptionsPattern[]` matches the trailing option arguments of a call — each a
@@ -147,6 +187,10 @@ Gives the number of elements or subexpressions that match a pattern.
   `OptionValue[f, name]`) read the matched options, falling back to the defaults
   registered with the head via `Options` (see
   [Assignment and Rules](assignment-and-rules.md)).
+- `OptionsPattern[{name -> default, ...}]` (or a single rule) carries its own
+  defaults, which `OptionValue` uses for an option that was not passed:
+  `q[x_, OptionsPattern[{o -> 1}]] := OptionValue[o]` gives `q[1] == 1` and
+  `q[1, o -> 2] == 2` (v0.475).
 
 ```mathematica
 In[1]:= Options[g] = {a -> 1, b -> 2};

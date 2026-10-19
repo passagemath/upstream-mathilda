@@ -471,6 +471,112 @@ static void assert_parse_silent(const char* input, const char* expected) {
     expr_free(p);
 }
 
+/* Issue #102: `:` takes its LEFT operand at atom level -- the bare symbol
+ * (Pattern) or blank token (Optional) just before it -- not the expression
+ * built so far, so n_.*a:_g is Times[n_., a:_g], not Optional[n_.*a, _g].
+ * Every expected FullForm below was produced by the reference kernel
+ * (ToString[FullForm[ToExpression[src, InputForm, Hold]]]). */
+void test_parse_colon_atom_level() {
+    assert_parse_eq("n_.*a:_g", "Times[Optional[Pattern[n, Blank[]]], Pattern[a, Blank[g]]]");
+    assert_parse_eq("n_*a:_g", "Times[Pattern[n, Blank[]], Pattern[a, Blank[g]]]");
+    assert_parse_eq("x+a:_g", "Plus[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("x + a:_g == b", "Plus[x, Pattern[a, Equal[Blank[g], b]]]");
+    assert_parse_eq("x + a:_g + c", "Plus[x, Pattern[a, Plus[Blank[g], c]]]");
+    assert_parse_eq("n a:_g", "Times[n, Pattern[a, Blank[g]]]");
+    assert_parse_eq("n a:_g b", "Times[n, Pattern[a, Times[Blank[g], b]]]");
+    assert_parse_eq("a:_g b", "Pattern[a, Times[Blank[g], b]]");
+    assert_parse_eq("a.b:_g", "Dot[a, Pattern[b, Blank[g]]]");
+    assert_parse_eq("x_:0", "Optional[Pattern[x, Blank[]], 0]");
+    assert_parse_eq("a:b:c", "Optional[Pattern[a, b], c]");
+    assert_parse_eq("a:b:c:d", "Optional[Pattern[a, b], Pattern[c, d]]");
+    assert_parse_eq("x_:a:b", "Optional[Pattern[x, Blank[]], Pattern[a, b]]");
+    assert_parse_eq("a:x_:0", "Optional[Pattern[a, Pattern[x, Blank[]]], 0]");
+    assert_parse_eq("-a:_g", "Times[-1, Pattern[a, Blank[g]]]");
+    assert_parse_eq("!a:_", "Not[Pattern[a, Blank[]]]");
+    assert_parse_eq("2 a:_g", "Times[2, Pattern[a, Blank[g]]]");
+    assert_parse_eq("b/a:_g", "Times[b, Power[Pattern[a, Blank[g]], -1]]");
+    assert_parse_eq("x^a:_g", "Power[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("f@a:_g", "f[Pattern[a, Blank[g]]]");
+    assert_parse_eq("a:_g->1", "Rule[Pattern[a, Blank[g]], 1]");
+    assert_parse_eq("a:_/;c", "Condition[Pattern[a, Blank[]], c]");
+    assert_parse_eq("a:_g..", "Pattern[a, Repeated[Blank[g]]]");
+    assert_parse_eq("a:b|c", "Pattern[a, Alternatives[b, c]]");
+    assert_parse_eq("x|a:b", "Alternatives[x, Pattern[a, b]]");
+    assert_parse_eq("x|a:b|c", "Alternatives[x, Pattern[a, Alternatives[b, c]]]");
+    assert_parse_eq("a ~~ x:b", "StringExpression[a, Pattern[x, b]]");
+    assert_parse_eq("x:a ~~ b", "StringExpression[Pattern[x, a], b]");
+    assert_parse_eq("a:_+b", "Pattern[a, Plus[Blank[], b]]");
+    assert_parse_eq("x->a:_g", "Rule[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("{a:_g, b:_h}", "List[Pattern[a, Blank[g]], Pattern[b, Blank[h]]]");
+    assert_parse_eq("f[a:_g, n_.*b:_h]", "f[Pattern[a, Blank[g]], Times[Optional[Pattern[n, Blank[]]], Pattern[b, Blank[h]]]]");
+    assert_parse_eq("a:_g:1", "Optional[Pattern[a, Blank[g]], 1]");
+    assert_parse_eq("n_.*a:_g:1", "Times[Optional[Pattern[n, Blank[]]], Optional[Pattern[a, Blank[g]], 1]]");
+    assert_parse_eq("x__*a:_g", "Times[Pattern[x, BlankSequence[]], Pattern[a, Blank[g]]]");
+    assert_parse_eq("a:_g?f", "Pattern[a, PatternTest[Blank[g], f]]");
+    assert_parse_eq("x?f:_", "PatternTest[x, Pattern[f, Blank[]]]");
+    assert_parse_eq("a:_g&&b", "Pattern[a, And[Blank[g], b]]");
+    assert_parse_eq("x&&a:_g", "And[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("x==a:_g", "Equal[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("x>a:_g", "Greater[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("a:_g;b", "CompoundExpression[Pattern[a, Blank[g]], b]");
+    assert_parse_eq("a :> b", "RuleDelayed[a, b]");
+    assert_parse_eq("a := b", "SetDelayed[a, b]");
+    assert_parse_eq("a::b", "MessageName[a, \"b\"]");
+    assert_parse_eq("x: _", "Pattern[x, Blank[]]");
+    assert_parse_eq("x : _g * y", "Pattern[x, Times[Blank[g], y]]");
+    assert_parse_eq("x_^n_.*a:_", "Times[Power[Pattern[x, Blank[]], Optional[Pattern[n, Blank[]]]], Pattern[a, Blank[]]]");
+    assert_parse_eq("Times[a:_g]", "Times[Pattern[a, Blank[g]]]");
+    assert_parse_eq("p:{___}", "Pattern[p, List[BlankNullSequence[]]]");
+    assert_parse_eq("f[x:_:0]", "f[Optional[Pattern[x, Blank[]], 0]]");
+    assert_parse_eq("n x_:0", "Times[n, Optional[Pattern[x, Blank[]], 0]]");
+    assert_parse_eq("n_.*a:_g:1 + c", "Times[Optional[Pattern[n, Blank[]]], Optional[Pattern[a, Blank[g]], Plus[1, c]]]");
+    assert_parse_eq("a:_g:1+c", "Optional[Pattern[a, Blank[g]], Plus[1, c]]");
+    assert_parse_eq("x + a:b:c", "Plus[x, Optional[Pattern[a, b], c]]");
+    assert_parse_eq("a:_:1 b", "Optional[Pattern[a, Blank[]], Times[1, b]]");
+    assert_parse_eq("x + a:_g:1 == b", "Plus[x, Optional[Pattern[a, Blank[g]], Equal[1, b]]]");
+    assert_parse_eq("x + a:_g:1 -> b", "Rule[Plus[x, Optional[Pattern[a, Blank[g]], 1]], b]");
+    assert_parse_eq("x /; a:_g", "Condition[x, Pattern[a, Blank[g]]]");
+    assert_parse_eq("x:a:b:c:d:e", "Optional[Pattern[x, a], Optional[Pattern[b, c], Pattern[d, e]]]");
+    assert_parse_eq("a:_g:b:_h", "Optional[Pattern[a, Blank[g]], Pattern[b, Blank[h]]]");
+    assert_parse_eq("2 a:_g:1", "Times[2, Optional[Pattern[a, Blank[g]], 1]]");
+    assert_parse_eq("f[x] := n_*a:_g", "SetDelayed[f[x], Times[Pattern[n, Blank[]], Pattern[a, Blank[g]]]]");
+    assert_parse_eq("a:_g:1?f", "Optional[Pattern[a, Blank[g]], PatternTest[1, f]]");
+    assert_parse_eq("x^a:_:1", "Power[x, Optional[Pattern[a, Blank[]], 1]]");
+    assert_parse_eq("{n_*a:_g, x}", "List[Times[Pattern[n, Blank[]], Pattern[a, Blank[g]]], x]");
+    assert_parse_eq("a:_g + x_:0", "Optional[Pattern[a, Plus[Blank[g], Pattern[x, Blank[]]]], 0]");
+    assert_parse_eq("a:f[b:c:d]", "Pattern[a, f[Optional[Pattern[b, c], d]]]");
+    assert_parse_eq("a:{b:c, d:e:f}", "Pattern[a, List[Pattern[b, c], Optional[Pattern[d, e], f]]]");
+    assert_parse_eq("a:(b:c)", "Pattern[a, Pattern[b, c]]");
+    assert_parse_eq("a:b|c:d", "Optional[Pattern[a, Alternatives[b, c]], d]");
+    assert_parse_eq("a:_?(x:_)", "Pattern[a, PatternTest[Blank[], Pattern[x, Blank[]]]]");
+    assert_parse_eq("x_:a:b:c", "Optional[Pattern[x, Blank[]], Optional[Pattern[a, b], c]]");
+    assert_parse_eq("x_:a:b:c:d", "Optional[Pattern[x, Blank[]], Optional[Pattern[a, b], Pattern[c, d]]]");
+    assert_parse_eq("a:b..:c", "Optional[Pattern[a, Repeated[b]], c]");
+    assert_parse_eq("x:_ ~~ y:_", "StringExpression[Pattern[x, Blank[]], Pattern[y, Blank[]]]");
+    assert_parse_eq("x_:0 ~~ y", "StringExpression[Optional[Pattern[x, Blank[]], 0], y]");
+    assert_parse_eq("a:x_+y_:1", "Optional[Pattern[a, Plus[Pattern[x, Blank[]], Pattern[y, Blank[]]]], 1]");
+    assert_parse_eq("f[x_, y_:0 z]", "f[Pattern[x, Blank[]], Optional[Pattern[y, Blank[]], Times[0, z]]]");
+    assert_parse_eq("f[x_, y_:0, z_:1]", "f[Pattern[x, Blank[]], Optional[Pattern[y, Blank[]], 0], Optional[Pattern[z, Blank[]], 1]]");
+    assert_parse_eq("a:b->c:d", "Rule[Pattern[a, b], Pattern[c, d]]");
+    assert_parse_eq("a:b:>c:d", "RuleDelayed[Pattern[a, b], Pattern[c, d]]");
+    assert_parse_eq("x_:a+b:c", "Optional[Pattern[x, Blank[]], Plus[a, Pattern[b, c]]]");
+    assert_parse_eq("x_h:0", "Optional[Pattern[x, Blank[h]], 0]");
+    assert_parse_eq("x__:0", "Optional[Pattern[x, BlankSequence[]], 0]");
+    assert_parse_eq("x___h:0", "Optional[Pattern[x, BlankNullSequence[h]], 0]");
+    assert_parse_eq("_:0", "Optional[Blank[], 0]");
+    assert_parse_eq("__:0", "Optional[BlankSequence[], 0]");
+    assert_parse_eq("x_:0?f", "Optional[Pattern[x, Blank[]], PatternTest[0, f]]");
+    assert_parse_eq("x:_:0 /; y", "Condition[Optional[Pattern[x, Blank[]], 0], y]");
+    assert_parse_eq("h[a:_:0, b:_.]", "h[Optional[Pattern[a, Blank[]], 0], Pattern[b, Optional[Blank[]]]]");
+    assert_parse_eq("x_:a:b|c", "Optional[Pattern[x, Blank[]], Pattern[a, Alternatives[b, c]]]");
+    assert_parse_eq("a:-b:c", "Optional[Pattern[a, Times[-1, b]], c]");
+    assert_parse_eq("a:!b:c", "Optional[Pattern[a, Not[b]], c]");
+    assert_parse_eq("f[_, n_.*a:_g:2]", "f[Blank[], Times[Optional[Pattern[n, Blank[]]], Optional[Pattern[a, Blank[g]], 2]]]");
+    assert_parse_eq("p:x_*y_", "Pattern[p, Times[Pattern[x, Blank[]], Pattern[y, Blank[]]]]");
+    assert_parse_eq("p:x_*y_:1", "Optional[Pattern[p, Times[Pattern[x, Blank[]], Pattern[y, Blank[]]]], 1]");
+    assert_parse_eq("x:a.b:c", "Optional[Pattern[x, Dot[a, b]], c]");
+}
+
 void test_parse_trailing_semicolon() {
     /* `expr;` followed immediately by a closing delimiter should produce
      * CompoundExpression[expr, Null] without writing to stderr.  Each
@@ -905,6 +1011,7 @@ int main() {
     TEST(test_long_string_literal_not_truncated);
     TEST(test_parse_headless_bracket);
     TEST(test_parse_empty_slots_are_null);
+    TEST(test_parse_colon_atom_level);
 
     printf("\nAll parser tests passed!\n");
     return 0;

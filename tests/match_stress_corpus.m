@@ -302,21 +302,31 @@
     {"MatchQ[Sin[t]^2 + Cos[t]^2, a_. Sin[x_]^2 + a_. Cos[x_]^2]",     True},
     {"MatchQ[2 Sin[t]^2 + 3 Cos[t]^2, a_. Sin[x_]^2 + a_. Cos[x_]^2]", False},
 
-    (* ---- 26. OrderlessPatternSequence: matches a sub-multiset in any order ---- *)
-    {"MatchQ[f[1, 2, 3], f[3, OrderlessPatternSequence[1, 2]]]", True},
-    {"MatchQ[f[1, 2, 3], f[OrderlessPatternSequence[2, 3], 1]]", True},
+    (* ---- 26. OrderlessPatternSequence: matches a CONTIGUOUS run at its own
+       position, in any order (verified against the reference; the earlier
+       "sub-multiset anywhere" expectations were written from memory) ---- *)
+    {"MatchQ[f[1, 2, 3], f[3, OrderlessPatternSequence[1, 2]]]", False},
+    {"MatchQ[f[1, 2, 3], f[OrderlessPatternSequence[2, 3], 1]]", False},
+    {"MatchQ[f[2, 1, 3], f[OrderlessPatternSequence[1, 2], 3]]", True},
+    {"MatchQ[f[1, 3, 2], f[1, OrderlessPatternSequence[2, 3]]]", True},
     {"MatchQ[{a, c, b}, {OrderlessPatternSequence[a, b, c]}]",   True},
     {"MatchQ[{d, b, a, c}, {OrderlessPatternSequence[a, b, c, d]}]", True},
     {"MatchQ[f[1, 2, 3], f[9, OrderlessPatternSequence[1, 2]]]", False},
     {"MatchQ[{1, 2, 3}, {OrderlessPatternSequence[1, 2]}]",      False},
     {"MatchQ[f[1], f[1, OrderlessPatternSequence[]]]",           True},
-    {"MatchQ[{1, 2, 3, 4}, {OrderlessPatternSequence[4, 2], ___}]", True},
-    {"MatchQ[h[1, 2, 3], h[OrderlessPatternSequence[_?OddQ, _?OddQ], _?EvenQ]]", True},
+    {"MatchQ[{1, 2, 3, 4}, {OrderlessPatternSequence[4, 2], ___}]", False},
+    {"MatchQ[{2, 4, 3, 1}, {OrderlessPatternSequence[4, 2], ___}]", True},
+    {"MatchQ[h[1, 2, 3], h[OrderlessPatternSequence[_?OddQ, _?OddQ], _?EvenQ]]", False},
+    {"MatchQ[h[3, 1, 2], h[OrderlessPatternSequence[_?OddQ, _?OddQ], _?EvenQ]]", True},
     {"f[1, 2, 3] /. f[x : OrderlessPatternSequence[_, _], last_] :> {x, last}", {1, 2, 3}},
 
-    (* ---- 27. Alternatives binding different names (WL leaves one unbound) ---- *)
+    (* ---- 27. Alternatives binding different names: a name in the branch NOT
+       taken is bound to Sequence[] (verified against the reference; the earlier
+       expectation {1, y} had been written from memory and was wrong) ---- *)
     {"MatchQ[1, x_ | y_]",                        True},
-    {"1 /. (x_ | y_) :> {x, y}",                  {1, y}},
+    {"1 /. (x_ | y_) :> {x, y}",                  {1}},
+    {"ReplaceList[f[1, 2], f[x_ | y_, y_] :> {x, y}]",  {{1, 2}}},
+    {"ReplaceList[f[1, 1], f[x_ | y_, y_] :> {x, y}]",  {{1, 1}, {1}}},
 
     (* ---- 28. Deep recursion is bounded by $RecursionLimit (no C-stack crash) ----
        Depth beyond the default 1024 yields a graceful non-match, not a SIGSEGV;
@@ -404,5 +414,16 @@
     {"MatchQ[{5, 10}, {b__ /; Length[{b}] > 0 /; Total[{b}] == 15}]",              True},
     {"ReplaceList[{5, 10, 3, 12}, {___, b__ /; Total[{b}] == 15, ___} :> Total[{b}]]", {15, 15}},
     {"MatchQ[{12, 1, 2}, {c : (b__ /; Total[{b}] == 15)} /; Length[{c}] == 3]",    True},
-    {"ReplaceList[{1, 2, 1, 2}, {___, a__ /; Total[{a}] == 3, b__ /; Total[{b}] == 3, ___} :> {a, b}]", {{1, 2, 1, 2}}}
+    {"ReplaceList[{1, 2, 1, 2}, {___, a__ /; Total[{a}] == 3, b__ /; Total[{b}] == 3, ___} :> {a, b}]", {{1, 2, 1, 2}}},
+
+    (* ---- 38. Issue #102: `sym:patt` binds at atom level, so n_.*a:_g is
+       Times[n_., a:_g] (it was parsed as Optional[n_.*a, _g]: a silently
+       wrong pattern). Expected values verified against the reference. ---- *)
+    {"MatchQ[f[1, 2, g[]], f[__, n_*a:_g]]",       False},
+    {"MatchQ[f[1, g[]], f[_, n_.*a:_g]]",          True},
+    {"MatchQ[f[1, 2 g[]], f[_, n_*a:_g]]",         True},
+    {"ReplaceList[f[1, 2, 3 g[a]], f[__, n_.*a:_g] :> {n, a}]", {{3, g[a]}}},
+    {"x + g[1] /. x_ + a:_g :> {x, a}",            {x, g[1]}},
+    {"MatchQ[f[2], f[n x_:0]]",                    False},
+    {"Hold[n x_:0] /. Hold[Times[n, Optional[x_, 0]]] -> ok", ok}
 }

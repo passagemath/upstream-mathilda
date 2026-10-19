@@ -33,6 +33,10 @@ typedef struct Rule {
      * are sorted by descending specificity, with insertion order
      * preserved as the tie-breaker for equal scores. */
     int32_t specificity;
+    /* Hash of the pattern up to renaming of its pattern variables, so an
+     * alpha-equivalent redefinition is found without normalising every
+     * stored rule (see add_rule). Computed lazily; 0 = not yet computed. */
+    uint64_t alpha_hash;
     struct Rule* next;
 } Rule;
 

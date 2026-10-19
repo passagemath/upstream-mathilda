@@ -162,11 +162,16 @@ int main(int argc, char** argv) {
         time_t deadline = time(NULL) + CORPUS_PER_CASE_TIMEOUT_SEC + 1;
         int status = 0;
         bool reaped = false;
+        /* Exponential back-off from 100us: most cases finish in well under a
+         * millisecond, and a fixed 20ms poll put a 20ms floor under every
+         * case (minutes over the ~11k-case exhaustive corpus). */
+        useconds_t nap = 100;
         while (time(NULL) < deadline) {
             pid_t r = waitpid(pid, &status, WNOHANG);
             if (r == pid) { reaped = true; break; }
             if (r < 0) break;
-            usleep(20000);
+            usleep(nap);
+            if (nap < 20000) nap *= 2;
         }
         if (!reaped) {
             kill(pid, SIGKILL);

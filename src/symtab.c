@@ -312,6 +312,19 @@ static bool slot_is_variable_length(const Expr* p) {
     if (h == SYM_Repeated) return true;
     if (h == SYM_RepeatedNull) return true;
     if (h == SYM_OptionsPattern) return true;
+    /* A pattern sequence spans as many arguments as its elements do -- zero,
+     * one or several -- so it cannot pin the arity (q[PatternSequence[a_, b_],
+     * c_] takes three arguments, and was skipped for q[1, 2, 3]). */
+    if (h == SYM_PatternSequence) return true;
+    if (h == SYM_OrderlessPatternSequence) return true;
+    if ((h == SYM_Longest || h == SYM_Shortest) && p->data.function.arg_count >= 1)
+        return slot_is_variable_length(p->data.function.args[0]);
+    /* Alternatives are variable iff some branch is (x__ | y_). */
+    if (h == SYM_Alternatives) {
+        for (size_t i = 0; i < p->data.function.arg_count; i++)
+            if (slot_is_variable_length(p->data.function.args[i])) return true;
+        return false;
+    }
     /* Pattern[x, q] is variable iff q is. */
     if (h == SYM_Pattern && p->data.function.arg_count == 2) {
         return slot_is_variable_length(p->data.function.args[1]);
@@ -788,6 +801,9 @@ static Expr* pattern_canonicalize(Expr* p) {
 }
 
 // Helper to add a rule to a list
+static Expr* pattern_alpha_normalize(const Expr* p);
+static uint64_t pattern_alpha_hash(const Expr* p);
+
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
@@ -802,24 +818,60 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
      * rationale. We retain ownership of `canon`. */
     Expr* canon = pattern_canonicalize(expr_copy(pattern));
 
-    // Check if rule with same pattern already exists
+    int32_t arity = pattern_dispatch_arity(canon);
+    const char* first_head = (arity == -1) ? NULL : pattern_first_arg_head(canon);
+    int32_t spec = pattern_specificity(canon);
+    uint64_t ahash = 0;      /* computed on the first candidate, if any */
+
+    /* A rule whose LHS is the same "up to renaming of patterns" (and the
+     * same RHS condition, which canonicalisation folds into the pattern)
+     * replaces the old one, pattern AND right-hand side -- the RHS refers to
+     * the new names: f[x_] := x^2; f[y_] := y^3 leaves one rule, y^3. The
+     * exact match is the cheap first test; the alpha-normalised comparison
+     * (two deep copies) only runs on an alpha-hash hit, which every
+     * alpha-equivalent pattern shares, so defining n distinct rules stays an
+     * integer compare per stored rule. Both hashes are computed lazily, only
+     * once a stored rule passes the cheap key test: an OwnValue update (the
+     * same symbol, caught by expr_eq) never hashes at all. */
+    Expr* key = NULL;
     for (Rule* curr = *list; curr; curr = curr->next) {
         if (expr_eq(curr->pattern, canon)) {
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
             expr_free(canon);
+            if (key) expr_free(key);
+            return;
+        }
+        if (curr->specificity != spec || curr->dispatch_arity != arity ||
+            curr->first_arg_head_canon != first_head)
+            continue;
+        if (!ahash) ahash = pattern_alpha_hash(canon);
+        if (!curr->alpha_hash) curr->alpha_hash = pattern_alpha_hash(curr->pattern);
+        if (curr->alpha_hash != ahash)
+            continue;
+        if (!key) key = pattern_alpha_normalize(canon);
+        Expr* curr_key = pattern_alpha_normalize(curr->pattern);
+        bool same = expr_eq(curr_key, key);
+        expr_free(curr_key);
+        if (same) {
+            expr_free(curr->pattern);
+            curr->pattern = canon;          /* same alpha_hash: keep it */
+            expr_free(curr->replacement);
+            curr->replacement = expr_copy(replacement);
+            expr_free(key);
             return;
         }
     }
+    if (key) expr_free(key);
 
     Rule* new_rule = malloc(sizeof(Rule));
     new_rule->pattern = canon;
     new_rule->replacement = expr_copy(replacement);
-    new_rule->dispatch_arity = pattern_dispatch_arity(canon);
-    new_rule->first_arg_head_canon =
-        (new_rule->dispatch_arity == -1) ? NULL : pattern_first_arg_head(canon);
-    new_rule->specificity = pattern_specificity(canon);
+    new_rule->dispatch_arity = arity;
+    new_rule->first_arg_head_canon = first_head;
+    new_rule->specificity = spec;
+    new_rule->alpha_hash = ahash;
     new_rule->next = NULL;
 
     /* §3.6 stable insertion: walk until we find a rule with strictly
@@ -1006,6 +1058,35 @@ static Expr* pattern_alpha_normalize(const Expr* p) {
     alpha_collect_names(copy, names, &n);
     alpha_rename(copy, names, n);
     return copy;
+}
+
+static uint64_t alpha_mix(uint64_t h, uint64_t v) {
+    h ^= v + UINT64_C(0x9e3779b97f4a7c15) + (h << 6) + (h >> 2);
+    return h;
+}
+
+/* Structural hash of `p` in which a bound pattern variable contributes its
+ * first-occurrence index rather than its name -- equal for alpha-equivalent
+ * patterns, like expr_eq after pattern_alpha_normalize, but with no copy. */
+static uint64_t alpha_hash_rec(const Expr* p, const char** names, int n) {
+    if (p->type == EXPR_SYMBOL) {
+        for (int i = 0; i < n; i++)
+            if (p->data.symbol.name == names[i]) return alpha_mix(UINT64_C(0xa1fa), (uint64_t)i);
+        return expr_hash(p);
+    }
+    if (p->type != EXPR_FUNCTION) return expr_hash(p);
+    uint64_t h = alpha_mix(UINT64_C(0xf00d), p->data.function.arg_count);
+    h = alpha_mix(h, alpha_hash_rec(p->data.function.head, names, n));
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        h = alpha_mix(h, alpha_hash_rec(p->data.function.args[i], names, n));
+    return h;
+}
+
+static uint64_t pattern_alpha_hash(const Expr* p) {
+    const char* names[ALPHA_MAX_VARS];
+    int n = 0;
+    alpha_collect_names(p, names, &n);
+    return alpha_hash_rec(p, names, n) | 1;   /* never 0: 0 means "not computed" */
 }
 
 bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,

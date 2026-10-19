@@ -5375,6 +5375,14 @@ else()
 endif()
 add_test(NAME match_stress_corpus_tests
          COMMAND match_stress_corpus_tests ../match_stress_corpus.m)
+# Exhaustive corpus: every pattern construct crossed with a shared subject set,
+# expected values computed by the reference kernel (regenerate with
+# tools/gen_match_exhaustive_corpus.py). The gate must pass in full; the
+# observe corpus holds the known, annotated divergences and is report-only.
+add_test(NAME match_exhaustive_corpus_tests
+         COMMAND match_stress_corpus_tests ../match_exhaustive_corpus.m)
+add_test(NAME match_exhaustive_observe
+         COMMAND match_stress_corpus_tests ../match_exhaustive_observe.m --observe)
 
 # ratcanon SPEC: canonical output-form contract for the Together/Cancel rewrite
 # (RATCANON_REWRITE_PLAN.md). Pins the WL-faithful forms + prototype correctness.

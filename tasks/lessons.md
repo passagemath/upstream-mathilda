@@ -4713,3 +4713,19 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   unevaluated"), or say "verified against the reference". Before every commit,
   grep the staged diff's added lines for Mathematica / Wolfram / MMA / WL
   (ignore "COMMAND" in CMakeLists).
+
+## 2026-10-19 — "pattern matcher bug" that was a parser bug (issue #102)
+- The report was `MatchQ[f[1, 2, g[]], f[__, n_*a:_g]]` giving the wrong answer.
+  The matcher was correct. `n_*a:_g` parsed as `Optional[n_*a, _g]`, because
+  `:` was an ordinary infix operator, whereas the reference takes its left
+  operand at atom level.
+- Rule: for any matching bug, first print
+  `FullForm[ToExpression[src, InputForm, Hold]]` of the pattern and compare it
+  with the reference's parse. Then hand-enter the intended tree (`n_*(a:_g)`) and
+  check whether the matcher already gets it right.
+- Hand-written corpus expectations rot. Five rows of
+  `tests/match_stress_corpus.m` (the Alternatives `{1, y}` row and four
+  OrderlessPatternSequence rows) had been written from memory, were wrong, and
+  pinned the bugs in place. For pattern semantics, generate expectations from
+  the reference kernel (`tools/gen_match_exhaustive_corpus.py`); never type
+  them in.

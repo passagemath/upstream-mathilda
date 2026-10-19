@@ -267,12 +267,12 @@ static void test_specificity_condition_adds_score(void) {
 
 static void test_specificity_insertion_order_tie_break(void) {
     symtab_clear_symbol("g5");
-    /* Two rules with identical specificity (both g5[x_]) -- but the
-     * patterns are textually distinguishable so neither overwrites
-     * the other. */
-    add_down("g5", "g5[a_]", "first");
-    add_down("g5", "g5[b_]", "second");
-    add_down("g5", "g5[c_]", "third");
+    /* Three rules with identical specificity (one blank, one literal each)
+     * that are NOT the same up to renaming, so none replaces another.
+     * (g5[a_], g5[b_], g5[c_] would be one rule: see the alpha test below.) */
+    add_down("g5", "g5[a_, 1]", "first");
+    add_down("g5", "g5[b_, 2]", "second");
+    add_down("g5", "g5[c_, 3]", "third");
 
     Rule* head = symtab_get_down_values("g5");
     ASSERT(rule_list_length(head) == 3);
@@ -281,9 +281,9 @@ static void test_specificity_insertion_order_tie_break(void) {
     ASSERT(head->next->specificity == head->next->next->specificity);
 
     /* Verify the patterns are in insertion order. */
-    Expr* p0 = parse_expression("g5[a_]");
-    Expr* p1 = parse_expression("g5[b_]");
-    Expr* p2 = parse_expression("g5[c_]");
+    Expr* p0 = parse_expression("g5[a_, 1]");
+    Expr* p1 = parse_expression("g5[b_, 2]");
+    Expr* p2 = parse_expression("g5[c_, 3]");
     ASSERT(expr_eq(rule_at(head, 0)->pattern, p0));
     ASSERT(expr_eq(rule_at(head, 1)->pattern, p1));
     ASSERT(expr_eq(rule_at(head, 2)->pattern, p2));
@@ -292,16 +292,41 @@ static void test_specificity_insertion_order_tie_break(void) {
 
 static void test_specificity_overwrite_keeps_position(void) {
     symtab_clear_symbol("g6");
-    add_down("g6", "g6[a_]", "v1");
-    add_down("g6", "g6[b_]", "v2");
-    add_down("g6", "g6[a_]", "v1_new"); /* overwrite first rule's RHS */
+    add_down("g6", "g6[a_, 1]", "v1");
+    add_down("g6", "g6[b_, 2]", "v2");
+    add_down("g6", "g6[a_, 1]", "v1_new"); /* overwrite first rule's RHS */
 
     Rule* head = symtab_get_down_values("g6");
     ASSERT(rule_list_length(head) == 2);
-    /* Order preserved: g6[a_] still at index 0 (was already there). */
-    Expr* pa = parse_expression("g6[a_]");
+    /* Order preserved: g6[a_, 1] still at index 0 (was already there). */
+    Expr* pa = parse_expression("g6[a_, 1]");
     ASSERT(expr_eq(rule_at(head, 0)->pattern, pa));
     expr_free(pa);
+}
+
+/* A left-hand side that is the same up to renaming of its pattern variables
+ * replaces the rule -- pattern and right-hand side, since the RHS refers to the
+ * new names -- in place; a different condition keeps both rules. */
+static void test_alpha_equivalent_redefinition_replaces(void) {
+    symtab_clear_symbol("g7");
+    add_down("g7", "g7[a_, z]", "v1");
+    add_down("g7", "g7[b_, 9]", "other");
+    add_down("g7", "g7[c_, z]", "v2");          /* alpha-equivalent to the first */
+    Rule* head = symtab_get_down_values("g7");
+    ASSERT(rule_list_length(head) == 2);
+    Expr* pc = parse_expression("g7[c_, z]");
+    ASSERT(expr_eq(rule_at(head, 0)->pattern, pc));   /* new names, same slot */
+    expr_free(pc);
+
+    char* s = eval_str("g7[1, z]");
+    ASSERT_STR_EQ(s, "v2");
+    free(s);
+    s = eval_str("g7[x_] := x^2; g7[y_] := y^3; g7[2]");
+    ASSERT_STR_EQ(s, "8");
+    free(s);
+    s = eval_str("g7[u_] := pos /; u > 0; g7[w_] := neg /; w < 0; {g7[1], g7[-1]}");
+    ASSERT_STR_EQ(s, "{pos, neg}");
+    free(s);
 }
 
 /* ------------------------------------------------------------------ */
@@ -558,6 +583,7 @@ int main(void) {
     TEST(test_specificity_condition_adds_score);
     TEST(test_specificity_insertion_order_tie_break);
     TEST(test_specificity_overwrite_keeps_position);
+    TEST(test_alpha_equivalent_redefinition_replaces);
 
     TEST(test_functional_specific_wins);
     TEST(test_functional_arity_dispatch);

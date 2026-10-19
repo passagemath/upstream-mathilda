@@ -50,6 +50,7 @@ MatchEnv* env_new(void) {
         env->count = 0;                 /* arrays + capacity retained */
         env->callback = NULL;
         env->callback_data = NULL;
+        env->top_pattern = NULL;
         return env;
     }
     MatchEnv* env = malloc(sizeof(MatchEnv));
@@ -57,6 +58,7 @@ MatchEnv* env_new(void) {
     env->capacity = 8;
     env->callback = NULL;
     env->callback_data = NULL;
+    env->top_pattern = NULL;
     env->symbols = malloc(sizeof(char*) * env->capacity);
     env->values = malloc(sizeof(Expr*) * env->capacity);
     return env;
@@ -299,6 +301,29 @@ static bool pat_has_optional(Expr* p) {
     return false;
 }
 
+/* True when `p` contains no pattern construct at any depth (heads included),
+ * so it can only match an expression structurally equal to itself. */
+static bool pat_is_literal(const Expr* p) {
+    if (p->type != EXPR_FUNCTION) return true;
+    const Expr* hd = p->data.function.head;
+    if (hd->type == EXPR_SYMBOL) {
+        const char* h = hd->data.symbol.name;
+        if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
+            h == SYM_Pattern || h == SYM_Alternatives || h == SYM_Except ||
+            h == SYM_PatternTest || h == SYM_Condition || h == SYM_Optional ||
+            h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_HoldPattern ||
+            h == SYM_Verbatim || h == SYM_Longest || h == SYM_Shortest ||
+            h == SYM_OptionsPattern || h == SYM_PatternSequence ||
+            h == SYM_OrderlessPatternSequence || h == SYM_KeyValuePattern)
+            return false;
+    } else if (!pat_is_literal(hd)) {
+        return false;
+    }
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (!pat_is_literal(p->data.function.args[i])) return false;
+    return true;
+}
+
 /* ------------------------------------------------------------------
  *  Span analysis for elements of an ordered Flat call pattern
  *  (Dot, **, And, Or, StringJoin, a user head with only Flat).
@@ -480,10 +505,16 @@ typedef struct ParentMatch {
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent);
+/* Success continuation for rep_units_match: called once the units cover the
+ * whole span; returning false makes the search try the next way to split it. */
+typedef bool (*RepCont)(MatchEnv* env, void* data);
 static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
                             int min_reps, int max_reps,
-                            MatchEnv* env, Expr* pat_head);
+                            MatchEnv* env, Expr* pat_head,
+                            RepCont k, void* kdata);
 static bool rep_unit_split(Expr* rep_pat, Expr** slot, Expr*** unit, size_t* m);
+static bool pat_is_single_elem(Expr* p);
+static void pat_width(Expr* p, size_t* lo, size_t* hi);
 
 /* C-stack-overflow guard for the mutually-recursive matcher.  match_internal
  * is the per-expression-level entry (the descent that overflows on deeply
@@ -656,10 +687,53 @@ static void extract_subset(Expr** exprs, size_t n_exprs, int* comb, int k, Expr*
 
 static ParentMatch top_level_sentinel = {0};
 
+/* Bind every pattern name in `p` that the match left unbound to Sequence[].
+ * A name can stay unbound only when it sits in an Alternatives branch that was
+ * not taken (or under Except); it then stands for
+ * nothing on the right-hand side: 1 /. (x_ | y_) :> {x, y} is {1}. Done once,
+ * at the point a whole match is accepted -- not when the branch is chosen --
+ * so a later occurrence can still bind the name: f[1, 2] /. f[x_ | y_, y_]
+ * gives x -> 1, y -> 2. Only pattern positions are walked: Verbatim content
+ * is literal data, and the test / condition / default operand of PatternTest,
+ * Condition and Optional is an expression whose own patterns (a nested
+ * MatchQ, say) belong to an inner scope. Runs only on success, so failed
+ * attempts -- the DownValue hot path -- pay nothing. */
+static void bind_leftover_names(Expr* p, MatchEnv* env) {
+    if (p->type != EXPR_FUNCTION) return;
+    Expr* h = p->data.function.head;
+    size_t n = p->data.function.arg_count;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Verbatim) return;
+        if (hn == SYM_Pattern && n == 2 && p->data.function.args[0]->type == EXPR_SYMBOL) {
+            const char* name = p->data.function.args[0]->data.symbol.name;
+            if (!env_get(env, name)) {
+                Expr* empty = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, 0);
+                env_set(env, name, empty);
+                expr_free(empty);
+            }
+            bind_leftover_names(p->data.function.args[1], env);
+            return;
+        }
+        if ((hn == SYM_PatternTest || hn == SYM_Condition || hn == SYM_Optional) && n >= 1) {
+            bind_leftover_names(p->data.function.args[0], env);
+            return;
+        }
+    } else {
+        bind_leftover_names(h, env);
+    }
+    for (size_t i = 0; i < n; i++)
+        bind_leftover_names(p->data.function.args[i], env);
+}
+
 static bool call_parent(MatchEnv* env, ParentMatch* parent) {
     if (parent == &top_level_sentinel) {
+        size_t saved = env->count;
+        if (env->top_pattern) bind_leftover_names(env->top_pattern, env);
         if (env->callback) {
-            return env->callback(env, env->callback_data);
+            if (env->callback(env, env->callback_data)) return true;
+            env_rollback(env, saved);
+            return false;
         }
         return true;
     }
@@ -667,6 +741,11 @@ static bool call_parent(MatchEnv* env, ParentMatch* parent) {
         return match_args_internal(parent->exprs, parent->n_exprs, parent->pats, parent->n_pats, env, parent->condition, parent->pat_head, parent->total_pats, parent->parent);
     }
     return true;
+}
+
+/* RepCont adapter: continue with the enclosing match. */
+static bool rep_cont_parent(MatchEnv* env, void* data) {
+    return call_parent(env, (ParentMatch*)data);
 }
 
 /* True iff `e` is a two-argument Rule/RuleDelayed. */
@@ -726,57 +805,88 @@ static Expr* ops_unwrap(Expr* e, Expr** bind_out) {
     return NULL;
 }
 
-/* OrderlessPatternSequence[q0..q_{nq-1}] at the head of the pattern list:
- * assign each qi to a DISTINCT, still-unused argument (in any order, any
- * position — that is the "orderless" part) by backtracking, then continue the
- * rest of the pattern list against the remaining arguments in their original
- * order. Each qi is matched as a single-element pattern (the common,
- * documented usage). A named x:OPS[...] binds x to the Sequence of consumed
- * arguments in original order. */
-static bool ops_assign(Expr** exprs, size_t n_exprs, bool* used,
+/* Assign the elements qs[qi..nq) of an OrderlessPatternSequence to the
+ * still-unused elements of `run` (the contiguous block of arguments the OPS
+ * occupies), in any order. A single-element pattern takes one element; a
+ * literal one (no pattern construct) takes only the FIRST equal element, as
+ * every equal choice leaves the same state; a variable-width one (x__, x___,
+ * p..) takes an order-preserving subset, and the last pattern takes whatever
+ * is left. Once every pattern is placed and the whole run consumed, the OPS
+ * name (if any) binds the run in its ORIGINAL order and matching continues
+ * with the arguments after the run against pats[1..]. */
+static bool ops_assign(Expr** run, size_t L, bool* used,
                        Expr** qs, size_t qi, size_t nq,
+                       Expr** tail, size_t n_tail,
                        Expr** pats, size_t n_pats, MatchEnv* env,
                        Expr* condition, Expr* pat_head, size_t total_pats,
                        ParentMatch* parent, Expr* bind_sym) {
     if (qi == nq) {
-        size_t rn = 0;
-        for (size_t i = 0; i < n_exprs; i++) if (!used[i]) rn++;
-        Expr** rem = malloc((rn ? rn : 1) * sizeof(Expr*));
-        size_t w = 0;
-        for (size_t i = 0; i < n_exprs; i++) if (!used[i]) rem[w++] = exprs[i];
-
+        for (size_t i = 0; i < L; i++) if (!used[i]) return false;
         size_t saved = env->count;
-        bool okbind = true;
         if (bind_sym && bind_sym->type == EXPR_SYMBOL) {
-            size_t un = n_exprs - rn;
-            Expr* seqv = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, un);
-            size_t sw = 0;
-            for (size_t i = 0; i < n_exprs; i++)
-                if (used[i]) seqv->data.function.args[sw++] = expr_copy(exprs[i]);
+            Expr* seqv = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, L);
+            for (size_t i = 0; i < L; i++) seqv->data.function.args[i] = expr_copy(run[i]);
             Expr* existing = env_get(env, bind_sym->data.symbol.name);
-            if (existing) { if (!expr_eq(seqv, existing)) okbind = false; }
+            bool okbind = true;
+            if (existing) okbind = expr_eq(seqv, existing);
             else env_set(env, bind_sym->data.symbol.name, seqv);
             expr_free(seqv);
+            if (!okbind) return false;
         }
-        bool r = okbind && match_args_internal(rem, rn, pats + 1, n_pats - 1, env,
-                                               condition, pat_head, total_pats, parent);
-        if (!r) env_rollback(env, saved);
-        free(rem);
-        return r;
-    }
-    for (size_t p = 0; p < n_exprs; p++) {
-        if (used[p]) continue;
-        size_t saved = env->count;
-        used[p] = true;
-        if (match_internal(exprs[p], qs[qi], env, NULL)
-            && ops_assign(exprs, n_exprs, used, qs, qi + 1, nq, pats, n_pats, env,
-                          condition, pat_head, total_pats, parent, bind_sym)) {
+        if (match_args_internal(tail, n_tail, pats + 1, n_pats - 1, env,
+                                condition, pat_head, total_pats, parent))
             return true;
-        }
-        used[p] = false;
         env_rollback(env, saved);
+        return false;
     }
-    return false;
+    Expr* q = qs[qi];
+    if (pat_is_single_elem(q)) {
+        bool lit = pat_is_literal(q);
+        for (size_t p = 0; p < L; p++) {
+            if (used[p]) continue;
+            if (lit && !expr_eq(run[p], q)) continue;
+            size_t saved = env->count;
+            used[p] = true;
+            if (match_internal(run[p], q, env, NULL)
+                && ops_assign(run, L, used, qs, qi + 1, nq, tail, n_tail, pats, n_pats,
+                              env, condition, pat_head, total_pats, parent, bind_sym))
+                return true;
+            used[p] = false;
+            env_rollback(env, saved);
+            if (lit) break;
+        }
+        return false;
+    }
+    /* Variable width: choose `w` of the free elements (kept in run order). */
+    size_t free_n = 0;
+    for (size_t i = 0; i < L; i++) if (!used[i]) free_n++;
+    size_t lo, hi;
+    pat_width(q, &lo, &hi);
+    size_t wmin = lo, wmax = hi < free_n ? hi : free_n;
+    if (qi + 1 == nq) { if (free_n < lo || free_n > hi) return false; wmin = wmax = free_n; }
+    int* freeidx = malloc((free_n ? free_n : 1) * sizeof(int));
+    size_t fw = 0;
+    for (size_t i = 0; i < L; i++) if (!used[i]) freeidx[fw++] = (int)i;
+    Expr** sub = malloc((free_n ? free_n : 1) * sizeof(Expr*));
+    int* comb = malloc((free_n ? free_n : 1) * sizeof(int));
+    bool r = false;
+    for (size_t w = wmin; w <= wmax && !r; w++) {
+        for (size_t i = 0; i < w; i++) comb[i] = (int)i;
+        do {
+            for (size_t i = 0; i < w; i++) sub[i] = run[freeidx[comb[i]]];
+            size_t saved = env->count;
+            if (match_args_internal(sub, w, &q, 1, env, NULL, pat_head, 1, NULL)) {
+                for (size_t i = 0; i < w; i++) used[freeidx[comb[i]]] = true;
+                r = ops_assign(run, L, used, qs, qi + 1, nq, tail, n_tail, pats, n_pats,
+                               env, condition, pat_head, total_pats, parent, bind_sym);
+                for (size_t i = 0; i < w; i++) used[freeidx[comb[i]]] = false;
+            }
+            if (r) break;
+            env_rollback(env, saved);
+        } while (next_combination(comb, (int)free_n, (int)w));
+    }
+    free(comb); free(sub); free(freeidx);
+    return r;
 }
 
 
@@ -967,9 +1077,8 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             if (rep_unit_split(rep_pat, &slot, &unit, &um)) {
                 /* A variable-width body ((PatternSequence[...])..): the lone
                  * subject is a one-argument sequence for the units to cover. */
-                if (rep_units_match(&expr, 1, unit, um, rmin, rmax, env, NULL)) {
-                    if (call_parent(env, parent)) return true;
-                }
+                if (rep_units_match(&expr, 1, unit, um, rmin, rmax, env, NULL,
+                                    rep_cont_parent, parent)) return true;
                 env_rollback(env, saved);
             } else if (rmin <= 1 && (rmax == -1 || rmax >= 1)) {
                 if (match_internal(expr, rep_pat, env, NULL)) {
@@ -985,28 +1094,23 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
     Expr* p_pat = NULL;
     if (is_pattern(pattern, &p_sym, &p_pat)) {
         if (p_sym->type == EXPR_SYMBOL) {
+            /* Bind (or check) the name FIRST, then match the inner pattern with
+             * the real continuation. The name's value is `expr` whatever the
+             * inner pattern binds, so binding early changes no result; but
+             * matching the inner pattern with a NULL continuation (as this
+             * once did) committed to its first assignment, so a parent that
+             * failed could not backtrack into the others: ReplaceList[2 x,
+             * p:x_.*y_ :> ...] found one of the three matches. */
             size_t saved_env_count = env->count;
-            // Match p_pat first
-            if (!match_internal(expr, p_pat, env, NULL)) {
-                return false;
-            }
-            // Then handle binding and parent
             Expr* existing = env_get(env, p_sym->data.symbol.name);
             if (existing) {
-                if (!expr_eq(expr, existing)) {
-                    env_rollback(env, saved_env_count);
-                    return false;
-                }
-                // Match with parent
-                if (call_parent(env, parent)) return true;
-                env_rollback(env, saved_env_count);
-                return false;
+                if (!expr_eq(expr, existing)) return false;
             } else {
                 env_set(env, p_sym->data.symbol.name, expr);
-                if (call_parent(env, parent)) return true;
-                env_rollback(env, saved_env_count);
-                return false;
             }
+            if (match_internal(expr, p_pat, env, parent)) return true;
+            env_rollback(env, saved_env_count);
+            return false;
         }
     }
 
@@ -1093,10 +1197,28 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
         }
     }
 
-    // Try OneIdentity if pattern is a function
+    /* OneIdentity: f[p1, ..., pn] may match a lone x as if it were f[x] --
+     * but only through DEFAULTS: some pi must be
+     * Optional, so the others can match x while it takes its default
+     * (x matches Times[n_., x_] as n -> 1). Without an Optional, f[x_] does
+     * not match x, nor f[a, b] (which would otherwise bind x -> f[a, b]), nor
+     * f[] under Flat; and f[a] gets one match from the ordinary path above,
+     * not a second one through f[f[a]]. */
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL) {
         SymbolDef* def = symtab_get_def(pattern->data.function.head->data.symbol.name);
+        bool any_optional = false;
         if (def && (def->attributes & ATTR_ONEIDENTITY)) {
+            for (size_t i = 0; i < pattern->data.function.arg_count && !any_optional; i++)
+                any_optional = pat_has_optional(pattern->data.function.args[i]);
+        }
+        /* Under Flat, a subject that already has this head is covered by the
+         * ordinary path (the defaulted element leaves the rest to group into
+         * one f[...] operand), so the f[f[...]] reading would only repeat that
+         * match: ReplaceList[a + x, x_. + y_ :> ...] lists {0, a + x} once. */
+        if (any_optional && (def->attributes & ATTR_FLAT) && expr->type == EXPR_FUNCTION
+            && expr_eq(expr->data.function.head, pattern->data.function.head))
+            any_optional = false;
+        if (any_optional) {
             size_t saved_env_count = env->count;
             Expr* args[1] = { expr };
             if (match_args_internal(args, 1, pattern->data.function.args, pattern->data.function.arg_count, env, NULL, pattern->data.function.head, pattern->data.function.arg_count, parent)) {
@@ -1110,7 +1232,11 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
 }
 
 bool match(Expr* expr, Expr* pattern, MatchEnv* env) {
-    return match_internal(expr, pattern, env, &top_level_sentinel);
+    Expr* outer = env->top_pattern;          /* match() may nest via conditions */
+    env->top_pattern = pattern;
+    bool r = match_internal(expr, pattern, env, &top_level_sentinel);
+    env->top_pattern = outer;
+    return r;
 }
 
 /* True when pattern `p` always consumes exactly ONE argument of a sequence:
@@ -1216,17 +1342,27 @@ static void pat_width(Expr* p, size_t* lo, size_t* hi) {
  * Otherwise the split is searched depth-first over the width of each unit,
  * with an explicit stack (no recursion, so a long subject cannot exhaust the
  * C stack); each unit takes its first inner match at a given width. */
+static bool rep_cont_call(RepCont k, void* kdata, MatchEnv* env) {
+    if (!k) return true;
+    size_t mark = env->count;
+    if (k(env, kdata)) return true;
+    env_rollback(env, mark);
+    return false;
+}
+
 static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
                             int min_reps, int max_reps,
-                            MatchEnv* env, Expr* pat_head) {
+                            MatchEnv* env, Expr* pat_head,
+                            RepCont k, void* kdata) {
     size_t saved = env->count;
     if (n == 0) {
         /* Zero units suffice when the bounds allow it; otherwise min_reps
          * units must each match nothing -- one empty match stands for all of
          * them, since repeating it binds nothing new. */
-        if (min_reps == 0) return true;
+        if (min_reps == 0) return rep_cont_call(k, kdata, env);
         if (max_reps == 0) return false;
-        if (match_args_internal(xs, 0, unit, m, env, NULL, pat_head, m, NULL)) return true;
+        if (match_args_internal(xs, 0, unit, m, env, NULL, pat_head, m, NULL)
+            && rep_cont_call(k, kdata, env)) return true;
         env_rollback(env, saved);
         return false;
     }
@@ -1244,7 +1380,9 @@ static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
                 return false;
             }
         }
-        return true;
+        if (rep_cont_call(k, kdata, env)) return true;
+        env_rollback(env, saved);
+        return false;
     }
 
     /* Depth-first search over unit widths. Frame d records where unit d
@@ -1270,7 +1408,11 @@ static bool rep_units_match(Expr** xs, size_t n, Expr** unit, size_t m,
     bool ok = false;
     for (;;) {
         if (off == n) {
-            if (depth >= (size_t)min_reps) { ok = true; break; }
+            /* A complete cover: accept it only if the continuation does too;
+             * otherwise fall through to the dead-end step and re-split, so
+             * f[a, a] /. f[x__..] can give x -> a (two units) and, on
+             * backtracking, x -> Sequence[a, a] (one unit). */
+            if (depth >= (size_t)min_reps && rep_cont_call(k, kdata, env)) { ok = true; break; }
         } else if (max_reps == -1 || depth < (size_t)max_reps) {
             bool pushed = false;
             size_t wmax = (whi < n - off) ? whi : n - off;
@@ -1323,6 +1465,45 @@ static bool rep_unit_split(Expr* rep_pat, Expr** slot, Expr*** unit, size_t* m) 
         *m = 1;
     }
     return true;
+}
+
+/* The commit step of a sequence element (x__, x___, p.., ...) that has taken
+ * the k arguments `subset`: bind its name(s) to Sequence[subset] -- a name
+ * already bound (nonlinear reuse, or the outer/inner names of x:(b___/;c))
+ * must agree -- evaluate its element-level Condition guard, then match the
+ * rest of the argument list. Bindings it adds are left for the caller to roll
+ * back on failure. Also used as a RepCont, so a Repeated unit search can
+ * resume when the rest fails. */
+typedef struct {
+    Expr** subset; size_t k;
+    Expr* p_sym; Expr* extra_bind_sym; Expr* seq_cond;
+    Expr** remainder; size_t n_rem;
+    Expr** pats; size_t n_pats;
+    Expr* condition; Expr* pat_head; size_t total_pats; ParentMatch* parent;
+} SeqCommit;
+
+static bool seq_commit(MatchEnv* env, void* data) {
+    SeqCommit* c = (SeqCommit*)data;
+    if (c->p_sym) {
+        Expr* seq_val = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, c->k);
+        for (size_t i = 0; i < c->k; i++) seq_val->data.function.args[i] = expr_copy(c->subset[i]);
+        bool bound_ok = true;
+        Expr* existing = env_get(env, c->p_sym->data.symbol.name);
+        if (existing) { if (!expr_eq(seq_val, existing)) bound_ok = false; }
+        else env_set(env, c->p_sym->data.symbol.name, seq_val);
+        if (bound_ok && c->extra_bind_sym) {
+            Expr* ex2 = env_get(env, c->extra_bind_sym->data.symbol.name);
+            if (ex2) { if (!expr_eq(seq_val, ex2)) bound_ok = false; }
+            else env_set(env, c->extra_bind_sym->data.symbol.name, seq_val);
+        }
+        expr_free(seq_val);
+        if (!bound_ok) return false;
+    }
+    /* Element-level Condition guard (block___ /; ...): evaluated once, now
+     * that the sequence variable is bound. */
+    if (c->seq_cond && !eval_seq_conditions(c->seq_cond, env)) return false;
+    return match_args_internal(c->remainder, c->n_rem, c->pats, c->n_pats, env,
+                               c->condition, c->pat_head, c->total_pats, c->parent);
 }
 
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
@@ -1380,37 +1561,38 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         return r;
     }
 
-    /* OrderlessPatternSequence[...] anywhere in the pattern list: its patterns
-     * match some subset of the arguments in any order/position, so it is not
-     * bound by left-to-right position. Move the first OPS element to the front
-     * (preserving the relative order of the other elements) and dispatch it
-     * against a distinct-argument assignment via ops_assign; the remaining
-     * pattern elements then match the leftover arguments in order. */
+    /* OrderlessPatternSequence[q1, ..., qm] in first position: it occupies a
+     * CONTIGUOUS run of the arguments starting here -- as any sequence
+     * element does -- and the qi match the run's elements in any order
+     * (f[2, 1, b] matches f[OrderlessPatternSequence[1, 2], ___], f[1, b, 2]
+     * does not). Run lengths are tried shortest first; when the OPS is the
+     * last element it must take everything that is left. Literal qi are
+     * placed first, so each settles on one element before the variable ones
+     * enumerate (one match, not two, for f[a, a] against OPS[x_, a]). */
     {
-        size_t ops_j = n_pats;
         Expr* ops_bind = NULL;
-        for (size_t i = 0; i < n_pats; i++) {
-            Expr* b = NULL;
-            if (ops_unwrap(pats[i], &b)) { ops_j = i; ops_bind = b; break; }
-        }
-        if (ops_j < n_pats) {
-            if (ops_j > 0) {
-                Expr** np = malloc(sizeof(Expr*) * n_pats);
-                np[0] = pats[ops_j];
-                size_t w = 1;
-                for (size_t i = 0; i < n_pats; i++) if (i != ops_j) np[w++] = pats[i];
-                bool r = match_args_internal(exprs, n_exprs, np, n_pats, env,
-                                             condition, pat_head, total_pats, parent);
-                free(np);
-                return r;
-            }
-            Expr* ops = ops_unwrap(pats[0], &ops_bind);
+        Expr* ops = ops_unwrap(pats[0], &ops_bind);
+        if (ops) {
+            size_t nq = ops->data.function.arg_count;
+            Expr** qs = malloc((nq ? nq : 1) * sizeof(Expr*));
+            size_t w = 0;
+            for (size_t i = 0; i < nq; i++)
+                if (pat_is_literal(ops->data.function.args[i])) qs[w++] = ops->data.function.args[i];
+            for (size_t i = 0; i < nq; i++)
+                if (!pat_is_literal(ops->data.function.args[i])) qs[w++] = ops->data.function.args[i];
+            size_t lo, hi;
+            pat_width(ops, &lo, &hi);
+            size_t lmin = lo, lmax = hi < n_exprs ? hi : n_exprs;
+            if (n_pats == 1) { lmin = n_exprs; if (n_exprs < lo || n_exprs > hi) lmax = 0, lmin = 1; }
+            bool r = false;
             bool* used = calloc(n_exprs ? n_exprs : 1, sizeof(bool));
-            bool r = ops_assign(exprs, n_exprs, used,
-                                ops->data.function.args, 0, ops->data.function.arg_count,
-                                pats, n_pats, env, condition, pat_head, total_pats,
-                                parent, ops_bind);
+            for (size_t L = lmin; L <= lmax && !r; L++) {
+                r = ops_assign(exprs, L, used, qs, 0, nq, exprs + L, n_exprs - L,
+                               pats, n_pats, env, condition, pat_head, total_pats,
+                               parent, ops_bind);
+            }
             free(used);
+            free(qs);
             return r;
         }
     }
@@ -1639,9 +1821,20 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             }
         }
         if (ok) {
-            Expr** items = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+            /* OptionsPattern[{o -> v, ...}] (or a single rule) carries its own
+             * defaults: append them AFTER the passed options, so OptionValue's
+             * first-match lookup sees a passed value first and the default
+             * otherwise. A symbol argument is handled below. */
+            Expr* dflt = (opt_pat->data.function.arg_count >= 1)
+                         ? opt_pat->data.function.args[0] : NULL;
+            size_t nd = 0;
+            if (dflt && mo_is_list(dflt)) nd = dflt->data.function.arg_count;
+            else if (dflt && mo_is_option_rule(dflt)) nd = 1;
+            Expr** items = malloc(sizeof(Expr*) * (cnt + nd ? cnt + nd : 1));
             for (size_t i = 0; i < cnt; i++) items[i] = expr_copy(collected[i]);
-            Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt);
+            for (size_t i = 0; i < nd; i++)
+                items[cnt + i] = expr_copy(mo_is_list(dflt) ? dflt->data.function.args[i] : dflt);
+            Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt + nd);
             free(items);
             size_t saved = env->count;
             env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
@@ -1807,8 +2000,14 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 && inner_hn != SYM_Repeated && inner_hn != SYM_RepeatedNull) {
                 SymbolDef* idef = symtab_get_def(inner_hn);
                 bool has_oid = idef && (idef->attributes & ATTR_ONEIDENTITY);
+                /* OneIdentity lets a group be absorbed by a one-argument
+                 * pattern, or through defaults -- Power[y_, n_.] takes the
+                 * group 2 x as y with n -> 1 -- so keep the group spans then. */
                 bool oid_can_absorb = has_oid
                     && inner_p->data.function.arg_count == 1;
+                for (size_t ai = 0; has_oid && !oid_can_absorb
+                                    && ai < inner_p->data.function.arg_count; ai++)
+                    oid_can_absorb = pat_has_optional(inner_p->data.function.args[ai]);
                 if (!oid_can_absorb) {
                     max_k = (n_exprs > 0) ? 1 : 0;
                 }
@@ -1876,6 +2075,15 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
          * a leading `___` scanned across a long list this halves the per-attempt
          * memory traffic (e.g. the duplicate-search `{___, x_, ___, x_, ___}`). */
         bool need_subset = !(is_seq && !b_head && !seq_test && !p_sym);
+        /* A literal element (no pattern construct, no name) of an Orderless
+         * head can only take an argument equal to itself, and every such
+         * argument leaves the same bindings and an equal remainder. So it is
+         * matched against the FIRST equal argument only:
+         * ReplaceList[o[a, a], o[a, x_] :> x] is {a}, not {a, a}.
+         * Unequal candidates are skipped without building the continuation. */
+        bool lit_elem = is_orderless && k == 1 && !is_seq && !is_rep && !p_sym
+                        && pat_is_literal(inner_p);
+        bool lit_done = false;
         do {
             /* For an ordered (non-Orderless) head the do-while runs exactly once
              * with comb = [0..k-1] (next_combination is gated on is_orderless
@@ -1908,6 +2116,8 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 
             if (is_seq || is_rep) {
                 bool type_ok = true;
+                bool rep_variable = false;
+                Expr* rep_slot = NULL; Expr** rep_unit = NULL; size_t rep_um = 0;
                 if (p_sym) {
                     /* Already-bound sequence name of a different length: the
                      * Sequence built below can never equal it -- reject before
@@ -1935,10 +2145,8 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                         }
                     }
                 } else if (is_rep) {
-                    Expr* slot = NULL; Expr** unit = NULL; size_t um = 0;
-                    if (rep_unit_split(rep_pat, &slot, &unit, &um)) {
-                        type_ok = rep_units_match(subset, k, unit, um, min_len, max_len,
-                                                  env, is_orderless ? NULL : pat_head);
+                    if (rep_unit_split(rep_pat, &rep_slot, &rep_unit, &rep_um)) {
+                        rep_variable = true;    /* matched below, with a continuation */
                     } else {
                         for (size_t i = 0; i < k; i++) {
                             if (!match_internal(subset[i], rep_pat, env, NULL)) { type_ok = false; break; }
@@ -1947,34 +2155,21 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 }
 
                 if (type_ok) {
-                    if (p_sym) {
-                        Expr* seq_val = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, k);
-                        for (size_t i = 0; i < k; i++) seq_val->data.function.args[i] = expr_copy(subset[i]);
-                        /* Bind the sequence name(s); a name already bound (nonlinear
-                         * reuse, or the outer/inner names of x:(b___/;c)) must agree.
-                         * New bindings added here are undone by the env_rollback at
-                         * the end of this combination iteration on failure. */
-                        bool bound_ok = true;
-                        Expr* existing = env_get(env, p_sym->data.symbol.name);
-                        if (existing) { if (!expr_eq(seq_val, existing)) bound_ok = false; }
-                        else env_set(env, p_sym->data.symbol.name, seq_val);
-                        if (bound_ok && extra_bind_sym) {
-                            Expr* ex2 = env_get(env, extra_bind_sym->data.symbol.name);
-                            if (ex2) { if (!expr_eq(seq_val, ex2)) bound_ok = false; }
-                            else env_set(env, extra_bind_sym->data.symbol.name, seq_val);
-                        }
-                        /* Element-level Condition guard (block___ /; ...): evaluated
-                         * once, now that the sequence variable is bound. */
-                        if (bound_ok && (!seq_cond || eval_seq_conditions(seq_cond, env))
-                            && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                            expr_free(seq_val); { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
-                        }
-                        expr_free(seq_val);
-                    } else {
-                        if ((!seq_cond || eval_seq_conditions(seq_cond, env))
-                            && match_args_internal(remainder, n_exprs - k, pats + 1, n_pats - 1, env, condition, pat_head, total_pats, parent)) {
-                            { if (subset_owned) free(subset_owned); if (remainder_owned) free(remainder_owned); if (comb) free(comb); return true; }
-                        }
+                    SeqCommit sc = { subset, k, p_sym, extra_bind_sym, seq_cond,
+                                     remainder, n_exprs - k, pats + 1, n_pats - 1,
+                                     condition, pat_head, total_pats, parent };
+                    /* A variable-width repeat hands the commit step to the unit
+                     * search as its continuation, so a failure after it (or
+                     * ReplaceList asking for more) re-splits the units. */
+                    bool done = rep_variable
+                        ? rep_units_match(subset, k, rep_unit, rep_um, min_len, max_len, env,
+                                          is_orderless ? NULL : pat_head, seq_commit, &sc)
+                        : seq_commit(env, &sc);
+                    if (done) {
+                        if (subset_owned) free(subset_owned);
+                        if (remainder_owned) free(remainder_owned);
+                        if (comb) free(comb);
+                        return true;
                     }
                 }
             } else {
@@ -1993,6 +2188,13 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                     for (size_t i = 0; i < k; i++) {
                         matched_val->data.function.args[i] = expr_copy(subset[i]);
                     }
+                }
+
+                if (matched_val && lit_elem && !expr_eq(matched_val, inner_p)) {
+                    expr_free(matched_val);     /* cannot equal the literal */
+                    matched_val = NULL;
+                } else if (lit_elem) {
+                    lit_done = true;            /* the one candidate worth trying */
                 }
 
                 if (matched_val) {
@@ -2031,7 +2233,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             if (subset_owned) free(subset_owned);
             if (remainder_owned) free(remainder_owned);
 
-        } while (is_orderless && next_combination(comb, n_exprs, (int)k));
+        } while (is_orderless && !lit_done && next_combination(comb, n_exprs, (int)k));
         
         if (comb) free(comb);
         }

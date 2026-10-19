@@ -6,6 +6,8 @@
 #include "test_utils.h"
 #include "parse.h"
 #include "print.h"
+#include "numbertheory_internal.h"   /* df_factor_list_read */
+#include <gmp.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -134,41 +136,66 @@ void test_primenu_attributes() {
 /* A number FactorInteger cannot finish must leave these heads unevaluated, not
  * produce a confident wrong integer.
  *
- * FactorInteger's Automatic method is bounded, and on a hard composite that
- * survives trial division, Pollard rho and ECM it returns the cofactor
- * UNFACTORED with exponent 1 (warning as it goes, but still answering). The
- * shared helper df_factor_mpz read that back as a prime factor, so for the
- * 82-digit semiprime below PrimeNu said 1 and PrimeOmega said 1 where the truth
- * is 2, and MoebiusMu said -1 where the truth is 1 -- while PrimeQ on the very
- * same number correctly said False. facint.c's own facint_factor_complete
- * already states the rule ("the caller must then DECLINE rather than trust a
- * possibly-composite prime"); the helper now enforces it, and every consumer
- * already returned NULL on a failed factorisation. */
+ * When FactorInteger's Automatic method gives up on a hard composite, it
+ * returns the cofactor UNFACTORED with exponent 1 (warning as it goes, but
+ * still answering). The shared helper df_factor_mpz read that back as a prime
+ * factor, so for a semiprime PrimeNu said 1 and PrimeOmega said 1 where the
+ * truth is 2, and MoebiusMu said -1 where the truth is 1 -- while PrimeQ on the
+ * very same number correctly said False. The helper (now its reader,
+ * df_factor_list_read) declines on any base that is not prime, and every
+ * consumer returns NULL on a failed factorisation.
+ *
+ * TWO HALVES, because the engine outgrew the original probe. This test used
+ * NextPrime[10^40] NextPrime[10^41], which FactorInteger once abandoned; the
+ * quadratic sieve now finishes it in ~50 s per call, so the test spent 1m45
+ * asserting a decline that no longer happens. No input a unit test can afford
+ * still exhausts Automatic (its ECM runs to 65-digit levels), so:
+ *   1. the decline guard is exercised directly, on a crafted incomplete
+ *      factorisation {{p, 1}, {composite, 1}};
+ *   2. the end-to-end property -- a semiprime above 2^64 counts TWO primes --
+ *      is checked on one that factors in well under a second.
+ * Reference values from Mathematica 14. */
 void test_primenu_incomplete_factorisation_declines() {
-    /* p = NextPrime[10^40], q = NextPrime[10^41] */
-    const char* m = "1000000000000000000000000000000000000013190000000000000000000000000000000000013189";
-    char buf[512], want[512];
+    /* 1. The guard: a FactorInteger-shaped list carrying a composite base
+     *    (NextPrime[10^20] NextPrime[10^21]) must be refused, not counted. */
+    const char* incomplete =
+        "{{2, 3}, {100000000000000000050700000000000000004563, 1}}";
+    Expr* fact = parse_expression(incomplete);
+    mpz_t* primes = NULL;
+    unsigned long* exps = NULL;
+    size_t np = 99;
+    ASSERT(!df_factor_list_read(fact, &primes, &exps, &np));
+    ASSERT(primes == NULL && exps == NULL && np == 99);   /* outputs untouched */
+    expr_free(fact);
 
-    /* Mathilda knows it is composite ... */
-    snprintf(buf, sizeof buf, "PrimeQ[%s]", m);
-    check(buf, "False");
+    /* ... while the same shape with only prime bases reads back faithfully. */
+    fact = parse_expression("{{2, 3}, {100000000000000000039, 1}, {1000000000000000000117, 2}}");
+    ASSERT(df_factor_list_read(fact, &primes, &exps, &np));
+    ASSERT(np == 3);
+    ASSERT(mpz_cmp_ui(primes[0], 2) == 0 && exps[0] == 3);
+    ASSERT(exps[1] == 1 && exps[2] == 2);
+    for (size_t i = 0; i < np; i++) mpz_clear(primes[i]);
+    free(primes);
+    free(exps);
+    expr_free(fact);
 
-    /* ... so it must not claim it has one prime factor. */
-    snprintf(buf,  sizeof buf,  "PrimeNu[%s]", m);
-    snprintf(want, sizeof want, "PrimeNu[%s]", m);
-    check(buf, want);
+    /* A unit entry contributes nothing: FactorInteger[1] is {{1, 1}}. */
+    fact = parse_expression("{{1, 1}}");
+    ASSERT(df_factor_list_read(fact, &primes, &exps, &np));
+    ASSERT(np == 0 && primes == NULL && exps == NULL);
+    expr_free(fact);
 
-    snprintf(buf,  sizeof buf,  "PrimeOmega[%s]", m);
-    snprintf(want, sizeof want, "PrimeOmega[%s]", m);
-    check(buf, want);
-
-    snprintf(buf,  sizeof buf,  "MoebiusMu[%s]", m);
-    snprintf(want, sizeof want, "MoebiusMu[%s]", m);
-    check(buf, want);
-
-    snprintf(buf,  sizeof buf,  "LiouvilleLambda[%s]", m);
-    snprintf(want, sizeof want, "LiouvilleLambda[%s]", m);
-    check(buf, want);
+    /* 2. End to end: m = NextPrime[10^20] NextPrime[10^21], both primes above
+     *    2^64. The pre-fix answers were 1, 1, -1, -1. */
+    const char* m = "100000000000000000050700000000000000004563";
+    char buf[512];
+    snprintf(buf, sizeof buf, "PrimeQ[%s]", m);          check(buf, "False");
+    snprintf(buf, sizeof buf, "PrimeNu[%s]", m);         check(buf, "2");
+    snprintf(buf, sizeof buf, "PrimeOmega[%s]", m);      check(buf, "2");
+    snprintf(buf, sizeof buf, "MoebiusMu[%s]", m);       check(buf, "1");
+    snprintf(buf, sizeof buf, "LiouvilleLambda[%s]", m); check(buf, "1");
+    snprintf(buf, sizeof buf, "PrimeOmega[%s^2]", m);    check(buf, "4");
+    snprintf(buf, sizeof buf, "MoebiusMu[%s^2]", m);     check(buf, "0");
 
     /* A big number that DOES factor must still answer: 2^64 - 1 has 7 distinct
      * primes, so the guard must not turn into a blanket refusal on large input. */

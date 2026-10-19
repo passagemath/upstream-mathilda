@@ -34,6 +34,8 @@ bool    pr_collect_distinct_primes(const mpz_t m_in, mpz_t* out, size_t* count);
 bool    is_gaussian_integer(Expr* e);
 bool    df_factor_mpz(const mpz_t m, mpz_t** out_primes,
                       unsigned long** out_exps, size_t* out_n);
+bool    df_factor_list_read(const Expr* fact, mpz_t** out_primes,
+                            unsigned long** out_exps, size_t* out_n);
 bool    df_to_gaussian(Expr* e, mpz_t a, mpz_t b);
 bool    df_gaussian_prime_factor(const mpz_t a_in, const mpz_t b_in,
                                  mpz_t** out_gu, mpz_t** out_gv,

@@ -1402,7 +1402,7 @@ target_include_directories(primeomega_tests PRIVATE ../src)
 add_test(NAME primeomega_tests COMMAND primeomega_tests)
 
 add_executable(primenu_tests test_primenu.c $<TARGET_OBJECTS:mathilda_common>)
-target_include_directories(primenu_tests PRIVATE ../src)
+target_include_directories(primenu_tests PRIVATE ../src ../src/numbertheory)
 add_test(NAME primenu_tests COMMAND primenu_tests)
 
 add_executable(prime_tests test_prime.c $<TARGET_OBJECTS:mathilda_common>)

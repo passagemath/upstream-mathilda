@@ -46,24 +46,24 @@ static int df_gpair_cmp(const void* x, const void* y) {
     return mpz_cmp(p->im, q->im);
 }
 
-/* Factor a positive integer m into distinct primes and exponents by delegating
- * to internal_factorinteger (FactorInteger).  On success returns true and sets
+/* Read a FactorInteger result {{p1, e1}, ...} (borrowed, not freed) into
+ * distinct primes and exponents.  On success returns true and sets
  * *out_primes (an array of *out_n init'd mpz_t) and *out_exps (matching
- * exponents); the caller frees both arrays and clears each prime.  For m == 1
- * the factorisation is empty (n == 0, arrays NULL).  Returns false on any
- * structural problem. */
-bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
-                          unsigned long** out_exps, size_t* out_n) {
-    /* internal_factorinteger takes ownership of the args array contents, so the
-     * constructed integer must NOT be freed here. */
-    Expr* args[1] = { expr_bigint_normalize(expr_new_bigint_from_mpz(m)) };
-    Expr* fact = internal_factorinteger(args, 1);
+ * exponents); the caller frees both arrays and clears each prime.  A unit
+ * entry {1, 1} contributes nothing, so FactorInteger[1] reads as the empty
+ * factorisation (n == 0, arrays NULL).  Returns false on any structural
+ * problem AND on any base that is not prime -- see the comment in the loop.
+ *
+ * Split out of df_factor_mpz so that the decline guard can be tested on a
+ * crafted incomplete factorisation: FactorInteger's Automatic method now
+ * finishes every composite a test can afford to hand it, so no natural input
+ * reaches this path in reasonable time. */
+bool df_factor_list_read(const Expr* fact, mpz_t** out_primes,
+                         unsigned long** out_exps, size_t* out_n) {
     if (!fact || fact->type != EXPR_FUNCTION ||
         fact->data.function.head->type != EXPR_SYMBOL ||
-        fact->data.function.head->data.symbol.name != SYM_List) {
-        if (fact) expr_free(fact);
+        fact->data.function.head->data.symbol.name != SYM_List)
         return false;
-    }
 
     size_t n = fact->data.function.arg_count;
     mpz_t* primes = (n > 0) ? (mpz_t*)malloc(n * sizeof(mpz_t)) : NULL;
@@ -109,7 +109,6 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
             ok = false; break;
         }
     }
-    expr_free(fact);
 
     if (!ok) {
         for (size_t i = 0; i < got; i++) mpz_clear(primes[i]);
@@ -122,6 +121,21 @@ bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
     *out_exps = exps;
     *out_n = got;
     return true;
+}
+
+/* Factor a positive integer m into distinct primes and exponents by delegating
+ * to internal_factorinteger (FactorInteger) and reading the result with
+ * df_factor_list_read (same outputs and ownership).  Returns false on any
+ * structural problem or an incomplete factorisation. */
+bool df_factor_mpz(const mpz_t m, mpz_t** out_primes,
+                          unsigned long** out_exps, size_t* out_n) {
+    /* internal_factorinteger takes ownership of the args array contents, so the
+     * constructed integer must NOT be freed here. */
+    Expr* args[1] = { expr_bigint_normalize(expr_new_bigint_from_mpz(m)) };
+    Expr* fact = internal_factorinteger(args, 1);
+    bool ok = df_factor_list_read(fact, out_primes, out_exps, out_n);
+    if (fact) expr_free(fact);
+    return ok;
 }
 
 /* Build the ascending list of positive divisors of nabs (>= 2 in practice).

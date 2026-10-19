@@ -434,7 +434,7 @@ void options_register_defaults(void) {
     /* ---- Number theory ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
-    {   /* ProgressReporting :> $ProgressReporting, as in Mathematica (accepted,
+    {   /* ProgressReporting :> $ProgressReporting (accepted,
          * no progress is reported) */
         Expr** ra = malloc(2 * sizeof(Expr*));
         ra[0] = expr_new_symbol("ProgressReporting");
@@ -898,7 +898,7 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("GaussianIntegers", "Automatic"));
     ob_commit(&b, "PrimePowerQ");
 
-    /* CoprimeQ has NO options in Mathematica 14 -- a GaussianIntegers rule is
+    /* CoprimeQ has NO options in the reference -- a GaussianIntegers rule is
      * just a non-integer argument, so CoprimeQ[2, 5, GaussianIntegers -> True]
      * is False -- and none are registered here. */
 

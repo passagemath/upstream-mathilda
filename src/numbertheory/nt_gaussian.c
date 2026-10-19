@@ -475,14 +475,14 @@ Expr* divisors_gaussian(const mpz_t a_in, const mpz_t b_in) {
 
 /* ---- Gaussian GCD / extended GCD (GCD, LCM, ExtendedGCD, CoprimeQ) -------- *
  * The Euclidean algorithm in Z[i]: the quotient of x by y is x conj(y) / N(y)
- * rounded component-wise to the NEAREST integer, ties to even -- Mathematica's
- * Round -- and it starts from the operand of LARGER norm (swapping the
- * cofactors back). Together those reproduce Mathematica's ExtendedGCD
+ * rounded component-wise to the NEAREST integer, ties to even (Round's
+ * convention) -- and it starts from the operand of LARGER norm (swapping the
+ * cofactors back). Together those give the reference ExtendedGCD
  * coefficients on 399 of 400 random pairs (the remaining one is a norm tie
  * between remainders, where both answers are valid Bezout certificates);
  * round-half-up matched 319, and no norm ordering 390. The gcd is normalised
  * to its first-quadrant associate (Re > 0, Im >= 0), which matches
- * Mathematica on all 400. */
+ * the reference on all 400. */
 
 /* q = num / den rounded to nearest, ties to even (den > 0). */
 static void gi_round_even(mpz_t q, const mpz_t num, const mpz_t den) {
@@ -663,7 +663,7 @@ bool is_gaussian_rational(Expr* e) {
     return is_complex(e, &r, &i) && is_rational_like(r) && is_rational_like(i);
 }
 
-/* x mod m in Z[i], Mathematica's convention: x - m Round[x / m], the quotient
+/* x mod m in Z[i], the nearest-quotient convention: x - m Round[x / m], the quotient
  * rounded component-wise to nearest, ties to even (Mod[3 + 4 I, 2] is -1).
  * m must be nonzero. Writes (rr, ri); outputs init'd by the caller and may not
  * alias the inputs. */
@@ -684,7 +684,7 @@ void gi_mod(mpz_t rr, mpz_t ri, const mpz_t xr, const mpz_t xi,
 
 /* a^e mod m in Z[i] for an integer e (m != 0), by square-and-multiply with a
  * gi_mod reduction after every product -- which is what reproduces
- * Mathematica's PowerMod on 390 of 400 random Gaussian cases (all 250 with
+ * the reference PowerMod on 390 of 400 random Gaussian cases (all 250 with
  * e >= 0). A negative e inverts a first through gi_xgcd. Returns false when a
  * is not invertible modulo m. Outputs init'd by the caller. */
 bool gi_powmod(mpz_t rr, mpz_t ri, const mpz_t ar, const mpz_t ai,

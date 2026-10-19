@@ -35,7 +35,7 @@ void numbertheory_init(void) {
     symtab_add_builtin("Prime", builtin_prime);
     symtab_add_builtin("PrimePi", builtin_primepi);
 
-    /* No NumericFunction: Mathematica's GCD and LCM do not carry it. */
+    /* No NumericFunction: GCD and LCM do not carry it. */
     symtab_get_def("GCD")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("LCM")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("ExtendedGCD")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);

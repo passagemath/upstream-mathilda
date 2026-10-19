@@ -70,7 +70,7 @@ static bool cr_is_number(Expr* e) {
 Expr* builtin_chineseremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    /* Mathematica says "2 arguments are expected" even though 3 are accepted:
+    /* The message says "2 arguments are expected" even though 3 are accepted:
      * argr for one argument, argrx otherwise. */
     if (argc < 2 || argc > 3) {
         if (argc == 1)
@@ -102,7 +102,7 @@ Expr* builtin_chineseremainder(Expr* res) {
     }
 
     /* Numbers, but not two equal-length lists of integers with positive moduli
-     * -- ChineseRemainder::pilist, as in Mathematica. */
+     * -- ChineseRemainder::pilist. */
     bool valid = mlist->data.function.arg_count == n;
     for (size_t i = 0; i < n && valid; i++) {
         Expr* r = rlist->data.function.args[i];

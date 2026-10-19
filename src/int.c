@@ -53,11 +53,13 @@
 
 #include "int.h"
 #include "ndarray.h"      /* is_ndarray, ndarray_delist_and_reeval */
+#include "pack.h"         /* ndbuild_open_i64 */
 #include "ndinteger.h"   /* NDArray buffer fast path */
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
 #include "sym_names.h"
+#include "eval.h"           /* eval_and_free */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,14 +150,20 @@ Expr* builtin_integerdigits(Expr* res) {
     mpz_t base;
     if (argc >= 2) {
         Expr* b_expr = res->data.function.args[1];
-        if (!expr_is_integer_like(b_expr)) {
-            if (expr_is_numeric_like(b_expr)) return int_emit_int(2, res);
-            return NULL;
+        bool ok_base = expr_is_integer_like(b_expr);
+        if (ok_base) {
+            expr_to_mpz(b_expr, base);
+            if (mpz_cmp_ui(base, 2) < 0) { mpz_clear(base); ok_base = false; }
         }
-        expr_to_mpz(b_expr, base);
-        if (mpz_cmp_ui(base, 2) < 0) {
-            mth_message("IntegerDigits", "ibase", "Base argument must be an integer >= 2.");
-            mpz_clear(base);
+        if (!ok_base) {
+            /* IntegerDigits::ibase, for any number that is
+             * not an integer > 1; a symbolic base stays unevaluated quietly. */
+            if (expr_is_numeric_like(b_expr)) {
+                char* bs = expr_to_string(b_expr);
+                mth_message("IntegerDigits", "ibase", "Base %s is not an integer greater than 1.",
+                            bs ? bs : "?");
+                free(bs);
+            }
             return NULL;
         }
     } else {
@@ -167,22 +175,87 @@ Expr* builtin_integerdigits(Expr* res) {
     size_t target_len = 0;
     if (argc >= 3) {
         Expr* l_expr = res->data.function.args[2];
-        if (!expr_is_integer_like(l_expr)) {
-            mpz_clear(base);
-            if (expr_is_numeric_like(l_expr)) return int_emit_int(3, res);
-            return NULL;
-        }
-        mpz_t l;
-        expr_to_mpz(l_expr, l);
-        if (mpz_sgn(l) < 0 || !mpz_fits_ulong_p(l)) {
-            mth_message("IntegerDigits", "intnn", "Non-negative machine-sized integer expected at position 3.");
+        bool ok_len = false;
+        if (expr_is_integer_like(l_expr)) {
+            mpz_t l;
+            expr_to_mpz(l_expr, l);
+            ok_len = mpz_sgn(l) >= 0 && mpz_fits_ulong_p(l);
+            if (ok_len) target_len = (size_t)mpz_get_ui(l);
             mpz_clear(l);
+        }
+        if (!ok_len) {
             mpz_clear(base);
+            if (expr_is_numeric_like(l_expr)) {
+                char* call = expr_to_string(res);
+                mth_message("IntegerDigits", "intnm",
+                            "Non-negative machine-sized integer expected at position 3 in %s.",
+                            call ? call : "?");
+                free(call);
+            }
             return NULL;
         }
-        target_len = (size_t)mpz_get_ui(l);
-        mpz_clear(l);
         has_len = true;
+    }
+
+    /* --- machine fast path: int64 n, base up to 2^31 ----------------- */
+    if (n_expr->type == EXPR_INTEGER && mpz_cmp_ui(base, 2147483647UL) <= 0 &&
+        n_expr->data.integer != INT64_MIN) {
+        uint64_t b = mpz_get_ui(base);
+        uint64_t v = (uint64_t)(n_expr->data.integer < 0 ? -n_expr->data.integer : n_expr->data.integer);
+        int64_t dg[64];
+        size_t cnt = 0;
+        do { dg[cnt++] = (int64_t)(v % b); v /= b; } while (v);
+        size_t outn = has_len ? target_len : cnt;
+        size_t use = (has_len && target_len < cnt) ? target_len : cnt;
+        Expr** out_args = outn ? malloc(sizeof(Expr*) * outn) : NULL;
+        size_t lead = outn - use;
+        for (size_t i = 0; i < lead; i++) out_args[i] = expr_new_integer(0);
+        for (size_t i = 0; i < use; i++) out_args[lead + i] = expr_new_integer(dg[use - 1 - i]);
+        mpz_clear(base);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), out_args, outn);
+        free(out_args);
+        return r;
+    }
+
+    /* --- bignum, base 2..62: GMP's subquadratic radix conversion ------- */
+    if (mpz_cmp_ui(base, 62) <= 0) {
+        mpz_t n;
+        expr_to_mpz(n_expr, n);
+        mpz_abs(n, n);
+        int b = (int)mpz_get_ui(base);
+        char* str = mpz_get_str(NULL, b, n);
+        size_t cnt = strlen(str);
+        size_t outn = has_len ? target_len : cnt;
+        size_t use = (has_len && target_len < cnt) ? target_len : cnt;
+        size_t lead = outn - use;
+        const char* src = str + (cnt - use);          /* the `use` least-significant */
+        /* The answer is a flat list of machine integers, so it is written
+         * straight into a packed int64 buffer (the canonical form):
+         * 95k boxed digits cost 2.5x the radix conversion itself. NULL means
+         * packing is off or the list is under threshold -> boxed digits. */
+        int64_t* pbuf = NULL;
+        Expr* packed = ndbuild_open_i64((int64_t)outn, &pbuf);
+        Expr** out_args = (!packed && outn) ? malloc(sizeof(Expr*) * outn) : NULL;
+        for (size_t i = 0; i < outn; i++) {
+            int d = 0;
+            if (i >= lead) {
+                int c = (unsigned char)src[i - lead];
+                d = (c >= '0' && c <= '9') ? c - '0'
+                  : (c >= 'a' && c <= 'z') ? (b <= 36 ? 10 + c - 'a' : 36 + c - 'a')
+                  : 10 + c - 'A';                            /* GMP: base > 36 uses A-Z then a-z */
+            }
+            if (packed) pbuf[i] = d;
+            else out_args[i] = expr_new_integer(d);
+        }
+        void (*gmp_free)(void*, size_t);
+        mp_get_memory_functions(NULL, NULL, &gmp_free);
+        gmp_free(str, cnt + 1);
+        mpz_clear(n);
+        mpz_clear(base);
+        if (packed) return packed;
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), out_args, outn);
+        free(out_args);
+        return r;
     }
 
     /* --- n = |n| ---------------------------------------------------- */
@@ -465,14 +538,20 @@ Expr* builtin_integerexponent(Expr* res) {
     mpz_t base;
     if (argc == 2) {
         Expr* b_expr = res->data.function.args[1];
-        if (!expr_is_integer_like(b_expr)) {
-            if (expr_is_numeric_like(b_expr)) return intexp_emit_int(2, res);
-            return NULL;
+        bool ok_base = expr_is_integer_like(b_expr);
+        if (ok_base) {
+            expr_to_mpz(b_expr, base);
+            if (mpz_cmp_ui(base, 2) < 0) { mpz_clear(base); ok_base = false; }
         }
-        expr_to_mpz(b_expr, base);
-        if (mpz_cmp_ui(base, 2) < 0) {
-            mth_message("IntegerExponent", "ibase", "Base argument must be an integer >= 2.");
-            mpz_clear(base);
+        if (!ok_base) {
+            /* IntegerExponent::ibase for any number that is not an integer
+             * > 1; a symbolic base stays unevaluated quietly. */
+            if (expr_is_numeric_like(b_expr)) {
+                char* bs = expr_to_string(b_expr);
+                mth_message("IntegerExponent", "ibase", "Base %s is not an integer greater than 1.",
+                            bs ? bs : "?");
+                free(bs);
+            }
             return NULL;
         }
     } else {
@@ -537,10 +616,13 @@ static Expr* dc_emit_base(Expr* b_expr, Expr* res) {
  * should be a non-negative integer less than the base.`  Used for
  * non-integer digit OR integer digit out of [0, base). */
 static Expr* dc_emit_digit(Expr* d_expr, Expr* res) {
-    char* d_str = expr_to_string(d_expr);
+    (void)d_expr;
     char* call_str = expr_to_string(res);
-    mth_message("DigitCount", "digit", "The digit %s at position 3 of %s should be a non-negative integer less than the base.", d_str ? d_str : "?", call_str ? call_str : "?");
-    free(d_str);
+    char* b_str = NULL;
+    if (res->data.function.arg_count >= 2) b_str = expr_to_string(res->data.function.args[1]);
+    mth_message("DigitCount", "digp", "Positive integer or list of non-negative integers less than the base %s expected at position 3 in %s.",
+                b_str ? b_str : "10", call_str ? call_str : "?");
+    free(b_str);
     free(call_str);
     return NULL;
 }
@@ -560,7 +642,10 @@ static Expr* dc_emit_digit(Expr* d_expr, Expr* res) {
  * DC_MAX_BASE_FOR_LIST, which always fits in unsigned long). */
 static void dc_build_histogram(const mpz_t n, unsigned long b_val,
                                 int64_t* counts) {
-    if (mpz_sgn(n) == 0) return;
+    /* 0 is the single digit 0 -- except in base 2, which counts
+     * no digits at all (DigitCount[0] is {0, ..., 0, 1}, DigitCount[0, 2]
+     * is {0, 0}). */
+    if (mpz_sgn(n) == 0) { if (b_val != 2) counts[0] = 1; return; }
     mpz_t abs_n, q;
     mpz_init(q);
     mpz_init(abs_n);
@@ -581,7 +666,10 @@ static void dc_build_histogram(const mpz_t n, unsigned long b_val,
 static void dc_count_one_digit(const mpz_t n, const mpz_t base,
                                 const mpz_t target, mpz_t out_count) {
     mpz_set_ui(out_count, 0);
-    if (mpz_sgn(n) == 0) return;
+    if (mpz_sgn(n) == 0) {                     /* see dc_build_histogram */
+        if (mpz_sgn(target) == 0 && mpz_cmp_ui(base, 2) != 0) mpz_set_ui(out_count, 1);
+        return;
+    }
 
     /* Fast path: base fits in unsigned long AND target fits in unsigned
      * long.  Avoid an mpz_t for the per-digit remainder. */
@@ -624,6 +712,104 @@ Expr* builtin_digitcount(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 3) return dc_emit_argb(argc);
+
+    Expr** dargs = res->data.function.args;
+
+    /* DigitCount[{n1, n2, ...}, ...] threads over the first argument only
+     * (it is not Listable): one count per
+     * number, integer or real.  A non-numeric element is ::int for the
+     * whole call; a list as the base is ::base. */
+    if (dargs[0]->type == EXPR_FUNCTION &&
+        dargs[0]->data.function.head->type == EXPR_SYMBOL &&
+        dargs[0]->data.function.head->data.symbol.name == SYM_List) {
+        size_t nn = dargs[0]->data.function.arg_count;
+        for (size_t i = 0; i < nn; i++) {
+            Expr* e = dargs[0]->data.function.args[i];
+            if (!expr_is_integer_like(e) && e->type != EXPR_REAL
+#ifdef USE_MPFR
+                && e->type != EXPR_MPFR
+#endif
+                ) return dc_emit_int(1, res);
+        }
+        Expr** items = malloc((nn ? nn : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < nn; i++) {
+            Expr* ca[3];
+            ca[0] = expr_copy(dargs[0]->data.function.args[i]);
+            for (size_t j = 1; j < argc; j++) ca[j] = expr_copy(dargs[j]);
+            items[i] = expr_new_function(expr_new_symbol("DigitCount"), ca, argc);
+        }
+        Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), items, nn));
+        free(items);
+        return out;
+    }
+    if (argc >= 2 && dargs[1]->type == EXPR_FUNCTION &&
+        dargs[1]->data.function.head->type == EXPR_SYMBOL &&
+        dargs[1]->data.function.head->data.symbol.name == SYM_List)
+        return dc_emit_base(dargs[1], res);
+
+    /* DigitCount[n, b, {d1, d2, ...}]: a list of counts. */
+    if (argc == 3 && dargs[2]->type == EXPR_FUNCTION &&
+        dargs[2]->data.function.head->type == EXPR_SYMBOL &&
+        dargs[2]->data.function.head->data.symbol.name == SYM_List) {
+        size_t nd = dargs[2]->data.function.arg_count;
+        Expr** items = malloc((nd ? nd : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < nd; i++) {
+            Expr* ca[3] = { expr_copy(dargs[0]), expr_copy(dargs[1]),
+                            expr_copy(dargs[2]->data.function.args[i]) };
+            items[i] = expr_new_function(expr_new_symbol("DigitCount"), ca, 3);
+        }
+        Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), items, nd));
+        free(items);
+        return out;
+    }
+
+    /* A real n counts the digits RealDigits[n, b] gives (DigitCount[2.5, 2]
+     * is {2, 51}). */
+    if (dargs[0]->type == EXPR_REAL
+#ifdef USE_MPFR
+        || dargs[0]->type == EXPR_MPFR
+#endif
+        ) {
+        Expr* b_e = argc >= 2 ? dargs[1] : NULL;
+        int64_t b = 10;
+        if (b_e) {
+            if (b_e->type != EXPR_INTEGER || b_e->data.integer < 2)
+                return expr_is_numeric_like(b_e) ? dc_emit_base(b_e, res) : NULL;
+            b = b_e->data.integer;
+        }
+        if ((uint64_t)b > DC_MAX_BASE_FOR_LIST) return NULL;
+        int64_t target = -1;
+        if (argc == 3) {
+            Expr* d = dargs[2];
+            if (d->type != EXPR_INTEGER || d->data.integer < 0 || d->data.integer >= b)
+                return expr_is_numeric_like(d) ? dc_emit_digit(d, res) : NULL;
+            target = d->data.integer;
+        }
+        Expr* rd_args[2] = { expr_copy(dargs[0]), expr_new_integer(b) };
+        Expr* rd = eval_and_free(expr_new_function(expr_new_symbol("RealDigits"), rd_args, 2));
+        Expr* digs = (rd->type == EXPR_FUNCTION && rd->data.function.arg_count == 2)
+                         ? rd->data.function.args[0] : NULL;
+        if (!digs || digs->type != EXPR_FUNCTION) { expr_free(rd); return NULL; }
+        int64_t* counts = calloc((size_t)b, sizeof(int64_t));
+        for (size_t i = 0; i < digs->data.function.arg_count; i++) {
+            Expr* d = digs->data.function.args[i];
+            if (d->type == EXPR_INTEGER && d->data.integer >= 0 && d->data.integer < b)
+                counts[d->data.integer]++;
+        }
+        expr_free(rd);
+        Expr* out;
+        if (target >= 0) {
+            out = expr_new_integer(counts[target]);
+        } else {
+            Expr** oa = malloc((size_t)b * sizeof(Expr*));
+            for (int64_t i = 1; i < b; i++) oa[i - 1] = expr_new_integer(counts[i]);
+            oa[b - 1] = expr_new_integer(counts[0]);
+            out = expr_new_function(expr_new_symbol(SYM_List), oa, (size_t)b);
+            free(oa);
+        }
+        free(counts);
+        return out;
+    }
 
     /* --- n -------------------------------------------------------- */
     Expr* n_expr = res->data.function.args[0];
@@ -763,7 +949,8 @@ Expr* builtin_digitcount(Expr* res) {
  * arguments are expected.`  Print to stderr and return NULL so the
  * call is left unevaluated, matching Mathematica's surface behaviour. */
 static Expr* fd_emit_argb(size_t argc) {
-    mth_message("FromDigits", "argb", "FromDigits called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
+    /* The expected tag for "1 or 2 arguments" is argt. */
+    mth_message("FromDigits", "argt", "FromDigits called with %zu arguments; 1 or 2 arguments are expected.", argc);
     return NULL;
 }
 
@@ -830,24 +1017,42 @@ static bool fd_all_integer_digits(Expr* list) {
  * digit. */
 static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
     size_t n = list->data.function.arg_count;
-    mpz_t acc, tmp;
+    mpz_t acc;
     mpz_init_set_ui(acc, 0);
-    mpz_init(tmp);
-    for (size_t i = 0; i < n; i++) {
-        mpz_t digit;
-        expr_to_mpz(list->data.function.args[i], digit);
-        mpz_mul(tmp, acc, base);
-        mpz_add(acc, tmp, digit);
-        mpz_clear(digit);
-    }
-    mpz_clear(tmp);
 
-    Expr* out;
-    if (mpz_fits_slong_p(acc)) {
-        out = expr_new_integer((int64_t)mpz_get_si(acc));
-    } else {
-        out = expr_new_bigint_from_mpz(acc);
+    /* Every digit in [0, base) with 2 <= base <= 62: GMP's subquadratic radix
+     * conversion from a digit string, instead of an O(n^2) Horner loop --
+     * FromDigits[IntegerDigits[3^100000]] in a few ms rather than 0.27 s. */
+    bool simple = mpz_cmp_ui(base, 2) >= 0 && mpz_cmp_ui(base, 62) <= 0 && n > 0;
+    unsigned long b = simple ? mpz_get_ui(base) : 0;
+    for (size_t i = 0; i < n && simple; i++) {
+        Expr* d = list->data.function.args[i];
+        simple = d->type == EXPR_INTEGER && d->data.integer >= 0 &&
+                 (uint64_t)d->data.integer < b;
     }
+    if (simple) {
+        char* str = malloc(n + 1);
+        for (size_t i = 0; i < n; i++) {
+            int64_t d = list->data.function.args[i]->data.integer;
+            str[i] = (char)(d < 10 ? '0' + d : (b <= 36 ? 'a' + (d - 10)
+                                                : (d < 36 ? 'A' + (d - 10) : 'a' + (d - 36))));
+        }
+        str[n] = 0;
+        mpz_set_str(acc, str, (int)b);
+        free(str);
+    } else {
+        mpz_t tmp;
+        mpz_init(tmp);
+        for (size_t i = 0; i < n; i++) {
+            mpz_t digit;
+            expr_to_mpz(list->data.function.args[i], digit);
+            mpz_mul(tmp, acc, base);
+            mpz_add(acc, tmp, digit);
+            mpz_clear(digit);
+        }
+        mpz_clear(tmp);
+    }
+    Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(acc));
     mpz_clear(acc);
     return out;
 }
@@ -858,6 +1063,24 @@ static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
  * unevaluated.  Empty string -> 0. */
 static Expr* fd_compute_integer_string(const char* s, const mpz_t base,
                                         Expr* res) {
+    /* Every character a digit below the base (base <= 36, case-insensitive):
+     * GMP's subquadratic conversion. Otherwise ("12a" in base 10 is 130)
+     * the character values go through Horner. */
+    if (mpz_cmp_ui(base, 36) <= 0 && *s) {
+        unsigned long b = mpz_get_ui(base);
+        bool simple = true;
+        for (const char* p = s; *p && simple; p++) {
+            int d = fd_char_to_digit((unsigned char)*p);
+            simple = d >= 0 && (unsigned long)d < b;
+        }
+        if (simple) {
+            mpz_t v;
+            mpz_init_set_str(v, s, (int)b);
+            Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(v));
+            mpz_clear(v);
+            return out;
+        }
+    }
     mpz_t acc, tmp;
     mpz_init_set_ui(acc, 0);
     mpz_init(tmp);
@@ -939,6 +1162,98 @@ static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
     return plus_node;
 }
 
+/* Nested Horner form b (b (d0) + d1) + d2 ..., the form
+ * given for symbolic digits in a numeric base: FromDigits[{a, b, c}] is
+ * 10 (10 a + b) + c. */
+static Expr* fd_build_horner(Expr* list, Expr* base_expr) {
+    size_t n = list->data.function.arg_count;
+    if (n == 0) return expr_new_integer(0);
+    Expr* acc = expr_copy(list->data.function.args[0]);
+    for (size_t i = 1; i < n; i++) {
+        Expr* t_args[2] = { expr_copy(base_expr), acc };
+        Expr* t = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+        Expr* p_args[2] = { t, expr_copy(list->data.function.args[i]) };
+        acc = expr_new_function(expr_new_symbol(SYM_Plus), p_args, 2);
+    }
+    return acc;
+}
+
+static bool fd_is_list(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* FromDigits[{{d1, ..., dm}, e}, b] and FromDigits[{{d1, ..., dm, {r1, ...}}, e}, b]:
+ * the digits d1 d2 ... with the "point" placed so the value is
+ * sum_i d_i b^(e - i), a trailing sublist repeating forever (the
+ * RealDigits form): (FromDigits[d] + R / (b^p - 1)) b^(e - m) with R the
+ * repeating block's value and p its length. Built as an expression and
+ * evaluated, so it is exact for integer b and e and symbolic otherwise. */
+static Expr* fd_mantissa(Expr* digits, Expr* e, Expr* base_expr) {
+    size_t n = digits->data.function.arg_count;
+    Expr* rec = (n > 0 && fd_is_list(digits->data.function.args[n - 1]))
+                    ? digits->data.function.args[n - 1] : NULL;
+    size_t m = rec ? n - 1 : n;
+    Expr** dv = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) dv[i] = expr_copy(digits->data.function.args[i]);
+    Expr* dl = expr_new_function(expr_new_symbol(SYM_List), dv, m);
+    free(dv);
+    Expr* fd_args[2] = { dl, expr_copy(base_expr) };
+    Expr* mant = expr_new_function(expr_new_symbol("FromDigits"), fd_args, 2);
+    if (rec) {
+        /* + FromDigits[rec, b] / (b^p - 1) */
+        size_t p = rec->data.function.arg_count;
+        Expr* r_args[2] = { expr_copy(rec), expr_copy(base_expr) };
+        Expr* r = expr_new_function(expr_new_symbol("FromDigits"), r_args, 2);
+        Expr* bp_args[2] = { expr_copy(base_expr), expr_new_integer((int64_t)p) };
+        Expr* bp = expr_new_function(expr_new_symbol(SYM_Power), bp_args, 2);
+        Expr* den_args[2] = { bp, expr_new_integer(-1) };
+        Expr* den = expr_new_function(expr_new_symbol(SYM_Plus), den_args, 2);
+        Expr* inv_args[2] = { den, expr_new_integer(-1) };
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power), inv_args, 2);
+        Expr* q_args[2] = { r, inv };
+        Expr* q = expr_new_function(expr_new_symbol(SYM_Times), q_args, 2);
+        Expr* s_args[2] = { mant, q };
+        mant = expr_new_function(expr_new_symbol(SYM_Plus), s_args, 2);
+    }
+    /* * b^(e - m) */
+    Expr* ex_args[2] = { expr_copy(e), expr_new_integer(-(int64_t)m) };
+    Expr* ex = expr_new_function(expr_new_symbol(SYM_Plus), ex_args, 2);
+    Expr* pw_args[2] = { expr_copy(base_expr), ex };
+    Expr* pw = expr_new_function(expr_new_symbol(SYM_Power), pw_args, 2);
+    Expr* out_args[2] = { mant, pw };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), out_args, 2));
+}
+
+/* FromDigits[s, "Roman"]: a Roman numeral, case-insensitive, read additively
+ * with the subtractive pairs (a smaller numeral before a larger one is
+ * subtracted) -- "XLII" is 42, "IIII" is 4.
+ * Anything else draws FromRomanNumeral::nrom and gives $Failed. */
+static Expr* fd_roman(const char* s) {
+    int64_t total = 0;
+    size_t len = strlen(s);
+    bool ok = len > 0;
+    for (size_t i = 0; i < len && ok; i++) {
+        int c = s[i] >= 'a' && s[i] <= 'z' ? s[i] - 32 : s[i];
+        int64_t v = c == 'I' ? 1 : c == 'V' ? 5 : c == 'X' ? 10 : c == 'L' ? 50 :
+                    c == 'C' ? 100 : c == 'D' ? 500 : c == 'M' ? 1000 : 0;
+        if (!v) { ok = false; break; }
+        int64_t nx = 0;
+        if (i + 1 < len) {
+            int c2 = s[i + 1] >= 'a' && s[i + 1] <= 'z' ? s[i + 1] - 32 : s[i + 1];
+            nx = c2 == 'I' ? 1 : c2 == 'V' ? 5 : c2 == 'X' ? 10 : c2 == 'L' ? 50 :
+                 c2 == 'C' ? 100 : c2 == 'D' ? 500 : c2 == 'M' ? 1000 : 0;
+        }
+        total += (nx > v) ? -v : v;
+    }
+    if (!ok) {
+        mth_message("FromRomanNumeral", "nrom",
+                    "String \"%s\" does not represent a valid roman numeral.", s);
+        return expr_new_symbol("$Failed");
+    }
+    return expr_new_integer(total);
+}
+
 Expr* builtin_fromdigits(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -955,6 +1270,10 @@ Expr* builtin_fromdigits(Expr* res) {
     if (argc == 2) base_expr = res->data.function.args[1];
 
     /* --- Case 1: first argument is a string ------------------------ */
+    if (first->type == EXPR_STRING && base_expr && base_expr->type == EXPR_STRING &&
+        strcmp(base_expr->data.string, "Roman") == 0)
+        return fd_roman(first->data.string);
+
     if (first->type == EXPR_STRING) {
         /* String form: every "digit" is a character with value in
          * [0, 36).  We currently require an integer base.  Symbolic /
@@ -986,47 +1305,104 @@ Expr* builtin_fromdigits(Expr* res) {
         return out;
     }
 
+    /* --- Case 1b: a packed / NDArray int64 digit buffer -------------- */
+    /* FromDigits is on pack.c's AWARE list, so a packed digit list arrives
+     * as its buffer instead of 10^5 materialised Integers (which cost 5x the
+     * conversion itself). Digits in [0, b), b <= 62, go straight into
+     * mpz_set_str; anything else is delisted and takes the List path. */
+    if (is_ndarray(first)) {
+        if (first->data.ndarray.rank == 1 && first->data.ndarray.dtype == NDT_INT64 &&
+            (!base_expr || (base_expr->type == EXPR_INTEGER &&
+                            base_expr->data.integer >= 2 && base_expr->data.integer <= 62))) {
+            size_t n = ndarray_size(first);
+            const void* buf = first->data.ndarray.data;
+            int64_t b = base_expr ? base_expr->data.integer : 10;
+            char* str = malloc(n + 1);
+            size_t i = 0;
+            for (; i < n; i++) {
+                int64_t d = ndt_get_i(buf, i, NDT_INT64);
+                if (d < 0 || d >= b) break;
+                str[i] = (char)(d < 10 ? '0' + d : (b <= 36 ? 'a' + (d - 10)
+                                                    : (d < 36 ? 'A' + (d - 10) : 'a' + (d - 36))));
+            }
+            if (i == n && n > 0) {
+                str[n] = 0;
+                mpz_t acc;
+                mpz_init(acc);
+                mpz_set_str(acc, str, (int)b);
+                free(str);
+                Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(acc));
+                mpz_clear(acc);
+                return out;
+            }
+            free(str);
+        }
+        return ndarray_delist_and_reeval(res);
+    }
+
     /* --- Case 2: first argument is a List -------------------------- */
     if (first->type == EXPR_FUNCTION
         && first->data.function.head
         && first->data.function.head->type == EXPR_SYMBOL
         && first->data.function.head->data.symbol.name == SYM_List) {
 
-        /* Decide between integer fast path and symbolic Horner. */
-        bool all_int_digits = fd_all_integer_digits(first);
-        bool int_base = (base_expr == NULL) || expr_is_integer_like(base_expr);
+        Expr* base_for_poly = base_expr ? expr_copy(base_expr) : expr_new_integer(10);
 
-        if (all_int_digits && int_base) {
-            /* Pure-integer path: GMP Horner.  Reject base < 2 with a
-             * Mathematica-style diagnostic. */
-            mpz_t base;
-            if (base_expr == NULL) {
-                mpz_init_set_ui(base, 10);
-            } else {
-                expr_to_mpz(base_expr, base);
-                if (mpz_cmp_ui(base, 2) < 0) {
-                    mth_message("FromDigits", "ibase", "Base argument must be an integer >= 2.");
-                    mpz_clear(base);
+        /* {{digits...}, exponent}: the mantissa-exponent (RealDigits) form. */
+        if (first->data.function.arg_count == 2 && fd_is_list(first->data.function.args[0]) &&
+            !fd_is_list(first->data.function.args[1])) {
+            Expr* out = fd_mantissa(first->data.function.args[0], first->data.function.args[1],
+                                    base_for_poly);
+            expr_free(base_for_poly);
+            return out;
+        }
+        /* {{digits...}, {e1, e2, ...}} threads over the exponents:
+         * FromDigits[{{1, 2}, {3, 4}}] is {120, 1200}. */
+        if (first->data.function.arg_count == 2 && fd_is_list(first->data.function.args[0]) &&
+            fd_is_list(first->data.function.args[1])) {
+            Expr* exps = first->data.function.args[1];
+            size_t ne = exps->data.function.arg_count;
+            bool flat = true;
+            for (size_t i = 0; i < ne && flat; i++) flat = !fd_is_list(exps->data.function.args[i]);
+            if (flat) {
+                Expr** items = malloc((ne ? ne : 1) * sizeof(Expr*));
+                size_t got = 0;
+                for (; got < ne; got++) {
+                    items[got] = fd_mantissa(first->data.function.args[0],
+                                             exps->data.function.args[got], base_for_poly);
+                    if (!items[got]) break;
+                }
+                if (got < ne) {
+                    for (size_t i = 0; i < got; i++) expr_free(items[i]);
+                    free(items);
+                    expr_free(base_for_poly);
                     return NULL;
                 }
+                Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, ne);
+                free(items);
+                expr_free(base_for_poly);
+                return out;
             }
+        }
+
+        /* Integer digits in an integer base (any base: 0, 1, -10 are all just
+         * Horner): exact in GMP. */
+        if (fd_all_integer_digits(first) && expr_is_integer_like(base_for_poly)) {
+            mpz_t base;
+            expr_to_mpz(base_for_poly, base);
             Expr* out = fd_compute_integer_list(first, base);
             mpz_clear(base);
+            expr_free(base_for_poly);
             return out;
         }
 
-        /* Symbolic / non-integer path: build the Horner polynomial and
-         * hand it back to the evaluator. */
-        Expr* base_for_poly;
-        bool base_for_poly_owned = false;
-        if (base_expr == NULL) {
-            base_for_poly = expr_new_integer(10);
-            base_for_poly_owned = true;
-        } else {
-            base_for_poly = base_expr;  /* aliased; fd_build_symbolic deep-copies */
-        }
-        Expr* out = fd_build_symbolic(first, base_for_poly);
-        if (base_for_poly_owned) expr_free(base_for_poly);
+        /* Otherwise an expression: nested Horner in a numeric base
+         * (10 (10 a + b) + c), the expanded sum in a symbolic one
+         * (3 + 2 b + b^2). */
+        Expr* out = expr_is_numeric_like(base_for_poly)
+                        ? fd_build_horner(first, base_for_poly)
+                        : fd_build_symbolic(first, base_for_poly);
+        expr_free(base_for_poly);
         return out;
     }
 

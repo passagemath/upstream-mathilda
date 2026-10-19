@@ -3,7 +3,7 @@
  *
  * Always returns True or False on a structurally valid call.
  * Wrong arg count emits `SquareFreeQ::argb` to stderr and returns NULL.
- * Malformed options emit `SquareFreeQ::nonopt` and return NULL.
+ * A non-rule option emits `SquareFreeQ::nonopt`, an unknown one `::par`.
  *
  * Algorithms:
  *   - Integer n: factor with FactorInteger, check every prime exponent <= 1.
@@ -18,9 +18,11 @@
  *   - Anything else (Real, symbolic): False -- per Mathematica's "expr is not
  *     manifestly square free" semantics.
  *
- * The Modulus option is parsed but only Modulus -> 0 is honoured; non-zero
- * values emit `SquareFreeQ::modnotimpl` and return the call unevaluated until
- * a real mod-p polynomial sqfree test is wired in.
+ * Modulus -> p (p prime) tests a univariate polynomial over GF(p) through
+ * gcd(f, f') (sqfree_modp); multivariate input and a non-prime modulus stay
+ * unevaluated, and a number with a modulus draws SquareFreeQ::par.
+ * Unknown options draw SquareFreeQ::par; a List argument stays
+ * unevaluated (SquareFreeQ is not Listable).
  */
 
 #include "squarefreeq.h"
@@ -125,11 +127,34 @@ static Expr* sqfree_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
 /* `Modulus -> n` with n other than 0 is parsed but not yet implemented.
  * Emit a Mathematica-style diagnostic and signal "leave unevaluated" by
  * returning NULL so the surface call stays visible to the user. */
-static Expr* sqfree_emit_modnotimpl(Expr* val) {
-    char* val_str = expr_to_string(val);
-    mth_message("SquareFreeQ", "modnotimpl", "Modulus -> %s is not yet supported; only Modulus -> 0 (the default integer ring) is currently implemented.", val_str ? val_str : "?");
-    free(val_str);
+/* SquareFreeQ::par -- "Inappropriate parameter: opt." (the tag for
+ * an unknown option, and for Modulus on a non-polynomial argument). */
+static Expr* sqfree_emit_par(Expr* opt) {
+    char* s = expr_to_string(opt);
+    mth_message("SquareFreeQ", "par", "Inappropriate parameter: %s.", s ? s : "?");
+    free(s);
     return NULL;
+}
+
+/* Is the univariate polynomial f square-free over GF(p)? Reduce f mod p, then
+ * f is square-free iff gcd(f, f') over GF(p) is a constant -- which also
+ * answers the f' == 0 case (f a p-th power, e.g. x^5 + 1 mod 5): the gcd is f
+ * itself. A polynomial that vanishes mod p is not square-free. Returns 1 / 0,
+ * or -1 when the computation does not come back polynomial. */
+static int sqfree_modp(Expr* f, Expr* x, Expr* pexpr) {
+    Expr* pm_args[2] = { expr_copy(f), expr_copy(pexpr) };
+    Expr* fp = eval_and_free(expr_new_function(expr_new_symbol("PolynomialMod"), pm_args, 2));
+    if (fp->type == EXPR_INTEGER && fp->data.integer == 0) { expr_free(fp); return 0; }
+    Expr* d_args[2] = { expr_copy(fp), expr_copy(x) };
+    Expr* df = eval_and_free(expr_new_function(expr_new_symbol("D"), d_args, 2));
+    Expr* rule_args[2] = { expr_new_symbol(SYM_Modulus), expr_copy(pexpr) };
+    Expr* g_args[3] = { fp, df, expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2) };
+    Expr* g = eval_and_free(expr_new_function(expr_new_symbol("PolynomialGCD"), g_args, 3));
+    Expr* e_args[2] = { g, expr_copy(x) };
+    Expr* deg = eval_and_free(expr_new_function(expr_new_symbol("Exponent"), e_args, 2));
+    int out = (deg->type == EXPR_INTEGER) ? (deg->data.integer <= 0 ? 1 : 0) : -1;
+    expr_free(deg);
+    return out;
 }
 
 /* ===================================================================== */
@@ -629,12 +654,15 @@ Expr* builtin_squarefreeq(Expr* res) {
         }
     }
 
-    /* Parse options.  Recognised: GaussianIntegers -> True|False|Automatic,
-     * Modulus -> integer (only 0 is meaningfully honoured for now).
-     * Anything else (or unknown option name) marks `last_bad`; we report
-     * the LAST one after the full scan to match Mathematica's diagnostic. */
+    /* Options: {GaussianIntegers -> Automatic, Modulus -> 0}.
+     * A non-rule draws SquareFreeQ::nonopt (the LAST one
+     * reports it); an unknown option or bad value SquareFreeQ::par. Extension
+     * is not an option here and leaves the call unevaluated silently.
+     * Modulus -> p (p prime) tests a univariate polynomial over
+     * GF(p); any other modulus leaves the call unevaluated. */
     int gaussian_setting = 0;  /* 0 = Automatic (default), 1 = True, -1 = False */
     Expr* last_bad = NULL;
+    Expr* modulus = NULL;      /* the Modulus rule, when p != 0 */
     for (size_t i = opt_start; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
         if (!is_rule_head(opt) || opt->data.function.args[0]->type != EXPR_SYMBOL) {
@@ -647,29 +675,60 @@ Expr* builtin_squarefreeq(Expr* res) {
             if (is_sym_eq(val, "True")) gaussian_setting = 1;
             else if (is_sym_eq(val, "False")) gaussian_setting = -1;
             else if (is_sym_eq(val, "Automatic")) gaussian_setting = 0;
-            else last_bad = opt;
+            else { if (free_vars) free(vars); return sqfree_emit_par(opt); }
         } else if (name == SYM_Modulus || strcmp(name, "Modulus") == 0) {
-            /* Only Modulus -> 0 is implemented; any other value (non-zero
-             * integer, non-integer, or symbolic) emits modnotimpl and the
-             * call returns unevaluated.  Mathematica accepts arbitrary
-             * integer moduli; that is a deferred extension. */
-            bool is_zero_modulus = false;
-            if (val->type == EXPR_INTEGER && val->data.integer == 0) {
-                is_zero_modulus = true;
-            } else if (val->type == EXPR_BIGINT && mpz_sgn(val->data.bigint) == 0) {
-                is_zero_modulus = true;
-            }
-            if (!is_zero_modulus) {
-                if (free_vars) free(vars);
-                return sqfree_emit_modnotimpl(val);
-            }
+            bool zero = (val->type == EXPR_INTEGER && val->data.integer == 0) ||
+                        (val->type == EXPR_BIGINT && mpz_sgn(val->data.bigint) == 0);
+            if (!zero) modulus = opt;
+        } else if (strcmp(name, "Extension") == 0) {
+            if (free_vars) free(vars);
+            return NULL;
         } else {
-            last_bad = opt;
+            if (free_vars) free(vars);
+            return sqfree_emit_par(opt);
         }
     }
     if (last_bad != NULL) {
         if (free_vars) free(vars);
         return sqfree_emit_nonopt(last_bad, 1, res);
+    }
+
+    /* Not Listable: a List stays unevaluated. */
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL &&
+        expr->data.function.head->data.symbol.name == SYM_List) {
+        if (free_vars) free(vars);
+        return NULL;
+    }
+
+    if (modulus) {
+        Expr* p = modulus->data.function.args[1];
+        Expr *re, *im;
+        if (is_rational_like(expr) || is_complex(expr, &re, &im)) {     /* a number */
+            if (free_vars) free(vars);
+            return sqfree_emit_par(modulus);
+        }
+        bool prime = false;
+        if (expr_is_integer_like(p)) {
+            mpz_t z;
+            expr_to_mpz(p, z);
+            prime = mpz_sgn(z) > 0 && mpz_probab_prime_p(z, 25) > 0;
+            mpz_clear(z);
+        }
+        /* The single variable: from the vars slot, or found in expr. */
+        Expr* var = NULL;
+        Expr* vl = NULL;
+        if (var_count == 1) var = vars[0];
+        else if (var_count == 0) {
+            Expr* va[1] = { expr_copy(expr) };
+            vl = eval_and_free(expr_new_function(expr_new_symbol("Variables"), va, 1));
+            if (vl->type == EXPR_FUNCTION && vl->data.function.arg_count == 1)
+                var = vl->data.function.args[0];
+        }
+        int r = (prime && var) ? sqfree_modp(expr, var, p) : -1;
+        if (vl) expr_free(vl);
+        if (free_vars) free(vars);
+        if (r < 0) return NULL;             /* multivariate, composite p, ... */
+        return expr_new_symbol(r ? "True" : "False");
     }
 
     /* Resolve GaussianIntegers -> Automatic: enable Z[i] mode iff the

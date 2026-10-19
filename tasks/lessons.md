@@ -4703,3 +4703,13 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   any parser change, including changes to how valid input parses.
 - Rule: for a `src/parse.c` change, add cases to `tests/test_parse.c` and run
   only the two parser binaries.
+
+## 2026-10-19 — no "Mathematica" in source code or commit messages
+- Correction: the number-theory review (v0.470–v0.473) wrote "as in
+  Mathematica 14", "/* MMA */" and "(wolframscript)" into comments, docstrings
+  and tests, and named Mathematica in the v0.471 commit subject. The user
+  wants none of it in source code or commit messages.
+- Rule: describe the behaviour on its own terms ("a negative modulus stays
+  unevaluated"), or say "verified against the reference". Before every commit,
+  grep the staged diff's added lines for Mathematica / Wolfram / MMA / WL
+  (ignore "COMMAND" in CMakeLists).

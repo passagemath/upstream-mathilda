@@ -47,7 +47,7 @@ static Expr* moebiusmu_from_exps(const unsigned long* exps, size_t n) {
  * mu(-n) = mu(n).  A non-real Gaussian-integer argument Complex[a, b] is handled
  * over Z[i] by factoring into Gaussian primes (the unit factor does not count).
  * MoebiusMu is Listable, so list arguments are threaded by the evaluator first.
- * MoebiusMu[0] is 0 (0 is divisible by every square), as in Mathematica; a
+ * MoebiusMu[0] is 0 (0 is divisible by every square); a
  * non-integer n is left unevaluated; a wrong argument count emits
  * MoebiusMu::argx. */
 Expr* builtin_moebiusmu(Expr* res) {

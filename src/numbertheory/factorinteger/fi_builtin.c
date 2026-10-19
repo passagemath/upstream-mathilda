@@ -527,8 +527,24 @@ static int parse_args(const Expr* res, size_t first, FiCtx* c, CallOpts* o, int 
             o->k = a->data.integer;
             continue;
         }
-        if (a->type == EXPR_SYMBOL && a->data.symbol.name == SYM_Automatic && i == first) continue;
-        if (!is_rule(a)) return 0;
+        /* Automatic, All and Infinity as k: the complete factorisation. */
+        if (a->type == EXPR_SYMBOL && i == first &&
+            (a->data.symbol.name == SYM_Automatic || a->data.symbol.name == SYM_All ||
+             a->data.symbol.name == SYM_Infinity)) continue;
+        if (!is_rule(a)) {
+            /* A non-rule past the k slot: FactorInteger::nonopt.
+             * A non-integer k itself stays unevaluated silently. */
+            if (i > first || (i == first && first == 1 && argc > 2)) {
+                char* bad = expr_to_string((Expr*)a);
+                char* call = expr_to_string((Expr*)res);
+                mth_message("FactorInteger", "nonopt",
+                    "Options expected (instead of %s) beyond position %zu in %s. "
+                    "An option must be a rule or a list of rules.",
+                    bad ? bad : "?", i, call ? call : "?");
+                free(bad); free(call);
+            }
+            return 0;
+        }
         const Expr* lhs = a->data.function.args[0];
         const Expr* rhs = a->data.function.args[1];
         if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_GaussianIntegers) {
@@ -579,47 +595,197 @@ static void factor_rational(const mpz_t p, const mpz_t q, FiFactors* out, FiCtx*
 }
 
 /* Build the output list for a rational input. */
-static Expr* rational_result(const mpz_t p, const mpz_t q, FiFactors* f, int64_t k) {
+static Expr* rational_result(const mpz_t p, const mpz_t q, FiFactors* f) {
     fi_factors_sort(f);
     int neg = mpz_sgn(p) < 0;
     size_t total = f->n + (size_t)neg;
-    Expr** items;
+    Expr** items = malloc((total + 1) * sizeof(Expr*));
     size_t ni = 0;
-    if (k > 0 && total > (size_t)k) {
-        /* Partial: keep the k-1 smallest primes, fold the rest (and the sign)
-         * into one remainder entry {r, 1}. */
-        size_t keep = (size_t)k - 1;
-        mpq_t r;
-        mpq_init(r);
-        mpq_set_si(r, neg ? -1 : 1, 1);
-        mpz_t pw;
-        mpz_init(pw);
-        for (size_t i = keep; i < f->n; i++) {
-            int64_t e = f->v[i].e;
-            mpz_pow_ui(pw, f->v[i].p, (unsigned long)(e < 0 ? -e : e));
-            if (e > 0) mpz_mul(mpq_numref(r), mpq_numref(r), pw);
-            else mpz_mul(mpq_denref(r), mpq_denref(r), pw);
-        }
-        mpq_canonicalize(r);
-        items = malloc((keep + 1) * sizeof(Expr*));
-        Expr* rem = make_rational_mpz(mpq_numref(r), mpq_denref(r));
-        /* Sort the remainder into place by value. */
-        int placed = 0;
-        for (size_t i = 0; i < keep; i++) {
-            if (!placed && mpq_cmp_z(r, f->v[i].p) < 0) { items[ni++] = pair_expr(rem, 1); placed = 1; }
-            items[ni++] = pair_expr(mpz_expr(f->v[i].p), f->v[i].e);
-        }
-        if (!placed) items[ni++] = pair_expr(rem, 1);
-        mpz_clear(pw);
-        mpq_clear(r);
-    } else {
-        items = malloc((total + 1) * sizeof(Expr*));
-        if (neg) items[ni++] = pair_expr(expr_new_integer(-1), 1);
-        for (size_t i = 0; i < f->n; i++) items[ni++] = pair_expr(mpz_expr(f->v[i].p), f->v[i].e);
-    }
+    if (neg) items[ni++] = pair_expr(expr_new_integer(-1), 1);
+    for (size_t i = 0; i < f->n; i++) items[ni++] = pair_expr(mpz_expr(f->v[i].p), f->v[i].e);
     (void)q;
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, ni);
     free(items);
+    return out;
+}
+
+/* ---- FactorInteger[n, k]: the partial-factorisation form ------------------ *
+ * Fixed by some 250 verified cases, numerator and denominator each on
+ * their own:
+ *   1. Trial division by the primes below 2^16 (the bound: 65521 is
+ *      found, 65537 is not) gives the small prime powers T, ascending, and a
+ *      cofactor C.
+ *   2. C = 1: a part with at most k primes is listed in full; otherwise its
+ *      k - 1 LARGEST prime powers are kept and the rest multiplied into one
+ *      entry {rest, 1} -- FactorInteger[360, 2] is {{5, 1}, {72, 1}}.
+ *   3. C > 1 and |T| > k - 1: C stays one unsplit entry, the k - 2 largest of
+ *      T are kept, the rest of T merged -- FactorInteger[10^30 + 1, 2] is
+ *      {{165573604901641, 1}, {6039610000603961, 1}}: the five trial primes
+ *      merged, the two large ones left as their product.
+ *   4. C > 1 with room r = k - |T| > 1: C is split into at most r entries,
+ *      smallest factors first, the remainder left unsplit. Which factors are
+ *      split off first is a matter of search order, so another splitting
+ *      would be equally valid (C = 1000003 1000033 1000037 with r = 2 is
+ *      {1000003, 1000033 1000037}; {1000033, 1000003 1000037} is as good).
+ *   5. A negative n has no separate {-1, 1}; the sign goes into the
+ *      denominator's part if there is one, else the numerator's, onto: the
+ *      merged trial entry if any; else an unsplit C; else (C split into primes)
+ *      the smallest entry; else (C = 1) the largest prime power -- as a base
+ *      with exponent 1 (FactorInteger[-36, 2] is {{-9, 1}, {2, 2}}).
+ *   6. Entries sorted by base value; k = 1 is {{n, 1}}; k = All / Infinity /
+ *      Automatic is the complete factorisation.
+ * Steps 1 and 3 mean a large hard cofactor is never factored when k is small. */
+typedef struct { mpq_t base; int64_t e; } FiPEntry;
+
+static int fi_pentry_cmp(const void* a, const void* b) {
+    return mpq_cmp(((const FiPEntry*)a)->base, ((const FiPEntry*)b)->base);
+}
+
+#define FI_PARTIAL_TRIAL_BOUND 65535u
+
+/* A growable entry list. */
+typedef struct { FiPEntry* v; size_t n, cap; } FiPList;
+
+static void fi_pentry_push_z(FiPList* L, const mpz_t b, int64_t e) {
+    if (L->n == L->cap) {
+        L->cap = L->cap ? 2 * L->cap : 16;
+        L->v = realloc(L->v, L->cap * sizeof(FiPEntry));
+    }
+    mpq_init(L->v[L->n].base);
+    mpq_set_z(L->v[L->n].base, b);
+    L->v[L->n].e = e;
+    L->n++;
+}
+
+/* Append the entries of one part (m > 1; dir = +1 numerator, -1 denominator)
+ * to L. Returns the index of the entry that carries a sign (rule 5). */
+static size_t fi_partial_part(const mpz_t m_in, int dir, int64_t k, FiCtx* c, FiPList* L) {
+    mpz_t m, rest, pw;
+    mpz_inits(m, rest, pw, NULL);
+    mpz_set(m, m_in);
+    FiFactors T;
+    fi_factors_init(&T);
+    fi_trial_divide(m, FI_PARTIAL_TRIAL_BOUND, 1, &T);
+    fi_factors_sort(&T);
+    size_t t = T.n;
+    size_t carrier;
+
+    /* merge T[0 .. upto) into one {rest, dir} entry */
+    #define FI_MERGE_TRIAL(upto) do {                                         \
+        mpz_set_ui(rest, 1);                                                  \
+        for (size_t i_ = 0; i_ < (upto); i_++) {                              \
+            mpz_pow_ui(pw, T.v[i_].p, (unsigned long)T.v[i_].e);              \
+            mpz_mul(rest, rest, pw);                                          \
+        }                                                                     \
+        fi_pentry_push_z(L, rest, dir);                               \
+    } while (0)
+
+    if (mpz_cmp_ui(m, 1) == 0) {                                   /* rule 2 */
+        if (t <= (size_t)k) {
+            for (size_t i = 0; i < t; i++) fi_pentry_push_z(L, T.v[i].p, dir * T.v[i].e);
+            carrier = L->n - 1;                                    /* largest */
+        } else {
+            size_t keep_from = t - ((size_t)k - 1);
+            carrier = L->n;
+            FI_MERGE_TRIAL(keep_from);
+            for (size_t i = keep_from; i < t; i++) fi_pentry_push_z(L, T.v[i].p, dir * T.v[i].e);
+        }
+    } else if (t > (size_t)k - 1) {                                /* rule 3 */
+        size_t keep_from = t - ((size_t)k - 2);
+        carrier = L->n;
+        FI_MERGE_TRIAL(keep_from);
+        for (size_t i = keep_from; i < t; i++) fi_pentry_push_z(L, T.v[i].p, dir * T.v[i].e);
+        fi_pentry_push_z(L, m, dir);
+    } else {                                                       /* rule 4 */
+        size_t first = L->n;
+        for (size_t i = 0; i < t; i++) fi_pentry_push_z(L, T.v[i].p, dir * T.v[i].e);
+        int64_t room = k - (int64_t)t;
+        if (room <= 1 || fi_is_prime(m)) {
+            carrier = L->n;
+            fi_pentry_push_z(L, m, dir);
+        } else {
+            FiFactors cf;
+            fi_factors_init(&cf);
+            c->k_limit = room;                    /* smallest first, remainder unsplit */
+            fi_factor(m, &cf, c);
+            c->k_limit = 0;
+            fi_factors_sort(&cf);
+            /* The early stop may overshoot by one (a last prime is emitted as
+             * itself): keep the room - 1 smallest, multiply the rest into one
+             * unsplit entry. */
+            size_t keep = cf.n;
+            if (cf.n > (size_t)room) {
+                keep = (size_t)room - 1;
+                mpz_set_ui(rest, 1);
+                for (size_t i = keep; i < cf.n; i++) {
+                    mpz_pow_ui(pw, cf.v[i].p, (unsigned long)cf.v[i].e);
+                    mpz_mul(rest, rest, pw);
+                }
+            }
+            carrier = (size_t)-1;
+            for (size_t i = 0; i < keep; i++) {
+                if (carrier == (size_t)-1 && !fi_is_prime(cf.v[i].p)) carrier = L->n;
+                fi_pentry_push_z(L, cf.v[i].p, dir * cf.v[i].e);
+            }
+            if (keep < cf.n) {
+                carrier = L->n;
+                fi_pentry_push_z(L, rest, dir);
+            }
+            if (carrier == (size_t)-1) {                 /* all prime: the smallest */
+                carrier = first;
+                for (size_t i = first + 1; i < L->n; i++)
+                    if (mpq_cmp(L->v[i].base, L->v[carrier].base) < 0) carrier = i;
+            }
+            fi_factors_clear(&cf);
+        }
+    }
+    #undef FI_MERGE_TRIAL
+    fi_factors_clear(&T);
+    mpz_clears(m, rest, pw, NULL);
+    return carrier;
+}
+
+static Expr* partial_result(const mpz_t p, const mpz_t q, int64_t k, FiCtx* c) {
+    if (k == 1) {                                         /* {{n, 1}} */
+        Expr* items[1] = { pair_expr(make_rational_mpz(p, q), 1) };
+        return expr_new_function(expr_new_symbol(SYM_List), items, 1);
+    }
+    mpz_t a;
+    mpz_init(a);
+    mpz_abs(a, p);
+    FiPList L = { NULL, 0, 0 };
+    c->k_limit = 0;
+    size_t s_num = (mpz_cmp_ui(a, 1) > 0) ? fi_partial_part(a, 1, k, c, &L) : (size_t)-1;
+    size_t s_den = (mpz_cmp_ui(q, 1) > 0) ? fi_partial_part(q, -1, k, c, &L) : (size_t)-1;
+    FiPEntry* ent = L.v;
+    size_t n_ent = L.n;
+
+    if (mpz_sgn(p) < 0) {
+        size_t at = (s_den != (size_t)-1) ? s_den : s_num;
+        if (at != (size_t)-1) {
+            /* base^e -> (-(base^|e|))^(sign of e) as a single base, exponent 1 */
+            FiPEntry* t = &ent[at];
+            mpz_t pw;
+            mpz_init(pw);
+            int64_t e = t->e < 0 ? -t->e : t->e;
+            mpz_pow_ui(pw, mpq_numref(t->base), (unsigned long)e);
+            mpq_set_z(t->base, pw);
+            if (t->e < 0) mpq_inv(t->base, t->base);
+            mpq_neg(t->base, t->base);
+            t->e = 1;
+            mpz_clear(pw);
+        }
+    }
+    qsort(ent, n_ent, sizeof(FiPEntry), fi_pentry_cmp);
+    Expr** items = malloc((n_ent + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n_ent; i++) {
+        items[i] = pair_expr(make_rational_mpz(mpq_numref(ent[i].base), mpq_denref(ent[i].base)), ent[i].e);
+        mpq_clear(ent[i].base);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n_ent);
+    free(items);
+    free(ent);
+    mpz_clear(a);
     return out;
 }
 
@@ -810,7 +976,11 @@ done:
 
 static Expr* factorinteger_core(Expr* res, FiCtx* c, int named) {
     size_t argc = res->data.function.arg_count;
-    if (argc < 1) return NULL;
+    if (argc < 1) {
+        mth_message("FactorInteger", "argt",
+                    "FactorInteger called with 0 arguments; 1 or 2 arguments are expected.");
+        return NULL;
+    }
     Expr* n = res->data.function.args[0];
     CallOpts o = { 0, 0, 0 };
     if (!parse_args(res, 1, c, &o, named)) return NULL;
@@ -826,7 +996,10 @@ static Expr* factorinteger_core(Expr* res, FiCtx* c, int named) {
     mpz_t p, q;
     if (get_rational(n, p, q)) {
         Expr* out;
-        if (o.gaussian) {
+        if (o.gaussian && o.have_k && o.k == 1) {
+            Expr* items[1] = { pair_expr(make_rational_mpz(p, q), 1) };
+            out = expr_new_function(expr_new_symbol(SYM_List), items, 1);
+        } else if (o.gaussian) {
             mpz_t zi, oi;
             mpz_init_set_ui(zi, 0);
             mpz_init_set_ui(oi, 1);
@@ -838,17 +1011,24 @@ static Expr* factorinteger_core(Expr* res, FiCtx* c, int named) {
         } else if (mpz_cmpabs_ui(p, 1) == 0 && mpz_cmp_ui(q, 1) == 0) {
             Expr* items[1] = { pair_expr(mpz_expr(p), 1) };
             out = expr_new_function(expr_new_symbol(SYM_List), items, 1);
+        } else if (o.have_k) {
+            out = partial_result(p, q, o.k, c);
         } else {
             FiFactors f;
             fi_factors_init(&f);
             factor_rational(p, q, &f, c);
-            out = rational_result(p, q, &f, c->k_limit);
+            out = rational_result(p, q, &f);
             fi_factors_clear(&f);
         }
         mpz_clears(p, q, NULL);
         return out;
     }
     Expr *re, *im;
+    if (is_complex(n, &re, &im) && o.have_k && o.k == 1) {
+        /* k = 1 is {{n, 1}} in Z[i] too. */
+        Expr* items[1] = { pair_expr(expr_copy(n), 1) };
+        return expr_new_function(expr_new_symbol(SYM_List), items, 1);
+    }
     if (is_complex(n, &re, &im)) {
         mpz_t pr, qr, pi, qi;
         if (!get_rational(re, pr, qr)) goto inexact;
@@ -951,8 +1131,11 @@ static const char FACTORINTEGER_DOC[] =
     "\tentry is {-1, 1}; for a rational n the denominator's primes have negative\n"
     "\texponents; a Gaussian integer or Gaussian rational is factored over Z[i]\n"
     "\t(unit first, primes in the first quadrant).\n"
-    "FactorInteger[n, k] does a partial factorisation: at most k entries, the last\n"
-    "\tof which may be an unfactored remainder.\n"
+    "FactorInteger[n, k] does a partial factorisation into at most k entries:\n"
+    "\tthe small primes found by trial division (below 2^16) keep\n"
+    "\ttheir k - 1 largest and merge the rest, a large cofactor stays unsplit when there\n"
+    "\tis no room (FactorInteger[360, 2] is {{5, 1}, {72, 1}}). k = All or Infinity is\n"
+    "\tthe complete factorisation; k = 1 gives {{n, 1}}.\n"
     "FactorInteger[n, Automatic] is FactorInteger[n].\n"
     "Options:\n"
     "\tGaussianIntegers -> True factors over the Gaussian integers.\n"

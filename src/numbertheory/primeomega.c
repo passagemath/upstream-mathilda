@@ -53,7 +53,7 @@ Expr* builtin_primeomega(Expr* res) {
     if (argc < 1 || argc > 2) return primeomega_emit_argt(argc);
 
     /* One positional argument, then options (GaussianIntegers only), with
-     * Mathematica's nonopt / optx / opttf messages. */
+     * the standard nonopt / optx / opttf messages. */
     bool gaussian = false, gaussian_set = false;
     if (!nt_parse_gaussian_options(res, 1, "PrimeOmega", &gaussian, &gaussian_set))
         return NULL;

@@ -49,7 +49,7 @@ static Expr* lcm_rational_mpz_fold(Expr* res, size_t count) {
 /* LCM over the Gaussian rationals, used when some argument is a non-real
  * exact complex number: lcm(w_1, w_2, ...) / gcd(d_1, d_2, ...) for arguments
  * w_i/d_i, normalised to the first-quadrant associate -- LCM[3 + I, 2] is
- * 2 + 4 I and LCM[2 + I, 2 - I] is 5, as in Mathematica. Any zero argument
+ * 2 + 4 I and LCM[2 + I, 2 - I] is 5. Any zero argument
  * gives 0. NULL if some argument is not a Gaussian rational. */
 static Expr* lcm_gaussian(Expr* res, size_t count) {
     mpz_t wr, wi, d, xr, xi, xd, lr, li;
@@ -75,7 +75,7 @@ static Expr* lcm_gaussian(Expr* res, size_t count) {
 Expr* builtin_lcm(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
-    /* LCM::argm -- unlike GCD[] (0), LCM[] has no value in Mathematica. */
+    /* LCM::argm -- unlike GCD[] (0), LCM[] has no value. */
     if (count == 0) {
         mth_message_gated(g_arith_warnings_muted, "LCM", "argm",
                           "LCM called with 0 arguments; 1 or more arguments are expected.");

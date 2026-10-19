@@ -633,9 +633,14 @@ the same expression giving different element heads either side of the
 - `IntegerDigits[0]` returns `{0}` (single zero digit). With an explicit
   length, `IntegerDigits[0, b, len]` returns a list of `len` zeros.
 - Bases > 10 are allowed; digit values range over `{0, ..., b-1}`.
-- Works seamlessly for both machine integers and arbitrary-precision
-  bignums (digits are computed in GMP and demoted to machine ints
-  whenever they fit).
+- Machine integers take a word-sized loop. Bignums in bases up to 62 go
+  through GMP's subquadratic `mpz_get_str`, and the digits are written
+  straight into a packed `int64` list, which is how Mathematica returns them:
+  `IntegerDigits[3^200000]` takes 0.0035 s (Mathematica 14.0: 0.0038 s; the
+  old repeated division took 0.78 s). Larger bases fall back to repeated
+  division.
+- Messages, as in Mathematica: `IntegerDigits::ibase` (a base that is not an
+  integer greater than 1) and `IntegerDigits::intnm` (a negative length).
 
 ```mathematica
 In[1]:= IntegerDigits[58127]
@@ -653,7 +658,9 @@ Out[4]= {5, 3, 5, 4}
 
 > **Packed arrays.** The one-argument form reads an `int64` buffer directly
 > rather than materialising it. The result is ragged — a list per element, of
-> differing lengths — so it is an ordinary list either way.
+> differing lengths — so it is an ordinary list either way. The digit nodes and
+> list heads are shared (reference-counted), so `IntegerDigits[Range[10^6]]`
+> takes 0.36 s (Mathematica 14.0: 0.47 s; before: 1.23 s).
 
 ## IntegerLength
 
@@ -731,6 +738,12 @@ Out[6]= IntegerLength[1.1234]
 - Works for both machine integers and bignums. Base 2 uses GMP's
   `mpz_scan1` (lowest-set-bit lookup, O(log n / wordsize)); other bases use
   `mpz_remove` (a single library call that strips all factors of `b`).
+- A non-integer numeric base emits `IntegerExponent::ibase`, as in Mathematica.
+- **Machine surfaces.** A packed `int64` list (with a scalar base) runs on a
+  buffer kernel and stays packed: 0.021 s for 10^6 elements, against 0.087 s
+  in Mathematica 14.0 (0.45 s before). A zero element gives `Infinity`, so
+  that result is an ordinary list. `IntegerExponent[v, b]` compiles at scalar
+  and rank-1 shapes.
 
 ```mathematica
 In[1]:= IntegerExponent[1230000]
@@ -811,11 +824,17 @@ Out[3]= {10, 0, 18}
   `0 <= d < b`) in the base-`b` representation of `n`.
 
 **Features**:
-- `Protected` (intentionally not `Listable`). `DigitCount[{1,2,3}]` is left
-  unevaluated rather than threading, because the natural result of
-  `DigitCount[n]` is itself a list.
-- `DigitCount[0]` is a list of zeros of length `b` (zero has no significant
-  digits). In the 3-argument form, `DigitCount[0, b, d] == 0`.
+- `Protected`, not `Listable` (as in Mathematica), but a list in the **first**
+  argument threads explicitly: `DigitCount[{1, 0, 1}, 2]` is
+  `{{1, 0}, {0, 0}, {1, 0}}`. A non-numeric element emits `DigitCount::int`
+  for the whole call, and a list as the base emits `DigitCount::base`.
+- `DigitCount[n, b, {d1, d2, ...}]` is the list of the individual counts.
+- `0` counts as the single digit 0 (`DigitCount[0]` is
+  `{0, 0, 0, 0, 0, 0, 0, 0, 0, 1}`), except in base 2, where it is `{0, 0}`.
+  Both match Mathematica 14.0.
+- A real `n` counts the digits `RealDigits[n, b]` gives:
+  `DigitCount[2.5, 2]` is `{2, 51}`.
+- A digit that is not an integer in `[0, b)` emits `DigitCount::digp`.
 - Defining property: `Total[DigitCount[n, b]] == IntegerLength[n, b]` for
   any `n != 0`, and `DigitCount[n, b, d] == Count[IntegerDigits[n, b], d]`.
 - The 3-argument form supports arbitrary-precision base `b` and digit `d`
@@ -842,6 +861,14 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 - `FromDigits["string"]`: Constructs an integer from a string of digits.
   Characters `0`-`9`, `a`-`z`, `A`-`Z` represent digit values `0`-`35`.
 - `FromDigits["string", b]`: String form in base `b`.
+- `FromDigits[{digits, e}]`, `FromDigits[{digits, e}, b]`: the mantissa form
+  `RealDigits` returns, an exact rational. A trailing sublist is a recurring
+  block: `FromDigits[{{1, 2}, -1}]` is `3/250`, `FromDigits[{{1, 2, {3, 4}}, 2}]`
+  is `1222/99`. A list of exponents threads: `FromDigits[{{1, 2}, {3, 4}}]` is
+  `{120, 1200}`.
+- `FromDigits["MCMXC", "Roman"]`: a Roman numeral (case-insensitive, additive
+  forms such as `"IIII"` accepted); an invalid one emits
+  `FromRomanNumeral::nrom` and gives `$Failed`.
 
 **Features**:
 - `Protected` (intentionally not `Listable`: the first argument *is* a list).
@@ -851,15 +878,18 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
   than the base; they are carried via Horner's evaluation, matching
   Mathematica (e.g. `FromDigits[{7, 11, 0, 0, 0, 122}] == 810122`,
   `FromDigits["1A3C"] == 2042`).
-- The all-integer (digits + base) case is computed exactly in GMP and
-  demoted to a machine integer when it fits in `int64`; arbitrarily large
-  bignums are returned otherwise.
-- Symbolic, Real, or Rational digits or base trigger the polynomial Horner
-  expansion `d[0] b^(n-1) + d[1] b^(n-2) + ... + d[n-1]`, which the
-  evaluator simplifies normally. This single code path handles symbolic
-  bases, symbolic digits, and inexact bases uniformly. For a string input,
-  the base is required to be an integer; symbolic bases over strings leave
-  the call unevaluated (silently).
+- Any integer base is accepted for a list, as in Mathematica:
+  `FromDigits[{1, 2, 3}, 1]` is `6`, `FromDigits[{1, 2, 3}, -10]` is `83`.
+- The all-integer case is exact in GMP. Digit lists in bases up to 62 and
+  strings in bases up to 36 go through `mpz_set_str` (subquadratic). A packed
+  `int64` digit list is read in place (FromDigits is on `AWARE`): 10^5 digits
+  take 0.0018 s, against 0.27 s before and 0.0015 s in Mathematica 14.0.
+- With a numeric base and symbolic digits the result is the Horner form
+  (`FromDigits[{a, b, c}]` is `c + 10 (b + 10 a)`, as in Mathematica); a
+  symbolic base gives the expanded sum `d[n-1] + d[n-2] x + ...`. For a string,
+  the base must be an integer; a symbolic base over a string stays unevaluated
+  (silently).
+- `FromDigits[]` emits `FromDigits::argt`.
 - Edge cases: `FromDigits[{}] == 0`, `FromDigits[""] == 0`,
   `FromDigits[{0, 0, 1, 2, 3}] == 123` (leading zeros are inert).
 

@@ -152,8 +152,9 @@ static void test_decimal_mix(void) {
 /* --- Zero handling ----------------------------------------------- */
 
 static void test_zero_default_base(void) {
-    /* DigitCount[0] -> ten zeros (zero has no significant digits). */
-    assert_eval_eq("DigitCount[0]", "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}", 0);
+    /* DigitCount[0] -> the single digit 0 (IntegerDigits[0] is {0}). */
+    assert_eval_eq("DigitCount[0]", "{0, 0, 0, 0, 0, 0, 0, 0, 0, 1}", 0);
+    assert_eval_eq("DigitCount[0, 2]", "{0, 0}", 0);      /* ...except base 2 */
 }
 
 static void test_zero_binary(void) {
@@ -162,8 +163,8 @@ static void test_zero_binary(void) {
 }
 
 static void test_zero_scalar(void) {
-    /* DigitCount[0, 10, 0] -> 0; DigitCount[0, 10, 5] -> 0. */
-    assert_eval_eq("DigitCount[0, 10, 0]", "0", 0);
+    /* DigitCount[0, 10, 0] -> 1; DigitCount[0, 10, 5] -> 0. */
+    assert_eval_eq("DigitCount[0, 10, 0]", "1", 0);
     assert_eval_eq("DigitCount[0, 10, 5]", "0", 0);
     assert_eval_eq("DigitCount[0, 2, 1]", "0", 0);
 }
@@ -361,16 +362,9 @@ static void test_five_args_argb(void) {
 /* --- Non-integer n (::int) -------------------------------------- */
 
 static void test_real_n_int_diagnostic(void) {
-    char* result = NULL;
-    char* err = eval_capturing_stderr("DigitCount[1.234]", &result);
-    ASSERT(result != NULL);
-    ASSERT(strstr(result, "DigitCount[1.234]") != NULL);
-    ASSERT(err != NULL);
-    ASSERT_MSG(strstr(err, "DigitCount::int") != NULL,
-               "expected int diagnostic, got: %s", err);
-    ASSERT(strstr(err, "Integer expected at position 1") != NULL);
-    free(result);
-    free(err);
+    /* A real n counts the digits RealDigits gives -- the reference. */
+    assert_eval_eq("DigitCount[1.234]", "{1, 1, 1, 1, 0, 0, 0, 0, 0, 12}", 0);
+    assert_eval_eq("DigitCount[2.5, 2]", "{2, 51}", 0);
 }
 
 static void test_rational_n_int_diagnostic(void) {
@@ -460,8 +454,8 @@ static void test_digit_negative_diagnostic(void) {
     char* err = eval_capturing_stderr("DigitCount[10, 2, -1]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "DigitCount::digit") != NULL);
-    ASSERT(strstr(err, "non-negative integer less than the base") != NULL);
+    ASSERT(strstr(err, "DigitCount::digp") != NULL);
+    ASSERT(strstr(err, "non-negative integers less than the base") != NULL);
     free(result);
     free(err);
 }
@@ -472,7 +466,7 @@ static void test_digit_equal_to_base_diagnostic(void) {
     char* err = eval_capturing_stderr("DigitCount[10, 2, 2]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "DigitCount::digit") != NULL);
+    ASSERT(strstr(err, "DigitCount::digp") != NULL);
     free(result);
     free(err);
 }
@@ -482,7 +476,7 @@ static void test_digit_too_large_diagnostic(void) {
     char* err = eval_capturing_stderr("DigitCount[10, 2, 7]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "DigitCount::digit") != NULL);
+    ASSERT(strstr(err, "DigitCount::digp") != NULL);
     free(result);
     free(err);
 }
@@ -492,7 +486,7 @@ static void test_digit_rational_diagnostic(void) {
     char* err = eval_capturing_stderr("DigitCount[10, 2, 1/2]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "DigitCount::digit") != NULL);
+    ASSERT(strstr(err, "DigitCount::digp") != NULL);
     free(result);
     free(err);
 }
@@ -535,17 +529,19 @@ static void test_symbolic_digit_silent(void) {
     free(err);
 }
 
-/* --- Not Listable (list of integers left unevaluated) ----------- */
+/* --- Not Listable, but threads over n explicitly ---------------- */
 
 static void test_not_listable_on_n(void) {
-    /* Without Listable, DigitCount[{1, 2, 3}] is evaluated once with a
-     * List arg -- which is not integer-like -- and the call is left
-     * unevaluated.  No threading. */
+    /* DigitCount is not Listable ({Protected, ReadProtected}),
+     * yet it threads over a list in the first argument:
+     * DigitCount[{1, 2, 3}] is one count list per element. */
     char* result = NULL;
     char* err = eval_capturing_stderr("DigitCount[{1, 2, 3}]", &result);
     ASSERT(result != NULL);
-    ASSERT_MSG(strstr(result, "DigitCount[") != NULL,
-               "expected unevaluated form, got: %s", result);
+    ASSERT_MSG(strcmp(result, "{{1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, "
+                              "{0, 1, 0, 0, 0, 0, 0, 0, 0, 0}, "
+                              "{0, 0, 1, 0, 0, 0, 0, 0, 0, 0}}") == 0,
+               "expected one count list per element, got: %s", result);
     free(result);
     free(err);
 }
@@ -587,7 +583,7 @@ static void test_repeated_evaluation_does_not_corrupt(void) {
         assert_eval_eq("DigitCount[100!]",
                        "{15, 19, 10, 10, 14, 19, 7, 14, 20, 30}", 0);
         assert_eval_eq("DigitCount[0]",
-                       "{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}", 0);
+                       "{0, 0, 0, 0, 0, 0, 0, 0, 0, 1}", 0);
         assert_eval_eq("DigitCount[-(10^30)]",
                        "{1, 0, 0, 0, 0, 0, 0, 0, 0, 30}", 0);
         assert_eval_eq("DigitCount[(10^18 + 2)^2, 10^18 + 1, 1]", "2", 0);

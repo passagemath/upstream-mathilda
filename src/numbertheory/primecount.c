@@ -572,7 +572,7 @@ static int64_t count_lmo(int64_t x) {
  * 10^11 0.54 s -> 0.04 s, 10^12 4.4 s -> 0.20 s, 10^13 40 s -> 1.06 s.
  * Cross-checked against Meissel and LMO on 400 random x in [10^6, 10^11] and
  * on cube/square edges for every alpha from 1 to 64, and against the known
- * pi(10^k) and Mathematica's pi(5 * 10^13). */
+ * pi(10^k) and a reference pi(5 * 10^13). */
 
 double primecount_dr_alpha = -1.0;   /* > 0 forces alpha (tests); < 0 automatic */
 

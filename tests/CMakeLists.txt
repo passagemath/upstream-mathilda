@@ -1397,6 +1397,10 @@ add_executable(primes_review_tests test_primes_review.c $<TARGET_OBJECTS:mathild
 target_include_directories(primes_review_tests PRIVATE ../src)
 add_test(NAME primes_review_tests COMMAND primes_review_tests)
 
+add_executable(factor_digits_review_tests test_factor_digits_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(factor_digits_review_tests PRIVATE ../src)
+add_test(NAME factor_digits_review_tests COMMAND factor_digits_review_tests)
+
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)
 add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)

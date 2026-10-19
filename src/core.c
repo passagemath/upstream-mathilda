@@ -3251,7 +3251,7 @@ static Expr* mod_indeterminate(const char* head, const char* tag, const char* wh
     return expr_new_symbol(SYM_Indeterminate);
 }
 
-/* Mod beyond the machine/rational fast paths, as in Mathematica 14:
+/* Mod beyond the machine/rational fast paths:
  *   - a zero modulus with a numeric dividend is Indeterminate (Mod::indet);
  *   - an infinite dividend is Indeterminate (Infinity::indet), a real
  *     infinite modulus returns m unchanged, ComplexInfinity is Indeterminate;
@@ -3340,7 +3340,7 @@ Expr* builtin_mod(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 2 && argc != 3) {
-        /* Mathematica's tags: argtu for one argument, argt otherwise. */
+        /* The expected tag: argtu for one argument, argt otherwise. */
         if (argc == 1)
             mth_message("Mod", "argtu", "Mod called with 1 argument; 2 or 3 arguments are expected.");
         else

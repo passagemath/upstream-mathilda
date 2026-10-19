@@ -47,7 +47,7 @@ static Expr* gcd_rational_mpz_fold(Expr* res, size_t count) {
  * exact complex number: writing each argument as w/d (w in Z[i], d a positive
  * integer), the gcd is gcd(w_1, w_2, ...) / lcm(d_1, d_2, ...) with the
  * Gaussian gcd normalised to its first-quadrant associate -- GCD[3 + I, 2] is
- * 1 + I and GCD[1/2 + I/3, 2] is 1/6, as in Mathematica. NULL if some argument
+ * 1 + I and GCD[1/2 + I/3, 2] is 1/6. NULL if some argument
  * is not a Gaussian rational (GCD[2, 3 + I, x] stays unevaluated). */
 static Expr* gcd_gaussian(Expr* res, size_t count) {
     mpz_t wr, wi, d, xr, xi, xd, gr, gi;

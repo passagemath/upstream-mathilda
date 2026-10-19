@@ -227,6 +227,9 @@ EXEMPT = {
     "N": "numericalisation is a no-op on a machine value",
     "FromCharacterCode": "reads an int64 code buffer but returns a String, "
                          "which no compiled register holds",
+    "FromDigits": "reads an int64 digit buffer, but the answer is an exact "
+                  "integer that outgrows a machine register past ~18 digits; "
+                  "the buffer path exists for long digit lists",
     "TeXForm": "formatting",
     "Normal": "representation conversion",
     "ToNDArray": "representation conversion",

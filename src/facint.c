@@ -89,8 +89,8 @@ static void gaussian_prime_test(const mpz_t a_in, const mpz_t b_in, int* out_is_
  * to honour the *Q always-boolean contract). */
 /* PrimeQ[n] / PrimeQ[n, GaussianIntegers -> True]. True or False for every
  * well-formed call -- anything that is not a prime integer (or, in Z[i], a
- * Gaussian prime) is False. A MALFORMED call is not a question about n: as in
- * Mathematica, PrimeQ[] draws PrimeQ::argx and a bad option ::nonopt / ::optx
+ * Gaussian prime) is False. A MALFORMED call is not a question about n:
+ * PrimeQ[] draws PrimeQ::argx and a bad option ::nonopt / ::optx
  * / ::opttf, and those calls stay unevaluated. */
 Expr* builtin_primeq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return expr_new_symbol(SYM_False);
@@ -575,7 +575,7 @@ Expr* builtin_primepowerq(Expr* res) {
     return expr_new_symbol(ok ? SYM_True : SYM_False);
 }
 
-/* The signed primes, in Mathematica's ordering: ..., -7, -5, -3, -2, 2, 3,
+/* The signed primes, in signed order: ..., -7, -5, -3, -2, 2, 3,
  * 5, 7, ... (|p| prime). np_up sets cur to the least such prime > cur,
  * np_down to the greatest < cur. */
 static void np_up(mpz_t cur) {
@@ -595,11 +595,11 @@ static void np_down(mpz_t cur) {
 }
 
 /* NextPrime[x] / NextPrime[x, k]: the k-th prime after x (k > 0) or before it
- * (k < 0), counting the NEGATIVE primes too, as Mathematica does --
+ * (k < 0), counting the NEGATIVE primes too:
  * NextPrime[-10] is -7, NextPrime[3, -2] is -2. NextPrime[x, 0] is x when x is
  * a (signed) prime and unevaluated otherwise. x may be any real number (a
  * non-integer starts from Floor[x] going up and Ceiling[x] going down); k must
- * be an integer. Not Listable -- as in Mathematica -- but a List in either
+ * be an integer. Not Listable, but a List in either
  * position is threaded explicitly. A wrong argument count draws
  * NextPrime::argt. */
 Expr* builtin_nextprime(Expr* res) {
@@ -718,7 +718,7 @@ bool facint_factor_complete(const mpz_t n, mpz_t* primes, int64_t* exps,
 }
 
 /* EulerPhi[n]: the number of 1 <= k <= n coprime to n. EulerPhi[0] is 0 and
- * the sign of n is ignored, as in Mathematica. A small machine n goes through
+ * the sign of n is ignored. A small machine n goes through
  * ndint_euler_phi_i64 -- the helper behind the NDArray kernel and Compile's
  * OP_PHI_I -- so the three agree and no GMP is touched; otherwise FactorInteger
  * and GMP. A non-integer NUMBER (EulerPhi[1/2], EulerPhi[2.], EulerPhi[3 + I])
@@ -801,7 +801,7 @@ void facint_init(void) {
     ppq_trial_primes_init();
     /* PrimePi is registered in numbertheory_init() (src/numbertheory/prime.c). */
     symtab_get_def("EulerPhi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
-    /* NextPrime is NOT Listable in Mathematica (it threads lists explicitly). */
+    /* NextPrime is NOT Listable (it threads lists explicitly). */
     symtab_get_def("NextPrime")->attributes |= ATTR_PROTECTED;
 
     /* FactorInteger and FactorInteger`<Method> (src/numbertheory/factorinteger/). */

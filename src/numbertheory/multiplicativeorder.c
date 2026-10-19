@@ -171,7 +171,7 @@ static bool mo_search_residues(const mpz_t k_in, const mpz_t n,
 }
 
 static Expr* mo_emit_argt(size_t argc) {
-    /* Mathematica's tag is argtu for one argument, argt otherwise. */
+    /* The expected tag is argtu for one argument, argt otherwise. */
     if (argc == 1)
         mth_message("MultiplicativeOrder", "argtu", "MultiplicativeOrder called with 1 argument; 2 or 3 arguments are expected.");
     else
@@ -238,7 +238,7 @@ Expr* builtin_multiplicativeorder(Expr* res) {
     mpz_t k, n;
     expr_to_mpz(k_expr, k);
     expr_to_mpz(n_expr, n);
-    /* A zero or negative modulus stays unevaluated, as in Mathematica
+    /* A zero or negative modulus stays unevaluated
      * (MultiplicativeOrder[2, -7] is not 3). */
     if (mpz_sgn(n) <= 0) { mpz_clears(k, n, NULL); return NULL; }
 

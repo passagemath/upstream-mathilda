@@ -389,9 +389,9 @@ static Expr* pm_gaussian(Expr* a_expr, Expr* b_expr, Expr* m_expr) {
  *   integer b       square-and-multiply in GMP (mpz_powm); b < 0 inverts a
  *                   first, and a non-invertible a draws PowerMod::ninv;
  *   rational p/q    a q-th root of a^p mod m (PowerMod::root when none);
- *   Gaussian a or m the same over Z[i] for integer b, reducing with Mathematica's
+ *   Gaussian a or m the same over Z[i] for integer b, reducing with the
  *                   nearest-quotient Mod after every product.
- * As in Mathematica 14: an inexact argument, a non-integer base or modulus, or a
+ * As in the reference: an inexact argument, a non-integer base or modulus, or a
  * non-rational exponent draws PowerMod::pmod; a zero modulus PowerMod::divz; a
  * negative integer modulus leaves the call unevaluated; a wrong argument count
  * draws PowerMod::argr / ::argrx. Symbolic arguments stay unevaluated silently.
@@ -434,7 +434,7 @@ Expr* builtin_powermod(Expr* res) {
             free(call);
             return NULL;
         }
-        /* Mathematica leaves a negative integer modulus unevaluated. */
+        /* A negative integer modulus stays unevaluated. */
         if ((m_expr->type == EXPR_INTEGER && m_expr->data.integer < 0) ||
             (m_expr->type == EXPR_BIGINT && mpz_sgn(m_expr->data.bigint) < 0))
             return NULL;

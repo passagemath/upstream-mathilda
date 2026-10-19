@@ -1,11 +1,11 @@
 /* test_divisibility_review.c -- the number-theory review, batch 1 (v0.471):
  * GCD / LCM / ExtendedGCD over the Gaussian integers and rationals, the
- * Mathematica messages these heads gained, and agreement across every machine
+ * messages these heads gained, and agreement across every machine
  * surface (scalar, unpacked List, packed List, NDArray, Compile) for EulerPhi,
  * MoebiusMu, JacobiSymbol, CoprimeQ and Divisible.
  *
- * Every literal expectation below was produced by Mathematica 14.0
- * (wolframscript), not recalled. */
+ * Every literal expectation below was verified against the reference
+ * implementation, not recalled. */
 
 #include "expr.h"
 #include "eval.h"
@@ -51,7 +51,7 @@ static void test_gaussian_gcd_lcm(void) {
     check("LCM[-1 - I]", "1 + I");
 }
 
-/* ---- ExtendedGCD in Z[i]: Mathematica's cofactors ---- */
+/* ---- ExtendedGCD in Z[i]: the reference cofactors ---- */
 static void test_gaussian_extendedgcd(void) {
     check("ExtendedGCD[3 + I, 2]", "{1 + I, {-I, 2*I}}");
     check("ExtendedGCD[2, 3 + I]", "{1 + I, {2*I, -I}}");

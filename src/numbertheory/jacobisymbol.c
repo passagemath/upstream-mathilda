@@ -16,7 +16,7 @@
 /* Emit the wrong-argument-count diagnostic for JacobiSymbol and return NULL so
  * the call is left unevaluated. */
 static Expr* jacobisymbol_emit_argrx(size_t npos) {
-    /* Mathematica's tag is argr for one argument, argrx otherwise. */
+    /* The expected tag is argr for one argument, argrx otherwise. */
     if (npos == 1)
         mth_message_gated(g_arith_warnings_muted, "JacobiSymbol", "argr",
             "JacobiSymbol called with 1 argument; 2 arguments are expected.");

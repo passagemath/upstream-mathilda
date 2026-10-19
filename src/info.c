@@ -120,8 +120,8 @@ void info_init(void) {
         "\tg == r1 n1 + r2 n2 + ... (Bezout's identity; it yields modular inverses).\n"
         "\tIntegers: the cofactors are GMP's minimal ones, |r1| < |n2|/(2 g), folded pairwise.\n"
         "\tGaussian integers: a nearest-rounding Euclid in Z[i] with g first-quadrant\n"
-        "\tnormalised -- ExtendedGCD[3 + I, 2] is {1 + I, {-I, 2 I}}; the cofactors match\n"
-        "\tMathematica's in almost all cases and are always a valid Bezout pair.\n"
+        "\tnormalised -- ExtendedGCD[3 + I, 2] is {1 + I, {-I, 2 I}}; the cofactors\n"
+        "\tare always a valid Bezout pair.\n"
         "\tA non-integer exact argument draws ExtendedGCD::egcd, an inexact one\n"
         "\tExtendedGCD::exact. Listable.");
     symtab_set_docstring("ChineseRemainder",
@@ -2899,12 +2899,14 @@ void info_init(void) {
         "Listable. Trial division by the primes below 2^10, reduction to the primitive root "
         "(FLINT fmpz_is_perfect_power), then one PrimeQ test on that root.");
     symtab_set_docstring("SquareFreeQ",
-        "SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime (or "
-        "irreducible factor) occurs more than once, equivalently MoebiusMu[n] != 0 for an integer -- "
-        "and False otherwise; the squarefree integers have density 6/Pi^2.\n"
+        "SquareFreeQ[expr] gives True if expr is a square-free number or polynomial -- no prime\n"
+        "\t(or irreducible factor) occurs more than once -- and False otherwise.\n"
         "SquareFreeQ[expr, vars]\n"
-        "\tgives True if expr is square-free with respect to the variables vars.\n"
-        "Option GaussianIntegers -> True | False | Automatic switches to Gaussian integers.");
+        "\ttests square-freeness with respect to the variables vars.\n"
+        "\tOptions: GaussianIntegers -> Automatic | True | False; Modulus -> p tests a\n"
+        "\tunivariate polynomial over GF(p) (p prime; other moduli and several variables\n"
+        "\tstay unevaluated). An unknown option, or Modulus on a number, draws\n"
+        "\tSquareFreeQ::par. Not Listable: SquareFreeQ[{...}] stays unevaluated.");
     symtab_set_docstring("IrreduciblePolynomialQ",
         "IrreduciblePolynomialQ[poly]\n"
         "\tgives True if poly is an irreducible polynomial over the rationals.\n"
@@ -4859,9 +4861,14 @@ void info_init(void) {
         "residual chain with decidable pairs dropped.");
 
     symtab_set_docstring("IntegerDigits",
-        "IntegerDigits[n] gives a list of the decimal digits in the integer n.\n"
-        "IntegerDigits[n, b] gives a list of the base b digits in the integer n.\n"
-        "IntegerDigits[n, b, len] pads the list on the left with zeros to give a list of length len; if n has more than len base-b digits, the last len least-significant digits are returned.");
+        "IntegerDigits[n] gives the list of the decimal digits of the integer n (sign ignored).\n"
+        "IntegerDigits[n, b]\n"
+        "\tgives the base b digits, b an integer > 1 (IntegerDigits::ibase otherwise).\n"
+        "IntegerDigits[n, b, len]\n"
+        "\tpads on the left with zeros to length len, or keeps the len least-significant\n"
+        "\tdigits; len must be a non-negative machine integer (IntegerDigits::intnm).\n"
+        "\tSubquadratic for big n (GMP radix conversion for b <= 62). Listable; a packed\n"
+        "\tlist is read straight off its buffer.");
 
     symtab_set_docstring("IntegerLength",
         "IntegerLength[n] gives the number of decimal digits in the integer n.\n"
@@ -4876,19 +4883,21 @@ void info_init(void) {
 
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
-        "IntegerExponent[n] is equivalent to IntegerExponent[n, 10] and "
-        "gives the number of trailing zeros in the decimal digits of n.\n"
-        "IntegerExponent ignores the sign of n; IntegerExponent[0, b] is "
-        "Infinity.");
+        "IntegerExponent[n]\n"
+        "\tis IntegerExponent[n, 10]: the number of trailing decimal zeros of n.\n"
+        "\tThe sign of n is ignored; IntegerExponent[0, b] is Infinity. A base that is not an\n"
+        "\tinteger > 1 draws IntegerExponent::ibase, a non-integer n ::int. Listable;\n"
+        "\tpacked lists and Compile have machine paths.");
 
     symtab_set_docstring("DigitCount",
-        "DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 "
-        "in the base-10 representation of n.\n"
-        "DigitCount[n, b] gives a list of the counts of digits 1, 2, ..., "
-        "b-1, 0 in the base-b representation of n.\n"
-        "DigitCount[n, b, d] gives the number of d digits in the base-b "
-        "representation of n.\n"
-        "The sign of n is discarded; DigitCount[0] is a list of zeros.");
+        "DigitCount[n] gives the counts of digits 1, 2, ..., 9, 0 in the decimal digits of n.\n"
+        "DigitCount[n, b]\n"
+        "\tgives the counts of 1, 2, ..., b-1, 0 in base b.\n"
+        "DigitCount[n, b, d]\n"
+        "\tgives the number of digits d; a list of d gives a list of counts.\n"
+        "\tThe sign of n is ignored. 0 is the single digit 0 (but has no digits in base 2).\n"
+        "\tA real n counts the digits of RealDigits[n, b]. A bad base draws\n"
+        "\tDigitCount::base, a bad digit ::digp, a rational n ::int.");
 
     symtab_set_docstring("DigitSum",
         "DigitSum[n] gives the sum of the decimal digits of the integer n.\n"
@@ -4942,20 +4951,28 @@ void info_init(void) {
         "precision p digits gives -p / Log10[b].  Threads over lists.");
 
     symtab_set_docstring("FromDigits",
-        "FromDigits[list] constructs an integer from a list of decimal "
-        "digits, most-significant first.\n"
-        "FromDigits[list, b] takes the digits to be given in base b.\n"
-        "FromDigits[\"string\"] constructs an integer from a string of "
-        "digits, where letters a-z and A-Z denote digit values 10-35.\n"
-        "FromDigits[\"string\", b] takes the digits in the string to be "
-        "given in base b.\n"
-        "Digits in list and characters in the string need not be less than "
-        "the base; they are carried through Horner's method.  Symbolic "
-        "digits or base expand to the polynomial sum d[0] b^(n-1) + ... + "
-        "d[n-1].");
+        "FromDigits[list] constructs a number from a list of decimal digits, most significant first.\n"
+        "FromDigits[list, b]\n"
+        "\ttakes the digits in base b -- any base: integer, rational, symbolic, even 0 or -10.\n"
+        "FromDigits[{list, e}, b]\n"
+        "\tplaces the point so the value is sum d_i b^(e - i); a trailing sublist of list\n"
+        "\trepeats forever (FromDigits[{{1, 2, {3, 4}}, 2}] is 1222/99), inverting RealDigits.\n"
+        "FromDigits[\"string\", b]\n"
+        "\treads digits 0-9 and letters a-z (A-Z) as 10-35.\n"
+        "FromDigits[\"string\", \"Roman\"]\n"
+        "\treads a Roman numeral (FromRomanNumeral::nrom and $Failed if it is not one).\n"
+        "\tSymbolic digits in a numeric base give the Horner form 10 (10 a + b) + c; a\n"
+        "\tsymbolic base the expanded sum. Subquadratic for long digit lists.");
 
     // Primes
-    symtab_set_docstring("Divisors", "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.");
+    symtab_set_docstring("Divisors",
+        "Divisors[n] gives the ascending list of the positive integers dividing n (the sign of n\n"
+        "\tis ignored); Divisors[1] is {1}, Divisors[0] stays unevaluated.\n"
+        "Divisors[n, GaussianIntegers -> True]\n"
+        "\tgives the Gaussian-integer divisors, one first-quadrant representative per\n"
+        "\tassociate class; a non-real Gaussian integer n switches to Z[i] automatically.\n"
+        "\tDivisors[] draws Divisors::argx; a bad option ::nonopt / ::optx / ::opttf.\n"
+        "\tListable; Options: GaussianIntegers -> False.");
     symtab_set_docstring("DivisorSigma",
         "DivisorSigma[k, n]\n"
         "\tThe divisor function sigma_k(n): the sum of d^k over the positive divisors d of n.\n"
@@ -5012,7 +5029,7 @@ void info_init(void) {
         "NextPrime[x] gives the smallest prime above x.\n"
         "NextPrime[x, k]\n"
         "\tgives the k-th prime above x (k > 0) or below x (k < 0).\n"
-        "\tNegative primes count, as in Mathematica: NextPrime[-10] is -7, NextPrime[3, -2] is -2.\n"
+        "\tNegative primes count: NextPrime[-10] is -7, NextPrime[3, -2] is -2.\n"
         "\tx may be any real number; NextPrime[x, 0] is x for a (signed) prime and stays\n"
         "\tunevaluated otherwise. Lists are threaded (NextPrime is not Listable).");
     symtab_set_docstring("Distribute",

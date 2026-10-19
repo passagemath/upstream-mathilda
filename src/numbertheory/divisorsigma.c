@@ -25,7 +25,7 @@
 /* ---- DivisorSigma ------------------------------------------------------- */
 
 /* Emit the wrong-argument-count diagnostic and return NULL so the call is left
- * unevaluated. Wolfram's tag is `argr` for exactly one argument and `argrx`
+ * unevaluated. The tag is `argr` for exactly one argument and `argrx`
  * otherwise. Gated on the raw arithmetic probe mute, so an internal probe that
  * pokes at a malformed call is invisible to Check[] as well as silent. */
 static Expr* divisorsigma_emit_argcount(size_t npos) {
@@ -118,7 +118,7 @@ static Expr* ds_divisor_count(const unsigned long* exps, size_t n) {
  * The multiplicative formula built as an expression (ds_assemble) is the one
  * path that serves EVERY k -- rational, symbolic, complex, arbitrary precision
  * -- and it is also the slow one: a Times/Power/Plus tree per call, then a full
- * evaluation of it (2x Mathematica on Do[DivisorSigma[1, i], {i, 10^5}]). The
+ * evaluation of it (2x the target on Do[DivisorSigma[1, i], {i, 10^5}]). The
  * two kinds of k that dominate real workloads, an exact machine Integer and a
  * machine Real, are answered here directly instead. Each path returns NULL to
  * decline, and the caller then takes the expression path exactly as before. */
@@ -207,8 +207,8 @@ static Expr* ds_integer_k(int64_t k, const Expr* n) {
  * over n <= 3000 and k in {0.5, 1.5, 2., -1.5, 3.7}, Horner's worst case is
  * 5.8 ulp, where the closed form (and the expression path it replaces) reached
  * 31 ulp at k = 3.7 -- and the closed form is 0/0 at k = 0., where Horner gives
- * the divisor count. n = 1 is the empty product, the exact Integer 1, as in
- * Mathematica (DivisorSigma[2., {1, 2, 3}] is {1, 5., 10.}). Declines a
+ * the divisor count. n = 1 is the empty product, the exact Integer 1
+ * (DivisorSigma[2., {1, 2, 3}] is {1, 5., 10.}). Declines a
  * non-finite result, so an overflow reaches the expression path, which carries
  * it into an extended-exponent MPFR real. */
 static Expr* ds_real_k(double k, const Expr* n) {

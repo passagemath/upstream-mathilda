@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L   /* dup / dup2 / fileno */
 /* Unit tests for IntegerExponent.
  *
  *   IntegerExponent[n]      -- highest power of 10 dividing |n|; equivalently
@@ -29,6 +30,7 @@
  *     valgrind.
  */
 
+#include <unistd.h>
 #include "expr.h"
 #include "eval.h"
 #include "core.h"
@@ -48,8 +50,12 @@
  * fixed temp file path; safe because tests run serially. */
 static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     const char* path = "/tmp/mathilda_int_exponent_stderr.log";
+    /* Save and restore the real stderr descriptor: reopening "/dev/tty"
+     * fails without a terminal and would leave stderr closed. */
     fflush(stderr);
-    if (!freopen(path, "w+", stderr)) {
+    int saved = dup(fileno(stderr));
+    if (saved < 0 || !freopen(path, "w+", stderr)) {
+        if (saved >= 0) close(saved);
         if (out_result_str) *out_result_str = NULL;
         return NULL;
     }
@@ -61,7 +67,9 @@ static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     expr_free(e);
 
     fflush(stderr);
-    freopen("/dev/tty", "w", stderr);
+    dup2(saved, fileno(stderr));
+    close(saved);
+    clearerr(stderr);
 
     FILE* f = fopen(path, "r");
     if (!f) return NULL;
@@ -459,8 +467,8 @@ static void test_real_base_int_diagnostic(void) {
     char* err = eval_capturing_stderr("IntegerExponent[10, 2.5]", &result);
     ASSERT(result != NULL);
     ASSERT(err != NULL);
-    ASSERT(strstr(err, "IntegerExponent::int") != NULL);
-    ASSERT(strstr(err, "Integer expected at position 2") != NULL);
+    ASSERT(strstr(err, "IntegerExponent::ibase") != NULL);   /* ibase, not int */
+    ASSERT(strstr(err, "is not an integer greater than 1") != NULL);
     free(result);
     free(err);
 }

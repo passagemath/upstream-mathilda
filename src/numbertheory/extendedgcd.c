@@ -77,7 +77,7 @@ static Expr* egcd_gaussian_value(const mpz_t re, const mpz_t im) {
 /* ExtendedGCD over Z[i], used when some argument is a non-real Gaussian
  * integer. Folds gi_xgcd from the first argument (normalised, with the unit
  * that normalised it as its coefficient), scaling the accumulated coefficients
- * by each step's s -- the integer fold's shape. Reproduces Mathematica's
+ * by each step's s -- the integer fold's shape. Gives the canonical
  * coefficients, e.g. ExtendedGCD[3 + I, 2] is {1 + I, {-I, 2 I}}; see gi_xgcd
  * for where the two can differ. Every argument must be a Gaussian integer. */
 static Expr* egcd_gaussian(Expr* res, size_t count) {

@@ -116,7 +116,7 @@ static bool ndk_EulerPhi_ii(int64_t n, int64_t* out) {
 }
 
 /* MoebiusMu[n]: 0 if any exponent >= 2, else (-1)^(distinct primes).
- * MoebiusMu[0] is 0, as in Mathematica (0 is divisible by every square). Sign
+ * MoebiusMu[0] is 0 (0 is divisible by every square). Sign
  * ignored. Shared by the scalar builtin and Compile's OP_MU_I. */
 static int64_t ndi_mu_from_exps(const int* e, int np) {
     for (int i = 0; i < np; i++) if (e[i] >= 2) return 0;
@@ -380,6 +380,19 @@ static const NDBinaryKernel NDKB_GCD =
     { NULL, false, NULL, ndk_GCD_ii, true, NULL };
 static const NDBinaryKernel NDKB_LCM =
     { NULL, false, NULL, ndk_LCM_ii, true, NULL };
+/* IntegerExponent[n, b]: the largest e with b^e | n. Declines n == 0
+ * (Infinity, not an int64) and b < 2 (::ibase in the scalar builtin). */
+static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
+    if (n == 0 || b < 2) return false;
+    uint64_t m = n < 0 ? (uint64_t)0 - (uint64_t)n : (uint64_t)n;
+    int64_t e = 0;
+    while (m % (uint64_t)b == 0) { m /= (uint64_t)b; e++; }
+    *out = e;
+    return true;
+}
+
+static const NDBinaryKernel NDKB_IntegerExponent =
+    { NULL, false, NULL, ndk_IntegerExponent_ii, true, NULL };
 static const NDBinaryKernel NDKB_JacobiSymbol =
     { NULL, false, NULL, ndk_JacobiSymbol_ii, true, NULL };
 static const NDBinaryKernel NDKB_DivisorSigma =
@@ -503,8 +516,8 @@ Expr* ndint_powermod(Expr* res) {
     int64_t e, m;
     if (!ndi_exact_int(res->data.function.args[1], &e) || e < 0) return NULL;
     if (!ndi_exact_int(res->data.function.args[2], &m)) return NULL;
-    /* A negative modulus is left unevaluated by the builtin (as in
-     * Mathematica), so the buffer declines and the List path reproduces it. */
+    /* A negative modulus is left unevaluated by the builtin,
+     * so the buffer declines and the List path reproduces it. */
     if (m <= 0) return NULL;
     int64_t am = m;
     if (am > NDI_POWERMOD_MAX) return NULL;
@@ -540,30 +553,31 @@ Expr* ndint_integerdigits(Expr* res) {
     size_t sz = ndarray_size(a);
     const void* in = a->data.ndarray.data;
 
-    Expr** rows = malloc(sizeof(Expr*) * (sz ? sz : 1));
-    if (!rows) return NULL;
+    for (size_t i = 0; i < sz; i++)                 /* INT64_MIN: let GMP have it */
+        if (ndt_get_i(in, i, NDT_INT64) == INT64_MIN) return NULL;
+
+    /* Expressions are refcounted, so every digit node is one of ten shared
+     * Integers and every row shares one List head: each row costs a single
+     * node, filled in place -- 10^6 rows of ~7 digits allocate 10^6 nodes
+     * instead of ~8 * 10^6 (IntegerDigits[Range[10^6]]: 1.23 s -> see the
+     * v0.473 changelog). */
+    Expr* dig[10];
+    for (int j = 0; j < 10; j++) dig[j] = expr_new_integer(j);
+    Expr* head = expr_new_symbol(SYM_List);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, sz);
+    if (!out) { for (int j = 0; j < 10; j++) expr_free(dig[j]); expr_free(head); return NULL; }
     for (size_t i = 0; i < sz; i++) {
-        int64_t v = ndt_get_i(in, i, NDT_INT64), m;
-        if (ci_abs_i64(v, &m)) {                    /* INT64_MIN: let GMP have it */
-            for (size_t j = 0; j < i; j++) expr_free(rows[j]);
-            free(rows);
-            return NULL;
-        }
-        int64_t d[20]; int nd = 0;
+        int64_t v = ndt_get_i(in, i, NDT_INT64);
+        uint64_t m = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+        int d[20]; int nd = 0;
         if (m == 0) d[nd++] = 0;
-        while (m > 0) { d[nd++] = m % 10; m /= 10; }
-        Expr** digits = malloc(sizeof(Expr*) * (size_t)nd);
-        if (!digits) {
-            for (size_t j = 0; j < i; j++) expr_free(rows[j]);
-            free(rows);
-            return NULL;
-        }
-        for (int j = 0; j < nd; j++) digits[j] = expr_new_integer(d[nd - 1 - j]);
-        rows[i] = expr_new_function(expr_new_symbol(SYM_List), digits, (size_t)nd);
-        free(digits);
+        while (m > 0) { d[nd++] = (int)(m % 10); m /= 10; }
+        Expr* row = expr_new_function(expr_copy(head), NULL, (size_t)nd);
+        for (int j = 0; j < nd; j++) row->data.function.args[j] = expr_copy(dig[d[nd - 1 - j]]);
+        out->data.function.args[i] = row;
     }
-    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, sz);
-    free(rows);
+    for (int j = 0; j < 10; j++) expr_free(dig[j]);
+    expr_free(head);
     return out;
 }
 
@@ -775,4 +789,5 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
     symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);
+    symtab_set_ndarray_binary_kernel("IntegerExponent", &NDKB_IntegerExponent);
 }

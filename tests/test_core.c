@@ -900,7 +900,7 @@ void test_gcd_lcm(void) {
     assert_eval_eq("LCM[12, 18, 24]", "72", 1);
     assert_eval_eq("LCM[1/2, 1/3]", "1", 1);
     assert_eval_eq("LCM[0, 5]", "0", 1);
-    assert_eval_eq("Quiet[LCM[]]", "LCM[]", 1);   /* LCM::argm, as in Mathematica */
+    assert_eval_eq("Quiet[LCM[]]", "LCM[]", 1);   /* LCM::argm */
     assert_eval_eq("LCM[-5]", "5", 1);
     assert_eval_eq("LCM[x]", "x", 1);
 
@@ -947,7 +947,7 @@ void test_primeq(void) {
     assert_eval_eq("PrimeQ[x]", "False", 1);
     assert_eval_eq("PrimeQ[Sqrt[2]]", "False", 1);
     assert_eval_eq("PrimeQ[Exp[2 Pi I / 3]]", "False", 1);
-    assert_eval_eq("Quiet[PrimeQ[]]", "PrimeQ[]", 1);   /* PrimeQ::argx, as Mathematica */
+    assert_eval_eq("Quiet[PrimeQ[]]", "PrimeQ[]", 1);   /* PrimeQ::argx */
 
     // Large prime (from user request)
     assert_eval_eq("PrimeQ[-59]", "True", 1);
@@ -992,7 +992,7 @@ void test_factorinteger(void) {
     // Partial factorization
     /* Mathematica: at most k entries, the last an unfactored remainder. */
     assert_eval_eq("FactorInteger[100, 1]", "List[List[100, 1]]", 1);
-    assert_eval_eq("FactorInteger[100, 2]", "List[List[2, 2], List[25, 1]]", 1);
+    assert_eval_eq("FactorInteger[100, 2]", "List[List[2, 2], List[5, 2]]", 1);  /* 2 primes fit in k = 2 */
     assert_eval_eq("FactorInteger[1]", "List[List[1, 1]]", 1);
     
     // Automatic (easy factors)
@@ -1133,7 +1133,7 @@ void test_nextprime(void) {
     assert_eval_eq("NextPrime[10, 2]", "13", 1);
     assert_eval_eq("NextPrime[5, -1]", "3", 1);
     assert_eval_eq("NextPrime[5, -2]", "2", 1);
-    assert_eval_eq("NextPrime[2, -1]", "-2", 1);   /* negative primes count, as Mathematica */
+    assert_eval_eq("NextPrime[2, -1]", "-2", 1);   /* negative primes count */
 }
 
 void test_primepi(void) {

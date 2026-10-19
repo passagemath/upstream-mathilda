@@ -629,7 +629,13 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
         }
     }
     for (size_t i = 0; i < *count; i++) if (expr_eq((*vars_ptr)[i], e)) return;
-    if (*count == *capacity) { *capacity *= 2; *vars_ptr = realloc(*vars_ptr, sizeof(Expr*) * (*capacity)); }
+    /* Grow from any start, including an empty (NULL, 0) buffer: doubling a
+     * zero capacity stays zero and realloc(p, 0) then gives a block the
+     * write below overruns (PolynomialGCD's Modulus path starts empty). */
+    if (*count == *capacity) {
+        *capacity = *capacity ? *capacity * 2 : 8;
+        *vars_ptr = realloc(*vars_ptr, sizeof(Expr*) * (*capacity));
+    }
     (*vars_ptr)[(*count)++] = expr_copy(e);
 }
 

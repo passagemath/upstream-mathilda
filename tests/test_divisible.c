@@ -45,7 +45,7 @@ void test_divisible_negative() {
 }
 
 /* ---- Zero edge cases: a zero divisor draws Divisible::divz and stays
- * unevaluated, as in Mathematica 14. ---- */
+ * unevaluated. ---- */
 void test_divisible_zero() {
     check("Divisible[0, 5]", "True");
     check("Quiet[Divisible[0, 0]]", "Divisible[0, 0]");
@@ -129,7 +129,7 @@ void test_divisible_arg_errors() {
     check("Divisible[7]", "Divisible[7]");
 }
 
-/* ---- Three or more arguments form a CHAIN (Mathematica 14): n divisible by
+/* ---- Three or more arguments form a CHAIN (the reference): n divisible by
  * m1, m1 by m2, ... ---- */
 void test_divisible_chain() {
     check("Divisible[6, 5, 4, 3]", "False");

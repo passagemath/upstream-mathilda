@@ -83,7 +83,7 @@ void test_coprimeq_gaussian_auto() {
     check("CoprimeQ[3, 1 + I]", "True");       /* 3 is a Gaussian prime, norm 9 */
 }
 
-/* ---- CoprimeQ has no options (Mathematica 14): a rule is a non-integer
+/* ---- CoprimeQ has no options (the reference): a rule is a non-integer
  * argument, so the answer is False whatever the rule says. ---- */
 void test_coprimeq_gaussian_option() {
     check("Options[CoprimeQ]", "{}");
@@ -108,7 +108,7 @@ void test_coprimeq_listable() {
 /* ---- Single argument and empty call (documented contract) ---- */
 void test_coprimeq_arity() {
     check("CoprimeQ[]", "False");
-    /* One argument: is it a unit? (Mathematica 14.) */
+    /* One argument: is it a unit? (the reference.) */
     check("CoprimeQ[7]", "False");
     check("CoprimeQ[12]", "False");
     check("CoprimeQ[0]", "False");

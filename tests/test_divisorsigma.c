@@ -129,7 +129,7 @@ void test_divisorsigma_unevaluated() {
     check("DivisorSigma[1, 2, 3]", "DivisorSigma[1, 2, 3]");
 }
 
-/* ---- Options and messages (expectations verified against Mathematica 14.0) ---- */
+/* ---- Options and messages (expectations verified against the reference) ---- */
 void test_divisorsigma_options() {
     check("Options[DivisorSigma]", "{GaussianIntegers -> False}");
     check("DivisorSigma[1, 6, GaussianIntegers :> True]", "8 + 12*I");
@@ -174,10 +174,10 @@ void test_divisorsigma_fastpath() {
 void test_divisorsigma_real() {
     check("DivisorSigma[2., 6]", "50.0");
     check("DivisorSigma[-2., 10]", "1.3");
-    /* n = 1 is the empty product, an exact 1, as in Mathematica. */
+    /* n = 1 is the empty product, an exact 1. */
     check("DivisorSigma[2., {1, 2, 3}]", "{1, 5.0, 10.0}");
     check("Abs[DivisorSigma[1.5, 6] - 23.72151800415189] < 10^-13", "True");
-    /* Mathematica's closed form is 0/0 here (Indeterminate); Horner gives the
+    /* The closed form is 0/0 here (Indeterminate); Horner gives the
      * divisor count, which is the value of sigma_0. A deliberate difference. */
     check("DivisorSigma[0., 6]", "4.0");
     /* Arbitrary-precision k keeps the expression path. */

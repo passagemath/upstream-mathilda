@@ -170,7 +170,7 @@ Expr* nt_emit_int(const char* head, size_t pos, Expr* res) {
 /* ---- the GaussianIntegers -> True | False option ------------------------- *
  * Shared by the heads whose only option it is (DivisorSigma, PrimeQ, PrimeNu,
  * PrimeOmega). Reads args[first ..] as options, left to right, with
- * Mathematica's messages: a non-rule is head::nonopt, a name other than
+ * the standard messages: a non-rule is head::nonopt, a name other than
  * GaussianIntegers head::optx, a value other than True / False head::opttf.
  * Rule and RuleDelayed both count; of repeated settings the first wins.
  * Returns false (message emitted, caller leaves the call unevaluated) on any

@@ -51,7 +51,7 @@ Expr*   divisors_gaussian(const mpz_t a_in, const mpz_t b_in);
 
 /* Gaussian GCD arithmetic (nt_gaussian.c). Every output is init'd by the
  * caller. gcd / lcm / the xgcd gcd are first-quadrant normalised (Re > 0,
- * Im >= 0); gi_xgcd gives g = s a + t b with Mathematica's coefficients
+ * Im >= 0); gi_xgcd gives g = s a + t b with the canonical coefficients
  * (nearest-rounding Euclid, ties to even). gi_normalize reports the power of
  * i it multiplied by; gi_rotate_by multiplies by i^k. */
 void    gi_xgcd(mpz_t gr, mpz_t gi, mpz_t sr, mpz_t si, mpz_t tr, mpz_t ti,

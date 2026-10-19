@@ -826,6 +826,10 @@ static void pack_mark_aware_heads(void) {
          * instead of falling out unevaluated. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
         "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
+        "IntegerExponent",
+        /* FromDigits reads an int64 digit buffer straight into mpz_set_str
+         * (src/int.c) and delists anything else itself. */
+        "FromDigits",
         /* The elementwise sign predicates. Now buffer on BOTH sides (§13 gap C.1
          * closed): the input is read straight off the buffer and the answer is a
          * packed NDT_BOOL array of True/False, never 10^6 Real comparisons nor
@@ -1186,7 +1190,7 @@ static void pack_mark_aware_heads(void) {
          * and GMP still answer every case the buffer cannot. */
         "GCD", "LCM", "DivisorSigma", "EulerPhi", "MoebiusMu", "JacobiSymbol",
         "IntegerLength", "BitLength", "PowerMod", "Prime", "IntegerDigits",
-        "CoprimeQ", "Divisible", "PrimeQ",
+        "CoprimeQ", "Divisible", "PrimeQ", "IntegerExponent", "FromDigits",
         /* The sign predicates answer with True/False, which no dtype holds --
          * but they READ an int64 buffer exactly, by comparison, and comparison
          * is the one operation on integers that needs no arithmetic to be

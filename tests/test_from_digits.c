@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L   /* dup / dup2 / fileno */
 /* Unit tests for FromDigits.
  *
  *   FromDigits[list]            -- decimal digits, MSD-first.
@@ -26,7 +27,7 @@
  *   - Edge cases: empty list, empty string, single zero, zero list,
  *     leading zeros.
  *   - Error paths: 0 args, 3 args (::argb), numeric / unevaluated
- *     first arg (::nlst), base < 2 over list / string (::ibase),
+ *     first arg (::nlst), base < 2 over a string (::ibase),
  *     invalid character in string (::char), symbolic base over a
  *     string (silent unevaluated), symbolic first arg
  *     (silent unevaluated).
@@ -35,6 +36,7 @@
  *     under valgrind.
  */
 
+#include <unistd.h>
 #include "expr.h"
 #include "eval.h"
 #include "core.h"
@@ -54,8 +56,12 @@
  * fixed temp file path; safe because tests run serially. */
 static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     const char* path = "/tmp/mathilda_from_digits_stderr.log";
+    /* Save and restore the real stderr descriptor: reopening "/dev/tty"
+     * fails without a terminal and would leave stderr closed. */
     fflush(stderr);
-    if (!freopen(path, "w+", stderr)) {
+    int saved = dup(fileno(stderr));
+    if (saved < 0 || !freopen(path, "w+", stderr)) {
+        if (saved >= 0) close(saved);
         if (out_result_str) *out_result_str = NULL;
         return NULL;
     }
@@ -67,7 +73,9 @@ static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     expr_free(e);
 
     fflush(stderr);
-    freopen("/dev/tty", "w", stderr);
+    dup2(saved, fileno(stderr));
+    close(saved);
+    clearerr(stderr);
 
     FILE* f = fopen(path, "r");
     if (!f) return NULL;
@@ -215,7 +223,7 @@ static void test_symbolic_base(void) {
 
 static void test_symbolic_digit_in_list(void) {
     /* Mixed integer / symbolic digit list with concrete base. */
-    assert_eval_eq("FromDigits[{1, a, 3}, 10]", "103 + 10 a", 0);
+    assert_eval_eq("FromDigits[{1, a, 3}, 10]", "3 + 10 (10 + a)", 0);   /* Horner */
 }
 
 static void test_symbolic_both(void) {
@@ -298,8 +306,8 @@ static void test_zero_args_argb(void) {
     char* err = eval_capturing_stderr("FromDigits[]", &result);
     ASSERT(result != NULL);
     ASSERT_STR_EQ(result, "FromDigits[]");
-    ASSERT_MSG(err && strstr(err, "FromDigits::argb") != NULL,
-               "expected argb diagnostic, got: %s", err ? err : "(null)");
+    ASSERT_MSG(err && strstr(err, "FromDigits::argt") != NULL,
+               "expected argt diagnostic, got: %s", err ? err : "(null)");
     ASSERT(strstr(err, "called with 0 arguments") != NULL);
     ASSERT(strstr(err, "1 or 2 arguments are expected") != NULL);
     free(result);
@@ -312,8 +320,8 @@ static void test_three_args_argb(void) {
     ASSERT(result != NULL);
     ASSERT(strstr(result, "FromDigits") != NULL);
     ASSERT(err != NULL);
-    ASSERT_MSG(strstr(err, "FromDigits::argb") != NULL,
-               "expected argb diagnostic, got: %s", err);
+    ASSERT_MSG(strstr(err, "FromDigits::argt") != NULL,
+               "expected argt diagnostic, got: %s", err);
     ASSERT(strstr(err, "called with 3 arguments") != NULL);
     free(result);
     free(err);
@@ -344,16 +352,11 @@ static void test_real_first_arg_nlst(void) {
 }
 
 static void test_bad_base_zero_list(void) {
-    /* Base 0 over a list -> ::ibase, call left unevaluated. */
-    char* result = NULL;
-    char* err = eval_capturing_stderr("FromDigits[{1,2,3}, 0]", &result);
-    ASSERT(result != NULL);
-    ASSERT(strstr(result, "FromDigits") != NULL);
-    ASSERT(err != NULL);
-    ASSERT_MSG(strstr(err, "FromDigits::ibase") != NULL,
-               "expected ibase diagnostic, got: %s", err);
-    free(result);
-    free(err);
+    /* Any integer base over a list is Horner: base 0
+     * keeps the last digit, base 1 sums, a negative base alternates. */
+    assert_eval_eq("FromDigits[{1, 2, 3}, 0]", "3", 0);
+    assert_eval_eq("FromDigits[{1, 2, 3}, 1]", "6", 0);
+    assert_eval_eq("FromDigits[{1, 2, 3}, -10]", "83", 0);
 }
 
 static void test_bad_base_negative_string(void) {

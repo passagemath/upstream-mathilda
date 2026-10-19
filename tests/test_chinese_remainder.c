@@ -18,7 +18,7 @@
  *   - No-solution / inconsistent systems -> unevaluated, no diagnostic.
  *   - Edge cases: empty lists -> 0; single congruence; length mismatch;
  *     symbolic and non-integer arguments -> unevaluated.
- *   - Argument-count error -> ChineseRemainder::argr / ::argrx (as Mathematica 14).
+ *   - Argument-count error -> ChineseRemainder::argr / ::argrx (as the reference).
  *   - Attribute (Protected, NOT Listable), docstring, interned-symbol
  *     introspection.
  *   - Repeated-evaluation stress loop to catch double-frees / leaks under
@@ -224,7 +224,7 @@ static void test_no_solution_variants(void) {
 /* --- Edge cases ---------------------------------------------------- */
 
 static void test_empty_lists(void) {
-    /* Mathematica 14 leaves empty lists unevaluated. */
+    /* the reference leaves empty lists unevaluated. */
     assert_eval_eq("ChineseRemainder[{}, {}]", "ChineseRemainder[{}, {}]", 0);
     assert_eval_eq("ChineseRemainder[{}, {}, 5]", "ChineseRemainder[{}, {}, 5]", 0);
 }

@@ -178,7 +178,7 @@ static void test_squarefreeq_symbolic(void) {
 /* Strings and arbitrary expressions: stay False (never unevaluated). */
 static void test_squarefreeq_garbage(void) {
     run_test("SquareFreeQ[\"hello\"]", "False");
-    run_test("SquareFreeQ[{1, 2, 3}]", "False");  /* Not Listable. */
+    run_test("SquareFreeQ[{1, 2, 3}]", "SquareFreeQ[List[1, 2, 3]]");  /* Not Listable: unevaluated. */
 }
 
 /* SquareFreeQ is Protected, not Listable. */
@@ -198,23 +198,33 @@ static void test_squarefreeq_argb(void) {
 static void test_squarefreeq_nonopt(void) {
     fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::nonopt diagnostic ---\n");
     run_test("SquareFreeQ[1, 2, 3]", "SquareFreeQ[1, 2, 3]");
-    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::nonopt diagnostic ---\n");
+    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::par diagnostic ---\n");
     run_test("SquareFreeQ[4, GaussianIntegers -> Foo]",
              "SquareFreeQ[4, Rule[GaussianIntegers, Foo]]");
 }
 
-/* The Modulus option is accepted only for Modulus -> 0 (the default integer
- * ring).  Any other value -- non-zero integer, non-integer, or symbolic --
- * is not yet implemented and must emit SquareFreeQ::modnotimpl while leaving
- * the call unevaluated. */
+/* Modulus -> p (p prime) tests a univariate polynomial over GF(p); a number
+ * with a modulus draws SquareFreeQ::par; multivariate input and a non-prime
+ * modulus stay unevaluated. Every expectation from the reference. */
 static void test_squarefreeq_modulus_option(void) {
     run_test("SquareFreeQ[10, Modulus -> 0]", "True");
-    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::modnotimpl diagnostic ---\n");
+    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::par diagnostic ---\n");
     run_test("SquareFreeQ[10, Modulus -> 7]",
              "SquareFreeQ[10, Rule[Modulus, 7]]");
-    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::modnotimpl diagnostic ---\n");
-    run_test("SquareFreeQ[x^2 + 1, Modulus -> 2]",
-             "SquareFreeQ[Plus[1, Power[x, 2]], Rule[Modulus, 2]]");
+    run_test("SquareFreeQ[x^2 + 1, Modulus -> 2]", "False");
+    run_test("SquareFreeQ[(x - 1)^2, Modulus -> 2]", "False");
+    run_test("SquareFreeQ[x^2 + 1, Modulus -> 3]", "True");
+    run_test("SquareFreeQ[x^3 + 1, Modulus -> 3]", "False");
+    run_test("SquareFreeQ[x^4 + x^2 + 1, Modulus -> 3]", "False");
+    run_test("SquareFreeQ[x^5 + 1, Modulus -> 5]", "False");
+    run_test("SquareFreeQ[2 x, Modulus -> 2]", "False");
+    run_test("SquareFreeQ[x, Modulus -> 7]", "True");
+    run_test("SquareFreeQ[x^2 + 1, Modulus -> 4]",
+             "SquareFreeQ[Plus[1, Power[x, 2]], Rule[Modulus, 4]]");
+    run_test("SquareFreeQ[x y + 1, Modulus -> 5]",
+             "SquareFreeQ[Plus[1, Times[x, y]], Rule[Modulus, 5]]");
+    run_test("SquareFreeQ[x^2 - 2, Extension -> Sqrt[2]]",
+             "SquareFreeQ[Plus[-2, Power[x, 2]], Rule[Extension, Power[2, Rational[1, 2]]]]");
 }
 
 /* Regression: the dispatcher must not double-free vars on an early

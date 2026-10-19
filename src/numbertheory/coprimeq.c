@@ -71,8 +71,8 @@ static bool gaussian_pair_coprime(const mpz_t a1, const mpz_t a2,
  * anything that is not an integer or Gaussian integer -- a rational, a real, a
  * symbol, a rule -- makes it False. With one argument it asks whether n is a
  * unit (CoprimeQ[1], CoprimeQ[-1], CoprimeQ[I] are True; CoprimeQ[3] and
- * CoprimeQ[0] are False); CoprimeQ[] is False. All as in Mathematica 14, which
- * has no GaussianIntegers option here: CoprimeQ[2, 5, GaussianIntegers -> True]
+ * CoprimeQ[0] are False); CoprimeQ[] is False. CoprimeQ
+ * has no GaussianIntegers option: CoprimeQ[2, 5, GaussianIntegers -> True]
  * is False because the rule is not an integer. Listable threading is done by
  * the evaluator first. */
 Expr* builtin_coprimeq(Expr* res) {

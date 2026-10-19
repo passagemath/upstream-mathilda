@@ -116,10 +116,10 @@ static bool divisible_is_zero(const Expr* e) {
  * quantities such as 2 Pi or Sqrt[6] it evaluates the quotient n/m and asks
  * whether that is an integer or Gaussian integer.
  *
- * Divisible[n, m1, m2, ...] is a CHAIN, as in Mathematica: n divisible by m1,
+ * Divisible[n, m1, m2, ...] is a CHAIN: n divisible by m1,
  * m1 by m2, and so on (Divisible[12, 2, 3] is False, Divisible[8, 2, 2] True).
  *
- * Messages, as in Mathematica, each leaving the call unevaluated: a zero
+ * Messages, each leaving the call unevaluated: a zero
  * divisor draws ::divz, an inexact argument ::exact, fewer than two arguments
  * ::argmu / ::argm. Symbolic arguments stay unevaluated silently. Listable, so
  * the evaluator threads list arguments first. */
@@ -145,7 +145,7 @@ Expr* builtin_divisible(Expr* res) {
     for (size_t i = 1; i < argc; i++) {
         if (divisible_is_zero(args[i])) {
             /* ::divz only when every argument is a number; a symbolic call
-             * (Divisible[x, 0]) stays unevaluated silently, as in Mathematica. */
+             * (Divisible[x, 0]) stays unevaluated silently. */
             for (size_t j = 0; j < argc; j++)
                 if (!divisible_is_numeric_quantity(args[j])) return NULL;
             char* call = expr_to_string(res);

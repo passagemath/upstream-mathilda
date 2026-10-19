@@ -503,7 +503,7 @@ Expr* builtin_primitiverootlist(Expr* res) {
 
     mpz_t n;
     expr_to_mpz(n_expr, n);
-    mpz_abs(n, n);              /* PrimitiveRootList[-7] is {3, 5}, as in Mathematica */
+    mpz_abs(n, n);              /* PrimitiveRootList[-7] is {3, 5} */
     if (mpz_cmp_ui(n, 1) <= 0) {
         mpz_clear(n);
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);

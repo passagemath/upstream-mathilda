@@ -71,11 +71,23 @@ static void test_basics(void) {
     check("FactorInteger[12, Automatic]", "{{2, 2}, {3, 1}}");
 }
 
-/* ---- Partial factorisation: at most k entries, the last a remainder ---- */
+/* ---- Partial factorisation, the reference's rule (see partial_result in
+ * fi_builtin.c): the k - 1 LARGEST trial prime powers plus the rest merged,
+ * a large cofactor left unsplit when there is no room. All verified. ---- */
 static void test_partial(void) {
     check("FactorInteger[100, 1]", "{{100, 1}}");                 /* MMA */
     check("FactorInteger[6/35, 1]", "{{6/35, 1}}");               /* MMA */
-    check("FactorInteger[100, 2]", "{{2, 2}, {25, 1}}");
+    check("FactorInteger[100, 2]", "{{2, 2}, {5, 2}}");
+    check("FactorInteger[360, 2]", "{{5, 1}, {72, 1}}");
+    check("FactorInteger[5040, 3]", "{{5, 1}, {7, 1}, {144, 1}}");
+    check("FactorInteger[-30, 2]", "{{-6, 1}, {5, 1}}");
+    check("FactorInteger[-36, 2]", "{{-9, 1}, {2, 2}}");
+    check("FactorInteger[-2/3, 2]", "{{-1/3, 1}, {2, 1}}");
+    check("FactorInteger[7/360, 2]", "{{5, -1}, {7, 1}, {72, -1}}");
+    check("FactorInteger[10^30 + 1, 2]", "{{165573604901641, 1}, {6039610000603961, 1}}");
+    check("FactorInteger[10^30 + 1, 3]", "{{27961, 1}, {216001216001, 1}, {165573604901641, 1}}");
+    check("FactorInteger[360, All]", "{{2, 3}, {3, 2}, {5, 1}}");
+    check("FactorInteger[360, Infinity]", "{{2, 3}, {3, 2}, {5, 1}}");
     check("FactorInteger[5040, 4]", "{{2, 4}, {3, 2}, {5, 1}, {7, 1}}");  /* MMA */
     check("Length[FactorInteger[5040, 3]] <= 3", "True");
     check("Times @@ (#[[1]]^#[[2]] & /@ FactorInteger[5040, 3]) == 5040", "True");

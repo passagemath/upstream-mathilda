@@ -627,10 +627,27 @@ Out[3]= {4, 25}
 ## FactorInteger
 
 - `FactorInteger[n]`: the prime factorisation `{{p1, e1}, {p2, e2}, ...}`, primes ascending.
-- `FactorInteger[n, k]`: partial factorisation with **at most `k` entries**; the last entry may be an
-  unfactored remainder (Mathematica's contract: `FactorInteger[100, 1]` is `{{100, 1}}`,
-  `FactorInteger[100, 2]` is `{{2, 2}, {25, 1}}`). `k < 1` leaves the call unevaluated.
-- `FactorInteger[n, Automatic]`: the same as `FactorInteger[n]`.
+- `FactorInteger[n, k]`: a partial factorisation with **at most `k` entries**, grouped the way
+  Mathematica 14 groups them (all expectations below were checked against it):
+  1. Primes below 2^16 are removed by trial division; what is left is the cofactor C.
+  2. If C = 1, the k - 1 largest prime powers are kept and the rest merge into one entry:
+     `FactorInteger[360, 2]` is `{{5, 1}, {72, 1}}`.
+  3. If there are more trial primes than k - 1 and C > 1, the smallest trial primes merge, the k - 2
+     largest are kept, and C stays unsplit: `FactorInteger[3 5 7 1000003 1000033, 3]` is
+     `{{7, 1}, {15, 1}, {1000036000099, 1}}`.
+  4. Otherwise C is split into the room left, smallest factors first, and any overshoot merges.
+  5. A negative sign goes onto the merged entry, else onto an unsplit C, else onto the smallest entry,
+     else onto the largest prime power (written with exponent 1): `FactorInteger[-36, 2]` is
+     `{{-9, 1}, {2, 2}}`. For a rational, the sign prefers the denominator part.
+  6. Entries are sorted by base.
+
+  `FactorInteger[n, 1]` is `{{n, 1}}`; `k < 1` leaves the call unevaluated. Mathematica splits the
+  cofactor in the order its own search happens to find factors, so when C has three or more prime
+  factors and only some fit, the split can differ from Mathematica's (Mathilda's is smallest-first).
+  Gaussian partial factorisation with `k >= 2` keeps the full answer: Mathematica's output there is
+  inconsistent and is not reproduced.
+- `FactorInteger[n, Automatic]`, `FactorInteger[n, All]`, `FactorInteger[n, Infinity]`: the same as
+  `FactorInteger[n]`.
 - `FactorInteger[n, GaussianIntegers -> True]`: factorisation over Z[i]. A Gaussian integer or Gaussian
   rational argument (`3 + 4 I`, `(3 + 4 I)/(1 + I)`) is factored over Z[i] automatically. The unit comes
   first, when it is not 1. Primes are given in the first quadrant (Re > 0, Im >= 0), sorted by real part
@@ -645,7 +662,8 @@ Out[3]= {4, 25}
   - `FactorInteger::method`: unknown method;
   - `FactorInteger::mopt`: bad suboption;
   - `FactorInteger::optx`: unknown option;
-  - `FactorInteger::exact`: inexact or symbolic argument, as in Mathematica.
+  - `FactorInteger::exact`: inexact or symbolic argument, as in Mathematica;
+  - `FactorInteger::argt`: no arguments; `FactorInteger::nonopt`: a third non-rule argument.
 
 The implementation is in `src/numbertheory/factorinteger/` (one file per algorithm; see `fi_internal.h`).
 Every randomised choice (rho constants, ECM sigmas, p+1 seeds, QS polynomials) is drawn from a generator
@@ -777,8 +795,8 @@ Out[1]= {{-1, 1}, {2, 2}, {3, 1}}
 In[2]:= FactorInteger[3/4]
 Out[2]= {{2, -2}, {3, 1}}
 
-In[3]:= FactorInteger[100, 2]
-Out[3]= {{2, 2}, {25, 1}}
+In[3]:= FactorInteger[360, 2]
+Out[3]= {{5, 1}, {72, 1}}
 
 In[4]:= FactorInteger[5, GaussianIntegers -> True]
 Out[4]= {{-I, 1}, {1 + 2 I, 1}, {2 + I, 1}}
@@ -813,8 +831,12 @@ Out[6]= {{100000000000000000000000000319, 1}, {300000000000000000000000000007, 1
   primes `p ≡ 1 (mod 4)` split via a sum-of-two-squares (Cornacchia)
   decomposition, and primes `p ≡ 3 (mod 4)` stay inert.
 - `Divisors[0]`, non-integer arguments, and calls whose divisor count would
-  overflow (e.g. `Divisors[100!]`) are left unevaluated; `Divisors[]` issues a
-  `Divisors::argx` message.
+  overflow (e.g. `Divisors[100!]`) are left unevaluated.
+- Messages, matching Mathematica 14 and routed through the `Quiet`/`Check`
+  funnel: `Divisors::argx` (no arguments), `Divisors::nonopt` (a second
+  non-rule argument), `Divisors::optx` (unknown option), `Divisors::opttf`
+  (`GaussianIntegers` set to anything but `True`/`False`). When an option is
+  given twice, the first setting wins.
 
 ```mathematica
 In[1]:= Divisors[1729]
@@ -1186,8 +1208,8 @@ Out[2]= 618970019642690137449562110
   with integer real and imaginary parts.
 
 **Features**:
-- `Protected`. Not `Listable` -- passing a list of inputs treats the list as
-  the expression (`SquareFreeQ[{1, 2, 3}]` returns `False`).
+- `Protected`. Not `Listable`: `SquareFreeQ[{1, 2, 3}]` stays unevaluated, as
+  in Mathematica.
 - Always returns `True` or `False` on a structurally valid call. For inputs
   that are neither a recognised number nor a manifest polynomial -- reals,
   `Sqrt[2]`, `Sin[x]`, `Pi`, strings -- the result is `False`, never
@@ -1211,17 +1233,21 @@ Out[2]= 618970019642690137449562110
   - `p ≡ 1 (mod 4)`: `p` splits as `pi * conj(pi)`; ambiguous cases (the
     `e_in_norm == 2` slice) are resolved by computing `pi` via a
     Cornacchia search and stripping the multiplicity directly.
-- The `Modulus -> p` option is parsed but only `Modulus -> 0` (the default
-  no-modulus path) is wired in; any other value -- non-zero integer,
-  non-integer, or symbolic -- emits `SquareFreeQ::modnotimpl` and leaves
-  the call unevaluated until a polynomial sqfree-mod-`p` test is added.
+- `Modulus -> p` (p prime) tests a univariate polynomial over GF(p): the
+  polynomial is reduced mod p, and it is square-free iff
+  `PolynomialGCD[f, D[f, x], Modulus -> p]` is a constant
+  (`SquareFreeQ[x^5 + 1, Modulus -> 5]` is `False`, since x^5 + 1 = (x + 1)^5
+  there). `Modulus -> 0` is the ordinary test. A multivariate polynomial or a
+  composite modulus stays unevaluated, without a message.
+- `Extension -> ...` stays unevaluated, without a message.
 
 Diagnostics:
 - `SquareFreeQ[]` emits `SquareFreeQ::argb` and stays unevaluated.
 - A non-`Rule` past the optional vars slot (e.g. `SquareFreeQ[1, 2, 3]`)
   emits `SquareFreeQ::nonopt` and stays unevaluated.
-- `Modulus -> n` with `n != 0` emits `SquareFreeQ::modnotimpl` and stays
-  unevaluated (e.g. `SquareFreeQ[x^2 + 1, Modulus -> 2]`).
+- `SquareFreeQ::par` ("Inappropriate parameter: ..."), as in Mathematica, for
+  an unknown option, a bad option value, or `Modulus -> p` on a number
+  (`SquareFreeQ[12, Modulus -> 5]`). The call stays unevaluated.
 
 ```mathematica
 In[1]:= SquareFreeQ[10]

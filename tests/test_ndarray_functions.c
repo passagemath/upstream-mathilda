@@ -245,7 +245,7 @@ static void test_mod_quotient(void) {
     /* Zero divisor: the kernel declines and the List path answers -- exactly
      * what Mod[{1, 2, 3}, 0] gives. The point is the agreement, not the shape. */
     chk_eq("Quiet[Mod[NDArray[{1, 2, 3}, DataType -> \"int64\"], 0]]",
-           "{Indeterminate, Indeterminate, Indeterminate}");   /* Mod::indet, as Mathematica */
+           "{Indeterminate, Indeterminate, Indeterminate}");   /* Mod::indet */
 
     /* An int64 buffer with a scalar that is not an exact Integer must NOT take
      * Quotient's REAL arm: that arm reads elements through ndt_get, which is

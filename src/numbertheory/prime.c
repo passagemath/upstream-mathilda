@@ -63,7 +63,7 @@ static int prime_parse_method(const Expr* val, PrimeCountMethod *out) {
 
 /* PrimePi[x]: the number of primes <= x, for any real x (a non-integer is
  * floored; an exact numeric such as Pi or E^10 is floored exactly; Infinity
- * is Infinity and -Infinity, like any x < 2, gives 0). As in Mathematica:
+ * is Infinity and -Infinity, like any x < 2, gives 0).
  * PrimePi[] draws PrimePi::argx, a non-rule extra argument ::nonopt and an
  * unknown option ::optx, all leaving the call unevaluated; an unrecognised
  * Method value leaves it unevaluated silently; ProgressReporting is accepted

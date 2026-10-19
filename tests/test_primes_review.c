@@ -3,8 +3,8 @@
  * finish, NextPrime's signed-prime semantics, the PrimePi / PrimeQ / PrimeNu /
  * PrimeOmega messages and options, and PrimeQ's packed and Compile surfaces.
  *
- * Every literal expectation below was produced by Mathematica 14.0
- * (wolframscript), not recalled. */
+ * Every literal expectation below was verified against the reference
+ * implementation, not recalled. */
 
 #include "expr.h"
 #include "eval.h"

@@ -37,6 +37,10 @@ uint32_t get_attributes(const char* symbol_name);
 struct SymbolDef;
 uint32_t get_attributes_def(struct SymbolDef* def);
 
+// Current attributes of `call`'s symbol head (ATTR_NONE for a non-symbol
+// head), read through the def cached on the head node.
+uint32_t call_head_attributes(Expr* call);
+
 // Set attributes for a given symbol
 void set_attributes(const char* symbol_name, uint32_t attrs);
 

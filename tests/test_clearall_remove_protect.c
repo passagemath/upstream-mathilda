@@ -254,6 +254,36 @@ static void test_clearattributes_builtin_takes_effect(void) {
     assert_eval_eq("Attributes[Range]", "{Listable, Protected}", 0);
 }
 
+/* Clearing Orderless on Plus / Times must actually stop the reordering: the
+ * builtins sorted their output unconditionally, so b + a came back a + b.
+ * Without Orderless, numbers still collect into one leading term and only
+ * ADJACENT like terms combine. Every expectation is the reference's output;
+ * the attributes are restored at the end so later tests see the default. */
+static void test_clear_orderless_plus_times(void) {
+    run("ClearAttributes[Plus, Orderless]");
+    assert_eval_eq("b + a", "b + a", 0);
+    assert_eval_eq("b + a + 1 + 2", "3 + b + a", 0);
+    assert_eval_eq("Plus[b, a, b]", "b + a + b", 0);       /* not adjacent */
+    assert_eval_eq("b + a + a", "b + 2 a", 0);             /* adjacent */
+    assert_eval_eq("c + Plus[b, a]", "c + b + a", 0);      /* Flat */
+    assert_eval_eq("Plus[b, a] + Plus[a, b]", "b + 2 a + b", 0);
+    assert_eval_eq("b + a - b", "b + a - b", 0);
+    assert_eval_eq("x^2 + x + x^2", "x^2 + x + x^2", 0);
+    run("SetAttributes[Plus, Orderless]");
+    assert_eval_eq("b + a", "a + b", 0);
+
+    run("ClearAttributes[Times, Orderless]");
+    assert_eval_eq("b a", "b a", 0);
+    assert_eval_eq("b * a * 2 * 3", "6 b a", 0);
+    assert_eval_eq("b a b", "b a b", 0);
+    assert_eval_eq("b a^2 a", "b a^3", 0);
+    assert_eval_eq("Times[b, 2, a]", "2 b a", 0);
+    run("SetAttributes[Times, Orderless]");
+    assert_eval_eq("b a", "a b", 0);
+    assert_eval_eq("Attributes[Plus]",
+                   "{Flat, Listable, NumericFunction, OneIdentity, Orderless, Protected}", 0);
+}
+
 /* ------------------------------------------------------------------------
  *  HoldAll behaviour (operate on the symbol, not its value)
  * ---------------------------------------------------------------------- */
@@ -336,6 +366,7 @@ int main(void) {
     TEST(test_unprotect_builtin_clears_protected);
     TEST(test_unprotect_builtin_allows_definition);
     TEST(test_clearattributes_builtin_takes_effect);
+    TEST(test_clear_orderless_plus_times);
 
     /* HoldAll */
     TEST(test_holdall_protect_targets_symbol);

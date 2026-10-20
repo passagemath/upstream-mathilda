@@ -150,6 +150,13 @@ Symbolic sum.
   the collapsed result, so a large flat sum (e.g. `Total` of 10^5 monomials) does
   not pay the generic `Orderless` sort over all N raw terms. `Times` collects
   factors the same way.
+- Honours a cleared `Orderless` (`ClearAttributes[Plus, Orderless]`), as the
+  reference does: numbers still collect into one leading term, but like terms
+  combine only with the term just before them and the result keeps argument
+  order -- `b + a` stays `b + a`, `b + a + 1 + 2` is `3 + b + a`,
+  `b + a + b` stays, `b + a + a` is `b + 2 a`. `Times` likewise (`b a b`
+  stays, `b a^2 a` is `b a^3`, `b a 2 3` is `6 b a`). With the default
+  attributes the behaviour and cost are unchanged.
 - A collected term is a flat `Times`: `2 a b + x` holds `Times[2, a, b]`, never
   `Times[2, Times[a, b]]`. The coefficient is spliced in front of the
   monomial's factors.

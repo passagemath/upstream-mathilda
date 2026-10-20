@@ -181,6 +181,23 @@ uint32_t get_attributes_def(SymbolDef* def) {
     return def ? def->attributes : ATTR_NONE;
 }
 
+/* Current attributes of a call's symbol head, through the def the symbol node
+ * caches (the evaluator fills it on its first pass over the node, so for a
+ * builtin it is a couple of loads; a node built in C pays one lookup, once).
+ * For a builtin that must honour a user's SetAttributes / ClearAttributes on
+ * its own head -- Plus and Times re-check Orderless before sorting. */
+uint32_t call_head_attributes(Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return ATTR_NONE;
+    Expr* h = call->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return ATTR_NONE;
+    SymbolDef* d = h->data.symbol.def;
+    if (!d) {
+        d = symtab_get_def(h->data.symbol.name);
+        h->data.symbol.def = d;      /* benign metadata, as in evaluate_step */
+    }
+    return get_attributes_def(d);
+}
+
 uint32_t get_attributes(const char* symbol_name) {
     if (!symbol_name) return ATTR_NONE;
     return get_attributes_def(symtab_get_def(symbol_name));

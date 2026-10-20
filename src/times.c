@@ -1,4 +1,5 @@
 #include "times.h"
+#include "attr.h"       /* call_head_attributes — a cleared Orderless */
 #include "sort.h"       /* expr_orderless_sort — memoized Orderless canonicalisation */
 #include "arithmetic.h"
 #include "complex.h"
@@ -602,6 +603,12 @@ Expr* builtin_times(Expr* res) {
      * builtin_plus): avoids three malloc/free pairs per Times in tight numeric
      * loops. n <= TIMES_SMALL_N bounds ht_cap <= TIMES_SMALL_HT below. */
     enum { TIMES_SMALL_N = 8, TIMES_SMALL_HT = 16 };
+    /* Times is Orderless by default, but a user may ClearAttributes it. Then,
+     * as in the reference, numbers still fold into one leading coefficient
+     * but like bases combine only with their immediate predecessor
+     * (b a b stays; b a^2 a is b a^3) and the factors are not sorted. One
+     * attribute load; the default path is unchanged. */
+    const bool orderless = (call_head_attributes(res) & ATTR_ORDERLESS) != 0;
     bool heap_bufs = (n > TIMES_SMALL_N);
     BasePower groups_stack[TIMES_SMALL_N];
     BasePower* groups = heap_bufs ? malloc(sizeof(BasePower) * n) : groups_stack;
@@ -701,19 +708,29 @@ Expr* builtin_times(Expr* res) {
                 base = arg->data.function.args[0]; exponent = expr_copy(arg->data.function.args[1]);
             } else { exponent = expr_new_integer(1); }
             
-            uint64_t hb = expr_hash(base);
-            size_t slot = (size_t)hb & ht_mask;
+            uint64_t hb = 0;
+            size_t slot = 0;
             int found = -1;
-            while (slot_group[slot] != -1) {
-                if (slot_hash[slot] == hb && expr_eq(groups[slot_group[slot]].base, base)) {
-                    found = (int)slot_group[slot];
-                    break;
+            if (orderless) {
+                hb = expr_hash(base);
+                slot = (size_t)hb & ht_mask;
+                while (slot_group[slot] != -1) {
+                    if (slot_hash[slot] == hb && expr_eq(groups[slot_group[slot]].base, base)) {
+                        found = (int)slot_group[slot];
+                        break;
+                    }
+                    slot = (slot + 1) & ht_mask;
                 }
-                slot = (slot + 1) & ht_mask;
+            } else if (group_count > 0 && expr_eq(groups[group_count - 1].base, base)) {
+                found = (int)(group_count - 1);    /* adjacent like base only */
             }
             if (found != -1) {
                 Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){groups[found].exponent, exponent}, 2));
                 groups[found].exponent = new_exp;
+            } else if (!orderless) {
+                groups[group_count].base = expr_copy(base);
+                groups[group_count].exponent = exponent;
+                group_count++;
             } else {
                 /* `slot` is the empty slot the probe stopped on. */
                 slot_group[slot] = (int64_t)group_count;
@@ -1431,7 +1448,7 @@ Expr* builtin_times(Expr* res) {
      * the evaluator can skip the generic ORDERLESS sort of the raw input; see
      * the ORDERLESS block in eval.c. The leading numeric coefficient still
      * sorts first (numbers precede symbols/powers in expr_compare). */
-    if (idx >= 2) expr_orderless_sort(final_args, idx);   /* memoized symbol sets */
+    if (idx >= 2 && orderless) expr_orderless_sort(final_args, idx);   /* memoized symbol sets */
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     if (heap_bufs) free(final_args);
     return result;

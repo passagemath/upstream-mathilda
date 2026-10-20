@@ -1,5 +1,6 @@
 
 #include "plus.h"
+#include "attr.h"       /* call_head_attributes — a cleared Orderless */
 #include "sort.h"       /* expr_orderless_sort — memoized Orderless canonicalisation */
 #include "arithmetic.h"
 #include "complex.h"
@@ -693,6 +694,12 @@ Expr* builtin_plus(Expr* res) {
     }
 
     plus_grouping:;   /* fused special-case guard jumps here for an ordinary sum */
+    /* Plus is Orderless by default, but a user may ClearAttributes it. Then
+     * the reference keeps the terms in order: numbers still collect into one
+     * leading term, but like terms combine only with their immediate
+     * predecessor (b + a + b stays; b + a + a is b + 2 a), and the result is
+     * not sorted. One attribute load; the default path is unchanged. */
+    const bool orderless = (call_head_attributes(res) & ATTR_ORDERLESS) != 0;
     Expr* num_sum = expr_new_integer(0);
     
     typedef struct {
@@ -778,16 +785,22 @@ Expr* builtin_plus(Expr* res) {
                 return num_sum;
             }
         } else {
-            uint64_t hb = expr_hash(b);
-            size_t slot = (size_t)hb & ht_mask;
+            uint64_t hb = 0;
+            size_t slot = 0;
             int found = -1;
-            while (slot_group[slot] != -1) {
-                if (slot_hash[slot] == hb &&
-                    expr_eq(groups[slot_group[slot]].base, b)) {
-                    found = (int)slot_group[slot];
-                    break;
+            if (orderless) {
+                hb = expr_hash(b);
+                slot = (size_t)hb & ht_mask;
+                while (slot_group[slot] != -1) {
+                    if (slot_hash[slot] == hb &&
+                        expr_eq(groups[slot_group[slot]].base, b)) {
+                        found = (int)slot_group[slot];
+                        break;
+                    }
+                    slot = (slot + 1) & ht_mask;
                 }
-                slot = (slot + 1) & ht_mask;
+            } else if (group_count > 0 && expr_eq(groups[group_count - 1].base, b)) {
+                found = (int)(group_count - 1);    /* adjacent like term only */
             }
 
             if (found >= 0) {
@@ -820,8 +833,10 @@ Expr* builtin_plus(Expr* res) {
                 }
             } else {
                 /* `slot` is the empty slot the probe stopped on. */
-                slot_group[slot] = (int64_t)group_count;
-                slot_hash[slot] = hb;
+                if (orderless) {
+                    slot_group[slot] = (int64_t)group_count;
+                    slot_hash[slot] = hb;
+                }
                 groups[group_count].base = b;
                 groups[group_count].coeff = c; // Already owned
                 groups[group_count].temp_base = is_temp_base;
@@ -909,7 +924,7 @@ Expr* builtin_plus(Expr* res) {
          * through to qsort (with at most one wasted O(n) partial pass).
          * Mirrors the Orderless already-sorted fast path in evaluate_step. */
         bool already_sorted = true;
-        for (size_t j = 1; j < idx; j++) {
+        for (size_t j = 1; orderless && j < idx; j++) {
             if (plus_cmp_ptrs(&final_args[j - 1], &final_args[j]) > 0) {
                 already_sorted = false;
                 break;

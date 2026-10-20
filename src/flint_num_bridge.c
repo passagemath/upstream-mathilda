@@ -471,7 +471,8 @@ done:
  * e(k+1, j) = (k e(k, j) + e(k, j-1)) / (k+1). The terms decay like
  * |z|^k (Log k)^(p-1) / k^(n+1); the sum stops once |term| < 2^-(prec+10) past
  * the peak, and declines (Indeterminate) beyond 10^6 terms or for |z| >= 1,
- * where the series does not converge. */
+ * where the series does not converge. It is the small-|z| method of
+ * nb_nielsen_gen for an integer p. */
 static void nb_nielsen(acb_t res, const acb_t n, slong p, const acb_t z_in, slong prec) {
     acb_t z; acb_init(z); acb_set(z, z_in);
     mag_t mz; mag_init(mz); acb_get_mag(mz, z);
@@ -521,14 +522,284 @@ static void nb_nielsen(acb_t res, const acb_t n, slong p, const acb_t z_in, slon
     acb_clear(z);
 }
 
-static slong nb_nielsen_p;   /* the order p, fixed for one nb_eval2 call */
-static void nb_nielsen2(acb_t res, const acb_t n, const acb_t z, slong prec) {
-    nb_nielsen(res, n, nb_nielsen_p, z, prec);
+/* S_{n,p}(z) for a non-integer (or complex) p and |z| < 1. With g(w) =
+ * -Log(1 - w)/w = Sum_j w^j/(j+1), (-Log(1 - w))^p = w^p g(w)^p, and the
+ * coefficients c_k of g^p follow J. C. P. Miller's power recurrence
+ * c_k = (1/k) Sum_{j=1}^{k} ((p + 1) j - k) g_j c_{k-j}, so term by term in the
+ * Mellin form
+ *
+ *   S_{n,p}(z) = (1/Gamma(p + 1)) Sum_{k>=0} c_k z^(p+k) / (p + k)^n.
+ *
+ * O(K^2) in the K ~ prec / -log2|z| terms, so it is the method for small |z|
+ * or Re n <= 0 (where the quadrature below does not converge); K is capped at
+ * 4000. */
+static void nb_nielsen_series_gen(acb_t res, const acb_t n, const acb_t p,
+                                  const acb_t z, slong prec) {
+    mag_t mz; mag_init(mz); acb_get_mag(mz, z);
+    double az = mag_get_d(mz);
+    mag_clear(mz);
+    if (!(az < 1.0)) { acb_indeterminate(res); return; }
+    slong K = az == 0.0 ? 1 : (slong)((double)(prec + 20) / -log2(az)) + 10;
+    if (K > 4000) { acb_indeterminate(res); return; }
+    acb_struct* c = _acb_vec_init(K + 1);
+    acb_t s, t, zp, zk, pk, w, p1;
+    acb_init(s); acb_init(t); acb_init(zp); acb_init(zk); acb_init(pk);
+    acb_init(w); acb_init(p1);
+    acb_add_ui(p1, p, 1, prec);                     /* p + 1 */
+    acb_one(c + 0);
+    for (slong k = 1; k <= K; k++) {
+        acb_zero(s);
+        for (slong j = 1; j <= k; j++) {
+            acb_mul_si(t, p1, j, prec);                 /* (p + 1) j - k */
+            acb_sub_si(t, t, k, prec);
+            acb_div_si(t, t, j + 1, prec);              /* g_j = 1/(j + 1) */
+            acb_addmul(s, t, c + k - j, prec);
+        }
+        acb_div_si(c + k, s, k, prec);
+    }
+    acb_pow(zp, z, p, prec);                        /* z^p, principal */
+    acb_one(zk);
+    acb_zero(res);
+    for (slong k = 0; k <= K; k++) {
+        acb_add_si(pk, p, k, prec);
+        acb_pow(w, pk, n, prec);                    /* (p + k)^n */
+        acb_mul(t, c + k, zk, prec);
+        acb_div(t, t, w, prec);
+        acb_add(res, res, t, prec);
+        acb_mul(zk, zk, z, prec);
+    }
+    acb_mul(res, res, zp, prec);
+    acb_rgamma(t, p1, prec);
+    acb_mul(res, res, t, prec);
+    _acb_vec_clear(c, K + 1);
+    acb_clear(s); acb_clear(t); acb_clear(zp); acb_clear(zk); acb_clear(pk);
+    acb_clear(w); acb_clear(p1);
 }
 
-Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z) {
-    nb_nielsen_p = (slong)p;
-    return nb_eval2(n, z, nb_nielsen2);
+/* Tanh-sinh (double-exponential) quadrature of f over [0, 1], for integrands
+ * with integrable singularities at either end. f receives the node t and its
+ * complement 1 - t, each computed directly (1/(1 + e^-2s) and e^-2s/(1 + e^-2s))
+ * so a logarithm of either keeps full relative accuracy at the endpoints. The
+ * step halves until two successive sums agree to 2^-(prec+4); the difference
+ * of the last two is added to the result's radius, so the caller's precision
+ * ladder sees an unconverged sum as an inaccurate one. Indeterminate when no
+ * level converges. */
+typedef void (*nb_qfn)(acb_t out, const arb_t t, const arb_t omt, const void* ctx, slong prec);
+
+static void nb_tanh_sinh(acb_t res, nb_qfn f, const void* ctx, slong prec) {
+    slong wp = prec + 40;   /* the node sum carries ~2^16 terms' rounding */
+    double khmax = asinh((double)(wp + 60) * 0.2206356) + 0.5;  /* ln2/pi */
+    int maxlevel = 6 + (int)(log2((double)prec));
+    acb_t S, prev, v, d;
+    arb_t pi, h, kh, sh, ch, s2, e, onepe, t, omt, wgt;
+    acb_init(S); acb_init(prev); acb_init(v); acb_init(d);
+    arb_init(pi); arb_init(h); arb_init(kh); arb_init(sh); arb_init(ch);
+    arb_init(s2); arb_init(e); arb_init(onepe); arb_init(t); arb_init(omt); arb_init(wgt);
+    arb_const_pi(pi, wp);
+    int done = 0;
+    for (int level = 2; level <= maxlevel && !done; level++) {
+        arb_one(h); arb_mul_2exp_si(h, h, -level);
+        /* the centre node t = 1/2 */
+        arb_set_d(t, 0.5); arb_set_d(omt, 0.5);
+        f(v, t, omt, ctx, wp);
+        arb_mul(wgt, h, pi, wp); arb_mul_2exp_si(wgt, wgt, -2);    /* h pi/4 */
+        acb_mul_arb(S, v, wgt, wp);
+        slong kmax = (slong)(khmax * (double)(1 << level)) + 1;
+        for (slong k = 1; k <= kmax; k++) {
+            arb_mul_si(kh, h, k, wp);
+            arb_sinh_cosh(sh, ch, kh, wp);
+            arb_mul(s2, sh, pi, wp);                               /* 2s = pi sinh(kh) */
+            arb_neg(e, s2); arb_exp(e, e, wp);                     /* e^-2s */
+            arb_add_ui(onepe, e, 1, wp);
+            arb_inv(t, onepe, wp);                                 /* 1/(1 + e^-2s) */
+            arb_mul(omt, e, t, wp);                                /* e^-2s/(1 + e^-2s) */
+            /* w = h pi cosh(kh) e^-2s / (1 + e^-2s)^2 */
+            arb_mul(wgt, h, pi, wp); arb_mul(wgt, wgt, ch, wp);
+            arb_mul(wgt, wgt, omt, wp); arb_mul(wgt, wgt, t, wp);
+            f(v, t, omt, ctx, wp);                                 /* the node near 1 */
+            if (acb_is_finite(v)) acb_addmul_arb(S, v, wgt, wp);
+            f(v, omt, t, ctx, wp);                                 /* its mirror near 0 */
+            if (acb_is_finite(v)) acb_addmul_arb(S, v, wgt, wp);
+            if (arb_is_zero(omt)) break;
+        }
+        if (level > 2) {
+            /* Midpoints only: the balls' accumulated rounding radius is not the
+             * discretisation error, and would keep this test from ever passing. */
+            acb_get_mid(d, S);
+            acb_sub(d, d, prev, wp);
+            acb_get_mid(d, d);
+            mag_t md, ms; mag_init(md); mag_init(ms);
+            acb_get_mag(md, d); acb_get_mag(ms, S);
+            mag_mul_2exp_si(ms, ms, -(prec + 4));
+            if (mag_cmp(md, ms) <= 0 && acb_is_finite(S)) {
+                acb_get_mid(res, S);
+                acb_add_error_mag(res, md);
+                done = 1;
+            }
+            mag_clear(md); mag_clear(ms);
+        }
+        acb_get_mid(prev, S);
+    }
+    if (!done) acb_indeterminate(res);
+    acb_clear(S); acb_clear(prev); acb_clear(v); acb_clear(d);
+    arb_clear(pi); arb_clear(h); arb_clear(kh); arb_clear(sh); arb_clear(ch);
+    arb_clear(s2); arb_clear(e); arb_clear(onepe); arb_clear(t); arb_clear(omt); arb_clear(wgt);
+}
+
+/* The integrand of S_{n,p}(z) = 1/(Gamma(n) Gamma(p+1)) Int_0^1
+ * (-Log t)^(n-1) (-Log(1 - z t))^p dt/t on one of three pieces of [0, 1]:
+ * the whole interval, or, for a real z > 1 whose branch point t = 1/z lies on
+ * it, [0, 1/z] and [1/z, 1]. Each piece is mapped to tau in [0, 1] so that the
+ * quantity that vanishes at its ends is formed without cancellation:
+ *   whole:  t = tau,                 1 - z t = (1 - tau) - (z - 1) tau
+ *   left:   t = c tau (c = 1/z),     1 - z t = 1 - tau
+ *   right:  t = c + (1 - c) tau,     1 - z t = (1 - z) tau   (negative: Log
+ *           takes the principal + I Pi, the reference's side of the cut). */
+typedef struct {
+    acb_t n1, p, z, zm1;   /* n - 1, p, z, z - 1 */
+    arb_t c, omc;          /* the split point 1/z and 1 - 1/z */
+    int piece;             /* 0 whole, 1 left, 2 right */
+    int p_int;             /* p an exact small integer: acb_pow_si */
+    slong p_si;
+} nb_nielsen_ctx;
+
+static void nb_nielsen_integrand(acb_t out, const arb_t tau, const arb_t omtau,
+                                 const void* vctx, slong prec) {
+    const nb_nielsen_ctx* C = (const nb_nielsen_ctx*)vctx;
+    arb_t t, omt, r;
+    acb_t w, lw, lt;
+    arb_init(t); arb_init(omt); arb_init(r);
+    acb_init(w); acb_init(lw); acb_init(lt);
+    if (C->piece == 0) {
+        arb_set(t, tau); arb_set(omt, omtau);
+        acb_mul_arb(w, C->zm1, tau, prec);
+        acb_neg(w, w);
+        acb_add_arb(w, w, omtau, prec);
+    } else if (C->piece == 1) {
+        arb_mul(t, C->c, tau, prec);
+        arb_mul(omt, C->c, tau, prec); arb_sub_ui(omt, omt, 1, prec); arb_neg(omt, omt);
+        acb_set_arb(w, omtau);
+    } else {
+        arb_mul(t, C->omc, tau, prec); arb_add(t, t, C->c, prec);
+        arb_mul(omt, C->omc, omtau, prec);
+        acb_mul_arb(w, C->zm1, tau, prec);
+        acb_neg(w, w);
+    }
+    /* -Log t = Log1p((1 - t)/t), accurate as t -> 1 */
+    arb_div(r, omt, t, prec);
+    arb_log1p(r, r, prec);
+    acb_set_arb(lt, r);
+    /* -Log(1 - u) for the u = z t (or tau) that vanishes at the left end,
+     * through log1p: Log of 1 - tiny cancels, and a fractional power of the
+     * resulting ball about 0 is worthless. */
+    if (C->piece != 2) {
+        acb_t u; acb_init(u);
+        if (C->piece == 0) acb_mul_arb(u, C->z, t, prec);
+        else               acb_set_arb(u, tau);
+        mag_t mu; mag_init(mu); acb_get_mag(mu, u);
+        if (mag_cmp_2exp_si(mu, -1) < 0) {
+            acb_neg(u, u);
+            acb_log1p(lw, u, prec);
+        } else {
+            acb_log(lw, w, prec);
+        }
+        mag_clear(mu); acb_clear(u);
+    } else {
+        acb_log(lw, w, prec);
+    }
+    acb_neg(lw, lw);
+    if (C->p_int) acb_pow_si(lw, lw, C->p_si, prec);
+    else          acb_pow(lw, lw, C->p, prec);
+    acb_pow(lt, lt, C->n1, prec);
+    acb_mul(out, lt, lw, prec);
+    acb_div_arb(out, out, t, prec);
+    if (C->piece == 1) acb_mul_arb(out, out, C->c, prec);
+    if (C->piece == 2) acb_mul_arb(out, out, C->omc, prec);
+    arb_clear(t); arb_clear(omt); arb_clear(r);
+    acb_clear(w); acb_clear(lw); acb_clear(lt);
+}
+
+/* S_{n,p}(z) by quadrature of its Mellin-type integral; Re n > 0. */
+static void nb_nielsen_quad(acb_t res, const acb_t n, const acb_t p, const acb_t z, slong prec) {
+    nb_nielsen_ctx C;
+    acb_init(C.n1); acb_init(C.p); acb_init(C.z); acb_init(C.zm1);
+    arb_init(C.c); arb_init(C.omc);
+    acb_sub_ui(C.n1, n, 1, prec);
+    acb_set(C.p, p);
+    acb_set(C.z, z);
+    acb_sub_ui(C.zm1, z, 1, prec);
+    C.p_int = acb_is_int(p) && arb_is_exact(acb_realref(p)) &&
+              arf_cmpabs_2exp_si(arb_midref(acb_realref(p)), 20) < 0;
+    C.p_si = C.p_int ? arf_get_si(arb_midref(acb_realref(p)), ARF_RND_NEAR) : 0;
+    acb_t part, g;
+    acb_init(part); acb_init(g);
+    int split = acb_is_real(z) && arf_cmp_si(arb_midref(acb_realref(z)), 1) > 0 && !arb_contains_si(acb_realref(z), 1);   /* z > 1: t = 1/z on the path */
+    if (split) {
+        arb_inv(C.c, acb_realref(z), prec);
+        arb_sub_ui(C.omc, C.c, 1, prec); arb_neg(C.omc, C.omc);
+        C.piece = 1; nb_tanh_sinh(res, nb_nielsen_integrand, &C, prec);
+        C.piece = 2; nb_tanh_sinh(part, nb_nielsen_integrand, &C, prec);
+        acb_add(res, res, part, prec);
+    } else {
+        C.piece = 0; nb_tanh_sinh(res, nb_nielsen_integrand, &C, prec);
+    }
+    acb_rgamma(g, n, prec);                         /* 1/(Gamma(n) Gamma(p + 1)) */
+    acb_mul(res, res, g, prec);
+    acb_add_ui(part, p, 1, prec);
+    acb_rgamma(g, part, prec);
+    acb_mul(res, res, g, prec);
+    acb_clear(part); acb_clear(g);
+    acb_clear(C.n1); acb_clear(C.p); acb_clear(C.z); acb_clear(C.zm1);
+    arb_clear(C.c); arb_clear(C.omc);
+}
+
+/* The method for one S_{n,p}(z) evaluation (the caller has already decided
+ * the call is one the reference evaluates): the Stirling series for a positive
+ * integer p and |z| <= 3/4, the Miller series for any other p with |z| <= 1/2
+ * (or Re n <= 0, where the integral diverges at t = 0), the quadrature
+ * otherwise. */
+/* A part whose ball contains zero and whose midpoint is negligible beside the
+ * other part is an exact zero: the series' principal powers of positive reals
+ * and the quadrature's rounding leave an imaginary dust of ~2^-prec (and a real
+ * one on a value that is purely imaginary). */
+static void nb_clean_parts(acb_t r, slong prec) {
+    arb_ptr part[2] = { acb_realref(r), acb_imagref(r) };
+    for (int i = 0; i < 2; i++) {
+        arb_ptr a = part[i], b = part[1 - i];
+        if (!arb_contains_zero(a) || arb_is_zero(a)) continue;
+        mag_t ma, mb; mag_init(ma); mag_init(mb);
+        arb_get_mag(ma, a); arb_get_mag(mb, b);
+        mag_mul_2exp_si(mb, mb, -(prec - 8));
+        if (mag_cmp(ma, mb) <= 0) arb_zero(a);
+        mag_clear(ma); mag_clear(mb);
+    }
+}
+
+static void nb_nielsen_gen(acb_t res, const acb_t n_in, const acb_t p_in, const acb_t z, slong prec) {
+    /* local copies: GCC's -Wstringop-overread misreads arb's inline helpers on
+     * the const parameters */
+    acb_t n, p; acb_init(n); acb_init(p); acb_set(n, n_in); acb_set(p, p_in);
+    mag_t mz; mag_init(mz); acb_get_mag(mz, z);
+    double az = mag_get_d(mz);
+    mag_clear(mz);
+    int p_int = acb_is_int(p) && arb_is_positive(acb_realref(p)) &&
+                arf_cmpabs_2exp_si(arb_midref(acb_realref(p)), 10) < 0;
+    int re_n_pos = arb_is_positive(acb_realref(n));
+    if (p_int && az <= 0.75) {
+        nb_nielsen(res, n, arf_get_si(arb_midref(acb_realref(p)), ARF_RND_NEAR), z, prec);
+    } else if (az < 1.0 && (az <= 0.5 || !re_n_pos)) {
+        nb_nielsen_series_gen(res, n, p, z, prec);
+    } else if (re_n_pos) {
+        nb_nielsen_quad(res, n, p, z, prec);
+    } else {
+        acb_indeterminate(res);
+    }
+    if (acb_is_finite(res)) nb_clean_parts(res, prec);
+    acb_clear(n); acb_clear(p);
+}
+
+Expr* flint_num_nielsen_polylog(const Expr* n, const Expr* p, const Expr* z) {
+    return nb_eval3(n, p, z, nb_nielsen_gen);
 }
 
 Expr* flint_num_polylog(const Expr* s, const Expr* z) {
@@ -1972,7 +2243,7 @@ Expr* flint_num_airy_bi_prime(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) { (void)z; (void)s; (void)a; return NULL; }
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; return NULL; }
 Expr* flint_num_expint(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
-Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z) { (void)n; (void)p; (void)z; return NULL; }
+Expr* flint_num_nielsen_polylog(const Expr* n, const Expr* p, const Expr* z) { (void)n; (void)p; (void)z; return NULL; }
 Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) { (void)nu; (void)seed; (void)bits; return NULL; }
 Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n) { (void)a; (void)q; (void)n; return NULL; }
 Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type) { (void)n; (void)m; (void)z; (void)type; return NULL; }

@@ -40,9 +40,13 @@ Expr* flint_num_airy_bi_prime(const Expr* z);              /* AiryBiPrime[z]    
 Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a); /* LerchPhi[z,s,a] */
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a);   /* StieltjesGamma[n,a]*/
 Expr* flint_num_expint(const Expr* s, const Expr* z);      /* ExpIntegralE[s, z] */
-/* PolyLog[n, p, z], Nielsen's S_{n,p}(z), for a positive integer p and |z| < 1
- * (the Stirling-number series); NULL elsewhere. */
-Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z);
+/* PolyLog[n, p, z], Nielsen's S_{n,p}(z), numerically: the Stirling-number
+ * series (positive integer p, small |z|), the generalized-power series
+ * (any p, |z| < 1) or tanh-sinh quadrature of
+ * 1/(Gamma(n) Gamma(p+1)) Int_0^1 (-Log t)^(n-1) (-Log(1 - z t))^p dt/t (Re n > 0,
+ * any z; principal logarithms). The caller decides which calls evaluate. NULL
+ * when no method applies or the value is not finite. */
+Expr* flint_num_nielsen_polylog(const Expr* n, const Expr* p, const Expr* z);
 /* BesselJZero at arbitrary precision: the zero of BesselJ[nu, x] nearest the
  * machine zero `seed`, by Newton in arb, returned at `bits` bits. */
 Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits);

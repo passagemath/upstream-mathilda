@@ -3,9 +3,10 @@
  *   PolyLog[n, z]     Li_n(z) = Sum_{k>=1} z^k / k^n      (|z| < 1; analytic
  *                     continuation elsewhere, branch cut [1, Infinity))
  *   PolyLog[n, p, z]  Nielsen generalized polylogarithm S_{n,p}(z). p = 1 is
- *                     PolyLog[n + 1, z]; an inexact call with a positive
- *                     integer p and |z| < 1 sums the Stirling-number series
- *                     (flint_num_nielsen_polylog); the rest stays symbolic.
+ *                     PolyLog[n + 1, z]; an inexact call evaluates where the
+ *                     reference does (see polylog_nielsen): series in arb for
+ *                     |z| < 1, tanh-sinh quadrature beyond, the closed form
+ *                     for n <= 0.
  *
  * Evaluation is layered so each kind of argument takes the cheapest exact or
  * fastest numeric route, mirroring src/gamma.c and src/zeta.c:
@@ -989,6 +990,108 @@ static Expr* polylog_emit_argt(size_t argc) {
     return NULL;
 }
 
+/* ------------------------------------------------------------------ */
+/* Nielsen's generalized polylogarithm PolyLog[n, p, z]                */
+/* ------------------------------------------------------------------ */
+
+/* An integer value: exact, or an integer-valued machine / arbitrary-precision
+ * real (N leaves the orders as 2.). */
+static bool pl_int_value(const Expr* e, long* out) {
+    if (e->type == EXPR_INTEGER) {
+        if (e->data.integer > 1000000 || e->data.integer < -1000000) return false;
+        *out = (long)e->data.integer;
+        return true;
+    }
+    if (e->type == EXPR_REAL && e->data.real == floor(e->data.real) &&
+        fabs(e->data.real) < 1e6) {
+        *out = (long)e->data.real;
+        return true;
+    }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR && mpfr_integer_p(e->data.mpfr) &&
+        mpfr_cmpabs_ui(e->data.mpfr, 1000000) < 0) {
+        *out = mpfr_get_si(e->data.mpfr, MPFR_RNDN);
+        return true;
+    }
+#endif
+    return false;
+}
+
+/* A number's value as a machine complex (the domain decisions only). */
+static bool pl_cvalue(const Expr* e, double* re, double* im) {
+    Expr* v = numericalize(e, numeric_machine_spec());
+    bool ok = false;
+    Expr *r, *i;
+    if (v && v->type == EXPR_REAL) { *re = v->data.real; *im = 0.0; ok = true; }
+    else if (v && is_complex(v, &r, &i) && r->type == EXPR_REAL && i->type == EXPR_REAL) {
+        *re = r->data.real; *im = i->data.real; ok = true;
+    }
+    if (v) expr_free(v);
+    return ok;
+}
+
+/* S_{n,p}(z) for a non-positive integer n: (z d/dz)^(-n) of
+ * (-Log(1 - z))^p / Gamma[p + 1], built with a placeholder variable and
+ * evaluated at z (any p, any z: principal logarithm and power). */
+static Expr* pl_nielsen_nonpositive(long n, Expr* p, Expr* z) {
+    if (n < -60) return NULL;
+    Expr* w = expr_new_symbol("Nielsen$w");
+    Expr* lg = expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_new_integer(1),
+            expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_integer(-1), expr_copy(w) }, 2) }, 2) }, 1);
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_integer(-1), lg }, 2);
+    Expr* pw = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ neg, expr_copy(p) }, 2);
+    Expr* fact = expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){
+        expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_copy(p), expr_new_integer(1) }, 2) }, 1);
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ fact, expr_new_integer(-1) }, 2);
+    Expr* f = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ pw, inv }, 2));
+    for (long k = 0; k < -n; k++) {
+        Expr* d = expr_new_function(expr_new_symbol(SYM_D), (Expr*[]){ f, expr_copy(w) }, 2);
+        f = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_copy(w), d }, 2));
+    }
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), (Expr*[]){ w, expr_copy(z) }, 2);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll), (Expr*[]){ f, rule }, 2));
+}
+
+/* PolyLog[n, p, z]. PolyLog[n, 1, z] = PolyLog[n + 1, z]. Otherwise an inexact
+ * call with Re p > 0 evaluates exactly where the reference evaluates it
+ * (principal logarithms and powers throughout):
+ *
+ *   integer n <= 0    any z, in closed form (pl_nielsen_nonpositive)
+ *   |z| <= 1, z != 1  any n
+ *   z == 1            Re n > 0
+ *   |z| > 1           integer n >= 1 and a positive integer p
+ *
+ * and stays unevaluated elsewhere -- a non-integer n or p off the unit disk,
+ * p = 0 or Re p <= 0 -- as the reference leaves it. The values come from
+ * flint_num_nielsen_polylog (series or quadrature in arb). The reference's own
+ * machine values are less accurate than these (up to 1e-6 relative, at
+ * PolyLog[3, 0.5, 0.95]; 30-digit quadrature confirms ours), and it answers
+ * PolyLog[1, 2, 1.] with Indeterminate where the value is Zeta[3]. */
+static Expr* polylog_nielsen(Expr* res) {
+    Expr** args = res->data.function.args;
+    long pv = 0, nv = 0;
+    bool p_int = pl_int_value(args[1], &pv);
+    if (args[1]->type == EXPR_INTEGER && pv == 1) {
+        Expr* np1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(args[0]), expr_new_integer(1) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_PolyLog),
+                   (Expr*[]){ np1, expr_copy(args[2]) }, 2);
+    }
+    if (!flint_num_call_inexact(res)) return NULL;
+    double pr, pi, nr, ni, zr, zi;
+    if (!pl_cvalue(args[0], &nr, &ni) || !pl_cvalue(args[1], &pr, &pi) ||
+        !pl_cvalue(args[2], &zr, &zi)) return NULL;
+    if (!(pr > 0.0) || (p_int && pv < 1)) return NULL;
+    bool n_int = pl_int_value(args[0], &nv);
+    if (n_int && nv <= 0) return pl_nielsen_nonpositive(nv, args[1], args[2]);
+    double az = hypot(zr, zi);
+    bool z_one = zr == 1.0 && zi == 0.0;
+    if ((az <= 1.0 && !z_one) || (z_one && nr > 0.0) || (p_int && n_int && !z_one))
+        return flint_num_for_call(flint_num_nielsen_polylog(args[0], args[1], args[2]), res);
+    return NULL;
+}
+
 Expr* builtin_polylog(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1017,30 +1120,7 @@ Expr* builtin_polylog(Expr* res) {
         }
     }
     if (argc == 2) return polylog_two_arg(args[0], args[1]);
-    if (argc == 3) {
-        /* Nielsen S_{n,p}(z). PolyLog[n, 1, z] = PolyLog[n + 1, z]; otherwise
-         * numeric for an inexact call with a positive integer p (an exact
-         * integer or an integer-valued real) and |z| < 1. */
-        Expr* p = args[1];
-        long pv = 0;
-        if (p->type == EXPR_INTEGER) pv = (long)p->data.integer;
-        else if (p->type == EXPR_REAL && p->data.real == floor(p->data.real) &&
-                 fabs(p->data.real) < 1e6) pv = (long)p->data.real;
-#ifdef USE_MPFR
-        else if (p->type == EXPR_MPFR && mpfr_integer_p(p->data.mpfr) &&
-                 mpfr_cmpabs_ui(p->data.mpfr, 1000000) < 0)
-            pv = mpfr_get_si(p->data.mpfr, MPFR_RNDN);   /* N[...] leaves p = 3. */
-#endif
-        if (p->type == EXPR_INTEGER && pv == 1) {
-            Expr* np1 = expr_new_function(expr_new_symbol(SYM_Plus),
-                            (Expr*[]){ expr_copy(args[0]), expr_new_integer(1) }, 2);
-            return expr_new_function(expr_new_symbol(SYM_PolyLog),
-                       (Expr*[]){ np1, expr_copy(args[2]) }, 2);
-        }
-        if (pv >= 1 && flint_num_call_inexact(res))
-            return flint_num_for_call(flint_num_nielsen_polylog(args[0], pv, args[2]), res);
-        return NULL;
-    }
+    if (argc == 3) return polylog_nielsen(res);
     return polylog_emit_argt(argc);
 }
 

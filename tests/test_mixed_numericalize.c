@@ -233,6 +233,45 @@ static void test_nielsen(void) {
     check("PolyLog[2, 0, 0.5]", "PolyLog[2, 0, 0.5]");
 }
 
+/* ---- Nielsen beyond the unit disk and for a non-integer p (v0.478) ---- */
+static void test_nielsen_continued(void) {
+    /* |z| > 1, integer n >= 1 and p: the principal-logarithm integral */
+    check_near("PolyLog[2, 2, 2.]", "0.4554289599591583 - 1.3189461296972319 I", "1*^-14");
+    check_near("PolyLog[2, 2, -3.]", "0.5052321953754769", "1*^-15");
+    check_near("PolyLog[2, 2, 2. + I]", "-0.46179573693753576 + 0.8126908557655475 I", "1*^-14");
+    check_near("PolyLog[2, 2, 0.5 + 3 I]", "-0.6322864658786631 - 0.43026879618230067 I", "1*^-14");
+    check_near("PolyLog[2, 3, 5.]", "-1.4264256992301926 + 2.158171317830972 I", "1*^-13");
+    check_near("PolyLog[1, 2, 2.]", "-1.3169446513992683 - 2.583856390024985 I", "1*^-14");
+    check_near("PolyLog[3, 2, 2.]", "0.4642952438592966 - 0.36813325559494618 I", "1*^-14");
+    check_near("PolyLog[2, 2, 100.]", "-25.953340869693107 + 31.083771542159424 I", "1*^-12");
+    check_near("PolyLog[2, 2, -1.]", "0.0877856715686553", "1*^-15");
+    /* z = 1, and a non-integer or complex p in the closed disk */
+    check_near("PolyLog[2, 2, 1.]", "0.27058080842778455", "1*^-15");
+    check_near("PolyLog[2, 2.5, 1.]", "0.15686179900608218", "1*^-15");
+    check_near("PolyLog[2, 0.5, 0.5]", "3.2411607336981399", "1*^-14");
+    check_near("PolyLog[1.5, 1.5, 0.5]", "0.17858105367126854", "1*^-15");
+    check_near("PolyLog[2, 1.5, -0.5]", "-0.10483906257910724 I", "1*^-15");
+    check_near("PolyLog[2, 1. + I, 0.5]", "-0.2918380219781763 - 0.1824400742846398 I", "1*^-14");
+    /* 30-digit quadrature; the reference's machine value is 1.3e-6 off */
+    check_near("PolyLog[3, 0.5, 0.95]", "8.8877201600060307", "1*^-13");
+    /* integer n <= 0: (z d/dz)^-n (-Log[1 - z])^p / Gamma[p + 1], any p and z */
+    check_near("PolyLog[-1, 2, 2.]", "2 Pi I", "1*^-14");
+    check_near("PolyLog[0, 2, 3.]", "-4.694575693585578 + 2.177586090303602 I", "1*^-14");
+    check_near("PolyLog[-1, 2, 0.5]", "Log[2.]", "1*^-15");
+    check_near("PolyLog[-1, 0.5, 1.5]", "-0.7356391804312229 - 0.5910237088861859 I", "1*^-13");
+    /* arbitrary precision */
+    check_near("N[PolyLog[2, 2, 3], 30]",
+               "-0.48051063523149439645020401492659433081`30 - 2.30253895026584497656797406915324175659`30 I",
+               "1*^-28");
+    check_near("N[PolyLog[3/2, 5/2, 9/10], 40]", "0.1846209219293389738431779980488161567043718`40", "1*^-38");
+    check_near("N[PolyLog[3, 2, 1], 30]", "0.0965511599894437344656455314289427640320`30", "1*^-29");
+    /* deliberate difference: the reference says Indeterminate at machine 1. */
+    check_near("PolyLog[1, 2, 1.]", "Zeta[3]", "1*^-14");
+    /* left unevaluated, as in the reference: non-integer n or p off the disk, p <= 0 */
+    check("{PolyLog[2, 2.5, 2.], PolyLog[2.5, 2, 3.], PolyLog[2, -0.5, 0.5], PolyLog[2, 2. + I, 3.]}",
+          "{PolyLog[2, 2.5, 2.0], PolyLog[2.5, 2, 3.0], PolyLog[2, -0.5, 0.5], PolyLog[2, 2.0 + 1.0*I, 3.0]}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -250,6 +289,7 @@ int main(void) {
     TEST(test_qpochhammer);
     TEST(test_besseljzero);
     TEST(test_nielsen);
+    TEST(test_nielsen_continued);
 
     printf("All mixed numericalize tests passed!\n");
     symtab_clear();

@@ -1859,13 +1859,26 @@ In[3]:= PolyLog[2, 3.0]
 Out[3]= 2.32018 - 3.45139*I
 ```
 
-- **Nielsen's `PolyLog[n, p, z]`** (v0.477), previously always symbolic.
-  `PolyLog[n, 1, z] = PolyLog[n + 1, z]`. With an inexact argument, a positive
-  integer `p` and |z| < 1 it sums S_{n,p}(z) = Σ_{k≥p} (c(k,p)/k!) zᵏ/kⁿ (c the
-  unsigned Stirling numbers of the first kind) in arb, for any real or complex
-  `n` and complex `z`, at the call's precision. Not yet covered, and so left
-  unevaluated: |z| ≥ 1 and a non-integer `p`, both of which the reference
-  evaluates.
+- **Nielsen's `PolyLog[n, p, z]`** (v0.477, extended in v0.478), previously
+  always symbolic. `PolyLog[n, 1, z] = PolyLog[n + 1, z]`. An inexact call with
+  Re p > 0 evaluates exactly where the reference evaluates it, at the call's
+  precision (principal logarithms and powers throughout):
+  - integer `n ≤ 0`, any `z`: the closed form (z d/dz)^(-n) (-Log[1 - z])^p / Gamma[p + 1];
+  - |z| ≤ 1, `z ≠ 1`, any `n` and `p`: the series S_{n,p}(z) = Σ_{k≥p}
+    (c(k,p)/k!) zᵏ/kⁿ (Stirling numbers, integer `p`, |z| ≤ 3/4), the
+    generalized-power series (1/Γ(p+1)) Σ c_k z^(p+k)/(p+k)ⁿ (Miller's
+    recurrence for the coefficients of (-Log(1-w)/w)^p; |z| ≤ 1/2 or Re n ≤ 0),
+    or tanh-sinh quadrature of 1/(Γ(n)Γ(p+1)) ∫₀¹ (-Log t)^(n-1) (-Log(1 - z t))^p dt/t;
+  - `z = 1`, Re n > 0: the same quadrature;
+  - |z| > 1 with integer `n ≥ 1` and a positive integer `p`: the quadrature,
+    split at t = 1/z for a real z > 1 (the reference's side of the cut).
+  A non-integer `n` or `p` off the unit disk, and `p ≤ 0`, stay unevaluated, as
+  in the reference. Over a grid of 637 machine calls the evaluated set is the
+  reference's exactly, and all 479 values are within 6e-15 of 30-digit
+  quadrature; the reference's own machine values are off by up to 2e-6 there
+  (`PolyLog[3, 0.5, -1.]`). Deliberate difference: `PolyLog[1, 2, 1.]` is
+  `Zeta[3]` = 1.2020569…, where the reference says `Indeterminate`. A call costs
+  1–3 ms at machine precision.
 
 ## LerchPhi
 

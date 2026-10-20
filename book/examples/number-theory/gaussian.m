@@ -1,0 +1,10 @@
+# Section 5.6.1: Euclid in the Gaussian integers, and two edge conventions.
+GCD[5, 3 + 4 I]
+GCD[10, 3 + I]
+LCM[2 + I, 2 - I]
+ExtendedGCD[3 + I, 2 - I]
+Mod[10 + 7 I, 3 + 2 I]
+PowerMod[1 + I, 10, 3 + 2 I]
+CoprimeQ[3]
+CoprimeQ[-1]
+Mod[7, 0]

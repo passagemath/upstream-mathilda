@@ -1,0 +1,10 @@
+# 5.3 A table of classical definite integrals -- special-function families
+Integrate[Cos[x^3/3 + a x], {x, 0, Infinity}, Assumptions -> Element[a, Reals]]
+Integrate[Exp[-a x] BesselJ[0, b x], {x, 0, Infinity}, Assumptions -> a > 0 && b > 0]
+Integrate[Exp[-z Cosh[t]] Cosh[n t], {t, 0, Infinity}, Assumptions -> z > 0]
+Integrate[E^(-a x) x^(s - 1)/(1 - E^(-x)), {x, 0, Infinity}, Assumptions -> s > 1 && a > 0]
+Integrate[Cos[a x]/Cosh[b x]^2, {x, -Infinity, Infinity}, Assumptions -> Element[a, Reals] && b > 0]
+Integrate[BesselJ[0, x] BesselJ[1, x]/x, {x, 0, Infinity}]
+Integrate[BesselJ[0, a x] Cos[b x], {x, 0, Infinity}, Assumptions -> a > b > 0]
+Integrate[BesselJ[0, a x] Cos[b x], {x, 0, Infinity}, Assumptions -> b > a > 0]
+Integrate[x^(s - 1) Exp[-x] Cos[x], {x, 0, Infinity}, Assumptions -> s > 0]

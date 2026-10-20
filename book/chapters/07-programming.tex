@@ -309,6 +309,226 @@ lunch; a long-running kernel that memoizes over a wide domain will accumulate
 rules until the symbol is cleared. The win is asymptotic and often enormous, but
 the stored table is real, and \B{Clear} is how you reclaim it.}
 
+\subsection{Rules on the argument: UpValues}
+\label{ssec:prog-upvalues}
+
+A DownValue is filed under the \emph{head} of the call it rewrites:
+\texttt{area[r\_] := Pi r\^{}2} belongs to \texttt{area}. That is usually the right
+home, but not always. Suppose you are inventing a new kind of object---a square
+\texttt{sq[s]} of side \(s\)---and you want \texttt{area} to know about it. Filing
+the rule under \texttt{area} means editing a function that is not yours; and if the
+head is \B{Plus} or \B{Sin}, it is \texttt{Protected} and will refuse the rule
+outright. The alternative is to file the rule under the \emph{argument's} symbol.
+Such a rule is an \emph{UpValue}\index{UpValues}: it lives on \texttt{sq}, and it
+fires whenever \texttt{sq[\ldots]} turns up as an argument of a call it describes.
+
+\B{UpSet} (\texttt{lhs \^{}= rhs}) and \B{UpSetDelayed} (\texttt{lhs \^{}:= rhs}) are
+the immediate and delayed forms, the counterparts of \texttt{=} and \texttt{:=}; each
+attaches the rule to every symbol that heads an argument of \texttt{lhs}. When you
+want to name the symbol yourself, \B{TagSet} and \B{TagSetDelayed} spell it out:
+\texttt{sq /: lhs := rhs} files the rule under \texttt{sq} and nowhere else, and
+\B{TagUnset} (\texttt{sq /: lhs =.}) removes it again. \B{UpValues}\texttt{[s]} lists
+the rules a symbol carries, as \B{DownValues} does for the ordinary kind.
+
+\begin{codepairs}
+\pair{07-programming/upvalues/1}{\mcode{UpSet}: the rule is filed under \texttt{sq},
+the head of the argument.}
+\pair{07-programming/upvalues/2}{It fires when \texttt{area} is applied to a
+square of numeric side.}
+\pair{07-programming/upvalues/3}{It fires just as well for a symbolic side,
+giving \((a+b)^2\).}
+\pair{07-programming/upvalues/4}{\mcode{UpValues} shows where the rule went.}
+\pair{07-programming/upvalues/5}{And \texttt{area} itself has no rules at all.}
+\pair{07-programming/upvalues/6}{\mcode{TagSetDelayed} names the owning symbol
+explicitly with \texttt{sq /:}.}
+\pair{07-programming/upvalues/7}{The perimeter rule fires like the first one.}
+\pair{07-programming/upvalues/8}{Now give \texttt{area} a general DownValue: the area
+of a disk of radius \(r\).}
+\pair{07-programming/upvalues/9}{Both coexist. A plain number takes the disk rule; a
+square takes its own, more specific, upvalue.}
+\pair{07-programming/upvalues/10}{\mcode{TagUnset} (\texttt{=.}) removes one upvalue
+by its left-hand side.}
+\pair{07-programming/upvalues/11}{With that rule gone, \texttt{perimeter} no
+longer knows squares and stays unevaluated.}
+\pair{07-programming/upvalues/12}{Only the area rule is left on \texttt{sq}.}
+\end{codepairs}
+
+Pair~9 is the point of the mechanism. The general fact about \texttt{area}
+(disks) lives with \texttt{area}; the special fact about squares lives with
+\texttt{sq}; and when both could apply, the upvalue wins, because it is the more
+specific claim about \emph{this} argument. Knowledge about a new type is kept
+with the type, which is how object-oriented languages organize methods, arrived at
+here with nothing more than a second place to file rules.
+
+The payoff is largest when the outer head is one you cannot touch. \mcode{Plus} and
+\B{Times} are \texttt{Protected}, yet an upvalue lets a new symbol teach them a new
+algebra. Here is arithmetic in \(\mathbb{Z}/p\mathbb{Z}\), integers modulo \(p\),
+as a new number type \texttt{mod[a, p]}:
+
+\begin{codepairs}
+\pair{07-programming/modular/1}{Addition: the rule is an upvalue of \texttt{mod},
+though the head it describes is \mcode{Plus}. \B{Mod} reduces the sum.}
+\pair{07-programming/modular/2}{Multiplication, the same way on \mcode{Times}.}
+\pair{07-programming/modular/3}{\(1+2+3 = 6 \equiv 1 \pmod 5\). Three terms, a
+two-term rule: it fires twice.}
+\pair{07-programming/modular/4}{The rule matches \emph{part} of a longer sum,
+combining the residues and leaving \texttt{x} alone.}
+\pair{07-programming/modular/5}{Equal terms are combined by the upvalue, before
+\mcode{Plus} could collect them into \texttt{2 mod[2, 5]}.}
+\pair{07-programming/modular/6}{\(3 \cdot 5 = 15 \equiv 1 \pmod 7\).}
+\pair{07-programming/modular/7}{Different moduli: the shared name \texttt{p} cannot
+bind both \(5\) and \(7\), so nothing fires.}
+\pair{07-programming/modular/8}{\mcode{Plus} is still \texttt{Protected}: its
+attributes are untouched.}
+\pair{07-programming/modular/9}{\mcode{Plus} still has no rules of its own.
+Nothing was added to it.}
+\end{codepairs}
+
+Pair~4 deserves a second look. The rule's left-hand side is a sum of
+\emph{two} terms, and the subject is a sum of three; it matches anyway, because
+\texttt{Plus} is \texttt{Flat} and a rule on a \texttt{Flat} head may match any
+sub-collection of its operands, rewriting those and keeping the rest. That is
+the subject of the next subsection. Pair~7 is the non-linear pattern of
+\S\ref{ssec:prog-blank} doing quiet work: the name \texttt{p} appears twice, so the
+rule demands the two moduli be equal, and residues mod~\(5\) and mod~\(7\) are left
+as an honest unevaluated sum.\index{modular arithmetic!as UpValues}
+
+Where an upvalue sits in the evaluator's order is the last thing to know. When a
+call \texttt{f[\ldots]} has been prepared---head evaluated, arguments evaluated
+unless held, attributes applied---the evaluator tries the upvalues of the symbols
+heading its arguments \emph{first}, then the DownValues of \texttt{f}, and only then
+the builtin C code behind \texttt{f}, if any.\index{UpValues!evaluation order} A
+merely \texttt{HoldAll} head does not prevent this: its arguments are unevaluated but
+present, and can still be inspected. \texttt{HoldAllComplete} is the one attribute
+that switches the upvalue scan off, as its name promises (\S\ref{sec:int-eval}).
+
+\begin{codepairs}
+\pair{07-programming/upvalorder/1}{A general DownValue on \texttt{f}.}
+\pair{07-programming/upvalorder/2}{An upvalue for \texttt{f[g[\ldots]]}, filed
+under \texttt{g}.}
+\pair{07-programming/upvalorder/3}{Both match \texttt{f[g[1]]}; the upvalue is
+tried first and wins.}
+\pair{07-programming/upvalorder/4}{Make \texttt{hc} a \texttt{HoldAllComplete}
+head.}
+\pair{07-programming/upvalorder/5}{Give \texttt{g} an upvalue for
+\texttt{hc[g[x\_]]}.}
+\pair{07-programming/upvalorder/6}{The upvalue never fires: \texttt{HoldAllComplete}
+hides the argument's head from upvalue lookup.}
+\pair{07-programming/upvalorder/7}{Make \texttt{ho} a merely \texttt{HoldAll}
+head.}
+\pair{07-programming/upvalorder/8}{Give \texttt{g} the same upvalue for
+\texttt{ho}.}
+\pair{07-programming/upvalorder/9}{This time the upvalue fires: holding the argument
+does not hide it.}
+\pair{07-programming/upvalorder/10}{\B{Definition} prints every rule attached to a
+symbol, in the \texttt{tag /: lhs := rhs} form that would recreate it.}
+\pair{07-programming/upvalorder/11}{Assigning a list to \texttt{DownValues[f]}
+replaces the whole rule set in one step.}
+\pair{07-programming/upvalorder/12}{The new rule takes effect at once, while the
+upvalue on \texttt{g} still overrides it.}
+\end{codepairs}
+
+\usagebox{UpSetDelayed}
+
+\calloutnote{Pitfall}{An upvalue can only be attached to a symbol at the
+\emph{first level} of the left-hand side---the head of one of its immediate
+arguments. In \texttt{area[sq[s\_]] \^{}= s\^{}2} that is \texttt{sq}. A symbol
+nested deeper cannot own the rule: \texttt{k /: h[sq[k[s\_]]] := 1} is refused with
+a \texttt{TagSetDelayed::tagnf} message, because the evaluator, scanning the first
+level of \texttt{h[\ldots]}, would never look inside \texttt{sq} to find \texttt{k}.
+If that happens, the knowledge probably belongs to \texttt{sq}.}
+
+\subsection{Partial matches on Flat heads}
+\label{ssec:prog-flatmatch}
+
+The modular-arithmetic rule matched two terms out of three. That is not a feature
+of upvalues but of the \texttt{Flat} attribute\index{attribute!Flat!partial matching}: because \(a + b + c\) means the same as \((a + b) + c\) and
+\(a + (b + c)\), a rule whose left-hand side is a \texttt{Flat} head may match any
+sub-collection of the operands, as if the expression had been bracketed that way.
+The rewritten part is spliced back among the operands it did not touch. For an
+\texttt{Orderless} head like \texttt{Plus} or \texttt{Times}, ``sub-collection''
+means any subset; for a \texttt{Flat} head that is \emph{not} \texttt{Orderless},
+the operands' order is part of the meaning, so the rule matches a contiguous run, at
+the start, in the middle, or at the end.
+
+The ordered case has its own operator. \B{NonCommutativeMultiply}, written
+\texttt{**}, is multiplication with the \texttt{Orderless} attribute left off: it is
+\texttt{Flat} and \texttt{OneIdentity}, so it associates, but \texttt{x ** y} and
+\texttt{y ** x} are different expressions. It does nothing else---no
+simplification, no evaluation---which makes it a blank canvas for the
+algebra of matrices, operators, and other objects that do not commute. It binds
+tighter than \B{Dot} (\texttt{.}) and looser than \B{Power}.
+
+\begin{codepairs}
+\pair{07-programming/flatmatch/1}{The rule's \(x + y\) matches part of the sum; the
+\(1\) is kept.}
+\pair{07-programming/flatmatch/2}{\mcode{MatchQ} asks about the \emph{whole}
+expression, so the same pattern does not match.}
+\pair{07-programming/flatmatch/3}{\texttt{Times} is \texttt{Orderless}, so
+non-adjacent factors \(a\) and \(c\) are a valid subset.}
+\pair{07-programming/flatmatch/4}{\texttt{**} keeps its operands as written.}
+\pair{07-programming/flatmatch/5}{An ordered \texttt{Flat} head matches an interior
+or trailing run: here \texttt{y ** z} becomes \texttt{w}.}
+\pair{07-programming/flatmatch/6}{It does not match a non-adjacent pair: \(x\)
+and \(z\) are not a run.}
+\pair{07-programming/flatmatch/7}{\texttt{Flat}, \texttt{OneIdentity}, and
+deliberately no \texttt{Orderless}.}
+\pair{07-programming/flatmatch/8}{Precedence: \texttt{Power} binds tightest, then
+\texttt{**}, then \texttt{.}.}
+\pair{07-programming/flatmatch/9}{An operator algebra: adjacent \texttt{op}s
+compose by adding their indices.}
+\pair{07-programming/flatmatch/10}{Three operators fold to one, two at a time.}
+\pair{07-programming/flatmatch/11}{Between other factors, the adjacent pair still
+combines in place.}
+\pair{07-programming/flatmatch/12}{A non-commuting \texttt{a} in between blocks it:
+the two \texttt{op}s are not a run.}
+\end{codepairs}
+
+Pairs~10 to~12 are a miniature of how a CAS handles quantum operators or
+translation groups: \texttt{op[i] ** op[j] = op[i + j]} is the composition law of
+shifts, and the non-commutativity is respected without any code that knows about
+it---the rule simply cannot see through \texttt{a}. The distinction in pairs~1
+and~2 is also deliberate: \emph{rewriting} looks for a matching part, while
+\mcode{MatchQ} asks whether the expression as a whole has the shape, so the same
+pattern can fire in a \texttt{/.} and still fail a \texttt{MatchQ}.
+
+\usagebox{NonCommutativeMultiply}
+
+The matcher has a few other fine points that are easy to get wrong in either
+direction, and they are worth seeing once:
+
+\begin{codepairs}
+\pair{07-programming/matchfine/1}{\texttt{a:\_g} names exactly one blank: the
+pattern is a product of an optional \texttt{n\_.} and a named \texttt{\_g}.}
+\pair{07-programming/matchfine/2}{So it splits \(3\,g[x]\) into coefficient and
+factor.}
+\pair{07-programming/matchfine/3}{On a bare \texttt{g[x]} the optional coefficient
+takes its default, \(1\).}
+\pair{07-programming/matchfine/4}{An alternative that did not match leaves its
+names bound to nothing: \texttt{y} vanishes from the list.}
+\pair{07-programming/matchfine/5}{\B{OrderlessPatternSequence} matches its elements
+in any order, so \texttt{c, b} matches the run
+\texttt{b, c}.}
+\pair{07-programming/matchfine/6}{The elements must still form one contiguous run:
+\texttt{a} and \texttt{c} are not adjacent.}
+\end{codepairs}
+
+The first pair is about parsing. In \texttt{name:patt} the colon attaches to the
+single symbol before it, so \texttt{n\_.\ a:\_g} is the product of
+\texttt{n\_.} and \texttt{a:\_g}, not a pattern named by the whole product. Pair~4
+is the rule for a name that sits in an alternative that was not taken: it is bound
+to the empty sequence \texttt{Sequence[]}, which vanishes when spliced into a list.
+\index{pattern matching!Alternatives!unbound names}
+
+\calloutnote{Under the hood}{Corner cases like these are where pattern matchers
+quietly disagree, so Mathilda's matcher is graded rather than trusted. A generated
+corpus crosses eighteen families of pattern constructs with a shared set of
+subjects; every one of its 11{,}385 expected answers was computed by the reference
+system, not written by hand, and the whole corpus runs as a gating test. The same
+work settled all three behaviors above, along with a handful of subtler ones
+(\S\ref{sec:int-match}).
+\index{pattern matching!reference-graded corpus}}
+
 \section{Procedural programming}
 \label{sec:prog-procedural}
 
@@ -730,10 +950,54 @@ compose to describe everything from arithmetic to your own functions. The three
 paradigms of this chapter are three ways of installing rules; the attributes are
 the dial that sets \emph{when and how} those rules fire.\index{attribute!Flat}\index{attribute!Orderless}\index{attribute!Listable}\index{attribute!HoldAll}
 
+The same three functions work on builtins, not only on your own symbols---with one
+guard. Almost every builtin is \texttt{Protected}\index{attribute!Protected}, which
+forbids new rules on it, and \B{Unprotect} lifts the guard while \B{Protect} puts it
+back. Attributes themselves can be changed directly:
+
+\begin{codepairs}
+\pair{07-programming/attributes/11}{\mcode{Sin} threads over lists because it is
+\texttt{Listable}.}
+\pair{07-programming/attributes/12}{Clear that one bit with
+\mcode{ClearAttributes}.}
+\pair{07-programming/attributes/13}{\mcode{Sin} no longer threads: the list is a
+single, unevaluable argument.}
+\pair{07-programming/attributes/14}{Restore it with \mcode{SetAttributes}.}
+\pair{07-programming/attributes/15}{Threading is back.}
+\pair{07-programming/attributes/16}{\mcode{Unprotect} returns the names it unlocked.}
+\pair{07-programming/attributes/17}{Now \mcode{Sin} accepts a rule: a value for one
+particular angle.}
+\pair{07-programming/attributes/18}{It is used wherever \texttt{Sin[t0]} appears.}
+\pair{07-programming/attributes/19}{\mcode{Unset} (\texttt{=.}) removes the rule.}
+\pair{07-programming/attributes/20}{Re-lock \mcode{Sin} with \mcode{Protect}, which
+returns the names it locked.}
+\pair{07-programming/attributes/21}{Back exactly as it started.}
+\pair{07-programming/attributes/22}{The better way: a \mcode{TagSet} files the value under
+\texttt{t1}, with \mcode{Sin} untouched and still \texttt{Protected}.}
+\pair{07-programming/attributes/23}{It applies to \texttt{t1} only.}
+\end{codepairs}
+
+These changes take effect immediately and globally: \texttt{ClearAttributes[Sin,
+Listable]} changes \mcode{Sin} for every expression in the session, including ones inside
+library code you did not write. (Before v0.480 they did not take effect at all on
+the builtins whose attributes are seeded from an internal table: the call reported
+success and the attribute quietly came back on the next lookup.) Pair~22 is the
+lesson to carry away: when the goal is to tell a builtin something about \emph{your}
+object, an upvalue on that object (\S\ref{ssec:prog-upvalues}) does it without
+unprotecting anything.
+
+\calloutnote{Pitfall}{Not every built-in behavior is an attribute you can switch
+off. \mcode{Plus} and \mcode{Times} put their operands in canonical order inside their own
+code as well as through \texttt{Orderless}, so after
+\texttt{ClearAttributes[Plus, Orderless]} a sum like \texttt{b + a} still prints as
+\texttt{a + b}. Removing a core arithmetic attribute is a good way to break the rest
+of the system and a poor way to change notation; restore it in the same session.}
+
 \calloutnote{Theory}{The evaluator's per-call sequence is fixed and worth
 memorizing: evaluate the head; read its attributes; evaluate the arguments except
 those held; thread if \texttt{Listable}; flatten if \texttt{Flat}; sort if
-\texttt{Orderless}; then try the builtin, then the DownValues. Each attribute is a
+\texttt{Orderless}; then try the UpValues of the arguments, then the DownValues of
+the head, and only then the builtin (\S\ref{ssec:prog-upvalues}). Each attribute is a
 step in that pipeline, which is why \texttt{Orderless} on \texttt{circ} and
 \texttt{Flat} on \texttt{gp} take effect the instant they are set, with no change
 to the symbol's rules---they change how the evaluator \emph{prepares} the call
@@ -814,8 +1078,31 @@ across cores, so \mcode{Timing} can \emph{exceed} \mcode{AbsoluteTiming}---which
 why Chapter~\ref{ch:compilation} benchmarks with \mcode{AbsoluteTiming}.}
 
 To \emph{bound} how long a computation may run, rather than measure it after the
-fact, wrap it in \B{TimeConstrained}, which aborts an evaluation that overruns its
-budget.
+fact, wrap it in \B{TimeConstrained}\texttt{[expr, t]}, which abandons an evaluation
+that overruns its budget of \(t\) seconds and returns \texttt{\$Aborted}, or a third
+argument you supply instead. The budget is \emph{wall-clock} time, the clock of
+\mcode{AbsoluteTiming}:\index{TimeConstrained@\mcode{TimeConstrained}!wall-clock budget}
+
+\begin{codepairs}
+\pair{07-programming/timing/7}{A five-second pause under a half-second budget is cut
+off after half a second.}
+\pair{07-programming/timing/8}{\mcode{Timing} of the same thing is near zero: the time
+was spent asleep, yet it was still charged to the budget.}
+\pair{07-programming/timing/9}{A third argument replaces \texttt{\$Aborted} as the
+answer on a timeout.}
+\end{codepairs}
+
+Charging wall-clock time is the choice that makes the budget mean what you expect
+when the work is not a single busy thread. Idle time counts, as pair~8 shows, and so
+does parallel work: a multithreaded region such as a large \B{FactorInteger} burns
+CPU time on many cores at once, and a CPU-time budget would expire several times
+faster than the clock on the wall. (Before v0.463 that is what happened---a 16-thread
+factoring run used a 3-second budget in 0.3 seconds, and
+\texttt{TimeConstrained[Pause[5], 1]} slept the full five.) On native Windows the
+abort is \emph{cooperative}: there is no asynchronous timer signal, so the
+evaluation is stopped at the next point where the kernel checks its deadline rather
+than at the instant it expires, and a long stretch of C code with no check in it can
+overrun.\index{TimeConstrained@\mcode{TimeConstrained}!on Windows}
 
 \section*{Where this connects}
 

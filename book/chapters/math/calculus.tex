@@ -304,6 +304,34 @@ cleared the alternating elimination goes through---and the earlier claim that
 Mathilda could not reach the vertical asymptote no longer holds. The boundary that
 remains is the transcendental one of the first callout, not this.}
 
+Back to computing limits. A limit that depends on a parameter often has no single
+answer: \(x^a\) runs to \(\infty\), tends to \(0\), or stays at \(1\) according to the
+sign of \(a\). Mathilda will not pick one for you. Tell it what you know with the
+\texttt{Assumptions} option\index{assumptions!in limits}\index{limit!under assumptions}
+and the parametric limit closes:
+
+\begin{codepairs}
+\pair{calculus/limits-assumptions/1}{With nothing known about \(a\), the limit of
+\(x^a\) is returned unevaluated---three different answers are possible.}
+\pair{calculus/limits-assumptions/2}{Under \(a<0\) the power decays: \(0\).}
+\pair{calculus/limits-assumptions/3}{An exponential with a complex rate decays when its
+real part is positive, whatever the (real) frequency \(b\).}
+\pair{calculus/limits-assumptions/4}{A symbolic power inside a logarithm:
+\(\log(x^a+1)\sim a\log x\), so the ratio tends to \(a\).}
+\pair{calculus/limits-assumptions/5}{Stirling's asymptotics for a ratio of
+\B{Gamma} functions, \(\Gamma(x+a)/\Gamma(x)\sim x^a\).}
+\pair{calculus/limits-assumptions/6}{A one-sided limit of \B{Floor} at a
+\emph{symbolic} integer \(n\): from below, it is \(n-1\).}
+\end{codepairs}
+
+Each of these is a separate, narrowly gated layer of the limit cascade---a
+dominant-term rule that needs the sign of an exponent (pairs~2 and~4), a decay test
+on \(\operatorname{Re}(a+ib)\) (pair~3), a table of special-function asymptotics
+(pair~5), and one-sided rules for the rounding functions at an integer
+(pair~6). When the assumptions do not settle the question, each layer declines and
+the call comes back unevaluated, exactly as in pair~1; without
+\texttt{Assumptions} the cascade is the one described above, unchanged.
+
 \usagebox{Limit}
 
 \subsection{Series}
@@ -352,6 +380,32 @@ you can do arithmetic with series as freely as with polynomials. Coefficients
 promote automatically to arbitrary-precision rationals when machine integers would
 overflow, so a deep Laurent expansion such as \(\operatorname{Series}[1/\sin^{10}x]\)
 stays exact.}
+
+A function with a kink or a branch cut has \emph{different} expansions depending on
+which side of the cut you stand, and the side may be fixed only by a parameter.
+\B{Series} accepts \texttt{Assumptions}\index{assumptions!in series} and uses them to
+choose the branch\index{branch selection}:
+
+\begin{codepairs}
+\pair{calculus/series-assumptions/1}{Without information, \(\lvert x-a\rvert\) expands
+formally, through derivatives of \B{Abs} it cannot evaluate.}
+\pair{calculus/series-assumptions/2}{Under \(a>0\), the point \(x=0\) lies left of the
+kink, so \(\lvert x-a\rvert=a-x\) there.}
+\pair{calculus/series-assumptions/3}{\(\sqrt{1-\cos x}=\lvert x\rvert/\sqrt2+\cdots\):
+on the negative side the whole series changes sign.}
+\pair{calculus/series-assumptions/4}{Under \(a<0\) the root is of a negative number,
+and the principal branch is imaginary.}
+\pair{calculus/series-assumptions/5}{At infinity, \(\arctan(ax)\) tends to \(-\pi/2\)
+when \(a<0\), not \(+\pi/2\).}
+\end{codepairs}
+
+Pair~3 rests on a small point that is easy to get wrong. The leading term of
+\(\sqrt{1-\cos x}\) is \(\sqrt{x^2/2}=\lvert x\rvert/\sqrt2\), and the sign
+\(\lvert x\rvert = -x\) for \(x<0\) is read off the \emph{true} leading exponent of the
+radicand (\(x^2\)), not the stored start of the coefficient list---\(1-\cos x\) carries
+a leading zero there. Sign questions about the expansion point, such as the sign of
+\(-a\) in pair~2, are settled by the same real decision procedure that proves the
+\(\varepsilon\)--\(\delta\) limits of \S\ref{ssec:calc-limit}.
 
 \subsection{Residues}
 \label{ssec:calc-residue}
@@ -537,6 +591,43 @@ as a wrong answer. The second is Feynman's trick,
 \texttt{"DiffUnderInt"}---differentiation under the integral sign---which belongs
 to definite integration and is taken up next.
 
+Much of the cascade's day-to-day work is less glamorous, and it is where speed is
+won or lost. Three smaller stages illustrate the range:
+
+\begin{codepairs}
+\pair{calculus/integrate-newer/1}{A shared linear argument \(3x\) is substituted
+away before the Weierstrass stage sees it, so \(\int\sec^2 3x = \tfrac13\tan 3x\)
+rather than a high-degree rational in \(\tan(x/2)\).}
+\pair{calculus/integrate-newer/2}{A logarithm times a trigonometric kernel, by one
+integration by parts: the residual \(\int\cos x/x\) is the cosine integral
+\B{CosIntegral}.}
+\pair{calculus/integrate-newer/3}{A \emph{holonomic} answer: \(1/\operatorname{Ai}^2\)
+integrates to \(\pi\operatorname{Bi}/\operatorname{Ai}\), by the Wronskian of the two
+Airy functions.}
+\pair{calculus/integrate-newer/4}{A Bessel product closed in its own differential
+module: \(\int xJ_0^2 = \tfrac{x^2}2(J_0^2+J_1^2)\).}
+\end{codepairs}
+
+Pair~2 is the log-by-parts\index{integration by parts!logarithmic} stage: for \(c\log g(x)\,K(x)\) with a trigonometric
+or hyperbolic kernel \(K\), it does the single step \(\int\log g\,K=\log g\,V-\int
+V\,g'/g\) with \(V=\int K\), and accepts the result only if it differentiates back
+exactly.\calloutnote{Performance}{Before the stage existed, \(\int\log x\sin x\)
+fell through to the general \texttt{"ParallelMixedSpecial"} search and took about
+\(5\)~s; the stage closes it in roughly a tenth of a second, and the integral now
+costs well under that on this build. The saving matters most inside \mcode{DSolve},
+whose variation-of-parameters quadratures produce exactly this shape:
+\(y''+4y=\log x\) dropped from over \(9\)~s to about a third of a second, and solves
+in under that here.} Pairs~3 and~4 are
+the \texttt{"Holonomic"}\index{holonomic function} stage. Bessel, Airy, and
+sine/cosine kernels of a linear argument each span a two-dimensional space closed
+under \(d/dx\), so a power of \(x\) times a product of them lies in a
+finite-dimensional \emph{differential module}; one linear system then finds the
+antiderivative inside that module, or the stage declines. For
+\(1/\operatorname{Ai}^2\) a second route applies: with \(t=\operatorname{Bi}/\operatorname{Ai}\)
+we have \(t' = W/\operatorname{Ai}^2\) where the Wronskian \(W=1/\pi\) is constant, so the
+integral is \(\pi t\). Every holonomic answer is re-checked symbolically before it
+is returned.
+
 \usagebox{Integrate}
 
 \subsection{Definite integration}
@@ -628,6 +719,36 @@ odd-order interior poles where the symmetric divergences cancel:
 \(-\log 2\).}
 \end{codepairs}
 
+The principal value reaches well beyond a numeric pole on a finite interval. The
+endpoints may be symbolic, the interval may be the whole line with an oscillating
+numerator, or the half-line with a branch-cut power:
+
+\begin{codepairs}
+\pair{calculus/contour/5}{Symbolic bounds \(\pm a\) around the pole of \(e^x/x\):
+\(\operatorname{Ei}(a)-\operatorname{Ei}(-a)\), which is \(2\operatorname{Shi}(a)\).}
+\pair{calculus/contour/6}{A pole \emph{on} the real axis of a Fourier integral
+contributes half a residue: \(\pi\cos 1\).}
+\pair{calculus/contour/7}{The same, symbolically: \(\mathrm{PV}\!\int e^{iax}/(x-b) =
+i\pi e^{iab}\) for \(a>0\).}
+\pair{calculus/contour/8}{A Mellin principal value\index{Mellin transform!principal
+value}, the reflection of the Beta integral: \(\pi\cot\pi c\).}
+\pair{calculus/contour/9}{A keyhole contour with an indented pole at \(x=a\):
+\(\pi/(2\sqrt a)\).}
+\end{codepairs}
+
+\calloutnote{Theory}{When a contour is pushed across a simple pole on the real axis,
+the small semicircle that detours around it contributes \(\pm i\pi\) times the residue
+rather than the full \(2\pi i\)---the \emph{half-residue}\index{Cauchy principal
+value!half-residue}. Pairs~6 and~7 are the Jordan-lemma closure of
+\S\ref{ssec:calc-definite} with that half-residue added at the real pole. In pair~9 the
+integrand \(\sqrt x\) has a branch cut along the positive axis, so the pole at \(x=a\)
+sits on both lips of the keyhole; the indented contour averages the two branch values
+\(a^{1/2}\) and \(a^{1/2}e^{2\pi i\cdot\frac12}\), and the principal value is the real
+part that survives. Pair~8 is the \(d=1\) member of a family closed as a whole,
+\(\mathrm{PV}\!\int_0^\infty x^{c-1}/(1-x^d)\,dx=(\pi/d)\cot(\pi c/d)\) for \(0<c<d\):
+the formula is matched directly, because the \(d\)-th roots of unity that are the
+poles cannot be enumerated for a symbolic \(d\).}
+
 Finally, differentiation under the integral sign---\emph{Feynman's
 trick}\index{Feynman's trick}\index{differentiation under the integral sign}---is
 a definite-integration method in its own right. For a parameter-dependent integral
@@ -636,10 +757,163 @@ and integrates back, fixing the constant from an exact base value.
 
 \begin{codepairs}
 \pair{calculus/feynman/1}{\(\int_0^1 (x^a-1)/\log x\,dx = \log(1+a)\), the standard
-Feynman warm-up.}
+Feynman warm-up. The integral converges only for \(a>-1\), so that is stated; without it
+Mathilda declines rather than return an answer that is wrong for half the parameter line.}
 \pair{calculus/feynman/2}{And \(\int_0^\infty \log(1+a^2x^2)/(1+x^2)\,dx = \pi\log(1+a)\)
 under \(a>0\).}
 \end{codepairs}
+
+Two more everyday situations deserve a word. An integrand built from \mcode{Abs},
+\B{Sign}, \B{UnitStep}, \B{Min}, \B{Max}, or \B{Piecewise} is smooth only between its
+breakpoints\index{piecewise integrand}, and the fundamental theorem applies to each
+piece separately. Mathilda splits the interval at every interior breakpoint, proves
+the sign of each branch at a test point inside its piece---under your assumptions,
+when the breakpoint is symbolic---integrates the pieces, and sums:
+
+\begin{codepairs}
+\pair{calculus/definite-piecewise/1}{The kink of \(\lvert x-a\rvert\) sits at
+\(x=a\), inside \([0,2a]\) because \(a>0\): two triangles, area \(a^2\).}
+\pair{calculus/definite-piecewise/2}{\(\min(x,a)\) on \([0,2a]\): a triangle plus a
+rectangle, \(\tfrac32a^2\).}
+\pair{calculus/definite-piecewise/3}{\(\max(\sin x,\cos x)\) switches at \(\pi/4\):
+\(\tfrac{\sqrt2}2+\bigl(1+\tfrac{\sqrt2}2\bigr)=1+\sqrt2\).}
+\pair{calculus/definite-piecewise/4}{An explicit \mcode{Piecewise}, split at
+\(x=1\).}
+\pair{calculus/definite-piecewise/5}{\(\sqrt{1-\cos 2x}=\sqrt2\,\lvert\sin x\rvert\):
+the hidden absolute value is recovered, and its periodic breakpoints found, so the
+answer is \(4\sqrt2\), not \(0\).}
+\end{codepairs}
+
+Pair~5 is the kind of integral that catches a careless system: the obvious
+antiderivative \(-\sqrt2\cos x\) gives \(0\) over a full period, because it silently
+drops the absolute value. Symbolic endpoints raise the same question in another
+form. Whether \(\int_0^a dx/\sqrt{a^2-x^2}\) is \(\pi/2\) or \(-\pi/2\) depends on the
+sign of \(a\), so without that information Mathilda declines; with it, the
+Newton--Leibniz mechanism classifies the endpoint singularity, evaluates both limits
+under the assumption, and simplifies the result with \B{Refine}:\index{assumptions!in
+definite integrals}
+
+\begin{codepairs}
+\pair{calculus/definite-piecewise/6}{No sign for \(a\): unevaluated.}
+\pair{calculus/definite-piecewise/7}{Under \(a>0\): \(\arcsin(x/a)\big|_0^a=\pi/2\).}
+\pair{calculus/definite-piecewise/8}{And \(\int_0^a x/\sqrt{a^2-x^2}=a\), with the
+integrable singularity at the upper endpoint.}
+\end{codepairs}
+
+\subsection{A table of classical definite integrals}
+\label{ssec:calc-classical}
+
+Every calculus text ends with a table of definite integrals that have no
+elementary antiderivative but do have a closed form---each one the residue of a
+clever trick. Mathilda's definite integrator now carries most of those tricks as
+methods of their own, each recognising a family and closing it exactly. The first
+table is elementary and logarithmic:
+
+\begin{codepairs}
+\pair{calculus/classical/1}{\emph{King's rule}\index{King's rule}: \(f(x)+f(\pi/2-x)=1\),
+so the integral is half the interval, \(\pi/4\)---for \emph{any} exponent, here
+\(\sqrt2\).}
+\pair{calculus/classical/2}{King again, for \(x\,g(x)\) with \(g\) symmetric about
+\(\pi/2\): \(\int_0^\pi x\,g = \tfrac\pi2\int_0^\pi g = \pi^2/4\).}
+\pair{calculus/classical/3}{A Frullani integral\index{Frullani integral}:
+\(\int_0^\infty (f(ax)-f(bx))/x = (f(0)-f(\infty))\log(b/a)\), with \(\cos\) averaging
+to \(0\) at infinity.}
+\pair{calculus/classical/4}{Its logarithmic cousin, by differentiation in the
+exponent: \(\log\frac{1+a}{1+b}\).}
+\pair{calculus/classical/5}{Euler's log-sine integral\index{log-sine integral}:
+\(\int_0^{\pi/2}\log\sin x = -\tfrac\pi2\log 2\).}
+\pair{calculus/classical/6}{Poisson's integral\index{Poisson's integral}
+\(\int_0^\pi\log(A+B\cos x)\,dx\) is \(\pi\log\frac{A+R}2\) with \(R=\sqrt{A^2-B^2}\); here \(A=5\), \(B=4\),
+so \(R=3\) and the value is \(2\pi\log2\).}
+\pair{calculus/classical/7}{Term by term: \(\log x/(1+x^2)=\sum(-1)^k x^{2k}\log x\)
+integrates to minus \B{Catalan}'s constant\index{Catalan's constant}.}
+\pair{calculus/classical/8}{Catalan again, from a polylogarithm ladder evaluated at
+the endpoints.}
+\pair{calculus/classical/9}{\(\sum_k 2/(k+1)^3\): Ap\'ery's constant
+\(\zeta(3)\)\index{Apery's constant@Ap\'ery's constant}, twice.}
+\pair{calculus/classical/10}{A ladder through \(\log(1-e^{2ix})\):
+\(\int_0^\pi x\log\sin x = -\tfrac{\pi^2}2\log 2\).}
+\end{codepairs}
+
+The second table is the special-function half, where the closed form is a named
+function rather than a constant:
+
+\begin{codepairs}
+\pair{calculus/classical-special/1}{Airy's own integral representation: \(\pi\,
+\operatorname{Ai}(a)\).}
+\pair{calculus/classical-special/2}{The Laplace transform of \(J_0(bx)\):
+\(1/\sqrt{a^2+b^2}\).}
+\pair{calculus/classical-special/3}{The standard integral representation of the
+modified Bessel function \B{BesselK}.}
+\pair{calculus/classical-special/4}{A shifted Bose--Einstein integral:
+\(\Gamma(s)\,\zeta(s,a)\), the Hurwitz zeta function \B{HurwitzZeta}.}
+\pair{calculus/classical-special/5}{A whole-line integral against \(\operatorname{sech}^2\),
+by residues at a double pole: \(\pi a\operatorname{csch}(\pi a/2b)/b^2\).}
+\pair{calculus/classical-special/6}{A product of two Bessel functions:
+\(\int_0^\infty J_0J_1/x = 2/\pi\).}
+\pair{calculus/classical-special/7}{Weber's discontinuous integral\index{Weber's
+discontinuous integral}: for \(b<a\) it is \(1/\sqrt{a^2-b^2}\).}
+\pair{calculus/classical-special/8}{For \(b>a\) the same integral is exactly
+\(0\). The assumptions decide which side of the discontinuity you are on.}
+\pair{calculus/classical-special/9}{The Mellin transform of the product
+\(e^{-x}\cos x\) is \(\Gamma(s)\,2^{-s/2}\) times \(\cos(\pi s/4)\).}
+\end{codepairs}
+
+Behind each line is a recognisable piece of classical analysis. King's
+rule\index{King's rule} is the reflection \(x\mapsto a+b-x\): when
+\(f(x)+f(a+b-x)\) collapses to a constant \(c\), the integral is \(c(b-a)/2\), which
+is why the exponent in pair~1 of the first table is irrelevant. The Frullani
+integral of pair~3 falls to the Mellin engine of \S\ref{ssec:calc-definite}; its
+logarithmic cousin in pair~4 is Feynman's trick---differentiate
+\(\int_0^1 x^e\,dx = 1/(e+1)\) in the exponent---taken in one step. The log-sine and Poisson values (pairs~5--6) are matched as families; the
+Catalan and zeta values (pairs~7--10) come either from expanding the integrand in a
+power series and integrating term by term---with the resulting sum recognised---or from
+the \emph{polylogarithm ladder}\index{polylogarithm ladder} that writes
+\(\log\sin x\) as \(-\log 2 + i(\tfrac\pi2-x) + \log(1-e^{2ix})\) and integrates each
+\(x^n\log(1-e^{2ix})\) into \mcode{PolyLog}s. In the second table, pairs~1--4 are
+\emph{integral representations}\index{integral representation} read backwards: the
+integrand is recognised as the defining integral of \B{AiryAi}, of a Laplace
+transform, of \mcode{BesselK}, or of the Hurwitz zeta (expand
+\(1/(1-e^{-x})=\sum_k e^{-kx}\) and integrate term by term), so the answer is
+correct by construction. Pair~5 extends the residue engine to a pole of order~\(n\)
+of \(\operatorname{sech}^n\). Pairs~6--9 are products of two kernels on the half-line,
+the province of the Mellin-transform engines: Ramanujan's Master Theorem from
+\S\ref{ssec:calc-definite}, and a convolution stage that writes each factor---a Bessel
+function, an exponential or Gaussian, a sine or cosine, a power of \(a+x^2\)---as a
+Meijer \(G\)-function\index{Meijer G-function@Meijer \(G\)-function!convolution
+theorem} (\B{MeijerG}) of \(x^2\). The integral of a product of two \(G\)-functions is
+again a \(G\)-function, and that one is reduced to the named value. Convergence at
+both ends, and every side condition of the theorem, is proved from your assumptions
+before the answer is returned; an unproved condition yields a
+\mcode{ConditionalExpression}, and a refuted one declines.
+
+\calloutnote{Under the hood}{All of these stages sit in one cascade, and its
+\emph{order} matters as much as its contents. The transform methods---Beta, the
+trigonometric-power integrals, Ramanujan's Mellin engine---are deterministic: each
+either matches its family at once or declines at once. Newton--Leibniz, by contrast,
+first searches for an antiderivative, and for an integrand that has none that search
+is expensive. So the transform stages run \emph{before} it. On this build
+\(\int_0^\infty x^{s-1}/(1+x^2)^m\,dx\) under \(0<s<2m\) closes to a \B{Beta} value in a
+few milliseconds; pinned to \texttt{Method -> "NewtonLeibniz"} alone, the same call
+spends about \(55\)~s proving the integrand non-elementary and then gives up. Each
+family above can be pinned the same way---\texttt{"King"}, \texttt{"SeriesExpansion"},
+\texttt{"FeynmanParameter"}, \texttt{"PolyLogLadder"},
+\texttt{"IntegralRepresentation"}, \texttt{"MeijerConvolution"}, \texttt{"Mellin"},
+\texttt{"Piecewise"}---to see which method owns an integral.}
+
+\calloutnote{Under the hood}{A table of closed forms is only as good as its error
+rate, so these families were built against stress corpora whose reference values are
+checked by numerical quadrature, and each corpus is gated at \emph{zero} wrong
+answers: a method that cannot prove its convergence conditions declines or returns a
+\mcode{ConditionalExpression} rather than guess. The hardest
+of them, a fifty-case ``extreme'' battery of Frullani, branch-cut, oscillatory, and
+principal-value integrals, scores 48 of 48 (two double-pole principal values are
+excluded because their value depends on a regularisation convention)---and four of
+the battery's own reference answers turned out to be wrong. The broadest is a corpus
+mined from R.~J.~Mathar's \emph{Yet Another Table of Integrals}: 580 definite and 135
+indefinite records, each checked numerically, whose construction exposed and fixed
+seven correctness bugs elsewhere in the system. Coverage there is far from complete;
+the wrong-answer count is zero.}
 
 \subsection{Differential equations}
 \label{ssec:calc-dsolve}
@@ -706,15 +980,19 @@ answer often hinges on a deep classical algorithm.
 
 \begin{codepairs}
 \pair{calculus/dsolve-special/1}{The Airy equation \(y''=xy\), whose solutions are
-\B{AiryAi} and \B{AiryBi}.}
+\mcode{AiryAi} and \B{AiryBi}.}
 \pair{calculus/dsolve-special/2}{Bessel's equation of order \(2\), giving
 \B{BesselJ} and \B{BesselY}.}
 \pair{calculus/dsolve-special/3}{An Euler--Cauchy\index{Euler--Cauchy equation}
 equidimensional equation, solved by \(x^r\) with complex exponents.}
 \pair{calculus/dsolve-special/4}{A Liouvillian solution found by Kovacic's
 algorithm---elementary, not a series.}
-\pair{calculus/dsolve-special/5}{No closed form exists, so the fallback is a
-Frobenius\index{Frobenius method} power series about the origin.}
+\pair{calculus/dsolve-special/5}{\(y''+\sin(x)\,y=0\) has no closed form in any of
+the classes the cascade knows, so \B{DSolve} returns it unevaluated---an honest ``not
+found,'' never a truncated series passed off as a solution.}
+\pair{calculus/dsolve-special/6}{Ask for a series and you get one: \texttt{Method ->
+"FrobeniusSeries"} expands about the origin by the Frobenius\index{Frobenius method}
+method, with the \(O[x]^7\) term marking it as an approximation.}
 \end{codepairs}
 
 \calloutnote{Theory}{Pair~4 is the crown of second-order theory.
@@ -724,11 +1002,14 @@ ODE \(y''+Py'+Qy=0\) has a \emph{Liouvillian} solution---one built from exponent
 integrals, and algebraic functions---and constructs it when it does, by examining
 the equation's reduced normal form \(z''=rz\) and the local behaviour of \(r\) at
 its poles and at infinity. When it succeeds you get a genuine closed form (here
-\((C_1+C_2e^{x^2})e^{-x^2/2}/\sqrt x\)); when it proves none exists, control passes
-to the Frobenius\index{Frobenius method} series method, which expands about a regular
-singular point with an indicial equation fixing the leading exponents. The two
-together---Kovacic for the closed form, Frobenius for its absence---cover the
-second-order linear equations a course would set.}
+\(\cosh(x^2/2)/\sqrt x\) and \(\sinh(x^2/2)/\sqrt x\), written through the normalisation
+of the half-order Bessel functions they are); when it proves none exists, that is a
+theorem about the equation, and \B{DSolve} says so by returning it unevaluated. The
+Frobenius\index{Frobenius method} series method, which expands about a regular singular
+point with an indicial equation fixing the leading exponents, is then yours to request
+with \texttt{Method -> "FrobeniusSeries"} (or \texttt{"PowerSeries"} about an ordinary
+point). Series answers are opt-in by design: an automatic \mcode{DSolve} result is a
+\emph{solution}, which a truncated series is not.}
 
 Systems of equations are dispatched to their own cascade, which diagonalises the
 coefficient matrix and handles real, complex, and defective spectra.
@@ -739,6 +1020,56 @@ the solution is oscillatory.}
 \pair{calculus/dsolve-systems/2}{A system with real eigenvalues \(-1\) and \(3\):
 a combination of growing and decaying exponentials.}
 \end{codepairs}
+
+Engineering problems switch forces on and off. A forcing term built from
+\mcode{UnitStep}, \mcode{Piecewise}, or an impulse \mcode{DiracDelta}\index{impulse
+forcing}\index{step forcing} is handled by its own route, and the answers come back
+as a \mcode{Piecewise} or with an explicit \mcode{HeavisideTheta}\index{Heaviside step
+function} switching the response on at the right moment. The same block shows three
+newer tools for variable-coefficient and nonlinear equations:
+
+\begin{codepairs}
+\pair{calculus/dsolve-forcing/1}{A step switched on at \(t=1\): nothing before, then
+\(1-e^{1-t}\).}
+\pair{calculus/dsolve-forcing/2}{An impulse at \(t=3\) kicks the decaying solution
+up by \(e^{-2(t-3)}\).}
+\pair{calculus/dsolve-forcing/3}{A hammer blow to an oscillator at rest: it rings as
+\(\sin(t-\pi)\) from \(t=\pi\) on.}
+\pair{calculus/dsolve-forcing/4}{Laguerre's equation\index{Laguerre equation}, a
+Kummer equation with a polynomial solution \(L_2\); the independent second solution
+needs \mcode{ExpIntegralEi}.}
+\pair{calculus/dsolve-forcing/5}{With \(f\) and \(g\) unknown, the integrating factor
+cannot be computed, so it is kept as an \B{Inactive} integral\index{inert integral}.}
+\pair{calculus/dsolve-forcing/6}{A Riccati equation solved through the particular
+solution \(1/x\), found by inspection.}
+\end{codepairs}
+
+Pairs~1--3 look like textbook exercises, but they hide a trap. The first-order
+linear method writes \(y=\mu^{-1}\bigl(C_1+\int\mu q\bigr)\), and for a step or
+impulse \(q\) the indefinite integral stays unevaluated; fitting \(y(0)\) then
+substitutes \(t=0\) \emph{into} that inert integral and silently corrupts it. So a
+discontinuous forcing in an initial-value problem is routed elsewhere: to a
+piecewise solver that integrates the equation interval by interval (pair~1), or to
+the causal convolution \(y=\mu^{-1}\bigl(C_1+\int_0^t\mu(s)q(s)\,ds\bigr)\), whose
+definite integral of a \(\delta\) sifts to a clean \mcode{HeavisideTheta}
+(pairs~2--3). Pair~4 is the degenerate Kummer\index{Kummer's equation} case: when
+\({}_1F_1\) terminates in a polynomial, the usual second solution
+\mcode{HypergeometricU} is a constant multiple of it, so \B{DSolve} constructs the
+genuinely independent logarithmic partner instead---\(p(x)\operatorname{Ei}(x)+e^x
+R(x)\), with \(R\) from an exact recurrence. Pair~5 answers in the same inert form the
+reference system uses, and pair~6 shows the Riccati solver trying monomial
+particular solutions \(cx^k\) before it linearises through \(y=y_p+1/v\).
+
+The cascade has also grown methods that are invisible until they are needed: a
+confluent (Whittaker) recogniser that returns \({}_1F_1\) closed forms for
+regular-singular equations with a \(y'\) term, a solver for linear systems written
+with several leading derivatives in one equation, and an \emph{inverse orientation}
+method\index{inverse orientation} that retries a stubborn \(y'=F(x,y)\) as
+\(dx/dy=1/F\), where it is often a Bernoulli or linear equation, and returns the
+implicit first integral. Their yardstick is Nasser Abbasi's public corpus of
+textbook differential equations; on its most recent batch of 500 problems
+(Problems 5001--5500), \mcode{DSolve} solves 462, and every section of the corpus is
+gated at zero wrong answers: what it cannot solve, it returns unevaluated.
 
 Two engines stand out for their generality. The first is the Lie point-symmetry
 method, the general backstop for first-order equations.\calloutnote{Theory}{A

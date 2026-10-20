@@ -16,8 +16,10 @@ modulus, how a rational unfolds into a continued fraction.
 We take the subject in the classical order. First the greatest common divisor and the
 Euclidean algorithm that computes it (\B{GCD}, \B{LCM}, \B{ExtendedGCD}, \B{CoprimeQ},
 \B{Divisible}); then primes and how Mathilda tests, counts, and finds them (\B{PrimeQ},
-\B{Prime}, \B{PrimePi}, \B{NextPrime}); then the factorization pipeline that breaks a
-composite into primes (\B{FactorInteger}, \B{IntegerExponent}, \B{SquareFreeQ}); the
+\B{Prime}, \B{PrimePi}, \B{NextPrime}, \mcode{RandomPrime}, \mcode{PrimePowerQ}); then the
+factorization pipeline that breaks a composite into primes (\B{FactorInteger},
+\B{IntegerExponent}, \B{SquareFreeQ}), together with a special-purpose factoring method,
+rational base descent, that was designed by Mathilda's author; the
 classical arithmetic functions built on that factorization (\B{Divisors},
 \B{DivisorSigma}, \B{EulerPhi}, \B{MoebiusMu}, \B{LiouvilleLambda}, \B{PrimeOmega},
 \B{PrimeNu}); modular arithmetic and the structure of the residues (\B{PowerMod},
@@ -71,6 +73,37 @@ interpreted code---it hands the integers to GMP's \texttt{mpz\_gcd} and
 \texttt{mpz\_gcdext}, whose subquadratic ``half-GCD'' handles thousand-digit inputs in
 microseconds. The partial quotients Euclid discards on the way are, as
 \S\ref{ssec:nt-contfrac} will show, precisely a continued fraction~\cite{knuth-taocp2}.}
+
+Euclid's algorithm needs only a division with a remainder that is \emph{smaller} than the
+divisor, and the Gaussian integers\index{Gaussian integers!Euclidean algorithm}
+\(\mathbb{Z}[i]=\{a+bi : a,b\in\mathbb{Z}\}\) have one: divide in \(\mathbb{Q}(i)\), round
+both parts to the nearest integer, and the remainder's norm \(a^{2}+b^{2}\) is at most half
+the divisor's. So the whole of this subsection carries over, and Mathilda's divisibility
+functions accept Gaussian arguments directly. Because \(\pm1\) and \(\pm i\) are all units,
+a gcd is defined only up to a unit; Mathilda reports the associate in the first quadrant.
+
+\begin{codepairs}
+\pair{number-theory/gaussian/1}{\(5=(2+i)(2-i)\) and \(3+4i=(2+i)^{2}\) share the Gaussian
+prime \(2+i\)---and only once, since \(2-i\) does not divide \(3+4i\).}
+\pair{number-theory/gaussian/2}{\(3+i=(1+i)(2-i)\) divides \(10\) outright.}
+\pair{number-theory/gaussian/3}{Conjugate primes are coprime, so their lcm is their product.}
+\pair{number-theory/gaussian/4}{A B\'ezout certificate in \(\mathbb{Z}[i]\): \(0\cdot(3+i) +
+i\,(2-i) = 1+2i\), the first-quadrant associate of the common factor \(2-i\).}
+\pair{number-theory/gaussian/5}{The remainder \(1+i\) has norm \(2\), below the divisor's
+\(13\).}
+\pair{number-theory/gaussian/6}{Modular powers too: \((1+i)^{10}=32i\equiv-1+i\).}
+\end{codepairs}
+
+Two edge conventions are worth knowing. With a single argument, \mcode{CoprimeQ} asks
+whether that number is coprime to \emph{itself}---true only of the units---and a modulus of
+zero has no residues at all:
+
+\begin{codepairs}
+\pair{number-theory/gaussian/7}{\(\gcd(3,3)=3\), so \(3\) is not ``coprime''.}
+\pair{number-theory/gaussian/8}{\(-1\) is a unit, so it is.}
+\pair{number-theory/gaussian/9}{\(7\bmod0\) is undefined; \B{Mod} says so, with an
+\mcode{Mod::indet} message on the side.}
+\end{codepairs}
 
 \subsection{Primes and primality}
 \label{ssec:nt-primes}
@@ -134,6 +167,58 @@ it uses the Baillie--PSW test (a strong Fermat test composed with a Lucas test),
 no counterexample is known below the ranges Mathilda will ever see. Both are
 probabilistic in theory and, at these sizes, certain in practice~\cite{crandallpomerance}.}
 
+Two smaller tools complete the kit. \mcode{RandomPrime} draws a prime uniformly at random
+from a range---the first step of any key generation---and \mcode{PrimePowerQ} recognises
+the numbers \(p^{k}\) that are ``prime up to a power'':
+
+\begin{codepairs}
+\pair{number-theory/primes-more/1}{Six primes below \(1000\). The draw is pseudorandom,
+so the seed is fixed first with \B{SeedRandom}.}
+\pair{number-theory/primes-more/2}{Reseeding with the same value reproduces the draw
+exactly.}
+\pair{number-theory/primes-more/3}{A \(100\)-digit prime, drawn and confirmed.}
+\pair{number-theory/primes-more/4}{\(8=2^{3}\), \(9=3^{2}\) and \(-8\) are prime powers (signs
+are ignored), \(12\) and \(1\) are not, and a rational counts when its reciprocal does.}
+\pair{number-theory/primes-more/5}{A Gaussian argument is tested in \(\mathbb{Z}[i]\)
+automatically: \((2+i)^{3}\) is a power of one Gaussian prime.}
+\pair{number-theory/primes-more/6}{Asked in \(\mathbb{Z}[i]\), \(5=(2+i)(2-i)\) is \emph{not}
+a prime power.}
+\end{codepairs}
+
+\usagebox{RandomPrime}
+\usagebox{PrimePowerQ}
+
+\calloutnote{Under the hood}{\mcode{RandomPrime} uses rejection sampling: it draws
+uniformly from \(\{2\}\) together with the odd integers of the range and keeps the first
+draw that passes the same primality test as \mcode{PrimeQ}. Every prime in the range is
+therefore exactly equally likely---unlike the tempting shortcut of taking the
+\mcode{NextPrime} after a random integer, which favours primes that follow long gaps. A range
+that might contain no prime is checked for one first, so an empty range is reported with
+a message rather than looped on forever. \mcode{PrimePowerQ} trial-divides, reduces the
+number to its primitive root \(m^{1/k}\), and makes exactly one primality test on that
+root.}
+
+Counting primes is where the algorithms of this subsection earn their keep. The
+\mcode{PrimePi} values below are far beyond any sieve that lists the primes one by one, yet
+each takes well under a second:
+
+\begin{codepairs}
+\pair{number-theory/primes-more/7}{\(\pi(10^{12})\): there are \(37{,}607{,}912{,}018\) primes
+below a trillion. \B{AbsoluteTiming} returns the elapsed time alongside the value.}
+\pair{number-theory/primes-more/8}{And that count took less than a second.}
+\pair{number-theory/primes-more/9}{The billionth prime, by way of \(\pi\).}
+\end{codepairs}
+
+\calloutnote{Performance}{The default \mcode{PrimePi} is a tuned
+Del\'eglise--Rivat\index{Deleglise--Rivat method@Del\'eglise--Rivat method} algorithm, which
+counts primes in roughly \(x^{2/3}\) time by a combinatorial sum over ``leaves'' instead of
+by enumeration. On this book's build machine (an eight-core Intel i9-9880H) \(\pi(10^{12})\)
+takes about \(0.2\)~s and \(\pi(10^{13})\) about \(1.2\)~s. \mcode{Prime}\([n]\) inverts the
+count: it estimates the \(n\)th prime from Riemann's \(R(x)\approx\pi(x)\), makes one exact
+\(\pi\) call at the estimate, and sieves only the short gap that remains, so
+\(\mcode{Prime}[10^{9}]\) takes about \(0.02\)~s and \(\mcode{Prime}[10^{11}]\) about half a
+second.}
+
 \subsection{Integer factorization}
 \label{ssec:nt-factor}
 
@@ -168,20 +253,261 @@ prime.}
 \pair{number-theory/factorization/9}{\(12=2^{2}\cdot3\) does, so it is not square-free.}
 \end{codepairs}
 
-\calloutnote{Under the hood}{\B{FactorInteger} runs a pipeline, each stage suited to a
-different size of factor. It strips small primes by trial division, then hunts medium
-factors with Pollard's rho (Brent's variant) and the \(p\pm1\) methods, which succeed when
-\(p-1\) or \(p+1\) is smooth. For the genuinely hard factors it turns to Lenstra's
-elliptic-curve method (ECM)\index{elliptic curve method}, whose running time depends on
-the size of the factor found rather than the number
-factored~\cite{lenstraecm,crandallpomerance}, with continued-fraction and quadratic-sieve
-routines behind that. The default chooses among them by size; \texttt{Method} overrides
-the choice.}
+\calloutnote{Theory}{Factoring algorithms come in two kinds. \emph{Special-purpose}
+methods find a factor \(p\) quickly when \(p\) has some property, whatever the size of
+\(n\): Pollard's rho\index{Pollard rho method} takes about \(\sqrt p\) steps, so it is fast
+for small \(p\); Pollard's \(p-1\)\index{Pollard p-1 method@Pollard \(p-1\) method} and
+Williams' \(p+1\)\index{Williams p+1 method@Williams \(p+1\) method} succeed when
+\(p-1\) or \(p+1\) has only small prime factors; Fermat's
+method\index{Fermat's factoring method} when the two factors are close together; and
+Lenstra's elliptic-curve method (ECM)\index{elliptic curve method}, which replaces the
+fixed group \((\mathbb{Z}/p)^{\times}\) of \(p-1\) by the group of a random elliptic curve,
+gets a fresh chance at a smooth group order with every curve, so its running time
+depends on the size of \(p\) rather than of \(n\)~\cite{lenstraecm}. \emph{General-purpose}
+methods ignore the factors' shape and pay by the size of \(n\): the continued-fraction
+method (CFRAC) and the quadratic sieve\index{quadratic sieve} both collect many
+congruences \(x^{2}\equiv y\pmod n\) with \(y\) smooth, then combine them by linear
+algebra over \(\mathrm{GF}(2)\) into \(X^{2}\equiv Y^{2}\pmod n\), whence
+\(\gcd(X-Y,n)\) is a factor about half the time. Their cost is subexponential in the
+number of digits~\cite{crandallpomerance}.}
 
-\calloutnote{Performance}{The asymmetry between \S\ref{ssec:nt-primes} and this section is
-the whole point. Deciding that a \(300\)-digit number is composite takes milliseconds;
-producing its factors is, as far as anyone knows, infeasible. RSA
-(\S\ref{ssec:nt-rsa}) is exactly this gap, weaponised.}
+\mcode{FactorInteger} is not one algorithm but a family of them, and every member is also a
+builtin of its own, living in the \mcode{FactorInteger\textasciigrave} context. Each
+takes the method's tuning parameters as string-named options; the same call can be
+spelled \mcode{Method -> \{"Name", "Sub" -> v\}} on \mcode{FactorInteger} itself. Choosing
+the right tool for a number's \emph{shape} matters far more than its size:
+
+\begin{codepairs}
+\pair{number-theory/factor-methods/1}{\B{Names} lists the entry points: the classical
+methods, three aliases (\mcode{QS}, \mcode{SIQS}, \mcode{SQUFOF}), and seven heads for the
+rational base descent of \S\ref{ssec:nt-rbd}.}
+\pair{number-theory/factor-methods/2}{The Fermat number \(F_{7}=2^{128}+1\) by ECM. Its
+\(17\)-digit factor took Morrison and Brillhart a landmark computation in \(1970\).}
+\pair{number-theory/factor-methods/3}{The same method through \texttt{Method}, here with
+the stage-one smoothness bound \(B_{1}\) set by hand.}
+\pair{number-theory/factor-methods/4}{Two \(31\)-digit primes a million apart: Fermat's
+method writes \(n=a^{2}-b^{2}\) with \(a\) just above \(\sqrt n\), and finds this in its
+first few steps.}
+\pair{number-theory/factor-methods/5}{But on lopsided factors Fermat is hopeless. It
+gives up when its budget runs out and returns the composite unfactored (the
+\mcode{FactorInteger::\allowbreak nofac} message is silenced by \B{Quiet}).}
+\pair{number-theory/factor-methods/6}{The same number by \(p-1\): the factor \(2^{61}-1\)
+has \(p-1=2\cdot3^{2}\cdot5^{2}\cdot7\cdot11\cdot13\cdot31\cdot41\cdot61\cdot151\cdot331\cdot1321\),
+entirely made of small primes, so it falls out at once.}
+\pair{number-theory/factor-methods/7}{A balanced \(60\)-digit semiprime has no shape to
+exploit; this is the quadratic sieve's territory, about half a second here.}
+\pair{number-theory/factor-methods/8}{The eighth Fermat number, \(2^{256}+1\), whose
+factorization by Brent and Pollard in \(1980\) was a celebrated success for the rho
+method. \texttt{Automatic} finds the \(16\)-digit factor in a fraction of a second.}
+\end{codepairs}
+
+Two further forms of the call round out the interface. A second argument \(k\) asks for a
+\emph{partial} factorization with at most \(k\) entries, which is useful when you need
+only the small primes of a number whose large cofactor is expensive. The entries for the
+largest primes are kept and the smallest are merged into one composite entry. And
+\texttt{GaussianIntegers -> True} factors over \(\mathbb{Z}[i]\), as a Gaussian argument
+does automatically:
+
+\begin{codepairs}
+\pair{number-theory/factor-forms/1}{\(10!=2^{8}\,3^{4}\,5^{2}\,7\) in full.}
+\pair{number-theory/factor-forms/2}{At most three entries: \(5^{2}\) and \(7\) are kept,
+and \(2^{8}3^{4}=20736\) is merged into one.}
+\pair{number-theory/factor-forms/3}{A Gaussian integer factors over \(\mathbb{Z}[i]\) on its
+own: \(3+4i=(2+i)^{2}\).}
+\pair{number-theory/factor-forms/4}{\(5=-i\,(1+2i)(2+i)\). The unit comes first, then the
+primes in the first quadrant---the splitting of \S\ref{ssec:nt-primes}, made explicit.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{With \texttt{Method -> Automatic}, \mcode{FactorInteger} runs a
+cascade of tiers, cheapest first. Below \(2^{64}\) a separate word-size engine does
+everything in machine arithmetic, with no big-integer allocation: Montgomery
+multiplication, a deterministic Miller--Rabin test, Pollard rho, and a ``micro-ECM'' on
+Suyama curves, with Shanks' square forms (SQUFOF) as a backstop. Above \(2^{64}\) the
+tiers are trial division to \(2^{16}\), a perfect-power test, Pollard rho (Brent's
+variant), a light two-word ECM, a Fermat probe for near-square factors, one
+\(p-1\) pass, one \(p+1\) pass, and then ECM at increasing factor sizes of \(15\), \(20\),
+\(25\), \dots\ digits (through GMP-ECM). After every split both parts re-enter at the tier
+that succeeded, so a number rich in small factors keeps being peeled by the cheap
+tiers. Once the search effort spent---measured as the size of factor the earlier tiers
+would probably have found---reaches \(2/7\) of the composite's digit count, the point past
+which sieving is cheaper than searching on, a composite of up to \(100\)
+digits is handed to Mathilda's own self-initialising quadratic
+sieve\index{quadratic sieve!self-initialising}: a Knuth--Schroeppel multiplier, Gray-code switching between
+polynomials, a cache-sized block sieve, single large primes and, from \(72\) digits,
+double large primes combined by finding cycles in a graph, with block
+Lanczos\index{block Lanczos algorithm} for the \(\mathrm{GF}(2)\) linear algebra. The
+\mcode{Lehman}, \mcode{CFRAC} and \mcode{Dixon} methods are not part of the cascade; they
+are there to be called by name.}
+
+\calloutnote{Under the hood}{Every random choice in \mcode{FactorInteger}---rho constants, ECM
+curves, \(p+1\) seeds, sieve polynomials---comes from a generator seeded by \(n\)
+itself\index{factorization!deterministic seeding}, so the answer, the time it takes, and
+whether a hard number is left unfactored depend on \(n\) alone. The quadratic sieve from
+\(45\) digits, ECM above \(2^{160}\), and \(p+1\), CFRAC, Dixon and the rational base
+descent all spread their work across every core (up to sixteen threads), but the results
+of the workers are replayed in a fixed order, so the answer does not depend on the thread
+count either. \B{TimeConstrained} budgets are measured in elapsed time, and a parallel
+region checks the deadline often enough that an abort is taken promptly.}
+
+How fast is it? The table below is drawn from the shootout in the repository's
+\texttt{benchmarks/\allowbreak 98-factorinteger-shootout/\allowbreak REPORT.md}, run at version \(0.453\) on the
+same eight-core i9-9880H that built this book's transcripts. PARI/GP~2.17 and FLINT~3.6
+ran single-threaded; Mathilda used its threads, and ``---'' marks a run that timed out
+(600~s for PARI and FLINT; the reference-system column is from an earlier run with a
+120~s limit). Batch rows give the total for the whole group.
+
+\begin{center}
+\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Input & Mathilda & PARI/GP & FLINT & reference \\
+\midrule
+\(500\) semiprimes of \(63\) bits & \textbf{38 ms} & 154 ms & 126 ms & 585 ms \\
+\(20\) semiprimes of \(96\) bits & 77 ms & \textbf{40 ms} & 127 ms & 244 ms \\
+\(30\)-digit semiprime & 6.4 ms & \textbf{3.0 ms} & 6.2 ms & 62 ms \\
+\(50\)-digit semiprime & \textbf{76 ms} & 279 ms & 358 ms & 6.2 s \\
+\(60\)-digit semiprime & \textbf{0.61 s} & 3.2 s & 6.5 s & --- \\
+\(70\)-digit semiprime & \textbf{3.1 s} & 27 s & 27 s & --- \\
+\(80\)-digit semiprime & \textbf{32 s} & 494 s & 346 s & --- \\
+\(90\)-digit semiprime & \textbf{288 s} & --- & --- & --- \\
+\(25\)-digit factor by ECM & \textbf{3.2 s} & 188 s & 207 s & --- \\
+\(F_{8}=2^{256}+1\) & \textbf{0.19 s} & 0.84 s & 0.34 s & 0.98 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\calloutnote{Performance}{Two honest qualifications to that table. First, the threads:
+single-threaded, Mathilda's sieve still factors the \(60\)-digit case in about
+\(0.4\)~s against PARI's \(3.4\)~s, and the \(80\)-digit case in \(145\)~s against
+\(320\)--\(490\)~s, so the lead is algorithmic, not just parallel. Second, the rows it
+loses are the small ones, where fixed costs dominate: at \(30\) digits the cascade spends
+milliseconds on rho and ECM before it switches to the sieve, and on \(96\)-bit
+semiprimes a minority of inputs slip past the light ECM tier. Above all, the asymmetry
+between \S\ref{ssec:nt-primes} and this section is the whole point. Deciding that a
+\(300\)-digit number is composite takes milliseconds; producing its factors is, as far as
+anyone knows, infeasible. RSA (\S\ref{ssec:nt-rsa}) is exactly this gap, weaponised.}
+
+\subsection{Blake's rational base descent}
+\label{ssec:nt-rbd}
+
+The general-purpose methods are blind to structure, and the special-purpose ones each
+look for one particular kind. \emph{Rational base descent}\index{rational base descent}
+(RBD) is a special-purpose method of this second kind, devised by Sam Blake, the author of
+Mathilda~\cite{blake-rbd,blake-lattice-rbd}. Its target is a number \(n=PM\) whose
+\emph{larger} factor lies close to a power of a rational number,
+\[
+  P \approx c\left(\frac{a}{b}\right)^{k},\qquad a>b\ge1,\ \gcd(a,b)=1,
+\]
+with a modest coefficient \(c\); the smaller factor \(M\) can be anything. Primes of this
+shape are not something an honest key generator produces, but they are exactly what a
+careless or malicious one might, and the method also explains why integers with
+algebraic structure, such as \(2^{n}\pm1\), split along their algebraic factors.
+
+The idea is a descent. Start from \(Q=n\) and repeatedly divide by the base, discarding
+fractions:
+\[
+  Q \;\leftarrow\; \left\lfloor \frac{b\,Q}{a} \right\rfloor .
+\]
+After \(k\) steps the factor \(P\approx c(a/b)^{k}\) has been divided down to about \(c\),
+so \(Q\) has become approximately \(cM\)---an unknown multiple of the hidden factor. If it
+is close enough, then for some small offset \(j\) the gcd \(\gcd(Q-j,\,n)\) equals \(M\)
+(or \(M\gcd(c,P)\)), and the number is split. One descent passes through every depth, so
+it tests every exponent \(k\) and every coefficient \(c\) at once, in time polynomial in
+\(\log n\).
+
+\begin{codepairs}
+\pair{number-theory/rbd/1}{A planted instance: \(P\) is the first prime after
+\(3\,(22/7)^{150}\), a \(76\)-digit number.}
+\pair{number-theory/rbd/2}{The second factor \(M\) is an arbitrary \(30\)-digit
+prime, the first after \(7\cdot10^{29}\).}
+\pair{number-theory/rbd/3}{The defect \(\Delta=P-\lfloor c(a/b)^{k}\rfloor\) is only \(46\).}
+\pair{number-theory/rbd/4}{The product has \(105\) digits.}
+\pair{number-theory/rbd/5}{Told the base \(22/7\), the paper's reference descent
+(\mcode{Classic}) splits it instantly.}
+\pair{number-theory/rbd/6}{The default variant does not even need the base: it enumerates
+candidate bases and finds a working one in about ten milliseconds.}
+\pair{number-theory/rbd/7}{\texttt{Automatic} \mcode{FactorInteger} does not use RBD. Facing a
+\(30\)-digit factor of a \(105\)-digit number---too large for its sieve, a hard case
+for ECM---it is still searching when two seconds run out.}
+\end{codepairs}
+
+\calloutnote{Theory}{Why the descent lands near \(cM\): write each step as \(Q_{i}=(b/a)Q_{i-1}-\epsilon_{i}\)
+with \(\epsilon_{i}\in[0,1)\). Unrolling, \(Q_{k}=(b/a)^{k}n-E_{k}\) with
+\(0\le E_{k}<a/(a-b)\), a geometric series. Substituting \(n=PM\) and
+\(P=\lfloor c(a/b)^{k}\rfloor+\Delta\) gives
+\[
+  Q_{k}-cM \;=\; \Delta\left(\tfrac{b}{a}\right)^{k}M \;-\; \delta\left(\tfrac{b}{a}\right)^{k}M \;-\; E_{k},
+  \qquad \delta=\{c(a/b)^{k}\}\in[0,1).
+\]
+Blake's theorem~\cite{blake-rbd} follows by bounding the three terms: if \((a/b)^{k}>M\)
+and \(|\Delta|<(a/b)^{k}/M\), then \(|Q_{k}-cM|\le J=\lceil2+a/(a-b)\rceil\), so a window of
+\(2J+1\) gcds at each depth cannot miss. The same bound shows the structure must sit on
+the \emph{larger} factor, and that against a balanced RSA modulus the tolerance
+\((a/b)^{k}/M\) shrinks to about one, so an unstructured \(n\) needs on the order of
+\(\sqrt n\) candidate bases---no threat to RSA. The bases that work form a ``comb'' of
+isolated teeth\index{rational base descent!comb of bases} of relative width about
+\(1/(kM)\): nothing signals a nearby base, so bases are enumerated, breadth-first over the
+Stern--Brocot tree\index{Stern--Brocot tree}, which lists every positive rational once,
+coarse to fine.}
+
+The theorem's window is the method's weakness. For a balanced semiprime the tolerance is
+about one: if \(P\) misses \(c(a/b)^{k}\) by more than a few units, the descent's \(Q\) lands
+too far from \(cM\) and no gcd sees it. The companion paper~\cite{blake-lattice-rbd}
+replaces the gcd window by a \emph{lattice} detector: Howgrave-Graham's method for
+approximate common divisors\index{approximate common divisor}, which uses LLL lattice
+reduction\index{LLL lattice reduction} to recover \(cM\) from any \(Q\) within a distance
+\(X\approx n^{\beta^{2}}\) when \(M\ge n^{\beta}\). The next session plants a miss of
+almost \(2^{28}\) in a balanced \(60\)-digit semiprime:
+
+\begin{codepairs}
+\pair{number-theory/rbd-lattice/1}{\(P\) is now the first prime after
+\(3\,(22/7)^{59}+2^{28}\)---deliberately far from the power.}
+\pair{number-theory/rbd-lattice/2}{\(M\) is a prime of about the same size.}
+\pair{number-theory/rbd-lattice/3}{The \(60\)-digit product.}
+\pair{number-theory/rbd-lattice/4}{The miss \(Q_{59}-cM\) of the exact descent: about
+\(2.4\times10^{8}\), against a window of a few units.}
+\pair{number-theory/rbd-lattice/5}{So the classic descent fails and returns \(n\)
+unfactored.}
+\pair{number-theory/rbd-lattice/6}{The lattice variant runs one LLL reduction at each depth
+of the band where \(cM\) can lie, and finds it.}
+\pair{number-theory/rbd-lattice/7}{Knowing \(a/b\), \(c\) and \(k\) as well turns the search
+into a single detector call at \(\lfloor c(a/b)^{k}\rfloor\): this is Coppersmith-style
+factoring with the high bits of \(P\) known\index{Coppersmith's method}, here spelled with
+\texttt{Method} and a \texttt{"Variant"} suboption.}
+\end{codepairs}
+
+There are six variants, each selected by \texttt{"Variant" -> name} and each also a head
+of its own, \mcode{FactorInteger\textasciigrave BlakeRationalBaseDescent}\emph{Name}:
+
+\begin{itemize}
+\item \texttt{"Exact"} (the default) runs the descent on \(Sn\) for a power of two
+\(S\ge2a/(a-b)\), so the target always lies among four consecutive values whatever the
+base; it skips depths above \(\sqrt{c_{\max}n}\), where \(cM\) cannot lie, and batches
+its gcds into one per block of steps.
+\item \texttt{"Classic"} is the paper's reference algorithm, a gcd window of \(2J+1\)
+values at every depth.
+\item \texttt{"AllHits"} runs the descent to the end and refines every non-trivial gcd it
+meets into pairwise coprime divisors---the mode for Cunningham numbers \(b^{n}\pm1\) and
+repunits, whose base-\(b\) truncations inherit their algebraic factors.
+\item \texttt{"Lattice"} swaps the gcd window for the Howgrave-Graham detector.
+\item \texttt{"TwoPass"}, the papers' practical algorithm, is \texttt{"Exact"} over the
+enumerated bases followed by \texttt{"Lattice"} over a coarse grid of bases.
+\item \texttt{"Coppersmith"} takes a known base, coefficient and exponent and makes one
+detector call.
+\end{itemize}
+
+\calloutnote{Under the hood}{The descent core is a small, reentrant library over GMP, with
+FLINT's LLL when it is available and an exact native LLL otherwise. A many-base search
+runs blocks of \(2048\) bases on every thread, and a lattice base runs its depths two per
+thread; in both, the lowest-indexed success wins, so the answer does not depend on the
+thread count. Suboptions set the search: \texttt{"Base"} (one base or a list),
+\texttt{"Order"} (Stern--Brocot or by \(a+b\)), \texttt{"Height"} and \texttt{"Bases"}
+(the enumeration limits), \texttt{"MaxCoefficient"}, \texttt{"Multiplier"}, and the
+lattice parameters \texttt{"Tolerance"}, \texttt{"Beta"}, \texttt{"Dimension"} and
+\texttt{"Multiplicity"}. The method's \texttt{?} documentation, which is unusually long,
+explains each one. The repository's tests reproduce every example in the two papers; the
+papers' \(2048\)-bit challenge modulus is factored from scratch, with no base given, in
+about two minutes on sixteen threads.}
 
 \subsection{Arithmetic functions}
 \label{ssec:nt-arith}
@@ -259,7 +585,7 @@ prime is necessary, not sufficient.}
 \subsection{Modular arithmetic and congruences}
 \label{ssec:nt-modular}
 
-To work modulo \(n\) is to care only about remainders. \B{Mod} (met in
+To work modulo \(n\) is to care only about remainders. \mcode{Mod} (met in
 \S\ref{sec:arithmetic}, and always returning a residue with the sign of the modulus) is
 the entry point; the number-theoretic weight sits in what you can do inside a modulus. The
 first essential is fast modular exponentiation, because forming a huge power and
@@ -471,6 +797,14 @@ above.}
 needs \(101\) bits, the leading one plus a hundred zeros.}
 \end{codepairs}
 
+Not every positional-looking notation is positional. \B{FromDigits} also reads Roman
+numerals\index{Roman numerals}, an additive system with subtractive pairs (\texttt{IV},
+\texttt{XC}) rather than a base:
+
+\begin{codepairs}
+\pair{number-theory/digits/13}{\(\mathrm{MMXXVI}=1000+1000+10+10+5+1=2026\).}
+\end{codepairs}
+
 \usagebox{IntegerDigits}
 
 \subsection{Combinatorial number theory}
@@ -502,7 +836,13 @@ fast that its exact evaluation is a small miracle of analysis:
 \pair{number-theory/combinatorial/9}{\(p(1000)\), a \(32\)-digit integer computed exactly.}
 \pair{number-theory/combinatorial/10}{\B{PartitionsQ} counts partitions into
 \emph{distinct} parts.}
+\pair{number-theory/combinatorial/15}{A length specification restricts the parts: there
+are \(7153\) ways to write \(100\) as a sum of exactly four positive integers.}
 \end{codepairs}
+
+\noindent That last count is answered by listing, but not by building every partition and
+filtering: \mcode{IntegerPartitions} walks the restricted partitions directly, so the
+list above costs about two milliseconds.
 
 Finally the Fibonacci and Lucas numbers, the archetypal integer sequences:
 
@@ -586,6 +926,8 @@ reappear as the engine behind Pell. The polynomial \B{Factor} of \S\ref{sec:alge
 algebraic mirror of \B{FactorInteger}, square-free decomposition and Hensel lifting
 standing in for trial division and rho. And the integer-valued special functions that shade
 number theory into analysis---\B{BernoulliB}, \B{Zeta}, and their kin---await in
-\S\ref{sec:specialfns}. Underneath every result here is GMP, and the same exact integers
+\S\ref{sec:specialfns}, including the Dirichlet characters and \(L\)-functions of
+\S\ref{ssec:sf-dirichlet}, where the residue classes of \S\ref{ssec:nt-modular} become
+analytic objects. Underneath every result here is GMP, and the same exact integers
 feed the compiler of Chapter~\ref{ch:compilation} when a number-theoretic loop needs to run
 at machine speed.

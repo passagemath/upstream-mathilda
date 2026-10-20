@@ -15,10 +15,12 @@ The theme of the chapter is precisely this tension---one uniform data model on t
 invisible acceleration beneath---and how Mathilda keeps the two from ever
 contradicting each other.
 
-We build up in four steps. First the expression tree itself: head and arguments,
+We build up in five steps. First the expression tree itself: head and arguments,
 atoms and compounds, and the tools that read a value's shape. Then lists---the
 workhorse aggregate---their parts, spans, and the newer array operations. Then
-associations, the key--value store. And finally the packed-array substrate, where
+associations, the key--value store. Then strings, the one atom with an internal
+structure of its own, and the pattern language that takes them apart. And finally
+the packed-array substrate, where
 most of the chapter's ``under the hood'' weight lies, because that is where a
 transparent list quietly becomes a C buffer and back again.
 
@@ -431,6 +433,264 @@ rules, collecting clashing keys before it reduces---so it doubles as a grouping 
 
 \usagebox{Association}
 
+\section{Strings and string patterns}
+\label{sec:ds-strings}
+
+Text is data too: a configuration file, a log line, the words of a document. A
+\emph{string}\index{string} in Mathilda is an atom---head \texttt{String}, no parts
+for \mcode{Part} to descend into---and that is the right model for the evaluator,
+which treats \texttt{"Hello"} as a single value exactly as it treats \(42\). But a
+string plainly \emph{has} internal structure, a sequence of characters, and a whole
+family of functions reaches inside it. This section covers the everyday operations,
+then the pattern language that generalizes them, and closes by turning a page of raw
+text into an association.
+
+\subsection{The basic operations}
+\label{ssec:ds-string-basics}
+
+\B{StringLength} counts characters; \B{StringTake} cuts a piece out by position,
+with the same positive-from-the-front, negative-from-the-back conventions as
+\mcode{Part}; \B{StringJoin}, written \texttt{<>}, concatenates; and
+\B{StringSplit} breaks a string into a list of pieces.
+
+\begin{codepairs}
+\pair{06-data-structures/strings/1}{A string to work with.}
+\pair{06-data-structures/strings/2}{It is an atom, its head is \texttt{String}, and
+\mcode{StringLength} counts its twelve characters, the comma and space included.}
+\pair{06-data-structures/strings/3}{\mcode{StringTake} with \(5\) takes the first five
+characters.}
+\pair{06-data-structures/strings/4}{With \(-5\), the last five.}
+\pair{06-data-structures/strings/5}{\texttt{<>} is \mcode{StringJoin}: plain
+concatenation, any number of pieces.}
+\pair{06-data-structures/strings/6}{With one argument \mcode{StringSplit} splits at runs
+of whitespace, so the double space yields no empty piece.}
+\pair{06-data-structures/strings/7}{With an explicit delimiter every occurrence
+counts, and the empty field between the two commas is kept.}
+\end{codepairs}
+
+The editing operations each return a new string---a string, being an atom, is never
+modified in place. \B{StringReplace} rewrites by rules, \B{ToUpperCase} maps case,
+\B{Characters} explodes a string into a list of one-character strings, and
+\B{StringRiffle} goes the other way, joining a list with a separator.
+
+\begin{codepairs}
+\pair{06-data-structures/strings/8}{\mcode{StringReplace} takes a rule (or a list of
+them) and rewrites every match.}
+\pair{06-data-structures/strings/9}{\mcode{ToUpperCase} maps every letter; the
+punctuation passes through.}
+\pair{06-data-structures/strings/10}{\mcode{Characters} gives the list view of a string,
+the bridge to every list operation of \S\ref{sec:ds-lists}.}
+\pair{06-data-structures/strings/11}{\B{StringReverse} reverses by character.}
+\pair{06-data-structures/strings/12}{\mcode{StringRiffle} interleaves a separator
+between the elements of a list and joins the result.}
+\end{codepairs}
+
+The last pair of tools crosses the boundary between text and expressions.
+\B{ToString} renders any expression as the string you would see printed, and
+\B{ToExpression} parses a string back into an expression \emph{and evaluates
+it}\index{string!round trip with expressions}---so a string can carry a whole
+computation.
+
+\begin{codepairs}
+\pair{06-data-structures/strings/13}{\mcode{ToString} gives the printed form, as a
+string: the canonical order \(1 + x^2\), not the order typed.}
+\pair{06-data-structures/strings/14}{\mcode{ToExpression} parses it back into the
+polynomial.}
+\pair{06-data-structures/strings/15}{Parsing is followed by evaluation, so a string
+holding a \mcode{Sum} comes back as \(5050\).}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\mcode{ToString} uses \texttt{OutputForm} by default, the same
+form the REPL prints, so a string inside the expression loses its quotation marks:
+\mcode{ToString[\{"a"\}]} is the three-character string \texttt{\{a\}}. For a string
+that \mcode{ToExpression} can read back exactly, ask for
+\mcode{ToString[expr, InputForm]}. And because \mcode{ToExpression} evaluates what it
+parses, it should never be fed text from a source you do not trust.}
+
+\subsection{String patterns}
+\label{ssec:ds-string-patterns}
+
+A literal search string is the simplest pattern, but most text-processing questions
+are about \emph{kinds} of text: a run of digits, a word, whatever lies between two
+brackets. Mathilda answers them with \emph{string patterns}\index{string!patterns},
+built from the same pieces as the expression patterns of
+\S\ref{sec:prog-patterns}. A \B{StringExpression}, written \texttt{\textasciitilde\textasciitilde},
+concatenates pieces; character classes such as \mcode{DigitCharacter},
+\mcode{LetterCharacter}, \mcode{WordCharacter}, and \mcode{Whitespace} stand for
+families of characters; \texttt{p..} repeats; and the blanks \texttt{\_},
+\texttt{\_\_}, \texttt{\_\_\_} match one, one-or-more, and zero-or-more characters.
+\B{StringCases} extracts every match, and \B{StringMatchQ} asks whether the whole
+string matches.
+
+\begin{codepairs}
+\pair{06-data-structures/string-patterns/1}{\texttt{DigitCharacter..} is a run of
+one or more digits; \mcode{StringCases} returns each maximal run.}
+\pair{06-data-structures/string-patterns/2}{\mcode{Whitespace} is any run of
+spaces, so this collapses irregular spacing to single blanks.}
+\pair{06-data-structures/string-patterns/3}{\mcode{StringMatchQ} tests the
+\emph{whole} string: all letters, so \texttt{True}.}
+\end{codepairs}
+
+Naming a piece---\texttt{x\_\_}, or \texttt{x:\,p} for any pattern
+\(p\)---captures the text it matched, and a delayed rule \texttt{:>} can use that name
+on its right-hand side. This is where string patterns earn their keep: they do not
+just find text, they take it apart\index{string!named captures}.
+
+\begin{codepairs}
+\pair{06-data-structures/string-patterns/4}{\texttt{x\_\_} binds whatever precedes
+\texttt{"123"}, and the rule returns just that piece.}
+\pair{06-data-structures/string-patterns/5}{Three named digit runs, reassembled in a
+new order: an ISO date rewritten day-first.}
+\pair{06-data-structures/string-patterns/6}{A blank sequence is \emph{greedy}: it
+runs to the \emph{last} \texttt{">"} it can reach, swallowing both tags.}
+\pair{06-data-structures/string-patterns/7}{\B{Shortest} makes it lazy, so each
+match stops at the first closing bracket. (\B{Longest} names the greedy
+default.)}
+\pair{06-data-structures/string-patterns/8}{A name used twice must match the
+\emph{same} text both times: \texttt{x\_ \textasciitilde\textasciitilde\ x\_} finds
+doubled letters.}
+\pair{06-data-structures/string-patterns/11}{A condition \texttt{/;} filters the
+matches to runs of digits that are prime, but it also accepts the \(2\) inside
+\(42\), which was not one of the numbers.}
+\pair{06-data-structures/string-patterns/12}{Anchoring each run between
+\mcode{WordBoundary}s makes the condition see whole numbers only, so the stray
+\(2\) is gone.}
+\end{codepairs}
+
+The \(2\) in the first of those last two pairs is not a bug; it is backtracking doing
+its job. When \(42\) fails the primality test, the engine is entitled to try a
+shorter run starting one character later, and \texttt{"2"} passes. A condition
+constrains which matches are accepted, not where they may start---so if the
+\emph{units} of a match matter, say so in the pattern itself.
+
+When the pattern vocabulary runs out, \B{RegularExpression} drops into raw
+regular-expression syntax, and only there do \texttt{"\$1"}-style group references
+work on the right-hand side. A rule whose right-hand side is not a string makes
+\mcode{StringReplace} return a \mcode{StringExpression}---the string with a symbolic
+hole in it.
+
+\begin{codepairs}
+\pair{06-data-structures/string-patterns/9}{\mcode{RegularExpression} with a capture
+group; \texttt{"\$1"} names the group's text.}
+\pair{06-data-structures/string-patterns/10}{Replacing \texttt{"b"} by the symbol
+\(z\) cannot give a string, so the result is a \mcode{StringExpression}, printed
+with \texttt{\textasciitilde\textasciitilde}.}
+\end{codepairs}
+
+\usagebox{StringCases}
+
+\calloutnote{Under the hood}{There is no separate string-matching engine in
+Mathilda. One translator (\texttt{src/strings/regex/string\_pattern.c}) compiles a
+string pattern into the source of a PCRE2 regular expression, and every pattern
+function---\mcode{StringCases}, \mcode{StringReplace}, \mcode{StringSplit},
+\mcode{StringMatchQ}, \mcode{StringPosition}, \mcode{StringCount},
+\mcode{StringContainsQ}, and the rest---shares it, so a construct added there
+becomes available to all of them at once. The mapping is direct:
+\texttt{\textasciitilde\textasciitilde} is concatenation, \texttt{|} an alternation,
+\texttt{p..} becomes \texttt{(?:p)+}, \texttt{\_\_} becomes \texttt{.+},
+\mcode{Shortest} switches the quantifiers to their lazy forms, and a named piece
+\texttt{x:\,p} becomes a capture group. A name's \emph{second} occurrence is emitted
+as a backreference to that group, which is exactly why \texttt{x\_
+\textasciitilde\textasciitilde\ x\_} means ``the same character twice.'' The
+translator keeps a table from group numbers to names, and after a match the captured
+texts are bound to those names and the rule's right-hand side is evaluated with them
+in scope---the step that makes \texttt{:> x} return the piece rather than the whole
+match. A \texttt{/;} condition or a \texttt{?test} cannot be expressed as a regular
+expression at all: it needs Mathilda to evaluate code in the middle of a match. PCRE2
+\emph{callouts} provide exactly that hook, and a callout that answers ``no'' makes the
+regex engine backtrack and try the next alternative---the behavior you saw with the
+primes. Compiling a pattern (translation, \texttt{pcre2\_compile}, then a JIT pass) is
+the expensive step, so compiled rule sets are kept in a 64-entry least-recently-used
+cache keyed by the pattern's structural hash. A pattern applied to forty thousand
+separate strings is compiled once. A pattern the translator does not understand
+leaves the call unevaluated rather than guessing.}
+
+\calloutnote{Performance}{The cache is what makes the common idiom of mapping one
+pattern over many strings cheap. On this build, forty thousand separate
+\mcode{StringMatchQ} calls with the same pattern take about \(40\) milliseconds---one
+microsecond each, nearly all of it evaluator overhead rather than matching---and the
+listable form \mcode{StringMatchQ[list, p]}, which skips that overhead, about
+\(7\). The commit that introduced the cache recorded the mapped form at \(556\)
+milliseconds beforehand.}
+
+\subsection{Characters, not bytes}
+\label{ssec:ds-string-unicode}
+
+Mathilda stores a string as UTF-8, in which a Greek letter occupies two bytes and
+many other characters three or four. Every string function nonetheless counts and
+indexes \emph{characters}\index{string!Unicode characters}---Unicode code points---so
+the byte encoding never shows. Named characters are typed with the
+\texttt{\textbackslash[\emph{Name}]} escape\index{named character}, and a code point
+by number with \texttt{\textbackslash:\emph{hhhh}}.
+
+\begin{codepairs}
+\pair{06-data-structures/string-unicode/1}{The string \(\alpha\beta\gamma\), typed
+with named-character escapes.}
+\pair{06-data-structures/string-unicode/2}{Three characters---although the string
+occupies six bytes.}
+\pair{06-data-structures/string-unicode/3}{\B{ToCharacterCode} gives the code points,
+U+03B1 to U+03B3.}
+\pair{06-data-structures/string-unicode/4}{Indexing is by character too: the second
+character is \(\beta\), not the second byte of \(\alpha\).}
+\pair{06-data-structures/string-unicode/5}{Case mapping is full Unicode:
+\(\alpha\beta\gamma\) becomes \(\mathrm{A}\mathrm{B}\Gamma\), code points 913--915.}
+\pair{06-data-structures/string-unicode/6}{The two escapes and
+\B{FromCharacterCode} all denote the same one-character string.}
+\pair{06-data-structures/string-unicode/7}{An accented letter is one character:
+\texttt{caf\'e} has length four.}
+\pair{06-data-structures/string-unicode/8}{And the pattern classes are Unicode-aware:
+Greek letters are \mcode{LetterCharacter}s.}
+\end{codepairs}
+
+\calloutnote{Under the hood}{The character view lives in
+\texttt{src/strings/utf8.c}. A string that is pure ASCII---detected a machine word at
+a time---is indexed by plain byte arithmetic, so the common case costs nothing extra;
+otherwise the helpers walk the UTF-8 sequences to translate a character position into
+a byte offset. A byte that does not begin a valid sequence counts as one character on
+its own, so malformed input is never split mid-character and round-trips unchanged.
+The regular-expression side is put in the same frame by compiling every pattern in
+PCRE2's UTF and Unicode-property modes, which is what makes \mcode{LetterCharacter}
+match \(\alpha\) and \texttt{IgnoreCase -> True} fold Greek as well as Latin.}
+
+\subsection{Worked example: from text to data}
+\label{ssec:ds-string-worked}
+
+The pieces combine naturally with the associations of \S\ref{sec:ds-associations}.
+First, a small configuration file: drop the comment lines, then let one pattern with
+two named pieces turn each \texttt{key = value} line into a rule.
+
+\begin{codepairs}
+\pair{06-data-structures/string-worked/1}{The raw text, with inconsistent spacing
+and a comment line.}
+\pair{06-data-structures/string-worked/2}{Split into lines and keep those that do not
+start with \texttt{\#}.}
+\pair{06-data-structures/string-worked/3}{\mcode{StringCases} threads over the list of
+lines; the pattern binds the key \(k\) and the value \(v\), optional whitespace
+around the \texttt{=} is absorbed, and the rules become an \mcode{Association}.}
+\pair{06-data-structures/string-worked/4}{Lookup by name. The value is still text, the
+string \texttt{"8080"}.}
+\pair{06-data-structures/string-worked/5}{\mcode{ToExpression} turns the text into a
+number you can compute with.}
+\end{codepairs}
+
+Second, word frequencies. Extract the runs of word characters, which discards
+punctuation for free, normalize case, and let \mcode{Counts} build the frequency table.
+
+\begin{codepairs}
+\pair{06-data-structures/string-worked/6}{A sentence with punctuation and mixed case.}
+\pair{06-data-structures/string-worked/7}{The tokens: every run of word characters,
+lower-cased.}
+\pair{06-data-structures/string-worked/8}{\mcode{Counts} turns the tokens into an
+association from word to frequency, in order of first appearance.}
+\pair{06-data-structures/string-worked/9}{\mcode{Select} on an association filters by
+value, keeping the words that occur more than once.}
+\end{codepairs}
+
+Both halves have the same shape: a string pattern does the parsing, and an
+association holds the result. That division of labor is the general recipe for text
+processing in Mathilda---patterns to take text apart, the structural data types of
+this chapter to hold what comes out.
+
 \section{NDArrays and packed arrays}
 \label{sec:ds-packed}
 
@@ -532,6 +792,57 @@ but the identical-looking literal \(\{1., 2., 3., 4.\}\) does not. Packing is op
 per producer, and a hand-written literal has no producer to opt in. A threshold of
 four elements (the size of a \(2\times2\) matrix, so that any matrix packs) keeps the
 mechanism from paying its own overhead on tiny lists.
+
+\subsection{Complex buffers}
+\label{ssec:ds-complex}
+
+Reals and integers are not the only machine numbers. A list of machine complex
+numbers packs to a \texttt{"complex64"}\index{data type!complex64} buffer---two
+doubles per element, real and imaginary parts interleaved---and \B{RandomComplex}
+writes one directly, just as \B{RandomReal} writes a \texttt{"float64"} buffer. The
+exactness contract decides the borderline cases exactly as it did for integers and
+reals.
+
+\begin{codepairs}
+\pair{06-data-structures/packing-complex/1}{A thousand random points in the square
+\([-1,1]^2\) of the complex plane.}
+\pair{06-data-structures/packing-complex/2}{\B{RandomComplex} filled a packed
+\texttt{"complex64"} buffer.}
+\pair{06-data-structures/packing-complex/3}{A \mcode{Table} whose body is a machine
+complex number builds \texttt{c}.}
+\pair{06-data-structures/packing-complex/4}{It packs the same way, into a
+\texttt{"complex64"} buffer.}
+\pair{06-data-structures/packing-complex/5}{Element-wise functions keep it packed:
+\(e^{ic}\) is computed on the buffer.}
+\pair{06-data-structures/packing-complex/6}{One \emph{real} element among the complex
+ones and the list stays unpacked---storing \(3.\) as \(3.+0.\,i\) would change its
+head from \texttt{Real} to \texttt{Complex}.}
+\pair{06-data-structures/packing-complex/7}{Exact Gaussian integers \(k+i\) do not
+pack either; a machine buffer would make them inexact.}
+\end{codepairs}
+
+\calloutnote{Performance}{Before complex lists packed, every complex array fell to
+the element-by-element interpreter path even where a machine kernel existed. On this
+build, \mcode{Sin} of a million random complex numbers takes about \(7\) milliseconds on
+the \texttt{"complex64"} buffer and about \(1.8\) seconds on the same values unpacked
+with \mcode{FromPackedArray}---two orders of magnitude (the ratio varies between runs, from about \(170\) to \(270\) here), with bit-identical results.}
+
+The same buffers feed the special functions of several arguments. A listable
+function such as \B{Hypergeometric2F1} or \B{LerchPhi} maps a packed array in a single
+pass \emph{whichever} argument the array occupies, and returns a packed result whose
+values equal those of the boxed list.
+
+\begin{codepairs}
+\pair{06-data-structures/packing-complex/8}{Ten packed sample points.}
+\pair{06-data-structures/packing-complex/9}{The array as the last argument of
+\({}_2F_1(1,2;3;x)\): the result stays packed.}
+\pair{06-data-structures/packing-complex/10}{As the first argument of
+\(\Phi(x,2,1)\): packed again.}
+\pair{06-data-structures/packing-complex/11}{Even as a \emph{parameter}, \({}_2F_1(x,2;3;\tfrac12)\)
+maps over the buffer.}
+\pair{06-data-structures/packing-complex/12}{And the buffer answers agree with calling
+the function on each element in turn.}
+\end{codepairs}
 
 \subsection{The visible NDArray}
 \label{ssec:ds-visible}
@@ -635,7 +946,8 @@ rule engine of Chapter~\ref{ch:programming} possible: a pattern is an expression
 rule is an expression, and matching one tree against another is the single mechanism
 behind \B{Map}, \B{Cases}, \B{ReplaceAll}, and every definition you write. The
 levelspecs and structural operators introduced here reappear there as the working
-vocabulary of functional programming. Associations are the natural output of the
+vocabulary of functional programming, and the string patterns of
+\S\ref{sec:ds-strings} are that same pattern language turned on text. Associations are the natural output of the
 grouping and counting that descriptive statistics (\S\ref{sec:statistics}) runs on,
 and their \(O(1)\) keyed store underlies any code that indexes data by name. The
 packed-array substrate of \S\ref{sec:ds-packed} is where numeric Mathilda gets its

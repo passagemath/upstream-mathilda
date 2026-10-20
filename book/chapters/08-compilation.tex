@@ -219,8 +219,10 @@ compilable.}
 \pair{08-compilation/cliff/3}{The same over arrays: \B{Total} lowers, but
 \B{Riffle} does not, so \(\mathtt{Total}[\mathtt{Riffle}[v, 0.]]\) does not
 compile at all.}
-\pair{08-compilation/cliff/4}{And an integer body: \B{MoebiusMu} has no machine
-lowering, so it sinks the sum with \B{EulerPhi} regardless of the latter.}
+\pair{08-compilation/cliff/4}{An integer body: \B{EulerPhi} lowers on its own, to a
+machine kernel over \texttt{int64}.}
+\pair{08-compilation/cliff/5}{Add \B{PrimeOmega}, which has no machine lowering, and it
+sinks the sum, \mcode{EulerPhi} with it.}
 \end{codepairs}
 
 The lesson is a workflow. When a numeric loop is slower than you expected, do not
@@ -237,6 +239,36 @@ cliff can only ever recede. When an auto-compiled builtin
 (\S\ref{sec:compile-auto}) falls back, setting the environment variable
 \texttt{MATHILDA\_COMPILE\_DIAG=1} makes it name the head that forced it, on
 standard error.}
+
+The frontier does move, and quickly.\index{compilation!compilable subset!growth} The
+number-theoretic functions---\B{MoebiusMu}, \mcode{EulerPhi}, \B{PrimeQ},
+\B{DivisorSigma}, \B{PartitionsP} and \B{PartitionsQ}, \B{JacobiSymbol}, \B{PowerMod},
+\B{IntegerExponent}, \mcode{PrimePowerQ}---now lower to machine-integer instructions,
+each built on the same \texttt{int64} helpers as the interpreter's packed-array
+path, so a compiled answer is the interpreted one. \B{Chop} and \B{Clip}, which once
+compiled only on a scalar, now lower over a rank-1 array too. And the special
+functions of several arguments---\B{LerchPhi}, \B{Hypergeometric2F1} and its
+siblings, the Nielsen \B{PolyLog}, the Whittaker functions---accept the array in
+\emph{any} operand position, not only the last, with up to 24 operands in one call.
+
+\begin{codepairs}
+\pair{08-compilation/frontier/1}{Three multiplicative functions in one integer body:
+all compile.}
+\pair{08-compilation/frontier/2}{A Fermat-test shape---a primality check, a modular
+power, a Jacobi symbol---compiles to a single integer program, branch and all.}
+\pair{08-compilation/frontier/3}{\mcode{Chop} and \mcode{Clip} chained over a rank-1
+array, then summed: the whole pipeline lowers, to a scalar \texttt{Real} result.}
+\pair{08-compilation/frontier/4}{The array may sit in the \emph{first} parameter of
+\({}_2F_1(a,b;c;z)\); the result is an array of the same length.}
+\pair{08-compilation/frontier/5}{Compile a vectorised Lerch transcendent with the
+array as its first argument.}
+\pair{08-compilation/frontier/6}{The compiled function agrees with the interpreter's
+listable evaluation not merely numerically but bit for bit (\mcode{SameQ}).}
+\end{codepairs}
+
+\noindent
+The cliff is still there---\mcode{PrimeOmega} has not crossed it---but every head that
+crosses takes every body containing it along.
 
 \section{Auto-compilation}
 \label{sec:compile-auto}

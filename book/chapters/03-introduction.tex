@@ -574,6 +574,17 @@ the Euler--Mascheroni constant $\gamma$.}
 recovered numerically.}
 \end{codepairs}
 
+Optimization comes in both flavours. \B{NMinimize} and \B{FindMinimum} search
+numerically; \B{Minimize} solves a polynomial problem exactly and proves the
+answer is the global minimum:
+
+\begin{codepairs}
+\pair{03-introduction/minimize/1}{The point of the disk of radius 1 about
+\((2,3)\) nearest the origin. The squared distance is
+\((\sqrt{13}-1)^2 = 14 - 2\sqrt{13}\), exactly.}
+\end{codepairs}
+
+Chapter~\ref{ch:optimization} treats both kinds of optimizer in depth.
 Section~\ref{sec:numcalc} covers numerical differentiation, integration, summation,
 differential equations, and limits.
 

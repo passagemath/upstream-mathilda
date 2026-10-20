@@ -1,0 +1,11 @@
+# Simplify under assumptions: conditional identities proved on a region
+Simplify[Abs[x - 2], 0 < x < 1]
+Simplify[Abs[x - 2], 0 < x < 3]
+Simplify[ArcCos[1 - 2 x^2], 0 < x < 1]
+Simplify[(-1)^(n^2), Element[n, Integers]]
+Simplify[Floor[n/2] + Ceiling[n/2], Element[n, Integers]]
+Simplify[GCD[n, n + 1], Element[n, Integers]]
+Simplify[LegendreP[n, -1], Element[n, Integers]]
+Simplify[Sin[x + 2 n Pi + Pi], Element[n, Integers]]
+Refine[Sqrt[1 + b^2/a^2], a > 0]
+Abs[Pi - 4]

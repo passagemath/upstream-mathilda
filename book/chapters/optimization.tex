@@ -4,10 +4,16 @@
 Section~\ref{ssec:optimization} gave a short tour of optimization in Mathilda.
 It minimized Rosenbrock's function, solved one constrained problem, and let
 differential evolution find the bottom of Rastrigin's egg carton. This chapter
-goes further. It is about the algorithms behind the four optimizers
-\B{FindMinimum}, \B{FindMaximum}, \B{NMinimize}, and \B{NMaximize}: what each
-one computes, why it works, when it fails, and how to tell the difference at
-the prompt.
+goes further. Mathilda has two kinds of optimizer. The exact pair \B{Minimize}
+and \B{Maximize} treat a polynomial (or piecewise, radical, or rational)
+problem as algebra: they return the optimum in closed form, as an integer, a
+fraction, a radical, or a \B{Root} object, and they prove that it is global.
+The four numerical optimizers \B{FindMinimum}, \B{FindMaximum}, \B{NMinimize},
+and \B{NMaximize} work with any objective you can evaluate, but they return
+floating-point numbers and prove nothing. Section~\ref{sec:opt-exact} covers
+the exact engine. The rest of the chapter is about the algorithms behind the
+four numerical ones: what each one computes, why it works, when it fails, and
+how to tell the difference at the prompt.
 
 Optimization asks for the smallest (or largest) value of a function, and for the
 point where it occurs. That single question covers a surprising amount of
@@ -23,7 +29,8 @@ method is introduced with the idea that makes it work. Brent's method rests on
 the golden ratio, BFGS on the secant condition, differential evolution on its
 mutation rule, and the penalty method on hidden Lagrange multipliers. The second is
 honesty about what a numerical optimizer can promise. A local method finds a
-local minimum. A global method searches harder but proves nothing. A
+local minimum. A global method searches harder but proves nothing; only the
+exact engine proves, and it declines when it cannot. A
 constrained answer must satisfy its constraints, and Mathilda refuses to return
 one that does not. The third is speed. The optimizers compile the objective to
 bytecode before they search, and the benchmarks at the end of the chapter show
@@ -77,8 +84,7 @@ the objective, or a list \mcode{\{f, cons\}} of an objective and its
 constraints. The second argument names the variables. \B{FindMinimum} pairs
 each variable with a starting value, as in \mcode{\{x, 2\}}. \B{NMinimize}
 takes the bare variables and searches a region. Both return
-\mcode{\{fmin, \{x -> xmin, \ldots\}\}}.
-
+\mcode{\{fmin, \{x -> xmin, \ldots\}\}}.%
 \calloutnote{Theory}{There is no general algorithm that finds the global
 minimum of an arbitrary continuous function using finitely many function
 values. Between any two samples the function could dip arbitrarily low, and no
@@ -101,7 +107,7 @@ constraints & boxes, smooth inequalities and equalities & also \mcode{Or} and in
 answer & a local optimum & the best optimum found \\
 \bottomrule
 \end{tabular}
-\caption{The four optimizers.}
+\caption{The four numerical optimizers.}
 \label{tab:opt-four}
 \end{table}
 
@@ -109,6 +115,285 @@ The maximizers are thin wrappers. \B{FindMaximum}\mcode{[f, ...]} calls
 \B{FindMinimum}\mcode{[-f, ...]} and negates the value it gets back, and
 \B{NMaximize} does the same with \B{NMinimize}. Everything this chapter says
 about minimization therefore applies to maximization with the sign reversed.
+
+\section{Exact optimization: Minimize and Maximize}
+\label{sec:opt-exact}
+
+A local method knows one valley and a global search samples many, but neither
+can \emph{prove} that its answer is the global minimum. For a large and useful
+class of problems there is a third kind of answer: a proof. When the objective
+and the constraints are polynomials, or close relatives of polynomials, the
+question ``is \(v\) the smallest value of \(f\) on this region?'' is a statement
+about real algebraic sets, and real algebra can decide it. \B{Minimize} and
+\B{Maximize} do exactly that. They are the exact
+optimizers\index{exact optimization}: they take the same arguments as
+\B{NMinimize}, return the same \mcode{\{fmin, \{x -> xmin, \ldots\}\}} pair, and
+put exact numbers in it.
+
+\begin{codepairs}
+\pair{optimization/exact/1}{A quadratic. The vertex \(x = 3/4\) and the value
+\(31/8\) come back as fractions, not as \(0.75\) and \(3.875\).}
+\pair{optimization/exact/2}{\B{Maximize} is the mirror image. The largest
+rectangle with perimeter 20 is the \(5\times5\) square.}
+\pair{optimization/exact/3}{A sextic with five local extrema. The global minimum
+sits at the midpoint of the two innermost roots, \(4\) and \(7\).}
+\pair{optimization/exact/4}{The critical points of \(x^4 - 3x^2 + x\) are the
+roots of the cubic \(4x^3 - 6x + 1\). The minimizer is its smallest root, a
+\B{Root} object, and the value is written in terms of it.}
+\pair{optimization/exact/5}{\B{RootReduce} collapses the value to a single
+algebraic number: the smallest root of another cubic.}
+\pair{optimization/exact/6}{\mcode{N} turns both into the same numbers
+\B{FindMinimum} found from \(x = -1\) in \S\ref{sec:opt-brent}.}
+\pair{optimization/exact/7}{A flat valley. The value \(1\) is attained along the
+whole hyperbola \(xy = 3\); the answer names one point on it.}
+\end{codepairs}
+
+\usagebox{Minimize}
+
+The \mcode{Root} answer is not an evasion. The cubic \(4x^3 - 6x + 1\) has no
+rational roots and three real ones, which is the \emph{casus
+irreducibilis}\index{casus irreducibilis}: Cardano's formula for its roots
+passes through complex cube roots, and no formula in real radicals exists.
+\mcode{Root[1 - 6 \#1 + 4 \#1\^{}3 \&, 1]}, ``the smallest real root of this
+cubic'', is the honest closed form, and it is exact: it can be compared,
+reduced, and evaluated to any number of digits.
+
+\subsection{How a minimum is proved}
+\label{ssec:opt-exact-method}
+
+In one variable the method is the one from a first calculus course. Solve
+\(f'(x) = 0\) exactly, compare \(f\) at the real roots, and read the behaviour at
+infinity off the degree and the leading coefficient: an odd degree, or an even
+degree with a negative leading coefficient, is unbounded below. The comparison is
+exact too. Two values such as \(14 - 2\sqrt{13}\) and a \mcode{Root} object are
+ordered by an algebraic-number sign test, never by rounding.
+
+In several variables the candidates are the solutions of the
+\emph{first-order conditions}\index{exact optimization!first-order conditions}.
+Without constraints that is \(\nabla f = 0\), solved over the reals by \B{Solve}.
+With constraints \(g_i(x) \le 0\) and \(h_j(x) = 0\), Mathilda enumerates
+\emph{active sets}\index{exact optimization!active set}: for each choice of
+inequalities assumed to hold with equality, it solves the Lagrange system
+\[
+  \nabla f = \sum_{i\ \text{active}} \lambda_i \nabla g_i
+           + \sum_j \mu_j \nabla h_j, \qquad
+  g_i = 0\ (i\ \text{active}), \qquad h_j = 0,
+\]
+keeps the solutions that satisfy every constraint, and takes the least value.
+These are the Karush--Kuhn--Tucker (KKT)\index{Karush--Kuhn--Tucker conditions}
+conditions, solved exactly instead of iteratively.
+
+The least candidate is not yet the answer. First-order conditions are
+necessary, not sufficient, so the engine finishes with a
+\emph{certificate}\index{exact optimization!certificate}: it asks
+\B{Reduce} to decide the sentence
+\(\forall x\,(\text{constraints} \Rightarrow f(x) \ge v)\) over the reals. Only a
+\mcode{True} from that decision procedure turns the candidate \(v\) into the
+reported minimum.
+
+\calloutnote{Theory}{Why a certificate? The cubic \(x^3 - x\) has a perfectly
+good local minimum at \(x = 1/\sqrt3\), and the first-order conditions find it.
+It is not a global minimum, because the function falls without bound to the
+left, and nothing in the list of critical points says so. A sentence of the
+form \(\forall x\,(f(x) \ge v)\) is decided by real quantifier elimination
+through cylindrical algebraic decomposition (\S\ref{ssec:alg-reduce}); Tarski
+proved that every such polynomial sentence over the reals is decidable. When the feasible
+region is compact, a cheaper argument suffices: by the extreme-value theorem a
+continuous function attains its minimum there, so the least of a
+\emph{complete} candidate list is the minimum. Completeness requires the
+Fritz~John points as well as the KKT points, that is, the points where the
+active constraint gradients are linearly dependent and Lagrange's equation can
+fail. Mathilda proves the region bounded with one existential query,
+\(\exists x\,(\text{region} \wedge \lVert x\rVert^2 > 2^{20})\), adds the
+singular points, and skips the certificate.}
+
+With that machinery, constrained problems with irrational optima come out in
+closed form:
+
+\begin{codepairs}
+\pair{optimization/exact-constraints/1}{A linear objective on the unit disk.
+The minimum is on the boundary, at the point opposite the direction \((1,1)\).}
+\pair{optimization/exact-constraints/2}{The point of the disk of radius 1 about
+\((2,3)\) closest to the origin. The raw answer is correct but unsimplified.}
+\pair{optimization/exact-constraints/3}{\B{Simplify} shows it as
+\(14 - 2\sqrt{13} = (\sqrt{13} - 1)^2\): the centre is \(\sqrt{13}\) from the
+origin and the disk reaches 1 closer.}
+\pair{optimization/exact-constraints/4}{The same number as \B{NMinimize} would
+report, now with a proof behind it.}
+\pair{optimization/exact-constraints/5}{An equality constraint. The hyperbola
+\(xy = 1\) comes closest to the origin at \((-1,-1)\) and at \((1,1)\); one
+minimizer is reported.}
+\pair{optimization/exact-constraints/6}{A radical objective. \(\sqrt x + \sqrt
+y\) is concave, so its minimum on the segment is at an end.}
+\pair{optimization/exact-constraints/7}{A rational objective. The minimum of
+\((x^2+1)/(x+1)\) for \(x \ge 0\) is \(2\sqrt2 - 2\), at \(x = \sqrt2 - 1\);
+the output writes both with the sign outside.}
+\end{codepairs}
+
+The last two examples are not polynomial, and the engine makes them so before
+it starts. Each radical \(g^{p/q}\) is replaced by a fresh variable \(u\) with
+\(u^q = g\) and \(u \ge 0\); the extra constraints also confine \(g\) to
+\(g \ge 0\), where the real branch is defined. A rational objective \(p/q\)
+becomes a new variable \(w\) with the constraint \(p - wq = 0\), once the sign of
+\(q\) on the region has been proved strict. The fresh variables are removed from
+the reported point.
+
+\subsection{What a proof can say}
+\label{ssec:opt-exact-limits}
+
+An exact optimizer has three answers that a numerical search cannot give. It can
+say that there is no minimum, that there is no feasible point, and that it does
+not know.
+
+\begin{codepairs}
+\pair{optimization/exact-limits/1}{\(x^3 - x\) is unbounded below. The value is
+\mcode{-Infinity} and the point \mcode{Indeterminate}.}
+\pair{optimization/exact-limits/2}{\B{NMinimize} returns a large finite number:
+the place where its search happened to stop.}
+\pair{optimization/exact-limits/3}{Unbounded under a constraint. On the
+boundary \(x = y^2\) the objective \(y^2 + y\) is bounded below, but inside
+the region \(x\) can go to \(-\infty\).}
+\pair{optimization/exact-limits/4}{\B{NMinimize} again reports a finite
+``minimum''.}
+\pair{optimization/exact-limits/5}{No real \(x\) satisfies \(x^2 < -1\). An empty
+region gives \mcode{Infinity}.}
+\pair{optimization/exact-limits/6}{The unbounded case also issues a message,
+which \B{Check} catches.}
+\pair{optimization/exact-limits/7}{A transcendental objective is outside the
+engine's reach, and the call is returned unevaluated.}
+\pair{optimization/exact-limits/8}{An inexact coefficient hands the problem to
+\B{NMinimize}, and the answer is a machine number.}
+\end{codepairs}
+
+The transcript shows only values. At the prompt, the unbounded calls also print
+\mcode{Minimize::natt}, ``The minimum is not attained at any point satisfying
+the given constraints'', and the empty region prints \mcode{Minimize::infeas},
+``The constraints are infeasible; the feasible region is empty''. Both go
+through the standard message channel, so \B{Quiet} silences them and
+\mcode{Check} sees them, as line 6 shows. Unboundedness is decided by the same
+quantifier elimination as the certificate: the infimum is the largest \(b\) with
+\(\forall x\,(f(x) \ge b)\), and when \B{Reduce} reports that no such \(b\)
+exists, the answer is \(-\infty\). The flat valley in the previous subsection
+was solved the same way, because there \(\nabla f = 0\) has a whole curve of
+solutions and no finite candidate list exists.
+
+\calloutnote{Pitfall}{An unevaluated \mcode{Minimize[\ldots]} means ``not
+decided'', not ``no minimum''. The engine declines whenever one of its oracles
+cannot answer: a transcendental function, a certificate that \B{Reduce} cannot
+settle, or a time budget that runs out. It never substitutes a numerical guess
+for a proof. For such a problem, call \mcode{NMinimize} or \mcode{FindMinimum}
+directly.}
+
+\subsection{Linear and integer programs, exactly}
+\label{ssec:opt-exact-integers}
+
+A linear program is a polynomial problem of degree one, so small ones are solved
+by the same active-set enumeration, with exact rational vertices. A third
+argument \mcode{Integers} asks for integer variables, and so does the constraint
+\mcode{Element[\{x, y\}, Integers]} when it covers every variable. Here is the
+integer program of \S\ref{sec:opt-integer} again, this time exactly:
+
+\begin{codepairs}
+\pair{optimization/exact-integers/1}{The linear relaxation. The vertex
+\((4, 9/2)\) and the value \(17/2\) are exact.}
+\pair{optimization/exact-integers/2}{With integer variables the optimum is
+\(3\) at \((1, 2)\), now with a proof that no lattice point does better.}
+\pair{optimization/exact-integers/3}{The lattice points on the circle of radius
+5. The smallest \(x + y\) is at \((-4,-3)\).}
+\pair{optimization/exact-integers/4}{Integer points on the sphere of radius 3:
+\((-2,-2,-1)\) beats \((-3,0,0)\).}
+\pair{optimization/exact-integers/5}{The \mcode{Element} spelling. Three lattice
+points tie at \(-2\); one is reported.}
+\end{codepairs}
+
+Two routes make an integer problem finite. An equality region, like the circle
+and the sphere, goes to the Diophantine solver of \B{Solve} over the integers
+(\S\ref{ssec:alg-diophantine}), which lists the lattice points. An inequality
+region is first solved over the reals, once per variable and direction, to bound
+each coordinate; the floors and ceilings of those exact bounds define a box, and
+the box is searched point by point with exact feasibility tests. The search is
+exhaustive, so the answer is certified by construction.
+
+The price is that the region must be bounded and small. A problem whose
+continuous relaxation is unbounded in some coordinate, such as minimizing
+\(3x + 5y\) subject to \(x + 2y \ge 7\), \(3x + y \ge 6\), \(x, y \ge 0\), is
+returned unevaluated, even though its objective is bounded below. So is a mixed
+problem with some variables integer and some real, and so, on this build, is the
+three-item knapsack of \S\ref{sec:opt-integer}. The box bounds come from the
+active-set enumeration, which grows as \(2^m\) in the number \(m\) of
+inequalities and is capped at six of them, \(2^6 = 64\) active sets; the
+knapsack has seven. Large linear and integer programs
+belong to \B{NMaximize}, as in \S\ref{sec:opt-integer}; the exact engine is the
+tool for small ones whose answer you want proved.
+
+\subsection{Piecewise objectives, separable objectives, and time}
+\label{ssec:opt-exact-special}
+
+An objective built from absolute values of polynomials is a polynomial on each
+interval between the zeros of the \mcode{Abs} arguments. In one variable the
+minimum is therefore at one of those breakpoints or at a critical point of one
+of the pieces, and the engine compares the original objective at all of them.
+
+\begin{codepairs}
+\pair{optimization/exact-special/1}{The point minimizing the total distance to
+the first ten squares. Any median works: the value is \(275\) for every
+\(x \in [25, 36]\), and the left end is reported.}
+\pair{optimization/exact-special/2}{A smooth piece and a kink. The minimum is at
+the vertex of the left piece, \(x^2 - x + 2\).}
+\pair{optimization/exact-special/3}{For \(x < 0\) the objective is \(x\), so it
+is unbounded below.}
+\pair{optimization/exact-special/4}{Twice the Styblinski--Tang test function in
+six variables. Each term depends on one variable.}
+\pair{optimization/exact-special/5}{The exact minimum, a polynomial in a
+\mcode{Root} object, kept in \mcode{m}.}
+\pair{optimization/exact-special/6}{Its numerical value: every coordinate is
+the smallest root of \(4v^3 - 32v + 5\).}
+\pair{optimization/exact-special/7}{\B{NMinimize} finds the same point, without
+a proof.}
+\pair{optimization/exact-special/8}{A radical objective whose polynomial form
+has degree 12. With a one-second budget the engine gives up after one second.}
+\end{codepairs}
+
+The Styblinski--Tang function\index{Styblinski--Tang function} shows why
+structure matters. Each one-variable term \(v^4 - 16v^2 + 5v\) has three real
+critical points, so the gradient system in six variables has \(3^6 = 729\) real
+solutions, and a certificate over six variables is far beyond cylindrical
+decomposition. But the objective is
+\emph{separable}\index{exact optimization!separable objective}: it is a sum of
+terms in disjoint sets of variables. The engine detects this, minimizes each
+block on its own, and adds the results, which takes a few hundredths of a
+second on this build.
+
+Every call runs under a time budget, the \mcode{TimeConstraint} option, 30
+seconds by default (\mcode{TimeConstraint -> Infinity} removes it). The budget
+is for the whole call, not per step: a deadline is fixed when the call starts,
+and each internal \mcode{Solve} or \mcode{Reduce} is given only the time that
+remains. When it runs out, the call declines, as in the last example. A
+problem with many active sets or many fresh radical variables therefore costs at
+most the budget you set, never the budget times the number of subproblems.
+
+\calloutnote{Under the hood}{The engine is \texttt{src/calculus/minimize.c}, a
+calculus module rather than a numerical one. Its dispatcher hands inexact input
+to \mcode{NMinimize}, replaces radicals by fresh variables, and reformulates a
+rational objective. An unconstrained problem then tries the univariate
+\mcode{Abs} and polynomial paths, separable decomposition, the critical-point
+method with its \mcode{Reduce} certificate, and finally the
+quantifier-elimination infimum for flat valleys and unbounded problems. A
+constrained one first has any variable pinned by an equality eliminated, then
+goes to the active-set enumeration with its compact-region shortcut and
+certificate, and to the same quantifier-elimination fallback. The \mcode{Integers} domain has its own branch. Every internal \mcode{Solve} and
+\mcode{Reduce} runs with messages suppressed, so a probe's
+\mcode{Solve::nsdim} never reaches you. \mcode{Maximize[f, \ldots]} is
+\mcode{Minimize[-f, \ldots]} with the value negated, like its numerical
+counterparts.}
+
+The two kinds of optimizer complement each other. \mcode{Minimize} is the right
+call when the problem is algebraic and small, and the answer must be exact or
+proved: a textbook extremum, a geometric distance, an inequality you want
+confirmed, or a reference value for testing a numerical method
+(\S\ref{sec:opt-testing}). \mcode{NMinimize} and \mcode{FindMinimum} are the
+right call for everything else: transcendental objectives, simulations, data,
+hundreds of variables. The rest of the chapter is about them.
 
 \section{Minimizing in one variable}
 \label{sec:opt-brent}
@@ -1025,13 +1310,16 @@ there is solved exactly as before.
 \section{Integer and linear problems}
 \label{sec:opt-integer}
 
-Mathilda has no separate linear-programming function. There is no
+Mathilda has no dedicated numerical linear-programming function. There is no
 \mcode{LinearOptimization}, \mcode{LinearProgramming}, or
 \mcode{QuadraticOptimization}, and \mcode{FindMinimum} rejects the method
 names \mcode{"InteriorPoint"} and \mcode{"LinearProgramming"} as not yet
-implemented. A linear or quadratic program is posed to \B{NMinimize} or
-\B{NMaximize} like any other constrained problem, and a variable is made
-integer by the constraint \mcode{Element[x, Integers]}.
+implemented. A small linear or integer program with exact data can be solved,
+and its optimum proved, by \mcode{Minimize} and \mcode{Maximize}
+(\S\ref{ssec:opt-exact-integers}). Anything larger, or anything with inexact
+data, is posed to \B{NMinimize} or \B{NMaximize} like any other constrained
+problem, and a variable is made integer by the constraint
+\mcode{Element[x, Integers]}. That is the subject of this section.
 
 An integer program shows how much integrality changes a problem. Maximize \(x + y\)
 subject to \(-2x + 2y \ge 1\), \(-8x + 10y \le 13\), and \(x, y \ge 0\):
@@ -1404,9 +1692,11 @@ Chapter~\ref{ch:compilation}. \B{FindRoot} and \B{FindMinimum} are two views of
 the same problem, as the Gamma example showed, and a minimizer located to full
 precision is often best computed as a root of the derivative. The featured
 examples drew on the graphics of Chapter~\ref{ch:graphics}. Two gaps remain
-that a reader coming from Mathematica will notice. There is no dedicated
-linear or quadratic programming function, so such problems go to
-\B{NMinimize}, and there are no \mcode{FindArgMin} or \mcode{NArgMin} shortcuts,
+that a reader coming from the reference system will notice. There is no
+dedicated numerical linear or quadratic programming function, so such problems go
+to \mcode{Minimize} when they are small and exact
+(\S\ref{ssec:opt-exact-integers}) and to \mcode{NMinimize} otherwise, and there
+are no \mcode{FindArgMin} or \mcode{NArgMin} shortcuts,
 so the location is read from the rules of the full result. For the complete
 list of methods and sub-options, type \texttt{?FindMinimum} or
 \texttt{?NMinimize} at the prompt.

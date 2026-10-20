@@ -1,0 +1,11 @@
+# 5.3 A table of classical definite integrals -- elementary and logarithmic families
+Integrate[1/(1 + Tan[x]^Sqrt[2]), {x, 0, Pi/2}]
+Integrate[x Sin[x]/(1 + Cos[x]^2), {x, 0, Pi}]
+Integrate[(Cos[a x] - Cos[b x])/x, {x, 0, Infinity}, Assumptions -> a > 0 && b > 0]
+Integrate[(x^a - x^b)/Log[x], {x, 0, 1}, Assumptions -> a > -1 && b > -1]
+Integrate[Log[Sin[x]], {x, 0, Pi/2}]
+Integrate[Log[5 + 4 Cos[x]], {x, 0, Pi}]
+Integrate[Log[x]/(1 + x^2), {x, 0, 1}]
+Integrate[x/Sin[x], {x, 0, Pi/2}]
+Integrate[Log[x]^2/(1 - x), {x, 0, 1}]
+Integrate[x Log[Sin[x]], {x, 0, Pi}]

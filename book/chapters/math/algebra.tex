@@ -592,7 +592,20 @@ constant sign. Mathilda uses McCallum's projection (\texttt{src/solve/reduce\_ca
 and it holds itself to a hard soundness rule: if any step is undecidable---an algebraic
 sign it cannot resolve, a fibre it cannot isolate---it declines rather than emit a
 formula that might be wrong.} The third positional argument chooses the \texttt{Domain}:
-\texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}.
+\texttt{Reals}, \texttt{Complexes} (the default), or \texttt{Rationals}. The variable
+list may also be left out, in which case \mcode{Reduce} takes every free symbol of the input
+(named constants such as \texttt{Pi} excepted), in alphabetical order, and a domain
+symbol may then stand in the second slot.
+
+\begin{codepairs}
+\pair{algebra/reduce-infer/1}{One argument: the variable \(x\) is inferred and the
+domain defaults to the complexes.}
+\pair{algebra/reduce-infer/2}{A domain in the second slot is read as a domain, not as a
+variable named \texttt{Reals}.}
+\pair{algebra/reduce-infer/3}{A three-variable question decided outright: no point of the
+triangle \(x+y+z=1\), \(x,y,z\ge0\) lies outside the sphere of radius~\(2\). The empty
+region is the whole answer.}
+\end{codepairs}
 
 That decomposition can be asked for on its own. \B{CylindricalDecomposition}$[\mathit{expr},
 \mathit{vars}]$ returns the CAD cells directly---always over the reals, since the cylindrical
@@ -638,6 +651,63 @@ returning to a decimal.}
 \pair{algebra/transcendental/6}{And the two roots of \(x^2-2\), being \(\pm\sqrt2\),
 sum to \(0\).}
 \end{codepairs}
+
+A transcendental \emph{inequality} is harder still. To decide where \(\sin x>x/2\), the
+sign-diagram method of the CAD needs the points where the sign can change---the real
+roots of \(x-2\sin x\)---and those have no closed form at all. Rather than give up,
+\mcode{Reduce} \emph{isolates} them rigorously and names each with a transcendental
+\mcode{Root} object, \texttt{Root[\{f, x0\}]}\index{Root object!transcendental}: the unique
+zero of the function \(f\) in a small, certified neighbourhood of the decimal
+\(x_0\).
+
+\begin{codepairs}
+\pair{algebra/reduce-transcendental-roots/1}{\(\sin x>x/2\) holds left of the negative
+nonzero root of \(x=2\sin x\) and between \(0\) and the positive one. Beyond
+\(|x|=2\) the sign of \(\sin x-x/2\) can no longer change, which is why finitely
+many breakpoints suffice.}
+\pair{algebra/reduce-transcendental-roots/2}{A \texttt{Root} you type is checked and
+canonicalised: \(1.9\) is close enough to identify the root, and the object is
+rewritten with its standard six-digit anchor.}
+\pair{algebra/reduce-transcendental-roots/3}{It is an exact number in the same sense as
+\(\sqrt2\): \mcode{N} computes it to any precision you ask.}
+\pair{algebra/reduce-transcendental-roots/4}{An equation with a single real solution, the
+fixed point of the cosine.}
+\pair{algebra/reduce-transcendental-roots/5}{And an exponential against a line: \(e^x>3x\)
+fails only on the interval between the two crossings.}
+\end{codepairs}
+
+The anchor \(x_0\) is a label, not an approximation the answer depends on. Behind
+it Mathilda holds an interval that provably contains exactly one zero of
+\(f\).\calloutnote{Under the hood}{Isolation runs on a region the engine first proves
+bounded---here \(|2\sin x|\le2\), so every root of \(x-2\sin x\) has \(|x|\le2\)---using
+\emph{ball arithmetic}\index{ball arithmetic} (Arb), where every quantity is a midpoint
+with a rigorous error radius. A box on which \(f\) is bounded away from zero is
+discarded; one on which \(f'\) is bounded away from zero holds at most one root, and a
+sign change across it proves there is exactly one. The \texttt{Root[\{f, x0\}]} object
+is then certified by \emph{interval Newton}\index{interval Newton method}: if one
+Newton step, carried out in interval arithmetic, maps the interval strictly into
+itself, it contains a unique root. \mcode{N} refines the same interval to the precision
+requested. Where any of these steps fails---an interval that straddles a double root, an
+unbounded region the dominance bounds cannot tame---\mcode{Reduce} declines rather than
+guess, so \(\sin x>0\) over the whole line, with its infinitely many crossings, is left
+unevaluated.}
+
+Polynomial inputs have their own hard cases: a high-degree system on which the CAD's
+projection grows explosively. Two features keep these honest.\calloutnote{Under the
+hood}{When the region to be described is \emph{empty}, a short proof may exist that the
+CAD never finds. Before running it, \mcode{Reduce} tries a \emph{sum-of-squares
+certificate}\index{sum of squares!emptiness certificate}\index{Positivstellensatz}: to
+show \(q<0\) is impossible on \(\{g_i\ge0\}\) it seeks a Putinar identity
+\(q=s_0+\sum_i s_ig_i\) with every \(s_i\) a sum of squares. The search is numerical (a
+semidefinite program over Gram matrices); the result is then rounded to rationals and
+the identity and every positive-semidefiniteness condition re-verified in \emph{exact}
+arithmetic, so a floating-point near-miss can never become a wrong \texttt{False}. This
+is how the classical inequality
+\(xy+yz+zx\ge9xyz\) on the simplex \(x+y+z=1\), \(x,y,z>0\), is proved in under a second
+on this build. When no certificate is found the CAD runs as before, and its loops now
+poll the clock, so \texttt{TimeConstrained[Reduce[\(\ldots\)], t]} returns
+\texttt{\$Aborted} promptly and cleanly instead of overrunning its budget inside a
+projection.}
 
 \subsection{Deciding quantified statements}
 \label{ssec:alg-resolve}
@@ -890,6 +960,81 @@ forbids. An answer Refine does give can therefore be trusted.}
 
 \usagebox{Refine}
 
+The same assumptions reach \mcode{Simplify}, given as its second argument, and there they
+do more than resolve a sign: they unlock whole \emph{conditional identities}, equalities
+that are false in general but true on the region you describe. The variety is the point.
+An absolute value whose argument has a fixed sign, an inverse-trigonometric
+multiple-angle formula valid only on one branch, a power of \(-1\) whose exponent's
+parity is all that matters, the arithmetic of \B{Floor} and \B{Ceiling} on integers---each
+is a theorem about a set, not about every complex number.
+
+\begin{codepairs}
+\pair{algebra/simplify-assumptions/1}{On \(0<x<1\) the quantity \(x-2\) is negative
+throughout, so \(|x-2|=2-x\).}
+\pair{algebra/simplify-assumptions/2}{Widen the region to \(0<x<3\) and \(x-2\) changes
+sign inside it. No single branch is correct, and the absolute value stays.}
+\pair{algebra/simplify-assumptions/3}{\(\arccos(1-2x^2)=2\arcsin x\) is the double-angle
+formula read backwards; it holds for \(0\le x\le1\) and fails for negative \(x\), where
+the left side is still positive.}
+\pair{algebra/simplify-assumptions/4}{For an integer \(n\), \(n^2\) and \(n\) have the
+same parity, which is all a power of \(-1\) sees.}
+\pair{algebra/simplify-assumptions/5}{\(\lfloor n/2\rfloor+\lceil n/2\rceil=n\): split by
+the parity of \(n\) and both halves agree.}
+\pair{algebra/simplify-assumptions/6}{Consecutive integers are coprime, so
+\(\gcd(n,n+1)=1\).}
+\pair{algebra/simplify-assumptions/7}{\(P_n(-1)=(-1)^n\) for the Legendre polynomials
+(\B{LegendreP}), a fact about integer degree only.}
+\pair{algebra/simplify-assumptions/8}{Periodicity over a symbolic multiple of \(\pi\): the
+shift \(2n\pi+\pi\) is an \emph{odd} multiple whenever \(n\) is an integer, so the sine
+changes sign.}
+\pair{algebra/simplify-assumptions/9}{\mcode{Refine} pulls a squared factor out of a radical
+once its sign is known, even when the square is hidden in a quotient:
+\(\sqrt{1+b^2/a^2}=\sqrt{a^2+b^2}/a\) for \(a>0\).}
+\pair{algebra/simplify-assumptions/10}{No assumption is needed when the argument is an
+exact constant. \(\pi-4\) is \emph{certified} negative by ball arithmetic, so the absolute
+value resolves to \(4-\pi\).}
+\end{codepairs}
+
+Pair~2 is as instructive as pair~1. Simplify did not reach for the more common branch or
+for the larger half of the interval; it left \(|x-2|\) alone because neither \(x-2\) nor
+\(2-x\) is right everywhere on \((0,3)\). Every rewrite on this page is either proved on
+the whole region or not made.\calloutnote{Theory}{How is a conditional identity
+\emph{proved}?\index{assumptions!proving a conditional identity} For a sign, Mathilda
+runs a \emph{sign oracle}\index{sign oracle}: cheap structural provers first (a sum of
+positive terms is positive), then a decomposition of the trigonometric family
+(\(\operatorname{sign}\tan=\operatorname{sign}\sin\cdot\operatorname{sign}\cos\)), and
+finally the real decision procedure of \S\ref{ssec:alg-reduce}: \(g\ge0\) holds on the
+region \(A\) exactly when \(A\wedge g<0\) has no real solution, and \mcode{Reduce} can
+\emph{prove} that emptiness. A candidate identity \(f=h\), such as \(\arccos(1-2x^2)=
+2\arcsin x\), goes the same way: Simplify proposes a short list of candidate right-hand
+sides and keeps the first for which \(A\wedge f\ne h\) reduces to \texttt{False}.
+Integer assumptions use a different tool, arithmetic modulo~\(2\): an integer-valued
+exponent polynomial is reduced over the Boolean ring (\(g^2=g\)), which is why
+\((-1)^{n^2}\) and \((-1)^{n^3+n}\) collapse without any case split. In every case a
+\texttt{False} from the oracle is a proof, and anything less is a decline.} For an
+expensive input, Simplify's \texttt{TimeConstraint} option bounds the whole call, every
+internal phase included; when the budget runs out you get the best form found so far
+rather than a hang.
+
+A related family needs no assumptions at all, because the variables are gone: the
+values of the trigonometric functions at rational multiples of \(\pi\). Each such value
+is an \emph{algebraic number}---\(\cos(k\pi/n)\) is half the sum of two \(2n\)-th roots
+of unity---so products and sums of them can be decided exactly in a number field.
+
+\begin{codepairs}
+\pair{algebra/trig-algebraic/1}{Left alone, the product is three separate cosines.}
+\pair{algebra/trig-algebraic/2}{\mcode{Simplify} recognises it as the rational \(1/8\), a
+classical identity proved here by exact computation with roots of unity.}
+\pair{algebra/trig-algebraic/3}{The tangent analogue is irrational: \(\sqrt7\).}
+\pair{algebra/trig-algebraic/4}{\mcode{RootReduce} hands back \(\sin(\pi/7)\) as an explicit
+algebraic number, the fourth (in increasing order) of the six real roots of its minimal polynomial.}
+\pair{algebra/trig-algebraic/5}{The logarithmic form of the Gudermannian inverse,
+\(\log(\sec x+\tan x)\), does \emph{not} collapse unconditionally: at \(x=3\) its argument
+is negative and the logarithm picks up \(i\pi\).}
+\pair{algebra/trig-algebraic/6}{On \(-\pi/2<x<\pi/2\), where \(\sec x+\tan x>0\),
+\mcode{FullSimplify} rewrites it as \(\operatorname{artanh}(\sin x)\).}
+\end{codepairs}
+
 \subsection{Is it zero?}
 \label{ssec:alg-possiblezeroq}
 
@@ -956,9 +1101,9 @@ identity stands.}
 \texttt{Simplify}, is cost. Its work is \emph{bounded}---a fixed budget of samples at a few
 precisions---no matter how the expression is built, whereas \texttt{Simplify}'s symbolic
 search is open-ended and can explode. On the Machin-like identity below,
-\mcode{PossibleZeroQ} returns \texttt{True} in about \(0.3\) ms while \texttt{Simplify}
-spends some twenty times longer \emph{and does not reduce it at all}; on the nested radical
-above it is roughly four times faster. The trade is honest, though: on an easy identity
+\mcode{PossibleZeroQ} returns \texttt{True} in about half a millisecond, while
+\texttt{Simplify} spends some fifteen times longer proving it; on the nested radical above
+the zero test is roughly five times faster. The trade is honest, though: on an easy identity
 such as the triple-angle formula the two are comparable, and \texttt{Simplify}, when it
 succeeds, hands back the \emph{proof}---the literal \(0\)---that \mcode{PossibleZeroQ} only
 makes probable. (Figures from this build, Apple M-series.)}
@@ -966,8 +1111,12 @@ makes probable. (Figures from this build, Apple M-series.)}
 \begin{codepairs}
 \pair{algebra/possiblezeroq-limits/2}{\(\arctan\tfrac13+\arctan\tfrac12=\tfrac\pi4\): the
 zero test decides it at once.}
-\pair{algebra/possiblezeroq-limits/3}{\texttt{Simplify}, after much more work,
-leaves it unreduced. Numeric evidence settles what the symbolic search does not recognise.}
+\pair{algebra/possiblezeroq-limits/3}{\texttt{Simplify} reaches the literal \(0\) too,
+by an exact argument. Each \(\arctan(p/q)\) is the angle of the Gaussian integer \(q+pi\),
+so \(e^{i e}\) is an algebraic number: here \((3+i)(2+i)=5+5i\), whose angle is
+\(\tfrac\pi4\). It checks \(e^{ie}=1\) exactly, bounds \(e\) numerically to pin the
+multiple of \(2\pi\), and concludes \(e=0\)---a proof, where the zero test's \texttt{True}
+is evidence.}
 \end{codepairs}
 
 \calloutnote{Pitfall}{A \texttt{True} is evidence, not a proof. The structural certificate

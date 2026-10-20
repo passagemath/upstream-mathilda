@@ -3,4 +3,5 @@
 CompileDiagnostics[{{x, _Real}}, Sin[x] + Gamma[x]]
 CompileDiagnostics[{{x, _Real}}, Sin[x] + BarnesG[x]]
 CompileDiagnostics[{{v, _Real, 1}}, Total[Riffle[v, 0.]]]
-CompileDiagnostics[{{n, _Integer}}, MoebiusMu[n] + EulerPhi[n]]
+CompileDiagnostics[{{n, _Integer}}, EulerPhi[n]]
+CompileDiagnostics[{{n, _Integer}}, PrimeOmega[n] + EulerPhi[n]]

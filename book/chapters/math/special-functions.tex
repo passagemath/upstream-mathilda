@@ -8,8 +8,9 @@ coefficients grow by a fixed ratio, or the solution of a second-order linear
 differential equation with a variable coefficient, you have left the elementary
 world and entered the realm of the \emph{special functions}: the gamma and zeta
 functions, the error function, the Bessel and Airy functions, the Legendre
-functions, the elliptic integrals, and the hypergeometric
-family.\index{special functions} They are ``special'' only in
+functions and the classical orthogonal polynomials, the elliptic integrals, the
+hypergeometric family up to Meijer's \(G\), and the Dirichlet
+\(L\)-functions of number theory.\index{special functions} They are ``special'' only in
 the sense that they were named and tabulated before computers existed; today they
 are as ordinary as \(\sin\), and Mathilda treats them so.
 
@@ -72,8 +73,12 @@ is why pair~4 is finite but pair~5 is not.} The numeric face (pairs~7--8) is the
 one a differential-equation solver or a statistics routine actually leans
 on.\calloutnote{Under the hood}{\B{Gamma} lives in
 \texttt{src/special\_functions/gamma.c}. A machine-precision real routes to the C
-library's \texttt{tgamma}; an arbitrary-precision real to MPFR's correctly rounded
-\texttt{mpfr\_gamma}; and an arbitrary-precision \emph{complex} argument to Spouge's
+library's \texttt{tgamma}; a machine-precision \emph{complex} argument to Mathilda's own
+double-precision kernel (\texttt{sf\_machine\_gamma.c}), which reads \(\log\Gamma\) off
+precomputed Taylor tiles near the real axis and Stirling's series beyond, and is the same
+code the packed-array and \B{Compile} paths call, so all three agree to the bit; an
+arbitrary-precision real goes to MPFR's correctly rounded \texttt{mpfr\_gamma}; and an
+arbitrary-precision complex argument to Spouge's
 approximation, whose coefficients are recomputed at runtime to the precision you
 request, with the reflection formula handling \(\operatorname{Re}(z)<\tfrac12\). The
 incomplete form uses \texttt{mpfr\_gamma\_inc} on the real axis and a lower-incomplete
@@ -233,6 +238,123 @@ expansion of \(\zeta\) about its pole at \(s=1\); the zeroth is Euler's constant
 \(\gamma\), surfaced here as \B{EulerGamma}, and the rest are carried as inert
 \B{StieltjesGamma} symbols.
 
+The Hurwitz zeta of pair~10 is defined for \(a>0\), but the sum makes sense for any
+offset that avoids the one term \(k+a=0\). For \(a\le 0\) Mathilda follows the
+reference system's convention, summing \(\bigl((k+a)^2\bigr)^{-s/2}\) so that a
+negative base never forces a branch choice and dropping the singular term; it then
+shifts the offset into \((0,1]\) by peeling off the first few terms exactly,
+\(\zeta(s,a)=\sum_{k<m,\;k+a\ne0}|k+a|^{-s}+\zeta(s,a+m)\), and closes the remainder
+when it can.\index{Riemann zeta function!Hurwitz, negative offset}
+
+\begin{codepairs}
+\pair{special-functions/zeta-hurwitz/1}{One peeled term, \((1/2)^{-2}=4\), plus
+\(\zeta(2,1/2)=(2^2-1)\zeta(2)=\pi^2/2\).}
+\pair{special-functions/zeta-hurwitz/2}{Two peeled terms, \(4/9\) and \(4\), on top of
+the same remainder.}
+\pair{special-functions/zeta-hurwitz/3}{At \(s=-1\) the peeled terms are \(2+1\), and
+\(\zeta(-1,1)=-1/12\) finishes the job.}
+\pair{special-functions/zeta-hurwitz/4}{At an integer offset the \(k+a=0\) term is
+dropped: \(1^{-2}+\zeta(2)\).}
+\pair{special-functions/zeta-hurwitz/5}{\mcode{IncludeSingularTerm -> True} keeps it,
+and \(0^{-2}\) is a pole.}
+\end{codepairs}
+
+The machine path agrees: a real \(a\le0\) runs the same peel-and-shift in double
+precision, with the peeled terms summed compensatedly, and it is the same kernel that
+a packed array of offsets or a compiled function calls.
+
+\subsection{Dirichlet characters and \texorpdfstring{\(L\)}{L}-functions}
+\label{ssec:sf-dirichlet}
+
+Euler's product \(\zeta(s)=\prod_p(1-p^{-s})^{-1}\) encodes the primes; Dirichlet's
+insight was that twisting it by a periodic sign pattern separates the primes by
+residue class. A \emph{Dirichlet character} modulo \(k\) is a function
+\(\chi:\mathbb Z\to\mathbb C\) that is periodic mod \(k\), completely multiplicative,
+and zero exactly on the integers sharing a factor with \(k\); its nonzero values are
+roots of unity, and there are \(\varphi(k)\) of
+them.\index{Dirichlet character} Its \(L\)-function is the twisted zeta
+series\index{Dirichlet L-function}
+\[
+  L(s,\chi)=\sum_{n\ge1}\frac{\chi(n)}{n^{s}}=\prod_p\bigl(1-\chi(p)\,p^{-s}\bigr)^{-1}.
+\]
+\B{DirichletCharacter}\texttt{[k, j, n]} gives \(\chi(n)\) for the \(j\)-th character
+mod \(k\), and \B{DirichletL}\texttt{[k, j, s]} its \(L\)-function; \(j=1\) is
+always the principal character. The number theory that uses them is
+\S\ref{sec:numbertheory}; here they are special functions, with the same three faces
+as \(\zeta\).
+
+\begin{codepairs}
+\pair{special-functions/dirichlet/1}{The one non-principal character mod 4:
+\(+1\) on \(n\equiv1\), \(-1\) on \(n\equiv3\), \(0\) on the evens.}
+\pair{special-functions/dirichlet/2}{Mod 5 there are four characters; this one has
+order 4, so its values are the fourth roots of unity.}
+\pair{special-functions/dirichlet/3}{The real character mod 5 is the Legendre symbol
+\(\bigl(\frac{n}{5}\bigr)\), checked against \B{JacobiSymbol}.}
+\pair{special-functions/dirichlet/4}{Leibniz's series \(1-\tfrac13+\tfrac15-\cdots\)
+is \(L(1,\chi_4)=\pi/4\).}
+\pair{special-functions/dirichlet/5}{Its mod-3 analogue, \(\pi/(3\sqrt3)\).}
+\pair{special-functions/dirichlet/6}{\(L\) is rational at every non-positive
+integer; for instance \(L(-2,\chi_4)=-1/2\).}
+\pair{special-functions/dirichlet/7}{The principal character mod 1 is the constant
+\(1\), so \(L\) is \(\zeta\) itself.}
+\pair{special-functions/dirichlet/8}{Mod 4 the principal character removes the prime
+2: \(L(s,\chi_0)=(1-2^{-s})\zeta(s)\), here \((1-2)(-\tfrac1{12})\).}
+\pair{special-functions/dirichlet/9}{\(L(2,\chi_4)\) has no closed form in
+\mcode{DirichletL}, but its digits are---}
+\pair{special-functions/dirichlet/10}{---Catalan's constant \(G\), \B{Catalan}.}
+\pair{special-functions/dirichlet/11}{The real character mod 5 at \(s=1\) comes out
+as a difference of logarithms of sines.}
+\pair{special-functions/dirichlet/12}{To thirty digits that difference is
+\(2\log\phi/\sqrt5\), with \(\phi\) the golden ratio.}
+\pair{special-functions/dirichlet/13}{A machine value on the critical line,}
+\pair{special-functions/dirichlet/14}{the same point to forty digits,}
+\pair{special-functions/dirichlet/15}{and a complex character at a complex \(s\).}
+\pair{special-functions/dirichlet/16}{An \B{Interval} argument returns a rigorous
+enclosure: \(L(s,\chi_4)\) runs from \(G\) at \(s=2\) to \(\pi^3/32\) at \(s=3\).}
+\end{codepairs}
+
+The exact values come from two classical theorems.\calloutnote{Theory}{For a
+non-principal \(\chi\) the series converges at \(s=1\), and \(L(1,\chi)\) is a finite
+sum of logarithms (an even character) or of \(\pi\) times algebraic numbers (an odd
+one)---the input to Dirichlet's class number formula and the reason \(L(1,\chi)\ne0\),
+which is the heart of his theorem on primes in arithmetic progressions. At the
+non-positive integers, \(L(1-n,\chi)=-B_{n,\chi}/n\), where \(B_{n,\chi}\) is a
+\emph{generalized Bernoulli number}\index{Bernoulli numbers!generalized}
+\(B_{n,\chi}=k^{n-1}\sum_{a=1}^{k}\chi(a)B_n(a/k)\); this is the twisted form of
+\(\zeta(1-n)=-B_n/n\) and why pair~6 is rational. Like \(\zeta\), every primitive
+\(L(s,\chi)\) satisfies a functional equation relating \(s\) to \(1-s\), and the
+generalized Riemann hypothesis puts its nontrivial zeros on
+\(\operatorname{Re}s=\tfrac12\).} Two things need care in a CAS, and both are about
+\emph{which} character \(j\) names.\calloutnote{Under the hood}{There is no canonical
+numbering of the characters mod \(k\). Mathilda uses the reference system's \((k,j)\)
+labelling: the primes of \(k\) in ascending order, each odd prime power generated by
+its smallest primitive root, \(2^a\) (\(a\ge3\)) split into \(\langle-1\rangle\) then
+\(\langle5\rangle\), and \(j-1\) read as a mixed-radix number with the first
+component most significant. The convention is not published; it was reconstructed and
+verified on 148{,}138 character values. Evaluating \(\chi(n)\) needs a discrete
+logarithm in each component, done by Pohlig--Hellman. Numerically, arbitrary
+precision goes to FLINT's \texttt{acb\_dirichlet\_l}, with the character set on
+FLINT's \emph{own} generators rather than translated through its (different)
+labelling; machine precision has a native kernel (\texttt{sf\_machine\_dirichlet.c})
+that runs Euler--Maclaurin on \(L\) with the integral terms written through
+\texttt{expm1}/\texttt{log1p}, so nothing cancels as \(s\to1\), and the functional
+equation for \(\operatorname{Re}s<\tfrac12\). The engine is
+\texttt{src/special\_functions/dirichlet.c}.}
+
+\usagebox{DirichletL}
+
+Pair~11 shows the system's habit of returning the closed form it derived rather than
+the one you know: the class-number formula naturally produces logarithms of
+\(\sin(\pi a/5)\), and recognizing their ratio as the golden ratio is a separate
+simplification. The 30-digit comparison in pair~12 is the quick way to confirm such an
+identity.\calloutnote{Pitfall}{Do not take machine \(L\)-values from another system
+on trust in the left half-plane, where the functional equation multiplies by large
+gamma factors. The special-functions benchmark (\S\ref{ssec:sf-machine}) found the
+reference system's own machine value at \(L(-3.3,\chi)\), \(\chi\) the real character
+mod 5, to be \(2.492235964\) where the true value is \(2.4922356398\ldots\)---wrong from
+the seventh digit. When an \(L\)-value matters, ask for it at an exact \(s\) with
+\mcode{N[..., 20]}, which in Mathilda is evaluated in ball arithmetic.}
+
 \subsection{Error functions and the integral functions}
 \label{ssec:sf-erf}
 
@@ -268,10 +390,13 @@ that \(1-\operatorname{erf}(z)\) loses every significant digit to cancellation, 
 \(\operatorname{erfc}\) is computed by its own cancellation-free
 route.\calloutnote{Under the hood}{The kernels live in
 \texttt{src/special\_functions/erf.c} (and \texttt{inverf.c} for the inverse). Real
-arguments use the C library or MPFR's \texttt{erf}/\texttt{erfc}; complex arguments
-sum the cancellation-aware Maclaurin series of DLMF~7.6.2 in MPFR with
-\(|z|^2/\ln2\) guard bits, so even a machine-precision complex result carries full
-accuracy. Neither the C library nor MPFR ships an inverse error function, so
+arguments use the C library or MPFR's \texttt{erf}/\texttt{erfc}. A machine-precision
+complex argument has its own kernel (\texttt{sf\_machine\_error.c}): Salzer's series,
+with every square in \(e^{-x^2}\), \(e^{y^2}\) and the phase \(2xy\) formed exactly in
+double-double arithmetic, since rounding \(x^2\) alone would cost nine ulps at \(x=3\)
+before any algorithm ran. An arbitrary-precision complex argument sums the
+cancellation-aware Maclaurin series of DLMF~7.6.2 in MPFR with \(|z|^2/\ln2\) guard
+bits. Neither the C library nor MPFR ships an inverse error function, so
 \B{InverseErf} is Newton's iteration on \(\operatorname{erf}(z)-s\), started from a
 Winitzki seed and polished to the working precision.}
 
@@ -311,14 +436,36 @@ to the cardinal sine \B{Sinc}---the loop closes.}
 That \(\int dx/\log x\) and \(\int e^x/x\,dx\) come back as the \emph{same} function
 (pairs~3--4) is the logarithmic integral's claim to fame: \(\operatorname{li}(x)\)
 is the leading term of the prime-counting function, and the substitution
-\(t=\log x\) turns one integral into the other.\calloutnote{Under the hood}{On the
-real axis \B{ExpIntegralEi} uses MPFR's correctly rounded \texttt{mpfr\_eint} for
-\(x>0\) and an on-cut convergent series for \(x<0\); large \(|z|\) switches to the
-asymptotic expansion, and the two regimes overlap and agree. \B{LogIntegral} is
+\(t=\log x\) turns one integral into the other.\calloutnote{Under the hood}{At machine
+precision the whole family runs on one set of double kernels
+(\texttt{sf\_machine\_expint.c}), shared by the scalar, packed-array and \mcode{Compile}
+paths: \B{ExpIntegralEi} on the real axis is Cody and Thacher's piecewise rational
+fit (refitted against mpmath), and \mcode{SinIntegral}/\mcode{CosIntegral} follow Cephes. At
+arbitrary precision \mcode{ExpIntegralEi} uses MPFR's correctly rounded
+\texttt{mpfr\_eint} for \(x>0\) and an on-cut convergent series for \(x<0\); large
+\(|z|\) switches to the asymptotic expansion, and the two regimes overlap and agree. \B{LogIntegral} is
 literally \(\operatorname{Ei}(\log z)\), reusing the same kernel. The sine, cosine,
 and Fresnel integrals sum their Maclaurin series for moderate arguments and their
 trigonometric-prefactored asymptotic forms for large ones, with the complex plane
 handled by the shared MPFR-complex toolkit.}
+
+The exponential integral also comes in a graded family. The \emph{generalized
+exponential integral} \(E_n(z)=\int_1^\infty e^{-zt}\,t^{-n}\,dt\), \B{ExpIntegralE},
+is the Laplace transform of \(t^{-n}\) on \([1,\infty)\); integrating by parts lowers
+\(n\) by one, so the whole ladder hangs from \(E_0(z)=e^{-z}/z\), and \(E_1\) is
+\(\operatorname{Ei}\) reflected.\index{exponential integral!generalized} The order need
+not be an integer.
+
+\begin{codepairs}
+\pair{special-functions/expinte/1}{The bottom rung is elementary.}
+\pair{special-functions/expinte/2}{At the origin \(E_n(0)=1/(n-1)\) for \(n>1\).}
+\pair{special-functions/expinte/3}{Thirty digits of \(E_2(1)\).}
+\pair{special-functions/expinte/4}{A non-integer order, at machine precision.}
+\pair{special-functions/expinte/5}{\(E_1(x)=-\operatorname{Ei}(-x)\) for \(x>0\): the
+two heads cancel.}
+\pair{special-functions/expinte/6}{Differentiation walks down the ladder,
+\(E_n'=-E_{n-1}\).}
+\end{codepairs}
 
 \subsection{Bessel and Airy functions}
 \label{ssec:sf-bessel}
@@ -368,8 +515,8 @@ point.\index{Airy functions} \B{AiryAi} and \B{AiryBi} solve \(y''=xy\), and the
 values at the origin tie the whole family back to the gamma function.
 
 \begin{codepairs}
-\pair{special-functions/airy/1}{\(\operatorname{Ai}(0)\) closes through the gamma
-function: \(1/(3^{2/3}\Gamma(2/3))\).}
+\pair{special-functions/airy/1}{At the origin \(\operatorname{Ai}\) closes
+through the gamma function: \(\operatorname{Ai}(0)\) is \(1/(3^{2/3}\,\Gamma(2/3))\).}
 \pair{special-functions/airy/2}{\(\operatorname{Bi}(0)\) shares the same
 \(\Gamma(2/3)\), scaled differently.}
 \pair{special-functions/airy/3}{The derivative at the origin brings in
@@ -393,6 +540,41 @@ representation of the solution, and every Taylor coefficient follows from the
 equation by \(y^{(n+2)}=x\,y^{(n)}+n\,y^{(n-1)}\). The kernels are in
 \texttt{src/special\_functions/airyai.c} and \texttt{airybi.c}.}
 
+Two more members complete the Bessel neighborhood. Drive Bessel's equation with a
+power, \(x^2y''+xy'+(x^2-\nu^2)y=4(x/2)^{\nu+1}/(\sqrt\pi\,\Gamma(\nu+\tfrac12))\), and
+the particular solution is the \emph{Struve function} \B{StruveH},
+\(\mathbf H_\nu(x)\), which turns up in the radiation impedance of a piston and in
+unsteady aerodynamics.\index{Struve function} And the zeros of \(J_\nu\)---the
+vibration frequencies of a drum, the cut-offs of a waveguide---have their own head,
+\B{BesselJZero}, where \texttt{BesselJZero[nu, k]} is the \(k\)-th positive zero
+\(j_{\nu,k}\).\index{Bessel functions!zeros}
+
+\begin{codepairs}
+\pair{special-functions/struve/1}{\(\mathbf H_\nu(0)=0\) for \(\operatorname{Re}\nu>-1\).}
+\pair{special-functions/struve/2}{A machine value,}
+\pair{special-functions/struve/3}{and thirty digits of \(\mathbf H_0(1)\).}
+\pair{special-functions/struve/4}{For large \(x\), \(\mathbf H_0-Y_0\) decays like
+\(2/(\pi x)\): the inhomogeneous term's footprint once the oscillations of \(Y_0\) are
+subtracted---}
+\pair{special-functions/struve/5}{---already within \(1\%\) at \(x=10\).}
+\pair{special-functions/struve/6}{\(j_{0,1}\) has no closed form and stays a symbol,}
+\pair{special-functions/struve/7}{but it is a number to any precision,}
+\pair{special-functions/struve/8}{and \(J_0\) vanishes there to all thirty digits.}
+\end{codepairs}
+
+FLINT, which backs most of this section's arbitrary-precision numerics, ships no Struve
+function, so Mathilda composes one.\calloutnote{Under the hood}{At arbitrary precision
+\(\mathbf H_\nu(z)=(z/2)^{\nu+1}\,{}_1\tilde F_2(1;\tfrac32,\nu+\tfrac32;-z^2/4)\) is
+evaluated in Arb, with the regularized \({}_1F_2\) from \texttt{acb\_hypgeom\_pfq} and
+the working precision raised up front by about \(1.44|z|\) bits to pay for the
+cancellation in an alternating series of size \(e^{|z|}\). At machine precision a
+double kernel (\texttt{sf\_machine\_struve\_h}) picks between the convergent series and
+the large-\(x\) form---Hankel's expansion of \(Y_\nu\) plus the asymptotic series
+for \(\mathbf H_\nu-Y_\nu\) (DLMF~11.6.1), each cut at its smallest term---whichever
+predicts the smaller error at that point; it serves the scalar call, packed arrays and \mcode{Compile}
+alike. \mcode{BesselJZero} likewise gained a numeric kernel shared by all three
+surfaces in v0.477.}
+
 \subsection{Legendre functions of the first and second kind}
 \label{ssec:sf-legendre}
 
@@ -401,7 +583,7 @@ equation on the sphere, and it too has two independent
 solutions.\index{Legendre functions} \B{LegendreP} is the first: at a non-negative
 integer degree it is the Legendre \emph{polynomial}, the workhorse of Gaussian
 quadrature and multipole expansions. \B{LegendreQ} is the second kind---the other
-solution of the same equation---and it is new in this release.\index{Legendre
+solution of the same equation.\index{Legendre
 functions!second kind}
 
 \begin{codepairs}
@@ -437,6 +619,103 @@ implementation is in \texttt{src/special\_functions/legendre.c}.} The visible
 structure of \(Q_2\) in pair~7---a Legendre polynomial multiplying
 \(\operatorname{arctanh}x\), minus a lower-degree polynomial---is exactly that
 recurrence made concrete.
+
+\subsection{The classical orthogonal polynomials}
+\label{ssec:sf-orthopoly}
+
+The Legendre polynomials are the first of a small family. Change the interval or the
+weight against which the polynomials are orthogonal and you get the other classical
+families:\index{orthogonal polynomials} the Chebyshev polynomials \B{ChebyshevT} and
+\B{ChebyshevU} on \([-1,1]\) with weights \((1-x^2)^{\mp1/2}\), the Hermite
+polynomials \B{HermiteH} on the whole line with weight \(e^{-x^2}\) (the physicists'
+normalization), and the Laguerre polynomials \B{LaguerreL} on \([0,\infty)\) with
+weight \(x^a e^{-x}\). They are the eigenfunctions of the harmonic oscillator and the
+hydrogen atom, the nodes of Gaussian quadrature, and---in the Chebyshev case---the
+basis in which numerical analysts approximate everything else.
+
+\begin{codepairs}
+\pair{special-functions/orthopoly/1}{\(T_5\): odd degree, odd polynomial, leading
+coefficient \(2^{4}\).}
+\pair{special-functions/orthopoly/2}{\(U_4\), the second kind.}
+\pair{special-functions/orthopoly/3}{\(H_5\), with leading coefficient \(2^5\).}
+\pair{special-functions/orthopoly/4}{\(L_4\) has rational coefficients, alternating in
+sign.}
+\pair{special-functions/orthopoly/5}{The generalized \(L_n^{(a)}\) is a polynomial in
+both \(x\) and the parameter.}
+\pair{special-functions/orthopoly/6}{\(T_n(\cos t)=\cos nt\) is the definition the
+others are measured against.}
+\pair{special-functions/orthopoly/7}{Orthogonality under the Chebyshev weight,}
+\pair{special-functions/orthopoly/8}{and the Hermite norm \(2^n n!\sqrt\pi\), here
+\(48\sqrt\pi\).}
+\end{codepairs}
+
+What the families share is more useful than what separates
+them.\calloutnote{Theory}{Any sequence of polynomials orthogonal against a positive
+weight satisfies a \emph{three-term recurrence}\index{orthogonal
+polynomials!three-term recurrence} \(p_{n+1}=(\alpha_nx+\beta_n)p_n-\gamma_np_{n-1}\)
+(Favard's theorem is the converse). For the classical families the coefficients are
+simple: \(T_{n+1}=2xT_n-T_{n-1}\), \(H_{n+1}=2xH_n-2nH_{n-1}\),
+\((n+1)L_{n+1}=(2n+1-x)L_n-nL_{n-1}\). The same structure gives each family a
+second-order differential equation and a derivative rule that stays inside the family,
+which is what the derivative rules further on exploit.} The exact integer-order polynomials come from
+FLINT (\texttt{fmpz\_poly\_chebyshev\_t}, \texttt{\_u}, \texttt{fmpz\_poly\_hermite\_h}),
+with an integer recurrence as the fallback when Mathilda is built without it, and
+Laguerre's rational coefficients from a rational recurrence.
+
+\usagebox{ChebyshevT}
+
+The recurrence matters even more for numbers than for symbols, and here the
+orthogonal polynomials teach a lesson that applies to every special function: \emph{an
+explicit formula is not an algorithm}. The expanded \(H_{100}\) has coefficients up to
+about \(3\times10^{98}\), of alternating sign; evaluate it at \(x=5\) and terms as
+large as \(2\times10^{118}\) cancel to leave a value of about
+\(8\times10^{98}\)---twenty orders of magnitude below its largest term, so a double,
+with its sixteen digits, has nothing left to say.\index{cancellation!polynomial evaluation}
+
+\begin{codepairs}
+\pair{special-functions/orthopoly-numeric/1}{A machine argument runs the three-term
+recurrence in double precision.}
+\pair{special-functions/orthopoly-numeric/2}{Substitution into the expanded polynomial
+is wrong by a factor of about 6500---not a rounding error but a different number.}
+\pair{special-functions/orthopoly-numeric/3}{The exact polynomial at the exact
+argument, to twenty digits, sides with the recurrence.}
+\pair{special-functions/orthopoly-numeric/4}{The same story for \(L_{100}(5)\),}
+\pair{special-functions/orthopoly-numeric/5}{which substitution triples.}
+\pair{special-functions/orthopoly-numeric/6}{Non-integer order: \(T_\nu(x)=\cos(\nu
+\arccos x)\), here \(\cos(\tfrac12\arccos 0.3)\).}
+\pair{special-functions/orthopoly-numeric/7}{Any precision, through the
+hypergeometric form \({}_2F_1(-\nu,\nu;\tfrac12;\tfrac{1-x}{2})\).}
+\pair{special-functions/orthopoly-numeric/8}{A complex order is no harder.}
+\pair{special-functions/orthopoly-numeric/9}{\(T_n'=nU_{n-1}\) links the two Chebyshev
+kinds,}
+\pair{special-functions/orthopoly-numeric/10}{\(H_n'=2nH_{n-1}\) drops the
+degree by one,}
+\pair{special-functions/orthopoly-numeric/11}{and \(L_n'=-L_{n-1}^{(1)}\) raises the
+Laguerre parameter.}
+\pair{special-functions/orthopoly-numeric/12}{The associated Legendre function
+\(P_3^1\) carries the factor \(\sqrt{1-x^2}\).}
+\pair{special-functions/orthopoly-numeric/13}{\(P_{30}^4\) over a list of machine
+reals.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{\texttt{HermiteH[100, x] /. x -> 5.} (pair~2) is the natural way
+to ``plug in a number'', and it is the wrong one. \texttt{/.} substitutes into the
+expression \emph{after} it has been expanded, so the evaluation order is fixed by the
+monomial basis, the worst-conditioned one available. Pass the number to the function
+itself, \texttt{HermiteH[100, 5.]}, and Mathilda chooses the stable algorithm. The same
+holds for every polynomial family in this section, \mcode{LegendreP} included.} The
+non-integer orders (pairs~6--8) leave the polynomial world altogether: there each
+family is a hypergeometric function---\(T_\nu\) and \(U_\nu\) a \({}_2F_1\), \(H_\nu\)
+and \(L_\nu^{(a)}\) a confluent \({}_1F_1\)---and is evaluated as one, at machine or
+arbitrary precision, real or complex.\calloutnote{Performance}{Each of the four families, and
+\mcode{LegendreP[n, x]} itself, has one double-precision recurrence kernel (with a
+complex arm) shared by the scalar call, the packed-array and \B{NDArray} maps and
+\mcode{Compile}, so those surfaces agree bit for bit (\S\ref{ssec:sf-machine}). The
+associated Legendre functions over a machine array are evaluated by Horner's rule in
+\texttt{double} rather than as a sum of monomials, each of which used to cost a
+full-buffer \texttt{pow}; that change (v0.376)
+took \texttt{LegendreP[30, 4, xs]} over a million points from not finishing in
+85~seconds to about a tenth of a second on this build.}
 
 \subsection{Legendre elliptic integrals}
 \label{ssec:sf-elliptic}
@@ -626,6 +905,231 @@ reduction and the Hurwitz zeta of \S\ref{ssec:sf-zeta} are two faces of one seri
 \B{ProductLog}'s implicit derivative (pair~10) comes from differentiating
 \(w\,e^w=z\) directly, since no explicit formula for \(W\) exists.}
 
+The polylogarithm has a two-index generalization that appears wherever Feynman
+integrals or iterated integrals of logarithms are done by hand. \emph{Nielsen's
+generalized polylogarithm}\index{polylogarithm!Nielsen generalized}
+\[
+  S_{n,p}(z)=\frac{(-1)^{n+p-1}}{(n-1)!\,p!}\int_0^1\frac{\log^{n-1}t\,\log^p(1-zt)}{t}\,dt
+\]
+is \texttt{PolyLog[n, p, z]}, with \(S_{n-1,1}=\operatorname{Li}_n\). Its exact special
+values are not built in---\texttt{PolyLog[1, 2, 1/2]} stays as it is---but its numerics
+are, at any precision.
+
+\begin{codepairs}
+\pair{special-functions/nielsen/1}{\(S_{1,2}(\tfrac12)\) at machine precision,}
+\pair{special-functions/nielsen/2}{to thirty digits,}
+\pair{special-functions/nielsen/3}{and the classical closed form
+\(\zeta(3)/8-\tfrac16\log^32\) it equals.}
+\pair{special-functions/nielsen/4}{\(S_{2,2}(1)\) to thirty digits.}
+\pair{special-functions/nielsen/5}{\(\zeta(4)/4\) gives the same digits, so
+\(S_{2,2}(1)=\zeta(4)/4\).}
+\pair{special-functions/nielsen/6}{Past \(z=1\), on the cut, integer \(n\) and \(p\)
+continue analytically.}
+\pair{special-functions/nielsen/7}{A non-integer order off the unit disk has no agreed
+continuation, and stays unevaluated.}
+\pair{special-functions/nielsen/8}{Over a list of machine reals.}
+\pair{special-functions/nielsen/9}{\mcode{LerchPhi} with \mcode{DoublyInfinite -> True}
+sums over all \(k\in\mathbb Z\): \(\sum_k(k+\tfrac12)^{-2}=\pi^2\).}
+\end{codepairs}
+
+Pair~7 is deliberate: Mathilda evaluates \(S_{n,p}\) on exactly the domain where the
+reference system does---any \(n\) and any \(p\) with \(\operatorname{Re}p>0\) on the closed unit disk (\(z\ne1\)), \(\operatorname{Re}n>0\)
+at \(z=1\), integer \(n\le0\) anywhere through the closed form \((z\,d/dz)^{-n}\), and
+integer \(n,p\) beyond the disk---and leaves the rest alone rather than choosing a branch
+nobody else would.\calloutnote{Under the hood}{In Arb at any precision \(S_{n,p}\) is
+summed by a Stirling-number series for integer \(p\) and small \(|z|\), by a
+generalized power series built with Miller's recurrence for any \(p\), and otherwise
+by tanh--sinh quadrature of the integral above, split at \(t=1/z\) when the path meets
+the cut. A machine kernel (v0.479) runs the same methods in double precision and
+declines to Arb when its error estimate passes \(2\times10^{-14}\); over a 479-value
+test grid it is within \(6.1\times10^{-15}\) of 30-digit values.}
+
+\subsection{Kummer, Tricomi and Whittaker: the confluent family}
+\label{ssec:sf-whittaker}
+
+Kummer's equation \(zw''+(b-z)w'-aw=0\) is the confluent limit of Gauss's
+hypergeometric equation, and like every second-order equation it has two independent
+solutions.\index{confluent hypergeometric functions} The one regular at the origin is
+\({}_1F_1(a;b;z)\), already met as \mcode{Hypergeometric1F1}; the other, singled out
+by its algebraic decay \(U\sim z^{-a}\) as \(z\to+\infty\), is Tricomi's function
+\B{HypergeometricU}. Remove the first-derivative term and Kummer's equation becomes
+Whittaker's, \(w''+\bigl(-\tfrac14+\tfrac kz+\tfrac{1/4-m^2}{z^2}\bigr)w=0\), whose
+solutions \B{WhittakerM} and \B{WhittakerW} are the same two functions dressed in a
+prefactor,
+\[
+  M_{k,m}(z)=e^{-z/2}z^{m+1/2}\,{}_1F_1\bigl(m-k+\tfrac12;2m+1;z\bigr),\qquad
+  W_{k,m}(z)=e^{-z/2}z^{m+1/2}\,U\bigl(m-k+\tfrac12,2m+1,z\bigr).
+\]
+The radial wave functions of the hydrogen atom, the Coulomb wave functions, the
+parabolic cylinder functions and the incomplete gamma function are all Whittaker
+functions in disguise.\index{Whittaker functions}
+
+\begin{codepairs}
+\pair{special-functions/whittaker/1}{When \(b=a+1\), \(U\) is exactly its own
+asymptotic form \(z^{-a}\).}
+\pair{special-functions/whittaker/2}{So \(U(2,3,z)=z^{-2}\).}
+\pair{special-functions/whittaker/3}{Differentiation shifts both parameters,
+\(U'=-a\,U(a{+}1,b{+}1,z)\).}
+\pair{special-functions/whittaker/4}{Thirty digits of \(U(\tfrac13,2,5)\).}
+\pair{special-functions/whittaker/5}{\(M_{k,m}\) at machine precision,}
+\pair{special-functions/whittaker/6}{\(W_{k,m}\) at the same point,}
+\pair{special-functions/whittaker/7}{and \(W\) with a complex index.}
+\pair{special-functions/whittaker/8}{At \(m=\tfrac12\) the origin value of \(W\) is
+finite: \(1/\Gamma(1-k)\).}
+\pair{special-functions/whittaker/9}{The derivative closes in \(W\) itself, with the
+index \(k\) raised by one.}
+\pair{special-functions/whittaker/10}{The defining identity of \(M\), checked at a
+machine point.}
+\end{codepairs}
+
+\usagebox{WhittakerW}
+
+Tricomi's \(U\) is the harder of the two to compute, because no single expansion
+serves the whole plane.\calloutnote{Under the hood}{The machine kernel
+(\texttt{sf\_machine\_hyperu}) switches between three representations: the asymptotic
+\({}_2F_0\) series for large \(z\); for integer \(b\), the logarithmic series of
+DLMF~13.2.9, since there the two \({}_1F_1\) solutions coincide and their difference
+must be taken analytically; and for non-integer \(b\), Kummer's connection formula
+\(U=\frac{\Gamma(1-b)}{\Gamma(a-b+1)}M(a,b,z)+\frac{\Gamma(b-1)}{\Gamma(a)}z^{1-b}M(a-b+1,2-b,z)\).
+A guard measures the cancellation in that difference and declines to the rigorous path,
+FLINT's \texttt{acb\_hypgeom\_u}, which also answers at arbitrary precision and on
+\(z\le0\). \mcode{WhittakerW} multiplies the same kernel by its prefactor (folding
+\(m\to|m|\), since \(W_{k,m}=W_{k,-m}\)), so it inherits the accuracy and the
+array and \mcode{Compile} surfaces of \(U\) unchanged.}
+
+\subsection{The Meijer \texorpdfstring{\(G\)}{G}-function}
+\label{ssec:sf-meijerg}
+
+The generalized hypergeometric \({}_pF_q\) is a power series; Meijer's \(G\) is the
+contour integral that contains it, and it is the largest family in common use that is
+still closed under the operations a CAS performs on integrands.\index{Meijer
+G-function} With parameter lists split as \(a_1,\dots,a_n\mid a_{n+1},\dots,a_p\) and
+\(b_1,\dots,b_m\mid b_{m+1},\dots,b_q\),
+\[
+  G^{m,n}_{p,q}\!\left(z\,\middle|\,\begin{matrix}a_1,\dots,a_p\\
+  b_1,\dots,b_q\end{matrix}\right)
+  =\frac1{2\pi i}\int_L
+  \frac{\prod_{j=1}^m\Gamma(b_j-s)\prod_{j=1}^n\Gamma(1-a_j+s)}
+       {\prod_{j=m+1}^q\Gamma(1-b_j+s)\prod_{j=n+1}^p\Gamma(a_j-s)}\,z^s\,ds,
+\]
+written \texttt{MeijerG[\{\{a1..an\}, \{a(n+1)..ap\}\}, \{\{b1..bm\}, \{b(m+1)..bq\}\}, z]}.
+Closing the contour around the poles of \(\Gamma(b_j-s)\) and summing residues turns
+the integral into \(m\) hypergeometric series---\emph{Slater's
+theorem}\index{Slater's theorem}---and that is how \B{MeijerG} recognizes the named
+functions it contains.
+
+\begin{codepairs}
+\pair{special-functions/meijerg/1}{The simplest \(G\) of all, \(G^{1,0}_{0,1}(z|0)\), is
+\(e^{-z}\).}
+\pair{special-functions/meijerg/2}{One \(a\) and one \(b\) give a binomial power.}
+\pair{special-functions/meijerg/3}{\(G^{1,2}_{2,2}\) with these parameters is
+\(\log(1+z)\).}
+\pair{special-functions/meijerg/4}{\(G^{1,0}_{0,2}\) is a Bessel \(J\) of \(2\sqrt z\)---}
+\pair{special-functions/meijerg/5}{---and \(G^{2,0}_{0,2}\) a Bessel \(K\).}
+\pair{special-functions/meijerg/6}{Three \(b\)'s have no single classical name; the
+parameters come back sorted into canonical order.}
+\pair{special-functions/meijerg/7}{\B{FunctionExpand} writes out the Slater sum: three
+\({}_0F_2\) terms with gamma-function weights.}
+\pair{special-functions/meijerg/8}{Machine values, threaded over a list,}
+\pair{special-functions/meijerg/9}{and the same point to twenty-five digits.}
+\pair{special-functions/meijerg/10}{Here \(b_1,b_2\) differ by an integer---the log
+case---so no Slater expansion exists and the symbolic form stays unevaluated.}
+\pair{special-functions/meijerg/11}{The number still exists: thirty digits at
+\(z=3\).}
+\end{codepairs}
+
+The automatic reductions (pairs~1--5) and \mcode{FunctionExpand} (pair~7) are two
+strengths of the same rewrite: \mcode{MeijerG} applies Slater's theorem only when the
+result is a classical function, while \mcode{FunctionExpand} applies it whenever an
+expansion exists. That is, at present, \mcode{FunctionExpand}'s only rule; every other
+expression passes through it unchanged.\calloutnote{Theory}{When two \(b_j\) among the
+first \(m\) differ by an integer, the poles of the corresponding \(\Gamma(b_j-s)\)
+collide, the residues become derivatives, and the expansion acquires powers of
+\(\log z\)---the same mechanism that puts a logarithm into \(Y_0\) and \(K_0\). This
+\emph{log case} has no finite sum of \({}_pF_q\)'s, which is why pairs~10--11 stay
+symbolic and evaluate only as numbers. The reason \(G\) matters is closure: the
+product of two \(G\)'s integrated over \((0,\infty)\) is again a \(G\), so an integrator
+that rewrites both factors as \(G\)-functions can do whole classes of definite
+integrals by parameter bookkeeping, the Mellin-transform route of
+\S\ref{ssec:calc-definite}.}\calloutnote{Performance}{Numerically a parameter set is turned
+into a \emph{plan} once---the \(z\)-independent \(\pi/\sin\) and gamma products of every
+Slater term---and each point costs one hypergeometric kernel call per term; a
+cancelling sum is re-evaluated in Arb. The log case has its own machine kernel
+(v0.446), the residue series \(\sum_k w^{\beta+k}\sum_j c_{kj}\log^jw\) with the
+coefficients tabulated once per plan and summed in double-double where it cancels: a
+scalar call went from \(456\,\mu\)s to about \(3\,\mu\)s, a \(10^6\)-element buffer from
+119~s to 0.3~s. In the special-functions benchmark (\S\ref{ssec:sf-machine}) Mathilda is
+the fastest engine in all nine \mcode{MeijerG} cells.}
+
+\usagebox{MeijerG}
+
+\subsection{Machine precision: one kernel, five surfaces}
+\label{ssec:sf-machine}
+
+Two rules govern what happens when a special function meets a floating-point
+number.\index{special functions!machine precision} The first is about mixed input: a
+call with one inexact argument and other exact but irrational ones is numericalized as
+a whole, at the lowest precision present, rather than left half-evaluated. The second
+is about where the number is computed, and it is the subject of the rest of this
+subsection.
+
+\begin{codepairs}
+\pair{special-functions/mixed/1}{A machine \(s\) numericalizes the exact
+\(a=\sqrt2\).}
+\pair{special-functions/mixed/2}{A 30-digit \(s\) gives a 30-digit answer.}
+\pair{special-functions/mixed/3}{The same rule for an irrational order.}
+\pair{special-functions/mixed/4}{The \(q\)-Pochhammer symbol \B{QPochhammer},
+\((a;q)_n=\prod_{k<n}(1-aq^k)\), exactly,}
+\pair{special-functions/mixed/5}{and at a non-integer \(n\), where it is a ratio of
+infinite products.}
+\end{codepairs}
+
+A machine-precision special function can be reached five ways: as a scalar call, an
+element of an unpacked list, a packed array, a visible \mcode{NDArray}, or inside
+\mcode{Compile}d code (\S\ref{sec:ds-packed}, \S\ref{ch:compilation}). In Mathilda all
+five call the \emph{same} raw-double kernel, so they return the same bits, not merely
+the same digits.\index{special functions!bit-for-bit surfaces} Since v0.479 that holds
+for the \(n\)-ary heads too---\mcode{LerchPhi}, \mcode{PolyLog}, the \({}_1F_1\) and
+\({}_2F_1\), \mcode{HypergeometricU}, \mcode{WhittakerM}/\mcode{W},
+\mcode{EllipticPi}, \mcode{LaguerreL}, \mcode{DirichletL}---with the array in any one
+operand.
+
+\begin{codepairs}
+\pair{special-functions/surfaces/1}{Twenty machine values of the index \(k\).}
+\pair{special-functions/surfaces/2}{The array sits in the \emph{first} operand of a
+three-argument head,}
+\pair{special-functions/surfaces/3}{and the result is still a packed array, by
+\B{PackedArrayQ}.}
+\pair{special-functions/surfaces/4}{A scalar call on one element gives identical
+bits (\B{SameQ}, not \mcode{Equal}),}
+\pair{special-functions/surfaces/5}{so does compiled code,}
+\pair{special-functions/surfaces/6}{with the array in the same slot,}
+\pair{special-functions/surfaces/7}{and so does a visible \mcode{NDArray}.}
+\pair{special-functions/surfaces/8}{\B{CompileDiagnostics} confirms the head lowered:
+no fall-back to the interpreter.}
+\end{codepairs}
+
+Bit-for-bit agreement is a correctness property, not a nicety: a numerical method that
+evaluates the same function by two routes and differences the results (a Newton step,
+a finite difference, a convergence test) sees the disagreement between the routes as
+signal. It is also the reason the scalar path is fast.\calloutnote{Performance}{The
+four-engine special-functions benchmark in
+\texttt{benchmarks/97-special-functions/} (its report is
+\texttt{special\_function\_performance.tex}) times 58 rows---every numerically
+evaluable special function, some in several variants---against SciPy (with mpmath for
+arbitrary precision), Maxima and the reference system, with distinct arguments per
+call so no engine can serve a cached value. In the report's latest run (v0.446, with the
+\mcode{DirichletL} rows from v0.450) Mathilda has the lowest
+per-call latency in \emph{every} machine-real and machine-complex row, with medians of
+\(8.9\times\) and \(10.2\times\) below the fastest other engine, and its
+\(10^6\)-element packed buffers beat SciPy for every head SciPy implements. Every
+machine kernel was gated against mpmath at a median of about one ulp before it was
+wired in. At 50 digits the picture is mixed: a median of \(2.7\times\) ahead, but
+fastest in 46 of 57 rows, with Maxima an order of magnitude quicker on \mcode{BesselY}
+and \mcode{BesselK}. The machine regimes were closed (v0.436--v0.444) by routing every
+scalar call through one gate to the kernel the array paths already used, and by
+writing native double re/im complex kernels in place of MPFR pairs.}
+
 \subsection*{Where this connects}
 
 The special functions are the point where the three layers of Mathilda meet on a
@@ -639,8 +1143,9 @@ elliptic families under \B{D}, the series expansions, the antiderivatives that
 arithmetic in the complex plane, are what the numerical methods of
 \S\ref{sec:numcalc} call when an integral or a differential equation resolves into
 one of these functions. The orthogonality of the Legendre polynomials underwrites
-Gaussian quadrature; the gamma and zeta functions thread through analytic number
-theory; and the hypergeometric family is the organizing idea that keeps the whole
+Gaussian quadrature; the gamma and zeta functions, and the Dirichlet
+\(L\)-functions that twist them, thread through analytic number theory; and the
+hypergeometric family, with Meijer's \(G\) at its summit, is the organizing idea that keeps the whole
 collection from being a bag of unrelated formulas. For the exhaustive options and
 corner cases of any function named here---the branch-cut conventions, the incomplete
 and generalized forms, the full list of recognized reductions---its reference page

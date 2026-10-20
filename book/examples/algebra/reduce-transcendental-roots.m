@@ -1,0 +1,6 @@
+# Certified real roots of transcendental functions: Root[{f, x0}]
+Reduce[Sin[x] > x/2, x, Reals]
+r = Root[{#1 - 2 Sin[#1] &, 1.9}]
+N[r, 30]
+Reduce[Cos[x] == x, x, Reals]
+Reduce[Exp[x] > 3 x, x, Reals]

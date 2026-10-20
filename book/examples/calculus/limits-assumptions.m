@@ -1,0 +1,7 @@
+# 5.3 Limits under Assumptions
+Limit[x^a, x -> Infinity]
+Limit[x^a, x -> Infinity, Assumptions -> a < 0]
+Limit[Exp[-(a + I b) x], x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]
+Limit[Log[x^a + 1]/Log[x], x -> Infinity, Assumptions -> a > 0]
+Limit[Gamma[x + a]/(Gamma[x] x^a), x -> Infinity, Assumptions -> a > 0]
+Limit[Floor[x], x -> n, Direction -> "FromBelow", Assumptions -> Element[n, Integers]]

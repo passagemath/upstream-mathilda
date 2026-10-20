@@ -1,0 +1,13 @@
+# 11.4 String patterns, named captures, RegularExpression
+StringCases["a1b22c333", DigitCharacter ..]
+StringReplace["a  b   c", Whitespace -> " "]
+StringMatchQ["hello", LetterCharacter ..]
+StringCases["abc123", (x__ ~~ "123") :> x]
+StringReplace["2026-10-20", y : (DigitCharacter ..) ~~ "-" ~~ m : (DigitCharacter ..) ~~ "-" ~~ d : (DigitCharacter ..) :> d <> "/" <> m <> "/" <> y]
+StringCases["<a><b>", "<" ~~ x__ ~~ ">" :> x]
+StringCases["<a><b>", "<" ~~ Shortest[x__] ~~ ">" :> x]
+StringCases["aabbbcdd", x_ ~~ x_]
+StringCases["x=1, y=22", RegularExpression["[a-z]=(\\d+)"] :> "$1"]
+InputForm[StringReplace["abc", "b" -> z]]
+StringCases["7 42 13 8 100", x : DigitCharacter .. /; PrimeQ[ToExpression[x]]]
+StringCases["7 42 13 8 100", WordBoundary ~~ x : DigitCharacter .. ~~ WordBoundary /; PrimeQ[ToExpression[x]]]

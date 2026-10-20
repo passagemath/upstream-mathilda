@@ -1,6 +1,6 @@
 # Mathilda Specification
 
-Mathilda is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) inspired by the core architecture of Mathematica. Mathilda is written in the C programming language. It supports a recursive expression model, pattern matching, rewriting rules, and a small library of built-in functions.
+Mathilda is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) written in the C programming language. Throughout this spec, "the reference" is the established CAS whose architecture and behaviour Mathilda reproduces; every value, message and timing quoted against it was verified by running it, never recalled. It supports a recursive expression model, pattern matching, rewriting rules, and a small library of built-in functions.
 
 The name, Mathilda is inspired by David Stoutemyer's PICOMATH-80 tiny computer algebra system.
 

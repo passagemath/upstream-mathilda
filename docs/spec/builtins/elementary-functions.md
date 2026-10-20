@@ -32,7 +32,7 @@ MPFR's exponent range (`Exp[10^25]`) returns `Overflow[]` (`Indeterminate` for a
   `src/numeric_complex.c`).
 
 **Wrong arity.** Every elementary function validates its argument count and,
-on a mismatch, emits the standard Mathematica diagnostic on stderr and leaves
+on a mismatch, emits the standard reference diagnostic on stderr and leaves
 the call unevaluated (returns the expression unchanged). The unary functions
 (`Sin`, `Cos`, …, `ArcSin`, …, `Exp`, `Sqrt`, and the hyperbolic set below)
 use `argx`; the variadic `ArcTan` and `Log` (1 or 2 arguments) use `argt`. The
@@ -70,7 +70,7 @@ Out[4]= 1/4*Pi
   `src/numeric_complex.c`.
 
 ## Exponential and Logarithmic Functions
-- `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching Mathematica — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
+- `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching the reference — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
 - `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`. When `b` and `z` are exact positive
   rationals that are integer powers of one common rational, the result is the
@@ -79,7 +79,7 @@ Out[4]= 1/4*Pi
   `Log[10, 10^30] = 30` (BigInts included). Otherwise `Log[z]/Log[b]`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
-inexact zero (ambiguous direction in floating point), matching Mathematica:
+inexact zero (ambiguous direction in floating point), matching the reference:
 
 - `Log[0]` -> `-Infinity`; `Log[b, 0]` -> `-Infinity` when `b` is a
   real-positive numeric with `b > 1` (or one of the known-positive
@@ -88,7 +88,7 @@ inexact zero (ambiguous direction in floating point), matching Mathematica:
   `+0.0` and `-0.0`).
 
 **Wrong arity.** `Log` with 0, 3, or more arguments emits the standard
-Mathematica diagnostic and leaves the call unevaluated:
+reference diagnostic and leaves the call unevaluated:
 
 ```
 Log[]            -> Log::argt: Log called with 0 arguments; 1 or 2 arguments are expected.
@@ -151,10 +151,10 @@ Out[8]= 1/3
 - `Log2[z]` gives the base-2 logarithm of `z`, `Log[2, z]`.
 
 **Features**:
-- `Listable`, `NumericFunction`, `Protected`, matching Mathematica.
+- `Listable`, `NumericFunction`, `Protected`, matching the reference.
 - Defined as `Log[10, z]` / `Log[2, z]`, so exact powers of the base are
   exact (`Log10[1000] = 3`, `Log10[1/100] = -2`, `Log2[1/8] = -3`) and a
-  symbolic or non-power argument gives Mathematica's `Log[z]/Log[10]` form.
+  symbolic or non-power argument gives the reference's `Log[z]/Log[10]` form.
   Zero, the negative axis, complex and arbitrary-precision arguments follow
   `Log[b, z]` (`Log10[0] = -Infinity`, `Log10[0.] = Indeterminate`,
   `Log10[-1.] = 0. + 1.36438 I`).
@@ -234,7 +234,7 @@ Out[11]= ArcSin[Sin[x]]
 ### Singular special values
 
 `ArcTanh` and `ArcCoth` have poles at `±1`, and Mathilda evaluates them to the
-corresponding directed infinities (matching Mathematica):
+corresponding directed infinities (matching the reference):
 
 ```mathematica
 In[12]:= ArcTanh[1]
@@ -256,7 +256,7 @@ such as `-ArcTanh[x]` blows up at an interior pole, so a divergent integral like
 
 ### Values at Infinity
 
-The inverse-trig functions fold at `±Infinity` (Wolfram-faithful), so that both
+The inverse-trig functions fold at `±Infinity` (reference-faithful), so that both
 top-level evaluation and `Limit` return closed forms:
 
 ```mathematica
@@ -315,7 +315,7 @@ Converts trigonometric and hyperbolic functions in `expr` to exponentials.
 - Operates on both circular and hyperbolic functions, and their inverses.
 - Rewrites recursively, including trig heads nested inside the *argument* of an
   outer trig head — e.g. `TrigToExp[Sin[Cos[x]]]` exponentializes the inner
-  `Cos[x]` as well, matching Wolfram Language semantics.
+  `Cos[x]` as well, matching the reference semantics.
 - Automatically threads over lists, equations, inequalities, and logic functions.
 
 ```mathematica
@@ -611,7 +611,7 @@ it.
 - Applied component-wise to `Complex` numbers.
 - `Round` rounds to the nearest even integer for ties.
 - `Floor[x, a]` returns the greatest multiple of `a` $\le x$.
-- **Exact real numeric arguments** that no leaf branch resolves (e.g. `Pi`, `E`, surds, and products such as `10000000 3^(2/3)` or `25000000000000000000 Pi`) are numericalized to MPFR at increasing precision and reduced to the exact integer. The result is only accepted once two successive precisions (starting at 256 bits, doubling to a 65536-bit cap) agree on the integer — an interval-style certification that never returns a wrong answer; a value that cannot be certified (or is not a pure real number) is left unevaluated. For `FractionalPart` the answer is kept exact as `x - IntegerPart[x]` (matching Mathematica).
+- **Exact real numeric arguments** that no leaf branch resolves (e.g. `Pi`, `E`, surds, and products such as `10000000 3^(2/3)` or `25000000000000000000 Pi`) are numericalized to MPFR at increasing precision and reduced to the exact integer. The result is only accepted once two successive precisions (starting at 256 bits, doubling to a 65536-bit cap) agree on the integer — an interval-style certification that never returns a wrong answer; a value that cannot be certified (or is not a pure real number) is left unevaluated. For `FractionalPart` the answer is kept exact as `x - IntegerPart[x]` (matching the reference).
 
 **Symbolic simplifications** (`Floor`, `Ceiling`, `Round` only -- `IntegerPart` and `FractionalPart` are excluded):
 
@@ -666,7 +666,7 @@ at both endpoints, matching the `UnitStep[0] = 1` convention below.
 
 **Features**:
 - `Listable`, `NumericFunction`, `Orderless`, `Protected`, matching
-  Mathematica. `Orderless` reflects the variadic multidimensional box
+  the reference. `Orderless` reflects the variadic multidimensional box
   (`UnitBox[x, y, ...]`, like `UnitStep`); this implementation evaluates the
   single-argument pulse.
 - The result is **always exact** -- an integer `0` or `1` -- for real numeric
@@ -827,7 +827,7 @@ default.
   interpreter gives the exact `Integer 0`; a machine integer is the identity.
 
 **Complex handling**.  `Complex[re, im]` whose components are both
-machine reals is the "machine complex" case and gets Mathematica's
+machine reals is the "machine complex" case and gets the reference's
 special treatment:
 
 | `re` below tolerance | `im` below tolerance | result |

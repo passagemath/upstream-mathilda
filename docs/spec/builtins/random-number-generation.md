@@ -256,9 +256,9 @@ Gives pseudorandom prime numbers.
   - A machine-width span of at most 4096 integers enumerates its primes once, so each draw is a single index. This also decides `noprime` exactly.
   - A wider machine-width span uses xoshiro rejection. No existence scan is needed, because the largest prime gap below 2^64 is 1550.
   - A bound past int64 uses GMP rejection. An upward scan from imin first proves at least one prime exists, since a bignum gap can be any length.
-- `imin` may be 1 (`RandomPrime[{1, 2}]` is `2`), and a reversed pair `{imax, imin}` is accepted, as in Mathematica.
-- `RandomPrime[range, {}]` gives a one-element list, as in Mathematica.
-- **Packed output.** When imax < 2^63, a list or array is written straight into a packed int64 buffer, like `RandomInteger`. It runs at about 8 ns per prime for `RandomPrime[100, 10^6]` and 4 µs per prime up to 10^18. Mathematica 14 on the same machine takes 240 ns and 69 µs.
+- `imin` may be 1 (`RandomPrime[{1, 2}]` is `2`), and a reversed pair `{imax, imin}` is accepted, as in the reference.
+- `RandomPrime[range, {}]` gives a one-element list, as in the reference.
+- **Packed output.** When imax < 2^63, a list or array is written straight into a packed int64 buffer, like `RandomInteger`. It runs at about 8 ns per prime for `RandomPrime[100, 10^6]` and 4 µs per prime up to 10^18. The reference on the same machine takes 240 ns and 69 µs.
 - **No NDArray kernel and no `Compile[]` lowering, deliberately.** RandomPrime is a generator, not an element-wise numeric map, and its dimension argument is a shape, not data. It is listed with the other `Random*` heads in `SKIP_DIMS` of `tools/nd_fastpath_sweep.py`.
 - `SeedRandom[n]` makes the sequence reproducible.
 - Messages, all through the message funnel, so `Quiet`/`Check` apply. The input is returned unevaluated in every case:

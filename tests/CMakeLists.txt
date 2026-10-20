@@ -385,6 +385,8 @@ set(COMMON_SRC
     ../src/special_functions/fresnel.c
     ../src/special_functions/elliptic.c
     ../src/special_functions/sinc.c
+    ../src/special_functions/surd.c
+    ../src/special_functions/kroneckerdelta.c
     ../src/special_functions/inverf.c
     ../src/special_functions/sf_machine.c
     ../src/special_functions/sf_machine_gamma.c
@@ -1408,6 +1410,10 @@ add_test(NAME partitions_review_tests COMMAND partitions_review_tests)
 add_executable(analytic_review_tests test_analytic_review.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(analytic_review_tests PRIVATE ../src)
 add_test(NAME analytic_review_tests COMMAND analytic_review_tests)
+
+add_executable(mixed_numericalize_tests test_mixed_numericalize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(mixed_numericalize_tests PRIVATE ../src)
+add_test(NAME mixed_numericalize_tests COMMAND mixed_numericalize_tests)
 
 add_executable(moebiusmu_tests test_moebiusmu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(moebiusmu_tests PRIVATE ../src)

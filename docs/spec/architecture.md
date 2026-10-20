@@ -29,11 +29,11 @@ The symbol table (`SymbolDef`) stores the global state associated with symbols. 
 
 The parser translates raw string input into `Expr` trees.
 *   **Lexical Analysis**: Handled inline within the parsing routines by advancing a `ParserState` pointer and skipping whitespace.
-*   **Pratt Parsing**: Operator precedence (Infix, Prefix, Postfix) is implemented using a Pratt parser (`parse_expression_prec`). Operator precedence values exactly mirror Mathematica's standard precedences (e.g., `OP_CALL` is 1000, `OP_TIMES` is 400, `OP_PLUS` is 310, `OP_PREFIX` (`@`) is 620, `OP_POSTFIX` (`//`) is 70).
+*   **Pratt Parsing**: Operator precedence (Infix, Prefix, Postfix) is implemented using a Pratt parser (`parse_expression_prec`). Operator precedence values exactly mirror the reference's standard precedences (e.g., `OP_CALL` is 1000, `OP_TIMES` is 400, `OP_PLUS` is 310, `OP_PREFIX` (`@`) is 620, `OP_POSTFIX` (`//`) is 70).
 
 ## 5.4. Evaluator (`eval.c`)
 
-The `evaluate(Expr* e)` function is the heart of Mathilda. It follows Mathematica's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
+The `evaluate(Expr* e)` function is the heart of Mathilda. It follows the reference's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
 
 **Evaluation Sequence for Functions (`f[arg1, arg2]`):**
 1.  **Evaluate Head**: The head `f` is evaluated first.

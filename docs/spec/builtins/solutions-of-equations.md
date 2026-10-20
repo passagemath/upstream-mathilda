@@ -187,7 +187,7 @@ Attempts to solve an equation or system of equations for one or more variables.
     `−b/a < 0`.  Complex roots (no Reals constraint) are emitted as
     `r * (-1)^(2k/n)` for the principal radical `r = (-b/a)^(1/n)` and
     `k = 0..n-1`, then folded by `Power`'s rational-exponent canonicaliser
-    so output matches Mathematica's standard form (e.g.
+    so output matches the reference's standard form (e.g.
     `Solve[x^5 + 1 == 0, x]` returns
     `{{x -> (-1)^(1/5)}, {x -> (-1)^(3/5)}, {x -> -1},
        {x -> -(-1)^(2/5)}, {x -> -(-1)^(4/5)}}`).
@@ -605,7 +605,7 @@ Attempts to solve an equation or system of equations for one or more variables.
   that `-1` is a quadratic residue modulo every odd prime factor of the
   opposite-sign coefficient (tested per prime with `mpz_legendre`). An
   unsolvable form returns the **trivial solution** `{{x->0,y->0,z->0}}` — a
-  proof of no nontrivial solution, *not* `{}` (matching Mathematica) — so
+  proof of no nontrivial solution, *not* `{}` (matching the reference) — so
   `Solve[x^2 + y^2 == 3 z^2, {x,y,z}, Integers] -> {{0,0,0}}`. A solvable form
   returns the **complete** integer family: `Solve[x^2 + y^2 == z^2, …]` is the
   Pythagorean parametrisation and `Solve[x^2 + y^2 == 2 z^2, …]` the full family
@@ -638,7 +638,7 @@ Attempts to solve an equation or system of equations for one or more variables.
   family, `G(V)·P0 − 2(P0^T M V)V` over `V = C[1] e_i + C[2] e_j` with scale
   `C[3]`, plus the tangent line `C[1]·P0`, is the **complete projective**
   solution — every branch is a solution and every integer solution is a rational
-  multiple of a family point, exactly the representation Mathematica / sympy
+  multiple of a family point, exactly the representation the reference / sympy
   return. So `Solve[4 x^2 - 5 y^2 + z^2 == 0, {x,y,z}, Integers]`,
   `Solve[x^2 + 3 x y + 2 y^2 - z^2 == 0, …]` and the multi-representation
   `Solve[x^2 + y^2 == 65 z^2, …]` now solve. Degenerate (rank-deficient) forms,
@@ -650,7 +650,7 @@ Attempts to solve an equation or system of equations for one or more variables.
   `(1,0,...,0,1)`, giving the standard stereographic parametric family
   (parameters `C[1..k]`): `x_i -> 2 C[i] C[k]` (`i < k`),
   `x_k -> Σ_{i<k} C[i]^2 - C[k]^2`, `y -> Σ_{i<k} C[i]^2 + C[k]^2`. One family is
-  emitted, matching Mathematica / sympy. So `Solve[x^2 + y^2 + z^2 == w^2,
+  emitted, matching the reference / sympy. So `Solve[x^2 + y^2 + z^2 == w^2,
   {x,y,z,w}, Integers]` and `Solve[x^2 + y^2 + z^2 + w^2 == v^2, …]` solve.
   Weighted summand coefficients decline (a documented follow-up).
 - **General binary quadratic — parabolic and hyperbolic families**
@@ -820,7 +820,7 @@ logical description of its solution set.
 - `Reduce[expr, vars]`: reduce `expr` over the complex numbers (default), **or
   over the reals when `expr` contains an ordering inequality** (`<`, `<=`, `>`,
   `>=`) — ordering is undefined over the complexes, so an inequality with no
-  explicit domain defaults to `Reals` (as in Mathematica). Equations (`==`) and
+  explicit domain defaults to `Reals` (as in the reference). Equations (`==`) and
   `Unequal` (`!=`) keep the `Complexes` default. Thus
   `Reduce[-5 < 3 x + 7 <= 22, x]` solves as `Reduce[-5 < 3 x + 7 <= 22, x, Reals]`.
 - `Reduce[expr, vars, dom]`: reduce over `dom` (`Complexes`, `Reals`, `Integers`,
@@ -1312,7 +1312,7 @@ each on the parameters.
 univariate residual (`Sin[x] - x/2`), the sign diagram isolates them with
 certified arb interval arithmetic (`src/root_trans.c`) on a *provably bounded*
 region and emits each as an exact rational (`x == 0`) or as a transcendental
-`Root[{f, x0}]` object, as Mathematica does:
+`Root[{f, x0}]` object, as the reference does:
 
 - the region is `[-R, R]` when `R` can be proved to bound the roots: the
   expansion is a polynomial whose lower coefficients are bounded (`Sin`, `Cos`,
@@ -1474,7 +1474,7 @@ contradiction.
 
 Unlike `Reduce`, `LogicalExpand` does **no domain reasoning**: every non-connective
 subexpression is treated as an **opaque Boolean atom** (a symbol `p`, a relation
-`x == a`, a membership `Element[...]`), exactly as in Mathematica. Two relational
+`x == a`, a membership `Element[...]`), exactly as in the reference. Two relational
 atoms are complementary iff one is the head-flipped logical negation of the other
 (`x == a` / `x != a`, `x < 1` / `x >= 1`, `Element` / `NotElement`, `a` / `!a`), so
 a negation folds into the complementary relation head rather than leaving a stray
@@ -1495,7 +1495,7 @@ over independent opaque atoms a DNF is unsatisfiable iff every clause holds a
 complementary pair — i.e. it distributes to zero surviving clauses — so `expr`
 collapses to `False` when its DNF is empty and to `True` when the DNF of `!expr` is
 empty (its negation is unsatisfiable). The result is a **sound, equivalent** DNF but,
-like the rest of the `Reduce` family, not guaranteed minimal — where Mathematica's
+like the rest of the `Reduce` family, not guaranteed minimal — where the reference's
 consensus contractions produce a shorter but logically identical cover, the output
 here may differ cosmetically (`Table[in == out, ...]` over the atoms is still all
 `True`).
@@ -1735,7 +1735,7 @@ unknowns.
   evaluator's pre-pass on `==` are folded into the trivial answers.
 - `vars` is a symbol or a `List` of symbols.
 - The empty-parameter case (every symbol in `eqns` already appears in
-  `vars`) returns `{}` — Mathematica's convention that there are no
+  `vars`) returns `{}` — the reference's convention that there are no
   parameter values to report regardless of whether the polynomial is
   identically zero.
 - `Unequal` (`!=`), `Or`-combinations of equations, radicals
@@ -1773,7 +1773,7 @@ Held symbolic representation of an indexed root of a univariate polynomial.
 
 - `Root[Function[t, p[t]], k]` — the `k`-th root of `p` (1-indexed).
 
-**Canonical index `k`** (matches Mathematica):
+**Canonical index `k`** (matches the reference):
 
 1. **Real roots first**, ordered ascending by value.
 2. **Complex roots** afterwards, ordered by `Re` ascending; ties broken by
@@ -1852,7 +1852,7 @@ closed-form radical expressions.
   by `(-1)^(2 (k-1) / n)`.
 - Other Root objects of degree ≥ 5 are returned unchanged — the system
   makes no attempt at decomposition or solvable-Galois detection (cf.
-  Mathematica's note "ToRadicals cannot find them").
+  The reference's note "ToRadicals cannot find them").
 - The k-th radical root is selected to agree with `N[Root[poly, k]]`'s
   canonical ordering (real-first ascending, complex by `Re` / `|Im|` /
   negative-`Im` first) — each formula's natural emission order is
@@ -1860,7 +1860,7 @@ closed-form radical expressions.
   When the polynomial carries parametric coefficients (no numericalisation
   possible), the natural per-formula index `k - 1` is used and the result
   is allowed to disagree with `expr` for some parameter values, matching
-  Mathematica's `nongen` behaviour.
+  the reference's `nongen` behaviour.
 - Walks its argument recursively, so `Root[..]` nodes inside `List`,
   `Equal`, `Less`, `Greater`, `And`, `Or`, `Not`, `Implies`, ... thread
   automatically — every `Root` anywhere in the tree is processed
@@ -1909,7 +1909,7 @@ caller has already classified its input.
   (caller leaves `Solve` unevaluated).
 - The m x (n+1) augmented matrix is built with variable columns in
   **reversed order** (M[i][0] is the coefficient of `vars[n-1]`).  This is
-  what produces Mathematica's `Solve::svars` convention for under-determined
+  what produces the reference's `Solve::svars` convention for under-determined
   systems: left-to-right Gauss--Jordan then naturally pivots on the
   right-most variable first, leaving left-most variables free.
 - Gauss--Jordan elimination with symbolic-pivot selection: among non-zero
@@ -2070,7 +2070,7 @@ input.
   controlled by the parent `Solve`'s `GeneratedParameters` option) and
   wrap each branch in `ConditionalExpression[..., Element[C[k], Integers]]`.
 - Inverse heads (`ArcSin`, `ArcCos`, `ArcTan`) use a vertical-strip
-  predicate on `Re[a]`/`Im[a]` matching Mathematica's principal-branch
+  predicate on `Re[a]`/`Im[a]` matching the reference's principal-branch
   domain.
 - Inner equations are solved by hand-off to
   `Solve`SolvePolynomialEquality` -> `Solve`SolveInverseFunctions`
@@ -2138,7 +2138,7 @@ context-qualified name when the caller has already classified its input.
      `N[]` evaluates the same residual in microseconds.  Candidates
      whose residual still depends on free parameters (and so cannot
      be decided either way) are kept and trigger `Solve::nongen`,
-     matching Mathematica's convention.  **`Root[]` candidates are
+     matching the reference's convention.  **`Root[]` candidates are
      verified the same way, not exempted:** the elimination hands every
      branch of the substituted `u = base^(1/L)` to the polynomial solver,
      but only the branch matching the principal `Sqrt` / `x^(p/q)`
@@ -2160,7 +2160,7 @@ context-qualified name when the caller has already classified its input.
 - The verifier accepts `Root[poly, k]` candidates without further
   checks: the polynomial elimination is exact, and `Root[]` objects
   describe the unique algebraic root of an irreducible factor that
-  is not amenable to back-substitution.  Reflects Mathematica's
+  is not amenable to back-substitution.  Reflects the reference's
   policy of keeping `Root[]`-form solutions when they cannot be
   further simplified.
 - The substitution-then-elimination strategy is "complete up to

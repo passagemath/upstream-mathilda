@@ -376,7 +376,7 @@ Gives the q-th quantile estimate of the elements in data.
 
 **Features**:
 - `Protected`.
-- Default parameters are `{{0, 0}, {1, 0}}` (Wolfram's Type-1 / left-continuous inverse CDF), so `Quantile[{1, 2, 3, 4}, 1/2]` is `2` while `Median[{1, 2, 3, 4}]` is `5/2` — the two deliberately differ on even-length data.
+- Default parameters are `{{0, 0}, {1, 0}}` (the reference's Type-1 / left-continuous inverse CDF), so `Quantile[{1, 2, 3, 4}, 1/2]` is `2` while `Median[{1, 2, 3, 4}]` is `5/2` — the two deliberately differ on even-length data.
 - `Quartiles[data]` is `Quantile[data, {1/4, 1/2, 3/4}, {{1/2, 0}, {0, 1}}]`.
 - Exact input gives exact output; sorting uses the canonical `Sort` order.
 - For $w \in [0, 1]$ the interpolation is evaluated as the convex combination $(1-w)x_{(j)} + w\,x_{(j+1)}$, not as $x_{(j)} + w\,(x_{(j+1)} - x_{(j)})$. The two are equal in exact arithmetic, but the difference form overflows on `Real` data whose neighbours straddle zero near the machine range: `Quantile[{-1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 1}}]` is `0.0`, not `Infinity`. Outside $[0, 1]$ — which `{{a,b},{c,d}}` permits, though no standard quantile type uses it — the difference form is used instead, because there the convex form is the one that can produce `NaN`. At $w = 0$ or $w = 1$ the element is selected outright rather than computed.

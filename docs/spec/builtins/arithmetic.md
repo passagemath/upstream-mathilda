@@ -35,7 +35,7 @@ Consequences:
 - Zero literals (`0.0`, `0.000`, `0.0e10`) always stay machine
   precision regardless of the typed digits.
 
-Examples (verified against Mathematica):
+Examples (verified against the reference):
 
 ```mathematica
 In[1]:= Precision[-29037945.290347]
@@ -50,7 +50,7 @@ In[3]:= Accuracy[
 Out[3]= 32.0235
 ```
 
-Mathematica-style backtick suffixes (`` ` ``, `` `` ``) still override
+Reference-style backtick suffixes (`` ` ``, `` `` ``) still override
 the implicit decision: `3.14`50` is 50-digit MPFR, `3.14``49` is
 49-digit accuracy, and `3``50` is `EXPR_REAL`.
 
@@ -65,7 +65,7 @@ Numerical evaluation.
   targets machine precision even when `expr` is already an approximate
   arbitrary-precision number, so `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`)
   collapses back to `MachinePrecision` rather than keeping 100 digits, matching
-  Mathematica. Likewise `N[2.5`100]` comes back at `MachinePrecision`. To
+  the reference. Likewise `N[2.5`100]` comes back at `MachinePrecision`. To
   request a specific precision, use the two-argument form.
 - `N[expr, p]` is an explicit precision request, but like `N[expr]` it **never
   increases** the precision of a number that is already approximate — `N`
@@ -398,7 +398,7 @@ Symbolic product.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.
 - **Sqrt-coefficient absorption**: a non-trivial rational/integer coefficient
   combined with a single `Power[r, -1/2]` group folds into the canonical
-  Mathematica form `sign(c) * Sqrt[c^2 / r]`, then Power's existing
+  reference form `sign(c) * Sqrt[c^2 / r]`, then Power's existing
   rational-base extraction pulls out any newly-exposed perfect square:
   `14/Sqrt[10] → 7 Sqrt[2/5]`, `78/Sqrt[66] → 13 Sqrt[6/11]`,
   `(3/5)/Sqrt[2/5] → 3/Sqrt[10]`. Skipped when no square is actually
@@ -468,7 +468,7 @@ Arithmetic negation as a function.
 - `Minus[x]` is `-x`, i.e. `Times[-1, x]`.
 
 **Features**:
-- `Listable`, `NumericFunction`, `Protected`, as in Mathematica.
+- `Listable`, `NumericFunction`, `Protected`, as in the reference.
 - Rewrites to `Times[-1, x]`, so numbers, rationals, complex numbers, `Plus`
   distribution and symbolic arguments all behave exactly like `-x`.
 - Usable as a sort key: `SortBy[list, Minus]`, `KeySortBy[a, Minus]`.
@@ -496,7 +496,7 @@ Exponentiation.
 **Features**:
 - `Listable`.
 - Simplifies integer powers of integers.
-- `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and Mathematica does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
+- `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - Supports complex results for negative bases (e.g., `(-1)^(1/2)` becomes `I`).
@@ -505,7 +505,7 @@ Exponentiation.
   rule `(-n)^(p/2) = I^p · |n|^(p/2)`).
 - For a negative base, the residual `(-1)^(b/q)` exponent is reduced into
   `[0, 1)` by **floor** division of `p/q`, pulling out a `(-1)^a = ±1` sign
-  that merges into the coefficient (Mathematica canonical form). This covers
+  that merges into the coefficient (the reference canonical form). This covers
   negative exponents and `|p| ≥ q` alike, e.g. `(-1)^(-1/5) → -(-1)^(4/5)`,
   `(-1)^(-2/3) → -(-1)^(1/3)`, `(-1)^(-7/5) → (-1)^(3/5)`, `(-1)^(5/4) →
   -(-1)^(1/4)`, `(-8)^(-1/3) → -(-1)^(2/3)/2`. Positive bases keep
@@ -530,7 +530,7 @@ Exponentiation.
 - For `Power[Integer, Rational]` with positive base and positive
   `p/q` exponent, splits the base's prime factorisation into a
   product of distinct-prime powers grouped by reduced effective
-  exponent (Mathematica canonical form). Triggers only when the
+  exponent (the reference canonical form). Triggers only when the
   resulting form is strictly more informative -- uniform-exponent
   inputs like `6^(1/3)` and `30^(1/3)` keep the compact form.
 
@@ -582,14 +582,14 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
 
 - `Mod[n, m]`: Remainder of `n/m`.
   - Real operands use the floored quotient: `n - m Floor[n/m]`. `Mod[n, m, d]` uses `n - m Floor[(n - d)/m]`.
-  - Since v0.471 Mod also follows Mathematica 14 beyond integers, rationals and reals:
+  - Since v0.471 Mod also follows the reference beyond integers, rationals and reals:
     - **Complex or Gaussian operands** use the nearest quotient, `n - m Round[(n - d)/m]`, with ties to even: `Mod[3 + 4 I, 2]` → `-1`, `Mod[7, 3 + I, 1/2]` → `I`. Gaussian integers take a direct `Z[i]` route (`nt_gaussian_mod`), in int64 when the modulus components are below 2¹⁶.
-      - **Printing difference:** an inexact complex result whose imaginary part rounds to `0.` prints as a Real. Mathilda's arithmetic drops `0.` imaginary parts everywhere; Mathematica keeps `-0.5 + 0.*I`.
+      - **Printing difference:** an inexact complex result whose imaginary part rounds to `0.` prints as a Real. Mathilda's arithmetic drops `0.` imaginary parts everywhere; the reference keeps `-0.5 + 0.*I`.
     - **Other exact numerics** use `Floor`: `Mod[Pi, 1]` → `Pi - 3`.
     - **A zero modulus** gives `Indeterminate` with `Mod::indet` (it used to stay unevaluated), on every surface: scalar, packed, and `Compile`, which hands the zero back to the interpreter.
     - **An infinite dividend** gives `Indeterminate` with `Infinity::indet`. A real infinite modulus returns `n` (`Mod[-3, Infinity]` → `-3`), and `ComplexInfinity` gives `Indeterminate`.
     - **Arity**: one argument draws `Mod::argtu`, other counts `Mod::argt`.
-  - Packed `Mod[buffer, k]` with a constant `k >= 2` uses a reciprocal-multiply arm (`NDBinaryKernel.whole_i`) with an exact integer correction, so the loop has no hardware division. On a pre-built `Range[10^7]` it went from 0.116 s to 0.037 s (Mathematica 0.047 s), and the results are bit-identical to the `%` path.
+  - Packed `Mod[buffer, k]` with a constant `k >= 2` uses a reciprocal-multiply arm (`NDBinaryKernel.whole_i`) with an exact integer correction, so the loop has no hardware division. On a pre-built `Range[10^7]` it went from 0.116 s to 0.037 s (the reference 0.047 s), and the results are bit-identical to the `%` path.
 - `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
   rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
   `Quotient[n, m, d]` is `Floor[(n - d)/m]`. For **complex** `n` or `m` it is
@@ -598,7 +598,7 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
   quotient of least remainder norm. So `Quotient[10 + 2 I, 3 + I]` is `3`,
   `Quotient[17.5 + 6 I, 1 + 2 I]` is `6 - 6 I`, and `Quotient[5 + 3 I, 2]` is
   `2 + 2 I`. The two branches deliberately differ — an imaginary part changes
-  which integer is nearest — and both match Mathematica.
+  which integer is nearest — and both match the reference.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
 Over a list, both run on the machine buffer and keep the result packed. Their
@@ -606,7 +606,7 @@ exactness rules differ, and the difference is the point: `Quotient` **narrows** 
 its answer is an exact `Integer` whatever it is given, so
 `Quotient[{1., 2., 3.}, 3]` is `{0, 0, 1}` — while `Mod` takes the *argument's*
 exactness, so `Mod[{1., 2., 3.}, 3]` is `{1., 2., 0.}` and `Mod[{1, 2, 3}, 3]`
-is `{1, 2, 0}`. Both match Mathematica.
+is `{1, 2, 0}`. Both match the reference.
 
 Before 2026-08-01 neither could hold an integer buffer, which made them the
 break in the chain for integer work: `Mod[Range[10^6] 7919, 1000]` handed 10⁶
@@ -635,11 +635,11 @@ the same expression giving different element heads either side of the
 - Bases > 10 are allowed; digit values range over `{0, ..., b-1}`.
 - Machine integers take a word-sized loop. Bignums in bases up to 62 go
   through GMP's subquadratic `mpz_get_str`, and the digits are written
-  straight into a packed `int64` list, which is how Mathematica returns them:
-  `IntegerDigits[3^200000]` takes 0.0035 s (Mathematica 14.0: 0.0038 s; the
+  straight into a packed `int64` list, which is how the reference returns them:
+  `IntegerDigits[3^200000]` takes 0.0035 s (the reference: 0.0038 s; the
   old repeated division took 0.78 s). Larger bases fall back to repeated
   division.
-- Messages, as in Mathematica: `IntegerDigits::ibase` (a base that is not an
+- Messages, as in the reference: `IntegerDigits::ibase` (a base that is not an
   integer greater than 1) and `IntegerDigits::intnm` (a negative length).
 
 ```mathematica
@@ -660,7 +660,7 @@ Out[4]= {5, 3, 5, 4}
 > rather than materialising it. The result is ragged — a list per element, of
 > differing lengths — so it is an ordinary list either way. The digit nodes and
 > list heads are shared (reference-counted), so `IntegerDigits[Range[10^6]]`
-> takes 0.36 s (Mathematica 14.0: 0.47 s; before: 1.23 s).
+> takes 0.36 s (the reference: 0.47 s; before: 1.23 s).
 
 ## IntegerLength
 
@@ -693,7 +693,7 @@ Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 1
 ```
 
 **Arity diagnostics** (`IntegerLength::argt`). Wrong-arity calls emit the
-diagnostic and echo the call back unevaluated, matching Mathematica:
+diagnostic and echo the call back unevaluated, matching the reference:
 
 ```mathematica
 In[4]:= IntegerLength[]
@@ -738,10 +738,10 @@ Out[6]= IntegerLength[1.1234]
 - Works for both machine integers and bignums. Base 2 uses GMP's
   `mpz_scan1` (lowest-set-bit lookup, O(log n / wordsize)); other bases use
   `mpz_remove` (a single library call that strips all factors of `b`).
-- A non-integer numeric base emits `IntegerExponent::ibase`, as in Mathematica.
+- A non-integer numeric base emits `IntegerExponent::ibase`, as in the reference.
 - **Machine surfaces.** A packed `int64` list (with a scalar base) runs on a
   buffer kernel and stays packed: 0.021 s for 10^6 elements, against 0.087 s
-  in Mathematica 14.0 (0.45 s before). A zero element gives `Infinity`, so
+  in the reference (0.45 s before). A zero element gives `Infinity`, so
   that result is an ordinary list. `IntegerExponent[v, b]` compiles at scalar
   and rank-1 shapes.
 
@@ -763,7 +763,7 @@ Out[5]= Infinity
 ```
 
 **Arity diagnostics** (`IntegerExponent::argt`). Wrong-arity calls emit the
-diagnostic and echo the call back unevaluated, matching Mathematica:
+diagnostic and echo the call back unevaluated, matching the reference:
 
 ```mathematica
 In[6]:= IntegerExponent[]
@@ -819,19 +819,19 @@ Out[3]= {10, 0, 18}
   representation of `n`. Sign of `n` is discarded.
 - `DigitCount[n, b]`: List of counts of digits `1, 2, ..., b-1, 0` in the
   base-`b` representation of `n` (requires `b >= 2`). Note the ordering:
-  digit `0` is **last**, matching Mathematica's convention.
+  digit `0` is **last**, matching the reference's convention.
 - `DigitCount[n, b, d]`: Scalar count of digit `d` (an integer with
   `0 <= d < b`) in the base-`b` representation of `n`.
 
 **Features**:
-- `Protected`, not `Listable` (as in Mathematica), but a list in the **first**
+- `Protected`, not `Listable` (as in the reference), but a list in the **first**
   argument threads explicitly: `DigitCount[{1, 0, 1}, 2]` is
   `{{1, 0}, {0, 0}, {1, 0}}`. A non-numeric element emits `DigitCount::int`
   for the whole call, and a list as the base emits `DigitCount::base`.
 - `DigitCount[n, b, {d1, d2, ...}]` is the list of the individual counts.
 - `0` counts as the single digit 0 (`DigitCount[0]` is
   `{0, 0, 0, 0, 0, 0, 0, 0, 0, 1}`), except in base 2, where it is `{0, 0}`.
-  Both match Mathematica 14.0.
+  Both match the reference.
 - A real `n` counts the digits `RealDigits[n, b]` gives:
   `DigitCount[2.5, 2]` is `{2, 51}`.
 - A digit that is not an integer in `[0, b)` emits `DigitCount::digp`.
@@ -876,16 +876,16 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
   the sign of `n`, `FromDigits[IntegerDigits[n]]` is `Abs[n]`, not `n`.
 - Digits in the list (and characters in the string) need *not* be smaller
   than the base; they are carried via Horner's evaluation, matching
-  Mathematica (e.g. `FromDigits[{7, 11, 0, 0, 0, 122}] == 810122`,
+  the reference (e.g. `FromDigits[{7, 11, 0, 0, 0, 122}] == 810122`,
   `FromDigits["1A3C"] == 2042`).
-- Any integer base is accepted for a list, as in Mathematica:
+- Any integer base is accepted for a list, as in the reference:
   `FromDigits[{1, 2, 3}, 1]` is `6`, `FromDigits[{1, 2, 3}, -10]` is `83`.
 - The all-integer case is exact in GMP. Digit lists in bases up to 62 and
   strings in bases up to 36 go through `mpz_set_str` (subquadratic). A packed
   `int64` digit list is read in place (FromDigits is on `AWARE`): 10^5 digits
-  take 0.0018 s, against 0.27 s before and 0.0015 s in Mathematica 14.0.
+  take 0.0018 s, against 0.27 s before and 0.0015 s in the reference.
 - With a numeric base and symbolic digits the result is the Horner form
-  (`FromDigits[{a, b, c}]` is `c + 10 (b + 10 a)`, as in Mathematica); a
+  (`FromDigits[{a, b, c}]` is `c + 10 (b + 10 a)`, as in the reference); a
   symbolic base gives the expanded sum `d[n-1] + d[n-2] x + ...`. For a string,
   the base must be an integer; a symbolic base over a string stays unevaluated
   (silently).
@@ -918,7 +918,7 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
   Digit values `10`-`35` use the lowercase letters `a`-`z`.
 - `IntegerString[n, b, len]`: Pads the string on the left with `'0'` to give
   a string of length `len`. If `n` has more than `len` base-`b` digits, the
-  `len` least-significant digits are returned (matching Mathematica).
+  `len` least-significant digits are returned (matching the reference).
 
 **Features**:
 - `Protected`, `Listable`. Threads element-wise over a list of integers in
@@ -951,7 +951,7 @@ Out[5]= "345"
 ```
 
 **Arity diagnostics** (`IntegerString::argb`). Wrong-arity calls emit the
-diagnostic and echo the call back unevaluated, matching Mathematica:
+diagnostic and echo the call back unevaluated, matching the reference:
 
 ```mathematica
 In[6]:= IntegerString[]
@@ -1102,14 +1102,14 @@ Out[7]= {-3/20, 1}
   Plain symbols with no numeric value are left unevaluated.
 - Output is a machine `Real` unless one of the inputs already carries
   MPFR precision, in which case the result is `MPFR` at the higher of
-  the input precisions.  This matches Mathematica's contagion: an
+  the input precisions.  This matches the reference's contagion: an
   explicit `N[..., p]` lifts the exponent to the same precision.
 - The base must be a real number `> 1`; non-positive, `<= 1`, or complex
   bases emit `RealExponent::ibase` and leave the call unevaluated.
 - Complex arguments with non-zero imaginary part emit
   `RealExponent::realx` and leave the call unevaluated.
 - Sign of `x` is discarded.
-- Zero handling (Mathematica-compatible):
+- Zero handling (reference-compatible):
   - Exact zero (Integer 0, BigInt 0, Rational 0/n) → `-Infinity`.
   - Machine `0.` → `Log[b, $MinMachineNumber]` (`≈ -307.65` for base 10).
   - MPFR `0``p` of `p` digits → `-p / Log10[b]` (`-p` for base 10).
@@ -1193,6 +1193,14 @@ In[4]:= D[x^n, {x, k}]
 Out[4]= x^(-k + n) FactorialPower[n, k]
 ```
 
+- **v0.477**: the step form `FactorialPower[x, n, h]` = x (x - h) … (x - (n - 1) h)
+  for a positive integer `n`, 1/((x + h) … (x + |n| h)) for a negative one, and
+  h^n Gamma[x/h + 1]/Gamma[x/h - n + 1] otherwise, evaluated when `x` and `h` are
+  numeric (`FactorialPower[5, 3, 2] = 15`, `FactorialPower[5, 1/2, 2] = 15
+  Sqrt[Pi/2]/8`, `FactorialPower[-2.5, 1.5, 0.5] = ComplexInfinity`); a symbolic
+  `x` or `h` stays. A negative integer `k` with numeric `n` now evaluates too
+  (`FactorialPower[5, -2] = 1/42`).
+
 ## Binomial
 
 Gives the binomial coefficient $\binom{n}{m}$, generalised via
@@ -1222,7 +1230,7 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
 - Arbitrary-precision real branch via MPFR (`mpfr_gamma`), evaluating the
   Gamma quotient at the working precision. It leaves the exact rational
   form symbolic — `Binomial[7/3, 1/5]` stays `Binomial[7/3, 1/5]`, as in
-  Mathematica — but supplies a value under `N[Binomial[7/3, 1/5], p]`.
+  the reference — but supplies a value under `N[Binomial[7/3, 1/5], p]`.
   Placed after the integer-`m` branch so an integer `m` keeps the exact
   falling-factorial form. The working precision follows the usual
   contagion rule (minimum precision among the inexact operands, floored
@@ -1418,7 +1426,7 @@ Complex number functions.
 
 **Exact numeric constants.** `Re`, `Im`, `ReIm`, `Abs`, `Sign` and `Arg` also
 evaluate on closed-form constants such as `Sqrt[2]`, `Pi - 4`, `Sin[10]`,
-`E + I Pi` or `1 + I Sqrt[2]`, as Mathematica does: `Abs[Pi - 4] = 4 - Pi`,
+`E + I Pi` or `1 + I Sqrt[2]`, as the reference does: `Abs[Pi - 4] = 4 - Pi`,
 `Sign[Pi - 3] = 1`, `Re[E + I Pi] = E`, `Sign[I Pi] = I`, `Arg[-Sqrt[2]] = Pi`,
 `Arg[-1 + I Sqrt[2]] = Pi - ArcTan[Sqrt[2]]`, `Abs[1 + I Sqrt[2]] = Sqrt[3]`.
 The real and imaginary parts come from the structural `a + b I` split, and the
@@ -1692,7 +1700,7 @@ accumulator), and `src/power.c`.
 
 **Not modelled.** Approximate numbers become *point* intervals
 (`Interval[1.]` → `Interval[{1., 1.}]`) — a tight, rigorous enclosure of the
-machine value; Wolfram's half-ULP "uncertainty preloading" of a machine number
+machine value; the reference's half-ULP "uncertainty preloading" of a machine number
 is not replicated, because Mathilda's printer shows full precision and would
 render `[1.−ulp, 1.+ulp]` as `{0.9999…, 1.0000…}` rather than `{1., 1.}`.
 `Interval` is also not (yet) usable as a geometric `Region`, since Mathilda has

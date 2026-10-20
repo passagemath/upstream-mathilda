@@ -27,8 +27,9 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
     const char* got_s = (got == 1) ? "" : "s"; /* "argument" vs "arguments" */
 
     if (min == max) {
-        /* Fixed arity. Mathematica tags the one-argument case `argx`. */
-        const char* tag = (min == 1) ? "argx" : "argrx";
+        /* Fixed arity. The reference tags an expected count of one `argx`, and
+         * a call with ONE argument against a larger fixed count `argr`. */
+        const char* tag = (min == 1) ? "argx" : (got == 1) ? "argr" : "argrx";
         mth_message(head, tag,
                 "%s called with %zu argument%s; %zu argument%s %s expected.",
                 head, got, got_s,
@@ -38,7 +39,7 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
                 "%s called with %zu argument%s; %zu or more arguments are expected.",
                 head, got, got_s, min);
     } else if (max == min + 1) {
-        mth_message(head, "argt",
+        mth_message(head, (got == 1) ? "argtu" : "argt",
                 "%s called with %zu argument%s; %zu or %zu arguments are expected.",
                 head, got, got_s, min, max);
     } else {

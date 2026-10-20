@@ -1,7 +1,7 @@
 # Data Structures
 
 Associations (`<| key -> value, ... |>`) are Mathilda's key–value data structure,
-modelled on the Wolfram Language. Keys are unique and insertion-ordered (the
+modelled on the reference. Keys are unique and insertion-ordered (the
 first occurrence fixes a key's position, the last occurrence its value), and
 bulk operations are backed by a hash index for amortised `O(n)` construction,
 grouping and lookup.
@@ -82,7 +82,7 @@ Tests whether an expression is an association.
 
 - `AssociationQ[expr]`: `True` only for a *well-formed* association, one whose
   every entry is a two-argument `Rule` or `RuleDelayed`. A malformed
-  `Association[1, 2]`, which the constructor leaves unevaluated as Mathematica
+  `Association[1, 2]`, which the constructor leaves unevaluated as the reference
   does, gives `False`.
 
 ```mathematica
@@ -97,7 +97,7 @@ Out[3]= False
 ```
 
 ## Association atomicity (structural functions)
-An evaluated association is an **atom**, as in Mathematica: its parts are its
+An evaluated association is an **atom**, as in the reference: its parts are its
 values, and its keys and `Rule` wrappers are not parts at all.
 
 - `AtomQ[assoc]` is `True`; `Depth`, `LeafCount`, `Level`, `FreeQ`,
@@ -127,12 +127,12 @@ values, and its keys and `Rule` wrappers are not parts at all.
 - Linear time: the well-formedness check is paid once per visited node, and an
   association used as a rule set costs one O(1) lookup per subexpression, not
   one pattern match per key.
-- Differences from Mathematica, both deliberate:
-  - Mathematica does not re-evaluate the values of an association built by
+- Differences from the reference, both deliberate:
+  - The reference does not re-evaluate the values of an association built by
     `/.`: `<|"a" -> x^2|> /. x -> 3` is `<|"a" -> 3^2|>`. Mathilda gives
     `<|"a" -> 9|>`. It has no "already evaluated" mark on the rebuilt node, so
     the evaluator reduces the new values, as it does for a `List`.
-  - Mathematica treats an *unevaluated* `Association[...]` inside `Hold` as an
+  - The reference treats an *unevaluated* `Association[...]` inside `Hold` as an
     ordinary expression, so `Hold[<|a -> 1|>] /. a -> b` renames the key.
     Mathilda has a single representation for both, so the key is left alone
     there too.
@@ -189,7 +189,7 @@ Gives the list of keys of an association (or a list of rules).
 - `Keys[assoc, f]` wraps each key: `{f[k1], f[k2], ...}`.
 
 **Features**: an invalid list element gives `Keys::invrl` and leaves the call
-unevaluated. Mathematica has no level argument (`Keys[a, 2]` is the `f` form
+unevaluated. The reference has no level argument (`Keys[a, 2]` is the `f` form
 with `f = 2`), and neither does Mathilda.
 
 ```mathematica
@@ -235,10 +235,10 @@ Looks up the value stored under a key.
 - Also accepts a bare list of rules (like `Keys`/`Values`).
 - `Lookup[key][assoc]` is the operator form (see *Operator forms* in
   `functional-programming.md`); `Lookup[key, default][assoc]` is not one, as in
-  Mathematica.
+  the reference.
 
 **Features**:
-- `HoldAll`, as in Mathematica: the association and key are evaluated, the
+- `HoldAll`, as in the reference: the association and key are evaluated, the
   default only when a key is actually absent (once per absent key), so a
   default with side effects runs only when needed.
 
@@ -272,7 +272,7 @@ association or a bare list of rules.
   construct (`_`, `x_h`, `Alternatives`, `Except`, `PatternTest`, `Condition`,
   ...) is matched against every key.
 - `KeyExistsQ` never treats its key as a pattern: `KeyExistsQ[a, _]` looks for
-  the literal key `_`, as in Mathematica.
+  the literal key `_`, as in the reference.
 
 ```mathematica
 In[1]:= KeyExistsQ[<|"a" -> 1|>, "a"]
@@ -316,7 +316,7 @@ Out[3]= {<|"a" -> 1|>, <|"a" -> 3|>}
 - `KeyTake[{assoc1, ...}, keys]` threads over a list of associations.
 
 **Features**
-- Matches Mathematica 15: absent keys are skipped, and a key requested more
+- Matches the reference: absent keys are skipped, and a key requested more
   than once is placed at its last occurrence (`{"c", "a", "c"}` gives
   `<|"a" -> .., "c" -> ..|>`).
 - `O(n + m)`: the association's entries are hash-indexed once; `RuleDelayed`
@@ -403,7 +403,7 @@ Hash-indexed grouping in `O(n)` plus the cost of `f`.
   associations (group by `f1`, then each group by `f2`, ...);
   `GroupBy[list, {f1, f2, ...}, g]` applies the reducer `g` at the innermost
   level only. A level written `keyfn -> valfn` transforms the elements the next
-  level sees, as in Mathematica 15.
+  level sees, as in the reference.
 
 ```mathematica
 In[1]:= GroupBy[{1, 2, 3, 4, 5, 6}, EvenQ]
@@ -744,7 +744,7 @@ Out[5]= <|"a" -> 9, "b" -> 2|>
 
 ## Position
 `Position[assoc, patt]` gives the positions of matches inside the **values** as
-`{Key[k], subpos...}` (Wolfram semantics), descending into nested values; the
+`{Key[k], subpos...}` (the reference semantics), descending into nested values; the
 positions round-trip through `Part`/`Extract`.
 
 ```mathematica
@@ -783,7 +783,7 @@ Out[4]= True
 
 ## Map, Select
 `Map` and `Select` thread over the **values** of an association, preserving keys
-(matching Wolfram semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and
+(matching the reference semantics) — `Map[f, <|k -> v|>]` gives `<|k -> f[v]|>`, and
 `Select` keeps the entries whose value satisfies the predicate.
 
 ```mathematica
@@ -810,10 +810,10 @@ while `Total`/`Min`/`Max` reduce over the values. `Join` merges associations
   `ReverseSortBy[coll, f, p]` is `SortBy[coll, f, p[#2, #1] &]`.
 
 **Features**
-- With an ordering function, the sort is Mathematica 15's top-down merge sort
+- With an ordering function, the sort is the reference's top-down merge sort
   (the merge keeps the left element unless `p[left, right]` is `False` or
   `-1`), so ties under a strict `p` such as `Greater` land exactly where
-  Mathematica puts them. `Ordering[..., p]` and `KeySort[assoc, p]` share it.
+  the reference puts them. `Ordering[..., p]` and `KeySort[assoc, p]` share it.
 
 ```mathematica
 In[1]:= Sort[<|"a" -> 3, "b" -> 1, "c" -> 2|>]
@@ -848,7 +848,7 @@ Out[8]= <|"a" -> 2, "b" -> 2, "c" -> 1|>
 **Features**
 - `KeySort[assoc, p]` orders the keys exactly as `Sort[Keys[assoc], p]` would
   (the shared merge sort), so a `p` that does not evaluate to `False`/`-1`
-  leaves the order alone, as in Mathematica 15.
+  leaves the order alone, as in the reference.
 
 ```mathematica
 In[1]:= KeySort[<|"c" -> 3, "a" -> 1, "b" -> 2|>]
@@ -938,7 +938,7 @@ Out[2]= 30
 
 A unifying principle runs through the association operations above: **functions
 that consume or reduce a collection operate on an association's values, keeping
-keys aligned**, matching the Wolfram Language.
+keys aligned**, matching the reference.
 
 - Element-wise (`Map`, `Select`) return an association: `Map[f, <|k -> v|>]` is `<|k -> f[v]|>`.
 - Reductions (`Total`, `Min`, `Max`, `Mean`) return a scalar over the values — and are
@@ -961,11 +961,11 @@ and ranks in one expression (see [`../../../examples/association-showcase.md`](.
 - `AppendTo[a, rule]` / `PrependTo[a, rule]` do the same and assign back to `a`.
 
 **Features**
-- As in Mathematica 15, an existing entry with the same key is **moved**: it is
+- As in the reference, an existing entry with the same key is **moved**: it is
   removed from its old position and the new value is placed at the end
   (`Append`) or the front (`Prepend`).
 - A non-rule element leaves `Append`/`Prepend` unevaluated; `AppendTo[a, 5]`
-  assigns the unevaluated `Append[a, 5]`, exactly like Mathematica.
+  assigns the unevaluated `Append[a, 5]`, exactly like the reference.
 - `O(n + m)`: membership is tested through an indexed association of the new
   rules.
 
@@ -994,10 +994,10 @@ Out[3]= <|"b" -> 9, "a" -> 1|>
 - An absent key gives `Missing["KeyAbsent", spec]` with the spec as written:
   `<|"a" -> 1|>[[Key["b"]]]` is `Missing["KeyAbsent", Key["b"]]`; inside a key
   list it becomes the entry `k -> Missing[...]`.
-- As in Mathematica 15, the Part stays unevaluated for a position out of range,
+- As in the reference, the Part stays unevaluated for a position out of range,
   a span running off either end (an empty span just inside, such as `3 ;; 2`,
   gives `<||>`), positions mixed with keys, a bare symbol or real as the spec,
-  or a deeper index that fails on any selected value. (Mathematica also prints
+  or a deeper index that fails on any selected value. (the reference also prints
   `Part::partw`, `Part::take`, `Part::pmix`, `Part::pkspec1` or `Part::partd`;
   Mathilda does not print these messages.)
 - Sub-associations share their entries with the source, so `RuleDelayed`
@@ -1034,9 +1034,9 @@ Out[5]= Missing["KeyAbsent", Key["a"]]
 - `Insert` removes an existing entry with the inserted key, so the new position
   wins; a non-rule element returns the association unchanged, and an
   out-of-range position or absent key leaves the call unevaluated
-  (Mathematica 15).
+  (the reference).
 - An association used as a `Pick` selector is atomic: the whole expression if
-  it matches the pattern, else `Sequence[]`, as in Mathematica 15 (it no longer
+  it matches the pattern, else `Sequence[]`, as in the reference (it no longer
   builds malformed `Rule[]` nodes).
 
 ```mathematica
@@ -1093,7 +1093,7 @@ Out[4]= 12
 ```
 
 ## First, Last, Rest, Most, Take, Drop
-Structural extractors follow Wolfram semantics on associations: `First`/`Last`
+Structural extractors follow the reference semantics on associations: `First`/`Last`
 give the first/last **value**, while `Rest`/`Most`/`Take`/`Drop` slice **entries**
 and return an association (order preserved). `First[expr, default]` and
 `Last[expr, default]` return `default` when `expr` has no elements (an empty
@@ -1121,7 +1121,7 @@ the values of association arguments, keeping the keys.
   `<|a -> 2|>`.
 - Several association arguments must have the same keys **in the same order**;
   otherwise `Association::incmp` is issued and the call stays unevaluated (as in
-  Mathematica 15, where `<|a -> 1, b -> 2|> + <|b -> 1, a -> 2|>` is also
+  the reference, where `<|a -> 1, b -> 2|> + <|b -> 1, a -> 2|>` is also
   rejected).
 - When a `List` argument is present too, List threading runs first, so the list
   is the outer level: `<|a -> 1, b -> 2|> + {10, 20}` is a list of two
@@ -1189,7 +1189,7 @@ fills gaps with `Missing["KeyAbsent", k]` and `JoinAcross` with
 `Missing["Unmatched"]` / `Missing["NotAvailable"]`.
 - Test with [`MissingQ`](#missingq); remove with [`DeleteMissing`](#deletemissing).
 
-**Features**: an inert head; attributes `{Protected}` (Mathematica also sets
+**Features**: an inert head; attributes `{Protected}` (the reference also sets
 `ReadProtected`, which Mathilda does not implement).
 
 ```mathematica
@@ -1329,7 +1329,7 @@ Out[3]= True
 `Splice[{e1, e2, ...}]` is replaced by the sequence `e1, e2, ...` when it appears
 as an argument of a `List` or an `Association`.
 - `Splice[list, h]` splices into any head matching the pattern `h`
-  (`Splice[list, _]` everywhere). As in Mathematica, an explicit `h` never
+  (`Splice[list, _]` everywhere). As in the reference, an explicit `h` never
   splices into an `Association`.
 - Anywhere else it stays inert, so `f[Splice[{1, 2}]]` is unchanged.
 
@@ -1371,7 +1371,7 @@ Joins two lists of associations on shared key values (a relational join).
 **Features**: attributes `{Protected}`; `Options[JoinAcross]` is
 `{KeyCollisionFunction -> Left}`. The right rows are hash-indexed on the
 join-key tuple, so a join costs `O(|left| + |right| + |output|)`. Output order
-matches Mathematica 15: matched pairs (left-major), then unmatched left rows,
+matches the reference: matched pairs (left-major), then unmatched left rows,
 then unmatched right rows; rows whose key sets then differ are padded to the
 union with `Missing["NotAvailable"]`.
 
@@ -1391,7 +1391,7 @@ Out[4]= {<|"a" -> 1, "v" -> "R"|>}
 
 ## ApplyTo
 `ApplyTo[x, f]` sets `x` to `f[x]` and returns the new value (`x //= f` in
-Mathematica's notation).
+the reference's notation).
 - `x` may be a symbol with a value, a part `s[[i]]`, or an association entry
   `s[key]`; the write-back goes through `Set`.
 - A target without a value gives `ApplyTo::rvalue` and stays unevaluated.
@@ -1437,7 +1437,7 @@ Out[2]= {<|"x" -> 1|>, <|"x" -> 2|>}
 ## Normal (associations)
 `Normal[expr]` converts every association in `expr` to its list of rules, at
 any depth, but does not descend into the values of a converted association
-(Mathematica's rule). `Normal[expr, Association]` converts only associations.
+(the reference's rule). `Normal[expr, Association]` converts only associations.
 Held expressions (`Hold`, `HoldComplete`, ...) are left alone.
 
 ```mathematica
@@ -1459,19 +1459,19 @@ Out[2]= {"a" -> <|"b" -> 1|>}
 **Features**:
 - Mathilda has **no sparse storage**: a `SparseArray[...]` expression stays
   inert, exactly as written. `Normal` converts it to the dense nested List it
-  denotes; that is the conversion Mathematica code relies on, and until
+  denotes; that is the conversion code written for the reference relies on, and until
   2026-09-28 `Normal` handed the `SparseArray` back unchanged.
 - Positions are Integer lists (an Integer for a vector); without `dims` the
   size is the per-coordinate maximum of the positions. Negative indices count
   from the end once `dims` are known. When several rules name one position the
-  **first** wins, as in Mathematica.
+  **first** wins, as in the reference.
 - Rule forms: `{p1, p2, ...} -> {v1, v2, ...}`; pattern rules
   (`{i_, i_} -> 1`, `{i_, j_} :> i + j`, conditions allowed), which need `dims`;
   and `Band[start] -> v`, `Band[start, end]`, `Band[start, end, step]`, with `v`
   a scalar or a List of successive values.
-- The InputForm of Mathematica's own representation,
+- The InputForm of the reference's own representation,
   `SparseArray[Automatic, dims, default, {1, {rowptr, colidx}, vals}]`, is
-  accepted, so a value pasted out of Mathematica round-trips through `Normal`.
+  accepted, so a value pasted out of the reference round-trips through `Normal`.
 - A specification Mathilda cannot densify (pattern rules without `dims`, a
   position outside `dims`, a result over 2^27 entries) leaves `Normal[...]`
   unevaluated.

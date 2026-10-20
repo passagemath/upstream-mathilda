@@ -44,6 +44,8 @@
 #include "special_functions/sf_machine_bessel.h"
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
+#include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r) */
+#include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -776,6 +778,8 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
 static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL };
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(StruveH,           sf_machine_struve_h)
+NDK_BIN2(Surd,              sf_surd_r)          /* Surd[x, n]: real root, integer n */
+NDK_BIN2(BesselJZero,       sf_bessel_j_zero_r) /* BesselJZero[n, k]: real n, integer k */
 #undef NDK_BIN2
 
 /* PolyLog[s, z]: written out because it has a machine COMPLEX arm. A wholly
@@ -1030,6 +1034,8 @@ void ndkernels_init(void) {
     REG_B(BesselY, NDKB_BesselY);
     REG_B(Beta,    NDKB_Beta);
     REG_B(StruveH, NDKB_StruveH);   /* real z via sf_machine_struve_h; Compile[] too */
+    REG_B(Surd,    NDKB_Surd);      /* declines even roots of x < 0 -> List path */
+    REG_B(BesselJZero, NDKB_BesselJZero); /* real n > -1, integer-valued k */
 
     /* Exponential-integral family (sf_machine.c) + two already-existing
      * double algorithms that were simply never registered. */

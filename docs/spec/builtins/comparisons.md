@@ -40,7 +40,7 @@ a NaN with itself. So `Indeterminate === Indeterminate` is `True`. This applies
 to `Indeterminate` as an *operand*; a compound operand that merely contains one
 (e.g. `{1, Indeterminate} == {1, Indeterminate}`) still decides by structure.
 
-Note this differs from Mathematica, where `Indeterminate == Indeterminate` is
+Note this differs from the reference, where `Indeterminate == Indeterminate` is
 `True`.
 
 ## Equal
@@ -52,6 +52,9 @@ Tests whether two (or more) expressions are mathematically equal.
 
 **Features**:
 - Numeric arguments are compared by value, so `2 == 2.0` is `True`.
+- Two exact rationals compare exactly, whatever the size of their parts
+  (v0.477): `1 == 1 + 10^-20` is `False`. It used to reach the tolerant
+  machine comparison and test `True`.
 - Closed-form numeric constants that carry no real ordering are decided by the
   exact zero-test: `I == 0` is `False`, `(1 + I) == (1 - I)` is `False`, and a
   complex radical such as `(-1 + (1/8)(-1 - I Sqrt[3])^3)/(-1 + (1/2)(-1 - I Sqrt[3]))
@@ -70,7 +73,7 @@ Tests whether two (or more) expressions are mathematically equal.
   `False`, one decidably unequal position makes the whole comparison `False`
   (`{x, 1} == {y, 2}`), and otherwise it stays symbolic (`{x} == {y}`).
   `Unequal` uses the same test.
-- `Equal` is `Orderless` for the equality test but preserves Mathematica's
+- `Equal` is `Orderless` for the equality test but preserves the reference's
   printed form.
 
 ```mathematica
@@ -92,7 +95,7 @@ Tests whether expressions are unequal.
   unequal, `False` if equal, otherwise stays symbolic.
 - `Unequal[x, y, z, ...]` (written `x != y != z`): `True` only if all
   arguments are pairwise distinct. A run of `!=` parses to this one variadic
-  call, as in Mathematica (`1 != 2 != 1` is `False`); mixed with an ordering
+  call, as in the reference (`1 != 2 != 1` is `False`); mixed with an ordering
   operator it joins an `Inequality` instead (`a < b != c`).
 
 **Features**:
@@ -131,7 +134,7 @@ Tests structural identity.
   identical, `False` otherwise. Always returns a boolean.
 - `SameQ[x, y, z, ...]` (written `x === y === z`): `True` if all arguments are
   identical. A run of `===` parses to this one variadic call, as in
-  Mathematica, so `1 === 1 === 1` is `True`; `(a === b) === c` stays nested.
+  the reference, so `1 === 1 === 1` is `True`; `(a === b) === c` stays nested.
 
 **Features**:
 - Unlike `Equal`, `SameQ` never stays symbolic and does not coerce numeric

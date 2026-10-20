@@ -519,7 +519,7 @@ The complexity measure used by `Simplify` when no `ComplexityFunction` option (o
   `Complex[re, im]` counts `SimplifyCount[re] + SimplifyCount[im] + 1`; a real
   (machine or MPFR) counts `2`; a function `h[a1, ...]` counts
   `SimplifyCount[h] + Sum SimplifyCount[ai]`.
-- Matches Mathematica's definition, so the integer-digit penalty keeps
+- Matches the reference's definition, so the integer-digit penalty keeps
   `100 Log[2]` (count 6) ahead of `Log[2^100]` (count 32).
 
 ```mathematica

@@ -99,7 +99,7 @@ modelled on numpy's `ndarray`.
   sub-`NDArray` whose shape is the kept axes — so `mat[[i]]` is a packed row,
   `mat[[All, j]]` a packed column, `mat[[All, a;;b]]` a packed sub-matrix, all
   preserving dtype. `arr[[0]]` is the head `NDArray`. Out-of-range or too-many
-  subscripts leave the `Part[...]` unevaluated, as in Wolfram. (Exotic specs
+  subscripts leave the `Part[...]` unevaluated, as in the reference. (Exotic specs
   such as an empty span or `Key[...]` fall back to the general `List` `Part`.)
 
 **Features**:
@@ -217,7 +217,7 @@ Tests whether a matrix has nonzero entries only on a particular diagonal.
   vector, ragged, or higher-rank tensor inputs.  `{}` is rejected; an
   `n`-by-`0` matrix (e.g. `{{}, {}}`) is vacuously diagonal and returns
   `True`.
-- Zero positional arguments emits a Mathematica-compatible
+- Zero positional arguments emits a reference-compatible
 
   ```
   DiagonalMatrixQ::argt: DiagonalMatrixQ called with 0 arguments; 1 or 2 arguments are expected.
@@ -287,7 +287,7 @@ Tests whether a matrix is upper triangular relative to a chosen diagonal.
   vector, ragged, or higher-rank tensor inputs.  `{}` is rejected; an
   `n`-by-`0` matrix (e.g. `{{}, {}}`) is vacuously upper triangular and
   returns `True`.
-- Zero positional arguments emits a Mathematica-compatible
+- Zero positional arguments emits a reference-compatible
 
   ```
   UpperTriangularMatrixQ::argt: UpperTriangularMatrixQ called with 0 arguments; 1 or 2 arguments are expected.
@@ -346,7 +346,7 @@ Tests whether a matrix has the same number of rows and columns.
   vector, empty (`{}`, `{{}}`), ragged, rectangular, or higher-rank
   tensor inputs.
 - Exactly one argument is accepted; any other count emits a
-  Mathematica-compatible
+  reference-compatible
 
   ```
   SquareMatrixQ::argx: SquareMatrixQ called with N arguments; 1 argument is expected.
@@ -435,7 +435,7 @@ Tests whether a matrix is explicitly positive definite.
 - Returns `False` (rather than leaving unevaluated) on non-matrix,
   non-square, ragged, empty, or higher-rank tensor inputs.
 - Exactly one argument is accepted; any other count emits a
-  Mathematica-compatible
+  reference-compatible
 
   ```
   PositiveDefiniteMatrixQ::argx: PositiveDefiniteMatrixQ called with N arguments; 1 argument is expected.
@@ -488,7 +488,7 @@ Tests whether a matrix is explicitly negative definite.
 - Returns `False` (rather than leaving unevaluated) on non-matrix,
   non-square, ragged, empty, or higher-rank tensor inputs.
 - Exactly one argument is accepted; any other count emits a
-  Mathematica-compatible
+  reference-compatible
 
   ```
   NegativeDefiniteMatrixQ::argx: NegativeDefiniteMatrixQ called with N arguments; 1 argument is expected.
@@ -1283,9 +1283,9 @@ Finds an integer relation among a list of numbers (PSLQ).
   `B = √(M² / (1 + n/4))` on the norm of *any* integer relation (`M² =
   minᵢ |b*ᵢ|²`), conditional on the numeric evaluation being correct to
   precision. `B` drives the no-relation diagnostics. Because this is the
-  LLL bound (not the tighter PSLQ bound Wolfram reports), it is
+  LLL bound (not the tighter PSLQ bound the reference reports), it is
   conservative: near the minimal-relation norm Mathilda may return the
-  relation with a `lgrelb` message where Wolfram proves nonexistence.
+  relation with a `lgrelb` message where the reference proves nonexistence.
 - Relations are returned up to sign and (for complex input) up to a
   Gaussian-unit multiple — `{a}`, `{-a}`, and `{I a}` are all valid null
   vectors.
@@ -1364,7 +1364,7 @@ Gives the Jordan decomposition of a square matrix.
     numericalised back, which recovers the genuine block structure.
 - Result-fidelity notes: the exact printed `s` is not canonical (any
   Jordan basis satisfying `m == s . j . Inverse[s]` is valid); numeric
-  block-splitting is not bit-reproducible from Mathematica (an ill-posed
+  block-splitting is not bit-reproducible from the reference (an ill-posed
   problem), so the numeric contract is the residual `m ≈ s . j . Inverse[s]`
   plus a block structure matching the numeric nullities.
 - Limitation: an exact matrix with an *irrational, defective* eigenvalue
@@ -1616,11 +1616,11 @@ Gives the LU decomposition of a matrix.
     when every entry of the active column is an exact numeric
     (`Integer` / `BigInt` / `Rational` / `Complex` of those) the pivot
     with the **smallest absolute value** is chosen — matching
-    Mathematica (e.g. `LUDecomposition[{{1/2, 1/3}, {1/5, 1/7}}]`
+    the reference (e.g. `LUDecomposition[{{1/2, 1/3}, {1/5, 1/7}}]`
     picks the `1/5` pivot, keeping intermediate `L` entries small).
     For any column containing a free symbol, `Sqrt`, or other
     non-exact-numeric leaf, the rule falls back to "first non-zero"
-    — matching the Mathematica example
+    — matching the reference example
     `LUDecomposition[{{a, b}, {c, d}}]` returning `p = {1, 2}`.
   - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`)
     or MPFR is unavailable (`USE_MPFR=0`) the corresponding fast
@@ -1629,11 +1629,11 @@ Gives the LU decomposition of a matrix.
     → numericalise round-trip.
 - Singular inputs emit `LUDecomposition::sing` and the factorisation
   completes with a zero on U's diagonal at the singular step
-  (matching Mathematica's behaviour).
+  (matching the reference's behaviour).
 - Ill-conditioned numerical inputs emit `LUDecomposition::luc`: the
   factorisation completes but the reported `c` exceeds the
   precision-loss threshold (`1 / $MachineEpsilon` for machine input,
-  `2^bits` for MPFR input), matching Mathematica's
+  `2^bits` for MPFR input), matching the reference's
   `LUDecomposition::luc` behaviour.  Both warnings are one-shot per
   process; subsequent calls are silent.
 
@@ -1759,7 +1759,7 @@ Gives the singular value decomposition of a matrix.
 - Real or complex machine-precision input is forwarded to LAPACK
   `dggsvd3` (real) or `zggsvd3` (complex).  The output of LAPACK,
   `A = U . D1 . (0 R) . Q^H` and `B = V . D2 . (0 R) . Q^H`, maps to
-  Mathematica's form with `u = U`, `ua = V`, `v = Q`, and
+  the reference's form with `u = U`, `ua = V`, `v = Q`, and
   `sigma = D1 . (0 R)` and `sigma_a = D2 . (0 R)` materialised as
   dense rectangular matrices.  Mathilda handles both LAPACK
   layouts (`M >= K+L` and `M < K+L`, the latter splits `R` across
@@ -2389,7 +2389,7 @@ Gives a list of the eigenvalues of a square matrix.
 - Repeated eigenvalues appear with their algebraic multiplicity.
 - Eigenvalues are sorted in order of decreasing absolute value. On an exact
   modulus tie — the case that matters is a complex-conjugate pair `a ± b I` —
-  the `+imag` member is listed first, matching Mathematica
+  the `+imag` member is listed first, matching the reference
   (`Eigenvalues[{{0,-1},{1,0}}]` → `{I, -I}`). This holds for both the numeric
   Direct kernel and the symbolic (`Root[]` / radical) path, so
   `N[Eigenvalues[m]]` and `Eigenvalues[N[m]]` agree on the sign order
@@ -2401,7 +2401,7 @@ Gives a list of the eigenvalues of a square matrix.
   `Infinity` for each degree drop in the characteristic polynomial.
 - Options: `Cubics -> False`, `Quartics -> False` (defaults), `Method`.  With
   the defaults a general irreducible cubic/quartic characteristic polynomial is
-  returned as held `Root[]` objects (matching Mathematica); `Cubics -> True` /
+  returned as held `Root[]` objects (matching the reference); `Cubics -> True` /
   `Quartics -> True` force explicit radicals for the general case.  The special
   always-solvable families — binomials (`a x^n + b`), quadratic-in-`x^m`, and
   biquadratic-after-depression quartics — are always returned in radical form
@@ -2531,7 +2531,7 @@ Gives a list of the eigenvectors of a square matrix.
   domain, then numericalized and normalised to unit `Norm`. Exact /
   symbolic matrices return un-normalised eigenvectors.
 - Generalised case: vectors that fall in the shared null space of `m`
-  and `a` are returned as zero vectors (matching Mathematica's
+  and `a` are returned as zero vectors (matching the reference's
   `Eigenvectors::geinsl1` warning behaviour).
 - Options: same as Eigenvalues, including the numerical `Method`
   dispatch (`Automatic`, `"Direct"`, `"Arnoldi"`, `"Banded"`,

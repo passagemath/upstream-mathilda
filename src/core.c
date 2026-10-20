@@ -36,6 +36,8 @@
 #include "fresnel.h"
 #include "elliptic.h"
 #include "sinc.h"
+#include "surd.h"
+#include "kroneckerdelta.h"
 #include "inverf.h"
 #include "inverfc.h"
 #include "loggamma.h"
@@ -818,6 +820,8 @@ void core_init(void) {
     fresnel_init();
     elliptic_init();
     sinc_init();
+    surd_init();
+    kroneckerdelta_init();
     inverf_init();
     inverfc_init();
     loggamma_init();

@@ -28,6 +28,7 @@ extern "C" {
 Expr* flint_num_zeta(const Expr* s);                       /* Zeta[s]            */
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a);/* HurwitzZeta[s, a]  */
 Expr* flint_num_polygamma(const Expr* n, const Expr* z);   /* PolyGamma[n, z]    */
+Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z); /* non-integer order */
 Expr* flint_num_polylog(const Expr* s, const Expr* z);     /* PolyLog[s, z]      */
 Expr* flint_num_airy_ai(const Expr* z);                    /* AiryAi[z]          */
 Expr* flint_num_erf(const Expr* z);                        /* Erf[z]  (entire)   */
@@ -38,6 +39,32 @@ Expr* flint_num_airy_bi(const Expr* z);                    /* AiryBi[z]         
 Expr* flint_num_airy_bi_prime(const Expr* z);              /* AiryBiPrime[z]     */
 Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a); /* LerchPhi[z,s,a] */
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a);   /* StieltjesGamma[n,a]*/
+Expr* flint_num_expint(const Expr* s, const Expr* z);      /* ExpIntegralE[s, z] */
+/* PolyLog[n, p, z], Nielsen's S_{n,p}(z), for a positive integer p and |z| < 1
+ * (the Stirling-number series); NULL elsewhere. */
+Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z);
+/* BesselJZero at arbitrary precision: the zero of BesselJ[nu, x] nearest the
+ * machine zero `seed`, by Newton in arb, returned at `bits` bits. */
+Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits);
+/* QPochhammer[a, q] (n == NULL) and QPochhammer[a, q, n] for any n, |q| < 1:
+ * (a; q)_n = (a; q)_inf / (a q^n; q)_inf. */
+Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n);
+
+/* Legendre functions of a general degree n and order m. `type` follows arb:
+ * 0 is the Ferrers form (the reference's types 1 and 2, cut on (-inf, -1] and
+ * [1, inf)), 1 the form analytic off (-inf, 1] (the reference's type 3). */
+Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type);
+Expr* flint_num_legendre_q(const Expr* n, const Expr* m, const Expr* z, int type);
+
+/* The numeric tail of a special-function builtin. flint_num_call_inexact is
+ * true iff every argument of `call` is a number (Integer, Rational, Real,
+ * arbitrary-precision Real, or a Complex of those) and at least one of them
+ * is inexact: the case where the arb value is the answer. flint_num_for_call
+ * takes an arb result (consumed; NULL passes through) and lowers it to
+ * machine Reals when a machine-precision argument governs, so a machine call
+ * answers with a machine number. Both always compiled. */
+bool  flint_num_call_inexact(const Expr* call);
+Expr* flint_num_for_call(Expr* r, const Expr* call);
 
 /* The Legendre elliptic integrals, in the PARAMETER convention m = k^2 that
  * Mathematica uses (not the modulus k) -- which is also Arb's, so no argument

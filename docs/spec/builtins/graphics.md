@@ -1,15 +1,15 @@
 # Graphics
 
-A 2D graphics engine modeled on Mathematica's: symbolic primitives compose
+A 2D graphics engine modeled on the reference's: symbolic primitives compose
 into a `Graphics[...]` object, which is rendered in an interactive window
 via a Raylib backend. Rendering is owned by the REPL "front end": **any
 top-level result whose head is `Graphics` is auto-displayed**, just as
-Mathematica's notebook front end does. `Show[]` and `Plot[]` therefore
+the reference's notebook front end does. `Show[]` and `Plot[]` therefore
 simply build and return a `Graphics[...]` object -- the window is opened by
 the REPL when that object is the output, so `g // Graphics`, `Show[g]` and
 `Plot[...]` all render through one path. A trailing `;` (whose result is
 `Null`) suppresses the window. The textual `Out[n]=` line still shows the
-`-Graphics-` placeholder, matching Mathematica's behavior outside a
+`-Graphics-` placeholder, matching the reference's behavior outside a
 notebook.
 
 Requires Raylib (a system library, autodetected via `pkg-config` at build
@@ -189,7 +189,7 @@ axis-aligned filled rectangle.
 
 ## Circle
 A graphics primitive: `Circle[{x,y}, r]` is a circle outline of radius `r`
-centered at `{x,y}`. The radius and centre carry Mathematica's defaults:
+centered at `{x,y}`. The radius and centre carry the reference's defaults:
 `Circle[{x,y}]` is radius 1, and `Circle[]` is the unit circle at the
 origin.
 
@@ -204,7 +204,7 @@ closed polygon through the given vertices, in either winding order --
 clockwise and counter-clockwise vertex lists both fill correctly (the
 renderer detects the winding via the shoelace formula and corrects it
 before drawing, since the underlying triangle-fan fill is
-winding-sensitive but `Polygon[]` itself, like Mathematica's, is not).
+winding-sensitive but `Polygon[]` itself, like the reference's, is not).
 
 ## Text
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
@@ -224,7 +224,7 @@ this same font.
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
 list, each affects every primitive that follows it (left to right) up to the
-end of the enclosing `{...}` list, exactly like Mathematica's directive
+end of the enclosing `{...}` list, exactly like the reference's directive
 semantics: a list is a directive scope, so `{{Red, Line[a]}, Line[b]}` draws
 only the first line red. See also `Hue` and `CMYKColor` below, the
 **Named color constants** section above for the 24 pre-defined color
@@ -268,7 +268,7 @@ Line-dash directives, honoured for `Line` (and the curves of `Plot`,
 
 **Features**:
 - Inert, `Protected` heads; `Dashed`/`Dotted`/`DotDashed` are `Protected`
-  OwnValues, as in Mathematica.
+  OwnValues, as in the reference.
 
 ```mathematica
 In[1]:= Dashed
@@ -441,7 +441,7 @@ the data range when `ColorFunctionScaling -> True`, the default). The default
 magnitude colormap is **`"Viridis"`** — used by `DensityPlot`, `ContourPlot`,
 `StreamPlot` (speed), `VectorPlot` (speed), and `Plot3D` (single-surface height)
 when no `ColorFunction` is given. `ArrayPlot` instead defaults to `"Greyscale"`
-(matching Mathematica), `ComplexPlot`'s phase coloring keeps its cyclic
+(matching the reference), `ComplexPlot`'s phase coloring keeps its cyclic
 `"Cyclic"` default (hue = phase, HSL lightness from `|f|`), and multi-surface
 `Plot3D` keeps its per-surface palette.
 
@@ -596,7 +596,7 @@ Out[3]= {{{0.0, 2.0}, {0.0, 3.0}}}
 ### Interactive window controls
 
 These are toolbar/mouse-driven window behaviors, not `Graphics[...]` options
-— there is nothing to pass at the Mathematica-syntax level, they're just
+— there is nothing to pass at the reference-syntax level, they're just
 there once the window is open. Available in the standalone `Show`/`Plot`/
 `Plot3D` windows; a `Show`/`Plot`/`Plot3D` result embedded in `Animate`/
 `Manipulate` gets the always-on items (hover trace, animated streamlines)
@@ -628,7 +628,7 @@ region — `Animate`/`Manipulate`'s own controls occupy that space instead).
   X/Y/Z) cuts through the surface; a slider moves it along that axis. Shows
   the cutting plane and the intersection curve directly on the surface in
   3D, *and* a small flattened "CT-scan" inset panel in the corner showing
-  just the 2D cross-section. A genuinely new capability — Mathematica has no
+  just the 2D cross-section. A genuinely new capability — the reference has no
   equivalent.
 - Mouse: drag to orbit, scroll to zoom, right/middle-drag to pan. Keyboard:
   `R` reset view, `S` save PNG, `Esc` close.
@@ -762,7 +762,7 @@ Adaptively samples and displays a function of one real variable.
 - `Plot[{f1, f2, ...}, {x, xmin, xmax}]`: plots several curves on the same
   axes. Each is sampled independently (its own gaps/singularities) and
   drawn in a distinct colour drawn from the default plot palette
-  (Mathematica's `ColorData[97]`), chosen so the series read as distinct
+  (the reference's `ColorData[97]`), chosen so the series read as distinct
   yet harmonious; the palette cycles when there are more curves than
   entries. A single curve keeps the `PlotStyle` colour.
 - `Plot[f, {x, xmin, xmax}, opts...]`: as above, with sampling and/or
@@ -805,7 +805,7 @@ A symbolic 3D graphics object, as built by `Plot3D[]`.
   style directives -- the *same* heads `Graphics[]` uses (`Polygon`, `Line`,
   `RGBColor`/`GrayLevel`/`Hue`, `Opacity`), but with 3-coordinate `{x,y,z}`
   points instead of 2-coordinate `{x,y}` ones, exactly mirroring how
-  Mathematica itself reuses primitive heads between `Graphics`/`Graphics3D`.
+  the reference itself reuses primitive heads between `Graphics`/`Graphics3D`.
 - `Graphics3D[primitives, opt1 -> val1, ...]`: as above, with options (see
   `Plot3D` below).
 - Like `Graphics`, it is an inert structural head -- nothing renders until
@@ -843,7 +843,7 @@ Samples and displays a function of two real variables as a surface.
 Options: see **Feature summary** above. `HoldAll`, `Protected`. `ExclusionStyle` (default `GrayLevel[0.35]`) styles boundary edges when `RegionFunction` is active. `Options[Plot3D]` returns the full defaulted set (`Axes`, `Background`, `BoxRatios`, `ColorFunction`, `ColorFunctionScaling`, `ExclusionStyle`, `ImageSize`, `Lighting`, `MaxRecursion`, `Mesh`, `PlotLabel`, `PlotPoints`, `PlotRange`, `PlotStyle`, `RegionFunction`, `Ticks`).
 
 `BoxRatios -> {rx, ry, rz}` sets the display box's side-length ratios,
-independent of the data ranges (Mathematica semantics). The default is
+independent of the data ranges (the reference semantics). The default is
 **`{1, 1, 0.4}`**: each axis is normalised to its data span and scaled by its
 ratio, so a shallow z-range still reads as a surface instead of a flattened
 sheet. A raw `Graphics3D[...]` with no `BoxRatios` renders at true scale.
@@ -1126,7 +1126,7 @@ step, so point spacing and rendered curvature stay uniform regardless of
 local speed — and runs until it nears another line, leaves the domain,
 reaches a critical point, or closes on itself (so a rotational field draws
 whole circles). A uniform hash grid keeps the lines evenly spaced and from
-overlapping. Each line is rendered in Mathematica's **dashed-arrow style** — a
+overlapping. Each line is rendered in the reference's **dashed-arrow style** — a
 run of short dashes (each a curve-following `Line[...]` capped by a small filled
 arrowhead triangle at its downstream tip) separated by gaps — so the flow
 direction reads everywhere and neighbouring lines stay distinct; the result is a
@@ -1148,7 +1148,7 @@ The shape draws identically either way, but in an interactive window (a
 `Show`/`StreamPlot` window, or embedded in `Animate`/`Manipulate`) a few
 particle dots additionally flow along each streamline in real time,
 following the field's actual downstream direction — a genuinely new
-capability, not a gap-fill: Mathematica's `StreamPlot` has no equivalent.
+capability, not a gap-fill: the reference's `StreamPlot` has no equivalent.
 No window-opening call is needed for the animation itself; the interactive
 renderer already redraws continuously, so the dots animate for free the
 moment the result is shown.
@@ -1326,7 +1326,7 @@ number leaves the whole call unevaluated.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `ColorFunction` | `"Greyscale"` | Named ramp string or `f[t] → color` (`t ∈ [0,1]`); see **Named ColorFunction ramps** above. The default is white at the array minimum, black at the maximum — Mathematica's own `ArrayPlot` default, unlike every other plotter here (thermal). Only applies to numeric cells |
+| `ColorFunction` | `"Greyscale"` | Named ramp string or `f[t] → color` (`t ∈ [0,1]`); see **Named ColorFunction ramps** above. The default is white at the array minimum, black at the maximum — the reference's own `ArrayPlot` default, unlike every other plotter here (thermal). Only applies to numeric cells |
 | `ColorFunctionScaling` | `True` | Normalise entries to `[0,1]` before calling `ColorFunction`; `False` passes the raw value |
 | `ColorRules` | `None` | `{v1 -> c1, v2 -> c2, ...}` (or a single `v -> c`): an explicit colour for numeric cells whose value exactly equals `v`, checked before `ColorFunction`. Cells matching no rule still get the normal scaled `ColorFunction` colour |
 | `Mesh` | `None` | `All`/`True`: draw grey (`GrayLevel[0.5]`) grid lines between cells |
@@ -1388,7 +1388,7 @@ would emit at those grid points is muted during sampling, as in `Plot`.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `PlotPoints` | `400` | Grid resolution per axis (high default for smooth gradients) |
-| `ColorFunction` | `"Cyclic"` | A named ramp string, or a function of the **eight** Mathematica arguments — `#1 Re[z]`, `#2 Im[z]`, `#3 Abs[z]`, `#4 Arg[z]`, `#5 Re[f]`, `#6 Im[f]`, `#7 Abs[f]`, `#8 Arg[f]` (so `#8` is the phase of the value; e.g. `ColorFunction -> (Hue[#8 + 0.5] &)`). A one-argument colour map (a `ColorData` gradient) is instead keyed to the scaled `Arg[f]`. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Cyclic"`, `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
+| `ColorFunction` | `"Cyclic"` | A named ramp string, or a function of the **eight** reference arguments — `#1 Re[z]`, `#2 Im[z]`, `#3 Abs[z]`, `#4 Arg[z]`, `#5 Re[f]`, `#6 Im[f]`, `#7 Abs[f]`, `#8 Arg[f]` (so `#8` is the phase of the value; e.g. `ColorFunction -> (Hue[#8 + 0.5] &)`). A one-argument colour map (a `ColorData` gradient) is instead keyed to the scaled `Arg[f]`. **`"PhaseRings"`** — hue = `Arg`, brightness = `(1+cos(2π·log|w|))/2` (one ring per e-fold of `|w|`); highlights poles and zeros as dense concentric ring clusters. Other ramps keyed to normalised `Arg`: `"Cyclic"`, `"Rainbow"`, `"CoolTones"`, `"WarmTones"`, `"Greyscale"`, `"Temperature"` |
 | `ColorFunctionScaling` | `True` | Scale each of the eight arguments to `[0,1]` across the sampled domain before calling a custom `ColorFunction` (no effect on named-string ramps) |
 | `RegionFunction` | `None` | `f[x,y]` mask; excluded cells are not drawn |
 | `PlotLegends` | `None` | `Automatic` / `True`: draw a vertical phase color scale bar (thermal or hue ramp, −π at bottom, +π at top) |

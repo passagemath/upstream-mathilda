@@ -119,7 +119,7 @@ Out[3]= {h[2], f[k[2]]}
   - `f` occurs as an **element of `lhs`, or the head of an element** → UpValue.
 - `f /: lhs =.` (`TagUnset`): removes the matching own/down/up rule associated
   with the tag `f`. (Plain `lhs =.` does **not** reach an UpValue — the tag is
-  required, matching Mathematica.)
+  required, matching the reference.)
 
 **Features**:
 - `TagSet`, `TagSetDelayed` and `TagUnset` are `HoldAll` and `Protected`; for the
@@ -147,7 +147,7 @@ A rewrite rule whose left-hand side has a **Flat** head — `Plus`, `Times`,
 `Dot`, `**`, `And`, `Or`, or any symbol carrying the `Flat` attribute — matches a
 **subset** of a longer operand sequence: the matched operands are rewritten and
 the remaining ones are kept, re-wrapped in the head. This holds for UpValues,
-DownValues, and `Replace`/`ReplaceAll` alike (matching Wolfram).
+DownValues, and `Replace`/`ReplaceAll` alike (matching the reference).
 
 ```mathematica
 In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];
@@ -166,7 +166,7 @@ Out[3]= 1 + z
   group `x + y` (→ `g[x + y]`), not `x` with `y` left over. The leftover match is
   taken only when no full-consumption match exists.
 - `MatchQ` stays a **whole-expression** test and does *not* do leftover matching:
-  `MatchQ[mod[1,5] + mod[2,5] + x, mod[a_,p_] + mod[b_,p_]]` is `False`, as in Wolfram.
+  `MatchQ[mod[1,5] + mod[2,5] + x, mod[a_,p_] + mod[b_,p_]]` is `False`, as in the reference.
 - For a Flat head that is **not** `Orderless` (e.g. `Dot`, `**`, a user head with
   only `Flat`), the matched operands must be a **contiguous run in order**, but the
   run may sit anywhere — at the front, in the interior, or at the end. The
@@ -373,7 +373,7 @@ Out[4]= {"OK", "OK", h[], f[]}
 
 **Features**:
 - Each rule is returned as `HoldPattern[lhs] :> rhs` (a `RuleDelayed` whose
-  left-hand side is wrapped in `HoldPattern`), matching Mathematica. The
+  left-hand side is wrapped in `HoldPattern`), matching the reference. The
   `HoldPattern` keeps the stored pattern from re-matching its own definition, and
   the `RuleDelayed` keeps the right-hand side unevaluated, so the returned list is
   **inert**: querying `DownValues[f]` for a recursive `f` does not re-trigger the

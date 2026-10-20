@@ -15,7 +15,7 @@
   must hold (`Condition` is `HoldAll`, so the leaves are evaluated individually).
   A failing condition (or a failing later argument) **backtracks into nested
   patterns** — every assignment of a nested `Orderless` / `Flat` / sequence match is
-  tried, as in Mathematica (v0.451): `MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]` is
+  tried, as in the reference (v0.451): `MatchQ[g[z x^k], g[a_ f_] /; FreeQ[a, x]]` is
   `True` (`a -> z`), where the matcher previously committed to the nested match's
   first split (`a -> x^k`) and failed.
 - `p1 | p2 | ...`: `Alternatives`, matches any one of the `pi`. A name that
@@ -95,7 +95,7 @@ Removes the elements of an expression that match a pattern.
 - Uses standard level specifications, defaulting to level `{1}`.
 - Option `Heads -> True` tests heads as well; deleting a head is equivalent to applying `FlattenAt` at that point, splicing the remaining arguments into the parent.
 - Traverses `expr` in depth-first post-order (leaves before roots) so that the `n` budget is spent on deeper matches before shallower ones.
-- The match test is applied to the original subexpression (not the version with children already deleted), matching Mathematica semantics.
+- The match test is applied to the original subexpression (not the version with children already deleted), matching the reference semantics.
 
 ## Position
 Gives a list of the positions at which objects matching a pattern appear.
@@ -146,7 +146,7 @@ Gives the number of elements or subexpressions that match a pattern.
 - `p..`: `Repeated[p]`, matches a sequence of one or more expressions, each matching `p`.
 - `p...`: `RepeatedNull[p]`, matches a sequence of zero or more expressions, each matching `p`.
 - `Repeated[p, max]`, `Repeated[p, {min, max}]`, `Repeated[p, {n}]`: match sequences of length bounded by `max` or `{min, max}` (`max` may be `Infinity`). Equivalent properties exist for `RepeatedNull`. The bounds count *repetitions*, so they are argument counts only when `p` matches one argument at a time. A malformed spec (negative or non-integer count, `{min, max}` with `min > max`, `Repeated[p, 0]`) issues `Repeated::range` or `Repeated::order` and matches nothing. A bound too large for any argument list (`10^30`) acts as unbounded. `Repeated` and `RepeatedNull` are `Protected`.
-- **Tokenization.** `..` and `...` are single tokens that take precedence over a decimal point: `0..` is `Repeated[0]`, `0...` is `RepeatedNull[0]`, and `1.5..` is `Repeated[1.5]`. After a headed or sequence blank the dots are the repeat operator (`_Integer..`, `x__..`). After a bare single blank `_.` is formed first, as in WL, so `_...` is `(_.)..` and `_..` is a syntax error; write `(_)..` (that is also how it prints).
+- **Tokenization.** `..` and `...` are single tokens that take precedence over a decimal point: `0..` is `Repeated[0]`, `0...` is `RepeatedNull[0]`, and `1.5..` is `Repeated[1.5]`. After a headed or sequence blank the dots are the repeat operator (`_Integer..`, `x__..`). After a bare single blank `_.` is formed first, as in the reference, so `_...` is `(_.)..` and `_..` is a syntax error; write `(_)..` (that is also how it prints).
 - **Unnamed sub-patterns** inside a repeat must bind the same value in every repetition: `{1, 1}` matches `{(x_ /; x > 0)..}`, `{1, 2}` does not. An unconstrained `x:p..` followed by more patterns takes the *shortest* run (`{1, 1, 2} /. {x:1.., y___} :> {{x}, {y}}` is `{{1}, {1, 2}}`); wrap it in `Longest` for the longest run.
 - **Backtracking into units.** When the rest of the match fails, or
   `ReplaceList` asks for more matches, the unit search tries the next way to
@@ -172,8 +172,8 @@ Gives the number of elements or subexpressions that match a pattern.
   `f[a, b]`, and `f[]` under Flat+OneIdentity does not match `f[x_]` (before
   v0.475 all three matched). Under Flat, a subject that already has head `f`
   is covered by the ordinary path, so its default match is listed once.
-- **Flat without OneIdentity** differs from WL in `ReplaceList` enumeration.
-  WL binds a one-operand slice both as `h[b]` and as `b` and repeats matches;
+- **Flat without OneIdentity** differs from the reference in `ReplaceList` enumeration.
+  The reference binds a one-operand slice both as `h[b]` and as `b` and repeats matches;
   Mathilda binds `b` once. These cases are recorded, report-only, in
   `tests/match_exhaustive_observe.m`.
 

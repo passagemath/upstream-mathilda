@@ -1,6 +1,6 @@
 # Graphs
 
-A graph subsystem modeled on the Wolfram Language's, implemented in
+A graph subsystem modeled on the reference's, implemented in
 `src/graph/` (one builtin per translation unit, mirroring `src/linalg/`).
 Graphs are ordinary `Expr` trees — there is **no new `EXPR_*` tag** — of the
 canonical form
@@ -41,7 +41,7 @@ you hold:
 - adjacency-based algorithms skip validation and build a CSR adjacency with no
   hashing;
 - `AcyclicGraphQ`, `TreeGraphQ`, `BipartiteGraphQ` and `TopologicalSort` cache
-  their answer on the graph, so repeating a query is `O(1)`. Mathematica's atomic
+  their answer on the graph, so repeating a query is `O(1)`. The reference's atomic
   `Graph` object caches properties the same way.
 
 Keying on the node pointer is sound because the memo holds a reference: a
@@ -340,7 +340,7 @@ Out[6]= {1, 2, 0}
 
 **Features**:
 - `Protected`. `False` (never unevaluated) for a non-graph.
-- An edgeless graph counts as undirected (as in the Wolfram Language), so
+- An edgeless graph counts as undirected (as in the reference), so
   `DirectedGraphQ` and `UndirectedGraphQ` are never both `True`. A mixed graph
   is neither.
 
@@ -435,7 +435,7 @@ Out[6]= EdgeWeight[5]
 - Linear-algebra interop: the result is an ordinary matrix, so `Det`, `Tr`,
   `Eigenvalues`, `MatrixPower`, etc. apply directly. Inverse: `AdjacencyGraph`.
   Weighted variant: `WeightedAdjacencyMatrix`.
-- Mathematica returns a `SparseArray`; Mathilda returns a dense list of lists.
+- The reference returns a `SparseArray`; Mathilda returns a dense list of lists.
 - Unevaluated on a non-graph.
 
 ```mathematica
@@ -521,7 +521,7 @@ Out[5]= AdjacencyGraph[{{1, 2}, {3}}]
 - `Protected`. Equal to `AdjacencyMatrix[g]` exactly when `g` has no
   `EdgeWeight` (every weight defaults to `1`). Undirected edges put their weight
   in both symmetric positions.
-- Mathematica returns a `SparseArray`; Mathilda returns a dense matrix.
+- The reference returns a `SparseArray`; Mathilda returns a dense matrix.
 - Unevaluated on a non-graph.
 
 ```mathematica
@@ -683,10 +683,10 @@ Out[6]= RandomGraph[{6, 5}, -1]
 - Unevaluated when `s` or `t` is not a vertex.
 - Companion `GraphDistance[g, s, t]` gives the length/total weight of that path;
   `Infinity` if unreachable. Same weight-aware dispatch as `FindShortestPath`,
-  and, on a weighted graph, returns a machine real as the Wolfram Language does
+  and, on a weighted graph, returns a machine real as the reference does
   (weights `{5, 7}` give `12.`), identical to `GraphDistance[g, s]` and
   `GraphDistanceMatrix`. (Until v0.186 it returned an exact
-  `Integer`/`Rational`, which disagreed with both Mathematica and the
+  `Integer`/`Rational`, which disagreed with both the reference and the
   single-source form.)
 
 ```mathematica
@@ -721,7 +721,7 @@ Out[7]= Infinity
 
 - `ConnectedComponents[g]`: the connected components of `g`, as lists of
   vertices. On a graph with a directed edge these are the **strongly**
-  connected components (as in Mathematica); on an undirected graph, the
+  connected components (as in the reference); on an undirected graph, the
   ordinary components.
 - `ConnectedComponents[g, {v1, v2, ...}]`: only the components that contain at
   least one of the `vi`.
@@ -731,13 +731,13 @@ Out[7]= Infinity
 **Features**:
 - `Protected`. Directed and mixed graphs: Tarjan's algorithm, the components
   listed so that no edge runs from a component to a later one (sinks first) —
-  exactly Mathematica's order, e.g. `ConnectedComponents[Graph[{3->1, 1->5,
+  exactly the reference's order, e.g. `ConnectedComponents[Graph[{3->1, 1->5,
   2->4, 2->6, 3->5, 4->6}]]` is `{{5}, {1}, {3}, {6}, {4}, {2}}` in both. An
   undirected edge links its endpoints both ways.
 - Undirected graphs, and `WeaklyConnectedComponents` always: the largest
-  component first, as Mathematica documents; equal-sized components keep
+  component first, as the reference documents; equal-sized components keep
   first-appearance order.
-- Vertices within a component are in `VertexList` order. (Mathematica's order
+- Vertices within a component are in `VertexList` order. (the reference's order
   inside an undirected component, and between equal-sized ones, follows no
   documented rule and is not reproduced.)
 - Linear time. The null graph has no components; unevaluated on a non-graph.
@@ -772,7 +772,7 @@ Out[7]= ConnectedComponents[5]
 
 **Features**:
 - `Protected`. Tarjan's algorithm, listed in the same sinks-first order as
-  `ConnectedComponents` on a directed graph (Mathematica has no separate head:
+  `ConnectedComponents` on a directed graph (the reference has no separate head:
   there `ConnectedComponents` is the strong notion). On an undirected graph the
   strong components are the ordinary ones.
 - Unevaluated on a non-graph.
@@ -798,24 +798,24 @@ Out[3]= {{1, 2, 3}}
   and ignored (every method gives the same optimum).
 
 **Features**:
-- `Protected`. Matches Mathematica case by case:
+- `Protected`. Matches the reference case by case:
   - undirected, unweighted: a BFS spanning forest;
   - undirected, weighted: a minimum spanning forest (Kruskal with union-find),
     ties between equal weights broken by the edge's vertex positions, lowest
-    first — which reproduces Mathematica's choice on tied inputs;
+    first — which reproduces the reference's choice on tied inputs;
   - directed, unweighted: a BFS *branching* (edges followed forwards), roots
     taken in decreasing DFS finishing time so as few roots as possible are used;
   - directed, weighted: a minimum-weight spanning branching (Chu–Liu/Edmonds,
     `O(E log V)`) among those with the fewest roots — the minimum spanning
     arborescence whenever some vertex reaches all;
-  - mixed graphs are left unevaluated, as in Mathematica.
+  - mixed graphs are left unevaluated, as in the reference.
 - Weights are compared **exactly**: integers, rationals and reals become GMP
   rationals (a real's exact binary value), so `1/3` and `0.3333333333333333`
   are told apart; other numeric weights (`Sqrt[2]`, `Pi`) are compared via
   `N[w, 40]`. A weight that is not a real number (a symbol, a complex number)
   leaves the call unevaluated. Negative weights are fine.
 - The result carries each tree edge's own `EdgeWeight` (and `EdgeCapacity`).
-  As in Mathematica, an undirected tree edge is written lower vertex position
+  As in the reference, an undirected tree edge is written lower vertex position
   first, and the edges are sorted by their endpoints' positions. The result's
   `VertexList` is `g`'s, or for `{g, v}` just the vertices of `v`'s tree.
 - A `v` that is not a vertex of `g` emits `FindSpanningTree::inv` and leaves the
@@ -849,13 +849,13 @@ Out[7]= Graph[{3, 4}, {3 <-> 4}]
 - `ConnectedGraphQ[g]`: `True` iff `g` is a single connected component.
 
 **Features**:
-- `Protected`. As in Mathematica, a graph with a directed edge must be
+- `Protected`. As in the reference, a graph with a directed edge must be
   **strongly** connected (every vertex reaches every other along the edges'
   directions; an undirected edge goes both ways); an undirected graph must be
   connected. So it agrees with `Length[ConnectedComponents[g]] == 1`.
 - The null graph is not connected.
 - Unlike the `*Q` structural predicates (see `UndirectedGraphQ`), a non-graph
-  argument leaves `ConnectedGraphQ` unevaluated; Mathematica gives `False`.
+  argument leaves `ConnectedGraphQ` unevaluated; the reference gives `False`.
 
 ```mathematica
 In[1]:= ConnectedGraphQ[CycleGraph[5]]
@@ -890,7 +890,7 @@ Out[6]= ConnectedGraphQ[5]
   with Esfahanian-Hakimi pair selection), replacing the former exponential
   subset search.
 - Edge direction is currently ignored (the underlying undirected graph is
-  used), so a directed cycle scores like an undirected one. Mathematica uses
+  used), so a directed cycle scores like an undirected one. The reference uses
   strong connectivity for directed graphs (a directed cycle has vertex
   connectivity 1).
 
@@ -1193,7 +1193,7 @@ Out[5]= TopologicalSort[Graph[<3 vertices, 3 edges>]]
   towards the inside of the drawing); `EdgeLabels -> {e -> lbl, ...}` labels
   chosen edges. `VertexSize -> d` sets the disk diameter to `d` edge lengths.
 - **Look**: vertices are disks in `RGBColor[0.368417, 0.506779, 0.709798]`
-  (Mathematica's `ColorData[97]` blue) with a thin darker rim, edges 1.1 pt in
+  (the reference's `ColorData[97]` blue) with a thin darker rim, edges 1.1 pt in
   grey-blue `RGBColor[0.571589, 0.586483, 0.699215]`, the disk radius scaled to
   the median edge length and the extent of the drawing. The result carries
   `PlotRange`, `AspectRatio -> Automatic`, `Axes -> False` and an explicit
@@ -1238,7 +1238,7 @@ Out[9]= GraphPlot[5]
 **Features**:
 - `Protected`. The number of distinct colours equals the chromatic number, and
   no edge joins two vertices of equal colour. Edge direction is ignored.
-- Minimality is proven by exact search (Wolfram's `"BacktrackingDS"` method)
+- Minimality is proven by exact search (the reference's `"BacktrackingDS"` method)
   seeded by DSATUR upper and clique lower bounds.
 - Exact colouring is NP-hard, so there are two guards, and exceeding either
   returns the expression unevaluated — never a valid-but-larger colouring:
@@ -1251,7 +1251,7 @@ Out[9]= GraphPlot[5]
 - Cost is driven by density, not vertex count: a sparse 128-vertex graph
   answers instantly, while a dense one may exhaust the budget and refuse.
 - `FindVertexColoring[g, {c1, ...}]` and `FindVertexColoring[g, l]`
-  (Mathematica's colour-list forms) are not implemented and stay unevaluated.
+  (the reference's colour-list forms) are not implemented and stay unevaluated.
 
 ```mathematica
 In[1]:= FindVertexColoring[CycleGraph[5]]
@@ -1282,14 +1282,14 @@ Out[6]= FindVertexColoring[5]
 - `Protected`. A non-graph first argument is left unevaluated.
 - A list always means a list of vertices; to add a vertex that is itself a list,
   wrap it in another list (`VertexAdd[g, {{1, 2}}]`).
-- Vertex and edge orders follow Mathematica 15. Existing weights are kept.
+- Vertex and edge orders follow the reference. Existing weights are kept.
 - Shared conventions of the graph-editing family (`VertexAdd`, `VertexDelete`,
   `EdgeAdd`, `EdgeDelete`, `Subgraph`, `NeighborhoodGraph`, `VertexReplace`,
   `EdgeRules`, `VertexIndex`, `EdgeIndex`, `IndexGraph`), the transforms, set
   operations, predicates and cycle/path finders: implemented in
   `src/graph/gops_*.c` (header `src/graph/graph_ops.h`). Every head leaves a
   non-graph argument unevaluated (the `*Q` predicates give `False`). Orders —
-  of vertices, of edges, of cycle edges — follow Mathematica 15 unless a
+  of vertices, of edges, of cycle edges — follow the reference unless a
   deviation is listed.
 - Performance: every edit is an integer pass over the validated-graph memo's
   endpoint arrays: `O(V + E)` plus one hash per argument item, with vertex, edge
@@ -1297,12 +1297,12 @@ Out[6]= FindVertexColoring[5]
   (`graph_memo_seed`) from the endpoint arrays already computed and stamped as
   evaluated, so returning a graph costs one vertex hash per vertex — not a full
   re-validation — and the first accessor on the result is a memo hit. At `10^5`
-  vertices the edits run in 4–16 ms: 8–200x faster than Mathematica 15 (warm
+  vertices the edits run in 4–16 ms: 8–200x faster than the reference (warm
   and cold) and 20–60x faster than networkx (`benchmarks/93-graph-ops-editing`).
 - Deviation (whole editing family): Mathilda graphs are simple, so an edit whose
   result would have a self-loop or parallel edges — `EdgeAdd` of an existing
   edge, `VertexReplace` merging two adjacent vertices — is left unevaluated
-  (Mathematica returns a multigraph).
+  (the reference returns a multigraph).
 
 ```mathematica
 In[1]:= VertexList[VertexAdd[CycleGraph[3], 4]]
@@ -1358,7 +1358,7 @@ Out[4]= VertexDelete[Graph[<3 vertices, 3 edges>], 7]
 - A new edge has weight 1 in a weighted graph.
 - Deviation: Mathilda graphs are simple, so adding an edge that already exists
   (which would create parallel edges) or a self-loop is left unevaluated;
-  Mathematica returns a multigraph.
+  the reference returns a multigraph.
 - `O(V + E)` plus one hash per argument item; result seeded into the graph memo.
 
 ```mathematica
@@ -1449,7 +1449,7 @@ Out[5]= Subgraph[Graph[<4 vertices, 4 edges>], {TwoWayRule[1, 2]}]
 - Vertices: the centres, then each centre's new vertices in `VertexList` order;
   edges are ordered as for `Subgraph`.
 - Non-vertex centres are ignored.
-- `k = Infinity` is accepted (Mathematica leaves it unevaluated).
+- `k = Infinity` is accepted (the reference leaves it unevaluated).
 
 ```mathematica
 In[1]:= VertexList[NeighborhoodGraph[PathGraph[Range[6]], {1,6}]]
@@ -1477,7 +1477,7 @@ Out[5]= {}
 - Patterns and `RuleDelayed` work, as in `Replace`.
 - Vertices mapped to the same name merge.
 - Deviation: Mathilda graphs are simple, so merging two adjacent vertices (which
-  would create a self-loop) is left unevaluated; Mathematica returns a
+  would create a self-loop) is left unevaluated; the reference returns a
   multigraph.
 
 ```mathematica
@@ -1523,7 +1523,7 @@ Out[3]= EdgeRules[5]
 - `Protected`. A non-graph first argument, or a vertex/edge not in the graph, is
   left unevaluated.
 - `EdgeIndex` matches `u -> v` against an undirected edge of an undirected
-  graph, as Mathematica does; an undirected edge matches either orientation.
+  graph, as the reference does; an undirected edge matches either orientation.
 
 ```mathematica
 In[1]:= VertexIndex[Graph[{a<->b, b<->c}], b]
@@ -1576,7 +1576,7 @@ Out[3]= IndexGraph[{1, 2}]
   as a directed edge.
 - Edges in row-major `VertexList` order; weights are dropped.
 - Performance: the complement of a 1000-cycle (498500 new edges) is at parity
-  with Mathematica 15, its time dominated by allocating and freeing edge
+  with the reference, its time dominated by allocating and freeing edge
   expressions (`benchmarks/93-graph-ops-editing`).
 
 ```mathematica
@@ -1624,7 +1624,7 @@ Out[3]= {1 <-> 2, 2 <-> 3, 3 <-> 1}
 - `u -> v` and `v -> u` merge into one edge whose weight is the sum (`Plus`) of theirs.
 - Edges are oriented and ordered by `VertexList` position (upper triangle, row-major).
 - An undirected `g` is returned unchanged.
-- Performance: 1.1–1.6x faster than Mathematica 15 at `10^5` vertices
+- Performance: 1.1–1.6x faster than the reference at `10^5` vertices
   (`benchmarks/93-graph-ops-editing`).
 
 ```mathematica
@@ -1650,7 +1650,7 @@ Out[3]= {3 <-> 1, 3 <-> 2}
 - `"Acyclic"`: gives a DAG for undirected `g`, with edges sorted by (tail, head)
   `VertexList` position; a mixed `g` keeps its edge order.
 - Other methods (`"Random"`, ...) are left unevaluated.
-- Performance: 1.1–1.6x faster than Mathematica 15 at `10^5` vertices
+- Performance: 1.1–1.6x faster than the reference at `10^5` vertices
   (`benchmarks/93-graph-ops-editing`).
 
 ```mathematica
@@ -1681,7 +1681,7 @@ Out[5]= DirectedGraph[Graph[<3 vertices, 3 edges>], Random]
   by shared endpoint, then by `i`.
 - Directed `g`: `i -> j` when edge `i` ends where edge `j` starts, in `(i, j)` order.
 - Mixed graphs are left unevaluated.
-- Deviation: Mathematica numbers directed line-graph vertices in a traversal
+- Deviation: the reference numbers directed line-graph vertices in a traversal
   order of its own; Mathilda always uses `EdgeList` position (an isomorphic graph).
 
 ```mathematica
@@ -1713,7 +1713,7 @@ Out[4]= LineGraph[Graph[<3 vertices, 2 edges>]]
   order. `GraphUnion[g]` is `g`.
 - `GraphIntersection` / `GraphDifference` edges are in canonical order.
   `GraphDifference` takes exactly two graphs.
-- Weights are dropped, as in Mathematica (the one-argument `GraphUnion[g]`
+- Weights are dropped, as in the reference (the one-argument `GraphUnion[g]`
   returns `g` itself, so its weights survive).
 - Implementation: vertex lists equal to the first graph's are mapped by an
   `O(V)` elementwise `SameQ` check (no hashing); otherwise through one hash index
@@ -1750,7 +1750,7 @@ Out[6]= GraphUnion[Graph[<3 vertices, 3 edges>], 5]
 - `Protected`. A non-graph argument is left unevaluated.
 - Vertices are relabelled `1..n`, `g1`'s first; edges are translated in order.
 - `GraphDisjointUnion[g]` is `g` (not relabelled).
-- Weights are dropped, as in Mathematica. Shares the set-operation machinery
+- Weights are dropped, as in the reference. Shares the set-operation machinery
   described under `GraphUnion`.
 
 ```mathematica
@@ -1805,13 +1805,13 @@ Out[1]= {True, False, True, False, False}
 
 ## PathGraphQ
 
-- `PathGraphQ[g]`: `True` if `g` is a path graph in Mathematica's sense.
+- `PathGraphQ[g]`: `True` if `g` is a path graph in the reference's sense.
 
 **Features**:
 - `Protected`. A non-graph argument gives `False`.
-- Mathematica's definition: at least one vertex, connected, and every degree
+- The reference's definition: at least one vertex, connected, and every degree
   `<= 2` (undirected) or every in/out-degree `<= 1` (directed). So cycles count:
-  `PathGraphQ[CycleGraph[3]]` is `True`, as in Mathematica.
+  `PathGraphQ[CycleGraph[3]]` is `True`, as in the reference.
 - Mixed graphs are never paths.
 
 ```mathematica
@@ -1856,11 +1856,11 @@ Out[3]= EulerianGraphQ[Graph[<3 vertices, 2 edges>]]
 - Hierholzer's algorithm, iterative, linear time: starts at the first vertex with
   an edge, takes edges in `EdgeList` order, reports undirected cycles in pop
   order and directed ones forwards; undirected edges are written in the
-  direction walked. This reproduces Mathematica's cycle in most cases (not all).
+  direction walked. This reproduces the reference's cycle in most cases (not all).
 - `n > 1` / `All` and mixed graphs are left unevaluated.
 - The cycle/path finders reuse a small per-graph cache of incidence lists
   (holding a reference to the graph, like the memo), so repeating a query skips
-  the CSR build. 1.1–1.6x faster than Mathematica 15 at `10^5` vertices
+  the CSR build. 1.1–1.6x faster than the reference at `10^5` vertices
   (`benchmarks/93-graph-ops-editing`).
 
 ```mathematica
@@ -1894,9 +1894,9 @@ Out[6]= FindEulerianCycle[Graph[<3 vertices, 3 edges>], All]
 
 **Features**:
 - `Protected`. A non-graph argument is left unevaluated.
-- Plain form: linear time, by Mathematica's own search order (a stack DFS that
+- Plain form: linear time, by the reference's own search order (a stack DFS that
   scans a vertex's edges when visiting it), so the reported cycle matches
-  Mathematica's.
+  the reference's.
 - `FindCycle[{g, v}]` (plain form) is found by BFS from `v`, in linear time.
 - Each cycle is reported once. Cycle length counts edges; undirected cycles have
   length `>= 3`, directed `>= 2`.
@@ -1904,7 +1904,7 @@ Out[6]= FindEulerianCycle[Graph[<3 vertices, 3 edges>], All]
   cycle's lowest vertex — exponential in the worst case (a cycle of exact length
   `n` is a Hamiltonian cycle) — poll `TimeConstrained`, and give up (unevaluated)
   after `5*10^7` steps. Their choice and order of cycles is Mathilda's own
-  (Mathematica's differs).
+  (the reference's differs).
 - Mixed graphs, and weighted graphs with a length spec, are left unevaluated.
 - Reuses the per-graph incidence-list cache shared with `FindPath` and
   `FindEulerianCycle`.
@@ -1938,14 +1938,14 @@ Out[6]= FindCycle[Graph[<3 vertices, 2 edges>]]
 **Features**:
 - `Protected`. A non-graph argument is left unevaluated.
 - Plain form: the first path a DFS meets, taking neighbours in `EdgeList` order
-  — linear time and the same path as Mathematica.
+  — linear time and the same path as the reference.
 - `s == t` gives `{}`.
 - With a `kspec`, simple paths are enumerated depth-first within the length
   bounds and the first `n` (or `All`) are reported shortest first —
-  Mathematica's order.
-- Weighted graphs with a `kspec` are left unevaluated (Mathematica measures the
+  the reference's order.
+- Weighted graphs with a `kspec` are left unevaluated (the reference measures the
   `kspec` in total weight there).
-- Reuses the per-graph incidence-list cache; 1.1–1.6x faster than Mathematica 15
+- Reuses the per-graph incidence-list cache; 1.1–1.6x faster than the reference
   at `10^5` vertices (`benchmarks/93-graph-ops-editing`).
 
 ```mathematica
@@ -1977,24 +1977,24 @@ Out[6]= FindPath[Graph[<3 vertices, 3 edges>], 1, 3, 2]
 - Part of the distances / centralities / clustering / graph-families module,
   implemented in `src/graph/gmet_*.c` (header `src/graph/graph_metrics.h`,
   registered by `graph_metrics_init()` at the end of `graph_init()`). Every
-  convention of this module was checked against Mathematica 15 with
-  `wolframscript` on small graphs, including the undocumented ones (noted
+  convention of this module was checked against the reference
+  on small graphs, including the undocumented ones (noted
   *reverse-engineered* in the sections concerned).
 - Numeric vector/matrix results of the module are **packed** (`NDArrayQ` is
   `True`) whenever they are uniform machine numbers; a result containing
-  `Infinity` or exact rationals is an ordinary list, as in Wolfram.
+  `Infinity` or exact rationals is an ordinary list, as in the reference.
 - Edge direction is followed; an undirected edge is usable both ways.
   `Infinity` marks an unreachable pair.
 - **Weights** *(w)*: uses `EdgeWeight` as edge lengths and then answers in
-  machine reals (Wolfram converts even integer weights). Unweighted results are
+  machine reals (the reference converts even integer weights). Unweighted results are
   Integers (packed when every pair is reachable). A symbolic, complex or
-  negative weight leaves the call unevaluated (Wolfram also refuses symbolic
-  weights; negative weights, which Wolfram routes to Bellman–Ford, are not
+  negative weight leaves the call unevaluated (the reference also refuses symbolic
+  weights; negative weights, which the reference routes to Bellman–Ford, are not
   supported). The same weight rule applies to every head marked *(w)* in this
   module (`GraphDistance`, `VertexEccentricity`, the diameter family,
   `MeanGraphDistance`, `ClosenessCentrality`, `EccentricityCentrality`,
   `EdgeBetweennessCentrality`); the other heads ignore weights exactly as
-  Wolfram does.
+  the reference does.
 - **Algorithm — bit-parallel multi-source BFS** (MS-BFS): 256 sources advance
   together, one bit per source per vertex, so each BFS level walks the
   adjacency once for the whole batch; batches run on a pthread team
@@ -2008,7 +2008,7 @@ Out[6]= FindPath[Graph[<3 vertices, 3 edges>], 1, 3, 2]
   per `(head, graph node, other arguments)` in a 16-slot cache holding
   references, the same soundness argument as the validated-graph memo.
 - Benchmarks: `benchmarks/94-graph-metrics` (warm and cold cases, vs
-  Mathematica and networkx).
+  the reference and networkx).
 
 ```mathematica
 In[1]:= GraphDistanceMatrix[Graph[{1->2, 2->3, 3->1, 3->4}]]
@@ -2042,11 +2042,11 @@ Out[6]= GraphDistanceMatrix[x]
   its pre-existing form (`[g, s, t]`) to the original builtin.
 - `[g, s, t]` uses the same weight-aware dispatch as `FindShortestPath`
   (Dijkstra when every weight is non-negative and numeric, BFS otherwise) and
-  on a weighted graph returns a machine real, as the Wolfram Language does
+  on a weighted graph returns a machine real, as the reference does
   (weights `{5, 7}` give `12.`), identical to `GraphDistance[g, s]` and
   `GraphDistanceMatrix`.
 - Single-source form, weighted: machine reals, except the source's own entry,
-  which is an exact `0` as in Wolfram. A symbolic, complex or negative weight
+  which is an exact `0` as in the reference. A symbolic, complex or negative weight
   leaves the single-source form unevaluated.
 - Unweighted single-source results are Integers, packed when every vertex is
   reachable. Edge direction is followed; an undirected edge is usable both
@@ -2078,7 +2078,7 @@ Out[5]= GraphDistance[Graph[<2 vertices, 1 edge>], 1]
   negative weights leave it unevaluated).
 - Unweighted: the largest distance to a vertex that `v` reaches, so it is
   finite on disconnected graphs.
-- Weighted: `Infinity` if `v` does not reach every vertex (Wolfram's weighted
+- Weighted: `Infinity` if `v` does not reach every vertex (the reference's weighted
   rule).
 - Computed from the cached per-source MS-BFS summary (see
   `GraphDistanceMatrix`).
@@ -2226,7 +2226,7 @@ Out[5]= GraphDensity[Graph[<1 vertex, 0 edges>]]
 **Features**:
 - `D` is the diagonal matrix of the number of incident edges of each vertex,
   `A` the (directed) adjacency matrix; weights ignored.
-- **Deviation:** returns a dense packed Integer matrix (Wolfram returns a
+- **Deviation:** returns a dense packed Integer matrix (the reference returns a
   `SparseArray`; this is its `Normal`).
 
 ```mathematica
@@ -2255,7 +2255,7 @@ Out[5]= KirchhoffMatrix[5]
 **Features**:
 - Exact degrees, in `VertexList` order; weights ignored.
 - On a mixed graph an undirected edge counts once in each direction (so it
-  adds 2 to the default total), as in Wolfram.
+  adds 2 to the default total), as in the reference.
 - An unknown direction string leaves the call unevaluated.
 
 ```mathematica
@@ -2331,7 +2331,7 @@ Out[4]= {0.0, 0.0}
 **Features**:
 - Unnormalized; summed over unordered pairs on undirected graphs, ordered
   pairs on directed ones; weights ignored. Machine reals.
-- **Deviation:** mixed graphs are left unevaluated (Wolfram's values there
+- **Deviation:** mixed graphs are left unevaluated (the reference's values there
   match no standard definition, e.g. `{1<->2, 2->3}` gives vertex 2 a
   betweenness of 0).
 - **Algorithm:** Brandes, O(nm), with the sources spread over threads with
@@ -2387,7 +2387,7 @@ Out[4]= {6.0, 8.0, 6.0, 0.0}
   normalized to `Total[x] = 1`. Default `a = 0.85`; requires `0 <= a <= 1`
   (otherwise unevaluated). Weights ignored.
 - Computed by (Jacobi) iteration with a correct stopping rule, converged to
-  `1e-14` (Wolfram stops near `1e-9`, so they agree to ~9 digits).
+  `1e-14` (the reference stops near `1e-9`, so they agree to ~9 digits).
 
 ```mathematica
 In[1]:= PageRankCentrality[CycleGraph[4]]
@@ -2416,7 +2416,7 @@ Out[5]= PageRankCentrality[Graph[<4 vertices, 4 edges>], 2]
 - Computed per strongly connected component: each component `C` with
   `|C| > 1` gets its Perron vector scaled to total
   `(|C| - 1)/Σ(|C'| - 1)`; single-vertex components get 0, so a DAG gives all
-  zeros (*reverse-engineered*: reproduces Wolfram exactly on every
+  zeros (*reverse-engineered*: reproduces the reference exactly on every
   disconnected / non-strongly-connected case tried, e.g. `K4 ⊔ K3 ⊔ K2` totals
   3:2:1).
 - Weights ignored.
@@ -2449,10 +2449,10 @@ Out[5]= {0.125, 0.125, 0.125, 0.125, 0.111111, 0.111111, 0.111111, 0.0833333, 0.
 **Features**:
 - Solves `x = a A^T x + b`, with `b` = 1 by default, a number, or a list.
   Weights ignored.
-- Answered even beyond the convergence radius, like Wolfram (`K4` with
+- Answered even beyond the convergence radius, like the reference (`K4` with
   `a = 1/2` gives `-2`); uses a dense LAPACK solve, `n <= 4000`. A system
   singular up to rounding (LU pivot ratio below `1e-12`, e.g. `K4` with
-  `a = 1/3`) is left unevaluated. Mathematica 15 returns rounding noise there
+  `a = 1/3`) is left unevaluated. The reference returns rounding noise there
   (about `1.8*10^16` per vertex for `K4`, `a = 1/3`).
 - No edges, or an exact `a = 0`, return `b` exactly.
 
@@ -2486,7 +2486,7 @@ Out[7]= KatzCentrality[Graph[<4 vertices, 6 edges>], 1/3]
 **Features**:
 - Returns `{h, A.h}`; `h` is built like `EigenvectorCentrality` but for
   `A^T A`, whose blocks are the classes of vertices sharing an in-neighbour
-  (*reverse-engineered*; reproduces Wolfram exactly, including degenerate
+  (*reverse-engineered*; reproduces the reference exactly, including degenerate
   spectra such as `PathGraph[5]` and the all-zero answer for mixed graphs whose
   classes are singletons).
 - Weights ignored. Spectral blocks use the same restarted Arnoldi solver as
@@ -2511,7 +2511,7 @@ Out[4]= {{0.0, 0.0, 0.0, 0.0}, {0.0, 0.0, 0.0, 0.0}}
 - `GraphTriangleCount[g]`: the number of triangles in `g`.
 
 **Features**:
-- Exact, weights ignored, mixed graphs unevaluated (as in Wolfram).
+- Exact, weights ignored, mixed graphs unevaluated (as in the reference).
 - Undirected: the number of 3-cliques. Directed (*reverse-engineered*):
   triangles are directed 3-cycles, so a transitive triple `1->2, 2->3, 1->3`
   does not count.
@@ -2543,7 +2543,7 @@ Out[5]= GraphTriangleCount[Graph[<3 vertices, 2 edges>]]
 
 **Features**:
 - All clustering heads are exact, ignore weights, and leave mixed graphs
-  unevaluated (as in Wolfram).
+  unevaluated (as in the reference).
 - Undirected: `t(v)/C(d(v), 2)`, with `t(v)` the triangles at `v` and `d(v)`
   its degree.
 - Directed (*reverse-engineered*): triangles are directed 3-cycles; local
@@ -2574,7 +2574,7 @@ Out[5]= LocalClusteringCoefficient[Graph[<3 vertices, 2 edges>]]
 - `GlobalClusteringCoefficient[g]`: the global clustering coefficient (transitivity) of `g`.
 
 **Features**:
-- Exact, weights ignored, mixed graphs unevaluated (as in Wolfram).
+- Exact, weights ignored, mixed graphs unevaluated (as in the reference).
 - Undirected: `3T/Σ C(d, 2)`, with `T` the number of triangles and the sum
   over the vertex degrees `d`.
 - Directed (*reverse-engineered*): triangles are directed 3-cycles, with the
@@ -2599,7 +2599,7 @@ Out[4]= GlobalClusteringCoefficient[Graph[<3 vertices, 2 edges>]]
 - `MeanClusteringCoefficient[g]`: the mean of the local clustering coefficients of the vertices of `g`.
 
 **Features**:
-- Exact, weights ignored, mixed graphs unevaluated (as in Wolfram).
+- Exact, weights ignored, mixed graphs unevaluated (as in the reference).
 - The arithmetic mean of `LocalClusteringCoefficient[g]` (undirected or
   directed definition accordingly).
 
@@ -2624,7 +2624,7 @@ Out[4]= MeanClusteringCoefficient[Graph[<3 vertices, 2 edges>]]
 
 **Features**:
 - All graph families of this module are undirected on `1..N`; the edge list is
-  the sorted list of pairs `{i, j}`, `i < j` — identical to Wolfram's
+  the sorted list of pairs `{i, j}`, `i < j` — identical to the reference's
   `EdgeList` for each family.
 - `CompleteGraph[{n}]` is `K_n`.
 - `CompleteGraph` is re-registered by a wrapper that delegates its
@@ -2659,7 +2659,7 @@ Out[6]= CompleteGraph[x]
 
 **Features**:
 - Undirected on `1..n`; the edge list is the sorted list of pairs `{i, j}`,
-  `i < j`, identical to Wolfram's `EdgeList`.
+  `i < j`, identical to the reference's `EdgeList`.
 - Accepts `n = 1` or `n >= 4`; `n = 2` and `3` would be multigraphs and are
   left unevaluated.
 - Options (`DirectedEdges`, layout options) are not supported: a call with
@@ -2690,7 +2690,7 @@ Out[5]= WheelGraph[5, DirectedEdges -> True]
 
 **Features**:
 - Undirected on `1..2^n`; the edge list is the sorted list of pairs `{i, j}`,
-  `i < j`, identical to Wolfram's `EdgeList`.
+  `i < j`, identical to the reference's `EdgeList`.
 - `HypercubeGraph[0]` is a single vertex.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
@@ -2717,7 +2717,7 @@ Out[4]= Graph[<1 vertex, 0 edges>]
 **Features**:
 - Undirected on `1..N`, vertices numbered with the first coordinate varying
   fastest; the edge list is the sorted list of pairs `{i, j}`, `i < j`,
-  identical to Wolfram's `EdgeList`.
+  identical to the reference's `EdgeList`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limits (shared by every graph family of this module): a family
   with more than 10^8 vertices or 5×10^7 edges is left unevaluated rather than
@@ -2749,7 +2749,7 @@ Out[5]= GridGraph[{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2
 
 **Features**:
 - Undirected on `1..N`, root `1`, vertices numbered level by level; the edge
-  list is the sorted list of pairs `{i, j}`, `i < j`, identical to Wolfram's
+  list is the sorted list of pairs `{i, j}`, `i < j`, identical to the reference's
   `EdgeList`.
 - `KaryTree` counts vertices; `CompleteKaryTree` counts levels.
 - Options (`DirectedEdges`, layout options) are not supported.
@@ -2783,7 +2783,7 @@ Out[6]= KaryTree[0]
 
 **Features**:
 - Undirected on `1..n`; the edge list is the sorted list of pairs `{i, j}`,
-  `i < j`, identical to Wolfram's `EdgeList`.
+  `i < j`, identical to the reference's `EdgeList`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
   unevaluated.
@@ -2810,7 +2810,7 @@ Out[4]= {4, 4, 4, 4, 4, 4, 4, 4}
 **Features**:
 - Undirected on `1..2n`: the inner star is `1..n`, the outer cycle `n+1..2n`;
   the edge list is the sorted list of pairs `{i, j}`, `i < j`, identical to
-  Wolfram's `EdgeList`.
+  the reference's `EdgeList`.
 - `PetersenGraph[]` is `PetersenGraph[5, 2]`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
@@ -2836,7 +2836,7 @@ Out[4]= {1 <-> 2, 1 <-> 4, 1 <-> 5, 2 <-> 3, 2 <-> 6, 3 <-> 4, 3 <-> 7, 4 <-> 8,
 
 **Features**:
 - Undirected on `1..n`, larger parts first; the edge list is the sorted list
-  of pairs `{i, j}`, `i < j`, identical to Wolfram's `EdgeList`.
+  of pairs `{i, j}`, `i < j`, identical to the reference's `EdgeList`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
   unevaluated.
@@ -2862,7 +2862,7 @@ Out[4]= {1 <-> 3, 1 <-> 4, 2 <-> 3, 2 <-> 4, 3 <-> 4}
 **Features**:
 - Requires `k >= 2` and `n > k`; otherwise unevaluated.
 - Undirected on `1..n`; the edge list is the sorted list of pairs `{i, j}`,
-  `i < j`, identical to Wolfram's `EdgeList`.
+  `i < j`, identical to the reference's `EdgeList`.
 - Options (`DirectedEdges`, layout options) are not supported.
 - Resource limit: more than 10^8 vertices or 5×10^7 edges is left
   unevaluated.
@@ -2897,32 +2897,32 @@ Out[5]= HararyGraph[4, 4]
   validated-graph memo, so on a graph built by `Graph[...]` it starts from
   pre-resolved integer endpoints. Every head is `Protected`, stays unevaluated on
   a non-graph (the `*Q` predicates give `False`), and returns a fresh value.
-  Semantics and output forms were checked against Mathematica 15 by a randomized
-  differential test (`benchmarks/95-graph-algorithms/diff_mathematica.py`, about
+  Semantics and output forms were checked against the reference by a randomized
+  differential test (under `benchmarks/95-graph-algorithms/`, about
   12k cases, 0 failures); where the answer is unique the outputs are identical.
 - `s` and `t` may be lists of sources / sinks; `s == t` gives `0`.
 - `"FlowValue"` is the default. `"FlowMatrix"` is a dense `n x n` matrix of edge
-  flows (packed); Mathematica returns a `SparseArray`, which Mathilda does not
+  flows (packed); the reference returns a `SparseArray`, which Mathilda does not
   have. `"EdgeList"` gives the edges carrying flow, oriented along the flow, in
   flow-matrix row order.
 - Options: `EdgeCapacity -> {c1, ...}` (in `EdgeList` order) and
   `VertexCapacity -> {c1, ...}` (in `VertexList` order). Sources and sinks are
-  capped by their own vertex capacity too, as in Mathematica. The two lists are
+  capped by their own vertex capacity too, as in the reference. The two lists are
   parsed together onto one exact scale, so an exact `EdgeCapacity` mixes with a
-  Rational/Real `VertexCapacity` (Mathematica leaves a non-integer
-  `VertexCapacity` unevaluated). Matches Mathematica on 160 random
+  Rational/Real `VertexCapacity` (the reference leaves a non-integer
+  `VertexCapacity` unevaluated). Matches the reference on 160 random
   vertex-capacitated instances (single and multiple terminals, directed and
   undirected). Where every capacity on the source side is `Infinity`,
-  Mathematica 15 answers `0`; Mathilda gives the true value (`Infinity`, or the
+  the reference answers `0`; Mathilda gives the true value (`Infinity`, or the
   finite bottleneck).
-- **Capacities ignore `EdgeWeight`**, exactly as Mathematica does. With no
+- **Capacities ignore `EdgeWeight`**, exactly as the reference does. With no
   `EdgeCapacity` option (or `EdgeCapacity -> Automatic`) the capacities are the
   graph's own `EdgeCapacity` when it was built with one
-  (`Graph[e, EdgeCapacity -> {...}]`), else 1 for every edge — Mathematica's
+  (`Graph[e, EdgeCapacity -> {...}]`), else 1 for every edge — the reference's
   documented rule. An explicit option wins over the stored list. An undirected
   edge carries flow either way.
 - Numbers (shared by the whole flow/cut family): integer capacities/weights give
-  exact Integers; Rational or Real ones give a Real (as Mathematica); `Infinity`
+  exact Integers; Rational or Real ones give a Real (as the reference); `Infinity`
   is an allowed capacity; a negative or symbolic one leaves the call
   unevaluated. Internally everything is int64: reals are scaled by a common power
   of two, so the max flow of machine-real capacities is computed exactly.
@@ -2987,10 +2987,10 @@ Out[13]= 0.5
 - For a graph with directed edges, the edges counted run from `part1` (the
   source side) to `part2`.
 - Among equal cuts the shore without `VertexList[g][[1]]` is listed first for
-  undirected graphs (Mathematica's tie choice is not reproducible; the value
+  undirected graphs (the reference's tie choice is not reproducible; the value
   always agrees).
 - Integer weights give an Integer; Rational or Real weights give a Real (as
-  Mathematica); a negative or symbolic weight leaves the call unevaluated.
+  the reference); a negative or symbolic weight leaves the call unevaluated.
   Computation is exact in int64 (reals scaled by a common power of two).
 - Algorithms: Nagamochi-Ibaraki for undirected global minimum cuts
   (maximum-adjacency orders that contract every edge whose attachment reaches
@@ -3022,7 +3022,7 @@ Out[5]= FindMinimumCut[Graph[<1 vertex, 0 edges>]]
 **Features**:
 - `Protected`; unevaluated on a non-graph.
 - Cuts are weighted by `EdgeWeight`; the edges are returned in `EdgeList` order.
-- The `s`-`t` cut is the one closest to `s`, as in Mathematica.
+- The `s`-`t` cut is the one closest to `s`, as in the reference.
 - Directed graphs use strong connectivity.
 - Uses the same exact int64 flow machinery as `FindMaximumFlow` /
   `FindMinimumCut` (Dinic; Nagamochi-Ibaraki for undirected global cuts).
@@ -3054,7 +3054,7 @@ Out[5]= FindEdgeCut[x]
 - Works on the underlying undirected graph; vertices are returned in
   `VertexList` order.
 - The `s`-`t` separator is the one closest to `t`; `{}` for adjacent `s`, `t`.
-- Mathematica's conventions: a complete undirected graph gives its first `n-1`
+- The reference's conventions: a complete undirected graph gives its first `n-1`
   vertices; a graph with a directed edge whose underlying graph is complete
   gives `{}`.
 - Algorithm: Even's split-vertex network with Esfahanian-Hakimi pair selection,
@@ -3118,9 +3118,9 @@ Out[4]= 1
 - Algorithm: Karp-Sipser greedy start, then Hopcroft-Karp when the graph is
   bipartite and Edmonds' blossom algorithm otherwise (union-find blossom bases;
   failed searches retire their Hungarian trees). Matching on a triangulated grid:
-  about 2.8 ms against 190 ms in Mathematica.
-- Weighted graphs: optimizes cardinality, as the Wolfram documentation states.
-  (The differential test found Mathematica returning non-maximum matchings on
+  about 2.8 ms against 190 ms in the reference.
+- Weighted graphs: optimizes cardinality, as the reference documentation states.
+  (The differential test found the reference returning non-maximum matchings on
   weighted graphs.)
 
 ```mathematica
@@ -3145,9 +3145,9 @@ Out[4]= FindIndependentEdgeSet[x]
 - `Protected`; unevaluated on a non-graph.
 - Computed as a maximum matching (`FindIndependentEdgeSet`) plus one edge per
   exposed vertex.
-- `{}` when `g` has an isolated vertex, as in Mathematica.
-- Weighted graphs: optimizes cardinality, as the Wolfram documentation states.
-  (The differential test found Mathematica returning non-minimum edge covers on
+- `{}` when `g` has an isolated vertex, as in the reference.
+- Weighted graphs: optimizes cardinality, as the reference documentation states.
+  (The differential test found the reference returning non-minimum edge covers on
   weighted graphs.)
 
 ```mathematica
@@ -3176,7 +3176,7 @@ Out[3]= {}
   exhausted. All of them poll the `TimeConstrained` deadline, so e.g.
   `TimeConstrained[FindClique[g], 1]` returns `$Aborted` rather than hanging.
   They never return a merely-good answer.
-- Weighted graphs: optimizes cardinality, as the Wolfram documentation states.
+- Weighted graphs: optimizes cardinality, as the reference documentation states.
 
 ```mathematica
 In[1]:= FindVertexCover[PetersenGraph[]]
@@ -3222,7 +3222,7 @@ Out[4]= FindVertexCover[x]
   20000, so a huge non-bipartite sparse input (e.g.
   `RandomGraph[{200000, 300000}]`) returns unevaluated in bounded memory rather
   than exhausting it. The `TimeConstrained` deadline is polled.
-- Weighted graphs: optimizes cardinality, as the Wolfram documentation states.
+- Weighted graphs: optimizes cardinality, as the reference documentation states.
 
 ```mathematica
 In[1]:= FindIndependentVertexSet[PetersenGraph[]]
@@ -3317,7 +3317,7 @@ Out[6]= False
 - `Protected`; unevaluated on a non-graph.
 - A directed graph needs edges both ways between clique members.
 - Maximal cliques are listed by size, largest first; within one size
-  Mathematica's order is reproduced
+  the reference's order is reproduced
   (`FindClique[CycleGraph[5], Infinity, All]` gives
   `{{4,5},{3,4},{2,3},{1,5},{1,2}}`).
 - `FindClique[g, 2]` is `{}` when every maximal clique is larger.
@@ -3437,7 +3437,7 @@ Out[8]= $Aborted
 
 **Features**:
 - `Protected`; unevaluated on a non-graph.
-- The one-vertex graph gives `{}`, as in Mathematica.
+- The one-vertex graph gives `{}`, as in the reference.
 - Paths reduce to cycles through an added vertex and use the
   `FindHamiltonianCycle` engine (exact; polls `TimeConstrained`).
 
@@ -3494,9 +3494,9 @@ Out[5]= False
 
 **Features**:
 - `Protected`. `False` if any argument is not a graph; one argument stays
-  unevaluated, as in Mathematica.
-- Directed and mixed graphs are supported (Mathematica leaves mixed graphs
-  unevaluated). Edge weights are ignored, as in Mathematica.
+  unevaluated, as in the reference.
+- Directed and mixed graphs are supported (the reference leaves mixed graphs
+  unevaluated). Edge weights are ignored, as in the reference.
 - The reduction to the engine also folds self-loops into vertex colours and
   turns an edge of multiplicity k > 1 into a coloured subdivision vertex, so
   loops and multigraphs will work unchanged once `Graph` accepts them (today's
@@ -3513,7 +3513,7 @@ Out[5]= False
   unevaluated on budget exhaustion; polls `TimeConstrained`.
 - Performance: on an exactly 3-regular random graph with 10^4 vertices (where
   colour refinement alone learns nothing) `IsomorphicGraphQ` takes about 4 ms
-  against about 0.8 s in Mathematica 15; at 10^5 vertices about 0.2 s against
+  against about 0.8 s in the reference; at 10^5 vertices about 0.2 s against
   about 60 s.
 
 ```mathematica
@@ -3546,8 +3546,8 @@ Out[6]= IsomorphicGraphQ[Graph[<4 vertices, 4 edges>]]
 - `Protected`; unevaluated on non-graph arguments.
 - The Association runs over `VertexList[g1]` in order.
 - The order of the list of isomorphisms is the engine's search order;
-  Mathematica's differs.
-- Two empty graphs give `{<||>}` (Mathematica gives `{}`, which contradicts its
+  the reference's differs.
+- Two empty graphs give `{<||>}` (the reference gives `{}`, which contradicts its
   own `IsomorphicGraphQ` answer `True`).
 - Uses the `IsomorphicGraphQ` individualization-refinement engine; every map
   returned is verified edge by edge. Directed and mixed graphs are supported;
@@ -3577,9 +3577,9 @@ Out[5]= {<||>}
 **Features**:
 - `Protected`; unevaluated on a non-graph.
 - `CanonicalGraph[g] === CanonicalGraph[h]` iff `g` and `h` are isomorphic.
-- The particular representative differs from Mathematica's (both are
+- The particular representative differs from the reference's (both are
   arbitrary).
-- Properties such as `EdgeWeight` are dropped, as in Mathematica.
+- Properties such as `EdgeWeight` are dropped, as in the reference.
 - Canonical labeling keeps the best leaf by (trace, relabeled graph) with
   automorphism pruning (leaf and internal-node automorphisms, jump-back,
   first-path orbits) on the `IsomorphicGraphQ` engine. Directed and mixed graphs
@@ -3608,7 +3608,7 @@ Out[5]= CanonicalGraph[x]
 
 **Features**:
 - `Protected`; unevaluated on a non-graph.
-- The group is given by a generating set: the group is Mathematica's, but the
+- The group is given by a generating set: the group is the reference's, but the
   generators may differ.
 - Mathilda has no permutation-group functions, so the result is an inert
   expression.

@@ -98,6 +98,35 @@ static bool compare_via_mpfr(Expr* a, Expr* b, int* out) {
 }
 #endif
 
+/* An integer-like Expr into an already-initialised mpz (expr_to_mpz
+ * initialises its target, so it goes through a temporary). */
+static void cmp_set_mpz(mpz_t z, const Expr* e) {
+    mpz_t t;
+    expr_to_mpz(e, t);
+    mpz_set(z, t);
+    mpz_clear(t);
+}
+
+/* An exact rational (Integer, BigInt, or Rational with either kind of part)
+ * read into `q`. */
+static bool cmp_exact_rational(const Expr* e, mpq_t q) {
+    if (expr_is_integer_like((Expr*)e)) {
+        cmp_set_mpz(mpq_numref(q), e);
+        mpz_set_ui(mpq_denref(q), 1);
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 2 ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_Rational) return false;
+    const Expr* n = e->data.function.args[0];
+    const Expr* d = e->data.function.args[1];
+    if (!expr_is_integer_like((Expr*)n) || !expr_is_integer_like((Expr*)d)) return false;
+    cmp_set_mpz(mpq_numref(q), n);
+    cmp_set_mpz(mpq_denref(q), d);
+    mpq_canonicalize(q);
+    return true;
+}
+
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     double va, vb;
     int64_t na, da, nb, db;
@@ -132,6 +161,23 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
         if (cmp < 0) return -1;
         if (cmp > 0) return 1;
         return 0;
+    }
+
+    /* Two exact rationals compare exactly. The int64 n/d read below cannot
+     * hold a BigInt part, so 1 + 10^-20 used to reach the tolerant double
+     * comparison and test Equal to 1. */
+    if ((a->type == EXPR_FUNCTION || b->type == EXPR_FUNCTION) &&
+        (a->type == EXPR_FUNCTION || expr_is_integer_like(a)) &&
+        (b->type == EXPR_FUNCTION || expr_is_integer_like(b))) {
+        mpq_t qa, qb;
+        mpq_init(qa); mpq_init(qb);
+        bool ok = cmp_exact_rational(a, qa) && cmp_exact_rational(b, qb);
+        int cmp = ok ? mpq_cmp(qa, qb) : 0;
+        mpq_clear(qa); mpq_clear(qb);
+        if (ok) {
+            *can_compare = true;
+            return (cmp > 0) - (cmp < 0);
+        }
     }
 
 #ifdef USE_MPFR

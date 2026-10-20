@@ -2,9 +2,10 @@
  *
  *   PolyLog[n, z]     Li_n(z) = Sum_{k>=1} z^k / k^n      (|z| < 1; analytic
  *                     continuation elsewhere, branch cut [1, Infinity))
- *   PolyLog[n, p, z]  Nielsen generalized polylogarithm S_{n,p}(z).  Accepted
- *                     for surface compatibility but left symbolic -- there is
- *                     no closed-form / numeric engine for it here.
+ *   PolyLog[n, p, z]  Nielsen generalized polylogarithm S_{n,p}(z). p = 1 is
+ *                     PolyLog[n + 1, z]; an inexact call with a positive
+ *                     integer p and |z| < 1 sums the Stirling-number series
+ *                     (flint_num_nielsen_polylog); the rest stays symbolic.
  *
  * Evaluation is layered so each kind of argument takes the cheapest exact or
  * fastest numeric route, mirroring src/gamma.c and src/zeta.c:
@@ -1016,7 +1017,30 @@ Expr* builtin_polylog(Expr* res) {
         }
     }
     if (argc == 2) return polylog_two_arg(args[0], args[1]);
-    if (argc == 3) return NULL;             /* Nielsen S_{n,p}(z): stay symbolic */
+    if (argc == 3) {
+        /* Nielsen S_{n,p}(z). PolyLog[n, 1, z] = PolyLog[n + 1, z]; otherwise
+         * numeric for an inexact call with a positive integer p (an exact
+         * integer or an integer-valued real) and |z| < 1. */
+        Expr* p = args[1];
+        long pv = 0;
+        if (p->type == EXPR_INTEGER) pv = (long)p->data.integer;
+        else if (p->type == EXPR_REAL && p->data.real == floor(p->data.real) &&
+                 fabs(p->data.real) < 1e6) pv = (long)p->data.real;
+#ifdef USE_MPFR
+        else if (p->type == EXPR_MPFR && mpfr_integer_p(p->data.mpfr) &&
+                 mpfr_cmpabs_ui(p->data.mpfr, 1000000) < 0)
+            pv = mpfr_get_si(p->data.mpfr, MPFR_RNDN);   /* N[...] leaves p = 3. */
+#endif
+        if (p->type == EXPR_INTEGER && pv == 1) {
+            Expr* np1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_copy(args[0]), expr_new_integer(1) }, 2);
+            return expr_new_function(expr_new_symbol(SYM_PolyLog),
+                       (Expr*[]){ np1, expr_copy(args[2]) }, 2);
+        }
+        if (pv >= 1 && flint_num_call_inexact(res))
+            return flint_num_for_call(flint_num_nielsen_polylog(args[0], pv, args[2]), res);
+        return NULL;
+    }
     return polylog_emit_argt(argc);
 }
 

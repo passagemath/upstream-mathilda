@@ -15,7 +15,7 @@ Attributes: `Protected`.
 - `Image[image, type]` — converts an existing image between types, preserving brightness;
   `Image[image]` is the image itself
 
-**The canonical form is `Image[data, type]`, which is also real Wolfram syntax.** Normalising to
+**The canonical form is `Image[data, type]`, which is also valid syntax in the reference.** Normalising to
 it is what makes validity *decidable*: a builtin that returns `NULL` leaves its expression alone,
 so a valid `Image[data]` and a nonsensical `Image["hello"]` would otherwise be
 indistinguishable — both merely unevaluated. A canonical two-argument form is exactly what passed
@@ -24,7 +24,7 @@ validation, and `ImageQ` tests for it.
 **Data layout, and the transposition that is the whole trap.** `data` is a rectangular
 `height × width` array, indexed `data[[y, x]]` with rows running *down* the image; a colour image
 is `height × width × channels`, interleaved. `ImageDimensions` reports `{width, height}` —
-**transposed relative to this**. That is Mathematica's convention and the single most common
+**transposed relative to this**. That is the reference's convention and the single most common
 source of silently-wrong image code, so the tests use a non-square image throughout: a square one
 cannot tell the two apart.
 
@@ -40,7 +40,7 @@ alone:
 So `Image[{{0, 1}, {1, 0}}]` is a bit image while `Image[{{0., 1.}, {1., 0.}}]` is a real one —
 the same numbers written differently, and a distinction a caller can rely on.
 
-**A stated type coerces the data, as in Mathematica.** Mathematica's documentation says of
+**A stated type coerces the data, as in the reference.** The reference's documentation says of
 `Image[data, "type"]` that "values in data are coerced to the specified type by rounding or
 clipping", and Mathilda follows it. The data of `Image[data, type]` is read in the type's *own*
 range (not the unit interval), then:
@@ -54,9 +54,9 @@ range (not the unit interval), then:
 
 So `Image[{{0, 300}}, "Byte"]` stores `{{0, 255}}` (and `ImageData` gives `{{0., 1.}}`),
 `Image[{{-5, 3.4, 3.6}}, "Byte"]` stores `{{0, 3, 4}}`, and `Image[{{0.5, 2}}, "Bit"]` stores
-`{{1, 1}}`. A NaN value stores as `0`, Mathematica's default `"IndeterminateValue"`. The tie rule
-(halves up) is Mathilda's choice: Mathematica documents rounding but not its tie-breaking.
-`"Real"` is not clipped because Mathematica's real images allow any value and only *display* the
+`{{1, 1}}`. A NaN value stores as `0`, the reference's default `"IndeterminateValue"`. The tie rule
+(halves up) is Mathilda's choice: the reference documents rounding but not its tie-breaking.
+`"Real"` is not clipped because the reference's real images allow any value and only *display* the
 unit interval. `"Real32"` and `"Real64"` both name Mathilda's one real type (double precision) and
 normalise to `"Real"`, so `ImageType` reports `"Real"` for them.
 
@@ -660,11 +660,11 @@ In[1]:= ImageData[ImageConvolve[Image[{{0., 1., 0.}}], {{1, 2, 3}}]]
 Out[1]= {{1.0, 2.0, 3.0}}          (* correlation would give {{3., 2., 1.}} *)
 ```
 
-Mathematica draws the same line — `ImageConvolve` reflects, `ImageCorrelate` does not — and a test
+The reference draws the same line — `ImageConvolve` reflects, `ImageCorrelate` does not — and a test
 pins it with exactly that case.
 
 **Padding is `"Fixed"`**: out-of-range reads clamp to the nearest edge pixel, replicating the
-border. This is Mathematica's default, and it is the right one for smoothing — zero padding would
+border. This is the reference's default, and it is the right one for smoothing — zero padding would
 darken every edge, which looks exactly like a real vignetting bug. Clamping also makes an exact
 property available: a constant image convolved with a kernel summing to 1 comes back as the *same*
 constant everywhere, border included. A test asserts that, and it is what would fail if the
@@ -1298,7 +1298,7 @@ Out[4]= True
 `GaussianMatrix[r]` gives a `(2r+1) × (2r+1)` Gaussian normalised to sum 1.
 `GaussianMatrix[{r, sigma}]` states the standard deviation. Attributes: `Protected`.
 
-`sigma` defaults to `r/2`, Mathematica's convention: it puts the kernel's edge at two standard
+`sigma` defaults to `r/2`, the reference's convention: it puts the kernel's edge at two standard
 deviations, where the Gaussian has fallen to about 13% of its peak, so truncating there loses
 little.
 
@@ -1317,7 +1317,7 @@ In[2]:= Total[Flatten[GaussianMatrix[2]]]
 
 `BoxMatrix[r]` gives a `(2r+1) × (2r+1)` matrix of 1s. Attributes: `Protected`.
 
-**Not normalised**, matching Mathematica — so `ImageConvolve[img, BoxMatrix[1]]` is nine times too
+**Not normalised**, matching the reference — so `ImageConvolve[img, BoxMatrix[1]]` is nine times too
 bright, and the normalised version is a mean filter. Kept faithful rather than helpfully rescaled,
 since a caller using `BoxMatrix` in arithmetic needs the ones.
 
@@ -1330,7 +1330,7 @@ In[1]:= BoxMatrix[1]
 
 `GaussianFilter[image, r]` blurs `image` with a Gaussian of radius `r`. Attributes: `Protected`.
 
-Exactly `ImageConvolve[image, GaussianMatrix[r]]` — Mathematica documents the two as equal, so it
+Exactly `ImageConvolve[image, GaussianMatrix[r]]` — the reference documents the two as equal, so it
 is implemented by building the same matrix and calling the same convolution, and a test asserts the
 identity. Two independent implementations of one identity is how the identity quietly stops
 holding.
@@ -1775,7 +1775,7 @@ saturated green at the same brightness — and for thresholding specifically it 
 and pure blue on the same side of any threshold, when perceptually they are far apart. The test
 asserts the three weights as exact values for exactly this reason.
 
-**Only `"Grayscale"` is accepted.** The other spaces Mathematica supports (LAB, HSB, XYZ, …) each
+**Only `"Grayscale"` is accepted.** The other spaces the reference supports (LAB, HSB, XYZ, …) each
 carry their own white point and transfer-function decisions; accepting the name while doing
 something approximate would be worse than declining it.
 
@@ -2827,7 +2827,7 @@ whole padded line.
 `[image, t]` takes pixels above `t` as foreground (default 0). `CornerNeighbors -> False` selects
 4-connectivity instead of the default 8. Attributes: `Protected`.
 
-**Returns an integer matrix, not an `Image`** — a deliberate deviation from Mathematica. Here an
+**Returns an integer matrix, not an `Image`** — a deliberate deviation from the reference. Here an
 `Image` would be actively wrong: type inference would call a label array of 1..12 a `"Byte"` image, and
 `ImageData` would then divide every label by 255. Labels are indices, not brightnesses, and the one
 thing that must not happen to them is being scaled.
@@ -3024,7 +3024,7 @@ Parity on the reduction and **4.5× faster** on the enlargement.
 
 ## ImageLevels
 
-`ImageLevels[image]` gives `{{level, count}, …}` — the histogram as **data, not a plot**. Mathematica's
+`ImageLevels[image]` gives `{{level, count}, …}` — the histogram as **data, not a plot**. The reference's
 `ImageHistogram` draws a graphic and `ImageLevels` gives the counts; in a computer algebra system the
 counts are the useful half, so that is what this provides and `Histogram` over the result draws the
 picture. `ImageLevels[image, n]` uses `n` bins. Accepts volumes. Attributes: `Protected`.
@@ -3068,7 +3068,7 @@ exact properties follow:
 answer, and mapping the single value to either end would be arbitrary.
 
 **The parametric curve is Mathilda's documented choice, not a claim of bit-compatibility** with
-Mathematica, whose exact formula is not published in a form worth guessing at. It is stated so a caller
+the reference, whose exact formula is not published in a form worth guessing at. It is stated so a caller
 can reproduce it:
 
 ```
@@ -3220,7 +3220,7 @@ Out[2]= -Image-
 difference from `ImageConvolve`. `ImageCorrelate[image, template, "NormalizedCrossCorrelation"]` is
 template matching. Attributes: `Protected`.
 
-The kernel (or template) is a matrix or, as in Mathematica, a **single-channel `Image`**, whose
+The kernel (or template) is a matrix or, as in the reference, a **single-channel `Image`**, whose
 unit-scale pixels are used as the matrix — so a patch cut from one picture can be matched against
 another directly. `ImageCorrelate[img, Image[m]]` equals `ImageCorrelate[img, m]` for a real `m`. A
 multichannel template declines: whether it should correlate channel against channel or be reduced to
@@ -3365,7 +3365,7 @@ answers instead.
 ## ImagePad and ImageCrop
 
 `ImagePad[image, m]` pads `m` pixels on every side; `ImagePad[image, {{left, right},
-{bottom, top}}]` pads each side separately. The pair is named in Mathematica's **visual**
+{bottom, top}}]` pads each side separately. The pair is named in the reference's **visual**
 order — bottom before top — while the data's first row is the **top** of the image, so `top`
 padding adds rows at the *start* of the array. That is the reverse of how the specification
 reads, and a symmetric pad cannot detect it being wrong, so the test pads one side only and
@@ -3454,7 +3454,7 @@ ImagePad[volume, {{left, right}, {bottom, top}, {first slice, last slice}}]
 The third pair is named for what it does rather than as `{front, back}`: which end of a
 volume "front" means is not something to guess, and a wrong guess here is a silent
 transposition rather than an error. The **height** pair is the reversed one, matching the
-2-D case — Mathematica names it `{bottom, top}` while row 1 is the top of the image, so
+2-D case — the reference names it `{bottom, top}` while row 1 is the top of the image, so
 `top` adds rows at the start of the array. Width and depth are `{low, high}` as written.
 Each convention is pinned by a test that pads one axis on one side only, since a symmetric
 pad cannot tell any of them apart.
@@ -3634,14 +3634,14 @@ near and the loop exits early. A grid would make it asymptotically linear and th
 to write one.
 
 Positions carry a caveat worth reading twice if you are writing a test against them: Mathilda's
-real comparison is **tolerant**, in Mathematica's way, so two responses one ulp apart are `Equal`
+real comparison is **tolerant**, in the reference's way, so two responses one ulp apart are `Equal`
 and neither is `Greater`. `Sort[values, Greater]` therefore cannot serve as a descending-order
 oracle for a response list — it reports such elements incomparable and permutes them freely. The
 suite asserts non-increasing order elementwise instead, and asserts "the top n" as *the weakest
 kept is at least as strong as the strongest dropped*.
 
 Positions are `{row, column}`, 1-based, so each indexes `ImageData` directly. This is **not**
-Mathematica's `{x, y}` measured from the bottom left; the convention is stated rather than
+the reference's `{x, y}` measured from the bottom left; the convention is stated rather than
 guessed, because a silently transposed or flipped coordinate looks plausible on any test image.
 
 ### The properties that are exact
@@ -3728,7 +3728,7 @@ like-for-like: scikit-image is parameterised by `sigma` where this takes an inte
 
 ## Named options
 
-`CornerFilter` and `ImageCorners` take Wolfram-style trailing options as well as their positional
+`CornerFilter` and `ImageCorners` take standard trailing options as well as their positional
 forms:
 
 ```
@@ -3746,10 +3746,10 @@ constants in C.
 The mechanism is `options_extract` in `options.c`, and it is general: any builtin can accept a set
 of named options without growing a positional tail. `ImageCorners` had reached five positional
 arguments, four of them settings, which is what prompted it. Options must be **trailing**, as in
-Mathematica; the scan runs from the end of the argument list so a positional argument that happens
+the reference; the scan runs from the end of the argument list so a positional argument that happens
 to be a rule cannot be mistaken for an option. Duplicates resolve last-wins.
 
-An unknown option **declines** rather than being ignored. Mathematica warns and continues; refusing
+An unknown option **declines** rather than being ignored. The reference warns and continues; refusing
 is the more conservative reading and matches this tree's rule of refusing rather than guessing — a
 mistyped option name that silently does nothing is the failure it avoids.
 
@@ -4244,9 +4244,9 @@ as planar-only when it was not. A "no volumetric path" list is only as good as t
 ## ImageReflect in a volume
 
 `ImageReflect[volume]` reflects about the **height** axis, matching the planar default. The named
-sides extend Mathematica's own vocabulary rather than inventing one: `Top`/`Bottom` select the height
+sides extend the reference's own vocabulary rather than inventing one: `Top`/`Bottom` select the height
 axis as in the plane, `Left`/`Right` the width axis, and `Front`/`Back` the depth axis — the pair
-Mathematica uses for volumes. Either name of a pair selects the same axis, since reflecting *to* the
+the reference uses for volumes. Either name of a pair selects the same axis, since reflecting *to* the
 top and *to* the bottom are one operation; that is already true of the planar version.
 
 `Front` and `Back` **decline** on a plane, which has no depth axis. Reinterpreting them as some other
@@ -4832,7 +4832,7 @@ Morphological dilation: the maximum over a structuring element.
 - `Dilation[image, r]`: a `(2r+1)` square, or a cube for an `Image3D`.
 - `Dilation[image, elem]`: an explicit element (planar only).
 - Cost is independent of the radius: a full box separates into one pass per axis.
-- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 ```mathematica
 In[1]:= ImageData[Dilation[Image[{{0, 1, 0, 0}, {0, 0, 0, 0}}], 1], "Bit"]
@@ -4969,7 +4969,7 @@ Morphological erosion: the minimum over a structuring element.
 
 - `Erosion[image, r]`, the dual of `Dilation` under negation.
 - Accepts an `Image3D` with an integer radius.
-- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Basic Examples
 
@@ -5098,7 +5098,7 @@ Erosion then dilation with the same element. Idempotent.
 
 - `Opening[image, r]`: removes bright detail smaller than the element.
 - `Opening[Opening[x, r], r]` equals `Opening[x, r]` **exactly**, which is what makes it an opening rather than merely a smoother, and holds only because both passes use the same element.
-- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Properties & Relations
 
@@ -5224,7 +5224,7 @@ Dilation then erosion with the same element. Idempotent.
 
 - `Closing[image, r]`: fills dark detail smaller than the element.
 - `Opening[x] <= x <= Closing[x]` pointwise.
-- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in Mathematica: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
+- A `"Bit"` image (or `Image3D`) gives a `"Bit"` image, as in the reference: flat morphology takes a max or min of stored values, so a binary input stays exactly binary. Other types give `"Real"`.
 
 #### Basic Examples
 
@@ -5887,13 +5887,13 @@ Out[2]= -Image-
 ```
 
 ## ImageRotate
-Rotates an image **counterclockwise** by a positive angle, as Mathematica does. Right angles are exact index permutations.
+Rotates an image **counterclockwise** by a positive angle, as the reference does. Right angles are exact index permutations.
 
 - `ImageRotate[image]`: a quarter turn counterclockwise.
 - `ImageRotate[image, angle]`: `angle` in radians (`n Degree` for degrees); negative turns clockwise. A free angle uses bilinear inverse mapping, reading out of frame as 0 rather than replicating the edge.
-- `ImageRotate[image, side]`: turns the top of the image to face `side` (`Left`, `Right`, `Top`, `Bottom`) — Mathematica's `Top -> side`. `Left` is a counterclockwise quarter turn, `Right` a clockwise one, `Bottom` a half turn.
+- `ImageRotate[image, side]`: turns the top of the image to face `side` (`Left`, `Right`, `Top`, `Bottom`) — the reference's `Top -> side`. `Left` is a counterclockwise quarter turn, `Right` a clockwise one, `Bottom` a half turn.
 - `ImageRotate[image, side1 -> side2]`: turns `side1` onto `side2`, e.g. `Top -> Bottom` is a half turn.
-- **Deviation:** a free angle keeps the input's dimensions — Mathematica's size `Full` — where Mathematica's default (`Automatic`) enlarges the canvas to enclose the whole rotated image. The size argument (`ImageRotate[image, angle, size]`) and the `Background` option are not supported.
+- **Deviation:** a free angle keeps the input's dimensions — the reference's size `Full` — where the reference's default (`Automatic`) enlarges the canvas to enclose the whole rotated image. The size argument (`ImageRotate[image, angle, size]`) and the `Background` option are not supported.
 
 The first version turned **clockwise**, on both the quarter-turn and the free-angle path, while its
 docstring said counterclockwise. No test caught it because every assertion was a composition — four

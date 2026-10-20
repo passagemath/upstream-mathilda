@@ -681,7 +681,7 @@ expression would.
   `Sqrt`, `Divide` and the transcendentals still widen an integer argument to a
   Real, so `Compile[{{n, _Integer}}, n/2][3]` is `1.5` where the interpreter says
   `3/2`. That divergence is inherent rather than an oversight: Rationals and
-  symbolic radicals are not machine numbers, and the Wolfram Language's `Compile`
+  symbolic radicals are not machine numbers, and the reference's `Compile`
   behaves the same way.
 
 - **Packed array arguments.** A [packed `List`](packed-arrays.md) — an ordinary
@@ -796,7 +796,7 @@ Out[9]= {{11.0, 12.0, 13.0}, {21.0, 22.0, 23.0}, {31.0, 32.0, 33.0}}
 
 A worked end-to-end example — an explicit finite-difference solver for the 2-D
 wave equation, verified against an exact discrete solution and benchmarked
-against the interpreter, Wolfram Language and `NDSolve` — is summarised in
+against the interpreter, the reference and `NDSolve` — is summarised in
 [`docs/design/compile_state.md`](../../design/compile_state.md).
 
 ### Arbitrary precision (opt-in)

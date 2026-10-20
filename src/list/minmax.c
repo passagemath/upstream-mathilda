@@ -4,6 +4,46 @@
 #include "ndarray.h"
 #include "ndreduce.h"
 #include "interval.h"
+#include "numeric.h"
+
+/* A real numeric quantity that is not a number: Pi, Sqrt[2], Log[3]. Max and
+ * Min order these with the numbers, keeping the exact form of the winner
+ * (Max[1., Pi] is Pi, Min[1/2, Sqrt[2]] is 1/2). A complex quantity (I Pi)
+ * has no order and stays symbolic. */
+static bool minmax_real_quantity(Expr* e) {
+    if (e->type != EXPR_FUNCTION && e->type != EXPR_SYMBOL) return false;
+    if (!expr_is_numeric_quantity(e)) return false;
+    Expr* v = numericalize(e, numeric_machine_spec());
+    bool ok = v && (v->type == EXPR_REAL
+#ifdef USE_MPFR
+                    || v->type == EXPR_MPFR
+#endif
+                    );
+    if (v) expr_free(v);
+    return ok;
+}
+
+static bool minmax_orderable(Expr* e) {
+    return is_real_numeric(e) || minmax_real_quantity(e);
+}
+
+/* Sign of a - b for two orderable arguments. Two numbers keep the canonical
+ * order the heads always used; a numeric quantity is decided by Less /
+ * Greater, which settle exact constants to whatever precision they need.
+ * An undecided pair (equal values) reports 0, so the earlier argument stays. */
+static int minmax_cmp(Expr* a, Expr* b) {
+    if (is_real_numeric(a) && is_real_numeric(b)) return expr_compare(a, b);
+    Expr* args[2] = { expr_copy(a), expr_copy(b) };
+    Expr* lt = eval_and_free(expr_new_function(expr_new_symbol(SYM_Less), args, 2));
+    bool is_lt = lt->type == EXPR_SYMBOL && lt->data.symbol.name == SYM_True;
+    expr_free(lt);
+    if (is_lt) return -1;
+    Expr* args2[2] = { expr_copy(a), expr_copy(b) };
+    Expr* gt = eval_and_free(expr_new_function(expr_new_symbol(SYM_Greater), args2, 2));
+    bool is_gt = gt->type == EXPR_SYMBOL && gt->data.symbol.name == SYM_True;
+    expr_free(gt);
+    return is_gt ? 1 : 0;
+}
 
 /* MinMax[list] gives {Min[list], Max[list]} in the natural single pass a caller
  * would otherwise write by hand. Over an association it uses the values (Min and
@@ -119,11 +159,11 @@ Expr* builtin_min(Expr* res) {
     
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (is_real_numeric(arg)) {
+        if (minmax_orderable(arg)) {
             if (min_num == NULL) {
                 min_num = expr_copy(arg);
             } else {
-                if (expr_compare(arg, min_num) < 0) {
+                if (minmax_cmp(arg, min_num) < 0) {
                     expr_free(min_num);
                     min_num = expr_copy(arg);
                 }
@@ -254,11 +294,11 @@ Expr* builtin_max(Expr* res) {
     
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (is_real_numeric(arg)) {
+        if (minmax_orderable(arg)) {
             if (max_num == NULL) {
                 max_num = expr_copy(arg);
             } else {
-                if (expr_compare(arg, max_num) > 0) {
+                if (minmax_cmp(arg, max_num) > 0) {
                     expr_free(max_num);
                     max_num = expr_copy(arg);
                 }

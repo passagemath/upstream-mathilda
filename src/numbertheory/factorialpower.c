@@ -4,6 +4,7 @@
 
 #include "numbertheory.h"
 #include "numbertheory_internal.h"
+#include "numeric.h"   /* expr_is_numeric_quantity */
 #include "arithmetic.h"
 #include "eval.h"
 #include "sym_names.h"
@@ -27,13 +28,13 @@
  * Concrete numeric paths:
  *   - Both arguments integer with k >= 0: compute the product (GMP for
  *     k > 30 to avoid int64 overflow).
- *   - Integer n with negative integer k: undefined / no closed-form
- *     elementary identity in MMA's symbolic core; leave unevaluated.
+ *   - Numeric n with negative integer k: 1/((n + 1) (n + 2) ... (n + |k|)).
+ *   - FactorialPower[x, n, h], the step-h form: see fp_three_arg.
  *
  * Symbolic n with concrete non-negative integer k expands to a product
  * of (n - i) factors so downstream Expand / D can act on it -- e.g.
  *   FactorialPower[n, 3] -> n (n - 1) (n - 2)
- * Mathematically equal under Mathematica's definition and lets the
+ * Mathematically equal under the reference's definition and lets the
  * surrounding evaluator collapse it via Expand[] when the user wants.
  *
  * Anything else (k symbolic, or both arguments symbolic): NULL --
@@ -75,8 +76,76 @@ static Expr* fp_gamma_quotient(Expr* n, Expr* k) {
     return eval_and_free(prod);
 }
 
+static Expr* fp_call(const char* head, Expr** a, size_t n) {
+    return expr_new_function(expr_new_symbol(head), a, n);
+}
+
+/* x + c h, unevaluated, for the product factors. */
+static Expr* fp_shift(Expr* x, int64_t c, Expr* h) {
+    if (c == 0) return expr_copy(x);
+    Expr* ch = fp_call(SYM_Times, (Expr*[]){ expr_new_integer(c), expr_copy(h) }, 2);
+    return fp_call(SYM_Plus, (Expr*[]){ expr_copy(x), ch }, 2);
+}
+
+/* A number, or a numeric quantity (Pi, Sqrt[2]). */
+static bool fp_numeric(const Expr* e) {
+    return expr_is_numeric_quantity(e);
+}
+
+/* FactorialPower[x, n, h] -- the falling factorial with step h:
+ *
+ *   x (x - h) (x - 2 h) ... (x - (n - 1) h)            n a positive integer
+ *   1 / ((x + h) (x + 2 h) ... (x + |n| h))             n a negative integer
+ *   h^n Gamma[x/h + 1] / Gamma[x/h - n + 1]             any other numeric n
+ *
+ * with h = 1 the two-argument form. Evaluated when x and h are numeric (and,
+ * for a non-integer n, every argument is a number or one is inexact); a
+ * symbolic x or h stays unevaluated, as in the reference. */
+static Expr* fp_step_product(Expr* x, Expr* n, Expr* h) {
+    if (n->type == EXPR_INTEGER && n->data.integer > 0 && n->data.integer <= 100000) {
+        int64_t k = n->data.integer;
+        Expr** f = malloc(sizeof(Expr*) * (size_t)k);
+        for (int64_t i = 0; i < k; i++) f[i] = fp_shift(x, -i, h);
+        Expr* prod = fp_call(SYM_Times, f, (size_t)k);
+        free(f);
+        return eval_and_free(prod);
+    }
+    if (n->type == EXPR_INTEGER && n->data.integer < 0 && n->data.integer >= -100000) {
+        int64_t k = -n->data.integer;
+        Expr** f = malloc(sizeof(Expr*) * (size_t)k);
+        for (int64_t i = 0; i < k; i++) f[i] = fp_shift(x, i + 1, h);
+        Expr* prod = fp_call(SYM_Times, f, (size_t)k);
+        free(f);
+        return eval_and_free(fp_call(SYM_Power, (Expr*[]){ prod, expr_new_integer(-1) }, 2));
+    }
+    return NULL;
+}
+
+static Expr* fp_three_arg(Expr* x, Expr* n, Expr* h) {
+    if (n->type == EXPR_INTEGER && n->data.integer == 0) return expr_new_integer(1);
+    if (h->type == EXPR_INTEGER && h->data.integer == 1)
+        return fp_call("FactorialPower", (Expr*[]){ expr_copy(x), expr_copy(n) }, 2);
+    if (!fp_numeric(x) || !fp_numeric(h)) return NULL;
+    Expr* p = fp_step_product(x, n, h);
+    if (p || !fp_numeric(n)) return p;
+    /* h^n Gamma[x/h + 1] / Gamma[x/h - n + 1]. */
+    Expr* xh = eval_and_free(fp_call(SYM_Times, (Expr*[]){ expr_copy(x),
+        fp_call(SYM_Power, (Expr*[]){ expr_copy(h), expr_new_integer(-1) }, 2) }, 2));
+    Expr* q = fp_gamma_quotient(xh, n);
+    expr_free(xh);
+    Expr* hn = fp_call(SYM_Power, (Expr*[]){ expr_copy(h), expr_copy(n) }, 2);
+    Expr* v = eval_and_free(fp_call(SYM_Times, (Expr*[]){ hn, q }, 2));
+    if (v && (expr_is_numeric_like(v) || fp_numeric(v))) return v;
+    expr_free(v);
+    return NULL;
+}
+
 Expr* builtin_factorialpower(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 3)
+        return fp_three_arg(res->data.function.args[0], res->data.function.args[1],
+                            res->data.function.args[2]);
+    if (res->data.function.arg_count != 2) return NULL;
     Expr* n_arg = res->data.function.args[0];
     Expr* k_arg = res->data.function.args[1];
 
@@ -92,7 +161,14 @@ Expr* builtin_factorialpower(Expr* res) {
         return NULL;
     }
     int64_t k = k_arg->data.integer;
-    if (k < 0) return NULL;
+    if (k < 0) {
+        /* 1/((n + 1) (n + 2) ... (n + |k|)) for a numeric n. */
+        if (!fp_numeric(n_arg) || k < -100000) return NULL;
+        Expr* one = expr_new_integer(1);
+        Expr* r = fp_step_product(n_arg, k_arg, one);
+        expr_free(one);
+        return r;
+    }
     if (k == 0) return expr_new_integer(1);
 
     /* Both n and k integer: compute exact product in GMP. */

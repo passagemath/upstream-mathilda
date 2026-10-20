@@ -27,6 +27,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "stieltjesgamma.h" /* numeric_stieltjes_n: N of an NHoldFirst constant */
 
 /* M_PI and M_E are POSIX/GNU extensions, not part of C99. glibc hides them
  * under -std=c99, so provide portable fallbacks here. */
@@ -761,6 +762,14 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         if (!numeric_head) return expr_copy((Expr*)e);
     }
 
+    /* StieltjesGamma[n] has nothing N could numericalize (its order is
+     * NHoldFirst), so its value is asked for directly. */
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_StieltjesGamma) {
+        Expr* r = numeric_stieltjes_n(e, spec);
+        if (r) return r;
+    }
+
     /* General function f[a, b, ...] — rebuild with numericalized args, then
      * feed the result to the evaluator to trigger any numeric fast paths in
      * the per-function builtins (e.g. trig.c's csin, power.c's cpow). */
@@ -795,15 +804,24 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * plus an N rule for s). Numericalizing them would give DirichletL[3., 2.,
      * 0.5`50], which is not a character label and stays unevaluated. */
     size_t n_label_held = 0;
-    if (n == 3 && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_DirichletL)
+    bool dirichlet_l = n == 3 && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_DirichletL;
+    if (dirichlet_l)
         n_label_held = 2;
+    /* NHoldFirst / NHoldRest: positions N leaves exact (StieltjesGamma's order,
+     * Part's indices). DirichletL is NHoldAll yet numericalizes s, so its
+     * labels are the explicit rule above. */
+    uint32_t nhold = 0;
+    if (!dirichlet_l && e->data.function.head->type == EXPR_SYMBOL)
+        nhold = get_attributes(e->data.function.head->data.symbol.name) &
+                (ATTR_NHOLDFIRST | ATTR_NHOLDREST);
 
     /* Numericalize args left-to-right. For Power, decide whether to preserve
      * the exponent based on the (already-computed) numericalized base. */
     bool preserve_power_exp = exp_is_int;
     for (size_t i = 0; i < n; ++i) {
-        if (i < n_label_held) {
+        if (i < n_label_held || (i == 0 && (nhold & ATTR_NHOLDFIRST)) ||
+            (i > 0 && (nhold & ATTR_NHOLDREST))) {
             new_args[i] = expr_copy(e->data.function.args[i]);
             continue;
         }
@@ -1804,6 +1822,187 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
         out[i] = numericalize(args[i], spec);
     }
     return true;
+}
+
+/* ------------------------------------------------------------------------
+ *  Mixed exact/inexact arguments of a numeric builtin
+ *
+ *  Zeta[2., Sqrt[2]] is a machine number in the reference, exactly as
+ *  Sin[2.] is: a numeric builtin given an inexact argument numericalizes its
+ *  exact numeric arguments to the inexact one's precision. Plus / Times do
+ *  that in their own contagion pass; every other head used to stay
+ *  unevaluated, because each one's numeric path tests "all arguments are
+ *  numbers". numeric_mixed_args_call() supplies the rule once, for every
+ *  NumericFunction builtin, from the evaluator (step 5 of evaluate_step).
+ * ---------------------------------------------------------------------- */
+
+/* Rational[p, q], or Complex[a, b] with integer / rational parts. */
+static bool mixed_is_rational_atom(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational) return true;
+    if (h != SYM_Complex || e->data.function.arg_count != 2) return false;
+    return mixed_is_rational_atom(e->data.function.args[0]) &&
+           mixed_is_rational_atom(e->data.function.args[1]);
+}
+
+/* Classify the leaves of one argument: a number (inexact or exact), a numeric
+ * quantity (Sqrt[2], Pi, Gamma[1/3]: exact), or a List of those. Returns false
+ * on anything else (a symbol, a string, a rule), which ends the attempt. */
+static bool mixed_arg_scan(const Expr* e, bool* any_inexact, bool* any_exact,
+                           bool* any_machine, long* min_bits, int depth) {
+    if (e->type == EXPR_REAL) { *any_inexact = true; *any_machine = true; return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) {
+        long p = (long)mpfr_get_prec(e->data.mpfr);
+        if (*min_bits == 0 || p < *min_bits) *min_bits = p;
+        *any_inexact = true;
+        return true;
+    }
+#endif
+    /* Integers, rationals and exact Gaussian rationals are already what every
+     * numeric path accepts beside a real (and often a structural index:
+     * BesselJ's order, ProductLog's branch), so they neither trigger the
+     * rewrite nor change under it. Only an irrational numeric quantity does. */
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type != EXPR_FUNCTION) {
+        if (e->type == EXPR_SYMBOL && expr_is_numeric_quantity(e)) { *any_exact = true; return true; }
+        return false;
+    }
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im) || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List) {
+        if (arg_is_inexact(e)) {
+            if (arg_has_machine_real(e)) *any_machine = true;
+#ifdef USE_MPFR
+            long p = numeric_min_inexact_bits(e);
+            if (p > 0 && !arg_has_machine_real(e) && (*min_bits == 0 || p < *min_bits)) *min_bits = p;
+#endif
+            /* A compound holding an inexact leaf (Sqrt[2.]-style residue an
+             * earlier pass left) is not a number; leave it alone. */
+            if (!is_complex((Expr*)e, &re, &im)) return false;
+            *any_inexact = true;
+            return true;
+        }
+        if (mixed_is_rational_atom(e)) return true;
+        if (!expr_is_numeric_quantity(e)) return false;
+        *any_exact = true;
+        return true;
+    }
+    /* A List argument (HypergeometricPFQ's parameter lists): its leaves count. */
+    if (depth > 4) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!mixed_arg_scan(e->data.function.args[i], any_inexact, any_exact,
+                            any_machine, min_bits, depth + 1))
+            return false;
+    return true;
+}
+
+static bool mixed_is_list(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* True iff every leaf of `e` is an inexact number or a rational atom: nothing
+ * left for the rewrite to convert (and the retry's postcondition). */
+static bool mixed_arg_settled(const Expr* e) {
+    if (e->type == EXPR_REAL || mixed_is_rational_atom(e)) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr *re, *im;
+    if (is_complex((Expr*)e, &re, &im)) return arg_is_inexact(e);
+    if (!mixed_is_list(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!mixed_arg_settled(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* N of one argument, leaf by leaf through Lists so a rational parameter
+ * beside the irrational one keeps its exact form. */
+static Expr* mixed_numericalize(const Expr* e, NumericSpec spec) {
+    if (mixed_arg_settled(e)) return expr_copy((Expr*)e);
+    if (!mixed_is_list(e)) return numericalize(e, spec);
+    size_t n = e->data.function.arg_count;
+    Expr** a = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    if (!a) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        a[i] = mixed_numericalize(e->data.function.args[i], spec);
+        if (!a[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(a[j]);
+            free(a);
+            return NULL;
+        }
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+Expr* numeric_mixed_args_call(const Expr* call, uint32_t attrs) {
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    size_t n = call->data.function.arg_count;
+    if (n < 2) return NULL;
+    /* Cheap gate first: this runs on every declined NumericFunction call
+     * (Power[x, 2], ...), and an inexact argument can only be a top-level
+     * Real / MPFR, a Complex, or sit inside a List. */
+    bool candidate = false;
+    for (size_t i = 0; i < n && !candidate; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (a->type == EXPR_REAL) candidate = true;
+#ifdef USE_MPFR
+        else if (a->type == EXPR_MPFR) candidate = true;
+#endif
+        else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+                 (a->data.function.head->data.symbol.name == SYM_Complex ||
+                  a->data.function.head->data.symbol.name == SYM_List))
+            candidate = true;
+    }
+    if (!candidate) return NULL;
+    bool any_inexact = false, any_exact = false, any_machine = false;
+    long min_bits = 0;
+    for (size_t i = 0; i < n; i++) {
+        if ((i == 0 && (attrs & ATTR_NHOLDFIRST)) || (i > 0 && (attrs & ATTR_NHOLDREST)))
+            continue;
+        if (!mixed_arg_scan(call->data.function.args[i], &any_inexact, &any_exact,
+                            &any_machine, &min_bits, 0))
+            return NULL;
+    }
+    if (!any_inexact || !any_exact) return NULL;
+
+    /* The lowest precision governs, and machine precision is the floor. */
+    NumericSpec spec = numeric_machine_spec();
+#ifdef USE_MPFR
+    if (!any_machine && min_bits > 0) {
+        spec.mode = NUMERIC_MODE_MPFR_CAP;
+        spec.bits = min_bits;
+    }
+#else
+    (void)min_bits;
+#endif
+    Expr** args = (Expr**)malloc(n * sizeof(Expr*));
+    if (!args) return NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = call->data.function.args[i];
+        bool held = (i == 0 && (attrs & ATTR_NHOLDFIRST)) || (i > 0 && (attrs & ATTR_NHOLDREST));
+        if (held || mixed_arg_settled(a)) { args[i] = expr_copy((Expr*)a); continue; }
+        args[i] = mixed_numericalize(a, spec);
+        if (!args[i] || !mixed_arg_settled(args[i])) {
+            if (!args[i]) args[i] = expr_copy((Expr*)a);
+            ok = false;
+        }
+    }
+    if (!ok) {
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+        free(args);
+        return NULL;
+    }
+    Expr* out = expr_new_function(expr_copy(call->data.function.head), args, n);
+    free(args);
+    return out;
 }
 
 /* ------------------------------------------------------------------------

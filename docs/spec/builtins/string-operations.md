@@ -1,7 +1,7 @@
 # String Operations
 
 Strings are UTF-8, and every String function counts, indexes, slices and
-reverses in **characters** (Unicode code points), as Mathematica does:
+reverses in **characters** (Unicode code points), as the reference does:
 `StringLength["h\:00e9llo"]` is `5`, `StringReverse` keeps each character whole,
 `StringPosition` reports character positions, and the string-pattern classes
 are Unicode-aware (`LetterCharacter` matches `"\:00fc"`, `DigitCharacter`
@@ -10,10 +10,10 @@ Pure-ASCII strings take a byte-speed path. A byte that does not begin a valid
 UTF-8 sequence counts as one character, so malformed input never crashes or
 splits.
 
-String literals accept Mathematica's character escapes: `\[Name]` (the 1100+
+String literals accept the reference's character escapes: `\[Name]` (the 1100+
 named characters, e.g. `"\[Alpha]"`), `\:hhhh`, `\|hhhhhh`, `\.hh` and `\ooo`.
 
-Invalid arguments emit Mathematica's diagnostics through the message system
+Invalid arguments emit the reference's diagnostics through the message system
 (`StringLength::string`, `StringPadLeft::intnm`, `StringRepeat::intp`,
 `StringJoin::string`, `...::strse`, ...) and leave the call unevaluated.
 
@@ -190,7 +190,7 @@ Gives a substring of a string.
 - `StringTake["string", 0]`: Returns the empty string `""`.
 - Negative indices count from the end of the string.
 - In `StringTake["string", {m, n, s}]`, m, n, and/or s can be negative.
-- Positions are characters (code points). The range rules are Mathematica's:
+- Positions are characters (code points). The range rules are the reference's:
   an empty result needs adjacent bounds (`{4, 3}`), a literal `0` start means
   "past the end".
 - Out-of-range positions emit `StringTake::take`, a malformed spec
@@ -237,7 +237,7 @@ Out[11]= StringTake[x, 1]
 ## StringDrop
 
 Gives a string with a specified subset of its characters removed. `StringDrop`
-is the complement of `StringTake`: the same standard Wolfram Language sequence
+is the complement of `StringTake`: the same standard reference sequence
 specification selects the characters to *remove*, and the remaining characters
 are concatenated in order.
 
@@ -360,7 +360,7 @@ Replaces one or more ranges of characters in a string with new strings.
 - `StringReplacePart["string", "snew", {{m1, n1}, {m2, n2}, ...}]`: Inserts a copy of `"snew"` at each of the given ranges.
 - `StringReplacePart["string", {"snew1", "snew2", ...}, {{m1, n1}, ...}]`: Replaces the characters at each range by the corresponding new string. The list of new strings must be the same length as the list of positions.
 - `StringReplacePart["string", "snew", n]` means `{1, n}` (`-n`: `{-n, -1}`), and `{m, m-1}` inserts before character m.
-- It does not thread over a list of strings (Mathematica emits `StringReplacePart::string`).
+- It does not thread over a list of strings (the reference emits `StringReplacePart::string`).
 - `StringReplacePart[new, part][old]`: Operator form, equivalent to `StringReplacePart[old, new, part]`.
 - Position specifications use the form returned by `StringPosition`: each is a pair `{m, n}` of first/last character positions. Negative positions count from the end. All positions refer to `"string"` *before* any replacement is done.
 - Positions are not allowed to overlap: a range that overlaps a previously accepted one emits `StringReplacePart::ovlp` and its new string is not inserted.
@@ -401,7 +401,7 @@ Out[8]= StringReplacePart[]
 
 Represents a class of strings given by a PCRE regular expression, for use in
 `StringMatchQ`, `StringCases`, `StringReplace`, and `StringSplit`. Backed by
-PCRE2 (the same engine the Wolfram Language uses).
+PCRE2 (the same engine the reference uses).
 
 - `RegularExpression["regex"]`: an inert head that evaluates to itself and
   carries the pattern.
@@ -597,7 +597,7 @@ Extracts the substrings of a string that match a pattern.
   an alternative that did not take part in the match is bound to `""`.
 - For a `RegularExpression` pattern a string `rhs` is a template: `$n` is the
   n-th capture group, `$0` the whole match, `$$` a literal `$`. With any other
-  pattern `"$1"` is literal text, as in Mathematica.
+  pattern `"$1"` is literal text, as in the reference.
 - `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`;
   non-string elements pass through unchanged.
 - `patt` may be `RegularExpression["re"]`, a literal string, or a list of
@@ -692,7 +692,7 @@ Replaces matches of a pattern in a string.
   `RegularExpression` pattern a string `rep` may use `$n`/`$0`.
 - A replacement that is not a string cannot be spliced into text, so the result
   becomes a `StringExpression` of the text runs and those values, as in
-  Mathematica: `StringReplace["abc123", x:DigitCharacter :> ToExpression[x]]`
+  the reference: `StringReplace["abc123", x:DigitCharacter :> ToExpression[x]]`
   is `"abc"~~1~~2~~3`. `Sequence[...]` replacements splice; `Sequence[]` deletes.
 - `StringReplace["string", {patt1 -> rep1, ...}]`: applies a list of rules; at
   each position the leftmost match wins, ties broken by rule order.
@@ -765,7 +765,7 @@ Trims substrings matching a pattern from the beginning and end of a string.
 - `StringTrim["string"]`: trims runs of whitespace (spaces, tabs, newlines)
   from both ends.
 - `StringTrim["string", patt]`: removes one substring matching the string
-  pattern `patt` from the start and one from the end, as in Mathematica:
+  pattern `patt` from the start and one from the end, as in the reference:
   `StringTrim["xxabxx", "x"]` is `"xabx"`; use `"x"..` to remove runs. The end
   match must begin at or after the end of the start match.
 - Option `IgnoreCase -> True` matches case-insensitively.
@@ -884,9 +884,9 @@ Partitions a string into fixed-length substrings. Lengths count characters.
   `d = n`), allowing the final substring to be shorter so every character
   appears. Combinable with an explicit offset as `UpTo[n], d`.
 - With an explicit offset `d < n` and `UpTo[n]`, the trailing blocks shorten as
-  Mathematica's do (`StringPartition["abcdefg", UpTo[3], 2]` is
+  the reference's do (`StringPartition["abcdefg", UpTo[3], 2]` is
   `{"abc", "cde", "efg", "g"}`).
-- Does not thread over a list (Mathematica emits `StringPartition::string`).
+- Does not thread over a list (the reference emits `StringPartition::string`).
   A bad length or offset emits `::intpm` / `::intnm` / `::intp`; other arities
   emit `::argtu` / `::argt`.
 - **Attributes**: `Protected`.
@@ -938,16 +938,16 @@ string) or truncating it. Lengths count characters.
 
 - `StringPad*["string", n]`: length `n`, padded with spaces or truncated.
 - `StringPad*["string", n, "padding"]`: pads with `"padding"` repeated
-  cyclically and aligned to the result, as in Mathematica: on the right,
+  cyclically and aligned to the result, as in the reference: on the right,
   result character `i` is `padding[[i mod len]]`; on the left the cycle is
   anchored at the result's end. `StringPadRight["ab", 6, "xyz"]` is
   `"abzxyz"`, `StringPadLeft["ab", 7, "xyz"]` is `"zxyzxab"`.
 - `StringPad*["string"]`: a single string needs a length -- emits
-  `::strlist` and stays unevaluated (Mathematica).
+  `::strlist` and stays unevaluated (the reference).
 - `StringPad*[{s1, s2, ...}]`: pads each string to the length of the longest,
   so all become the same length.
 - `StringPad*[{s1, s2, ...}, n, ...]`: pads or truncates each string to length `n`.
-- Invalid arguments emit Mathematica's messages and leave the call
+- Invalid arguments emit the reference's messages and leave the call
   unevaluated: a subject that is not a string or a list of strings
   (`::strlist`), a non-integer or negative `n` (`::intnm`), an empty or
   non-string `padding` (`::stringnz`). `StringPadLeft[{}, n]` is `""`. Other
@@ -1013,7 +1013,7 @@ Beyond `RegularExpression["re"]` and literal strings, every pattern-taking
 string function (`StringMatchQ`, `StringCases`, `StringCount`,
 `StringPosition`, `StringReplace`, `StringSplit`, `StringTrim`, and the
 substring predicates `StringContainsQ` and friends) shares one translator
-(`string_pattern.c`) that turns symbolic Wolfram string patterns into PCRE2:
+(`string_pattern.c`) that turns symbolic reference string patterns into PCRE2:
 
 | Pattern | Matches |
 |---------|---------|
@@ -1036,7 +1036,7 @@ substring predicates `StringContainsQ` and friends) shares one translator
 | `p ? f` (`PatternTest`) | `p`, if `f[text]` is `True` (`_?LetterQ`-style tests are a character class) |
 | `p /; cond` (`Condition`) | `p`, if `cond` is `True` with the names bound so far |
 
-Pattern names follow Mathematica: a name's first occurrence captures, and
+Pattern names follow the reference: a name's first occurrence captures, and
 every later occurrence must match the same text -- `x_ ~~ x_` matches two equal
 characters, and in a repeated pattern `(x:LetterCharacter)..` every repetition
 equals the first (`"aaa"`, not `"abc"`). A failed `Condition` or `PatternTest`
@@ -1162,7 +1162,7 @@ Out[3]= {"alpha", "beta"}
 
 - `LetterQ["string"]`: every character is a letter of any script.
 - `DigitQ["string"]`: every character is an ASCII digit `0`-`9` (as in
-  Mathematica, even though the pattern `DigitCharacter` matches any Unicode
+  the reference, even though the pattern `DigitCharacter` matches any Unicode
   decimal digit).
 - `UpperCaseQ["string"]` / `LowerCaseQ["string"]`: every character is an
   uppercase / lowercase letter.
@@ -1233,7 +1233,7 @@ Out[3]= 26
 - Operator forms: `StringCases[patt][s]`, `StringReplace[rules][s]`,
   `StringMatchQ[patt][s]`, `StringPosition[patt][s]`, `StringDelete[patt][s]`
   (in addition to the `StringContainsQ` family). `StringSplit`, `StringCount`
-  and `StringTrim` have none, as in Mathematica.
+  and `StringTrim` have none, as in the reference.
 - Occurrence limits: `StringCases[s, patt, n]`, `StringReplace[s, rules, n]`,
   `StringPosition[s, patt, n]`, `StringReplaceList[s, rules, n]` (`n` an
   integer >= 0 or `Infinity`). With non-overlapping matching the scan stops as

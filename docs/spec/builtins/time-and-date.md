@@ -56,7 +56,7 @@ Evaluates `expr`, generating an interrupt to abort the evaluation if it has not 
 
 **Features**:
 - `HoldAll`, `Protected`.
-- Returns the value of `expr` if it completes within `t` seconds of elapsed (wall-clock) time, as in Mathematica.
+- Returns the value of `expr` if it completes within `t` seconds of elapsed (wall-clock) time, as in the reference.
 - Returns `$Aborted` if the budget is exhausted and no `failexpr` is provided.
 - Returns the (then-evaluated) value of `failexpr` if the budget is exhausted and the three-argument form is used. `failexpr` is **not** evaluated when the body completes in time.
 - `TimeConstrained[expr, Infinity]` imposes no time constraint.

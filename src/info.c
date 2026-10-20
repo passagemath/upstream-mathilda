@@ -766,8 +766,10 @@ void info_init(void) {
         "QPochhammer[a, q, n]\n"
         "\tgives the q-Pochhammer symbol prod_{k=0}^{n-1} (1 - a q^k).\n"
         "QPochhammer[a, q] gives the infinite q-Pochhammer (a;q)_Inf for |q|<1. "
-        "The finite form is exact/symbolic for a non-negative integer n; the "
-        "infinite form evaluates for machine-real a, q. Listable, "
+        "The finite form is exact/symbolic for an integer n (n < 0 gives "
+        "1/prod_{k=1}^{-n} (1 - a q^-k)); a non-integer n with an inexact "
+        "argument is (a;q)_Inf/(a q^n;q)_Inf. The infinite form evaluates for "
+        "inexact a, q: machine real, complex, or arbitrary precision. Listable, "
         "NumericFunction.");
     symtab_set_docstring("NIntegrate",
         "NIntegrate[f, {x, xmin, xmax}]\n"
@@ -961,9 +963,10 @@ void info_init(void) {
         "\tgives the generalized exponential integral E_n(z) =\n"
         "\tIntegral_1^Infinity E^(-z t)/t^n dt.\n"
         "ExpIntegralE[0, z] = E^-z/z, ExpIntegralE[n, 0] = 1/(n-1) for n > 1,\n"
-        "ExpIntegralE[1, z] = Gamma[0, z]. Integer order with an inexact real z > 0\n"
-        "evaluates numerically; D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z].\n"
-        "Listable.");
+        "ExpIntegralE[1, z] = Gamma[0, z]. Any real or complex order evaluates\n"
+        "numerically when an argument is inexact (machine or arbitrary precision);\n"
+        "E_s(0.) is ComplexInfinity for s <= 1.\n"
+        "D[ExpIntegralE[n, z], z] = -ExpIntegralE[n-1, z]. Listable, NumericFunction.");
     symtab_set_docstring("StruveH",
         "StruveH[nu, z]\n"
         "\tgives the Struve function H_nu(z), the particular solution of the\n"
@@ -1019,6 +1022,23 @@ void info_init(void) {
         "FresnelS[+-Infinity] = +-1/2, FresnelS[+-I Infinity] = -+I/2.\n"
         "Real and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
         "precision; D[FresnelS[z], z] = Sin[Pi z^2/2]. Listable.");
+    symtab_set_docstring("Surd",
+        "Surd[x, n]\n"
+        "\tgives the real-valued n-th root of a real x: Sign[x] Abs[x]^(1/n) for\n"
+        "\todd n, x^(1/n) for even n and x >= 0.\n"
+        "Exact x gives an exact root (Surd[-8, 3] = -2, Surd[-2, 3] = -2^(1/3));\n"
+        "machine and arbitrary-precision x evaluate numerically. An even root of a\n"
+        "negative x is Indeterminate (Surd::noneg), n = 0 is Indeterminate\n"
+        "(Surd::indet), a non-real x (Surd::preal) or non-integer n (Surd::int)\n"
+        "stays unevaluated. Listable, NumericFunction.");
+    symtab_set_docstring("KroneckerDelta",
+        "KroneckerDelta[n1, n2, ...]\n"
+        "\tgives 1 when all the ni are equal and 0 when any two are unequal.\n"
+        "KroneckerDelta[] is 1 and KroneckerDelta[n] is KroneckerDelta[n, 0].\n"
+        "Identical arguments give 1; numbers and numeric quantities compare by\n"
+        "value (KroneckerDelta[1/2, 0.5] = 1); one unequal pair gives 0 even beside\n"
+        "symbols (KroneckerDelta[x, 1, 2] = 0). Otherwise it stays unevaluated.\n"
+        "Orderless, NumericFunction.");
     symtab_set_docstring("Sinc",
         "Sinc[z]\n"
         "\tgives the cardinal sine Sin[z]/z, with Sinc[0] = 1.\n"
@@ -1059,8 +1079,9 @@ void info_init(void) {
         "minus EulerGamma, and psi^(n)(m) for odd n to a rational plus a rational\n"
         "multiple of Pi^(n+1); even orders stay symbolic. Non-positive integer\n"
         "arguments give ComplexInfinity. Inexact real and complex arguments evaluate\n"
-        "numerically at machine or arbitrary (MPFR) precision. PolyGamma[-1, z] gives\n"
-        "LogGamma[z]. Listable.");
+        "numerically at machine or arbitrary (MPFR) precision, and so does a\n"
+        "non-integer order (the Riemann-Liouville fractional derivative of psi).\n"
+        "PolyGamma[-1, z] gives LogGamma[z]. Listable.");
     symtab_set_docstring("HarmonicNumber",
         "HarmonicNumber[n]\n"
         "\tgives the n-th harmonic number H_n = Sum_{i=1}^n 1/i.\n"
@@ -1140,8 +1161,9 @@ void info_init(void) {
         "PolyLog[n, z]\n"
         "\tgives the polylogarithm Li_n(z) = Sum_{k>=1} z^k/k^n.\n"
         "PolyLog[n, p, z]\n"
-        "\tgives the Nielsen generalized polylogarithm S_{n,p}(z) (accepted but\n"
-        "left unevaluated).\n"
+        "\tgives the Nielsen generalized polylogarithm S_{n,p}(z); p = 1 is\n"
+        "\tPolyLog[n + 1, z], and an inexact call with a positive integer p and\n"
+        "\t|z| < 1 evaluates numerically.\n"
         "Special arguments reduce in closed form: PolyLog[n, 0] = 0,\n"
         "PolyLog[1, z] = -Log[1-z], PolyLog[0, z] = z/(1-z), negative integer\n"
         "orders give rational functions, PolyLog[n, 1] = Zeta[n] and\n"
@@ -1196,9 +1218,10 @@ void info_init(void) {
         "\tgives the Legendre polynomial P_n(x).\n"
         "LegendreP[n, m, x] gives the associated Legendre function P_n^m(x).\n"
         "LegendreP[n, m, a, x] gives the Legendre function of type a (a in\n"
-        "{1, 2, 3}, default 1). Integer n yields the explicit polynomial; a\n"
-        "non-integer order with an inexact argument evaluates numerically at\n"
-        "machine or arbitrary (MPFR) precision, real or complex. Listable.");
+        "{1, 2, 3}, default 1; types 1 and 2 are the Ferrers form). Integer n\n"
+        "yields the explicit polynomial; any other degree or order with an inexact\n"
+        "argument evaluates numerically at machine or arbitrary (MPFR) precision,\n"
+        "real or complex, inside or outside (-1, 1). Listable.");
     symtab_set_docstring("ChebyshevT",
         "ChebyshevT[n, x]\n"
         "\tgives the Chebyshev polynomial of the first kind T_n(x).\n"
@@ -1288,15 +1311,20 @@ void info_init(void) {
         "LegendreQ[n, m, a, x] gives the Legendre function of type a (a in\n"
         "{1, 2, 3}, default 1). For integer n the explicit closed form\n"
         "P_n(x) (Log[1+x] - Log[1-x])/2 + v_n(x) is generated; a non-integer\n"
-        "order with an inexact argument on the cut (|x| < 1) evaluates\n"
-        "numerically at machine or arbitrary (MPFR) precision, real or\n"
-        "complex. D[LegendreQ[n,x],x] and the origin Series are supported.\n"
+        "degree or order with an inexact argument evaluates numerically at\n"
+        "machine or arbitrary (MPFR) precision, real or complex, inside or\n"
+        "outside (-1, 1). D[LegendreQ[n,x],x] and the origin Series are supported.\n"
         "Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"
-        "Zeta about s = 1. StieltjesGamma[0] is EulerGamma; higher constants are\n"
-        "inert (they stay symbolic) and appear in Series expansions of Zeta. Listable.");
+        "\tZeta about s = 1.\n"
+        "StieltjesGamma[n, a]\n"
+        "\tgives the generalized constant gamma_n(a), the same for Zeta[s, a].\n"
+        "StieltjesGamma[0] is EulerGamma and StieltjesGamma[n, 1] is StieltjesGamma[n];\n"
+        "other exact calls stay symbolic and appear in Series expansions of Zeta.\n"
+        "An inexact a, or N, evaluates numerically at any precision. n must be a\n"
+        "non-negative machine integer (StieltjesGamma::intnm). Listable, NHoldFirst.");
     symtab_set_docstring("EulerGamma",
         "EulerGamma\n"
         "\tis Euler's constant gamma, with numerical value ~= 0.5772156649.\n"

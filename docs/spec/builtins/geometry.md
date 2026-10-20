@@ -1,11 +1,11 @@
 # Computational geometry
 
 Core 2D computational-geometry heads over `Polygon` and point sets, following
-Wolfram Language 12 semantics (every example below is locked to a live Wolfram
+the reference semantics (every example below is locked to a live reference
 kernel reference output, 2026-08-27; ticket GEO-1). Implemented in
 `src/geometry.c`; registered by `geometry_init()`.
 
-All five heads have attributes `{Protected}` (WL-faithful) and
+All five heads have attributes `{Protected}` (reference-faithful) and
 are deliberately **not** `Listable` — they are structural, not element-wise.
 
 Two computation paths, chosen per call:
@@ -14,7 +14,7 @@ Two computation paths, chosen per call:
   in GMP rationals; results are exact (`Integer`/`Rational`, or symbolic
   radical sums for `Perimeter`).
 - **Machine** — any `Real`/`MPFR` coordinate switches the whole computation to
-  machine doubles (WL's contagion semantics). A visible `NDArray` points
+  machine doubles (the reference's contagion semantics). A visible `NDArray` points
   argument (`Polygon[NDArray[...]]`, `ConvexHullRegion[NDArray[...]]`, or an
   `NDArray` query point) is read directly and is always machine.
 
@@ -119,7 +119,7 @@ Out[3]= False
 `ConvexHullRegion[{{x1, y1}, ...}]` — convex hull of a 2D point set (Andrew's
 monotone chain; duplicate, interior, and collinear-middle points removed).
 Result by hull dimension: `Polygon` (vertices counterclockwise, starting from
-the lexicographic minimum — WL's own vertex order), `Line` for collinear
+the lexicographic minimum — the reference's own vertex order), `Line` for collinear
 input, `Point` for a single point.
 
 ```
@@ -170,21 +170,21 @@ confident wrong number. In addition to symbolic coordinates and non-2D input:
 | nested `List` of exact numbers | exact | exact GMP path |
 | **packed** integer list (e.g. from `Table`) | **exact** | packed buffers materialise before these heads run, which is what preserves exactness — the reason they are `EXEMPT` rather than `AWARE` in `tools/check_packed_aware.py` |
 | visible `NDArray[...]` | machine | `NDArray[{{0,0},...}]` stores and prints `0.0` — float64 by construction, so there is no exactness to keep. Matches `Total[NDArray[{1,2,3}]]` being `6.0` where `Total[{1,2,3}]` is `6` |
-| any `Real` coordinate | machine | WL contagion |
+| any `Real` coordinate | machine | reference contagion |
 
-## Documented deviations from Wolfram Language
+## Documented deviations from the reference
 
 - **Simple polygons only.** Self-intersecting vertex lists follow
-  shoelace/even-odd semantics; WL computes the enclosed region. Not detected
+  shoelace/even-odd semantics; the reference computes the enclosed region. Not detected
   at runtime.
-- **`RegionCentroid` declines on zero-area polygons** (WL returns the
+- **`RegionCentroid` declines on zero-area polygons** (the reference returns the
   lower-dimensional measure centroid, e.g. the segment midpoint).
-- **`ConvexHullRegion` returns bare `Polygon[{verts}]`** — WL 12+ attaches a
+- **`ConvexHullRegion` returns bare `Polygon[{verts}]`** — the reference attaches a
   cell-spec second argument (`Polygon[verts, {1, 2, ..., n}]`).
 - **Machine-path comparisons are exact IEEE** — boundary membership requires
   the cross product to be exactly zero; the zero-area centroid gate compares
   to exactly `0.0`. No epsilon tolerances.
-- Machine reals print in mathilda's form (`12.0`, `4.0`) where WL prints
+- Machine reals print in mathilda's form (`12.0`, `4.0`) where the reference prints
   `12.`, `4.` — values identical.
 
 ## Tests

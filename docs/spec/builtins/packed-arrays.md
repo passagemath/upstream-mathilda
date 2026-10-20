@@ -224,7 +224,7 @@ Out[13]= False
 An all-`True`/`False` list infers — and packs to — the `"bool"` dtype, one byte
 per element. It behaves exactly like the `List` of `True`/`False` it packs:
 logical and predicate heads run on the buffer, while anything numeric delists to
-the symbolic `List` (Mathematica leaves `Sin[True]` and `True + True`
+the symbolic `List` (the reference leaves `Sin[True]` and `True + True`
 unevaluated, and so does a bool array). `"Boolean"` is accepted as a spelling of
 `"bool"` and canonicalises to it. A bool value never unifies with a number, so a
 mix like `{True, 1, 2.}` declines rather than coercing.
@@ -245,7 +245,7 @@ restates the same values as a `List`.
 
 ## `ToPackedArray`
 
-`ToPackedArray` is `ToNDArray` under Mathematica's name for the same operation —
+`ToPackedArray` is `ToNDArray` under the reference's name for the same operation —
 the same builtin registered twice, not a rule that rewrites to the other, so it
 costs no extra evaluation pass and cannot be shadowed. Every form and every
 option is identical.
@@ -273,7 +273,7 @@ Out[13]= {1., 2.}
 
 ## `FromPackedArray`
 
-`FromPackedArray` is `FromNDArray` under Mathematica's name, on the same terms as
+`FromPackedArray` is `FromNDArray` under the reference's name, on the same terms as
 `ToPackedArray` above. It undoes both forms of buffer storage — a packed `List`
 and an explicit `NDArray[...]`.
 
@@ -291,14 +291,14 @@ Out[3]= {1.0, 2.0, 3.0}
 ## `PackedArrayQ`
 
 `PackedArrayQ[expr]` gives `True` when `expr` is a packed array — a `List` stored
-as a dense machine-precision buffer — and `False` otherwise. It is Mathematica's
+as a dense machine-precision buffer — and `False` otherwise. It is the reference's
 name (`Developer`​`PackedArrayQ`) for that test.
 
 It is deliberately **narrower** than `NDArrayQ`. `NDArrayQ` is `True` for either
 surface of an `EXPR_NDARRAY` — a packed `List` *or* a visible `NDArray[...]`
 object. `PackedArrayQ` is `True` only for the packed-`List` surface: a visible
 `NDArray[...]` is a distinct atom (`AtomQ` is `True`, `ListQ` is `False`), not a
-`List` that happens to be packed, so it gives `False` — matching Mathematica,
+`List` that happens to be packed, so it gives `False` — matching the reference,
 which has no visible `NDArray` head at all. The two predicates therefore differ
 only on that one input.
 
@@ -371,7 +371,7 @@ past 2^53 equal; they use a bounded heap on real data, so the cost is
 
 `Append` and `Prepend` refuse an element that does not belong to the buffer's
 dtype rather than coercing it. `Append[{1., 2.}, 0]` is the mixed
-`{1., 2., 0}` — an exact `0` after two `Real`s, as `Mathematica` gives — and no
+`{1., 2., 0}` — an exact `0` after two `Real`s, as the reference gives — and no
 uniform buffer holds that, so the result is an ordinary list. `Append[{1., 2.},
 0.]` stays packed.
 
@@ -386,7 +386,7 @@ were the break in the chain for integer work: both had a kernel that computed in
 next. The heads downstream — `Union`, `Tally`, `DeleteDuplicates`, `Sort`,
 `BinCounts` — were already buffer-capable and simply never received one. They
 have exact integer arms now, and `Quotient` narrows: `Quotient[{1., 2., 3.}, 3]`
-is the exact `{0, 0, 1}`, as `Mathematica` gives, while `Mod` keeps the
+is the exact `{0, 0, 1}`, as the reference gives, while `Mod` keeps the
 argument's exactness (`Mod[{1., 2., 3.}, 3]` is `{1., 2., 0.}`).
 
 `ListConvolve` and `ListCorrelate` read a packed kernel, a packed list, or both,

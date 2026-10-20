@@ -40,7 +40,7 @@ Out[5]= {{}, {c}, {b}, {b, c}, {a}, {a, c}, {a, b}, {a, b, c}}
 
 **Features**:
 - **Lexical parameter binding**: named parameters are substituted into the body before evaluation (not bound via the global symbol table). This means held references to a parameter (for example `Unevaluated[x]` inside the body) see the substituted expression rather than the raw symbol.
-- **No Hold by default**: the default `Function` has no hold attributes, so its arguments are evaluated before substitution, matching Mathematica. `(Hold[#]&)[1+2]` gives `Hold[3]`, not `Hold[1 + 2]`.
+- **No Hold by default**: the default `Function` has no hold attributes, so its arguments are evaluated before substitution, matching the reference. `(Hold[#]&)[1+2]` gives `Hold[3]`, not `Hold[1 + 2]`.
 - **3-argument form attributes**: `Function[params, body, attrs]` can assign any of the standard evaluator attributes. Recognised attributes include `HoldFirst`, `HoldRest`, `HoldAll`, `HoldAllComplete`, `Listable`, `Flat`, `Orderless`, `OneIdentity`, `NumericFunction`, `SequenceHold`, `NHoldRest`. `attrs` may be a single attribute symbol or a list.
 - `Slot` parameters are positionally mapped to arguments provided. Remaining arguments are ignored.
 - Pure functions can be assigned to variables (e.g., `f = #^2 &`) and applied over lists (e.g., `f /@ {1, 2, 3}`).
@@ -77,13 +77,13 @@ A named slot reads a key of the association a pure function is applied to.
 - `(... #name ...) &[assoc]` substitutes `assoc["name"]` for each named slot.
 
 **Features**:
-- Parsed exactly as the Wolfram Language lexer does: `#1a` is still `#1*a`,
+- Parsed exactly as the reference lexer does: `#1a` is still `#1*a`,
   `##a` is `##*a`, and `#a_b` is `#a*_b`; `#`, `#n`, `##` and `##n` are unchanged.
 - Lookup uses the association's O(1) key index. `#a` reads the string key
   `"a"`, never the symbol key `a`.
 - Named and numbered slots mix: `{#a, #} &[assoc]` gives `{assoc["a"], assoc}`.
 - A slot that cannot be filled stays in place with a message, as in
-  Mathematica: `Function::slota` when the association lacks the key,
+  the reference: `Function::slota` when the association lacks the key,
   `Function::slot1` when the first argument is not an association.
 - Printing round-trips: `Slot["a"]` prints as `#a` (`#"a b"` when quoting is
   needed); `FullForm` shows `Slot["a"]`.
@@ -129,7 +129,7 @@ stays inert, and applying it to one expression supplies that argument.
   `Prepend`, `Delete`, `TakeLargest`, `TakeSmallest`. (`Cases`, `DeleteCases`,
   `Count`, `Position`, `Extract`, `MemberQ`, `MapAt`, `SortBy`, `MaximalBy`,
   `MinimalBy` already had operator forms.)
-- Only forms that exist in Mathematica are registered: `Take[2][l]`,
+- Only forms that exist in the reference are registered: `Take[2][l]`,
   `Lookup[k, d][a]` and `Select[crit, n][l]` stay unevaluated, as they do there.
 - Exactly one data argument: `Select[OddQ][x, y]` is left alone.
 - If the rewritten call does not evaluate, the curried form is kept
@@ -185,7 +185,7 @@ is found in each dimension and a sliding window of `order + 1` consecutive grid
 points, centred on that interval, is selected; the value is the tensor product
 of the per-dimension Newton divided-difference polynomials. The order drops to
 `min(3, n_k - 1)` when a dimension has fewer than four grid points (two →
-linear, three → quadratic). The windowing reproduces Mathematica's default
+linear, three → quadratic). The windowing reproduces the reference's default
 piecewise interpolant.
 
 **Batch (vectorised) application**: applying a 1-D interpolant to an array of
@@ -203,7 +203,7 @@ point at a time — prefer `ifun[list]` for large batches.
 **Derivatives**: `Derivative[d1, ..., dm][InterpolatingFunction[...]]` (and so
 `ifun'`, `D[ifun[x], x]`, `D[f[x,y], {x,2}]`, etc.) returns another
 `InterpolatingFunction` carrying the accumulated derivative orders — exactly as
-in Mathematica. When applied it evaluates the mixed partial
+in the reference. When applied it evaluates the mixed partial
 `∂^{d1}_{x1} ... ∂^{dm}_{xm}` of the windowed interpolant. Orders are additive
 across repeated differentiation, and an order beyond the local polynomial
 degree yields `0`.
@@ -304,7 +304,7 @@ and at the data's MPFR precision when the data or the evaluation point carry
 arbitrary precision; the result is an `EXPR_MPFR` real in that case. All methods
 and data forms support both precisions. The interpolants are mathematically
 standard (passing through every data point and honouring every supplied
-derivative); interior values need not match Wolfram's B-spline output bit-for-bit.
+derivative); interior values need not match the reference's B-spline output bit-for-bit.
 
 Attribute: `Protected`.
 

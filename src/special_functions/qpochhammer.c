@@ -9,9 +9,13 @@
  * symbolic / non-integer n is left unevaluated -- which is exactly what Product
  * relies on to emit QPochhammer[a, q, n] as a closed form.
  *
- * Infinite form (2 args): evaluated for machine-real a, q with |q| < 1 by
- * accumulating factors until they fall below machine epsilon.  Symbolic or
- * |q| >= 1 inputs stay unevaluated.
+ * Infinite form (2 args): evaluated for machine-real a, q with |q| < 1 by the
+ * shared kernel sf_machine_qpochhammer (also the NDArray / Compile one), and
+ * for complex or arbitrary-precision a, q through arb at the call's precision.
+ * Symbolic or |q| >= 1 inputs stay unevaluated.
+ *
+ * A negative integer n gives 1 / prod_{k=1}^{|n|} (1 - a q^-k); a non-integer
+ * n, with an inexact argument, (a; q)_inf / (a q^n; q)_inf.
  *
  * Memory: honours the builtin ownership contract (never frees res).
  */
@@ -22,6 +26,9 @@
 #include "attr.h"
 #include "arithmetic.h"   /* is_rational */
 #include "sym_names.h"
+#include "flint_num_bridge.h"   /* complex / MPFR and non-integer n */
+#include "sf_machine.h"         /* sf_machine_qpochhammer: the shared kernel */
+#include "sf_scalar.h"          /* sf_machine_scalar_args */
 #include <gmp.h>
 #include <math.h>
 #include <stdbool.h>
@@ -38,18 +45,6 @@ static Expr* qfactor(Expr* a, Expr* q, int64_t k) {
                (Expr*[]){ expr_new_integer(1), aqk }, 2);
 }
 
-/* Best-effort machine double for an exact/inexact real Expr; returns false for
- * non-real / symbolic inputs. */
-static bool to_double(const Expr* e, double* out) {
-    int64_t n, d;
-    if (e->type == EXPR_REAL) { *out = e->data.real; return true; }
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
-#endif
-    if (is_rational((Expr*)e, &n, &d) && d != 0) { *out = (double)n / (double)d; return true; }
-    return false;
-}
-
 Expr* builtin_qpochhammer(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -58,8 +53,23 @@ Expr* builtin_qpochhammer(Expr* res) {
     if (argc == 3) {
         Expr *av = a[0], *qv = a[1], *nv = a[2];
         int64_t n, d;
-        if (!(is_rational(nv, &n, &d) && d == 1)) return NULL;  /* symbolic n stays */
-        if (n < 0) return NULL;
+        if (!(is_rational(nv, &n, &d) && d == 1)) {
+            /* A non-integer n: (a; q)_inf / (a q^n; q)_inf, for an inexact call. */
+            if (flint_num_call_inexact(res))
+                return flint_num_for_call(flint_num_qpochhammer(av, qv, nv), res);
+            return NULL;                                 /* symbolic n stays */
+        }
+        if (n < 0) {
+            /* (a; q)_-m = 1 / prod_{k=1}^{m} (1 - a q^-k). */
+            if (n < -100000) return NULL;
+            int64_t m = -n;
+            Expr** facs = malloc(sizeof(Expr*) * (size_t)m);
+            for (int64_t k = 0; k < m; k++) facs[k] = qfactor(av, qv, -(k + 1));
+            Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), facs, (size_t)m);
+            free(facs);
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ prod, expr_new_integer(-1) }, 2));
+        }
         if (n == 0) return expr_new_integer(1);
         Expr** facs = malloc(sizeof(Expr*) * (size_t)n);
         for (int64_t k = 0; k < n; k++) facs[k] = qfactor(av, qv, k);
@@ -71,24 +81,18 @@ Expr* builtin_qpochhammer(Expr* res) {
     }
 
     if (argc == 2) {
-        double av, qv;
-        if (!to_double(a[0], &av) || !to_double(a[1], &qv)) return NULL;
-        if (!(fabs(qv) < 1.0)) return NULL;                     /* diverges / undefined */
-        /* Only commit to a machine value when at least one input is inexact;
-         * an all-exact (a;q)_inf is left symbolic (no exact closed form). */
-        if (a[0]->type != EXPR_REAL && a[1]->type != EXPR_REAL
-#ifdef USE_MPFR
-            && a[0]->type != EXPR_MPFR && a[1]->type != EXPR_MPFR
-#endif
-           ) return NULL;
-        double prod = 1.0, qk = 1.0;
-        for (int k = 0; k < 100000; k++) {
-            double factor = 1.0 - av * qk;
-            prod *= factor;
-            qk *= qv;
-            if (fabs(av * qk) < 1e-18) break;
+        /* Machine-real a, q: the kernel the NDArray map and Compile[] share.
+         * An all-exact (a;q)_inf stays symbolic (no exact closed form). */
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma) && !ma.any_complex) {
+            double v;
+            if (sf_machine_qpochhammer(ma.re[0], ma.re[1], &v)) return expr_new_real(v);
         }
-        return expr_new_real(prod);
+        /* Complex or arbitrary-precision a, q: the same product through arb,
+         * at the call's precision (|q| >= 1 diverges and stays unevaluated). */
+        if (flint_num_call_inexact(res))
+            return flint_num_for_call(flint_num_qpochhammer(a[0], a[1], NULL), res);
+        return NULL;
     }
 
     return NULL;

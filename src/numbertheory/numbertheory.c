@@ -49,7 +49,7 @@ void numbertheory_init(void) {
     symtab_get_def("Factorial2")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("FactorialPower")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_set_docstring("FactorialPower",
-        "FactorialPower[n, k]\n\tThe falling factorial n (n - 1) (n - 2) ... (n - k + 1).\n\tFor non-negative integer k, expands to a product of k linear factors.\n\tEquivalent to n! / (n - k)! when both n and k are non-negative integers.\n\tFor a non-integer numeric k (under N), evaluates as Gamma[n+1]/Gamma[n-k+1].");
+        "FactorialPower[n, k]\n\tThe falling factorial n (n - 1) (n - 2) ... (n - k + 1).\n\tFor non-negative integer k, expands to a product of k linear factors;\n\tequivalent to n! / (n - k)! when both are non-negative integers.\n\tFor a negative integer k and numeric n, 1/((n + 1) ... (n + |k|)).\n\tFor a non-integer numeric k (under N), Gamma[n+1]/Gamma[n-k+1].\nFactorialPower[x, n, h]\n\tThe falling factorial with step h, x (x - h) ... (x - (n - 1) h);\n\th^n Gamma[x/h + 1]/Gamma[x/h - n + 1] for a non-integer n.\n\tEvaluated for numeric x and h; symbolic arguments stay unevaluated.");
     symtab_get_def("Binomial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Divisible")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("CoprimeQ")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_ORDERLESS);

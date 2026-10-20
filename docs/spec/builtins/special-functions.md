@@ -10,6 +10,24 @@ promote to an extended-exponent machine number (matching `N[f[exact]]`), and a
 magnitude past MPFR's range returns `Overflow[]`/`Indeterminate`. See
 [`elementary-functions.md`](elementary-functions.md) and the 2026-09-21 changelog.
 
+**Mixed exact and inexact arguments** (v0.477). A numeric builtin given an
+inexact argument numericalizes its exact numeric ones to the lowest precision
+among the inexact arguments, as `Plus` and `Times` do: `Zeta[2., Sqrt[2]]`,
+`BesselJ[Sqrt[2], 2.]`, `Hypergeometric2F1[1., 2, 3, Sqrt[2]/3]` and
+`Zeta[2.`30, Sqrt[2]]` (30 digits) all evaluate. The rule lives once, in the
+evaluator (`numeric_mixed_args_call`, `src/numeric.c`): when a `NumericFunction`
+builtin declines a call whose arguments are numbers, numeric quantities or Lists
+of them, with at least one inexact and at least one irrational exact argument,
+the builtin is called once more with the irrational ones numericalized. Integers
+and rationals are left as they are (they are often a structural index, such as
+`BesselJ`'s order or `ProductLog`'s branch), positions held by `NHoldFirst` /
+`NHoldRest` are untouched, `Flat` heads keep their own contagion pass, and a
+decline that emitted a message is not retried. A symbolic argument still blocks
+it (`Zeta[2., x]`), and so does a user-defined `NumericFunction` head, as in the
+reference. Deliberate difference: `HarmonicNumber[Pi/3, 1.36]` evaluates; the
+reference leaves that mixed call unevaluated while evaluating the all-machine
+one.
+
 ## Gamma
 
 
@@ -454,6 +472,12 @@ In[4]:= D[ExpIntegralE[n, z], z]
 Out[4]= -ExpIntegralE[-1 + n, z]
 ```
 
+- **Any order** (v0.477): a numeric call with an inexact argument that the
+  integer-order kernels do not cover -- a real or complex order, or arbitrary
+  precision -- evaluates through arb's `acb_hypgeom_expint` on the principal
+  branch (`ExpIntegralE[Pi/3, 0.5] = 0.54325…`, `N[ExpIntegralE[1/3, 2], 25]`).
+  `E_s(0.)` for `s ≤ 1` is `ComplexInfinity`.
+
 ## StruveH
 
 - `StruveH[nu, z]` — the Struve function H_ν(z), the particular solution of the
@@ -825,7 +849,7 @@ inputs.
     ≤ 3.5 ulp away from the zeros.
 - Complex arguments are fully accurate, e.g. `FresnelC[2.5 + I] = 116.648 −
   105.229 I`, and on the imaginary axis `FresnelC[2. I] = 0. + 0.488253 I` (a
-  machine-complex argument gives a machine-complex result, as in Mathematica).
+  machine-complex argument gives a machine-complex result, as in the reference).
 - Derivatives: `D[FresnelC[z], z] = Cos[π z²/2]`, `D[FresnelS[z], z] =
   Sin[π z²/2]` (chain rule applies, e.g. `D[FresnelC[x^2], x] = 2 x Cos[π x⁴/2]`).
 - Series: Taylor at the origin (`Series[FresnelC[x], {x, 0, 9}] = x − π² x⁵/40 +
@@ -872,7 +896,7 @@ differentiates to it.
   precision: `Sinc[2.] = 0.454649`,
   `N[Sinc[2], 45] = 0.454648713412840847698009932955872421351127485`. Complex:
   `Sinc[1. + I] = 0.966711 - 0.331747 I`.
-- Symbolic arguments stay unevaluated (`Sinc[x]`, `Sinc[-x]`; WL does not
+- Symbolic arguments stay unevaluated (`Sinc[x]`, `Sinc[-x]`; the reference does not
   auto-fold the even symmetry).
 - Derivative: `D[Sinc[z], z] = Cos[z]/z - Sin[z]/z^2`.
 - Series at the origin: `Series[Sinc[x], {x, 0, 6}] =
@@ -888,7 +912,7 @@ differentiates to it.
 
 **Attributes**: `Listable`, `NumericFunction`, `Protected`.
 
-`InverseErf` is odd in s and (per Mathematica) produces explicit numerical
+`InverseErf` is odd in s and (per the reference) produces explicit numerical
 values only for **real** s in `[-1, 1]`; complex and out-of-domain (`|s| > 1`)
 inputs stay symbolic.
 
@@ -1094,6 +1118,17 @@ In[3]:= PolyGamma[3, 2.5 + I]
 Out[3]= 0.0415431 - 0.163057*I
 ```
 
+- **Non-integer order** (v0.477), in the reference's convention: the
+  Riemann–Liouville derivative of order ν, from 0, of ψ(z) + 1/z, with the pole
+  term continued in ν,
+  ψ^(ν)(z) = z^(-ν)/Γ(1-ν) [-γ + Σ_k (1 - ₂F₁(1,1;1-ν;-z/k))/k] - z^(-1-ν)/Γ(-ν) (Log z - ψ(-ν) - γ)
+  (`flint_num_polygamma_frac`, arb; the k-sum runs directly to 2|z| + 2 and its
+  tail through Hurwitz zeta values). This is not arb's own `acb_polygamma`
+  generalisation, which differs. It agrees with the reference at ν = ±1/2, 3/2,
+  z = 1, 2, -3/2, 2 + I to the digits it prints, and tends to the ordinary
+  polygamma as ν approaches an integer. Machine and arbitrary precision, real
+  and complex z; |z| > 5000 stays unevaluated.
+
 ## LogGamma
 
 `LogGamma[z]` is the log-gamma function log Γ(z) — the analytic continuation of
@@ -1196,7 +1231,7 @@ Out[3]= -41.1026 + 74.356*I
   `Pochhammer[{2, 3, 5, 7, 11}, 3] = {24, 60, 210, 504, 1716}`.
 - All other arguments (e.g. `Pochhammer[a, n]`, `Pochhammer[a, 1/2]`,
   `Pochhammer[1/2, 1/3]`) stay unevaluated. (Derivatives and series, which
-  Mathematica expresses through `PolyGamma`, are not yet implemented.)
+  the reference expresses through `PolyGamma`, are not yet implemented.)
 
 ## HypergeometricPFQ
 
@@ -1363,7 +1398,7 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
   continuation of the hypergeometric ODE by successive Taylor steps (Bühring
   1987) from `z0 = 1/2 ± 0.45 i`. Complex parameters: series for `|z| ≤ 0.9`.
 - **On the cut** `z > 1` a machine-real `z` returns the complex limit from below
-  (the Mathematica / mpmath convention): `Hypergeometric2F1[1, 2, 3, 2.5]` is
+  (the reference / mpmath convention): `Hypergeometric2F1[1, 2, 3, 2.5]` is
   `-0.929749 - 1.00531 I` (it used to stay unevaluated, as did every real
   `z < -1` and every complex `|z| ≥ 1`).
 - Scalar 0.3 µs (real), 1.7 µs (complex); 10^6 packed elements 0.14 s.
@@ -1533,7 +1568,7 @@ Attributes: `Listable`, `NumericFunction`, `Protected`. Options:
     `rational · Pi^(2n)` memoised per n.
 - **Arbitrary precision.** One-argument zeta routes through arb's
   `acb_dirichlet_zeta` (the `flint_num_zeta` bridge), ~4× faster than `mpfr_zeta`
-  and faster than Mathematica at 50 digits. Two-argument (Hurwitz) inputs, and
+  and faster than the reference at 50 digits. Two-argument (Hurwitz) inputs, and
   machine inputs the kernels decline, use the Euler–Maclaurin complex-MPFR kernel
   (Riemann is the `a = 1` case). Precision tracks the input, e.g.
   `N[Zeta[3], 50] = 1.2020569031595942853997381615114499907649862923405…`,
@@ -1642,15 +1677,28 @@ Out[3]= -1079/120
 
 `StieltjesGamma[n]` is the n-th Stieltjes constant γₙ, the coefficients of the
 Laurent expansion of `Zeta` about s = 1:
-ζ(s) = 1/(s-1) + Σ_{n≥0} ((-1)ⁿ/n!) γₙ (s-1)ⁿ.
+ζ(s) = 1/(s-1) + Σ_{n≥0} ((-1)ⁿ/n!) γₙ (s-1)ⁿ. `StieltjesGamma[n, a]` is the
+generalized constant γₙ(a), the same coefficients for ζ(s, a).
 
-Attributes: `Listable`, `Protected`. It is inert: `StieltjesGamma[0]` reduces to
-`EulerGamma`, and higher indices stay symbolic (they have no elementary closed
-form). It appears in the `Series` expansions of `Zeta`.
+Attributes: `Listable`, `NHoldFirst`, `Protected` (`NHoldFirst` since v0.477).
+An exact call is inert apart from `StieltjesGamma[0] = EulerGamma` and
+`StieltjesGamma[n, 1] = StieltjesGamma[n]` (they have no elementary closed form);
+it appears in the `Series` expansions of `Zeta`.
+
+- **Numeric** (v0.477): an inexact `a` evaluates through arb's
+  `acb_dirichlet_stieltjes`, at `a`'s precision (`StieltjesGamma[1, 2.] =
+  -0.0728158…`, complex for `a < 0`), and `N[StieltjesGamma[3]]`, `N[…, 30]`
+  evaluate (`numeric_stieltjes_n`; the order stays exact under `N`). `a = 0` or a
+  negative integer is `ComplexInfinity`.
+- The order must be a non-negative machine integer: `StieltjesGamma[-1]`,
+  `StieltjesGamma[1.]` give `StieltjesGamma::intnm` and stay unevaluated.
 
 ```mathematica
 In[1]:= StieltjesGamma[0]
 Out[1]= EulerGamma
+
+In[2]:= N[StieltjesGamma[3]]
+Out[2]= 0.00205383
 ```
 
 ## BernoulliB
@@ -1739,7 +1787,7 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
     rational function.)
   - For integer `n ≥ 2`: `PolyLog[n, 1] = Zeta[n]` (e.g. `PolyLog[2, 1] = Pi²/6`)
     and `PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n]` (e.g. `PolyLog[2, -1] = -Pi²/12`).
-  - `PolyLog[2, I] = I Catalan - Pi²/48` and `PolyLog[2, -I] = -I Catalan - Pi²/48`, as Mathematica evaluates them (v0.458).
+  - `PolyLog[2, I] = I Catalan - Pi²/48` and `PolyLog[2, -I] = -I Catalan - Pi²/48`, as the reference evaluates them (v0.458).
   - The dilogarithm and trilogarithm at ½:
     `PolyLog[2, 1/2] = Pi²/12 - Log[2]²/2`,
     `PolyLog[3, 1/2] = Log[2]³/6 - Pi² Log[2]/12 + 7 Zeta[3]/8`.
@@ -1775,20 +1823,20 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
   1/2 < |z| with |ln z| < 2π. At **arbitrary precision** with a real order and real
   −1 < z < 1 (no branch cut), evaluation routes through arb's `acb_polylog`
   (`flint_num_polylog`), ~45× faster than the MPFR series and faster than
-  Mathematica; machine precision, complex z, |z| ≥ 1, and the real cut [1, ∞) keep
+  the reference; machine precision, complex z, |z| ≥ 1, and the real cut [1, ∞) keep
   the branch-cut-careful MPFR paths. The required ζ values for a complex order use
   the ζ functional equation in the left half-plane to stay well-conditioned. For the
   common **integer order** on the real machine/packed path, the Jonquière series'
   ζ(s−k) are constants, read from `static const` tables (ζ at integers ≥2, and the
   Bernoulli-rational ζ at integers ≤0) rather than recomputed per element, and the
   defining series uses an integer power for `kˢ` — together ~6× faster on a 10⁶
-  buffer (`PolyLog[2, v]` 453→76 ms), ahead of Mathematica and within a small
+  buffer (`PolyLog[2, v]` 453→76 ms), ahead of the reference and within a small
   factor of SciPy's specialised `spence` dilog.
   Examples: `PolyLog[2, 0.9] = 1.29971`, `PolyLog[0, 5.0] = -1.25`,
   `N[PolyLog[1, 1/3], 50] = 0.40546510810816438197801311546434913657199042346249`,
   `PolyLog[.2 + I, .5 - I] = -0.0898526 - 0.595865 I`. The branch cut runs along
   the real axis from 1 to ∞; values on it are taken continuous from below,
-  matching Mathematica (e.g. Im Li₂(x) = −π Log[x] for real x > 1, so
+  matching the reference (e.g. Im Li₂(x) = −π Log[x] for real x > 1, so
   `PolyLog[2, 2.0] = 2.4674 - 2.17759 I`), and the branch point `PolyLog[2, 1.0]`
   is the finite real `Pi²/6`.
 - **Derivatives.** `D[PolyLog[n, z], z] = PolyLog[n-1, z]/z`; the order
@@ -1810,6 +1858,14 @@ Out[2]= 1.29971
 In[3]:= PolyLog[2, 3.0]
 Out[3]= 2.32018 - 3.45139*I
 ```
+
+- **Nielsen's `PolyLog[n, p, z]`** (v0.477), previously always symbolic.
+  `PolyLog[n, 1, z] = PolyLog[n + 1, z]`. With an inexact argument, a positive
+  integer `p` and |z| < 1 it sums S_{n,p}(z) = Σ_{k≥p} (c(k,p)/k!) zᵏ/kⁿ (c the
+  unsigned Stirling numbers of the first kind) in arb, for any real or complex
+  `n` and complex `z`, at the call's precision. Not yet covered, and so left
+  unevaluated: |z| ≥ 1 and a non-integer `p`, both of which the reference
+  evaluates.
 
 ## LerchPhi
 
@@ -1836,14 +1892,14 @@ product), forms each k + a by TwoSum with a first-order power correction, sums
 with Neumaier compensation, and declines when the terms exceed 16× the sum.
 Accuracy against mpmath: real z ∈ [0, 0.9] median 0.3 / max 1.0 ulp, complex
 z in the box ±0.6 median 0.2 / max 0.9 ulp; net latency ≈ 1.3 µs real, 1.6 µs
-complex (Mathematica 149 µs). A single `NDArray`/packed argument is threaded over
+complex (the reference 149 µs). A single `NDArray`/packed argument is threaded over
 the real kernel and returns a packed result (`LerchPhi` is on `pack.c`'s `AWARE`
 list), and anything the kernels decline (`|z| ≥ 1`, `a ≤ 0`, cancellation, high
 precision) falls through to the accurate MPFR path. A visible `NDArray` is never
 left unevaluated. At **arbitrary precision** in the convergent region `|z| ≤ 1`
 (default convention) evaluation routes through arb's `acb_dirichlet_lerch_phi`
 (`flint_num_lerchphi`), ~15× faster than the MPFR series and ~12× faster than
-Mathematica; `|z| > 1` keeps the Erdélyi continuation and `IncludeSingularTerm`
+the reference; `|z| > 1` keeps the Erdélyi continuation and `IncludeSingularTerm`
 keeps the series.
 
 - **Exact reductions** (built symbolically, so they also numericalize through the
@@ -1865,7 +1921,7 @@ keeps the series.
     `LerchPhi[z, s, 2] = (PolyLog[s, z] - z)/z^2`.  This reduction is also taken
     for `z = -1` with integer `a`, so `LerchPhi[-1, 1, 1] = Log[2]` (the
     two-`Zeta` `z = -1` form is indeterminate at integer `s`).
-  - A non-positive integer `a = -m` drops the singular `k = m` term (Wolfram's
+  - A non-positive integer `a = -m` drops the singular `k = m` term (the reference's
     default) and shifts onto `PolyLog`:
     `LerchPhi[z, s, 0] = PolyLog[s, z]` (so `LerchPhi[z, s, 0] == PolyLog[s, z]`,
     `LerchPhi[0, s, 0] = 0`, `LerchPhi[0, 0, 0] = 0`), and in general
@@ -1953,7 +2009,7 @@ Out[3]= 4 Catalan
 Implemented in `src/special_functions/dirichlet_l.c` on the character engine
 `dirichlet.{c,h}`, registered via `dirichletl_init()` in `core_init()`.
 Attributes `Listable`, `NHoldAll`, `Protected` (v0.476; it was `NumericFunction`, so `NumericQ[DirichletL[4, 2, 3]]` is now `False` and `1. + DirichletL[4, 2, 3]` stays unevaluated, as in the reference). `N` keeps the labels k, j
-exact (`numericalize_rec`, as Mathematica's `NHoldAll` + N-rule does), so
+exact (`numericalize_rec`, as the reference's `NHoldAll` + N-rule does), so
 `N[DirichletL[3, 2, 1/2], 50]` evaluates at s = 0.5`50.
 
 Machine accuracy against a 40-digit reference is within 3.4 ulp
@@ -1978,11 +2034,11 @@ reference stays unevaluated.
   - s = 1, non-principal χ: the classical closed forms of the primitive χ*
     (odd: π i τ(χ*)/f² Σ χ̄(a) a; even: −2 τ(χ*)/f Σ_{a<f/2} χ̄(a) Log[Sin[π a/f]];
     τ = √f or i√f for a real χ*) times Π (1 − χ*(p)/p). `DirichletL[3, 2, 1] =
-    Pi/(3 Sqrt[3])`, `DirichletL[4, 2, 1] = Pi/4`. Mathematica leaves the
+    Pi/(3 Sqrt[3])`, `DirichletL[4, 2, 1] = Pi/4`. The reference leaves the
     imprimitive s = 1 values unevaluated; Mathilda gives them.
   - Everything else (s ≥ 2 for k > 1, non-integer exact s, the principal
-    character at s = 1 for k > 1) stays unevaluated, as in Mathematica.
-  - Matches Mathematica on all 1152 exact values it produces for
+    character at s = 1 for k > 1) stays unevaluated, as in the reference.
+  - Matches the reference on all 1152 exact values it produces for
     k ∈ {2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15, 16, 20, 21, 24, 25, 27, 32, 35, 40},
     every j, s ∈ −5..1.
 - **Machine precision** (`src/special_functions/sf_machine_dirichlet.c`, the one
@@ -1997,17 +2053,17 @@ reference stays unevaluated.
   functional equation with the root number ε = τ(χ*)/(i^δ √f) from the
   character table (ε = 1 for real χ*), exact 0 at the trivial zeros.
   Accuracy: max 6e-14 relative over 3000 random (k ≤ 300, s real in ±12,
-  complex |Im s| ≤ 40) against arb; Mathematica's own machine values are off by
+  complex |Im s| ≤ 40) against arb; the reference's own machine values are off by
   up to 1e-9 relative at some of these points (e.g. (7, 2, −7/2 + 10 I)).
   Shootout (`benchmarks/97-special-functions`, v0.450): 1.5 µs (real χ mod 5) /
-  2.6 µs (complex χ mod 7) per machine call vs Mathematica 288 / 462 µs and
+  2.6 µs (complex χ mod 7) per machine call vs the reference 288 / 462 µs and
   mpmath 12 / 18 ms; complex s 3.0 / 4.2 µs vs 425 / 660 µs; a 10⁶ buffer 1.0 /
   1.8 s vs 171 / 289 s; ~35 µs at k = 1000.
 - **Arbitrary precision.** arb's `acb_dirichlet_l` on the primitive χ* (set on
   FLINT's own generators from our values, never via Conrey labels) times the
   Euler factors, with the bridge's precision-doubling ladder
   (`flint_num_dirichlet_l`); the result carries the precision of s. 0.73 / 1.09
-  ms at 50 digits (Mathematica 8.9 / 11.2 ms, mpmath 28 / 58 ms). Without FLINT, the HurwitzZeta template
+  ms at 50 digits (the reference 8.9 / 11.2 ms, mpmath 28 / 58 ms). Without FLINT, the HurwitzZeta template
   f⁻ˢ Σ χ*(a) ζ(s, a/f) × Euler factors.
 - **Interval** (real characters). A rigorous arb enclosure
   (`flint_dirichlet_l_interval`): pieces whose derivative ball excludes 0 are
@@ -2015,10 +2071,10 @@ reference stays unevaluated.
   12) and bounded at the leaves by L(mid) ± r sup|L'|. The jets come from
   deflated Hurwitz series (L = q⁻ˢ Σ χ(a)(ζ(s, a/q) − 1/(s−1)), entire for
   non-principal χ) or, below s = −1/4, the functional equation. Tighter than
-  Mathematica: `DirichletL[5, 1, Interval[{1.23, 1.24}]] =
-  Interval[{4.11396, 4.25899}]` (the endpoint values; Mathematica returns the
+  the reference: `DirichletL[5, 1, Interval[{1.23, 1.24}]] =
+  Interval[{4.11396, 4.25899}]` (the endpoint values; the reference returns the
   looser {4.09145, 4.28087}), and non-principal characters are enclosed where
-  Mathematica returns unevaluated. A range containing s = 1 is left unevaluated
+  the reference returns unevaluated. A range containing s = 1 is left unevaluated
   (arb's sums have no finite enclosure on a ball through the cancelled poles).
   `CenteredInterval` is not implemented in Mathilda.
 - **Surfaces.** A packed / `NDArray` s with scalar k, j threads the machine
@@ -2071,7 +2127,7 @@ returns Ai(z) and Ai′(z) together).
 - **Numerics.** With an inexact argument, machine- and arbitrary-precision
   (MPFR) real and complex inputs evaluate numerically. At **arbitrary precision**
   all four Airy heads route through arb's `acb_hypgeom_airy` (`flint_num_airy_*`),
-  ~9× faster than the MPFR core and faster than Mathematica (Airy is entire, so
+  ~9× faster than the MPFR core and faster than the reference (Airy is entire, so
   arb's values match directly); machine `double` keeps the unified `acx` core,
   which routes on `r = |z|` and the requested precision `P`:
   - a **Maclaurin series** for small/moderate `r` (recurrence
@@ -2518,7 +2574,7 @@ the small-|z| power series is the same `I_μ(z)` series `BesselK` already uses.
   two-exponential asymptotic (DLMF 10.40.5), e.g. for n = 0
   `E^x (1/(Sqrt[2π] Sqrt[x]) + 1/(8 Sqrt[2π] x^(3/2)) + …) +
   I E^(-x) (1/(Sqrt[2π] Sqrt[x]) − 1/(8 Sqrt[2π] x^(3/2)) + …)`, matching
-  Mathematica's `Normal` form, valid for symbolic order too.
+  the reference's `Normal` form, valid for symbolic order too.
 - **Indefinite integrals** (recurrence forms, `src/internal/CRCMathTablesIntegrals.m`):
   `∫ xᵖ⁺¹ Iₚ(x) dx = xᵖ⁺¹ Iₚ₊₁(x)`, `∫ x⁻ᵖ⁺¹ Iₚ(x) dx = x⁻ᵖ⁺¹ Iₚ₋₁(x)`,
   `∫ I₁(x) dx = I₀(x)`.
@@ -2698,6 +2754,14 @@ In[1]:= QPochhammer[a, q, 3]
 Out[1]= (1 - a) (1 - a q) (1 - a q^2)
 ```
 
+- **v0.477**: the machine-real `(a; q)_∞` uses the shared kernel
+  `sf_machine_qpochhammer` (also the NDArray / `Compile` one); a complex or
+  arbitrary-precision `a, q` evaluates through arb at the call's precision (it
+  used to be rounded to a double). A non-integer `n` with an inexact argument is
+  `(a; q)_∞ / (a qⁿ; q)_∞` (`QPochhammer[0.5, 0.3, 2.5]`, complex `n` too), and a
+  negative integer `n` is `1/Π_{k=1}^{|n|} (1 - a q^-k)` (`QPochhammer[1/2, 1/3,
+  -2] = 4/7`). A vanishing factor gives `0.`, not `-0.`.
+
 ## ProductLog
 
 - `ProductLog[z]` — the principal branch W₀(z) of the Lambert W function, the
@@ -2804,7 +2868,7 @@ Out[5]= x - x^2 + 3/2 x^3 - 8/3 x^4 + O[x]^5
   catastrophically-cancelled result. A non-integer or complex order with an
   inexact argument evaluates through `T_v(x) = 2F1(-v, v; 1/2; (1-x)/2)` where
   the Gauss series converges (`|(1-x)/2| < 1`), and otherwise through the
-  whole-plane closed form `T_v(x) = Cos[v ArcCos x]`, which takes Mathematica's
+  whole-plane closed form `T_v(x) = Cos[v ArcCos x]`, which takes the reference's
   branch cut from `-∞` to `-1`. All paths run at machine or arbitrary (MPFR)
   precision, real or complex: `ChebyshevT[12, 2.5] = 7.31808× 10⁷`,
   `N[ChebyshevT[1/7, 1/3], 50]` is accurate to 50 digits, `ChebyshevT[2 - 4 I,
@@ -2859,7 +2923,7 @@ Out[3]= {-0.825313, -0.825313}
   inexact argument evaluates through `U_v(x) = (v+1) 2F1(-v, v+2; 3/2; (1-x)/2)`
   where the Gauss series converges (`|(1-x)/2| < 1`), and otherwise through the
   whole-plane closed form `U_v(x) = Sin[(v+1) ArcCos x]/Sin[ArcCos x]`, which
-  takes Mathematica's branch cut from `-∞` to `-1`. All paths run at machine or
+  takes the reference's branch cut from `-∞` to `-1`. All paths run at machine or
   arbitrary (MPFR) precision, real or complex: `ChebyshevU[12, 2.5] = 1.53028×
   10⁸`, `N[ChebyshevU[1/7, 1/3], 50]` is accurate to 50 digits, `ChebyshevU[2 -
   4 I, 3`40] = 25.18033… - 24.31072… I`, and `ChebyshevU[-1.5, -2.4`100] ≈
@@ -2944,7 +3008,7 @@ LaguerreL[n, 0, x]`. They are orthogonal with weight `x^a e^-x` and satisfy
   bit-identical, and a million-point array runs at hardware speed rather than
   re-expanding the explicit polynomial per element (a ~20–40× speedup that put
   the form ahead of SciPy's `eval_genlaguerre` and ~50–500× ahead of
-  Mathematica over a packed array). An exact (`"int64"`) buffer, an
+  the reference over a packed array). An exact (`"int64"`) buffer, an
   arbitrary-precision argument, a large degree (`n > 1000`), or an overflow
   falls back to the stable exact / MPFR recurrence unchanged.
 
@@ -3015,7 +3079,7 @@ orthogonal on `(-∞, ∞)` with weight `e^(-x²)` and satisfy `y'' - 2x y' + 2n
 A non-integer order with an exact/symbolic argument (e.g. `HermiteH[1/2, x]`),
 and a negative-integer order with an exact argument, stay symbolic. The
 symbolic-index `SeriesCoefficient` is given at `x0 = 0` (the `x0 = 1` holonomic
-form in Mathematica's docs is not produced), and the subdominant exponential
+form in the reference's docs is not produced), and the subdominant exponential
 branch of the Infinity asymptotics is not included.
 
 Attributes: `Listable`, `NumericFunction`, `Protected`.
@@ -3113,7 +3177,7 @@ HypergeometricU[m-k+1/2, 2m+1, z]`, and is evaluated through that form.
   log series advances its three digammas by the recurrence `ψ(x+1) = ψ(x) + 1/x`
   — three seed evaluations instead of three per term — so the packed path runs
   ~1.8× faster than the SciPy `exp·z^(m+½)·hyperu` composition and ~1000× faster
-  than Mathematica, which has no packed Whittaker path.
+  than the reference, which has no packed Whittaker path.
 - **Values at z = 0.** By the leading exponent `1/2 - |Re m|`: `0` for
   `|Re m| < 1/2` (`WhittakerW[0, 0, 0] = 0`), `ComplexInfinity` for `|Re m| > 1/2`
   (`WhittakerW[0, 1, 0]`), and the finite `1/Gamma[1-k]` for `m = ±1/2`
@@ -3160,15 +3224,15 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
 
 - **Canonical form.** The parameters are sorted within each of the four groups
   (`MeijerG[{{1},{2}},{{2/3,1/5},{4}},z]` → `MeijerG[{{1},{2}},{{1/5,2/3},{4}},z]`),
-  as in Mathematica.
+  as in the reference.
 - **Consistency.** `m = n = 0`, or a pole collision `a_k − b_j ∈ ℤ⁺` (`k ≤ n`,
   `j ≤ m`, exact or inexact), gives `MeijerG::hdiv` and stays unevaluated — unless
   a Gamma pair cancels: for `b_j − a_k = N ∈ ℤ≥0` with `j ≤ m`, `k > n`,
   `Γ(b_j+s)/Γ(a_k+s) = (−1)^N Γ(1−a_k−s)/Γ(1−b_j−s)`, so the two move groups
-  (Mathematica's rewrite: `MeijerG[{{31,4},{2,3}},{{5,3/2},{1/10}},3]` →
+  (the reference's rewrite: `MeijerG[{{31,4},{2,3}},{{5,3/2},{1/10}},3]` →
   `−MeijerG[{{2,4,31},{3}},{{3/2},{1/10,5}},3]`). A wrong argument count gives
   `hdiv` then `argt`. All messages route through `Quiet`/`Check`.
-- **Automatic reduction** (Slater's theorem, calibrated against Mathematica 14):
+- **Automatic reduction** (Slater's theorem, calibrated against the reference):
   `G^{2,0}_{0,2}` → `2 z^((b+c)/2) BesselK[b−c, 2√z]`; `G^{2,1}_{1,2}` →
   `Γ(1−a+b) Γ(1−a+c) z^b HypergeometricU[1−a+b, 1+b−c, z]`; any one-term
   Slater expansion (`m = 1`, `p ≤ q`, or the dual `n = 1`, `p ≥ q`); and a
@@ -3183,7 +3247,7 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
 - **z = 0.** `p > q`: `ComplexInfinity` when `n = 1`, else unevaluated; `p ≤ q`:
   `0` when every `Re b_h > 0` (`h ≤ m`), the coefficient when one `b_h = 0`,
   `ComplexInfinity` when some `Re b_h < 0` (with a non-zero coefficient). This
-  answers a few cases Mathematica leaves unevaluated or returns as `Indeterminate`
+  answers a few cases the reference leaves unevaluated or returns as `Indeterminate`
   (`MeijerG[{{},{}},{{1/2,1/3},{}},0]` is `0`).
 - **Numerics.** Machine (real and complex) through `sf_machine_meijerg.c`: the
   Slater sum in `w = z^(1/r)` (`p < q`, or `p = q` with `|w| < 1`) or in `1/w`
@@ -3192,7 +3256,7 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   `∏ π/sin(π(b_j−b_h)) ∏Γ(1+b_h−a_j)/∏Γ(a_j−b_h)` precomputed once per parameter
   set. It declines — and the same point is re-evaluated in arb and rounded — for
   more than 6 bits of cancellation between terms, or when a term kernel declines,
-  so a machine answer is always within a few ulp (25 Mathematica references agree
+  so a machine answer is always within a few ulp (25 reference values agree
   to ≤ 6×10⁻¹⁵).
   The **log case** (two of `b1…bm` an integer apart, where the `π/sin` factors
   have cancelling poles) has its own machine kernel (v0.446): the residue series
@@ -3225,7 +3289,7 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   dropping the imaginary part. `CompileDiagnostics[{{v,_Real,1}}, MeijerG[{{1/3},{}},{{1/2},{1}},v]]`
   reports `Compiled -> True`.
 - **Derivative.** `D[MeijerG[{{a},{a'}},{{b},{b'}},z],z] =
-  MeijerG[{{−1, a−1},{a'−1}},{{b−1},{0, b'−1}},z]` (Mathematica's form); for the
+  MeijerG[{{−1, a−1},{a'−1}},{{b−1},{0, b'−1}},z]` (the reference's form); for the
   generalized form `(1/(r z)) MeijerG[{{0,a},{a'}},{{b},{1,b'}},z,r]`.
 - **Series.** At 0 (`p ≤ q`) and at `Infinity` (`p ≥ q`) from the truncated Slater
   expansion, including the log case (exact Laurent expansion in `ε` of every
@@ -3236,7 +3300,7 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
 - **Performance.** Scalar machine calls 9.5–16 µs (the log case 0.46 ms, through
   arb); 10^6 packed elements 0.29 s; 50 digits 0.24–1.5 ms; 1000 digits 27 ms.
   The fastest engine in every MR / C / AP cell of the special-functions shootout
-  (mpmath 2–234x slower, Mathematica 14 11–670x).
+  (mpmath 2–234x slower, the reference 11–670x).
 - **Threads** over a List in its third argument; not `Listable`.
 
 Gaps: the general-term `SeriesCoefficient` at `x = 1`; the exponential (Stokes)
@@ -3366,6 +3430,13 @@ In[5]:= D[LegendreP[n, x], x]
 Out[5]= ((1 + n) LegendreP[1 + n, x] + (-1 - n) x LegendreP[n, x])/(-1 + x^2)
 ```
 
+- **General degree and order** (v0.477): a numeric call with an inexact
+  argument that the series above do not reach -- a non-integer `n` or `m`, or a
+  point outside their disks -- evaluates through arb's
+  `acb_hypgeom_legendre_p/q`. Types 1 and 2 are both the Ferrers form (arb type
+  0); type 3 is arb type 1. The type label may arrive as `2.` (as `N` leaves it).
+  Checked against the reference inside and outside (-1, 1) and at complex `x`.
+
 ## LegendreQ
 
 `LegendreQ[n, x]` gives the Legendre function of the second kind `Q_n(x)`;
@@ -3440,10 +3511,17 @@ In[4]:= LegendreQ[1/2, 0]
 Out[4]= -(Gamma[3/4] Sqrt[Pi])/(2 Sqrt[2] Gamma[5/4])
 ```
 
+- **General degree and order** (v0.477): a numeric call with an inexact
+  argument that the series above do not reach -- a non-integer `n` or `m`, or a
+  point outside their disks -- evaluates through arb's
+  `acb_hypgeom_legendre_p/q`. Types 1 and 2 are both the Ferrers form (arb type
+  0); type 3 is arb type 1. The type label may arrive as `2.` (as `N` leaves it).
+  Checked against the reference inside and outside (-1, 1) and at complex `x`.
+
 ## EllipticK, EllipticF, EllipticE and EllipticPi
 
 The Legendre elliptic integrals. **The parameter argument is `m = k²`, not the
-modulus `k`** — the Wolfram Language convention. This is the one place a reader
+modulus `k`** — the reference convention. This is the one place a reader
 of these signatures goes silently wrong, so each is written out as its integral:
 
 - `EllipticK[m]` — ∫₀^(π/2) dt / √(1 − m sin²t), complete, first kind.
@@ -3454,7 +3532,7 @@ of these signatures goes silently wrong, so each is written out as its integral:
   third kind.
 - `EllipticPi[n, φ, m]` — the same with upper limit φ, incomplete, third kind.
 
-`EllipticE` and `EllipticPi` are arity-overloaded exactly as in Wolfram: one
+`EllipticE` and `EllipticPi` are arity-overloaded exactly as in the reference: one
 argument is complete for `E`, two arguments are complete for `Π`. There is no
 `EllipticK[φ, m]` — that spelling is `EllipticF`.
 
@@ -3498,7 +3576,7 @@ argument is complete for `E`, two arguments are complete for `Π`. There is no
     `E = K (1 − Σ 2ⁿ⁻¹ cₙ²)` (DLMF 19.8.5–6), in raw `double` re/im with the
     "right choice" of square root at each step (Cox 1984), which gives the
     principal branch with the cut on `[1, ∞)`; on the cut the value is the limit
-    from below (`EllipticK[2.] = 1.31103 − 1.31103 I`, as Mathematica and
+    from below (`EllipticK[2.] = 1.31103 − 1.31103 I`, as the reference and
     mpmath). Max 3.4 ulp (`K`), 3.9 ulp (`E`) on `|Re m|, |Im m| ≤ 0.9`; ≤ 4.7
     ulp on `|Re m|, |Im m| ≤ 20`.
   - A machine **complex** argument, and a machine **real** `m > 1`, now return
@@ -3641,3 +3719,65 @@ Out[5]= 1.31103 - 1.31103*I
 In[6]:= EllipticE[0.3 + 0.4 I]
 Out[6]= 1.46251 - 0.175161*I
 ```
+
+## Surd
+
+`Surd[x, n]` is the real-valued n-th root of a real `x` (v0.477; new): `Sign[x]
+Abs[x]^(1/n)` for odd `n`, `x^(1/n)` for even `n` and `x ≥ 0` — unlike
+`x^(1/n)`, which is the principal complex root for `x < 0`.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- Exact `x`: `Surd[8, 3] = 2`, `Surd[-8, 3] = -2`, `Surd[-2, 3] = -2^(1/3)`,
+  `Surd[Sqrt[2], 3] = 2^(1/6)`, `Surd[8, -3] = 1/2`; a symbolic `x` stays.
+- Machine `x`: `sf_surd_r` (sqrt / cbrt / pow with a Newton step), shared by the
+  scalar path, the packed / `NDArray` map and `Compile`.
+- Messages, as in the reference: `Surd::noneg` (even root of a negative,
+  `Indeterminate`), `Surd::indet` (`n = 0`, `Indeterminate`), `Surd::preal` (a
+  non-real `x`, unevaluated), `Surd::int` (a non-integer `n`, unevaluated),
+  `::argr` / `::argrx` for the argument count.
+- Deliberate difference: an integer-valued machine `n` (`Surd[8., 3.]`) is
+  accepted as that integer; the reference rejects it with `Surd::int`. The
+  packed kernel receives every operand as a double, so the scalar path accepts it
+  too, to keep the surfaces in agreement.
+
+## KroneckerDelta
+
+`KroneckerDelta[n1, n2, ...]` is 1 when every `ni` is equal and 0 when any two
+are unequal (v0.477; new). `KroneckerDelta[]` is 1 and `KroneckerDelta[n]` is
+`KroneckerDelta[n, 0]`.
+
+- Attributes: `NumericFunction`, `Orderless`, `Protected` (not `Listable`).
+- Identical arguments give 1 (`KroneckerDelta[x, x]`); numbers and numeric
+  quantities are compared by `Equal` (`KroneckerDelta[1/2, 0.5] = 1`,
+  `KroneckerDelta[Pi, 3] = 0`); one provably unequal pair settles the whole call
+  (`KroneckerDelta[x, 1, 2] = 0`). A symbolic pair that is not identical is
+  never guessed (`KroneckerDelta[x, y]` stays).
+
+## BesselJZero
+
+`BesselJZero[n, k]` is the k-th positive zero of `BesselJ[n, x]`.
+
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+- An exact call stays unevaluated (the Hadamard-product recogniser in `Product`
+  relies on it). With an inexact argument — and so under `N`, which leaves
+  `k = 2.` — it evaluates (v0.477; previously never) for a real order `n > -1`
+  and a positive integer `k`.
+- Machine: `sf_bessel_j_zero_r`, McMahon's expansion when `k > n + 20`, otherwise
+  a sign-change scan of `J_n` from the origin in steps of 1/4 (consecutive zeros
+  are more than 2 apart), then Newton on `J_n / J_n'`. Shared by the scalar path,
+  the packed / `NDArray` map and `Compile`. Within 3 ulp of the reference.
+- Arbitrary precision: the machine zero refined by Newton in arb with the
+  precision doubling from 64 bits (`N[BesselJZero[0, 1], 30]`).
+
+## HeavisideTheta and DiracDelta
+
+Defined by rules in `src/internal/distributions.m`. `HeavisideTheta[x]` is 1 for
+positive and 0 for negative numeric `x`, and `HeavisideTheta[0] = 0` (the causal,
+left-continuous convention DSolve's impulse responses rely on; the reference
+leaves it unevaluated). `DiracDelta[x]` is 0 for a nonzero real numeric `x`.
+
+The multivariate forms are products (v0.477): `HeavisideTheta[x1, x2, ...]` is 0
+when any `xi` is negative (or 0) and 1 when all are positive, and drops its
+positive arguments otherwise (`HeavisideTheta[1, x] = HeavisideTheta[x]`);
+`DiracDelta[x1, x2, ...]` is 0 as soon as one `xi` is nonzero. Mixed exact and
+inexact arguments (`HeavisideTheta[1., Sqrt[2]]`) decide by sign like any other.

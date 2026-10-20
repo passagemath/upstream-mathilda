@@ -2306,7 +2306,25 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                      * as a single rewrite. Arguments were already evaluated (and
                      * traced) above, before this bump. */
                     g_trace_suppress++;
+                    unsigned long msg_before = mth_msg_fired_count();
                     Expr* ret = hdef->builtin_func(res);
+                    /* 5a. Mixed exact/inexact numeric arguments. A numeric
+                     * builtin that declined f[2., Sqrt[2]] is re-called once
+                     * with its exact numeric arguments numericalized to the
+                     * inexact ones' precision (numeric_mixed_args_call), so
+                     * Zeta[2., Sqrt[2]] is a number as Sin[2.] is. Flat heads
+                     * (Plus, Times) run their own contagion pass, and a decline
+                     * that already emitted a message is a rejection of the
+                     * call, not of its exactness, so neither is retried. */
+                    if (!ret && (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
+                        res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
+                        mth_msg_fired_count() == msg_before) {
+                        Expr* mixed = numeric_mixed_args_call(res, attrs);
+                        if (mixed) {
+                            ret = hdef->builtin_func(mixed);
+                            expr_free(mixed);
+                        }
+                    }
                     g_trace_suppress--;
                     if (ret) {
                         /* No inf/nan may leak: a machine fast path that

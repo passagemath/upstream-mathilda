@@ -62,6 +62,7 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sf_machine_plog.h"  /* sf_machine_legendre_p_c / _q_c */
 #include "sf_scalar.h"        /* sf_machine_scalar_args */
+#include "flint_num_bridge.h" /* the general degree / order through arb */
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -1004,6 +1005,45 @@ static Expr* legendre_machine(Expr* res, bool is_q) {
     return sf_machine_complex_result(rr, ri);
 }
 
+/* The type label of the four-argument form: 1, 2 or 3, exact, or as the
+ * integer-valued real (machine or arbitrary precision) N leaves behind:
+ * N[LegendreP[n, m, 2, x]] reaches here with the label 2.. */
+static bool leg_type_label(const Expr* e, int64_t* out) {
+    if (leg_exact_int(e, out)) return true;
+    if (e->type == EXPR_REAL && e->data.real == floor(e->data.real) &&
+        fabs(e->data.real) < 8) {
+        *out = (int64_t)e->data.real;
+        return true;
+    }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR && mpfr_integer_p(e->data.mpfr) &&
+        mpfr_cmpabs_ui(e->data.mpfr, 8) < 0) {
+        *out = (int64_t)mpfr_get_si(e->data.mpfr, MPFR_RNDN);
+        return true;
+    }
+#endif
+    return false;
+}
+
+/* The general degree and order -- non-integer n or m, or a point the series
+ * above do not reach -- through arb, when every argument is a number and one
+ * is inexact. The reference's types 1 and 2 are both the Ferrers form (arb
+ * type 0); type 3 is arb type 1. `r` is the layered answer, returned as is
+ * when there was one. */
+static Expr* leg_arb_tail(Expr* r, Expr* res, bool q, int type) {
+    if (r || !flint_num_call_inexact(res)) return r;
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+    Expr* zero = expr_new_integer(0);
+    const Expr* m = argc == 2 ? zero : a[1];
+    const Expr* z = a[argc - 1];
+    int arb_type = type == 3 ? 1 : 0;
+    Expr* v = q ? flint_num_legendre_q(a[0], m, z, arb_type)
+                : flint_num_legendre_p(a[0], m, z, arb_type);
+    expr_free(zero);
+    return flint_num_for_call(v, res);
+}
+
 Expr* builtin_legendre_p(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1014,13 +1054,13 @@ Expr* builtin_legendre_p(Expr* res) {
         if (m) return m;
     }
 
-    if (argc == 2) return legendre_two_arg(args[0], args[1]);
-    if (argc == 3) return legendre_assoc(args[0], args[1], 1, args[2]);
+    if (argc == 2) return leg_arb_tail(legendre_two_arg(args[0], args[1]), res, false, 1);
+    if (argc == 3) return leg_arb_tail(legendre_assoc(args[0], args[1], 1, args[2]), res, false, 1);
     if (argc == 4) {
         int64_t a;
-        if (!leg_exact_int(args[2], &a)) return NULL;  /* type must be 1/2/3 */
+        if (!leg_type_label(args[2], &a)) return NULL;  /* type must be 1/2/3 */
         if (a < 1 || a > 3) return NULL;
-        return legendre_assoc(args[0], args[1], (int)a, args[3]);
+        return leg_arb_tail(legendre_assoc(args[0], args[1], (int)a, args[3]), res, false, (int)a);
     }
     return legendre_emit_argb(argc);
 }
@@ -1041,13 +1081,13 @@ Expr* builtin_legendre_q(Expr* res) {
         if (m) return m;
     }
 
-    if (argc == 2) return legendre_q_two_arg(args[0], args[1]);
-    if (argc == 3) return legendre_q_assoc(args[0], args[1], 1, args[2]);
+    if (argc == 2) return leg_arb_tail(legendre_q_two_arg(args[0], args[1]), res, true, 1);
+    if (argc == 3) return leg_arb_tail(legendre_q_assoc(args[0], args[1], 1, args[2]), res, true, 1);
     if (argc == 4) {
         int64_t a;
-        if (!leg_exact_int(args[2], &a)) return NULL;  /* type must be 1/2/3 */
+        if (!leg_type_label(args[2], &a)) return NULL;  /* type must be 1/2/3 */
         if (a < 1 || a > 3) return NULL;
-        return legendre_q_assoc(args[0], args[1], (int)a, args[3]);
+        return leg_arb_tail(legendre_q_assoc(args[0], args[1], (int)a, args[3]), res, true, (int)a);
     }
     return legendre_q_emit_argb(argc);
 }

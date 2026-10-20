@@ -15,6 +15,7 @@
 #include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
+#include "numeric.h"           /* arg_is_inexact, numeric_lower_mpfr_to_machine */
 
 #if defined(USE_FLINT) && defined(USE_MPFR)
 
@@ -286,6 +287,250 @@ Expr* flint_num_polygamma(const Expr* n, const Expr* z) {
     return nb_eval2(n, z, acb_polygamma);
 }
 
+/* PolyGamma[nu, z] for a NON-INTEGER order, in the reference's convention:
+ * the Riemann-Liouville derivative of order nu, from 0, of psi(z) + 1/z (which
+ * is regular there), with the pole term 1/z continued analytically in nu:
+ *
+ *   psi^(nu)(z) = z^-nu/Gamma(1-nu) [ -gamma + Sum_{k>=1} (1 - 2F1(1,1;1-nu;-z/k))/k ]
+ *                 - z^(-1-nu)/Gamma(-nu) (Log z - psi(-nu) - gamma)
+ *
+ * using RL[(k+z)^-1] = z^-nu/(k Gamma(1-nu)) 2F1(1,1;1-nu;-z/k). The sum runs
+ * k = 1..K directly and the tail k > K through its Taylor expansion in z,
+ *
+ *   Sum_{k>K} (1/k - 1/(k+z)) -> -Sum_{n>=1} n!/(1-nu)_n (-z)^n zeta(n+1, K+1),
+ *
+ * which converges geometrically (ratio |z|/(K+1) <= 1/2 for K = 2|z| + 2). It
+ * reduces to the ordinary polygamma as nu approaches an integer, and agreed with
+ * the reference to the 20 digits it printed at nu = -1/2, 1/2, 3/2 and z = 1, 2,
+ * -3/2, 2 + I. |z| > 5000 declines (the direct sum would cost 10^4 2F1s). */
+static void nb_polygamma_frac(acb_t res, const acb_t nu, const acb_t z_in, slong prec) {
+    /* A local copy: GCC's -Wstringop-overread misreads arb's inline helpers
+     * applied straight to the const parameter. */
+    acb_t z; acb_init(z); acb_set(z, z_in);
+    double zr = arf_get_d(arb_midref(acb_realref(z)), ARF_RND_NEAR);
+    double zi = arf_get_d(arb_midref(acb_imagref(z)), ARF_RND_NEAR);
+    double az = sqrt(zr * zr + zi * zi);
+    if (!(az <= 5000.0)) { acb_indeterminate(res); acb_clear(z); return; }
+    slong K = (slong)(2.0 * az) + 2;
+    double ratio = az / (double)(K + 1);
+    slong nmax = (slong)((double)(prec + 20) / -log2(ratio > 1e-300 ? ratio : 1e-300)) + 20;
+    if (nmax > 4 * prec + 100) nmax = 4 * prec + 100;
+
+    acb_t one, t, g1, zn, c, eul, S, sum, w, term, coef, pw, mz, hz, s1, hk, a;
+    acb_init(one); acb_init(t); acb_init(g1); acb_init(zn); acb_init(c);
+    acb_init(eul); acb_init(S); acb_init(sum); acb_init(w); acb_init(term);
+    acb_init(coef); acb_init(pw); acb_init(mz); acb_init(hz); acb_init(s1);
+    acb_init(hk); acb_init(a);
+
+    acb_one(one);
+    acb_sub(t, one, nu, prec);                  /* t = 1 - nu */
+    acb_rgamma(g1, t, prec);                    /* 1/Gamma(1 - nu) */
+    acb_neg(a, nu);
+    acb_pow(zn, z, a, prec);                    /* z^-nu */
+    acb_mul(c, zn, g1, prec);                   /* c = z^-nu/Gamma(1-nu) */
+    arb_const_euler(acb_realref(eul), prec);
+
+    /* -gamma + the direct terms k = 1..K. */
+    acb_neg(sum, eul);
+    for (slong k = 1; k <= K; k++) {
+        acb_div_si(w, z, -k, prec);
+        acb_hypgeom_2f1(term, one, one, t, w, 0, prec);
+        acb_sub(term, one, term, prec);
+        acb_div_si(term, term, k, prec);
+        acb_add(sum, sum, term, prec);
+    }
+    /* The tail k > K. */
+    acb_neg(mz, z);
+    acb_one(coef); acb_one(pw); acb_zero(s1);
+    acb_set_si(hk, K + 1);
+    for (slong n = 1; n <= nmax; n++) {
+        acb_add_si(w, t, n - 1, prec);          /* (1-nu)_n / (1-nu)_{n-1} */
+        acb_mul_si(coef, coef, n, prec);
+        acb_div(coef, coef, w, prec);
+        acb_mul(pw, pw, mz, prec);
+        acb_set_si(w, n + 1);
+        acb_dirichlet_hurwitz(hz, w, hk, prec);
+        acb_mul(term, coef, pw, prec);
+        acb_mul(term, term, hz, prec);
+        acb_add(s1, s1, term, prec);
+    }
+    acb_sub(sum, sum, s1, prec);
+    acb_mul(S, c, sum, prec);
+
+    /* The continued pole term. */
+    acb_rgamma(g1, a, prec);                    /* 1/Gamma(-nu) */
+    acb_digamma(w, a, prec);
+    acb_log(term, z, prec);
+    acb_sub(term, term, w, prec);
+    acb_sub(term, term, eul, prec);
+    acb_sub_si(w, a, 1, prec);
+    acb_pow(hz, z, w, prec);                    /* z^(-1-nu) */
+    acb_mul(term, term, hz, prec);
+    acb_mul(term, term, g1, prec);
+    acb_sub(res, S, term, prec);
+
+    acb_clear(one); acb_clear(t); acb_clear(g1); acb_clear(zn); acb_clear(c);
+    acb_clear(eul); acb_clear(S); acb_clear(sum); acb_clear(w); acb_clear(term);
+    acb_clear(coef); acb_clear(pw); acb_clear(mz); acb_clear(hz); acb_clear(s1);
+    acb_clear(hk); acb_clear(a); acb_clear(z);
+}
+
+Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z) {
+    return nb_eval2(nu, z, nb_polygamma_frac);
+}
+
+/* (a; q)_inf = prod_{k>=0} (1 - a q^k) for |q| < 1, at `prec`: the factors are
+ * multiplied until |a q^k| < 2^-(prec + 10), which bounds the rest of the
+ * product to within that of 1. Indeterminate (so the caller declines) when
+ * |q| >= 1 or 10^6 factors do not reach it. */
+static void nb_qpoch_inf(acb_t res, const acb_t a, const acb_t q, slong prec) {
+    acb_t aqk, f, qq;
+    acb_init(aqk); acb_init(f); acb_init(qq);
+    acb_set(qq, q);
+    mag_t mq; mag_init(mq);
+    acb_get_mag(mq, qq);
+    if (mag_cmp_2exp_si(mq, 0) >= 0) { acb_indeterminate(res); goto done; }
+    acb_one(res);
+    acb_set(aqk, a);
+    for (slong k = 0; ; k++) {
+        if (k >= 1000000) { acb_indeterminate(res); break; }
+        acb_sub_si(f, aqk, 1, prec);
+        acb_neg(f, f);                       /* 1 - a q^k */
+        acb_mul(res, res, f, prec);
+        acb_mul(aqk, aqk, qq, prec);
+        mag_t m; mag_init(m);
+        acb_get_mag(m, aqk);
+        int small = mag_cmp_2exp_si(m, -(prec + 10)) < 0;
+        mag_clear(m);
+        if (small) break;
+    }
+done:
+    mag_clear(mq);
+    acb_clear(aqk); acb_clear(f); acb_clear(qq);
+}
+
+/* (a; q)_n = (a; q)_inf / (a q^n; q)_inf, for any complex n (|q| < 1). */
+static void nb_qpoch_n(acb_t res, const acb_t a, const acb_t q, const acb_t n, slong prec) {
+    acb_t qn, den;
+    acb_init(qn); acb_init(den);
+    acb_pow(qn, q, n, prec);
+    acb_mul(qn, qn, a, prec);
+    nb_qpoch_inf(den, qn, q, prec);
+    nb_qpoch_inf(res, a, q, prec);
+    acb_div(res, res, den, prec);
+    acb_clear(qn); acb_clear(den);
+}
+
+Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n) {
+    return n ? nb_eval3(a, q, n, nb_qpoch_n) : nb_eval2(a, q, nb_qpoch_inf);
+}
+
+/* The zero of J_nu nearest `seed` (a machine zero), refined by Newton in arb at
+ * `bits` (+ guard) bits: x <- x - J_nu(x) / J_nu'(x), J' = (J_{nu-1} - J_{nu+1})/2,
+ * with the working precision doubling from 64 bits so each step starts from an
+ * iterate already correct to the previous precision. */
+Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) {
+    slong target = bits + NB_GUARD;
+    acb_t N, Nm, Np, X, F, A, B;
+    acb_init(N); acb_init(Nm); acb_init(Np); acb_init(X); acb_init(F);
+    acb_init(A); acb_init(B);
+    Expr* out = NULL;
+    if (!expr_to_acb(nu, N, target)) goto done;
+    acb_set_d(X, seed);
+    for (slong wp = 64; ; wp *= 2) {
+        if (wp > target) wp = target;
+        acb_sub_si(Nm, N, 1, wp);
+        acb_add_si(Np, N, 1, wp);
+        for (int it = 0; it < 4; it++) {
+            acb_hypgeom_bessel_j(F, N, X, wp);
+            acb_hypgeom_bessel_j(A, Nm, X, wp);
+            acb_hypgeom_bessel_j(B, Np, X, wp);
+            acb_sub(A, A, B, wp);
+            acb_mul_2exp_si(A, A, -1);
+            acb_div(F, F, A, wp);
+            acb_sub(X, X, F, wp);
+            acb_get_mid(X, X);          /* Newton: carry the midpoint */
+        }
+        if (wp == target) break;
+    }
+    if (acb_is_finite(X)) out = acb_to_expr(X, bits);
+done:
+    acb_clear(N); acb_clear(Nm); acb_clear(Np); acb_clear(X); acb_clear(F);
+    acb_clear(A); acb_clear(B);
+    return out;
+}
+
+/* Nielsen's generalized polylogarithm S_{n,p}(z), a positive integer p and
+ * |z| < 1, from (-Log(1 - w))^p / p! = Sum_k c(k, p) w^k / k! (c the unsigned
+ * Stirling numbers of the first kind) integrated against the Mellin form
+ * S_{n,p}(z) = (-1)^p / (Gamma(n) p!) Int_0^inf u^(n-1) Log^p(1 - z e^-u) du:
+ *
+ *   S_{n,p}(z) = Sum_{k>=p} (c(k, p) / k!) z^k / k^n.
+ *
+ * e(k, j) = c(k, j)/k! is carried for j = 0..p by
+ * e(k+1, j) = (k e(k, j) + e(k, j-1)) / (k+1). The terms decay like
+ * |z|^k (Log k)^(p-1) / k^(n+1); the sum stops once |term| < 2^-(prec+10) past
+ * the peak, and declines (Indeterminate) beyond 10^6 terms or for |z| >= 1,
+ * where the series does not converge. */
+static void nb_nielsen(acb_t res, const acb_t n, slong p, const acb_t z_in, slong prec) {
+    acb_t z; acb_init(z); acb_set(z, z_in);
+    mag_t mz; mag_init(mz); acb_get_mag(mz, z);
+    double az = mag_get_d(mz);
+    mag_clear(mz);
+    if (!(az < 1.0) || p < 1 || p > 1000) { acb_indeterminate(res); acb_clear(z); return; }
+    slong nmax = az == 0.0 ? p + 1
+               : (slong)((double)(prec + 20) * 0.6931471805599453 / -log(az)) + 4 * p + 100;
+    if (nmax > 1000000) { acb_indeterminate(res); acb_clear(z); return; }
+
+    arb_struct* e = (arb_struct*)flint_malloc(sizeof(arb_struct) * (size_t)(p + 1));
+    for (slong j = 0; j <= p; j++) arb_init(e + j);
+    acb_t zk, term, kn, kk;
+    acb_init(zk); acb_init(term); acb_init(kn); acb_init(kk);
+    arb_t tmp; arb_init(tmp);
+    acb_zero(res);
+    arb_one(e + 0);                         /* k = 0: e(0,0) = 1 */
+    acb_one(zk);
+    for (slong k = 0; k < nmax; k++) {
+        /* advance to k + 1 */
+        for (slong j = p; j >= 1; j--) {
+            arb_mul_si(tmp, e + j, k, prec);
+            arb_add(tmp, tmp, e + j - 1, prec);
+            arb_div_si(e + j, tmp, k + 1, prec);
+        }
+        arb_mul_si(e + 0, e + 0, k, prec);  /* e(k+1, 0) = 0 for k >= 0 */
+        arb_div_si(e + 0, e + 0, k + 1, prec);
+        acb_mul(zk, zk, z, prec);
+        slong kp = k + 1;
+        if (kp < p) continue;
+        acb_set_si(kk, kp);
+        acb_pow(kn, kk, n, prec);
+        acb_div(term, zk, kn, prec);
+        acb_mul_arb(term, term, e + p, prec);
+        acb_add(res, res, term, prec);
+        if (kp > 4 * p + 20) {
+            mag_t mt; mag_init(mt); acb_get_mag(mt, term);
+            int tiny = mag_cmp_2exp_si(mt, -(prec + 10)) < 0;
+            mag_clear(mt);
+            if (tiny) break;
+        }
+    }
+    for (slong j = 0; j <= p; j++) arb_clear(e + j);
+    flint_free(e);
+    acb_clear(zk); acb_clear(term); acb_clear(kn); acb_clear(kk);
+    arb_clear(tmp);
+    acb_clear(z);
+}
+
+static slong nb_nielsen_p;   /* the order p, fixed for one nb_eval2 call */
+static void nb_nielsen2(acb_t res, const acb_t n, const acb_t z, slong prec) {
+    nb_nielsen(res, n, nb_nielsen_p, z, prec);
+}
+
+Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z) {
+    nb_nielsen_p = (slong)p;
+    return nb_eval2(n, z, nb_nielsen2);
+}
+
 Expr* flint_num_polylog(const Expr* s, const Expr* z) {
     return nb_eval2(s, z, acb_polylog);   /* acb_polylog(w, s, z, prec) */
 }
@@ -311,6 +556,22 @@ Expr* flint_num_airy_bi_prime(const Expr* z) { return nb_eval1(z, nb_airy_bip); 
 
 Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) {
     return nb_eval3(z, s, a, acb_dirichlet_lerch_phi);  /* (res, z, s, a, prec) */
+}
+
+Expr* flint_num_expint(const Expr* s, const Expr* z) {
+    return nb_eval2(s, z, acb_hypgeom_expint);    /* (res, s, z, prec) */
+}
+
+static void nb_legp0(acb_t r, const acb_t n, const acb_t m, const acb_t z, slong p) { acb_hypgeom_legendre_p(r, n, m, z, 0, p); }
+static void nb_legp1(acb_t r, const acb_t n, const acb_t m, const acb_t z, slong p) { acb_hypgeom_legendre_p(r, n, m, z, 1, p); }
+static void nb_legq0(acb_t r, const acb_t n, const acb_t m, const acb_t z, slong p) { acb_hypgeom_legendre_q(r, n, m, z, 0, p); }
+static void nb_legq1(acb_t r, const acb_t n, const acb_t m, const acb_t z, slong p) { acb_hypgeom_legendre_q(r, n, m, z, 1, p); }
+
+Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type) {
+    return nb_eval3(n, m, z, type ? nb_legp1 : nb_legp0);
+}
+Expr* flint_num_legendre_q(const Expr* n, const Expr* m, const Expr* z, int type) {
+    return nb_eval3(n, m, z, type ? nb_legq1 : nb_legq0);
 }
 
 /* StieltjesGamma[n] or StieltjesGamma[n, a]; n a non-negative integer. The fmpz
@@ -1699,6 +1960,7 @@ bool flint_cert_parts_sign(const Expr* e, int* re_sgn, int* im_sgn) {
 Expr* flint_num_zeta(const Expr* s) { (void)s; return NULL; }
 Expr* flint_num_hurwitz_zeta(const Expr* s, const Expr* a) { (void)s; (void)a; return NULL; }
 Expr* flint_num_polygamma(const Expr* n, const Expr* z) { (void)n; (void)z; return NULL; }
+Expr* flint_num_polygamma_frac(const Expr* nu, const Expr* z) { (void)nu; (void)z; return NULL; }
 Expr* flint_num_polylog(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
 Expr* flint_num_airy_ai(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_erf(const Expr* z)  { (void)z; return NULL; }
@@ -1709,6 +1971,12 @@ Expr* flint_num_airy_bi(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi_prime(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_lerchphi(const Expr* z, const Expr* s, const Expr* a) { (void)z; (void)s; (void)a; return NULL; }
 Expr* flint_num_stieltjes(const Expr* n, const Expr* a) { (void)n; (void)a; return NULL; }
+Expr* flint_num_expint(const Expr* s, const Expr* z) { (void)s; (void)z; return NULL; }
+Expr* flint_num_nielsen_polylog(const Expr* n, long p, const Expr* z) { (void)n; (void)p; (void)z; return NULL; }
+Expr* flint_num_bessel_j_zero(const Expr* nu, double seed, long bits) { (void)nu; (void)seed; (void)bits; return NULL; }
+Expr* flint_num_qpochhammer(const Expr* a, const Expr* q, const Expr* n) { (void)a; (void)q; (void)n; return NULL; }
+Expr* flint_num_legendre_p(const Expr* n, const Expr* m, const Expr* z, int type) { (void)n; (void)m; (void)z; (void)type; return NULL; }
+Expr* flint_num_legendre_q(const Expr* n, const Expr* m, const Expr* z, int type) { (void)n; (void)m; (void)z; (void)type; return NULL; }
 Expr* flint_num_elliptic_k(const Expr* m) { (void)m; return NULL; }
 Expr* flint_num_elliptic_e(const Expr* m) { (void)m; return NULL; }
 Expr* flint_num_elliptic_f(const Expr* phi, const Expr* m) { (void)phi; (void)m; return NULL; }
@@ -1756,3 +2024,46 @@ bool flint_dirichlet_l_interval(double lo, double hi, uint64_t q, uint64_t den,
 void  flint_num_bridge_init(void) { /* no FLINT/MPFR: nothing to register */ }
 
 #endif
+
+/* ------------------------------------------------------------------ */
+/*  The numeric tail of a builtin (always compiled)                    */
+/* ------------------------------------------------------------------ */
+
+static bool nb_is_number(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.arg_count != 2) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    if (h == SYM_Rational) return true;
+    return h == SYM_Complex && nb_is_number(e->data.function.args[0]) &&
+           nb_is_number(e->data.function.args[1]);
+}
+
+bool flint_num_call_inexact(const Expr* call) {
+    if (!call || call->type != EXPR_FUNCTION) return false;
+    bool inexact = false;
+    for (size_t i = 0; i < call->data.function.arg_count; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (!nb_is_number(a)) return false;
+        if (arg_is_inexact(a)) inexact = true;
+    }
+    return inexact;
+}
+
+Expr* flint_num_for_call(Expr* r, const Expr* call) {
+    if (!r) return NULL;
+#ifdef USE_MPFR
+    long bits = 0;
+    for (size_t i = 0; i < call->data.function.arg_count; i++) {
+        long b = numeric_min_inexact_bits(call->data.function.args[i]);
+        if (b > 0 && (bits == 0 || b < bits)) bits = b;
+    }
+    return bits <= 53 ? numeric_lower_mpfr_to_machine(r) : r;
+#else
+    (void)call;
+    return r;
+#endif
+}

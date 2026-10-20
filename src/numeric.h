@@ -251,6 +251,18 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out);
  * for it (e.g. Plus's fused special-case guard). */
 bool arg_is_inexact(const Expr* e);
 
+/* A numeric builtin given inexact and exact numeric arguments together
+ * (Zeta[2., Sqrt[2]], BesselJ[Sqrt[2], 2.], HypergeometricPFQ[{1., 2}, {3},
+ * Sqrt[2]/3]) numericalizes the exact ones at the LOWEST precision among the
+ * inexact ones (machine precision is the floor), as Plus / Times do. Returns
+ * that rewritten call, or NULL when the call has no such mixture, an argument is
+ * not a number / numeric quantity / List of them, or an exact argument does not
+ * become a number under N. Positions held by NHoldFirst / NHoldRest in `attrs`
+ * are neither scanned nor converted. `call` is read-only; the result is the
+ * caller's. The evaluator calls it once, when a NumericFunction builtin has
+ * declined the original call. */
+Expr* numeric_mixed_args_call(const Expr* call, uint32_t attrs);
+
 /* True iff `e` is a numeric quantity in the NumericQ sense: a number, a named
  * numeric constant (Pi, E, I, EulerGamma, ...), or a numeric function (a head
  * with the NumericFunction attribute) applied to numeric-quantity arguments.

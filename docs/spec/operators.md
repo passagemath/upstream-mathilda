@@ -2,7 +2,7 @@
 
 Precedences are numbered on a **1–10000 ladder** (`;` = 100 at the bottom,
 `[[…]]` = 10000 at the top). The levels preserve the relative ordering of
-Mathematica's own scheme but are spread out with generous gaps between adjacent
+the reference's own scheme but are spread out with generous gaps between adjacent
 levels, so new operators can be inserted without renumbering. The values below
 are the internal numbers used by the parser (`get_operator` in `src/parse.c`)
 and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
@@ -54,7 +54,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 (`_`/`__`/`___` blanks are recognised structurally in `parse_primary`, not via
 the operator table; the value above is their documented rank.)
 
-**`:` binds its left operand at atom level.** As in the Wolfram Language, the
+**`:` binds its left operand at atom level.** As in the reference, the
 left operand of `:` is the single token right before it: a bare symbol gives
 `Pattern` (`a:p`), a blank token gives `Optional` (`x_:v`, `_h:v`). It is never
 the expression built so far. The right operand is read at the Pattern (2200) or
@@ -74,11 +74,11 @@ Optional (2150) rank, so it takes in everything that binds tighter, `|`, `..`,
 
 Before v0.475 `:` was an ordinary low-precedence infix operator, so `n_.*a:_g`
 parsed as `Optional[n_.*a, _g]`, which is a silently wrong pattern (issue #102).
-A left operand that WL rejects (`(a):_g`, `f[x]:0`) is still accepted, as
+A left operand that the reference rejects (`(a):_g`, `f[x]:0`) is still accepted, as
 `Pattern`/`Optional` of the whole left expression.
 
-The Unicode rightwards arrow `→` (U+2192, Wolfram `\[Rule]`) is accepted as a
-synonym for `->`, so Wolfram-Language rules and associations paste and parse
+The Unicode rightwards arrow `→` (U+2192, the reference `\[Rule]`) is accepted as a
+synonym for `->`, so rules and associations written for the reference paste and parse
 directly.
 
 

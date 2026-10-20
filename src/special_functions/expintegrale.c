@@ -10,6 +10,8 @@
  *                                          fraction (x > 1)
  *   integer n >= 0, machine complex z      sf_machine_expn_c (and real x < 0,
  *   (or real x < 0)                        whose value is complex)
+ *   any other numeric call with an         arb's acb_hypgeom_expint, at the call's
+ *   inexact argument (real order, MPFR)    precision
  *   everything else                        stays symbolic (return NULL)
  *
  * The derivative rule d/dz E_n(z) = -E_(n-1)(z) (with the base E_0 above) lives
@@ -28,9 +30,13 @@
 
 #include <math.h>
 #include <stdbool.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 #include "sf_machine_expint.h"   /* sf_machine_expn */
 #include "sf_scalar.h"           /* the shared machine-scalar gate */
+#include "flint_num_bridge.h"    /* E_s(z) for any other inexact call */
 
 /* Small expr builders (local, matching the deriv.c idiom). */
 static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
@@ -88,6 +94,28 @@ Expr* builtin_expintegrale(Expr* res) {
         double x = z->data.real, out;
         if (x > 0.0 && expintegrale_machine((long)n->data.integer, x, &out))
             return expr_new_real(out);
+    }
+
+    /* Any other numeric call with an inexact argument -- a non-integer order,
+     * arbitrary precision: E_s(z) through arb (principal branch). */
+    if (flint_num_call_inexact(res)) {
+        /* E_s(0) diverges for Re s <= 1 (the integrand ~ 1/t^s): arb's NaN
+         * there would leave the call unevaluated, the reference says
+         * ComplexInfinity. */
+        double zr = 1.0, sr = 2.0;
+        bool z_zero = (z->type == EXPR_REAL && z->data.real == 0.0)
+#ifdef USE_MPFR
+                   || (z->type == EXPR_MPFR && mpfr_zero_p(z->data.mpfr))
+#endif
+                   ;
+        if (z_zero) zr = 0.0;
+        if (n->type == EXPR_REAL) sr = n->data.real;
+        else if (n->type == EXPR_INTEGER) sr = (double)n->data.integer;
+#ifdef USE_MPFR
+        else if (n->type == EXPR_MPFR) sr = mpfr_get_d(n->data.mpfr, MPFR_RNDN);
+#endif
+        if (zr == 0.0 && sr <= 1.0) return expr_new_symbol(SYM_ComplexInfinity);
+        return flint_num_for_call(flint_num_expint(n, z), res);
     }
     return NULL;
 }

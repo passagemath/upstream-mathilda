@@ -102,7 +102,7 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
   `Together[E^Cos[x] Integrate[E^-Cos[x], x]]` returned `x`, the generator having been
   substituted into the integrand and re-integrated). `Log[...]` arguments are never
   rewritten: `Together[Log[x^2] + 1/x]` is `(1 + x Log[x^2])/x`, not `2 Log[x]` (false
-  for `x < 0`), and `Log[-w]` is not split into `I Pi + Log[w]` — matching Mathematica.
+  for `x < 0`), and `Log[-w]` is not split into `I Pi + Log[w]` — matching the reference.
   The same holds for `Cancel` and `Factor`.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
@@ -137,7 +137,7 @@ Out[7]= -(2 x)/(k^(2/3) - x^2)
   radicals `Power[base, p/q]` of any index `q ≥ 2` whose radicand carries a free
   symbol (e.g. `k^(1/3)`) is combined over a common denominator via FLINT
   (`flint_algebraic_field_together`), with the radicals treated as free kernels —
-  WL-faithful: radicals stay in the denominator, no rationalisation. This
+  reference-faithful: radicals stay in the denominator, no rationalisation. This
   generalises the sqrt-only combiner to any index. The same path serves `Cancel`;
   single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
   go through the relation-aware GCD path.
@@ -156,7 +156,7 @@ roots of unity, the imaginary unit and `Root[]` objects combined by `+,-,*,/,^`
 representative: a **rational number**, a **quadratic radical expression**, or a
 `Root[Function[minpoly&], k]` object (degree ≥ 3). Fractional powers use the
 **principal branch** (via `qqbar_root_ui`, argument in `(-π/n, π/n]`), matching
-Mathematica's `Power` and Mathilda's numeric `N[]`; the `Root` index `k` follows
+the reference's `Power` and Mathilda's numeric `N[]`; the `Root` index `k` follows
 Mathilda's own canonical order (real roots ascending first, then non-real roots
 by `Re` ascending, `|Im|` ascending, the negative-`Im` member of a conjugate pair
 first) so that `N[Root[minpoly, k]]` re-derives the reduced value exactly.
@@ -685,7 +685,7 @@ Out[4]= 0
 
 - `IrreduciblePolynomialQ[poly]`: Returns `True` if `poly` is an irreducible
   polynomial over the rationals (treating any algebraic-number coefficient
-  as an independent variable, per Mathematica's `Extension -> None` default).
+  as an independent variable, per the reference's `Extension -> None` default).
 - `IrreduciblePolynomialQ[poly, Extension -> alpha | {alpha_1, ...}]`: Tests
   irreducibility over the field extension `Q(alpha_1, alpha_2, ...)`.
 - `IrreduciblePolynomialQ[poly, Extension -> Automatic]`: Extends `Q` by every
@@ -715,7 +715,7 @@ Out[4]= 0
     algebraic constants in `poly` (`Sqrt[int]`, `Power[int, p/q]`) are
     *frozen* to fresh placeholder symbols before factoring so Mathilda's
     multivariate Factor doesn't silently re-apply `Extension -> Automatic`
-    -- matching Mathematica's "treat algebraic-number coefficients like
+    -- matching the reference's "treat algebraic-number coefficients like
     independent variables" semantics.
   - `Extension -> alpha`: dispatches to the public `Factor[poly, Extension -> alpha]`.
   - `Extension -> {alpha_1, ...}`: list-of-generators tower, same routing.

@@ -55,6 +55,7 @@
 #include "symtab.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sf_scalar.h"        /* sf_machine_scalar_args: the machine-scalar gate */
+#include "flint_num_bridge.h" /* a non-integer order through arb */
 #include "sf_machine_gamma.h" /* sfg_polygamma(_c): the shared double kernels */
 
 #ifdef USE_MPFR
@@ -770,6 +771,17 @@ static Expr* pg_machine(const Expr* res, size_t argc) {
     return NULL;
 }
 
+/* An order with an integer value: exact, or a machine / arbitrary-precision
+ * real (PolyGamma[2., z] is the ordinary second polygamma). */
+static bool pg_integer_valued(const Expr* n) {
+    if (n->type == EXPR_INTEGER || n->type == EXPR_BIGINT) return true;
+    if (n->type == EXPR_REAL) return n->data.real == floor(n->data.real);
+#ifdef USE_MPFR
+    if (n->type == EXPR_MPFR) return mpfr_integer_p(n->data.mpfr) != 0;
+#endif
+    return false;
+}
+
 Expr* builtin_polygamma(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -787,7 +799,20 @@ Expr* builtin_polygamma(Expr* res) {
     if (argc == 2 && args[0]->type == EXPR_INTEGER && is_interval(args[1])) {
         Expr* r = interval_polygamma(args[0]->data.integer, args[1]); if (r) return r;
     }
-    if (argc == 2) return polygamma_two_arg(args[0], args[1]);
+    if (argc == 2) {
+        Expr* r = polygamma_two_arg(args[0], args[1]);
+        /* A non-integer order -- the fractional derivative of digamma, in the
+         * reference's Riemann-Liouville convention (flint_num_polygamma_frac),
+         * not arb's Hurwitz-zeta one -- has no layered path; nor does an
+         * integer order the ladder above declined. Both through arb, for any
+         * inexact numeric call. */
+        if (!r && flint_num_call_inexact(res))
+            r = flint_num_for_call(pg_integer_valued(args[0])
+                                       ? flint_num_polygamma(args[0], args[1])
+                                       : flint_num_polygamma_frac(args[0], args[1]),
+                                   res);
+        return r;
+    }
     return pg_emit_argt(argc);
 }
 

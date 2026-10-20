@@ -98,7 +98,7 @@ Layer 5.1 -- L'Hospital with complexity-growth guardrail
 Layer 6 -- Bounded-oscillation Interval returns
 ```
 
-**Calling forms** (Mathematica-compatible):
+**Calling forms** (reference-compatible):
 
 | Form                                            | Meaning                            |
 |-------------------------------------------------|------------------------------------|
@@ -116,7 +116,7 @@ Layer 6 -- Bounded-oscillation Interval returns
 | `"FromBelow"` or `+1`          | approach from below (x -> a^-)    |
 | `Complexes`                    | complex / radial-in-all-directions|
 
-The Mathematica sign convention (`-1 == FromAbove`) is applied once in
+The reference sign convention (`-1 == FromAbove`) is applied once in
 the option parser so that the math layers only ever see internal
 `+1 / -1 / 0` tags.
 
@@ -160,7 +160,7 @@ value.
    `Limit[Sin[1/x], x -> 0] = Interval[{-1, 1}]` shape by recognising
    a bounded trigonometric head wrapped around a divergent argument.
 
-**Worked examples (cross-checked against Mathematica):**
+**Worked examples (cross-checked against the reference):**
 
 | Input                                                   | Result        |
 |---------------------------------------------------------|---------------|
@@ -305,7 +305,7 @@ preserve the layered dispatcher rather than adding new layers.
 4. *Oscillatory limits return `Indeterminate`*. Layer 6 previously
    returned `Interval[{-1, 1}]` for shapes like `Sin[1/x]` at 0 and
    `Sin[x]` at `Infinity`. That interval is a correct bound but not a
-   limit value; Mathematica returns `Indeterminate`, which we now match.
+   limit value; the reference returns `Indeterminate`, which we now match.
    The layer still only fires after the squeeze / substitution / Series
    paths have failed, so bounded shapes that actually converge to a
    fixed value are unaffected.
@@ -393,7 +393,7 @@ regression in `tests/test_limit.c` (`test_wp8_*`, `test_wp2_*`,
    `LIMIT_DIR_REALS` tag (distinct from the implicit `LIMIT_DIR_TWOSIDED`
    default). At an odd-order pole with two sides disagreeing in sign,
    `Direction -> Reals` returns `Indeterminate` (the real-line answer
-   matches Mathematica's behaviour for `Tan[x] at Pi/2, Reals`), while
+   matches the reference's behaviour for `Tan[x] at Pi/2, Reals`), while
    the default two-sided direction keeps the old `ComplexInfinity`
    fall-back for unqualified rational-function limits.
    `Direction -> Complexes` returns `ComplexInfinity` for any pole
@@ -506,7 +506,7 @@ regression in `tests/test_limit.c` (`test_wp8_*`, `test_wp2_*`,
   from-below limits are respectively `0` and `Infinity`, so the
   two-sided answer is ambiguous. Our dispatcher returns `1` via a
   fall-through path (strictly speaking both `Indeterminate` and `1`
-  are defensible depending on convention; Mathematica returns
+  are defensible depending on convention; the reference returns
   `Indeterminate`).
 
 

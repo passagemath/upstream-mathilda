@@ -120,7 +120,7 @@ Attributes: `Protected`.
   caller checking only the shape. An unknown `Method`, a non-positive `k`, an omitted
   `k`, and a flat list all decline too.
 
-**Not implemented**: Wolfram's `DimensionReduce` can also choose `k` itself and can
+**Not implemented**: the reference's `DimensionReduce` can also choose `k` itself and can
 return a `DimensionReducerFunction` applicable to *new* data. The second is the
 substantive gap — a reusable reducer is a trained model, and that representation is
 being designed with the `Predict` family rather than invented twice.
@@ -151,7 +151,7 @@ obvious one is the rejected one:
   `expr_free`, `expr_eq`, `expr_hash`, `expr_compare` and the printer, to store what
   existing expression types already hold. Machine precision is not an argument for it
   either: a packed list already holds a dense buffer and is still a list.
-- **An `Association` payload**, the most Wolfram-ish shape. It buys nothing positional
+- **An `Association` payload**, the most reference-like shape. It buys nothing positional
   arguments do not, while adding a dependency to every read. Named properties are
   reached through the application instead, which is where you would ask for them:
   `p["Coefficients"]`, `p["Method"]`, `p["FeatureCount"]`.
@@ -232,7 +232,7 @@ Out[3]= {1.0, 2.0, 3.0}
 Fits a linear model with an intercept and returns a `PredictorFunction` carrying its
 coefficients — the same ones `Predict` finds. Attributes: `Protected`.
 
-**Not implemented**: Wolfram's `LinearModelFit` returns a `FittedModel` whose
+**Not implemented**: the reference's `LinearModelFit` returns a `FittedModel` whose
 properties are regression diagnostics (`RSquared`, standard errors, ANOVA). Those are
 a separate piece of work and are **not** approximated here.
 
@@ -253,7 +253,7 @@ Returns a reusable **`DimensionReducerFunction`**. Attributes: `Protected`.
 
 - `DimensionReduction[data, k]`
 
-This is the counterpart to `DimensionReduce[data, k]`, and Wolfram's split of the two is
+This is the counterpart to `DimensionReduce[data, k]`, and the reference's split of the two is
 kept: `DimensionReduce` gives you the *reduced training data*, `DimensionReduction` gives
 you a *reducer you can apply to data it was never trained on*.
 
@@ -426,7 +426,7 @@ lengths per species, to 0.1 cm, have 45 values but only 28 distinct ones — and
 duplicate's zero distance to its twin put the median at 0, the floor at `1e-300`, and the
 fit at nine components, two of them a single point with weight 1/45. Measured between
 distinct values the floor is the data's real resolution (0.1² here) and BIC picks two
-components, weights `{1/3, 2/3}` with means 1.42 and 4.91 — the same model Mathematica 15
+components, weights `{1/3, 2/3}` with means 1.42 and 4.91 — the same model the reference
 learns. The floor is also held to at least `1e-4` of the average per-coordinate variance
 (a component standard deviation of 1% of the data's), and the component count is capped
 by the number of distinct points, as `FindClusters`' mixture path caps it.
@@ -717,6 +717,6 @@ In[2]:= f[{2.5, 2.5}, "Probabilities"]
 Out[2]= {"a" -> 0.641, "b" -> 0.174, "c" -> 0.185}
 ```
 
-**Fifty trees, fixed.** Wolfram tunes the count against held-out data. Doing that here would
+**Fifty trees, fixed.** The reference tunes the count against held-out data. Doing that here would
 mean carving a validation split out of the user's data without being asked, and guessing
 silently is worse than a documented constant.

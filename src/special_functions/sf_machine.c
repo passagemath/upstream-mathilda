@@ -711,7 +711,7 @@ bool sf_machine_qpochhammer(double a, double q, double* out) {
         qk *= q;
         if (fabs(a * qk) < EI_EPS * 0.5) break;       /* remaining factors are 1 */
     }
-    *out = p;
+    *out = (p == 0.0) ? 0.0 : p;    /* a vanishing factor is an exact zero, not -0. */
     return isfinite(p);
 }
 

@@ -4,17 +4,17 @@ A native hypergraph subsystem, implemented in `src/graph/hyp_*.c` (header
 `src/graph/graph_hyper.h`, registered by `graph_hyper_init()` at the end of
 `graph_init()`).
 
-### Relation to the Wolfram ecosystem
+### Relation to the reference ecosystem
 
-Mathematica 15 has **no** built-in hypergraph symbols (`Names["*Hypergraph*"]`
-is empty). Hypergraphs exist in the Wolfram ecosystem only as add-ons: the
-WolframInstitute/Hypergraph paclet (a `Hypergraph` object with `VertexDegree`,
-`VertexList`, `EdgeList`, `HypergraphIncidenceMatrix`, …), Wolfram Function
-Repository functions (`ResourceFunction["HypergraphToGraph"]`,
+The reference has **no** built-in hypergraph symbols (`Names["*Hypergraph*"]`
+is empty). Hypergraphs exist in the reference ecosystem only as add-ons: the
+reference's Hypergraph paclet (a `Hypergraph` object with `VertexDegree`,
+`VertexList`, `EdgeList`, `HypergraphIncidenceMatrix`, …), the reference's function
+repository functions (`ResourceFunction["HypergraphToGraph"]`,
 `["ConnectedHypergraphQ"]`, `["RandomHypergraph"]`, `["TransversalHypergraph"]`,
-`["HypergraphAdjacencyMatrix"]`, …) and the Wolfram Physics Project tooling
-(`["WolframModel"]`, `["HypergraphPlot"]`). All of those run as top-level WL.
-Mathilda's heads are named after them where a Wolfram name exists
+`["HypergraphAdjacencyMatrix"]`, …) and the reference's hypergraph-rewriting tooling
+(`["HypergraphPlot"]`, …). All of those run as top-level code in the reference.
+Mathilda's heads are named after them where a reference name exists
 (`Hypergraph`, `HypergraphQ`, `HypergraphToGraph`, `ConnectedHypergraphQ`,
 `RandomHypergraph`, `TransversalHypergraph`), accept their argument forms
 (including a bare List of hyperedges where the FR function takes one), and are
@@ -32,7 +32,7 @@ Hypergraph[ List[v1, ..., vn], List[e1, ..., em] ]
 Each hyperedge `e_j` is a `List` of vertices. Vertices are arbitrary
 expressions and pairwise distinct. Hyperedges may **repeat** (a
 multi-hypergraph), **overlap** or **nest** arbitrarily, be **empty**, and may
-**repeat a vertex** (`{1, 1, 2}`, as Wolfram-model states do).
+**repeat a vertex** (`{1, 1, 2}`, as hypergraph-rewriting-model states do).
 
 **Ordered vs. unordered — the documented choice.** A hyperedge `List` is kept
 exactly as written, so its order is available to the order-sensitive heads:
@@ -42,10 +42,10 @@ exactly as written, so its order is available to the order-sensitive heads:
 counting repeats), and `HypergraphEdgeDelete` (`SameQ` on the List). Every
 **set-theoretic** head — degrees, incidence, duals, expansions, line graphs,
 components, distances, restrictions, transversals — reads a hyperedge as the
-**set of its distinct vertices**. So a Wolfram-model state such as
+**set of its distinct vertices**. So a hypergraph-rewriting-model state such as
 `{{1,2,3},{3,4}}` is a valid hyperedge list as it stands, and one object answers
 both kinds of question. (There is no separate directed-hyperedge head: an
-ordered List *is* the Wolfram-model directed hyperedge.)
+ordered List *is* the hypergraph-rewriting-model directed hyperedge.)
 
 Hyperedge indices, in arguments and results, are 1-based positions in
 `EdgeList[h]`.
@@ -79,7 +79,7 @@ first need — the vertex→hyperedge incidence CSR. `Hypergraph[...]` seeds the
 memo during construction. So validation is `O(1)` after the first call on an
 object, and every algorithm runs on integer arrays with no hashing. Invalid
 objects are never memoized. When every vertex is a machine integer in a range
-at most `4n + 1024` wide (e.g. `Range[n]`, Wolfram-model states), hyperedge
+at most `4n + 1024` wide (e.g. `Range[n]`, hypergraph-rewriting-model states), hyperedge
 elements resolve by direct addressing instead of through the hash index, which
 roughly halves construction time.
 
@@ -94,15 +94,15 @@ expanded at most once per BFS.
 
 `benchmarks/96-hypergraphs/` (Apple silicon, times in ms, best of 3; cold = a
 fresh hypergraph object before every timed call, construction untimed).
-Mathematica column: the WolframInstitute/Hypergraph paclet, the Function
-Repository ResourceFunctions, or plain WL where neither has the function —
-each definition in `mma_baseline.m` is tagged with its source (its
+The reference column: the reference's Hypergraph paclet, the function
+repository ResourceFunctions, or plain reference code where neither has the function —
+each definition in the baseline script is tagged with its source (its
 single-source distances use `BreadthFirstScan`, since the kernel's
 `GraphDistance[g, s]` is quadratic here). Python column: xgi 0.10, networkx
 BFS where xgi's own shortest paths are quadratic, scipy HiGHS for the MILP.
 Every case's value check agrees across all three systems.
 
-| Case | Mathilda | Mathematica | xgi | Mma / Mathilda | xgi / Mathilda |
+| Case | Mathilda | Reference   | xgi | ref / Mathilda | xgi / Mathilda |
 |---|---:|---:|---:|---:|---:|
 | Hypergraph construction, 10^5 hyperedges | 19.9 | 2912 | 301 | 146× | 15× |
 | VertexDegree, 10^5 hyperedges | 0.005 | 577 | 1.8 | 115373× | 354× |
@@ -139,7 +139,7 @@ a single packed `RandomInteger` array, while Mathilda returns a validated
 representation invariant keeps packed buffers out of expression trees); the
 allocation of those nodes alone exceeds 1.6 ms. For scale, Mathilda's own
 `RandomInteger[{1, 20000}, {100000, 3}]` takes 16 ms.
-`FindMinimumTransversal`'s baselines are MILP solvers (Mathematica's
+`FindMinimumTransversal`'s baselines are MILP solvers (the reference's
 `LinearOptimization`, scipy/HiGHS); the combinatorial branch and bound is
 3.2–3.6× faster at this size, and comparable to the MILPs at 100 vertices.
 
@@ -160,7 +160,7 @@ In the examples on the individual pages, `h` denotes
   `Hypergraph[{v1, ..., vn}, {e1, ..., em}]` — no new `EXPR_*` tag. Each
   hyperedge is a `List` of vertices; vertices are arbitrary, pairwise distinct
   expressions. Hyperedges may repeat (a multi-hypergraph), overlap or nest, be
-  empty, and may repeat a vertex (`{1, 1, 2}`, as Wolfram-model states do).
+  empty, and may repeat a vertex (`{1, 1, 2}`, as hypergraph-rewriting-model states do).
 - A hyperedge List is kept exactly as written: order-sensitive heads
   (`HypergraphToGraph`, `EdgeList`/`InputForm`, `HyperedgeSizes` and the arity
   heads, `HypergraphEdgeDelete`) see the order and repeats; every set-theoretic
@@ -183,9 +183,9 @@ In the examples on the individual pages, `h` denotes
   multiplicity otherwise, as `IncidenceMatrix` gives 2 for a Graph self-loop;
   Mathilda has no `SparseArray`). `VertexInDegree`/`VertexOutDegree` are
   Graph-only and stay unevaluated.
-- Mathematica has no built-in `Hypergraph`; the name follows the
-  WolframInstitute/Hypergraph paclet.
-- Benchmark (experiment 96): construction of 10⁵ hyperedges 19.9 ms (Mathematica
+- The reference has no built-in `Hypergraph`; the name follows the
+  reference's Hypergraph paclet.
+- Benchmark (experiment 96): construction of 10⁵ hyperedges 19.9 ms (the reference
   paclet 2912 ms, xgi 301 ms); `VertexDegree` 0.005 ms warm / 0.432 ms cold;
   `IncidenceMatrix` 1000 × 10⁴ 0.365 ms warm / 0.498 ms cold.
 
@@ -256,7 +256,7 @@ Out[4]= False
 - `UniformHypergraphQ` gives `False` for a non-hypergraph; the other three are
   left unevaluated on one.
 - Benchmark (experiment 96): `HyperedgeSizes` on 10⁵ hyperedges 0.024 ms warm /
-  0.025 ms cold (Mathematica 5.6 ms, xgi 9.6 ms).
+  0.025 ms cold (the reference 5.6 ms, xgi 9.6 ms).
 
 ```mathematica
 In[1]:= HyperedgeSizes[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]]
@@ -290,7 +290,7 @@ Out[6]= HyperedgeSizes[{{1, 2}}]
 - Hyperedges are read as sets. The dual of the dual recovers the incidence
   structure on `1..n`.
 - Linear in the total incidence. Benchmark (experiment 96): 10⁵ hyperedges
-  8.1 ms warm / 10.1 ms cold (Mathematica 236 ms, xgi 361 ms).
+  8.1 ms warm / 10.1 ms cold (the reference 236 ms, xgi 361 ms).
 - A bare List of hyperedges is not accepted (unevaluated).
 
 ```mathematica
@@ -318,7 +318,7 @@ Out[4]= HypergraphDual[{{1, 2}}]
   gives no self-loop.
 - Also equals the graph whose distance `HypergraphDistance` measures.
 - Benchmark (experiment 96): 10⁵ hyperedges 32.3 ms warm / 33.8 ms cold
-  (Mathematica 278 ms, xgi 729 ms).
+  (the reference 278 ms, xgi 729 ms).
 
 ```mathematica
 In[1]:= InputForm[HypergraphCliqueExpansion[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]]]
@@ -341,7 +341,7 @@ Out[3]= Graph[<2 vertices, 1 edge>]
 - Returns a simple `Graph`, validated and memoized as usual.
 - Unevaluated if some vertex of `h` is itself such a `Hyperedge[j]` node.
 - Benchmark (experiment 96): 10⁵ hyperedges 38.5 ms warm / 38.3 ms cold
-  (Mathematica 313 ms, xgi 466 ms).
+  (the reference 313 ms, xgi 466 ms).
 
 ```mathematica
 In[1]:= InputForm[HypergraphStarExpansion[Hypergraph[{{1,2},{2,3}}]]]
@@ -363,7 +363,7 @@ Out[3]= HypergraphStarExpansion[Hypergraph[{Hyperedge[1], 2}, {{Hyperedge[1], 2}
   to `Graphics`.
 
 **Features**:
-- `Protected`. Implemented in `src/graph/hyp_plot.c`; Mathematica has no
+- `Protected`. Implemented in `src/graph/hyp_plot.c`; the reference has no
   built-in hypergraph drawing (the Function Repository's `HypergraphPlot` is the
   model). Deterministic, like `GraphPlot`.
 - **Layout**: the vertices are placed by the stress layout of the star
@@ -408,7 +408,7 @@ Out[5]= HypergraphPlot[5]
 - `HypergraphToGraph[{e1, e2, ...}]`: the same for a bare List of hyperedges.
 
 **Features**:
-- Wolfram Function Repository name and semantics: hyperedge `{v1, ..., vk}`
+- reference function repository name and semantics: hyperedge `{v1, ..., vk}`
   contributes `v_a -> v_b` for every `a < b`.
 - Accepts a bare List of hyperedges, as the FR function does.
 - *Deviation:* Mathilda graphs are simple, so self-loops (from a repeated
@@ -449,7 +449,7 @@ Out[4]= HypergraphToGraph[5]
   bounds the 1-line graph's size anyway.
 - `s` must be a positive integer; otherwise unevaluated.
 - Benchmark (experiment 96): 10⁵ hyperedges 47.0 ms warm / 48.5 ms cold
-  (Mathematica 819 ms, xgi 1117 ms).
+  (the reference 819 ms, xgi 1117 ms).
 
 ```mathematica
 In[1]:= EdgeList[HypergraphLineGraph[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]]]
@@ -474,15 +474,15 @@ Out[4]= HypergraphLineGraph[Hypergraph[<5 vertices, 4 hyperedges>], 0]
 
 **Features**:
 - Components are ordered by their first vertex, vertices within a component in
-  VertexList order. (Graph `ConnectedComponents` instead follows Mathematica:
+  VertexList order. (Graph `ConnectedComponents` instead follows the reference:
   largest first when undirected, strong components when directed.) Isolated
   vertices are singleton components.
 - Union–find, near-linear in the total incidence.
-- `ConnectedHypergraphQ` is the Wolfram Function Repository name. It accepts a
+- `ConnectedHypergraphQ` is the reference function repository name. It accepts a
   bare List of hyperedges; the FR function leaves `{}` unevaluated, Mathilda
   gives `False`. It gives `False` for any non-hypergraph.
 - Benchmark (experiment 96): `HypergraphConnectedComponents` on 10⁵ hyperedges
-  2.3 ms warm and cold (Mathematica 160 ms, xgi 282 ms);
+  2.3 ms warm and cold (the reference 160 ms, xgi 282 ms);
   `ConnectedHypergraphQ` 20.1 ms (FR function 261 ms, xgi 546 ms).
 
 ```mathematica
@@ -518,7 +518,7 @@ Out[5]= False
   hyperedge, `O(Σ_v deg(v)²)`.
 - `s` must be a positive integer; otherwise unevaluated.
 - Benchmark (experiment 96): `s = 2` on 10⁵ hyperedges 18.4 ms warm / 18.6 ms
-  cold (Mathematica 1306 ms, xgi 2466 ms).
+  cold (the reference 1306 ms, xgi 2466 ms).
 
 ```mathematica
 In[1]:= HyperedgeConnectedComponents[Hypergraph[{{1,2,3},{3,4},{4,5,6},{7}}]]
@@ -562,8 +562,8 @@ Out[5]= HyperedgeConnectedComponents[Hypergraph[<7 vertices, 4 hyperedges>], 0]
 - An out-of-range hyperedge index or an unknown vertex leaves the call
   unevaluated.
 - Benchmark (experiment 96), single source on 10⁵ hyperedges:
-  `HyperedgeDistance` 2.8 ms warm / 3.3 ms cold (Mathematica 7255 ms, xgi
-  1048 ms); `HypergraphDistance` 2.9 ms warm / 3.5 ms cold (Mathematica
+  `HyperedgeDistance` 2.8 ms warm / 3.3 ms cold (the reference 7255 ms, xgi
+  1048 ms); `HypergraphDistance` 2.9 ms warm / 3.5 ms cold (the reference
   5791 ms, xgi 1057 ms).
 
 ```mathematica
@@ -687,7 +687,7 @@ Out[5]= Subhypergraph[{{1, 2}}, {1}]
 - `RandomHypergraph[{n, m}, k]`: a random k-uniform hypergraph on `1..n` with `m`
   hyperedges.
 - `RandomHypergraph[{n, m}, k, c]`: a list of `c` such hypergraphs.
-- `RandomHypergraph[{n, {e, a}}]`: the Wolfram Function Repository form — `e`
+- `RandomHypergraph[{n, {e, a}}]`: the reference function repository form — `e`
   hyperedges of arity `a`.
 - `RandomHypergraph[{n, {{e1, a1}, ...}}]`: `e_i` hyperedges of arity `a_i`.
 
@@ -743,7 +743,7 @@ Out[6]= RandomHypergraph[{3, 2}, 4]
 **Features**:
 - A transversal (hitting set) meets every hyperedge; it is minimal when no
   proper subset is one.
-- `TransversalHypergraph` is the Wolfram Function Repository name. In the
+- `TransversalHypergraph` is the reference function repository name. In the
   bare-List form, non-List elements (the FR's "isolated vertices") are
   ignored. No hyperedges → `{{}}`; an empty hyperedge → `{}`. The FR function
   leaves `{}`, `{{}}`, `{{1},{1,2}}` and `{{1,2},{1,2}}` unevaluated; these are
@@ -769,7 +769,7 @@ Out[6]= RandomHypergraph[{3, 2}, 4]
   `TimeConstrained` interrupts them.
 - Benchmark (experiment 96): `TransversalHypergraph` on 16 vertices 4.2 ms (FR
   function 5219 ms); `FindMinimumTransversal` on 80 vertices × 200 hyperedges
-  245 ms against MILP baselines (Mathematica `LinearOptimization` 874 ms,
+  245 ms against MILP baselines (the reference `LinearOptimization` 874 ms,
   scipy/HiGHS 784 ms) — 3.2–3.6× faster at this size, and comparable to the
   MILPs at 100 vertices.
 

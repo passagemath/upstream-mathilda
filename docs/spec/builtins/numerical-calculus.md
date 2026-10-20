@@ -82,7 +82,7 @@ when `WorkingPrecision` requests it, in MPFR complex arithmetic.
 | `MaxRecursion`     | `10`            | Maximum number of `N`-doublings. |
 | `Method`           | `Trapezoidal`   | Only the trapezoidal rule is implemented. |
 
-### Beyond Mathematica's NResidue
+### Beyond the reference's NResidue
 
 - `Radius -> Automatic` removes the manual radius tuning the reference
   implementation requires (its own `Exp[1/x]` example fails until you
@@ -92,7 +92,7 @@ when `WorkingPrecision` requests it, in MPFR complex arithmetic.
   garbage.  A cut lying entirely *inside* the disk (e.g.
   `Sqrt[x-1] Sqrt[x+1]` on `Radius -> 2`, where the integrand is analytic
   on the circle) is undetectable on the contour and returns the same value
-  as Mathematica.
+  as the reference.
 - Aitken/Shanks extrapolation plus a reported error estimate.
 
 ### Diagnostics (stderr)
@@ -323,7 +323,7 @@ Out[5]= 1. + x + 0.5 x^2 + 0.16666666666666666... x^3 + ... + O[x]^6
 
 ### Notes
 
-- Unlike Mathematica's `NSeries` (whose documented count is
+- Unlike the reference's `NSeries` (whose documented count is
   `2^{ceil(log2 n) + 1}`), Mathilda oversamples by `+2` for a wider
   anti-aliasing margin.
 - `Series[Sin[x + 1/x], {x, 0, 10}]` returns unevaluated (no power series at
@@ -453,13 +453,13 @@ reversal for the screen to see.
 *sample scale* (the largest `|S_k|`).  A divergent or non-settling sequence --
 e.g. a power-law approach to infinity like `NLimit[1/x, x -> 0]` -- is returned
 unevaluated.  A bounded but only roughly-resolved limit is returned rather than
-refused, matching Mathematica.
+refused, matching the reference.
 
-### Beyond / unlike Mathematica's NLimit
+### Beyond / unlike the reference's NLimit
 
 - `EulerSum` is implemented as Richardson/Romberg extrapolation (consistent
   with `ND`), not Euler series summation; results agree on smooth cases.
-- Some sequences that make Mathematica's `EulerSum` fail (e.g.
+- Some sequences that make the reference's `EulerSum` fail (e.g.
   `NLimit[Tanh[x], x -> Infinity]` at the default `Terms`) succeed here because
   Richardson does not divide by a vanishing Euler ratio.
 
@@ -605,7 +605,7 @@ A **large finite** sum is evaluated as the difference of two infinite tails,
 
 For infinite sums `VerifyConvergence -> True` runs a tail ratio test; a clearly
 divergent sum (`|a_{k+1}/a_k| > 1`) yields `NSum::div` and `ComplexInfinity`.
-The test is deliberately blind to ratios → 1, so (like Mathematica) it does not
+The test is deliberately blind to ratios → 1, so (like the reference) it does not
 detect the divergence of `Σ 1/k` or `Σ 1/Prime[n]`.  This is a genuine
 limitation, not an oversight: at the convergence *boundary* (terms → 0 with
 `a_{k+1}/a_k → 1`) convergence is undecidable from finitely many samples — the
@@ -716,7 +716,7 @@ convergence test (factors are checked for `-> 1`; a divergent product such as
 because `Exp` turns the exponent's absolute error into the product's relative
 error.
 
-Like Mathematica, NProduct can miss the divergence of slowly diverging products
+Like the reference, NProduct can miss the divergence of slowly diverging products
 (e.g. `∏(1+1/k)`, whose log-sum is the harmonic series) and may leave a harmless
 `+0. I` residue on products of real negative factors.
 
@@ -845,7 +845,7 @@ They take Method sub-options in the `Method -> {"rule", "opt" -> val, …}` form
 
 The Riemann rectangle rules are first order (midpoint second order) and are not
 extrapolated; Trapezoidal and Newton–Cotes drive a Romberg table by default.
-(Wolfram's same-named methods plug these as *local* rules into the adaptive
+(the reference's same-named methods plug these as *local* rules into the adaptive
 strategy, so its crude-`PrecisionGoal` values come from non-uniform subdivision;
 the values here are the well-defined uniform-composite estimates.)
 
@@ -1040,7 +1040,7 @@ solution must meet in the combined tolerance — `VerifySolutions`,
 `RandomSeeding` (seeds the generic linear form). The four methods agree on the
 same solution set.
 
-### Beyond / unlike Mathematica's NSolve
+### Beyond / unlike the reference's NSolve
 
 The supported envelope is polynomial and linear systems plus the
 `Solve`/`FindRoot` fallbacks. Not yet handled (the input is left unevaluated
@@ -1311,7 +1311,7 @@ Remaining (deferred): periodic BCs and mixed spatial derivatives in 2-D (a
 periodic coupling `u[t,xmin,y]==u[t,xmax,y]` is detected and reported rather than
 mis-solved).
 
-### Beyond / unlike Mathematica's NDSolve
+### Beyond / unlike the reference's NDSolve
 
 Supported: ODE initial-value problems — scalar, systems, and higher-order,
 including **complex-valued** ODEs (via realification: each complex unknown is
@@ -1328,7 +1328,7 @@ seams in place): DAEs, boundary-value problems, event location
 variable-order (1–5); Adams is adaptive variable-step but capped at order 2. When
 `MaxSteps` is exhausted the partial `InterpolatingFunction` is returned with an
 `NDSolve::mxst` warning; querying it beyond the reached domain additionally emits
-`InterpolatingFunction::dmval` (extrapolation), as in Mathematica.
+`InterpolatingFunction::dmval` (extrapolation), as in the reference.
 
 ### Examples
 
@@ -1375,7 +1375,7 @@ objective value before returning.
 
 - `FindMinimum[f, {x, x0}]` -- 1D from a single start (default Brent).
 - `FindMinimum[f, {x, x0, x1}]` -- derivative-free Brent using `x0` and `x1`
-  as the **first two values** of `x` (Mathematica's two-start form), not as
+  as the **first two values** of `x` (the reference's two-start form), not as
   bounds: if an interior golden-section point of `[x0, x1]` lies below both
   ends the interval is the initial bracket, otherwise the bracket is expanded
   downhill from the lower end and the search may leave the interval
@@ -1383,7 +1383,7 @@ objective value before returning.
 - `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
 - `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
 - `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at 1 for each variable
-  (matches Mathematica; avoids the common saddle-at-origin trap for
+  (matches the reference; avoids the common saddle-at-origin trap for
   oscillatory objectives like `Sin[x] Sin[2 y]` whose gradient vanishes
   at the origin).
 - `FindMinimum[{f, cons}, vars]` -- constrained minimisation; as with
@@ -1401,7 +1401,7 @@ objective value before returning.
 Although `FindMinimum` is `HoldAll`, only the **variables** stay held: the
 starting values, the bounds of `{x, xstart, xmin, xmax}`, and the values of
 `Method`, `WorkingPrecision`, `MaxIterations`, `AccuracyGoal` and
-`PrecisionGoal` are evaluated, as in Mathematica. So
+`PrecisionGoal` are evaluated, as in the reference. So
 `Table[FindMinimum[x Cos[x], {x, s}], {s, {2, 7}}]` starts from `x = 2` and
 `x = 7` (a symbol in the second slot that carries a value, or a numeric
 constant such as `Pi`, is a starting value, never a second variable), and a
@@ -1441,7 +1441,7 @@ central-difference fallback; override via `Gradient -> {dfdx1, dfdx2,
 ...}`.  Powell and NelderMead use no gradient at all.
 
 `"LBFGSB"` (aliases `"LBFGS"`, `"LimitedMemoryBFGS"`; a Mathilda extension —
-Mathematica exposes no such method name) is **limited-memory BFGS with bound
+the reference exposes no such method name) is **limited-memory BFGS with bound
 constraints**.  It keeps only the `m = 10` most recent correction pairs and
 forms the search direction by the Nocedal two-loop recursion at `O(m·n)` cost,
 so it scales to large `n` where the full-memory QuasiNewton's dense `n×n`
@@ -1454,7 +1454,7 @@ reference L-BFGS-B.  General (non-box) constraints route through the same
 augmented-Lagrangian wrapper as the other methods.  References: Byrd, Lu,
 Nocedal & Zhu 1995, with the Morales–Nocedal 2011 correction.
 
-`"Powell"` (alias `"PrincipalAxis"`, Mathematica's name for the same
+`"Powell"` (alias `"PrincipalAxis"`, the reference's name for the same
 derivative-free conjugate-direction family) minimises **using function
 values only** — no gradient, analytic or finite-difference — so it is the
 method for non-smooth, noisy, or black-box objectives the gradient methods
@@ -1506,7 +1506,7 @@ non-smooth** ones -- the simplex can converge to a non-stationary point
 (McKinnon 1998) -- so `"Powell"` is the better derivative-free choice for a
 non-smooth objective.  Reference: Nelder & Mead 1965.
 
-`"TNC"` (alias `"TruncatedNewton"`, a Mathilda extension -- Mathematica has
+`"TNC"` (alias `"TruncatedNewton"`, a Mathilda extension -- the reference has
 no such method name) is **Nash's truncated Newton with bound constraints**,
 and it is **Hessian-free**: each outer iteration approximately solves the
 Newton system `H·p = -g` by an inner **conjugate-gradient** loop that
@@ -1535,7 +1535,7 @@ refinement); `WorkingPrecision > MachinePrecision` falls back to
 case.  References: Nash 1984; Dembo & Steihaug 1983; Nocedal & Wright ch. 7.
 
 `"SLSQP"` (alias `"SequentialQuadraticProgramming"`, a Mathilda extension --
-Mathematica has no such method name) is **Han-Powell sequential quadratic
+the reference has no such method name) is **Han-Powell sequential quadratic
 programming**, the method for smooth **constrained** problems (equality +
 inequality + bounds).  Each outer iteration replaces `f` by a quadratic model
 `½ dᵀB d + ∇fᵀd` -- where `B` is a BFGS approximation to the Hessian of the
@@ -1565,7 +1565,7 @@ trivial-objective QPs where the dense active-set QP linear algebra dominates
 1988; Powell 1978; Goldfarb & Idnani 1983; Nocedal & Wright ch. 18.
 
 `"COBYLA"` (Powell's Constrained Optimization BY Linear Approximation; a
-Mathilda extension -- Mathematica has no such method name) is the
+Mathilda extension -- the reference has no such method name) is the
 **derivative-free** method for **constrained** problems, and the FIRST
 derivative-free method here to accept general (non-box) constraints -- `"Powell"`
 and `"NelderMead"` reject them, and every gradient method needs a derivative --
@@ -1706,7 +1706,7 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
   feasible iterate seen across the schedule if the final round drifts
   infeasible.
 - `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
-  Mathematica constraint surface are not yet implemented -- they emit
+  reference's constraint surface are not yet implemented -- they emit
   `FindMinimum::nimpl`.
 
 The penalty wrapper converges from feasible *or* infeasible starting
@@ -1815,7 +1815,7 @@ Numerical **global** optimisation.  Implemented natively in C in
 `src/numerical_calculus/findmin.c`, layered on the `FindMinimum` machinery (it reuses the same
 `Block`-style variable binding, `{f, cons}` constraint parsing, penalty/BFGS
 local solvers, MPFR path, and result construction).  Both are `Protected` but
-**not** `HoldAll` (matching Mathematica's `Attributes[NMinimize] == {Protected}`);
+**not** `HoldAll` (matching the reference's `Attributes[NMinimize] == {Protected}`);
 their variables must be unbound symbols, and an assigned optimization variable
 makes the call return unevaluated with `NMinimize::ivar`.  `NMaximize[f, ...]` is a thin wrapper around
 `NMinimize[-f, ...]` that negates the objective value before returning.
@@ -1829,7 +1829,7 @@ then polishes the best point with the exact local solver.
 - `NMinimize[f, x]` -- global minimum with respect to one variable.
 - `NMinimize[f, {x, y, ...}]` -- global minimum over several variables.
 - `NMinimize[{f, cons}, vars]` -- constrained global minimum.  `cons` may be
-  a single constraint, an `And[...]` of constraints, or — as Mathematica
+  a single constraint, an `And[...]` of constraints, or — as the reference
   allows — additional list elements `{f, c1, c2, ...}` that are implicitly
   `And`-ed.
 - `NMaximize[...]` -- same forms; maximises `f`.
@@ -1882,7 +1882,7 @@ quadratic-penalty local solver during the polish.  Integer variables
 integer coordinate descent.  A domain declaration may name **several variables
 at once**, written either as `Element[x | y, Integers]` (Alternatives) or
 `Element[{x, y}, Integers]` (List); each named variable gets the domain, exactly
-as Mathematica does.  The declaration is accepted in the variable list or the
+as the reference does.  The declaration is accepted in the variable list or the
 constraints, and every member must be one of the optimization variables (a
 declaration on any other symbol is left in place and rejected as unenforceable).
 
@@ -1975,7 +1975,7 @@ whichever basin that one member occupied, so a larger population or a shorter ru
 — both of which leave the population less converged — could report a *worse*
 optimum; ranking basins by their minima instead makes the result improve, not
 degrade, with `"SearchPoints"`. On Griewank-10 over `[-600, 600]` the plain
-`Method -> "DifferentialEvolution"` reaches the global `0` (Mathematica reports
+`Method -> "DifferentialEvolution"` reaches the global `0` (the reference reports
 `~0.175`). `"PostProcess" -> False` disables it and returns the raw global best;
 mixed-integer problems keep the single driver polish so their integer-descent cost
 is unchanged.
@@ -2067,7 +2067,7 @@ ignored. This mirrors how top-level options already report an unrecognised name.
 `"PostProcess"`
 defaults to on: the global best is refined by the exact local optimizer (and,
 for continuous box/unconstrained problems at `WorkingPrecision > MachinePrecision`,
-by an MPFR BFGS step). It accepts the full Mathematica value set — `True`,
+by an MPFR BFGS step). It accepts the full reference value set — `True`,
 `Automatic`, or a named local method as a string (`"InteriorPoint"`,
 `"FindMinimum"`, `"KKT"`, …) or `{"method", opts…}` turn the polish on; `False`
 or `None` turn it off. Mathilda has a single `FindMinimum`-style local polish
@@ -2104,7 +2104,7 @@ constraints to penalize).
 `"SimulatedAnnealing"` honors four of its own sub-options.
 `"SearchPoints" -> K` runs `K` independent annealing chains from random starts
 and keeps the best local minimum (default `Automatic = Min[Max[2·d, 12], 50]`).
-The `2·d` scaling follows Mathematica, but a rugged, many-basin landscape in low
+The `2·d` scaling follows the reference, but a rugged, many-basin landscape in low
 dimension (Eggholder, Schwefel, Griewank, ...) has far more basins than `2·d = 4`
 starts can cover, so a floor of 12 independent starts is what makes the reported
 optimum reliably the global one there rather than luck-of-the-trajectory; a
@@ -2136,9 +2136,9 @@ without the probe. A downhill move is always accepted, as usual. `"PostProcess"
 -> False` skips the per-chain polish and returns the global raw best. On the
 strongly-multimodal Griewank function `Sum[x[i]²/4000] - Product[Cos[x[i]/√i]] +
 1` over `[-600, 600]^d`, the default multi-chain SimulatedAnnealing reaches
-`~0.015` for `d = 10`, below Mathematica's `~0.175` on the same problem; on the
+`~0.015` for `d = 10`, below the reference's `~0.175` on the same problem; on the
 2-D Eggholder over `[-512, 512]²` it reaches the global `-959.64`, below
-Mathematica's default `-935.34`.
+the reference's default `-935.34`.
 
 #### SHGO — Simplicial Homology Global Optimization
 
@@ -2504,7 +2504,7 @@ Expected numeric-domain diagnostics raised while probing the function — e.g.
 `Power::infy` from a `1/0` in a gradient term on a non-differentiable ridge
 (Bukin N.6, `100 Sqrt[Abs[x2 - 0.01 x1^2]] + ...`) — are **quieted** during the
 search: a non-finite value is treated as a bad point and steered away from, so
-the messages are noise. This matches Mathematica, which quiets `NMinimize`'s
+the messages are noise. This matches the reference, which quiets `NMinimize`'s
 internal evaluation. (The same applies to `FindMinimum` / `FindMaximum`, which
 share the point-evaluation path.)
 

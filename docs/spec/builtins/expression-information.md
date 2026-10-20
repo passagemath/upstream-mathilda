@@ -727,7 +727,7 @@ Out[11]= Hold[2, 4]
 
 ## Trace
 Records the expressions produced while evaluating `expr`, as a **nested** list
-that mirrors the structure of the evaluation (as in Mathematica).
+that mirrors the structure of the evaluation (as in the reference).
 - `Trace[expr]`: Returns a `List` of the forms `expr` passes through. Each
   argument sub-evaluation that takes a step appears as a nested sublist, in the
   order it occurs, and the reassembled intermediate form (`f[evaluated_args]`,
@@ -748,7 +748,7 @@ that mirrors the structure of the evaluation (as in Mathematica).
 - **Automatic-rewrite steps are atomic.** A builtin's internal computation (e.g.
   `Range` folding) and `Listable` threading of the threaded elements are shown as
   a single rewrite, not decomposed — so `Range[10]` and `x^{1..10}` each appear
-  as one step, matching Mathematica.
+  as one step, matching the reference.
 - Each step leaf is returned wrapped in `HoldForm` (printed transparently), so
   the result stays inert and does not re-evaluate.
 - Not memoized: `Trace` bumps the evaluation clock once per call so an
@@ -1168,13 +1168,13 @@ Out[2]= 1, 2, 3
 ```
 
 ## ToString
-- `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in Mathematica: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
+- `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in the reference: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
 - `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads), `FullForm`, and `TeXForm`. `StandardForm` is accepted as an alias for `InputForm`.
 
 **Features**:
 - `Protected`.
 - An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
-- `TeXForm` renders the generated constant `C[k]` (from `DSolve`, `Reduce`, `Integrate`) as the subscripted `c_k`, matching Mathematica: `ToString[C[1], TeXForm]` is `"c_1"`, and `ToString[C[10], TeXForm]` is `"c_{10}"` (single-character subscripts bare, longer ones braced). The same holds for the notebook LaTeX renderer.
+- `TeXForm` renders the generated constant `C[k]` (from `DSolve`, `Reduce`, `Integrate`) as the subscripted `c_k`, matching the reference: `ToString[C[1], TeXForm]` is `"c_1"`, and `ToString[C[10], TeXForm]` is `"c_{10}"` (single-character subscripts bare, longer ones braced). The same holds for the notebook LaTeX renderer.
 - `TeXForm` sets the infix heads infix: `Rule` as `\to`, `RuleDelayed` as `:\to`, `Set` as `=`, `SetDelayed` as `:=`, `And`/`Or` as `\land`/`\lor`, the relations as `=`, `\neq`, `<`, `>`, `\leq`, `\geq`, `SameQ`/`UnsameQ` as `\equiv`/`\not\equiv`, `Not` as `\neg`, and a chained `Inequality` as the chain (`1<x<2`). `RuleDelayed` is deliberately distinguished from `Rule` — one glyph for both would make `a -> b` and `a :> b` indistinguishable once typeset, the same reason `SetDelayed` is `:=`. The notebook LaTeX renderer agrees, and additionally brackets a nested operator that binds looser than the one holding it (`(a || b) && c`, but not `a && b || c`).
 
 ```mathematica
@@ -1429,7 +1429,7 @@ Gives an integer hash code for an expression.
 - `Protected` (not `Listable`: `Hash[{1, 2, 3}]` hashes the whole list, not element-wise).
 - The argument is evaluated first, so `Hash[1 + 1]` equals `Hash[2]`.
 - Only the default `"Expression"` hash `type` is implemented: the 64-bit FNV-1a structural
-  hash computed from `expr`'s internal representation. Like Mathematica's, this value is
+  hash computed from `expr`'s internal representation. Like the reference's, this value is
   **implementation-defined** — it may differ between computer systems and between versions of
   Mathilda — so treat it as a stable key within one build, not a portable digest. Other hash
   types (`"SHA256"`, `{"SHA", b}`, `"MD5"`, `"CRC32"`, …) are left unevaluated for now.
@@ -1466,12 +1466,12 @@ Gives the number of bytes of memory currently resident for the Mathilda process.
 
 **Features**:
 - `Protected`.
-- **This is the process resident set size, which is not the same quantity Mathematica
-  reports.** Wolfram's `MemoryInUse[]` counts the bytes holding the current session's data —
+- **This is the process resident set size, which is not the same quantity the reference
+  reports.** The reference's `MemoryInUse[]` counts the bytes holding the current session's data —
   expressions, definitions, caches — and nothing else. Mathilda's also includes the binary,
   the shared libraries (GMP, MPFR, LAPACK, Readline, and Raylib on a graphics build), the
   stacks, and whatever the allocator is holding without having returned it to the system. On
-  a freshly started kernel Wolfram's figure is small where this one is tens of megabytes of
+  a freshly started kernel the reference's figure is small where this one is tens of megabytes of
   mapped libraries, so the two are **not interchangeable**.
 - The difference is deliberate on both counts. Reporting session-data bytes exactly would
   mean routing every allocation in the tree through a counting wrapper — around 500 modules,

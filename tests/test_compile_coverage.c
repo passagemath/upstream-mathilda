@@ -35,12 +35,11 @@ static int failures = 0;
 
 /* Heads that carry NumericFunction but do not compile.
  *
- * As of the M5 kernel work this list contains NO pending numerics — every head
- * here is one that SHOULD stay uncompiled, for one of two reasons:
+ * Entries in (a) and (b) SHOULD stay uncompiled; (d) is pending work:
  *
- *  (a) THE INTERPRETER ITSELF DECLINES on real arguments.  `BesselJZero[2., 1.]`,
- *      `BarnesG[3.5]`, `Hyperfactorial[3.5]`, `Factorial2[5.5]` and
- *      `FactorialPower[5.5, 2.]` all come back UNEVALUATED.  A machine kernel
+ *  (a) THE INTERPRETER ITSELF DECLINES on real arguments (none at present;
+ *      BesselJZero, BarnesG, Hyperfactorial, Factorial2 and FactorialPower
+ *      were here and all evaluate on machine reals now).  A machine kernel
  *      would make the compiled path ANSWER where the interpreter does not —
  *      the one divergence the engine forbids, and a far worse bug than a bail.
  *      (Check this before writing numerics for anything on this list:
@@ -56,13 +55,11 @@ static int failures = 0;
  * list, say so explicitly — otherwise the distinction rots. */
 typedef struct { const char* name; const char* why; } Gap;
 static const Gap KNOWN_GAPS[] = {
-    /* (a) the interpreter leaves these unevaluated on machine reals. */
-    { "BesselJZero",          "interpreter leaves BesselJZero[n,k] unevaluated" },
-    { "BarnesG",              "interpreter leaves BarnesG[real] unevaluated" },
-    { "Hyperfactorial",       "interpreter leaves Hyperfactorial[real] unevaluated" },
-    { "Factorial2",           "interpreter leaves Factorial2[real] unevaluated" },
-    { "FactorialPower",       "interpreter leaves FactorialPower[real,real] unevaluated" },
+    /* (a) the interpreter leaves these unevaluated on machine reals: none at
+     * present. BesselJZero gained its kernel (and compiles) in v0.477; the four
+     * below evaluate on machine reals and moved to (d). */
     /* (b) deliberately not machine-scalar functions. */
+    { "KroneckerDelta",       "a comparison by Equal, not a numeric kernel" },
     { "GCD",                  "exact integer semantics; not a double kernel" },
     { "LCM",                  "exact integer semantics; not a double kernel" },
     { "DigitSum",             "exact integer semantics; not a double kernel" },
@@ -70,9 +67,15 @@ static const Gap KNOWN_GAPS[] = {
     { "QuotientRemainder",    "returns a list, not one machine number" },
     /* (c) no machine kernel ON PURPOSE, because the correct machine answer is
      * not a real number over the range callers actually use. */
-    /* (d) special functions with a numeric fast path but no Compile[] lowering
-     * yet -- a genuine gap to close later, not a deliberate exclusion. Empty
-     * since v0.438: ExpIntegralE gained its binary kernel and now compiles. */
+    /* (d) special functions with a numeric path but no Compile[] lowering
+     * yet -- a genuine gap to close later, not a deliberate exclusion. These
+     * were filed under (a) until v0.477, when it was found that every one of
+     * them evaluates on machine reals (FactorialPower[5.5, 2.] = 24.75,
+     * BarnesG[3.5] = 1.25965, ...). */
+    { "BarnesG",              "evaluates on reals; no machine kernel yet" },
+    { "Hyperfactorial",       "evaluates on reals; no machine kernel yet" },
+    { "Factorial2",           "evaluates on reals; no machine kernel yet" },
+    { "FactorialPower",       "evaluates on reals; no machine kernel yet" },
 };
 static const size_t NGAPS = sizeof KNOWN_GAPS / sizeof KNOWN_GAPS[0];
 

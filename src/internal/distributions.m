@@ -22,3 +22,11 @@ HeavisideTheta[x_?Negative] := 0;
 
 DiracDelta[x_?Positive] := 0;
 DiracDelta[x_?Negative] := 0;
+
+(* The multivariate forms are products: HeavisideTheta[x1, x2, ...] is 1 when
+ * every xi is positive and 0 when any is negative (or 0, by the convention
+ * above); DiracDelta[x1, x2, ...] is 0 as soon as one xi is nonzero. *)
+HeavisideTheta[x_, y__] /; AnyTrue[{x, y}, TrueQ[Negative[#]] || TrueQ[# == 0] &] := 0;
+HeavisideTheta[x_, y__] /; AllTrue[{x, y}, TrueQ[Positive[#]] &] := 1;
+HeavisideTheta[a___, p_?Positive, b___] /; Length[{a, b}] > 0 := HeavisideTheta[a, b];
+DiracDelta[x_, y__] /; AnyTrue[{x, y}, TrueQ[Positive[#]] || TrueQ[Negative[#]] &] := 0;

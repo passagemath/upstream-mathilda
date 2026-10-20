@@ -128,7 +128,7 @@ Generates a list of expressions.
 
 - **Numeric symbolic bounds.** A bound or step that is not an explicit number
   but has a real value (`Pi`, `2 Pi`, `Pi/2`, `Sqrt[2]`) iterates the lattice
-  `imin + k di`, `k = 0, ..., Floor[(imax - imin)/di]`, as in Mathematica:
+  `imin + k di`, `k = 0, ..., Floor[(imax - imin)/di]`, as in the reference:
   `Table[x, {x, 0., 2 Pi, 1.}]` has seven elements and
   `Table[x, {x, 0, 2 Pi, Pi/2}]` is `{0, Pi/2, Pi, 3 Pi/2, 2 Pi}`. The shared
   iterator parser (`iter_normalize_bounds`, `src/iter.c`) replaces such an
@@ -237,7 +237,7 @@ and need not land on its upper bound.
   the general path.
 - Such a result is a [packed list](packed-arrays.md) built directly, with no
   `Expr` node constructed at all. The interior points are `min + i (max - min)/n`
-  in doubles, which is the rule `numpy.linspace` uses and which Mathematica
+  in doubles, which is the rule `numpy.linspace` uses and which the reference
   agrees with: `Subdivide[0., 1., 10]` gives `0.30000000000000004` for its
   fourth point, not `0.3`.
 - `n` must be a **positive integer**. Zero, negative, rational, real, and
@@ -506,13 +506,13 @@ Distances between two numeric vectors, or between two scalars.
   introducing a root -- which is how `FindClusters` stays exact in n dimensions.
 - **Complex components contribute their modulus**, because the definition takes
   `Abs` before squaring rather than squaring the difference. This matters only
-  for complex input, where the two orders differ, and follows Mathematica.
+  for complex input, where the two orders differ, and follows the reference.
 - Symbolic input survives rather than being rejected: `ManhattanDistance[{a},
-  {b}]` is `Abs[a - b]`, as in Mathematica.
+  {b}]` is `Abs[a - b]`, as in the reference.
 - `CosineDistance` ranges over `[0, 2]` -- `0` parallel, `1` orthogonal, `2`
   antiparallel -- and ignores magnitude. It is **not** a metric (it violates the
   triangle inequality) and has no squared form that ranks identically, so it is
-  used directly. A zero vector on either side gives `0`, following Mathematica;
+  used directly. A zero vector on either side gives `0`, following the reference;
   that is a convention, not a derivation, since the quotient is `0/0`.
 - Mismatched lengths, or an argument that is a matrix, leave the call
   unevaluated.
@@ -551,7 +551,7 @@ Distances between two sequences -- two strings, or two lists.
 - Strings are compared **byte by byte**, so a multi-byte UTF-8 character counts
   as several elements.
 - `HammingDistance` requires equal lengths and leaves the call unevaluated
-  otherwise, matching Mathematica's `::idim`.
+  otherwise, matching the reference's `::idim`.
 - `EditDistance` costs `O(m n)` time and `O(min(m, n))` memory (two DP rows).
 
 ```mathematica
@@ -745,10 +745,10 @@ numbers, equal-length numeric vectors, colours (`RGBColor`, `GrayLevel`, `Hue`,
 - Returns unevaluated for an empty list, a non-`List` argument, a nested list, an
   `NDArray` of rank 3 or more, a non-numeric element, a count that is not a
   positive integer or `UpTo[k]`, or a method incompatible with the count mode.
-- **Symbolic elements are declined**, not clustered. Mathematica treats them as
+- **Symbolic elements are declined**, not clustered. The reference treats them as
   nominal features and answers `FindClusters[{1, a, 3}, 2]` with `{{a}, {1, 3}}`;
   this implementation is numeric-only.
-- **The output is not expected to match Mathematica's.** Mathematica
+- **The output is not expected to match the reference's.** The reference
   auto-selects a distance function and preprocesses the data by unpublished
   rules, so even single-linkage with an explicit count differs, and its
   `Automatic` cluster count is an internal index rather than a gap rule. The

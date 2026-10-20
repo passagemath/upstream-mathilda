@@ -51,16 +51,18 @@
  * do not reintroduce strcmp-based head comparisons. */
 bool head_is(const Expr* e, const char* sym);
 
-/* Emit a Wolfram-style argument-count diagnostic on stderr for a builtin
- * `head` that was called with `got` arguments but expects an argument count
- * in the inclusive range [min, max].
+/* Emit the reference's argument-count diagnostic for a builtin `head` that
+ * was called with `got` arguments but expects an argument count in the
+ * inclusive range [min, max].
  *
- *   - min == max            -> fixed arity   ("Sin::argx" / "Head::argrx")
+ *   - min == max            -> fixed arity   ("Sin::argx" / "Head::argrx";
+ *                                             "Head::argr" when got == 1)
  *   - max == SIZE_MAX       -> min-or-more   ("Head::argm")
- *   - max == min + 1        -> two choices   ("Head::argt": "1 or 2 ...")
+ *   - max == min + 1        -> two choices   ("Head::argt": "1 or 2 ...";
+ *                                             "Head::argtu" when got == 1)
  *   - otherwise             -> a range       ("Head::argb": "between m and n")
  *
- * The message text mirrors Mathematica exactly, e.g.
+ * The message text mirrors the reference exactly, e.g.
  *   Sin::argx: Sin called with 3 arguments; 1 argument is expected.
  *
  * Always returns NULL so an arity guard reads as a single statement:

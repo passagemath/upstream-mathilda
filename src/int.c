@@ -1229,21 +1229,32 @@ static Expr* fd_mantissa(Expr* digits, Expr* e, Expr* base_expr) {
  * with the subtractive pairs (a smaller numeral before a larger one is
  * subtracted) -- "XLII" is 42, "IIII" is 4.
  * Anything else draws FromRomanNumeral::nrom and gives $Failed. */
+/* The Roman numeral system, shared by FromDigits[s, "Roman"] (reading) and
+ * IntegerString[n, "Roman"] (writing): the seven numerals and, for writing,
+ * the six subtractive pairs, largest first. */
+static const struct { int64_t value; const char* text; } roman_table[] = {
+    {1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"}, {100, "C"}, {90, "XC"},
+    {50, "L"}, {40, "XL"}, {10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"}
+};
+#define ROMAN_TABLE_LEN (sizeof(roman_table) / sizeof(roman_table[0]))
+
+/* Value of one numeral character, case-insensitive; 0 if it is not one. */
+static int64_t roman_numeral_value(char ch) {
+    int c = ch >= 'a' && ch <= 'z' ? ch - 32 : ch;
+    for (size_t k = 0; k < ROMAN_TABLE_LEN; k++)
+        if (roman_table[k].text[1] == '\0' && roman_table[k].text[0] == c)
+            return roman_table[k].value;
+    return 0;
+}
+
 static Expr* fd_roman(const char* s) {
     int64_t total = 0;
     size_t len = strlen(s);
     bool ok = len > 0;
     for (size_t i = 0; i < len && ok; i++) {
-        int c = s[i] >= 'a' && s[i] <= 'z' ? s[i] - 32 : s[i];
-        int64_t v = c == 'I' ? 1 : c == 'V' ? 5 : c == 'X' ? 10 : c == 'L' ? 50 :
-                    c == 'C' ? 100 : c == 'D' ? 500 : c == 'M' ? 1000 : 0;
+        int64_t v = roman_numeral_value(s[i]);
         if (!v) { ok = false; break; }
-        int64_t nx = 0;
-        if (i + 1 < len) {
-            int c2 = s[i + 1] >= 'a' && s[i + 1] <= 'z' ? s[i + 1] - 32 : s[i + 1];
-            nx = c2 == 'I' ? 1 : c2 == 'V' ? 5 : c2 == 'X' ? 10 : c2 == 'L' ? 50 :
-                 c2 == 'C' ? 100 : c2 == 'D' ? 500 : c2 == 'M' ? 1000 : 0;
-        }
+        int64_t nx = (i + 1 < len) ? roman_numeral_value(s[i + 1]) : 0;
         total += (nx > v) ? -v : v;
     }
     if (!ok) {
@@ -1471,6 +1482,37 @@ static Expr* is_emit_intnn(void) {
  * decode without consulting our own conventions. */
 #define IS_MAX_BASE 36
 
+/* ASCII case-insensitive strcmp (strcasecmp is POSIX, hidden under -std=c99). */
+static int strcasecmp_ascii(const char* a, const char* b) {
+    for (;; a++, b++) {
+        int ca = (*a >= 'A' && *a <= 'Z') ? *a + 32 : *a;
+        int cb = (*b >= 'A' && *b <= 'Z') ? *b + 32 : *b;
+        if (ca != cb || !ca) return ca - cb;
+    }
+}
+
+/* IntegerString[n, "Roman"]: |n| as a Roman numeral, greedy over the shared
+ * roman_table (so 4 is "IV" and 4000 is "MMMM"); 0 is "N" (nulla). The
+ * reference renders 5000 and above with overbarred (x1000) numerals, which is
+ * a typeset box, not a string -- those stay unevaluated. A length argument
+ * does not pad or truncate a Roman numeral. */
+static Expr* is_roman(Expr* n_expr) {
+    if (n_expr->type != EXPR_INTEGER) return NULL;   /* bigint: >= 5000 */
+    int64_t v = n_expr->data.integer;
+    if (v <= -5000 || v >= 5000) return NULL;
+    if (v < 0) v = -v;                                /* |n| */
+    if (v == 0) return expr_new_string("N");
+    char buf[32];                                     /* "MMMMDCCCLXXXVIII" is 16 */
+    size_t o = 0;
+    for (size_t k = 0; k < ROMAN_TABLE_LEN; k++)
+        while (v >= roman_table[k].value) {
+            for (const char* t = roman_table[k].text; *t; t++) buf[o++] = *t;
+            v -= roman_table[k].value;
+        }
+    buf[o] = '\0';
+    return expr_new_string(buf);
+}
+
 Expr* builtin_integerstring(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1485,6 +1527,11 @@ Expr* builtin_integerstring(Expr* res) {
         if (expr_is_numeric_like(n_expr)) return is_emit_int(1, res);
         return NULL;
     }
+
+    /* --- IntegerString[n, "Roman"] -------------------------------- */
+    if (argc >= 2 && res->data.function.args[1]->type == EXPR_STRING &&
+        strcasecmp_ascii(res->data.function.args[1]->data.string, "Roman") == 0)
+        return is_roman(n_expr);
 
     /* --- base argument --------------------------------------------- */
     unsigned long base = 10;

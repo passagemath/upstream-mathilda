@@ -578,6 +578,23 @@ static void test_symbolic_len_left_unevaluated(void) {
     free(err);
 }
 
+/* --- IntegerString[n, "Roman"] (reference-system values) ---------- */
+
+static void test_roman(void) {
+    assert_eval_eq("IntegerString[2026, \"Roman\"]", "\"MMXXVI\"", 0);
+    assert_eval_eq("IntegerString[{1, 4, 9, 14, 40, 90, 400, 900, 3999, 4000, 4999, 0}, \"Roman\"]",
+                   "{\"I\", \"IV\", \"IX\", \"XIV\", \"XL\", \"XC\", \"CD\", \"CM\", "
+                   "\"MMMCMXCIX\", \"MMMM\", \"MMMMCMXCIX\", \"N\"}", 0);
+    assert_eval_eq("IntegerString[-5, \"Roman\"]", "\"V\"", 0);
+    assert_eval_eq("IntegerString[14, \"roman\"]", "\"XIV\"", 0);
+    assert_eval_eq("IntegerString[14, \"Roman\", 6]", "\"XIV\"", 0);   /* no padding */
+    /* 5000 and up are overbarred numerals (a typeset box): unevaluated. */
+    assert_eval_eq("IntegerString[5000, \"Roman\"]", "IntegerString[5000, \"Roman\"]", 0);
+    /* Round trip through FromDigits, which reads the same table. */
+    assert_eval_eq("And @@ Table[FromDigits[IntegerString[k, \"Roman\"], \"Roman\"] == k, {k, 1, 4999}]",
+                   "True", 0);
+}
+
 /* --- Attribute / docstring / interned-symbol introspection -------- */
 
 static void test_attributes(void) {
@@ -697,6 +714,7 @@ int main(void) {
     TEST(test_symbolic_base_left_unevaluated);
     TEST(test_symbolic_len_left_unevaluated);
 
+    TEST(test_roman);
     TEST(test_attributes);
     TEST(test_docstring_set);
     TEST(test_sym_pointer_interned);

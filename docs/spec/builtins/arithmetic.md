@@ -919,6 +919,12 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
 - `IntegerString[n, b, len]`: Pads the string on the left with `'0'` to give
   a string of length `len`. If `n` has more than `len` base-`b` digits, the
   `len` least-significant digits are returned (matching the reference).
+- `IntegerString[n, "Roman"]` (the name is case-insensitive): `|n|` as a Roman
+  numeral -- `IntegerString[2026, "Roman"]` is `"MMXXVI"`, `4000` is `"MMMM"`,
+  `0` is `"N"`. A length argument does not pad it. `|n| >= 5000` needs
+  overbarred numerals, a typeset form rather than a string, and stays
+  unevaluated. Written from the same numeral table `FromDigits[s, "Roman"]`
+  reads, so the two round-trip.
 
 **Features**:
 - `Protected`, `Listable`. Threads element-wise over a list of integers in

@@ -4986,6 +4986,8 @@ void info_init(void) {
         "digits to give a string of length len; if len is less than the "
         "number of digits in n, the len least-significant digits are "
         "returned.\n"
+        "IntegerString[n, \"Roman\"] gives |n| as a Roman numeral (\"N\" for 0); "
+        "|n| must be below 5000.\n"
         "The maximum allowed base is 36; the sign of n is discarded.");
 
     symtab_set_docstring("RealDigits",

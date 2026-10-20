@@ -41,6 +41,18 @@
 Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions);
 
+/*
+ * Indefinite-integration stage for an integrand g(x) J with one jump factor J
+ * whose argument u is linear in x (real-literal nonzero slope c; the point x0
+ * may be symbolic, UnitStep[x - a]):
+ *   J = UnitStep[u] / HeavisideTheta[u]: the CONTINUOUS antiderivative
+ *       (G(x) - G(x0)) J, where G = Integrate[g, x] must close and be finite
+ *       at x0;
+ *   J = DiracDelta[u]: the sifted g(x0)/|c| HeavisideTheta[x - x0].
+ * NULL otherwise.  f and x are borrowed.
+ */
+Expr* integrate_step_indefinite_try(Expr* f, Expr* x);
+
 /* `Integrate`Piecewise[f, {x, a, b}]` builtin.  Strict: NULL on any
  * non-applicable input. */
 Expr* builtin_integrate_piecewise(Expr* res);

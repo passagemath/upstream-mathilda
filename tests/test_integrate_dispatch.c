@@ -424,6 +424,36 @@ static void test_linearity_distributes_product(void) {
         "- E^(-5 x) (a E^(x) + b E^(3 x) - E^(4 x))]", "0", 0);
 }
 
+/* A step factor with a linear argument integrates to the CONTINUOUS
+ * antiderivative (G(x) - G(x0)) UnitStep[...] -- also for a symbolic breakpoint,
+ * which no other stage handles -- and an impulse sifts to g(x0)/|c|
+ * HeavisideTheta[x - x0].  Forms match the reference system's. */
+static void test_step_and_impulse_indefinite(void) {
+    assert_eval_eq("Integrate[UnitStep[x], x]", "x UnitStep[x]", 0);
+    assert_eval_eq("Integrate[E^s UnitStep[s - a], s]", "(-E^a + E^s) UnitStep[-a + s]", 0);
+    assert_eval_eq("Integrate[E^x UnitStep[x - 2], x]", "(-E^2 + E^x) UnitStep[-2 + x]", 0);
+    assert_eval_eq("Integrate[HeavisideTheta[x - a] Sin[x], x]",
+                   "(Cos[a] - Cos[x]) HeavisideTheta[-a + x]", 0);
+    /* decreasing step (negative slope): still continuous across x0 */
+    assert_eval_eq("Integrate[x UnitStep[a - x], x]", "(-1/2 a^2 + 1/2 x^2) UnitStep[a - x]", 0);
+    assert_eval_eq("Integrate[x UnitStep[2 x - a], x]", "(-1/8 a^2 + 1/2 x^2) UnitStep[-a + 2 x]", 0);
+    /* nested steps recurse */
+    assert_eval_eq("Integrate[UnitStep[x - a] UnitStep[x - b], x]",
+                   "UnitStep[-a + x] (-(a - b) UnitStep[a - b] + (-b + x) UnitStep[-b + x])", 0);
+    /* impulses */
+    assert_eval_eq("Integrate[E^s DiracDelta[s - a], s]", "E^a HeavisideTheta[-a + s]", 0);
+    assert_eval_eq("Integrate[x DiracDelta[3 - x], x]", "3 HeavisideTheta[-3 + x]", 0);
+    assert_eval_eq("Integrate[Cos[x] DiracDelta[2 x - a], x]",
+                   "1/2 Cos[1/2 a] HeavisideTheta[-1/2 a + x]", 0);
+    /* a pulse (sum of steps) factor expands and closes term by term */
+    assert_eval_eq("Integrate[x (UnitStep[x - 1] - UnitStep[x - 2]), x]",
+                   "(-1/2 + 1/2 x^2) UnitStep[-1 + x] + (2 - 1/2 x^2) UnitStep[-2 + x]", 0);
+    /* declines: symbolic slope, product of impulses, singular at the breakpoint */
+    assert_eval_eq("Head[Integrate[x UnitStep[b x - a], x]]", "Integrate", 0);
+    assert_eval_eq("Head[Integrate[DiracDelta[x - a] DiracDelta[x - b], x]]", "Integrate", 0);
+    assert_eval_eq("Head[Integrate[UnitStep[x]/x, x]]", "Integrate", 0);
+}
+
 void test_integrate_dispatch(void) {
     symtab_init();
     core_init();
@@ -445,6 +475,7 @@ void test_integrate_dispatch(void) {
     TEST(test_arctanh_real_branch);
     TEST(test_root_kernel_keeps_radicals);
     TEST(test_linearity_distributes_product);
+    TEST(test_step_and_impulse_indefinite);
 
     printf("All Integrate dispatch tests passed!\n");
 }

@@ -1978,7 +1978,7 @@ MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
  * family of knob as MATHILDA_PACK_DIAG / MATHILDA_NO_PACK.
  * ---------------------------------------------------------------------- */
 typedef enum {
-    IP_UNDEFINED = 0, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
+    IP_UNDEFINED = 0, IP_STEP, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
@@ -1986,7 +1986,7 @@ typedef enum {
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
-    "01 Undefined", "02 BronsteinRational", "03 LinearRadicals",
+    "01 Undefined", "01b UnitStep", "02 BronsteinRational", "03 LinearRadicals",
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
@@ -2473,6 +2473,11 @@ Expr* builtin_integrate(Expr* res) {
                 ip_flush_inflight(); g_ip_entries++;
             }
             IP_STAGE(IP_UNDEFINED, try_undefined(effective_f, x));
+            /* A step factor with a linear argument, g(x) UnitStep[x - a]: the
+             * continuous antiderivative (G(x) - G(a)) UnitStep[x - a].  Cheap
+             * structural gate (a top-level step factor), and first because no
+             * later stage integrates a step at all -- they would only grind. */
+            IP_STAGE(IP_STEP,         integrate_step_indefinite_try(effective_f, x));
             IP_STAGE(IP_RATIONAL,     try_rational(effective_f, x));
             IP_STAGE(IP_LINRAD,       try_linrad(effective_f, x));
             IP_STAGE(IP_QUADRAD,      try_quadrad(effective_f, x));

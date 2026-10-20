@@ -1030,6 +1030,19 @@ endpoint) for numeric limits.  A sum integrand (`1 + δ`, `t + δ`, `δ + cos`) 
 split by linearity, sifting each impulse and re-integrating the remainder.  An
 empty interval integrates to `0`.  `DiracDelta` is otherwise inert, so these
 never change an existing result — they are the sole source of a value for such
+An **indefinite integral with one step or impulse factor of a linear argument**
+(real-literal slope `c ≠ 0`; the point `x0` may be symbolic) is closed ahead of the
+rest of the cascade (`Integrate` stage `01b UnitStep`):
+`Integrate[g(x) UnitStep[c x + d], x] = (G(x) − G(x0)) UnitStep[c x + d]` with
+`G = ∫g` — the **continuous** antiderivative, valid across `x0`, for either sign of
+`c` (also for `HeavisideTheta`); `Integrate[g(x) DiracDelta[c x + d], x] =
+g(x0)/|c| HeavisideTheta[x − x0]`. E.g. `Integrate[E^s UnitStep[s − a], s] =
+(E^s − E^a) UnitStep[s − a]`, `Integrate[UnitStep[x − a] UnitStep[x − b], x]`
+recurses. It declines when `G` does not close or is singular at `x0`
+(`UnitStep[x]/x`), for a symbolic slope, and for a product of impulses. A product
+with a *sum* factor carrying jumps (`g(x)(UnitStep[x−a] − UnitStep[x−b])`, a
+step-pulse variation-of-parameters integrand) is expanded and closed term by term.
+
 inputs (used by `DSolve`'s Green's-function solutions of impulse-forced ODEs).
 
 - **Polynomials in `x`** — term-by-term integration via

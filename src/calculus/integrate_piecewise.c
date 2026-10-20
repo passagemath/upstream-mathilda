@@ -63,6 +63,15 @@ static bool contains_symbol(const Expr* e, const Expr* x) {
         if (contains_symbol(e->data.function.args[i], x)) return true;
     return false;
 }
+static bool contains_symbol_name(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (contains_symbol_name(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_symbol_name(e->data.function.args[i], name)) return true;
+    return false;
+}
 static bool contains_head(const Expr* e, const char* name) {
     if (!e) return false;
     if (head_name_is(e, name)) return true;
@@ -642,6 +651,183 @@ Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
     else
         simp = eval_take(mk_fn1("Quiet", mk_fn1("Simplify", sum)));
     return simp;
+}
+
+/* ---- indefinite: one step factor with a linear argument ----------------- */
+
+/* Is `e` an explicit real number (Integer / Rational / Real)? */
+static bool is_real_literal(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+                 e->type == EXPR_REAL || head_name_is(e, "Rational"));
+}
+
+/* Does `e` mention a divergent / undefined value (the antiderivative is
+ * singular at the breakpoint, so no continuous antiderivative exists)? */
+static bool has_singular_value(const Expr* e) {
+    return contains_head(e, "DirectedInfinity") ||
+           contains_symbol_name(e, "Infinity") ||
+           contains_symbol_name(e, "ComplexInfinity") ||
+           contains_symbol_name(e, "Indeterminate");
+}
+
+/* Is `e` a one-argument jump/impulse head of `x`: UnitStep / HeavisideTheta
+ * (want_delta false) or DiracDelta (want_delta true)? */
+static bool is_x_jump(const Expr* e, const Expr* x, bool want_delta) {
+    bool head_ok = want_delta
+        ? head_name_is(e, "DiracDelta")
+        : (head_name_is(e, "UnitStep") || head_name_is(e, "HeavisideTheta"));
+    return head_ok && e->data.function.arg_count == 1 && contains_symbol(e, x);
+}
+
+/* The x-free coefficient f / f[[idx]] (or 1 when f is the factor itself),
+ * evaluated.  f borrowed. */
+static Expr* cofactor_without(const Expr* f, bool is_times, size_t idx) {
+    if (!is_times) return expr_new_integer(1);
+    size_t n = f->data.function.arg_count;
+    Expr** rest = (Expr**)malloc((n > 1 ? n - 1 : 1) * sizeof(Expr*));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++)
+        if (i != idx) rest[k++] = cp(f->data.function.args[i]);
+    Expr* g = eval_take(mk_fn("Times", rest, k));
+    free(rest);
+    return g;
+}
+
+/* Does `e` carry a jump / impulse head whose argument mentions x? */
+static bool has_x_jump(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if ((head_name_is(e, "UnitStep") || head_name_is(e, "HeavisideTheta") ||
+         head_name_is(e, "DiracDelta")) && contains_symbol(e, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_x_jump(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* A product with a SUM factor carrying jumps -- g(x) (UnitStep[x - a] -
+ * UnitStep[x - b]), the variation-of-parameters integrand of a step-pulse
+ * forcing -- has no top-level jump factor.  Expand it and integrate term by
+ * term: each term then carries its jump as a factor and closes through the
+ * rule below.  (The general Linearity stage does not get there for a trig
+ * cofactor: it TrigReduces first and declines when that is not a sum.)  NULL
+ * unless every term closes. */
+static Expr* integrate_jump_sum_try(Expr* f, Expr* x, bool is_times) {
+    if (!is_times) return NULL;
+    bool sum_factor = false;
+    for (size_t i = 0; i < f->data.function.arg_count && !sum_factor; i++) {
+        const Expr* fi = f->data.function.args[i];
+        if (head_name_is(fi, "Plus") && has_x_jump(fi, x)) sum_factor = true;
+    }
+    if (!sum_factor) return NULL;
+    Expr* ex = eval_take(mk_fn1("Expand", cp(f)));
+    if (!head_name_is(ex, "Plus") || expr_eq(ex, f)) { expr_free(ex); return NULL; }
+    size_t n = ex->data.function.arg_count;
+    Expr** parts = (Expr**)malloc(n * sizeof(Expr*));
+    size_t got = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* gi = eval_take(mk_fn2("Integrate", cp(ex->data.function.args[i]), cp(x)));
+        if (!gi || contains_head(gi, "Integrate")) {
+            if (gi) expr_free(gi);
+            for (size_t j = 0; j < got; j++) expr_free(parts[j]);
+            free(parts); expr_free(ex);
+            return NULL;
+        }
+        parts[got++] = gi;
+    }
+    expr_free(ex);
+    Expr* sum = eval_take(mk_fn("Plus", parts, got));
+    free(parts);
+    return sum;
+}
+
+Expr* integrate_step_indefinite_try(Expr* f, Expr* x) {
+    if (!f || !x || x->type != EXPR_SYMBOL || f->type != EXPR_FUNCTION) return NULL;
+
+    /* Locate the jump factor J: f itself, or one factor of a Times.  An impulse
+     * DiracDelta[u] takes precedence (a step cofactor is then just part of the
+     * sifted value); otherwise a step UnitStep[u] / HeavisideTheta[u]. */
+    bool is_times = head_name_is(f, "Times");
+    const Expr* jump = NULL;
+    size_t jump_idx = 0;
+    bool delta = false;
+    for (int pass = 0; pass < 2 && !jump; pass++) {
+        bool want_delta = (pass == 0);
+        if (is_times) {
+            for (size_t i = 0; i < f->data.function.arg_count; i++)
+                if (is_x_jump(f->data.function.args[i], x, want_delta)) {
+                    jump = f->data.function.args[i]; jump_idx = i; break;
+                }
+        } else if (is_x_jump(f, x, want_delta)) {
+            jump = f;
+        }
+        if (jump) delta = want_delta;
+    }
+    if (!jump) return integrate_jump_sum_try(f, x, is_times);
+
+    /* u must be linear in x with a nonzero real-literal slope c: then the jump
+     * sits at exactly one point, x0 = -(u - c x)/c. */
+    const Expr* u = jump->data.function.args[0];
+    Expr* c = eval_take(mk_fn2("D", cp(u), cp(x)));
+    if (!is_real_literal(c) || contains_symbol(c, x)) { expr_free(c); return NULL; }
+    Expr* czero = eval_take(mk_fn2("Equal", cp(c), expr_new_integer(0)));
+    bool c_is_zero = sym_is(czero, "True");
+    expr_free(czero);
+    if (c_is_zero) { expr_free(c); return NULL; }
+    Expr* d = eval_take(mk_fn2("Plus", cp(u),
+                  neg_of(mk_fn2("Times", cp(c), cp(x)))));
+    if (contains_symbol(d, x)) { expr_free(c); expr_free(d); return NULL; }
+    Expr* x0 = eval_take(mk_fn2("Times", neg_of(d),
+                   mk_fn2("Power", cp(c), expr_new_integer(-1))));   /* consumes d */
+
+    Expr* g = cofactor_without(f, is_times, jump_idx);
+
+    if (delta) {
+        /* Sifting: g(x) DiracDelta[c (x - x0)] = g(x0)/|c| DiracDelta[x - x0],
+         * whose antiderivative is g(x0)/|c| HeavisideTheta[x - x0].  A second
+         * impulse in g is a product of distributions -- not this rule's. */
+        if (contains_head(g, "DiracDelta")) {
+            expr_free(g); expr_free(c); expr_free(x0); return NULL;
+        }
+        Expr* gx0 = subst(g, x, x0);
+        expr_free(g);
+        if (!gx0 || contains_symbol(gx0, x) || has_singular_value(gx0)) {
+            if (gx0) expr_free(gx0);
+            expr_free(c); expr_free(x0);
+            return NULL;
+        }
+        Expr* xm = mk_fn2("Plus", cp(x), neg_of(x0));          /* consumes x0 */
+        Expr* theta = mk_fn1("HeavisideTheta", xm);
+        Expr* scale = mk_fn2("Power", mk_fn1("Abs", c), expr_new_integer(-1));
+        Expr* args[3] = { gx0, scale, theta };
+        return eval_take(mk_fn("Times", args, 3));
+    }
+    expr_free(c);
+
+    /* Step.  The derivative of a step is an impulse; a DiracDelta cofactor was
+     * claimed by the sifting arm above, so none is left here. */
+    Expr* G = eval_take(mk_fn2("Integrate", g, cp(x)));      /* consumes g */
+    if (!G || contains_head(G, "Integrate") || has_singular_value(G)) {
+        if (G) expr_free(G);
+        expr_free(x0);
+        return NULL;
+    }
+    /* G(x0): must be finite, else G has a singularity at the breakpoint and the
+     * glued antiderivative below would not be continuous. */
+    Expr* Gx0 = subst(G, x, x0);
+    expr_free(x0);
+    if (!Gx0 || contains_symbol(Gx0, x) || has_singular_value(Gx0)) {
+        if (Gx0) expr_free(Gx0);
+        expr_free(G);
+        return NULL;
+    }
+
+    /* The CONTINUOUS antiderivative (G - G(x0)) S.  For an increasing step
+     * (c > 0) it is 0 left of x0 and G - G(x0) right of it; for a decreasing
+     * one (c < 0) it is G - G(x0) left of x0 and 0 right of it, which is the
+     * same expression.  Either way it tends to 0 at the breakpoint from both
+     * sides, so it is a valid antiderivative ACROSS x0 -- the property the
+     * definite integral (Newton-Leibniz) and a DSolve IC-fit rely on. */
+    Expr* diff = mk_fn2("Plus", G, neg_of(Gx0));
+    return eval_take(mk_fn2("Times", diff, cp(jump)));
 }
 
 /* ---- builtin ------------------------------------------------------------ */

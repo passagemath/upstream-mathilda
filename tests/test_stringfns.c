@@ -427,6 +427,32 @@ static void test_extract_unevaluated(void) {
 #endif /* USE_REGEX */
 
 #ifdef USE_REGEX
+/* $n in a RegularExpression rule's RHS is expanded in EVERY string of the RHS
+ * -- inside a list, nested calls, and before the RHS is evaluated -- not only
+ * when the whole RHS is one string. Expected values from the reference system. */
+static void test_regex_dollar_in_compound_rhs(void) {
+    assert_eval_eq("StringCases[\"x=1, y=22\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] :> {\"$1\", \"$2\"}]",
+                   "{{\"x\", \"1\"}, {\"y\", \"22\"}}", 0);
+    assert_eval_eq("StringCases[\"x=1, y=22\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] -> {\"$1\", \"$2\"}]",
+                   "{{\"x\", \"1\"}, {\"y\", \"22\"}}", 0);
+    assert_eval_eq("StringCases[\"x=1, y=22\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] :> f[\"$1\", {\"$2\", g[\"$1$2\"]}]]",
+                   "{f[\"x\", {\"1\", g[\"x1\"]}], f[\"y\", {\"22\", g[\"y22\"]}]}", 0);
+    assert_eval_eq("StringCases[\"x=1\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] :> ToUpperCase[\"$1\"]]",
+                   "{\"X\"}", 0);
+    assert_eval_eq("StringCases[\"x=1\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] :> StringLength[\"$1$2\"]]",
+                   "{2}", 0);
+    assert_eval_eq("StringReplace[\"x=1\", "
+                   "RegularExpression[\"([a-z])=(\\\\d+)\"] :> StringJoin[\"$2\", \"-\", \"$1\"]]",
+                   "\"1-x\"", 0);
+    /* No RegularExpression: "$1" is literal text. */
+    assert_eval_eq("StringCases[\"ab\", \"a\" :> {\"$1\"}]", "{{\"$1\"}}", 0);
+}
+
 static void test_issue98_named_captures(void) {
     /* Issue #98 and its family: pattern names bound into a rule RHS
      * (StringCases / StringReplace / StringSplit); a non-string StringReplace
@@ -842,6 +868,7 @@ int main(void) {
     TEST(test_split_unevaluated);
     TEST(test_cases_wl_pattern);
     TEST(test_issue98_named_captures);
+    TEST(test_regex_dollar_in_compound_rhs);
     TEST(test_string_pattern_language);
 
     TEST(test_trim_whitespace_default);

@@ -411,7 +411,9 @@ PCRE2 (the same engine the reference uses).
   alpha, ascii, blank, cntrl, digit, graph, lower, print, punct, space, upper,
   word, xdigit); anchors `^ $ \b \B`; and inline options `(?i)` `(?m)` `(?s)`.
 - In a replacement right-hand side, `$n` stands for the n-th captured group and
-  `$0` for the whole match; `$$` is a literal `$`.
+  `$0` for the whole match; `$$` is a literal `$`. The expansion applies to every
+  string in the right-hand side, before it is evaluated: `:> {"$1", "$2"}`,
+  `:> f["$1", {"$2"}]` and `:> ToUpperCase["$1"]` all see the captures.
 - Requires PCRE2 at build time; without it these builtins warn and stay
   unevaluated.
 - **Attributes**: `Protected`.
@@ -595,9 +597,11 @@ Extracts the substrings of a string that match a pattern.
   `StringCases["abc123", x__ ~~ "123" :> x]` is `{"abc"}`, and `rhs` may be any
   expression (`x:DigitCharacter.. :> ToExpression[x]` gives integers). A name in
   an alternative that did not take part in the match is bound to `""`.
-- For a `RegularExpression` pattern a string `rhs` is a template: `$n` is the
-  n-th capture group, `$0` the whole match, `$$` a literal `$`. With any other
-  pattern `"$1"` is literal text, as in the reference.
+- For a `RegularExpression` pattern every string in `rhs` is a template: `$n` is
+  the n-th capture group, `$0` the whole match, `$$` a literal `$` --
+  `RegularExpression["([a-z])=(\\d+)"] :> {"$1", "$2"}` gives
+  `{{"x", "1"}, {"y", "22"}}` on `"x=1, y=22"`. With any other pattern `"$1"` is
+  literal text, as in the reference.
 - `StringCases[{s1, s2, ...}, patt]`: gives the list of results for each `si`;
   non-string elements pass through unchanged.
 - `patt` may be `RegularExpression["re"]`, a literal string, or a list of
@@ -1196,6 +1200,13 @@ Out[4]= False
   `FromCharacterCode[{{...}, ...}]`: the inverse. It reads a packed or `NDArray`
   integer buffer directly. A code outside `0`..`1114111` emits
   `FromCharacterCode::notunicode` (`::intnm` for a negative or non-integer).
+- `ToCharacterCode[s, "enc"]` / `FromCharacterCode[codes, "enc"]`: the same in
+  an encoding. `"UTF8"` (or `"UTF-8"`) is the byte sequence of the UTF-8 form
+  (a packed integer array); decoding reports a byte that starts no valid
+  sequence as `$CharacterEncoding::utf8` and keeps it as the code point of the
+  same value. `"ISOLatin1"` and `"ASCII"` are single-byte: `ToCharacterCode`
+  gives `None` for a character the encoding cannot represent. `"Unicode"` is the
+  default. Any other encoding name leaves the call unevaluated.
 - No `Compile[]` lowering: one side of each is a `String`.
 - **Attributes**: `Protected`.
 
@@ -1208,6 +1219,12 @@ Out[2]= "Hi"
 
 In[3]:= FromCharacterCode[{{72, 105}, {955, 8364}}]
 Out[3]= {"Hi", "λ€"}
+
+In[4]:= ToCharacterCode["a\[Alpha]", "UTF8"]
+Out[4]= {97, 206, 177}
+
+In[5]:= ToCharacterCode["a\[Alpha]", "ASCII"]
+Out[5]= {97, None}
 ```
 
 ## CharacterRange / Alphabet

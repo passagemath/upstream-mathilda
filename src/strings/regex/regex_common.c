@@ -702,6 +702,45 @@ oom:
     return NULL;
 }
 
+/* Expand $n in every string of an RHS tree, before it is evaluated.
+ *
+ * A RegularExpression rule's "$n" references are a property of the strings in
+ * its RHS wherever they sit: {"$1", "$2"}, f["$1", {"$2"}] and
+ * ToUpperCase["$1"] all see the capture -- the last because expansion precedes
+ * evaluation. Copy-on-write: expr_copy is a refcount bump, so a subtree with no
+ * '$' string is shared rather than rebuilt and the rule's RHS is never written
+ * through. Returns an owned reference. */
+static Expr* expand_rhs_tree(Expr* e, const char* subj,
+                             const size_t* ov, size_t npairs) {
+    if (e->type == EXPR_STRING) {
+        if (!strchr(e->data.string, '$')) return expr_copy(e);
+        char* t = regex_expand_template(e->data.string, subj, ov, npairs);
+        if (!t) return expr_copy(e);
+        Expr* s = expr_new_string(t);
+        free(t);
+        return s;
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    if (!args) return expr_copy(e);
+    Expr* head = expand_rhs_tree(e->data.function.head, subj, ov, npairs);
+    int changed = (head != e->data.function.head);
+    for (size_t i = 0; i < n; i++) {
+        args[i] = expand_rhs_tree(e->data.function.args[i], subj, ov, npairs);
+        if (args[i] != e->data.function.args[i]) changed = 1;
+    }
+    if (!changed) {
+        for (size_t i = 0; i < n; i++) expr_free(args[i]);
+        free(args);
+        expr_free(head);
+        return expr_copy(e);
+    }
+    Expr* out = expr_new_function(head, args, n);
+    free(args);
+    return out;
+}
+
 Expr* regex_rule_eval_rhs(const RegexRule* r, const char* subj,
                           const size_t* ov, size_t npairs) {
     if (!r->rhs) return NULL;
@@ -715,11 +754,16 @@ Expr* regex_rule_eval_rhs(const RegexRule* r, const char* subj,
         return e;
     }
 
-    /* No named captures: the RHS is constant per match; just evaluate it. */
-    if (r->info.nnamed == 0) return evaluate(r->rhs);
+    /* A regex rule's compound RHS: expand $n in each of its strings first. */
+    Expr* rhs = r->info.has_regex ? expand_rhs_tree(r->rhs, subj, ov, npairs)
+                                  : expr_copy(r->rhs);
+
+    /* No named captures: nothing left to bind; just evaluate it. */
+    if (r->info.nnamed == 0) return eval_and_free(rhs);
 
     MatchEnv* env = rule_bind_env(r, subj, ov, npairs, /*unset_empty=*/1);
-    Expr* inst = replace_bindings(r->rhs, env);
+    Expr* inst = replace_bindings(rhs, env);
     env_free(env);
+    expr_free(rhs);
     return eval_and_free(inst);
 }

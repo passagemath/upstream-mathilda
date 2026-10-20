@@ -6,6 +6,9 @@
  *   FromCharacterCode[n]         the one-character string for code point n
  *   FromCharacterCode[{n1, ...}] the string of those code points
  *   FromCharacterCode[{{..}, ..}] one string per sublist
+ *   ToCharacterCode[s, enc] / FromCharacterCode[codes, enc]
+ *                                the same in encoding enc: "UTF8" (bytes),
+ *                                "ASCII", "ISOLatin1", "Unicode"
  *   CharacterRange["a", "e"]     {"a", "b", "c", "d", "e"}
  *   CharacterRange[n1, n2]       the characters with codes n1 .. n2
  *   Alphabet[]                   the 26 lowercase English letters
@@ -33,8 +36,63 @@
 #include <stdint.h>
 
 /* ------------------------------------------------------------------ */
+/* Character encodings                                                */
+/* ------------------------------------------------------------------ */
+
+/* The encodings the two-argument forms accept. ENC_UNICODE is the default
+ * (code points); ENC_UTF8 is the byte sequence of the UTF-8 form, which is
+ * also Mathilda's internal string representation; ASCII and ISOLatin1 are the
+ * single-byte encodings, where a character outside the encoding's range has
+ * no code (None from ToCharacterCode). */
+typedef enum { ENC_UNICODE, ENC_UTF8, ENC_ASCII, ENC_LATIN1, ENC_UNKNOWN } CharEnc;
+
+static CharEnc enc_of(const Expr* e) {
+    if (e->type != EXPR_STRING) return ENC_UNKNOWN;
+    const char* s = e->data.string;
+    if (!strcmp(s, "UTF8") || !strcmp(s, "UTF-8")) return ENC_UTF8;
+    if (!strcmp(s, "Unicode")) return ENC_UNICODE;
+    if (!strcmp(s, "ASCII") || !strcmp(s, "PrintableASCII")) return ENC_ASCII;
+    if (!strcmp(s, "ISOLatin1") || !strcmp(s, "ISO8859-1")) return ENC_LATIN1;
+    return ENC_UNKNOWN;
+}
+
+/* The largest code point a single-byte encoding represents. */
+static uint32_t enc_max(CharEnc enc) {
+    return enc == ENC_ASCII ? 0x7F : 0xFF;
+}
+
+/* ------------------------------------------------------------------ */
 /* ToCharacterCode                                                    */
 /* ------------------------------------------------------------------ */
+
+/* Codes of one string in a non-default encoding. UTF8 is the string's own
+ * bytes (a packed int64 vector when packing applies); ASCII / ISOLatin1 give
+ * a List with None for each character the encoding cannot represent. */
+static Expr* codes_of_enc(const char* s, CharEnc enc) {
+    size_t len = strlen(s);
+    if (enc == ENC_UTF8) {
+        int64_t* buf = NULL;
+        Expr* packed = ndbuild_open_i64((int64_t)len, &buf);
+        if (packed) {
+            for (size_t i = 0; i < len; i++) buf[i] = (int64_t)(unsigned char)s[i];
+            return packed;
+        }
+        Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, len);
+        for (size_t i = 0; out && i < len; i++)
+            out->data.function.args[i] = expr_new_integer((int64_t)(unsigned char)s[i]);
+        return out;
+    }
+    size_t n = u8_length(s, len), k = 0;
+    uint32_t hi = enc_max(enc);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, n);
+    if (!out) return NULL;
+    for (size_t i = 0; i < len; ) {
+        uint32_t cp = u8_decode(s, len, &i);
+        out->data.function.args[k++] = cp <= hi ? expr_new_integer((int64_t)cp)
+                                                : expr_new_symbol(SYM_None);
+    }
+    return out;
+}
 
 /* Codes of one string: a packed int64 vector when packing applies, else a
  * List of Integers. */
@@ -56,10 +114,18 @@ static Expr* codes_of(const char* s) {
     return out;
 }
 
+static Expr* codes_of_any(const char* s, CharEnc enc) {
+    return enc == ENC_UNICODE ? codes_of(s) : codes_of_enc(s, enc);
+}
+
 Expr* builtin_tocharactercode(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    CharEnc enc = argc == 2 ? enc_of(res->data.function.args[1]) : ENC_UNICODE;
+    if (enc == ENC_UNKNOWN) return NULL;            /* unsupported encoding */
     Expr* a = res->data.function.args[0];
-    if (a->type == EXPR_STRING) return codes_of(a->data.string);
+    if (a->type == EXPR_STRING) return codes_of_any(a->data.string, enc);
 
     int ok = a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
              a->data.function.head->data.symbol.name == SYM_List;
@@ -72,7 +138,7 @@ Expr* builtin_tocharactercode(Expr* res) {
     size_t m = a->data.function.arg_count;
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
     for (size_t i = 0; out && i < m; i++) {
-        out->data.function.args[i] = codes_of(a->data.function.args[i]->data.string);
+        out->data.function.args[i] = codes_of_any(a->data.function.args[i]->data.string, enc);
         if (!out->data.function.args[i]) { expr_free(out); out = NULL; }
     }
     return out;
@@ -103,6 +169,93 @@ static Expr* fcc_bad(Expr* res, const Expr* code, size_t pos, const Expr* list) 
                                "Non-negative machine-sized integer", pos, res);
 }
 
+/* Length of the UTF-8 sequence led by byte b (0 for a byte that cannot lead),
+ * and the minimum code point that length may encode (overlong rejection). */
+static int u8_lead_len(int64_t b, uint32_t* min_cp) {
+    if (b < 0x80) { *min_cp = 0;       return 1; }
+    if (b < 0xC0) return 0;                          /* continuation byte */
+    if (b < 0xE0) { *min_cp = 0x80;    return 2; }
+    if (b < 0xF0) { *min_cp = 0x800;   return 3; }
+    if (b < 0xF8) { *min_cp = 0x10000; return 4; }
+    return 0;
+}
+
+/* Decode n UTF-8 bytes into code points (cps has room for n). A byte that does
+ * not start a well-formed sequence is reported ($CharacterEncoding::utf8, as a
+ * sequence of one byte) and kept as the code point of the same value, so the
+ * decode always completes. Returns the code-point count, or (size_t)-1 when a
+ * value is not a byte at all (*bad is its index). */
+static size_t utf8_decode_codes(const int64_t* b, size_t n, int64_t* cps, size_t* bad) {
+    size_t m = 0;
+    for (size_t i = 0; i < n; ) {
+        if (b[i] < 0 || b[i] > 0xFF) { *bad = i; return (size_t)-1; }
+        uint32_t min_cp = 0;
+        int len = u8_lead_len(b[i], &min_cp);
+        int ok = len > 0 && i + (size_t)len <= n;
+        uint32_t cp = 0;
+        if (ok) {
+            cp = len == 1 ? (uint32_t)b[i]
+                          : (uint32_t)b[i] & (0x7Fu >> (unsigned)len);
+            for (int j = 1; ok && j < len; j++) {
+                int64_t c = b[i + (size_t)j];
+                if (c < 0x80 || c > 0xBF) ok = 0;
+                else cp = (cp << 6) | ((uint32_t)c & 0x3F);
+            }
+            if (ok && (cp < min_cp || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)))
+                ok = 0;
+        }
+        if (!ok) {
+            mth_message("$CharacterEncoding", "utf8",
+                        "The byte sequence {%lld} could not be interpreted as a "
+                        "character in the UTF-8 character encoding.",
+                        (long long)b[i]);
+            cps[m++] = b[i];
+            i++;
+            continue;
+        }
+        cps[m++] = (int64_t)cp;
+        i += (size_t)len;
+    }
+    return m;
+}
+
+static Expr* string_of_codes(const int64_t* codes, size_t n, Expr* res, const Expr* list);
+
+/* The string of n codes in encoding `enc`: UTF8 bytes are decoded to code
+ * points first; ISOLatin1 / ASCII codes are code points already, restricted to
+ * the encoding's range. NULL when a code is invalid (message emitted) or, for
+ * ASCII, outside 0 .. 127 (left unevaluated: no character to name). */
+static Expr* string_of_codes_enc(const int64_t* codes, size_t n, CharEnc enc,
+                                 Expr* res, const Expr* list) {
+    if (enc == ENC_UNICODE) return string_of_codes(codes, n, res, list);
+    if (enc == ENC_UTF8) {
+        int64_t* cps = malloc((n ? n : 1) * sizeof(int64_t));
+        if (!cps) return NULL;
+        size_t bad = 0;
+        size_t m = utf8_decode_codes(codes, n, cps, &bad);
+        Expr* s = NULL;
+        if (m == (size_t)-1) {
+            Expr* c = expr_new_integer(codes[bad]);
+            fcc_bad(res, c, bad + 1, list);
+            expr_free(c);
+        } else {
+            s = string_of_codes(cps, m, res, list);
+        }
+        free(cps);
+        return s;
+    }
+    for (size_t k = 0; k < n; k++) {
+        if (codes[k] < 0) {
+            Expr* c = expr_new_integer(codes[k]);
+            fcc_bad(res, c, k + 1, list);
+            expr_free(c);
+            return NULL;
+        }
+        if (codes[k] > (int64_t)enc_max(enc)) return NULL;
+    }
+    return string_of_codes(codes, n, res, list);
+}
+
 /* The string of the n codes read by get(k); NULL (message emitted) if one is
  * invalid. `res`/`list` are only used for diagnostics. */
 static Expr* string_of_codes(const int64_t* codes, size_t n, Expr* res, const Expr* list) {
@@ -124,7 +277,7 @@ static Expr* string_of_codes(const int64_t* codes, size_t n, Expr* res, const Ex
 }
 
 /* A List of Integer codes -> String; NULL if not all are valid codes. */
-static Expr* string_of_list(const Expr* lst, Expr* res) {
+static Expr* string_of_list(const Expr* lst, CharEnc enc, Expr* res) {
     size_t n = lst->data.function.arg_count;
     int64_t* codes = malloc((n ? n : 1) * sizeof(int64_t));
     if (!codes) return NULL;
@@ -136,7 +289,7 @@ static Expr* string_of_list(const Expr* lst, Expr* res) {
         }
         codes[k] = c->data.integer;
     }
-    Expr* s = string_of_codes(codes, n, res, lst);
+    Expr* s = string_of_codes_enc(codes, n, enc, res, lst);
     free(codes);
     return s;
 }
@@ -147,7 +300,12 @@ static int is_list(const Expr* e) {
 }
 
 /* FromCharacterCode of the value `a`; `res` is the call, for diagnostics. */
-static Expr* fcc_value(Expr* a, Expr* res) {
+static Expr* fcc_value(Expr* a, CharEnc enc, Expr* res) {
+    if (a->type == EXPR_INTEGER && enc != ENC_UNICODE) {   /* one encoded code */
+        if (!code_ok(a->data.integer)) return fcc_bad(res, a, 1, NULL);
+        int64_t c = a->data.integer;
+        return string_of_codes_enc(&c, 1, enc, res, NULL);
+    }
     if (a->type == EXPR_INTEGER) {
         if (!code_ok(a->data.integer)) return fcc_bad(res, a, 1, NULL);
         char buf[5];
@@ -161,11 +319,11 @@ static Expr* fcc_value(Expr* a, Expr* res) {
         const NDArrayData* nd = &a->data.ndarray;
         const int64_t* codes = (const int64_t*)nd->data;
         if (nd->rank == 1)
-            return string_of_codes(codes, (size_t)nd->dims[0], res, a);
+            return string_of_codes_enc(codes, (size_t)nd->dims[0], enc, res, a);
         size_t rows = (size_t)nd->dims[0], cols = (size_t)nd->dims[1];
         Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, rows);
         for (size_t r = 0; out && r < rows; r++) {
-            out->data.function.args[r] = string_of_codes(codes + r * cols, cols, res, a);
+            out->data.function.args[r] = string_of_codes_enc(codes + r * cols, cols, enc, res, a);
             if (!out->data.function.args[r]) { expr_free(out); out = NULL; }
         }
         return out;
@@ -173,7 +331,7 @@ static Expr* fcc_value(Expr* a, Expr* res) {
     if (a->type == EXPR_NDARRAY) {                /* other dtypes: as a List */
         Expr* plain = pack_unpack(a);
         if (!plain) return NULL;
-        Expr* r = fcc_value(plain, res);
+        Expr* r = fcc_value(plain, enc, res);
         expr_free(plain);
         return r;
     }
@@ -186,18 +344,22 @@ static Expr* fcc_value(Expr* a, Expr* res) {
         Expr* out = expr_new_function(expr_new_symbol(SYM_List), NULL, m);
         for (size_t i = 0; out && i < m; i++) {
             const Expr* sub = a->data.function.args[i];
-            out->data.function.args[i] = is_list(sub) ? string_of_list(sub, res)
+            out->data.function.args[i] = is_list(sub) ? string_of_list(sub, enc, res)
                                                       : fcc_bad(res, sub, i + 1, NULL);
             if (!out->data.function.args[i]) { expr_free(out); out = NULL; }
         }
         return out;
     }
-    return string_of_list(a, res);
+    return string_of_list(a, enc, res);
 }
 
 Expr* builtin_fromcharactercode(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    return fcc_value(res->data.function.args[0], res);
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+    CharEnc enc = argc == 2 ? enc_of(res->data.function.args[1]) : ENC_UNICODE;
+    if (enc == ENC_UNKNOWN) return NULL;            /* unsupported encoding */
+    return fcc_value(res->data.function.args[0], enc, res);
 }
 
 /* ------------------------------------------------------------------ */

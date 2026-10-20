@@ -534,11 +534,42 @@ static void test_strings_utf8_and_specs(void) {
                    "StringPartition[\"abcd\", 0]", 0);
 }
 
+/* ToCharacterCode[s, enc] / FromCharacterCode[codes, enc]: UTF8 is the
+ * byte sequence; ASCII / ISOLatin1 give None for an unrepresentable character.
+ * Expected values from the reference system. */
+static void test_character_code_encodings(void) {
+    assert_eval_eq("ToCharacterCode[\"a\\[Alpha]\", \"UTF8\"]", "{97, 206, 177}", 0);
+    assert_eval_eq("ToCharacterCode[{\"a\\[Alpha]\", \"\\[Euro]\"}, \"UTF8\"]",
+                   "{{97, 206, 177}, {226, 130, 172}}", 0);
+    assert_eval_eq("ToCharacterCode[\"a\\|01f600\", \"UTF8\"]",
+                   "{97, 240, 159, 152, 128}", 0);
+    assert_eval_eq("ToCharacterCode[\"a\\[Alpha]\", \"ASCII\"]", "{97, None}", 0);
+    assert_eval_eq("ToCharacterCode[\"a\\[Alpha]\\[EAcute]\", \"ISOLatin1\"]",
+                   "{97, None, 233}", 0);
+    assert_eval_eq("ToCharacterCode[\"ab\", \"Unicode\"]", "{97, 98}", 0);
+    assert_eval_eq("FromCharacterCode[{97, 206, 177}, \"UTF8\"]", "\"aα\"", 0);
+    assert_eval_eq("FromCharacterCode[{{97, 206, 177}, {226, 130, 172}}, \"UTF8\"]",
+                   "{\"aα\", \"€\"}", 0);
+    assert_eval_eq("FromCharacterCode[{97, 233}, \"ISOLatin1\"]", "\"aé\"", 0);
+    /* Round trip, including a 4-byte sequence and a packed byte vector. */
+    assert_eval_eq("FromCharacterCode[ToCharacterCode[\"x\\|01f600y\", \"UTF8\"], \"UTF8\"]",
+                   "\"x😀y\"", 0);
+    assert_eval_eq("ccs1 = StringJoin[Table[\"\\[Alpha]b\", {100}]]; "
+                   "FromCharacterCode[ToCharacterCode[ccs1, \"UTF8\"], \"UTF8\"] === ccs1", "True", 0);
+    /* A byte that starts no valid sequence: reported, kept as that code point. */
+    assert_eval_eq("Quiet[ToCharacterCode[FromCharacterCode[{97, 255, 128}, \"UTF8\"]]]",
+                   "{97, 255, 128}", 0);
+    assert_eval_eq("Check[FromCharacterCode[{97, 255}, \"UTF8\"], \"msg\"]", "\"msg\"", 0);
+    /* An encoding Mathilda does not know stays unevaluated. */
+    assert_eval_eq("ToCharacterCode[\"a\", \"Bogus\"]", "ToCharacterCode[\"a\", \"Bogus\"]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
 #ifdef USE_REGEX
+    TEST(test_character_code_encodings);
     TEST(test_unicode_code_points);
     TEST(test_pad_repeat_join_riffle);
     TEST(test_new_builtins_and_forms);

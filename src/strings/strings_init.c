@@ -189,7 +189,11 @@ void strings_init(void) {
         "\tGives the list of the Unicode code points of the characters of\n"
         "\t\"string\" (a packed integer array).\n"
         "ToCharacterCode[{s1, s2, ...}]\n"
-        "\tGives one list of codes per string.");
+        "\tGives one list of codes per string.\n"
+        "ToCharacterCode[s, \"enc\"]\n"
+        "\tGives the codes in encoding \"enc\": \"UTF8\" (the bytes),\n"
+        "\t\"ASCII\" or \"ISOLatin1\" (None for a character outside the\n"
+        "\tencoding), or \"Unicode\".");
     symtab_add_builtin("FromCharacterCode", builtin_fromcharactercode);
     symtab_get_def("FromCharacterCode")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("FromCharacterCode",
@@ -198,7 +202,10 @@ void strings_init(void) {
         "FromCharacterCode[{n1, n2, ...}]\n"
         "\tGives the string of the characters with those codes.\n"
         "FromCharacterCode[{{n11, ...}, {n21, ...}, ...}]\n"
-        "\tGives one string per sublist.");
+        "\tGives one string per sublist.\n"
+        "FromCharacterCode[codes, \"enc\"]\n"
+        "\tDecodes codes in encoding \"enc\": \"UTF8\" (a byte sequence),\n"
+        "\t\"ISOLatin1\", \"ASCII\" or \"Unicode\".");
     symtab_add_builtin("CharacterRange", builtin_characterrange);
     symtab_get_def("CharacterRange")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("CharacterRange",

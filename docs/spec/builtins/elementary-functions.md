@@ -815,16 +815,21 @@ default.
   arbitrary heads, lists, and held forms are all chopped.
 - Exact numbers (`Integer`, BigInt, `Rational`, symbolic constants) and
   symbolic input pass through untouched.
-- `delta` may be supplied as `Integer`, `Real`, `Rational[n, d]`,
-  BigInt, or (when `USE_MPFR=1`) `MPFR`; its absolute value is the
-  effective tolerance.
+- `delta` may be any real numeric quantity — `Integer`, `Real`,
+  `Rational[n, d]`, BigInt, `MPFR` (when `USE_MPFR=1`), or a symbolic constant
+  such as `Pi/10^6` (numericalized to a machine real); its absolute value is the
+  effective tolerance. A complex or symbolic `delta` leaves the call
+  unevaluated.
 - **Packed/NDArray fast path** (packed-aware): a machine buffer is scanned and
   kept untouched when nothing chops (the common cleanup call); a chopping rank-1
   buffer builds the exact mixed `{…, 0, …}` result in one pass, else it degrades
   to the list path. See [packed arrays](packed-arrays.md).
-- **`Compile[]`/auto-compilation**: `Chop[x]` / `Chop[x, δ]` (literal `δ`) lower to
-  the branchless `x * (Abs[x] >= δ)`, returning a machine `0.` where the
+- **`Compile[]`/auto-compilation**: `Chop[x]` / `Chop[x, δ]` lower to the
+  branchless `x * (Abs[x] >= |δ|)`, returning a machine `0.` where the
   interpreter gives the exact `Integer 0`; a machine integer is the identity.
+  `δ` is any real scalar operand: a machine literal, an exact one (`10^-6`,
+  `1/1000`, `Pi/10^6` — folded to a machine constant), or a runtime argument.
+  A rank-1 array maps the scalar lowering over the buffer.
 
 **Complex handling**.  `Complex[re, im]` whose components are both
 machine reals is the "machine complex" case and gets the reference's

@@ -344,6 +344,40 @@ static void test_cf_chop(void) {
     assert_true("Lookup[CompileDiagnostics[{{z, _Complex}}, Chop[z]], \"Compiled\"] === False");
 }
 
+/* An EXACT tolerance -- `10^-6`, `1/1000`, a symbolic constant -- lowers like a
+ * machine one.  It used to be accepted only as a Real/Integer literal, so
+ * `Chop[x, 10^-6]` took its whole body to the interpreter.  Every answer is
+ * checked against the interpreter's own Chop of the same machine value (the
+ * compiled chopped value is the machine 0., the interpreter's the exact 0, so
+ * the comparison is `==` on the value plus the unchopped values exactly). */
+static void test_cf_chop_exact_tolerance(void) {
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x, 10^-6]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x, 1/1000]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Chop[x, Pi/10^6]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}, {t, _Real}}, Chop[x, t]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Chop[v, 10^-6]]");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 10^-6]][1.*10^-7] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 10^-6]][2.*10^-6] === 2.*10^-6");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 1/1000]][0.0005] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 1/1000]][0.002] === 0.002");
+    /* the boundary: |x| == delta is kept, as in the interpreter */
+    assert_true("Compile[{{x, _Real}}, Chop[x, 10^-6]][1.*10^-6] === Chop[1.*10^-6, 10^-6]");
+    /* a runtime tolerance chops against its magnitude, as the interpreter does */
+    assert_true("Compile[{{x, _Real}, {t, _Real}}, Chop[x, t]][0.005, -0.01] === 0.");
+    assert_true("Compile[{{x, _Real}, {t, _Real}}, Chop[x, t]][0.5, 0.01] === 0.5");
+    /* array form == the interpreter elementwise, packed input */
+    assert_true("With[{v = Table[(-1)^k k 10.^-8, {k, 1, 300}]},"
+                " Normal[Compile[{{u, _Real, 1}}, Chop[u, 10^-6]][v]] == Chop[v, 10^-6]]");
+    /* the interpreter accepts a symbolic-constant tolerance too (it used to stay
+     * unevaluated), so both surfaces agree on Pi/10^6 */
+    assert_eval_eq("Chop[1.*10^-7, Pi/10^6]", "0", 0);
+    assert_true("Compile[{{x, _Real}}, Chop[x, Pi/10^6]][1.*10^-7] === 0.");
+    assert_true("Compile[{{x, _Real}}, Chop[x, Pi/10^6]][4.*10^-6] === 4.*10^-6");
+    /* a complex tolerance is not a tolerance: unevaluated, and no lowering */
+    assert_true("MatchQ[Chop[1.*10^-7, I/10^6], HoldPattern[Chop[_, _]]]");
+    assert_true("Lookup[CompileDiagnostics[{{x, _Real}}, Chop[x, I/10^6]], \"Compiled\"] === False");
+}
+
 /* Boole: a truth value -> the exact Integer 1/0.  The scalar arm is a retyping
  * move (a compiled truth value already lives in the integer slot as 0/1); the
  * rank-1 arm runs that per element into an int64 buffer, the interpreter's
@@ -443,6 +477,7 @@ int main(void) {
     TEST(test_cf_norm_list_literal);
 
     TEST(test_cf_chop);
+    TEST(test_cf_chop_exact_tolerance);
     TEST(test_cf_boole);
     TEST(test_cf_sign_predicates);
     TEST(test_cf_clip_default);

@@ -441,7 +441,14 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (CT_IS_ARRAY(ta))
             return CT_RANK(ta) == 1 ? infer_elem_over_array(c, h, A, na, out) : false;
         if (ta == CT_BOOL || ta == CT_COMPLEX) return false;
-        if (na == 2 && A[1]->type != EXPR_REAL && A[1]->type != EXPR_INTEGER) return false;
+        /* The tolerance is any real-valued scalar operand: a machine literal,
+         * an exact one (`10^-6`, `1/1000`, a bigint -- literal() and the Power
+         * lowering already carry those into a real slot, and the optimiser
+         * folds a constant one), or a runtime argument. */
+        if (na == 2) {
+            IT(1, tb);
+            if (CT_IS_ARRAY(tb) || tb == CT_BOOL || tb == CT_COMPLEX) return false;
+        }
         *out = ta;   /* CT_INT -> identity; CT_REAL -> Real */
         return true;
     }

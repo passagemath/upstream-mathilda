@@ -458,13 +458,17 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
             return emit_map_over_array(c, h, e, A, na, out);
         }
         if (tx == CT_BOOL || tx == CT_COMPLEX) { c->ok = false; return -1; }
-        /* delta must be a compile-time real/integer literal (default 1e-10). */
-        double delta = 1.0e-10;
+        /* The tolerance (default 1e-10) is any real-valued scalar operand.  It
+         * used to be accepted only as a machine Real/Integer literal, so an
+         * exact one -- `Chop[x, 10^-6]`, `Chop[x, 1/1000]` -- sent the whole
+         * body to the interpreter even though the general operand path already
+         * lowers exact numeric constants into a real slot (literal() rounds a
+         * Rational correctly; the Power lowering takes 10^-6) and the
+         * optimiser folds a constant one.  Typed here, emitted below. */
+        CompileType td = CT_REAL;
         if (na == 2) {
-            const Expr* d = A[1];
-            if (d->type == EXPR_REAL)         delta = fabs(d->data.real);
-            else if (d->type == EXPR_INTEGER) delta = fabs((double)d->data.integer);
-            else { c->ok = false; return -1; }
+            if (!infer_type(c, A[1], &td)) { c->ok = false; return -1; }
+            if (CT_IS_ARRAY(td) || td == CT_BOOL || td == CT_COMPLEX) { c->ok = false; return -1; }
         }
         /* A machine integer is exact and never chops -> identity. */
         if (tx == CT_INT) return emit(c, A[0], out) ? (c->ok ? 1 : -1) : -1;
@@ -476,8 +480,17 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
          * to one register for an argument and value-numbers for a computed x. */
         Val xa; if (!emit(c, A[0], &xa)) return -1;
         Val ax = unop(c, OP_ABS_R, xa, CT_REAL);
-        Slot dz; memset(&dz, 0, sizeof dz); dz.r = delta;
-        Val dv = emit_const(c, dz, CT_REAL);
+        Val dv;
+        if (na == 2) {
+            /* |delta|: the interpreter chops against the tolerance's magnitude. */
+            Val d; if (!emit(c, A[1], &d)) return -1;
+            coerce(c, &d, CT_REAL);
+            if (!c->ok) return -1;
+            dv = unop(c, OP_ABS_R, d, CT_REAL);
+        } else {
+            Slot dz; memset(&dz, 0, sizeof dz); dz.r = 1.0e-10;
+            dv = emit_const(c, dz, CT_REAL);
+        }
         Val mask = binop(c, OP_GE_R, ax, dv, CT_INT);
         coerce(c, &mask, CT_REAL);
         Val xb; if (!emit(c, A[0], &xb)) return -1;

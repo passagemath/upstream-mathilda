@@ -3316,6 +3316,7 @@ void info_init(void) {
         "\tby the exact integer 0.\n"
         "Chop[expr, delta]\n"
         "\treplaces numbers smaller in absolute magnitude than delta by 0.\n"
+        "\tdelta is any real number: 10^-6, 1/1000, 1.*^-8, Pi/10^6, ...\n"
         "\n"
         "The default tolerance is 10^-10. Chop walks the entire expression\n"
         "tree, so small real-valued subterms inside arbitrary heads, lists,\n"

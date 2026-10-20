@@ -1664,9 +1664,14 @@ static Expr* chop_recursive(Expr* e, double delta) {
     return expr_copy(e);
 }
 
+static bool clip_to_double_value(Expr* e, double* out);
+
 /* Convert a delta argument to a positive double tolerance. Accepts
- * Integer, BigInt, Real, MPFR (when enabled), and Rational[n, d].
- * Returns -1.0 if the argument cannot be coerced. */
+ * Integer, BigInt, Real, MPFR (when enabled), Rational[n, d], and any other
+ * real numeric quantity (Pi/10^6, Sqrt[2]/10^6, ...) via numericalize -- the
+ * same tolerance Compile[] lowers, so a compiled Chop and the interpreter agree
+ * on every tolerance either accepts.  Returns -1.0 if the argument cannot be
+ * coerced (a symbol, a complex number). */
 static double chop_extract_delta(Expr* d) {
     if (!d) return -1.0;
     if (d->type == EXPR_REAL) return fabs(d->data.real);
@@ -1679,6 +1684,8 @@ static double chop_extract_delta(Expr* d) {
     if (is_rational(d, &n, &den) && den != 0) {
         return fabs((double)n / (double)den);
     }
+    double v;
+    if (clip_to_double_value(d, &v)) return fabs(v);
     return -1.0;
 }
 

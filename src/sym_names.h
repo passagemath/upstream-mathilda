@@ -321,6 +321,8 @@ extern const char* SYM_Integer;
 extern const char* SYM_IntegerDigits;
 extern const char* SYM_IntegerLength;
 extern const char* SYM_BitLength;
+extern const char* SYM_BitXor;
+extern const char* SYM_BitNot;
 extern const char* SYM_IntegerExponent;
 extern const char* SYM_DigitCount;
 extern const char* SYM_DigitSum;

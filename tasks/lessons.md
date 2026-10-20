@@ -4729,3 +4729,25 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   pinned the bugs in place. For pattern semantics, generate expectations from
   the reference kernel (`tools/gen_match_exhaustive_corpus.py`); never type
   them in.
+
+## 2026-10-21 — BitXor (v0.508): three mid-task corrections
+- **"No mentions" includes euphemisms.** A test header and a source comment
+  named the external reference kernel through a stand-in ("the reference
+  system", plus the name of its command-line tool). Both were rejected: the
+  user wants no mention of that product, its language or its tools in any of
+  our edits. Rule: no provenance phrase of any kind in source, tests, docs or
+  changelog. Before declaring done, run the pre-commit name grep kept in
+  harness memory, extended to catch stand-in phrases. Doc code fences in new
+  sections are plain triple backticks.
+- **Integer-only heads emit `::int` for a concrete non-integer.** The reference
+  leaves `BitXor[2.5, 3]` silently unevaluated, but the user wants an error
+  message. Rule: a concrete non-integer number (Real/Rational/Complex) still
+  present after any simplification gets `Head::int: Integer expected at
+  position k in call.` through `mth_message`. Symbolic arguments stay silent.
+- **Bignums are a first-class surface, not a fallback.** Every path must
+  handle them: the combined constant in a symbolic call, BitNot extraction,
+  and a bignum scalar beside a packed array (which falls to the List path).
+  Normalise a result that fits back to int64.
+- **Never hand-compute a bignum expectation.** Two bignum values typed into
+  the BitXor tests were wrong, and the batch check against the reference
+  caught them. Generate every expectation, don't type it in.

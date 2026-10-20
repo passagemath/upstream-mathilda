@@ -1229,7 +1229,14 @@ int main(void) {
         must_bail_raw("array Sum body",     "Sum[v, {i, 1, 3}]", vw, AA, 1);
         must_bail_raw("array comparison",   "v < w",             vw, AA, 2);
         must_bail_raw("array Max",          "Max[v, w]",         vw, AA, 2);
-        must_bail_raw("array Mod",          "Mod[v, w]",         vw, AA, 2);
+        /* Mod is Listable with a binary kernel: two arrays map through
+         * ndarray_map_binary2 in the interpreter and in OP_V_KERN2 alike. */
+        {   /* restore the stream: the randomised trees later in the file stay
+             * exactly the corpus they were before this check was added */
+            uint64_t rng_saved_mod = rng_state;
+            parity_arr("array Mod",      "Mod[v, w]",         vw, AA, 2, 64, 0.3, 4.0, N);
+            rng_state = rng_saved_mod;
+        }
         parity_arr("array With local",      "With[{u = v}, u + 1]", vw, AA, 1, 64, 0.3, 4.0, N);
         parity_arr("array Module local",    "Module[{u = v w}, Total[u]]", vw, AA, 2, 64, 0.3, 4.0, N);
 
@@ -2759,12 +2766,15 @@ int main(void) {
          * Max[v,w] is the largest single element, not an elementwise maximum. */
         must_bail_raw("fuse: Max stays scalar", "Max[v, w]", vw, AA, 2);
         must_bail_raw("fuse: If stays scalar",  "If[v > 0, v, -v]", vw, AA, 1);
-        /* The interpreter leaves ArcTan[NDArray, NDArray] unevaluated because the
-         * ND binary kernels are one-array-plus-scalar only.  Fusion could compute
-         * it, and must not: answering where the interpreter declines is the same
-         * class of bug as answering differently. */
-        must_bail_raw("fuse: ArcTan[v,w] declines", "ArcTan[v, w]", vw, AA, 2);
-        must_bail_raw("fuse: BesselJ[v,w] declines", "BesselJ[v, w]", vw, AA, 2);
+        /* Two arrays through a binary kernel: the interpreter maps them with
+         * ndarray_map_binary2 (eval.c's kernel step), and OP_V_KERN2 calls the
+         * same routine, so the compiled answer is the interpreter's own. */
+        {   /* as for "array Mod": keep the later random corpus unchanged */
+            uint64_t rng_saved_kern2 = rng_state;
+            parity_arr_ex("fuse: ArcTan[v,w]",  "ArcTan[v, w]",  vw, AA, 2, 64, 0.3, 4.0, 20, 0u);
+            parity_arr_ex("fuse: BesselJ[v,w]", "BesselJ[v, w]", vw, AA, 2, 64, 0.3, 4.0, 20, 0u);
+            rng_state = rng_saved_kern2;
+        }
     }
 
     /* ================= STRIP-MINING STRESS =================

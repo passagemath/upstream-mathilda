@@ -1195,6 +1195,8 @@ bool any_array_arg(Ctx* c, Expr** A, size_t na) {
  * ndkernels layer (Gamma, LogGamma, Zeta, PolyGamma, Bessel*, ...) is lowered to
  * a KERNEL op that calls the machine kernel — no Expr, no opcode per function.
  * Returns true if a kernel handled the node; false otherwise (caller bails). */
+static bool kernel2_vals(Ctx* c, const NDBinaryKernel* k, Val a, Val b, Val* out);
+
 bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
     if (na == 1) {
         SymbolDef* d = symtab_lookup(h);
@@ -1228,6 +1230,37 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         else if (k->cplx)                   *out = kern_unop(c, OP_KERN_RC, a, CT_COMPLEX, (const void*)k->cplx);
         else return false;
         return true;
+    }
+    if (na >= 3) {
+        /* A Flat, Listable, Orderless head with a binary kernel and no n-ary
+         * one (GCD, LCM, BitXor) and an array among its operands: fold left,
+         * one kernel pass per operand -- the association the interpreter's own
+         * Flat attribute gives f[a, b, c].  All-scalar calls never get here:
+         * their integer opcodes (emit_int) are tried first.  Anything else
+         * falls through to the n-ary kernel lowering below. */
+        SymbolDef* d = symtab_lookup(h);
+        unsigned at = get_attributes(h);
+        const NDBinaryKernel* k = d ? (const NDBinaryKernel*)d->ndarray_binary_kernel : NULL;
+        if (k && !d->ndarray_nary_kernel && (k->cplx || k->to_int)
+            && (at & ATTR_FLAT) && (at & ATTR_LISTABLE) && (at & ATTR_ORDERLESS)) {
+            /* Start from an ARRAY operand (Orderless makes any order the
+             * interpreter's): a scalar-scalar step would need the kernel's
+             * scalar arm, which the integer-only kernels do not have. */
+            size_t first = na;
+            for (size_t i = 0; i < na && first == na; i++) {
+                CompileType t;
+                if (infer_type(c, A[i], &t) && CT_IS_ARRAY(t)) first = i;
+            }
+            if (first == na) return false;
+            Val acc; if (!emit(c, A[first], &acc)) return false;
+            for (size_t i = 0; i < na; i++) {
+                if (i == first) continue;
+                Val v; if (!emit(c, A[i], &v)) return false;
+                if (!kernel2_vals(c, k, acc, v, &acc)) return false;
+            }
+            *out = acc;
+            return c->ok;
+        }
     }
     if (na >= 3 && na <= 8) {
         /* N-ary machine kernel.  Arguments must land in CONSECUTIVE registers
@@ -1300,34 +1333,50 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
          * that have a complex arm. */
         if (!k->cplx && !k->to_int) return false;
         Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return false;
-        CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return false; }
-        if (CT_IS_ARRAY(t)) {
-            /* one array + one broadcast scalar (BesselJ[n,v], ArcTan[v,y], ...);
-             * the ND layer has no array-array binary-kernel map. */
-            if (CT_IS_ARRAY(a.type) && CT_IS_ARRAY(b.type)) { c->ok = false; return false; }
-            CompileType ea = CT_IS_ARRAY(a.type) ? CT_ELEM(a.type) : CT_ELEM(b.type);
-            CompileType es = CT_IS_ARRAY(a.type) ? b.type : a.type;
-            CompileType er = nd_binary_elem(k, ea, es);
-            if ((int)er < 0) { c->ok = false; return false; }
-            /* Prepare at the COMMON element type, not the result's and not the
-             * array's.  The result's is wrong for a narrowing kernel (CT_INT
-             * out of a Real buffer would round the scalar before the kernel
-             * ran); the array's is wrong for a complex scalar against a real
-             * buffer (`BesselJ[0.5 + I, v]`), where coerce refuses to narrow
-             * and the whole body would bail. */
-            CompileType ep = CT_ELEM(t);
-            arr_prep(c, &a, ep); arr_prep(c, &b, ep);
-            Slot z; z.p = k;
-            *out = arr_op(c, OP_V_KERN2, a, b, CT_ARRAY(er, CT_RANK(t)), z);
-            return c->ok;
-        }
-        if (!k->cplx) return false;   /* scalar body, sentinel kernel -> bail */
-        if (t <= CT_REAL && k->real_closed) { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RR, a, b, CT_REAL, (const void*)k->cplx); }
-        else if (t <= CT_REAL)              { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RC, a, b, CT_COMPLEX, (const void*)k->cplx); }
-        else                                { coerce(c, &a, CT_COMPLEX); coerce(c, &b, CT_COMPLEX); *out = kern_binop(c, OP_KERN2_CC, a, b, CT_COMPLEX, (const void*)k->cplx); }
-        return true;
+        return kernel2_vals(c, k, a, b, out);
     }
     return false;
+}
+
+/* Lower binary kernel `k` over two already-emitted operands: an array op
+ * (OP_V_KERN2) when either is an array, else the scalar KERN2_* call. */
+static bool kernel2_vals(Ctx* c, const NDBinaryKernel* k, Val a, Val b, Val* out) {
+    CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return false; }
+    if (CT_IS_ARRAY(t)) {
+        /* One array + one broadcast scalar (BesselJ[n,v], ArcTan[v,y], ...),
+         * or two arrays of the same rank (ArcTan[v,w], BitXor[v,w], ...):
+         * the interpreter maps the latter through ndarray_map_binary2
+         * (eval.c step 4b), and OP_V_KERN2 dispatches to the same routine,
+         * so the answers are the interpreter's own.  Both operands are
+         * prepared at the common element type below, so with two arrays the
+         * kernel's element arm is chosen at that type.  A rank mismatch has
+         * no element-wise meaning; a length mismatch is caught at run time
+         * (map_binary2 declines and the interpreter reports Thread::tdlen). */
+        bool both = CT_IS_ARRAY(a.type) && CT_IS_ARRAY(b.type);
+        if (both && CT_RANK(a.type) != CT_RANK(b.type)) { c->ok = false; return false; }
+        CompileType ea = both ? CT_ELEM(t)
+                       : CT_IS_ARRAY(a.type) ? CT_ELEM(a.type) : CT_ELEM(b.type);
+        CompileType es = both ? CT_ELEM(t)
+                       : CT_IS_ARRAY(a.type) ? b.type : a.type;
+        CompileType er = nd_binary_elem(k, ea, es);
+        if ((int)er < 0) { c->ok = false; return false; }
+        /* Prepare at the COMMON element type, not the result's and not the
+         * array's.  The result's is wrong for a narrowing kernel (CT_INT
+         * out of a Real buffer would round the scalar before the kernel
+         * ran); the array's is wrong for a complex scalar against a real
+         * buffer (`BesselJ[0.5 + I, v]`), where coerce refuses to narrow
+         * and the whole body would bail. */
+        CompileType ep = CT_ELEM(t);
+        arr_prep(c, &a, ep); arr_prep(c, &b, ep);
+        Slot z; z.p = k;
+        *out = arr_op(c, OP_V_KERN2, a, b, CT_ARRAY(er, CT_RANK(t)), z);
+        return c->ok;
+    }
+    if (!k->cplx) return false;   /* scalar body, sentinel kernel -> bail */
+    if (t <= CT_REAL && k->real_closed) { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RR, a, b, CT_REAL, (const void*)k->cplx); }
+    else if (t <= CT_REAL)              { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RC, a, b, CT_COMPLEX, (const void*)k->cplx); }
+    else                                { coerce(c, &a, CT_COMPLEX); coerce(c, &b, CT_COMPLEX); *out = kern_binop(c, OP_KERN2_CC, a, b, CT_COMPLEX, (const void*)k->cplx); }
+    return true;
 }
 
 /* ------------------------------------------------------------------ *

@@ -55,3 +55,70 @@ In[8]:= BitLength[1, 2]
         BitLength::argx: BitLength called with 2 arguments; 1 argument is expected.
 Out[8]= BitLength[1, 2]
 ```
+
+## BitXor
+
+- `BitXor[n1, n2, ...]`: The bitwise XOR of the integers `ni` -- the integer
+  whose binary representation has ones at the positions where an odd number of
+  the `ni` have ones.
+
+**Features**:
+- `Flat`, `Listable`, `OneIdentity`, `Orderless`, `Protected`. Takes any number
+  of arguments; `BitXor[]` is `0` and `BitXor[n]` is `n`. Threads over lists
+  (`BitXor[Range[120], 5]`, `BitXor[{1, 2}, 3, {4, 5}]`), including nested and
+  empty ones (`BitXor[{}]` is `{}`).
+- Negative integers are taken in two's complement (`BitXor[-2, -3]` is `3`).
+  Integers of any size are exact: bignums go through GMP's `mpz_xor`, and a
+  result that fits in a machine integer is returned as one
+  (`BitXor[2^70, 2^70 + 5]` is `5`).
+- Automatic symbolic simplification, in this order:
+  1. identical arguments cancel in pairs (`BitXor[x, x]` is `0`,
+     `BitXor[x, y, x, y, x]` is `x`, `BitXor[x, 2.5, 2.5]` is `x`);
+  2. an odd number of `-1` arguments is pulled out as `BitNot`
+     (`BitXor[-1, x]` is `BitNot[x]`, `BitXor[1, -1, x]` is
+     `BitNot[BitXor[1, x]]`);
+  3. the remaining integers combine into one constant, dropped when it is `0`,
+     pulled out as `BitNot` when it is `-1` (`BitXor[1, 2, x]` is
+     `BitXor[3, x]`, `BitXor[-2, 1, x]` is `BitNot[x]`); any other negative
+     constant stays inline (`BitXor[-5, x]`).
+
+  `BitNot` appears only as an inert head.
+- **Packed / NDArray**: an exact int64 kernel (`ndk_BitXor_ii`, plus a
+  vectorisable whole-buffer arm against a scalar) in `src/ndinteger.c`, on the
+  `AWARE` and `INT64_OK` lists. It handles array ⊕ scalar and array ⊕ array, and
+  the n-ary form (`BitXor[v, w, 7]`, `BitXor[v, 1, 2]`) stays on the buffer, one
+  pass per operand. A visible `NDArray` gives a visible `NDArray`. Operands that
+  no int64 buffer can hold (a bignum, a symbol) take the exact List path.
+- **Compile[]**: `OP_BXOR_I` (total, never bails), folded left for any arity.
+  It lowers at scalar shape, array ⊕ scalar, array ⊕ array and the n-ary array
+  form, and `CompileDiagnostics` reports `Compiled -> True` for each. Scalar,
+  List, packed, `NDArray` and compiled results agree bit for bit, `INT64_MIN`
+  included.
+
+```
+In[1]:= BitXor[61, 15]
+Out[1]= 50
+
+In[2]:= BitXor[3^100, 5^100]
+Out[2]= 7888609052210118054116793203790437104101594041461795136781437785275168
+
+In[3]:= BitXor[3333, 5555, 7777, 9999]
+Out[3]= 8664
+
+In[4]:= {BitXor[x, x, x], BitXor[1, 2, x], BitXor[-1, x], BitXor[y, x]}
+Out[4]= {x, BitXor[3, x], BitNot[x], BitXor[x, y]}
+
+In[5]:= Outer[BitXor, {1, 0}, {1, 0}]
+Out[5]= {{0, 1}, {1, 0}}
+```
+
+**Diagnostics**. A concrete non-integer number that survives pair cancellation
+(a Real, Rational or Complex) emits `BitXor::int`, naming its position, and the
+call stays unevaluated. Symbolic arguments are silent. The message routes
+through the message funnel, so `Quiet` and `Check` see it.
+
+```
+In[6]:= BitXor[2.5, 3]
+        BitXor::int: Integer expected at position 1 in BitXor[2.5, 3].
+Out[6]= BitXor[2.5, 3]
+```

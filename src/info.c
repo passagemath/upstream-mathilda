@@ -4958,6 +4958,16 @@ void info_init(void) {
         "For n > 0, BitLength[n] is Floor[Log[2, n]] + 1; BitLength[0] is 0.\n"
         "For n < 0, BitLength[n] is equivalent to BitLength[BitNot[n]].");
 
+    symtab_set_docstring("BitXor",
+        "BitXor[n1, n2, ...] gives the bitwise XOR of the integers ni: the "
+        "integer whose binary representation has ones at positions where an odd "
+        "number of the ni have ones.\n"
+        "Negative integers are taken in two's complement; integers of any size "
+        "are exact. BitXor[] is 0. BitXor threads over lists.\n"
+        "Identical arguments cancel in pairs (BitXor[x, x] is 0), integers "
+        "combine (BitXor[1, 2, x] is BitXor[3, x]) and a -1 becomes BitNot "
+        "(BitXor[-1, x] is BitNot[x]).");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

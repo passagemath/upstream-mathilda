@@ -11,6 +11,7 @@
 #include "compile_emit.h"        /* Ctx / Val / FnSpec / LoopSpec / IntClosed + emit-core */
 #include "../arithmetic.h"       /* is_rational */
 #include "../symtab.h"           /* symtab_lookup, SymbolDef, ndarray_unary_kernel */
+#include "../attr.h"             /* ATTR_FLAT / ATTR_LISTABLE / ATTR_ORDERLESS -- n-ary kernel fold */
 #include "compiled_function.h"   /* compiled_function_body — a CompiledFunction callee's body */
 #include "../sym_names.h"        /* SYM_SameTest / SYM_List ... */
 #include "../special_functions/dirichlet.h" /* dch_labels_real */
@@ -102,16 +103,42 @@ const IntClosed* int_closed_head(const char* h, size_t na) {
             return &INT_CLOSED[i];
     return NULL;
 }
+/* Result type of binary kernel `k` over operand types ta, tb -- the inference
+ * twin of compile.c's kernel2_vals, and the two must agree.  Over an array the
+ * result is an ARRAY, mirroring the unary branch and the emit-side lowering
+ * (reporting a scalar would mis-size a fused loop's output buffer).  Two arrays
+ * must share a rank, and pick the element arm at their common type. */
+static bool kernel2_type(const NDBinaryKernel* k, CompileType ta, CompileType tb,
+                         CompileType* out) {
+    CompileType t = num_common(ta, tb);
+    if ((int)t < 0) return false;
+    if (CT_IS_ARRAY(t)) {
+        bool both = CT_IS_ARRAY(ta) && CT_IS_ARRAY(tb);
+        if (both && CT_RANK(ta) != CT_RANK(tb)) return false;
+        CompileType ea = both ? CT_ELEM(t)
+                       : CT_IS_ARRAY(ta) ? CT_ELEM(ta) : CT_ELEM(tb);
+        CompileType es = both ? CT_ELEM(t) : CT_IS_ARRAY(ta) ? tb : ta;
+        CompileType er = nd_binary_elem(k, ea, es);
+        if ((int)er < 0) return false;
+        *out = CT_ARRAY(er, CT_RANK(t));
+        return true;
+    }
+    if (!k->cplx) return false;    /* scalar: no arm to call */
+    *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX;
+    return true;
+}
+
 /* Integer-ONLY heads: ones with no real counterpart at all.  Unlike INT_CLOSED
  * above there is no kernel behind them to fall through to — non-integer
  * arguments simply bail, exactly as they did before.
  *
  * `*pred` distinguishes the ones that answer True/False (CT_BOOL) from the ones
- * that answer an Integer.  GCD and LCM are Flat and n-ary in the interpreter, so
- * any arity from 2 up is accepted and folded left. */
+ * that answer an Integer.  GCD, LCM and BitXor are Flat and n-ary in the
+ * interpreter, so any arity from 2 up is accepted and folded left. */
 bool int_only_head(const char* h, size_t na, bool* pred) {
     *pred = false;
-    if (na >= 2 && (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0)) return true;
+    if (na >= 2 && (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0
+                    || strcmp(h, "BitXor") == 0)) return true;
     if ((na == 1 || na == 2)
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
     if (na == 1 && strcmp(h, "BitLength") == 0) return true;
@@ -876,31 +903,40 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
             }
         }
     }
+    if (na >= 3) {
+        /* Flat + Listable + Orderless head with a binary kernel and no n-ary
+         * one (GCD, LCM, BitXor) and an array operand: folded left from an
+         * array operand, one kernel step per operand -- mirrors try_kernel. */
+        SymbolDef* d = symtab_lookup(h);
+        unsigned at = get_attributes(h);
+        if (d && d->ndarray_binary_kernel && !d->ndarray_nary_kernel
+            && (at & ATTR_FLAT) && (at & ATTR_LISTABLE) && (at & ATTR_ORDERLESS)) {
+            const NDBinaryKernel* k = d->ndarray_binary_kernel;
+            size_t first = na;
+            for (size_t i = 0; i < na && first == na; i++) {
+                CompileType t;
+                if (infer_type(c, A[i], &t) && CT_IS_ARRAY(t)) first = i;
+            }
+            if (first < na && (k->cplx || k->to_int)) {
+                CompileType acc; IT(first, acc);
+                for (size_t i = 0; i < na; i++) {
+                    if (i == first) continue;
+                    CompileType ti;
+                    if (!infer_type(c, A[i], &ti)) return false;
+                    if (!kernel2_type(k, acc, ti, &acc)) return false;
+                }
+                *out = acc;
+                return true;
+            }
+        }
+    }
     if (na == 2) {
         SymbolDef* d = symtab_lookup(h);
         if (d && d->ndarray_binary_kernel) {
             const NDBinaryKernel* k = d->ndarray_binary_kernel;
             if (k->cplx || k->to_int) {
                 IT(0, ta); IT(1, tb);
-                CompileType t = num_common(ta, tb);
-                if ((int)t < 0) return false;
-                /* Over an array the result is an ARRAY, mirroring the unary
-                 * branch above and the emit-side lowering.  Reporting a scalar
-                 * here was harmless while every array op was delegated (the ND
-                 * layer picks its own result dtype), and becomes a wrong output
-                 * buffer as soon as a fused loop is sized from this type. */
-                if (CT_IS_ARRAY(t)) {
-                    if (CT_IS_ARRAY(ta) && CT_IS_ARRAY(tb)) return false;
-                    CompileType ea = CT_IS_ARRAY(ta) ? CT_ELEM(ta) : CT_ELEM(tb);
-                    CompileType es = CT_IS_ARRAY(ta) ? tb : ta;
-                    CompileType er = nd_binary_elem(k, ea, es);
-                    if ((int)er < 0) return false;
-                    *out = CT_ARRAY(er, CT_RANK(t));
-                    return true;
-                }
-                if (!k->cplx) return false;    /* scalar: no arm to call */
-                *out = (t <= CT_REAL && k->real_closed) ? CT_REAL : CT_COMPLEX;
-                return true;
+                return kernel2_type(k, ta, tb, out);
             }
         }
     }

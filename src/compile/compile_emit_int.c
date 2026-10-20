@@ -30,10 +30,12 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
     {
         bool pred = false;
         if (int_only_head(h, na, &pred) && all_args_int(c, A, na)) {
-            /* GCD / LCM: Flat and n-ary, folded left the way the interpreter's
-             * own Flat attribute would associate them. */
-            if (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0) {
-                uint16_t op = (h[0] == 'G') ? OP_GCD_I : OP_LCM_I;
+            /* GCD / LCM / BitXor: Flat and n-ary, folded left the way the
+             * interpreter's own Flat attribute would associate them. */
+            if (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0
+                || strcmp(h, "BitXor") == 0) {
+                uint16_t op = (h[0] == 'G') ? OP_GCD_I
+                            : (h[0] == 'L') ? OP_LCM_I : OP_BXOR_I;
                 Val acc; if (!emit(c, A[0], &acc)) return -1;
                 for (size_t i = 1; i < na; i++) {
                     Val v; if (!emit(c, A[i], &v)) return -1;

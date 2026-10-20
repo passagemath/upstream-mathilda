@@ -152,6 +152,25 @@ static bool ndk_GCD_ii(int64_t a, int64_t b, int64_t* out) {
     return true;
 }
 
+/* BitXor[a, b]: two's-complement XOR. Total and exact on int64 (the XOR of two
+ * int64 values is an int64), so it never declines. The scalar builtin's
+ * all-machine-integer path computes the same `a ^ b`, and so does Compile's
+ * OP_BXOR_I, so every surface agrees bit for bit. */
+static bool ndk_BitXor_ii(int64_t a, int64_t b, int64_t* out) {
+    *out = a ^ b;
+    return true;
+}
+
+/* Whole-buffer twin: XOR against a broadcast scalar is symmetric, so the side
+ * the buffer was on does not matter. No call per element -- the loop
+ * vectorises. */
+static bool ndk_BitXor_whole(const int64_t* in, size_t sz, int64_t scal,
+                             bool arr_first, int64_t* out) {
+    (void)arr_first;
+    for (size_t i = 0; i < sz; i++) out[i] = in[i] ^ scal;
+    return true;
+}
+
 /* LCM[a, b] = |a|/gcd * |b|, in that order so the product is formed from the
  * already-reduced factor. LCM[0, n] is 0. Overflow declines. */
 static bool ndk_LCM_ii(int64_t a, int64_t b, int64_t* out) {
@@ -390,6 +409,8 @@ static const NDBinaryKernel NDKB_GCD =
     { NULL, false, NULL, ndk_GCD_ii, true, NULL };
 static const NDBinaryKernel NDKB_LCM =
     { NULL, false, NULL, ndk_LCM_ii, true, NULL };
+static const NDBinaryKernel NDKB_BitXor =
+    { NULL, false, NULL, ndk_BitXor_ii, true, ndk_BitXor_whole };
 /* IntegerExponent[n, b]: the largest e with b^e | n. Declines n == 0
  * (Infinity, not an int64) and b < 2 (::ibase in the scalar builtin). */
 static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
@@ -798,6 +819,7 @@ void ndinteger_init(void) {
     symtab_set_ndarray_unary_kernel("PartitionsP",   &NDKU_PartitionsP);
     symtab_set_ndarray_unary_kernel("PartitionsQ",   &NDKU_PartitionsQ);
     symtab_set_ndarray_binary_kernel("GCD",          &NDKB_GCD);
+    symtab_set_ndarray_binary_kernel("BitXor",       &NDKB_BitXor);
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
     symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);

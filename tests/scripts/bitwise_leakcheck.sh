@@ -2,8 +2,10 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength (machine-int, bignum, negative, INT64_MIN, listable, packed,
-# and error paths) under a leak checker and FAILS on any leaked byte.
+# Drives BitLength and BitXor (machine-int, bignum, negative, INT64_MIN,
+# listable, packed, NDArray, n-ary buffer folds, symbolic cancellation, BitNot
+# extraction, Compile, and error paths) under a leak checker and FAILS on any
+# leaked byte.
 #
 #   macOS : leaks --atExit
 #   Linux : valgrind --error-exitcode
@@ -32,6 +34,39 @@ Do[BitLength[3.5], {200}];
 Do[BitLength[], {200}];
 Do[BitLength[1, 2], {200}];
 Do[BitLength[x], {200}];
+Do[BitXor[61, 15], {200}];
+Do[BitXor[3333, 5555, 7777, 9999], {200}];
+Do[BitXor[-2, -3], {200}];
+Do[BitXor[3^100, 5^100], {200}];
+Do[BitXor[2^63, -1], {200}];
+Do[BitXor[2^70, 2^70 + 5], {200}];
+Do[BitXor[-3^50, 7, -5^30], {200}];
+Do[BitXor[x, x, y], {200}];
+Do[BitXor[x, y, x, y, x], {200}];
+Do[BitXor[1, 2, x], {200}];
+Do[BitXor[1, -1, x], {200}];
+Do[BitXor[-2, 1, x], {200}];
+Do[BitXor[-1, x, x], {200}];
+Do[BitXor[-1, 2^70, x], {200}];
+Do[BitXor[x, 2.5, 2.5], {200}];
+Do[BitXor[], {200}];
+Do[BitXor[{}, {}], {200}];
+Do[BitXor[{1, 2}, 3, {4, 5}], {200}];
+Do[BitXor[Range[64], 5], {200}];
+Do[BitXor[Range[64], Reverse[Range[64]]], {200}];
+Do[BitXor[Range[64], 1, 2, 3], {200}];
+Do[BitXor[Range[64], Range[64], 9], {200}];
+Do[BitXor[Range[8], 2^70], {200}];
+Do[BitXor[Range[8], x, x], {200}];
+Do[BitXor[NDArray[{-9223372036854775808, -1, 0, 1}, DataType -> "int64"], 7], {200}];
+Do[BitXor[NDArray[{1, 2, 3}, DataType -> "int64"], NDArray[{3, 2, 1}, DataType -> "int64"], 1], {200}];
+Do[Quiet[BitXor[{1, 2}, {1, 2, 3}]], {200}];
+Do[Quiet[BitXor[2.5, 3]], {200}];
+Do[Quiet[BitXor[1/2, x]], {200}];
+Do[Quiet[BitXor[{1., 2.}, 3, 4]], {200}];
+cfx = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitXor[v, w, 6]];
+Do[cfx[Range[32], Reverse[Range[32]]], {200}];
+Do[Quiet[cfx[{1, 2}, {1, 2, 3}]], {200}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

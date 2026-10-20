@@ -15,4 +15,9 @@ void bitwise_init(void) {
     symtab_add_builtin("BitLength", builtin_bitlength);
     symtab_get_def("BitLength")->attributes |=
         (ATTR_PROTECTED | ATTR_LISTABLE);
+
+    symtab_add_builtin("BitXor", builtin_bitxor);
+    symtab_get_def("BitXor")->attributes |=
+        (ATTR_FLAT | ATTR_LISTABLE | ATTR_ONEIDENTITY | ATTR_ORDERLESS |
+         ATTR_PROTECTED);
 }

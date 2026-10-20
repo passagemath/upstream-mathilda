@@ -853,8 +853,21 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             Expr* boxb = (kb == AK_ARR) ? NULL : vm_box_scalar(b, kb);
             const Expr* p0 = boxa ? boxa : a->arr;
             const Expr* p1 = boxb ? boxb : b->arr;
-            if (p0 && p1) r = ndarray_map_binary(p0, p1, (const NDBinaryKernel*)c->imm.p);
+            const NDBinaryKernel* k = (const NDBinaryKernel*)c->imm.p;
+            /* Two arrays go through map_binary2, exactly as the interpreter's
+             * kernel step does (eval.c), so the answers are its own. */
+            if (p0 && p1)
+                r = (ka == AK_ARR && kb == AK_ARR) ? ndarray_map_binary2(p0, p1, k)
+                                                   : ndarray_map_binary(p0, p1, k);
             expr_free(boxa); expr_free(boxb);
+            /* map_binary2 picks its result dtype by promotion; an integer
+             * promise met by a float buffer (or the reverse) would be read at
+             * the wrong element width downstream, so that mismatch declines to
+             * the interpreter.  Real-vs-complex is the shared tail's check. */
+            if (r && r->type == EXPR_NDARRAY && ka == AK_ARR && kb == AK_ARR
+                && ((AF_R(f) == (unsigned)CT_INT) != (r->data.ndarray.dtype == NDT_INT64))) {
+                expr_free(r); r = NULL;
+            }
             break;
         }
 
@@ -1147,6 +1160,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(ILEN_I):  IOP(int_ilen(RA.i, RB.i, &RD.i));
             OP(IEXP_I):  IOP(int_iexp(RA.i, RB.i, &RD.i));
             OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
+            /* BitXor: two's-complement XOR, total on int64 -- never bails. */
+            OP(BXOR_I):  RD.i = RA.i ^ RB.i; NEXT();
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
             OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i

@@ -168,6 +168,7 @@ extern const char* SYM_Erfi;
 extern const char* SYM_ExpIntegralEi;
 extern const char* SYM_ExpIntegralE;
 extern const char* SYM_StruveH;
+extern const char* SYM_StruveL;
 extern const char* SYM_LogIntegral;
 extern const char* SYM_SinIntegral;
 extern const char* SYM_CosIntegral;

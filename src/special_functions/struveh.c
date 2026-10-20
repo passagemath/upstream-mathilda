@@ -10,6 +10,7 @@
  *   anything else numeric         arb's regularized 1F2 (flint_num_struveh),
  *                                 demoted to machine numbers for machine input;
  *                                 the unregularized 1F2 template only without FLINT
+ *   exact half-odd-integer nu     elementary closed form (sh_half_integer)
  *   everything else               stays symbolic (return NULL)
  *
  * The 1F2 identity is also the reduction used by the half-line Mellin transform
@@ -32,6 +33,7 @@
 #include "sf_machine.h"         /* sf_machine_struve_h (shared double kernel)   */
 
 #include <stdbool.h>
+#include <stdlib.h>
 
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -118,6 +120,108 @@ static long sh_inexact_bits(const Expr* e) {
 }
 static bool sh_inexact(const Expr* e) { return sh_inexact_bits(e) > 0; }
 
+/* ---- half-odd-integer order: elementary closed forms ------------------- */
+
+static Expr* sh_rat(int64_t p, int64_t q) {
+    return mk_fn2("Rational", mk_int(p), mk_int(q));
+}
+
+/* a_k(n + 1/2) = (n + k)! / (2^k k! (n - k)!), the Hankel coefficient
+ * (DLMF 10.49.1), as an unevaluated exact expression. */
+static Expr* sh_hankel_a(int64_t n, int64_t k) {
+    return expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        mk_fn1("Factorial", mk_int(n + k)),
+        mk_fn2("Power", mk_int(2), mk_int(-k)),
+        mk_fn2("Power", mk_fn1("Factorial", mk_int(k)), mk_int(-1)),
+        mk_fn2("Power", mk_fn1("Factorial", mk_int(n - k)), mk_int(-1)) }, 4);
+}
+
+/* Sum_{k = par, par + 2, ... <= n} (-1)^((k - par)/2) a_k(n + 1/2) z^-k. */
+static Expr* sh_hankel_sum(int64_t n, int par, const Expr* z) {
+    int64_t cnt = n >= par ? (n - par) / 2 + 1 : 0;
+    if (cnt == 0) return mk_int(0);
+    Expr** t = malloc(sizeof(Expr*) * (size_t)cnt);
+    if (!t) return NULL;
+    for (int64_t i = 0; i < cnt; i++) {
+        int64_t k = par + 2 * i;
+        t[i] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            mk_int((i & 1) ? -1 : 1), sh_hankel_a(n, k),
+            mk_fn2("Power", expr_copy((Expr*)z), mk_int(-k)) }, 3);
+    }
+    Expr* s = expr_new_function(expr_new_symbol("Plus"), t, (size_t)cnt);
+    free(t);
+    return s;
+}
+
+/* The spherical-Bessel form of J_{n+1/2}(z) (want_y false) or Y_{n+1/2}(z)
+ * (DLMF 10.49.2/10.49.4, times Sqrt(2 z / Pi)):
+ *
+ *   J = Sqrt(2/Pi) z^(-1/2) ( S E(z) + C O(z))
+ *   Y = Sqrt(2/Pi) z^(-1/2) (-C E(z) + S O(z))
+ *
+ * with S = Sin(z - n Pi/2), C = Cos(z - n Pi/2) (reduced to +-Sin z, +-Cos z),
+ * E the even and O the odd Hankel sum. */
+static Expr* sh_sph_bessel(int64_t n, bool want_y, const Expr* z) {
+    Expr* E = sh_hankel_sum(n, 0, z);
+    Expr* O = sh_hankel_sum(n, 1, z);
+    if (!E || !O) { expr_free(E); expr_free(O); return NULL; }
+    int r = (int)(n % 4);
+    /* sin(z - r Pi/2), cos(z - r Pi/2) */
+    static const int s_sgn[4] = { 1, -1, -1, 1 }, s_sin[4] = { 1, 0, 1, 0 };
+    static const int c_sgn[4] = { 1, 1, -1, -1 };
+    Expr* S = mk_fn2("Times", mk_int(s_sgn[r]),
+                     mk_fn1(s_sin[r] ? "Sin" : "Cos", expr_copy((Expr*)z)));
+    Expr* C = mk_fn2("Times", mk_int(c_sgn[r]),
+                     mk_fn1(s_sin[r] ? "Cos" : "Sin", expr_copy((Expr*)z)));
+    Expr* body = want_y
+        ? mk_fn2("Plus", expr_new_function(expr_new_symbol("Times"),
+                     (Expr*[]){ mk_int(-1), C, E }, 3), mk_fn2("Times", S, O))
+        : mk_fn2("Plus", mk_fn2("Times", S, E), mk_fn2("Times", C, O));
+    return expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        mk_fn2("Power", mk_int(2), sh_rat(1, 2)),
+        mk_fn2("Power", expr_new_symbol("Pi"), sh_rat(-1, 2)),
+        mk_fn2("Power", expr_copy((Expr*)z), sh_rat(-1, 2)),
+        body }, 4);
+}
+
+/* A half-odd-integer order nu = k/2 (k odd): the elementary closed forms
+ * (DLMF 11.4.4 / 11.4.5), with n >= 0:
+ *
+ *   H_{-(n+1/2)}(z) = (-1)^n J_{n+1/2}(z)
+ *   H_{n+1/2}(z)    = Y_{n+1/2}(z)
+ *                     + (1/Pi) Sum_{j=0}^n Gamma(j+1/2) (z/2)^(n-2j-1/2) / (n-j)!
+ *
+ * with the half-integer Bessel functions written out in spherical form, so the
+ * result is elementary for any n (no Bessel DownValues are involved). */
+static Expr* sh_half_integer(const Expr* nu, const Expr* z) {
+    if (nu->type != EXPR_FUNCTION || !is_rational_like(nu)) return NULL;
+    const Expr* num = nu->data.function.args[0];
+    const Expr* den = nu->data.function.args[1];
+    if (num->type != EXPR_INTEGER || den->type != EXPR_INTEGER || den->data.integer != 2)
+        return NULL;
+    int64_t k = num->data.integer;                 /* odd: Rational is canonical */
+    int64_t n = k < 0 ? (-k - 1) / 2 : (k - 1) / 2;
+    Expr* bes = sh_sph_bessel(n, k > 0, z);
+    if (!bes) return NULL;
+    if (k < 0)
+        return sh_eval(mk_fn2("Times", mk_int((n & 1) ? -1 : 1), bes));
+    Expr** t = malloc(sizeof(Expr*) * (size_t)(n + 1));
+    if (!t) { expr_free(bes); return NULL; }
+    for (int64_t j = 0; j <= n; j++) {
+        /* Gamma(j+1/2) 2^-(n-2j-1/2) z^(n-2j-1/2) / (n-j)! */
+        Expr* e = sh_rat(2 * (n - 2 * j) - 1, 2);
+        t[j] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            mk_fn1("Gamma", sh_rat(2 * j + 1, 2)),
+            mk_fn2("Power", mk_int(2), mk_fn2("Times", mk_int(-1), expr_copy(e))),
+            mk_fn2("Power", expr_copy((Expr*)z), e),
+            mk_fn2("Power", mk_fn1("Factorial", mk_int(n - j)), mk_int(-1)) }, 4);
+    }
+    Expr* poly = expr_new_function(expr_new_symbol("Plus"), t, (size_t)(n + 1));
+    free(t);
+    Expr* part = mk_fn2("Times", mk_fn2("Power", expr_new_symbol("Pi"), mk_int(-1)), poly);
+    return sh_eval(mk_fn2("Plus", part, bes));
+}
+
 Expr* builtin_struveh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* nu = res->data.function.args[0];
@@ -172,8 +276,10 @@ Expr* builtin_struveh(Expr* res) {
                 }
             }
         }
+        return NULL;
     }
-    return NULL;
+    /* Exact half-odd-integer order: elementary. */
+    return sh_half_integer(nu, z);
 }
 
 void struveh_init(void) {

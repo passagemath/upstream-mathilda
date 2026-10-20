@@ -1757,6 +1757,66 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- StruveH[N, Z] / StruveL[N, Z]: chain rule on both args.
+         *   d/dZ H_N(Z) = ((Z/2)^N / (Sqrt[Pi] Gamma[N + 3/2])
+         *                  + H_(N-1)(Z) - H_(N+1)(Z)) / 2
+         *   d/dZ L_N(Z) = ((Z/2)^N / (Sqrt[Pi] Gamma[N + 3/2])
+         *                  + L_(N-1)(Z) + L_(N+1)(Z)) / 2
+         * (half the sum of the two first-order recurrences, DLMF 11.4.23-26).
+         *   d/dN = Derivative[1,0][head][N, Z]  (no closed form in the order).
+         * Zero-derivative arms are dropped, so D[StruveH[nu,x],x] keeps only the
+         * dZ term, the form the reference system returns. */
+        if ((h == SYM_StruveH || h == SYM_StruveL) && n == 2) {
+            const char* hn = h == SYM_StruveH ? "StruveH" : "StruveL";
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* 2^-N Z^N Pi^(-1/2) / Gamma[N + 3/2] */
+                Expr* src = expr_new_function(mk_sym("Times"), (Expr*[]){
+                    mk_fn2("Power", mk_int(2), mk_neg(expr_copy(N))),
+                    mk_fn2("Power", expr_copy(Z), expr_copy(N)),
+                    mk_fn2("Power", mk_sym("Pi"),
+                           mk_fn2("Rational", mk_int(-1), mk_int(2))),
+                    mk_fn2("Power",
+                           mk_fn1("Gamma", mk_fn2("Plus",
+                               mk_fn2("Rational", mk_int(3), mk_int(2)), expr_copy(N))),
+                           mk_int(-1)) }, 4);
+                Expr* sm1 = mk_fn2(hn, mk_fn2("Plus", mk_int(-1), expr_copy(N)),
+                                   expr_copy(Z));
+                Expr* sp1 = mk_fn2(hn, mk_fn2("Plus", mk_int(1), expr_copy(N)),
+                                   expr_copy(Z));
+                if (h == SYM_StruveH) sp1 = mk_neg(sp1);
+                Expr* sum = expr_new_function(mk_sym("Plus"),
+                                              (Expr*[]){ src, sm1, sp1 }, 3);
+                Expr* dSdZ = mk_fn2("Times",
+                              mk_fn2("Rational", mk_int(1), mk_int(2)), sum);
+                terms[nt++] = mk_fn2("Times", dSdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][head][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym(hn));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- HypergeometricU[A, B, Z]: chain rule on the argument Z (DLMF 13.3.22,
          *   d/dz U(a,b,z) = -a U(a+1, b+1, z)).
          *   d/dA, d/dB have no elementary form -> inert

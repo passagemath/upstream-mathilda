@@ -488,6 +488,20 @@ Out[4]= -ExpIntegralE[-1 + n, z]
 
 **Features**:
 - Exact value: `StruveH[nu, 0] = 0` for a real ν > −1.
+- **Half-odd-integer order → elementary** (any exact or symbolic `z`), as the
+  reference reduces it: `H_{−(n+½)}(z) = (−1)ⁿ J_{n+½}(z)` and
+  `H_{n+½}(z) = Y_{n+½}(z) + (1/π) Σ_{j=0}^n Γ(j+½)(z/2)^(n−2j−½)/(n−j)!`
+  (DLMF 11.4.4/11.4.5), with the half-integer Bessel functions written out in
+  their spherical (Hankel-sum) form, so the cost is linear in n and no Bessel
+  rewrite is involved: `StruveH[1/2, x] = Sqrt[2]/(Sqrt[Pi] Sqrt[x]) -
+  (Sqrt[2] Cos[x])/(Sqrt[Pi] Sqrt[x])`, `StruveH[1/2, 2] = 1/Sqrt[Pi] -
+  Cos[2]/Sqrt[Pi]`; `StruveH[101/2, x]` in 6 ms. Other rational orders stay
+  symbolic.
+- **Derivative.** `D[StruveH[ν, z], z] = ((z/2)^ν/(√π Γ(ν+3/2)) + H_{ν−1}(z) −
+  H_{ν+1}(z))/2`; the ν-derivative is the inert `Derivative[1, 0][StruveH]`.
+  `D[StruveL[ν, z], z]` gets the analogue `((z/2)^ν/(√π Γ(ν+3/2)) + L_{ν−1}(z) +
+  L_{ν+1}(z))/2` (`StruveL` itself is not yet a builtin; the rule fires on the
+  symbolic head).
 - **Arbitrary precision** (`N[StruveH[ν, z], p]` with an exact or MPFR argument):
   the rigorous FLINT/arb kernel `H_ν(z) = (z/2)^(ν+1) · ₁F̃₂(1; 3/2, ν+3/2; −z²/4)`
   (the *regularized* ₁F₂, so it is entire in ν — no pole to dodge — and valid for

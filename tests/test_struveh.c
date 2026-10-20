@@ -232,6 +232,41 @@ void test_struveh_attributes() {
     ASSERT_MSG((d->attributes & ATTR_PROTECTED) != 0, "StruveH not Protected");
 }
 
+/* ---- half-odd-integer order: elementary closed forms ---------------- */
+
+void test_struveh_halfinteger_elementary() {
+    /* DLMF 11.4.4/11.4.5 with the spherical-Bessel forms written out. */
+    assert_eval_eq("StruveH[1/2, x]",
+        "Sqrt[2]/(Sqrt[Pi] Sqrt[x]) - (Sqrt[2] Cos[x])/(Sqrt[Pi] Sqrt[x])", 0);
+    assert_eval_eq("StruveH[-1/2, x]", "(Sqrt[2] Sin[x])/(Sqrt[Pi] Sqrt[x])", 0);
+    assert_eval_eq("StruveH[1/2, 2]", "1/Sqrt[Pi] - Cos[2]/Sqrt[Pi]", 0);
+    /* Values at 13/10 against the reference system's 25-digit StruveH. */
+    assert_close("N[StruveH[5/2, x] /. x -> 13/10]", 0.038804081097075112823, 1e-15);
+    assert_close("N[StruveH[7/2, x] /. x -> 13/10]", 0.0063957243807799023608, 1e-16);
+    assert_close("N[StruveH[9/2, x] /. x -> 13/10]", 0.00083931298990262896181, 1e-17);
+    assert_close("N[StruveH[-9/2, x] /. x -> 13/10]", 0.0025450232156187135632, 1e-16);
+    assert_close("N[StruveH[-3/2, x] /. x -> 13/10]", -0.33149086451171976044, 1e-15);
+    /* Other rational orders stay symbolic. */
+    assert_eval_eq("StruveH[1/3, x]", "StruveH[1/3, x]", 0);
+}
+
+/* ---- derivatives (DLMF 11.4.23-26) ----------------------------------- */
+
+void test_struve_derivative() {
+    assert_eval_eq("D[StruveH[nu, x], x]",
+        "1/2 (StruveH[-1 + nu, x] - StruveH[1 + nu, x] + "
+        "(2^(-nu) x^nu)/(Sqrt[Pi] Gamma[3/2 + nu]))", 0);
+    assert_eval_eq("D[StruveL[nu, x], x]",
+        "1/2 (StruveL[-1 + nu, x] + StruveL[1 + nu, x] + "
+        "(2^(-nu) x^nu)/(Sqrt[Pi] Gamma[3/2 + nu]))", 0);
+    assert_eval_eq("D[StruveH[nu, x], nu]", "Derivative[1, 0][StruveH][nu, x]", 0);
+    assert_eval_eq("D[StruveH[nu, y], x]", "0", 0);
+    /* The derivative of the elementary H_{1/2} agrees with the rule's value. */
+    assert_eval_eq("Abs[N[(D[StruveH[1/2, x], x] - (1/2 (StruveH[-1/2, x] - "
+                   "StruveH[3/2, x] + (2^(-1/2) x^(1/2))/(Sqrt[Pi] Gamma[2])))) "
+                   "/. x -> 13/10]] < 10^-14", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -248,6 +283,8 @@ int main() {
     TEST(test_struveh_listable);
     TEST(test_struveh_argcount);
     TEST(test_struveh_attributes);
+    TEST(test_struveh_halfinteger_elementary);
+    TEST(test_struve_derivative);
 
     printf("All StruveH tests passed.\n");
     return 0;

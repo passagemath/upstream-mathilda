@@ -218,6 +218,42 @@ static void test_unprotect_then_protect_roundtrip(void) {
     assert_eval_eq("Attributes[unD]", "{}", 0);
 }
 
+/* Issue #103: 154 builtins (those seeded from attr.c's builtin_attrs[]
+ * table) used to OR their seed attributes back in on every lookup, so
+ * Unprotect reported success yet Attributes still listed Protected, and the
+ * symbol stayed unassignable. Expectations checked against WL. */
+static void test_unprotect_builtin_clears_protected(void) {
+    assert_eval_eq("Unprotect[Sin]", "{\"Sin\"}", 0);
+    assert_eval_eq("Attributes[Sin]", "{Listable, NumericFunction}", 0);
+    assert_eval_eq("Protect[Sin]", "{\"Sin\"}", 0);
+    assert_eval_eq("Attributes[Sin]", "{Listable, NumericFunction, Protected}", 0);
+
+    assert_eval_eq("Unprotect[Hold]", "{\"Hold\"}", 0);
+    assert_eval_eq("Attributes[Hold]", "{HoldAll}", 0);
+    run("Protect[Hold]");
+}
+
+static void test_unprotect_builtin_allows_definition(void) {
+    run("Unprotect[Sec]");
+    run("Sec[42] = 7");
+    assert_eval_eq("Sec[42]", "7", 0);
+    run("Sec[42] =.");
+    run("Protect[Sec]");
+    assert_eval_eq("Sec[42]", "Sec[42]", 0);
+}
+
+static void test_clearattributes_builtin_takes_effect(void) {
+    run("ClearAttributes[Cos, Protected]");
+    assert_eval_eq("Attributes[Cos]", "{Listable, NumericFunction}", 0);
+    run("SetAttributes[Cos, Protected]");
+    assert_eval_eq("Attributes[Cos]", "{Listable, NumericFunction, Protected}", 0);
+
+    run("ClearAttributes[Range, Listable]");
+    assert_eval_eq("Attributes[Range]", "{Protected}", 0);
+    run("SetAttributes[Range, Listable]");
+    assert_eval_eq("Attributes[Range]", "{Listable, Protected}", 0);
+}
+
 /* ------------------------------------------------------------------------
  *  HoldAll behaviour (operate on the symbol, not its value)
  * ---------------------------------------------------------------------- */
@@ -297,6 +333,9 @@ int main(void) {
     TEST(test_unprotect_not_protected_returns_empty);
     TEST(test_unprotect_allows_redefinition);
     TEST(test_unprotect_then_protect_roundtrip);
+    TEST(test_unprotect_builtin_clears_protected);
+    TEST(test_unprotect_builtin_allows_definition);
+    TEST(test_clearattributes_builtin_takes_effect);
 
     /* HoldAll */
     TEST(test_holdall_protect_targets_symbol);

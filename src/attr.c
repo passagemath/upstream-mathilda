@@ -172,32 +172,13 @@ static SymbolAttr builtin_attrs[] = {
     {NULL, 0}
 };
 
-/* Scan the immutable builtin_attrs[] table for a symbol's static base
- * attributes. O(table size); called at most once per symbol -- the result is
- * cached in def->base_attributes (the static table never changes). */
-static uint32_t base_attributes_of(const char* symbol_name) {
-    for (int i = 0; builtin_attrs[i].name != NULL; i++) {
-        if (strcmp(builtin_attrs[i].name, symbol_name) == 0) {
-            return builtin_attrs[i].attrs;
-        }
-    }
-    return ATTR_NONE;
-}
-
-/* Phase 3a: def-threaded fast path. Given the resolved SymbolDef, return its
- * effective attributes as an O(1) field read + OR -- no symbol-table lookup at
- * all. The evaluator resolves the head's def once per step and calls this. */
+/* Effective attributes of a resolved SymbolDef: an O(1) field read, no
+ * symbol-table lookup. The evaluator resolves the head's def once per step and
+ * calls this. builtin_attrs[] above is only the initial seed (folded into
+ * def->attributes by attr_init); after that the field is the single source of
+ * truth, so Unprotect / ClearAttributes on a builtin really do take effect. */
 uint32_t get_attributes_def(SymbolDef* def) {
-    if (!def) return ATTR_NONE;
-    /* Phase 1: fold the static base attributes into the def exactly once. The
-     * static builtin_attrs[] table is immutable, so (base | dynamic) reproduces
-     * the old scan|dynamic result bit-for-bit, including the documented
-     * Unprotect-resistance of builtins. */
-    if (!def->base_seeded) {
-        def->base_attributes = base_attributes_of(def->symbol_name);
-        def->base_seeded = 1;
-    }
-    return def->base_attributes | def->attributes;
+    return def ? def->attributes : ATTR_NONE;
 }
 
 uint32_t get_attributes(const char* symbol_name) {
@@ -424,15 +405,11 @@ void attr_init(void) {
     symtab_add_builtin("SetAttributes", builtin_set_attributes);
     symtab_add_builtin("ClearAttributes", builtin_clear_attributes);
     
-    // Initialize builtin attributes in symtab. Seed both the dynamic field
-    // (kept for match.c's direct def->attributes reads) and the cached base
-    // floor (Phase 1: makes get_attributes an O(1) read for every builtin).
+    /* Seed the builtin attributes into the symbol table, once. This is a
+     * starting value, not a floor: the bits live only in def->attributes, so
+     * a later Unprotect / ClearAttributes is not silently undone (issue #103). */
     for (int i = 0; builtin_attrs[i].name != NULL; i++) {
         SymbolDef* def = symtab_get_def(builtin_attrs[i].name);
-        if (def) {
-            def->attributes = builtin_attrs[i].attrs;
-            def->base_attributes = builtin_attrs[i].attrs;
-            def->base_seeded = 1;
-        }
+        if (def) def->attributes |= builtin_attrs[i].attrs;
     }
 }

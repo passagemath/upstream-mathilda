@@ -117,7 +117,7 @@ static bool sum_head_is_opaque(Expr* head) {
     SymbolDef* d = symtab_lookup(head->data.symbol.name);
     if (!d) return true;                 /* never materialised: undefined */
     if (d->builtin_func) return false;   /* a C builtin head */
-    if ((d->attributes | d->base_attributes) & ATTR_PROTECTED) return false;
+    if (d->attributes & ATTR_PROTECTED) return false;
     if (d->down_values || d->own_values) return false;  /* user-defined */
     return true;                         /* a plain, undefined indexed accessor */
 }

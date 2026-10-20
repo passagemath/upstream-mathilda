@@ -431,6 +431,10 @@ Out[3]= x
 - Both have attributes `{HoldAll, Protected}` and hold their arguments.
 - The typical sequence for adding rules to an existing symbol is
   `Unprotect[f]; definition; Protect[f]`.
+- This applies to builtins too: `Unprotect[Sin]` really removes `Protected`, so
+  `Attributes[Sin]` is `{Listable, NumericFunction}` and `Sin[x] = ...` is
+  accepted until `Protect[Sin]`. `SetAttributes`/`ClearAttributes` change a
+  builtin's attributes in the same way (issue #103).
 
 ```mathematica
 In[1]:= f[x_] := x^2; Protect[f]

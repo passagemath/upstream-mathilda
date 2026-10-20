@@ -67,8 +67,6 @@ static void reset_node_payload(SymbolDef* d) {
     if (d->default_options) { expr_free(d->default_options); d->default_options = NULL; }
     d->builtin_func = NULL;
     d->attributes = 0;
-    d->base_attributes = 0;
-    d->base_seeded = 0;
     d->has_def = 0;
 }
 
@@ -86,7 +84,7 @@ static SymbolDef* node_intern(const char* name, int materialize) {
         }
     }
     /* Not present: create a node owning a stable copy of the name. calloc zeroes
-     * every field (own_values=NULL, attributes=0, is_system=0, base_seeded=0). */
+     * every field (own_values=NULL, attributes=0, is_system=0). */
     SymbolDef* d = calloc(1, sizeof(SymbolDef));
     size_t len = strlen(name);
     char* copy = malloc(len + 1);

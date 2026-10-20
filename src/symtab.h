@@ -62,17 +62,6 @@ typedef struct SymbolDef {
 #endif
     BuiltinFunc builtin_func; // C function evaluating this symbol
     uint32_t attributes;
-    /* Phase 1 (EVAL_SYMTAB_IMPROVEMENTS): cached immutable "base" attributes --
-     * the floor from attr.c's builtin_attrs[] table. get_attributes() returns
-     * (base_attributes | attributes) as an O(1) field read + OR instead of the
-     * old ~140-entry strcmp scan on every call. The static table never changes,
-     * so once folded the base is permanently valid; base_seeded guards the
-     * one-time fold (lazily on first get_attributes, eagerly in attr_init for
-     * table symbols). `attributes` keeps its exact meaning (dynamic bits, also
-     * carrying the base bits that attr_init copies in for match.c's direct
-     * reads), so no mutation site needs to change. */
-    uint32_t base_attributes;
-    uint8_t  base_seeded;
     /* Phase 2 unified-table bookkeeping.
      *   is_system : migrated from the old InternEntry; set by
      *               intern_mark_all_system() for every kernel-interned name.

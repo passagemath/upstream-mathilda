@@ -4222,11 +4222,25 @@ Rational, radical, or `Root[...]`). With inexact (approximate) input Minimize
 automatically calls `NMinimize`. `Maximize` reuses the whole engine by
 minimizing `-f` and negating the reported value.
 
-The whole call runs under a time budget: a deadline is anchored when it starts
-and each internal `Solve`/`Reduce` probe is handed only the time left, so a
-quantifier-elimination blow-up — or a problem with many probes — declines
-gracefully rather than hanging. The budget is the `TimeConstraint -> t` option
-(seconds; default `30`; `TimeConstraint -> Infinity` removes it).
+The whole call runs under a time budget: one wall-clock deadline is anchored
+when it starts and **every** internal `Solve`/`Reduce`/`FindInstance` probe, in
+every stage of the cascade (rational reformulation, separable split, KKT,
+compact-region shortcut, certificate, quantifier elimination, integer box), is
+handed only the time left — so a quantifier-elimination blow-up, or a problem
+with many probes, declines gracefully rather than hanging. The budget is the
+`TimeConstraint -> t` option (seconds; default `30`; `TimeConstraint ->
+Infinity` removes it). A declined call is remembered for the rest of the
+top-level evaluation, so the evaluator's re-examination of the unevaluated
+`Minimize[...]` does not repeat the search (it used to run about three times,
+tripling the decline); a decline forced by an *enclosing* `TimeConstrained` is
+not remembered.
+
+Radical answers are presented in simplified form: the value and each
+coordinate are replaced by the smallest (by `LeafCount`) of the raw form,
+`Together` and `Expand` — exact identities — so
+`Minimize[{x^2+y^2, (x-2)^2+(y-3)^2<=1}, {x,y}]` is
+`{14 - 2 Sqrt[13], {x -> 2 - 2/Sqrt[13], y -> 3 - 3/Sqrt[13]}}` rather than a
+sum of squared surds over `169`. `Root[...]` values are left as they are.
 
 Special return forms:
 
@@ -4262,7 +4276,18 @@ exact result.
   chained `a <= g <= b`). Candidates come from KKT / active-set enumeration on
   the closure of the region; the optimum is confirmed by the Reduce lower-bound
   certificate and must be attained in the original (strict) region. Small
-  **linear programs** fall out as the degenerate case. For a pure single-equality
+  **linear programs** fall out as the degenerate case. The active-set
+  enumeration has no fixed cap on the number of inequalities: only active sets
+  of at most `n` constraints (`n` variables) are solved — a larger one has
+  linearly dependent gradients, so its multipliers are never isolated — and the
+  singular-point enumeration stops at `n + 1`, every larger set's points being
+  among those of its `(n+1)`-subsets. The work is polynomial, `O(m^n)` in the
+  number `m` of inequalities, instead of `2^m`, and is bounded by the deadline.
+  When every constraint is affine, boundedness of the region (the premise of the
+  compact-region shortcut) is decided from the recession cone `{d : E d == 0,
+  A d <= 0}` with `2n` linear existential probes, in milliseconds, instead of the
+  quadratic large-ball probe (which took seconds on a three-variable LP and
+  timed out on an unbounded plane). For a pure single-equality
   problem over a **compact** variety the certificate is replaced by an
   extreme-value argument (the global optimum is the least of the enumerated
   regular Lagrange points and the variety's singular points, once a rational ball
@@ -4290,7 +4315,9 @@ exact result.
   inequality regions by enumerating the integer box whose per-variable range is
   bounded by the continuous relaxation. `Minimize[{x+y, x^2+y^2==25}, {x,y},
   Integers]` -> `{-7, {x->-4, y->-3}}`; `Minimize[{x^2+y^2, x+y>=3 && 0<=x<=5 &&
-  0<=y<=5}, {x,y}, Integers]` -> `{5, {x->2, y->1}}`. An unbounded or
+  0<=y<=5}, {x,y}, Integers]` -> `{5, {x->2, y->1}}`; the 0/1 knapsack
+  `Maximize[{60a+100b+120c, 10a+20b+30c<=50 && 0<=a<=1 && 0<=b<=1 && 0<=c<=1},
+  {a,b,c}, Integers]` -> `{220, {a->0, b->1, c->1}}`. An unbounded or
   undecidable integer region (e.g. `x^3+y^3+z^3==33`), an unconstrained integer
   objective, or a mixed integer/continuous problem declines.
 - **Unconstrained multivariate polynomials with a positive-dimensional
@@ -4317,7 +4344,10 @@ exact result.
 
 - **Separable (variable-disjoint) unconstrained objectives** are decomposed into
   blocks and the block minima summed, so a flat additive objective (e.g. a
-  separable quartic sum) avoids the multivariate certificate entirely.
+  separable quartic sum) avoids the multivariate certificate entirely. A constant
+  multiple `c (g1 + g2 + ...)` is distributed first, so the halved
+  Styblinski–Tang `Minimize[(st[x]+st[y]+st[z])/2, {x,y,z}]` splits too (about
+  15 ms; it used to run the three-variable certificate for minutes).
 - **Compact (bounded + closed) feasible regions of any shape.** When the closure
   is provably bounded and the KKT + Fritz–John singular enumeration is complete,
   the global minimum is the least candidate by the extreme-value theorem — no
@@ -4329,7 +4359,12 @@ exact result.
   (`x==t, y==t², z==t³` collapses a distance problem to a univariate one).
 - **Rational-function objectives** `p/q`, reformulated as
   `Minimize[w, cons && p - w*q == 0 && q(>|<)0]` once `q`'s strict sign on the
-  closure is proved (a denominator of indefinite sign — boundary poles — declines).
+  feasible region is proved. A pole on an **open** boundary is admitted:
+  `Minimize[{(x^2+1)/(x+1), x > -1}, x]` -> `{-2 + 2 Sqrt[2], {x -> -1 + Sqrt[2]}}`;
+  an infimum approached at the pole is never reported (the minimiser must
+  satisfy the strict constraints), and a denominator of indefinite sign on the
+  region declines. A denominator free of the variables (`(x^2+y^2-2x)/4`) is
+  treated as a polynomial with a constant coefficient.
 - **Integers domain via the `Element[{vars}, Integers]` spelling** (covering
   every variable; a partial membership is mixed and declines), including an
   infinite parametric Diophantine family with a coercive objective (bounded via

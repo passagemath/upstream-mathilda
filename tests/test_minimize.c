@@ -22,6 +22,10 @@
  *     (irrational-algebraic optima), radical/fractional-power objectives, Abs /
  *     piecewise objectives, bounded Integers-domain optimization, TimeConstraint
  *     option, and the Minimize::natt message routing (Check[]-catchable).
+ *   - Book-pass fixes: constant multiples of separable sums, a TimeConstraint
+ *     that bounds the whole call, simplified radical answers, open-boundary
+ *     poles of rational objectives, dimension-bounded active-set enumeration,
+ *     polyhedral boundedness.
  *   - Memory-hygiene smoke loop.
  *
  * Run binary directly: ./minimize_tests */
@@ -422,6 +426,82 @@ static void test_mixed_integer_declines(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 9c. Book-pass fixes: constant multiples, whole-call budget, radical  */
+/*     presentation, open-boundary poles, uncapped active sets.         */
+/* ------------------------------------------------------------------ */
+
+/* A constant multiple of a separable sum, (g(x)+g(y)+g(z))/2, is still split
+ * block by block (it used to fall to the 3-variable certificate and run 141 s).
+ * The value is 3/2 the univariate minimum of g(v) = (v^4 - 16 v^2 + 5 v)/2. */
+static void test_separable_constant_factor(void) {
+    check_true("Module[{st}, st[v_] := (v^4 - 16 v^2 + 5 v)/2; "
+               "Head[Minimize[(st[x] + st[y] + st[z])/2, {x, y, z}]] === List]");
+    check_true("Module[{st, r}, st[v_] := (v^4 - 16 v^2 + 5 v)/2; "
+               "r = AbsoluteTiming[Minimize[(st[x] + st[y] + st[z])/2, {x, y, z}]]; "
+               "r[[1]] < 2 && Abs[N[r[[2, 1]]] - 3/2 N[First[Minimize[st[x], x]]]] < 10^-6]");
+    /* a constant denominator is a polynomial objective, not a rational one */
+    check_eq("Minimize[(x^2 + y^2 - 2 x)/4, {x, y}]",
+             "List[Rational[-1, 4], List[Rule[x, 1], Rule[y, 0]]]");
+}
+
+/* TimeConstraint bounds the WHOLE call: every stage shares one deadline, and the
+ * evaluator's re-invocations of a declined call hit the decline memo. A coupled
+ * (non-separable) quartic that the engine cannot decide used to take
+ * ~3 stages x 3 invocations x the budget. */
+static void test_timeconstraint_bounds_whole_call(void) {
+    check_true("Module[{st, t}, st[v_] := (v^4 - 16 v^2 + 5 v)/2; "
+               "t = First[AbsoluteTiming[Minimize[(st[x] + st[y] + st[z])/2 + x y z, "
+               "{x, y, z}, TimeConstraint -> 2]]]; t < 5]");
+    check_true("Module[{st, t}, st[v_] := (v^4 - 16 v^2 + 5 v)/2; "
+               "t = First[AbsoluteTiming[TimeConstrained[Minimize[(st[x] + st[y] + "
+               "st[z])/2 + x y z, {x, y, z}], 2]]]; t < 4]");
+}
+
+/* A radical optimum is presented in simplified form (the raw substitution was
+ * (-39 + 3 Sqrt[13])^2/169 + (-26 + 2 Sqrt[13])^2/169). */
+static void test_radical_answer_simplified(void) {
+    check_true("Minimize[{x^2 + y^2, (x - 2)^2 + (y - 3)^2 <= 1}, {x, y}] === "
+               "{14 - 2 Sqrt[13], {x -> 2 - 2/Sqrt[13], y -> 3 - 3/Sqrt[13]}}");
+    check_true("Maximize[{x^2 + y^2, (x - 2)^2 + (y - 3)^2 <= 1}, {x, y}] === "
+               "{14 + 2 Sqrt[13], {x -> 2 + 2/Sqrt[13], y -> 3 + 3/Sqrt[13]}}");
+}
+
+/* A pole on an OPEN boundary: q = x + 1 vanishes only on the closure of x > -1,
+ * so the rational reformulation applies; an infimum approached AT the pole (or
+ * at infinity) is never reported as a finite minimum. */
+static void test_rational_open_boundary_pole(void) {
+    check_true("Minimize[{(x^2 + 1)/(x + 1), x > -1}, x] === "
+               "{-2 + 2 Sqrt[2], {x -> -1 + Sqrt[2]}}");
+    check_true("Module[{r = Minimize[{-1/(x + 1), x > -1}, x, TimeConstraint -> 3]}, "
+               "Head[r] === Minimize || First[r] === -Infinity]");
+    check_true("Module[{r = Minimize[{(x + 2)/(x (x + 1)), x > 0}, x, TimeConstraint -> 3]}, "
+               "Head[r] === Minimize]");
+}
+
+/* More inequalities than the old fixed cap of 6: the active-set enumeration is
+ * bounded by the dimension (subsets of size <= n), not by a constant. */
+static void test_many_inequalities(void) {
+    check_true("Maximize[{60 a + 100 b + 120 c, 10 a + 20 b + 30 c <= 50 && "
+               "0 <= a <= 1 && 0 <= b <= 1 && 0 <= c <= 1}, {a, b, c}, Integers] === "
+               "{220, {a -> 0, b -> 1, c -> 1}}");
+    check_true("Minimize[{x + 2 y, -1 <= x <= 1 && -1 <= y <= 1 && x + y <= 3/2 && "
+               "x - y <= 3/2 && -x + y <= 3/2 && -x - y <= 3/2}, {x, y}] === "
+               "{-5/2, {x -> -1/2, y -> -1}}");
+}
+
+/* Polyhedral boundedness by the recession cone (milliseconds) instead of the
+ * quadratic large-ball CAD probe (seconds): a bounded LP and an unbounded plane. */
+static void test_polyhedral_boundedness(void) {
+    check_true("Module[{r = AbsoluteTiming[Minimize[{2 x + 3 y - z, 1 <= x + y + z <= 2 && "
+               "x >= 0 && y >= 0 && z >= 0}, {x, y, z}]]}, r[[1]] < 1 && "
+               "r[[2]] === {-2, {x -> 0, y -> 0, z -> 2}}]");
+    check_true("Module[{r = AbsoluteTiming[Minimize[{x^2 + y^2 + z^2, 5 x + 7 y + 11 z == 13}, "
+               "{x, y, z}]]}, r[[1]] < 1 && "
+               "r[[2]] === {13/15, {x -> 1/3, y -> 7/15, z -> 11/15}}]");
+    check_true("Minimize[{x + y, x >= 0 && y >= 0}, {x, y}] === {0, {x -> 0, y -> 0}}");
+}
+
+/* ------------------------------------------------------------------ */
 /* 8. Memory smoke                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -514,6 +594,14 @@ int main(void) {
     TEST(test_rational_poles_decline);
     TEST(test_integer_parametric);
     TEST(test_mixed_integer_declines);
+
+    /* 9c. Book-pass fixes */
+    TEST(test_separable_constant_factor);
+    TEST(test_timeconstraint_bounds_whole_call);
+    TEST(test_radical_answer_simplified);
+    TEST(test_rational_open_boundary_pole);
+    TEST(test_many_inequalities);
+    TEST(test_polyhedral_boundedness);
 
     /* 8. Memory */
     TEST(test_memory_smoke);

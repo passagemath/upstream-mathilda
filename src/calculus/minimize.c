@@ -29,10 +29,16 @@
  *       Reduce[ForAll[{vars}, f >= b], {b}, Reals], and a minimiser is realised
  *       with FindInstance (mz_qe_infimum). An unbounded objective (Reduce ===
  *       False) reports -Infinity; an un-attained infimum declines.
+ * Later scope (see the per-stage comments): separable sums, rational and
+ * radical objectives, univariate Abs/piecewise, the compact-region shortcut,
+ * equality elimination, and bounded Integers-domain problems.
  * Deferred (declines, never guesses): transcendental closed forms, parametric
- * Piecewise answers, CONSTRAINED or non-attained positive-dimensional minima,
- * general not-attained-under-constraints via quantifier elimination, exact
- * Integers/ILP optimisation.
+ * Piecewise answers, non-attained minima, mixed integer/continuous problems.
+ *
+ * Time: TimeConstraint bounds the WHOLE call through one per-call deadline
+ * (g_mz_deadline) that clamps every internal probe, and a declined call is
+ * memoised for the rest of the top-level evaluation (mz_memo_*), so the
+ * evaluator's re-examination of the unevaluated call does not repeat it.
  *
  * Minimize/Maximize are Protected but NOT HoldAll (matching Mathematica): the
  * variables are unbound symbols that evaluate to themselves, so the objective
@@ -52,7 +58,9 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "message.h"            /* mth_message + mth_msg_suppress_push/pop */
+#include "mtime.h"              /* mth_mono_seconds: the per-call wall deadline */
 #include "reduce_real_util.h"   /* rru_is_polynomial / rru_sign_of / rru_sign_compare */
+#include "core.h"               /* leaf_count_internal (LeafCount) */
 
 /* Numerator/denominator split of a rational expression (src/rat.c). */
 void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out);
@@ -321,20 +329,49 @@ bad:
     return 0;
 }
 
-/* Bounded evaluation: run `e` under TimeConstrained[e, budget, $Aborted] so a
+/* Per-CALL wall-clock deadline of the Minimize/Maximize invocation in progress:
+ * an absolute mth_mono_seconds() instant, or 0 for none (TimeConstraint ->
+ * Infinity). mz_run sets it once from the TimeConstraint option and EVERY
+ * bounded probe (mz_beval) is clamped to the time left before it, so the option
+ * bounds the WHOLE call — every stage of the cascade (rational reformulation,
+ * separable split, KKT, compact shortcut, certificate, QE, integer box) shares
+ * one budget instead of each stage, or each probe, getting a fresh one. Saved
+ * and restored around a nested call; a stale value left by a TimeConstrained
+ * unwind is harmless because every call overwrites it on entry. */
+static double g_mz_deadline = 0.0;
+
+/* Set when a probe was cut short by an ENCLOSING TimeConstrained (it aborted
+ * well before the budget this module granted it), as opposed to this call's
+ * own deadline. Such a decline depends on the caller's clock, so it is not
+ * recorded in the decline memo (mz_memo_*). */
+static bool g_mz_foreign_abort = false;
+
+/* Bounded evaluation: run `e` under TimeConstrained[e, t, $Aborted] so a
  * blow-up in an internal Solve/Reduce probe declines gracefully instead of
- * hanging. `budget` <= 0 means "no limit" (TimeConstraint -> Infinity). `e` is
- * consumed. On timeout the result is the $Aborted symbol, which every caller
- * treats as "unclean / not proven" — never as a positive answer — so the
- * soundness invariant is preserved (a timeout only ever *removes* a candidate or
- * a certificate, never fabricates one). Nesting clamps correctly: an outer
+ * hanging. `t` is the smaller of `budget` (<= 0 = "no per-stage limit") and the
+ * time left before the per-call deadline; with neither, `e` runs unbounded. A
+ * spent deadline returns $Aborted without evaluating. `e` is consumed. On
+ * timeout the result is the $Aborted symbol, which every caller treats as
+ * "unclean / not proven" — never as a positive answer — so the soundness
+ * invariant is preserved (a timeout only ever *removes* a candidate or a
+ * certificate, never fabricates one). Nesting clamps correctly: an outer
  * TimeConstrained[Minimize[...], T] still bounds these inner probes. */
 static Expr* mz_beval(Expr* e, int budget) {
-    if (budget <= 0) return eval_and_free(e);
+    double lim = (budget > 0) ? (double)budget : 0.0;     /* 0 = unlimited */
+    if (g_mz_deadline > 0.0) {
+        double rem = g_mz_deadline - mth_mono_seconds();
+        if (rem <= 0.0) { expr_free(e); return expr_new_symbol(SYM_DollarAborted); }
+        if (lim <= 0.0 || rem < lim) lim = rem;
+    }
+    if (lim <= 0.0) return eval_and_free(e);
+    double t0 = mth_mono_seconds();
     Expr* g = expr_new_function(expr_new_symbol(SYM_TimeConstrained),
-                  (Expr*[]){ e, mk_int(budget),
+                  (Expr*[]){ e, expr_new_real(lim),
                              expr_new_symbol(SYM_DollarAborted) }, 3);
-    return eval_and_free(g);
+    Expr* r = eval_and_free(g);
+    if (mz_is_sym(r, SYM_DollarAborted) && mth_mono_seconds() - t0 < 0.9 * lim)
+        g_mz_foreign_abort = true;
+    return r;
 }
 
 /* Per-CALL deadline: a problem with many active-set probes must not cost
@@ -343,6 +380,8 @@ static Expr* mz_beval(Expr* e, int budget) {
  * unlimited, a positive value is the remaining budget, and -1 means the deadline
  * is spent (the caller declines). So the whole call is bounded by `budget`. */
 static int mz_rem_budget(clock_t t0, int budget) {
+    if (g_mz_deadline > 0.0 && mth_mono_seconds() >= g_mz_deadline)
+        return -1;                                     /* per-call deadline spent */
     if (budget <= 0) return 0;                         /* unlimited */
     double el = (double)(clock() - t0) / (double)CLOCKS_PER_SEC;
     int rem = budget - (int)el;
@@ -973,8 +1012,40 @@ cleanup:
  *  (b)/(c) Multivariate / constrained polynomial over the Reals       *
  * ------------------------------------------------------------------ */
 
-#define MZ_MAX_INEQ 6               /* 2^MZ_MAX_INEQ active-set subproblems */
-#define MZ_DEFAULT_TIMECONSTRAINT 30  /* seconds per internal Solve/Reduce probe */
+#define MZ_DEFAULT_TIMECONSTRAINT 30  /* seconds for the whole call (all probes) */
+
+/* Active-set enumeration: the subsets of the inequality indices {0..m-1} of
+ * size 0, 1, ..., kmax in turn, each as an ascending index array idx[0..k-1].
+ * Replaces a 2^m bitmask walk (and the fixed cap on m it needed): the size bound
+ * kmax is DERIVED from the problem dimension by the callers (see mz_exact_poly
+ * and mz_add_singular_candidates), so the work is Σ_{k<=kmax} C(m, k) =
+ * O(m^kmax) — polynomial in the number of inequalities — and every subset the
+ * bound skips is provably redundant. */
+typedef struct { size_t m, kmax, k; size_t* idx; bool started; } MzSubsets;
+
+static void mz_subsets_init(MzSubsets* it, size_t m, size_t kmax) {
+    it->m = m; it->kmax = (kmax < m) ? kmax : m; it->k = 0; it->started = false;
+    it->idx = (size_t*)malloc(sizeof(size_t) * (m ? m : 1));
+}
+/* Advance to the next subset; false when exhausted. The first call yields {}. */
+static bool mz_subsets_next(MzSubsets* it) {
+    if (!it->started) { it->started = true; it->k = 0; return true; }
+    size_t k = it->k, m = it->m;
+    size_t i = k;
+    while (i > 0) {                                  /* next k-combination */
+        i--;
+        if (it->idx[i] < m - k + i) {
+            it->idx[i]++;
+            for (size_t j = i + 1; j < k; j++) it->idx[j] = it->idx[j - 1] + 1;
+            return true;
+        }
+    }
+    if (k >= it->kmax) return false;                 /* next size */
+    it->k = ++k;
+    for (size_t j = 0; j < k; j++) it->idx[j] = j;
+    return true;
+}
+static void mz_subsets_free(MzSubsets* it) { free(it->idx); it->idx = NULL; }
 
 typedef struct { Expr* z; bool strict; } MzIneq;   /* feasible <=> z <= 0 (< if strict) */
 
@@ -1023,6 +1094,60 @@ static Expr* mz_normalize_cons(const Expr* c) {
     return r;
 }
 
+/* Boundedness of a POLYHEDRAL closure (every equality and inequality affine in
+ * the variables, i.e. each constraint gradient is constant): a nonempty
+ * polyhedron P = {E x == e, A x <= a} is bounded iff its recession cone
+ * {d : E d == 0, A d <= 0} is {0}, i.e. iff no cone direction has a coordinate
+ * d_j >= 1 or d_j <= -1 (the cone is closed under positive scaling). That is 2n
+ * linear existential probes, each decided by Fourier–Motzkin elimination in
+ * milliseconds, where the general large-ball probe (mz_bounded_region_cons) is a
+ * quadratic CAD that took seconds on a three-variable LP and timed out on an
+ * unbounded plane. Returns 1 bounded, 0 unbounded, -1 not polyhedral or
+ * undecided (the caller falls back to the general probe). The caller guarantees
+ * P is nonempty (it has a feasible candidate). */
+static int mz_bounded_polyhedron(Expr*** dzEQ, size_t neq, Expr*** dzIN, size_t nin,
+                                 Expr* const* vars, size_t n, int budget) {
+    for (size_t e = 0; e < neq; e++)
+        for (size_t j = 0; j < n; j++)
+            if (mz_contains_var(dzEQ[e][j], vars, n)) return -1;
+    for (size_t k = 0; k < nin; k++)
+        for (size_t j = 0; j < n; j++)
+            if (mz_contains_var(dzIN[k][j], vars, n)) return -1;
+
+    /* The cone, written in the problem variables themselves (Exists binds them). */
+    size_t nc = neq + nin;
+    Expr** cone = (Expr**)malloc(sizeof(Expr*) * (nc + 1));
+    for (size_t c = 0; c < nc; c++) {
+        Expr** g = (c < neq) ? dzEQ[c] : dzIN[c - neq];
+        Expr** t = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t j = 0; j < n; j++)
+            t[j] = fn2(SYM_Times, expr_copy(g[j]), expr_copy(vars[j]));
+        Expr* lin = expr_new_function(expr_new_symbol(SYM_Plus), t, n);
+        free(t);
+        cone[c] = fn2(c < neq ? SYM_Equal : SYM_LessEqual, lin, mk_int(0));
+    }
+    int verdict = 1;
+    for (size_t j = 0; j < n && verdict == 1; j++)
+        for (int sgn = 0; sgn < 2 && verdict == 1; sgn++) {
+            Expr** parts = (Expr**)malloc(sizeof(Expr*) * (nc + 1));
+            for (size_t c = 0; c < nc; c++) parts[c] = expr_copy(cone[c]);
+            parts[nc] = sgn ? fn2(SYM_LessEqual, expr_copy(vars[j]), mk_int(-1))
+                            : fn2(SYM_GreaterEqual, expr_copy(vars[j]), mk_int(1));
+            Expr* conj = expr_new_function(expr_new_symbol(SYM_And), parts, nc + 1);
+            free(parts);
+            Expr* ex = fn2(SYM_Exists, mz_varlist(vars, n), conj);
+            mth_msg_suppress_push();
+            Expr* r = mz_beval(fn2(SYM_Resolve, ex, expr_new_symbol(SYM_Reals)), budget);
+            mth_msg_suppress_pop();
+            if (mz_is_true(r)) verdict = 0;                 /* a recession ray */
+            else if (!mz_is_sym(r, SYM_False)) verdict = -1; /* undecided */
+            expr_free(r);
+        }
+    for (size_t c = 0; c < nc; c++) expr_free(cone[c]);
+    free(cone);
+    return verdict;
+}
+
 /* Fritz–John SINGULAR candidates for the compact-region shortcut. For every
  * active set (all equalities, plus each subset of the inequalities), add the
  * points where the active constraints hold AND their Jacobian is rank-deficient
@@ -1033,7 +1158,12 @@ static Expr* mz_normalize_cons(const Expr* c) {
  * region, which is what makes the least feasible candidate the global minimum on
  * a compact region. When nact > n the active gradients are necessarily dependent
  * (rank < nact everywhere), so the whole active variety {z_c == 0} is singular
- * and no minor equations are added. Appends rows to *cand. Returns true iff every
+ * and no minor equations are added. Only active sets with nact <= n + 1 are
+ * solved: for a larger set S' every (n+1)-subset S ⊂ S' is enumerated too, and
+ * {z_S' == 0} ⊆ {z_S == 0}, so either some such S is parametric (and this
+ * returns false regardless of S') or S's finite solution set already contains
+ * every point of S' — the bound loses nothing and keeps the enumeration
+ * O(nin^(n+1)) instead of 2^nin. Appends rows to *cand. Returns true iff every
  * singular solve was clean/finite; a parametric or aborted solve returns false so
  * the shortcut does not fire. */
 static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t nin,
@@ -1041,10 +1171,11 @@ static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t
                                        Expr* const* vars, size_t n,
                                        clock_t t0, int budget,
                                        Expr**** cand, size_t* ncand, size_t* candcap) {
-    size_t nsub = (size_t)1 << nin;
-    for (size_t mask = 0; mask < nsub; mask++) {
-        size_t nact = neq;
-        for (size_t k = 0; k < nin; k++) if (mask & ((size_t)1 << k)) nact++;
+    MzSubsets sub;
+    mz_subsets_init(&sub, nin, (n + 1 > neq) ? n + 1 - neq : 0);
+    bool all_clean = true;
+    while (all_clean && mz_subsets_next(&sub)) {
+        size_t nact = neq + sub.k;
         if (nact == 0) continue;            /* interior: covered by regular ∇f==0 */
 
         /* Active constraint z-exprs and Jacobian rows: EQ first, then active IN. */
@@ -1052,8 +1183,8 @@ static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t
         Expr*** actdz = (Expr***)malloc(sizeof(Expr**) * nact);
         size_t ai = 0;
         for (size_t e = 0; e < neq; e++) { actz[ai] = EQ[e]; actdz[ai] = dzEQ[e]; ai++; }
-        for (size_t k = 0; k < nin; k++)
-            if (mask & ((size_t)1 << k)) { actz[ai] = IN[k].z; actdz[ai] = dzIN[k]; ai++; }
+        for (size_t q = 0; q < sub.k; q++) {
+            actz[ai] = IN[sub.idx[q]].z; actdz[ai] = dzIN[sub.idx[q]]; ai++; }
 
         /* Build {actz[c] == 0} ∪ {rank-deficiency equations}, classifying each
          * `e == 0` by evaluation: a nonzero-constant e makes the equation FALSE,
@@ -1115,7 +1246,7 @@ static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t
             free(eqs);
             continue;
         }
-        if (neqs == 0) { free(eqs); return false; }  /* whole space singular: cannot certify */
+        if (neqs == 0) { free(eqs); all_clean = false; break; }  /* whole space singular */
         Expr* sys = expr_new_function(expr_new_symbol(SYM_List), eqs, neqs);
         free(eqs);
 
@@ -1125,7 +1256,7 @@ static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t
         Expr*** sp = NULL; size_t nsp = 0;
         int ok = L ? mz_parse_points(L, vars, n, vars, n, &sp, &nsp) : 0;
         expr_free(L);
-        if (!ok) return false;              /* parametric/aborted: cannot certify */
+        if (!ok) { all_clean = false; break; }   /* parametric/aborted: cannot certify */
         for (size_t i = 0; i < nsp; i++) {
             if (*ncand == *candcap) { *candcap = *candcap ? *candcap * 2 : 8;
                 *cand = (Expr***)realloc(*cand, sizeof(Expr**) * *candcap); }
@@ -1133,7 +1264,8 @@ static bool mz_add_singular_candidates(Expr** EQ, size_t neq, MzIneq* IN, size_t
         }
         free(sp);
     }
-    return true;
+    mz_subsets_free(&sub);
+    return all_clean;
 }
 
 static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
@@ -1176,7 +1308,6 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
                 z = mz_sub(b, a); IN[nin].z = z; IN[nin].strict = (h == SYM_Greater); nin++;
             } else goto cleanup;      /* Inequality chain / Or / Element: decline */
         }
-        if (nin > MZ_MAX_INEQ) goto cleanup;
         for (size_t e = 0; e < neq; e++) if (!mz_poly_in_vars(EQ[e], vars, n)) goto cleanup;
         for (size_t k = 0; k < nin; k++) if (!mz_poly_in_vars(IN[k].z, vars, n)) goto cleanup;
     }
@@ -1195,19 +1326,30 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
      * the inequalities is additionally activated (set to its boundary z == 0).
      * The KKT stationarity + boundary system for each active set is solved over
      * the Reals; a parametric / unsolvable subset is SKIPPED (not fatal) — the
-     * Reduce lower-bound certificate below is the ultimate soundness gate. */
-    size_t nsub = (size_t)1 << nin;
-    for (size_t mask = 0; mask < nsub; mask++) {
-        size_t nact = neq;
-        for (size_t k = 0; k < nin; k++) if (mask & ((size_t)1 << k)) nact++;
+     * Reduce lower-bound certificate below is the ultimate soundness gate.
+     *
+     * Only active sets with nact <= n are solved. With more than n active
+     * constraints the n-dimensional gradients are linearly dependent, so the
+     * multipliers λ of any solution are not unique: such a set either has no
+     * real solution or a positive-dimensional (parametric) one, which is skipped
+     * anyway — it can never contribute an isolated candidate. The points where
+     * more than n constraints meet are exactly the Fritz–John singular points,
+     * which mz_add_singular_candidates enumerates for the compact-region
+     * shortcut, and the certificate needs no complete candidate set. So the
+     * bound is derived, not a cap: Σ_{k <= n-neq} C(nin, k) = O(nin^n) solves
+     * instead of 2^nin. */
+    MzSubsets sub;
+    mz_subsets_init(&sub, nin, (n > neq) ? n - neq : 0);
+    while (mz_subsets_next(&sub)) {
+        size_t nact = neq + sub.k;
 
         /* Active constraint z-exprs and jacobian rows: EQ first, then active IN. */
         Expr** actz = (Expr**)malloc(sizeof(Expr*) * (nact ? nact : 1));
         Expr*** actdz = (Expr***)malloc(sizeof(Expr**) * (nact ? nact : 1));
         size_t ai = 0;
         for (size_t e = 0; e < neq; e++) { actz[ai] = EQ[e]; actdz[ai] = dzEQ[e]; ai++; }
-        for (size_t k = 0; k < nin; k++)
-            if (mask & ((size_t)1 << k)) { actz[ai] = IN[k].z; actdz[ai] = dzIN[k]; ai++; }
+        for (size_t q = 0; q < sub.k; q++) {
+            actz[ai] = IN[sub.idx[q]].z; actdz[ai] = dzIN[sub.idx[q]]; ai++; }
 
         /* Variables: the x_j plus one fresh Lagrange multiplier per active c. */
         size_t nall = n + nact;
@@ -1246,6 +1388,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
             for (size_t j = 0; j < nall; j++) expr_free(allv[j]);
             free(lam); free(allv); free(actz); free(actdz);
             expr_free(system);
+            mz_subsets_free(&sub);
             goto cleanup;                       /* incomplete enumeration: decline */
         }
         Expr* L = mz_solve_real(system, allv, nall, rem);
@@ -1264,6 +1407,7 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
         }
         free(pp);                               /* rows moved into cand */
     }
+    mz_subsets_free(&sub);
 
     /* Closure of the region (strict < > -> <= >=); used by the feasibility
      * filter, the lower-bound certificate, and the compact-region fallback. */
@@ -1301,12 +1445,20 @@ static Expr* mz_exact_poly(const Expr* f, const Expr* cons,
          * the candidate set, so the least feasible candidate IS the global
          * minimum — dodging the algebraic-coefficient / degree wall (a Root
          * optimum on a sphere∩cylinder curve, a sextic over the simplex). Fires
-         * only when the closure is provably bounded (one Resolve probe) and every
+         * only when the closure is provably bounded (the recession-cone probes
+         * for a polyhedron, else one large-ball Resolve probe) and every
          * regular + singular solve is clean (complete-or-decline Solve contract);
          * otherwise falls through to the certificate. */
         if (constrained && kkt_all_clean) {
             int remb = mz_rem_budget(t0, budget);
-            if (remb >= 0 && mz_bounded_region_cons(CL, vars, n, remb) &&
+            int poly = (remb >= 0)
+                ? mz_bounded_polyhedron(dzEQ, neq, dzIN, nin, vars, n, remb) : -1;
+            bool bounded = (poly == 1);
+            if (poly == -1) {                   /* not polyhedral: the general probe */
+                int remg = mz_rem_budget(t0, budget);
+                bounded = (remg >= 0) && mz_bounded_region_cons(CL, vars, n, remg);
+            }
+            if (bounded &&
                 mz_add_singular_candidates(EQ, neq, IN, nin, dzEQ, dzIN, vars, n,
                                            t0, budget, &cand, &ncand, &candcap)) {
                 /* Re-filter and re-pick over the now-complete candidate set. */
@@ -1930,11 +2082,41 @@ static Expr* mz_separable_min(const Expr* f, Expr* const* vars, size_t n,
                               const char* head, int budget) {
     if (n < 2) return NULL;
 
-    /* Additive terms: the flat Plus args, or f itself as a single term. */
+    /* Additive terms: the flat Plus args, or f itself as a single term. A
+     * constant multiple c (t_1 + ... + t_k) — c free of the variables, e.g. the
+     * outer 1/2 of (g(x) + g(y) + g(z))/2 — is distributed first, to the terms
+     * c t_i: the identity c Σ t_i == Σ c t_i is exact for any c, so the block
+     * structure (and hence soundness) is unchanged, while the split is no longer
+     * hidden behind the Times head. */
     const Expr* single[1];
     Expr* const* terms;
     size_t nterms;
-    if (f->type == EXPR_FUNCTION && mz_is_sym(f->data.function.head, SYM_Plus)) {
+    Expr** dist = NULL;                     /* owned distributed terms, if any */
+    const Expr* sum = NULL;                 /* the Plus factor of a Times */
+    if (f->type == EXPR_FUNCTION && mz_is_sym(f->data.function.head, SYM_Times)) {
+        size_t nvf = 0;
+        for (size_t i = 0; i < f->data.function.arg_count; i++) {
+            const Expr* a = f->data.function.args[i];
+            if (mz_contains_var(a, vars, n)) { nvf++; sum = a; }
+        }
+        if (nvf != 1 || sum->type != EXPR_FUNCTION ||
+            !mz_is_sym(sum->data.function.head, SYM_Plus)) sum = NULL;
+    }
+    if (sum) {
+        size_t k = sum->data.function.arg_count, m = f->data.function.arg_count;
+        dist = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
+        for (size_t t = 0; t < k; t++) {
+            Expr** fac = (Expr**)malloc(sizeof(Expr*) * m);
+            for (size_t i = 0; i < m; i++) {
+                const Expr* a = f->data.function.args[i];
+                fac[i] = expr_copy((Expr*)(a == sum ? sum->data.function.args[t] : a));
+            }
+            Expr* ct = expr_new_function(expr_new_symbol(SYM_Times), fac, m);
+            free(fac);
+            dist[t] = eval_and_free(ct);
+        }
+        terms = dist; nterms = k;
+    } else if (f->type == EXPR_FUNCTION && mz_is_sym(f->data.function.head, SYM_Plus)) {
         terms = f->data.function.args;
         nterms = f->data.function.arg_count;
     } else {
@@ -1963,7 +2145,11 @@ static Expr* mz_separable_min(const Expr* f, Expr* const* vars, size_t n,
         for (size_t k = 0; k < ncomp; k++) if (roots[k] == r) { seen = true; break; }
         if (!seen) roots[ncomp++] = r;
     }
-    if (ncomp < 2) { free(parent); free(roots); return NULL; }
+    if (ncomp < 2) {
+        free(parent); free(roots);
+        if (dist) { for (size_t t = 0; t < nterms; t++) expr_free(dist[t]); free(dist); }
+        return NULL;
+    }
 
     Expr* total_val = NULL;                     /* Σ of block minima */
     Expr** vals = (Expr**)calloc(n ? n : 1, sizeof(Expr*));  /* per-var minimiser */
@@ -2041,6 +2227,7 @@ static Expr* mz_separable_min(const Expr* f, Expr* const* vars, size_t n,
     if (total_val) expr_free(total_val);
     for (size_t i = 0; i < n; i++) if (vals[i]) expr_free(vals[i]);
     free(vals); free(parent); free(roots);
+    if (dist) { for (size_t t = 0; t < nterms; t++) expr_free(dist[t]); free(dist); }
     return result;
 }
 
@@ -2216,12 +2403,14 @@ done:
  * Minimize[w, cons && p - w*q == 0 && q (>|<) 0] over the enlarged variables
  * {vars, w}, then stripping w (whose optimal value IS the optimum). The
  * equivalence p/q == w ⟺ p - w*q == 0 holds wherever q != 0; proving q's STRICT
- * definite sign on the closure both selects that branch and excludes the q == 0
- * locus (where p/q is undefined), so the reformulation is value- and domain-
- * preserving. Reuses mz_exact_poly whole — the KKT engine, the compact-region
+ * definite sign on the feasible region both selects that branch and excludes the
+ * q == 0 locus (where p/q is undefined), so the reformulation is value- and
+ * domain-preserving; a pole on an open boundary (q == 0 only on the closure) is
+ * admitted. Reuses mz_exact_poly whole — the KKT engine, the compact-region
  * shortcut and the lower-bound certificate all apply to the polynomial problem.
- * Returns NULL for a polynomial objective (q == 1), a non-polynomial p or q, or
- * an indefinite / undecidable q sign (a sound decline). */
+ * Returns NULL for a polynomial objective (q free of the variables), a
+ * non-polynomial p or q, or an indefinite / undecidable q sign (a sound
+ * decline). */
 static Expr* mz_rational_solve(const Expr* f, const Expr* cons,
                                Expr* const* vars, size_t n,
                                const char* head, int budget) {
@@ -2230,25 +2419,40 @@ static Expr* mz_rational_solve(const Expr* f, const Expr* cons,
     extract_num_den(tog, &p, &q);
     expr_free(tog);
     if (!p || !q) { if (p) expr_free(p); if (q) expr_free(q); return NULL; }
-    if (q->type == EXPR_INTEGER && q->data.integer == 1) {   /* polynomial: not ours */
+    /* A denominator free of the variables (q == 1, or the 4 Together pulls out
+     * of (x^4 + ...)/4) is a polynomial objective with a constant coefficient,
+     * not a rational one: leave it to the polynomial engines (separable split,
+     * critical points), which the w-reformulation would only slow down. */
+    if (!mz_contains_var(q, vars, n)) {
         expr_free(p); expr_free(q); return NULL;
     }
     if (!mz_poly_in_vars(p, vars, n) || !mz_poly_in_vars(q, vars, n)) {
         expr_free(p); expr_free(q); return NULL;
     }
 
-    /* Prove q has a strict definite sign on the closure of the region. */
-    Expr* CL = (cons && !mz_is_true(cons)) ? mz_closure(cons) : expr_new_symbol(SYM_True);
+    /* Prove q has a strict definite sign on the feasible region ITSELF (the
+     * original, possibly strict, constraints — not their closure), so a pole on
+     * an OPEN boundary, e.g. (x^2+1)/(x+1) over x > -1, is admitted. That is
+     * sound: the reformulated problem below carries the graph p - w q == 0 and
+     * the strict q (>|<) 0, so its feasible set is exactly the graph of p/q over
+     * the region. Its closure may add points over the pole locus q == 0, but only
+     * where p == 0 too (the graph equation forces it); the engine certifies its
+     * lower bound over that SUPERSET (a bound over a larger set is a bound over
+     * the smaller), and an optimum is reported only when the minimiser satisfies
+     * the original strict constraints, q (>|<) 0 included — so an infimum
+     * approached at the pole is declined, never reported. */
+    Expr* CR = (cons && !mz_is_true(cons)) ? expr_copy((Expr*)cons)
+                                           : expr_new_symbol(SYM_True);
     Expr* qpos_rel = fn2(SYM_Greater, expr_copy(q), mk_int(0));
-    int qpos = mz_entails(CL, qpos_rel, vars, n, budget);
+    int qpos = mz_entails(CR, qpos_rel, vars, n, budget);
     expr_free(qpos_rel);
     int qneg = 0;
     if (!qpos) {
         Expr* qneg_rel = fn2(SYM_Less, expr_copy(q), mk_int(0));
-        qneg = mz_entails(CL, qneg_rel, vars, n, budget);
+        qneg = mz_entails(CR, qneg_rel, vars, n, budget);
         expr_free(qneg_rel);
     }
-    expr_free(CL);
+    expr_free(CR);
     if (!qpos && !qneg) { expr_free(p); expr_free(q); return NULL; }  /* indefinite: decline */
 
     /* Enlarged polynomial problem. */
@@ -2335,7 +2539,7 @@ static Expr* mz_strip_domain_element(const Expr* cons, Expr* const* vars, size_t
     return r;
 }
 
-static Expr* mz_run(Expr* res, const char* head, bool is_max) {
+static Expr* mz_run_body(Expr* res, const char* head, bool is_max) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     Expr** A = res->data.function.args;
@@ -2353,6 +2557,8 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
      * removes the bound. Default MZ_DEFAULT_TIMECONSTRAINT. */
     int budget = mz_option_int(&A[pos_end], argc - pos_end,
                                "TimeConstraint", MZ_DEFAULT_TIMECONSTRAINT);
+    /* ONE deadline for the whole call (see g_mz_deadline). */
+    g_mz_deadline = (budget > 0) ? mth_mono_seconds() + (double)budget : 0.0;
 
     Expr* arg0 = A[0];
     Expr* arg1 = A[1];
@@ -2517,6 +2723,134 @@ static Expr* mz_run(Expr* res, const char* head, bool is_max) {
     free(vars);
     if (cons_owned) expr_free(cons);
     return result;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Presentation: canonical form of a radical answer                   *
+ * ------------------------------------------------------------------ */
+
+/* Does `e` carry a radical (Power[_, Rational[..]]) and no Root[] object? Only
+ * such values are re-presented: Root objects are already canonical, and
+ * rationals / integers have nothing to simplify. */
+static void mz_radical_scan(const Expr* e, bool* rad, bool* root) {
+    if (e->type != EXPR_FUNCTION) return;
+    const Expr* h = e->data.function.head;
+    if (mz_is_sym(h, SYM_Root)) { *root = true; return; }
+    if (mz_is_sym(h, SYM_Power) && e->data.function.arg_count == 2) {
+        const Expr* x = e->data.function.args[1];
+        if (x->type == EXPR_FUNCTION && mz_is_sym(x->data.function.head, SYM_Rational))
+            *rad = true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        mz_radical_scan(e->data.function.args[i], rad, root);
+}
+
+/* The simplest of the exact forms {e, Together[e], Expand[e]} by LeafCount. The
+ * engine's radical optima come out of Solve / substitution un-normalised —
+ * (-39 + 3 Sqrt[13])^2/169 + (-26 + 2 Sqrt[13])^2/169 rather than
+ * 14 - 2 Sqrt[13]. Together and Expand are value-preserving identities and,
+ * over a quadratic-surd answer, cost microseconds; Simplify would search far
+ * more forms (and its zero tests are not needed — both rewrites are exact).
+ * A rewrite that is not smaller (or is cut off by the deadline) keeps `e`.
+ * Consumes `e`. */
+static Expr* mz_canon_value(Expr* e) {
+    bool rad = false, root = false;
+    mz_radical_scan(e, &rad, &root);
+    if (!rad || root) return e;
+    const char* forms[2] = { SYM_Together, SYM_Expand };
+    int64_t best = leaf_count_internal(e, true);
+    for (int k = 0; k < 2; k++) {
+        Expr* c = mz_beval(fn1(forms[k], expr_copy(e)), 0);
+        if (!mz_is_sym(c, SYM_DollarAborted)) {
+            int64_t lc = leaf_count_internal(c, true);
+            if (lc < best) { best = lc; expr_free(e); e = c; continue; }
+        }
+        expr_free(c);
+    }
+    return e;
+}
+
+/* Canonicalise the value and every rule right-hand side of {value, {rules}}.
+ * Rebuilds the result rather than editing it in place (its subtrees may be
+ * shared: expr_copy is a reference bump). Consumes `r`. */
+static Expr* mz_canon_result(Expr* r) {
+    if (!r || r->type != EXPR_FUNCTION || !mz_is_sym(r->data.function.head, SYM_List) ||
+        r->data.function.arg_count != 2) return r;
+    const Expr* rules = r->data.function.args[1];
+    if (rules->type != EXPR_FUNCTION || !mz_is_sym(rules->data.function.head, SYM_List))
+        return r;
+    size_t m = rules->data.function.arg_count;
+    Expr** nr = (Expr**)malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) {
+        const Expr* rl = rules->data.function.args[i];
+        if (rl->type == EXPR_FUNCTION && mz_is_sym(rl->data.function.head, SYM_Rule) &&
+            rl->data.function.arg_count == 2)
+            nr[i] = fn2(SYM_Rule, expr_copy(rl->data.function.args[0]),
+                        mz_canon_value(expr_copy(rl->data.function.args[1])));
+        else nr[i] = expr_copy((Expr*)rl);
+    }
+    Expr* out = fn2(SYM_List, mz_canon_value(expr_copy(r->data.function.args[0])),
+                    expr_new_function(expr_new_symbol(SYM_List), nr, m));
+    free(nr);
+    expr_free(r);
+    return out;
+}
+
+/* Per-top-level decline memo. The fixed-point evaluator re-invokes a builtin
+ * that returned NULL (the call is re-examined after its arguments settle, and
+ * again by the enclosing assignment), so a single user-level Minimize[...] that
+ * declines used to run its whole cascade about three times — tripling a bounded
+ * decline (3 x TimeConstraint). Within one top-level evaluation the same call
+ * declines the same way, so a call structurally identical (expr_eq — exact, no
+ * hash collisions) to one already declined is declined at once. The memo is
+ * cleared whenever the top-level evaluation id changes, and a decline caused by
+ * an ENCLOSING TimeConstrained (g_mz_foreign_abort) is not recorded, since it
+ * depends on the caller's clock rather than on the problem. A memo hit can only
+ * ever return "unevaluated", never an answer, so it cannot be unsound. */
+#define MZ_MEMO_SLOTS 16
+static uint64_t g_mz_memo_epoch = 0;
+static Expr*    g_mz_memo[MZ_MEMO_SLOTS];
+static size_t   g_mz_memo_n = 0, g_mz_memo_next = 0;
+
+static void mz_memo_sync(void) {
+    uint64_t id = eval_toplevel_id();
+    if (id == g_mz_memo_epoch) return;
+    for (size_t i = 0; i < g_mz_memo_n; i++) expr_free(g_mz_memo[i]);
+    g_mz_memo_n = g_mz_memo_next = 0;
+    g_mz_memo_epoch = id;
+}
+static bool mz_memo_seen(const Expr* res) {
+    for (size_t i = 0; i < g_mz_memo_n; i++)
+        if (expr_eq(g_mz_memo[i], (Expr*)res)) return true;
+    return false;
+}
+static void mz_memo_add(Expr* res) {
+    if (g_mz_memo_n < MZ_MEMO_SLOTS) g_mz_memo[g_mz_memo_n++] = expr_copy(res);
+    else {                                          /* ring: evict the oldest */
+        expr_free(g_mz_memo[g_mz_memo_next]);
+        g_mz_memo[g_mz_memo_next] = expr_copy(res);
+        g_mz_memo_next = (g_mz_memo_next + 1) % MZ_MEMO_SLOTS;
+    }
+}
+
+/* Entry: decline memo, then the body under its own per-call deadline (the
+ * caller's deadline, if this is a nested call, is restored afterwards). */
+static Expr* mz_run(Expr* res, const char* head, bool is_max) {
+    mz_memo_sync();
+    if (mz_memo_seen(res)) return NULL;
+    double saved_deadline = g_mz_deadline;
+    bool saved_foreign = g_mz_foreign_abort;
+    g_mz_deadline = 0.0;
+    g_mz_foreign_abort = false;
+    Expr* r = mz_run_body(res, head, is_max);
+    bool foreign = g_mz_foreign_abort;
+    g_mz_deadline = saved_deadline;
+    g_mz_foreign_abort = saved_foreign || foreign;
+    /* Presentation runs outside this call's deadline, so the form of an answer
+     * never depends on how much of the budget the search used. */
+    r = mz_canon_result(r);
+    if (!r && !foreign) mz_memo_add(res);
+    return r;
 }
 
 Expr* builtin_minimize(Expr* res) { return mz_run(res, "Minimize", false); }

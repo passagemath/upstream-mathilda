@@ -1872,7 +1872,13 @@ monotonically down.
   - `"Beta"` — Euler-Beta reduction on `[0,1]`
     (`Integrate\`Beta[f, {x, 0, 1}]`): `x^(k-1) (1-x)^(l-1) → Beta[k, l]`, with
     `Log[x]^i Log[1-x]^j` weights giving the mixed parameter derivative of
-    `Beta`. Gated on `Re[k] > 0 && Re[l] > 0`.
+    `Beta`. Gated on `Re[k] > -j && Re[l] > -i`: a `Log[1-x]^j` weight vanishes
+    like `x^j` at 0 (and `Log[x]^i` like `(1-x)^i` at 1), widening the strip, and
+    on the widened part the value is the removable limit of the derivative
+    (`Integrate[Log[x] Log[1-x]/x, {x,0,1}]` → `Zeta[3]`,
+    `Integrate[Log[1-x]/x, {x,0,1}]` → `-Pi^2/6`). `PolyGamma[n, k]` at positive
+    integers in the value is written with `Zeta[n+1]`. The boundary
+    substitution is a muted probe, so it raises no `Infinity::indet`.
   - `"TrigPower"` — `Sin[x]^m Cos[x]^n` over a canonical trig interval
     (`Integrate\`TrigPower[f, {x, 0, c}]`): over `[0, Pi/2]` it is
     `Beta[(m+1)/2, (n+1)/2]/2`; over `[0, Pi]`/`[0, 2Pi]` the standard parity
@@ -2413,6 +2419,13 @@ bound may depend on an outer variable.
 
 `Integrate\`SingularPoints[expr, {x, a, b}]` returns the sorted list of the
 interior real poles used for the split — exposed for inspection and reuse.
+
+**Half-line King reflection.** The reflection stage (`x g(x)` on `[0, c]` with `g`
+invariant under `x → c − x`) requires a finite `c`. On `[0, ∞)` it used to
+substitute `x → ∞ − x` and raise `Infinity::indet`, so
+`Check[Integrate[x Exp[−p x^2] BesselJ[0, b x], {x,0,∞}, Assumptions -> p>0 &&
+b>0], "msg"]` returned `"msg"` although the integral closes to
+`E^(−b²/(4p))/(2p)`.
 
 **Cauchy principal value.** `Integrate[f, {x, a, b}, PrincipalValue -> True]`
 computes the Cauchy principal value across an interior pole. It is defined only

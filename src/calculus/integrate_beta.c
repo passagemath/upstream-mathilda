@@ -20,6 +20,8 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "arithmetic.h"   /* arith_warnings_mute_push/pop */
+#include "parse.h"
 
 #include <string.h>
 #include <stdbool.h>
@@ -58,6 +60,14 @@ static bool head_name_is(const Expr* e, const char* name) {
 }
 static bool sym_is(const Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, name) == 0;
+}
+/* True iff some subexpression of e has head `name`. */
+static bool contains_head(const Expr* e, const char* name) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is(e, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_head(e->data.function.args[i], name)) return true;
+    return false;
 }
 static bool is_symbol(const Expr* e, const Expr* x) {
     return e->type == EXPR_SYMBOL && x->type == EXPR_SYMBOL &&
@@ -192,16 +202,66 @@ static bool beta_visit(Expr* g, void* vctx) {
     return false;
 }
 
-/* d^i/dP^i d^j/dQ^j Beta[P,Q] with P,Q placeholder symbols, then P->A, Q->B. */
+/* d^i/dP^i d^j/dQ^j Beta[P,Q] with P,Q placeholder symbols, then P->A, Q->B.
+ * Consumes A and B.
+ *
+ * At a boundary point of Beta's own strip the substituted derivative is a
+ * 0 * ComplexInfinity (Beta[0, 1] PolyGamma[...]) although the integral
+ * converges: a Log[1-x]^j weight vanishes like x^j at 0 (a Log[x]^i weight like
+ * (1-x)^i at 1), which widens the convergence strip to A > -j, B > -i.  On that
+ * wider strip the integral is analytic in A and B, so its value is the
+ * (removable) limit of the meromorphic derivative.  The substitution is
+ * therefore an internal probe -- muted, so its Infinity::indet neither prints
+ * nor trips Check[] -- and a non-finite value falls back to the iterated limit.
+ * The caller still gates the result on the widened strip. */
 static Expr* beta_param_deriv(Expr* A, Expr* B, long i, long j) {
     const char* P = "Integrate`Beta`P";
     const char* Q = "Integrate`Beta`Q";
     Expr* d = Beta_(expr_new_symbol(P), expr_new_symbol(Q));
     for (long k = 0; k < i; k++) d = eval_take(mk_fn2("D", d, expr_new_symbol(P)));
     for (long k = 0; k < j; k++) d = eval_take(mk_fn2("D", d, expr_new_symbol(Q)));
-    Expr* rules = mk_fn2("List", mk_fn2("Rule", expr_new_symbol(P), A),
-                                  mk_fn2("Rule", expr_new_symbol(Q), B));
-    return eval_take(mk_fn2("ReplaceAll", d, rules));
+    arith_warnings_mute_push();
+    Expr* rules = mk_fn2("List", mk_fn2("Rule", expr_new_symbol(P), cp(A)),
+                                  mk_fn2("Rule", expr_new_symbol(Q), cp(B)));
+    Expr* v = eval_take(mk_fn2("ReplaceAll", cp(d), rules));
+    if ((!v || mentions_nonfinite(v)) && (i > 0 || j > 0)) {
+        /* Iterated limit, the regular variable substituted first. */
+        for (int order = 0; order < 2; order++) {
+            const char* sv = order ? P : Q;      /* substituted */
+            const char* lv = order ? Q : P;      /* limit variable */
+            Expr* sval = order ? A : B;
+            Expr* lval = order ? B : A;
+            Expr* part = eval_take(mk_fn2("ReplaceAll", cp(d),
+                             mk_fn2("Rule", expr_new_symbol(sv), cp(sval))));
+            if (!part || mentions_nonfinite(part)) { if (part) expr_free(part); continue; }
+            Expr* lim = eval_take(mk_fn2("Limit", part,
+                            mk_fn2("Rule", expr_new_symbol(lv), cp(lval))));
+            if (lim && !mentions_nonfinite(lim) && !contains_head(lim, "Limit")) {
+                if (v) expr_free(v);
+                v = lim;
+                break;
+            }
+            if (lim) expr_free(lim);
+        }
+    }
+    arith_warnings_mute_pop();
+    expr_free(d); expr_free(A); expr_free(B);
+    return v;
+}
+
+/* PolyGamma[n, k] at a positive integer k (n >= 1) in closed form:
+ *   PolyGamma[n, k] = (-1)^(n+1) n! (Zeta[n+1] - Sum_{m=1}^{k-1} m^-(n+1)),
+ * which the Beta parameter derivatives produce at integer arguments (the
+ * widened-strip limit of Log[x] Log[1-x]/x gives -PolyGamma[2,1]/2 = Zeta[3]).
+ * Bounded (k, n <= 64), exact. */
+static Expr* beta_polygamma_to_zeta(Expr* v) {
+    if (!v || !contains_head(v, "PolyGamma")) return v;
+    static const char* RULE =
+        "PolyGamma[n_Integer, k_Integer] /; 1 <= n <= 64 && 1 <= k <= 64 :> "
+        "(-1)^(n + 1) n! (Zeta[n + 1] - Sum[1/m^(n + 1), {m, 1, k - 1}])";
+    Expr* rule = parse_expression(RULE);
+    if (!rule) return v;
+    return eval_take(mk_fn2("ReplaceAll", v, rule));
 }
 
 Expr* integrate_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
@@ -224,7 +284,7 @@ Expr* integrate_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) 
     /* Value: constant * (Beta or its mixed parameter derivative). */
     Expr* core = (c.logi == 0 && c.logj == 0)
         ? Beta_(cp(A), cp(B))
-        : beta_param_deriv(cp(A), cp(B), c.logi, c.logj);
+        : beta_polygamma_to_zeta(beta_param_deriv(cp(A), cp(B), c.logi, c.logj));
     Expr* value = simp2(Times_(c.C, core), assumptions);
     if (!value || mentions_nonfinite(value)) {
         if (value) expr_free(value);
@@ -232,12 +292,17 @@ Expr* integrate_beta_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) 
         return NULL;
     }
 
-    /* Convergence strip: Re[k] > 0 && Re[l] > 0.  Prove on the plain positivity
-     * k > 0 && l > 0 -- a sound *sufficient* condition (real positivity implies
-     * Re > 0, and a complex argument leaves Greater undecided, never wrongly
-     * True), which Simplify can actually discharge under a `k > 0` assumption.
-     * Display the WL-faithful Re form when the strip stays undecided. */
-    Expr* value2 = beta_gate(value, A, B, assumptions);
+    /* Convergence strip: Re[k] > -logj && Re[l] > -logi (a Log[1-x]^j weight
+     * vanishes like x^j at 0, a Log[x]^i weight like (1-x)^i at 1).  Prove on
+     * the plain real inequalities -- a sound *sufficient* condition (real
+     * positivity implies Re > 0, and a complex argument leaves Greater
+     * undecided, never wrongly True), which Simplify can actually discharge
+     * under a `k > 0` assumption.  Display the WL-faithful Re form when the
+     * strip stays undecided. */
+    Expr* Ash = simp(Plus_(cp(A), mk_int(c.logj)));
+    Expr* Bsh = simp(Plus_(cp(B), mk_int(c.logi)));
+    Expr* value2 = beta_gate(value, Ash, Bsh, assumptions);
+    expr_free(Ash); expr_free(Bsh);
     expr_free(A); expr_free(B);
     return value2;
 }
@@ -665,6 +730,12 @@ Expr* integrate_poissonlog_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumpt
 Expr* integrate_kingreflect_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
     if (!(a->type == EXPR_INTEGER && a->data.integer == 0)) return NULL;
+    /* The reflection x -> c - x is an involution of [0, c] only for a FINITE c;
+     * on a half-line there is no such map.  Without this gate the invariance
+     * test substituted x -> Infinity - x and Simplify'd the result, which raised
+     * Infinity::indet (Infinity - Infinity) -- a spurious diagnostic that made
+     * Check[] reject a half-line integral another stage then closed. */
+    if (mentions_nonfinite(b)) return NULL;
     /* Cheap gate: f must be a product with an explicit bare x factor (f = x g). */
     if (!head_name_is(f, "Times")) return NULL;
     bool has_x = false;

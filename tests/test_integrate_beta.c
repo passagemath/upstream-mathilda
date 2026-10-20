@@ -23,6 +23,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -171,6 +172,56 @@ static void test_stress(void) {
              "- 1/2 Beta[11/2, 9/2]]", "0");
 }
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* -------------------------------------------------------------------------
+ * Widened Beta strip: a Log[1-x]^j weight vanishes like x^j at 0 (Log[x]^i
+ * like (1-x)^i at 1), so the integral converges for A > -j, B > -i and its
+ * value is the removable limit of the Beta parameter derivative.  Before,
+ * the boundary substitution Beta[0,1] PolyGamma[...] raised Infinity::indet
+ * (seen by Check[]) and the stage declined.  References: the reference system
+ * (Zeta[3], -Pi^2/6, -Pi^4/45, -Pi^4/180, Pi^2/3).
+ * ---------------------------------------------------------------------- */
+static void test_beta_widened_strip(void) {
+    check_quiet("Integrate[Log[x] Log[1-x]/x, {x, 0, 1}]", "Zeta[3]");
+    check_quiet("Integrate[Log[1-x]/x, {x, 0, 1}]", "-1/6 Pi^2");
+    check_quiet("Integrate[Log[x]^2 Log[1-x]/x, {x, 0, 1}]", "-1/45 Pi^4");
+    check_quiet("Integrate[Log[x] Log[1-x]^2/x, {x, 0, 1}]", "-1/180 Pi^4");
+    check_quiet("Integrate[Log[x] Log[1-x]/(1-x), {x, 0, 1}]", "Zeta[3]");
+    check_quiet("Integrate[Log[1-x]^2/x^2, {x, 0, 1}]", "1/3 Pi^2");
+    check_quiet("Check[Integrate[Log[x] Log[1-x]/x, {x, 0, 1}], \"msg\"]", "Zeta[3]");
+}
+
+/* King's reflection x -> c - x exists only for a finite c.  On a half-line the
+ * stage used to substitute x -> Infinity - x and raise Infinity::indet, which
+ * made Check[] reject a Gaussian-Bessel integral another stage then closed. */
+static void test_kingreflect_halfline_gate(void) {
+    check_quiet("Integrate[x Exp[-p x^2] BesselJ[0, b x], {x, 0, Infinity}, "
+                "Assumptions -> p > 0 && b > 0]", "E^(-b^2/(4 p))/(2 p)");
+    check_quiet("Check[Integrate[x Exp[-p x^2] BesselJ[0, b x], {x, 0, Infinity}, "
+                "Assumptions -> p > 0 && b > 0], \"msg\"]", "E^(-b^2/(4 p))/(2 p)");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -185,6 +236,8 @@ int main(void) {
     TEST(test_method_option);
     TEST(test_stress);
 
+    TEST(test_beta_widened_strip);
+    TEST(test_kingreflect_halfline_gate);
     printf("All integrate_beta tests passed.\n");
     return 0;
 }

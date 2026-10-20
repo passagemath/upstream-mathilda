@@ -725,6 +725,8 @@ Expr* builtin_dsolve(Expr* res) {
         result = NULL;
     }
 
+    result = ds_collapse_identities(result);
+
     if (!result && g_dsolve_depth == 0) ds_fail_record(heq, hv, (int)method);
     dsolve_problem_free(&P);
     return result;

@@ -3332,10 +3332,72 @@ static void t_nasser_series_sign_display(void) {
                "y[x], x, Method -> \"PowerSeries\"]], \"+ -\"]");
 }
 
+/* ---- step / impulse forcing with a SYMBOLIC breakpoint ---- */
+/* Integrate now closes g(t) UnitStep[t - a] (continuous antiderivative) and
+ * g(t) DiracDelta[t - a] (sifting) indefinitely, so the integrating-factor form
+ * is a closed form valid across the breakpoint: no causal convolution integral,
+ * no leaked DSolve`vpS dummy.  Targets are the reference system's answers. */
+static void t_step_impulse_symbolic_breakpoint(void) {
+    check_true("With[{s = DSolve[{y'[t] + y[t] == UnitStep[t - a], y[0] == 0}, y[t], t]}, "
+               "FreeQ[s, Integrate] && PossibleZeroQ[(y[t] /. s[[1]]) - "
+               "(-UnitStep[-a] + E^a UnitStep[-a] - E^a UnitStep[t - a] + E^t UnitStep[t - a])/E^t]]");
+    check_true("With[{s = DSolve[{y'[t] + y[t] == DiracDelta[t - a], y[0] == 0}, y[t], t]}, "
+               "FreeQ[s, Integrate] && PossibleZeroQ[(y[t] /. s[[1]]) + "
+               "E^(a - t) (HeavisideTheta[-a] - HeavisideTheta[t - a])]]");
+    /* a decreasing step */
+    check_true("With[{s = DSolve[{y'[t] + y[t] == UnitStep[a - t], y[0] == 0}, y[t], t]}, "
+               "FreeQ[s, Integrate] && Abs[N[(y[t] /. s[[1]]) /. {a -> 2, t -> 1}] - "
+               "(1 - E^-1)] < 1/10^10 && Abs[N[(y[t] /. s[[1]]) /. {a -> 1, t -> 3}] - "
+               "(E^1 - 1) E^-3] < 1/10^10]");
+}
+
+/* ---- a piecewise-constant forcing is not a constant ---- */
+/* ds_free_of read UnitStep[t - a] as t-free (its classical derivative is zero off
+ * the breakpoint), so UndeterminedCoefficients returned y_p == UnitStep[t - a]
+ * for y'' + y == UnitStep[t - a]: discontinuous at a, not a solution.  The
+ * correct particular is (1 - Cos[t - a]) UnitStep[t - a]. */
+static void t_step_forcing_not_constant(void) {
+    check_true("PossibleZeroQ[(y[t] /. DSolve[y''[t] + y[t] == UnitStep[t - a], y[t], t][[1]] "
+               "/. {C[1] -> 0, C[2] -> 0}) - (1 - Cos[t - a]) UnitStep[t - a]]");
+    /* IVP: y = (1 - Cos[t - a]) UnitStep[t - a] for a > 0, 1 - Cos[t] for a < 0
+     * (the reference's two ConditionalExpression branches), with no
+     * Piecewise[{{Indeterminate, ..}}] step-derivative residue in the constants. */
+    check_true("With[{s = DSolve[{y''[t] + y[t] == UnitStep[t - a], y[0] == 0, y'[0] == 0}, "
+               "y[t], t]}, FreeQ[s, Indeterminate] && "
+               "Abs[N[(y[t] /. s[[1]]) /. {a -> 1, t -> 3}] - (1 - Cos[2])] < 1/10^10 && "
+               "Abs[N[(y[t] /. s[[1]]) /. {a -> 1, t -> 1/2}]] < 1/10^10 && "
+               "Abs[N[(y[t] /. s[[1]]) /. {a -> -1, t -> 2}] - (1 - Cos[2])] < 1/10^10]");
+    /* 2.2.16-1503: a step PULSE samples to zero almost everywhere, and the
+     * numeric zero test read the forcing as homogeneous -> the wrong u == 0.
+     * Reference values from NDSolve at k = 2: u(2) = 0.234986, u(4) = 1.386579. */
+    check_true("With[{s = DSolve[{u''[t] + u'[t]/4 + u[t] == k (UnitStep[t - 3/2] - "
+               "UnitStep[t - 5/2]), u[0] == 0, u'[0] == 0}, u, t]}, FreeQ[s, Integrate] && "
+               "Abs[N[(u[2] /. s[[1]]) /. k -> 2] - 0.234986] < 1/10^4 && "
+               "Abs[N[(u[4] /. s[[1]]) /. k -> 2] - 1.386579] < 1/10^4]");
+}
+
+/* ---- answers come back in their clean form (Nasser 4175 / 4408 / 4009) ---- */
+static void t_clean_answer_forms(void) {
+    /* E^x (Cos^2 + Sin^2) is E^x */
+    check_true("With[{s = DSolve[{2 y1'[x] + y2'[x] - 4 y1[x] - y2[x] == E^x, "
+               "y1'[x] + 3 y1[x] + y2[x] == 0}, {y1, y2}, x]}, "
+               "FreeQ[s, Cos[x]^2] && FreeQ[s, Sin[x]^2]]");
+    /* Cosh[y^2] + Sinh[y^2] is E^(y^2) */
+    check_true("With[{s = DSolve[y'[x] == 1/(y[x] x + x^3 y[x]^3), y, x]}, "
+               "FreeQ[s, Cosh] && FreeQ[s, Sinh] && !FreeQ[s, E^(y[x]^2)]]");
+    /* the Whittaker recovery factor E^(x/2)/Sqrt[x] cancels into the basis */
+    check_true("With[{s = DSolve[x^2 y''[x] + x (1 - x) y'[x] - 7 y[x] == 0, y, x]}, "
+               "FreeQ[s, E] && FreeQ[s, Log] && !FreeQ[s, x^Sqrt[7]] && !FreeQ[s, x^(-Sqrt[7])]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
     test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
+
+    TEST(t_step_impulse_symbolic_breakpoint);
+    TEST(t_step_forcing_not_constant);
+    TEST(t_clean_answer_forms);
 
     TEST(t_linear_first_order_general);
     TEST(t_linear_homogeneous_general);

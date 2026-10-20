@@ -1530,7 +1530,26 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
             }
             expr_free(negr);
             if (base) {
-                Expr* cand = eval_and_free(ds_call2(SYM_Times, mu, base));  /* mu (C[1] z0 + C[2] z1) */
+                /* mu C[1] z0 + mu C[2] z1: distribute the recovery factor over the
+                 * basis terms so it meets each term's own powers of the same base
+                 * and cancels against them (4009: E^(x/2) x^(-1/2) times
+                 * E^(-x/2) x^(1/2 + Sqrt[7]) is x^Sqrt[7]).  Left as an outer
+                 * factor mu (C[1] z0 + C[2] z1), nothing ever combines them. */
+                Expr* cand;
+                if (base->type == EXPR_FUNCTION &&
+                    base->data.function.head->type == EXPR_SYMBOL &&
+                    base->data.function.head->data.symbol.name == SYM_Plus) {
+                    size_t nb = base->data.function.arg_count;
+                    Expr** terms = malloc(nb * sizeof(Expr*));
+                    for (size_t k = 0; k < nb; k++)
+                        terms[k] = ds_call2(SYM_Times, expr_copy(mu),
+                                            expr_copy(base->data.function.args[k]));
+                    cand = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, nb));
+                    free(terms);
+                    expr_free(mu); expr_free(base);
+                } else {
+                    cand = eval_and_free(ds_call2(SYM_Times, mu, base));
+                }
                 if (whit)   /* merge the stacked (x - x0) radicals: see (1) above */
                     cand = eval_and_free(ds_call1("PowerExpand", cand));
                 if (sf_num_ok(P, cand, xvar, P->fun_names[0])) general = cand;

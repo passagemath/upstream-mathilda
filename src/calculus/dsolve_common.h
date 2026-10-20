@@ -344,6 +344,10 @@ Expr* ds_inactivate_integrate(Expr* e);
  * `Inactive[Integrate][...]` as well.  These two distinguish the forms. */
 bool ds_has_active_integrate(const Expr* e);
 
+/* Collapse c Cos[u]^2 + c Sin[u]^2 -> c and c Cosh[u] +- c Sinh[u] -> c E^(+-u)
+ * wherever a Plus carries such a pair (exact identities).  Consumes `e`. */
+Expr* ds_collapse_identities(Expr* e);
+
 bool ds_has_inactive_integrate(const Expr* e);
 
 /* Correctness gate for a branch whose particular carries `Inactive[Integrate]`.

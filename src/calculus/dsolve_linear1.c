@@ -80,9 +80,31 @@ Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch) {
             bool numeric_bp = (nq && nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True);
             expr_free(nq);
             if (numeric_bp) { expr_free(p); expr_free(q); return NULL; }  /* -> PiecewiseForcing */
-            body = dsolve_linear_factor_solve_causal(p, q, xvar);
+            /* Symbolic breakpoint.  When Integrate closes mu*q (a step with a
+             * linear argument integrates to the CONTINUOUS antiderivative
+             * (G(x) - G(a)) UnitStep[x - a]), the plain integrating-factor form
+             * is a closed form valid across the breakpoint, and the IC-fit
+             * substitutes into no inert integral -- the capture hazard above
+             * cannot arise.  Only a non-closing integral needs the causal
+             * convolution, whose bound dummy must otherwise stay inside it. */
+            body = dsolve_linear_factor_solve(expr_copy(p), expr_copy(q), xvar);
+            if (body && !ds_has_active_integrate(body)) {
+                expr_free(p); expr_free(q);
+            } else {
+                if (body) expr_free(body);
+                body = dsolve_linear_factor_solve_causal(p, q, xvar);
+            }
         } else if (has_dirac && !has_step) {
-            body = dsolve_linear_factor_solve_causal(p, q, xvar);   /* impulse */
+            /* Impulse: Integrate sifts g(x) DiracDelta[x - a] indefinitely to
+             * g(a) HeavisideTheta[x - a], a closed form valid across a; only a
+             * non-closing integral needs the causal convolution. */
+            body = dsolve_linear_factor_solve(expr_copy(p), expr_copy(q), xvar);
+            if (body && !ds_has_active_integrate(body)) {
+                expr_free(p); expr_free(q);
+            } else {
+                if (body) expr_free(body);
+                body = dsolve_linear_factor_solve_causal(p, q, xvar);
+            }
         } else {
             /* Mixed step + impulse: neither path closes it cleanly — decline
              * (honest UNEVAL) rather than ship the broken inert indefinite form. */

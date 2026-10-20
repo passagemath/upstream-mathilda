@@ -172,6 +172,18 @@ bool ds_free_of(const Expr* e, const char* var) {
     if (!ds_contains(e, var)) return true;                 /* cheap syntactic pass */
     Expr* d = ds_d(expr_copy((Expr*)e), expr_new_symbol(var));
     bool zero = ds_is_zero(d);
+    /* A jump function is piecewise CONSTANT, so its classical derivative is zero
+     * almost everywhere (D[UnitStep[x - a], x] == Piecewise[{{Indeterminate,
+     * x - a == 0}}, 0]; D[HeavisideTheta[x - a], x] == DiracDelta[x - a]) -- yet
+     * it genuinely depends on var.  Reading it as var-free made the
+     * undetermined-coefficients ansatz treat UnitStep[t - a] as a constant
+     * forcing and return y_p == UnitStep[t - a] for y'' + y == UnitStep[t - a]:
+     * discontinuous at t == a, so not a solution.  A derivative that is zero
+     * only off a singular set betrays itself by carrying the Indeterminate /
+     * DiracDelta of that set. */
+    if (zero && !ds_is_structural_zero(d) &&
+        (ds_contains(d, SYM_Indeterminate) || ds_contains(d, intern_symbol("DiracDelta"))))
+        zero = false;
     /* A numeric "zero" that is not a structural one may be the sampler's decay
      * false positive (Coth[v x] passing as free of x because D == 2 a v Csch[v x]^2
      * underflows at its large samples).  Confirm it at a moderate point. */
@@ -920,6 +932,240 @@ static bool ds_branch_corpus_verifiable(const DSolveProblem* P, const Expr* body
     return true;
 }
 
+/* ---- answer identity collapse ------------------------------------------- */
+
+/* One additive term read as  coef * K[u]^k * rest  where K[u]^k is the
+ * identity-carrying kernel (Cos[u]^2 / Sin[u]^2 / Cosh[u] / Sinh[u]), coef the
+ * leading numeric factor (borrowed; NULL for 1) and rest the remaining factors
+ * (borrowed, in the term's canonical Times order). */
+typedef struct {
+    int kind;                 /* 0 none, 1 Cos^2, 2 Sin^2, 3 Cosh, 4 Sinh */
+    const Expr* u;
+    const Expr* coef;
+    const Expr** rest;
+    size_t nrest;
+} DsIdTerm;
+
+static int ds_id_kernel(const Expr* f, const Expr** u) {
+    if (head_is(f, SYM_Power) && f->data.function.arg_count == 2 &&
+        f->data.function.args[1]->type == EXPR_INTEGER &&
+        f->data.function.args[1]->data.integer == 2) {
+        const Expr* b = f->data.function.args[0];
+        if (head_is(b, SYM_Cos) && b->data.function.arg_count == 1) { *u = b->data.function.args[0]; return 1; }
+        if (head_is(b, SYM_Sin) && b->data.function.arg_count == 1) { *u = b->data.function.args[0]; return 2; }
+        return 0;
+    }
+    if (head_is(f, SYM_Cosh) && f->data.function.arg_count == 1) { *u = f->data.function.args[0]; return 3; }
+    if (head_is(f, SYM_Sinh) && f->data.function.arg_count == 1) { *u = f->data.function.args[0]; return 4; }
+    return 0;
+}
+
+static bool ds_is_number(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL ||
+           head_is(e, SYM_Rational) || head_is(e, SYM_Complex);
+}
+
+/* Decompose term t; rest is malloc'd (caller frees) when kind != 0. */
+static DsIdTerm ds_id_read(const Expr* t) {
+    DsIdTerm r = { 0, NULL, NULL, NULL, 0 };
+    const Expr* const* fs = (const Expr* const*)&t;
+    size_t n = 1;
+    if (head_is(t, SYM_Times)) { fs = (const Expr* const*)t->data.function.args; n = t->data.function.arg_count; }
+    size_t kidx = n;
+    for (size_t i = 0; i < n; i++) {
+        int k = ds_id_kernel(fs[i], &r.u);
+        if (k) { r.kind = k; kidx = i; break; }
+    }
+    if (!r.kind) return r;
+    r.rest = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        if (i == kidx) continue;
+        if (i == 0 && ds_is_number(fs[i])) { r.coef = fs[i]; continue; }
+        r.rest[r.nrest++] = fs[i];
+    }
+    return r;
+}
+
+static bool ds_id_same_rest(const DsIdTerm* a, const DsIdTerm* b) {
+    if (a->nrest != b->nrest || !expr_eq((Expr*)a->u, (Expr*)b->u)) return false;
+    for (size_t i = 0; i < a->nrest; i++)
+        if (!expr_eq((Expr*)a->rest[i], (Expr*)b->rest[i])) return false;
+    return true;
+}
+
+/* coef(b) == sgn * coef(a)?  (NULL coefficient == 1) */
+static bool ds_id_coef_rel(const DsIdTerm* a, const DsIdTerm* b, int sgn) {
+    Expr* ca = a->coef ? expr_copy((Expr*)a->coef) : expr_new_integer(1);
+    Expr* cb = b->coef ? expr_copy((Expr*)b->coef) : expr_new_integer(1);
+    Expr* d = eval_and_free(ds_call2(SYM_Plus, cb,
+                  ds_call2(SYM_Times, expr_new_integer(-sgn), ca)));
+    bool z = d->type == EXPR_INTEGER && d->data.integer == 0;
+    expr_free(d);
+    return z;
+}
+
+/* coef * rest * extra, evaluated; extra consumed (may be NULL). */
+static Expr* ds_id_rebuild(const DsIdTerm* a, Expr* extra) {
+    size_t n = a->nrest + 2;
+    Expr** fs = malloc(n * sizeof(Expr*));
+    size_t k = 0;
+    if (a->coef) fs[k++] = expr_copy((Expr*)a->coef);
+    for (size_t i = 0; i < a->nrest; i++) fs[k++] = expr_copy((Expr*)a->rest[i]);
+    if (extra) fs[k++] = extra;
+    Expr* out = (k == 0) ? expr_new_integer(1)
+              : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), fs, k));
+    free(fs);
+    return out;
+}
+
+/* Owned rewrite of one Plus, or NULL when no pair collapses. */
+static Expr* ds_id_collapse_plus(const Expr* e) {
+    size_t n = e->data.function.arg_count;
+    DsIdTerm* ts = calloc(n, sizeof(DsIdTerm));
+    bool* used = calloc(n, sizeof(bool));
+    Expr** out = malloc((n ? n : 1) * sizeof(Expr*));
+    size_t nout = 0;
+    bool any = false;
+    for (size_t i = 0; i < n; i++) ts[i] = ds_id_read(e->data.function.args[i]);
+    for (size_t i = 0; i < n; i++) {
+        if (used[i] || !ts[i].kind) continue;
+        int want = ts[i].kind == 1 ? 2 : ts[i].kind == 3 ? 4 : 0;
+        if (!want) continue;
+        for (size_t j = 0; j < n; j++) {
+            if (j == i || used[j] || ts[j].kind != want) continue;
+            if (!ds_id_same_rest(&ts[i], &ts[j])) continue;
+            Expr* repl = NULL;
+            if (want == 2 && ds_id_coef_rel(&ts[i], &ts[j], +1)) {
+                repl = ds_id_rebuild(&ts[i], NULL);                       /* c */
+            } else if (want == 4) {
+                int sg = ds_id_coef_rel(&ts[i], &ts[j], +1) ? +1
+                       : ds_id_coef_rel(&ts[i], &ts[j], -1) ? -1 : 0;
+                if (sg) {
+                    Expr* ex = (sg > 0) ? expr_copy((Expr*)ts[i].u)
+                             : ds_call2(SYM_Times, expr_new_integer(-1), expr_copy((Expr*)ts[i].u));
+                    repl = ds_id_rebuild(&ts[i], ds_call2(SYM_Power, expr_new_symbol(SYM_E), ex));
+                }
+            }
+            if (repl) { used[i] = used[j] = true; out[nout++] = repl; any = true; break; }
+        }
+    }
+    Expr* res = NULL;
+    if (any) {
+        for (size_t i = 0; i < n; i++)
+            if (!used[i]) out[nout++] = expr_copy(e->data.function.args[i]);
+        res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), out, nout));
+    } else {
+        for (size_t i = 0; i < nout; i++) expr_free(out[i]);
+    }
+    for (size_t i = 0; i < n; i++) free((void*)ts[i].rest);
+    free(ts); free(used); free(out);
+    return res;
+}
+
+/* Owned bottom-up rewrite, or NULL when nothing changed. */
+static Expr* ds_id_collapse_rw(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = ds_id_collapse_rw(e->data.function.args[i]);
+        if (!r) continue;
+        if (!args) args = calloc(n, sizeof(Expr*));
+        args[i] = r;
+    }
+    Expr* cur = NULL;
+    if (args) {
+        for (size_t i = 0; i < n; i++)
+            if (!args[i]) args[i] = expr_copy(e->data.function.args[i]);
+        cur = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, n));
+        free(args);
+    }
+    const Expr* node = cur ? cur : e;
+    if (head_is(node, SYM_Plus)) {
+        Expr* r = ds_id_collapse_plus(node);
+        if (r) { if (cur) expr_free(cur); cur = r; }
+    }
+    return cur;
+}
+
+/* Collapse the two unconditional identities a method can leave split across a
+ * sum in its answer:
+ *     c Cos[u]^2 + c Sin[u]^2  ->  c          (Pythagoras)
+ *     c Cosh[u] +- c Sinh[u]   ->  c E^(+-u)  (Euler, hyperbolic)
+ * e.g. a variation-of-parameters particular E^x (Cos[x]^2 + Sin[x]^2)/2 that the
+ * evaluator distributes into two terms (2.2.42-4175), or an integrating factor
+ * written Cosh[y^2] + Sinh[y^2] (2.2.45-4408).  Both hold for every complex u,
+ * so the rewrite is exact and needs no re-verification.  A direct pairing of a
+ * Plus's terms by their cofactor (not a pattern rule: a c_. Cos[u_]^2 + ...
+ * rule backtracks over every split of a large Plus, which cost a 4x4 system
+ * answer seconds), gated on the heads being present.  Applied to every DSolve
+ * answer by the dispatcher.  Consumes `result`. */
+Expr* ds_collapse_identities(Expr* result) {
+    if (!result) return NULL;
+    bool trig = ds_has_head(result, SYM_Cos) && ds_has_head(result, SYM_Sin);
+    bool hyp  = ds_has_head(result, SYM_Cosh) && ds_has_head(result, SYM_Sinh);
+    if (!trig && !hyp) return result;
+    Expr* r = ds_id_collapse_rw(result);
+    if (!r) return result;
+    expr_free(result);
+    return r;
+}
+
+/* The classical derivative of a step is Piecewise[{{Indeterminate, u == 0}}, 0]:
+ * undefined ON the breakpoint only.  Once an initial condition has been
+ * evaluated at its point, such a node whose condition did NOT become True says
+ * the point is off the breakpoint for generic parameters (UnitStep[t - a] at
+ * t == 0 leaves -a == 0), where the derivative is its default value -- the same
+ * generic-parameter convention the rest of the fit uses.  A condition that is
+ * literally True (the IC sits ON a numeric breakpoint) keeps the Indeterminate,
+ * so that ill-posed fit still fails.  Every site that evaluates an IC value
+ * y^(k)(x0) -- the fit equations and the condition check -- passes through. */
+static bool ds_is_generic_step_derivative(const Expr* e) {
+    if (!head_is(e, SYM_Piecewise) || e->data.function.arg_count != 2) return false;
+    const Expr* pl = e->data.function.args[0];
+    if (!head_is(pl, SYM_List) || pl->data.function.arg_count != 1) return false;
+    const Expr* pc = pl->data.function.args[0];
+    if (!head_is(pc, SYM_List) || pc->data.function.arg_count != 2) return false;
+    const Expr* val  = pc->data.function.args[0];
+    const Expr* cond = pc->data.function.args[1];
+    return val->type == EXPR_SYMBOL && val->data.symbol.name == SYM_Indeterminate &&
+           !(cond->type == EXPR_SYMBOL && cond->data.symbol.name == SYM_True) &&
+           !ds_contains(e->data.function.args[1], SYM_Indeterminate);
+}
+
+/* Owned rewrite of `e` with every generic step-derivative node replaced by its
+ * default, or NULL when `e` has none. `e` is borrowed. */
+static Expr* ds_generic_step_derivative_rw(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (ds_is_generic_step_derivative(e)) return expr_copy(e->data.function.args[1]);
+    size_t n = e->data.function.arg_count;
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = ds_generic_step_derivative_rw(e->data.function.args[i]);
+        if (!r) continue;
+        if (!args) {
+            args = malloc(n * sizeof(Expr*));
+            for (size_t j = 0; j < n; j++) args[j] = NULL;
+        }
+        args[i] = r;
+    }
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++)
+        if (!args[i]) args[i] = expr_copy(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+/* Consumes e; returns the (re-evaluated) rewritten tree. */
+static Expr* ds_generic_step_derivative(Expr* e) {
+    if (!ds_has_head(e, SYM_Piecewise)) return e;
+    Expr* r = ds_generic_step_derivative_rw(e);
+    if (!r) return e;
+    expr_free(e);
+    return eval_and_free(r);
+}
+
 /* Numeric check: does the fitted body satisfy every point CONDITION (initial /
  * boundary value)?  Unlike ds_branch_num_ok, which checks the ODE RESIDUAL (and so
  * passes y==0 for a homogeneous-looking equation), this catches a spurious
@@ -939,6 +1185,7 @@ static bool ds_fit_meets_conditions(const DSolveProblem* P, const Expr* body) {
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        bexpr = ds_generic_step_derivative(bexpr);
         Expr* resid = ds_call2(SYM_Subtract, bexpr, expr_copy((Expr*)P->conds[c].value));
         Expr* R = ds_subst_generics(resid, xvar);  /* instantiate free params; consumes resid */
         if (ds_has_undefined_function(R) || ds_has_head(R, SYM_Integrate)) { expr_free(R); continue; }
@@ -1062,6 +1309,7 @@ static Expr* ds_fit_sequential(const DSolveProblem* P, const Expr* body,
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        bexpr = ds_generic_step_derivative(bexpr);
         Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                       (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
 
@@ -1185,6 +1433,7 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        bexpr = ds_generic_step_derivative(bexpr);
         eqs[neq++] = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
     }
@@ -2732,6 +2981,7 @@ void dsolve_fit_system(const DSolveProblem* P, Expr** bodies, bool* no_solution)
         Expr* bexpr = expr_copy(bodies[fi]);
         for (int d = 0; d < P->conds[c].order; d++) bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        bexpr = ds_generic_step_derivative(bexpr);
         eqs[neq++] = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
     }

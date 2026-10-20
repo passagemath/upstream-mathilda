@@ -23,6 +23,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+/* Does e carry an active Integrate[f, x] whose second argument is a bare
+ * variable (indefinite), not a {s, a, b} range? */
+static bool cc_has_indefinite_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Integrate &&
+        e->data.function.arg_count >= 2 &&
+        e->data.function.args[1]->type == EXPR_SYMBOL) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (cc_has_indefinite_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     const char* xvar = P->ind_names[0];
@@ -65,11 +78,23 @@ Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
              * genuinely zero.  An impulse forcing DiracDelta[x - a] numerically
              * samples to 0 everywhere off its support, so the numeric zero-test
              * would wrongly call it zero and drop the particular solution; a
-             * DiracDelta-bearing g is never homogeneous. */
-            if (ds_is_zero(g) && !ds_contains(g, intern_symbol("DiracDelta"))) {
+             * DiracDelta-bearing g is never homogeneous.  The same holds for a
+             * step pulse k (UnitStep[t - 3/2] - UnitStep[t - 5/2]), zero at every
+             * sample outside its support: read as zero it shipped the WRONG
+             * answer y == 0 for the zero-IC IVP (2.2.16-1503). */
+            if (ds_is_zero(g) && !ds_contains(g, intern_symbol("DiracDelta"))
+                && !ds_contains(g, SYM_UnitStep) && !ds_contains(g, SYM_HeavisideTheta)
+                && !ds_contains(g, SYM_Piecewise)) {
                 general = Hgen;
             } else {
                 Expr* yp = dsolve_variation_of_parameters(basis, (size_t)n, g, a[n], xvar);
+                /* An IVP cannot be fitted through an INDEFINITE Integrate that did
+                 * not close: the fit substitutes x -> x0 into it, capturing its
+                 * bound variable (a malformed Integrate[., 0]).  Decline; the
+                 * definite (convolution) form is fine -- it is 0 at x0. */
+                if (yp && P->ncond > 0 && cc_has_indefinite_integrate(yp)) {
+                    expr_free(yp); yp = NULL;
+                }
                 if (yp) general = eval_and_free(ds_call2(SYM_Plus, Hgen, yp));
                 else expr_free(Hgen);
             }

@@ -1,6 +1,6 @@
 # Heads with a numeric fast path that `Compile[]` cannot lower
 
-**33 of 309** at 2026-10-20 (v0.479; `make check-compile-coverage` prints the current count).
+**28 of 309** at 2026-10-20 (after the `Boole` and sign-predicate lowerings; `make check-compile-coverage` prints the current count).
 **32 of 239.** Recorded 2026-08-03 by `make check-compile-coverage`
 (`tools/compile_coverage.py`), which joins the NDArray kernel registry and
 `src/pack.c`'s `AWARE` list against the binary's own `CompileDiagnostics`.
@@ -277,9 +277,12 @@ the compiled one now agree.
   `QRDecomposition` / `SingularValueDecomposition` triples.
 - **The result type is not static** — `Eigenvalues` may be complex for a real
   matrix; `Eigenvectors`' shape depends on whether the matrix is defective.
-- **There is no boolean array dtype** (§13 gap C.1) — `Positive`, `Negative`,
-  `NonNegative`, `NonPositive`, and the definite-matrix predicates. Closing
-  these needs the dtype, not a lowering.
+- **There is no boolean array dtype** (§13 gap C.1) — closed: `NDT_BOOL`
+  exists, and `Positive`, `Negative`, `NonNegative`, `NonPositive` and `Boole`
+  now lower at scalar and rank-1 shapes (`emit_elementwise_over_array`, the Map
+  element loop with the result dtype taken from the head's scalar arm). The
+  definite-matrix predicates answer one Boolean for the whole matrix and stay
+  exempt.
 - **The head asks about the REPRESENTATION**, which the compiler erases —
   `NDArrayQ`, `PackedArrayQ`, `DataType`, `ByteCount`, `Head`, `AtomQ`, `Normal`,
   `ToNDArray`/`FromNDArray`.

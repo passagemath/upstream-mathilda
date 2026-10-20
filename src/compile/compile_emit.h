@@ -318,6 +318,13 @@ bool infer_apply(Ctx* c, const FnSpec* s, const CompileType* argt, int n, Compil
 int  nest_fixed_type(Ctx* c, const FnSpec* s, CompileType t0);
 int  accum_fixed_type(Ctx* c, const FnSpec* s, CompileType t0, const CompileType* rest, int nrest);
 CompileType vec_elem_type(Ctx* c, const Expr* e);
+/* H[v] for a Listable unary truth-value head over a rank-1 array whose answer
+ * has its own element type (Boole: bool -> int; the sign predicates: number ->
+ * bool).  See compile_emit_iter.c. */
+int  emit_elementwise_over_array(Ctx* c, const char* h, const Expr* e,
+                                 const Expr* arr, Val* out);
+bool infer_elementwise_over_array(Ctx* c, const char* h, const Expr* arr,
+                                  CompileType* out);
 bool fp_opts(Expr* const* A, size_t na, size_t start, const Expr** max_out, const Expr** same_out);
 const IntClosed* int_closed_head(const char* h, size_t na);
 bool int_only_head(const char* h, size_t na, bool* pred);

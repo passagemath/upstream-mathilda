@@ -315,6 +315,13 @@ Indicator function (Iverson bracket) — converts logical values to 0/1.
 
 **Attributes**: `Listable`, `Protected`. Boole automatically threads over `List` arguments, so a vector of predicates becomes a vector of 0/1 indicators.
 
+**Packed arrays and `Compile[]`.** A packed bool list (or a visible bool
+`NDArray`) maps straight to a packed `int64` list. In `Compile[]`, `Boole[b]` of
+a Boolean scalar lowers to the exact `Integer` 1/0 (a compiled truth value is
+already 0/1 in its register, so it costs one move), and of a rank-1 bool array
+to an `int64` buffer — so `Total[Boole[Positive[v]]]` compiles whole. `Boole`
+of a number is unevaluated in the interpreter and declines in `Compile[]`.
+
 Useful for expressing integrals and sums over predicate regions, and for one-hot / dummy encoding of categorical variables in statistics. `Boole[expr]` is semantically equivalent to `If[expr, 1, 0]` but is `Listable` and so vectorises naturally.
 
 ```mathematica

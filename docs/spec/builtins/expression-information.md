@@ -522,6 +522,13 @@ Out[3]= False
 > list. An `Indeterminate` element is unordered and takes the ordinary path,
 > where it stays symbolic rather than answering `False`.
 
+> **`Compile[]`.** All four lower for an `Integer` or `Real` operand as one
+> comparison against zero (`x > 0`, `x < 0`, `x >= 0`, `x <= 0`), and over a
+> rank-1 array as that comparison per element into a bool buffer — the same
+> answer, element for element, as the interpreter's packed path. A complex
+> operand declines to the interpreter (a complex register cannot promise the
+> "genuinely non-real" that makes the interpreter answer `False`).
+
 ## Negative
 - `Negative[x]`: `True` if `x` is a negative real number; `False` if `x` is a
   manifestly non-negative real number (including zero) or a non-real complex

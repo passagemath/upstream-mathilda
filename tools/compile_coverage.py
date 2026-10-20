@@ -133,6 +133,14 @@ HEAD_SHAPES = {
         ("dl_v",  "array",  "{{v, _Real, 1}}", "DirichletL[5, 3, v]"),
         ("dl_vc", "array",  "{{v, _Real, 1}}", "DirichletL[5, 2, v]"),
     ],
+    # Boole: the bool -> int64 bridge.  Its real call shape is Boole[boolArray],
+    # which no _Real/_Integer template spells, so it gets a _Boolean array
+    # probe (and the composed Boole[Positive[v]] / scalar Boole[x > 0.5]).
+    "Boole": [
+        ("bo_s",  "scalar", "{{x, _Real}}",       "Boole[x > 0.5]"),
+        ("bo_v",  "array",  "{{b, _Boolean, 1}}", "Boole[b]"),
+        ("bo_pv", "array",  "{{v, _Real, 1}}",    "Boole[Positive[v]]"),
+    ],
     "MeijerG": [
         ("mg_s",  "scalar", "{{x, _Real}}",
          "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]"),
@@ -373,29 +381,20 @@ BASELINE = {
     # A callback lowering, as Map / Select / Fold already have.
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
-    # The elementwise sign predicates.  Now that NDT_BOOL exists (§13 gap C.1
-    # closed) they produce a packed bool array, so a compiled ARRAY form is
-    # finally possible — an elementwise compare-to-zero writing CT_BOOL elements
-    # (A_STORE_B).  No such lowering yet: they moved here from EXEMPT because the
-    # dtype that blocked them is no longer missing, only the lowering is.
-    "Positive", "Negative", "NonNegative", "NonPositive",
-    # Boole: the CONVERSE bridge, a bool array -> an int64 one.  Joined pack.c's
-    # AWARE with the NDT_BOOL work; a compiled array form (bool -> A_STORE_I) is
-    # possible but likewise undone.  Its real call shape is Boole[boolArray],
-    # which the probe list cannot express (no _Boolean array shape), so the tool
-    # reports it at the real/int shapes it can — either way, no lowering yet.
-    "Boole",
     # PrimePowerQ: the SCALAR form compiles (OP_PPQ_I, int -> CT_BOOL, the
     # interpreter's own mth_prime_power_base_u64), so loops over PrimePowerQ[k]
     # and Table[PrimePowerQ[v[[i]]], ...] stay compiled.  The direct ARRAY form
-    # PrimePowerQ[v] is the same missing int -> bool elementwise array lowering
-    # (A_STORE_B) as the sign predicates above and EvenQ.
+    # PrimePowerQ[v] wants an int -> bool elementwise array lowering (A_STORE_B).
+    # That lowering now exists -- emit_elementwise_over_array, which the sign
+    # predicates and Boole use -- and wiring a unary predicate to it is the
+    # remaining step (as for EvenQ and PrimeQ below).
     "PrimePowerQ",
     # CoprimeQ and Divisible (v0.471): the SCALAR forms compile (Divisible as
     # MOD_I == 0, CoprimeQ[a, b] as GCD_I == 1), and their packed buffers answer
     # straight off int64 with a packed bool List (ndint_binary_predicate).  The
-    # direct ARRAY form is the same missing int -> bool elementwise lowering
-    # (A_STORE_B) as PrimePowerQ and the sign predicates.
+    # direct ARRAY form is the int -> bool elementwise lowering PrimePowerQ
+    # wants, but BINARY (array op scalar), which emit_elementwise_over_array
+    # does not yet spell.
     "CoprimeQ", "Divisible",
     # PrimeQ (v0.472): same story -- the scalar form compiles (OP_PRIMEQ_I,
     # the interpreter's mth_is_prime_u64), the packed buffer answers off int64

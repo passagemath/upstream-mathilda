@@ -344,6 +344,73 @@ static void test_cf_chop(void) {
     assert_true("Lookup[CompileDiagnostics[{{z, _Complex}}, Chop[z]], \"Compiled\"] === False");
 }
 
+/* Boole: a truth value -> the exact Integer 1/0.  The scalar arm is a retyping
+ * move (a compiled truth value already lives in the integer slot as 0/1); the
+ * rank-1 arm runs that per element into an int64 buffer, the interpreter's
+ * Boole buffer path.  Boole of a NUMBER is unevaluated in the interpreter, so
+ * it must decline rather than answer. */
+static void test_cf_boole(void) {
+    assert_lowers("CompileDiagnostics[{{n, _Integer}}, Boole[PrimeQ[n]]]");
+    assert_lowers("CompileDiagnostics[{{x, _Real}}, Boole[x > 0]]");
+    assert_lowers("CompileDiagnostics[{{b, _Boolean}}, Boole[b]]");
+    assert_lowers("CompileDiagnostics[{{b, _Boolean, 1}}, Boole[b]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Boole[Positive[v]]]");
+    assert_lowers("CompileDiagnostics[{{v, _Real, 1}}, Total[Boole[Positive[v]]]]");
+    assert_true("Lookup[CompileDiagnostics[{{x, _Real}}, Boole[x]], \"Compiled\"] === False");
+    assert_true("Lookup[CompileDiagnostics[{{v, _Real, 1}}, Boole[v]], \"Compiled\"] === False");
+    /* scalar: same value AND head (an exact Integer) as the interpreter */
+    assert_true("With[{f = Compile[{{n, _Integer}}, Boole[PrimeQ[n]]]},"
+                " Table[f[k], {k, -5, 200}] === Table[Boole[PrimeQ[k]], {k, -5, 200}]]");
+    assert_true("With[{g = Compile[{{x, _Real}}, Boole[x > 0]]},"
+                " {g[1.5], g[-1.], g[0.]} === {1, 0, 0}]");
+    /* rank-1, packed input (> 250 elements so the buffer path really runs) */
+    assert_true("With[{v = Table[(-1)^k k/7. - 20., {k, 1, 400}]},"
+                " PackedArrayQ[v] && Compile[{{u, _Real, 1}}, Boole[Positive[u]]][v]"
+                " === Boole[Positive[v]]]");
+    assert_true("With[{v = Table[(-1)^k k/7. - 20., {k, 1, 400}]},"
+                " PackedArrayQ[Compile[{{u, _Real, 1}}, Boole[Positive[u]]][v]]]");
+    assert_true("With[{v = Table[(-1)^k k/7. - 20., {k, 1, 400}]},"
+                " Compile[{{u, _Real, 1}}, Total[Boole[Positive[u]]]][v]"
+                " === Total[Boole[Positive[v]]]]");
+    assert_true("With[{b = Positive[Table[(-1)^k k/7. - 20., {k, 1, 400}]]},"
+                " Compile[{{u, _Boolean, 1}}, Boole[u]][b] === Boole[b]]");
+    assert_true("Compile[{{u, _Boolean, 1}}, Boole[u]][{True, False, True}] === {1, 0, 1}");
+}
+
+/* The sign predicates: a compare against zero, scalar and rank-1 (a bool
+ * buffer).  Each is checked against the interpreter on a packed real array that
+ * includes 0. and both signs, and on integers. */
+static void test_cf_sign_predicates(void) {
+    static const char* const P[] = { "Positive", "Negative", "NonNegative", "NonPositive" };
+    char buf[512];
+    for (size_t i = 0; i < 4; i++) {
+        const char* p = P[i];
+        snprintf(buf, sizeof buf, "CompileDiagnostics[{{x, _Real}}, %s[x]]", p);
+        assert_lowers(buf);
+        snprintf(buf, sizeof buf, "CompileDiagnostics[{{v, _Real, 1}}, %s[v]]", p);
+        assert_lowers(buf);
+        snprintf(buf, sizeof buf,
+                 "With[{v = Table[(-1)^k k/7. - 20., {k, 1, 400}]},"
+                 " Compile[{{u, _Real, 1}}, %s[u]][v] === %s[v]]", p, p);
+        assert_true(buf);
+        snprintf(buf, sizeof buf,
+                 "With[{f = Compile[{{x, _Real}}, %s[x]]},"
+                 " Map[f, {-2.5, -0., 0., 3.}] === Map[%s, {-2.5, -0., 0., 3.}]]", p, p);
+        assert_true(buf);
+        snprintf(buf, sizeof buf,
+                 "With[{f = Compile[{{n, _Integer}}, %s[n]]},"
+                 " Table[f[k], {k, -3, 3}] === Table[%s[k], {k, -3, 3}]]", p, p);
+        assert_true(buf);
+        snprintf(buf, sizeof buf,
+                 "With[{w = Range[-200, 300]}, Compile[{{u, _Integer, 1}}, %s[u]][w] === %s[w]]", p, p);
+        assert_true(buf);
+        /* a complex operand's sign is not a register question: decline */
+        snprintf(buf, sizeof buf,
+                 "Lookup[CompileDiagnostics[{{z, _Complex}}, %s[z]], \"Compiled\"] === False", p);
+        assert_true(buf);
+    }
+}
+
 static void test_cf_clip_default(void) {
     assert_lowers("CompileDiagnostics[{{x, _Real}}, Clip[x]]");
     assert_true("Compile[{{x, _Real}}, Clip[x]][1.5] === 1.");
@@ -376,6 +443,8 @@ int main(void) {
     TEST(test_cf_norm_list_literal);
 
     TEST(test_cf_chop);
+    TEST(test_cf_boole);
+    TEST(test_cf_sign_predicates);
     TEST(test_cf_clip_default);
 
     TEST(test_repeated_evaluation_does_not_corrupt);

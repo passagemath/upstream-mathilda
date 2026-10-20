@@ -395,6 +395,27 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         *out = (cx || tz == CT_COMPLEX) ? CT_COMPLEX : CT_REAL;
         return true;
     }
+    if (strcmp(h, "Boole") == 0 && na == 1) {
+        /* Boole[b]: a truth value -> the exact Integer 1/0.  Only a Boolean
+         * operand lowers -- the interpreter leaves Boole[5] unevaluated, so a
+         * numeric operand must bail rather than answer.  A rank-1 bool array
+         * maps the scalar arm over the buffer (an int64 result, as Boole of a
+         * packed bool List gives); see the emitter. */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) return infer_elementwise_over_array(c, h, A[0], out);
+        if (ta != CT_BOOL) return false;
+        *out = CT_INT; return true;
+    }
+    if (na == 1 && (strcmp(h, "Positive") == 0 || strcmp(h, "Negative") == 0
+                    || strcmp(h, "NonNegative") == 0 || strcmp(h, "NonPositive") == 0)) {
+        /* The sign predicates: a compare against zero for a real or integer
+         * operand (see emit_logic); a rank-1 array applies that per element
+         * into a bool buffer, as the interpreter's buffer path answers. */
+        IT(0, ta);
+        if (CT_IS_ARRAY(ta)) return infer_elementwise_over_array(c, h, A[0], out);
+        if (ta != CT_INT && ta != CT_REAL) return false;
+        *out = CT_BOOL; return true;
+    }
     if (strcmp(h, "UnitStep") == 0 && na >= 1) {
         /* One array argument is the kernel's business, not the product-of-
          * comparisons lowering below: UnitStep's kernel is narrowing-only (no

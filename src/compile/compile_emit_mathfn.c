@@ -434,6 +434,21 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         *out = binop(c, OP_MUL_I, lo, hi, CT_INT);
         return c->ok ? 1 : -1;
     }
+    if (strcmp(h, "Boole") == 0 && na == 1) {
+        CompileType tb;
+        if (!infer_type(c, A[0], &tb)) { c->ok = false; return -1; }
+        /* A rank-1 bool array applies the scalar arm below to each element,
+         * into an int64 buffer -- the interpreter's Boole buffer path. */
+        if (CT_IS_ARRAY(tb)) return emit_elementwise_over_array(c, h, e, A[0], out);
+        /* Boole of a non-Boolean is unevaluated in the interpreter: bail. */
+        if (tb != CT_BOOL) { c->ok = false; return -1; }
+        /* A truth value already lives in the integer slot as 0/1 (every
+         * comparison and logic op writes RD.i), so Boole is a retyping MOVE --
+         * the exact Integer the interpreter answers, with no arithmetic. */
+        Val b; if (!emit(c, A[0], &b)) return -1;
+        *out = unop(c, OP_MOVE, b, CT_INT);
+        return c->ok ? 1 : -1;
+    }
     if (strcmp(h, "Chop") == 0 && (na == 1 || na == 2)) {
         CompileType tx;
         if (!infer_type(c, A[0], &tx)) { c->ok = false; return -1; }

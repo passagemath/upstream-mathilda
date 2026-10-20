@@ -11,6 +11,122 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* The element loop behind Map / Scan over a rank-1 array, and behind the
+ * elementwise lowering of a Listable truth-value head (emit_elementwise_over_
+ * array below).  `va` is the already-emitted source array, `rn` holds its
+ * length and `ri` is a free index temp, both allocated BEFORE `va` (the caller
+ * owns that prologue, so Map can try its fused route in between).  Each element
+ * of type `el` is loaded, `fs` is applied, and -- unless `scan` -- the result is
+ * coerced to `rt` and stored into a fresh rank-1 buffer.  Returns 1/-1. */
+static int map_elem_loop(Ctx* c, const FnSpec* fs, Val va, int rn, int ri,
+                         CompileType el, CompileType rt, bool scan, Val* out) {
+    Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+    int rout = -1;
+    if (!scan) {
+        rout = alloc_arr(c);
+        ins_f(c, OP_A_NEWLIKE, (uint16_t)(((unsigned)rt & 3u) << AF_R_SHIFT),
+              (uint32_t)rout, (uint32_t)va.reg, 0, z);
+    }
+    ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
+
+    size_t Lp = c->n;
+    int rc = alloc_temp(c);
+    ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
+    size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
+    c->temp_top--;
+
+    int relem = alloc_temp(c);
+    int body_top = c->temp_top;
+    ins(c,a_load_op(el),
+        (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
+    Val ev = { relem, false, el, false }, vb;
+    if (!emit_apply(c, fs, &ev, 1, &vb)) return -1;
+    if (CT_IS_ARRAY(vb.type)) { c->ok = false; return -1; }
+    if (!scan) {
+        coerce(c, &vb, rt); if (!c->ok) return -1;
+        ins(c,a_store_op(rt),
+            (uint32_t)rout, (uint32_t)ri, (uint32_t)vb.reg, z);
+    }
+    c->temp_top = body_top - 1;                     /* body temps and relem */
+    Slot one; memset(&one, 0, sizeof one); one.i = 1;
+    ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
+    ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
+    if (c->ok) c->code[jz].b = (uint32_t)c->n;
+
+    if (scan) {
+        free_if_tmp(c, va);
+        c->temp_top = (rn - c->nlocals);
+        int r0 = alloc_temp(c); ins(c, OP_CONST, (uint32_t)r0, 0, 0, k0);
+        out->reg = r0; out->tmp = true; out->type = CT_INT; out->built = false;
+        return c->ok ? 1 : -1;
+    }
+    /* The source may itself be a temporary sitting BELOW the result in the
+     * array stack, so it cannot just be popped: free it and slide the result
+     * down into its slot, restoring LIFO.  Same dance as the Part lowering. */
+    if (va.tmp) {
+        ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
+        ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)rout, 0, z);
+        c->arr_top--;
+        rout = va.reg;
+    }
+    c->temp_top = (rn - c->nlocals);                /* rn, ri dead; rout is an arr */
+    out->reg = rout; out->tmp = true; out->type = CT_ARRAY(rt, 1);
+    out->built = va.built;                          /* Map follows its source's kind */
+    return c->ok ? 1 : -1;
+}
+
+/* H[v] for a Listable unary head H over a rank-1 array whose interpreter
+ * answer has an element type of its OWN -- Boole of a bool buffer is an int64
+ * one, Positive of a real buffer a bool one.  This is the element loop Map
+ * runs, minus Map's rule that the result dtype equal the source's (that rule
+ * is about Map repacking with the source dtype; a Listable head's buffer path
+ * picks the dtype of its answer, which is exactly H's scalar result type).
+ * The scalar arm of H is applied to each element, so the array answer is the
+ * scalar one elementwise by construction.  `e` is the H[v] node (for bail
+ * blame).  Returns 1 = lowered (ok iff c->ok), -1 = not lowerable. */
+int emit_elementwise_over_array(Ctx* c, const char* h, const Expr* e,
+                                const Expr* arr, Val* out) {
+    CompileType rt;
+    if (!infer_elementwise_over_array(c, h, arr, &rt)) { c->ok = false; return -1; }
+    CompileType el = vec_elem_type(c, arr);
+    Expr* fx = expr_new_symbol(h);          /* the bare head, applied per element */
+    FnSpec fs;
+    if (!fx || !fn_resolve(fx, 1, &fs)) { expr_free(fx); c->ok = false; return -1; }
+    Slot z = { 0 };
+    int rn = alloc_temp(c), ri = alloc_temp(c);
+    Val va;
+    int r = -1;
+    if (emit(c, arr, &va)) {
+        if (!CT_IS_ARRAY(va.type) || CT_RANK(va.type) != 1) c->ok = false;
+        else {
+            ins(c, OP_A_SIZE, (uint32_t)rn, (uint32_t)va.reg, 0, z);
+            /* An empty source answers with a plain empty List in the
+             * interpreter, not an empty buffer: hand that call back. */
+            emit_nonzero_guard(c, rn);
+            r = map_elem_loop(c, &fs, va, rn, ri, el, CT_ELEM(rt), false, out);
+        }
+    }
+    if (r < 0 && c->bail_node && expr_subtree_of(fx, c->bail_node)) c->bail_node = (Expr*)e;
+    expr_free(fx);
+    return (r > 0 && c->ok) ? 1 : -1;
+}
+
+/* Inference twin: the rank-1 array type H[arr] lowers to, or false. */
+bool infer_elementwise_over_array(Ctx* c, const char* h, const Expr* arr,
+                                  CompileType* out) {
+    CompileType el = vec_elem_type(c, arr);
+    if ((int)el < 0) return false;
+    Expr* fx = expr_new_symbol(h);
+    FnSpec fs;
+    CompileType rt;
+    bool ok = fx && fn_resolve(fx, 1, &fs) && infer_apply(c, &fs, &el, 1, &rt)
+              && !CT_IS_ARRAY(rt) && !CT_IS_ASSOC(rt);
+    expr_free(fx);
+    if (!ok) return false;
+    *out = CT_ARRAY(rt, 1);
+    return true;
+}
+
 int emit_iter(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out) {
     (void)e;
     if (strcmp(h, "Nest") == 0 && na == 3) {
@@ -277,7 +393,7 @@ int emit_iter(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         CompileType rt;
         if (!infer_apply(c, &fs, &el, 1, &rt) || CT_IS_ARRAY(rt)) { c->ok = false; return -1; }
         if (!scan && rt != el) { c->ok = false; return -1; }
-        Slot z = { 0 }, k0; memset(&k0, 0, sizeof k0); k0.i = 0;
+        Slot z = { 0 };
 
         int rn = alloc_temp(c), ri = alloc_temp(c);
         Val va;
@@ -335,58 +451,7 @@ int emit_iter(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
             emit_rollback(c, mk);
         }
 
-        int rout = -1;
-        if (!scan) {
-            rout = alloc_arr(c);
-            ins_f(c, OP_A_NEWLIKE, (uint16_t)(((unsigned)rt & 3u) << AF_R_SHIFT),
-                  (uint32_t)rout, (uint32_t)va.reg, 0, z);
-        }
-        ins(c, OP_CONST, (uint32_t)ri, 0, 0, k0);
-
-        size_t Lp = c->n;
-        int rc = alloc_temp(c);
-        ins(c, OP_LT_I, (uint32_t)rc, (uint32_t)ri, (uint32_t)rn, z);
-        size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);
-        c->temp_top--;
-
-        int relem = alloc_temp(c);
-        int body_top = c->temp_top;
-        ins(c,a_load_op(el),
-            (uint32_t)relem, (uint32_t)va.reg, (uint32_t)ri, z);
-        Val ev = { relem, false, el, false }, vb;
-        if (!emit_apply(c, &fs, &ev, 1, &vb)) return -1;
-        if (CT_IS_ARRAY(vb.type)) { c->ok = false; return -1; }
-        if (!scan) {
-            coerce(c, &vb, rt); if (!c->ok) return -1;
-            ins(c,a_store_op(rt),
-                (uint32_t)rout, (uint32_t)ri, (uint32_t)vb.reg, z);
-        }
-        c->temp_top = body_top - 1;                     /* body temps and relem */
-        Slot one; memset(&one, 0, sizeof one); one.i = 1;
-        ins(c, OP_INC_I, (uint32_t)ri, 0, 0, one);
-        ins(c, OP_JMP, 0, 0, (uint32_t)Lp, z);
-        if (c->ok) c->code[jz].b = (uint32_t)c->n;
-
-        if (scan) {
-            free_if_tmp(c, va);
-            c->temp_top = (rn - c->nlocals);
-            int r0 = alloc_temp(c); ins(c, OP_CONST, (uint32_t)r0, 0, 0, k0);
-            out->reg = r0; out->tmp = true; out->type = CT_INT; out->built = false;
-            return c->ok ? 1 : -1;
-        }
-        /* The source may itself be a temporary sitting BELOW the result in the
-         * array stack, so it cannot just be popped: free it and slide the result
-         * down into its slot, restoring LIFO.  Same dance as the Part lowering. */
-        if (va.tmp) {
-            ins(c, OP_ARR_FREE, (uint32_t)va.reg, 0, 0, z);
-            ins(c, OP_A_XFER, (uint32_t)va.reg, (uint32_t)rout, 0, z);
-            c->arr_top--;
-            rout = va.reg;
-        }
-        c->temp_top = (rn - c->nlocals);                /* rn, ri dead; rout is an arr */
-        out->reg = rout; out->tmp = true; out->type = CT_ARRAY(rt, 1);
-        out->built = va.built;                          /* Map follows its source's kind */
-        return c->ok ? 1 : -1;
+        return map_elem_loop(c, &fs, va, rn, ri, el, rt, scan, out);
     }
 
     /* Fold[f, x0, v] / Fold[f, v]: reduce a rank-1 array into a scalar

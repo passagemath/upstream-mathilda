@@ -1307,6 +1307,36 @@ Expr* builtin_reverse_sort_by(Expr* res) {
  * The key is `f[subject]` when f != NULL, else `subject` itself, where
  * `subject` is each list element, or each value for an association. For an
  * association the result is an association of the corresponding entries. */
+/* Rank two TakeLargest/TakeSmallest keys. Numbers rank by VALUE: 3 and 3. tie
+ * here although canonical order separates them (by type), so that a tie is
+ * settled by position, as for any other tie. */
+static int take_key_cmp(const Expr* a, const Expr* b) {
+    int c = expr_compare(a, b);
+    if (c && a->type != b->type && is_atomic_numeric(a) && is_atomic_numeric(b) &&
+        get_numeric_value(a) == get_numeric_value(b))
+        return 0;
+    return c;
+}
+
+/* Ties are STABLE: the element that comes first in the collection wins it and
+ * is listed first. Each comparator is a total order (position last), so the
+ * result does not depend on qsort, which is not stable. */
+static int take_smallest_cmp(const void* a, const void* b) {
+    const SortByPair* pa = (const SortByPair*)a;
+    const SortByPair* pb = (const SortByPair*)b;
+    int c = take_key_cmp(pa->key, pb->key);
+    if (c) return c;
+    return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
+}
+
+static int take_largest_cmp(const void* a, const void* b) {
+    const SortByPair* pa = (const SortByPair*)a;
+    const SortByPair* pb = (const SortByPair*)b;
+    int c = take_key_cmp(pb->key, pa->key);                 /* descending */
+    if (c) return c;
+    return (pa->pos < pb->pos) ? -1 : (pa->pos > pb->pos);
+}
+
 static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
     if (coll->type != EXPR_FUNCTION || nreq < 0) return NULL;
     bool assoc = is_association(coll);
@@ -1314,6 +1344,8 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
 
     SortByPair* pairs = malloc(sizeof(SortByPair) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
+        pairs[i].pos = i;
+        pairs[i].multi = false;
         Expr* elem = coll->data.function.args[i];
         Expr* subject = elem;
         if (assoc && elem->type == EXPR_FUNCTION && elem->data.function.arg_count == 2)
@@ -1329,15 +1361,12 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
         }
     }
 
-    qsort(pairs, n, sizeof(SortByPair), sortby_pair_cmp);  /* ascending by key */
+    /* Best first: descending for largest, ascending for smallest. */
+    qsort(pairs, n, sizeof(SortByPair), largest ? take_largest_cmp : take_smallest_cmp);
 
     size_t k = ((int64_t)n < nreq) ? n : (size_t)nreq;
     Expr** out = malloc(sizeof(Expr*) * (k ? k : 1));
-    for (size_t j = 0; j < k; j++) {
-        /* largest: walk from the top (descending); smallest: from the bottom. */
-        size_t src = largest ? (n - 1 - j) : j;
-        out[j] = expr_copy(pairs[src].payload);
-    }
+    for (size_t j = 0; j < k; j++) out[j] = expr_copy(pairs[j].payload);
     for (size_t i = 0; i < n; i++) { expr_free(pairs[i].payload); expr_free(pairs[i].key); }
     free(pairs);
 

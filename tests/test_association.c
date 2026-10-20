@@ -792,6 +792,28 @@ void test_takelargest_more_than_length() {
     assert_eval_eq("TakeLargest[{1, 2}, 5]", "{2, 1}", 0);
 }
 
+/* Ties are stable: the earlier element wins a tie and is listed first. Before,
+ * equal keys fell through to a payload comparison (a -> 3 < c -> 3) and the
+ * largest walk took the LATER key -- and the tie-break read an uninitialised
+ * position field. The selected sets match the reference system. */
+void test_take_extreme_stable_ties() {
+    assert_eval_eq("TakeLargest[<|a -> 1, b -> 3, c -> 3, d -> 2, e -> 3|>, 2]",
+                   "<|b -> 3, c -> 3|>", 0);
+    assert_eval_eq("TakeLargest[<|a -> 1, b -> 3, c -> 3, d -> 2, e -> 3|>, 3]",
+                   "<|b -> 3, c -> 3, e -> 3|>", 0);
+    assert_eval_eq("TakeSmallest[<|a -> 1, b -> 3, c -> 1, d -> 2, e -> 1|>, 2]",
+                   "<|a -> 1, c -> 1|>", 0);
+    assert_eval_eq("TakeLargestBy[{{a, 3}, {b, 3}, {c, 1}, {d, 3}}, Last, 2]",
+                   "{{a, 3}, {b, 3}}", 0);
+    assert_eval_eq("TakeSmallestBy[{{a, 3}, {b, 1}, {c, 1}, {d, 1}}, Last, 2]",
+                   "{{b, 1}, {c, 1}}", 0);
+    assert_eval_eq("TakeLargestBy[<|a -> {3}, b -> {3}, c -> {1}, d -> {3}|>, First, 2]",
+                   "<|a -> {3}, b -> {3}|>", 0);
+    /* Numbers tie by value: 3 and 3. are equal keys, settled by position. */
+    assert_eval_eq("TakeLargest[{1, 3, 3., 2, 3}, 2]", "{3, 3.0}", 0);
+    assert_eval_eq("TakeSmallest[{2, 1, 1., 3}, 2]", "{1, 1.0}", 0);
+}
+
 /* ---------- GroupBy reducer form + GatherBy ---------- */
 
 void test_groupby_reducer_total() {
@@ -1558,6 +1580,7 @@ int main() {
     TEST(test_takelargestby_list);
     TEST(test_takelargestby_association);
     TEST(test_takelargest_more_than_length);
+    TEST(test_take_extreme_stable_ties);
 
     TEST(test_groupby_reducer_total);
     TEST(test_groupby_reducer_length);

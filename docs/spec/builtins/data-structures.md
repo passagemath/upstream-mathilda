@@ -629,7 +629,9 @@ Out[3]= <|"a" -> 1|>
 ## Top-N by value (TakeLargest, TakeSmallest)
 `TakeLargest[assoc, n]` / `TakeSmallest[assoc, n]` return the `n` entries with
 the largest / smallest values (as an association, ranked). `TakeLargestBy` /
-`TakeSmallestBy` rank by `f` of each value.
+`TakeSmallestBy` rank by `f` of each value. Ties are stable, for lists and
+associations alike: of two equal keys the one that comes first wins the tie and
+is listed first, and numbers tie by value (`3` and `3.` are equal keys).
 
 ```mathematica
 In[1]:= TakeLargest[<|"a" -> 3, "b" -> 9, "c" -> 1, "d" -> 6|>, 2]

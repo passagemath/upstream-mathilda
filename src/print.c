@@ -363,11 +363,12 @@ void expr_print_fullform(Expr* e) {
 }
 
 #if UP_VALUES
-/* Render the own/down/up values of `name` as assignment lines, one per rule,
- * the way Definition[name] displays them. Immediate vs delayed is not tracked
- * (Mathilda's Rule carries no such flag), so ownvalues print with `=` (the
- * common case) and down/up values with the delayed `:=` / `/: ... :=` forms,
- * matching DownValues[]'s uniformly-delayed readback. Empty -> "Null". */
+/* Render the own/up/down values of `name` as assignment lines, one per rule,
+ * the way Definition[name] displays them (in that order). Each rule records
+ * whether a delayed assignment made it, so it prints with `=` or `:=`. An
+ * upvalue prints as `lhs ^= rhs` / `lhs ^:= rhs` when UpSet would have tagged
+ * `name` alone, else as `name /: lhs = rhs` / `name /: lhs := rhs`.
+ * Empty -> "Null". */
 static void print_definition_body(const char* name) {
     Rule* ov = symtab_get_own_values(name);
     Rule* dv = symtab_get_down_values(name);
@@ -375,16 +376,27 @@ static void print_definition_body(const char* name) {
     int any = 0;
     for (Rule* r = ov; r; r = r->next) {
         if (any++) printf("\n");
-        print_standard(r->pattern, 0); printf(" = "); print_standard(r->replacement, 0);
-    }
-    for (Rule* r = dv; r; r = r->next) {
-        if (any++) printf("\n");
-        print_standard(r->pattern, 0); printf(" := "); print_standard(r->replacement, 0);
+        print_standard(r->pattern, 0);
+        printf(r->delayed ? " := " : " = ");
+        print_standard(r->replacement, 0);
     }
     for (Rule* r = uv; r; r = r->next) {
         if (any++) printf("\n");
-        printf("%s /: ", name);
-        print_standard(r->pattern, 0); printf(" := "); print_standard(r->replacement, 0);
+        if (upvalue_renders_as_upset(name, r->pattern)) {
+            print_standard(r->pattern, 0);
+            printf(r->delayed ? " ^:= " : " ^= ");
+        } else {
+            printf("%s /: ", name);
+            print_standard(r->pattern, 0);
+            printf(r->delayed ? " := " : " = ");
+        }
+        print_standard(r->replacement, 0);
+    }
+    for (Rule* r = dv; r; r = r->next) {
+        if (any++) printf("\n");
+        print_standard(r->pattern, 0);
+        printf(r->delayed ? " := " : " = ");
+        print_standard(r->replacement, 0);
     }
     if (!any) printf("Null");
 }

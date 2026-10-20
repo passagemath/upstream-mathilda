@@ -2988,45 +2988,19 @@ Expr* builtin_valueq(Expr* res) {
 }
 
 #if UP_VALUES
-/* Render a symbol's own/down/up values as newline-joined assignment lines, in
- * the same forms Definition prints (ownvalue with `=`, down/up delayed). Returns
- * a malloc'd string the caller frees, or NULL when the symbol has no values. */
+/* Render a symbol's own/up/down values as newline-joined assignment lines --
+ * exactly what Definition[name] prints, by rendering an inert Definition[name]
+ * node, so ?name and Definition can never disagree on a form (= vs :=, ^= vs
+ * tag /: ...). Returns a malloc'd string the caller frees, or NULL when the
+ * symbol has no values. */
 static char* render_definitions(const char* name) {
-    Rule* ov = symtab_get_own_values(name);
-    Rule* dv = symtab_get_down_values(name);
-    Rule* uv = symtab_get_up_values(name);
-    if (!ov && !dv && !uv) return NULL;
-
-    size_t cap = 256, len = 0;
-    char* out = malloc(cap);
-    out[0] = '\0';
-    int any = 0;
-    /* grow-and-append helper via a local macro keeps the three loops terse */
-    #define RD_APPEND(s) do {                                   \
-        const char* _s = (s);                                   \
-        size_t _l = strlen(_s);                                 \
-        while (len + _l + 1 > cap) { cap *= 2; out = realloc(out, cap); } \
-        memcpy(out + len, _s, _l); len += _l; out[len] = '\0'; \
-    } while (0)
-    for (Rule* r = ov; r; r = r->next) {
-        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
-        if (any++) RD_APPEND("\n");
-        RD_APPEND(p); RD_APPEND(" = "); RD_APPEND(v);
-        free(p); free(v);
-    }
-    for (Rule* r = dv; r; r = r->next) {
-        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
-        if (any++) RD_APPEND("\n");
-        RD_APPEND(p); RD_APPEND(" := "); RD_APPEND(v);
-        free(p); free(v);
-    }
-    for (Rule* r = uv; r; r = r->next) {
-        char* p = expr_to_string(r->pattern); char* v = expr_to_string(r->replacement);
-        if (any++) RD_APPEND("\n");
-        RD_APPEND(name); RD_APPEND(" /: "); RD_APPEND(p); RD_APPEND(" := "); RD_APPEND(v);
-        free(p); free(v);
-    }
-    #undef RD_APPEND
+    if (!symtab_get_own_values(name) && !symtab_get_down_values(name) &&
+        !symtab_get_up_values(name))
+        return NULL;
+    Expr* arg[1] = { expr_new_symbol(name) };
+    Expr* def = expr_new_function(expr_new_symbol(SYM_Definition), arg, 1);
+    char* out = expr_to_string(def);
+    expr_free(def);
     return out;
 }
 #endif

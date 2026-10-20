@@ -806,7 +806,7 @@ static Expr* pattern_canonicalize(Expr* p) {
 static Expr* pattern_alpha_normalize(const Expr* p);
 static uint64_t pattern_alpha_hash(const Expr* p);
 
-static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
+static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
      * eval clock. This invalidates every cached evaluation in one shot
@@ -841,6 +841,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
+            curr->delayed = delayed;
             expr_free(canon);
             if (key) expr_free(key);
             return;
@@ -861,6 +862,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
             curr->pattern = canon;          /* same alpha_hash: keep it */
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
+            curr->delayed = delayed;
             expr_free(key);
             return;
         }
@@ -874,6 +876,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
     new_rule->first_arg_head_canon = first_head;
     new_rule->specificity = spec;
     new_rule->alpha_hash = ahash;
+    new_rule->delayed = delayed;
     new_rule->next = NULL;
 
     /* §3.6 stable insertion: walk until we find a rule with strictly
@@ -893,8 +896,17 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
     }
 }
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+    symtab_add_own_value_as(symbol_name, pattern, replacement, false);
+}
+
+void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+    symtab_add_down_value_as(symbol_name, pattern, replacement, true);
+}
+
+void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
+                             bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
-    add_rule(&def->own_values, pattern, replacement);
+    add_rule(&def->own_values, pattern, replacement, delayed);
     /* An OwnValue binding is "soft": add_rule bumps only the eval clock, leaving
      * the rule epoch alone so a loop-invariant GROUND value survives an iterator
      * rebinding (the whole point of this path staying cheap). The one exception
@@ -906,9 +918,10 @@ void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacem
     if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
 }
 
-void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
+                              bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
-    add_rule(&def->down_values, pattern, replacement);
+    add_rule(&def->down_values, pattern, replacement, delayed);
     /* A DownValue changes how this head evaluates -- advance the rule epoch so
      * any GROUND node that uses it as a head is re-checked (add_rule already
      * bumped the eval clock). */
@@ -1313,12 +1326,17 @@ static size_t rule_list_len(const Rule* r) {
 }
 
 void symtab_add_up_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
+    symtab_add_up_value_as(symbol_name, pattern, replacement, true);
+}
+
+void symtab_add_up_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
+                            bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
     /* add_rule either replaces a same-LHS rule in place (no count change) or
      * links a new node (+1). Measure the delta so symtab_up_value_count tracks
      * the real list length rather than assuming an insert. */
     size_t before = rule_list_len(def->up_values);
-    add_rule(&def->up_values, pattern, replacement);
+    add_rule(&def->up_values, pattern, replacement, delayed);
     symtab_up_value_count += rule_list_len(def->up_values) - before;
     /* An UpValue changes how an ENCLOSING head evaluates -- advance the rule
      * epoch so GROUND nodes re-check (add_rule already bumped the eval clock). */
@@ -1526,6 +1544,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 continue;   /* skip a non-rule element */
             Expr* lhs = el->data.function.args[0];
             Expr* rhs = el->data.function.args[1];
+            bool delayed = el->data.function.head->data.symbol.name == SYM_RuleDelayed;
             if (lhs->type == EXPR_FUNCTION &&
                 lhs->data.function.head->type == EXPR_SYMBOL &&
                 lhs->data.function.head->data.symbol.name == SYM_HoldPattern &&
@@ -1534,10 +1553,10 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
 
             if (which == 2) {
                 size_t before = rule_list_len(*target);
-                add_rule(target, lhs, rhs);
+                add_rule(target, lhs, rhs, delayed);
                 symtab_up_value_count += rule_list_len(*target) - before;
             } else {
-                add_rule(target, lhs, rhs);
+                add_rule(target, lhs, rhs, delayed);
             }
         }
     }

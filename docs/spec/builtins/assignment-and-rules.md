@@ -124,9 +124,15 @@ Out[3]= {h[2], f[k[2]]}
 **Features**:
 - `TagSet`, `TagSetDelayed` and `TagUnset` are `HoldAll` and `Protected`; for the
   immediate `TagSet` the `rhs` is evaluated before the rule is stored.
-- If the tag does not occur in `lhs`, a `tagnf` message is issued and nothing is
-  installed. `SubValues` (`f[x][y]`, the tag as the head of the head) are not
+- If the tag does not occur in `lhs`, `TagSet::tagnf` / `TagSetDelayed::tagnf`
+  ("Tag k not found in lhs.") is issued and nothing is installed. If it occurs
+  but too deep to key a rule -- `k /: h[sq[k[s_]]] := 1` -- the message is
+  `::tagpos`: "Tag k in h[sq[k[s_]]] is too deep for an assigned rule to be
+  found." On either refusal `TagSetDelayed` gives `$Failed` and `TagSet` its
+  `rhs`. `SubValues` (`f[x][y]`, the tag as the head of the head) are not
   supported and are declined with a message.
+- The rule remembers whether it was made by `=` or `:=`; `Definition` renders it
+  back that way (see `Definition`).
 
 ```mathematica
 In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];

@@ -212,5 +212,11 @@ bool eval_flatten_args(Expr* e, const char* head_name);
 int eval_compare_expr_ptrs(const void* a, const void* b);
 /* Canonical Orderless sort with per-sort symbol-set memoization (sort.c). */
 void expr_orderless_sort(Expr** args, size_t n);
+#if UP_VALUES
+/* True when an upvalue of `tag` with LHS `lhs` is exactly what `lhs ^= rhs`
+ * would create -- tag is the only operand tag -- so Definition may render it in
+ * UpSet form rather than as `tag /: lhs = rhs`. */
+bool upvalue_renders_as_upset(const char* tag, Expr* lhs);
+#endif
 static inline void eval_sort_args(Expr* e) { if (e->type == EXPR_FUNCTION && e->data.function.arg_count > 0) expr_orderless_sort(e->data.function.args, e->data.function.arg_count); }
 #endif // EVAL_H

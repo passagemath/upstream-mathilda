@@ -185,6 +185,49 @@ static void test_definition_inert_fullform(void) {
     assert_eval_eq("Definition[g22]", "Definition[g22]", 1);
 }
 
+/* Definition renders each rule as the assignment that made it: = vs := is
+ * recorded on the rule, and an upvalue prints as lhs ^= rhs when UpSet would
+ * have tagged this symbol alone, else as tag /: lhs = rhs. Own, then up, then
+ * down values. Forms from the reference system. */
+static void test_definition_set_vs_delayed(void) {
+    ev("area80[sq80[s_]] ^= s^2");
+    assert_eval_eq("Definition[sq80]", "area80[sq80[s_]] ^= s^2", 0);
+    ev("h81[g81[x_]] ^:= x + 1");
+    assert_eval_eq("Definition[g81]", "h81[g81[x_]] ^:= x + 1", 0);
+    ev("t82 /: u82[t82[x_]] = x^3");                 /* TagSet, sole tag: ^= form */
+    assert_eval_eq("Definition[t82]", "u82[t82[x_]] ^= x^3", 0);
+    ev("a83 /: b83[a83, c83] = 7");                  /* another operand tag: /: form */
+    assert_eval_eq("Definition[a83]", "a83 /: b83[a83, c83] = 7", 0);
+    ev("f84 /: g84[f84[x_], 2] := x");               /* 2 is tag Integer */
+    assert_eval_eq("Definition[f84]", "f84 /: g84[f84[x_], 2] := x", 0);
+    ev("g85[f85[x_], y_] ^:= x");                    /* a blank carries no tag */
+    assert_eval_eq("Definition[f85]", "g85[f85[x_], y_] ^:= x", 0);
+    ev("q86[x_] := x; g86[q86] ^= 2; q86 = 5; q86[x_, y_] = 1");
+    assert_eval_eq("Definition[q86]",
+                   "q86 = 5\ng86[q86] ^= 2\nq86[x_] := x\nq86[x_, y_] = 1", 0);
+    ev("r87 := 5");
+    assert_eval_eq("Definition[r87]", "r87 := 5", 0);
+    /* Redefining a rule replaces its form too. */
+    ev("p88[x_] := 1; p88[x_] = 2");
+    assert_eval_eq("Definition[p88]", "p88[x_] = 2", 0);
+    /* ?name renders through the same printer. */
+    assert_eval_eq("StringContainsQ[Information[sq80], \"area80[sq80[s_]] ^= s^2\"]", "True", 0);
+}
+
+/* A tag that occurs in the LHS but below level one (or as an operand's head)
+ * cannot key a rule: ::tagpos, not ::tagnf. TagSetDelayed then gives $Failed;
+ * TagSet still gives its RHS. Nothing is installed. */
+static void test_tag_too_deep(void) {
+    assert_eval_eq("Check[k89 /: h89[sq89[k89[s_]]] := 1, \"msg\", TagSetDelayed::tagpos]",
+                   "\"msg\"", 0);
+    assert_eval_eq("Quiet[k89 /: h89[sq89[k89[s_]]] := 1]", "$Failed", 0);
+    assert_eval_eq("Quiet[k89 /: h89[sq89[k89]] = 1]", "1", 0);
+    assert_eval_eq("Check[k89 /: h89[sq89[k89]] = 1, \"msg\", TagSet::tagpos]", "\"msg\"", 0);
+    assert_eval_eq("Check[k89 /: h89[sq89[x_]] := 1, \"msg\", TagSetDelayed::tagnf]",
+                   "\"msg\"", 0);
+    assert_eval_eq("{UpValues[k89], DownValues[k89]}", "{{}, {}}", 0);
+}
+
 /* ---- scoping: Block restores upvalues ---- */
 static void test_block_restores_upvalues(void) {
     ev("g23 /: f23[g23[x_]] := outer23[x]");
@@ -381,6 +424,8 @@ int main(void) {
     TEST(test_downvalues_setter);
     TEST(test_ownvalues_setter);
     TEST(test_definition_inert_fullform);
+    TEST(test_definition_set_vs_delayed);
+    TEST(test_tag_too_deep);
     TEST(test_block_restores_upvalues);
     TEST(test_clear_removes_upvalues);
     TEST(test_upvalue_count_consistency);

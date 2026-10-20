@@ -177,23 +177,34 @@ Out[4]= {HoldPattern[area[sq[s_]] /; s > 0] :> s^2}
 
 > Gated behind the `UP_VALUES` build flag.
 
-`Definition[s]` is an inert object that **displays** the own-, down- and up-value
-rules associated with `s` (its `FullForm` is `Definition[s]` itself, not the
-rendered body). Up-values are shown in `s /: lhs := rhs` form. Because Mathilda's
-rule store does not record whether a value was immediate or delayed, down- and
-up-values always display with the delayed operators (`:=`, `/: … :=`), matching
-`DownValues[]`'s uniformly-delayed readback. `?s` / `Information[s]` likewise now
-append these definitions after the symbol's usage message.
+`Definition[s]` is an inert object that **displays** the own-, up- and
+down-value rules associated with `s`, in that order (its `FullForm` is
+`Definition[s]` itself, not the rendered body). Each rule records whether an
+immediate or a delayed assignment made it and displays with the matching
+operator (`=` / `:=`). An up-value displays as `lhs ^= rhs` / `lhs ^:= rhs` when
+`UpSet` on `lhs` would have tagged `s` alone, and as `s /: lhs = rhs` /
+`s /: lhs := rhs` when another operand also carries a tag (another symbol, or a
+literal such as `2`, tag `Integer`). `?s` / `Information[s]` render through the
+same printer, appending these definitions after the symbol's usage message.
+(`DownValues[]` / `UpValues[]` read back every rule as `:>`, as in the
+reference.)
 
 ```mathematica
 In[1]:= g /: f[g[x_]] := h[x]; Definition[g]
-Out[1]= g /: f[g[x_]] := h[x]
+Out[1]= f[g[x_]] ^:= h[x]
 
-In[2]:= c0 = 3; Definition[c0]
-Out[2]= c0 = 3
+In[2]:= area[sq[s_]] ^= s^2; Definition[sq]
+Out[2]= area[sq[s_]] ^= s^2
 
-In[3]:= fd[x_] := x^2; FullForm[Definition[fd]]   (* display only *)
-Out[3]= Definition[fd]
+In[3]:= a /: b[a, c] = 7; Definition[a]
+Out[3]= a /: b[a, c] = 7
+
+In[4]:= c0 = 3; c0[x_] = x^2; Definition[c0]
+Out[4]= c0 = 3
+        c0[x_] = x^2
+
+In[5]:= fd[x_] := x^2; FullForm[Definition[fd]]   (* display only *)
+Out[5]= Definition[fd]
 ```
 
 ## PossibleZeroQ

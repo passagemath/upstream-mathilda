@@ -37,6 +37,10 @@ typedef struct Rule {
      * alpha-equivalent redefinition is found without normalising every
      * stored rule (see add_rule). Computed lazily; 0 = not yet computed. */
     uint64_t alpha_hash;
+    /* 1 when the rule was made by a delayed assignment (:=, ^:=, /: :=), 0
+     * for an immediate one (=, ^=, /: =). Presentation only: Definition
+     * renders it; matching and rewriting never read it. */
+    uint8_t delayed;
     struct Rule* next;
 } Rule;
 
@@ -219,6 +223,13 @@ void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacem
 // Add a DownValue rule (e.g., f[x_] = x + 1)
 void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replacement);
 
+// The same, recording whether the rule came from a delayed assignment
+// (SetDelayed / UpSetDelayed / TagSetDelayed) or an immediate one. The flag only
+// affects how Definition renders the rule (`=` vs `:=`, `^=` vs `^:=`). The
+// plain forms above default to immediate for OwnValues, delayed otherwise.
+void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
+void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
+
 // Get rules
 Rule* symtab_get_own_values(const char* symbol_name);
 Rule* symtab_get_down_values(const char* symbol_name);
@@ -254,6 +265,7 @@ extern size_t symtab_up_value_count;
 // Add an UpValue rule on `symbol_name` (the tag), with `pattern` the enclosing
 // call to match and `replacement` its rewrite. Bumps the eval clock + rule epoch.
 void symtab_add_up_value(const char* symbol_name, Expr* pattern, Expr* replacement);
+void symtab_add_up_value_as(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
 
 // Borrowed UpValue list for a symbol (may be NULL).
 Rule* symtab_get_up_values(const char* symbol_name);

@@ -1098,7 +1098,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
 
     if (lhs->type == EXPR_SYMBOL) {
         /* Standard symbol assignment */
-        symtab_add_own_value(lhs->data.symbol.name, lhs, rhs);
+        symtab_add_own_value_as(lhs->data.symbol.name, lhs, rhs, is_delayed);
 
         /* Special system variables: keep their C-side mirror state in sync.
          * Set has HoldFirst, so for `$RecursionLimit = expr` the rhs is
@@ -1269,7 +1269,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                     symbol_name = inner_lhs->data.symbol.name;
                 }
             }
-            symtab_add_down_value(symbol_name, actual_pattern, actual_rhs);
+            symtab_add_down_value_as(symbol_name, actual_pattern, actual_rhs, is_delayed);
             if (actual_pattern != lhs) expr_free(actual_pattern);
             return true;
         }
@@ -1385,6 +1385,27 @@ static int collect_level_one_symbols(Expr* lhs, const char** out, int cap) {
     return n;
 }
 
+/* Would `lhs ^= rhs` have placed its rule on `tag` ALONE? Then Definition can
+ * render the upvalue in UpSet form (lhs ^= rhs); otherwise it needs the TagSet
+ * form (tag /: lhs = rhs), since UpSet would also have tagged the other
+ * operands. A literal atom operand (2, "s", 1.5) counts as another tag -- its
+ * head (Integer, String, Real) is what UpSet would try to tag. */
+bool upvalue_renders_as_upset(const char* tag, Expr* lhs) {
+    const char* syms[UP_MAX_LEVEL1];
+    int n = collect_level_one_symbols(lhs, syms, UP_MAX_LEVEL1);
+    if (n != 1 || syms[0] != tag) return false;
+    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+        lhs->data.function.head->data.symbol.name == SYM_Condition &&
+        lhs->data.function.arg_count >= 1)
+        lhs = lhs->data.function.args[0];
+    if (lhs->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        ExprType t = lhs->data.function.args[i]->type;
+        if (t != EXPR_SYMBOL && t != EXPR_FUNCTION) return false;
+    }
+    return true;
+}
+
 typedef enum { TAG_NOTFOUND, TAG_OWN, TAG_DOWN, TAG_UP, TAG_SUB } TagPos;
 
 /* Classify where interned name `tag` occurs in `lhs`, per the Mathematica rule
@@ -1458,18 +1479,28 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                         "Tag %s in the assignment is Protected.", syms[i]);
             continue;
         }
-        symtab_add_up_value(syms[i], pat, body);
+        symtab_add_up_value_as(syms[i], pat, body, is_delayed);
     }
     if (owned) expr_free(pat);
     return true;
 }
 
+/* Does symbol `tag` (interned) occur anywhere in e, heads included? */
+static bool tag_occurs_in(const Expr* e, const char* tag) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == tag;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (tag_occurs_in(e->data.function.head, tag)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (tag_occurs_in(e->data.function.args[i], tag)) return true;
+    return false;
+}
+
 /* tag /: lhs = rhs  (and := ): install on tag as own/down/up value per the tag's
- * position in lhs. Returns true once a rule was installed or the write was refused
- * with a message; returns false only when tag is not a symbol -- a purely
- * diagnostic signal (TagSet::sym already emitted). Either way the caller (branch
- * 6c) yields the RHS/Null, matching how the Set family still returns its RHS on an
- * invalid left-hand side (e.g. `3 = 4` emits Set::setraw and returns 4). */
+ * position in lhs. Returns true when a rule was installed, false when the
+ * assignment was refused with a message (tag not a symbol, Protected, absent or
+ * too deep). The caller (branch 6c) yields the RHS for TagSet either way, as
+ * the Set family does on an invalid left-hand side (`3 = 4` emits Set::setraw
+ * and returns 4), and for TagSetDelayed Null on success, $Failed on refusal. */
 static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delayed) {
     const char* head = is_delayed ? "TagSetDelayed" : "TagSet";
     if (tag->type != EXPR_SYMBOL) {
@@ -1479,25 +1510,36 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
     const char* tagn = tag->data.symbol.name;
     if (get_attributes(tagn) & ATTR_PROTECTED) {
         mth_message(head, "write", "Tag %s is Protected.", tagn);
-        return true;
+        return false;
     }
     TagPos pos = classify_tag_position(tagn, lhs);
     if (pos == TAG_SUB) {
         mth_message(head, "tagpos",
                     "Tag %s appears as the head of a head; SubValues are not supported.",
                     tagn);
-        return true;
+        return false;
     }
     if (pos == TAG_NOTFOUND) {
-        mth_message(head, "tagnf", "Tag %s not found in the assignment.", tagn);
-        return true;
+        /* Not at a position a rule can be keyed on. If the tag still occurs in
+         * lhs it is merely too deep (h[sq[k[s_]]]: k sits two levels down, so
+         * no evaluation of h[...] would ever consult k); otherwise it is absent. */
+        char* shown = expr_to_string_outputform(lhs);
+        if (tag_occurs_in(lhs, tagn))
+            mth_message(head, "tagpos",
+                        "Tag %s in %s is too deep for an assigned rule to be found.",
+                        tagn, shown ? shown : "");
+        else
+            mth_message(head, "tagnf", "Tag %s not found in %s.",
+                        tagn, shown ? shown : "");
+        free(shown);
+        return false;
     }
     /* Lift a delayed `body /; test` onto the LHS before storing, like SetDelayed. */
     bool owned; Expr* body;
     Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
-    if (pos == TAG_OWN)       symtab_add_own_value(tagn, pat, body);
-    else if (pos == TAG_DOWN) symtab_add_down_value(tagn, pat, body);
-    else                      symtab_add_up_value(tagn, pat, body);   /* TAG_UP */
+    if (pos == TAG_OWN)       symtab_add_own_value_as(tagn, pat, body, is_delayed);
+    else if (pos == TAG_DOWN) symtab_add_down_value_as(tagn, pat, body, is_delayed);
+    else                      symtab_add_up_value_as(tagn, pat, body, is_delayed); /* TAG_UP */
     if (owned) expr_free(pat);
     return true;
 }
@@ -2432,8 +2474,9 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     bool free_target = false;
                     Expr* target_lhs = build_assignment_target(lhs, &free_target);
                     Expr* store_rhs = is_delayed ? rhs : evaluate(rhs); /* owned iff immediate */
-                    apply_tag_assignment(tag, target_lhs, store_rhs, is_delayed);
-                    Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : store_rhs;
+                    bool installed = apply_tag_assignment(tag, target_lhs, store_rhs, is_delayed);
+                    Expr* ret = !is_delayed ? store_rhs
+                              : expr_new_symbol(installed ? SYM_Null : SYM_DollarFailed);
                     if (free_target) expr_free(target_lhs);
                     expr_free(res);
                     *changed = true;

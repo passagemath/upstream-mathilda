@@ -803,11 +803,16 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
         }
         long bj = numeric_min_inexact_bits(b->data.function.args[0]);
         if (bj > 0 && (gov == 0 || bj < gov)) gov = bj;
-        if (gov > 53) {
-            free(ac); free(bc);
-            return flint_num_hyp2f1(a->data.function.args[0], a->data.function.args[1],
-                                    b->data.function.args[0], z);
+        Expr* v = flint_num_hyp2f1(a->data.function.args[0], a->data.function.args[1],
+                                   b->data.function.args[0], z);
+        /* A machine-precision call (the machine kernel declined it, e.g. a
+         * complex parameter) still answers a machine number. */
+        if (v && gov <= 53) {
+            Expr* dn = hgpfq_demote_to_machine(v);
+            expr_free(v);
+            v = dn;
         }
+        if (v) { free(ac); free(bc); return v; }
     }
 #endif
 

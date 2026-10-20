@@ -799,10 +799,12 @@ needs \(101\) bits, the leading one plus a hundred zeros.}
 
 Not every positional-looking notation is positional. \B{FromDigits} also reads Roman
 numerals\index{Roman numerals}, an additive system with subtractive pairs (\texttt{IV},
-\texttt{XC}) rather than a base:
+\texttt{XC}) rather than a base, and \mcode{IntegerString} writes them:
 
 \begin{codepairs}
 \pair{number-theory/digits/13}{\(\mathrm{MMXXVI}=1000+1000+10+10+5+1=2026\).}
+\pair{number-theory/digits/14}{\mcode{IntegerString} writes them too, using the
+subtractive pairs: \(1994=\mathrm{M}+\mathrm{CM}+\mathrm{XC}+\mathrm{IV}\).}
 \end{codepairs}
 
 \usagebox{IntegerDigits}

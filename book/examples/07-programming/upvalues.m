@@ -11,3 +11,4 @@ area[r_] := Pi r^2
 sq /: perimeter[sq[s_]] =.
 perimeter[sq[5]]
 UpValues[sq]
+Definition[sq]

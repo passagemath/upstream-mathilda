@@ -13,3 +13,6 @@ Hypergeometric0F1[1/2, x]
 HypergeometricPFQ[{1, 1}, {2}, x]
 # A numeric value (this one is 2 Log[2])
 N[Hypergeometric2F1[1, 1, 2, 1/2], 20]
+Hypergeometric1F1[1/2, 3/2, -z]
+Hypergeometric2F1[1/2, 1, 3/2, -z]
+Hypergeometric2F1[1/3, 1/2, 2, 1]

@@ -575,6 +575,8 @@ group; \texttt{"\$1"} names the group's text.}
 \pair{06-data-structures/string-patterns/10}{Replacing \texttt{"b"} by the symbol
 \(z\) cannot give a string, so the result is a \mcode{StringExpression}, printed
 with \texttt{\textasciitilde\textasciitilde}.}
+\pair{06-data-structures/string-patterns/13}{Group references work anywhere in the
+right-hand side, here inside a list: each match becomes a name--value pair.}
 \end{codepairs}
 
 \usagebox{StringCases}
@@ -640,6 +642,8 @@ character is \(\beta\), not the second byte of \(\alpha\).}
 \texttt{caf\'e} has length four.}
 \pair{06-data-structures/string-unicode/8}{And the pattern classes are Unicode-aware:
 Greek letters are \mcode{LetterCharacter}s.}
+\pair{06-data-structures/string-unicode/9}{Asking \mcode{ToCharacterCode} for the
+\texttt{"UTF8"} encoding shows the six bytes underneath, two per Greek letter.}
 \end{codepairs}
 
 \calloutnote{Under the hood}{The character view lives in

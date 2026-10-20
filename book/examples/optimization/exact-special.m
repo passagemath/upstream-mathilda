@@ -2,7 +2,7 @@
 Minimize[Sum[Abs[x - i^2], {i, 1, 10}], x]
 Minimize[x^2 + Abs[x - 2], x]
 Minimize[2 x + Abs[x], x]
-st = Sum[v^4 - 16 v^2 + 5 v, {v, {a, b, c, d, e, f}}]
+st = Sum[(v^4 - 16 v^2 + 5 v)/2, {v, {a, b, c, d, e, f}}]
 m = Minimize[st, {a, b, c, d, e, f}];
 N[m]
 NMinimize[st, {a, b, c, d, e, f}]

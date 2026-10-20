@@ -23,3 +23,7 @@ Protect[Sin]
 Attributes[Sin]
 t1 /: Sin[t1] = 3/5
 {Sin[t1], Sin[t2]}
+ClearAttributes[Plus, Orderless]
+b + a
+SetAttributes[Plus, Orderless]
+b + a

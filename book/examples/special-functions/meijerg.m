@@ -15,3 +15,5 @@ N[MeijerG[{{}, {}}, {{1/3, 0, 1/2}, {}}, 7/10], 25]
 # The log case (b's an integer apart) has no Slater expansion
 MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, z]
 N[MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, 3], 30]
+MeijerG[{{1}, {}}, {{1/2}, {0}}, z]
+FunctionExpand[PolyLog[2, I]]

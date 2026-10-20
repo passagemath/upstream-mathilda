@@ -189,16 +189,18 @@ necessary, not sufficient, so the engine finishes with a
 \B{Reduce} to decide the sentence
 \(\forall x\,(\text{constraints} \Rightarrow f(x) \ge v)\) over the reals. Only a
 \mcode{True} from that decision procedure turns the candidate \(v\) into the
-reported minimum.
-
+reported minimum.%
 \calloutnote{Theory}{Why a certificate? The cubic \(x^3 - x\) has a perfectly
 good local minimum at \(x = 1/\sqrt3\), and the first-order conditions find it.
 It is not a global minimum, because the function falls without bound to the
 left, and nothing in the list of critical points says so. A sentence of the
 form \(\forall x\,(f(x) \ge v)\) is decided by real quantifier elimination
 through cylindrical algebraic decomposition (\S\ref{ssec:alg-reduce}); Tarski
-proved that every such polynomial sentence over the reals is decidable. When the feasible
-region is compact, a cheaper argument suffices: by the extreme-value theorem a
+proved that every such polynomial sentence over the reals is decidable.}
+
+With that machinery, constrained problems with irrational optima come out in
+closed form.\calloutnote{Under the hood}{When the feasible region is compact, a
+cheaper argument than the certificate suffices: by the extreme-value theorem a
 continuous function attains its minimum there, so the least of a
 \emph{complete} candidate list is the minimum. Completeness requires the
 Fritz~John points as well as the KKT points, that is, the points where the
@@ -207,17 +209,13 @@ fail. Mathilda proves the region bounded with one existential query,
 \(\exists x\,(\text{region} \wedge \lVert x\rVert^2 > 2^{20})\), adds the
 singular points, and skips the certificate.}
 
-With that machinery, constrained problems with irrational optima come out in
-closed form:
-
 \begin{codepairs}
 \pair{optimization/exact-constraints/1}{A linear objective on the unit disk.
 The minimum is on the boundary, at the point opposite the direction \((1,1)\).}
 \pair{optimization/exact-constraints/2}{The point of the disk of radius 1 about
-\((2,3)\) closest to the origin. The raw answer is correct but unsimplified.}
-\pair{optimization/exact-constraints/3}{\B{Simplify} shows it as
-\(14 - 2\sqrt{13} = (\sqrt{13} - 1)^2\): the centre is \(\sqrt{13}\) from the
-origin and the disk reaches 1 closer.}
+\((2,3)\) closest to the origin. The optimum comes back already simplified.}
+\pair{optimization/exact-constraints/3}{The value is \((\sqrt{13} - 1)^2\): the
+centre is \(\sqrt{13}\) from the origin and the disk reaches 1 closer.}
 \pair{optimization/exact-constraints/4}{The same number as \B{NMinimize} would
 report, now with a proof behind it.}
 \pair{optimization/exact-constraints/5}{An equality constraint. The hyperbola
@@ -226,16 +224,20 @@ minimizer is reported.}
 \pair{optimization/exact-constraints/6}{A radical objective. \(\sqrt x + \sqrt
 y\) is concave, so its minimum on the segment is at an end.}
 \pair{optimization/exact-constraints/7}{A rational objective. The minimum of
-\((x^2+1)/(x+1)\) for \(x \ge 0\) is \(2\sqrt2 - 2\), at \(x = \sqrt2 - 1\);
-the output writes both with the sign outside.}
+\((x^2+1)/(x+1)\) for \(x \ge 0\) is \(2\sqrt2 - 2\), at \(x = \sqrt2 - 1\).}
+\pair{optimization/exact-constraints/8}{A rational objective with a pole on the
+boundary of an open region. As \(x \to 1^+\) the objective grows without bound,
+so the minimum \(2 + 2\sqrt2\) is interior, at \(x = 1 + \sqrt2\).}
 \end{codepairs}
 
-The last two examples are not polynomial, and the engine makes them so before
+The last three examples are not polynomial, and the engine makes them so before
 it starts. Each radical \(g^{p/q}\) is replaced by a fresh variable \(u\) with
 \(u^q = g\) and \(u \ge 0\); the extra constraints also confine \(g\) to
 \(g \ge 0\), where the real branch is defined. A rational objective \(p/q\)
 becomes a new variable \(w\) with the constraint \(p - wq = 0\), once the sign of
-\(q\) on the region has been proved strict. The fresh variables are removed from
+\(q\) on the region has been proved strict; a zero of \(q\) on the boundary of
+an open region, as in the last example, is allowed, because the region never
+reaches it. The fresh variables are removed from
 the reported point.
 
 \subsection{What a proof can say}
@@ -304,6 +306,8 @@ integer program of \S\ref{sec:opt-integer} again, this time exactly:
 \((-2,-2,-1)\) beats \((-3,0,0)\).}
 \pair{optimization/exact-integers/5}{The \mcode{Element} spelling. Three lattice
 points tie at \(-2\); one is reported.}
+\pair{optimization/exact-integers/6}{The 0--1 knapsack of \S\ref{sec:opt-integer},
+solved exactly. The second and third items, worth 220, fill the bag of capacity 50.}
 \end{codepairs}
 
 Two routes make an integer problem finite. An equality region, like the circle
@@ -318,11 +322,12 @@ The price is that the region must be bounded and small. A problem whose
 continuous relaxation is unbounded in some coordinate, such as minimizing
 \(3x + 5y\) subject to \(x + 2y \ge 7\), \(3x + y \ge 6\), \(x, y \ge 0\), is
 returned unevaluated, even though its objective is bounded below. So is a mixed
-problem with some variables integer and some real, and so, on this build, is the
-three-item knapsack of \S\ref{sec:opt-integer}. The box bounds come from the
-active-set enumeration, which grows as \(2^m\) in the number \(m\) of
-inequalities and is capped at six of them, \(2^6 = 64\) active sets; the
-knapsack has seven. Large linear and integer programs
+problem with some variables integer and some real. The box bounds come from the
+active-set enumeration, and only active sets of at most \(n + 1\) constraints
+in \(n\) variables need to be tried: a larger set has linearly dependent
+gradients, so its points are already among those of its smaller subsets. That
+keeps the three-item knapsack of \S\ref{sec:opt-integer}, with seven
+inequalities, well within reach, as the last example shows. Large linear and integer programs
 belong to \B{NMaximize}, as in \S\ref{sec:opt-integer}; the exact engine is the
 tool for small ones whose answer you want proved.
 
@@ -342,8 +347,8 @@ the first ten squares. Any median works: the value is \(275\) for every
 the vertex of the left piece, \(x^2 - x + 2\).}
 \pair{optimization/exact-special/3}{For \(x < 0\) the objective is \(x\), so it
 is unbounded below.}
-\pair{optimization/exact-special/4}{Twice the Styblinski--Tang test function in
-six variables. Each term depends on one variable.}
+\pair{optimization/exact-special/4}{The Styblinski--Tang test function in six
+variables. Each term depends on one variable.}
 \pair{optimization/exact-special/5}{The exact minimum, a polynomial in a
 \mcode{Root} object, kept in \mcode{m}.}
 \pair{optimization/exact-special/6}{Its numerical value: every coordinate is
@@ -355,14 +360,15 @@ has degree 12. With a one-second budget the engine gives up after one second.}
 \end{codepairs}
 
 The Styblinski--Tang function\index{Styblinski--Tang function} shows why
-structure matters. Each one-variable term \(v^4 - 16v^2 + 5v\) has three real
+structure matters. Each one-variable term \((v^4 - 16v^2 + 5v)/2\) has three real
 critical points, so the gradient system in six variables has \(3^6 = 729\) real
 solutions, and a certificate over six variables is far beyond cylindrical
 decomposition. But the objective is
 \emph{separable}\index{exact optimization!separable objective}: it is a sum of
 terms in disjoint sets of variables. The engine detects this, minimizes each
 block on its own, and adds the results, which takes a few hundredths of a
-second on this build.
+second on this build. A constant factor such as the \(1/2\) here is distributed
+over the sum first, so it does not hide the separable structure.
 
 Every call runs under a time budget, the \mcode{TimeConstraint} option, 30
 seconds by default (\mcode{TimeConstraint -> Infinity} removes it). The budget

@@ -62,41 +62,76 @@ Roughly 45 pure bug-fix commits (portability, hangs, edge cases) and roughly 60
 internal, tooling, docs, test or benchmark commits. The evaluator speedups (about 10%
 on numeric calls) are not worth a sentence.
 
-## Kernel findings from the writing pass (follow-ups, not fixed here)
+## Kernel findings from the writing pass (follow-ups)
 
 These were found while building examples and written around. Each was checked on
-v0.480/0.481.
+v0.480/0.481; the status below was re-checked on v0.507, and the book passages that
+worked around a fixed item now show the natural input.
 
 **Wrong or misleading output**
-- `Limit[x^s Zeta[s,x], x->Infinity, Assumptions->s>1]` returns
-  `DirectedInfinity[1/(-1+s)]`, not `Infinity`.
-- `PolyLog[0, 2, 2.]` has a spurious imaginary part of about 6e-16.
-- `DSolve[{y'[t]+y[t]==UnitStep[t-a], y[0]==0}, y[t], t]` leaks the internal
-  ``DSolve`vpS`` into an inert integral.
-- `StringCases[..., RegularExpression[...] :> {"$1","$2"}]` does not expand `$n`
-  inside a list right-hand side.
-- `Definition` shows an `^=` upvalue as `:=`.
-- `ClearAttributes[Plus, Orderless]` has no visible effect, because Plus/Times sort
-  themselves.
+- FIXED v0.505: `Limit[x^s Zeta[s,x], x->Infinity, Assumptions->s>1]` returned
+  `DirectedInfinity[1/(-1+s)]`; it is now `Infinity` (shown as
+  calculus/limits-assumptions/7).
+- FIXED v0.489: `PolyLog[0, 2, 2.]` had a spurious imaginary part of about 6e-16.
+- FIXED v0.507 (with v0.506): `DSolve[{y'[t]+y[t]==UnitStep[t-a], y[0]==0}, y[t], t]`
+  leaked the internal ``DSolve`vpS`` into an inert integral; it now closes.
+- FIXED v0.495: `StringCases[..., RegularExpression[...] :> {"$1","$2"}]` did not
+  expand `$n` inside a list right-hand side (shown as
+  06-data-structures/string-patterns/13).
+- FIXED v0.498: `Definition` showed an `^=` upvalue as `:=` (shown as
+  07-programming/upvalues/13).
+- FIXED v0.500: `ClearAttributes[Plus, Orderless]` had no visible effect; the
+  Pitfall is rewritten around 07-programming/attributes/24-27.
 
 **Budget overruns and hangs**
-- `Minimize` of a halved 3-variable Styblinski–Tang runs about 147 s, past its 30 s
-  `TimeConstraint`.
-- `Integrate[Exp[-x t]/t^2, {t,1,Infinity}, Assumptions->x>0]` hangs (over 120 s)
-  with repeated `::idiv`.
+- FIXED v0.485: `Minimize` of a halved 3-variable Styblinski–Tang ran about 147 s,
+  past its 30 s `TimeConstraint` (now ~15 ms; the book uses the standard halved
+  definition in optimization/exact-special/4).
+- FIXED v0.493: `Integrate[Exp[-x t]/t^2, {t,1,Infinity}, Assumptions->x>0]` hung
+  with repeated `::idiv`; it now gives `E^(-x) + x ExpIntegralEi[-x]`.
 
 **Correct but unsimplified**
-- `Minimize` optima such as `14-2Sqrt[13]` come back unsimplified.
-- Several definite integrals return MeijerG/PolyLog forms that are correct but
-  unreduced: `ArcTan[x]/x` on [0,1] (Catalan), `x Log[2Cos x]`,
-  `E^-x Sin[x]/x` (π/4, plus a spurious `Infinity::indet`).
+- FIXED v0.485: `Minimize` optima such as `14-2Sqrt[13]` came back unsimplified (the
+  `Simplify[r]` wrapper in optimization/exact-constraints is gone).
+- FIXED v0.504: definite integrals returned MeijerG/PolyLog forms: `ArcTan[x]/x` on
+  [0,1] is now `Catalan`, `x Log[2Cos x]` is `-7/16 Zeta[3]`, `E^-x Sin[x]/x` is `Pi/4`
+  with no `Infinity::indet` (the first two shown as calculus/classical/11-12).
 
 **Declines and gaps**
-- 3-variable integer programs decline (`MZ_MAX_INEQ = 6`).
-- `D[StruveH[nu,x],x]` is not implemented.
-- `DirichletL` with an exact-rational `Interval` stays unevaluated.
-- `Boole` does not compile.
-- `Chop[x, 10^-6]` with an exact tolerance does not compile.
-- `IntegerString[n, "Roman"]` stays unevaluated.
-- `ToCharacterCode[s, "UTF8"]` stays unevaluated.
-- The `?Minimize` docstring is stale.
+- FIXED v0.485: 3-variable integer programs declined (`MZ_MAX_INEQ = 6`); the 0/1
+  knapsack is now optimization/exact-integers/6.
+- FIXED v0.490: `D[StruveH[nu,x],x]` (shown as special-functions/struve/11, with
+  half-integer `StruveH` at struve/9-10).
+- FIXED v0.487: `DirichletL` with an exact-rational `Interval` stayed unevaluated.
+- FIXED v0.482: `Boole` did not compile.
+- FIXED v0.483: `Chop[x, 10^-6]` with an exact tolerance did not compile.
+- FIXED v0.496: `IntegerString[n, "Roman"]` stayed unevaluated (shown as
+  number-theory/digits/14).
+- FIXED v0.495: `ToCharacterCode[s, "UTF8"]` stayed unevaluated (shown as
+  06-data-structures/string-unicode/9).
+- FIXED v0.486: the `?Minimize` docstring was stale.
+
+**Still open (re-checked on v0.507)**
+- `StruveL` at half-integer order is not reduced to elementary form
+  (`StruveL[1/2, x]` stays as it is); declined for now.
+- `Integrate` principal value with two symbolic interior poles stays unevaluated.
+- `Series[Gamma[s], {s,0,2}]` keeps `PolyGamma[2, 1]` instead of `-2 Zeta[3]`.
+- `Refine` does not derive `a > 0` from `a > b > 0` (`Refine[Sqrt[a^2], a > b > 0]`
+  is `Abs[a]`).
+- `Integrate[-(8 t E^(t/8) Sin[3/8 Sqrt[7] t])/(3 Sqrt[7] k), t]` is reported
+  non-elementary because of the constant factor; the integrand without it integrates.
+- `Simplify[C[1] E^x + C[2] x^2 E^x]` gives `(Cosh[x] + Sinh[x]) (C[1] + C[2] x^2)`.
+- A rare `compute_deriv(NULL)` segfault under load (not reproduced in isolation).
+
+**New, found in this pass (cosmetic; all values correct)**
+- The step-forcing answer of calculus/dsolve-forcing/1 is unfactored,
+  `-E^(-t) (E UnitStep[-1 + t] - E^t UnitStep[-1 + t])`; `Simplify` gives
+  `-(-1 + E^(1 - t)) UnitStep[-1 + t]`.
+- `D[StruveH[0, x], x]` is `1/2 (2/Pi + StruveH[-1, x] - StruveH[1, x])`;
+  `StruveH[-1, x]` is not reduced to `2/Pi - StruveH[1, x]`, so the result is not
+  `2/Pi - StruveH[1, x]`.
+- `Minimize` of the 3-variable halved Styblinski–Tang prints its value as
+  `g + 1/2 g` with `g` a sum of `Root` powers (`Plus` does not merge a sum with a
+  rational multiple of the same sum).
+- `Integrate[1/(x - b), {x, -1, 1}, PrincipalValue -> True, Assumptions -> -1 < b < 1]`
+  is `-1/2 Log[1 + 2 b + b^2] + 1/2 Log[1 - 2 b + b^2]`, not `Log[(1 - b)/(1 + b)]`.

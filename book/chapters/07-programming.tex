@@ -351,6 +351,8 @@ by its left-hand side.}
 \pair{07-programming/upvalues/11}{With that rule gone, \texttt{perimeter} no
 longer knows squares and stays unevaluated.}
 \pair{07-programming/upvalues/12}{Only the area rule is left on \texttt{sq}.}
+\pair{07-programming/upvalues/13}{\B{Definition} prints it as it was made: an
+immediate \mcode{UpSet}, \texttt{\^{}=}, not a delayed \texttt{\^{}:=}.}
 \end{codepairs}
 
 Pair~9 is the point of the mechanism. The general fact about \texttt{area}
@@ -420,8 +422,9 @@ head.}
 \texttt{ho}.}
 \pair{07-programming/upvalorder/9}{This time the upvalue fires: holding the argument
 does not hide it.}
-\pair{07-programming/upvalorder/10}{\B{Definition} prints every rule attached to a
-symbol, in the \texttt{tag /: lhs := rhs} form that would recreate it.}
+\pair{07-programming/upvalorder/10}{\mcode{Definition} prints every rule attached to a
+symbol, in the form that would recreate it: here \texttt{lhs \^{}:= rhs}, the
+\mcode{UpSetDelayed} that files each rule under \texttt{g}.}
 \pair{07-programming/upvalorder/11}{Assigning a list to \texttt{DownValues[f]}
 replaces the whole rule set in one step.}
 \pair{07-programming/upvalorder/12}{The new rule takes effect at once, while the
@@ -986,12 +989,25 @@ lesson to carry away: when the goal is to tell a builtin something about \emph{y
 object, an upvalue on that object (\S\ref{ssec:prog-upvalues}) does it without
 unprotecting anything.
 
-\calloutnote{Pitfall}{Not every built-in behavior is an attribute you can switch
-off. \mcode{Plus} and \mcode{Times} put their operands in canonical order inside their own
-code as well as through \texttt{Orderless}, so after
-\texttt{ClearAttributes[Plus, Orderless]} a sum like \texttt{b + a} still prints as
-\texttt{a + b}. Removing a core arithmetic attribute is a good way to break the rest
-of the system and a poor way to change notation; restore it in the same session.}
+The arithmetic heads are no exception. \mcode{Plus} and \mcode{Times} sort their
+operands only because they are \texttt{Orderless}, so clearing that bit really does
+switch the sorting off:
+
+\begin{codepairs}
+\pair{07-programming/attributes/24}{Clear \texttt{Orderless} on \mcode{Plus}.}
+\pair{07-programming/attributes/25}{The sum keeps the order in which it was
+written.}
+\pair{07-programming/attributes/26}{Put the attribute back.}
+\pair{07-programming/attributes/27}{Sums are sorted into canonical order again.}
+\end{codepairs}
+
+\calloutnote{Pitfall}{Removing a core arithmetic attribute is a good way to break
+the rest of the system and a poor way to change notation. With \texttt{Plus}
+unsorted, \texttt{a + b} and \texttt{b + a} are different expressions, so
+\mcode{SameQ}, pattern matching and every simplification that relies on a
+canonical form start to disagree. Restore the attribute in the same session. A
+sum built while the attribute was off is not frozen, though: it is re-sorted the
+next time it is evaluated after \texttt{Orderless} comes back.}
 
 \calloutnote{Theory}{The evaluator's per-call sequence is fixed and worth
 memorizing: evaluate the head; read its attributes; evaluate the arguments except

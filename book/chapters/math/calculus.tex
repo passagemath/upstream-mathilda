@@ -322,12 +322,15 @@ real part is positive, whatever the (real) frequency \(b\).}
 \B{Gamma} functions, \(\Gamma(x+a)/\Gamma(x)\sim x^a\).}
 \pair{calculus/limits-assumptions/6}{A one-sided limit of \B{Floor} at a
 \emph{symbolic} integer \(n\): from below, it is \(n-1\).}
+\pair{calculus/limits-assumptions/7}{The Hurwitz zeta function decays like
+\(x^{1-s}/(s-1)\), so \(x^s\zeta(s,x)\sim x/(s-1)\) grows without bound when
+\(s>1\).}
 \end{codepairs}
 
 Each of these is a separate, narrowly gated layer of the limit cascade---a
 dominant-term rule that needs the sign of an exponent (pairs~2 and~4), a decay test
 on \(\operatorname{Re}(a+ib)\) (pair~3), a table of special-function asymptotics
-(pair~5), and one-sided rules for the rounding functions at an integer
+(pairs~5 and~7), and one-sided rules for the rounding functions at an integer
 (pair~6). When the assumptions do not settle the question, each layer declines and
 the call comes back unevaluated, exactly as in pair~1; without
 \texttt{Assumptions} the cascade is the one described above, unchanged.
@@ -833,6 +836,13 @@ the endpoints.}
 \(\zeta(3)\)\index{Apery's constant@Ap\'ery's constant}, twice.}
 \pair{calculus/classical/10}{A ladder through \(\log(1-e^{2ix})\):
 \(\int_0^\pi x\log\sin x = -\tfrac{\pi^2}2\log 2\).}
+\pair{calculus/classical/11}{The inverse-tangent integral at \(1\) is Catalan's
+constant: \(\arctan x/x=\sum(-1)^k x^{2k}/(2k+1)\) integrates to
+\(\sum(-1)^k/(2k+1)^2\).}
+\pair{calculus/classical/12}{The companion of Euler's log-sine integral: the
+integral of \(x\log(2\cos x)\) over \([0,\pi/2]\) is \(-\tfrac7{16}\zeta(3)\).}
+\pair{calculus/classical/13}{\(\int_0^1 \log x\log(1-x)/x\): expanding
+\(\log(1-x)\) gives \(\sum_k 1/k^3=\zeta(3)\).}
 \end{codepairs}
 
 The second table is the special-function half, where the closed form is a named
@@ -857,6 +867,10 @@ discontinuous integral}: for \(b<a\) it is \(1/\sqrt{a^2-b^2}\).}
 \(0\). The assumptions decide which side of the discontinuity you are on.}
 \pair{calculus/classical-special/9}{The Mellin transform of the product
 \(e^{-x}\cos x\) is \(\Gamma(s)\,2^{-s/2}\) times \(\cos(\pi s/4)\).}
+\pair{calculus/classical-special/10}{A Hankel transform of \(1/(x^2+c^2)\): the
+modified Bessel function \(K_0(ac)\).}
+\pair{calculus/classical-special/11}{Another discontinuous integral: for \(b>a\),
+\(\int_0^\infty J_0(ax)\sin(bx)/x = \pi/2\).}
 \end{codepairs}
 
 Behind each line is a recognisable piece of classical analysis. King's
@@ -866,7 +880,7 @@ is why the exponent in pair~1 of the first table is irrelevant. The Frullani
 integral of pair~3 falls to the Mellin engine of \S\ref{ssec:calc-definite}; its
 logarithmic cousin in pair~4 is Feynman's trick---differentiate
 \(\int_0^1 x^e\,dx = 1/(e+1)\) in the exponent---taken in one step. The log-sine and Poisson values (pairs~5--6) are matched as families; the
-Catalan and zeta values (pairs~7--10) come either from expanding the integrand in a
+Catalan and zeta values (pairs~7--13) come either from expanding the integrand in a
 power series and integrating term by term---with the resulting sum recognised---or from
 the \emph{polylogarithm ladder}\index{polylogarithm ladder} that writes
 \(\log\sin x\) as \(-\log 2 + i(\tfrac\pi2-x) + \log(1-e^{2ix})\) and integrates each
@@ -876,7 +890,7 @@ integrand is recognised as the defining integral of \B{AiryAi}, of a Laplace
 transform, of \mcode{BesselK}, or of the Hurwitz zeta (expand
 \(1/(1-e^{-x})=\sum_k e^{-kx}\) and integrate term by term), so the answer is
 correct by construction. Pair~5 extends the residue engine to a pole of order~\(n\)
-of \(\operatorname{sech}^n\). Pairs~6--9 are products of two kernels on the half-line,
+of \(\operatorname{sech}^n\). Pairs~6--11 are products of two kernels on the half-line,
 the province of the Mellin-transform engines: Ramanujan's Master Theorem from
 \S\ref{ssec:calc-definite}, and a convolution stage that writes each factor---a Bessel
 function, an exponential or Gaussian, a sine or cosine, a power of \(a+x^2\)---as a
@@ -1023,14 +1037,16 @@ a combination of growing and decaying exponentials.}
 
 Engineering problems switch forces on and off. A forcing term built from
 \mcode{UnitStep}, \mcode{Piecewise}, or an impulse \mcode{DiracDelta}\index{impulse
-forcing}\index{step forcing} is handled by its own route, and the answers come back
-as a \mcode{Piecewise} or with an explicit \mcode{HeavisideTheta}\index{Heaviside step
-function} switching the response on at the right moment. The same block shows three
+forcing}\index{step forcing} is handled with care, and the answers come back with an explicit
+\mcode{UnitStep} or \mcode{HeavisideTheta}\index{Heaviside step function} (or as a
+\mcode{Piecewise}, when the forcing was written as one) switching the response on at
+the right moment. The same block shows three
 newer tools for variable-coefficient and nonlinear equations:
 
 \begin{codepairs}
-\pair{calculus/dsolve-forcing/1}{A step switched on at \(t=1\): nothing before, then
-\(1-e^{1-t}\).}
+\pair{calculus/dsolve-forcing/1}{A step switched on at \(t=1\). Every term carries
+the factor \(\theta(t-1)\), so the solution is zero before the step and
+\(1-e^{1-t}\) after it.}
 \pair{calculus/dsolve-forcing/2}{An impulse at \(t=3\) kicks the decaying solution
 up by \(e^{-2(t-3)}\).}
 \pair{calculus/dsolve-forcing/3}{A hammer blow to an oscillator at rest: it rings as
@@ -1045,14 +1061,18 @@ solution \(1/x\), found by inspection.}
 \end{codepairs}
 
 Pairs~1--3 look like textbook exercises, but they hide a trap. The first-order
-linear method writes \(y=\mu^{-1}\bigl(C_1+\int\mu q\bigr)\), and for a step or
-impulse \(q\) the indefinite integral stays unevaluated; fitting \(y(0)\) then
-substitutes \(t=0\) \emph{into} that inert integral and silently corrupts it. So a
-discontinuous forcing in an initial-value problem is routed elsewhere: to a
-piecewise solver that integrates the equation interval by interval (pair~1), or to
-the causal convolution \(y=\mu^{-1}\bigl(C_1+\int_0^t\mu(s)q(s)\,ds\bigr)\), whose
-definite integral of a \(\delta\) sifts to a clean \mcode{HeavisideTheta}
-(pairs~2--3). Pair~4 is the degenerate Kummer\index{Kummer's equation} case: when
+linear method writes \(y=\mu^{-1}\bigl(C_1+\int\mu q\bigr)\), and fitting \(y(0)\)
+substitutes \(t=0\) into that antiderivative. If the indefinite integral of a step
+or impulse \(q\) stayed unevaluated, the substitution would go \emph{into} the inert
+integral and silently corrupt it. \mcode{Integrate} now closes those integrals:
+\(\int e^{t}\,\theta(t-1)\,dt = (e^{t}-e)\,\theta(t-1)\), an antiderivative that is
+continuous across the breakpoint, so the fit at \(t=0\) is safe and pair~1 is the
+ordinary integrating-factor answer. Only when the integral does not close is the
+problem routed elsewhere: to the causal convolution
+\(y=\mu^{-1}\bigl(C_1+\int_0^t\mu(s)q(s)\,ds\bigr)\), whose definite integral of a
+\(\delta\) sifts to a clean \mcode{HeavisideTheta}, or, for a forcing written as a
+\mcode{Piecewise}, to a solver that integrates the equation interval by interval
+and answers in the same piecewise form. Pair~4 is the degenerate Kummer\index{Kummer's equation} case: when
 \({}_1F_1\) terminates in a polynomial, the usual second solution
 \mcode{HypergeometricU} is a constant multiple of it, so \B{DSolve} constructs the
 genuinely independent logarithmic partner instead---\(p(x)\operatorname{Ei}(x)+e^x

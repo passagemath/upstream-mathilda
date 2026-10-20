@@ -9,3 +9,7 @@ N[2/(10 Pi)]
 BesselJZero[0, 1]
 N[BesselJZero[0, 1], 30]
 BesselJ[0, N[BesselJZero[0, 1], 30]]
+# Half-integer order is elementary; the derivative follows the recurrence
+StruveH[1/2, x]
+StruveH[-1/2, x]
+D[StruveH[nu, x], x]

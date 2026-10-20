@@ -262,6 +262,26 @@ static void test_assumed_limit_guards(void) {
     assert_eval_eq("Simplify[Limit[x^(1 - a) Zeta[a, x], x -> Infinity, Assumptions -> a > 1]]", "0", 0);
 }
 
+/* A pole whose leading coefficient's sign is decided by the assumptions is a
+ * signed Infinity, never DirectedInfinity[coefficient]; the side of approach is
+ * applied to the coefficient whether or not its sign is known. */
+static void test_signed_pole_coefficient(void) {
+    assert_eval_eq("Limit[x^s Zeta[s, x], x -> Infinity, Assumptions -> s > 1]", "Infinity", 0);
+    assert_eval_eq("Limit[x/(s - 1), x -> Infinity, Assumptions -> s > 1]", "Infinity", 0);
+    assert_eval_eq("Limit[x/(1 - s), x -> Infinity, Assumptions -> s > 1]", "-Infinity", 0);
+    assert_eval_eq("Limit[x/(s - 1)^2, x -> Infinity, Assumptions -> s > 1]", "Infinity", 0);
+    assert_eval_eq("Limit[x/(s - 1), x -> -Infinity, Assumptions -> s > 1]", "-Infinity", 0);
+    assert_eval_eq("Limit[1/((s - 1) x), x -> 0, Direction -> \"FromBelow\", Assumptions -> s > 1]",
+                   "-Infinity", 0);
+    /* Undecidable sign: stays directed, but on the correct side. */
+    assert_eval_eq("Limit[x/(s - 1), x -> Infinity, Assumptions -> s > 0]",
+                   "DirectedInfinity[1/(-1 + s)]", 0);
+    assert_eval_eq("Limit[c/x, x -> 0, Direction -> \"FromAbove\"]", "DirectedInfinity[c]", 0);
+    assert_eval_eq("Limit[c/x, x -> 0, Direction -> \"FromBelow\"]", "DirectedInfinity[-c]", 0);
+    assert_eval_eq("Limit[c/x^2, x -> 0, Direction -> \"FromBelow\"]", "DirectedInfinity[c]", 0);
+    assert_eval_eq("Limit[c/x, x -> 0]", "ComplexInfinity", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -273,6 +293,9 @@ int main(void) {
     TEST(test_passthrough_no_assumption);
     TEST(test_wiring_ambient_and_option);
     TEST(test_real_base_vs_abs_magnitude);
+    /* ahead of the stress batches: assumed_limit_stress2 has a pre-existing
+     * (Log[a/b] vs Log[a]-Log[b]) Simplify failure that aborts the run */
+    TEST(test_signed_pole_coefficient);
     TEST(test_assumed_limit_stress);
     TEST(test_assumed_limit_stress2);
     TEST(test_assumed_limit_guards);

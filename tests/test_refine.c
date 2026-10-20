@@ -207,6 +207,20 @@ static void test_refine_re_of_real_terms(void) {
     check_quiet("Refine[Re[Log[b]], b < 0]", "1/2 Log[b^2]");
 }
 
+/* A DirectedInfinity whose direction has a decidable sign under the facts is
+ * the canonical +-Infinity (or DirectedInfinity[+-I]); an undecidable one is
+ * left alone.  DirectedInfinity[1/(-1 + s)] under s > 1 is the Limit answer
+ * this canonicalises. */
+static void test_directed_infinity(void) {
+    check("Refine[DirectedInfinity[1/(s - 1)], s > 1]", "Infinity");
+    check("Refine[DirectedInfinity[s - 1], s > 1]", "Infinity");
+    check("Refine[DirectedInfinity[1 - s], s > 1]", "-Infinity");
+    check("Refine[DirectedInfinity[a], a < 0]", "-Infinity");
+    check("Refine[DirectedInfinity[a], b > 0]", "DirectedInfinity[a]");
+    check("Refine[DirectedInfinity[s - 1], s > 0]", "DirectedInfinity[-1 + s]");
+    check("Refine[{x, DirectedInfinity[c]}, c > 0]", "{x, Infinity}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -221,6 +235,7 @@ int main(void) {
     test_errors_edges();
     test_stress_fixes();
     TEST(test_refine_re_of_real_terms);
+    test_directed_infinity();
     printf("All Refine tests passed.\n");
     return 0;
 }

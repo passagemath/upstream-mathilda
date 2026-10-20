@@ -475,7 +475,13 @@ Out[8]= 4 Cos[r^2] - 4 r^2 Sin[r^2]
     Infinity`, and the compose / one-sided-pole cases follow
     (`Limit[Tanh[c x], x -> Infinity, Assumptions -> c < 0] = -1`,
     `Limit[c/x, x -> 0, Direction -> "FromBelow", Assumptions -> c < 0] =
-    Infinity`).
+    Infinity`). The coefficient's sign also reads through an affine threshold
+    and an integer power: `Limit[x^s Zeta[s, x], x -> Infinity, Assumptions ->
+    s > 1] = Infinity` (coefficient `1/(s - 1)`), never the non-canonical
+    `DirectedInfinity[1/(-1 + s)]`. A coefficient whose sign stays undecidable
+    is returned as `DirectedInfinity[c]` with the side of approach applied
+    (`Limit[c/x, x -> 0, Direction -> "FromBelow"] = DirectedInfinity[-c]`; a
+    two-sided odd pole is `ComplexInfinity`).
   - **growth ordering / divergent monomial** — a strict order fact ranks powers
     (`Limit[x^n/x^m, x -> Infinity, Assumptions -> n > m] = Infinity`), and a
     function of one divergent parametric monomial `x^a` (`a > 0`) is closed by

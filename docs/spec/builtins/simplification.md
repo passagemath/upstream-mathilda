@@ -600,7 +600,11 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   `Log[b^2]/2`, and `Refine[Re[-I Pi - Log[a] + Log[b]], a > 0 && b > 0]` is
   `-Log[a] + Log[b]`,
   `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` and `Mod` under
-  integer / interval / modular facts. The per-symbol rule synthesis is pruned to
+  integer / interval / modular facts. A `DirectedInfinity[d]` whose direction
+  has a decidable sign settles to its canonical form
+  (`Refine[DirectedInfinity[1/(s - 1)], s > 1] -> Infinity`,
+  `DirectedInfinity[1 - s] -> -Infinity`); an undecidable direction is left
+  as it is. The per-symbol rule synthesis is pruned to
   the symbols the target actually uses, so a large assumption set does not
   overflow the rule buffer.
 - Predicate decisions: `Element[x, dom]` via the assumption-aware domain

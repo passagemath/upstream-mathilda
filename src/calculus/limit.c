@@ -822,6 +822,41 @@ static int literal_sign_ctx(Expr* e, const AssumeCtx* ctx) {
             else if (common != sf) { common = 0; break; }
         }
         if (common != 0) return common;
+        /* Affine A + k with k a numeric literal: sign from A vs -k
+         * (s - 1 is positive under s > 1, a + 1 positive under a > -1).
+         * The assumption oracle cannot prove `s - 1 > 0` from `s > 1` by
+         * itself (single-expression facts), so read the threshold off. */
+        if (e->data.function.arg_count == 2) {
+            Expr* a0 = e->data.function.args[0];
+            Expr* a1 = e->data.function.args[1];
+            Expr* A = NULL; Expr* kexpr = NULL;
+            bool lit0 = a0->type == EXPR_INTEGER || a0->type == EXPR_BIGINT ||
+                        a0->type == EXPR_REAL || head_is(a0, SYM_Rational);
+            bool lit1 = a1->type == EXPR_INTEGER || a1->type == EXPR_BIGINT ||
+                        a1->type == EXPR_REAL || head_is(a1, SYM_Rational);
+            if (lit1 && !lit0) { A = a0; kexpr = a1; }
+            else if (lit0 && !lit1) { A = a1; kexpr = a0; }
+            if (A) {
+                Expr* thr = simp(mk_neg(expr_copy(kexpr)));   /* -k */
+                int r = 0;
+                if (assume_known_gt(ctx, A, thr)) r = +1;
+                else if (assume_known_lt(ctx, A, thr)) r = -1;
+                expr_free(thr);
+                if (r) return r;
+            }
+        }
+    }
+    /* Power[b, k] with an integer exponent: an odd power keeps the sign of
+     * b, an even power of a nonzero-signed b is positive (1/(s - 1) under
+     * s > 1). A positive base to any power is covered by the fact oracle
+     * below (prov_pos). */
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type == EXPR_INTEGER) {
+        int sb = literal_sign_ctx(e->data.function.args[0], ctx);
+        if (sb != 0) {
+            int64_t k = e->data.function.args[1]->data.integer;
+            return (k % 2 == 0) ? +1 : sb;
+        }
     }
     /* Log[b]: sign follows b vs 1. */
     if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
@@ -868,25 +903,6 @@ static int exponent_sign_ctx(Expr* e, const AssumeCtx* ctx) {
         } else if (mag0 && !mag1) {             /* -A + B = B - A */
             if (assume_known_gt_expr(ctx, a1, mag0)) return +1;
             if (assume_known_gt_expr(ctx, mag0, a1)) return -1;
-        }
-        /* Affine A + k with k a numeric literal: sign from A vs -k.
-         * (a - 1 is negative under a < 1; a + 1 positive under a > -1.) */
-        {
-            Expr* A = NULL; Expr* kexpr = NULL;
-            bool lit0 = a0->type == EXPR_INTEGER || a0->type == EXPR_BIGINT ||
-                        a0->type == EXPR_REAL || head_is(a0, SYM_Rational);
-            bool lit1 = a1->type == EXPR_INTEGER || a1->type == EXPR_BIGINT ||
-                        a1->type == EXPR_REAL || head_is(a1, SYM_Rational);
-            if (lit1 && !lit0) { A = a0; kexpr = a1; }
-            else if (lit0 && !lit1) { A = a1; kexpr = a0; }
-            if (A) {
-                Expr* thr = simp(mk_neg(expr_copy(kexpr)));   /* -k */
-                int r = 0;
-                if (assume_known_gt(ctx, A, thr)) r = +1;
-                else if (assume_known_lt(ctx, A, thr)) r = -1;
-                expr_free(thr);
-                if (r) return r;
-            }
         }
     }
     return 0;
@@ -1264,12 +1280,59 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
     } else if (leading_num == 0) {
         result = leading_coef;
     } else {
-        /* Infinity with a sign. For one-sided at 0+, sign = sign(coef).
-         * For 0-, multiply by (-1)^leading_num (when integer); if the
-         * exponent has a nontrivial denominator the side is complex and
-         * we only answer if the direction is FromAbove. */
+        /* Infinity with a direction. The side of approach is settled FIRST
+         * and independently of the coefficient's sign: for one-sided 0+ the
+         * direction is the coefficient's; for 0- it is multiplied by
+         * (-1)^leading_num (integer exponents only -- a fractional exponent
+         * on the negative side is a branch cut); a two-sided odd pole is
+         * ComplexInfinity (Reals: Indeterminate). Deciding the side before
+         * the sign is what keeps an unknown-sign coefficient c honest:
+         * c/x at 0- is DirectedInfinity[-c], not DirectedInfinity[c]. */
+        int side_factor = +1;
+        if (ctx->dir == LIMIT_DIR_FROMBELOW) {
+            if (den == 1) {
+                side_factor = (leading_num % 2 == 0) ? +1 : -1;
+            } else {
+                expr_free(leading_coef);
+                if (prefactor) expr_free(prefactor);
+                return NULL;
+            }
+        } else if (ctx->dir == LIMIT_DIR_TWOSIDED) {
+            /* Default (un-qualified) two-sided: for an odd-order integer
+             * pole the two one-sided limits disagree in sign. Pick the
+             * complex-plane fall-back (ComplexInfinity). For non-integer
+             * exponents (sqrt-type), the negative side is off the real
+             * line anyway and the one-sided reading stands. */
+            if (den == 1 && (leading_num % 2 != 0)) {
+                expr_free(leading_coef);
+                result = mk_sym("ComplexInfinity");
+                goto apply_prefactor;
+            }
+        } else if (ctx->dir == LIMIT_DIR_REALS) {
+            /* Explicit Direction -> Reals. Unlike the default TWOSIDED
+             * mode, this specifically asks for the real-line answer: a
+             * pole with disagreeing signs on the two sides has no real
+             * limit, so return Indeterminate. Non-integer exponents hit
+             * a branch cut on the negative side; also Indeterminate. */
+            if (den != 1 || (leading_num % 2 != 0)) {
+                expr_free(leading_coef);
+                result = mk_sym("Indeterminate");
+                goto apply_prefactor;
+            }
+        } else if (ctx->dir == LIMIT_DIR_COMPLEX) {
+            /* Direction -> Complexes asks for the radial / all-
+             * direction answer. Any isolated pole (integer or
+             * fractional order) is ComplexInfinity. */
+            expr_free(leading_coef);
+            result = mk_sym("ComplexInfinity");
+            goto apply_prefactor;
+        }
+
         int coef_sign = literal_sign_ctx(leading_coef, ctx->assume);
-        if (coef_sign == 0) {
+        if (coef_sign != 0) {
+            expr_free(leading_coef);
+            result = signed_infinity(coef_sign * side_factor);
+        } else {
             /* Unknown sign -- only meaningful when the coefficient is a
              * pure constant (no residual limit variable). If x survived
              * into the coefficient (e.g. Log[x] in Log[x]/x at x=0), a
@@ -1280,52 +1343,8 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
                 if (prefactor) expr_free(prefactor);
                 return NULL;
             }
+            if (side_factor < 0) leading_coef = simp(mk_neg(leading_coef));
             result = mk_fn1("DirectedInfinity", leading_coef);
-        } else {
-            int side_factor = +1;
-            if (ctx->dir == LIMIT_DIR_FROMBELOW) {
-                /* (-1)^leading_num if integer; odd -> flip, even -> keep */
-                if (den == 1) {
-                    side_factor = (leading_num % 2 == 0) ? +1 : -1;
-                } else {
-                    /* Fractional exponent on the negative side: branch cut. */
-                    expr_free(leading_coef);
-                    if (prefactor) expr_free(prefactor);
-                    return NULL;
-                }
-            } else if (ctx->dir == LIMIT_DIR_TWOSIDED) {
-                /* Default (un-qualified) two-sided: for an odd-order integer
-                 * pole the two one-sided limits disagree in sign. Pick the
-                 * complex-plane fall-back (ComplexInfinity). For non-integer
-                 * exponents (sqrt-type), the negative side is off the real
-                 * line anyway and we bail to let the caller retry with a
-                 * sharper layer. */
-                if (den == 1 && (leading_num % 2 != 0)) {
-                    expr_free(leading_coef);
-                    result = mk_sym("ComplexInfinity");
-                    goto apply_prefactor;
-                }
-            } else if (ctx->dir == LIMIT_DIR_REALS) {
-                /* Explicit Direction -> Reals. Unlike the default TWOSIDED
-                 * mode, this specifically asks for the real-line answer: a
-                 * pole with disagreeing signs on the two sides has no real
-                 * limit, so return Indeterminate. Non-integer exponents hit
-                 * a branch cut on the negative side; also Indeterminate. */
-                if (den != 1 || (leading_num % 2 != 0)) {
-                    expr_free(leading_coef);
-                    result = mk_sym("Indeterminate");
-                    goto apply_prefactor;
-                }
-            } else if (ctx->dir == LIMIT_DIR_COMPLEX) {
-                /* Direction -> Complexes asks for the radial / all-
-                 * direction answer. Any isolated pole (integer or
-                 * fractional order) is ComplexInfinity. */
-                expr_free(leading_coef);
-                result = mk_sym("ComplexInfinity");
-                goto apply_prefactor;
-            }
-            expr_free(leading_coef);
-            result = signed_infinity(coef_sign * side_factor);
         }
     }
 

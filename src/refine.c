@@ -599,6 +599,73 @@ static Expr* deep_positivity_walk(const Expr* e, const Expr* Aconj,
     return rebuilt;
 }
 
+/* The unit direction a DirectedInfinity[d] collapses to under the facts, as
+ * an owned +1 / -1 / I / -I literal, or NULL when it cannot be decided.
+ * Refines Sign[d] with the same two passes the rewrite path runs (the fast
+ * rule set, then the Reduce-backed deep positivity walk), so the direction
+ * is settled exactly as Refine[Sign[d], assum] would settle it. */
+static Expr* refine_unit_direction(const Expr* d, const AssumeCtx* ctx,
+                                   const Expr* Aconj, RefineBudget* b) {
+    Expr* sgn = eval_and_free(expr_new_function(expr_new_symbol(SYM_Sign),
+                    (Expr*[]){ expr_copy((Expr*)d) }, 1));
+    Expr* r = apply_assumption_rules(sgn, ctx);
+    if (r) { expr_free(sgn); sgn = r; }
+    int changed = 0;
+    Expr* deep = deep_positivity_walk(sgn, Aconj, b, &changed);
+    expr_free(sgn);
+    deep = eval_and_free(deep);
+    if (deep->type == EXPR_INTEGER &&
+        (deep->data.integer == 1 || deep->data.integer == -1))
+        return deep;
+    if (head_is(deep, "Complex") && deep->data.function.arg_count == 2) {
+        const Expr* re = deep->data.function.args[0];
+        const Expr* im = deep->data.function.args[1];
+        if (re->type == EXPR_INTEGER && re->data.integer == 0 &&
+            im->type == EXPR_INTEGER &&
+            (im->data.integer == 1 || im->data.integer == -1))
+            return deep;
+    }
+    expr_free(deep);
+    return NULL;
+}
+
+/* Bottom-up walk canonicalising every DirectedInfinity[d] whose direction is
+ * decided by the facts: DirectedInfinity[1/(s - 1)] under s > 1 is Infinity,
+ * DirectedInfinity[1 - s] is -Infinity. An undecidable direction is left as
+ * it is. A literal direction is already canonical (the evaluator normalises
+ * it), so only a symbolic one is examined. Returns an owned tree. */
+static Expr* refine_directed_infinity(const Expr* e, const AssumeCtx* ctx,
+                                      const Expr* Aconj, RefineBudget* b) {
+    if (!e || e->type != EXPR_FUNCTION) return e ? expr_copy((Expr*)e) : NULL;
+    size_t n = e->data.function.arg_count;
+    if (head_is(e, "DirectedInfinity") && n == 1) {
+        const Expr* d = e->data.function.args[0];
+        if (d->type == EXPR_SYMBOL || d->type == EXPR_FUNCTION) {
+            Expr* u = budget_ok(b) ? refine_unit_direction(d, ctx, Aconj, b) : NULL;
+            if (u) {
+                /* +-1 take the canonical Infinity / -Infinity spelling. */
+                if (u->type == EXPR_INTEGER) {
+                    int64_t sg = u->data.integer;
+                    expr_free(u);
+                    Expr* inf = expr_new_symbol(SYM_Infinity);
+                    return sg > 0 ? inf
+                        : expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(-1), inf }, 2);
+                }
+                return expr_new_function(expr_new_symbol(SYM_DirectedInfinity),
+                                         (Expr*[]){ u }, 1);
+            }
+        }
+        return expr_copy((Expr*)e);
+    }
+    Expr** args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        args[i] = refine_directed_infinity(e->data.function.args[i], ctx, Aconj, b);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
 /* ------------------------------------------------------------------------- */
 /* builtin_refine                                                            */
 /* ------------------------------------------------------------------------- */
@@ -704,7 +771,11 @@ Expr* builtin_refine(Expr* res) {
         Expr* deep = deep_positivity_walk(rewritten, Aconj, &bud, &changed);
         expr_free(rewritten);
 
-        result = eval_and_free(deep);
+        /* Directed infinities: settle a symbolic direction to its unit. */
+        Expr* dirs = refine_directed_infinity(deep, ctx, Aconj, &bud);
+        expr_free(deep);
+
+        result = eval_and_free(dirs);
     }
 
     simp_set_time_budget(saved_budget);

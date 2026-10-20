@@ -257,7 +257,7 @@ static bool liveness(Opt* o) {
             if (s.ra && !bs_get(d, (int)c->a))   bs_set(u, (int)c->a);
             if (s.rb && !s.jump && !bs_get(d, (int)c->b)) bs_set(u, (int)c->b);
             if (op_reads_range(c->op))
-                for (unsigned k = 0; k < c->flags; k++)
+                for (unsigned k = 0; k < instr_run_len(c); k++)
                     if (!bs_get(d, (int)c->a + (int)k)) bs_set(u, (int)c->a + (int)k);
             if (s.wd) bs_set(d, (int)c->dst);
         }
@@ -575,7 +575,7 @@ static bool pass_dce(Opt* o, bool* progress) {
             if (s.ra && (int)c->a   < o->nreg) bs_set(live, (int)c->a);
             if (s.rb && !s.jump && (int)c->b < o->nreg) bs_set(live, (int)c->b);
             if (op_reads_range(c->op))
-                for (unsigned k = 0; k < c->flags; k++)
+                for (unsigned k = 0; k < instr_run_len(c); k++)
                     if ((int)c->a + (int)k < o->nreg) bs_set(live, (int)c->a + (int)k);
         }
     }

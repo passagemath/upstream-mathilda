@@ -1878,8 +1878,16 @@ Out[3]= 2.32018 - 3.45139*I
   reference's exactly, and all 479 values are within 6e-15 of 30-digit
   quadrature; the reference's own machine values are off by up to 2e-6 there
   (`PolyLog[3, 0.5, -1.]`). Deliberate difference: `PolyLog[1, 2, 1.]` is
-  `Zeta[3]` = 1.2020569…, where the reference says `Indeterminate`. A call costs
-  1–3 ms at machine precision.
+  `Zeta[3]` = 1.2020569…, where the reference says `Indeterminate`.
+- **Machine kernel, arrays and `Compile`** (v0.479): `sf_nielsen_c`
+  (`src/special_functions/sf_machine_nielsen.c`) is the double-precision twin of
+  the arb engine, with the same domain gate. It uses the closed form for
+  `n ≤ 0`, the Stirling and Miller series, and tanh-sinh quadrature, and declines
+  to the arb path wherever its own error estimate exceeds 2e-14. The scalar
+  builtin, the packed / `NDArray` map and `Compile` (an array in `n`, `p` or `z`)
+  all call it, so they agree bit for bit. It is within 6.1e-15 of 30-digit values
+  over the 479-value grid. About 17 µs a call; a complex value (real `z > 1`)
+  hands a compiled real body back to the interpreter.
 
 ## LerchPhi
 

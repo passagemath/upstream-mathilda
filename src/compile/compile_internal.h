@@ -96,11 +96,13 @@ typedef struct { uint16_t op, flags; uint32_t dst, a, b; Slot imm; } Instr;
  *   K_NARY    dst = kernel(a .. a+flags-1)   — same operand range as K_CALL but
  *             PURE: a machine kernel has no side effects, so it may be CSE'd
  *             and removed when dead
- *   K_NARYV   tile dst = kernel(a .. a+flags-1, tile b) element-wise — the
- *             strip-mined form of K_NARY for a kernel whose LAST operand is the
- *             only array-valued one (MeijerG's z): `flags` scalar registers
- *             starting at `a` are broadcast, the tile in `b` supplies the last
- *             operand. Pure, reads the range AND b
+ *   K_NARYV   tile dst = kernel(a .. a+ns-1 with tile b inserted) element-wise —
+ *             the strip-mined form of K_NARY for a kernel with ONE array-valued
+ *             operand: the low byte of `flags` is ns, the count of scalar
+ *             registers broadcast from `a`; the high byte is the tile's position
+ *             counted from the END of the argument list (0 = last, MeijerG's z;
+ *             2 = first of three, LerchPhi[v, s, a]). Pure, reads the range AND
+ *             b. Walk the range with instr_run_len, never with raw `flags`.
  *   K_ALOAD   dst = a[b], a READ of array memory.  Shaped exactly like K_BIN but
  *             deliberately NOT pure: it was pure while the only writer was
  *             fusion, which stores solely into a fresh result buffer, but once
@@ -145,6 +147,12 @@ enum {
  * carries. MeijerG flattens [shape, r, a_1..a_p, b_1..b_q, z] into one run,
  * so this bounds p + q + 3. */
 #define KERNN_MAX_OPERANDS 24
+
+/* K_NARYV's flags: scalar count in the low byte, the tile's position from the
+ * end of the argument list in the high byte (see K_NARYV above). */
+#define NARYV_FLAGS(ns, pos_from_end) ((uint16_t)((ns) | ((pos_from_end) << 8)))
+#define NARYV_NS(f)       ((unsigned)((f) & 0xFFu))
+#define NARYV_POS_END(f)  ((unsigned)((f) >> 8))
 
 /* Application cap for an iteration with no user-supplied bound (FixedPoint,
  * NestWhile).  MUST equal ITER_SAFETY_CAP in src/funcprog.c:2062: on reaching
@@ -670,6 +678,13 @@ Expr*  assoc_slot_to_value(Slot s, CompileType t);
 
 /* Kind of each opcode, indexed by opcode.  Defined in optimize.c. */
 extern const unsigned char compile_op_kind[OP__COUNT];
+
+/* Length of the register run an instruction reads from `a` (K_CALL, K_NARY,
+ * K_ARANGE, K_NARYV): `flags`, except K_NARYV, which keeps the tile's position
+ * in the high byte. */
+static inline unsigned instr_run_len(const Instr* c) {
+    return compile_op_kind[c->op] == K_NARYV ? NARYV_NS(c->flags) : (unsigned)c->flags;
+}
 
 /* Optimise `code` (length *n, updated in place) for a program with `nreg`
  * registers whose array bank starts at `arr_base`, and whose result lives in

@@ -2405,3 +2405,82 @@ void ndarray_init(void) {
     symtab_get_def("DataType")->attributes |= ATTR_PROTECTED;
     /* Docstring lives in info.c (centralized convention). */
 }
+
+/* ------------------------------------------------------------------ */
+/* N-ary kernels over arrays                                           */
+/* ------------------------------------------------------------------ */
+
+/* The most operands an n-ary map carries (the widest registered kernel, the
+ * MeijerG flat run, never reaches the evaluator in that form). */
+#define NDN_MAX_ARGS 8
+
+typedef struct {
+    const NDNaryKernel* k;
+    size_t n;
+    const void* in[NDN_MAX_ARGS];   /* NULL for a broadcast scalar */
+    NDType dt[NDN_MAX_ARGS];
+    double sre[NDN_MAX_ARGS], sim[NDN_MAX_ARGS];
+    double* ore; double* oim;
+} ndn_ctx;
+
+static bool ndn_map_chunk(void* c, size_t lo, size_t hi) {
+    const ndn_ctx* x = (const ndn_ctx*)c;
+    double re[NDN_MAX_ARGS], im[NDN_MAX_ARGS];
+    for (size_t i = 0; i < x->n; i++) { re[i] = x->sre[i]; im[i] = x->sim[i]; }
+    for (size_t j = lo; j < hi; j++) {
+        for (size_t i = 0; i < x->n; i++)
+            if (x->in[i]) ndt_get(x->in[i], j, x->dt[i], &re[i], &im[i]);
+        if (!x->k->cplx(re, im, x->n, &x->ore[j], &x->oim[j])) return false;
+    }
+    return true;
+}
+
+Expr* ndarray_map_nary(Expr* const* args, size_t n, const NDNaryKernel* k) {
+    if (!k || !k->cplx || n != k->nargs || n > NDN_MAX_ARGS) return NULL;
+    ndn_ctx x;
+    memset(&x, 0, sizeof x);
+    x.k = k; x.n = n;
+    const Expr* first = NULL;
+    const Expr* psrc = NULL;
+    bool any_cplx = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = args[i];
+        if (is_ndarray(a)) {
+            NDType dt = a->data.ndarray.dtype;
+            /* Only the machine float buffers: an int64 one holds exact values
+             * the List path keeps exact, and a float32 one would widen. */
+            if (dt != NDT_FLOAT64 && dt != NDT_COMPLEX64) return NULL;
+            if (!first) first = a;
+            else if (!same_shape(first, a)) return NULL;
+            if (!psrc || (is_packed_list(psrc) && !is_packed_list(a))) psrc = a;
+            x.in[i] = a->data.ndarray.data;
+            x.dt[i] = dt;
+            if (dt == NDT_COMPLEX64) any_cplx = true;
+        } else {
+            bool c;
+            if (!scalar_value(a, &x.sre[i], &x.sim[i], &c)) return NULL;
+            if (c) any_cplx = true;
+        }
+    }
+    if (!first) return NULL;
+    size_t sz = ndarray_size(first);
+    x.ore = (double*)malloc(sizeof(double) * (sz ? sz : 1));
+    x.oim = (double*)malloc(sizeof(double) * (sz ? sz : 1));
+    if (!x.ore || !x.oim || !nd_parallel_for(sz, ndn_map_chunk, &x)) {
+        free(x.ore); free(x.oim);
+        return NULL;   /* an element the kernel declines: the List path answers */
+    }
+    bool any_imag = any_cplx;
+    for (size_t j = 0; j < sz && !any_imag; j++) if (x.oim[j] != 0.0) any_imag = true;
+    int rank = first->data.ndarray.rank;
+    const int64_t* dims = first->data.ndarray.dims;
+    if (!any_imag) {
+        free(x.oim);
+        return expr_new_ndarray_like(psrc, rank, dims, x.ore, NDT_FLOAT64);
+    }
+    double* out = (double*)malloc(sizeof(double) * 2 * (sz ? sz : 1));
+    if (!out) { free(x.ore); free(x.oim); return NULL; }
+    for (size_t j = 0; j < sz; j++) { out[2 * j] = x.ore[j]; out[2 * j + 1] = x.oim[j]; }
+    free(x.ore); free(x.oim);
+    return expr_new_ndarray_like(psrc, rank, dims, out, NDT_COMPLEX64);
+}

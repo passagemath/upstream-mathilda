@@ -385,6 +385,7 @@ set(COMMON_SRC
     ../src/special_functions/fresnel.c
     ../src/special_functions/elliptic.c
     ../src/special_functions/sinc.c
+    ../src/special_functions/sf_machine_nielsen.c
     ../src/special_functions/surd.c
     ../src/special_functions/kroneckerdelta.c
     ../src/special_functions/inverf.c

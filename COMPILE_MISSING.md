@@ -1,5 +1,6 @@
 # Heads with a numeric fast path that `Compile[]` cannot lower
 
+**33 of 309** at 2026-10-20 (v0.479; `make check-compile-coverage` prints the current count).
 **32 of 239.** Recorded 2026-08-03 by `make check-compile-coverage`
 (`tools/compile_coverage.py`), which joins the NDArray kernel registry and
 `src/pack.c`'s `AWARE` list against the binary's own `CompileDiagnostics`.
@@ -247,11 +248,18 @@ to a fast path that does not exist. The order of work is a LAPACK path first,
 then a row in `ND_FNS`. Listed so the next reader does not spend an afternoon
 looking for the entry point to delegate to.
 
-## 10. One-off
+## 10. Closed 2026-10-20 (v0.479): the n-ary kernels
 
-| head | note |
-|---|---|
-| `LerchPhi` | an n-ary kernel is registered, but neither the scalar nor the array form lowers. The only head on the list that is missing *both*. |
+`LerchPhi`, `WhittakerM`, `WhittakerW`, `HypergeometricU` and the new Nielsen
+`PolyLog[n, p, z]` lower at scalar and array shapes. The tool used to carry the
+first four as "reported, not enforced" because its probe list stopped at two
+scalar arguments. It now has three- and four-argument probes, with the array
+first, in the middle and last, so they are enforced. The compiled n-ary form
+takes its one array operand in any position: `VKERNN_*` carries the operand's
+position from the end in the high byte of `flags`. Two array operands in one
+n-ary call still bail. The same release maps a Listable n-ary head over packed
+and `NDArray` operands (`ndarray_map_nary`), so the interpreter's array path and
+the compiled one now agree.
 
 ---
 

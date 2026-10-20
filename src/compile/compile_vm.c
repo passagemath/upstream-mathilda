@@ -1787,19 +1787,23 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 for (int k_ = 0; k_ < VBLOCK; k_++)
                     d_[k_] = ((kfn_c2)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), creal(b_[k_]), cimag(b_[k_]),
                                                 &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
-            /* N-ary kernel tiles: `flags` broadcast scalars from `a`, the last
-             * operand per element from the tile in `b`. Only the live elements
+            /* N-ary kernel tiles: NARYV_NS(flags) broadcast scalars from `a`,
+             * the operand in slot ns - NARYV_POS_END(flags) per element from the
+             * tile in `b` (0 from the end = the last operand). Only the live elements
              * are evaluated -- a padding element is a made-up argument, and an
              * expensive kernel (MeijerG's arb fallback) must not run on it. */
             OP(VKERNN_R): {
                 double ar[KERNN_MAX_OPERANDS], ai[KERNN_MAX_OPERANDS], or_, oi_;
-                unsigned ns_ = c->flags;
-                if (ns_ + 1 > KERNN_MAX_OPERANDS) goto vm_fail;
+                unsigned ns_ = NARYV_NS(c->flags), tp_;
+                if (ns_ + 1 > KERNN_MAX_OPERANDS || NARYV_POS_END(c->flags) > ns_) goto vm_fail;
+                tp_ = ns_ - NARYV_POS_END(c->flags);       /* the tile's argument slot */
                 double* d_ = TD_R; const double* b_ = TB_R;
-                for (unsigned k_ = 0; k_ < ns_; k_++) { ar[k_] = R[c->a + k_].r; ai[k_] = 0.0; }
-                ai[ns_] = 0.0;
+                for (unsigned k_ = 0, s_ = 0; k_ <= ns_; k_++) {
+                    ai[k_] = 0.0;
+                    if (k_ != tp_) ar[k_] = R[c->a + s_++].r;
+                }
                 for (int k_ = 0; k_ < vlen; k_++) {
-                    ar[ns_] = b_[k_];
+                    ar[tp_] = b_[k_];
                     if (!((kfn_cn)c->imm.p)(ar, ai, (size_t)ns_ + 1, &or_, &oi_)) d_[k_] = NAN;
                     else if (oi_ != 0.0) goto vm_fail;   /* complex value, real slot */
                     else d_[k_] = or_;
@@ -1808,14 +1812,16 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             } NEXT();
             OP(VKERNN_C): {
                 double ar[KERNN_MAX_OPERANDS], ai[KERNN_MAX_OPERANDS], or_, oi_;
-                unsigned ns_ = c->flags;
-                if (ns_ + 1 > KERNN_MAX_OPERANDS) goto vm_fail;
+                unsigned ns_ = NARYV_NS(c->flags), tp_;
+                if (ns_ + 1 > KERNN_MAX_OPERANDS || NARYV_POS_END(c->flags) > ns_) goto vm_fail;
+                tp_ = ns_ - NARYV_POS_END(c->flags);
                 double _Complex* d_ = TD_C; const double _Complex* b_ = (const double _Complex*)RB.p;
-                for (unsigned k_ = 0; k_ < ns_; k_++) {
-                    ar[k_] = creal(R[c->a + k_].z); ai[k_] = cimag(R[c->a + k_].z);
+                for (unsigned k_ = 0, s_ = 0; k_ <= ns_; k_++) {
+                    if (k_ == tp_) continue;
+                    ar[k_] = creal(R[c->a + s_].z); ai[k_] = cimag(R[c->a + s_].z); s_++;
                 }
                 for (int k_ = 0; k_ < vlen; k_++) {
-                    ar[ns_] = creal(b_[k_]); ai[ns_] = cimag(b_[k_]);
+                    ar[tp_] = creal(b_[k_]); ai[tp_] = cimag(b_[k_]);
                     d_[k_] = ((kfn_cn)c->imm.p)(ar, ai, (size_t)ns_ + 1, &or_, &oi_)
                              ? or_ + oi_ * I : NAN + NAN * I;
                 }

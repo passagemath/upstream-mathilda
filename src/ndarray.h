@@ -358,12 +358,12 @@ typedef struct {
 } NDBinaryKernel;
 
 /* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,
- * Hypergeometric2F1, ...).  The unary/binary descriptors above cannot express
- * these, and the Compile[] VM is the consumer that needs them — the NDArray
- * element-wise path still degrades for such heads, since "one array plus
- * broadcast scalars" is a different question from "n scalars".  Arguments arrive
- * as parallel (re, im) arrays of length n, the same choke point the other
- * kernels use. */
+ * Hypergeometric2F1, PolyLog[n, p, z], ...).  The unary/binary descriptors
+ * above cannot express these. Consumers: the Compile[] VM (KERNN / VKERNN, an
+ * array operand in any one position) and, for a Listable head, the evaluator's
+ * NDArray / packed map (ndarray_map_nary, one or more array operands with the
+ * rest broadcast).  Arguments arrive as parallel (re, im) arrays of length n,
+ * the same choke point the other kernels use. */
 typedef struct {
     bool (*cplx)(const double* re, const double* im, size_t n,
                  double* ore, double* oim);
@@ -389,6 +389,18 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
  * shapes disagree, or any element's kernel reports failure -- in every case the
  * caller degrades through ndarray_delist_and_reeval. */
 Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* k);
+
+/* Map n-ary kernel `k` (n == k->nargs) element-wise over the NDArray operands
+ * among `args` (one or more, all the same shape; float64 or complex buffers)
+ * with the other operands broadcast as numeric scalars: LerchPhi[z, s, v],
+ * Hypergeometric2F1[a, b, c, v], PolyLog[n, p, v], ... in one pass over the
+ * buffer instead of one Expr per element. The result is real when every value
+ * came out real and no operand is complex, otherwise complex; it presents as a
+ * visible NDArray when any operand does. NULL -- the caller degrades to the
+ * List path -- for an int64 / float32 / bool buffer, mismatched shapes, a
+ * non-numeric operand, or any element the kernel declines (all-or-nothing, as
+ * the unary and binary maps). */
+Expr* ndarray_map_nary(Expr* const* args, size_t n, const NDNaryKernel* k);
 
 /* Faithful degrade path: rebuild `call` with every NDArray arg replaced by its
  * equivalent nested List and re-evaluate, so the result matches f[{...}] exactly

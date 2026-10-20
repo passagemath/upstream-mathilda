@@ -337,7 +337,7 @@ static CompileType const_type(const CompiledProgram* p, size_t at, bool* dead) {
         unsigned k = compile_op_kind[c->op];
 
         if (k == K_CALL || k == K_NARY || k == K_ARANGE || k == K_NARYV) {
-            if (d >= c->a && d < c->a + c->flags) {
+            if (d >= c->a && d < c->a + instr_run_len(c)) {
                 *dead = false;
                 if (c->op == OP_CALL) {
                     const CompiledProgram* q = (const CompiledProgram*)c->imm.p;
@@ -559,7 +559,7 @@ static void render_operands(DBuf* b, const CompiledProgram* p, size_t i, ProgLis
             break;
         case K_CALL: case K_NARY: case K_ARANGE: case K_NARYV: {
             db_catf(b, "%s, [", rd);
-            for (unsigned j = 0; j < c->flags; j++) {
+            for (unsigned j = 0; j < instr_run_len(c); j++) {
                 char r[24]; reg_name(p, c->a + j, r, sizeof r);
                 db_catf(b, "%s%s", j ? ", " : "", r);
             }
@@ -671,12 +671,19 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
         case K_KERN1: case K_KERN2: case K_NARY: case K_NARYV: {
             const char* fn = kernel_name(c->imm.p);
             db_catf(b, "%s = %s[", rd, fn ? fn : "kernel");
-            if (k == K_NARY || k == K_NARYV) {
+            if (k == K_NARY) {
                 for (unsigned j = 0; j < c->flags; j++) {
                     char r[24]; reg_name(p, c->a + j, r, sizeof r);
                     db_catf(b, "%s%s", j ? ", " : "", r);
                 }
-                if (k == K_NARYV) db_catf(b, ", %s", rb);
+            } else if (k == K_NARYV) {
+                /* the tile printed in its argument position */
+                unsigned ns = NARYV_NS(c->flags), tpos = ns - NARYV_POS_END(c->flags);
+                for (unsigned j = 0, s = 0; j <= ns; j++) {
+                    if (j == tpos) { db_catf(b, "%s%s", j ? ", " : "", rb); continue; }
+                    char r[24]; reg_name(p, c->a + s++, r, sizeof r);
+                    db_catf(b, "%s%s", j ? ", " : "", r);
+                }
             } else if (k == K_KERN2) {
                 db_catf(b, "%s, %s", ra, rb);
             } else {

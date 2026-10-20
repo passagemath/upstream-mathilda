@@ -53,6 +53,7 @@
 #include "flint_num_bridge.h" /* flint_num_polylog (arb acb_polylog) */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "sf_scalar.h"       /* sf_machine_scalar_args: the machine-scalar gate */
+#include "sf_machine_nielsen.h" /* sf_nielsen_c: PolyLog[n, p, z] at machine precision */
 #include "sf_machine.h"      /* sf_machine_polylog: the real kernel */
 #include "sf_machine_zeta.h" /* sf_polylog_c: the complex kernel */
 
@@ -1079,6 +1080,17 @@ static Expr* polylog_nielsen(Expr* res) {
                    (Expr*[]){ np1, expr_copy(args[2]) }, 2);
     }
     if (!flint_num_call_inexact(res)) return NULL;
+    /* A machine call: the kernel the NDArray map and Compile[] share, so the
+     * surfaces agree bit for bit; it declines where it cannot reach machine
+     * accuracy, and the arb path below answers. */
+    {
+        SFMachineArgs ma;
+        if (sf_machine_scalar_args(res, &ma)) {
+            double vr, vi;
+            if (sf_nielsen_c(ma.re[0], ma.im[0], ma.re[1], ma.im[1], ma.re[2], ma.im[2], &vr, &vi))
+                return vi == 0.0 ? expr_new_real(vr) : sf_machine_complex_result(vr, vi);
+        }
+    }
     double pr, pi, nr, ni, zr, zi;
     if (!pl_cvalue(args[0], &nr, &ni) || !pl_cvalue(args[1], &pr, &pi) ||
         !pl_cvalue(args[2], &zr, &zi)) return NULL;

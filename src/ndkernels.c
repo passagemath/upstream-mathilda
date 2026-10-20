@@ -46,6 +46,7 @@
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
 #include "special_functions/surd.h"          /* Surd binary kernel (sf_surd_r) */
 #include "special_functions/besseljzero.h"   /* BesselJZero binary kernel */
+#include "special_functions/sf_machine_nielsen.h" /* Nielsen PolyLog n-ary kernel */
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
@@ -965,6 +966,14 @@ static bool ndk_MeijerG_n(const double* re, const double* im, size_t n,
 }
 static const NDNaryKernel NDKN_MeijerG = { ndk_MeijerG_n, 0, true };
 static const NDNaryKernel NDKN_LerchPhi            = { ndk_LerchPhi_n, 3, true };
+/* PolyLog[n, p, z], Nielsen's S_{n,p}(z): sf_nielsen_c, the scalar builtin's
+ * helper. Complex beyond z = 1 even for real arguments, so not real-closed. */
+static bool ndk_PolyLog_n(const double* re, const double* im, size_t n,
+                          double* rr, double* ri) {
+    if (n != 3) return false;
+    return sf_nielsen_c(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
+}
+static const NDNaryKernel NDKN_PolyLog              = { ndk_PolyLog_n, 3, false };
 /* DirichletL[k, j, s]: k, j integer labels (an imaginary part, or a
  * non-integer / out-of-range label, declines), s complex. The helper is the one
  * behind the scalar builtin and its buffer loop; a complex character makes the
@@ -1073,5 +1082,6 @@ void ndkernels_init(void) {
     REG_N(HypergeometricU); /* HypergeometricU[a, b, z] for Compile[] */
     REG_N(WhittakerW);  /* WhittakerW[k, m, z] for Compile[] */
     REG_N(DirichletL);  /* DirichletL[k, j, s] for Compile[] */
+    REG_N(PolyLog);     /* Nielsen PolyLog[n, p, z]; PolyLog[s, z] is REG_B */
 
 }

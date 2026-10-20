@@ -234,7 +234,11 @@ void symtab_set_packed_int64_ok(const char* symbol_name) {
 }
 
 void symtab_set_ndarray_nary_kernel(const char* symbol_name, const void* kernel) {
-    symtab_get_def(symbol_name)->ndarray_nary_kernel = kernel;
+    SymbolDef* def = symtab_get_def(symbol_name);
+    def->ndarray_nary_kernel = kernel;
+    /* A Listable n-ary head maps over a buffer operand (ndarray_map_nary), so it
+     * takes its packed arguments as buffers, like the unary / binary heads. */
+    if (def->attributes & ATTR_LISTABLE) def->packed_aware = 1;
 }
 
 void symtab_set_options(const char* symbol_name, Expr* list) {

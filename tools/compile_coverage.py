@@ -90,6 +90,19 @@ SHAPES = [
     # probes MatrixPower[m] and reports the probe's gap, not the head's — the
     # same failure the functional spellings below fix for Map / Fold.
     ("m_rk",  "array",  "{{m, _Real, 2}, {k, _Integer}}",  "%s[m, k]"),
+    # Three and four arguments: the n-ary kernels (LerchPhi, PolyLog[n, p, z],
+    # WhittakerM/W, HypergeometricU, 1F1, 2F1, EllipticPi, ...). The array shapes
+    # put the array FIRST, in the MIDDLE and LAST -- the compiled n-ary lowering
+    # takes it in any one position (VKERNN's position byte), and a head that
+    # threads over only some of them still shows as lowered.
+    ("s_rrr",  "scalar", "{{x, _Real}, {y, _Real}, {w, _Real}}", "%s[x, y, w]"),
+    ("s_rrrr", "scalar", "{{x, _Real}, {y, _Real}, {w, _Real}, {u, _Real}}",
+     "%s[x, y, w, u]"),
+    ("v_xxv",  "array",  "{{v, _Real, 1}, {x, _Real}, {y, _Real}}", "%s[x, y, v]"),
+    ("v_vxx",  "array",  "{{v, _Real, 1}, {x, _Real}, {y, _Real}}", "%s[v, x, y]"),
+    ("v_xvx",  "array",  "{{v, _Real, 1}, {x, _Real}, {y, _Real}}", "%s[x, v, y]"),
+    ("v_xxxv", "array",  "{{v, _Real, 1}, {x, _Real}, {y, _Real}, {w, _Real}}",
+     "%s[x, y, w, v]"),
     # Functional spellings.  Leaving these out is what made the first run of
     # this tool report Map, Select, Scan, Fold and Nest as gaps: every one of
     # them compiles, just not as H[v].  A probe list that cannot express a
@@ -278,9 +291,6 @@ EXEMPT = {
     "NegativeDefiniteMatrixQ": "answers a Boolean; the matrix is the argument",
     "HypergeometricPFQ": "parameter LISTS, not machine arrays (the scalar form with "
                          "literal Lists does lower, via OP_KERNN; the array form does not)",
-    "Hypergeometric0F1": "rewrites to HypergeometricPFQ",
-    "Hypergeometric1F1": "rewrites to HypergeometricPFQ",
-    "Hypergeometric2F1": "rewrites to HypergeometricPFQ",
     "Interpolation": "returns an InterpolatingFunction object (no compiled machine "
                      "type); AWARE only to read a packed data table straight through",
     "ListInterpolation": "returns an InterpolatingFunction object (no compiled "
@@ -363,22 +373,6 @@ BASELINE = {
     # A callback lowering, as Map / Select / Fold already have.
     "Scan", "MapAll", "MapAt", "MapIndexed", "MapThread", "SelectFirst",
     "NestWhile", "NestWhileList",
-    # LerchPhi[z, s, a]: a machine N-ary kernel that compiles via OP_KERNN
-    # (real) and OP_KERNN_C (complex z/s/a) -- verify with a 3-scalar-arg
-    # CompileDiagnostics -- but the SHAPES table tops out at two scalar args,
-    # so the tool cannot construct a probe: reported, not enforced.
-    "LerchPhi",
-    # WhittakerM[k, m, z]: has a machine N-ary kernel and genuinely compiles via
-    # the generic OP_KERNN path (verify with a 3-scalar-arg CompileDiagnostics),
-    # but the SHAPES table below tops out at two scalar args, so the tool cannot
-    # construct a probe for it -- reported-not-enforced, exactly like LerchPhi.
-    "WhittakerM",
-    # HypergeometricU[a, b, z]: same as WhittakerM -- a machine N-ary kernel that
-    # compiles via OP_KERNN, but the SHAPES probe cannot build a 3-scalar call.
-    "HypergeometricU",
-    # WhittakerW[k, m, z]: likewise -- N-ary kernel, compiles via OP_KERNN, no
-    # 3-scalar probe.
-    "WhittakerW",
     # The elementwise sign predicates.  Now that NDT_BOOL exists (§13 gap C.1
     # closed) they produce a packed bool array, so a compiled ARRAY form is
     # finally possible — an elementwise compare-to-zero writing CT_BOOL elements

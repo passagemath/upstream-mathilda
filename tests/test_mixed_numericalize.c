@@ -272,6 +272,34 @@ static void test_nielsen_continued(void) {
           "{PolyLog[2, 2.5, 2.0], PolyLog[2.5, 2, 3.0], PolyLog[2, -0.5, 0.5], PolyLog[2, 2.0 + 1.0*I, 3.0]}");
 }
 
+/* ---- n-ary kernels over arrays and in Compile (v0.479) ---- */
+static void test_nary_surfaces(void) {
+    check("nzs = ToPackedArray[N[Range[-400, 99]/100]]; nns = ToPackedArray[N[Range[1, 40]/8]]; 0", "0");
+    /* Nielsen PolyLog: packed == boxed == NDArray == Compile, the array anywhere */
+    check("PolyLog[2, 2, nzs] === Map[PolyLog[2, 2, #] &, FromPackedArray[nzs]]", "True");
+    check("PackedArrayQ[PolyLog[2, 2, nzs]]", "True");
+    check("Normal[PolyLog[2, 2, NDArray[nzs]]] === PolyLog[2, 2, nzs]", "True");
+    check("Compile[{{w, _Real, 1}}, PolyLog[2, 2, w]][nzs] === PolyLog[2, 2, nzs]", "True");
+    check("Compile[{{w, _Real, 1}}, PolyLog[w, 2, 0.5]][nns] === Map[PolyLog[#, 2, 0.5] &, FromPackedArray[nns]]", "True");
+    check("Compile[{{w, _Real, 1}}, PolyLog[2.5, w, 0.7]][nns] === Map[PolyLog[2.5, #, 0.7] &, FromPackedArray[nns]]", "True");
+    check("Table[Compile[{{x, _Real}}, PolyLog[2, 3, x]][x], {x, -3., 0.9, 0.1}] === Table[PolyLog[2, 3, x], {x, -3., 0.9, 0.1}]", "True");
+    check("Lookup[CompileDiagnostics[{{x, _Real}}, PolyLog[2, 2, x]], \"Compiled\"]", "True");
+    check("Lookup[CompileDiagnostics[{{v, _Real, 1}}, PolyLog[2, 2, v]], \"Compiled\"]", "True");
+    /* z > 1 is complex: the compiled real body hands it to the interpreter */
+    check_near("Compile[{{w, _Real, 1}}, PolyLog[2, 2, w]][{2.}][[1]]", "0.4554289599591583 - 1.3189461296972319 I", "1*^-14");
+    check("PolyLog[2, 2, {1/2, 1/3}]", "{PolyLog[2, 2, 1/2], PolyLog[2, 2, 1/3]}");
+    /* LerchPhi and 2F1 with the array in a leading position */
+    check("Lookup[CompileDiagnostics[{{v, _Real, 1}}, LerchPhi[v, 2., 1.5]], \"Compiled\"]", "True");
+    check("Compile[{{w, _Real, 1}}, LerchPhi[w, 2., 1.5]][nns/6] === Map[LerchPhi[#, 2., 1.5] &, FromPackedArray[nns/6]]", "True");
+    check("Compile[{{w, _Real, 1}}, LerchPhi[0.5, w + 1, 1.5]][nns] === Map[LerchPhi[0.5, # + 1, 1.5] &, FromPackedArray[nns]]", "True");
+    check("Compile[{{w, _Real, 1}}, Hypergeometric2F1[w, 1., 1.5, 0.3]][nns] === Map[Hypergeometric2F1[#, 1., 1.5, 0.3] &, FromPackedArray[nns]]", "True");
+    check("Compile[{{w, _Real, 1}}, WhittakerM[w, 0.25, 1.3]][nns] === Map[WhittakerM[#, 0.25, 1.3] &, FromPackedArray[nns]]", "True");
+    /* the packed map for n-ary Listable heads */
+    check("LerchPhi[nns/6, 2., 1.5] === Map[LerchPhi[#, 2., 1.5] &, FromPackedArray[nns/6]] && PackedArrayQ[LerchPhi[nns/6, 2., 1.5]]", "True");
+    check("Hypergeometric2F1[0.5, 1., 1.5, nns/6] === Map[Hypergeometric2F1[0.5, 1., 1.5, #] &, FromPackedArray[nns/6]]", "True");
+    check("LerchPhi[Range[3], 2, 1/2] // Length", "3");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -290,6 +318,7 @@ int main(void) {
     TEST(test_besseljzero);
     TEST(test_nielsen);
     TEST(test_nielsen_continued);
+    TEST(test_nary_surfaces);
 
     printf("All mixed numericalize tests passed!\n");
     symtab_clear();

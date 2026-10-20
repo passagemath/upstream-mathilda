@@ -822,18 +822,22 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         if (d && d->ndarray_nary_kernel) {
             const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
             if (k->cplx && k->nargs == na) {
-                /* Scalar leading arguments; the LAST one (z of WhittakerM/W,
-                 * HypergeometricU, 1F1, 2F1, ...) may be an ARRAY, over which the
-                 * Listable head threads -- the fused loop then feeds it as a tile
-                 * to VKERNN_* with the others broadcast (compile.c), exactly as
-                 * MeijerG / DirichletL. Complex anywhere -> KERNN_C. */
+                /* Scalar arguments, except that ONE of them -- any one: the z of
+                 * WhittakerM/W, HypergeometricU, 1F1, 2F1, or LerchPhi's z, s or a
+                 * -- may be an ARRAY, over which the Listable head threads; the
+                 * fused loop then feeds it as a tile to VKERNN_* with the others
+                 * broadcast (compile.c). MeijerG / DirichletL, which have their
+                 * own emitters, keep the array in the last slot. Complex
+                 * anywhere -> KERNN_C. */
                 bool any_c = false;            /* complex argument -> KERNN_C */
                 int rank = 0;
+                bool last_only = strcmp(h, "MeijerG") == 0 || strcmp(h, "DirichletL") == 0;
                 for (size_t i = 0; i < na; i++) {
                     CompileType t;
                     if (!infer_type(c, A[i], &t) || t == CT_BOOL) return false;
                     if (CT_IS_ARRAY(t)) {
-                        if (i + 1 != na || CT_ELEM(t) == CT_BOOL) return false;
+                        if (rank || CT_ELEM(t) == CT_BOOL || (last_only && i + 1 != na))
+                            return false;
                         rank = CT_RANK(t);
                         t = CT_ELEM(t);
                     }

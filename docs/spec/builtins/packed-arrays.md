@@ -339,6 +339,14 @@ special functions (`Sin`, `Exp`, `Gamma`, …), `Total`, `Mean`, `Min`, `Max`,
 `RandomChoice`, and the integer heads `GCD`, `LCM`, `DivisorSigma`, `EulerPhi`,
 `MoebiusMu`, `IntegerLength`, `PowerMod`, `Prime`.
 
+The special functions of three or four arguments thread over packed operands
+too (v0.479). That covers `LerchPhi`, Nielsen `PolyLog[n, p, z]`,
+`Hypergeometric1F1`/`2F1`, `HypergeometricU`, `WhittakerM`/`W`, `EllipticPi`,
+`LaguerreL[n, a, x]` and `DirichletL`. Any operand may be the array, or several
+may be arrays of one shape, and the others broadcast (`ndarray_map_nary`). The
+values are those of the boxed List. An exact integer buffer, or any element the
+machine kernel declines, takes the List path instead.
+
 The sign predicates `Positive`/`Negative`/`NonNegative`/`NonPositive` read a
 numeric buffer and return a `"bool"` one — a one-byte-per-element buffer of
 `True`/`False` — so both sides stay on the buffer. `Boole` runs the bridge the

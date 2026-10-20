@@ -1235,11 +1235,11 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
          * block is reserved first and each argument lowered into it — the same
          * shape OP_CALL uses.
          *
-         * Inside a strip-mined loop the LAST argument may be a TILE (the
-         * Listable head threading over an array z, as compile_infer.c types
-         * it): the run then stops before it and VKERNN_* reads it per element,
-         * the leading arguments broadcast -- the MeijerG / DirichletL shape.
-         * A tile in any earlier position has no opcode and bails. */
+         * Inside a strip-mined loop ONE argument, in any position, may be a
+         * TILE (the Listable head threading over that array, as
+         * compile_infer.c types it): the scalar run skips it, and VKERNN_*
+         * carries its position from the end in the high byte of `flags`
+         * (NARYV_FLAGS) and reads it per element, the others broadcast. */
         SymbolDef* d = symtab_lookup(h);
         if (!d || !d->ndarray_nary_kernel) return false;
         const NDNaryKernel* k = (const NDNaryKernel*)d->ndarray_nary_kernel;
@@ -1258,30 +1258,33 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         for (size_t i = 1; i < na; i++) (void)alloc_temp(c);
         int after = c->temp_top;
         Slot z; memset(&z, 0, sizeof z);
-        for (size_t i = 0; i + 1 < na && c->ok; i++) {
+        Val tile; memset(&tile, 0, sizeof tile);
+        int tile_pos = -1;
+        for (size_t i = 0, s = 0; i < na && c->ok; i++) {
             Val v;
             if (!emit(c, A[i], &v)) return false;
-            if (val_is_tile(v)) { c->ok = false; return false; }   /* broadcast only */
             coerce(c, &v, at);
             if (!c->ok) return false;
-            ins(c, OP_MOVE, (uint32_t)(base + (int)i), (uint32_t)v.reg, 0, z);
+            if (val_is_tile(v)) {
+                if (tile_pos >= 0) { c->ok = false; return false; }   /* one tile only */
+                tile = v; tile_pos = (int)i;
+                continue;
+            }
+            ins(c, OP_MOVE, (uint32_t)(base + (int)s), (uint32_t)v.reg, 0, z);
+            s++;
             c->temp_top = after;
         }
         if (!c->ok) return false;
-        Val vl;
-        if (!emit(c, A[na - 1], &vl)) return false;
-        coerce(c, &vl, at);
-        if (!c->ok) return false;
         Slot kp; memset(&kp, 0, sizeof kp); kp.p = (const void*)k->cplx;
-        if (val_is_tile(vl)) {
+        if (tile_pos >= 0) {
             int dst = alloc_tile(c);
-            ins_f(c, any_c ? OP_VKERNN_C : OP_VKERNN_R, (uint16_t)(na - 1), (uint32_t)dst,
-                  (uint32_t)base, (uint32_t)vl.reg, kp);
+            ins_f(c, any_c ? OP_VKERNN_C : OP_VKERNN_R,
+                  NARYV_FLAGS(na - 1, (na - 1) - (size_t)tile_pos), (uint32_t)dst,
+                  (uint32_t)base, (uint32_t)tile.reg, kp);
             c->temp_top = (base - c->nlocals);
             out->reg = dst; out->tmp = true; out->type = at;
             return c->ok;
         }
-        ins(c, OP_MOVE, (uint32_t)(base + (int)na - 1), (uint32_t)vl.reg, 0, z);
         c->temp_top = (base - c->nlocals) + 1;
         ins_f(c, any_c ? OP_KERNN_C : OP_KERNN, (uint16_t)na, (uint32_t)base, (uint32_t)base, 0, kp);
         out->reg = base; out->tmp = true; out->type = at;

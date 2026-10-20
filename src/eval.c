@@ -2290,6 +2290,17 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                                  ? ndarray_map_binary2(aa[0], aa[1], hdef->ndarray_binary_kernel)
                                  : ndarray_map_binary(aa[0], aa[1], hdef->ndarray_binary_kernel);
                         if (!nd) nd = ndarray_delist_and_reeval(res);
+                    } else if (na >= 3 && hdef->ndarray_nary_kernel && (attrs & ATTR_LISTABLE)) {
+                        /* An n-ary Listable head (LerchPhi, Hypergeometric2F1,
+                         * PolyLog[n, p, z], ...) over one or more array operands
+                         * threads exactly as the List path does, in one pass
+                         * over the buffers. */
+                        bool any_nd = false;
+                        for (size_t i = 0; i < na && !any_nd; i++) any_nd = is_ndarray(aa[i]);
+                        if (any_nd) {
+                            nd = ndarray_map_nary(aa, na, (const NDNaryKernel*)hdef->ndarray_nary_kernel);
+                            if (!nd) nd = ndarray_delist_and_reeval(res);
+                        }
                     }
                     if (nd) {
                         expr_free(res);

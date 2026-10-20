@@ -81,6 +81,27 @@ static void test_declines(void) {
              "Pi E^(-a b)/(2 b)) /. {a -> 2, b -> 3}, 20], 10^-12]", "0");
 }
 
+/* The stage answers in MeijerG; Integrate's final pass
+ * (fe_reduce_definite_result) rewrites it to named functions. The targets are
+ * the reference system's values; the 30-digit checks confirm the MeijerG the
+ * stage produced really is that function (arb numerics on the left via an
+ * MPFR argument, so no exact reduction is involved). */
+static void test_named_results(void) {
+    check_eq("Integrate[E^-x Sin[x]/x, {x, 0, Infinity}]", "1/4 Pi");
+    check_eq("Integrate[x BesselJ[0, a x]/(x^2 + c^2), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && c > 0]", "BesselK[0, a c]");
+    check_eq("Integrate[BesselJ[0, a x] Sin[b x]/x, {x, 0, Infinity}, "
+             "Assumptions -> b > a > 0]", "1/2 Pi");
+    check_eq("Abs[N[1/2 MeijerG[{{1/2}, {1}}, {{0, 1/2}, {}}, N[1, 50]] - Pi/4, 40]] < 10^-30", "True");
+    check_eq("Abs[N[(2 MeijerG[{{0, 0}, {}}, {{}, {}}, N[4/(a^2 c^2), 50]])/(a^2 c^2) - "
+             "BesselK[0, a c] /. {a -> 3/2, c -> 5/7}, 40]] < 10^-30", "True");
+    check_eq("Abs[N[1/2 Sqrt[Pi] MeijerG[{{1}, {1}}, {{1/2}, {0}}, N[b^2/a^2, 50]] - Pi/2 /. "
+             "{a -> 2/3, b -> 5/4}, 40]] < 10^-30", "True");
+    /* b < a is the other branch of the same Piecewise: ArcSin[b/a] */
+    check_eq("Integrate[BesselJ[0, a x] Sin[b x]/x, {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0 && b < a]", "ArcSin[b/a]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -88,6 +109,7 @@ int main(void) {
     TEST(test_two_kernels);
     TEST(test_symbolic);
     TEST(test_declines);
+    TEST(test_named_results);
 
     printf("All Integrate MeijerConvolution tests passed!\n");
     return 0;

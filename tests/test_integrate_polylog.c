@@ -92,6 +92,16 @@ static void test_definite(void) {
     check_eq("Chop[N[Integrate[Log[1 + x]/(1 + x^2), {x, 0, 1}] - Pi Log[2]/8]]", "0");
     /* radical endpoint: no false divergence */
     check_eq("Chop[N[Integrate[Log[x]/(1 + x^2), {x, 0, 2 - Sqrt[3]}] + 0.6106437294514793]]", "0");
+    /* Values at roots of unity folded by Integrate's final pass: conjugate
+     * pairs of PolyLog / Log[1 + w] cancel their imaginary parts exactly.
+     * The pre-fold Newton-Leibniz values are checked to 30 digits too. */
+    check_eq("Integrate[ArcTan[x]/x, {x, 0, 1}]", "Catalan");
+    check_eq("Integrate[x Log[2 Cos[x]], {x, 0, Pi/2}]", "-7/16 Zeta[3]");
+    check_eq("Abs[N[PolyLog[3, I] + PolyLog[3, -I] - Zeta[3]/4 + 7 Zeta[3]/16, 40]] < 10^-30", "True");
+    check_eq("Abs[N[Integrate[ArcTan[x]/x, {x, 0, 1}, Method -> \"NewtonLeibniz\"] - Catalan, 40]]"
+             " < 10^-30", "True");
+    /* a lone complex Log value is not "simpler" expanded: left as it was */
+    check_eq("Integrate[1/(x + I), {x, 0, 1}] === Log[1 + I] - I Pi/2", "True");
 }
 
 static void test_support(void) {

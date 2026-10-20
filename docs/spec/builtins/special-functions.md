@@ -1272,6 +1272,19 @@ HypergeometricPFQ[{a1,…,ap}, {b1,…,bq}, z]
   `2F1(1,1;1/2;z) -> 1/(1-z) + Sqrt[z] ArcSin[Sqrt[z]]/(1-z)^(3/2)`,
   `2F1(1,1;3/2;z) -> ArcSin[Sqrt[z]]/(Sqrt[z] Sqrt[1-z])`,
   `2F1(2,1;3/2;z) -> 1/(2(1-z)) + ArcSin[Sqrt[z]]/(2 Sqrt[z] (1-z)^(3/2))`.
+  The error-function family (as the reference evaluates it):
+  `1F1(1/2;3/2;-z) -> Sqrt[Pi] Erf[Sqrt[z]]/(2 Sqrt[z])` (`Erfi` for `+z`), and
+  every `1F1(a;a+1;z)` with `a` a half-integer or a positive integer through
+  `F_(a+1) = (a+1)(E^z - F_a)/z` (`1F1(-1/2;1/2;z) -> E^z - Sqrt[Pi] Sqrt[z]
+  Erfi[Sqrt[z]]`, `1F1(2;3;z)` elementary); Kummer's `1F1(1;c;z) = E^z
+  1F1(c-1;c;-z)` onto that family. Other `a` stay — the incomplete-gamma form
+  `a (-z)^-a Gamma[a, 0, -z]` would have no numerics for real `z > 0`.
+  `2F1(1/2,1;3/2;z) -> ArcTanh[Sqrt[z]]/Sqrt[z]` (`ArcTan[Sqrt[-z]]/Sqrt[-z]`
+  for a negated `z`), `2F1(1/2,1/2;3/2;z) -> ArcSin[Sqrt[z]]/Sqrt[z]`
+  (`ArcSinh` for a negated `z`). Gauss: `2F1(a,b;c;1) = Γ(c)Γ(c−a−b)/(Γ(c−a)Γ(c−b))`
+  for rational parameters with `c − a − b > 0` (symbolic ones stay, as in the
+  reference). Each identity is verified to 30 digits against the series in
+  `tests/test_hypergeopfq.c`.
   A table-backed very-well-poised reduction closes the classic
   central-binomial-cubed Ramanujan `1/Pi` series:
   `4F3({1/2,1/2,1/2,5/4}, {1/4,1,1}, -1) -> 2/Pi` (general `1/Pi` summation is an
@@ -1281,7 +1294,9 @@ HypergeometricPFQ[{a1,…,ap}, {b1,…,bq}, z]
   converges — `p <= q` (entire) and `p == q+1` with `|z| < 1`; for `p > q+1`,
   and `p == q+1` with `|z| >= 1` other than `2F1`, the call stays unevaluated.
   `2F1` (`{a, b}, {c}`) is analytically continued to the whole plane (see
-  `Hypergeometric2F1`).
+  `Hypergeometric2F1`) — at arbitrary precision too (arb's `acb_hypgeom_2f1`)
+  everywhere off the cut `[1, ∞)`: `N[HypergeometricPFQ[{2/3,11/12},{5/3},-1], 20]`
+  is a number.
 - **Machine precision: one raw-`double` kernel** (`sf_machine_hyper.c`), real and
   complex (raw re/im), answering every machine-precision call — exact
   (Integer / Rational) parameters included — *before* the exact rewrites, so the
@@ -1808,6 +1823,9 @@ Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
   - For integer `n ≥ 2`: `PolyLog[n, 1] = Zeta[n]` (e.g. `PolyLog[2, 1] = Pi²/6`)
     and `PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n]` (e.g. `PolyLog[2, -1] = -Pi²/12`).
   - `PolyLog[2, I] = I Catalan - Pi²/48` and `PolyLog[2, -I] = -I Catalan - Pi²/48`, as the reference evaluates them (v0.458).
+  - Other roots of unity stay automatically (as in the reference) and expand
+    under `FunctionExpand` (see there): `FunctionExpand[PolyLog[3, I]]` =
+    `I Pi³/32 - 3 Zeta[3]/32`.
   - The dilogarithm and trilogarithm at ½:
     `PolyLog[2, 1/2] = Pi²/12 - Log[2]²/2`,
     `PolyLog[3, 1/2] = Log[2]³/6 - Pi² Log[2]/12 + 7 Zeta[3]/8`.
@@ -3291,10 +3309,32 @@ every path evaluates it. `MeijerG[alist, blist, z, 1]` is the ordinary function.
   apart. Each pFq is rewritten to `Exp`, a power, `BesselJ`/`BesselI`,
   `1F1(u; 2u)` → `BesselI`, `EllipticK`/`EllipticE`, or left as a
   `HypergeometricPFQ` divided by the `Gamma`s of its regularized lower
-  parameters. For `p = q` the reduction needs `m + n > p` (otherwise the
-  expansions in `z` and `1/z` are not continuations of each other) and, for a
-  numeric `z`, uses the expansion that converges there. Everything else — e.g.
-  two 2F2 terms, or the log case — stays `MeijerG`.
+  parameters. For `p = q` a numeric `z` uses the expansion that converges there
+  — for `m + n ≤ p` too, where the two expansions are not continuations of each
+  other but each is `G` in its own disk (`MeijerG[{{1},{1}},{{1/2},{0}},4]` =
+  `Sqrt[Pi]`); a symbolic `z` needs `m + n > p`. On `|z| = 1` only `z = 1` reduces,
+  and only when every term's pF(p−1) converges there (parameter excess
+  `Re(Σa − Σb) − 1` above 0 at `x = 1`, above −1 at `x = −1`, by Abel's theorem):
+  `MeijerG[{{1/2},{1}},{{0,1/2},{}},1]` = `Pi/2`. Everything else — e.g. two 2F2
+  terms, or the log case — stays `MeijerG`. The dual named shapes (BesselK /
+  HypergeometricU in `1/z`) are left to `FunctionExpand`, as in the reference.
+- **Gamma-pair cancellation.** Equal parameters in opposite groups — an `a_k`
+  (`k > n`) equal to a `b_j` (`j ≤ m`), or an `a_k` (`k ≤ n`) equal to a `b_j`
+  (`j > m`) — cancel in the Mellin–Barnes integrand and are removed:
+  `MeijerG[{{},{0}},{{0,0},{}},z]` → `E^-z`,
+  `MeijerG[{{0,0},{0}},{{0},{}},z]` → `MeijerG[{{0,0},{}},{{},{}},z]`. A
+  cancellation that would leave `m = n = 0` gives `MeijerG::hdiv`.
+- **FunctionExpand.** The named shapes in `z` or `1/z`
+  (`FunctionExpand[MeijerG[{{0,0},{}},{{},{}},z]]` = `2 BesselK[0, 2/Sqrt[z]]/z`),
+  else the named Slater expansion, else — `p = q`, `m + n ≤ p`, symbolic `z` —
+  `Piecewise[{{inner, z == 1 || Abs[z] < 1}, {outer, Abs[z] > 1}}, Indeterminate]`
+  (the `z == 1` clause when the inner terms converge there):
+  `FunctionExpand[MeijerG[{{1},{1}},{{1/2},{0}},z]]` =
+  `Piecewise[{{2 ArcSin[Sqrt[z]]/Sqrt[Pi], z == 1 || Abs[z] < 1}, {Sqrt[Pi], Abs[z] > 1}}, Indeterminate]`.
+  A definite `Integrate` answers through the same rewrite (its final pass,
+  Refining such a Piecewise under the call's assumptions):
+  `∫₀^∞ x J₀(ax)/(x²+c²) dx` = `BesselK[0, a c]`, `∫₀^∞ J₀(ax) sin(bx)/x dx` =
+  `Pi/2` for `b > a > 0`, `∫₀^∞ e^−x sin x/x dx` = `Pi/4`.
 - **z = 0.** `p > q`: `ComplexInfinity` when `n = 1`, else unevaluated; `p ≤ q`:
   `0` when every `Re b_h > 0` (`h ≤ m`), the coefficient when one `b_h = 0`,
   `ComplexInfinity` when some `Re b_h < 0` (with a non-zero coefficient). This
@@ -3385,11 +3425,41 @@ Out[6]= MeijerG[{{-1, -1 + a1, -1 + a2}, {-1 + a3, -1 + a4}}, {{-1 + v}, {0, -1 
 
 `FunctionExpand[expr]` (and `FunctionExpand[expr, assum]`, the assumptions
 accepted but not yet used) expands special functions in `expr` into simpler
-ones. The first and so far only rule rewrites each `MeijerG` into its Slater
-expansion — a sum of `HypergeometricPFQ` terms in `z` (`p ≤ q`) or `1/z`
-(`p > q`), each in a classical form where it has one. A `MeijerG` without such an
-expansion (the log case; `p = q` with `m + n = p`) and every other expression are
-returned unchanged; a packed / NDArray buffer passes straight through.
+ones, bottom-up (`src/special_functions/functionexpand.c`):
+
+- **MeijerG** → its named shape (`BesselK`, `HypergeometricU`) in `z` or `1/z`,
+  else its Slater expansion — a sum of `HypergeometricPFQ` terms in `z`
+  (`p ≤ q`) or `1/z` (`p > q`), each in a classical form where it has one — else,
+  for `p = q` with `m + n ≤ p` and a symbolic `z`, the Piecewise of the inner and
+  outer expansions (see `MeijerG`). The log case is returned unchanged.
+- **PolyLog[n, w]**, integer `n ≥ 2`, `w = E^(I Pi r)` an exact root of unity
+  (spelled with `I`, `−1`, `(−1)^r`, `E^(I Pi r)` and products of them) →
+  `Re + I Im` with `x = r/2 mod 1 = p/q`:
+  the Bernoulli part (Re for even `n`, Im for odd `n`) is always
+  `(2π)^n B_n(x)/(2 n!)` up to sign; the Clausen part is a multiple of `Zeta[n]`
+  for a cosine sum with `q ∈ {1,2,3,4,6}` (Ramanujan sums:
+  `ζ(n) Σ_{d|q} μ(q/d) d^(1−n)/φ(q)`), `±Catalan` for `n = 2, q = 4`, and
+  otherwise the Hurwitz decomposition `q^(−n) Σ_j f(2πjp/q) ζ(n, j/q)` in
+  `PolyGamma` terms (as the reference writes it). The Clausen part is built
+  from the representative `p ≤ q/2`, so a conjugate pair cancels structurally:
+  `FunctionExpand[PolyLog[3, I] + PolyLog[3, −I]]` = `−3 Zeta[3]/16`,
+  `FunctionExpand[PolyLog[3, E^(2 Pi I/3)]]` = `2 I Pi^3/81 − 4 Zeta[3]/9`.
+- **Log[w]** → `I Pi r`, **Log[1 + w]** → `Log[2 Cos[Pi r/2]] + I Pi r/2`
+  (`|r| < 1`) for the same roots of unity.
+- **PolyGamma[m, x]**, `x ∈ {1/2, 1/4, 3/4}`, via `ζ(n, 1/2) = (2^n−1) ζ(n)` and
+  `ζ(n, 1/4 | 3/4) = ((4^n − 2^n) ζ(n) ± 4^n β(n))/2` where the Dirichlet beta is
+  closed (`n = 2`: Catalan; odd `n`: `EulerE`): `FunctionExpand[PolyGamma[1, 1/4]]`
+  = `8 Catalan + Pi^2`; `PolyGamma[3, 1/4]` stays.
+
+Every rule is checked to 30 digits against the unexpanded numerics in
+`tests/test_meijerg.c` and `tests/test_polylog.c`. Everything else is returned
+unchanged; a packed / NDArray buffer passes straight through.
+
+A definite `Integrate` runs the same rules as its final pass
+(`fe_reduce_definite_result`), keeping a MeijerG rewrite only when no MeijerG,
+pFq or unresolved Piecewise is left, and a root-of-unity rewrite only when the
+(expanded) result is strictly smaller with no new `PolyGamma`:
+`∫₀¹ ArcTan[x]/x dx` = `Catalan`, `∫₀^{π/2} x Log[2 Cos x] dx` = `−7 Zeta[3]/16`.
 
 Attributes: `Protected`.
 

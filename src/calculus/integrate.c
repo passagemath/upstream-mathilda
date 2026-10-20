@@ -77,6 +77,7 @@
 #include "message.h"   /* mth_msg_suppress_push/pop: quiet ParallelMixedTower's internal probes */
 #include "print.h"     /* expr_to_string: naming the integrand in the Integrate::nonelem diagnostic */
 #include "series.h"
+#include "functionexpand.h" /* fe_reduce_definite_result: MeijerG / PolyLog closed forms */
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -1589,7 +1590,13 @@ static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* as
     mth_msg_suppress_pop();
     expr_free(call);
     if (!r) return NULL;
-    if (r->type != EXPR_FUNCTION || result_contains_head(r, "Integrate") ||
+    /* An atomic answer is a value (0, Pi, Catalan, ...) unless it is the
+     * stage's $Failed: the MeijerG it builds can evaluate all the way to a
+     * number (the J1(x) Y1(3x) integral is exactly 0). */
+    if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
+                                    r->data.symbol.name == SYM_Indeterminate ||
+                                    r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_contains_head(r, "Integrate") ||
         result_contains_head(r, "MeijerConvolution`Run") ||
         result_contains_head(r, "Throw")) {
         expr_free(r);
@@ -1872,6 +1879,13 @@ static Expr* integrate_definite(Expr* res) {
         if (!r) return NULL;
         cur = r;
     }
+    /* Special-function closed forms.  A method stage can close the integral in
+     * a representation the user should not see: MeijerConvolution answers in
+     * MeijerG, Newton-Leibniz leaves PolyLog/Log values at roots of unity
+     * (E^(I Pi/4), I, ...) whose conjugate pairs cancel to Catalan / Zeta.
+     * fe_reduce_definite_result rewrites those through FunctionExpand's rules
+     * and keeps a rewrite only when it is a genuine closed form. */
+    if (cur) cur = fe_reduce_definite_result(cur, assumptions);
     /* Assumption-aware result cleanup.  When the call carried an explicit
      * Assumptions option, Refine the folded result so a definite integral
      * returns the reduced closed form a method stage left equal-but-unsimplified

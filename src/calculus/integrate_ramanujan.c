@@ -592,7 +592,11 @@ static bool rec_gamma_upper(const Expr* K, const Expr* x, const Expr* sv,
  *   giving  Integrate[x^(sv-1) pFq] = Gamma(sv) phi(-sv) lam^(-sv). */
 static bool rec_pfq(const Expr* K, const Expr* x, const Expr* sv,
                     Expr** M, Expr** P) {
-    if (!head_name_is(K, "HypergeometricPFQ") || K->data.function.arg_count != 3)
+    /* Integrate`RMTPFQ is the inert pFq reduce_to_hypergeometric writes: a live
+     * HypergeometricPFQ would evaluate straight back to its closed form
+     * (1F1(1/2;3/2;-x) is the error function) before this recognizer saw it. */
+    if ((!head_name_is(K, "HypergeometricPFQ") && !head_name_is(K, "Integrate`RMTPFQ")) ||
+        K->data.function.arg_count != 3)
         return false;
     Expr* as  = K->data.function.args[0];
     Expr* bs  = K->data.function.args[1];
@@ -1920,17 +1924,17 @@ static Expr* reduce_to_hypergeometric(const Expr* f) {
      * (the Struve prefactor 2/(Sqrt[Pi]Gamma[nu+3/2]) gives the correct leading
      *  H_0(z) ~ 2z/Pi). */
     static const char* RULES =
-        "{ Erf[u_] :> (2/Sqrt[Pi]) u HypergeometricPFQ[{1/2}, {3/2}, -u^2], "
-        "  Gamma[a_] - Gamma[a_, z_] :> z^a/a HypergeometricPFQ[{a}, {a+1}, -z], "
+        "{ Erf[u_] :> (2/Sqrt[Pi]) u Integrate`RMTPFQ[{1/2}, {3/2}, -u^2], "
+        "  Gamma[a_] - Gamma[a_, z_] :> z^a/a Integrate`RMTPFQ[{a}, {a+1}, -z], "
         "  BesselJ[nu_, z_]^2 :> (z/2)^(2 nu)/Gamma[nu+1]^2 "
-        "      HypergeometricPFQ[{nu+1/2}, {2 nu+1, nu+1}, -z^2], "
-        "  SinIntegral[u_] :> u HypergeometricPFQ[{1/2}, {3/2, 3/2}, -u^2/4], "
+        "      Integrate`RMTPFQ[{nu+1/2}, {2 nu+1, nu+1}, -z^2], "
+        "  SinIntegral[u_] :> u Integrate`RMTPFQ[{1/2}, {3/2, 3/2}, -u^2/4], "
         "  StruveH[nu_, u_] :> (u/2)^(nu+1) (2/(Sqrt[Pi] Gamma[nu+3/2])) "
-        "      HypergeometricPFQ[{1}, {3/2, nu+3/2}, -u^2/4], "
+        "      Integrate`RMTPFQ[{1}, {3/2, nu+3/2}, -u^2/4], "
         /* Complete elliptic integrals are single 2F1s (Gauss), so rec_pfq
          * closes them with the right Gamma-ratio and strip 0 < Re s < 1/2. */
-        "  EllipticK[z_] :> (Pi/2) HypergeometricPFQ[{1/2, 1/2}, {1}, z], "
-        "  EllipticE[z_] :> (Pi/2) HypergeometricPFQ[{-1/2, 1/2}, {1}, z], "
+        "  EllipticK[z_] :> (Pi/2) Integrate`RMTPFQ[{1/2, 1/2}, {1}, z], "
+        "  EllipticE[z_] :> (Pi/2) Integrate`RMTPFQ[{-1/2, 1/2}, {1}, z], "
         /* Y_nu is a cos(nu pi)/sin(nu pi) combination of J_nu and J_{-nu}; after
          * Expand each half is a single BesselJ closed by rec_bessel, and the two
          * strips intersect to Re s > |Re nu|, Re s < 3/2.  (Integer nu is a

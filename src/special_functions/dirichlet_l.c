@@ -496,12 +496,48 @@ static Expr* dl_numeric(const DchTable* T, Expr* s, bool machine) {
 /*  Interval                                                           */
 /* ------------------------------------------------------------------ */
 
-static bool dl_leaf_d(const Expr* e, double* d) {
+/* An Interval endpoint as a double, rounded OUTWARD (down for a lower endpoint,
+ * up for an upper one) so the double interval contains the exact one: a machine
+ * Real as is, an exact Integer / BigInt / Rational (or a wider MPFR) to the
+ * nearest double on the outer side. */
+static bool dl_leaf_d(const Expr* e, bool up, double* d) {
     if (e->type == EXPR_REAL) { *d = e->data.real; return true; }
-    if (e->type == EXPR_INTEGER && llabs(e->data.integer) < ((int64_t)1 << 53)) {
-        *d = (double)e->data.integer; return true;
+#ifdef USE_MPFR
+    if (dch_is_mpfr(e)) {
+        *d = mpfr_get_d(e->data.mpfr, up ? MPFR_RNDU : MPFR_RNDD);
+        return isfinite(*d);
     }
-    return false;
+#endif
+    if (e->type != EXPR_INTEGER && e->type != EXPR_BIGINT && !is_rational_like(e))
+        return false;
+    mpq_t q, t;
+    mpq_init(q); mpq_init(t);
+    mpz_t zn;                                  /* expr_to_mpz initialises its out */
+    if (e->type == EXPR_FUNCTION) {            /* Rational[n, d] */
+        mpz_t zd;
+        expr_to_mpz(e->data.function.args[0], zn);
+        expr_to_mpz(e->data.function.args[1], zd);
+        mpq_set_num(q, zn);
+        mpq_set_den(q, zd);
+        mpq_canonicalize(q);
+        mpz_clear(zd);
+    } else {
+        expr_to_mpz(e, zn);
+        mpq_set_z(q, zn);
+    }
+    mpz_clear(zn);
+    double v = mpq_get_d(q);                   /* truncated toward zero */
+    bool ok = isfinite(v);
+    if (ok) {
+        mpq_set_d(t, v);
+        int c = mpq_cmp(t, q);
+        if (up && c < 0) v = nextafter(v, INFINITY);
+        else if (!up && c > 0) v = nextafter(v, -INFINITY);
+        *d = v;
+        ok = isfinite(v);
+    }
+    mpq_clear(q); mpq_clear(t);
+    return ok;
 }
 
 /* Interval[{a1, b1}, ...] for a real character: rigorous enclosure per piece. */
@@ -518,8 +554,8 @@ static Expr* dl_interval(const DchTable* T, const Expr* iv) {
         ok = pr->type == EXPR_FUNCTION && pr->data.function.arg_count == 2
              && pr->data.function.head->type == EXPR_SYMBOL
              && pr->data.function.head->data.symbol.name == SYM_List
-             && dl_leaf_d(pr->data.function.args[0], &lo)
-             && dl_leaf_d(pr->data.function.args[1], &hi)
+             && dl_leaf_d(pr->data.function.args[0], false, &lo)
+             && dl_leaf_d(pr->data.function.args[1], true, &hi)
              && flint_dirichlet_l_interval(lo, hi, T->f, T->order, dl_chi_cb, T,
                                            T->neul, T->eul_p, T->eul_e, &ylo, &yhi);
         if (ok) pieces[built++] = mk2(SYM_List, expr_new_real(ylo), expr_new_real(yhi));

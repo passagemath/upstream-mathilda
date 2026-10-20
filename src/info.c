@@ -1215,7 +1215,8 @@ void info_init(void) {
         "\tSum_{n>=1} chi(n) n^-s, continued analytically.\n"
         "\tDirichletL[1, 1, s] = Zeta[s]. Exact values at integer s <= 0 (generalized Bernoulli numbers)\n"
         "\tand at s = 1 for a non-principal character. Real and complex s evaluate to any precision;\n"
-        "\tInterval s gives an enclosure for a real character.\n"
+        "\tInterval s (machine or exact endpoints, rounded outward) gives an enclosure\n"
+        "\tfor a real character.\n"
         "\tk and j must be positive integers with j <= EulerPhi[k] (DirichletL::intp, ::invl).\n"
         "\tN keeps k and j exact. Attributes: Listable, NHoldAll (not NumericFunction).");
     symtab_set_docstring("ProductLog",

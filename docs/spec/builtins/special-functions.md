@@ -2098,6 +2098,11 @@ reference stays unevaluated.
   looser {4.09145, 4.28087}), and non-principal characters are enclosed where
   the reference returns unevaluated. A range containing s = 1 is left unevaluated
   (arb's sums have no finite enclosure on a ball through the cancelled poles).
+  Exact endpoints (Integer, Rational, or MPFR) are first rounded outward to the
+  enclosing doubles (GMP comparison plus `nextafter`), so
+  `DirichletL[5, 3, Interval[{1/2, 3/4}]] = Interval[{0.231751, 0.336106}]`
+  (previously unevaluated; the reference returns the much looser
+  `{-12.92, 13.54}` with dyadic-rational endpoints).
   `CenteredInterval` is not implemented in Mathilda.
 - **Surfaces.** A packed / `NDArray` s with scalar k, j threads the machine
   kernel over the buffer with the character table fetched once (`AWARE`; a

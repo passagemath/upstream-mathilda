@@ -200,6 +200,14 @@ void test_dl_interval() {
     T("With[{iv = DirichletL[5, 3, Interval[{-3., 0.1}]]}, "
       "And @@ Table[Min[iv] <= DirichletL[5, 3, x] <= Max[iv], {x, -3., 0.1, 0.01}] && "
       "Max[iv] - Min[iv] < 2.43]");
+    /* Exact rational endpoints round outward to doubles and are enclosed the
+     * same way (point values from the reference system, 20 digits). */
+    T("With[{iv = DirichletL[5, 3, Interval[{1/2, 3/4}]]}, "
+      "Head[iv] === Interval && Min[iv] <= 0.23175094750401575588 && "
+      "Max[iv] >= 0.33610563499806043748 && Max[iv] - Min[iv] < 0.1046]");
+    T("With[{iv = DirichletL[5, 3, Interval[{3/2, 5/2}]]}, "
+      "And @@ Table[Min[iv] <= DirichletL[5, 3, x] <= Max[iv], {x, 1.5, 2.5, 0.05}]]");
+    T("Head[DirichletL[5, 3, Interval[{1/3, 2}]]] === DirichletL");   /* spans s = 1 */
     /* A range through s = 1 cannot be enclosed by arb's sums: left alone. */
     T("Head[DirichletL[5, 3, Interval[{0.9, 1.1}]]] === DirichletL");
     T("Head[DirichletL[3, 1, Interval[{2., 3.}]]] === Interval");

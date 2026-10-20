@@ -143,7 +143,7 @@ int main() {
      * application (ReplaceAll does not re-traverse the result). */
     run_test("x ** y ** z /. y ** z -> w", "x ** w");
     run_test("x ** y ** z /. x ** y -> w", "w ** z");
-    run_test("a . b . c . d /. b . c -> w", "Dot[a, w, d]");
+    run_test("a . b . c . d /. b . c -> w", "a . w . d");
     run_test("SetAttributes[ffr, Flat]; ffr[x, y, z] /. ffr[y, z] -> w", "ffr[x, w]");
     run_test("ffr[x, y, z, q] /. ffr[y, z] -> w", "ffr[x, w, q]");
     run_test("ffr[a, b, a, b] /. ffr[a, b] -> w", "ffr[w, a, b]");

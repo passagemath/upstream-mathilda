@@ -530,7 +530,10 @@ Gives products of vectors, matrices, and tensors.
   `{} . {}` is the empty sum `0`.
 - Product of a matrix and a vector yields a vector.
 - Product of two matrices yields a matrix.
-- When arguments are not lists, `Dot` remains unevaluated.
+- When arguments are not lists, `Dot` remains unevaluated, and prints infix as
+  `a . b` (OutputForm and InputForm; `FullForm` keeps `Dot[a, b]`), at the
+  parser's precedence: `(a b) . c`, `(-a) . b`, `(1/2) . a`, `a^2 . b`,
+  `(a . b)^2`, `a . b + c`.
 - Gives an error message `Dot::dotsh` if the shapes of the inputs are not compatible.
 - **Compilable.** Over machine arrays `Dot` lowers inside `Compile[]` and
   auto-compilation: matrix shapes through a BLAS-first path (`A_NDFN2`), the

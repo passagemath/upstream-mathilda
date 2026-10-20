@@ -5,7 +5,7 @@
 
 void test_distribute() {
     // Apply the distributive law:
-    assert_eval_eq("Distribute[(a+b).(x+y+z)]", "Dot[a, x] + Dot[b, x] + Dot[a, y] + Dot[b, y] + Dot[a, z] + Dot[b, z]", 0);
+    assert_eval_eq("Distribute[(a+b).(x+y+z)]", "a . x + b . x + a . y + b . y + a . z + b . z", 0);
     
     // Distribute f over Plus:
     assert_eval_eq("Distribute[f[a+b,c+d+e]]", "f[a, c] + f[b, c] + f[a, d] + f[b, d] + f[a, e] + f[b, e]", 0);
@@ -26,7 +26,7 @@ void test_distribute() {
     assert_eval_eq("Distribute[(a+b+c)(u+v),Plus,Times,plus,times]", "plus[times[a, u], times[a, v], times[b, u], times[b, v], times[c, u], times[c, v]]", 0);
     
     // Expand symbolic matrix and vector expressions:
-    assert_eval_eq("Distribute[(m1+m2).(m3+m4)]", "Dot[m1, m3] + Dot[m2, m3] + Dot[m1, m4] + Dot[m2, m4]", 0);
+    assert_eval_eq("Distribute[(m1+m2).(m3+m4)]", "m1 . m3 + m2 . m3 + m1 . m4 + m2 . m4", 0);
     assert_eval_eq("Distribute[Cross[v1+v2, v3+v4]]", "Cross[v1, v3] + Cross[v2, v3] + Cross[v1, v4] + Cross[v2, v4]", 0);
     
     // Find the list of all possible combinations of elements:

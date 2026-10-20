@@ -159,8 +159,8 @@ void test_ndarray_dot_shape_mismatch() {
     /* Incompatible inner dimensions: Dot stays unevaluated (error printed
      * to stderr, not checked here). */
     assert_eval_eq("Dot[NDArray[{{1, 2}, {3, 4}}], NDArray[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]]",
-                   "Dot[NDArray[{{1.0, 2.0}, {3.0, 4.0}}], "
-                   "NDArray[{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}}]]", 0);
+                   "NDArray[{{1.0, 2.0}, {3.0, 4.0}}] . "
+                   "NDArray[{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}}]", 0);
 }
 
 /* ---------- Elementwise Plus / Times fast paths ---------- */

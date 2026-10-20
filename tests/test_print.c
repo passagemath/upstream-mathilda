@@ -484,6 +484,54 @@ void test_quotient_denominator_parenthesised() {
     printf("PASS: quotient-valued denominators are parenthesised\n");
 }
 
+/* Dot prints infix, `a . b`, at the parser's Dot level: tighter than Times
+ * and Divide, looser than Power. Parenthesisation follows the reference
+ * system's InputForm (Times renders as juxtaposition here). Every form must
+ * re-parse to the same expression. */
+static void test_dot_infix(void) {
+    static const struct { const char* in; const char* out; } cases[] = {
+        { "a . b",                 "a . b" },
+        { "Dot[a, b, c]",          "a . b . c" },
+        { "(a + b) . c",           "(a + b) . c" },
+        { "Dot[a^2, b]",           "a^2 . b" },
+        { "Dot[a, b]^2",           "(a . b)^2" },
+        { "-a . b",                "-a . b" },
+        { "Dot[-a, b]",            "(-a) . b" },
+        { "Dot[a, -b]",            "a . (-b)" },
+        { "Dot[a b, c]",           "(a b) . c" },
+        { "Dot[1/2, a]",           "(1/2) . a" },
+        { "f[a . b]",              "f[a . b]" },
+        { "Dot[a, b] + c",         "a . b + c" },
+        { "Dot[a, b] -> c",        "a . b -> c" },
+        { "Dot[a, b][x]",          "(a . b)[x]" },
+        { "Dot[a]",                "a" },
+        { "Hold[Dot[a]]",          "Hold[Dot[a]]" },
+        { "{1, 2} . {c, d}",       "c + 2 d" },
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        Expr* e = parse_expression(cases[i].in);
+        ASSERT(e != NULL);
+        Expr* res = evaluate(e);
+        char* str = expr_to_string(res);
+        if (!str || strcmp(str, cases[i].out) != 0)
+            printf("  %s\n    got      %s\n    expected %s\n",
+                   cases[i].in, str ? str : "(null)", cases[i].out);
+        ASSERT(str && strcmp(str, cases[i].out) == 0);
+        /* Round trip: the printed form parses back to the same tree. */
+        Expr* back = parse_expression(str);
+        ASSERT(back != NULL);
+        Expr* back_ev = evaluate(back);
+        ASSERT(expr_eq(back_ev, res));
+        expr_free(back);
+        expr_free(back_ev);
+        free(str);
+        expr_free(e);
+        expr_free(res);
+    }
+    assert_eval_eq("Dot[a, b]", "Dot[a, b]", 1);   /* FullForm unchanged */
+    printf("PASS: Dot prints infix with precedence-aware parentheses\n");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -502,6 +550,7 @@ int main() {
     TEST(test_texform_fraction_parenthesisation);
     TEST(test_quotient_denominator_parenthesised);
     TEST(test_inputform_real_roundtrip);
+    TEST(test_dot_infix);
 
     printf("All print tests passed!\n");
     return 0;

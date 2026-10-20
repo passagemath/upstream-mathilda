@@ -494,7 +494,16 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         Val mask = binop(c, OP_GE_R, ax, dv, CT_INT);
         coerce(c, &mask, CT_REAL);
         Val xb; if (!emit(c, A[0], &xb)) return -1;
-        *out = binop(c, OP_MUL_R, mask, xb, CT_REAL);
+        Val prod = binop(c, OP_MUL_R, mask, xb, CT_REAL);
+        /* + 0.0: a chopped NEGATIVE x gives 0. * x == -0., where the
+         * interpreter's chop (and its packed / NDArray buffer paths) answer
+         * +0.  IEEE round-to-nearest makes -0. + 0. == +0., and x + 0. == x
+         * for every unchopped x (only x == -0. itself changes, and it is
+         * always chopped).  The optimiser has no x + 0 -> x identity fold, and
+         * a contracted fma(mask, x, 0.) gives the same +0. */
+        Slot pz; memset(&pz, 0, sizeof pz); pz.r = 0.0;
+        Val zv = emit_const(c, pz, CT_REAL);
+        *out = binop(c, OP_ADD_R, prod, zv, CT_REAL);
         return c->ok ? 1 : -1;
     }
     if (strcmp(h, "Clip") == 0 && na == 1) {

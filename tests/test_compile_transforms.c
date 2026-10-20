@@ -340,6 +340,20 @@ static void test_cf_chop(void) {
     assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.005] === 0.");
     assert_true("Compile[{{x, _Real}}, Chop[x, 0.01]][0.5] === 0.5");
     assert_true("Compile[{{n, _Integer}}, Chop[n]][5] === 5");
+    /* A chopped NEGATIVE value is +0., never -0. (the mask-multiply alone gave
+     * 0. * x == -0.; the interpreter's chop answers an unsigned 0).  `===`
+     * cannot see the sign of zero, so compare the printed forms. */
+    assert_true("ToString[Compile[{{x, _Real}}, Chop[x]][-1.*10^-12]] === ToString[0.]");
+    assert_true("ToString[Compile[{{x, _Real}}, Chop[x, 10^-6]][-5.*10^-7]] === ToString[0.]");
+    assert_true("ToString[Compile[{{x, _Real}}, Chop[x, 0.01]][-0.]] === ToString[0.]");
+    assert_true("Compile[{{x, _Real}}, Chop[x, 10^-6]][-2.*10^-6] === -2.*10^-6");
+    /* rank-1, packed and NDArray inputs: every chopped negative is +0. */
+    assert_true("With[{v = Table[(-1)^k k 10.^-9, {k, 1, 300}]},"
+                " PackedArrayQ[v] && Union[Map[ToString,"
+                " Compile[{{u, _Real, 1}}, Chop[u, 10^-6]][v]]] === {ToString[0.]}]");
+    assert_true("With[{v = Table[(-1)^k k 10.^-9, {k, 1, 300}]},"
+                " Union[Map[ToString, Normal[Compile[{{u, _Real, 1}}, Chop[u, 10^-6]]"
+                "[NDArray[v]]]]] === {ToString[0.]}]");
     /* a complex operand has no scalar lowering (chop can drop to real) */
     assert_true("Lookup[CompileDiagnostics[{{z, _Complex}}, Chop[z]], \"Compiled\"] === False");
 }

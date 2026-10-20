@@ -1116,6 +1116,55 @@ static Expr* assume_structural_rewrite(const Expr* e, const AssumeCtx* ctx, int*
          * (e.g. Abs[a + b I] -> Sqrt[a^2 + b^2]). When ComplexExpand cannot
          * reduce (unknown sign, as in Abs[x]) it returns the input unchanged,
          * which the expr_eq guard below discards. */
+        /* Re / Im of a provably-real quantity, or of a sum with provably-real
+         * terms (Re and Im are additive).  Runs before ComplexExpand, which is
+         * sign-agnostic: it writes Re[Log[b]] as Log[b^2]/2 even under b > 0,
+         * where the assumptions make Log[b] itself real.  This is what turns the
+         * principal value Re[-I Pi - Log[a] + Log[b]] (a, b > 0) into
+         * Log[b] - Log[a] instead of (Log[b^2] - Log[a^2])/2. */
+        if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0) && ctx) {
+            bool is_re = strcmp(h, "Re") == 0;
+            if (prov_re(ctx, a0)) {
+                Expr* out = is_re ? expr_copy(a0) : expr_new_integer(0);
+                expr_free(node); *changed = 1; return out;
+            }
+            if (sr_head(a0, "Plus")) {
+                size_t n = a0->data.function.arg_count;
+                Expr** re = malloc(n * sizeof(Expr*)); size_t nre = 0;
+                Expr** rest = malloc(n * sizeof(Expr*)); size_t nrest = 0;
+                for (size_t i = 0; i < n; i++) {
+                    Expr* t = a0->data.function.args[i];
+                    if (prov_re(ctx, t)) re[nre++] = expr_copy(t);
+                    else rest[nrest++] = expr_copy(t);
+                }
+                if (nre > 0 && nrest > 0) {
+                    Expr* rsum = expr_new_function(expr_new_symbol(SYM_Plus), rest, nrest);
+                    Expr* part0 = eval_and_free(expr_new_function(
+                        expr_new_symbol(is_re ? SYM_Re : SYM_Im), (Expr*[]){ rsum }, 1));
+                    /* The remainder gets the rest of this rewrite (the
+                     * ComplexExpand path below for real-symbol remainders:
+                     * Re[a + b I] -> a + Re[I b] -> a). */
+                    int sub_changed = 0;
+                    Expr* part = assume_structural_rewrite(part0, ctx, &sub_changed);
+                    expr_free(part0);
+                    Expr* out;
+                    if (is_re) {
+                        re = realloc(re, (nre + 1) * sizeof(Expr*));
+                        re[nre++] = part;
+                        out = expr_new_function(expr_new_symbol(SYM_Plus), re, nre);
+                    } else {
+                        for (size_t i = 0; i < nre; i++) expr_free(re[i]);
+                        out = part;
+                    }
+                    free(re); free(rest);
+                    out = eval_and_free(out);
+                    expr_free(node); *changed = 1; return out;
+                }
+                for (size_t i = 0; i < nre; i++) expr_free(re[i]);
+                for (size_t i = 0; i < nrest; i++) expr_free(rest[i]);
+                free(re); free(rest);
+            }
+        }
         if ((strcmp(h, "Re") == 0 || strcmp(h, "Im") == 0 ||
              strcmp(h, "Conjugate") == 0 || strcmp(h, "Arg") == 0 ||
              strcmp(h, "Abs") == 0)) {

@@ -12,6 +12,7 @@
 #include "eval.h"
 #include "core.h"
 #include "symtab.h"
+#include "message.h"
 #include "parse.h"
 #include "print.h"
 #include "test_utils.h"
@@ -173,6 +174,39 @@ static void test_stress_fixes(void) {
           "a19 > 0 && a20 > 0]", "a1");
 }
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* Re / Im of provably-real terms: Re[Log[b]] is Log[b] under b > 0 (not the
+ * sign-agnostic ComplexExpand form Log[b^2]/2); Re distributes over Plus. */
+static void test_refine_re_of_real_terms(void) {
+    check_quiet("Refine[Re[Log[b]], b > 0]", "Log[b]");
+    check_quiet("Refine[Im[Log[b]], b > 0]", "0");
+    check_quiet("Refine[Re[-I Pi - Log[a] + Log[b]], a > 0 && b > 0]", "-Log[a] + Log[b]");
+    check_quiet("Refine[Im[-I Pi - Log[a] + Log[b]], a > 0 && b > 0]", "-Pi");
+    /* No reality proof: left to ComplexExpand / unevaluated as before. */
+    check_quiet("Refine[Re[Log[b]], b < 0]", "1/2 Log[b^2]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -186,6 +220,7 @@ int main(void) {
     test_options_scoping();
     test_errors_edges();
     test_stress_fixes();
+    TEST(test_refine_re_of_real_terms);
     printf("All Refine tests passed.\n");
     return 0;
 }

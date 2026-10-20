@@ -594,7 +594,11 @@ Gives the form an expression would take if its symbols satisfied the assumptions
   `Log[x rest] -> Log[x] + Log[rest]` (positive `x`), `Sin[k Pi] -> 0` and
   `Cos[x + k Pi] -> (-1)^k Cos[x]` (integer `k`), `ArcTan[Tan[x]] -> x` on the
   principal domain, `Re`/`Im`/`Conjugate`/`Arg`/`Abs` of real-symbol expressions
-  (e.g. `Abs[a + b I] -> Sqrt[a^2 + b^2]`),
+  (e.g. `Abs[a + b I] -> Sqrt[a^2 + b^2]`), `Re[z] -> z` / `Im[z] -> 0` for a
+  provably-real `z`, with `Re`/`Im` distributed over the provably-real terms of a
+  sum. So `Refine[Re[Log[b]], b > 0]` is `Log[b]`, not the sign-agnostic
+  `Log[b^2]/2`, and `Refine[Re[-I Pi - Log[a] + Log[b]], a > 0 && b > 0]` is
+  `-Log[a] + Log[b]`,
   `Floor`/`Ceiling`/`Round`/`IntegerPart`/`FractionalPart` and `Mod` under
   integer / interval / modular facts. The per-symbol rule synthesis is pruned to
   the symbols the target actually uses, so a large assumption set does not

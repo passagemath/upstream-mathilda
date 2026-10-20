@@ -2445,6 +2445,17 @@ contributes a purely imaginary `I Pi` (residue) that `Re` removes. An
 **even-order** interior pole has no principal value and emits `Integrate::idiv`.
 With no interior pole the option is a no-op. Examples: `∫₋₁¹ dx/x = 0`,
 `∫₀³ dx/(x−2) = −Log 2`, `∫₀² x/(x²−1) dx = ½ Log 3`.
+A **symbolic** interior pole proved interior under the assumptions is placeable
+when it is the only one (the breakpoints are then `[a, p, b]`), and for the
+principal value it must be provably **simple** (`Limit[(x−p) f, x → p]` a
+nonzero finite residue): `Integrate[1/(x−a), {x,0,2a}, PrincipalValue -> True,
+Assumptions -> a>0]` → `0`, `Integrate[x/(x−a), {x,0,3a}, ...]` → `a(3 + Log 2)`;
+without `PrincipalValue` the same integral emits `Integrate::idiv`. Several
+symbolic poles cannot be ordered and leave the integral unevaluated. The
+realness check on a symbolic PV samples a point that satisfies the assumptions
+(under `0 < a < b` not `a = b`), and the final `Refine` reads `Re[Log[b]]` as
+`Log[b]` for `b > 0`, so `Integrate[1/x, {x,−a,b}, PrincipalValue -> True,
+Assumptions -> a>0 && b>0]` → `−Log[a] + Log[b]`.
 
 **Continuous branch-form antiderivatives.** Many continuous periodic integrands
 (e.g. `1/(2 + Cos[x])`) antidifferentiate to a Weierstrass branch form that is

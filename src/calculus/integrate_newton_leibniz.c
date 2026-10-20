@@ -285,10 +285,16 @@ typedef struct {
     double* vals; /* their numeric values, used for ordering / dedup         */
     size_t n, cap;
     bool undecidable; /* a pole exists whose interior-ness we cannot decide  */
+    /* The set holds a single SYMBOLIC interior pole (x = a, proved interior
+     * under the assumptions): its vals[] entry is NaN.  One such pole needs no
+     * ordering -- the breakpoints are [lo, pole, hi] -- so it is placeable;
+     * any second pole alongside it cannot be ordered and is undecidable. */
+    bool symbolic;
 } PoleSet;
 
 static void poleset_init(PoleSet* s) {
     s->pts = NULL; s->vals = NULL; s->n = 0; s->cap = 0; s->undecidable = false;
+    s->symbolic = false;
 }
 
 static void poleset_free(PoleSet* s) {
@@ -300,6 +306,9 @@ static void poleset_free(PoleSet* s) {
 /* Insert `val` (an owned Expr, numeric value `v`) keeping the array sorted
  * ascending and free of duplicates.  Consumes `val` (frees it on dedup). */
 static void poleset_insert(PoleSet* s, Expr* val, double v) {
+    if (s->symbolic) {                  /* cannot order against a symbolic pole */
+        expr_free(val); s->undecidable = true; return;
+    }
     for (size_t i = 0; i < s->n; i++) {
         if (nl_close(s->vals[i], v)) { expr_free(val); return; }
     }
@@ -463,7 +472,13 @@ static void nl_add_zero_roots(Expr* g, Expr* x, Expr* a, Expr* b, PoleSet* s, Ex
 
         if (cls == NL_INTERIOR) {
             if (rk == 1) poleset_insert(s, expr_copy(val), rv);
-            else         s->undecidable = true;  /* symbolic interior root: cannot place */
+            else if (s->symbolic && s->n == 1 && expr_eq(s->pts[0], val))
+                ;                                 /* same symbolic root again */
+            else if (s->n == 0 && !s->undecidable) {
+                /* The sole interior pole, symbolic (x = a under a > 0): placeable. */
+                poleset_insert(s, expr_copy(val), NAN);
+                s->symbolic = true;
+            } else s->undecidable = true;  /* symbolic root among others: cannot order */
         } else if (cls == NL_UNKNOWN) {
             s->undecidable = true;
         }
@@ -829,18 +844,52 @@ static void nl_collect_vars(const Expr* e, Expr*** rules, size_t* n, size_t* cap
  * branch-cut's imaginary residue because a special function (CosIntegral[-a]) is
  * treated as real symbolically but evaluates complex -- better to decline
  * (idiv) than return a spurious complex principal value. */
-static bool nl_realness_ok(Expr* pvval) {
+static bool nl_realness_ok(Expr* pvval, Expr* as) {
     Expr** rules = NULL; size_t n = 0, cap = 0;
     nl_collect_vars(pvval, &rules, &n, &cap);
+    /* The sample point must satisfy the assumptions: under 0 < a < b the
+     * all-equal sample a = b = 2 sits on the boundary a == b, where the genuine
+     * PV Log[b - a] - Log[a] is -Infinity, and the probe would reject a correct
+     * real value.  Try the all-2 sample first (unchanged when it is admissible),
+     * then distinct increasing and decreasing samples, keeping the first the
+     * assumptions accept; with none admissible, fall back to all-2. */
+    static const int64_t INC[] = { 2, 3, 5, 7, 11, 13, 17, 19 };
+    const size_t NI = sizeof INC / sizeof *INC;
+    int pick = 0;
+    if (as && n > 0 && n <= NI) {
+        for (int pat = 0; pat < 3; pat++) {
+            Expr** rr = malloc(n * sizeof(Expr*));
+            for (size_t k = 0; k < n; k++) {
+                int64_t v = pat == 0 ? 2 : pat == 1 ? INC[k] : INC[n - 1 - k];
+                rr[k] = mk_fn2("Rule", expr_copy(rules[k]->data.function.args[0]),
+                               expr_new_integer(v));
+            }
+            Expr* rl = expr_new_function(mk_sym("List"), rr, n);
+            free(rr);
+            Expr* ok = eval_take(mk_fn2("ReplaceAll", expr_copy(as), rl));
+            bool admissible = ok && ok->type == EXPR_SYMBOL && ok->data.symbol.name == SYM_True;
+            if (ok) expr_free(ok);
+            if (admissible) { pick = pat; break; }
+        }
+    }
+    for (size_t k = 0; k < n && pick != 0; k++) {
+        int64_t v = pick == 1 ? INC[k] : INC[n - 1 - k];
+        expr_free(rules[k]->data.function.args[1]);
+        rules[k]->data.function.args[1] = expr_new_integer(v);
+    }
     Expr* subbed;
-    /* Quiet: instantiating at a sample can hit a transient Power::infy (e.g.
-     * 0^(1-b) -> 0^-1 at b=2); this is an internal probe. */
+    /* An internal probe: instantiating at a sample can hit a transient
+     * Power::infy / Infinity::indet (e.g. 0^(1-b) -> 0^-1 at b=2).  Quiet alone
+     * would still let an enclosing Check[] see it, so the arithmetic probe mute
+     * brackets it too. */
+    arith_warnings_mute_push();
     if (n == 0) {
         subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", expr_copy(pvval))));
     } else {
         Expr* rl = expr_new_function(mk_sym("List"), rules, n);  /* copies the array */
         subbed = eval_take(mk_fn1("Quiet", mk_fn1("N", mk_fn2("ReplaceAll", expr_copy(pvval), rl))));
     }
+    arith_warnings_mute_pop();
     free(rules);
     double v;
     bool ok = subbed && nl_numeric(subbed, &v) == 1;   /* finite real only */
@@ -893,8 +942,31 @@ static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
     if (num_bounds && bv < av) { double t = av; av = bv; bv = t; }
     if (!num_bounds && !as) return NULL;   /* symbolic bounds need assumptions */
 
-    /* Odd-order gate: sign of f must flip across every interior pole. */
-    for (size_t i = 0; i < poles->n; i++) {
+    /* Odd-order gate: sign of f must flip across every interior pole.  A sole
+     * symbolic pole (x = a) has no numeric probe point; it is admitted when it
+     * is provably SIMPLE: Limit[(x - p) f, x -> p] is a finite nonzero residue
+     * under the assumptions (a simple pole is odd-order, its one-sided
+     * divergences cancel).  Higher-order symbolic poles decline. */
+    if (poles->symbolic) {
+        if (!as || poles->n != 1) return NULL;
+        Expr* p = poles->pts[0];
+        Expr* g = mk_fn2("Times", mk_fn2("Plus", expr_copy(x),
+                             mk_fn2("Times", expr_new_integer(-1), expr_copy(p))),
+                         expr_copy(f));
+        arith_warnings_mute_push();
+        Expr* res = nl_limit(g, x, p, NL_DIR_NONE, as);
+        Expr* nz = (res && nl_is_finite_closed(res, x))
+            ? eval_take(mk_fn2("Refine", mk_fn2("Unequal", expr_copy(res),
+                                                 expr_new_integer(0)), expr_copy(as)))
+            : NULL;
+        arith_warnings_mute_pop();
+        expr_free(g);
+        bool simple = nz && nz->type == EXPR_SYMBOL && nz->data.symbol.name == SYM_True;
+        if (res) expr_free(res);
+        if (nz) expr_free(nz);
+        if (!simple) return NULL;
+    }
+    for (size_t i = 0; i < poles->n && !poles->symbolic; i++) {
         double pv = poles->vals[i];
         double near_other = HUGE_VAL;
         for (size_t j = 0; j < poles->n; j++)
@@ -920,7 +992,7 @@ static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
     Expr* pvval = eval_take(as ? mk_fn1("Quiet", mk_fn2("Simplify",
                                         mk_fn1("Re", expr_copy(diff)), expr_copy(as)))
                                : mk_fn1("Simplify", mk_fn1("Re", expr_copy(diff))));
-    if (pvval && nl_is_finite_closed(pvval, x) && nl_realness_ok(pvval)) {
+    if (pvval && nl_is_finite_closed(pvval, x) && nl_realness_ok(pvval, as)) {
         expr_free(diff);
         return pvval;   /* genuinely real (0, Log[b/a], 2 SinhIntegral[a], ...) */
     }
@@ -930,7 +1002,7 @@ static Expr* nl_principal_value(Expr* F, Expr* f, Expr* x, Expr* a, Expr* b,
      * spurious complex value.  Fall back to the literal Re[F(b)-F(a)], which
      * forces the real part; accept it only if it is a real finite closed form. */
     Expr* pvre = eval_take(mk_fn1("Re", diff));   /* consumes diff */
-    if (pvre && nl_is_finite_closed(pvre, x) && nl_realness_ok(pvre)) return pvre;
+    if (pvre && nl_is_finite_closed(pvre, x) && nl_realness_ok(pvre, as)) return pvre;
     if (pvre) expr_free(pvre);
     return NULL;
 }

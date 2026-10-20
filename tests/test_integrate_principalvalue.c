@@ -21,6 +21,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -97,6 +98,52 @@ static void test_pv_numeric(void) {
              "+ 1/2 Log[3]]]", "0");
 }
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* -------------------------------------------------------------------------
+ * Symbolic interior pole (x = a, proved interior under the assumptions): a
+ * sole one needs no ordering, and a provably SIMPLE one is odd-order, so the
+ * PV exists.  1/x over (-a, b): the realness probe now samples a point that
+ * satisfies the assumptions, and Refine reads Re[Log[b]] as Log[b] for b > 0.
+ * References: the reference system (0, Log[b/a], a (3 + Log[2]), idiv).
+ * ---------------------------------------------------------------------- */
+static void test_pv_symbolic_pole(void) {
+    check_quiet("Integrate[1/(x-a), {x, 0, 2a}, PrincipalValue -> True, Assumptions -> a > 0]", "0");
+    check_quiet("Integrate[1/x, {x, -a, b}, PrincipalValue -> True, Assumptions -> a > 0 && b > 0]",
+                "-Log[a] + Log[b]");
+    check_quiet("Integrate[x/(x-a), {x, 0, 3a}, PrincipalValue -> True, Assumptions -> a > 0]",
+                "(3 + Log[2]) a");
+    /* 0 < a < b: the all-equal sample a = b = 2 used to reject this real PV. */
+    check_quiet("Chop[N[(Integrate[1/(x-a), {x, 0, b}, PrincipalValue -> True, "
+                "Assumptions -> 0 < a < b] - Log[b/a - 1]) /. {a -> 2, b -> 7}, 30]]", "0");
+    /* Even-order symbolic pole: no PV. */
+    check_eq("Quiet[Integrate[1/(x-a)^2, {x, 0, 2a}, PrincipalValue -> True, Assumptions -> a > 0]]",
+             "Integrate[1/(-a + x)^2, {x, 0, 2 a}, PrincipalValue -> True, Assumptions -> a > 0]");
+    /* Ordinary integral across the symbolic pole diverges. */
+    check_eq("Quiet[Integrate[1/(x-a), {x, 0, 2a}, Assumptions -> a > 0]]",
+             "Integrate[1/(-a + x), {x, 0, 2 a}, Assumptions -> a > 0]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -107,6 +154,7 @@ int main(void) {
     TEST(test_pv_no_pole);
     TEST(test_pv_numeric);
 
+    TEST(test_pv_symbolic_pole);
     printf("All integrate_principalvalue tests passed.\n");
     return 0;
 }

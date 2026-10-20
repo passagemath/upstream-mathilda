@@ -2326,6 +2326,12 @@ outside the Bessel / exp·Bessel / Gaussian·Bessel families above (e.g.
 `AiryAi[x]²`, a genuine Meijer-G with 1/3-step Gamma coefficients), finite
 intervals, and two-sided reductions — return unevaluated, never a wrong value.
 
+**Mellin value at a removable point.** The Mellin/Ramanujan stage evaluates its
+closed form at the evaluation point as a muted probe. When that is a removable
+`0 · ComplexInfinity` inside a proved strip, it takes the limit in the spectral
+variable instead (`E^−x Sin[x]/x` on `[0, ∞)`: `Gamma[s] Sin[s Pi/4] 2^(−s/2)`
+at `s = 0` → `Pi/4`).
+
 Worked examples that close:
 `Integrate[Exp[-x^2], {x,0,Infinity}]` → `√π/2`;
 `Integrate[x^(s-1) Exp[-x], {x,0,Infinity}]` → `ConditionalExpression[Γ[s], s>0]`;

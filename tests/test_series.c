@@ -13,6 +13,7 @@
 #include "parse.h"
 #include "expr.h"
 #include "symtab.h"
+#include "message.h"
 #include "core.h"
 #include "test_utils.h"
 #include <stdio.h>
@@ -2457,11 +2458,51 @@ static void test_series_stress_09(void) {
  *       x0 under an assumption like a != 0) is still decided by bare evaluation.
  */
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* Gamma / PolyGamma / Beta at a pole: shifted off it by the functional
+ * equations (Taylor-via-D has only ComplexInfinity derivatives there). */
+static void test_series_gamma_family_poles(void) {
+    setup_full();
+    check_quiet("Series[Gamma[s], {s, 0, 1}]",
+                "1/s - EulerGamma + 1/2 (EulerGamma^2 + 1/6 Pi^2) s + O[s]^2");
+    check_quiet("Series[Gamma[s], {s, -2, 0}]",
+                "1/(2 (s + 2)) + 3/4 - 1/2 EulerGamma + O[s + 2]^1");
+    check_quiet("Series[PolyGamma[s], {s, 0, 1}]", "-1/s - EulerGamma + 1/6 Pi^2 s + O[s]^2");
+    check_quiet("Series[PolyGamma[0, s], {s, -1, 0}]", "-1/(s + 1) + 1 - EulerGamma + O[s + 1]^1");
+    check_quiet("Series[PolyGamma[1, s], {s, 0, 0}]", "1/s^2 + 1/6 Pi^2 + O[s]^1");
+    check_quiet("Series[Beta[s, 1], {s, 0, 1}]", "1/s + O[s]^2");
+    /* Away from a pole Beta keeps its Taylor expansion. */
+    check_quiet("Series[Beta[s, 2], {s, 1, 1}]", "1/2 - 3/4 (s - 1) + O[s - 1]^2");
+    check_quiet("Limit[Gamma[s] Sin[s], s -> 0]", "1");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
     TEST(test_series_symbolic_f);
     TEST(test_series_laurent);
+    TEST(test_series_gamma_family_poles);
     TEST(test_series_scalar_laurent_order);
     TEST(test_series_leading_term);
     TEST(test_series_puiseux_sqrt_sin);

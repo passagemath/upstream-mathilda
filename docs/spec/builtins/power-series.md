@@ -128,6 +128,15 @@ Produces the power-series expansion of an expression about a point.
 - **The expansion variable must be a symbol.** Anything else — a variable carrying a numeric or compound value, or a literal non-symbol — declines with `Series::ivar` / `SeriesCoefficient::ivar` (`5 is not a valid variable.`) and leaves the call unevaluated, as in the reference and as `NSeries` already did. Nothing downstream type-checks the variable, so this is a correctness gate rather than tidiness: with `x = 5` in scope the spec is `{5, 0, 3}`, the "free of x" early-out cannot fire for a literal that occurs in the body, and the Taylor engine would otherwise answer `Series[Sin[5], {5, 0, 3}]` = `5 - 1/6 5^3 + O[5]^4`. A second argument that is no spec at all (`Series[f, x]`), and an unrecognised option name, are left unevaluated *silently*, as before. The message is capped at three consecutive appearances per head and re-armed by the next well-formed call, because the iterator heads are `HoldAll` and bind a fresh value per step — `Plot[Normal[Series[Sin[x], {x, 0, 5}]], {x, 0, 1}]` would otherwise print one line per sample point. That spelling needs `Plot[Evaluate[...], ...]`, exactly as in the reference.
 - Threaded over lists: `Series[{f1, f2, ...}, spec]` becomes `{Series[f1, spec], Series[f2, spec], ...}`.
 - Handles Taylor expansions for smooth functions, Laurent expansions where the function has a pole at `x0`, Puiseux expansions for fractional-power cases such as `Sqrt[Sin[x]]`, and logarithmic expansions for cases like `x^x` where `Log[x]` survives as a symbolic coefficient.
+- `Gamma`, `PolyGamma` and `Beta` expand at their **poles** (an argument whose
+  value at `x0` is a non-positive integer `−n`). The argument is shifted off the
+  pole by the functional equations `Gamma[u] = Gamma[u+n+1]/(u (u+1) ... (u+n))`
+  and `PolyGamma[m,u] = PolyGamma[m,u+n+1] − (−1)^m m! Σ_{k=0}^{n} (u+k)^−(m+1)`,
+  and `Beta` is written as its Gamma ratio. So `Series[Gamma[s], {s,0,1}]` is
+  `1/s − EulerGamma + (EulerGamma² + Pi²/6) s/2 + O[s]^2` and
+  `Series[PolyGamma[s], {s,0,1}]` is `−1/s − EulerGamma + Pi² s/6 + O[s]^2`.
+  Before, these were left unevaluated, and so `Limit` could not resolve
+  `Limit[Gamma[s] Sin[s], s → 0]`.
 - Symbolic parameters in exponents are supported: `Series[(1 + x)^n, {x, 0, 4}]` returns the binomial expansion with `n` kept unexpanded.
 - Approximate numeric coefficients flow through series arithmetic unchanged.
 - For unknown heads (e.g. `f[x]` where `f` has no rules), the engine falls back to naive Taylor via `D` at the expansion point; the coefficients appear as `Derivative[k][f][x0]`.

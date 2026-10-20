@@ -48,6 +48,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "parse.h"
+#include "arithmetic.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -1791,8 +1792,8 @@ static Expr* discharge_strip(Expr* pred, Expr* as) {
  * scope or provably divergent.  On success the convergence strip, reduced under
  * `assumptions`, is returned via *cond_out: NULL if it is discharged (proved
  * True), else the residual predicate to carry as a ConditionalExpression. */
-static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
-                         Expr** cond_out) {
+static Expr* mellin_term_core(Expr* term, const Expr* x, Expr* assumptions,
+                              Expr** cond_out) {
     *cond_out = NULL;
     Expr *C = NULL, *rho = NULL;
     Expr* kernels[16]; size_t nk = 0; long kw = 0;
@@ -1830,7 +1831,31 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
     }
 
     Expr* val = simp2(Tms(cp(C), cp(M)), assumptions);
-    expr_free(C); expr_free(s); expr_free(M);
+    expr_free(M);
+    /* Removable singularity of the closed form at an interior point.  Inside
+     * the open convergence strip the Mellin transform is analytic in s, but its
+     * Gamma-product closed form can be a 0 * ComplexInfinity there (e^-x Sin[x]
+     * at s = 0: Gamma[s] Sin[s Pi/4] 2^(-s/2)), which evaluates to Indeterminate.
+     * Only when the strip is PROVED (Ps == True) is the value the limit of the
+     * transform in a fresh spectral variable -- at a strip boundary the strip
+     * test has already declined, so this never manufactures a divergent value. */
+    if (!is_finite_value(val) && sym_is(Ps, "True") && kw == 0) {
+        Expr* sv = mk_sym("RmtLimitSpectral");
+        Expr *Ml = NULL, *Pl = NULL;
+        if (dispatch_term(kernels, nk, x, sv, assumptions, &Ml, &Pl)) {
+            Expr* lim = ev2("Limit", Tms(cp(C), Ml),
+                            mk_fn2("Rule", cp(sv), cp(s)));
+            Ml = NULL;
+            if (is_finite_value(lim)) {
+                if (val) expr_free(val);
+                val = simp2(lim, assumptions);
+            } else if (lim) expr_free(lim);
+        }
+        if (Ml) expr_free(Ml);
+        if (Pl) expr_free(Pl);
+        expr_free(sv);
+    }
+    expr_free(C); expr_free(s);
     if (!is_finite_value(val)) {                           /* boundary/divergent */
         if (val) expr_free(val);
         expr_free(Ps);
@@ -1839,6 +1864,22 @@ static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
     if (sym_is(Ps, "True")) expr_free(Ps);                 /* strip discharged */
     else *cond_out = Ps;                                   /* residual condition */
     return val;
+}
+
+/* mellin_term_core under the arithmetic-warning probe mute.  Building the
+ * closed form evaluates the transform AT the evaluation point, which can land
+ * on a pole or a removable 0 * ComplexInfinity of the Gamma product: that is
+ * an internal probe (an Indeterminate there declines, or is replaced by the
+ * limit), never a user event, so its Infinity::indet / Power::infy must not
+ * reach the user -- nor an enclosing Check[], which would otherwise return its
+ * failure branch for an integral a later stage closes.  Single exit, so the
+ * push/pop pair cannot unbalance. */
+static Expr* mellin_term(Expr* term, const Expr* x, Expr* assumptions,
+                         Expr** cond_out) {
+    arith_warnings_mute_push();
+    Expr* r = mellin_term_core(term, x, assumptions, cond_out);
+    arith_warnings_mute_pop();
+    return r;
 }
 
 /* Reduction pre-pass (applied before Expand): rewrite special-function and

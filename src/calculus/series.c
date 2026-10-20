@@ -2766,6 +2766,101 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             if (z) return z;
             /* unsupported point/order: fall through to generic differentiation */
         }
+        /* ---- Gamma / PolyGamma / Beta at a pole.  Taylor-via-D cannot expand
+         * them there (every derivative is ComplexInfinity), so shift the argument
+         * off the pole with the functional equations, leaving a factor analytic
+         * at x0 and an explicit rational part that carries the singularity:
+         *     Gamma[u]       = Gamma[u + n + 1] / (u (u + 1) ... (u + n))
+         *     PolyGamma[m,u] = PolyGamma[m, u + n + 1]
+         *                        - (-1)^m m! Sum_{k=0..n} (u + k)^-(m+1)
+         *     Beta[a, b]     = Gamma[a] Gamma[b] / Gamma[a + b]
+         * where u(x0) = -n, n a non-negative integer (capped, so a huge negative
+         * integer cannot build an enormous product).  The product / sum rules
+         * then yield the Laurent series: Gamma[s] at 0 -> 1/s - EulerGamma + ...,
+         * PolyGamma[s] at 0 -> -1/s - EulerGamma + ... ---- */
+        if (head && (strcmp(head, "Gamma") == 0 || strcmp(head, "PolyGamma") == 0) &&
+            (e->data.function.arg_count == 1 || e->data.function.arg_count == 2)) {
+            bool is_gamma = strcmp(head, "Gamma") == 0;
+            Expr* m = NULL;                    /* PolyGamma order (borrowed) */
+            Expr* u = NULL;                    /* argument (borrowed) */
+            if (is_gamma && e->data.function.arg_count == 1) {
+                u = e->data.function.args[0];
+            } else if (!is_gamma && e->data.function.arg_count == 1) {
+                u = e->data.function.args[0];  /* PolyGamma[u] = digamma */
+            } else if (!is_gamma && e->data.function.args[0]->type == EXPR_INTEGER &&
+                       e->data.function.args[0]->data.integer >= 0 &&
+                       e->data.function.args[0]->data.integer <= 64) {
+                m = e->data.function.args[0];
+                u = e->data.function.args[1];
+            }
+            if (u && !expr_free_of(u, ctx->x)) {
+                arith_warnings_mute_push();
+                Expr* u0 = simp(mk_fn2("ReplaceAll", expr_copy(u),
+                                       mk_fn2("Rule", expr_copy(ctx->x), expr_copy(ctx->x0))));
+                arith_warnings_mute_pop();
+                bool pole = u0 && u0->type == EXPR_INTEGER &&
+                            u0->data.integer <= 0 && u0->data.integer >= -256;
+                int64_t n = pole ? -u0->data.integer : 0;
+                if (u0) expr_free(u0);
+                if (pole) {
+                    Expr* shifted = mk_plus(expr_copy(u), expr_new_integer(n + 1));
+                    Expr* rewrite;
+                    if (is_gamma) {
+                        Expr* den = expr_copy(u);
+                        for (int64_t k = 1; k <= n; k++)
+                            den = mk_times(den, mk_plus(expr_copy(u), expr_new_integer(k)));
+                        rewrite = mk_times(mk_fn1("Gamma", shifted),
+                                           mk_power(den, expr_new_integer(-1)));
+                    } else {
+                        int64_t mo = m ? m->data.integer : 0;
+                        /* (-1)^m m! */
+                        int64_t fact = 1;
+                        for (int64_t k = 2; k <= mo; k++) fact *= k;   /* mo <= 20 safe */
+                        Expr* coef = mo <= 20
+                            ? expr_new_integer((mo % 2 ? -1 : 1) * fact)
+                            : mk_times(mk_power(expr_new_integer(-1), expr_new_integer(mo)),
+                                       mk_fn1("Factorial", expr_new_integer(mo)));
+                        Expr* sum = expr_new_integer(0);
+                        for (int64_t k = 0; k <= n; k++)
+                            sum = mk_plus(sum, mk_power(
+                                      mk_plus(expr_copy(u), expr_new_integer(k)),
+                                      expr_new_integer(-(mo + 1))));
+                        Expr* pg = m ? mk_fn2("PolyGamma", expr_copy(m), shifted)
+                                     : mk_fn1("PolyGamma", shifted);
+                        rewrite = mk_plus(pg, mk_times(expr_new_integer(-1),
+                                                       mk_times(coef, sum)));
+                    }
+                    SeriesObj* r = series_expand_nested(rewrite, ctx);
+                    expr_free(rewrite);
+                    if (r) return r;
+                }
+            }
+        }
+        if (head && strcmp(head, "Beta") == 0 && e->data.function.arg_count == 2 &&
+            !expr_free_of(e, ctx->x)) {
+            Expr* A = e->data.function.args[0];
+            Expr* B = e->data.function.args[1];
+            /* Only at a pole of a Gamma factor; elsewhere Taylor-via-D keeps
+             * the Beta/PolyGamma spelling of the coefficients. */
+            bool pole = false;
+            for (int w = 0; w < 2 && !pole; w++) {
+                arith_warnings_mute_push();
+                Expr* v0 = simp(mk_fn2("ReplaceAll", expr_copy(w ? B : A),
+                                       mk_fn2("Rule", expr_copy(ctx->x), expr_copy(ctx->x0))));
+                arith_warnings_mute_pop();
+                pole = v0 && v0->type == EXPR_INTEGER && v0->data.integer <= 0;
+                if (v0) expr_free(v0);
+            }
+            if (pole) {
+                Expr* rewrite = mk_times(mk_times(mk_fn1("Gamma", expr_copy(A)),
+                                                  mk_fn1("Gamma", expr_copy(B))),
+                                         mk_power(mk_fn1("Gamma", mk_plus(expr_copy(A), expr_copy(B))),
+                                                  expr_new_integer(-1)));
+                SeriesObj* r = series_expand_nested(rewrite, ctx);
+                expr_free(rewrite);
+                if (r) return r;
+            }
+        }
         /* ---- Reciprocal heads (Sec, Csc, Cot, Sech, Csch, Coth) ---- */
         {
             Expr* rewrite = rewrite_reciprocal_head(e);

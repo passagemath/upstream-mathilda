@@ -18,6 +18,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -654,7 +655,41 @@ void test_integrate_ramanujan(void) {
     printf("All Integrate Ramanujan Master Theorem tests passed!\n");
 }
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* -------------------------------------------------------------------------
+ * The Mellin closed form evaluated at the point: E^-x Sin[x] / x has
+ * M(s) = Gamma[s] Sin[s Pi/4] 2^(-s/2), a removable 0 * ComplexInfinity at
+ * s = 0 inside the strip.  The evaluation is a muted probe (no Infinity::indet
+ * reaching Check[]) and the value is the limit in the spectral variable.
+ * ---------------------------------------------------------------------- */
+static void test_mellin_removable_point(void) {
+    check_quiet("Integrate[E^-x Sin[x]/x, {x, 0, Infinity}]", "1/4 Pi");
+    check_quiet("Check[Integrate[E^-x Sin[x]/x, {x, 0, Infinity}], \"msg\"]", "1/4 Pi");
+}
+
 int main(void) {
     test_integrate_ramanujan();
+    TEST(test_mellin_removable_point);
     return 0;
 }

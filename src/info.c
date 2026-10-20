@@ -1497,11 +1497,15 @@ void info_init(void) {
 
     symtab_set_docstring("FunctionExpand",
         "FunctionExpand[expr]\n"
-        "\texpands special functions in expr into simpler ones. Currently each\n"
-        "MeijerG is rewritten to its Slater expansion: a sum of HypergeometricPFQ\n"
-        "terms in z (p <= q) or 1/z (p > q), with classical functions (Exp, powers,\n"
-        "Bessel, EllipticK/E) where a term has one. The log case (parameters an\n"
-        "integer apart) and p == q with m + n == p are left unchanged.\n"
+        "\texpands special functions in expr into simpler ones. MeijerG becomes\n"
+        "BesselK / HypergeometricU where its shape (in z or 1/z) is one, else its\n"
+        "Slater expansion (HypergeometricPFQ terms, named where a term has a\n"
+        "classical form); p == q with m + n <= p gives a Piecewise of the inner\n"
+        "(|z| < 1) and outer (|z| > 1) expansions; the log case is left alone.\n"
+        "PolyLog[n, w] at an exact root of unity w = E^(I Pi r) (integer n >= 2)\n"
+        "becomes Re + I Im in Pi^n, Zeta[n], Catalan, or PolyGamma terms;\n"
+        "Log[w] and Log[1 + w] become I Pi r and Log[2 Cos[Pi r/2]] + I Pi r/2;\n"
+        "PolyGamma[m, 1/2 | 1/4 | 3/4] uses Zeta, Catalan and Pi where closed.\n"
         "FunctionExpand[expr, assum] accepts assumptions (not yet used).");
 
     // Structural Manipulation

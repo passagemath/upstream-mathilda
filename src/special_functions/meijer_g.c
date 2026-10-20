@@ -22,7 +22,9 @@
  *      a plain List z threads element-wise (MeijerG is not Listable: its first
  *      two arguments ARE lists);
  *   3. canonical order: each of the four parameter groups sorted (the function
- *      is symmetric within a group), as Mathematica does;
+ *      is symmetric within a group), as the reference system does;
+ *   3b. Gamma-pair cancellation: equal parameters in opposite groups drop out
+ *      (mg_cancel_pairs); hdiv when that leaves m = n = 0;
  *   4. consistency: m = n = 0, or some a_k - b_j (k <= n, j <= m) a positive
  *      integer (the contour cannot separate the two pole families): hdiv;
  *   5. machine-precision call: sf_mg_eval (sf_machine_meijerg.c), the helper
@@ -351,6 +353,55 @@ static Expr* mg_move_pair(const MgView* g) {
             return (N % 2) ? neg(out) : out;
         }
     return NULL;
+}
+
+/* Gamma-pair cancellation. An a_k of the second a group (k > n) equal to a
+ * b_j of the first b group (j <= m) contributes Gamma(b_j+s)/Gamma(a_k+s) = 1
+ * to the Mellin-Barnes integrand, and an a_k of the first group (k <= n)
+ * equal to a b_j of the second (j > m) contributes
+ * Gamma(1-a_k-s)/Gamma(1-b_j-s) = 1: both pairs drop out, lowering
+ * (m, p) or (n, q) by one, with the contour unaffected (one pole family
+ * fewer to separate). MeijerG[{{}, {0}}, {{0, 0}, {}}, z] is G^{1,0}_{0,1}
+ * = E^-z this way. Exact (structural) equality only.
+ *
+ * Returns the rewritten call (owned, all equal pairs removed at once), or
+ * NULL when no pair cancels. A cancellation that would leave m = n = 0 has
+ * no contour at all -- the call does not exist -- and sets *hdiv instead. */
+static Expr* mg_cancel_pairs(const MgView* g, bool* hdiv) {
+    *hdiv = false;
+    bool* adrop = calloc(g->p ? g->p : 1, sizeof(bool));
+    bool* bdrop = calloc(g->q ? g->q : 1, sizeof(bool));
+    size_t dm = 0, dp = 0, dn = 0, dq = 0;
+    for (size_t k = g->n; k < g->p; k++)
+        for (size_t j = 0; j < g->m; j++)
+            if (!bdrop[j] && expr_eq((Expr*)g->a[k], (Expr*)g->b[j])) {
+                adrop[k] = bdrop[j] = true; dp++; dm++; break;
+            }
+    for (size_t k = 0; k < g->n; k++)
+        for (size_t j = g->m; j < g->q; j++)
+            if (!bdrop[j] && expr_eq((Expr*)g->a[k], (Expr*)g->b[j])) {
+                adrop[k] = bdrop[j] = true; dn++; dq++; break;
+            }
+    Expr* out = NULL;
+    if (dm + dn > 0) {
+        if (g->m - dm == 0 && g->n - dn == 0) {
+            *hdiv = true;
+        } else {
+            MgView s = *g;
+            s.a = malloc(sizeof(Expr*) * (g->p ? g->p : 1));
+            s.b = malloc(sizeof(Expr*) * (g->q ? g->q : 1));
+            size_t t = 0;
+            for (size_t k = 0; k < g->p; k++) if (!adrop[k]) s.a[t++] = g->a[k];
+            t = 0;
+            for (size_t j = 0; j < g->q; j++) if (!bdrop[j]) s.b[t++] = g->b[j];
+            s.n = g->n - dn; s.p = g->p - dn - dp;
+            s.m = g->m - dm; s.q = g->q - dm - dq;
+            out = mg_rebuild(&s, cp(g->z));
+            free(s.a); free(s.b);
+        }
+    }
+    free(adrop); free(bdrop);
+    return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -767,22 +818,70 @@ static Expr* mg_sum_expr(const MgExp* E, bool named) {
  * the cut): 0 = in w, 1 = in 1/w, -1 = none (p == q with m + n == p, where the
  * two expansions are not continuations of each other). For p == q the one with
  * fewer terms (ties: in w). */
+/* -1, 0, +1 as |z| is below, on, or above 1 for a numeric z; 2 when z is
+ * not a number (or the comparison does not decide). */
+static int mg_abs_cmp_one(const Expr* z) {
+    if (!is_number(z)) return 2;
+    Expr* az = ev(mk1(SYM_Abs, cp(z)));
+    int c = 2;
+    if (is_int_value(az, 1)) c = 0;
+    else {
+        Expr* lt = ev(mk2(SYM_Less, cp(az), I_(1)));
+        Expr* gt = ev(mk2(SYM_Greater, cp(az), I_(1)));
+        if (lt->type == EXPR_SYMBOL && lt->data.symbol.name == SYM_True) c = -1;
+        else if (gt->type == EXPR_SYMBOL && gt->data.symbol.name == SYM_True) c = 1;
+        expr_free(lt); expr_free(gt);
+    }
+    expr_free(az);
+    return c;
+}
+
 static int mg_pick(const MgView* g) {
     if (g->p < g->q) return 0;
     if (g->p > g->q) return 1;
-    if (g->m + g->n <= g->p) return -1;
     /* A numeric z picks the expansion that CONVERGES there, |z| < 1 in z and
      * |z| > 1 in 1/z: the other one needs every term's pF(p-1) continued past
      * its circle (and, for real z beyond it, onto a branch cut that only the
-     * sum of the terms does not have). */
-    if (is_number(g->z)) {
-        Expr* az = ev(mk1(SYM_Abs, cp(g->z)));
-        Expr* lt = ev(mk2(SYM_Less, az, I_(1)));
-        bool inside = lt->type == EXPR_SYMBOL && lt->data.symbol.name == SYM_True;
-        expr_free(lt);
-        return inside ? 0 : 1;
-    }
+     * sum of the terms does not have). For m + n <= p the two expansions are
+     * not continuations of each other but each IS G in its own disk (the
+     * Mellin-Barnes contour closes left for |z| < 1 and right for |z| > 1),
+     * so the convergent one is still the value: MeijerG[{{1},{1}},{{1/2},{0}},4]
+     * = Sqrt[Pi]. On |z| = 1 that case picks neither (see mg_unit_ok). */
+    int c = mg_abs_cmp_one(g->z);
+    if (c == -1) return 0;
+    if (c == 1) return 1;
+    if (g->m + g->n <= g->p) return -1;
+    if (c == 0) return 1;       /* callers gate |z| = 1 themselves */
     return (g->m <= g->n) ? 0 : 1;
+}
+
+/* Re(sum a - sum b) for exact numeric parameters; false otherwise. */
+static bool mg_param_excess(const MgView* g, double* out) {
+    Expr* s = I_(0);
+    for (size_t j = 0; j < g->p; j++) s = add(s, cp(g->a[j]));
+    for (size_t j = 0; j < g->q; j++) s = sub(s, cp(g->b[j]));
+    s = ev(mk1(SYM_Re, s));
+    bool ok = is_exact_number(s) && real_value(s, out);
+    expr_free(s);
+    return ok;
+}
+
+/* p == q and z exactly 1: may a Slater expansion be summed AT z = 1? Each
+ * term is a pF(p-1) at x = (-1)^{p-m-n} (the dual expansion has the same
+ * parity), whose parameter excess sum(lower) - sum(upper) works out to
+ * Re(sum a - sum b) - 1 for every term of either expansion. The series
+ * converges at x = 1 for excess > 0 and at x = -1 for excess > -1; Abel's
+ * theorem then makes the sum the radial limit, which is G(1): G is continuous
+ * at z = 1 when m + n > p (arg 0 is inside its sector), and for m + n = p the
+ * value on the circle is that inner limit. Only z == 1 is admitted: at other
+ * points of the circle the term powers z^{b_h} sit on or near their cuts. */
+static bool mg_unit_ok(const MgView* g) {
+    if (g->p != g->q || !is_int_value(g->z, 1) || g->r) return false;
+    double ex;
+    if (!mg_param_excess(g, &ex)) return false;
+    ex -= 1.0;
+    long par = ((long)g->p - (long)g->m - (long)g->n) % 2;
+    return par == 0 ? (ex > 1e-12) : (ex > -1.0 + 1e-12);
 }
 
 Expr* meijerg_slater_expand(const Expr* call, bool named) {
@@ -804,6 +903,52 @@ Expr* meijerg_slater_expand(const Expr* call, bool named) {
 /*  Automatic reduction                                                */
 /* ------------------------------------------------------------------ */
 
+static Expr* mg_named_shape(const MgView* g, bool dual);
+
+/* The Slater sum of expansion `dual` (named), or NULL in the log case. */
+static Expr* mg_expansion_or_null(const MgView* g, bool dual) {
+    MgExp E;
+    mg_exp_init(g, dual, &E);
+    Expr* out = mg_log_case(&E) ? NULL : ev(mg_sum_expr(&E, true));
+    mg_exp_free(&E);
+    return out;
+}
+
+Expr* meijerg_function_expand(const Expr* call) {
+    MgView g;
+    if (!mg_view(call, &g)) return NULL;
+    Expr* out = mg_named_shape(&g, false);
+    if (!out && !g.r) out = mg_named_shape(&g, true);
+    if (!out) {
+        int which = mg_pick(&g);
+        if (which >= 0) {
+            out = mg_expansion_or_null(&g, which == 1);
+        } else if (!is_number(g.z)) {
+            /* p == q, m + n <= p, symbolic z: G is one expansion inside the
+             * unit circle and the other outside -- a Piecewise, the inner one
+             * also owning z == 1 when its terms converge there. */
+            Expr* in = mg_expansion_or_null(&g, false);
+            Expr* outer = in ? mg_expansion_or_null(&g, true) : NULL;
+            if (in && outer) {
+                Expr* inner_cond = mk2(SYM_Less, mk1(SYM_Abs, cp(g.z)), I_(1));
+                double ex;
+                long par = ((long)g.p - (long)g.m - (long)g.n) % 2;
+                if (!g.r && mg_param_excess(&g, &ex) &&
+                    (par == 0 ? (ex - 1.0 > 1e-12) : (ex - 1.0 > -1.0 + 1e-12)))
+                    inner_cond = mk2(SYM_Or, mk2(SYM_Equal, cp(g.z), I_(1)), inner_cond);
+                Expr* outer_cond = mk2(SYM_Greater, mk1(SYM_Abs, cp(g.z)), I_(1));
+                Expr* pairs = mk2(SYM_List, mk2(SYM_List, in, inner_cond),
+                                  mk2(SYM_List, outer, outer_cond));
+                out = ev(mk2(SYM_Piecewise, pairs, expr_new_symbol(SYM_Indeterminate)));
+            } else {
+                expr_free(in); expr_free(outer);
+            }
+        }
+    }
+    mg_view_free(&g);
+    return out;
+}
+
 /* The policy, calibrated against Mathematica 14:
  *   - G^{2,0}_{0,2}(;b,c)        -> 2 w^{(b+c)/2} K_{b-c}(2 sqrt w)    (always)
  *   - G^{2,1}_{1,2}(a;b,c)       -> G(1-a+b) G(1-a+c) w^b U(1-a+b, 1+b-c, w)
@@ -812,38 +957,50 @@ Expr* meijerg_slater_expand(const Expr* call, bool named) {
  *   - two Slater terms whose pFq is a 0F1, 1F1 or 2F1, when the two exponent
  *     parameters are not an integer apart (no log case);
  *   - anything else stays MeijerG. */
+/* The named shapes that are not Slater sums (their expansions are log cases
+ * for integer-spaced parameters), read in t = w (dual false) or, through
+ * G^{m,n}_{p,q}(w | a; b) = G^{n,m}_{q,p}(1/w | 1-b; 1-a), in t = 1/w (dual
+ * true):
+ *   G^{2,0}_{0,2}(t | ;b,c)  = 2 t^{(b+c)/2} K_{b-c}(2 sqrt t)
+ *   G^{2,1}_{1,2}(t | a;b,c) = G(1-a+b) G(1-a+c) t^b U(1-a+b, 1+b-c, t)
+ * Evaluated and owned, or NULL. */
+static Expr* mg_named_shape(const MgView* g, bool dual) {
+    MgExp E; mg_exp_init(g, dual, &E);
+    Expr* r = NULL;
+    if (E.p == 0 && E.q == 2 && E.m == 2) {
+        Expr* s = add(cp(E.B[0]), cp(E.B[1]));
+        r = mul(mul(I_(2), tpow(&E, mul(half(), s))),
+                mk2(SYM_BesselK, sub(cp(E.B[0]), cp(E.B[1])),
+                    mul(I_(2), tpow(&E, half()))));
+    } else if (E.p == 1 && E.n == 1 && E.q == 2 && E.m == 2) {
+        const Expr *a = E.A[0], *b = E.B[0], *c = E.B[1];
+        r = mul(mul(gam(sub(add(I_(1), cp(b)), cp(a))), gam(sub(add(I_(1), cp(c)), cp(a)))),
+                mul(tpow(&E, cp(b)),
+                    mk3(SYM_HypergeometricU, sub(add(I_(1), cp(b)), cp(a)),
+                        sub(add(I_(1), cp(b)), cp(c)), tpow(&E, I_(1)))));
+    }
+    mg_exp_free(&E);
+    return r ? ev(r) : NULL;
+}
+
 static Expr* mg_try_reduce(const MgView* g) {
-    /* Named special shapes. */
-    if (g->p == 0 && g->q == 2 && g->m == 2) {
-        MgExp E; mg_exp_init(g, false, &E);
-        Expr* s = add(cp(g->b[0]), cp(g->b[1]));
-        Expr* r = mul(mul(I_(2), tpow(&E, mul(half(), s))),
-                      mk2(SYM_BesselK, sub(cp(g->b[0]), cp(g->b[1])),
-                          mul(I_(2), tpow(&E, half()))));
-        mg_exp_free(&E);
-        return ev(r);
-    }
-    if (g->p == 1 && g->n == 1 && g->q == 2 && g->m == 2) {
-        MgExp E; mg_exp_init(g, false, &E);
-        const Expr *a = g->a[0], *b = g->b[0], *c = g->b[1];
-        Expr* r = mul(mul(gam(sub(add(I_(1), cp(b)), cp(a))), gam(sub(add(I_(1), cp(c)), cp(a)))),
-                      mul(tpow(&E, cp(b)),
-                          mk3(SYM_HypergeometricU, sub(add(I_(1), cp(b)), cp(a)),
-                              sub(add(I_(1), cp(b)), cp(c)), tpow(&E, I_(1)))));
-        mg_exp_free(&E);
-        return ev(r);
-    }
+    /* Named special shapes, in w only: the dual spellings (in 1/w) are left
+     * to FunctionExpand, as the reference system does --
+     * MeijerG[{{0,0},{}},{{},{}},z] stays, FunctionExpand gives BesselK. */
+    Expr* named = mg_named_shape(g, false);
+    if (named) return named;
     int which = mg_pick(g);
-    if (which < 0) return NULL;
     /* p == q on the unit circle: the Slater terms' pFq (a 2F1 for p = 2) sit on
      * their circle of convergence and may diverge individually where G does
-     * not (G^{2,2}_{2,2} at z = 1). Keep MeijerG, whose numerics handle it. */
-    if (g->p == g->q && is_exact_number(g->z)) {
-        Expr* az = ev(mk1(SYM_Abs, cp(g->z)));
-        bool unit = is_int_value(az, 1);
-        expr_free(az);
-        if (unit) return NULL;
+     * not. Keep MeijerG, whose numerics handle it -- except at z = 1 when
+     * every term converges there (mg_unit_ok): the sum is then G(1), from the
+     * expansion in z when m + n <= p (the inner limit), else the usual one.
+     * MeijerG[{{1/2},{1}},{{0,1/2},{}},1] = Pi/2. */
+    if (g->p == g->q && is_exact_number(g->z) && mg_abs_cmp_one(g->z) == 0) {
+        if (!mg_unit_ok(g)) return NULL;
+        if (which < 0) which = 0;
     }
+    if (which < 0) return NULL;
     MgExp E;
     mg_exp_init(g, which == 1, &E);
     Expr* out = NULL;
@@ -1257,6 +1414,14 @@ Expr* builtin_meijer_g(Expr* res) {
     /* (3) Canonical parameter order. */
     out = mg_canonical(&g);
     if (out) goto done;
+
+    /* (3b) Gamma-pair cancellation (equal a_k, b_j in opposite groups). */
+    {
+        bool hdiv = false;
+        out = mg_cancel_pairs(&g, &hdiv);
+        if (hdiv) msg_hdiv(res);
+        if (out || hdiv) goto done;
+    }
 
     /* (4) Consistency: m = n = 0 has no contour at all; a pole collision is
      * resolved by cancelling a Gamma pair when one exists, else hdiv. */

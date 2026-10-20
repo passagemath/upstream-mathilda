@@ -1,18 +1,40 @@
 /*
- * functionexpand.c -- FunctionExpand for Mathilda (minimal).
+ * functionexpand.c -- FunctionExpand for Mathilda.
  *
  *   FunctionExpand[expr]
  *   FunctionExpand[expr, assum]
  *
- * expands special functions in expr into simpler ones. In this first version
- * the only rule is MeijerG -> its Slater expansion (src/special_functions/
- * meijer_g.c, meijerg_slater_expand): a sum of HypergeometricPFQ terms in z
- * (p < q, or p == q with the shorter expansion) or in 1/z (p > q), each pFq
- * rewritten to a classical function where one exists. A MeijerG with no such
- * expansion -- the log case of integer-spaced parameters, or p == q with
- * m + n == p, where the two expansions are not continuations of each other --
- * is left as it is, as is everything else. The assumptions argument is
- * accepted for compatibility and not yet used.
+ * expands special functions in expr into simpler ones, bottom-up. The rules:
+ *
+ *   MeijerG   -> named functions (meijer_g.c, meijerg_function_expand): the
+ *                BesselK / HypergeometricU shapes in z or 1/z, else the named
+ *                Slater expansion, else for p == q, m + n <= p a Piecewise of
+ *                the inner and outer expansions. A log case is left alone.
+ *
+ *   PolyLog[n, w], integer n >= 2, w = E^(I Pi r) an exact root of unity
+ *                (r rational, written with I, -1, (-1)^r, E^(I Pi r) and
+ *                products of them):  Li_n(w) = R + I S, with x = r/2 mod 1,
+ *       - the "Bernoulli part" (R for even n, S for odd n) always closed:
+ *             Li_n(e^{2 pi i x}) + (-1)^n Li_n(e^{-2 pi i x})
+ *                 = -(2 pi i)^n B_n(x) / n!            (0 <= x <= 1);
+ *       - the "Clausen part" (R for odd n, S for even n) as a multiple of
+ *         Zeta[n] when the cosine values are rational (q = den x in
+ *         {1, 2, 3, 4, 6}: Ramanujan sums,  sum_k c_q(k)/k^n =
+ *         Zeta[n] sum_{d|q} mu(q/d) d^{1-n}, shared by the phi(q) <= 2
+ *         primitive p); S = +-Catalan for n = 2, q = 4; else by the Hurwitz
+ *         decomposition  q^{-n} sum_{j=1..q} f(2 pi j p/q) zeta(n, j/q)  with
+ *         zeta(n, a) = (-1)^n PolyGamma[n-1, a]/(n-1)!.
+ *     Conjugate pairs therefore cancel their imaginary parts exactly:
+ *     PolyLog[3, I] + PolyLog[3, -I] -> -3 Zeta[3]/16.
+ *
+ *   Log[w] -> I Pi r and Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2
+ *                (-1 < r < 1) for the same roots of unity w.
+ *
+ * Everything else is left as it is. The assumptions argument is accepted for
+ * compatibility and not yet used.
+ *
+ * fe_reduce_definite_result (functionexpand.h) applies the same machinery as
+ * the final pass of a definite Integrate.
  *
  * Memory contract: the builtin takes ownership of res but must not free it.
  */
@@ -23,20 +45,294 @@
 #include "attr.h"
 #include "eval.h"
 #include "expr.h"
+#include "parse.h"
+#include "arithmetic.h"         /* is_rational */
 #include "sym_names.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
-/* A copy of e with every expandable MeijerG node replaced, bottom-up; sets
- * *changed when anything was rewritten. Returns an owned Expr. */
-static Expr* fe_walk(const Expr* e, bool* changed) {
+/* ------------------------------------------------------------------ */
+/*  Small helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+static bool fe_is_head(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+/* `fn`, the source of a pure function, applied to the (copied) arguments and
+ * evaluated. Owned result, or NULL if the template does not parse. */
+static Expr* fe_apply(const char* fn, Expr* const* args, size_t n) {
+    Expr* f = parse_expression(fn);
+    if (!f) return NULL;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = expr_copy(args[i]);
+    Expr* call = expr_new_function(f, a, n);
+    free(a);
+    return eval_and_free(call);
+}
+
+static int64_t fe_gcd(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+/* Bound on the denominators carried; far beyond any root of unity a closed
+ * form is wanted for, and it keeps every product below int64 range. */
+#define FE_MAX_DEN 100000
+
+/* r += n/d, reduced; false on a denominator past FE_MAX_DEN. */
+static bool fe_rat_add(int64_t* rn, int64_t* rd, int64_t n, int64_t d) {
+    if (d <= 0 || d > FE_MAX_DEN || *rd > FE_MAX_DEN) return false;
+    int64_t g = fe_gcd(*rd, d);
+    int64_t den = (*rd / g) * d;
+    if (den > FE_MAX_DEN) return false;
+    int64_t num = *rn * (d / g) + n * (*rd / g);
+    int64_t h = fe_gcd(num, den);
+    if (h == 0) h = 1;
+    *rn = num / h; *rd = den / h;
+    return true;
+}
+
+/* An exact rational leaf n/d (Integer or Rational). */
+static bool fe_rational(const Expr* e, int64_t* n, int64_t* d) {
+    return is_rational(e, n, d) && *d > 0;
+}
+
+/* Accumulate the angle (in units of Pi) of one factor of a root of unity. */
+static bool fe_root_factor(const Expr* f, int64_t* rn, int64_t* rd) {
+    int64_t n, d;
+    if (f->type == EXPR_INTEGER) {
+        if (f->data.integer == 1) return true;
+        if (f->data.integer == -1) return fe_rat_add(rn, rd, 1, 1);
+        return false;
+    }
+    if (fe_is_head(f, SYM_Complex) && f->data.function.arg_count == 2) {
+        const Expr* re = f->data.function.args[0];
+        const Expr* im = f->data.function.args[1];
+        if (re->type != EXPR_INTEGER || re->data.integer != 0 ||
+            im->type != EXPR_INTEGER) return false;
+        if (im->data.integer == 1)  return fe_rat_add(rn, rd, 1, 2);
+        if (im->data.integer == -1) return fe_rat_add(rn, rd, -1, 2);
+        return false;
+    }
+    if (fe_is_head(f, SYM_Power) && f->data.function.arg_count == 2) {
+        const Expr* b = f->data.function.args[0];
+        const Expr* x = f->data.function.args[1];
+        /* (-1)^(n/d) */
+        if (b->type == EXPR_INTEGER && b->data.integer == -1 && fe_rational(x, &n, &d))
+            return fe_rat_add(rn, rd, n, d);
+        /* E^(Complex[0, n/d] Pi) */
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E &&
+            fe_is_head(x, SYM_Times) && x->data.function.arg_count == 2) {
+            const Expr* c = x->data.function.args[0];
+            const Expr* pi = x->data.function.args[1];
+            if (pi->type == EXPR_SYMBOL && pi->data.symbol.name == SYM_Pi &&
+                fe_is_head(c, SYM_Complex) && c->data.function.arg_count == 2 &&
+                c->data.function.args[0]->type == EXPR_INTEGER &&
+                c->data.function.args[0]->data.integer == 0 &&
+                fe_rational(c->data.function.args[1], &n, &d))
+                return fe_rat_add(rn, rd, n, d);
+        }
+        return false;
+    }
+    return false;
+}
+
+/* w an exact root of unity E^(I Pi r): r = *rn / *rd reduced into (-1, 1]. */
+static bool fe_root_of_unity(const Expr* w, int64_t* rn, int64_t* rd) {
+    *rn = 0; *rd = 1;
+    if (fe_is_head(w, SYM_Times)) {
+        for (size_t i = 0; i < w->data.function.arg_count; i++)
+            if (!fe_root_factor(w->data.function.args[i], rn, rd)) return false;
+    } else if (!fe_root_factor(w, rn, rd)) {
+        return false;
+    }
+    /* Reduce modulo 2 into (-1, 1]. */
+    int64_t two = 2 * *rd;
+    *rn %= two;
+    if (*rn <= -*rd) *rn += two;
+    if (*rn > *rd) *rn -= two;
+    return true;
+}
+
+/* Rule families of the walk: MeijerG; PolyLog/Log at roots of unity (with
+ * the PolyGamma closed forms); the PolyGamma closed forms alone. */
+enum { FE_MEIJER = 1, FE_ROOTS = 2, FE_PGAMMA = 4, FE_ALL = 7 };
+static Expr* fe_walk(const Expr* e, bool* changed, int which);
+static Expr* fe_expand(const Expr* e);
+
+/* ------------------------------------------------------------------ */
+/*  PolyGamma at 1/2, 1/4, 3/4                                         */
+/* ------------------------------------------------------------------ */
+
+/* PolyGamma[m, x] = (-1)^(m+1) m! zeta(m+1, x), integer m >= 1, with the
+ * Hurwitz zeta closed where it is: n = m + 1,
+ *     zeta(n, 1/2)       = (2^n - 1) Zeta[n],
+ *     zeta(n, 1/4 | 3/4) = ((4^n - 2^n) Zeta[n] +- 4^n beta(n)) / 2,
+ * the Dirichlet beta closed for n = 2 (Catalan) and odd n = 2k+1
+ * (beta = (-1)^k EulerE[2k] Pi^n / (4^(k+1) (2k)!)); even n > 2 stays.
+ * FunctionExpand[PolyGamma[1, 1/4]] = Pi^2 + 8 Catalan. */
+static Expr* fe_polygamma_closed(const Expr* e) {
+    if (!fe_is_head(e, SYM_PolyGamma) || e->data.function.arg_count != 2) return NULL;
+    const Expr* me = e->data.function.args[0];
+    if (me->type != EXPR_INTEGER || me->data.integer < 1 || me->data.integer > 200) return NULL;
+    int64_t xn, xd;
+    if (!fe_rational(e->data.function.args[1], &xn, &xd)) return NULL;
+    int64_t n = me->data.integer + 1;
+    Expr* M = expr_new_integer(me->data.integer);
+    Expr* out = NULL;
+    if (xn == 1 && xd == 2) {
+        out = fe_apply("((-1)^(#1 + 1) #1! (2^(#1 + 1) - 1) Zeta[#1 + 1])&", &M, 1);
+    } else if (xd == 4 && (xn == 1 || xn == 3) && (n == 2 || n % 2 == 1)) {
+        Expr* args[2] = { M, expr_new_integer(xn == 1 ? 1 : -1) };
+        out = fe_apply(n == 2
+            ? "((-1)^(#1 + 1) #1! ((4^(#1+1) - 2^(#1+1)) Zeta[#1+1] + #2 4^(#1+1) Catalan)/2)&"
+            : "((-1)^(#1 + 1) #1! ((4^(#1+1) - 2^(#1+1)) Zeta[#1+1] + #2 4^(#1+1)"
+              " (-1)^(#1/2) EulerE[#1] Pi^(#1+1) / (4^(#1/2 + 1) #1!))/2)&",
+            args, 2);
+        expr_free(args[1]);
+    }
+    expr_free(M);
+    if (out) { Expr* x = fe_expand(out); expr_free(out); out = x; }
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  PolyLog at roots of unity                                          */
+/* ------------------------------------------------------------------ */
+
+/* Clausen part of Li_n(e^{2 pi i p/q}) -- the cosine sum (odd n) or the sine
+ * sum (even n) -- as an evaluated, owned Expr. */
+static Expr* fe_clausen_part(int64_t n, int64_t p, int64_t q) {
+    Expr* N = expr_new_integer(n);
+    Expr* P = expr_new_integer(p);
+    Expr* Q = expr_new_integer(q);
+    Expr* args[3] = { N, P, Q };
+    Expr* out = NULL;
+    bool odd = (n % 2) != 0;
+    if (odd && (q == 1 || q == 2 || q == 3 || q == 4 || q == 6)) {
+        /* Rational cosines: the Ramanujan-sum closed form (p is primitive
+         * mod q and the phi(q) <= 2 primitive residues share it). */
+        out = fe_apply("(Zeta[#1] Sum[MoebiusMu[#3/dd] dd^(1 - #1), {dd, Divisors[#3]}]"
+                       " / EulerPhi[#3])&", args, 3);
+    } else if (!odd && (q == 1 || q == 2)) {
+        out = expr_new_integer(0);
+    } else if (!odd && n == 2 && q == 4) {
+        /* Im Li_2(+-I) = +-Catalan (DirichletBeta[2]). */
+        out = fe_apply("(Sin[2 Pi #2/#3] Catalan)&", args, 3);
+    } else {
+        out = fe_apply(odd
+            ? "(#3^(-#1) Sum[Cos[2 Pi jj #2/#3] If[jj == #3, Zeta[#1],"
+              " (-1)^#1 PolyGamma[#1 - 1, jj/#3]/(#1 - 1)!], {jj, 1, #3}])&"
+            : "(#3^(-#1) Sum[Sin[2 Pi jj #2/#3] If[jj == #3, 0,"
+              " (-1)^#1 PolyGamma[#1 - 1, jj/#3]/(#1 - 1)!], {jj, 1, #3}])&",
+            args, 3);
+    }
+    expr_free(N); expr_free(P); expr_free(Q);
+    return out;
+}
+
+/* PolyLog[n, w] -> R + I S for integer n >= 2 and an exact root of unity w;
+ * NULL (nothing owned) when the call is not of that form. */
+static Expr* fe_polylog_root(const Expr* e) {
+    if (!fe_is_head(e, SYM_PolyLog) || e->data.function.arg_count != 2) return NULL;
+    const Expr* ne = e->data.function.args[0];
+    if (ne->type != EXPR_INTEGER || ne->data.integer < 2 || ne->data.integer > 200) return NULL;
+    int64_t rn, rd;
+    if (!fe_root_of_unity(e->data.function.args[1], &rn, &rd)) return NULL;
+    int64_t n = ne->data.integer;
+    /* x = r/2 mod 1 in [0, 1): p/q. */
+    int64_t p = rn, q = 2 * rd;
+    if (p < 0) p += q;
+    int64_t g = fe_gcd(p, q);
+    if (g == 0) g = 1;
+    p /= g; q /= g;
+    if (p == 0) q = 1;
+    Expr* N = expr_new_integer(n);
+    Expr* X = make_rational(p, q);
+    Expr* args[2] = { N, X };
+    bool odd = (n % 2) != 0;
+    Expr* bern = fe_apply(odd
+        ? "((-1)^((#1 + 1)/2) (2 Pi)^#1 BernoulliB[#1, #2] / (2 #1!))&"
+        : "((-1)^(#1/2 + 1) (2 Pi)^#1 BernoulliB[#1, #2] / (2 #1!))&", args, 2);
+    expr_free(N); expr_free(X);
+    /* The Clausen part from the representative p <= q/2: cosine sums are even
+     * in p -> q - p and sine sums odd, so the conjugate root w-bar yields the
+     * SAME expression (times -1 for a sine sum) and a conjugate pair cancels
+     * structurally, not merely numerically. */
+    Expr* cl;
+    if (2 * p > q) {
+        cl = fe_clausen_part(n, q - p, q);
+        if (cl && !odd) {
+            Expr* m1 = expr_new_integer(-1);
+            Expr* ng = fe_apply("(-#1)&", &cl, 1);
+            expr_free(m1); expr_free(cl); cl = ng;
+        }
+    } else {
+        cl = fe_clausen_part(n, p, q);
+    }
+    if (!bern || !cl) { expr_free(bern); expr_free(cl); return NULL; }
+    /* even n: R = bern, S = cl;  odd n: R = cl, S = bern. */
+    Expr* re = odd ? cl : bern;
+    Expr* im = odd ? bern : cl;
+    Expr* ri[2] = { re, im };
+    Expr* out = fe_apply("(#1 + I #2)&", ri, 2);
+    expr_free(re); expr_free(im);
+    /* The Hurwitz terms at 1/2, 1/4, 3/4 have closed forms of their own. */
+    if (out) {
+        bool ch = false;
+        Expr* w2 = fe_walk(out, &ch, FE_PGAMMA);
+        expr_free(out);
+        out = w2;
+    }
+    return out;
+}
+
+/* Log[w] -> I Pi r, Log[1 + w] -> Log[2 Cos[Pi r/2]] + I Pi r/2 (|r| < 1). */
+static Expr* fe_log_root(const Expr* e) {
+    if (!fe_is_head(e, SYM_Log) || e->data.function.arg_count != 1) return NULL;
+    const Expr* c = e->data.function.args[0];
+    int64_t rn, rd;
+    if (fe_is_head(c, SYM_Plus) && c->data.function.arg_count == 2 &&
+        c->data.function.args[0]->type == EXPR_INTEGER &&
+        c->data.function.args[0]->data.integer == 1 &&
+        fe_root_of_unity(c->data.function.args[1], &rn, &rd)) {
+        if (rn == rd) return NULL;               /* 1 + (-1): Log[0] */
+        Expr* R = make_rational(rn, rd);
+        Expr* out = fe_apply("(Log[2 Cos[Pi #1/2]] + I Pi #1/2)&", &R, 1);
+        expr_free(R);
+        return out;
+    }
+    if (fe_root_of_unity(c, &rn, &rd) && rn != 0) {
+        Expr* R = make_rational(rn, rd);
+        Expr* out = fe_apply("(I Pi #1)&", &R, 1);
+        expr_free(R);
+        return out;
+    }
+    return NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The walk                                                           */
+/* ------------------------------------------------------------------ */
+
+
+/* A copy of e with every expandable node replaced, bottom-up; sets *changed
+ * when anything was rewritten. `which` selects the rule families. Returns an
+ * owned Expr. */
+static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
     Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
     bool any = false;
     for (size_t i = 0; i < n; i++) {
         bool c = false;
-        a[i] = fe_walk(e->data.function.args[i], &c);
+        a[i] = fe_walk(e->data.function.args[i], &c, which);
         any |= c;
     }
     Expr* node = expr_new_function(expr_copy(e->data.function.head), a, n);
@@ -45,11 +341,15 @@ static Expr* fe_walk(const Expr* e, bool* changed) {
         *changed = true;
         node = eval_and_free(node);
     }
-    if (node->type == EXPR_FUNCTION && node->data.function.head->type == EXPR_SYMBOL &&
-        node->data.function.head->data.symbol.name == SYM_MeijerG) {
-        Expr* s = meijerg_slater_expand(node, true);
-        if (s) { expr_free(node); node = s; *changed = true; }
+    Expr* s = NULL;
+    if ((which & FE_MEIJER) && fe_is_head(node, SYM_MeijerG))
+        s = meijerg_function_expand(node);
+    if (!s && (which & FE_ROOTS)) {
+        s = fe_polylog_root(node);
+        if (!s) s = fe_log_root(node);
     }
+    if (!s && (which & (FE_ROOTS | FE_PGAMMA))) s = fe_polygamma_closed(node);
+    if (s) { expr_free(node); node = s; *changed = true; }
     return node;
 }
 
@@ -58,9 +358,115 @@ Expr* builtin_function_expand(Expr* res) {
     size_t na = res->data.function.arg_count;
     if (na != 1 && na != 2) return NULL;
     bool changed = false;
-    Expr* out = fe_walk(res->data.function.args[0], &changed);
+    Expr* out = fe_walk(res->data.function.args[0], &changed, FE_ALL);
     /* Unchanged: hand back the (already evaluated) argument itself. */
     return out;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Definite-integral finalisation                                     */
+/* ------------------------------------------------------------------ */
+
+static size_t fe_count_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    size_t c = fe_is_head(e, h) ? 1 : 0;
+    c += fe_count_head(e->data.function.head, h);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += fe_count_head(e->data.function.args[i], h);
+    return c;
+}
+
+static size_t fe_leaf_count(const Expr* e) {
+    if (!e) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    size_t c = fe_leaf_count(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += fe_leaf_count(e->data.function.args[i]);
+    return c;
+}
+
+/* Refine[e, assum], evaluated and owned. */
+static Expr* fe_refine(const Expr* e, const Expr* assum) {
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Refine),
+                    (Expr*[]){ expr_copy((Expr*)e), expr_copy((Expr*)assum) }, 2);
+    return eval_and_free(call);
+}
+
+/* A copy of e with the CONDITION of every Piecewise pair Refined on its own
+ * under assum (and the Piecewise re-evaluated, dropping False branches and
+ * collapsing to a True one). Refine of a whole Piecewise rewrites its
+ * conditions but does not decide them -- Abs[b^2/a^2] > 1 became b^2/a^2 > 1
+ * under b > a > 0 -- while the standalone condition is decided. Owned. */
+static Expr* fe_refine_piecewise(const Expr* e, const Expr* assum) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = fe_refine_piecewise(e->data.function.args[i], assum);
+    Expr* node = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    if (fe_is_head(node, SYM_Piecewise) && node->data.function.arg_count >= 1 &&
+        fe_is_head(node->data.function.args[0], SYM_List)) {
+        Expr* pairs = node->data.function.args[0];
+        for (size_t i = 0; i < pairs->data.function.arg_count; i++) {
+            Expr* pr = pairs->data.function.args[i];
+            if (!fe_is_head(pr, SYM_List) || pr->data.function.arg_count != 2) continue;
+            Expr* rc = fe_refine(pr->data.function.args[1], assum);
+            expr_free(pr->data.function.args[1]);
+            pr->data.function.args[1] = rc;
+        }
+    }
+    return eval_and_free(node);
+}
+
+/* Expand[e], evaluated and owned: collects the like terms a conjugate pair's
+ * expansions leave inside separate products. */
+static Expr* fe_expand(const Expr* e) {
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                            (Expr*[]){ expr_copy((Expr*)e) }, 1));
+}
+
+Expr* fe_reduce_definite_result(Expr* r, const Expr* assumptions) {
+    if (!r) return r;
+    /* (1) MeijerG -> named functions. Accepted only when it leaves no MeijerG,
+     * HypergeometricPFQ or Piecewise behind that the original did not have:
+     * a reduction that trades a MeijerG for an unresolved Piecewise (the
+     * p == q, m + n <= p case with an undecided |z| vs 1) or for raw pFq's is
+     * not a closed form. The Piecewise is resolved by Refine under the call's
+     * assumptions when they decide |z| against 1. */
+    if (fe_count_head(r, SYM_MeijerG) > 0) {
+        bool changed = false;
+        Expr* c = fe_walk(r, &changed, FE_MEIJER);
+        if (changed && assumptions &&
+            fe_count_head(c, SYM_Piecewise) > fe_count_head(r, SYM_Piecewise)) {
+            Expr* rc = fe_refine_piecewise(c, assumptions);
+            expr_free(c); c = rc;
+        }
+        if (changed &&
+            fe_count_head(c, SYM_MeijerG) < fe_count_head(r, SYM_MeijerG) &&
+            fe_count_head(c, SYM_HypergeometricPFQ) <= fe_count_head(r, SYM_HypergeometricPFQ) &&
+            fe_count_head(c, SYM_Piecewise) <= fe_count_head(r, SYM_Piecewise)) {
+            expr_free(r); r = c;
+        } else {
+            expr_free(c);
+        }
+    }
+    /* (2) PolyLog / Log at roots of unity. These are always valid but not
+     * always simpler (Log[1 + I] -> Log[2]/2 + I Pi/4), so accepted only when
+     * the expanded result is strictly smaller and has introduced no PolyGamma
+     * -- i.e. when the parts of conjugate pairs have actually cancelled:
+     * PolyLog[3, I] + PolyLog[3, -I] - Zeta[3]/4 -> -7 Zeta[3]/16. */
+    if (fe_count_head(r, SYM_PolyLog) + fe_count_head(r, SYM_Log) > 0) {
+        bool changed = false;
+        Expr* c = fe_walk(r, &changed, FE_ROOTS);
+        if (changed) { Expr* x = fe_expand(c); expr_free(c); c = x; }
+        if (changed && fe_leaf_count(c) < fe_leaf_count(r) &&
+            fe_count_head(c, SYM_PolyGamma) <= fe_count_head(r, SYM_PolyGamma)) {
+            expr_free(r); r = c;
+        } else {
+            expr_free(c);
+        }
+    }
+    return r;
 }
 
 void functionexpand_init(void) {

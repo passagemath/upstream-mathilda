@@ -211,6 +211,66 @@ void test_polylog_argcount() {
     assert_eval_eq("PolyLog[1, 2, 3, 4]", "PolyLog[1, 2, 3, 4]", 0);
 }
 
+/* ---- FunctionExpand at roots of unity -------------------------------- */
+
+static void check30_eq(const char* a, const char* b) {
+    char buf[2048];
+    snprintf(buf, sizeof buf, "Abs[N[(%s) - (%s), 40]] < 10^-30 Max[1, Abs[N[%s, 40]]]", a, b, a);
+    assert_eval_eq(buf, "True", 0);
+}
+
+void test_polylog_roots_of_unity() {
+    /* closed forms (the reference system's values) */
+    assert_eval_eq("FunctionExpand[PolyLog[3, I] + PolyLog[3, -I]]", "-3/16 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[3, I]]", "(1/32*I) Pi^3 - 3/32 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[2, I] - PolyLog[2, -I]]", "(2*I) Catalan", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[2, E^(I Pi/3)] + PolyLog[2, E^(-I Pi/3)]]", "1/18 Pi^2", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[3, E^(2 Pi I/3)]]", "(2/81*I) Pi^3 - 4/9 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[5, -I]]", "(-5/1536*I) Pi^5 - 15/512 Zeta[5]", 0);
+    assert_eval_eq("FunctionExpand[Re[PolyLog[3, E^(I Pi/3)]]]", "1/3 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[Re[PolyLog[5, E^(I Pi/3)]]]", "25/54 Zeta[5]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[3, I] + PolyLog[3, -I] - Zeta[3]/4]", "-7/16 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[3, (-1)^(2/3)]]", "(2/81*I) Pi^3 - 4/9 Zeta[3]", 0);
+    /* a non-root and a symbolic argument are left alone */
+    assert_eval_eq("FunctionExpand[PolyLog[3, 2 I]]", "PolyLog[3, 2*I]", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[3, z]]", "PolyLog[3, z]", 0);
+
+    /* every (order, root) pair: the expansion against the MPFR polylog */
+    const char* roots[] = { "I", "-I", "(-1)^(1/3)", "E^(I Pi/3)", "E^(2 I Pi/3)", "E^(-I Pi/4)",
+                            "E^(3 I Pi/4)", "E^(I Pi/6)", "E^(-5 I Pi/6)", "E^(2 I Pi/5)",
+                            "E^(I Pi/8)", "-I E^(-I Pi/4)", "E^(7 I Pi/12)" };
+    for (int n = 2; n <= 7; n++)
+        for (size_t k = 0; k < sizeof roots / sizeof roots[0]; k++) {
+            char a[256], b[256];
+            snprintf(a, sizeof a, "FunctionExpand[PolyLog[%d, %s]]", n, roots[k]);
+            snprintf(b, sizeof b, "PolyLog[%d, N[%s, 50]]", n, roots[k]);
+            check30_eq(a, b);
+        }
+
+    /* Log at roots of unity, and 1 + root */
+    assert_eval_eq("FunctionExpand[Log[E^(I Pi/4)]]", "(1/4*I) Pi", 0);
+    assert_eval_eq("FunctionExpand[Log[1 - E^(I Pi/4)]]", "(-3/8*I) Pi + Log[2 Cos[3/8 Pi]]", 0);
+    const char* logs[] = { "Log[1 - E^(I Pi/4)]", "Log[1 + I]", "Log[1 - I E^(-I Pi/4)]",
+                           "Log[1 + E^(5 I Pi/6)]", "Log[E^(-2 I Pi/3)]" };
+    for (size_t k = 0; k < sizeof logs / sizeof logs[0]; k++) {
+        char a[256];
+        snprintf(a, sizeof a, "FunctionExpand[%s]", logs[k]);
+        check30_eq(a, logs[k]);
+    }
+
+    /* PolyGamma at 1/2, 1/4, 3/4 */
+    assert_eval_eq("FunctionExpand[PolyGamma[1, 1/4]]", "8 Catalan + Pi^2", 0);
+    assert_eval_eq("FunctionExpand[PolyGamma[2, 1/4]]", "-2 Pi^3 - 56 Zeta[3]", 0);
+    assert_eval_eq("FunctionExpand[PolyGamma[3, 1/4]]", "PolyGamma[3, 1/4]", 0);
+    const char* pg[] = { "PolyGamma[1, 1/4]", "PolyGamma[1, 3/4]", "PolyGamma[2, 3/4]",
+                         "PolyGamma[4, 1/4]", "PolyGamma[3, 1/2]", "PolyGamma[2, 1/2]" };
+    for (size_t k = 0; k < sizeof pg / sizeof pg[0]; k++) {
+        char a[256];
+        snprintf(a, sizeof a, "FunctionExpand[%s]", pg[k]);
+        check30_eq(a, pg[k]);
+    }
+}
+
 void test_polylog_attributes() {
     SymbolDef* d = symtab_get_def("PolyLog");
     ASSERT(d != NULL);
@@ -240,6 +300,7 @@ int main() {
     TEST(test_polylog_nielsen_real_value);
     TEST(test_polylog_argcount);
     TEST(test_polylog_attributes);
+    TEST(test_polylog_roots_of_unity);
 
     printf("All PolyLog tests passed.\n");
     return 0;

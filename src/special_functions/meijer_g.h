@@ -29,6 +29,14 @@ void  meijer_g_init(void);
  * caller. Used by FunctionExpand and Series. */
 Expr* meijerg_slater_expand(const Expr* g, bool named);
 
+/* FunctionExpand's MeijerG rewrite: the named shapes (BesselK,
+ * HypergeometricU) in z and -- unlike the automatic reduction -- also in 1/z;
+ * else the named Slater expansion; else, for p == q with m + n <= p and a
+ * symbolic z, Piecewise[{{inner, z == 1 || Abs[z] < 1}, {outer, Abs[z] > 1}},
+ * Indeterminate] (the z == 1 clause only when the inner terms converge
+ * there). Evaluated and owned, or NULL (log case, malformed call). */
+Expr* meijerg_function_expand(const Expr* g);
+
 /* The leading-power data the series code needs, in the variable z of `g`:
  * the truncated expansion  sum_h  z^{e_h} * sum_{k<=order} c_{h,k} z^k
  * about 0 (`at_infinity` false, p <= q) or in powers of 1/z about Infinity

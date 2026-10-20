@@ -462,6 +462,73 @@ void test_mg_function_expand() {
     assert_str("FunctionExpand[Sin[x] + 1]", "1 + Sin[x]");
 }
 
+/* `closed` equals MeijerG[params, z] to 30 digits, the right side computed
+ * by the arb Slater engine (an MPFR z bypasses every exact reduction). */
+static void check_mg30(const char* closed, const char* params, const char* z) {
+    char e[2048];
+    snprintf(e, sizeof e,
+             "Abs[N[(%s) - MeijerG[%s, N[%s, 50]], 40]] < 10^-30 Max[1, Abs[N[%s, 40]]]",
+             closed, params, z, closed);
+    assert_true(e);
+}
+
+void test_mg_named_closed_forms() {
+    /* 1F1(1/2; 3/2; -z) is the error function */
+    assert_str("MeijerG[{{1},{}},{{1/2},{0}},z]", "Sqrt[Pi] Erf[Sqrt[z]]");
+    check_mg30("Sqrt[Pi] Erf[Sqrt[7/3]]", "{{1},{}},{{1/2},{0}}", "7/3");
+    assert_str("MeijerG[{{1},{}},{{1/2},{0}},-z]", "(Sqrt[Pi] Erfi[Sqrt[z]] Sqrt[-z])/Sqrt[z]");
+    check_mg30("MeijerG[{{1},{}},{{1/2},{0}},-z] /. z -> 5/2", "{{1},{}},{{1/2},{0}}", "-5/2");
+    /* 2F1(1/2, 1; 3/2; -1/z): ArcTan */
+    assert_str("MeijerG[{{1/2},{1}},{{0,1/2},{}},z]", "(2 ArcTan[Sqrt[1/z]])/(Sqrt[z] Sqrt[1/z])");
+    check_mg30("MeijerG[{{1/2},{1}},{{0,1/2},{}},z] /. z -> 3/7", "{{1/2},{1}},{{0,1/2},{}}", "3/7");
+    /* Gamma-pair cancellation */
+    assert_str("MeijerG[{{},{0}},{{0,0},{}},z]", "E^(-z)");
+    assert_str("MeijerG[{{0,0},{0}},{{0},{}},z]", "MeijerG[{{0, 0}, {}}, {{}, {}}, z]");
+    assert_str("MeijerG[{{a},{b}},{{b},{c}},z]", "MeijerG[{{a}, {}}, {{}, {c}}, z]");
+    assert_str("MeijerG[{{a},{b}},{{c},{a}},z]", "MeijerG[{{}, {b}}, {{c}, {}}, z]");
+    check_mg30("E^(-13/10)", "{{},{0}},{{0,0},{}}", "13/10");
+    check_mg30("MeijerG[{{0,0},{}},{{},{}},5/3]", "{{0,0},{0}},{{0},{}}", "5/3");
+    /* a cancellation that leaves m = n = 0 does not exist */
+    assert_true("Check[MeijerG[{{},{0}},{{0},{}},z]; False, True]");
+    /* z = 1 on the unit circle, when the Slater terms converge there */
+    assert_str("MeijerG[{{1/2},{1}},{{0,1/2},{}},1]", "1/2 Pi");
+    check_mg30("Pi/2", "{{1/2},{1}},{{0,1/2},{}}", "1");
+    assert_str("MeijerG[{{1},{1}},{{1/2},{0}},1]", "Sqrt[Pi]");
+    check_mg30("Sqrt[Pi]", "{{1},{1}},{{1/2},{0}}", "1");
+    check_mg30("MeijerG[{{1},{1}},{{1/3},{0}},1]", "{{1},{1}},{{1/3},{0}}", "1");
+    /* ... and not where they diverge or off z = 1 */
+    assert_str("MeijerG[{{1/2},{1}},{{0,1/2},{}},-1]", "MeijerG[{{1/2}, {1}}, {{0, 1/2}, {}}, -1]");
+    /* p == q, m + n == p at a numeric z: the expansion that converges there */
+    assert_str("MeijerG[{{1},{1}},{{1/2},{0}},4]", "Sqrt[Pi]");
+    assert_str("MeijerG[{{1},{1}},{{1/2},{0}},1/4]", "1/3 Sqrt[Pi]");
+    check_mg30("Sqrt[Pi]", "{{1},{1}},{{1/2},{0}}", "4");
+    check_mg30("Sqrt[Pi]/3", "{{1},{1}},{{1/2},{0}}", "1/4");
+    check_mg30("MeijerG[{{1},{1}},{{1/3},{0}},4]", "{{1},{1}},{{1/3},{0}}", "4");
+    /* the symbolic call stays (FunctionExpand gives the Piecewise) */
+    assert_str("MeijerG[{{1},{1}},{{1/2},{0}},z]", "MeijerG[{{1}, {1}}, {{1/2}, {0}}, z]");
+}
+
+void test_mg_function_expand_named() {
+    /* the BesselK shape read in 1/z (the automatic reduction keeps it) */
+    assert_str("MeijerG[{{0,0},{}},{{},{}},z]", "MeijerG[{{0, 0}, {}}, {{}, {}}, z]");
+    assert_str("FunctionExpand[MeijerG[{{0,0},{}},{{},{}},z]]", "(2 BesselK[0, 2/Sqrt[z]])/z");
+    check_mg30("FunctionExpand[MeijerG[{{0,0},{}},{{},{}},z]] /. z -> 5/3", "{{0,0},{}},{{},{}}", "5/3");
+    check_mg30("FunctionExpand[MeijerG[{{1/3,1/4},{}},{{},{}},z]] /. z -> 2/9",
+               "{{1/3,1/4},{}},{{},{}}", "2/9");
+    /* p == q, m + n == p: the inner / outer Piecewise */
+    assert_str("FunctionExpand[MeijerG[{{1},{1}},{{1/2},{0}},z]]",
+               "Piecewise[{{(2 ArcSin[Sqrt[z]])/Sqrt[Pi], z == 1 || Abs[z] < 1}, "
+               "{Sqrt[Pi], Abs[z] > 1}}, Indeterminate]");
+    const char* zs[] = { "1/5", "2/3", "3", "7/2 + I" };
+    for (size_t k = 0; k < sizeof zs / sizeof zs[0]; k++) {
+        char c[512];
+        snprintf(c, sizeof c, "FunctionExpand[MeijerG[{{1},{1}},{{1/3},{0}},z]] /. z -> %s", zs[k]);
+        check_mg30(c, "{{1},{1}},{{1/3},{0}}", zs[k]);
+        snprintf(c, sizeof c, "FunctionExpand[MeijerG[{{1/2},{}},{{},{0}},z]] /. z -> %s", zs[k]);
+        check_mg30(c, "{{1/2},{}},{{},{0}}", zs[k]);
+    }
+}
+
 void test_mg_attributes() {
     SymbolDef* d = symtab_get_def("MeijerG");
     ASSERT(d && (d->attributes & ATTR_NUMERICFUNCTION) && (d->attributes & ATTR_PROTECTED));
@@ -489,6 +556,8 @@ int main() {
     TEST(test_mg_derivative);
     TEST(test_mg_series);
     TEST(test_mg_function_expand);
+    TEST(test_mg_named_closed_forms);
+    TEST(test_mg_function_expand_named);
     TEST(test_mg_attributes);
 
     printf("All MeijerG tests passed.\n");

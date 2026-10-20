@@ -265,6 +265,11 @@ void core_init(void) {
      * else can allocate a bignum, so TimeConstrained's async abort can never
      * unwind out of a held libmalloc lock (see tc_install_alloc_guard). */
     tc_install_alloc_guard();
+    /* The arithmetic-warning probe mute (arith_warnings_mute_push/pop) is a
+     * nesting counter like any other: a timeout unwinding out of a muted probe
+     * (Limit, Integrate's stages) would skip the pop and silence Power::infy /
+     * Infinity::indet -- and hide them from Check[] -- for the whole session. */
+    tc_register_unwind_counter(&g_arith_warnings_muted);
     /* Cache canonical pointers for well-known symbol names. Doing this
      * before any other init step guarantees every later expr_new_symbol
      * with one of these names returns the same pointer the SYM_*

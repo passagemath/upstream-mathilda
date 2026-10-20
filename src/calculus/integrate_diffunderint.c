@@ -25,6 +25,7 @@
 #include "attr.h"
 #include "arithmetic.h"   /* arith_warnings_mute_push/pop */
 #include "sym_names.h"
+#include "core.h"     /* tc_register_unwind_counter */
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -530,6 +531,22 @@ static double pick_rep(double lo, double hi, size_t idx) {
     if (lo_fin)           return lo + seed;
     if (hi_fin)           return hi - seed;
     return seed;
+}
+
+/* True iff the numeric base point c lies in the closure of parameter p's
+ * assumed range.  The Leibniz back-integration I(p) = I(p0) + Integral of
+ * I'(q) over [p0, p] is valid only along a segment on which the integral
+ * converges, so a base outside the assumed domain is never a sound anchor --
+ * and probing one is costly: under x > 0, Exp[-x t]/t^2 on {1, Infinity} at
+ * x = -1 is exponentially divergent and its inner Integrate leaked
+ * Integrate::idiv while the stage ground on.  Unbounded parameters (no
+ * assumption) accept every candidate, as before. */
+static bool base_in_domain(const ParamBound* pb, size_t np, const Expr* p, long c) {
+    for (size_t i = 0; i < np; i++) {
+        if (pb[i].sym != p->data.symbol.name) continue;
+        return (double)c >= pb[i].lo && (double)c <= pb[i].hi;
+    }
+    return true;
 }
 
 /* -------------------------------------------------------------------------
@@ -1328,6 +1345,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     /* 2. numeric zero base: f|_{p->c} identically 0 in x, c in {0, 1, -1}. */
     static const long CS[] = { 0, 1, -1 };
     for (size_t i = 0; i < sizeof(CS)/sizeof(CS[0]); i++) {
+        if (!base_in_domain(pb, np, p, CS[i])) continue;
         Expr* c = mk_int(CS[i]);
         Expr* fc = subst(f, p, c);
         bool zero = fc && is_zero_q(fc);
@@ -1346,7 +1364,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
      *    integral, so it is deliberately excluded here (the zero-integrand
      *    other-parameter base above already covers the q-collapse cases). */
     Expr* cands[2]; size_t nc = 0;
-    cands[nc++] = mk_int(0);
+    if (base_in_domain(pb, np, p, 0)) cands[nc++] = mk_int(0);
     bool found = false;
     for (size_t i = 0; i < nc && !found; i++) {
         Expr* fp0 = subst(f, p, cands[i]);
@@ -2459,6 +2477,7 @@ static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* 
                        Expr** out_p0, Expr** vals) {
     static const long CS[] = { 0, 1, -1 };
     for (size_t c = 0; c < sizeof(CS)/sizeof(CS[0]); c++) {
+        if (!base_in_domain(pb, np, p, CS[c])) continue;
         Expr* p0 = mk_int(CS[c]);
         Expr* tmp[8]; long got = 0; bool ok = true;
         for (long j = 0; j < order && ok; j++) {
@@ -2746,6 +2765,14 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
      * pole, 1/0 in a degenerate family M(s), ...).  Those arithmetic warnings
      * are spurious search noise -- mute them like Limit does, keeping the return
      * values (ComplexInfinity/Indeterminate) that gate the search unchanged. */
+    /* The same holds for the stage's speculative inner Integrate calls: one at
+     * a divergent base emits Integrate::idiv, which is search noise too (the
+     * stage discards that candidate).  Bracket the whole stage as a probe
+     * region -- Quiet depth plus a fired-count restore -- so the noise neither
+     * prints nor trips an enclosing Check[] (message.h, mth_msg_fired_restore).
+     * DiffUnderInt emits no user-facing diagnostic of its own. */
+    unsigned long fired0 = mth_msg_fired_count();
+    mth_msg_suppress_push();
     diui_depth++;
     arith_warnings_mute_push();
     /* Finite-domain closers: they canonicalise a trig/radical integrand with a
@@ -2771,6 +2798,8 @@ Expr* integrate_diffunderint_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (!result) result = stage_reverse_feynman(f, x, a, b, assumptions);
     arith_warnings_mute_pop();
     diui_depth--;
+    mth_msg_suppress_pop();
+    mth_msg_fired_restore(fired0);
     return result;
 }
 
@@ -2811,6 +2840,9 @@ Expr* builtin_integrate_diffunderint(Expr* res) {
 }
 
 void integrate_diffunderint_init(void) {
+    /* Re-entry depth: restored if a TimeConstrained timeout unwinds mid-stage,
+     * else DiffUnderInt would stay disabled for the rest of the session. */
+    tc_register_unwind_counter(&diui_depth);
     symtab_add_builtin("Integrate`DiffUnderInt", builtin_integrate_diffunderint);
     symtab_get_def("Integrate`DiffUnderInt")->attributes |=
         ATTR_PROTECTED;

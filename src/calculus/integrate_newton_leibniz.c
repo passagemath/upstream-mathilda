@@ -401,6 +401,21 @@ static void nl_enum_periodic_pole(const Expr* body, const Expr* param,
  * nl_enum_periodic_pole).  `g` is borrowed. */
 static void nl_add_zero_roots(Expr* g, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr* as) {
     if (!g || !contains_symbol(g, x)) return;
+    /* A product vanishes exactly where one of its factors does, so solve each
+     * x-dependent factor on its own.  This keeps a never-zero factor from
+     * poisoning the whole denominator: Together[E^-t/t^2] has the denominator
+     * t^2 E^t, which Solve cannot treat as a unit, so the pole set went
+     * undecidable and every improper e^{-t}/t^n integral declined. */
+    if (head_name_is(g, "Times")) {
+        for (size_t i = 0; i < g->data.function.arg_count; i++)
+            nl_add_zero_roots(g->data.function.args[i], x, a, b, s, as);
+        return;
+    }
+    /* E^u is never zero for any finite u: it contributes no pole. */
+    if (head_name_is(g, "Power") && g->data.function.arg_count == 2 &&
+        g->data.function.args[0]->type == EXPR_SYMBOL &&
+        g->data.function.args[0]->data.symbol.name == SYM_E)
+        return;
     Expr* eq   = mk_fn2("Equal", expr_copy(g), expr_new_integer(0));
     /* Quiet: Solve is an internal pole probe; its Solve::ifun note on a
      * transcendental denominator (Cos[x] == 0) must not surface from Integrate. */

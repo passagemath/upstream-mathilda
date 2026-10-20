@@ -2017,6 +2017,15 @@ correct-by-construction (`Simplify[D[I,p] - (lambda I + M)] === 0` plus the exac
 base) — there is **no** numeric crosscheck. Assumptions (`a > 0`, …) are honoured
 and used to clean the closed forms.
 
+**Base points and probes.** A base point `p₀ ∈ {0, 1, −1}` is tried only when it
+lies in the closure of the parameter's assumed range: `I(p) = I(p₀) + ∫I'` holds
+only on a segment where the integral converges, so a base outside the domain is
+unsound as well as costly (under `x > 0`, `Exp[−x t]/t²` on `{1, ∞}` at
+`x = −1` is exponentially divergent). The whole stage is an internal probe region:
+the `Integrate::idiv` from a speculative inner integral is neither printed nor
+seen by `Check[]`. Its re-entry depth is restored when a `TimeConstrained`
+timeout unwinds out of it.
+
 Two stages solve that ODE. **Stage A (`lambda = 0`, pure quadrature)**: when the
 inner integral `J` closes to an x-free form, `I = Integral J dp + const`. **Stage
 B (`lambda != 0`, integrating factor)**: when `J` does *not* close but equals
@@ -2450,6 +2459,15 @@ interval** (the real branch can kink there) is accepted only when a numeric
 rather than risking a wrong value. As a final net, a real-looking integrand
 whose folded value has a **provably-nonzero imaginary part** is treated as a
 branch-crossing artifact (`Integrate::idiv`), never returned as a complex number.
+
+**Never-vanishing denominator factors.** The pole scan solves each factor of
+`Denominator[Together[f]]` separately and skips `E^u` factors, which never
+vanish. `Together[E^-t/t^2]` has the denominator `t^2 E^t`, which `Solve` cannot
+treat as one unit, so before this the pole set was undecidable and every improper
+`e^{−t}/tⁿ` integral declined: `Integrate[Exp[−t]/t^2, {t,1,∞}]` →
+`1/E + ExpIntegralEi[−1]`, and `Integrate[Exp[−x t]/t^2, {t,1,∞}, Assumptions ->
+x>0]` → `E^−x + x ExpIntegralEi[−x]` (`= E^−x − x Gamma[0,x]` for `x > 0`) in
+0.1 s. The latter used to run for more than a minute in DiffUnderInt.
 
 **Examples**:
 ```mathematica

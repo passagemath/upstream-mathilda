@@ -21,6 +21,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -225,6 +226,50 @@ static void test_stress_numeric(void) {
     num_match("1/(3 + 2 Sin[x])", "0", "2 Pi");
 }
 
+
+/* Evaluate `input`, assert its printed form is `expected` AND that no message
+ * fired while it ran -- the direct guard against an internal probe's
+ * diagnostic reaching an enclosing Check[] (which would then return its
+ * failure branch for a successful computation). */
+static void check_quiet(const char* input, const char* expected) {
+    unsigned long fired0 = mth_msg_fired_count();
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0)
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n", input, expected, s);
+    ASSERT_STR_EQ(s, expected);
+    if (mth_msg_fired_count() != fired0)
+        fprintf(stderr, "FAIL: %s fired a message\n", input);
+    ASSERT(mth_msg_fired_count() == fired0);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* -------------------------------------------------------------------------
+ * A never-vanishing factor in the denominator.  Together[E^-t/t^2] has the
+ * denominator t^2 E^t; Solve cannot treat it as a unit, so the pole set went
+ * undecidable and every improper e^{-t}/t^n integral declined -- and with a
+ * parameter the cascade fell through to DiffUnderInt, which ground for a
+ * minute probing bases outside the assumed domain (x = -1 under x > 0).
+ * References (the reference system): 1/E + ExpIntegralEi[-1];
+ * E^-x - x Gamma[0, x] (= E^-x + x ExpIntegralEi[-x] for x > 0).
+ * ---------------------------------------------------------------------- */
+static void test_nl_exponential_denominator(void) {
+    check_quiet("Integrate[Exp[-t]/t^2, {t, 1, Infinity}]", "1/E + ExpIntegralEi[-1]");
+    check_quiet("Integrate[Exp[-x t]/t^2, {t, 1, Infinity}, Assumptions -> x > 0]",
+                "E^(-x) + x ExpIntegralEi[-x]");
+    /* Equal to the reference form numerically, to 30 digits. */
+    check_quiet("Abs[N[(E^(-x) + x ExpIntegralEi[-x]) - (E^-x - x Gamma[0, x]) /. x -> 7/3, 30]] < 10^-28",
+                "True");
+    /* DiffUnderInt pinned: declines, silently and quickly (no idiv from its
+     * probes, no base outside x > 0). */
+    check_quiet("Integrate`DiffUnderInt[Exp[-x t]/t^2, {t, 1, Infinity}, Assumptions -> x > 0]",
+                "Integrate`DiffUnderInt[E^(-t x)/t^2, {t, 1, Infinity}, Assumptions -> x > 0]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -240,6 +285,7 @@ int main(void) {
     TEST(test_unevaluated);
     TEST(test_stress_numeric);
 
+    TEST(test_nl_exponential_denominator);
     printf("All Integrate NewtonLeibniz tests passed!\n");
     return 0;
 }

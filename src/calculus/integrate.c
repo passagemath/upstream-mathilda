@@ -29,6 +29,7 @@
 
 #include "integrate.h"
 #include "mtime.h"   /* mth_mono_seconds */
+#include "core.h"    /* tc_register_unwind_counter */
 #include "integrate_interp.h"
 #include "integrate_unknown.h"
 #include "integrate_derivdivides.h"
@@ -2126,12 +2127,73 @@ static void intg_nonelem_pending_clear(void) {
     free(g_integrate_nonelem_pending_x); g_integrate_nonelem_pending_x = NULL;
 }
 
+/* Nesting depth of the DEFINITE driver (integrate_definite_scoped).  A definite
+ * integral first tries an indefinite antiderivative (Newton-Leibniz), and that
+ * probe runs a complete top-level indefinite cascade (depth 0 -> 1 -> 0).  If
+ * the probe proves the integrand non-elementary, the cascade's exit would flush
+ * Integrate::nonelem -- even though a later DEFINITE stage (differentiation
+ * under the integral sign, Mellin, contour residues, ...) may still answer, as
+ * Integrate[Log[1 + a^2 x^2]/(1 + x^2), {x, 0, Infinity}, Assumptions -> a > 0]
+ * = Pi Log[1 + a] does.  That spurious message is not cosmetic: it marks the
+ * evaluation as failed, so Check[] returns its failure branch for a call that
+ * succeeded.  While this is > 0 the indefinite exit therefore HANDS its held
+ * message up to the definite-level payload below instead of printing it; the
+ * outermost definite frame prints it only if the whole definite call declined. */
+static int   g_integrate_definite_depth = 0;
+static char* g_integrate_definite_pending_f = NULL;
+static char* g_integrate_definite_pending_x = NULL;
+
+static void intg_definite_pending_clear(void) {
+    free(g_integrate_definite_pending_f); g_integrate_definite_pending_f = NULL;
+    free(g_integrate_definite_pending_x); g_integrate_definite_pending_x = NULL;
+}
+
+/* Adopt (fs, xs) as the definite-level held message, keeping the FIRST one a
+ * definite call produced (the same once-per-call contract as the cascade's
+ * de-dup flag).  Takes ownership of both strings. */
+static void intg_definite_pending_adopt(char* fs, char* xs) {
+    if (g_integrate_definite_pending_f || !fs || !xs) { free(fs); free(xs); return; }
+    g_integrate_definite_pending_f = fs;
+    g_integrate_definite_pending_x = xs;
+}
+
 static void intg_nonelem_pending_flush(void) {
+    if (g_integrate_definite_depth > 0) {
+        /* Inside a definite integral: defer to its outermost frame. */
+        intg_definite_pending_adopt(g_integrate_nonelem_pending_f,
+                                    g_integrate_nonelem_pending_x);
+        g_integrate_nonelem_pending_f = NULL;
+        g_integrate_nonelem_pending_x = NULL;
+        return;
+    }
     if (g_integrate_nonelem_pending_f && g_integrate_nonelem_pending_x)
         mth_message("Integrate", "nonelem",
                     "The integrand %s has no antiderivative elementary in %s.",
                     g_integrate_nonelem_pending_f, g_integrate_nonelem_pending_x);
     intg_nonelem_pending_clear();
+}
+
+static Expr* integrate_definite(Expr* res);
+
+/* integrate_definite, bracketed by the definite-level nonelem deferral (see
+ * g_integrate_definite_depth).  Only the outermost definite frame decides: a
+ * nested definite sub-integral's decline is not the user's answer. */
+static Expr* integrate_definite_scoped(Expr* res) {
+    if (g_integrate_definite_depth == 0)
+        intg_definite_pending_clear();   /* drop anything a longjmp stranded */
+    g_integrate_definite_depth++;
+    Expr* r = integrate_definite(res);
+    g_integrate_definite_depth--;
+    if (g_integrate_definite_depth == 0) {
+        char* fs = g_integrate_definite_pending_f;
+        char* xs = g_integrate_definite_pending_x;
+        if (!r && fs && xs)
+            mth_message("Integrate", "nonelem",
+                        "The integrand %s has no antiderivative elementary in %s.",
+                        fs, xs);
+        intg_definite_pending_clear();
+    }
+    return r;
 }
 
 /* Emit the user-facing "no elementary antiderivative" diagnostic for the
@@ -2145,9 +2207,10 @@ static void intg_nonelem_pending_flush(void) {
  * Gating mirrors the historical RischTranscendental site: silent for internal
  * recursion (depth > 1, where naming a gensym variable would be meaningless),
  * silent under speculative integration (g_integrate_quiet, e.g. the Kovacic
- * solver / DSolve), and at most once per top-level cascade (depth == 1).  A raw
- * fprintf to stderr, deliberately NOT routed through the Quiet[]/Check[] message
- * subsystem -- matching RischTranscendental's long-standing behaviour. */
+ * solver / DSolve), and at most once per top-level cascade (depth == 1).  Inside
+ * a definite integral the decision is deferred to its outermost frame (see
+ * g_integrate_definite_depth).  Routed through the mth_message funnel, so Quiet[]
+ * silences it and Check[] catches it. */
 void integrate_announce_nonelementary(Expr* f, Expr* x) {
     if (g_integrate_depth > 1) return;    /* internal recursion: stay silent   */
     if (g_integrate_quiet != 0) return;   /* speculative / DSolve suppression   */
@@ -2164,7 +2227,9 @@ void integrate_announce_nonelementary(Expr* f, Expr* x) {
         return;
     }
     /* depth 0 -- the direct qualified-symbol surface, one method, no cascade to
-     * change its mind: say it now. */
+     * change its mind: say it now -- unless a definite integral is probing it,
+     * in which case its outermost frame decides (see g_integrate_definite_depth). */
+    if (g_integrate_definite_depth > 0) { intg_definite_pending_adopt(fs, xs); return; }
     mth_message("Integrate", "nonelem", "The integrand %s has no antiderivative elementary in %s.", fs ? fs : "?", xs ? xs : "?");
     free(fs); free(xs);
 }
@@ -2251,7 +2316,7 @@ Expr* builtin_integrate(Expr* res) {
      * `{x, z0, ..., zn}` complex line/contour spec.  Handles the iterated
      * multi-spec form too. */
     if (integrate_line_is_contour_spec(res->data.function.args[1]))
-        return integrate_definite(res);
+        return integrate_definite_scoped(res);
 
     /* Trailing options are parsed as a loop below, so more than one is allowed
      * (`Integrate[f, x, Method -> "...", TimeConstraint -> 3]`).  The loop
@@ -2631,6 +2696,10 @@ Expr* builtin_integrate(Expr* res) {
 
 void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
+    /* A TimeConstrained timeout that siglongjmps out of a definite integral
+     * must not leave the definite depth raised, or every later Integrate::nonelem
+     * would be deferred forever. */
+    tc_register_unwind_counter(&g_integrate_definite_depth);
 
     /* The ParallelMixedTower method symbol (lazy-loads src/internal/mixed/
      * ParallelMixed.m on first use).  Registered here so the qualified-symbol

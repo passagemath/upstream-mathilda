@@ -18,9 +18,45 @@
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
+#include "print.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+/* Evaluate `input`, hard-assert its printed form equals `expected`
+ * (ASSERT_STR_EQ exits on mismatch, so this holds under -DNDEBUG too). */
+static void assert_eval_hard(const char* input, const char* expected) {
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+    char* str = expr_to_string(evaluated);
+    ASSERT_STR_EQ(str, expected);
+    free(str);
+    expr_free(evaluated);
+}
+
+/* v0.481: a definite integral that SUCCEEDS must not emit Integrate::nonelem.
+ * The Newton-Leibniz probe's indefinite cascade proves Log[1 + a^2 x^2]/(1 + x^2)
+ * non-elementary and used to flush the message on its own exit, before the
+ * definite cascade answered Pi Log[1 + a] -- so Check[] took its failure branch
+ * for a call that succeeded.  The message is now held until the outermost
+ * definite call is done and printed only if it declined. */
+static void test_no_spurious_nonelem(void) {
+    assert_eval_hard(
+        "Check[Integrate[Log[1 + a^2 x^2]/(1 + x^2), {x, 0, Infinity}, "
+        "Assumptions -> a > 0], failed] === Pi Log[1 + a]", "True");
+    assert_eval_hard(
+        "Check[Integrate[x^3/(E^x - 1), {x, 0, Infinity}], failed] === Pi^4/15",
+        "True");
+    /* A definite integral that genuinely declines still reports nonelem
+     * (Check catches it), and Quiet still silences the print. */
+    assert_eval_hard("Check[Integrate[x^x, {x, 1, 2}], failed]", "failed");
+    assert_eval_hard("Quiet[Check[Integrate[x^x, {x, 1, 2}], failed]]", "failed");
+    /* The indefinite surface is unchanged: a proved decline still speaks. */
+    assert_eval_hard("Check[Integrate[Exp[x^2] Sin[x], x], failed]", "failed");
+}
 
 /* Assert Simplify[<expr> - <expected>, <assum>] === 0. */
 static void assert_closes(const char* integral, const char* expected,
@@ -351,6 +387,7 @@ void test_integrate_diffunderint(void) {
     TEST(test_reverse_feynman);
     TEST(test_repeated_quadrature);
     TEST(test_finalize_quality);
+    TEST(test_no_spurious_nonelem);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }

@@ -1879,7 +1879,12 @@ Out[3]= 2.32018 - 3.45139*I
   - |z| > 1 with integer `n ≥ 1` and a positive integer `p`: the quadrature,
     split at t = 1/z for a real z > 1 (the reference's side of the cut).
   A non-integer `n` or `p` off the unit disk, and `p ≤ 0`, stay unevaluated, as
-  in the reference. Over a grid of 637 machine calls the evaluated set is the
+  in the reference. A real value comes back Real: integer powers of the complex
+  logarithm in the `n ≤ 0` closed form are taken by binary powering, not `cpow`
+  (`PolyLog[0, 2, 2.] = -4.9348`, = −π²/2, was `-4.9348 - 6.0e-16 I`), on the
+  scalar, packed, `NDArray` and `Compile[]` surfaces alike.
+  `D[PolyLog[n, p, z], z] = PolyLog[n - 1, p, z]/z`; the `n`- and
+  `p`-derivatives are the inert `Derivative[1, 0, 0]` / `Derivative[0, 1, 0]`. Over a grid of 637 machine calls the evaluated set is the
   reference's exactly, and all 479 values are within 6e-15 of 30-digit
   quadrature; the reference's own machine values are off by up to 2e-6 there
   (`PolyLog[3, 0.5, -1.]`). Deliberate difference: `PolyLog[1, 2, 1.]` is

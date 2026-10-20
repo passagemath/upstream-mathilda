@@ -1187,7 +1187,8 @@ void info_init(void) {
         "for PolyLog[2, 1/2] and PolyLog[3, 1/2]. Inexact real or complex arguments\n"
         "evaluate numerically at machine or arbitrary (MPFR) precision via a power\n"
         "series or the Jonquiere/zeta expansion. There is a branch cut from 1 to\n"
-        "Infinity. Listable.");
+        "Infinity. D[PolyLog[n, z], z] = PolyLog[n-1, z]/z and\n"
+        "D[PolyLog[n, p, z], z] = PolyLog[n-1, p, z]/z. Listable.");
     symtab_set_docstring("LerchPhi",
         "LerchPhi[z, s, a]\n"
         "\tThe Lerch transcendent Phi(z, s, a) = Sum_{k>=0} z^k ((k + a)^2)^(-s/2), continued analytically;\n"

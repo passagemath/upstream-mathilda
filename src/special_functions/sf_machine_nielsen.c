@@ -90,6 +90,21 @@ static cplx nl_pow(cplx b, cplx e) {
     }
     if (cimag(b) == 0.0 && creal(b) > 0.0 && cimag(e) == 0.0)
         return pow(creal(b), creal(e));
+    /* A complex base with a small integer exponent: binary powering. cpow goes
+     * through exp(e Log b), which leaves rounding dust in a part that is zero --
+     * (-I Pi)^2 came back as -Pi^2 - 6e-16 I, so the real PolyLog[0, 2, 2.] =
+     * Log(-1)^2 / 2 = -Pi^2/2 printed as a complex number. */
+    if (cimag(e) == 0.0 && creal(e) == floor(creal(e)) && fabs(creal(e)) <= 64.0) {
+        int k = (int)creal(e);
+        unsigned m = (unsigned)(k < 0 ? -k : k);
+        cplx r = 1.0, sq = b;
+        while (m) {
+            if (m & 1u) r *= sq;
+            m >>= 1;
+            if (m) sq *= sq;
+        }
+        return k < 0 ? 1.0 / r : r;
+    }
     return cpow(b, e);
 }
 

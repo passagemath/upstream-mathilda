@@ -181,6 +181,25 @@ void test_polylog_derivative() {
     assert_eval_eq("D[PolyLog[3, x^2], x]", "(2 PolyLog[2, x^2])/x", 0);
     /* Order derivative has no elementary form. */
     assert_eval_eq("D[PolyLog[s, z], s]", "Derivative[1, 0][PolyLog][s, z]", 0);
+    /* Nielsen: d/dz S_{n,p}(z) = S_{n-1,p}(z)/z; the orders stay inert. */
+    assert_eval_eq("D[PolyLog[n, p, z], z]", "PolyLog[-1 + n, p, z]/z", 0);
+    assert_eval_eq("D[PolyLog[n, p, z], n]", "Derivative[1, 0, 0][PolyLog][n, p, z]", 0);
+    assert_eval_eq("D[PolyLog[n, p, z], p]", "Derivative[0, 1, 0][PolyLog][n, p, z]", 0);
+    assert_eval_eq("D[PolyLog[n, p, y], z]", "0", 0);
+}
+
+/* ---- Nielsen machine values: a real value carries no imaginary dust --- */
+
+void test_polylog_nielsen_real_value() {
+    /* PolyLog[0, 2, 2.] = Log(-1)^2/2 = -Pi^2/2, exactly real: an integer
+     * power of the complex logarithm used to go through cpow and leave
+     * -6e-16 I behind. The value must be a Real, on every surface. */
+    assert_eval_eq("Head[PolyLog[0, 2, 2.]]", "Real", 0);
+    assert_eval_eq("Abs[PolyLog[0, 2, 2.] + Pi^2/2] < 10^-15", "True", 0);
+    assert_eval_eq("With[{v = {2., 3., 0.5, -1.5}}, "
+                   "(PolyLog[0, 2, #] & /@ v) === PolyLog[0, 2, v] === "
+                   "Normal[PolyLog[0, 2, NDArray[v]]] === "
+                   "Compile[{{x, _Real, 1}}, PolyLog[0, 2, x]][v]]", "True", 0);
 }
 
 /* ---- diagnostics & attributes --------------------------------------- */
@@ -218,6 +237,7 @@ int main() {
     TEST(test_polylog_arbitrary_precision);
     TEST(test_polylog_symbolic);
     TEST(test_polylog_derivative);
+    TEST(test_polylog_nielsen_real_value);
     TEST(test_polylog_argcount);
     TEST(test_polylog_attributes);
 

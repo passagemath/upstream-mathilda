@@ -1417,6 +1417,47 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- PolyLog[N, P, Z] (Nielsen generalized polylogarithm): chain rule.
+         *   d/dZ S_{N,P}(Z) = S_{N-1,P}(Z)/Z  (from the integral representation;
+         *               the recurrence that defines S_{N,P} in N)
+         *   d/dN, d/dP = Derivative[1,0,0] / Derivative[0,1,0][PolyLog][N,P,Z]. */
+        if (h == SYM_PolyLog && n == 3) {
+            Expr* N = args[0];
+            Expr* P = args[1];
+            Expr* Z = args[2];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dP = deriv_of(P, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                Expr* pl = expr_new_function(mk_sym("PolyLog"), (Expr*[]){
+                    mk_fn2("Plus", mk_int(-1), expr_copy(N)), expr_copy(P),
+                    expr_copy(Z) }, 3);
+                Expr* dPdZ = mk_fn2("Times", pl,
+                                    mk_fn2("Power", expr_copy(Z), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dPdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            Expr* dvs[2] = { dN, dP };
+            for (int k = 0; k < 2; k++) {
+                if (is_lit_zero(dvs[k])) { expr_free(dvs[k]); continue; }
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(k == 0), mk_int(k == 1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("PolyLog"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(P), expr_copy(Z) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dvs[k]);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
         /* --- LerchPhi[Z, S, A] (Lerch transcendent): chain rule on all three args.
          *   d/dZ Phi = (LerchPhi[Z,-1+S,A] - A LerchPhi[Z,S,A]) / Z   (elementary)
          *   d/dA Phi = -S LerchPhi[Z,1+S,A]                           (elementary)

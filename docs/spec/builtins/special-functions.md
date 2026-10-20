@@ -1772,8 +1772,9 @@ Out[2]= 1/4 - 3/2 z^2 + z^3
 
 - `PolyLog[n, z]` — the polylogarithm Liₙ(z) = Σ_{k≥1} zᵏ/kⁿ (|z| < 1; analytic
   continuation elsewhere, with a branch cut from 1 to ∞).
-- `PolyLog[n, p, z]` — the Nielsen generalized polylogarithm S_{n,p}(z). Accepted
-  for surface compatibility but left unevaluated (no closed-form engine).
+- `PolyLog[n, p, z]` — the Nielsen generalized polylogarithm S_{n,p}(z):
+  evaluated numerically where the reference evaluates it (see the Nielsen
+  bullet below); exact calls stay symbolic.
 
 Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
 

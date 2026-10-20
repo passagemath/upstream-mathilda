@@ -8,6 +8,8 @@
  * (mirroring Hypergeometric1F1 / WhittakerM):
  *
  *   U(0, b, z) = 1,  U(a, a+1, z) = z^(-a)   -> exact (symbolic or numeric).
+ *   U(-m, b, z), m a positive integer        -> the expanded polynomial
+ *                                             (hu_terminating, DLMF 13.2.7).
  *   machine-precision call (a, b exact or  -> the shared double helpers
  *   machine real; z machine real/complex)     sf_machine_hyperu (real z > 0) /
  *                                             sf_machine_hyperu_c (complex z, or
@@ -153,6 +155,39 @@ static bool hu_b_is_a_plus_1(const Expr* a_e, const Expr* b_e) {
     return zero;
 }
 
+/* U(-m, b, z) for a non-negative integer m terminates (DLMF 13.2.7):
+ *
+ *   U(-m, b, z) = (-1)^m Sum_{s=0}^m Binomial(m, s) (b + s)_(m - s) (-z)^s,
+ *
+ * a polynomial of degree m in z (and in b), returned expanded. The rising
+ * factorial is spelled out as a product so the expansion is polynomial for a
+ * symbolic b. */
+static Expr* hu_terminating(int64_t m, const Expr* b_e, const Expr* z_e) {
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)(m + 1));
+    if (!terms) return NULL;
+    for (int64_t s = 0; s <= m; s++) {
+        size_t nf = (size_t)(m - s) + 2;
+        Expr** f = malloc(sizeof(Expr*) * nf);
+        if (!f) {
+            for (int64_t t = 0; t < s; t++) expr_free(terms[t]);
+            free(terms);
+            return NULL;
+        }
+        f[0] = mk_fn2("Binomial", expr_new_integer(m), expr_new_integer(s));
+        f[1] = mk_fn2("Power", mk_fn2("Times", expr_new_integer(-1), expr_copy((Expr*)z_e)),
+                      expr_new_integer(s));
+        for (int64_t j = s; j < m; j++)               /* (b + s)_(m - s) */
+            f[2 + (j - s)] = mk_fn2("Plus", expr_copy((Expr*)b_e), expr_new_integer(j));
+        terms[s] = expr_new_function(expr_new_symbol("Times"), f, nf);
+        free(f);
+    }
+    Expr* sum = expr_new_function(expr_new_symbol("Plus"), terms, (size_t)(m + 1));
+    free(terms);
+    Expr* signed_sum = mk_fn2("Times", expr_new_integer((m & 1) ? -1 : 1), sum);
+    return eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                                           (Expr*[]){ signed_sum }, 1));
+}
+
 /* ------------------------------------------------------------------ */
 /* FLINT numeric path                                                  */
 /* ------------------------------------------------------------------ */
@@ -174,6 +209,9 @@ static Expr* hypergeometricu_eval(Expr* a_e, Expr* b_e, Expr* z_e) {
     /* Exact reductions (symbolic or numeric). */
     if (a_e->type == EXPR_INTEGER && a_e->data.integer == 0)      /* U(0,b,z) = 1 */
         return expr_new_integer(1);
+    if (a_e->type == EXPR_INTEGER && a_e->data.integer < 0 &&
+        a_e->data.integer > INT64_MIN)                            /* terminating */
+        return hu_terminating(-a_e->data.integer, b_e, z_e);
     if (hu_b_is_a_plus_1(a_e, b_e))                               /* U(a,a+1,z) = z^(-a) */
         return eval_and_free(mk_fn2("Power", expr_copy(z_e),
                                     mk_fn2("Times", expr_new_integer(-1),

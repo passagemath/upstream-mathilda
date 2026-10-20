@@ -55,6 +55,14 @@ void test_hyperu_exact() {
     /* All-symbolic / all-exact stays symbolic. */
     assert_eval_eq("HypergeometricU[3, 1, z]", "HypergeometricU[3, 1, z]", 0);
     assert_eval_eq("HypergeometricU[2, 5, 3]", "HypergeometricU[2, 5, 3]", 0);
+    /* A non-positive integer a terminates (DLMF 13.2.7): an expanded
+     * polynomial in b and z, as the reference system gives it. */
+    assert_eval_eq("HypergeometricU[-1, b, z]", "-b + z", 0);
+    assert_eval_eq("HypergeometricU[-2, b, z]", "b + b^2 - 2 z - 2 b z + z^2", 0);
+    assert_eval_eq("HypergeometricU[-3, b, z]",
+        "-2 b - 3 b^2 - b^3 + 6 z + 9 b z + 3 b^2 z - 6 z^2 - 3 b z^2 + z^3", 0);
+    assert_eval_eq("HypergeometricU[-2, 1, 3]", "-1", 0);  /* 1 + 1 - 6 - 6 + 9 */
+    assert_eval_eq("HypergeometricU[-2, -1, z]", "z^2", 0); /* = U(a, a+1, z) */
 }
 
 /* ---- machine real numerics (all three regimes) ---------------------- */

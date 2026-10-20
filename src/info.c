@@ -1293,7 +1293,8 @@ void info_init(void) {
         "machine or arbitrary (MPFR) precision, real or complex: a real machine\n"
         "argument uses a shared double kernel (also driving the NDArray/packed fast\n"
         "path and Compile[]); MPFR/complex/z<=0 use FLINT's rigorous acb_hypgeom_u.\n"
-        "Exact reductions U(0,b,z) = 1 and U(a,a+1,z) = z^(-a).\n"
+        "Exact reductions U(0,b,z) = 1 and U(a,a+1,z) = z^(-a); a non-positive\n"
+        "integer a gives the expanded polynomial (e.g. U(-1,b,z) = z - b).\n"
         "D[HypergeometricU[a,b,z],z] = -a HypergeometricU[a+1,b+1,z]. Listable.");
     symtab_set_docstring("WhittakerM",
         "WhittakerM[k, m, z]\n"

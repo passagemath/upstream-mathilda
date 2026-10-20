@@ -1430,7 +1430,12 @@ Out[4]= 24.8565393133858972090022500136712230259988212774851
 
 - **Exact reductions.** `HypergeometricU[0, b, z] = 1` and
   `HypergeometricU[a, a+1, z] = z^(-a)` (so `HypergeometricU[1, 2, z] = 1/z`,
-  `HypergeometricU[2, 3, 4] = 1/16`).
+  `HypergeometricU[2, 3, 4] = 1/16`). A non-positive integer `a = -m`
+  terminates (DLMF 13.2.7) and returns the expanded polynomial
+  `(-1)^m Σ_{s=0}^m Binomial[m, s] (b+s)_(m-s) (-z)^s` for any `b`, `z`:
+  `HypergeometricU[-2, b, z] = b + b^2 - 2 z - 2 b z + z^2`,
+  `HypergeometricU[-2, b, 2.5] = 1.25 - 4.0 b + b^2`. (An all-machine call
+  still takes the double kernel first.)
 - **Numerics.** With at least one inexact argument the value is computed at
   machine or arbitrary (MPFR) precision, real or complex:
   `HypergeometricU[1.5, 7, 4.5] = 0.554931`,

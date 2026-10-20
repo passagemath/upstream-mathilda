@@ -31,7 +31,7 @@ static void test_cancellation(void) {
 static void test_termination(void) {
     /* Upper non-positive integer -> finite polynomial (symbolic z). */
     assert_eval_eq("HypergeometricPFQ[{-3,a},{b,c},x]",
-        "1 - 3 (a x)/(b c) + 3 (a (1 + a) x^2)/(b (1 + b) c (1 + c)) - "
+        "1 - (3 a x)/(b c) + (3 a (1 + a) x^2)/(b (1 + b) c (1 + c)) - "
         "(a (1 + a) (2 + a) x^3)/(b (1 + b) (2 + b) c (1 + c) (2 + c))", 0);
     /* Degree-0 termination. */
     assert_eval_eq("HypergeometricPFQ[{0},{b},x]", "1", 0);
@@ -64,6 +64,78 @@ static void test_reductions(void) {
     /* A nearby but non-matching 4F3 must NOT reduce. */
     assert_eval_eq("HypergeometricPFQ[{1/2,1/2,1/2,7/4},{3/4,1,1},-1]",
                    "HypergeometricPFQ[{1/2, 1/2, 1/2, 7/4}, {3/4, 1, 1}, -1]", 0);
+}
+
+/* ---- named closed forms: error function, incomplete gamma, inverse trig,
+ * Gauss. Each identity is checked to 30 digits against the direct series
+ * (MPFR parameters keep the exact-parameter rewrite from firing, so the
+ * reference side really is the series). ------------------------------- */
+
+static void check30(const char* closed, const char* series) {
+    char buf[2048];
+    snprintf(buf, sizeof buf, "Abs[N[(%s) - (%s), 40]] < 10^-30 Max[1, Abs[N[%s, 40]]]",
+             closed, series, closed);
+    assert_eval_eq(buf, "True", 0);
+}
+
+static void test_named_closed_forms(void) {
+    assert_eval_eq("HypergeometricPFQ[{1/2},{3/2},-z]", "(Sqrt[Pi] Erf[Sqrt[z]])/(2 Sqrt[z])", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/2},{3/2},z]", "(Sqrt[Pi] Erfi[Sqrt[z]])/(2 Sqrt[z])", 0);
+    assert_eval_eq("HypergeometricPFQ[{-1/2},{1/2},z]", "E^z - Sqrt[Pi] Sqrt[z] Erfi[Sqrt[z]]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1},{3/2},-z]",
+                   "(Sqrt[Pi] Erfi[Sqrt[z]] E^(-z))/(2 Sqrt[z])", 0);
+    assert_eval_eq("HypergeometricPFQ[{2},{3},z]", "(2 (E^z - (-1 + E^z)/z))/z", 0);
+    /* a neither half-integer nor a positive integer: declined (the incomplete
+     * gamma form has no numerics on its cut, the series does) */
+    assert_eval_eq("HypergeometricPFQ[{1/3},{4/3},z]", "HypergeometricPFQ[{1/3}, {4/3}, z]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1},{4/3},z]", "HypergeometricPFQ[{1}, {4/3}, z]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/2,1},{3/2},z]", "ArcTanh[Sqrt[z]]/Sqrt[z]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/2,1},{3/2},-z]", "ArcTan[Sqrt[z]]/Sqrt[z]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/2,1/2},{3/2},z]", "ArcSin[Sqrt[z]]/Sqrt[z]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/2,1/2},{3/2},-z]", "ArcSinh[Sqrt[z]]/Sqrt[z]", 0);
+    /* symbolic Gauss parameters stay, as in the reference system */
+    assert_eval_eq("HypergeometricPFQ[{a,b},{c},1]", "HypergeometricPFQ[{a, b}, {c}, 1]", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/3,1/2},{2},1]", "(2 Gamma[7/6])/(Gamma[5/3] Sqrt[Pi])", 0);
+
+    const char* pts[] = { "7/3", "-7/3", "3/10", "-3/10", "2/5 + 3/4 I" };
+    for (size_t k = 0; k < sizeof pts / sizeof pts[0]; k++) {
+        char c[512], s[512];
+        const char* z = pts[k];
+        const char* fam[][2] = {
+            { "HypergeometricPFQ[{1/2},{3/2},%s]",   "HypergeometricPFQ[{N[1/2,50]},{N[3/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{-1/2},{1/2},%s]",  "HypergeometricPFQ[{N[-1/2,50]},{N[1/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{-5/2},{-3/2},%s]", "HypergeometricPFQ[{N[-5/2,50]},{N[-3/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{5/2},{7/2},%s]",   "HypergeometricPFQ[{N[5/2,50]},{N[7/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{3},{4},%s]",       "HypergeometricPFQ[{N[3,50]},{N[4,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{1},{3/2},%s]",     "HypergeometricPFQ[{N[1,50]},{N[3/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{1},{7/2},%s]",     "HypergeometricPFQ[{N[1,50]},{N[7/2,50]},N[%s,50]]" },
+            { "HypergeometricPFQ[{1},{4},%s]",       "HypergeometricPFQ[{N[1,50]},{N[4,50]},N[%s,50]]" },
+        };
+        for (size_t f = 0; f < sizeof fam / sizeof fam[0]; f++) {
+            snprintf(c, sizeof c, fam[f][0], z);
+            snprintf(s, sizeof s, fam[f][1], z);
+            check30(c, s);
+        }
+        /* the 2F1 forms inside the unit disc (the series' own domain) */
+        if (k >= 2) {
+            snprintf(c, sizeof c, "HypergeometricPFQ[{1/2,1},{3/2},%s]", z);
+            snprintf(s, sizeof s, "HypergeometricPFQ[{N[1/2,50],N[1,50]},{N[3/2,50]},N[%s,50]]", z);
+            check30(c, s);
+            snprintf(c, sizeof c, "HypergeometricPFQ[{1/2,1/2},{3/2},%s]", z);
+            snprintf(s, sizeof s, "HypergeometricPFQ[{N[1/2,50],N[1/2,50]},{N[3/2,50]},N[%s,50]]", z);
+            check30(c, s);
+        }
+    }
+    /* Gauss at z = 1, against reference-system values (35 digits) */
+    check30("HypergeometricPFQ[{1/3,1/2},{2},1]", "1.1595952669639283657699920515700208819`40");
+    check30("HypergeometricPFQ[{1/4,2/3},{3/2},1]", "1.3241485971871386627937369335599509558`40");
+    check30("HypergeometricPFQ[{-1/2},{1/2},7/3]", "-2.9326738896023747980081444006243659817`40");
+}
+
+/* 2F1 at arbitrary precision outside the unit disc (off the cut). */
+static void test_2f1_mpfr_continuation(void) {
+    assert_eval_startswith("N[HypergeometricPFQ[{2/3,11/12},{5/3},-1],20]", "0.76419793513910566523");
+    assert_eval_startswith("N[HypergeometricPFQ[{2/3,11/12},{5/3},-2],20]", "0.64424468650536985018");
 }
 
 /* ---- convenience heads ---------------------------------------------- */
@@ -129,6 +201,8 @@ int main(void) {
     TEST(test_termination);
     TEST(test_threading);
     TEST(test_reductions);
+    TEST(test_named_closed_forms);
+    TEST(test_2f1_mpfr_continuation);
     TEST(test_convenience_heads);
     TEST(test_numeric_machine);
     TEST(test_numeric_complex);

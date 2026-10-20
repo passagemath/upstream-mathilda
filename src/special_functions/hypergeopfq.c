@@ -40,6 +40,7 @@
 #include "arithmetic.h"   /* is_rational, is_complex, make_complex */
 #include "numeric.h"      /* numeric_combined_bits, get_approx_mpfr, ... */
 #include "flint_num_bridge.h" /* flint_num_hyp2f1: the arbitrary-precision 2F1 */
+#include "parse.h"        /* parse_expression: closed-form templates */
 #ifdef USE_MPFR
 #include "numeric_complex.h"
 #include <mpfr.h>
@@ -237,6 +238,97 @@ static bool hg_is_rat(Expr* e, int64_t num, int64_t den) {
     return ok;
 }
 
+/* `fn` -- the source of a pure function of one argument, e.g.
+ * "ArcTan[Sqrt[#]]/Sqrt[#] &" -- applied to a copy of z, UNevaluated (the
+ * caller of try_reduce evaluates its result). Templates keep the closed forms
+ * below readable; they are parsed only when a shape has already matched. */
+static Expr* hg_apply_tmpl(const char* fn, const Expr* z) {
+    Expr* f = parse_expression(fn);
+    if (!f) return NULL;
+    return expr_new_function(f, (Expr*[]){ expr_copy((Expr*)z) }, 1);
+}
+
+/* Is z syntactically a negated quantity (a negative real number, or a
+ * product with a negative numeric coefficient)? Picks between the two
+ * equally valid spellings of an even-in-Sqrt[z] closed form -- Erf[Sqrt[-z]]
+ * versus Erfi[Sqrt[z]], ArcTan versus ArcTanh -- so the printed form is the
+ * real-looking one: 1F1(1/2;3/2;-x) -> Erf[Sqrt[x]], not Erfi[Sqrt[-x]]. */
+static bool hg_negated(const Expr* z) {
+    if (z->type == EXPR_INTEGER) return z->data.integer < 0;
+    if (z->type == EXPR_REAL) return z->data.real < 0;
+    int64_t n, d;
+    if (is_rational((Expr*)z, &n, &d)) return n < 0;
+    if (z->type == EXPR_FUNCTION && z->data.function.head->type == EXPR_SYMBOL &&
+        z->data.function.head->data.symbol.name == SYM_Times &&
+        z->data.function.arg_count >= 1)
+        return hg_negated(z->data.function.args[0]);
+    return false;
+}
+
+/* l - u evaluated equals the integer `v` exactly. */
+static bool hg_diff_is(const Expr* l, const Expr* u, int64_t v) {
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)u) }, 2);
+    Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy((Expr*)l), neg }, 2));
+    bool ok = is_int_val(d, v);
+    expr_free(d);
+    return ok;
+}
+
+/* 1F1(a; a+1; z) for a half-integer or a positive integer, a = n/d.
+ *
+ * F_a(z) = 1F1(a; a+1; z) = a z^-a Int_0^z t^(a-1) e^t dt, and integrating
+ * by parts gives the two-term recurrence
+ *     F_(a+1) = (a+1) (E^z - F_a) / z,      F_(a-1) = E^z - z F_a / a,
+ * so every half-integer a reaches F_(1/2) = Sqrt[Pi] Erfi[Sqrt[z]]/(2 Sqrt[z])
+ * (written Erf[Sqrt[-z]] when z is a negated quantity) and every positive
+ * integer reaches F_1 = (E^z - 1)/z. These match the reference system's
+ * forms (1F1(-1/2;1/2;z) = E^z - Sqrt[Pi] Sqrt[z] Erfi[Sqrt[z]]).
+ *
+ * Other a are declined: the general closed form a (-z)^-a Gamma[a, 0, -z]
+ * is correct but Gamma[a, w] has no numerics on its cut w < 0, so it would
+ * turn a summable series at real z > 0 into an expression N cannot evaluate.
+ * Evaluated and owned, or NULL. */
+#define HG_1F1_MAX_STEPS 24
+static Expr* hg_1f1_a_ap1(const Expr* a, const Expr* z) {
+    int64_t n, d;
+    if (!is_rational((Expr*)a, &n, &d)) return NULL;
+    Expr* F;
+    Expr* cur;                      /* the parameter F currently belongs to */
+    int64_t steps;
+    if (d == 2) {
+        F = hg_negated(z)
+            ? hg_apply_tmpl("(Sqrt[Pi] Erf[Sqrt[-#]]/(2 Sqrt[-#]))&", z)
+            : hg_apply_tmpl("(Sqrt[Pi] Erfi[Sqrt[#]]/(2 Sqrt[#]))&", z);
+        cur = make_rational(1, 2);
+        steps = (n - 1) / 2;        /* n odd: a = 1/2 + steps */
+    } else if (d == 1 && n >= 1) {
+        F = hg_apply_tmpl("((E^# - 1)/#)&", z);
+        cur = expr_new_integer(1);
+        steps = n - 1;
+    } else {
+        return NULL;
+    }
+    if (!F || steps > HG_1F1_MAX_STEPS || steps < -HG_1F1_MAX_STEPS) {
+        expr_free(F); expr_free(cur);
+        return NULL;
+    }
+    F = eval_and_free(F);
+    for (int64_t k = 0; k != steps; k += (steps > 0 ? 1 : -1)) {
+        const char* rec = steps > 0 ? "((#1 + 1) (E^#3 - #2)/#3)&"      /* up   */
+                                    : "(E^#3 - #3 #2/#1)&";              /* down */
+        Expr* f = parse_expression(rec);
+        Expr* call = expr_new_function(f, (Expr*[]){ expr_copy(cur), F, expr_copy((Expr*)z) }, 3);
+        F = eval_and_free(call);
+        Expr* nc = expr_new_function(expr_new_symbol(SYM_Plus),
+                       (Expr*[]){ cur, expr_new_integer(steps > 0 ? 1 : -1) }, 2);
+        cur = eval_and_free(nc);
+    }
+    expr_free(cur);
+    return F;
+}
+
 static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
     size_t p = a->data.function.arg_count;
     size_t q = b->data.function.arg_count;
@@ -282,13 +374,55 @@ static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
                              (Expr*[]){ expr_copy(z), expr_new_integer(-1) }, 2);
             out = expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ em1, invz }, 2);
+        } else if (hg_diff_is(bl[0], au[0], 1) && !is_nonpos_int(au[0], NULL)) {
+            /* 1F1(a; a+1; z): incomplete gamma / error function. */
+            out = hg_1f1_a_ap1(au[0], z);
+        } else if (is_int_val(au[0], 1) && !is_nonpos_int(bl[0], NULL)) {
+            /* Kummer: 1F1(1; c; z) = E^z 1F1(c-1; c; -z), the family above
+             * with a = c - 1 (c = 2 was handled first; c - 1 a non-positive
+             * integer would be a terminating series on the right but not on
+             * the left, and is excluded with c itself). */
+            Expr* cm1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_copy(bl[0]), expr_new_integer(-1) }, 2));
+            Expr* mz = expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer(-1), expr_copy(z) }, 2);
+            Expr* mze = eval_and_free(mz);
+            if (!is_nonpos_int(cm1, NULL)) {
+                Expr* inner = hg_1f1_a_ap1(cm1, mze);
+                if (inner)
+                    out = expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Exp),
+                                             (Expr*[]){ expr_copy(z) }, 1), inner }, 2);
+            }
+            expr_free(cm1); expr_free(mze);
         }
     } else if (p == 2 && q == 1) {
         int64_t tw;
         bool u11 = is_int_val(au[0], 1) && is_int_val(au[1], 1);
         bool u12 = (is_int_val(au[0], 1) && is_int_val(au[1], 2)) ||
                    (is_int_val(au[0], 2) && is_int_val(au[1], 1));
-        if (u11 && is_int_val(bl[0], 2)) {
+        int64_t gn, gd;
+        bool rat3 = is_int_val(z, 1) && is_rational(au[0], &gn, &gd) &&
+                    is_rational(au[1], &gn, &gd) && is_rational(bl[0], &gn, &gd) &&
+                    !is_nonpos_int(bl[0], NULL);
+        Expr* excess = NULL;
+        if (rat3) {
+            /* Gauss: 2F1(a,b;c;1) = G(c) G(c-a-b) / (G(c-a) G(c-b)) for
+             * c - a - b > 0 (rational parameters, as the reference system
+             * sums it; symbolic ones stay). */
+            Expr* t = parse_expression("(#3 - #1 - #2)&");
+            excess = eval_and_free(expr_new_function(t,
+                         (Expr*[]){ expr_copy(au[0]), expr_copy(au[1]), expr_copy(bl[0]) }, 3));
+            int64_t en, ed;
+            if (!(is_rational(excess, &en, &ed) && en > 0)) rat3 = false;
+            expr_free(excess);
+        }
+        if (rat3) {
+            Expr* f = parse_expression(
+                "(Gamma[#3] Gamma[#3 - #1 - #2] / (Gamma[#3 - #1] Gamma[#3 - #2]))&");
+            out = expr_new_function(f, (Expr*[]){ expr_copy(au[0]), expr_copy(au[1]),
+                                                  expr_copy(bl[0]) }, 3);
+        } else if (u11 && is_int_val(bl[0], 2)) {
             /* 2F1(1,1;2;z) = -Log[1 - z] / z */
             Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
                            (Expr*[]){ one_minus(z) }, 1);
@@ -334,6 +468,19 @@ static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
             Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ make_rational(1, 2), asin, invsq, omz32 }, 4);
             out = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ t1, t2 }, 2);
+        } else if (is_half_int(bl[0], &tw) && tw == 3 &&
+                   ((hg_is_rat(au[0], 1, 2) && is_int_val(au[1], 1)) ||
+                    (is_int_val(au[0], 1) && hg_is_rat(au[1], 1, 2)))) {
+            /* 2F1(1/2, 1; 3/2; z) = ArcTanh[Sqrt[z]]/Sqrt[z]
+             *                     = ArcTan[Sqrt[-z]]/Sqrt[-z]  (even in Sqrt). */
+            out = hg_negated(z) ? hg_apply_tmpl("(ArcTan[Sqrt[-#]]/Sqrt[-#])&", z)
+                                : hg_apply_tmpl("(ArcTanh[Sqrt[#]]/Sqrt[#])&", z);
+        } else if (is_half_int(bl[0], &tw) && tw == 3 &&
+                   hg_is_rat(au[0], 1, 2) && hg_is_rat(au[1], 1, 2)) {
+            /* 2F1(1/2, 1/2; 3/2; z) = ArcSin[Sqrt[z]]/Sqrt[z]
+             *                       = ArcSinh[Sqrt[-z]]/Sqrt[-z]. */
+            out = hg_negated(z) ? hg_apply_tmpl("(ArcSinh[Sqrt[-#]]/Sqrt[-#])&", z)
+                                : hg_apply_tmpl("(ArcSin[Sqrt[#]]/Sqrt[#])&", z);
         }
     } else if (p == 4 && q == 3) {
         /* Very-well-poised Ramanujan 1/Pi series (table-backed; general 1/Pi
@@ -639,6 +786,30 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
         if (ok && near_nonpos_int(bc[j])) ok = false;   /* lower-parameter pole */
     }
     if (!ok || !inexact) { free(ac); free(bc); return NULL; }
+
+#ifdef USE_MPFR
+    /* 2F1 at arbitrary precision OUTSIDE the unit disc: arb's kernel is the
+     * principal-branch analytic continuation, so it is the value wherever that
+     * is single-valued -- everywhere but the cut [1, Infinity), where the side
+     * is a convention left to the caller. The machine twin already covers
+     * |z| >= 1 (hg_machine_pfq); without this, N[2F1(...; -1), 20] stayed
+     * unevaluated where the machine N gave a number. */
+    if (p == 2 && q == 1 && cabs(zc) >= 1.0 - 1e-12 &&
+        !(cimag(zc) == 0.0 && creal(zc) >= 1.0 - 1e-12)) {
+        long gov = numeric_min_inexact_bits(z);
+        for (size_t i = 0; i < p; i++) {
+            long bi = numeric_min_inexact_bits(a->data.function.args[i]);
+            if (bi > 0 && (gov == 0 || bi < gov)) gov = bi;
+        }
+        long bj = numeric_min_inexact_bits(b->data.function.args[0]);
+        if (bj > 0 && (gov == 0 || bj < gov)) gov = bj;
+        if (gov > 53) {
+            free(ac); free(bc);
+            return flint_num_hyp2f1(a->data.function.args[0], a->data.function.args[1],
+                                    b->data.function.args[0], z);
+        }
+    }
+#endif
 
     /* Convergence gate (radius of convergence by p vs q). */
     double az = cabs(zc);

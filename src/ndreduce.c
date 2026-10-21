@@ -437,6 +437,9 @@ static double nd_median_of(const void* buf, NDType dt, size_t base,
 Expr* ndred_median(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
+    /* No elements, no median -- and nd_median_of would read past an empty
+     * buffer. The List path leaves Median[{}] unevaluated. */
+    if (ndarray_size(a) == 0) return ndarray_delist_and_reeval(res);
     int rank = a->data.ndarray.rank;
     NDType dt = a->data.ndarray.dtype;
     if (ndt_is_complex(dt) || rank > 2) return ndarray_delist_and_reeval(res);
@@ -557,6 +560,9 @@ Expr* ndred_quartiles(Expr* res) {
         return ndarray_delist_and_reeval(res);
 
     size_t n = (size_t)a->data.ndarray.dims[0];
+    /* The quartile formula reads s[0] and s[n - 1]: an empty array has
+     * neither, so the List path answers (Quartiles[{}] stays unevaluated). */
+    if (n == 0) return ndarray_delist_and_reeval(res);
     NDType dt = a->data.ndarray.dtype;
     double* s = malloc(sizeof(double) * n);
     nd_gather_real(a->data.ndarray.data, dt, 0, 1, n, s);
@@ -1707,10 +1713,13 @@ static Expr* nd_extreme(Expr* res, bool want_max) {
     NDType dt = a->data.ndarray.dtype;
     if (ndt_is_complex(dt)) return ndarray_delist_and_reeval(res);
     size_t sz = ndarray_size(a);
+    /* An empty array has no extreme: the List path answers -Infinity /
+     * Infinity. The reduction below would hand back its +-INFINITY seed as a
+     * machine Real, which is Overflow[]. */
+    if (sz == 0) return ndarray_delist_and_reeval(res);
 
     if (dt == NDT_INT64) {
         /* Exact, and the head matters: Max[Range[300]] is the Integer 300. */
-        if (sz == 0) return ndarray_delist_and_reeval(res);
         return expr_new_integer(
             nd_extreme_i64((const int64_t*)a->data.ndarray.data, sz, want_max));
     }

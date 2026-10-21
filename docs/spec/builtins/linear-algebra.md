@@ -19,6 +19,17 @@ modelled on numpy's `ndarray`.
   explicit option). `Options[NDArray]` is `{DataType -> "float64"}`; `DataType[a]` gives an
   array's dtype as a string. dtype is part of an array's identity, so
   `NDArray[{1,2},DataType->"float32"]` is not `SameQ` to the `"float64"` one.
+- A rectangular list with a zero-length axis builds an **empty array** of that
+  shape: `NDArray[{}]` has `Dimensions` `{0}` and `Length` `0`;
+  `NDArray[{{}, {}}]` has `Dimensions` `{2, 0}`. With no elements to infer from,
+  the dtype is the requested one (`"float64"` by default). Elementwise
+  operations keep it empty, and reductions answer as on the empty List:
+  - `Total[NDArray[{}]]` is `0.`;
+  - `Max` and `Min` are `-Infinity` and `Infinity`;
+  - `Median[NDArray[{}]]` stays unevaluated, as `Median[{}]` does.
+
+  Only this constructor builds one: automatic packing never packs an empty
+  List, so `Range[0]` and an empty `Select` result stay ordinary Lists.
 - `NDArray[...]` is always exactly what it says: `Head[NDArray[{{1, 2}, {3,
   4}}]]` is `NDArray`, never `List`; `MatrixQ`, `VectorQ` and `ListQ` all report
   `False` for it; and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`,

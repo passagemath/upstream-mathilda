@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "rescale.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "ndarray.h"   /* is_ndarray, ndarray_delist_and_reeval */
 
 /* ====================================================================
  * Rescale[x, {min, max}]          -> (x - min)/(max - min)
@@ -43,6 +44,11 @@ Expr* builtin_rescale(Expr* res) {
     if (argc < 1 || argc > 3) return rescale_emit_argb(argc);
 
     Expr* x = res->data.function.args[0];
+
+    /* An empty array has no data range: the List path answers ({} rescales
+     * to {}). The one-argument form below would otherwise build the range
+     * {Infinity, -Infinity} and do symbolic arithmetic against the buffer. */
+    if (is_ndarray(x) && ndarray_size(x) == 0) return ndarray_delist_and_reeval(res);
 
     /* One-argument form: reduce to the two-argument form with the data
      * range {Min[x], Max[x]} and re-evaluate.  For a List this threads;

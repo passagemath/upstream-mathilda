@@ -2426,6 +2426,9 @@ static Expr* builtin_listinterpolation(Expr* res) {
     Expr* array = res->data.function.args[0];
     bool arr_is_nd = is_ndarray(array);
     if (!arr_is_nd && !interp_is_list(array)) return NULL;
+    /* An empty array has no points to interpolate; answer exactly as the
+     * empty List does rather than build a function over the domain {1, 0}. */
+    if (arr_is_nd && ndarray_size(array) == 0) return ndarray_delist_and_reeval(res);
 
     /* Split the trailing arguments: every Rule/RuleDelayed is an option passed
      * through to Interpolation verbatim; at most one non-rule positional is the

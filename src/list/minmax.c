@@ -79,6 +79,39 @@ Expr* builtin_minmax(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_List), items, 2);
 }
 
+/* Min / Max over several arguments, some of them arrays (packed or visible).
+ * The heads flatten Lists, so Max[{a, b}, c] is Max[Max[{a, b}], c]: reduce
+ * each array argument through its own buffer path (ndred_max / ndred_min,
+ * which also answers -Infinity / Infinity for an empty array), then evaluate
+ * the head over the reduced values and the other arguments. Without this a
+ * visible NDArray stayed an atom and the call was left unevaluated, and a
+ * packed one was materialised element by element (Max[v, 2] over 10^6
+ * elements took ~200 ms). NULL when no argument is an array. */
+static Expr* minmax_reduce_array_args(Expr* res, const char* head) {
+    size_t n = res->data.function.arg_count;
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++) any = is_ndarray(res->data.function.args[i]);
+    if (!any) return NULL;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = res->data.function.args[i];
+        if (is_ndarray(a)) {
+            Expr* one[1] = { expr_copy(a) };
+            Expr* call = expr_new_function(expr_new_symbol(head), one, 1);
+            args[i] = evaluate(call);
+            expr_free(call);
+        } else {
+            args[i] = expr_copy(a);
+        }
+    }
+    Expr* call = expr_new_function(expr_new_symbol(head), args, n);
+    free(args);
+    Expr* out = evaluate(call);
+    expr_free(call);
+    return out;
+}
+
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -91,6 +124,8 @@ Expr* builtin_min(Expr* res) {
 
     /* Min[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_min(res);
+    /* Min[nd, x, ...]: see minmax_reduce_array_args. */
+    if (n > 1) { Expr* r = minmax_reduce_array_args(res, SYM_Min); if (r) return r; }
 
     /* Min[Interval[{a,b}, ...]] is the lowest lower endpoint (the first pair's
      * lower endpoint after canonical sorting). */
@@ -226,6 +261,8 @@ Expr* builtin_max(Expr* res) {
 
     /* Max[ndarray] scans the flat buffer (see ndreduce.c). */
     if (n == 1 && is_ndarray(res->data.function.args[0])) return ndred_max(res);
+    /* Max[nd, x, ...]: see minmax_reduce_array_args. */
+    if (n > 1) { Expr* r = minmax_reduce_array_args(res, SYM_Max); if (r) return r; }
 
     /* Max[Interval[..., {a,b}]] is the highest upper endpoint (the last pair's
      * upper endpoint after canonical sorting). */

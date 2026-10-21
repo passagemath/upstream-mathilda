@@ -674,6 +674,12 @@ Returns the numerically smallest or largest elements.
 - Real numeric quantities order with the numbers and keep their exact form
   (v0.477): `Max[1, Pi] = Pi`, `Max[1., Pi] = Pi`, `Min[1/2, Sqrt[2]] = 1/2`,
   `Max[1., Pi, x] = Max[Pi, x]`. A complex quantity has no order and stays.
+- Packed arrays and `NDArray`s flatten like Lists, also among other
+  arguments: `Max[NDArray[{1., 5.}], 2]` is `5.`, `Max[Range[10], {20}]` is
+  `20`. Each array is reduced over its buffer first, so `Max[v, 2]` over 10^6
+  elements costs one buffer scan (~0.4 ms), not one Expr per element. An empty
+  array contributes nothing: `Max[NDArray[{}]]` is `-Infinity`, as `Max[{}]`
+  is.
 
 ```mathematica
 In[1]:= Min[9, 2]

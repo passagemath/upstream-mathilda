@@ -2383,6 +2383,26 @@ Expr* builtin_ndarray(Expr* res) {
     if (!explicit_dt && nested_list_has_complex(arg)) dtype = NDT_COMPLEX64;
     Expr* packed = ndarray_from_nested_list(arg, dtype);
     if (packed) return packed;
+    /* A rectangular list with a zero-length axis -- {}, {{}, {}} -- is an
+     * empty array of that shape: NDArray[{}] has Dimensions {0}. Only this
+     * explicit constructor builds one. ndarray_from_nested_list (and so every
+     * automatic pack and repack) still declines an empty list on purpose: an
+     * empty buffer buys nothing there, so an empty result stays an ordinary
+     * List. With no elements there are no leaves to check, so the dtype is the
+     * requested one (float64 by default). */
+    {
+        int64_t dims[NDARRAY_MAX_RANK];
+        int rank = shape_probe(arg, dims, NDARRAY_MAX_RANK);
+        bool empty = false;
+        for (int i = 0; i < rank; i++) empty = empty || dims[i] == 0;
+        if (rank >= 1 && rank < NDARRAY_MAX_RANK && empty) {
+            void* data = malloc(1);   /* never read; a live pointer for free() */
+            if (!data) return NULL;
+            Expr* e = expr_new_ndarray_raw(rank, dims, data, dtype);
+            if (!e) free(data);
+            return e;
+        }
+    }
     /* A ragged (non-rectangular) list can never form an array, so reject it
      * with a warning rather than leaving a valid-looking NDArray[...] around.
      * A non-ragged but non-machine-precision list (e.g. a symbolic entry)

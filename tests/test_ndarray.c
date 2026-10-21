@@ -454,6 +454,67 @@ void test_ndarray_part_slices_match_list_path() {
                    "{True, True, True, True, True}", 0);
 }
 
+/* ---- Empty arrays ------------------------------------------------------
+ * NDArray[{}] used to stay the symbolic NDArray[List[]] (Length 1). A
+ * rectangular list with a zero-length axis now builds an empty array of that
+ * shape, and the heads that reduce a buffer answer as on the empty List
+ * instead of reading past it (Median crashed) or returning their seed
+ * (Max gave Overflow[]). */
+static void test_ndarray_empty_construct(void) {
+    assert_eval_eq("NDArray[{}]", "NDArray[{}]", 0);
+    assert_eval_eq("NDArrayQ[NDArray[{}]]", "True", 0);
+    assert_eval_eq("Dimensions[NDArray[{}]]", "{0}", 0);
+    assert_eval_eq("Length[NDArray[{}]]", "0", 0);
+    assert_eval_eq("Normal[NDArray[{}]]", "{}", 0);
+    assert_eval_eq("DataType[NDArray[{}]]", "\"float64\"", 0);
+    assert_eval_eq("DataType[NDArray[{}, DataType -> \"int64\"]]", "\"int64\"", 0);
+    assert_eval_eq("Dimensions[NDArray[{{}, {}}]]", "{2, 0}", 0);
+    assert_eval_eq("Normal[NDArray[{{}, {}}]]", "{{}, {}}", 0);
+    assert_eval_eq("Dimensions[NDArray[{{{}}}]]", "{1, 1, 0}", 0);
+    assert_eval_eq("NDArray[NDArray[{}]]", "NDArray[{}]", 0);
+    /* Ragged or symbolic shapes still do not form an array. */
+    assert_eval_eq("NDArrayQ[NDArray[{{}, {1}}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[NDArray[{{}, x}]]", "False", 0);
+    /* Automatic packing is unchanged: an empty result stays an ordinary List. */
+    assert_eval_eq("PackedArrayQ[Range[0]]", "False", 0);
+    assert_eval_eq("NDArrayQ[Select[NDArray[{1., 2.}], # > 5 &]]", "False", 0);
+}
+
+static void test_ndarray_empty_operations(void) {
+    assert_eval_eq("e = NDArray[{}]; {e + 1, 2 e, Sin[e], Sort[e], Reverse[e]}",
+                   "{NDArray[{}], NDArray[{}], NDArray[{}], NDArray[{}], NDArray[{}]}", 0);
+    assert_eval_eq("e = NDArray[{}]; {Total[e], Map[f, e], Apply[f, e], Count[e, _]}",
+                   "{0.0, {}, f[], 0}", 0);
+    assert_eval_eq("e = NDArray[{}]; Join[e, NDArray[{1., 2.}]]", "NDArray[{1.0, 2.0}]", 0);
+    assert_eval_eq("Dimensions[Transpose[NDArray[{{}, {}}]]]", "{0, 2}", 0);
+    assert_eval_eq("e = NDArray[{}]; {Max[e], Min[e], MinMax[e]}",
+                   "{-Infinity, Infinity, {Infinity, -Infinity}}", 0);
+    assert_eval_eq("e = NDArray[{}, DataType -> \"int64\"]; {Max[e], Min[e]}",
+                   "{-Infinity, Infinity}", 0);
+    assert_eval_eq("{Max[NDArray[{{}, {}}]], MinMax[NDArray[{{}, {}}]]}",
+                   "{-Infinity, {Infinity, -Infinity}}", 0);
+    assert_eval_eq("e = NDArray[{}]; {Max[e, 3], Min[e, 3], Max[e, e]}", "{3, 3, -Infinity}", 0);
+    assert_eval_eq("Median[NDArray[{}]]", "Median[{}]", 0);
+    assert_eval_eq("Quiet[Quartiles[NDArray[{}]]]", "Quartiles[{}]", 0);
+    assert_eval_eq("Rescale[NDArray[{}]]", "{}", 0);
+    assert_eval_eq("Quiet[ListInterpolation[NDArray[{}]]]", "ListInterpolation[{}]", 0);
+}
+
+/* Max / Min over several arguments, one of them an array: each array is
+ * reduced through its buffer path and joins the other arguments. A visible
+ * NDArray used to leave the call unevaluated, and a packed one was
+ * materialised element by element. */
+static void test_ndarray_minmax_multi_arg(void) {
+    assert_eval_eq("Max[NDArray[{1., 5.}], 2]", "5.0", 0);
+    assert_eval_eq("Min[NDArray[{1., 5.}], 2]", "1.0", 0);
+    assert_eval_eq("Max[NDArray[{1., 5.}], NDArray[{7., 0.}]]", "7.0", 0);
+    assert_eval_eq("Max[Range[10], {20}]", "20", 0);
+    assert_eval_eq("Max[Range[10], 3, {4, 50}]", "50", 0);
+    assert_eval_eq("Min[Range[10], -3]", "-3", 0);
+    assert_eval_eq("Max[Range[1., 1000.], x]", "Max[1000.0, x]", 0);
+    assert_eval_eq("Max[NDArray[{3, 9}, DataType -> \"int64\"], 4]", "9", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -522,6 +583,9 @@ int main() {
     TEST(test_ndarray_part_matches_list_path);
     TEST(test_ndarray_part_slices_stay_packed);
     TEST(test_ndarray_part_slices_match_list_path);
+    TEST(test_ndarray_empty_construct);
+    TEST(test_ndarray_empty_operations);
+    TEST(test_ndarray_minmax_multi_arg);
 
     printf("All NDArray tests passed.\n");
     return 0;

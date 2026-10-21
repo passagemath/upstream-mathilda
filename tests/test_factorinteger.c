@@ -394,6 +394,116 @@ static int rbd_run(mpz_t g, uint64_t* k, int64_t* j, const char* N, unsigned lon
 
 #define RBD_FAIL(...) do { printf("FAIL: rbd: " __VA_ARGS__); printf("\n"); failures++; } while (0)
 
+/* The Montgomery window accumulator (fi_rbd_modacc.c): folding factors
+ * leaves acc = prod * R^(-e) mod N, a unit multiple of the product, so
+ * gcd(acc, N) must equal gcd(prod, N) exactly — for every N width, every
+ * factor width (including factors wider than N, which are shrunk first),
+ * and with planted divisors.  Then the batched descent must report exactly
+ * the hits of the unbatched one, which is its contract. */
+static void test_rbd_modacc(void) {
+    gmp_randstate_t rs;
+    gmp_randinit_default(rs);
+    gmp_randseed_ui(rs, 20261022);
+    mpz_t d, e, N, x, prod, g1, g2, A;
+    mpz_inits(d, e, N, x, prod, g1, g2, A, NULL);
+    int bad = 0;
+    for (int trial = 0; trial < 400 && !bad; trial++) {
+        unsigned long dbits = 8 + gmp_urandomm_ui(rs, 900), ebits = 8 + gmp_urandomm_ui(rs, 900);
+        mpz_urandomb(d, rs, dbits); mpz_setbit(d, 0); mpz_setbit(d, dbits);
+        mpz_urandomb(e, rs, ebits); mpz_setbit(e, 0); mpz_setbit(e, ebits);
+        mpz_mul(N, d, e);
+        fi_rbd_modctx_t c;
+        if (!fi_rbd_modctx_init(&c, N)) { bad = 1; break; }
+        size_t n = (size_t)c.n, maxs = 2 * n + 3;
+        mp_limb_t* acc = malloc(n * sizeof(mp_limb_t));
+        mp_limb_t* work = malloc(fi_rbd_modacc_work(&c, maxs) * sizeof(mp_limb_t));
+        fi_rbd_modacc_one(&c, acc);
+        mpz_set_ui(prod, 1);
+        int nf = 1 + (int)gmp_urandomm_ui(rs, 12);
+        for (int f = 0; f < nf; f++) {
+            unsigned long xb = 1 + gmp_urandomm_ui(rs, (unsigned long)(maxs * GMP_NUMB_BITS));
+            mpz_urandomb(x, rs, xb);
+            if (mpz_sgn(x) == 0) mpz_set_ui(x, 1);
+            unsigned long pick = gmp_urandomm_ui(rs, 8);
+            if (pick == 0) mpz_mul(x, x, d);           /* planted divisors */
+            else if (pick == 1) mpz_mul(x, x, e);
+            if (mpz_size(x) > maxs) mpz_tdiv_r_2exp(x, x, (mp_bitcnt_t)(maxs * GMP_NUMB_BITS));
+            if (mpz_sgn(x) == 0) mpz_set_ui(x, 3);
+            fi_rbd_modacc_fold(&c, acc, mpz_limbs_read(x), (mp_size_t)mpz_size(x), work);
+            mpz_mul(prod, prod, x);
+            mpz_mod(prod, prod, N);
+        }
+        mpz_t ar;
+        mpz_roinit_n(ar, acc, (mp_size_t)n);
+        if (mpz_cmp(ar, N) >= 0) bad = 2;
+        mpz_gcd(g1, ar, N);
+        mpz_gcd(g2, prod, N);
+        if (mpz_cmp(g1, g2) != 0) bad = 3;
+        free(acc);
+        free(work);
+        fi_rbd_modctx_clear(&c);
+    }
+    if (bad) RBD_FAIL("modacc fold disagrees with the mpz product (code %d)", bad);
+
+    /* Batched == unbatched hit records on planted structured semiprimes,
+     * for the exact and the iterated descent. */
+    static const unsigned long BASES[][2] = { {22, 7}, {3, 2}, {355, 113}, {7, 5}, {13, 4} };
+    mpz_t P, M, a, b, t;
+    mpz_inits(P, M, a, b, t, NULL);
+    for (size_t bi = 0; bi < sizeof BASES / sizeof BASES[0] && !bad; bi++) {
+        for (int rep = 0; rep < 6 && !bad; rep++) {
+            mpz_set_ui(a, BASES[bi][0]);
+            mpz_set_ui(b, BASES[bi][1]);
+            /* P of 300..600 bits, so the setup stays cheap. */
+            double lr0 = log2((double)BASES[bi][0] / (double)BASES[bi][1]);
+            unsigned long nexp = (unsigned long)((300 + gmp_urandomm_ui(rs, 300)) / lr0);
+            mpz_pow_ui(P, a, nexp);
+            mpz_pow_ui(t, b, nexp);
+            mpz_mul_ui(P, P, 1 + gmp_urandomm_ui(rs, 5));
+            mpz_fdiv_q(P, P, t);
+            mpz_add_ui(P, P, gmp_urandomm_ui(rs, 1000));
+            mpz_nextprime(P, P);
+            /* The hit needs delta M (b/a)^n < 1 for P's offset delta < 2^12:
+             * keep M below (a/b)^n / 2^16. */
+            double lr = log2((double)BASES[bi][0] / (double)BASES[bi][1]);
+            long mb = (long)(nexp * lr) - 16;
+            if (mb > 260) mb = 260;
+            if (mb < 24) mb = 24;
+            mpz_urandomb(M, rs, (mp_bitcnt_t)mb);
+            mpz_setbit(M, (mp_bitcnt_t)(mb - 1));
+            mpz_nextprime(M, M);
+            mpz_mul(N, P, M);
+            for (int exact = 0; exact < 2 && !bad; exact++) {
+                fi_rbd_hits_t h0, h1;
+                fi_rbd_hits_init(&h0);
+                fi_rbd_hits_init(&h1);
+                fi_rbd_scratch_t s;
+                fi_rbd_scratch_init(&s);
+                fi_rbd_opts_t o;
+                memset(&o, 0, sizeof o);
+                o.exact = exact;
+                o.record_all = 1;
+                int r0 = fi_rbd_descend(g1, NULL, NULL, N, a, b, &o, &h0, &s);
+                o.batch = 1;
+                int r1 = fi_rbd_descend(g2, NULL, NULL, N, a, b, &o, &h1, &s);
+                if (r0 != r1 || h0.n != h1.n) bad = 4;
+                for (size_t i = 0; i < h0.n && !bad; i++)
+                    if (mpz_cmp(h0.v[i].g, h1.v[i].g) != 0 || h0.v[i].k != h1.v[i].k || h0.v[i].j != h1.v[i].j)
+                        bad = 5;
+                if (!bad && h0.n == 0) bad = 6;          /* the planted M must be hit */
+                fi_rbd_scratch_clear(&s);
+                fi_rbd_hits_clear(&h0);
+                fi_rbd_hits_clear(&h1);
+                if (bad) RBD_FAIL("batched/unbatched records differ: base %lu/%lu exact=%d code %d",
+                                  BASES[bi][0], BASES[bi][1], exact, bad);
+            }
+        }
+    }
+    mpz_clears(P, M, a, b, t, NULL);
+    mpz_clears(d, e, N, x, prod, g1, g2, A, NULL);
+    gmp_randclear(rs);
+}
+
 static void test_rbd_core(void) {
     mpz_t g;
     mpz_init(g);
@@ -634,6 +744,7 @@ int main(void) {
     test_gf2(300);      /* dense */
     test_gf2(5000);     /* block Lanczos */
     test_rbd_core();
+    test_rbd_modacc();
     test_rbd_language();
     if (failures) {
         printf("%d FactorInteger test(s) FAILED\n", failures);

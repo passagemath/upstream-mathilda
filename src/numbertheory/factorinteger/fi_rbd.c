@@ -110,6 +110,8 @@ typedef struct {
     mpz_t      X;           /* lattice tolerance */
     int        t, d;
     int        lattice_ok;
+    fi_rbd_modctx_t mc;     /* batched-gcd modulus, shared by all workers */
+    int        have_mc;
 } Setup;
 
 static void setup_init(Setup* S, const mpz_t n, const FiRbdOpts* o, int variant) {
@@ -117,6 +119,7 @@ static void setup_init(Setup* S, const mpz_t n, const FiRbdOpts* o, int variant)
     S->n = n;
     S->variant = variant;
     mpz_inits(S->T, S->X, NULL);
+    S->have_mc = fi_rbd_modctx_init(&S->mc, n);
     mpz_srcptr mult = o->mult_set ? o->mult : NULL;
     S->have_T = !(o->cmax_set && o->cmax_inf);
     if (S->have_T) {
@@ -166,7 +169,10 @@ static void setup_init(Setup* S, const mpz_t n, const FiRbdOpts* o, int variant)
     }
 }
 
-static void setup_clear(Setup* S) { mpz_clears(S->T, S->X, NULL); }
+static void setup_clear(Setup* S) {
+    mpz_clears(S->T, S->X, NULL);
+    if (S->have_mc) fi_rbd_modctx_clear(&S->mc);
+}
 
 /* ------------------------------------------------------------------ */
 /* One base                                                            */
@@ -196,6 +202,7 @@ static int try_base(mpz_t g, const Setup* S, const mpz_t a, const mpz_t b, Work*
     fi_rbd_opts_t o;
     memset(&o, 0, sizeof o);
     o.mult = S->o->mult_set ? S->o->mult : NULL;
+    o.mod = S->have_mc ? &S->mc : NULL;
     switch (S->variant) {
     case FI_RBD_EXACT:
         o.exact = 1;
@@ -313,11 +320,14 @@ static size_t search_run(Search* sh, size_t count, mpz_t g, fi_rbd_hits_t* hits_
 /* ------------------------------------------------------------------ */
 
 typedef struct {
-    int           kind;     /* 0 explicit list, 1 Stern-Brocot, 2 sum, 3 grid */
+    int           kind;     /* 0 explicit list, 1 Stern-Brocot BFS, 2 sum, 3 grid,
+                             * 4 height doubling, 5 weighted */
     size_t        next;     /* explicit / grid: next index */
     size_t        emitted, budget;
     fi_rbd_sb_t   sb;
     fi_rbd_sum_t  sum;
+    fi_rbd_hd_t   hd;
+    fi_rbd_wt_t   wt;
     fi_rbd_base_t* wb;      /* word scratch */
     /* Grid: ascending fixed-point positions r = R / 2^prec. */
     mpz_t         R, Rhi, step_num;
@@ -358,16 +368,20 @@ static void source_init(Source* src, const Setup* S, int grid) {
         mpz_fdiv_q(src->Rhi, src->Rhi, mpq_denref(o->hi));
         return;
     }
-    /* The lattice pass of TwoPass defaults to a much lower height: a
+    /* The lattice pass of TwoPass defaults to a much lower height (a
      * lattice band costs one LLL reduction per depth, and a base near 1 has
-     * O(a log N) depths. */
+     * O(a log N) depths) and keeps the breadth-first order. */
     uint64_t H = o->height ? o->height : grid ? RBD_P2_HEIGHT : RBD_DEFAULT_HEIGHT;
-    if (o->order == 1) { src->kind = 2; fi_rbd_sum_init(&src->sum, o->height); }
-    else               { src->kind = 1; fi_rbd_sb_init(&src->sb, H); }
+    if (grid || o->order == FI_RBD_ORDER_SB) { src->kind = 1; fi_rbd_sb_init(&src->sb, H); }
+    else if (o->order == FI_RBD_ORDER_SUM)   { src->kind = 2; fi_rbd_sum_init(&src->sum, o->height); }
+    else if (o->order == FI_RBD_ORDER_HD)    { src->kind = 4; fi_rbd_hd_init(&src->hd, H); }
+    else                                     { src->kind = 5; fi_rbd_wt_init(&src->wt, H); }
 }
 
 static void source_clear(Source* src) {
     if (src->kind == 1) fi_rbd_sb_clear(&src->sb);
+    if (src->kind == 4) fi_rbd_hd_clear(&src->hd);
+    if (src->kind == 5) fi_rbd_wt_clear(&src->wt);
     free(src->wb);
     mpz_clears(src->R, src->Rhi, src->step_num, src->pa, src->pb, src->last_a, src->last_b, NULL);
     mpq_clears(src->qlo, src->qhi, NULL);
@@ -398,9 +412,13 @@ static size_t source_next(Source* src, const Setup* S, mpz_t* a, mpz_t* b, size_
         }
         break;
     case 1:
-    case 2: {
+    case 2:
+    case 4:
+    case 5: {
         size_t got = src->kind == 1 ? fi_rbd_sb_next(&src->sb, src->wb, max)
-                                    : fi_rbd_sum_next(&src->sum, src->wb, max);
+                   : src->kind == 2 ? fi_rbd_sum_next(&src->sum, src->wb, max)
+                   : src->kind == 4 ? fi_rbd_hd_next(&src->hd, src->wb, max)
+                                    : fi_rbd_wt_next(&src->wt, src->wb, max);
         for (size_t i = 0; i < got; i++) {
             set_u64(a[i], src->wb[i].a);
             set_u64(b[i], src->wb[i].b);

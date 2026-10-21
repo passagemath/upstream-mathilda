@@ -460,6 +460,7 @@ set(COMMON_SRC
     ../src/numbertheory/factorinteger/fi_lanczos.c
     ../src/numbertheory/factorinteger/fi_rbd.c
     ../src/numbertheory/factorinteger/fi_rbd_descent.c
+    ../src/numbertheory/factorinteger/fi_rbd_modacc.c
     ../src/numbertheory/factorinteger/fi_rbd_bases.c
     ../src/numbertheory/factorinteger/fi_rbd_lattice.c
     ../src/numbertheory/factorinteger/fi_rbd_lll.c

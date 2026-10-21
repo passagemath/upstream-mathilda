@@ -91,9 +91,11 @@ static const char RBD_DOC[] =
     "Suboptions:\n"
     "\t\"Base\" -> a/b or {a1/b1, ...}: the bases to use.  A base is reduced, and\n"
     "\t\tinverted if below 1.  Default: enumerate.\n"
-    "\t\"Order\" -> \"SternBrocot\" (default: breadth-first over the Stern-Brocot\n"
-    "\t\ttree, every rational once, coarse to fine) or \"Sum\" (a + b ascending).\n"
-    "\t\tBoth skip perfect-power bases (x/y)^m, which are redundant with x/y.\n"
+    "\t\"Order\" -> \"Weighted\" (default: ascending a / log2(a/b), height times\n"
+    "\t\tdescent length, so cheap simple bases go first), \"HeightDoubling\"\n"
+    "\t\t(Stern-Brocot in height bands 16, 32, 64, ...), \"SternBrocot\"\n"
+    "\t\t(breadth-first over the Stern-Brocot tree, coarse to fine) or \"Sum\"\n"
+    "\t\t(a + b ascending).  All skip perfect-power bases (x/y)^m.\n"
     "\t\"Height\" -> H: largest numerator enumerated (default 1000).\n"
     "\t\"Bases\" -> B: enumeration budget (default 200000).\n"
     "\t\"MaxCoefficient\" -> cmax: largest coefficient c searched for (default\n"
@@ -382,8 +384,10 @@ static int apply_rbd_sub(FiRbdOpts* o, const char* k, const Expr* val) {
     }
     if (strcmp(k, "Order") == 0) {
         if (val->type != EXPR_STRING) return 0;
-        if (strcmp(val->data.string, "SternBrocot") == 0) { o->order = 0; return 1; }
-        if (strcmp(val->data.string, "Sum") == 0) { o->order = 1; return 1; }
+        if (strcmp(val->data.string, "Weighted") == 0) { o->order = FI_RBD_ORDER_WEIGHTED; return 1; }
+        if (strcmp(val->data.string, "HeightDoubling") == 0) { o->order = FI_RBD_ORDER_HD; return 1; }
+        if (strcmp(val->data.string, "SternBrocot") == 0) { o->order = FI_RBD_ORDER_SB; return 1; }
+        if (strcmp(val->data.string, "Sum") == 0) { o->order = FI_RBD_ORDER_SUM; return 1; }
         return 0;
     }
     if (strcmp(k, "MaxCoefficient") == 0) {

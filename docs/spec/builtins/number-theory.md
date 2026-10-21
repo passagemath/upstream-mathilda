@@ -730,8 +730,11 @@ every exponent and every coefficient at once, in time polynomial in `log n` for 
 
 The base is supplied with `"Base"` or found by enumeration. The bases that succeed form a comb of isolated
 teeth of relative width ~1/(k M) around the representations of P (plus harmonic teeth at `a/d`, `d | a`).
-No signal points towards a tooth from a distance, so bases are enumerated breadth-first over the
-Stern–Brocot tree (every rational once, coarse to fine), skipping perfect powers `(x/y)^m`. For an integer
+No signal points towards a tooth from a distance, so bases are enumerated, every rational once and
+skipping perfect powers `(x/y)^m`. By default they come in ascending `a / log2(a/b)`. A descent with
+base `r` costs about `log n / log r` steps, and a simple base (small `a`) is a priori likelier, so this
+is weighted shortest-job-first. On random targets it reaches the right base 2–2.5× sooner on average
+than breadth-first Stern–Brocot, under both a uniform and a log-height prior. For an integer
 base the descent truncates the base-`a` digits of `n`, and truncations inherit algebraic divisors. This
 *truncation divisibility* is what recovers the cyclotomic factors of Cunningham numbers and repunits.
 
@@ -747,7 +750,11 @@ base the descent truncates the base-`a` digits of `n`, and truncations inherit a
 Suboptions (defaults in parentheses):
 - `"Base"` -> `a/b` or a list of bases. A base is reduced, and inverted if below 1; `1` is rejected with
   `FactorInteger::mopt`. (Default: enumerate.)
-- `"Order"` -> `"SternBrocot"` (default) or `"Sum"` (the papers' `a + b` order).
+- `"Order"` -> `"Weighted"` (default; ascending `a / log2(a/b)`), `"HeightDoubling"` (Stern–Brocot
+  breadth-first in height bands `a ≤ 16`, `16 < a ≤ 32`, …), `"SternBrocot"` (breadth-first over the
+  whole tree, coarse to fine; the order before v0.526) or `"Sum"` (the papers' `a + b` order).
+  The Weighted order is streamed in doubling key bands, each a pruned Stern–Brocot walk, so a large
+  `"Height"` does not materialise the tree. The TwoPass lattice pass keeps breadth-first order.
 - `"Height"` -> `H`: largest numerator enumerated (1000). `"Bases"` -> `B`: enumeration budget (200000).
 - `"MaxCoefficient"` -> `cmax` (2^64): sets the deferred-testing ceiling `sqrt(cmax n)`; `Infinity`
   tests every depth.
@@ -759,15 +766,24 @@ Suboptions (defaults in parentheses):
 
 Behaviour:
 - The suboptions describe the input. A composite cofactor that the configured search cannot split gets a
-  light default search (Exact, Stern–Brocot height 64, at most 2000 bases); AllHits re-runs AllHits
+  light default search (Exact, height 64 in the Weighted order, at most 2000 bases); AllHits re-runs AllHits
   instead. Anything still composite is returned with `FactorInteger::nofac`.
 - Threads: a many-base search runs blocks of 2048 bases on every thread. A lattice base runs its band two
   depths per thread per region. The lowest-indexed success wins (a hit caps the work claim), so the answer
   does not depend on the thread count, and a `TimeConstrained` abort is taken within milliseconds.
 - Lattice reduction is FLINT's `fmpz_lll` when available, else a native fraction-free integral LLL
   (de Weger / Cohen 2.6.7, δ = 0.99): exact, but slower.
-- The core (`fi_rbd.h`; `fi_rbd_descent.c`, `fi_rbd_bases.c`, `fi_rbd_lattice.c`, `fi_rbd_lll.c`) uses only
-  GMP (and optionally FLINT), with no global state; the Mathilda glue is `fi_rbd.c`.
+- The Exact window accumulator is division-free (`fi_rbd_modacc.c`). It is a running product mod `n` in
+  Montgomery-reduced form, on fixed-size limbs, with the modulus context built once per `n` and shared
+  by every thread. Each reduction multiplies by a unit mod `n` (odd `n`), so `gcd(acc, n)` needs no
+  conversion. Folding an `s`-limb factor costs one `n × s` product and `s` REDC passes, about the
+  information bound of the method.
+- Performance (v0.526, 16 threads): a 1630-bit `p q` with `p = NextPrime[⌊(355/113)^720⌋ + …]` splits
+  in about 2.8 s, against 63 s with the breadth-first order and the division-based accumulator. A single
+  known base takes about 5 ms.
+- The core (`fi_rbd.h`; `fi_rbd_descent.c`, `fi_rbd_modacc.c`, `fi_rbd_bases.c`, `fi_rbd_lattice.c`,
+  `fi_rbd_lll.c`) uses only GMP (and optionally FLINT), with no global state; the Mathilda glue is
+  `fi_rbd.c`.
 
 Performance, measured on 500 Stern–Brocot bases against a random semiprime, single thread:
 

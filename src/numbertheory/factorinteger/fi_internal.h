@@ -105,13 +105,21 @@ typedef enum {
     FI_RBD_NVARIANTS
 } FiRbdVariant;
 
+/* "Order" of the enumerated bases (0, the default, is Weighted). */
+enum {
+    FI_RBD_ORDER_WEIGHTED = 0, /* ascending a / log2(a/b)                    */
+    FI_RBD_ORDER_SUM,          /* a + b ascending ([RBD] Appendix A)         */
+    FI_RBD_ORDER_SB,           /* Stern-Brocot breadth-first                 */
+    FI_RBD_ORDER_HD            /* Stern-Brocot in doubling height bands      */
+};
+
 /* BlakeRationalBaseDescent suboptions; zero / unset means "default". */
 typedef struct {
     int      variant;
     size_t   nbases;      /* "Base" -> a/b or {a1/b1, ...} (a > b, coprime) */
     mpz_t*   ba;
     mpz_t*   bb;
-    int      order;       /* "Order": 0 Stern-Brocot, 1 sum a + b          */
+    int      order;       /* "Order": FI_RBD_ORDER_*                        */
     uint64_t height;      /* "Height": numerator bound of enumerated bases */
     uint64_t max_bases;   /* "Bases": enumeration budget                   */
     int      cmax_set, cmax_inf;

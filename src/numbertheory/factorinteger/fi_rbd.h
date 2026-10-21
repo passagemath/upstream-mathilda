@@ -60,6 +60,27 @@ void   fi_rbd_free_mpz_array(mpz_t* v, size_t n);
 /* Descent                                                             */
 /* ------------------------------------------------------------------ */
 
+/* The modulus of the batched-gcd accumulator (fi_rbd_modacc.c): an odd N
+ * as limbs with -N^{-1} mod 2^GMP_NUMB_BITS.  Built once per N and shared
+ * read-only by every thread and base. */
+typedef struct {
+    mp_limb_t* N;
+    mp_size_t  n;
+    mp_limb_t  ninv;
+} fi_rbd_modctx_t;
+
+/* Returns 0 (and builds nothing) unless N is odd and > 1. */
+int    fi_rbd_modctx_init(fi_rbd_modctx_t* c, const mpz_t N);
+void   fi_rbd_modctx_clear(fi_rbd_modctx_t* c);
+/* Limbs of scratch fi_rbd_modacc_fold needs for an s-limb factor. */
+size_t fi_rbd_modacc_work(const fi_rbd_modctx_t* c, size_t s);
+/* acc (n limbs) <- 1. */
+void   fi_rbd_modacc_one(const fi_rbd_modctx_t* c, mp_limb_t* acc);
+/* acc <- acc x R^{-e} mod N for some e >= 0 (acc < N on entry and exit).
+ * R^{-e} is a unit mod N, so gcd(acc, N) is that of the plain product. */
+void   fi_rbd_modacc_fold(const fi_rbd_modctx_t* c, mp_limb_t* acc, const mp_limb_t* x,
+                          mp_size_t s, mp_limb_t* work);
+
 typedef struct {
     /* 0: the iterated descent of [RBD] R1-R4 with the symmetric window
      *    |j| <= J = ceil(2 + a/(a-b)) (the paper's reference algorithm);
@@ -83,14 +104,19 @@ typedef struct {
      * Q > ceiling.  The exact descent also jumps straight to the first
      * depth below the ceiling with one division.  NULL tests every depth. */
     mpz_srcptr ceiling;
+    /* The accumulator modulus for N (batch mode); NULL builds one per call.
+     * An even N runs unbatched (the hits are the same by construction). */
+    const fi_rbd_modctx_t* mod;
 } fi_rbd_opts_t;
 
 /* Per-thread scratch, reusable across bases. */
 typedef struct {
-    mpz_t  Q, Qh, t, u, v, acc, g, Neff, Nr;
+    mpz_t  Q, Qh, t, u, v, g, Neff;
     mpz_t* blk;              /* replay buffer: the tested Q of each step */
     uint64_t* blk_k;
     size_t blk_cap;
+    mp_limb_t* ml;           /* accumulator limbs (n) followed by fold scratch */
+    size_t     ml_cap;
 } fi_rbd_scratch_t;
 
 void fi_rbd_scratch_init(fi_rbd_scratch_t* s);
@@ -143,6 +169,34 @@ void   fi_rbd_sb_init(fi_rbd_sb_t* it, uint64_t H);
 void   fi_rbd_sb_clear(fi_rbd_sb_t* it);
 /* Up to max bases into out; returns the count (0 once exhausted). */
 size_t fi_rbd_sb_next(fi_rbd_sb_t* it, fi_rbd_base_t* out, size_t max);
+
+/* Height-doubling: the Stern-Brocot bases in height bands a <= 16,
+ * 16 < a <= 32, ..., up to H, breadth-first within each band. */
+typedef struct {
+    fi_rbd_sb_t sb;
+    uint64_t    H, lo, hi;
+} fi_rbd_hd_t;
+void   fi_rbd_hd_init(fi_rbd_hd_t* it, uint64_t H);
+void   fi_rbd_hd_clear(fi_rbd_hd_t* it);
+size_t fi_rbd_hd_next(fi_rbd_hd_t* it, fi_rbd_base_t* out, size_t max);
+
+/* Weighted (the default): the primitive bases a/b > 1 with a <= H in
+ * ascending key a / log2(a/b) — height times descent length, i.e. the
+ * prior weight of a simple base over its cost, which is weighted shortest
+ * job first.  Ties go by (a, b).  Streamed in doubling key bands, each a
+ * pruned Stern-Brocot walk, so memory is one band, not the whole tree. */
+typedef struct {
+    uint64_t       H;
+    double         klo, khi;
+    fi_rbd_base_t* buf;      /* the current band, sorted */
+    size_t         n, pos, cap;
+    uint64_t*      stk;      /* walk stack of intervals (pl, ql, pr, qr) */
+    size_t         sn, scap;
+    int            done;
+} fi_rbd_wt_t;
+void   fi_rbd_wt_init(fi_rbd_wt_t* it, uint64_t H);
+void   fi_rbd_wt_clear(fi_rbd_wt_t* it);
+size_t fi_rbd_wt_next(fi_rbd_wt_t* it, fi_rbd_base_t* out, size_t max);
 
 /* The reference order of [RBD] Appendix A: a + b = 3, 4, ..., b ascending,
  * coprime and primitive pairs only, a <= H (H = 0: unbounded). */

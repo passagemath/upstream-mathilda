@@ -39,6 +39,7 @@
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* ------------------------------------------------------------------ */
 /* Hit records                                                         */
@@ -144,14 +145,19 @@ mpz_t* fi_rbd_coprime_base(const fi_rbd_hits_t* h, const mpz_t N, size_t* count)
 /* ------------------------------------------------------------------ */
 
 void fi_rbd_scratch_init(fi_rbd_scratch_t* s) {
-    mpz_inits(s->Q, s->Qh, s->t, s->u, s->v, s->acc, s->g, s->Neff, s->Nr, NULL);
+    mpz_inits(s->Q, s->Qh, s->t, s->u, s->v, s->g, s->Neff, NULL);
     s->blk = NULL;
     s->blk_k = NULL;
     s->blk_cap = 0;
+    s->ml = NULL;
+    s->ml_cap = 0;
 }
 
 void fi_rbd_scratch_clear(fi_rbd_scratch_t* s) {
-    mpz_clears(s->Q, s->Qh, s->t, s->u, s->v, s->acc, s->g, s->Neff, s->Nr, NULL);
+    mpz_clears(s->Q, s->Qh, s->t, s->u, s->v, s->g, s->Neff, NULL);
+    free(s->ml);
+    s->ml = NULL;
+    s->ml_cap = 0;
     for (size_t i = 0; i < s->blk_cap; i++) mpz_clear(s->blk[i]);
     free(s->blk);
     free(s->blk_k);
@@ -210,7 +216,7 @@ typedef struct {
     uint64_t J;            /* iterated window radius */
     size_t   B, nblk;      /* batch block length and fill */
     size_t   nbits;        /* bits of N */
-    size_t   rbits;        /* bits of Nr (whole limbs) */
+    const fi_rbd_modctx_t* mc;   /* accumulator modulus (batch mode) */
     int      found, added;
     mpz_ptr  g;
     uint64_t hk;
@@ -255,46 +261,67 @@ static int test_window(Desc* D, const mpz_t Q, uint64_t k) {
     return 0;
 }
 
-/* acc <- acc * x mod Nr, reducing x first when it is wider than Nr.  Nr is
- * N shifted up to a whole number of limbs with its top bit set: a multiple
- * of N, so the gcd with N is unchanged, and GMP's division then skips the
- * per-call normalisation (copy + shift) of the divisor. */
-static void acc_mul(Desc* D, mpz_ptr x) {
-    mpz_srcptr Nr = D->s->Nr;
-    if (mpz_sizeinbase(x, 2) > D->rbits) mpz_tdiv_r(x, x, Nr);
-    mpz_mul(D->s->acc, D->s->acc, x);
-    mpz_tdiv_r(D->s->acc, D->s->acc, Nr);
+/* Fold the factor x into the accumulator (s->ml[0..n)), growing the fold
+ * scratch behind it on demand.  Returns 0 on allocation failure, which the
+ * caller turns into "replay this block": the hits stay exact either way. */
+static int acc_fold(Desc* D, mpz_srcptr x) {
+    fi_rbd_scratch_t* s = D->s;
+    size_t n = (size_t)D->mc->n, xs = mpz_size(x);
+    size_t need = n + fi_rbd_modacc_work(D->mc, xs);
+    if (need > s->ml_cap) {
+        mp_limb_t* nm = realloc(s->ml, need * sizeof(mp_limb_t));
+        if (!nm) return 0;
+        s->ml = nm;
+        s->ml_cap = need;
+    }
+    fi_rbd_modacc_fold(D->mc, s->ml, mpz_limbs_read(x), (mp_size_t)xs, s->ml + n);
+    return 1;
 }
 
-/* Fold the window product of Q into the accumulator. */
+/* Fold the window product of Q into the accumulator.  A failed fold zeroes
+ * the accumulator, so the block's gcd is N and it is replayed. */
 static void acc_window(Desc* D, const mpz_t Q) {
     fi_rbd_scratch_t* s = D->s;
+    size_t n = (size_t)D->mc->n;
+    int ok = 1;
     if (D->o->exact) {
         if (mpz_sgn(Q) == 0) {             /* candidates 0..3: 0 is trivial */
             mpz_set_ui(s->t, 6);
+            ok = acc_fold(D, s->t);
         } else {
             mpz_add_ui(s->u, Q, 3);
             mpz_mul(s->u, s->u, Q);        /* y = Q (Q + 3) */
-            mpz_add_ui(s->t, s->u, 2);
-            mpz_mul(s->t, s->t, s->u);     /* y (y + 2) = Q (Q+1) (Q+2) (Q+3) */
+            mpz_add_ui(s->t, s->u, 2);     /* y (y + 2) = Q (Q+1) (Q+2) (Q+3) */
+            if (2 * mpz_size(s->u) <= n) {
+                /* Small y: one product, one fold (same limb count, half the
+                 * REDC set-up). */
+                mpz_mul(s->t, s->t, s->u);
+                ok = acc_fold(D, s->t);
+            } else {
+                ok = acc_fold(D, s->u) && acc_fold(D, s->t);
+            }
         }
-        acc_mul(D, s->t);
-        return;
-    }
-    /* Iterated window: prod_{|j| <= J} |Q - j|, skipping the trivial 0. */
-    mpz_abs(s->t, Q);
-    if (mpz_sgn(s->t) == 0) mpz_set_ui(s->t, 1);
-    for (uint64_t j = 1; j <= D->J; j++) {
-        for (int sg = 0; sg < 2; sg++) {
-            if (sg) mpz_add_ui(s->u, Q, (unsigned long)j);
-            else    mpz_sub_ui(s->u, Q, (unsigned long)j);
-            if (mpz_sgn(s->u) == 0) continue;
-            mpz_abs(s->u, s->u);
-            mpz_mul(s->t, s->t, s->u);
-            if (mpz_sizeinbase(s->t, 2) > 2 * D->rbits) mpz_tdiv_r(s->t, s->t, s->Nr);
+    } else {
+        /* Iterated window: prod_{|j| <= J} |Q - j|, skipping the trivial 0,
+         * folded whenever the partial product outgrows N. */
+        mpz_abs(s->t, Q);
+        if (mpz_sgn(s->t) == 0) mpz_set_ui(s->t, 1);
+        for (uint64_t j = 1; j <= D->J && ok; j++) {
+            for (int sg = 0; sg < 2; sg++) {
+                if (sg) mpz_add_ui(s->u, Q, (unsigned long)j);
+                else    mpz_sub_ui(s->u, Q, (unsigned long)j);
+                if (mpz_sgn(s->u) == 0) continue;
+                mpz_abs(s->u, s->u);
+                mpz_mul(s->t, s->t, s->u);
+                if (mpz_size(s->t) > n) {
+                    if (!(ok = acc_fold(D, s->t))) break;
+                    mpz_set_ui(s->t, 1);
+                }
+            }
         }
+        if (ok) ok = acc_fold(D, s->t);
     }
-    acc_mul(D, s->t);
+    if (!ok) memset(s->ml, 0, n * sizeof(mp_limb_t));
 }
 
 /* Close the current block: one gcd, and a candidate-by-candidate replay
@@ -302,13 +329,15 @@ static void acc_window(Desc* D, const mpz_t Q) {
 static int flush(Desc* D) {
     if (D->nblk == 0) return 0;
     fi_rbd_scratch_t* s = D->s;
-    mpz_gcd(s->g, s->acc, D->N);
+    mpz_t acc;
+    mpz_roinit_n(acc, s->ml, D->mc->n);
+    mpz_gcd(s->g, acc, D->N);
     int stop = 0;
     if (mpz_cmp_ui(s->g, 1) != 0) {
         for (size_t i = 0; i < D->nblk && !stop; i++) stop = test_window(D, s->blk[i], s->blk_k[i]);
     }
     D->nblk = 0;
-    mpz_set_ui(s->acc, 1);
+    fi_rbd_modacc_one(D->mc, s->ml);
     return stop;
 }
 
@@ -409,8 +438,7 @@ int fi_rbd_descend(mpz_t g, uint64_t* kout, int64_t* jout, const mpz_t N, const 
     D.hits = hits;
     D.J = 0;
     D.nbits = mpz_sizeinbase(N, 2);
-    D.rbits = (D.nbits + GMP_NUMB_BITS - 1) / GMP_NUMB_BITS * GMP_NUMB_BITS;
-    mpz_mul_2exp(s->Nr, N, (mp_bitcnt_t)(D.rbits - D.nbits));
+    D.mc = NULL;
     D.B = D.nbits / 8;
     if (D.B < 16) D.B = 16;
     if (D.B > 256) D.B = 256;
@@ -426,8 +454,33 @@ int fi_rbd_descend(mpz_t g, uint64_t* kout, int64_t* jout, const mpz_t N, const 
          * the block short so a replay stays cheap. */
         if (D.J > 64 && D.B > 32) D.B = 32;
     }
-    if (o->batch && !scratch_reserve(s, D.B)) return 0;
-    mpz_set_ui(s->acc, 1);
+    /* Batching needs the accumulator modulus: the caller's, else a local
+     * one.  An even N (Montgomery needs an odd modulus) runs unbatched,
+     * which finds exactly the same hits. */
+    fi_rbd_opts_t ob;
+    fi_rbd_modctx_t mloc;
+    int own_mc = 0;
+    if (o->batch) {
+        if (o->mod) D.mc = o->mod;
+        else if (fi_rbd_modctx_init(&mloc, N)) { D.mc = &mloc; own_mc = 1; }
+        if (!D.mc || !scratch_reserve(s, D.B)) {
+            if (own_mc) fi_rbd_modctx_clear(&mloc);
+            ob = *o;
+            ob.batch = 0;
+            o = D.o = &ob;
+            D.mc = NULL;
+            own_mc = 0;
+        } else {
+            size_t need = (size_t)D.mc->n;
+            if (need > s->ml_cap) {
+                mp_limb_t* nm = realloc(s->ml, need * sizeof(mp_limb_t));
+                if (!nm) { if (own_mc) fi_rbd_modctx_clear(&mloc); return 0; }
+                s->ml = nm;
+                s->ml_cap = need;
+            }
+            fi_rbd_modacc_one(D.mc, s->ml);
+        }
+    }
 
     int word = mpz_fits_ulong_p(a) && mpz_fits_ulong_p(b);
     unsigned long aw = word ? mpz_get_ui(a) : 0, bw = word ? mpz_get_ui(b) : 0;
@@ -464,6 +517,7 @@ int fi_rbd_descend(mpz_t g, uint64_t* kout, int64_t* jout, const mpz_t N, const 
     }
     if (!stop && o->batch) flush(&D);
     D.nblk = 0;
+    if (own_mc) fi_rbd_modctx_clear(&mloc);
 
     if (!D.found) return 0;
     if (kout) *kout = D.hk;

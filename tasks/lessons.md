@@ -4751,3 +4751,17 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 - **Never hand-compute a bignum expectation.** Two bignum values typed into
   the BitXor tests were wrong, and the batch check against the reference
   caught them. Generate every expectation, don't type it in.
+
+## 2026-10-21 — Scope an evaluator change to the evaluator suites (Thread::tdlen, v0.514)
+
+- **Correction:** "We should only need to run the evaluator unit tests, not the
+  entire test suite." For a change in `src/eval.c`, run `eval`,
+  `eval_eager_exit`, `eval_timestamps`, `evaluate`, `core`, `thread`,
+  `mapthread`, `unevaluated`, and the suites of any other touched file. Don't
+  run all ~560 binaries.
+- **A/B baseline:** configure the HEAD worktree `-DCMAKE_BUILD_TYPE=Release`.
+  Otherwise asserts abort at the first FAIL and the counts aren't comparable.
+- **Validate the runner on one binary first.** A broken `xargs sh -c` quoting
+  produced no logs at all, and "0 failures everywhere" looked like a pass.
+- **Never `git stash` in this shared tree.** It also stashes other sessions'
+  uncommitted work. Build a HEAD worktree instead.

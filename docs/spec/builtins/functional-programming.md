@@ -568,6 +568,12 @@ argument lists are given separately.
   `MapThread[f, {<|a -> 1|>, <|a -> 2|>}]` gives `<|a -> f[1, 2]|>`.
 - An `NDArray` entry threads like a list:
   `MapThread[f, {NDArray[{1, 2}], {a, b}}]` gives `{f[1., a], f[2., b]}`.
+- A rank >= 2 packed array or `NDArray` as the second argument is the list of
+  lists, one per row: `MapThread[f, Partition[Range[8], 2]]` gives
+  `{f[1, 3, 5, 7], f[2, 4, 6, 8]}`. This is also what `{x, y}` becomes when two
+  packed vectors are substituted into it, as in
+  `g[x_, y_] := MapThread[#1 + #2 &, {x, y}]; g[Range[5], Range[5]]`. Rows
+  stay packed while threading, and a numeric result comes back packed.
 
 A dimension mismatch (unequal lengths, a non-list argument, or mismatched
 association keys) leaves the expression unevaluated.

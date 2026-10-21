@@ -210,6 +210,47 @@ static void test_mapthread_pure_function(void) {
           "{f[x], g[y], h[z]}");
 }
 
+/* ---------- 8b. A packed rank-2 buffer as the list of lists ---------- */
+
+/* Substituting two packed vectors into {x, y} (a DownValue, With, Module)
+ * packs the pair into one rank-2 buffer. MapThread is packed-aware, so that
+ * buffer reaches it unmaterialised; every f outside the Min/Max/Plus/Times
+ * fold used to fall out unevaluated. */
+static void test_mapthread_packed_matrix_from_downvalue(void) {
+    check("Clear[g1]; g1[x_, y_] := MapThread[#1 + #2 &, {x, y}]; "
+          "g1[Range[5], Range[5]]", "{2, 4, 6, 8, 10}");
+    check("Clear[g2]; g2[x_, y_] := MapThread[f, {x, y}]; g2[Range[3], Range[3]]",
+          "{f[1, 1], f[2, 2], f[3, 3]}");
+    check("Clear[g3]; g3[x_, y_] := MapThread[Function[{s, t}, s t], {x, y}]; "
+          "g3[Range[4], Reverse[Range[4]]]", "{4, 6, 6, 4}");
+    check("Clear[g4]; g4[x_, y_] := MapThread[{#1, #2} &, {x, y}]; g4[Range[2], Range[2]]",
+          "{{1, 1}, {2, 2}}");
+    check("With[{x = Range[3], y = Range[3]}, MapThread[f, {x, y}]]",
+          "{f[1, 1], f[2, 2], f[3, 3]}");
+    check("Module[{x = Range[1., 3.], y = Range[1., 3.]}, MapThread[#1 #2 &, {x, y}]]",
+          "{1.0, 4.0, 9.0}");
+    /* Packed in, packed out for a numeric result; Min/Max/Plus/Times still
+     * take the column fold. */
+    check("Clear[g5]; g5[x_, y_] := MapThread[#1 - #2 &, {x, y}]; "
+          "PackedArrayQ[g5[Range[10], Range[10]]]", "True");
+    check("Clear[g6]; g6[x_, y_] := MapThread[Max, {x, y}]; g6[Range[5], Reverse[Range[5]]]",
+          "{5, 4, 3, 4, 5}");
+}
+
+static void test_mapthread_ndarray_matrix_argument(void) {
+    check("MapThread[f, NDArray[{{1, 2}, {3, 4}}, DataType -> \"int64\"]]",
+          "{f[1, 3], f[2, 4]}");
+    check("MapThread[#1 + #2 &, NDArray[{{1., 2.}, {3., 4.}}]]", "NDArray[{4.0, 6.0}]");
+    check("MapThread[f, Partition[Range[8], 2]]", "{f[1, 3, 5, 7], f[2, 4, 6, 8]}");
+    check("MapThread[f, Partition[Partition[Range[8], 2], 2], 2]",
+          "{{f[1, 5], f[2, 6]}, {f[3, 7], f[4, 8]}}");
+    check("Clear[g7]; g7[x_] := MapThread[f, x, 2]; g7[Partition[Partition[Range[8], 2], 2]]",
+          "{{f[1, 5], f[2, 6]}, {f[3, 7], f[4, 8]}}");
+    /* A vector has no lists to thread: unchanged, as for {1, 2, 3}. */
+    check("MapThread[f, Range[3]]", "MapThread[f, {1, 2, 3}]");
+    check("MapThread[f, {{}, {}}]", "{}");
+}
+
 /* ---------- 9. Stress: repeated calls (valgrind leak signal) ---------- */
 
 static void test_mapthread_repeated_success(void) {
@@ -279,6 +320,8 @@ int main(void) {
     TEST(test_mapthread_protected);
 
     TEST(test_mapthread_pure_function);
+    TEST(test_mapthread_packed_matrix_from_downvalue);
+    TEST(test_mapthread_ndarray_matrix_argument);
 
     TEST(test_mapthread_repeated_success);
     TEST(test_mapthread_repeated_failure);

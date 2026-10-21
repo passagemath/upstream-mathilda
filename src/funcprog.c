@@ -3609,15 +3609,33 @@ Expr* builtin_mapthread(Expr* res) {
         level = nspec->data.integer;
     }
 
+    /* A rank >= 2 buffer IS the List of k lists, one per row. MapThread is on
+     * pack.c's AWARE list, so the gate hands a packed matrix through as it is
+     * -- and {x, y} substituted with two packed vectors by a DownValue or With
+     * packs to exactly that. nd_mapthread2 folds only Min/Max/Plus/Times, so
+     * every other f must split the outer level here, keeping each row packed,
+     * rather than fall out unevaluated at the List test below. */
+    Expr* outer = NULL;
+    if (is_ndarray(lists)) {
+        if (lists->data.ndarray.rank < 2) return NULL;   /* no lists to thread */
+        outer = ndarray_unpack_top_level(lists);
+        if (!outer) return NULL;
+        lists = outer;
+    }
+
     /* Outer container must be a List of the k expressions to thread. */
     if (lists->type != EXPR_FUNCTION ||
         lists->data.function.head->type != EXPR_SYMBOL ||
-        lists->data.function.head->data.symbol.name != SYM_List)
+        lists->data.function.head->data.symbol.name != SYM_List) {
+        expr_free(outer);
         return NULL;
+    }
 
     size_t k = lists->data.function.arg_count;
-    if (k == 0)                              /* MapThread[f, {}] -> {} */
+    if (k == 0) {                            /* MapThread[f, {}] -> {} */
+        expr_free(outer);
         return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    }
 
     /* Materialize any NDArray entry to a nested list so it threads like a list:
      * MapThread[f, {NDArray[{1,2}], NDArray[{3,4}]}] -> {f[1,3], f[2,4]}. */
@@ -3640,7 +3658,7 @@ Expr* builtin_mapthread(Expr* res) {
         for (size_t j = 0; j < k; j++) expr_free(delisted[j]);
         free(delisted);
     }
-    if (!built) return NULL;                 /* structural mismatch -> unchanged */
+    if (!built) { expr_free(outer); return NULL; }   /* structural mismatch -> unchanged */
 
     /* Evaluate so f's attributes fire and the f[...] leaves reduce
      * (mirrors builtin_thread's final evaluate). */
@@ -3655,5 +3673,6 @@ Expr* builtin_mapthread(Expr* res) {
             if (is_ndarray(entries0[j])) { src_nd = entries0[j]; dt = src_nd->data.ndarray.dtype; break; }
         out = map_try_repack(src_nd, out, dt);
     }
+    expr_free(outer);   /* entries0 may point into it, so only now */
     return out;
 }

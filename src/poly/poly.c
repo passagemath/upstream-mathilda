@@ -3688,7 +3688,10 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
             else
                 new_args[i] = collect_internal(expr->data.function.args[i], vars, num_vars, var_idx, h);
         }
-        return eval_and_free(expr_new_function(expr_copy(expr->data.function.head), new_args, count));
+        /* expr_new_function copies the args array (not its elements). */
+        Expr* threaded = expr_new_function(expr_copy(expr->data.function.head), new_args, count);
+        free(new_args);
+        return eval_and_free(threaded);
     }
 
     if (var_idx == num_vars) {
@@ -3763,6 +3766,14 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
         if (single_base) {
             int matched_idx = -1;
             for (size_t j = 0; j < term_bp.count; j++) {
+                /* An integer literal to an integer power is a numeric
+                 * coefficient, never a power of the key: the `2` in
+                 * Collect[2 x + 2 y, Sqrt[2]] is not Sqrt[2]^2 (it stays
+                 * 2 x + 2 y). Genuine radicals (exponent 1/2, ...) still
+                 * match. */
+                if (expr_is_integer_like(term_bp.data[j].base)
+                    && term_bp.data[j].exp->type == EXPR_INTEGER)
+                    continue;
                 if (expr_eq(sb_base, term_bp.data[j].base)) {
                     matched_idx = (int)j;
                     break;
@@ -3985,6 +3996,54 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
     return result;
 }
 
+/* True when a Collect variable spec contains a pattern construct
+ * (`Power[_, 1/2]`, `f[_]`, `x^_`, `f[n_] /; n > 0`, `p | q`, ...). */
+static bool collect_var_is_pattern(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd && hd->type == EXPR_SYMBOL) {
+        const char* s = hd->data.symbol.name;
+        if (s == SYM_Blank || s == SYM_BlankSequence || s == SYM_BlankNullSequence
+            || s == SYM_Pattern || s == SYM_Optional || s == SYM_Repeated
+            || s == SYM_RepeatedNull || s == SYM_PatternTest || s == SYM_Condition
+            || s == SYM_Alternatives || s == SYM_Except || s == SYM_HoldPattern)
+            return true;
+    } else if (collect_var_is_pattern(hd)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (collect_var_is_pattern(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Append to `out` (deduplicated, as copies) every subexpression of `e` at
+ * levels 1..Infinity -- heads excluded, as in Cases -- that matches `patt`.
+ * Matched subexpressions are still descended into, so
+ * Sqrt[1 + Sqrt[x]] contributes both radicals. */
+static void collect_pattern_matches(Expr* e, Expr* patt,
+                                    Expr*** out, size_t* n, size_t* cap) {
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* sub = e->data.function.args[i];
+        MatchEnv* env = env_new();
+        bool hit = match(sub, patt, env);
+        env_free(env);
+        if (hit) {
+            bool dup = false;
+            for (size_t j = 0; j < *n && !dup; j++) dup = expr_eq((*out)[j], sub);
+            if (!dup) {
+                if (*n == *cap) { *cap = *cap ? *cap * 2 : 8; *out = realloc(*out, sizeof(Expr*) * *cap); }
+                (*out)[(*n)++] = expr_copy(sub);
+            }
+        }
+        collect_pattern_matches(sub, patt, out, n, cap);
+    }
+}
+
+static int collect_cmp_expr(const void* a, const void* b) {
+    return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
+}
+
 Expr* builtin_collect(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 || res->data.function.arg_count > 3) return NULL;
     Expr* expr = res->data.function.args[0];
@@ -3999,7 +4058,43 @@ Expr* builtin_collect(Expr* res) {
         vars = vars_expr->data.function.args;
     }
 
-    return collect_internal(expr, vars, num_vars, 0, h);
+    bool any_pattern = false;
+    for (size_t i = 0; i < num_vars && !any_pattern; i++)
+        any_pattern = collect_var_is_pattern(vars[i]);
+    if (!any_pattern) return collect_internal(expr, vars, num_vars, 0, h);
+
+    /* Pattern variables: every distinct subexpression of `expr` matching the
+     * pattern becomes a collection variable of its own, in canonical order,
+     * spliced in where the pattern stood (Collect[e, {f[_], x}] collects in
+     * the f[...] matches first, then x). No match leaves no variable, so
+     * Collect[c + d, f[_], h] is h[c + d]. */
+    Expr** ev = NULL;
+    size_t en = 0, ecap = 0;
+    for (size_t i = 0; i < num_vars; i++) {
+        Expr** m = NULL;
+        size_t mn = 0, mcap = 0;
+        if (collect_var_is_pattern(vars[i])) {
+            collect_pattern_matches(expr, vars[i], &m, &mn, &mcap);
+            if (mn > 1) qsort(m, mn, sizeof(Expr*), collect_cmp_expr);
+        } else {
+            m = malloc(sizeof(Expr*));
+            m[0] = expr_copy(vars[i]);
+            mn = 1;
+        }
+        for (size_t j = 0; j < mn; j++) {
+            bool dup = false;
+            for (size_t k = 0; k < en && !dup; k++) dup = expr_eq(ev[k], m[j]);
+            if (dup) { expr_free(m[j]); continue; }
+            if (en == ecap) { ecap = ecap ? ecap * 2 : 8; ev = realloc(ev, sizeof(Expr*) * ecap); }
+            ev[en++] = m[j];
+        }
+        free(m);
+    }
+
+    Expr* result = collect_internal(expr, ev, en, 0, h);
+    for (size_t i = 0; i < en; i++) expr_free(ev[i]);
+    free(ev);
+    return result;
 }
 
 /* Recursive worker for CoefficientList[expr, {v1, v2, ...}]. Builds a  */

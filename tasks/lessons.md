@@ -4765,3 +4765,17 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   produced no logs at all, and "0 failures everywhere" looked like a pass.
 - **Never `git stash` in this shared tree.** It also stashes other sessions'
   uncommitted work. Build a HEAD worktree instead.
+
+## 2026-10-21 — Check the reported mechanism with FullForm before fixing it (Collect patterns, v0.516)
+
+- **The report:** "Sqrt[x] should evaluate to Power[x, 1/2], not the other way
+  around." In fact `FullForm[Sqrt[x]]` was already `Power[x, Rational[1, 2]]`.
+  `Sqrt[...]` is printer output only. The real bug was that `Collect` compared
+  keys with `expr_eq`, so it never matched a pattern key. Rule: when a report
+  names a representation as the cause, check it with `FullForm` / `MatchQ`
+  first, then fix what actually fails.
+- **A new key-expansion path brings old concrete-key bugs into reach.** The
+  `Sqrt[_]` → `Sqrt[2]` expansion exposed a separate bug: the integer
+  coefficient `2` was read as `Sqrt[2]^2`. Re-run the existing corpus after a
+  widening change. Look for a soft `FAIL:` line even when the binary prints
+  "passed".

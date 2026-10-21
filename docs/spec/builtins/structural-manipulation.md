@@ -1253,6 +1253,8 @@ Collects together terms involving the same powers of objects matching a variable
 - Automatically threads over lists, equations, inequalities, and logic functions.
 - Effectively writes `expr` as a polynomial in `x` or a fractional power of `x`.
 - `Collect[expr, var, h]` applies `h` to the expression that forms the coefficient of each term obtained.
+- `var` may be a pattern (`Power[_, 1/2]`, `f[_]`, `x^_`, `p | q`, `f[n_] /; n > 0`). Every distinct subexpression of `expr` that matches it, at levels 1 to Infinity, becomes a collection variable of its own, in canonical order (v0.516).
+- Numeric coefficients are never powers of the key: `Collect[2 x + 2 y, Sqrt[2]]` stays `2 x + 2 y` (v0.516).
 
 ```mathematica
 In[1]:= Collect[a x + b y + c x + d y, x]
@@ -1263,6 +1265,12 @@ Out[2]= -7 + (1 + 2 a^2 - 3 b) x + (a + b) x^4
 
 In[3]:= Collect[a Sqrt[x] + Sqrt[x] + x^(2/3) - c x + 3x - 2b x^(2/3) + 5, x]
 Out[3]= 5 + (1 + a) Sqrt[x] + (1 - 2b) x^(2/3) + (3 - c) x
+
+In[4]:= Collect[1 + 3 Sqrt[1 + x^2] + x Sqrt[1 + x^2], Power[_, 1/2]]
+Out[4]= 1 + (3 + x) Sqrt[1 + x^2]
+
+In[5]:= Collect[a f[1] + b f[1] + c f[2] + d f[2], f[_]]
+Out[5]= (a + b) f[1] + (c + d) f[2]
 ```
 
 ## FactorSquareFree

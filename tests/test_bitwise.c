@@ -1611,6 +1611,25 @@ static void test_bitset_ragged_tdlen(void) {
      * the call left unevaluated (also from a packed operand). */
     assert_eval_eq("BitSet[{1, 2, 3}, {0, 1}]", "BitSet[{1, 2, 3}, {0, 1}]", 0);
     assert_eval_eq("BitSet[Range[3], Range[2]]", "BitSet[{1, 2, 3}, {1, 2}]", 0);
+    /* Routed through the message funnel: printed on stderr, silenced by
+     * Quiet, seen by Check. */
+    char* result = NULL;
+    char* err = eval_capturing_stderr("BitSet[{1, 2, 3}, {0, 1}]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitSet[{1, 2, 3}, {0, 1}]");
+    ASSERT_MSG(err != NULL && strstr(err, "Thread::tdlen: Objects of unequal length in "
+                                          "BitSet[{1, 2, 3}, {0, 1}] cannot be combined.") != NULL,
+               "expected tdlen diagnostic, got: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+    err = eval_capturing_stderr("Quiet[BitSet[{1, 2, 3}, {0, 1}]]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitSet[{1, 2, 3}, {0, 1}]");
+    ASSERT_MSG(err == NULL || strstr(err, "tdlen") == NULL,
+               "Quiet leaked: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+    assert_eval_eq("Check[BitSet[{1, 2, 3}, {0, 1}], failed]", "failed", 0);
 }
 
 static void test_bitset_properties(void) {

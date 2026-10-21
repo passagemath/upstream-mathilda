@@ -1373,6 +1373,23 @@ void test_valueq(void) {
     assert_eval_eq("ClearAll[vqX, vqY, vqF, vqA, vqB]", "Null", 0);
 }
 
+/* Thread::tdlen from the evaluator's Listable threading goes through the
+ * message funnel: Check sees it (it used to be a raw printf, so Check took the
+ * value branch -- a wrong answer), and Quiet keeps the unevaluated value. */
+static void test_listable_tdlen_funnel(void) {
+    assert_eval_eq("SetAttributes[tdlenG, Listable]", "Null", 0);
+    assert_eval_eq("Check[tdlenG[{1, 2}, {1, 2, 3}], failed]", "failed", 0);
+    assert_eval_eq("Quiet[tdlenG[{1, 2}, {1, 2, 3}]]", "tdlenG[{1, 2}, {1, 2, 3}]", 0);
+    assert_eval_eq("Quiet[Check[tdlenG[{1, 2}, {1, 2, 3}], failed]]", "failed", 0);
+    assert_eval_eq("Check[tdlenG[{1, 2}, {3, 4}], failed]", "{tdlenG[1, 3], tdlenG[2, 4]}", 0);
+    /* Builtin Listable heads take the same path, packed operands included. */
+    assert_eval_eq("Check[Plus[{1, 2}, {1, 2, 3}], failed]", "failed", 0);
+    assert_eval_eq("Check[GCD[Range[3], Range[2]], failed]", "failed", 0);
+    assert_eval_eq("Check[BitSet[{1, 2, 3}, {0, 1}], failed]", "failed", 0);
+    /* Not Listable: no threading, no message. */
+    assert_eval_eq("Check[tdlenF[{1, 2}, {1, 2, 3}], failed]", "tdlenF[{1, 2}, {1, 2, 3}]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1409,6 +1426,7 @@ int main(void) {
     TEST(test_bytecount);
     TEST(test_information);
     TEST(test_clear_attributes);
+    TEST(test_listable_tdlen_funnel);
 
     printf("All core tests passed!\n");
     return 0;

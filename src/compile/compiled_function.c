@@ -22,6 +22,7 @@
 #include "../match.h"          /* env_new / env_set / replace_bindings */
 #include "../eval.h"           /* evaluate / eval_and_free */
 #include "../print.h"          /* expr_to_string — Thread::tdlen diagnostic */
+#include "../message.h"        /* mth_message — Thread::tdlen through Quiet/Check */
 
 struct CompiledFunction {
     unsigned         refcount;   /* Expr copies share the payload */
@@ -536,8 +537,9 @@ static Expr* cf_thread_elem(const Expr* a, size_t j, bool* owned) {
     return row;
 }
 
-/* Print Thread::tdlen against the real call, exactly as the evaluator's generic
- * Listable threading does for a symbol head. */
+/* Report Thread::tdlen against the real call, exactly as the evaluator's
+ * generic Listable threading does for a symbol head -- through the message
+ * funnel, so Quiet silences it and Check sees it. */
 static void cf_report_tdlen(const CompiledFunction* cf, Expr* const* args, size_t nargs) {
     Expr** ca = malloc(nargs * sizeof(*ca));
     if (!ca) return;
@@ -546,8 +548,8 @@ static void cf_report_tdlen(const CompiledFunction* cf, Expr* const* args, size_
         expr_new_compiled(compiled_function_ref((CompiledFunction*)cf)), ca, nargs);
     free(ca);
     char* s = expr_to_string(call);
-    printf("Thread::tdlen: Objects of unequal length in %s cannot be combined.\n",
-           s ? s : "the compiled function");
+    mth_message("Thread", "tdlen", "Objects of unequal length in %s cannot be combined.",
+                s ? s : "the compiled function");
     free(s);
     expr_free(call);
 }

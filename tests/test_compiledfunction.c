@@ -843,6 +843,9 @@ void test_cf_runtime_attributes(void) {
     assert_eval_startswith("Compile[{{x, _Real}, {y, _Real}}, x - y, "
                            "RuntimeAttributes -> Listable][{1., 2.}, {10., 20., 30.}]",
                            "CompiledFunction[{x, y}");
+    /* That message goes through the funnel: Check sees it. */
+    assert_eval_eq("Check[Compile[{{x, _Real}, {y, _Real}}, x - y, RuntimeAttributes -> Listable]"
+                   "[{1., 2.}, {10., 20., 30.}], failed]", "failed", 0);
 
     /* Listable belongs to the OBJECT, not to its bytecode: a body outside the
      * compilable subset threads too, and each element still falls back on its

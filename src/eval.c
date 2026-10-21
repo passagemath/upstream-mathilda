@@ -806,7 +806,8 @@ static Expr* apply_listable(Expr* e) {
             if (!have_list) { have_list = true; list_len = len; }
             else if (len != list_len) {
                 char* s = expr_to_string(e);
-                printf("Thread::tdlen: Objects of unequal length in %s cannot be combined.\n", s);
+                mth_message("Thread", "tdlen",
+                            "Objects of unequal length in %s cannot be combined.", s);
                 free(s);
                 return NULL;
             }
@@ -832,7 +833,8 @@ static Expr* apply_listable(Expr* e) {
                 /* All list arguments must have identical lengths */
                 if (arg->data.function.arg_count != list_len) {
                     char* s = expr_to_string(e);
-                    printf("Thread::tdlen: Objects of unequal length in %s cannot be combined.\n", s);
+                    mth_message("Thread", "tdlen",
+                                "Objects of unequal length in %s cannot be combined.", s);
                     free(s);
                     for (size_t k = 0; k < i; k++) expr_free(new_func_args[k]);
                     free(new_func_args);

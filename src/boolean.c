@@ -134,7 +134,7 @@ Expr* builtin_boole(Expr* res) {
      * so this reads the visible surface; handling either is harmless.) */
     if (is_ndarray(arg) && arg->data.ndarray.dtype == NDT_BOOL) {
         size_t sz = ndarray_size(arg);
-        if (sz == 0) return NULL;
+        if (sz == 0) return ndarray_delist_and_reeval(res);
         const uint8_t* in = (const uint8_t*)arg->data.ndarray.data;
         void* buf = NULL;
         Expr* out = ndbuild_open_like(arg, arg->data.ndarray.rank,
@@ -148,6 +148,10 @@ Expr* builtin_boole(Expr* res) {
         for (size_t i = 0; i < sz; i++) ob[i] = in[i] ? 1 : 0;
         return out;
     }
+    /* Any other visible array -- numeric, or an empty bool one -- answers as
+     * its List does: Boole[NDArray[{1., 0.}]] is {Boole[1.], Boole[0.]} and
+     * Boole[NDArray[{}]] is {}, where the atom used to stay Boole[NDArray[...]]. */
+    if (is_ndarray(arg)) return ndarray_delist_and_reeval(res);
     return NULL;
 }
 

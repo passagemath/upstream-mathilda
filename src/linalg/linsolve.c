@@ -688,6 +688,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
                                   int64_t* trail_dims, int trail_rank,
                                   int r, int c, int k) {
     int cols = c + k;
+    bool free_inexact = matsol_is_inexact(m) || matsol_is_inexact(b);
 
     Expr** matrix = malloc(sizeof(Expr*) * (size_t)r * (size_t)cols);
     Expr** flat_m = malloc(sizeof(Expr*) * (size_t)r * (size_t)c);
@@ -878,7 +879,11 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
     for (int j = 0; j < c; j++) {
         for (int kk = 0; kk < k; kk++) {
             if (pivot_for_col[j] == -1) {
-                flat_answers[j * k + kk] = expr_new_integer(0);
+                /* A free variable is set to 0 -- an invented value, so it
+                 * takes the system's exactness: a machine-real singular system
+                 * answers 0., not a two-headed {3., 0}. */
+                flat_answers[j * k + kk] = free_inexact ? expr_new_real(0.0)
+                                                        : expr_new_integer(0);
             } else {
                 int pr = pivot_for_col[j];
                 flat_answers[j * k + kk] = matrix[pr * cols + c + kk];
@@ -912,6 +917,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
                                   int64_t* trail_dims, int trail_rank,
                                   int r, int c, int k) {
     int cols = c + k;
+    bool free_inexact = matsol_is_inexact(m) || matsol_is_inexact(b);
 
     Expr** matrix = malloc(sizeof(Expr*) * (size_t)r * (size_t)cols);
     Expr** flat_m = malloc(sizeof(Expr*) * (size_t)r * (size_t)c);
@@ -1027,7 +1033,11 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
     for (int j = 0; j < c; j++) {
         for (int kk = 0; kk < k; kk++) {
             if (pivot_for_col[j] == -1) {
-                flat_answers[j * k + kk] = expr_new_integer(0);
+                /* A free variable is set to 0 -- an invented value, so it
+                 * takes the system's exactness: a machine-real singular system
+                 * answers 0., not a two-headed {3., 0}. */
+                flat_answers[j * k + kk] = free_inexact ? expr_new_real(0.0)
+                                                        : expr_new_integer(0);
             } else {
                 int pr = pivot_for_col[j];
                 flat_answers[j * k + kk] = matrix[pr * cols + c + kk];
@@ -1248,7 +1258,7 @@ Expr* builtin_linearsolve(Expr* res) {
      * threshold, so the "already a buffer" guard never fires for it. */
     Expr* packed_call = linalg_pack_machine_call2(res);
     if (packed_call) {
-        Expr* fast = ndla_linearsolve(packed_call);
+        Expr* fast = linalg_try_fast(ndla_linearsolve, packed_call);
         expr_free(packed_call);
         if (fast) return fast;
     }

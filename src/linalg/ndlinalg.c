@@ -136,9 +136,24 @@ static Expr* nd_result_like(const Expr* a, const Expr* b, Expr* out)
     return out;
 }
 
+/* The call linalg_try_fast is probing, or NULL. The evaluator is single-
+ * threaded (the ND kernels' worker threads never evaluate), so a plain static
+ * suffices; it is saved and restored around each probe so probes nest. */
+static const Expr* g_linalg_probe_call = NULL;
+
+Expr* linalg_try_fast(Expr* (*fast)(Expr*), Expr* packed_call)
+{
+    const Expr* saved = g_linalg_probe_call;
+    g_linalg_probe_call = packed_call;
+    Expr* r = fast(packed_call);
+    g_linalg_probe_call = saved;
+    return r;
+}
+
 Expr* linalg_delist_and_reeval(Expr* res)
 {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
+    if (res == g_linalg_probe_call) return NULL;   /* declined probe: see linalg_try_fast */
     size_t n = res->data.function.arg_count;
     Expr** args = (n > 0) ? (Expr**)malloc(sizeof(Expr*) * n) : NULL;
     for (size_t i = 0; i < n; i++) {

@@ -571,7 +571,7 @@ Expr* builtin_inverse(Expr* res) {
      * "is it already a buffer" misses it and the generic path runs. */
     Expr* packed_call = linalg_pack_machine_call1(res);
     if (packed_call) {
-        Expr* fast = ndla_inverse(packed_call);
+        Expr* fast = linalg_try_fast(ndla_inverse, packed_call);
         expr_free(packed_call);
         if (fast) return fast;
     }

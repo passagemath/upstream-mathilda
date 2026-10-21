@@ -2188,6 +2188,26 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 }
             }
 
+            /* A VISIBLE NDArray beside a plain List that the lift above could
+             * not absorb -- unequal length, or a symbolic element. The gate
+             * materialises a packed argument in that position but by design
+             * never touches a visible one, so threading below treated the array
+             * as a scalar and broadcast it: NDArray[{1., 2., 3.}] + {1, 2} gave
+             * two whole arrays instead of Thread::tdlen, and
+             * NDArray[{1., 2.}] + {x, y} gave {nd + x, nd + y} instead of
+             * {1. + x, 2. + y}. Delist it, so the call threads exactly as the
+             * List would. A same-shape numeric List was already lifted to a
+             * buffer above and never reaches here. */
+            if ((attrs & ATTR_LISTABLE) && eval_any_ndarray_arg(res) && has_list_arg(res)) {
+                for (size_t i = 0; i < res->data.function.arg_count; i++) {
+                    Expr* pa = res->data.function.args[i];
+                    if (!is_ndarray(pa) || is_packed_list(pa)) continue;
+                    res->data.function.args[i] = ndarray_to_nested_list(pa);
+                    expr_free(pa);
+                    *changed = true;
+                }
+            }
+
             /* 3. Apply structural and semantic attributes.
              * Order follows Withoff §3.1: Flat → Sequence (already done above) →
              * Listable → Orderless. Flat must run before Listable so that lists

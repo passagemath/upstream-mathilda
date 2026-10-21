@@ -321,6 +321,39 @@ static void test_linearsolve_inverse_check(void) {
         "Equal[LinearSolve[mm, IdentityMatrix[4]], Inverse[mm]]]");
 }
 
+/* A small machine-real matrix is packed to reach the buffer path. When that
+ * path declined (non-square Det, singular Inverse or LinearSolve) it delisted
+ * and re-evaluated the same builtin, which packed it again -- to
+ * $RecursionLimit, with rows of Hold[List][...] in the result. Each now emits
+ * its one message and stays unevaluated, or answers. */
+static void test_linalg_machine_decline_no_recursion(void) {
+    silence_stderr();
+    run_check_true("Quiet[Det[{{1., 2., 3.}, {4., 5., 6.}}]] === Det[{{1., 2., 3.}, {4., 5., 6.}}]");
+    run_check_true("FreeQ[Quiet[Det[{{1., 2., 3.}, {4., 5., 6.}}]], Hold]");
+    run_check_true("Check[Det[{{1., 2., 3.}, {4., 5., 6.}}], failed] === failed");
+    run_check_true("FreeQ[Quiet[Det[NDArray[{{1., 2., 3.}, {4., 5., 6.}}]]], Hold]");
+    run_check_true("Quiet[Inverse[{{1., 2.}, {2., 4.}}]] === Inverse[{{1., 2.}, {2., 4.}}]");
+    run_check_true("Check[Inverse[{{1., 2.}, {2., 4.}}], failed, Inverse::sing] === failed");
+    run_check_true("FreeQ[Quiet[Inverse[NDArray[{{1., 2., 3.}, {4., 5., 6.}}]]], Hold]");
+    run_check_true("Check[LinearSolve[{{1., 2.}, {2., 4.}}, {1., 3.}], failed, LinearSolve::nosol] === failed");
+    /* The nonsingular machine cases keep the fast path. */
+    run_check_true("Det[{{1., 2.}, {3., 4.}}] == -2.");
+    run_check_true("LinearSolve[{{1., 2.}, {3., 4.}}, {1., 1.}] == {-1., 1.}");
+}
+
+/* Values the solver invents -- a free variable's 0, a pivot normalised to 1 --
+ * take the input's exactness, so a machine-real input answers in Reals only. */
+static void test_linalg_singular_machine_heads(void) {
+    run_check_true("LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}] === {3., 0.}");
+    run_check_true("Union[Head /@ LinearSolve[{{1., 2., 3.}, {2., 4., 6.}, {1., 1., 1.}}, {1., 2., 3.}]] === {Real}");
+    run_check_true("Union[Head /@ Flatten[RowReduce[{{1., 2., 1.}, {2., 4., 2.}}]]] === {Real}");
+    run_check_true("RowReduce[{{1., 2., 1.}, {2., 4., 2.}}] == {{1., 2., 1.}, {0., 0., 0.}}");
+    /* Exact input stays exact. */
+    run_check_true("LinearSolve[{{1, 2}, {2, 4}}, {3, 6}] === {3, 0}");
+    run_check_true("RowReduce[{{1, 2, 1}, {2, 4, 2}}] === {{1, 2, 1}, {0, 0, 0}}");
+    run_check_true("RowReduce[{{x, 2 x}, {1, 3}}] === {{1, 0}, {0, 1}}");
+}
+
 int main(void) {
     /* test_utils.h sets alarm(60); under valgrind that's tight, so
      * extend it.  Native runs need no headroom -- the suite runs in
@@ -340,6 +373,8 @@ int main(void) {
     TEST(test_linearsolve_no_solution);
     TEST(test_linearsolve_array_inputs);
     TEST(test_linearsolve_inverse_check);
+    TEST(test_linalg_machine_decline_no_recursion);
+    TEST(test_linalg_singular_machine_heads);
 
     printf("All LinearSolve tests passed!\n");
     symtab_clear();

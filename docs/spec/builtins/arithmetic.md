@@ -751,6 +751,9 @@ Out[6]= IntegerLength[1.1234]
   in the reference (0.45 s before). A zero element gives `Infinity`, so
   that result is an ordinary list. `IntegerExponent[v, b]` compiles at scalar
   and rank-1 shapes.
+- `IntegerExponent[array]` (base 10) maps an int64 packed or visible array
+  through the same exact kernel as `IntegerExponent[array, b]`; a 0 element or a
+  real array takes the List path (`IntegerExponent[0]` is `Infinity`).
 
 ```mathematica
 In[1]:= IntegerExponent[1230000]

@@ -59,10 +59,24 @@ Expr* linalg_pack_machine_call2(const Expr* res);
 /* Universal fallback: rebuild `res` with every top-level NDArray argument
  * replaced by its nested-List form and evaluate the result. Returns a freshly
  * owned Expr* (the evaluated call), or NULL if the rebuilt call cannot be
- * evaluated. Never frees `res`. Because the rebuilt call has no NDArray
- * arguments it cannot re-enter a `linalg_call_has_ndarray` guard, so there is
- * no recursion. */
+ * evaluated. Never frees `res`. The rebuilt call has no NDArray arguments, so
+ * it cannot re-enter a `linalg_call_has_ndarray` guard -- but a pack-and-try
+ * builtin would pack the plain List straight back, so those probe through
+ * linalg_try_fast, under which this returns NULL for the probed call. */
 Expr* linalg_delist_and_reeval(Expr* res);
+
+/* Run fast path `fast` on `packed_call` (from linalg_pack_machine_call1/2) as
+ * a PROBE: where it would decline by delisting and re-evaluating, it returns
+ * NULL instead, so the caller falls through to its own generic List path.
+ *
+ * Det, Inverse and LinearSolve pack a small machine-real List to reach the
+ * buffer path. When that path declines -- a non-square Det, a singular
+ * Inverse -- it delisted and re-evaluated, which called the same builtin on
+ * the same plain List, which packed it again: Det[{{1., 2., 3.}, {4., 5., 6.}}]
+ * ran to $RecursionLimit and printed rows of Hold[List][...]. Only the probed
+ * call itself is affected; nested evaluations inside the fast path keep the
+ * ordinary fallback. */
+Expr* linalg_try_fast(Expr* (*fast)(Expr*), Expr* packed_call);
 
 /* Per-routine NDArray fast paths. Each takes the full call `res`, parses the
  * arguments it needs, and returns a fast-path result, a genuine-error NULL, or

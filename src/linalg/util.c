@@ -69,7 +69,14 @@ Expr* exact_div_wrapper(Expr* num, Expr* den) {
     collect_variables(exp_den, &vars, &v_count, &v_cap);
     if (v_count > 0) qsort(vars, v_count, sizeof(Expr*), compare_expr_ptrs);
 
-    Expr* res = exact_poly_div(exp_num, exp_den, vars, v_count);
+    /* Two constants, one of them inexact: plain division keeps the inexactness.
+     * Exact polynomial division in no variables divides structurally, so
+     * 1./1. came back as the exact 1 -- RowReduce[{{1., 2., 1.}, {2., 4., 2.}}]
+     * answered {{1.0, 2.0, 1}, ...}, a result of two heads from an input of
+     * one. Falls through to the Times/Power branch below. */
+    Expr* res = (v_count == 0 && (matsol_is_inexact(num) || matsol_is_inexact(den)))
+                    ? NULL
+                    : exact_poly_div(exp_num, exp_den, vars, v_count);
 
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);

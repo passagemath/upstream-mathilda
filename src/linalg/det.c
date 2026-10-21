@@ -50,7 +50,7 @@ Expr* builtin_det(Expr* res) {
      * repeats against 0.0012 s packed, for the identical value. */
     Expr* packed_call = linalg_pack_machine_call1(res);
     if (packed_call) {
-        Expr* fast = ndla_det(packed_call);
+        Expr* fast = linalg_try_fast(ndla_det, packed_call);
         expr_free(packed_call);
         if (fast) return fast;
     }

@@ -30,6 +30,11 @@ modelled on numpy's `ndarray`.
 
   Only this constructor builds one: automatic packing never packs an empty
   List, so `Range[0]` and an empty `Select` result stay ordinary Lists.
+- A visible `NDArray` meeting a plain List in a Listable call threads as its
+  List does whenever the List cannot join the buffer: `NDArray[{1., 2., 3.}] +
+  {1, 2}` emits `Thread::tdlen`, and `NDArray[{1., 2.}] + {x, y}` is
+  `{1. + x, 2. + y}`. A same-shape numeric List still takes the buffer path
+  (`NDArray[{1., 2.}] + {10, 20}` is `NDArray[{11., 22.}]`).
 - `NDArray[...]` is always exactly what it says: `Head[NDArray[{{1, 2}, {3,
   4}}]]` is `NDArray`, never `List`; `MatrixQ`, `VectorQ` and `ListQ` all report
   `False` for it; and it always prints as `NDArray[{{1.0, 2.0}, {3.0, 4.0}}]`,
@@ -625,6 +630,10 @@ Gives the determinant of a square matrix.
 - **Packed/NDArray fast path** (machine reals): the LU factorisation runs through LAPACK `dgetrf` / `zgetrf` (in-house partial-pivot `double` LU as fallback).
 - **Overflow/underflow → arbitrary precision**: the determinant is the product of the LU pivots, which can exceed the IEEE-double range even when the matrix is ordinary — a 200×200 `RandomReal[{-10,10}]` matrix has `|Det| ≈ 10^340`. Rather than return `inf` (or `0` from a mid-product underflow), the pivot product is re-accumulated in a 53-bit-mantissa MPFR value whose exponent range is effectively unbounded, so the answer is finite and correct to machine precision (`Det[RandomReal[{-10,10},{200,200}]]` returns a `≈ -1.08×10^340` real). A genuinely singular matrix still returns `0`.
 - **Arbitrary-precision matrices**: a genuine MPFR matrix (precision > machine) uses an `O(n^3)` MPFR LU determinant (`mpfr_det_dispatch`) rather than the `O(n!)` Laplace expansion, which previously hung for `n ≳ 12`.
+- A non-square machine-real matrix emits `Det::matsq` once and stays
+  unevaluated. It used to run to `$RecursionLimit`: the buffer path declined,
+  re-evaluated `Det` on the List, and the List was packed back onto the buffer
+  path.
 
 ```mathematica
 In[1]:= Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -838,6 +847,9 @@ Gives the inverse of a square matrix.
   - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan on `[A | I]` with one division per pivot per row entry. Each entry is canonicalised via `Together` so symbolic cancellations are still detected. Fast on numeric matrices.
   - `Method -> "CofactorExpansion"` — adjugate / determinant formula `A^-1[i,j] = (-1)^(i+j) Det[M[j,i]] / Det[A]`, with `Det` computed via Laplace cofactor expansion. Time complexity is `O(n! n^2)`; intended for small `n` or closed-form symbolic inverses of small matrices. Emits `Inverse::sing` if `Det[A]` is structurally zero.
 - Unknown method names emit `Inverse::method` and the call remains unevaluated.
+- A singular or non-square machine-real matrix emits `Inverse::sing` /
+  `Inverse::matsq` once and stays unevaluated; it no longer recurses to
+  `$RecursionLimit` (see `Det`).
 
 ```mathematica
 In[1]:= Inverse[{{1.4,2},{3,-6.7}}]
@@ -1012,6 +1024,9 @@ Gives the row-reduced form of the matrix `m`.
   - `Method -> "CofactorExpansion"` — for a non-singular square matrix, returns the identity (verified via `Det[m] != 0` computed by Laplace cofactor expansion). On singular or rectangular input, falls back to `"DivisionFreeRowReduction"` and emits `RowReduce::cofnsq`.
 - `ZeroTest -> f` supplies a predicate deciding when an entry is zero during the reduction (zero iff `f[entry]` is `True`). Both a body such as `(RootReduce[Together[#]] === 0 &)` and a predicate head such as `PossibleZeroQ` are accepted. With a `ZeroTest`, an exact Gauss-Jordan RREF consults the predicate at every pivot (a structural RREF would pivot on an algebraic zero the predicate rejects) and keeps entries canonical via `Together`. Shares the machinery with `NullSpace` (`matsol_rref_with_zerotest`); `Method` and `ZeroTest` may be combined.
 - Unknown method names emit `RowReduce::method` and the call remains unevaluated.
+- The pivot 1s of a machine-real matrix are Reals, even where a pivot row
+  divides to exactly 1: `RowReduce[{{1., 2., 1.}, {2., 4., 2.}}]` is
+  `{{1., 2., 1.}, {0., 0., 0.}}`.
 
 ```mathematica
 In[1]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -2145,6 +2160,10 @@ Finds `x` that solves the matrix equation `m . x == b`.
   - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element on `[m | b]`. Each per-cell update is canonicalised via `Together` so symbolic rationals reduce. Fast on numeric matrices.
   - `Method -> "CofactorExpansion"` — Cramer's rule. Requires square non-singular `m`; emits `LinearSolve::cofnsq` on a non-square `m`, and `LinearSolve::cofsng` on a structurally singular `m`. For matrix `b` the rule is applied column-by-column.
 - Unknown method names emit `LinearSolve::method` and the call remains unevaluated.
+- A singular machine-real system that has solutions sets each free variable to
+  `0.`, not the exact `0`: `LinearSolve[{{1., 2.}, {2., 4.}}, {3., 6.}]` is
+  `{3., 0.}`. One with no solution emits `LinearSolve::nosol` once; neither
+  recurses to `$RecursionLimit` any more.
 
 ```mathematica
 In[1]:= LinearSolve[{{r, s}, {t, u}}, {y, z}]

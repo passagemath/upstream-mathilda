@@ -910,6 +910,15 @@ static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
 
 static const NDBinaryKernel NDKB_IntegerExponent =
     { NULL, false, NULL, ndk_IntegerExponent_ii, true, NULL, NULL };
+/* IntegerExponent[n]: the default base 10, through the same helper. Without a
+ * unary kernel a visible array was an atom to the one-argument form and stayed
+ * unevaluated, while the List threaded. A real buffer declines (integer-only
+ * descriptor) and the List path answers each element. */
+static bool ndk_IntegerExponent10_ii(int64_t n, int64_t* out) {
+    return ndk_IntegerExponent_ii(n, 10, out);
+}
+static const NDUnaryKernel NDKU_IntegerExponent =
+    { NULL, NULL, false, false, NULL, ndk_IntegerExponent10_ii, true, NULL };
 static const NDBinaryKernel NDKB_JacobiSymbol =
     { NULL, false, NULL, ndk_JacobiSymbol_ii, true, NULL, NULL };
 static const NDBinaryKernel NDKB_DivisorSigma =
@@ -1333,4 +1342,5 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
     symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);
     symtab_set_ndarray_binary_kernel("IntegerExponent", &NDKB_IntegerExponent);
+    symtab_set_ndarray_unary_kernel("IntegerExponent", &NDKU_IntegerExponent);
 }

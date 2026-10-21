@@ -515,6 +515,40 @@ static void test_ndarray_minmax_multi_arg(void) {
     assert_eval_eq("Max[NDArray[{3, 9}, DataType -> \"int64\"], 4]", "9", 0);
 }
 
+/* A Listable head with no array kernel for its arity left a visible array as
+ * an atom while the List threaded. Boole of a numeric array and the
+ * one-argument IntegerExponent now answer as on the List. */
+static void test_ndarray_boole_integerexponent(void) {
+    assert_eval_eq("Boole[NDArray[{1., 0.}]]", "{Boole[1.0], Boole[0.0]}", 0);
+    assert_eval_eq("Boole[NDArray[{1, 0}, DataType -> \"int64\"]]", "{Boole[1], Boole[0]}", 0);
+    assert_eval_eq("Boole[NDArray[{True, False}, DataType -> \"bool\"]]", "{1, 0}", 0);
+    assert_eval_eq("Boole[NDArray[{}]]", "{}", 0);
+    assert_eval_eq("IntegerExponent[NDArray[{10, 20, 300}, DataType -> \"int64\"]]",
+                   "NDArray[{1, 1, 2}]", 0);
+    assert_eval_eq("IntegerExponent[NDArray[{0, 10}, DataType -> \"int64\"]]", "{Infinity, 1}", 0);
+    assert_eval_eq("IntegerExponent[Range[10, 100, 10]]", "{1, 1, 1, 1, 1, 1, 1, 1, 1, 2}", 0);
+    assert_eval_eq("PackedArrayQ[IntegerExponent[Range[10, 100, 10]]]", "True", 0);
+    assert_eval_eq("Quiet[IntegerExponent[NDArray[{10., 20.}]]]",
+                   "{IntegerExponent[10.0], IntegerExponent[20.0]}", 0);
+}
+
+/* A visible array beside a plain List the lift could not absorb (unequal
+ * length, symbolic entries) was threaded as a scalar. It now threads as its
+ * List: a length mismatch is Thread::tdlen, a symbolic List pairs elementwise.
+ * A same-shape numeric List still takes the buffer path. */
+static void test_ndarray_plus_plain_list(void) {
+    assert_eval_eq("Quiet[NDArray[{1., 2., 3.}] + {1, 2}]", "{1, 2} + {1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("Check[NDArray[{1., 2., 3.}] + {1, 2}, failed]", "failed", 0);
+    assert_eval_eq("NDArray[{1., 2.}] + {x, y}", "{1.0 + x, 2.0 + y}", 0);
+    assert_eval_eq("NDArray[{2., 3.}] {x, 2}", "{2.0 x, 6.0}", 0);
+    assert_eval_eq("Quiet[BitShiftLeft[NDArray[{1, 2, 3}, DataType -> \"int64\"], {1, 2}]]",
+                   "BitShiftLeft[{1, 2, 3}, {1, 2}]", 0);
+    assert_eval_eq("NDArray[{1., 2.}] + {10, 20}", "NDArray[{11.0, 22.0}]", 0);
+    assert_eval_eq("NDArray[{{1., 2.}, {3., 4.}}] + {10, 20}",
+                   "NDArray[{{11.0, 12.0}, {23.0, 24.0}}]", 0);
+    assert_eval_eq("NDArray[{1., 2.}] + x", "NDArray[{1.0, 2.0}] + x", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -586,6 +620,8 @@ int main() {
     TEST(test_ndarray_empty_construct);
     TEST(test_ndarray_empty_operations);
     TEST(test_ndarray_minmax_multi_arg);
+    TEST(test_ndarray_boole_integerexponent);
+    TEST(test_ndarray_plus_plain_list);
 
     printf("All NDArray tests passed.\n");
     return 0;

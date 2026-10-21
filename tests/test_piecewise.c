@@ -93,7 +93,22 @@ void test_piecewise() {
         {"FractionalPart[-5/2]", "Rational[-1, 2]"},
         {"Round[-5/2]", "-2"},
         {"Round[-7/2]", "-4"},
-        
+
+        // int64 rationals past 2^53: exact quotient/remainder, not a double
+        // (Floor[(2^63-1)/2^37] was 2^26 and Ceiling[(2^54+1)/4] lost its +1).
+        {"Floor[(2^63 - 1)/2^37]", "67108863"},
+        {"Ceiling[(2^63 - 1)/2^37]", "67108864"},
+        {"FractionalPart[(2^63 - 1)/2^37]", "Rational[137438953471, 137438953472]"},
+        {"Ceiling[(2^54 + 1)/4]", "4503599627370497"},
+        {"Floor[-(2^54 + 1)/4]", "-4503599627370497"},
+        {"IntegerPart[-(2^54 + 1)/4]", "-4503599627370496"},
+        {"Round[(2^54 + 2)/4]", "4503599627370496"},
+        {"Round[(2^54 + 6)/4]", "4503599627370498"},
+        {"Round[-(2^54 + 6)/4]", "-4503599627370498"},
+        {"Round[(2^62 + 3)/4]", "1152921504606846977"},
+        {"Round[-(2^63)/3]", "-3074457345618258603"},
+        {"FractionalPart[-(2^63)/3]", "Rational[-2, 3]"},
+
         // Complex inputs
         {"Floor[Complex[2.4, -2.4]]", "Complex[2, -3]"},
         {"Round[Complex[2.5, -3.5]]", "Complex[2, -4]"},

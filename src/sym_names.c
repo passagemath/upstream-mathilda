@@ -319,6 +319,7 @@ const char* SYM_BitAnd = NULL;
 const char* SYM_BitOr = NULL;
 const char* SYM_BitNot = NULL;
 const char* SYM_BitSet = NULL;
+const char* SYM_BitGet = NULL;
 const char* SYM_IntegerExponent = NULL;
 const char* SYM_DigitCount = NULL;
 const char* SYM_DigitSum = NULL;
@@ -1344,6 +1345,7 @@ void sym_names_init(void) {
     SYM_BitOr                      = intern_symbol("BitOr");
     SYM_BitNot                     = intern_symbol("BitNot");
     SYM_BitSet                     = intern_symbol("BitSet");
+    SYM_BitGet                     = intern_symbol("BitGet");
     SYM_IntegerExponent            = intern_symbol("IntegerExponent");
     SYM_DigitCount                 = intern_symbol("DigitCount");
     SYM_DigitSum                   = intern_symbol("DigitSum");

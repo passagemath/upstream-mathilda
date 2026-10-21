@@ -182,18 +182,23 @@ static Expr* do_piecewise_1(Expr* x, int op) {
 #endif
     
     int64_t n, d;
-    if (is_rational(x, &n, &d)) {
-        double v = (double)n / d;
-        double res = 0.0;
-        if (op == OP_FLOOR) res = floor(v);
-        else if (op == OP_CEILING) res = ceil(v);
-        else if (op == OP_ROUND) res = round_half_even(v);
-        else if (op == OP_INTPART) res = trunc(v);
-        else if (op == OP_FRACPART) {
-            int64_t int_part = (int64_t)trunc(v);
-            return make_rational(n - int_part * d, d);
+    /* Exact int64 quotient and remainder. Going through (double)n / d was
+     * wrong once |n| > 2^53: Floor[(2^63 - 1)/2^37] gave 2^26, not 2^26 - 1,
+     * and Ceiling[(2^54 + 1)/4] lost its + 1. A non-positive denominator
+     * (only a structural Rational) falls through to the mpz branch below. */
+    if (is_rational(x, &n, &d) && d > 0) {
+        int64_t q = n / d, r = n % d;       /* trunc; r has the sign of n */
+        if (op == OP_FRACPART) return make_rational(r, d);
+        if (op == OP_FLOOR)        q -= (r < 0);
+        else if (op == OP_CEILING) q += (r > 0);
+        else if (op == OP_ROUND && r != 0) {
+            /* Half to even: compare 2|r| with d (|r| < d <= 2^63 - 1, so
+             * 2|r| fits in a uint64). */
+            uint64_t twice = 2 * (r < 0 ? -(uint64_t)r : (uint64_t)r);
+            if (twice > (uint64_t)d || (twice == (uint64_t)d && (q & 1)))
+                q += (r < 0) ? -1 : 1;
         }
-        return expr_new_integer((int64_t)res);
+        return expr_new_integer(q);
     }
 
     /* Rational[BigInt, _] / Rational[_, BigInt] / Rational[BigInt, BigInt] —

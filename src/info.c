@@ -5006,6 +5006,15 @@ void info_init(void) {
         "BitSet[n, k] with k < 0 or a non-integer argument is left "
         "unevaluated.");
 
+    symtab_set_docstring("BitGet",
+        "BitGet[n, k] gets the bit corresponding to the coefficient of 2^k in "
+        "the integer n, the bit k places from the right, as 0 or 1.\n"
+        "Integers are taken in two's complement with an unlimited number of "
+        "digits, so every high bit of a negative n is 1 (BitGet[-1, 100] is "
+        "1). BitGet threads over lists.\n"
+        "BitGet[n, k] with k < 0 or a non-integer argument is left "
+        "unevaluated.");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

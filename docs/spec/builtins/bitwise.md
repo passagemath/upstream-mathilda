@@ -383,3 +383,68 @@ Out[5]= {1, 0, 0, 0, 1, 0, 1, 0, 1, 0}
 In[6]:= {BitSet[-5, 2], BitSet[0, 64], BitSet[42, -1]}
 Out[6]= {-1, 18446744073709551616, BitSet[42, -1]}
 ```
+
+## BitGet
+
+- `BitGet[n, k]`: The bit of the integer `n` corresponding to the coefficient
+  of `2^k` -- the bit `k` places from the right -- as `0` or `1`.
+
+**Features**:
+- `Listable`, `Protected`. Integers are taken in two's complement with an
+  unlimited number of digits. Every bit of a negative `n` above its magnitude
+  is 1 (`BitGet[-1, 100]` is `1`, `BitGet[-42, 3]` is `0`), and bits above a
+  non-negative `n` are 0 (`BitGet[42, 1000]` is `0`). Threads over lists in
+  either or both arguments (`BitGet[5, {0, 1, 2, 3}]` is `{1, 0, 1, 0}`).
+  Lists of unequal length emit `Thread::tdlen`.
+- Exact at any size, and the answer is always the machine integer 0 or 1.
+  Machine integers are read with a shift and a mask. The shift count is
+  clamped to 63, which is exact because bit 63 is the sign bit and every
+  higher bit equals it. A bignum `n` is read in place by GMP's `mpz_tstbit`,
+  with no allocation and the operand untouched.
+- Left unevaluated **silently**, with no message: a negative `k`
+  (`BitGet[42, -1]`), a bignum `k`, any non-integer argument (`BitGet[2.5, 1]`,
+  `BitGet[5, 1.]`, `BitGet[x, 1]`), and the wrong argument count (`BitGet[5]`,
+  `BitGet[5, 1, 2]`). There are no symbolic rules:
+  `BitGet[BitSet[x, 1], 1]` stays as it is.
+- **Packed / NDArray**: an exact int64 binary kernel in `src/ndinteger.c`,
+  through the machine helper `ndint_bitget_i64`, on the `AWARE` and `INT64_OK`
+  lists. It has three whole-buffer arms:
+  - a buffer of `n` with a scalar `k`: one constant shift and mask;
+  - a scalar `n` with a buffer of `k`;
+  - two buffers.
+
+  The last two are branch-free, with per-element shifts. On x86-64 they get
+  the same AVX2 clone (`vpsrlvq`) as BitSet, chosen once at start-up. Because
+  any `k >= 0` has an int64 answer, the only decline is a negative `k`; those
+  elements stay unevaluated and the others answer (`BitGet[Range[3], {0, -1,
+  2}]` is `{1, BitGet[2, -1], 0}`). A packed array stays packed and a visible
+  `NDArray` gives a visible `NDArray`. Against NumPy's `(v >> k) & 1` on
+  random int64 data (x86-64, Mathilda mean time vs NumPy best of 3):
+
+  | n    | `BitGet[v, 3]`   | `BitGet[7, kv]`  | `BitGet[v, kv]`  |
+  |------|------------------|------------------|------------------|
+  | 10^5 | 0.037 vs 0.056 ms | 0.044 vs 0.060 ms | 0.055 vs 0.067 ms |
+  | 10^7 | 18.1 vs 23.6 ms  | 15.8 vs 23.8 ms  | 19.9 vs 27.5 ms  |
+- **Compile[]**: `OP_BGET_I`, through the same `ndint_bitget_i64`. It bails
+  to the interpreter only for a negative `k`, which then comes back
+  unevaluated exactly as uncompiled. It lowers at scalar shape and at array
+  shape (array `n`, array `k`, or both), and `CompileDiagnostics` reports
+  `Compiled -> True` for each. Auto-compilation follows. Scalar, List, packed,
+  `NDArray` and compiled results agree bit for bit.
+
+```
+In[1]:= IntegerDigits[42, 2]
+Out[1]= {1, 0, 1, 0, 1, 0}
+
+In[2]:= BitGet[42, 0]
+Out[2]= 0
+
+In[3]:= BitGet[42, 3]
+Out[3]= 1
+
+In[4]:= BitGet[Range[30, 60], 3]
+Out[4]= {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1}
+
+In[5]:= {BitGet[-1, 100], BitGet[-2^100, 99], BitGet[42, -1]}
+Out[5]= {1, 0, BitGet[42, -1]}
+```

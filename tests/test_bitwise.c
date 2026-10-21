@@ -1788,6 +1788,287 @@ static void test_bitset_stress(void) {
     }
 }
 
+/* ---- BitGet ------------------------------------------------------------ */
+
+static void test_bitget_documented_examples(void) {
+    assert_eval_eq("IntegerDigits[42, 2]", "{1, 0, 1, 0, 1, 0}", 0);
+    assert_eval_eq("BitGet[42, 0]", "0", 0);
+    assert_eval_eq("BitGet[42, 3]", "1", 0);
+    assert_eval_eq("BitGet[Range[30, 60], 3]",
+                   "{1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, "
+                   "0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1}", 0);
+}
+
+static void test_bitget_basic(void) {
+    assert_eval_eq("BitGet[0, 0]", "0", 0);
+    assert_eval_eq("BitGet[1, 0]", "1", 0);
+    assert_eval_eq("BitGet[42, 1]", "1", 0);
+    assert_eval_eq("BitGet[42, 5]", "1", 0);
+    assert_eval_eq("BitGet[42, 6]", "0", 0);
+    assert_eval_eq("BitGet[42, 1000]", "0", 0);
+    assert_eval_eq("Table[BitGet[42, k], {k, 0, 7}]", "{0, 1, 0, 1, 0, 1, 0, 0}", 0);
+    assert_eval_eq("Head[BitGet[42, 3]]", "Integer", 0);
+}
+
+static void test_bitget_negatives(void) {
+    /* Two's complement, infinitely sign-extended. */
+    assert_eval_eq("BitGet[-1, 0]", "1", 0);
+    assert_eval_eq("BitGet[-1, 100]", "1", 0);
+    assert_eval_eq("BitGet[-42, 1]", "1", 0);
+    assert_eval_eq("BitGet[-42, 3]", "0", 0);
+    assert_eval_eq("Table[BitGet[-42, k], {k, 0, 7}]", "{0, 1, 1, 0, 1, 0, 1, 1}", 0);
+    assert_eval_eq("BitGet[-256, 7]", "0", 0);
+    assert_eval_eq("BitGet[-256, 8]", "1", 0);
+}
+
+static void test_bitget_int64_boundary(void) {
+    assert_eval_eq("BitGet[2^63 - 1, 62]", "1", 0);
+    assert_eval_eq("BitGet[2^63 - 1, 63]", "0", 0);
+    assert_eval_eq("BitGet[2^63 - 1, 64]", "0", 0);
+    assert_eval_eq("BitGet[2^62, 62]", "1", 0);
+    assert_eval_eq("BitGet[1, 63]", "0", 0);
+    assert_eval_eq("BitGet[-2^63, 63]", "1", 0);
+    assert_eval_eq("BitGet[-2^63, 62]", "0", 0);
+    assert_eval_eq("BitGet[-2^63, 0]", "0", 0);
+    assert_eval_eq("BitGet[-2^63, 64]", "1", 0);
+    assert_eval_eq("BitGet[-7, 1000]", "1", 0);
+    assert_eval_eq("BitGet[7, 2^62]", "0", 0);
+    assert_eval_eq("BitGet[-7, 2^63 - 1]", "1", 0);
+}
+
+static void test_bitget_bignums(void) {
+    assert_eval_eq("BitGet[2^100, 100]", "1", 0);
+    assert_eval_eq("BitGet[2^100, 99]", "0", 0);
+    assert_eval_eq("BitGet[2^100, 101]", "0", 0);
+    assert_eval_eq("BitGet[-2^100, 100]", "1", 0);
+    assert_eval_eq("BitGet[-2^100, 99]", "0", 0);
+    assert_eval_eq("BitGet[-2^100, 101]", "1", 0);
+    assert_eval_eq("BitGet[2^63, 63]", "1", 0);
+    assert_eval_eq("BitGet[-2^63 - 1, 0]", "1", 0);
+    assert_eval_eq("BitGet[-2^63 - 1, 63]", "0", 0);
+    assert_eval_eq("BitGet[2^70 + 5, 2]", "1", 0);
+    assert_eval_eq("BitGet[2^70, 2^62]", "0", 0);
+    assert_eval_eq("BitGet[-3^200, 2^62]", "1", 0);
+    assert_eval_eq("BitGet[3^200, 0]", "1", 0);
+}
+
+static void test_bitget_bignum_operands_untouched(void) {
+    /* mpz_tstbit reads in place; a bound / shared operand is unchanged. */
+    assert_eval_eq("p = 3^200; r = BitGet[p, 5]; p == 3^200", "True", 0);
+    assert_eval_eq("p = -2^90; r = BitGet[p, 95]; {p == -2^90, r}", "{True, 1}", 0);
+    assert_eval_eq("l = {2^90, -2^91}; BitGet[l, 5]; l == {2^90, -2^91}", "True", 0);
+}
+
+static void test_bitget_unevaluated_silent(void) {
+    /* No message for any of these, wrong argument counts included. */
+    const char* in[] = { "BitGet[42, -1]", "BitGet[-10, -2]", "BitGet[2.5, 1]",
+                         "BitGet[5, 1.]", "BitGet[x, 1]", "BitGet[5, x]",
+                         "BitGet[1/2, 1]", "BitGet[5, 1/2]", "BitGet[I, 0]",
+                         "BitGet[1, 2^70]", "BitGet[-1, -2^70]", "BitGet[2^80, -1]",
+                         "BitGet[5]", "BitGet[5, 1, 2]",
+                         "BitGet[]", "BitGet[BitSet[x, 1], 1]" };
+    const char* out[] = { "BitGet[42, -1]", "BitGet[-10, -2]", "BitGet[2.5, 1]",
+                          "BitGet[5, 1.0]", "BitGet[x, 1]", "BitGet[5, x]",
+                          "BitGet[1/2, 1]", "BitGet[5, 1/2]", "BitGet[I, 0]",
+                          "BitGet[1, 1180591620717411303424]",
+                          "BitGet[-1, -1180591620717411303424]",
+                          "BitGet[1208925819614629174706176, -1]",
+                          "BitGet[5]", "BitGet[5, 1, 2]", "BitGet[]",
+                          "BitGet[BitSet[x, 1], 1]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(in[i], &result);
+        ASSERT(result != NULL);
+        ASSERT_STR_EQ(result, out[i]);
+        ASSERT_MSG(err == NULL || strstr(err, "::") == NULL,
+                   "unexpected diagnostic for %s: %s", in[i], err ? err : "(null)");
+        free(result);
+        free(err);
+    }
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char src[128];
+        snprintf(src, sizeof src, "Check[%s, failed]", in[i]);
+        assert_eval_eq(src, out[i], 0);
+    }
+}
+
+static void test_bitget_listable_shapes(void) {
+    assert_eval_eq("BitGet[{1, 2, 3}, {0, 1, 2}]", "{1, 1, 0}", 0);
+    assert_eval_eq("BitGet[{1, 2, 3}, 1]", "{0, 1, 1}", 0);
+    assert_eval_eq("BitGet[5, {0, 1, 2, 3}]", "{1, 0, 1, 0}", 0);
+    assert_eval_eq("BitGet[{1, {2, x}}, 1]", "{0, {1, BitGet[x, 1]}}", 0);
+    assert_eval_eq("BitGet[{0, 2^70, -1, 2.5}, 70]", "{0, 1, 1, BitGet[2.5, 70]}", 0);
+    assert_eval_eq("BitGet[{}, 3]", "{}", 0);
+    assert_eval_eq("BitGet[{{1, 2}, {3, 4}}, {0, 2}]", "{{1, 0}, {0, 1}}", 0);
+}
+
+static void test_bitget_ragged_tdlen(void) {
+    assert_eval_eq("BitGet[Range[3], Range[2]]", "BitGet[{1, 2, 3}, {1, 2}]", 0);
+    char* result = NULL;
+    char* err = eval_capturing_stderr("BitGet[{1, 2, 3}, {0, 1}]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitGet[{1, 2, 3}, {0, 1}]");
+    ASSERT_MSG(err != NULL && strstr(err, "Thread::tdlen: Objects of unequal length in "
+                                          "BitGet[{1, 2, 3}, {0, 1}] cannot be combined.") != NULL,
+               "expected tdlen diagnostic, got: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+    err = eval_capturing_stderr("Quiet[BitGet[{1, 2, 3}, {0, 1}]]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitGet[{1, 2, 3}, {0, 1}]");
+    ASSERT_MSG(err == NULL || strstr(err, "tdlen") == NULL,
+               "Quiet leaked: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+    assert_eval_eq("Check[BitGet[{1, 2, 3}, {0, 1}], failed]", "failed", 0);
+}
+
+static void test_bitget_properties(void) {
+    /* Independent oracles over every sign and size: floor division, BitAnd
+     * with 2^k, BitSet read-back, and reassembly of a non-negative n. */
+    assert_eval_eq(
+        "SeedRandom[31]; ns = Join[RandomInteger[{-2^200, 2^200}, 30], "
+        "RandomInteger[{-2^62, 2^62}, 30], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "ks = {0, 1, 5, 31, 32, 61, 62, 63, 64, 65, 127, 128, 300, 1000}; "
+        "And @@ Flatten[Table[BitGet[n, k] == Mod[Floor[n/2^k], 2] && "
+        "BitGet[n, k] == If[BitAnd[n, 2^k] == 0, 0, 1] && "
+        "BitGet[BitSet[n, k], k] == 1 && "
+        "BitGet[BitNot[n], k] == 1 - BitGet[n, k], "
+        "{n, ns}, {k, ks}]]", "True", 0);
+    assert_eval_eq(
+        "SeedRandom[32]; And @@ Table[Sum[BitGet[n, k] 2^k, {k, 0, BitLength[n]}] == n, "
+        "{n, Join[RandomInteger[{0, 2^150}, 40], {0, 1, 2^63 - 1, 2^63, 2^64}]}]",
+        "True", 0);
+    assert_eval_eq(
+        "And @@ Table[BitGet[a, Range[0, 11]] == Reverse[IntegerDigits[a, 2, 12]], "
+        "{a, 0, 4095}]", "True", 0);
+}
+
+static void test_bitget_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitGet[Range[10], 3]]", "True", 0);
+    assert_eval_eq("BitGet[Range[10], 1]", "{0, 1, 1, 0, 0, 1, 1, 0, 0, 1}", 0);
+    assert_eval_eq("PackedArrayQ[BitGet[5, Range[0, 9]]]", "True", 0);
+    assert_eval_eq("BitGet[5, Range[0, 4]]", "{1, 0, 1, 0, 0}", 0);
+    assert_eval_eq("PackedArrayQ[BitGet[Range[8], Range[0, 7]]]", "True", 0);
+    assert_eval_eq("BitGet[2^Range[0, 7], Range[0, 7]]", "{1, 1, 1, 1, 1, 1, 1, 1}", 0);
+    assert_eval_eq("BitGet[Range[8], Range[0, 7]]", "{1, 1, 0, 0, 0, 0, 0, 0}", 0);
+    assert_eval_eq("BitGet[NDArray[{1, 2, 3}, DataType -> \"int64\"], 1]",
+                   "NDArray[{0, 1, 1}]", 0);
+    assert_eval_eq("BitGet[5, NDArray[{0, 1, 2}, DataType -> \"int64\"]]",
+                   "NDArray[{1, 0, 1}]", 0);
+    assert_eval_eq("BitGet[NDArray[{1, 2, -3}, DataType -> \"int64\"], "
+                   "NDArray[{0, 1, 62}, DataType -> \"int64\"]]",
+                   "NDArray[{1, 1, 1}]", 0);
+    assert_eval_eq("BitGet[NDArray[{{1, 2}, {3, 4}}, DataType -> \"int64\"], 0]",
+                   "NDArray[{{1, 0}, {1, 0}}]", 0);
+    assert_eval_eq("PackedArrayQ[BitGet[Partition[Range[12], 3], 2]]", "True", 0);
+    /* Past bit 62 the buffer still answers: the sign bit. */
+    assert_eval_eq("BitGet[{-1, 0, 5, -5}, 63]", "{1, 0, 0, 1}", 0);
+    assert_eval_eq("BitGet[{-1, 0, 5, -5}, 10^6]", "{1, 0, 0, 1}", 0);
+    assert_eval_eq("BitGet[-5, Range[60, 66]]", "{1, 1, 1, 1, 1, 1, 1}", 0);
+    assert_eval_eq("BitGet[{-1, 3}, {100, 2^62}]", "{1, 0}", 0);
+    assert_eval_eq("PackedArrayQ[BitGet[-Range[5], 1000]]", "True", 0);
+    /* A real buffer has no integer answer: elements stay unevaluated. */
+    assert_eval_eq("BitGet[NDArray[{1.5, 2.}], 1]", "{BitGet[1.5, 1], BitGet[2.0, 1]}", 0);
+}
+
+static void test_bitget_buffer_declines(void) {
+    /* A negative k: those elements stay unevaluated, the others answer. */
+    assert_eval_eq("BitGet[Range[3], {0, -1, 2}]", "{1, BitGet[2, -1], 0}", 0);
+    assert_eval_eq("BitGet[1, {-1, 0}]", "{BitGet[1, -1], 1}", 0);
+    assert_eval_eq("BitGet[NDArray[{1, 2}, DataType -> \"int64\"], -1]",
+                   "{BitGet[1, -1], BitGet[2, -1]}", 0);
+    assert_eval_eq("BitGet[Range[2], -1]", "{BitGet[1, -1], BitGet[2, -1]}", 0);
+    assert_eval_eq("BitGet[{1, 2^70, x}, 70]", "{0, 1, BitGet[x, 70]}", 0);
+    assert_eval_eq("BitGet[{-2^63, 2^63 - 1}, {-2^63, 0}]",
+                   "{BitGet[-9223372036854775808, -9223372036854775808], 1}", 0);
+}
+
+static void test_bitget_surfaces_agree(void) {
+    /* List == packed == NDArray == Compile (array and scalar), for every arm. */
+    assert_eval_eq(
+        "SeedRandom[33]; na = Join[RandomInteger[{-2^62, 2^62}, 500], "
+        "{-2^63, 2^63 - 1, 0, -1}]; ka = RandomInteger[{0, 100}, Length[na]]; "
+        "ref1 = Table[Mod[Floor[na[[i]]/2^37], 2], {i, Length[na]}]; "
+        "ref2 = Table[Mod[Floor[-12345/2^ka[[i]]], 2], {i, Length[na]}]; "
+        "ref3 = Table[Mod[Floor[na[[i]]/2^ka[[i]]], 2], {i, Length[na]}]; "
+        "{BitGet[na, 37] === ref1, "
+        " Normal[BitGet[NDArray[na, DataType -> \"int64\"], 37]] === ref1, "
+        " Compile[{{v, _Integer, 1}}, BitGet[v, 37]][na] === ref1, "
+        " BitGet[-12345, ka] === ref2, "
+        " Normal[BitGet[-12345, NDArray[ka, DataType -> \"int64\"]]] === ref2, "
+        " Compile[{{v, _Integer, 1}}, BitGet[-12345, v]][ka] === ref2, "
+        " BitGet[na, ka] === ref3, "
+        " Normal[BitGet[NDArray[na, DataType -> \"int64\"], NDArray[ka, DataType -> \"int64\"]]] === ref3, "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitGet[v, w]][na, ka] === ref3, "
+        " Table[Compile[{{s, _Integer}, {t, _Integer}}, BitGet[s, t]][na[[i]], ka[[i]]], {i, Length[na]}] === ref3, "
+        " Table[BitGet[na[[i]], ka[[i]]], {i, Length[na]}] === ref3, "
+        " Table[BitGet[FromPackedArray[na][[i]], ka[[i]]], {i, Length[na]}] === ref3}",
+        "{True, True, True, True, True, True, True, True, True, True, True, True}", 0);
+}
+
+static void test_bitget_compile(void) {
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitGet[n, k]][42, 3]", "1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitGet[n, 0]][42]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitGet[n, 63]][-1]", "1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitGet[n, 1000]][7]", "0", 0);
+    /* k < 0: the VM bails and the interpreter leaves it unevaluated. */
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitGet[n, k]][42, -1]",
+                   "BitGet[42, -1]", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitGet[v, 1]][Range[5]]", "{0, 1, 1, 0, 0}", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Sum[BitGet[n, k] 2^k, {k, 0, 10}]][1234]", "1234", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, BitGet[x, 1]][2.5]", "BitGet[2.5, 1]", 0);
+}
+
+static void test_bitget_compile_diagnostics(void) {
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{n, _Integer}, {k, _Integer}}, BitGet[n, k]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitGet[v, 3]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitGet[7, v]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitGet[v, w]]", "True", 0);
+}
+
+static void test_bitget_autocompile(void) {
+    const char* tbl = "Table[x + BitGet[Floor[x], 3], {x, 0., 2000., 0.5}]";
+    const char* sm  = "Sum[Sin[x] BitGet[Floor[x], 2], {x, 0., 500., 0.25}]";
+    assert_eval_eq("Table[x + BitGet[Floor[x], 1], {x, 0., 2., 0.5}]",
+                   "{0.0, 0.5, 1.0, 1.5, 3.0}", 0);
+    autocompile_set_enabled(false);
+    Expr* t_off = bitnot_eval_owned(tbl);
+    Expr* s_off = bitnot_eval_owned(sm);
+    autocompile_set_enabled(true);
+    Expr* t_on = bitnot_eval_owned(tbl);
+    Expr* s_on = bitnot_eval_owned(sm);
+    ASSERT(expr_eq(t_off, t_on));
+    ASSERT(expr_eq(s_off, s_on));
+    ASSERT(s_on->type == EXPR_REAL);
+    expr_free(t_off); expr_free(s_off); expr_free(t_on); expr_free(s_on);
+}
+
+static void test_bitget_attributes(void) {
+    assert_eval_eq("Attributes[BitGet]", "{Listable, Protected}", 0);
+}
+
+static void test_bitget_docstring_and_sym(void) {
+    SymbolDef* def = symtab_get_def("BitGet");
+    ASSERT(def != NULL);
+    ASSERT(def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "coefficient of 2^k") != NULL);
+    ASSERT(SYM_BitGet != NULL && strcmp(SYM_BitGet, "BitGet") == 0);
+}
+
+static void test_bitget_stress(void) {
+    for (int k = 0; k < 50; k++) {
+        assert_eval_eq("BitGet[42, 3]", "1", 0);
+        assert_eval_eq("BitGet[-1, 100]", "1", 0);
+        assert_eval_eq("BitGet[2^100, 100]", "1", 0);
+        assert_eval_eq("BitGet[-2^100, 99]", "0", 0);
+        assert_eval_eq("BitGet[x, 1]", "BitGet[x, 1]", 0);
+        assert_eval_eq("BitGet[Range[4], 1]", "{0, 1, 1, 0}", 0);
+        assert_eval_eq("BitGet[-Range[4], 100]", "{1, 1, 1, 1}", 0);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1939,6 +2220,25 @@ int main(void) {
     TEST(test_bitset_attributes);
     TEST(test_bitset_docstring_and_sym);
     TEST(test_bitset_stress);
+    TEST(test_bitget_documented_examples);
+    TEST(test_bitget_basic);
+    TEST(test_bitget_negatives);
+    TEST(test_bitget_int64_boundary);
+    TEST(test_bitget_bignums);
+    TEST(test_bitget_bignum_operands_untouched);
+    TEST(test_bitget_unevaluated_silent);
+    TEST(test_bitget_listable_shapes);
+    TEST(test_bitget_ragged_tdlen);
+    TEST(test_bitget_properties);
+    TEST(test_bitget_packed_and_ndarray);
+    TEST(test_bitget_buffer_declines);
+    TEST(test_bitget_surfaces_agree);
+    TEST(test_bitget_compile);
+    TEST(test_bitget_compile_diagnostics);
+    TEST(test_bitget_autocompile);
+    TEST(test_bitget_attributes);
+    TEST(test_bitget_docstring_and_sym);
+    TEST(test_bitget_stress);
 
     printf("All BitLength / BitXor / BitAnd / BitOr / BitNot / BitSet tests passed!\n");
     return 0;

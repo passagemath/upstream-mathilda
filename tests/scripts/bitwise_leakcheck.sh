@@ -2,7 +2,7 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength, BitXor, BitAnd, BitOr, BitNot and BitSet (machine-int, bignum, negative,
+# Drives BitLength, BitXor, BitAnd, BitOr, BitNot, BitSet and BitGet (machine-int, bignum, negative,
 # INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
 # cancellation / idempotence / 0- and -1-absorption, BitNot extraction, BitSet
 # bignum growth and buffer declines, Compile, and
@@ -206,6 +206,43 @@ Do[cfss[42, 9], {200}];
 Do[cfss[0, 63], {200}];
 Do[cfss[42, -1], {200}];
 Do[Table[x + BitSet[Floor[x], 3], {x, 0., 200., 0.5}], {20}];
+Do[BitGet[42, 3], {200}];
+Do[BitGet[-42, 1], {200}];
+Do[BitGet[-1, 1000], {200}];
+Do[BitGet[2^63 - 1, 63], {200}];
+Do[BitGet[2^100, 100], {200}];
+Do[BitGet[-2^100, 99], {200}];
+Do[BitGet[100!, 2^62], {200}];
+bgp = 3^200; Do[BitGet[bgp, 7], {200}];
+Do[BitGet[42, -1], {200}];
+Do[BitGet[1, 2^70], {200}];
+Do[BitGet[x, 1], {200}];
+Do[BitGet[2.5, 1], {200}];
+Do[BitGet[5], {200}];
+Do[BitGet[5, 1, 2], {200}];
+Do[BitGet[{1, {2, x}, 2.5, 2^70}, 3], {200}];
+Do[Quiet[BitGet[{1, 2, 3}, {0, 1}]], {200}];
+Do[BitGet[Range[100], 5], {200}];
+Do[BitGet[7, Range[0, 100]], {200}];
+Do[BitGet[Range[50], Range[0, 49]], {200}];
+Do[BitGet[-Range[10], 1000], {200}];
+Do[BitGet[Range[3], {0, -1, 2}], {200}];
+Do[BitGet[Range[3], -1], {200}];
+Do[BitGet[NDArray[{1, 2, 3}, DataType -> "int64"], 1], {200}];
+Do[BitGet[5, NDArray[{0, 1, 2}, DataType -> "int64"]], {200}];
+Do[BitGet[NDArray[{1, 2, 3}, DataType -> "int64"], NDArray[{0, 1, 64}, DataType -> "int64"]], {200}];
+Do[BitGet[NDArray[{1, 2}, DataType -> "int64"], -1], {200}];
+Do[BitGet[NDArray[{1.5, 2.}], 1], {200}];
+cfg = Compile[{{v, _Integer, 1}}, BitGet[v, 3]];
+Do[cfg[Range[-50, 50]], {200}];
+cfg2 = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitGet[v, w]];
+Do[cfg2[Range[32], Range[0, 31]], {200}];
+Do[cfg2[Range[3], {0, -1, 2}], {200}];
+cfgs = Compile[{{n, _Integer}, {k, _Integer}}, BitGet[n, k]];
+Do[cfgs[42, 3], {200}];
+Do[cfgs[42, -1], {200}];
+Do[Table[x + BitGet[Floor[x], 3], {x, 0., 200., 0.5}], {20}];
+Do[{Floor[(2^63 - 1)/2^37], Ceiling[(2^54 + 1)/4], Round[-(2^54 + 6)/4], FractionalPart[-(2^63)/3]}, {200}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

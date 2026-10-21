@@ -90,6 +90,17 @@ static inline bool ndint_bitset_i64(int64_t n, int64_t k, int64_t* out) {
     return false;
 }
 
+/* BitGet[n, k] in int64: bit k of n as 0 or 1, two's complement. Shared by
+ * the scalar builtin (src/bitwise/bitget.c), the NDArray kernels and
+ * Compile's OP_BGET_I. Declines (false) only for k < 0 (BitGet stays
+ * unevaluated). Clamping k to 63 is exact: bit 63 is the sign bit, and in
+ * unlimited two's complement every higher bit equals it. */
+static inline bool ndint_bitget_i64(int64_t n, int64_t k, int64_t* out) {
+    if (k < 0) return false;
+    *out = (int64_t)(((uint64_t)n >> (k < 63 ? k : 63)) & 1);
+    return true;
+}
+
 Expr* ndint_prime(Expr* res);          /* Prime[arr] */
 Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */

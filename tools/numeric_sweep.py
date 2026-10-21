@@ -639,6 +639,9 @@ P("bitnot", "integer", "BitNot[iv]", "np.invert(iv)")
 P("bitset", "integer", "BitSet[iv, 5]", "np.bitwise_or(iv, 1 << 5)")
 P("bitset_vk", "integer", "BitSet[iv, Mod[kv, 32]]",
   "np.bitwise_or(iv, np.left_shift(1, kv % 32))")
+P("bitget", "integer", "BitGet[iv, 3]", "np.bitwise_and(np.right_shift(iv, 3), 1)")
+P("bitget_vk", "integer", "BitGet[iv, Mod[kv, 64]]",
+  "np.bitwise_and(np.right_shift(iv, kv % 64), 1)")
 P("bitshiftleft", "integer", "BitShiftLeft[iv, 3]", "np.left_shift(iv, 3)")
 P("integerlength", "integer", "IntegerLength[cv]",
   "np.floor(np.log10(cv)).astype(np.int64)+1")

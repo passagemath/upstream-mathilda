@@ -1175,6 +1175,13 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 if (!ndint_bitset_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
                 RD.i = (long long)r; NEXT();
             }
+            /* BitGet: bit k of n as 0/1, through the interpreter's own
+             * ndint_bitget_i64; bails only for k < 0. */
+            OP(BGET_I): {
+                int64_t r;
+                if (!ndint_bitget_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
+                RD.i = (long long)r; NEXT();
+            }
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
             OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i

@@ -1162,6 +1162,8 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(BLEN_I):  IOP(int_blen(RA.i, &RD.i));
             /* BitXor: two's-complement XOR, total on int64 -- never bails. */
             OP(BXOR_I):  RD.i = RA.i ^ RB.i; NEXT();
+            /* BitAnd: two's-complement AND, total on int64 -- never bails. */
+            OP(BAND_I):  RD.i = RA.i & RB.i; NEXT();
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
             OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i

@@ -30,16 +30,18 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
     {
         bool pred = false;
         if (int_only_head(h, na, &pred) && all_args_int(c, A, na)) {
-            /* GCD / LCM / BitXor: Flat and n-ary, folded left the way the
-             * interpreter's own Flat attribute would associate them. */
-            if (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0
-                || strcmp(h, "BitXor") == 0) {
-                uint16_t op = (h[0] == 'G') ? OP_GCD_I
-                            : (h[0] == 'L') ? OP_LCM_I : OP_BXOR_I;
+            /* GCD / LCM / BitXor / BitAnd: Flat and n-ary, folded left the
+             * way the interpreter's own Flat attribute would associate them. */
+            uint16_t fold = strcmp(h, "GCD") == 0    ? OP_GCD_I
+                          : strcmp(h, "LCM") == 0    ? OP_LCM_I
+                          : strcmp(h, "BitXor") == 0 ? OP_BXOR_I
+                          : strcmp(h, "BitAnd") == 0 ? OP_BAND_I
+                          : OP__COUNT;                   /* not a fold head */
+            if (fold != OP__COUNT) {
                 Val acc; if (!emit(c, A[0], &acc)) return -1;
                 for (size_t i = 1; i < na; i++) {
                     Val v; if (!emit(c, A[i], &v)) return -1;
-                    acc = binop(c, op, acc, v, CT_INT);
+                    acc = binop(c, fold, acc, v, CT_INT);
                     if (!c->ok) return -1;
                 }
                 *out = acc; return c->ok ? 1 : -1;

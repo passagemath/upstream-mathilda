@@ -124,3 +124,66 @@ In[6]:= BitXor[2.5, 3]
         BitXor::int: Integer expected at position 1 in BitXor[2.5, 3].
 Out[6]= BitXor[2.5, 3]
 ```
+
+## BitAnd
+
+- `BitAnd[n1, n2, ...]`: The bitwise AND of the integers `ni` -- the integer
+  whose binary representation has ones at the positions where all of the `ni`
+  have ones.
+
+**Features**:
+- `Flat`, `Listable`, `OneIdentity`, `Orderless`, `Protected`. Takes any number
+  of arguments; `BitAnd[]` is `-1` (the identity) and `BitAnd[n]` is `n`.
+  Threads over lists (`BitAnd[Range[70, 130], 17]`, `BitAnd[{1, 2}, 3, {4, 5}]`),
+  including nested and empty ones (`BitAnd[{}]` and `BitAnd[{}, {}]` are `{}`).
+- Negative integers are taken in two's complement (`BitAnd[-2, -3]` is `-4`).
+  Integers of any size are exact: bignums go through GMP's `mpz_and`, read in
+  place and ANDed straight into a presized result (no operand or result
+  copies), and a result that fits in a machine integer is returned as one
+  (`BitAnd[2^70 + 5, 7]` is `5`).
+- Automatic symbolic simplification (AND is idempotent, `-1` is its identity
+  and `0` absorbs):
+  1. identical arguments collapse to one (`BitAnd[x, y, y, x]` is
+     `BitAnd[x, y]`, `BitAnd[2.5, 2.5]` is `2.5`);
+  2. the integers combine into one constant (`BitAnd[3, 5, x]` is
+     `BitAnd[1, x]`). A constant of `0` absorbs everything, symbols and
+     non-integers included (`BitAnd[1, 2, x]` and `BitAnd[0, 2.5]` are `0`); a
+     constant of `-1` is dropped (`BitAnd[-1, x]` is `x`); any other constant
+     stays inline (`BitAnd[-5, x]`).
+
+  There are no complement or absorption rules: `BitAnd[x, BitNot[x]]` and
+  `BitAnd[x, BitOr[x, y]]` stay as they are.
+- **Packed / NDArray**: an exact int64 kernel (`ndk_BitAnd_ii`, plus
+  vectorisable whole-buffer arms for array & scalar and array & array) in
+  `src/ndinteger.c`, on the `AWARE` and `INT64_OK` lists. The n-ary form
+  (`BitAnd[v, w, 7]`, `BitAnd[v, 7, 14]`) stays on the buffer, one pass per
+  operand; a combined constant of `-1` costs no pass. A visible `NDArray` gives
+  a visible `NDArray`. Operands that no int64 buffer can hold (a bignum, a
+  symbol) take the exact List path. At 10^5 elements `BitAnd[v, 255]` and
+  `BitAnd[v, w]` take about 0.04 and 0.05 ms, level with NumPy's `bitwise_and`.
+- **Compile[]**: `OP_BAND_I` (total, never bails), folded left for any arity.
+  It lowers at scalar shape, array & scalar, array & array and the n-ary array
+  form, and `CompileDiagnostics` reports `Compiled -> True` for each. Scalar,
+  List, packed, `NDArray` and compiled results agree bit for bit, `INT64_MIN`
+  included.
+
+```
+In[1]:= BitAnd[61, 15]
+Out[1]= 13
+
+In[2]:= BitAnd[3^100, 5^100]
+Out[2]= 503913279078601980753385379100266097026814443729
+
+In[3]:= BitAnd[3333, 5555, 7777, 9999]
+Out[3]= 1025
+
+In[4]:= {BitAnd[x, y, y, x], BitAnd[3, 5, x], BitAnd[1, 2, x], BitAnd[-1, x]}
+Out[4]= {BitAnd[x, y], BitAnd[1, x], 0, x}
+
+In[5]:= Table[Sign[BitAnd[i, 2^2 + 2^3]], {i, 16}]
+Out[5]= {0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0}
+```
+
+**Diagnostics**. None. A non-integer number (a Real, Rational or Complex) is
+left in the call silently, exactly as a symbol is (`BitAnd[2.5, 3]` stays
+unevaluated and `Check` takes the value branch).

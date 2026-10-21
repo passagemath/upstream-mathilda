@@ -8,6 +8,13 @@
  * an IntegerDigits oracle, packed + NDArray (binary and n-ary), cross-surface
  * bit-equality incl. Compile, CompileDiagnostics, ::int + Quiet/Check.
  *
+ * BitAnd[n1, n2, ...] -- bitwise AND (two's complement), same attributes:
+ * documented examples, bignums, idempotence / integer folding / 0 absorbs /
+ * -1 dropped, silent non-integers (no message), a
+ * two's-complement oracle a + b == BitXor[a, b] + 2 BitAnd[a, b] across the
+ * bignum boundary, packed + NDArray (binary and n-ary), cross-surface
+ * bit-equality incl. Compile, CompileDiagnostics.
+ *
  * BitLength coverage:
  *   - Small positives, powers of two (2^k -> k+1, 2^k-1 -> k), zero.
  *   - Negatives: BitLength[n] = BitLength[BitNot[n]], BitNot[n] = -n-1, so
@@ -639,6 +646,302 @@ static void test_bitxor_stress(void) {
     }
 }
 
+/* ===================================================================== *
+ *  BitAnd[n1, n2, ...]                                                   *
+ * ===================================================================== */
+
+/* --- Documented examples -------------------------------------------- */
+
+static void test_bitand_documented_examples(void) {
+    assert_eval_eq("BitAnd[61, 15]", "13", 0);
+    assert_eval_eq("BitAnd[Range[70, 130], 17]",
+        "{0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 16, 17, 16, 17, 16, 17, 16, 17, 16, 17, "
+        "16, 17, 16, 17, 16, 17, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, "
+        "16, 17, 16, 17, 16, 17, 16, 17, 16, 17, 16, 17, 16, 17, 16, 17, 0, 1, 0}", 0);
+    assert_eval_eq("BitAnd[3^100, 5^100]",
+        "503913279078601980753385379100266097026814443729", 0);
+    assert_eval_eq("BitAnd[3333, 5555, 7777, 9999]", "1025", 0);
+    assert_eval_eq("BitAnd[-2, -3]", "-4", 0);
+    assert_eval_eq("BitAnd[x, y, y, x]", "BitAnd[x, y]", 0);
+    assert_eval_eq("BitAnd[3, 5, x]", "BitAnd[1, x]", 0);
+    assert_eval_eq("BitAnd[1, 2, x]", "0", 0);
+    assert_eval_eq("Table[BitAnd[i, 2], {i, 10}]", "{0, 2, 2, 0, 0, 2, 2, 0, 0, 2}", 0);
+    assert_eval_eq("Table[Sign[BitAnd[i, 2^2 + 2^3]], {i, 16}]",
+                   "{0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0}", 0);
+    assert_eval_eq("BitAnd[y, x]", "BitAnd[x, y]", 0);
+    assert_eval_eq("BitAnd[]", "-1", 0);
+    assert_eval_eq("BitAnd[{}]", "{}", 0);
+    assert_eval_eq("BitAnd[{}, {}]", "{}", 0);
+}
+
+static void test_bitand_basic(void) {
+    assert_eval_eq("BitAnd[-6, 3]", "2", 0);
+    assert_eval_eq("BitAnd[0, 0]", "0", 0);
+    assert_eval_eq("BitAnd[7, 7]", "7", 0);
+    assert_eval_eq("BitAnd[5]", "5", 0);
+    assert_eval_eq("BitAnd[-1, -1]", "-1", 0);
+    assert_eval_eq("BitAnd[-7, -7]", "-7", 0);
+    assert_eval_eq("BitAnd[-1]", "-1", 0);
+    assert_eval_eq("Outer[BitAnd, {1, 0}, {1, 0}]", "{{1, 0}, {0, 0}}", 0);
+}
+
+static void test_bitand_listable_shapes(void) {
+    assert_eval_eq("BitAnd[Range[16], 5]",
+                   "{1, 0, 1, 4, 5, 4, 5, 0, 1, 0, 1, 4, 5, 4, 5, 0}", 0);
+    assert_eval_eq("BitAnd[{1, 2}, 3, {4, 5}]", "{0, 0}", 0);
+    assert_eval_eq("BitAnd[{{1, 2}, {3, 4}}, 1]", "{{1, 0}, {1, 0}}", 0);
+    assert_eval_eq("BitAnd[{{1, 2}, {3, 4}}, 5]", "{{1, 0}, {1, 4}}", 0);
+    assert_eval_eq("BitAnd[{1, 2}, {3, 4}]", "{1, 0}", 0);
+    assert_eval_eq("BitAnd[{1, 2}, {3, 4}, {5, 6}]", "{1, 0}", 0);
+    assert_eval_eq("BitAnd[0, {1, 2}]", "{0, 0}", 0);
+    assert_eval_eq("BitAnd[{1, 2}, x]", "{BitAnd[1, x], BitAnd[2, x]}", 0);
+    assert_eval_eq("BitAnd[x, {1, 2}, {3, 4}]", "{BitAnd[1, x], 0}", 0);
+}
+
+/* --- Bignums and the int64 boundary ---------------------------------- */
+
+static void test_bitand_bignums(void) {
+    assert_eval_eq("BitAnd[2^63, -1]", "9223372036854775808", 0);
+    assert_eval_eq("BitAnd[-2^63, -1]", "-9223372036854775808", 0);
+    assert_eval_eq("BitAnd[2^63 - 1, -2^63]", "0", 0);
+    assert_eval_eq("BitAnd[-2^63, -2^63 + 1]", "-9223372036854775808", 0);
+    assert_eval_eq("BitAnd[2^70, -1]", "1180591620717411303424", 0);
+    assert_eval_eq("BitAnd[2^100, -2^100]", "1267650600228229401496703205376", 0);
+    assert_eval_eq("BitAnd[-3^50, 7, -5^30]", "7", 0);
+    assert_eval_eq("BitAnd[-3^50, 2^80 - 1]", "491027831922776585935927", 0);
+    assert_eval_eq("BitAnd[-2^100 - 1, 2^101 - 1]",
+                   "1267650600228229401496703205375", 0);
+    assert_eval_eq("BitAnd[{2^64 + 3, 1}, 2^64 + 1]", "{18446744073709551617, 1}", 0);
+    /* A bignum result that fits normalises back to a machine integer. */
+    assert_eval_eq("BitAnd[-3^50, 7, -5^30] // MachineIntegerQ", "True", 0);
+    assert_eval_eq("MachineIntegerQ[BitAnd[2^70 + 5, 7]]", "True", 0);
+    /* Machine constants folded into a bignum once, mixed signs. */
+    assert_eval_eq("BitAnd[2^100 - 1, 2, 4, -8]", "0", 0);
+    assert_eval_eq("BitAnd[3^100, 5^100, -7]",
+                   "503913279078601980753385379100266097026814443729", 0);
+}
+
+static void test_bitand_bignum_operands_untouched(void) {
+    /* The bignum path ANDs in place into a private result node, set from the
+     * first BigInt: the operands -- bound, shared or repeated -- are unchanged. */
+    assert_eval_eq("p = 3^200; q = 5^150; r = BitAnd[p, q, p, -1]; "
+                   "{p == 3^200, q == 5^150, r == BitAnd[3^200, 5^150]}",
+                   "{True, True, True}", 0);
+    assert_eval_eq("p = 2^100 + 7; {BitAnd[p, p], p == 2^100 + 7}",
+                   "{1267650600228229401496703205383, True}", 0);
+    assert_eval_eq("l = {2^90 + 1, 2^91 + 3}; BitAnd[l, 2^90 + 3]; l == {2^90 + 1, 2^91 + 3}",
+                   "True", 0);
+}
+
+/* --- Symbolic simplification ----------------------------------------- */
+
+static void test_bitand_idempotence(void) {
+    assert_eval_eq("BitAnd[x, x]", "x", 0);
+    assert_eval_eq("BitAnd[x, x, x]", "x", 0);
+    assert_eval_eq("BitAnd[x, y, z, x]", "BitAnd[x, y, z]", 0);
+    assert_eval_eq("BitAnd[f[u], f[u], 3]", "BitAnd[3, f[u]]", 0);
+    assert_eval_eq("BitAnd[u, 3, u]", "BitAnd[3, u]", 0);
+    assert_eval_eq("BitAnd[7, x, x, y]", "BitAnd[7, x, y]", 0);
+    assert_eval_eq("BitAnd[2.5, 2.5]", "2.5", 0);
+    assert_eval_eq("BitAnd[x, 2.5, 2.5]", "BitAnd[2.5, x]", 0);
+    assert_eval_eq("BitAnd[I, I, x]", "BitAnd[I, x]", 0);
+}
+
+static void test_bitand_integer_folding(void) {
+    assert_eval_eq("BitAnd[x, 2^70 + 3, 2^70 + 1]", "BitAnd[1180591620717411303425, x]", 0);
+    assert_eval_eq("BitAnd[-5, x]", "BitAnd[-5, x]", 0);
+    assert_eval_eq("BitAnd[-3^50, -5^40, x, x]",
+                   "BitAnd[-9095627113487849460680488937, x]", 0);
+    assert_eval_eq("BitAnd[2^70, 2^70 + 5, x]", "BitAnd[1180591620717411303424, x]", 0);
+    assert_eval_eq("BitAnd[x, y, x, 2^70 + 3, 7]", "BitAnd[3, x, y]", 0);
+    assert_eval_eq("BitAnd[3, 5, 2.5]", "BitAnd[1, 2.5]", 0);
+    assert_eval_eq("BitAnd[3, 5, 2.5, x]", "BitAnd[1, 2.5, x]", 0);
+}
+
+static void test_bitand_zero_absorbs(void) {
+    assert_eval_eq("BitAnd[0, x]", "0", 0);
+    assert_eval_eq("BitAnd[1, 2, x, x, y]", "0", 0);
+    assert_eval_eq("BitAnd[x, 2^70, 2^71]", "0", 0);
+    assert_eval_eq("BitAnd[0, 2.5]", "0", 0);
+    assert_eval_eq("BitAnd[0, 1/2]", "0", 0);
+    assert_eval_eq("BitAnd[0, x, 1/2]", "0", 0);
+    assert_eval_eq("BitAnd[0, x, y, 2.5, 1/2]", "0", 0);
+    assert_eval_eq("BitAnd[1, 2, -1, x]", "0", 0);
+}
+
+static void test_bitand_minus_one_identity(void) {
+    assert_eval_eq("BitAnd[-1, x]", "x", 0);
+    assert_eval_eq("BitAnd[-1, -1, x]", "x", 0);
+    assert_eval_eq("BitAnd[x, -1, -1]", "x", 0);
+    assert_eval_eq("BitAnd[-1, x, y]", "BitAnd[x, y]", 0);
+    assert_eval_eq("BitAnd[x, y, -1, y]", "BitAnd[x, y]", 0);
+    assert_eval_eq("BitAnd[-1, 2.5]", "2.5", 0);
+    assert_eval_eq("BitAnd[2^70, x, -1]", "BitAnd[1180591620717411303424, x]", 0);
+    assert_eval_eq("BitAnd[x, -1, 2.5, 2.5]", "BitAnd[2.5, x]", 0);
+}
+
+static void test_bitand_no_extra_rules(void) {
+    /* Neither complement nor absorption rules apply. */
+    assert_eval_eq("BitAnd[x, BitNot[x]]", "BitAnd[x, BitNot[x]]", 0);
+    assert_eval_eq("BitAnd[3, x, BitNot[x]]", "BitAnd[3, x, BitNot[x]]", 0);
+    assert_eval_eq("BitAnd[BitNot[x], BitNot[y]]", "BitAnd[BitNot[x], BitNot[y]]", 0);
+}
+
+static void test_bitand_orderless_flat(void) {
+    assert_eval_eq("BitAnd[x]", "x", 0);
+    assert_eval_eq("BitAnd[BitAnd[x, 7], BitAnd[13, y]]", "BitAnd[5, x, y]", 0);
+    assert_eval_eq("BitAnd[BitAnd[x, y], x]", "BitAnd[x, y]", 0);
+}
+
+/* --- Non-integers: left alone, silently ------------------------------ */
+
+static void test_bitand_non_integers_silent(void) {
+    /* (BitAnd[I, 3] is also silent; not pinned here because the canonical
+     * order of I against an integer is a known core-comparator gap,
+     * independent of BitAnd: it should sort I first.) */
+    const char* in[]  = { "BitAnd[2.5, 3]", "BitAnd[1/2, x]", "BitAnd[I, x]",
+                          "BitAnd[1.0, 3]", "BitAnd[x, y]" };
+    const char* out[] = { "BitAnd[2.5, 3]", "BitAnd[1/2, x]", "BitAnd[I, x]",
+                          "BitAnd[1.0, 3]", "BitAnd[x, y]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(in[i], &result);
+        ASSERT(result != NULL);
+        ASSERT_STR_EQ(result, out[i]);
+        ASSERT_MSG(err == NULL || strstr(err, "BitAnd::") == NULL,
+                   "unexpected diagnostic for %s: %s", in[i], err ? err : "(null)");
+        free(result);
+        free(err);
+    }
+    /* No message fires, so Check takes the value branch. */
+    assert_eval_eq("Check[BitAnd[2.5, 3], failed]", "BitAnd[2.5, 3]", 0);
+}
+
+static void test_bitand_ragged_tdlen(void) {
+    /* Ragged lists cannot thread: the evaluator's Listable step reports
+     * Thread::tdlen and the call stays unevaluated (also through the n-ary
+     * buffer fold, which hands mismatched shapes back to the List path). */
+    assert_eval_eq("BitAnd[{1, 2}, {1, 2, 3}]", "BitAnd[{1, 2}, {1, 2, 3}]", 0);
+    assert_eval_eq("BitAnd[Range[2], Range[3], 1]", "BitAnd[1, {1, 2}, {1, 2, 3}]", 0);
+}
+
+/* --- Properties ------------------------------------------------------ */
+
+static void test_bitand_properties(void) {
+    assert_eval_eq(
+        "And @@ Flatten[Table[BitAnd[BitAnd[a, b], c] == BitAnd[a, BitAnd[b, c]], "
+        "{a, -6, 6}, {b, -6, 6}, {c, -6, 6}]]", "True", 0);
+    /* Independent oracle: bitwise product of the binary digits. */
+    assert_eval_eq(
+        "And @@ Flatten[Table[BitAnd[a, b] == "
+        "FromDigits[IntegerDigits[a, 2, 8] * IntegerDigits[b, 2, 8], 2], "
+        "{a, 0, 63}, {b, 0, 63}]]", "True", 0);
+    /* a + b == BitXor[a, b] + 2 BitAnd[a, b] holds in two's complement for
+     * every sign and size -- an oracle across the bignum boundary. */
+    assert_eval_eq(
+        "SeedRandom[7]; ns = Join[RandomInteger[{-2^200, 2^200}, 30], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "And @@ Flatten[Table[m + n == BitXor[m, n] + 2 BitAnd[m, n], {m, ns}, {n, ns}]]",
+        "True", 0);
+    /* BitAnd[n, -1] == n; BitAnd[n, 0] == 0. */
+    assert_eval_eq(
+        "And @@ Table[BitAnd[n, -1] == n && BitAnd[n, 0] == 0, "
+        "{n, {-2^80, -7, 0, 9, 2^63, 3^60}}]", "True", 0);
+}
+
+/* --- Packed / NDArray surfaces --------------------------------------- */
+
+static void test_bitand_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitAnd[Range[10], 6]]", "True", 0);
+    assert_eval_eq("BitAnd[NDArray[{1, 2, 3}, DataType -> \"int64\"], 6]",
+                   "NDArray[{0, 2, 2}]", 0);
+    assert_eval_eq(
+        "BitAnd[NDArray[{-9223372036854775808, -1, 0}, DataType -> \"int64\"], "
+        "NDArray[{-1, -9223372036854775808, -1}, DataType -> \"int64\"]]",
+        "NDArray[{-9223372036854775808, -9223372036854775808, 0}]", 0);
+    /* n-ary: folded on the buffer, scalars combined first. */
+    assert_eval_eq("BitAnd[Range[10], 6, 3]", "{0, 2, 2, 0, 0, 2, 2, 0, 0, 2}", 0);
+    assert_eval_eq("PackedArrayQ[BitAnd[Range[10], 6, 3]]", "True", 0);
+    assert_eval_eq("BitAnd[Range[6], 7, 14]", "{0, 2, 2, 4, 4, 6}", 0);
+    assert_eval_eq("BitAnd[Range[5], Range[5], Reverse[Range[5]]]", "{1, 0, 3, 0, 1}", 0);
+    assert_eval_eq("BitAnd[NDArray[{7, 6, 5}, DataType -> \"int64\"], "
+                   "NDArray[{3, 3, 3}, DataType -> \"int64\"], 2]",
+                   "NDArray[{2, 2, 0}]", 0);
+    assert_eval_eq("BitAnd[Range[4], -1, -1]", "{1, 2, 3, 4}", 0);
+    assert_eval_eq("BitAnd[Range[4], 0]", "{0, 0, 0, 0}", 0);
+    assert_eval_eq("BitAnd[Range[3], -2]", "{0, 2, 2}", 0);
+    /* Off-buffer operands take the exact List path. */
+    assert_eval_eq("BitAnd[Range[3], 2^70 + 2]", "{0, 2, 2}", 0);
+    assert_eval_eq("BitAnd[Range[3], x, x]",
+                   "{BitAnd[1, x], BitAnd[2, x], BitAnd[3, x]}", 0);
+}
+
+static void test_bitand_surfaces_agree(void) {
+    assert_eval_eq(
+        "SeedRandom[5]; ba = Join[RandomInteger[{-2^62, 2^62}, 300], {-2^63, 2^63 - 1, 0, -1}]; "
+        "bb = Join[RandomInteger[{-2^62, 2^62}, 300], {-1, -2^63, 5, -2^63}]; "
+        "ref = Table[BitAnd[ba[[i]], bb[[i]]], {i, Length[ba]}]; "
+        "{BitAnd[ba, bb] === ref, "
+        " Normal[BitAnd[NDArray[ba, DataType -> \"int64\"], NDArray[bb, DataType -> \"int64\"]]] === ref, "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w]][ba, bb] === ref, "
+        " Table[Compile[{{s, _Integer}, {t, _Integer}}, BitAnd[s, t]][ba[[i]], bb[[i]]], {i, Length[ba]}] === ref, "
+        " BitAnd[ba, bb, -99] === Table[BitAnd[ba[[i]], bb[[i]], -99], {i, Length[ba]}], "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w, -99]][ba, bb] === BitAnd[ba, bb, -99]}",
+        "{True, True, True, True, True, True}", 0);
+}
+
+/* --- Compile[] ------------------------------------------------------- */
+
+static void test_bitand_compile(void) {
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, BitAnd[a, b]][61, 15]", "13", 0);
+    assert_eval_eq("Compile[{{a, _Integer}, {b, _Integer}}, BitAnd[a, b]][-2, -3]", "-4", 0);
+    assert_eval_eq(
+        "Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}, {d, _Integer}}, "
+        "BitAnd[a, b, c, d]][3333, 5555, 7777, 9999]", "1025", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitAnd[v, 17]][Range[70, 80]]",
+                   "{0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 16}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitAnd[7, v, 14]][Range[6]]",
+                   "{0, 2, 2, 4, 4, 6}", 0);
+    assert_eval_eq(
+        "Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w, 6]][{7, 15}, {3, 12}]",
+        "{2, 4}", 0);
+}
+
+static void test_bitand_compile_diagnostics(void) {
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{a, _Integer}, {b, _Integer}}, BitAnd[a, b]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, BitAnd[a, b, c]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitAnd[v, 255]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitAnd[v, 6, 4]]", "True", 0);
+}
+
+/* --- Introspection --------------------------------------------------- */
+
+static void test_bitand_attributes(void) {
+    assert_eval_eq("Attributes[BitAnd]",
+                   "{Flat, Listable, OneIdentity, Orderless, Protected}", 0);
+}
+
+static void test_bitand_docstring_and_sym(void) {
+    SymbolDef* def = symtab_get_def("BitAnd");
+    ASSERT(def != NULL);
+    ASSERT(def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "bitwise AND") != NULL);
+    ASSERT(SYM_BitAnd != NULL && strcmp(SYM_BitAnd, "BitAnd") == 0);
+}
+
+static void test_bitand_stress(void) {
+    for (int k = 0; k < 50; k++) {
+        assert_eval_eq("BitAnd[61, 15]", "13", 0);
+        assert_eval_eq("BitAnd[3^100, 5^100, -7]",
+                       "503913279078601980753385379100266097026814443729", 0);
+        assert_eval_eq("BitAnd[-1, x, x, y]", "BitAnd[x, y]", 0);
+        assert_eval_eq("BitAnd[x, y, x, 2^70 + 3, 7]", "BitAnd[3, x, y]", 0);
+        assert_eval_eq("BitAnd[Range[6], 7, 14]", "{0, 2, 2, 4, 4, 6}", 0);
+        assert_eval_eq("BitAnd[Range[3], 2^70 + 2]", "{0, 2, 2}", 0);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -707,6 +1010,28 @@ int main(void) {
     TEST(test_bitxor_docstring_and_sym);
     TEST(test_bitxor_stress);
 
-    printf("All BitLength / BitXor tests passed!\n");
+    TEST(test_bitand_documented_examples);
+    TEST(test_bitand_basic);
+    TEST(test_bitand_listable_shapes);
+    TEST(test_bitand_bignums);
+    TEST(test_bitand_bignum_operands_untouched);
+    TEST(test_bitand_idempotence);
+    TEST(test_bitand_integer_folding);
+    TEST(test_bitand_zero_absorbs);
+    TEST(test_bitand_minus_one_identity);
+    TEST(test_bitand_no_extra_rules);
+    TEST(test_bitand_orderless_flat);
+    TEST(test_bitand_non_integers_silent);
+    TEST(test_bitand_ragged_tdlen);
+    TEST(test_bitand_properties);
+    TEST(test_bitand_packed_and_ndarray);
+    TEST(test_bitand_surfaces_agree);
+    TEST(test_bitand_compile);
+    TEST(test_bitand_compile_diagnostics);
+    TEST(test_bitand_attributes);
+    TEST(test_bitand_docstring_and_sym);
+    TEST(test_bitand_stress);
+
+    printf("All BitLength / BitXor / BitAnd tests passed!\n");
     return 0;
 }

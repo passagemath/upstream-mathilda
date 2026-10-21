@@ -4,8 +4,9 @@
  * Bit-level integer builtins. Currently:
  *   - BitLength[n]          number of binary bits needed to represent n.
  *   - BitXor[n1, n2, ...]   bitwise XOR (two's complement for negatives).
+ *   - BitAnd[n1, n2, ...]   bitwise AND (two's complement for negatives).
  *
- * This is the seed of the Bit* family (BitAnd / BitOr / BitNot /
+ * The rest of the Bit* family (BitOr / BitNot /
  * BitShiftLeft / BitShiftRight, ...). Each builtin lives in its own <name>.c
  * file and is registered by bitwise_init(); docstrings live in src/info.c.
  */
@@ -17,6 +18,7 @@
 
 Expr* builtin_bitlength(Expr* res);
 Expr* builtin_bitxor(Expr* res);
+Expr* builtin_bitand(Expr* res);
 
 void bitwise_init(void);
 

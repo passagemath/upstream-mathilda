@@ -2,9 +2,10 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength and BitXor (machine-int, bignum, negative, INT64_MIN,
-# listable, packed, NDArray, n-ary buffer folds, symbolic cancellation, BitNot
-# extraction, Compile, and error paths) under a leak checker and FAILS on any
+# Drives BitLength, BitXor and BitAnd (machine-int, bignum, negative,
+# INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
+# cancellation / idempotence / 0-absorption, BitNot extraction, Compile, and
+# error paths) under a leak checker and FAILS on any
 # leaked byte.
 #
 #   macOS : leaks --atExit
@@ -67,6 +68,44 @@ Do[Quiet[BitXor[{1., 2.}, 3, 4]], {200}];
 cfx = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitXor[v, w, 6]];
 Do[cfx[Range[32], Reverse[Range[32]]], {200}];
 Do[Quiet[cfx[{1, 2}, {1, 2, 3}]], {200}];
+Do[BitAnd[61, 15], {200}];
+Do[BitAnd[3333, 5555, 7777, 9999], {200}];
+Do[BitAnd[-2, -3], {200}];
+Do[BitAnd[3^100, 5^100], {200}];
+Do[BitAnd[3^100, 5^100, -7], {200}];
+Do[BitAnd[2^63, -1], {200}];
+Do[BitAnd[-2^63, -2^63 + 1], {200}];
+Do[BitAnd[2^100 - 1, 2, 4, -8], {200}];
+Do[BitAnd[-3^50, -5^40, x, x], {200}];
+Do[BitAnd[x, y, y, x], {200}];
+Do[BitAnd[3, 5, x], {200}];
+Do[BitAnd[1, 2, x], {200}];
+Do[BitAnd[0, x, 1/2], {200}];
+Do[BitAnd[-1, x], {200}];
+Do[BitAnd[-1, x, y], {200}];
+Do[BitAnd[2^70, x, -1], {200}];
+Do[BitAnd[x, 2^70 + 3, 2^70 + 1], {200}];
+Do[BitAnd[x, 2.5, 2.5], {200}];
+Do[BitAnd[2.5, 3], {200}];
+Do[BitAnd[I, I, x], {200}];
+Do[BitAnd[], {200}];
+Do[BitAnd[{}, {}], {200}];
+Do[BitAnd[{1, 2}, 3, {4, 5}], {200}];
+Do[BitAnd[Range[64], 17], {200}];
+Do[BitAnd[Range[64], Reverse[Range[64]]], {200}];
+Do[BitAnd[Range[64], 7, 14], {200}];
+Do[BitAnd[Range[64], Range[64], 9], {200}];
+Do[BitAnd[Range[64], -1, -1], {200}];
+Do[BitAnd[Range[8], 2^70 + 2], {200}];
+Do[BitAnd[Range[8], x, x], {200}];
+Do[BitAnd[NDArray[{-9223372036854775808, -1, 0, 1}, DataType -> "int64"], 7], {200}];
+Do[BitAnd[NDArray[{1, 2, 3}, DataType -> "int64"], NDArray[{3, 2, 1}, DataType -> "int64"], 1], {200}];
+Do[Quiet[BitAnd[{1, 2}, {1, 2, 3}]], {200}];
+Do[Quiet[BitAnd[Range[2], Range[3], 1]], {200}];
+cfa = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w, 6]];
+Do[cfa[Range[32], Reverse[Range[32]]], {200}];
+cfs = Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, BitAnd[a, b, c]];
+Do[cfs[3333, 5555, -7], {200}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

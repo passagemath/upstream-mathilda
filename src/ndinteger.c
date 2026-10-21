@@ -171,6 +171,13 @@ static bool ndk_BitXor_whole(const int64_t* in, size_t sz, int64_t scal,
     return true;
 }
 
+/* Two int64 buffers of the same shape: element-wise XOR in one tight loop. */
+static bool ndk_BitXor_whole2(const int64_t* a, const int64_t* b, size_t sz,
+                              int64_t* out) {
+    for (size_t i = 0; i < sz; i++) out[i] = a[i] ^ b[i];
+    return true;
+}
+
 /* LCM[a, b] = |a|/gcd * |b|, in that order so the product is formed from the
  * already-reduced factor. LCM[0, n] is 0. Overflow declines. */
 static bool ndk_LCM_ii(int64_t a, int64_t b, int64_t* out) {
@@ -406,11 +413,11 @@ static const NDUnaryKernel NDKU_PartitionsP =
 static const NDUnaryKernel NDKU_PartitionsQ =
     { NULL, NULL, false, false, NULL, ndk_PartitionsQ_ii, true, NULL };
 static const NDBinaryKernel NDKB_GCD =
-    { NULL, false, NULL, ndk_GCD_ii, true, NULL };
+    { NULL, false, NULL, ndk_GCD_ii, true, NULL, NULL };
 static const NDBinaryKernel NDKB_LCM =
-    { NULL, false, NULL, ndk_LCM_ii, true, NULL };
+    { NULL, false, NULL, ndk_LCM_ii, true, NULL, NULL };
 static const NDBinaryKernel NDKB_BitXor =
-    { NULL, false, NULL, ndk_BitXor_ii, true, ndk_BitXor_whole };
+    { NULL, false, NULL, ndk_BitXor_ii, true, ndk_BitXor_whole, ndk_BitXor_whole2 };
 /* IntegerExponent[n, b]: the largest e with b^e | n. Declines n == 0
  * (Infinity, not an int64) and b < 2 (::ibase in the scalar builtin). */
 static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
@@ -423,11 +430,11 @@ static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
 }
 
 static const NDBinaryKernel NDKB_IntegerExponent =
-    { NULL, false, NULL, ndk_IntegerExponent_ii, true, NULL };
+    { NULL, false, NULL, ndk_IntegerExponent_ii, true, NULL, NULL };
 static const NDBinaryKernel NDKB_JacobiSymbol =
-    { NULL, false, NULL, ndk_JacobiSymbol_ii, true, NULL };
+    { NULL, false, NULL, ndk_JacobiSymbol_ii, true, NULL, NULL };
 static const NDBinaryKernel NDKB_DivisorSigma =
-    { NULL, false, NULL, ndk_DivisorSigma_ii, true, ndk_DivisorSigma_whole };
+    { NULL, false, NULL, ndk_DivisorSigma_ii, true, ndk_DivisorSigma_whole, NULL };
 
 /* ---------------------------------------------------------------------------
  *  Head-level buffer paths.

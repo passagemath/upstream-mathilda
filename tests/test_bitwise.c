@@ -407,6 +407,18 @@ static void test_bitxor_bignums(void) {
     assert_eval_eq("BitXor[{2^64, 1}, 2^64]", "{0, 18446744073709551617}", 0);
 }
 
+static void test_bitxor_bignum_operands_untouched(void) {
+    /* The bignum path XORs in place into a private result node: the operands
+     * themselves -- bound, shared, or repeated -- must come out unchanged. */
+    assert_eval_eq("p = 3^200; q = 5^150; r = BitXor[p, q, p, 7]; "
+                   "{p == 3^200, q == 5^150, r == BitXor[q, 7]}",
+                   "{True, True, True}", 0);
+    assert_eval_eq("p = 2^100; {BitXor[p, p], p == 2^100}", "{0, True}", 0);
+    assert_eval_eq("l = {2^90, 2^91}; BitXor[l, 2^90]; l == {2^90, 2^91}", "True", 0);
+    /* machine constants folded into a bignum once, mixed signs */
+    assert_eval_eq("BitXor[2^100, 1, 2, 4, -8]", "-1267650600228229401496703205377", 0);
+}
+
 /* --- Symbolic simplification ----------------------------------------- */
 
 static void test_bitxor_pair_cancellation(void) {
@@ -677,6 +689,7 @@ int main(void) {
     TEST(test_bitxor_empty_lists);
     TEST(test_bitxor_listable_shapes);
     TEST(test_bitxor_bignums);
+    TEST(test_bitxor_bignum_operands_untouched);
     TEST(test_bitxor_pair_cancellation);
     TEST(test_bitxor_integer_folding);
     TEST(test_bitxor_bitnot);

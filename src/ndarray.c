@@ -1982,6 +1982,10 @@ Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* 
     if (k->to_int && dt0 == NDT_INT64 && dt1 == NDT_INT64 && k->to_int_i) {
         int64_t* out = (int64_t*)malloc(sizeof(int64_t) * (sz ? sz : 1));
         if (!out) return NULL;
+        /* Whole-buffer arm first: a pure performance choice, bit-identical to
+         * the loop below, which still runs if the arm declines. */
+        if (k->whole_ii && k->whole_ii((const int64_t*)in0, (const int64_t*)in1, sz, out))
+            return expr_new_ndarray_like(psrc, rank, dims, out, NDT_INT64);
         bool ok = true;
         for (size_t i = 0; i < sz && ok; i++)
             ok = k->to_int_i(ndt_get_i(in0, i, dt0), ndt_get_i(in1, i, dt1), &out[i]);

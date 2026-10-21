@@ -60,49 +60,65 @@ static Expr* bitxor_emit_int(size_t pos, Expr* res) {
     return NULL;
 }
 
-/* XOR accumulator over exact integers: stays in int64 until the first BigInt
- * operand arrives, then continues in GMP. XOR of two int64 values is always an
- * int64, so the machine path can never overflow. */
+/* XOR accumulator over exact integers. Machine operands fold into the int64
+ * `i` (the XOR of two int64 values is an int64, so it cannot overflow). BigInt
+ * operands fold into `big`, the RESULT node itself: allocated on the first
+ * BigInt, private (refcount 1, not yet published), and XORed into in place.
+ * So a bignum operand is read where it lives -- never copied into a temporary
+ * mpz -- and the answer is never copied out again. `i` is folded into `big`
+ * once, at the end. */
 typedef struct {
     int64_t i;
-    bool    big;    /* true once `z` is live and authoritative */
-    mpz_t   z;
+    Expr*   big;      /* owned EXPR_BIGINT result node, or NULL */
+    size_t  reserve;  /* bits to presize `big` with, 0 = let GMP grow it */
 } XorAcc;
 
-static void xacc_init(XorAcc* a) { a->i = 0; a->big = false; }
+static void xacc_init(XorAcc* a) { a->i = 0; a->big = NULL; a->reserve = 0; }
+
+/* Presize for operands of up to `bits` bits, so the in-place XORs never
+ * reallocate. One spare limb covers the sign extension of a negative. */
+static void xacc_reserve(XorAcc* a, size_t bits) { a->reserve = bits + GMP_NUMB_BITS; }
 
 static void xacc_add(XorAcc* a, const Expr* n) {
-    if (n->type == EXPR_INTEGER && !a->big) { a->i ^= n->data.integer; return; }
+    if (n->type == EXPR_INTEGER) { a->i ^= n->data.integer; return; }
     if (!a->big) {
-        /* Promote the machine accumulator. Via an Expr so the int64 -> mpz
-         * conversion never narrows through `long` (32-bit on LLP64). */
-        Expr* cur = expr_new_integer(a->i);
-        expr_to_mpz(cur, a->z);
-        expr_free(cur);
-        a->big = true;
+        a->big = expr_new_bigint_from_int64(0);
+        if (a->reserve) mpz_realloc2(a->big->data.bigint, a->reserve);
     }
-    mpz_t t;
-    expr_to_mpz(n, t);
-    mpz_xor(a->z, a->z, t);
-    mpz_clear(t);
+    mpz_xor(a->big->data.bigint, a->big->data.bigint, n->data.bigint);
 }
 
-static bool xacc_is(const XorAcc* a, int64_t v) {
-    return a->big ? (mpz_cmp_si(a->z, (long)v) == 0) : (a->i == v);
+/* Fold the machine part into the bignum part (no-op when either is empty). */
+static void xacc_fold(XorAcc* a) {
+    if (!a->big || a->i == 0) return;
+    Expr* m = expr_new_integer(a->i);
+    mpz_t t;
+    expr_to_mpz(m, t);        /* the codebase's int64 -> mpz, LLP64-safe */
+    mpz_xor(a->big->data.bigint, a->big->data.bigint, t);
+    mpz_clear(t);
+    expr_free(m);
+    a->i = 0;
+}
+
+/* `v` is only ever 0 or -1, both well inside `long` on every target. */
+static bool xacc_is(XorAcc* a, int64_t v) {
+    xacc_fold(a);
+    return a->big ? (mpz_cmp_si(a->big->data.bigint, (long)v) == 0) : (a->i == v);
 }
 
 /* Consumes the accumulator. */
 static Expr* xacc_take(XorAcc* a) {
+    xacc_fold(a);
     if (!a->big) return expr_new_integer(a->i);
-    Expr* r = expr_bigint_normalize(expr_new_bigint_from_mpz(a->z));
-    mpz_clear(a->z);
-    a->big = false;
+    Expr* r = expr_bigint_normalize(a->big);   /* back to int64 when it fits */
+    a->big = NULL;
     return r;
 }
 
 static void xacc_clear(XorAcc* a) {
-    if (a->big) mpz_clear(a->z);
-    a->big = false;
+    if (a->big) expr_free(a->big);
+    a->big = NULL;
+    a->i = 0;
 }
 
 static bool is_minus_one(const Expr* e) {
@@ -176,6 +192,13 @@ Expr* builtin_bitxor(Expr* res) {
         all_int = expr_is_integer_like(args[i]);
     if (all_int) {
         XorAcc a; xacc_init(&a);
+        size_t bits = 0;
+        for (size_t i = 0; i < argc; i++)
+            if (args[i]->type == EXPR_BIGINT) {
+                size_t b = mpz_size(args[i]->data.bigint) * GMP_NUMB_BITS;
+                if (b > bits) bits = b;
+            }
+        if (bits) xacc_reserve(&a, bits);
         for (size_t i = 0; i < argc; i++) xacc_add(&a, args[i]);
         return xacc_take(&a);
     }

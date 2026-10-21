@@ -375,7 +375,7 @@ static bool ndk_LogB_c(double bre, double bim, double zre, double zim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_Log = { ndk_LogB_c, false, NULL, NULL, false, NULL, NULL };
 
 /* ArcTan[x, y] = arg(x + I y). Real for real inputs (real_closed). */
 static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
@@ -401,7 +401,7 @@ static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
     *rr = creal(w); *ri = cimag(w);
     return isfinite(*rr) && isfinite(*ri);
 }
-static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false, NULL, NULL };
 
 /* Mod[m, n] = m - n floor(m/n) and Quotient[m, n] = floor(m/n) over real
  * arrays (floored division, result carrying the divisor's sign — matches
@@ -510,9 +510,9 @@ static bool ndk_Quotient_ri(double m, double n, int64_t* o) {
 }
 
 static const NDBinaryKernel NDKB_Mod =
-    { ndk_Mod_c,      true, NULL,             ndk_Mod_ii,      true, ndk_Mod_whole };
+    { ndk_Mod_c,      true, NULL,             ndk_Mod_ii,      true, ndk_Mod_whole, NULL };
 static const NDBinaryKernel NDKB_Quotient =
-    { ndk_Quotient_c, true, ndk_Quotient_ri,  ndk_Quotient_ii, true, NULL };
+    { ndk_Quotient_c, true, ndk_Quotient_ri,  ndk_Quotient_ii, true, NULL, NULL };
 
 /* ---- special functions: real machine kernels ---------------------------- */
 /* These cover the common real-array case at C speed via libc; a complex NDArray
@@ -562,10 +562,10 @@ static bool ndk_BesselI_c(double nre, double nim, double zre, double zim, double
 { return sf_bessel_nd(SF_BESSEL_I, nre, nim, zre, zim, rr, ri); }
 static bool ndk_BesselK_c(double nre, double nim, double zre, double zim, double* rr, double* ri)
 { return sf_bessel_nd(SF_BESSEL_K, nre, nim, zre, zim, rr, ri); }
-static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_BesselI = { ndk_BesselI_c, true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_BesselK = { ndk_BesselK_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_BesselJ = { ndk_BesselJ_c, true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_BesselY = { ndk_BesselY_c, true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_BesselI = { ndk_BesselI_c, true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_BesselK = { ndk_BesselK_c, true, NULL, NULL, false, NULL, NULL };
 
 /* Beta[a, b], real and complex: the Gamma family's kernel (sf_machine_gamma.c),
  * shared with the scalar builtin so the surfaces agree bit for bit. */
@@ -573,7 +573,7 @@ static bool ndk_Beta_c(double are, double aim, double bre, double bim,
                        double* rr, double* ri) {
     return sfg_beta_c(are, aim, bre, bim, rr, ri);
 }
-static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_Beta = { ndk_Beta_c, true, NULL, NULL, false, NULL, NULL };
 
 /* The Legendre elliptic integrals over real arrays, by Carlson's symmetric
  * forms (src/special_functions/elliptic.c). PARAMETER convention m = k^2.
@@ -613,8 +613,8 @@ static bool ndk_EllipticEInc_c(double pre, double pim, double mre, double mim,
     if (!elliptic_machine_e_inc(pre, mre, rr)) return false;
     *ri = 0.0; return isfinite(*rr);
 }
-static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_EllipticF = { ndk_EllipticF_c,    true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_EllipticE = { ndk_EllipticEInc_c, true, NULL, NULL, false, NULL, NULL };
 
 static bool ndk_EllipticPi_c(double nre, double nim, double mre, double mim,
                              double* rr, double* ri) {
@@ -622,7 +622,7 @@ static bool ndk_EllipticPi_c(double nre, double nim, double mre, double mim,
     if (!elliptic_machine_pi(nre, mre, rr)) return false;
     *ri = 0.0; return isfinite(*rr);
 }
-static const NDBinaryKernel NDKB_EllipticPi = { ndk_EllipticPi_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_EllipticPi = { ndk_EllipticPi_c, true, NULL, NULL, false, NULL, NULL };
 
 static bool ndk_EllipticPiInc_n(const double* re, const double* im, size_t n,
                                 double* rr, double* ri) {
@@ -748,10 +748,10 @@ static bool ndk_LegendreQ_c(double nre, double nim, double xre, double xim,
     }
     return sf_machine_legendre_q_c(nre, xre, xim, rr, ri);
 }
-static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_Pochhammer = { ndk_Pochhammer_c, true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_Binomial   = { ndk_Binomial_c,   true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_LegendreP  = { ndk_LegendreP_c,  true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_LegendreQ  = { ndk_LegendreQ_c,  true, NULL, NULL, false, NULL, NULL };
 
 /* ExpIntegralE[n, z]: integer order n >= 0 (sf_machine_expint.c, the kernels
  * the scalar builtin calls). Real x > 0 stays real; complex z, and real x < 0
@@ -767,7 +767,7 @@ static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
     }
     return sf_machine_expn_c(nre, xre, xim, rr, ri);
 }
-static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false, NULL, NULL };
 
 #define NDK_BIN2(NAME, FN)                                                     \
 static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
@@ -776,7 +776,7 @@ static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,     \
     double v; if (!FN(are, bre, &v)) return false;                             \
     *rr = v; *ri = 0.0; return true;                                           \
 }                                                                              \
-static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL, NULL };
 NDK_BIN2(QPochhammer,       sf_machine_qpochhammer)
 NDK_BIN2(StruveH,           sf_machine_struve_h)
 NDK_BIN2(Surd,              sf_surd_r)          /* Surd[x, n]: real root, integer n */
@@ -795,7 +795,7 @@ static bool ndk_PolyLog_c(double sre, double sim, double zre, double zim,
     }
     return sf_polylog_c(sre, sim, zre, zim, rr, ri);
 }
-static const NDBinaryKernel NDKB_PolyLog = { ndk_PolyLog_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_PolyLog = { ndk_PolyLog_c, true, NULL, NULL, false, NULL, NULL };
 /* Hypergeometric0F1[b, z]: written out (not NDK_BIN2) for its machine COMPLEX
  * arm -- a complex z or b goes to sf_machine_hyper0f1_c instead of declining, so
  * a complex buffer computes on the buffer. Same helpers as the scalar builtin. */
@@ -808,7 +808,7 @@ static bool ndk_Hypergeometric0F1_c(double are, double aim, double bre, double b
     return sf_machine_hyper0f1_c(are, aim, bre, bim, ore, oim);
 }
 static const NDBinaryKernel NDKB_Hypergeometric0F1 =
-    { ndk_Hypergeometric0F1_c, true, NULL, NULL, false, NULL };
+    { ndk_Hypergeometric0F1_c, true, NULL, NULL, false, NULL, NULL };
 
 /* ChebyshevT and ChebyshevU are written out rather than generated by NDK_BIN2
  * because each has a machine COMPLEX arm as well (the generated form declines
@@ -825,7 +825,7 @@ static bool ndk_ChebyshevT_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_chebyshev_t_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_ChebyshevT = { ndk_ChebyshevT_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_ChebyshevT = { ndk_ChebyshevT_c, true, NULL, NULL, false, NULL, NULL };
 
 static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
                              double* ore, double* oim) {
@@ -836,7 +836,7 @@ static bool ndk_ChebyshevU_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_chebyshev_u_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_ChebyshevU = { ndk_ChebyshevU_c, true, NULL, NULL, false, NULL, NULL };
 
 /* HermiteH[n, x] (physicists'). Hand-written rather than via NDK_BIN2 because it
  * carries a machine COMPLEX arm: the order `a` must be a real integer, but the
@@ -852,7 +852,7 @@ static bool ndk_HermiteH_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_hermite_h_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_HermiteH = { ndk_HermiteH_c, true, NULL, NULL, false, NULL, NULL };
 
 /* LaguerreL[n, x] (ordinary Laguerre, a = 0). Hand-written rather than via
  * NDK_BIN2 because it carries a machine COMPLEX arm: the order `a` (here the
@@ -869,7 +869,7 @@ static bool ndk_LaguerreL_c(double are, double aim, double bre, double bim,
     }
     return sf_machine_laguerre_l_c(are, bre, bim, ore, oim);   /* complex argument */
 }
-static const NDBinaryKernel NDKB_LaguerreL = { ndk_LaguerreL_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_LaguerreL = { ndk_LaguerreL_c, true, NULL, NULL, false, NULL, NULL };
 
 /* N-ary kernels: arity >= 3, which the unary/binary descriptors cannot express.
  * Consumed by the Compile[] VM; the NDArray element-wise path still degrades for
@@ -991,9 +991,9 @@ static const NDNaryKernel NDKN_WhittakerM          = { ndk_WhittakerM_n, 3, true
 static const NDNaryKernel NDKN_HypergeometricU     = { ndk_HypergeometricU_n, 3, true };
 static const NDNaryKernel NDKN_WhittakerW          = { ndk_WhittakerW_n, 3, true };
 #define REG_N(NAME) symtab_set_ndarray_nary_kernel(#NAME, &NDKN_##NAME)
-static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL };
-static const NDBinaryKernel NDKB_Zeta        = { ndk_Zeta2_c, true, NULL, NULL, false, NULL };
+static const NDBinaryKernel NDKB_PolyGamma   = { ndk_PolyGamma_c,   true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_HurwitzZeta = { ndk_HurwitzZeta_c, true, NULL, NULL, false, NULL, NULL };
+static const NDBinaryKernel NDKB_Zeta        = { ndk_Zeta2_c, true, NULL, NULL, false, NULL, NULL };
 
 /* ---- registration ------------------------------------------------------- */
 

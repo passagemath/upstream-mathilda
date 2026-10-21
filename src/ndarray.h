@@ -355,6 +355,18 @@ typedef struct {
      * default for every positional initialiser) means "no such arm". */
     bool (*whole_i)(const int64_t* in, size_t sz, int64_t scal, bool arr_first,
                     int64_t* out);
+
+    /* Optional WHOLE-BUFFER twin of `to_int_i` for TWO int64 arrays of the
+     * same shape -- the ndarray_map_binary2 counterpart of `whole_i`. Without
+     * it the two-array map calls `to_int_i` once per element through a
+     * function pointer (with a dtype-dispatching read per operand), which is
+     * what made BitXor[v, w] ~3.5x a plain loop on cache-resident data. Same
+     * contract as `whole_i`: fill out[0..sz) and return true, or return false
+     * to DECLINE, in which case the per-element loop runs exactly as before;
+     * its answers must be bit-identical to `to_int_i`'s. NULL (the default
+     * for every positional initialiser that stops short of it) means "no such
+     * arm". */
+    bool (*whole_ii)(const int64_t* a, const int64_t* b, size_t sz, int64_t* out);
 } NDBinaryKernel;
 
 /* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,

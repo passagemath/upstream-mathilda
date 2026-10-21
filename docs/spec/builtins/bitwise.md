@@ -68,8 +68,9 @@ Out[8]= BitLength[1, 2]
   (`BitXor[Range[120], 5]`, `BitXor[{1, 2}, 3, {4, 5}]`), including nested and
   empty ones (`BitXor[{}]` is `{}`).
 - Negative integers are taken in two's complement (`BitXor[-2, -3]` is `3`).
-  Integers of any size are exact: bignums go through GMP's `mpz_xor`, and a
-  result that fits in a machine integer is returned as one
+  Integers of any size are exact: bignums go through GMP's `mpz_xor`, read in
+  place and XORed straight into a presized result (no operand or result
+  copies), and a result that fits in a machine integer is returned as one
   (`BitXor[2^70, 2^70 + 5]` is `5`).
 - Automatic symbolic simplification, in this order:
   1. identical arguments cancel in pairs (`BitXor[x, x]` is `0`,
@@ -83,8 +84,9 @@ Out[8]= BitLength[1, 2]
      constant stays inline (`BitXor[-5, x]`).
 
   `BitNot` appears only as an inert head.
-- **Packed / NDArray**: an exact int64 kernel (`ndk_BitXor_ii`, plus a
-  vectorisable whole-buffer arm against a scalar) in `src/ndinteger.c`, on the
+- **Packed / NDArray**: an exact int64 kernel (`ndk_BitXor_ii`, plus
+  vectorisable whole-buffer arms for array ⊕ scalar and array ⊕ array) in
+  `src/ndinteger.c`, on the
   `AWARE` and `INT64_OK` lists. It handles array ⊕ scalar and array ⊕ array, and
   the n-ary form (`BitXor[v, w, 7]`, `BitXor[v, 1, 2]`) stays on the buffer, one
   pass per operand. A visible `NDArray` gives a visible `NDArray`. Operands that

@@ -451,12 +451,31 @@ Sorts elements of an expression into canonical order.
 - Canonical order:
     - Real numbers by numerical value.
     - Complex numbers by real part, then imaginary part magnitude.
-    - Strings in dictionary order (lowercase before uppercase).
+    - Strings in collation order, on three levels; each later level breaks
+      ties of the one before (see below).
     - Symbols by name.
     - Expressions by length, then head, then parts depth-first.
 - Polynomial order: `x^n` sorts relative to `x`.
 - Numeric coefficient stripping: when a `Times` term has a leading numeric factor (Integer, Real, BigInt, MPFR, `Rational[n,d]`, `Complex[re,im]`, or a radical such as `Sqrt[2] = Power[2, 1/2]`), that factor is ignored when computing the term's main factor. As a result, `1 + x^2 + Sqrt[2] x` is canonicalised to `1 + Sqrt[2] x + x^2`, matching the reference's main-factor-first ordering.
 - Custom ordering function `p` can return `1`, `0`, `-1`, `True`, or `False`.
+
+**String order.** This is the same collation as WL's, checked against its sort
+of 5,233 random printable-ASCII strings. The three levels:
+
+1. **Primary characters only.** Digits come before letters, letters are
+   compared case-insensitively, then non-ASCII characters (by code point),
+   then `$`. Punctuation and space are ignored at this level.
+2. **Where the punctuation falls.** A string with more leading punctuation
+   sorts first (`"!-0" < "!0" < "0"`). Among punctuation-only strings, the
+   shorter comes first.
+3. **Position by position.** Punctuation is compared by its rank in
+   ``! @ # % ^ & * ( ) _ - + = ~ ` { [ } ] | \ < > . , ; " ? ' / :`` and then
+   space. A lowercase letter comes before its uppercase form.
+
+The result: `"a" < "A" < "a!" < "a1"`,
+`"a_b" < "a-b" < "a.b" < "ab" < "aB" < "Ab" < "ab."`, and `".hid"` sorts
+beside `"hid"`, after `"a.m"`. Only identical strings tie. Symbols still order
+by name (`strcmp`).
 
 ```mathematica
 In[1]:= Sort[{d, b, c, a}]

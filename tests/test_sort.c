@@ -164,6 +164,29 @@ void test_ordering() {
     run_test("Ordering[a, b, c, d]", "Ordering[a, b, c, d]");
 }
 
+/* String collation (reference order from wolframscript): punctuation and
+ * space are ignored at the first level, leading punctuation sorts first on a
+ * tie, then punctuation rank / letter case position by position, and `$`
+ * sorts after every letter. */
+void test_sort_string_collation() {
+    run_test("Sort[{\"b\", \"a\", \"A\", \"ab\", \"aB\", \"Ab\", \"AB\", \"a-b\", \"ab-\", "
+             "\"a b\", \"-a\", \"a1\", \"a10\", \"a2\", \"1\", \"10\", \"2\", \"_x\", \"x_\", "
+             "\"a.b\", \"a_b\", \"ab.\", \"abc\", \"a!\", \"\", \" \", \"z\", \"Z\", \"a.m\", "
+             "\".hid\"}] === {\"\", \" \", \"1\", \"10\", \"2\", \"-a\", \"a\", \"A\", \"a!\", "
+             "\"a1\", \"a10\", \"a2\", \"a_b\", \"a-b\", \"a.b\", \"a b\", \"ab\", \"aB\", \"Ab\", "
+             "\"AB\", \"ab-\", \"ab.\", \"abc\", \"a.m\", \"b\", \".hid\", \"_x\", \"x_\", \"z\", \"Z\"}",
+             "True");
+    /* Pure punctuation: shorter first, then by punctuation rank. */
+    run_test("Sort[{\"!@\", \" \", \".\", \"!\", \"@\", \"\"}] === {\"\", \"!\", \"@\", \".\", \" \", \"!@\"}",
+             "True");
+    /* `$` is primary and sorts after the letters. */
+    run_test("Sort[{\"$a\", \"a\", \"$\", \"a$\", \"ab\", \"z\", \"Z$\"}] === "
+             "{\"a\", \"ab\", \"a$\", \"z\", \"Z$\", \"$\", \"$a\"}", "True");
+    /* Ties only for identical strings; Order agrees with Sort. */
+    run_test("Order[\".hid\", \"a.m\"]", "-1");
+    run_test("Order[\"a\", \"a\"]", "0");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -173,6 +196,7 @@ int main() {
     // symtab_get_def("Pi")->attributes |= ATTR_NUMERICFUNCTION;
 
     TEST(test_sort_canonical);
+    TEST(test_sort_string_collation);
     TEST(test_sort_custom);
     TEST(test_orderedq);
     TEST(test_order);

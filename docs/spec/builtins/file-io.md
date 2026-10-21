@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, and the `$InputFileName` system variable).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, and the `$InputFileName` / `$HomeDirectory` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -711,6 +711,35 @@ FileNames["*.m", "src/internal"]
 FileNames["*.m", ".", Infinity]       (* recursive *)
 FileNames[{"*.c", "*.h"}, "src"]
 ```
+
+## Directory / SetDirectory / ResetDirectory / DirectoryStack
+The working directory and a stack of the ones left behind.
+- `Directory[]`: the current working directory, as an absolute path.
+- `SetDirectory["dir"]`: makes `dir` the working directory, pushes the previous
+  one onto the stack, and returns the new directory in canonical form
+  (`SetDirectory["./a/../a/"]` gives `".../a"`).
+- `SetDirectory[]`: goes to `$HomeDirectory`.
+- `ResetDirectory[]`: pops the stack and returns to that directory.
+- `DirectoryStack[]`: the stack, most recent first. Arguments are ignored, as in WL.
+
+**Features**:
+- All `Protected`.
+- Relative paths everywhere (`FileNames`, `Get`, `OpenRead`, ...) resolve
+  against the current directory.
+- If `dir` is missing or is not a directory, `SetDirectory::cdir` is emitted and
+  the result is `$Failed`. A non-string argument emits `SetDirectory::badfile`
+  and leaves the call unevaluated. In both cases the stack is unchanged.
+- `ResetDirectory[]` on an empty stack emits `ResetDirectory::dtop` and returns
+  the current directory.
+- `getcwd`/`chdir` (`_getcwd`/`_chdir` on Windows).
+
+```
+SetDirectory["src"]; FileNames["*.c"]; ResetDirectory[]
+```
+
+## $HomeDirectory
+The user's home directory. It is read from `HOME` at startup; on Windows from
+`USERPROFILE`, or else `HOMEDRIVE` + `HOMEPATH`. `Protected`.
 
 ## $InputFileName
 The absolute path of the file currently being read, or `""` when none is.

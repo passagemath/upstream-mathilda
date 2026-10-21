@@ -903,6 +903,46 @@ void test_filenames_bad_args(void) {
     assert_eval_eq("Options[FileNames]", "{IgnoreCase -> Automatic}", 0);
 }
 
+/* ===== Directory / SetDirectory / ResetDirectory / DirectoryStack ===== */
+
+void test_directory_stack(void) {
+    char root[256], src[1024];
+    fn_tree(root, sizeof root);
+    assert_eval_eq("d0 = Directory[]; StringQ[d0] && DirectoryStack[] === {}", "True", 0);
+
+    /* SetDirectory returns the canonical new directory and pushes the old. */
+    snprintf(src, sizeof src, "d1 = SetDirectory[\"%s\"]; d1 === Directory[]", root);
+    assert_eval_eq(src, "True", 0);
+    assert_eval_eq("DirectoryStack[] === {d0}", "True", 0);
+    /* Relative paths and FileNames now see the new directory. */
+    assert_eval_eq("d2 = SetDirectory[\"./sub/../sub/\"]; "
+                   "{d2 === d1 <> \"/sub\", DirectoryStack[] === {d1, d0}}",
+                   "{True, True}", 0);
+    assert_eval_eq("FileNames[\"*.m\"]", "{\"d.m\"}", 0);
+    /* Pop back, then the empty-stack message. */
+    assert_eval_eq("{ResetDirectory[] === d1, ResetDirectory[] === d0, Directory[] === d0}",
+                   "{True, True, True}", 0);
+    assert_eval_eq("Quiet[ResetDirectory[]] === d0", "True", 0);
+    assert_eval_eq("Check[ResetDirectory[], \"msg\"]", "\"msg\"", 0);
+
+    /* Failures leave the directory and the stack unchanged. */
+    snprintf(src, sizeof src, "Quiet[SetDirectory[\"%s/nonexistent\"]]", root);
+    assert_eval_eq(src, "$Failed", 0);
+    snprintf(src, sizeof src, "Quiet[SetDirectory[\"%s/a.m\"]]", root);
+    assert_eval_eq(src, "$Failed", 0);
+    assert_eval_eq("Quiet[SetDirectory[3]]", "SetDirectory[3]", 0);
+    assert_eval_eq("{Directory[] === d0, DirectoryStack[]}", "{True, {}}", 0);
+    assert_eval_eq("Quiet[Directory[1]]", "Directory[1]", 0);
+
+    /* SetDirectory[] goes home. */
+    assert_eval_eq("StringQ[$HomeDirectory] && SetDirectory[] === Directory[] && "
+                   "ResetDirectory[] === d0", "True", 0);
+    assert_eval_eq("{Attributes[SetDirectory], Attributes[ResetDirectory], "
+                   "Attributes[Directory], Attributes[DirectoryStack]}",
+                   "{{Protected}, {Protected}, {Protected}, {Protected}}", 0);
+    fn_tree_rm(root);
+}
+
 /* ===== $InputFileName ===== */
 
 void test_inputfilename_get(void) {
@@ -960,6 +1000,7 @@ int main(void) {
     TEST(test_filenames_tree);
     TEST(test_filenames_bad_args);
     TEST(test_inputfilename_get);
+    TEST(test_directory_stack);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

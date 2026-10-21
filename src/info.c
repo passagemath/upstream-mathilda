@@ -4185,6 +4185,22 @@ void info_init(void) {
         "FileNames[forms, dirs, n] searches subdirectories down to depth n (an integer or Infinity).\n"
         "Directories count as entries. A form containing a separator, e.g. \"sub/*.m\", searches that subdirectory. The result is sorted.\n"
         "Option: IgnoreCase -> Automatic (case-insensitive on macOS and Windows).");
+    symtab_set_docstring("Directory",
+        "Directory[]\n"
+        "\tgives the current working directory.");
+    symtab_set_docstring("SetDirectory",
+        "SetDirectory[\"dir\"]\n"
+        "\tsets the current working directory to dir, pushing the previous one onto DirectoryStack[], and returns the new directory.\n"
+        "SetDirectory[] sets it to $HomeDirectory. A directory that cannot be entered gives SetDirectory::cdir and $Failed.");
+    symtab_set_docstring("ResetDirectory",
+        "ResetDirectory[]\n"
+        "\treturns to the directory before the most recent SetDirectory, popping it from DirectoryStack[].");
+    symtab_set_docstring("DirectoryStack",
+        "DirectoryStack[]\n"
+        "\tgives the directories SetDirectory has left, most recent first.");
+    symtab_set_docstring("$HomeDirectory",
+        "$HomeDirectory\n"
+        "\tgives your home directory, from the HOME (or USERPROFILE) environment variable.");
     symtab_set_docstring("$InputFileName",
         "$InputFileName\n"
         "\tis the absolute path of the file currently being read by -file or Get, or \"\" when no file is being read.");

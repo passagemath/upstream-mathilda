@@ -11,6 +11,9 @@
  *   FileNameSplit["name"]  — splits a file name into its parts.
  *   DirectoryName["name"]  — directory portion of a path (pure string).
  *   FileNames[forms, dirs, n] — files matching forms, searched to depth n.
+ *   Directory[], SetDirectory["dir"], ResetDirectory[], DirectoryStack[]
+ *                          — the working directory and its push/pop stack.
+ *   $HomeDirectory         — the user's home directory (from the environment).
  *
  * Also initialises $InputFileName to "" (loadmodule.c swaps it in and out
  * around every file read).
@@ -45,6 +48,13 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>     /* _getcwd / _chdir */
+#define getcwd _getcwd
+#define chdir  _chdir
+#else
+#include <unistd.h>     /* getcwd / chdir (POSIX, see _POSIX_C_SOURCE above) */
+#endif
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -1105,6 +1115,143 @@ Expr* builtin_filenames(Expr* res) {
     return r;
 }
 
+/* ------------------------------------------------------------------ */
+/* Directory, SetDirectory, ResetDirectory, DirectoryStack             */
+/* ------------------------------------------------------------------ */
+
+/* Directories SetDirectory left, most recent last.  Reachable until exit. */
+static char** g_dir_stack = NULL;
+static size_t g_dir_count = 0, g_dir_cap = 0;
+
+/* The working directory as a malloc'd string, or NULL.  Grows the buffer
+ * rather than relying on getcwd(NULL, 0), which POSIX leaves unspecified. */
+static char* cwd_dup(void) {
+    size_t cap = 256;
+    for (;;) {
+        char* buf = malloc(cap);
+        if (!buf) return NULL;
+        if (getcwd(buf, cap)) return buf;
+        free(buf);
+        if (cap > (size_t)1 << 20) return NULL;   /* not ERANGE: give up */
+        cap *= 2;
+    }
+}
+
+/* String Expr for the working directory, or $Failed. */
+static Expr* cwd_expr(void) {
+    char* d = cwd_dup();
+    if (!d) return expr_new_symbol(SYM_DollarFailed);
+    Expr* r = expr_new_string(d);
+    free(d);
+    return r;
+}
+
+Expr* builtin_directory(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 0) return builtin_arg_error("Directory", argc, 0, 0);
+    return cwd_expr();
+}
+
+/* $HomeDirectory's current value (borrowed string), or NULL. */
+static const char* home_directory(void) {
+    Rule* r = symtab_get_own_values("$HomeDirectory");
+    return (r && r->replacement && r->replacement->type == EXPR_STRING)
+               ? r->replacement->data.string : NULL;
+}
+
+/*
+ * SetDirectory["dir"] -- make dir the working directory, pushing the old one
+ * onto the directory stack; returns the new (canonical) working directory.
+ * SetDirectory[] goes to $HomeDirectory.  An unusable dir emits
+ * SetDirectory::cdir and returns $Failed, leaving the stack unchanged.
+ */
+Expr* builtin_setdirectory(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc > 1) return builtin_arg_error("SetDirectory", argc, 0, 1);
+    const char* target;
+    if (argc == 0) {
+        target = home_directory();
+        if (!target) return expr_new_symbol(SYM_DollarFailed);
+    } else if (res->data.function.args[0]->type == EXPR_STRING) {
+        target = res->data.function.args[0]->data.string;
+    } else {
+        char* txt = expr_to_string_outputform(res->data.function.args[0]);
+        mth_message("SetDirectory", "badfile",
+                    "The specified argument, %s, should be a valid string or File.",
+                    txt ? txt : "?");
+        free(txt);
+        return NULL;
+    }
+
+    char* prev = cwd_dup();
+    if (!prev) return expr_new_symbol(SYM_DollarFailed);
+    if (chdir(target) != 0) {
+        mth_message("SetDirectory", "cdir", "Cannot set current directory to %s.", target);
+        free(prev);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    if (g_dir_count == g_dir_cap) {
+        size_t nc = g_dir_cap ? 2 * g_dir_cap : 8;
+        char** ns = realloc(g_dir_stack, nc * sizeof(char*));
+        if (!ns) { free(prev); return cwd_expr(); }   /* OOM: moved, not pushed */
+        g_dir_stack = ns;
+        g_dir_cap = nc;
+    }
+    g_dir_stack[g_dir_count++] = prev;
+    return cwd_expr();
+}
+
+/* ResetDirectory[] -- pop the directory stack and return to the directory it
+ * held.  On an empty stack emits ResetDirectory::dtop and returns the current
+ * directory. */
+Expr* builtin_resetdirectory(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 0) return builtin_arg_error("ResetDirectory", argc, 0, 0);
+    if (g_dir_count == 0) {
+        mth_message("ResetDirectory", "dtop", "Directory stack is empty.");
+        return cwd_expr();
+    }
+    char* dir = g_dir_stack[--g_dir_count];
+    if (chdir(dir) != 0)
+        mth_message("ResetDirectory", "cdir", "Cannot set current directory to %s.", dir);
+    free(dir);
+    return cwd_expr();
+}
+
+/* DirectoryStack[] -- the directories SetDirectory left, most recent first.
+ * Arguments are ignored, as in WL (DirectoryStack[1] is the stack too). */
+Expr* builtin_directorystack(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    Expr** items = g_dir_count ? malloc(g_dir_count * sizeof(Expr*)) : NULL;
+    if (g_dir_count && !items) return NULL;
+    for (size_t i = 0; i < g_dir_count; i++)
+        items[i] = expr_new_string(g_dir_stack[g_dir_count - 1 - i]);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), items, g_dir_count);
+    free(items);
+    return r;
+}
+
+/* $HomeDirectory from the environment: HOME, else (Windows) USERPROFILE or
+ * HOMEDRIVE + HOMEPATH.  Caller frees; NULL when none is set. */
+static char* home_from_env(void) {
+    const char* h = getenv("HOME");
+    if (!h || !*h) h = getenv("USERPROFILE");
+    if (h && *h) {
+        char* r = malloc(strlen(h) + 1);
+        if (r) strcpy(r, h);
+        return r;
+    }
+    const char* drive = getenv("HOMEDRIVE");
+    const char* path = getenv("HOMEPATH");
+    if (!drive || !path) return NULL;
+    char* r = malloc(strlen(drive) + strlen(path) + 1);
+    if (r) { strcpy(r, drive); strcat(r, path); }
+    return r;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -1140,6 +1287,26 @@ void files_init(void) {
         (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_Automatic) }, 2);
     symtab_set_options("FileNames",
         expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ ic }, 1));
+
+    symtab_add_builtin("Directory", builtin_directory);
+    symtab_get_def("Directory")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("SetDirectory", builtin_setdirectory);
+    symtab_get_def("SetDirectory")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ResetDirectory", builtin_resetdirectory);
+    symtab_get_def("ResetDirectory")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("DirectoryStack", builtin_directorystack);
+    symtab_get_def("DirectoryStack")->attributes |= ATTR_PROTECTED;
+
+    char* home = home_from_env();
+    if (home) {
+        Expr* hsym = expr_new_symbol("$HomeDirectory");
+        Expr* hval = expr_new_string(home);
+        symtab_add_own_value("$HomeDirectory", hsym, hval);
+        expr_free(hsym);
+        expr_free(hval);
+        free(home);
+    }
+    symtab_get_def("$HomeDirectory")->attributes |= ATTR_PROTECTED;
 
     /* $InputFileName: "" outside any file read (see mth_input_file_enter). */
     Expr* ifn_sym = expr_new_symbol("$InputFileName");

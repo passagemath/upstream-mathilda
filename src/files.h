@@ -80,4 +80,11 @@ Expr* builtin_directoryname(Expr* res);
  * searched to depth n; directories count as entries. */
 Expr* builtin_filenames(Expr* res);
 
+/* Directory[] / SetDirectory["dir"] / ResetDirectory[] / DirectoryStack[] --
+ * the working directory and the stack SetDirectory pushes onto. */
+Expr* builtin_directory(Expr* res);
+Expr* builtin_setdirectory(Expr* res);
+Expr* builtin_resetdirectory(Expr* res);
+Expr* builtin_directorystack(Expr* res);
+
 #endif /* FILES_H */

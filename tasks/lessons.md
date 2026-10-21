@@ -4795,3 +4795,22 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   also exposed a flat `rhs_idx` counter that distributed a List rhs wrongly on
   plain lists. Diff a few multi-axis spec shapes against wolframscript, not
   just the one reported.
+
+## 2026-10-21 — A workaround comment that says "deliberately" can mark a coupling to a bug (`$` context resolution, issue #104, v0.523)
+
+- **Root cause.** `context_resolve_name` returned every `$name` bare, before
+  it looked at `$Context`. Under ParallelMixed this showed up as "context
+  injection prefixes functions but not variables". That was recorded as
+  divergence F10, and integrate.c Blocked the bare `$SpecialTimeBudget`
+  "UNQUALIFIED deliberately". The real cause was the `$` shortcut. Rule: when
+  code or a doc explains a quirk with "deliberately" or "measured", grep for
+  that explanation before you fix the resolver underneath it. Here, removing
+  the shortcut would have silently changed the cascade budget from 10 s to
+  45 s.
+- **The init-time System flag is not a display predicate.** `intern_is_system`
+  also covers scratch names that C code interns (`x`, `y`, `t`). Trust it only
+  for System-shaped names (a leading `$` or a capital).
+- **`Context` is `HoldFirst`; `Context /@ {...}` is not.** The list is
+  evaluated first, so `$Version` arrives as its string. Probe with direct calls.
+- **The context_tests harness printed `FAIL:` and still exited 0.** Grep test
+  output for `FAIL:`; don't rely on the exit code.

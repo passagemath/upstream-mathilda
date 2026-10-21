@@ -43,7 +43,8 @@ static void test_resolve_system_prefix_stripped(void) {
 }
 
 static void test_resolve_dollar_unqualified(void) {
-    /* $Foo should never be context-qualified. */
+    /* In Global`, a new $Foo stays bare like any other new name. (Inside a
+     * package it is qualified -- see test_package_dollar_symbol.) */
     char* r = context_resolve_name("$Foo");
     ASSERT_STR_EQ(r, "$Foo");
     free(r);
@@ -184,6 +185,42 @@ static void test_context_of_user_symbol(void) {
     assert_eval_eq("Context[\"myvar\"]", "\"Global`\"", 0);
 }
 
+static void test_package_dollar_symbol(void) {
+    /* Issue #104: a leading '$' is not special -- $T2 inside a package is
+     * Test104`$T2, exactly like T1. */
+    assert_eval_eq("BeginPackage[\"Test104`\"]", "\"Test104`\"", 0);
+    assert_eval_eq("T1 = 137", "137", 0);
+    assert_eval_eq("$T2 = 42", "42", 0);
+    assert_eval_eq("Context[T1]", "\"Test104`\"", 0);
+    assert_eval_eq("Context[$T2]", "\"Test104`\"", 0);
+    /* System $-variables still resolve to System inside the package. */
+    assert_eval_eq("Context[$Failed]", "\"System`\"", 0);
+    assert_eval_eq("Context[$Assumptions]", "\"System`\"", 0);
+    assert_eval_eq("$RecursionLimit", "1024", 0);
+    assert_eval_eq("EndPackage[]", "Null", 0);
+    /* After EndPackage the short name finds the package symbol. */
+    assert_eval_eq("$T2", "42", 0);
+    assert_eval_eq("Test104`$T2", "42", 0);
+    assert_eval_eq("Context[$T2]", "\"Test104`\"", 0);
+    /* Begin[] qualifies $-names the same way. */
+    assert_eval_eq("Begin[\"Foo104`\"]", "\"Foo104`\"", 0);
+    assert_eval_eq("$y104 = 1", "1", 0);
+    assert_eval_eq("Context[$y104]", "\"Foo104`\"", 0);
+    assert_eval_eq("End[]", "\"Foo104`\"", 0);
+}
+
+static void test_context_of_system_symbols(void) {
+    /* Non-function System symbols (constants, $-variables, structural heads)
+     * report System`, not Global`. Scratch names the kernel interns (x, t)
+     * remain Global`. */
+    /* Context is HoldFirst; call it directly (Context /@ {...} would
+     * evaluate $Version to its string first). */
+    assert_eval_eq("{Context[$Version], Context[$Failed], Context[Pi], Context[Automatic], Context[List]}",
+                   "{\"System`\", \"System`\", \"System`\", \"System`\", \"System`\"}", 0);
+    assert_eval_eq("{Context[x], Context[t]}", "{\"Global`\", \"Global`\"}", 0);
+    assert_eval_eq("$g104 = 1; Context[$g104]", "\"Global`\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -210,6 +247,8 @@ int main(void) {
     TEST(test_nested_begin_private);
     TEST(test_system_prefix_stripped_in_parser);
     TEST(test_context_of_user_symbol);
+    TEST(test_package_dollar_symbol);
+    TEST(test_context_of_system_symbols);
 
     printf("All context tests passed!\n");
     return 0;

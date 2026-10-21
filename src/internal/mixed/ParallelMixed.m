@@ -94,6 +94,14 @@ BuildTower::powerfree = "The radicand `1` is not `2`-th-power-free.";
 BuildTower::radical3 = "The derivative of `1` needs Sqrt[`2`], but the tower has the radical y^`3` = `2`.";
 BuildTower::radicand = "The radicand `1` is not a squarefree polynomial in the generators.";
 BuildTower::residual = "Could not reduce the integrand to a rational function of the generators and y: `1`.";
+
+(* The two wall-clock budgets are exported (public, ParallelMixed`) so a caller can
+   raise them by their short names -- the stress harnesses do, and
+   src/calculus/integrate.c Blocks $SpecialTimeBudget for the Automatic cascade.
+   $SpecialTimeBudget belongs to ParallelMixedSpecial.m, which is loaded into
+   ParallelMixed`Private` and so has no public section of its own. *)
+$ParallelMixedTimeBudget::usage = "$ParallelMixedTimeBudget is the wall-clock budget in seconds (default 45) for one ParallelIntegrateMixed solve; past it the solve declines with {\"failed\", \"time budget exceeded\"}.";
+$SpecialTimeBudget::usage = "$SpecialTimeBudget is the wall-clock budget in seconds (default 45) for one special-function-stage solve (IntegrateSurfaceSpecial); the Automatic Integrate cascade scopes it down to 10 s.";
 Undecided;
 
 Begin["`Private`"];

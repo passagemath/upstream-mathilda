@@ -183,8 +183,10 @@ const char* context_display_name(const char* name) {
 char* context_resolve_name(const char* raw) {
     if (!raw || *raw == '\0') return ctx_strdup(raw ? raw : "");
 
-    /* System variables ($Foo) bypass context qualification. */
-    if (raw[0] == '$') return ctx_strdup(raw);
+    /* A leading '$' is NOT special: `$x` inside a package is qualified into
+     * the package context like any other name (issue #104). System `$`
+     * variables ($Version, $Failed, $Assumptions, ...) stay bare via the
+     * System fall-back below, since each has a SymbolDef or the System flag. */
 
     /* Leading backtick: relative to current context. */
     if (raw[0] == '`') {
@@ -348,13 +350,19 @@ static Expr* builtin_context(Expr* res) {
         return out;
     }
 
-    /* Bare name: look it up. If it exists as a builtin, report "System`".
-     * If it exists as a plain symbol with rules/docstring, report "Global`".
-     * If it doesn't exist at all (string form), emit a notfound-style
-     * warning and return the expression unevaluated. */
+    /* Bare name: look it up. A builtin, or a name flagged System at kernel
+     * init (Pi, Automatic, $Version, $Failed, ...), reports "System`"; any
+     * other existing symbol reports "Global`". The init flag also covers
+     * scratch variables the C side interns (x, y, t, ...), so it is trusted
+     * only for names spelled like System names: a leading '$' or capital.
+     * If the name doesn't exist at all (string form), emit a notfound-style
+     * warning and return unevaluated. */
     SymbolDef* def = symtab_lookup(name);
-    if (def) {
-        const char* home = (def->builtin_func != NULL) ? "System`" : "Global`";
+    bool is_system = (name[0] == '$' || (name[0] >= 'A' && name[0] <= 'Z'))
+                     && intern_is_system(name);
+    if (def || is_system) {
+        const char* home = (is_system || (def && def->builtin_func != NULL))
+                         ? "System`" : "Global`";
         Expr* out = expr_new_string(home);
         return out;
     }

@@ -1262,6 +1262,33 @@ Symbol::symname: The string "1x" cannot be used for a symbol name. A symbol name
 Out[5]= Symbol["1x"]
 ```
 
+## Context
+Gives the current context, or the context of a symbol.
+- `Context[]`: the current context (`$Context`).
+- `Context[sym]` / `Context["name"]`: the context `sym` lives in.
+
+**Features**:
+- `Protected`, `HoldFirst`.
+- A qualified symbol reports its prefix (`Context[a`b`x]` is `"a`b`"`).
+- A bare symbol reports `"System`"` for builtins and for kernel System symbols
+  without a function definition (`Pi`, `Automatic`, `List`, `$Version`,
+  `$Failed`, …), and `"Global`"` otherwise.
+- New symbols, **including `$`-prefixed ones**, are created in `$Context`: inside
+  `BeginPackage["P`"]` or `Begin["P`"]`, `$x = 1` creates ``P`$x`` (issue #104).
+  System `$`-variables (`$RecursionLimit`, `$Assumptions`, …) still resolve to
+  System. After `EndPackage[]` the short name `$x` finds ``P`$x`` via `$ContextPath`.
+- `Context["name"]` for a name that does not exist emits `Context::notfound`
+  and stays unevaluated.
+
+```
+In[1]:= BeginPackage["Test`"]; T1 = 137; $T2 = 42;
+In[2]:= {Context[T1], Context[$T2]}
+Out[2]= {"Test`", "Test`"}
+
+In[3]:= EndPackage[]; {Context[$T2], Context[$Version], Context[Pi], Context[x]}
+Out[3]= {"Test`", "System`", "System`", "Global`"}
+```
+
 ## Information
 Returns a formatted string containing the syntax and description of a symbol.
 - `Information[symbol]`

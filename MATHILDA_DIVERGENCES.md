@@ -949,7 +949,17 @@ purpose of the present bound is to keep `FactorInteger` from hanging. Whoever
 takes it should fix both tests at once and measure the cost on a deliberately hard
 input (a 40-digit semiprime), not just on these two.
 
-### F10. A context-injected `.m` prefixes its functions but NOT its variables
+### F10. A context-injected `.m` prefixes its functions but NOT its variables (FIXED, v0.523)
+
+**Fixed in v0.523 (issue #104).** The asymmetry was not a property of context
+injection at all: the context resolver left *every* `$`-prefixed name bare
+(`Global``) regardless of `$Context`, and the variables in question all start with
+`$`. With that shortcut removed, `$x` is qualified like any other name. The two
+budgets that callers set are now exported from the `ParallelMixed`` public
+section (`$ParallelMixedTimeBudget`, `$SpecialTimeBudget`), so the unqualified
+spelling still reaches them after `EndPackage`; `src/calculus/integrate.c` Blocks
+``ParallelMixed`$SpecialTimeBudget``. The remaining `$` knobs (`$PMDebug`,
+`$StrictSP`, …) are now genuinely private. The record below is kept as written.
 
 The sharp edge behind F8, found while scoping a budget from C and worth its own
 entry because the wrong guess is **silent and self-confirming**.

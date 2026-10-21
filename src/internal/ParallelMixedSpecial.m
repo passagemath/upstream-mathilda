@@ -139,8 +139,8 @@ SpecialProfileReset[] := ($SpecialStages = <||>;);
    ansatz-size caps are follow-up work, as they are there.
 
    The Automatic cascade scopes this DOWN to PMS_CASCADE_BUDGET_SECONDS (10 s;
-   src/calculus/integrate.c, which Blocks this symbol -- UNQUALIFIED, since the
-   context injection leaves it in Global`) : a stage applied to every integrand
+   src/calculus/integrate.c, which Blocks this symbol; it is exported from the
+   ParallelMixed` public section, so it is ParallelMixed`$SpecialTimeBudget) : a stage applied to every integrand
    nothing else closed must be cheap, where an explicit
    Method -> "ParallelMixedSpecial" is a deliberate request for the full search. *)
 $SpecialTimeBudget = 45;

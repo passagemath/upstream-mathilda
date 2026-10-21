@@ -1210,21 +1210,18 @@ static Expr* builtin_integrate_pms(Expr* res) {
          * Block restore OwnValues and DownValues across that unwind), so an
          * explicit Method -> call later in the same session still gets 45 s.
          *
-         * UNQUALIFIED deliberately.  The package is loaded INTO
-         * ParallelMixed`Private` (the logrewrite.m context-injection pattern),
-         * and that injection prefixes the FUNCTIONS it defines but not the
-         * variables: the budget really is Global`$SpecialTimeBudget, exactly as
-         * Part II's Global`$ParallelMixedTimeBudget is -- which is why the
-         * stress harness raises that one unqualified too.  Spelling this
-         * `ParallelMixed`Private`$SpecialTimeBudget` binds a DIFFERENT, unbound
-         * symbol and silently leaves the default in force (measured). */
+         * Fully qualified: the budget is exported from the ParallelMixed`
+         * public section (mixed/ParallelMixed.m).  Before v0.523 the resolver
+         * left every `$name` bare (issue #104), so this Blocked the bare name;
+         * a wrong spelling here binds a DIFFERENT symbol and silently leaves
+         * the 45 s default in force. */
         Expr* call = expr_new_function(
             expr_new_symbol("ParallelMixed`Private`IntegrateSurfaceSpecial"),
             (Expr*[]){ expr_copy(res->data.function.args[0]),
                        expr_copy(res->data.function.args[1]) }, 2);
         Expr* bind = expr_new_function(
             expr_new_symbol(SYM_Set),
-            (Expr*[]){ expr_new_symbol("$SpecialTimeBudget"),
+            (Expr*[]){ expr_new_symbol("ParallelMixed`$SpecialTimeBudget"),
                        expr_new_integer(PMS_CASCADE_BUDGET_SECONDS) }, 2);
         Expr* locals = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ bind }, 1);
         Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),

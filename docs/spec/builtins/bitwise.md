@@ -187,3 +187,68 @@ Out[5]= {0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0}
 **Diagnostics**. None. A non-integer number (a Real, Rational or Complex) is
 left in the call silently, exactly as a symbol is (`BitAnd[2.5, 3]` stays
 unevaluated and `Check` takes the value branch).
+
+## BitOr
+
+- `BitOr[n1, n2, ...]`: The bitwise OR of the integers `ni` -- the integer
+  whose binary representation has ones at the positions where any of the `ni`
+  have ones.
+
+**Features**:
+- `Flat`, `Listable`, `OneIdentity`, `Orderless`, `Protected`. Takes any number
+  of arguments; `BitOr[]` is `0` (the identity) and `BitOr[n]` is `n`. Threads
+  over lists (`BitOr[Range[-40, 40], 17]`, `BitOr[{1, 2}, 8, {4, 5}]`),
+  including nested and empty ones (`BitOr[{}]` and `BitOr[{}, {}]` are `{}`).
+- Negative integers are taken in two's complement (`BitOr[-2, -3]` is `-1`).
+  Integers of any size are exact: bignums go through GMP's `mpz_ior`, read in
+  place and ORed straight into a presized result (no operand or result
+  copies). A result that fits in a machine integer is returned as one, which
+  happens whenever a negative operand sign-extends over a larger positive one
+  (`BitOr[-5, 2^70]` is `-5`).
+- Automatic symbolic simplification, the dual of BitAnd (OR is idempotent, `0`
+  is its identity and `-1`, all bits on, absorbs):
+  1. identical arguments collapse to one (`BitOr[x, y, y, x]` is
+     `BitOr[x, y]`, `BitOr[2.5, 2.5]` is `2.5`);
+  2. the integers combine into one constant (`BitOr[1, 2, x]` is
+     `BitOr[3, x]`). A constant of `-1` absorbs everything, symbols and
+     non-integers included (`BitOr[-1, 2, x]` and `BitOr[-1, 2.5]` are `-1`); a
+     constant of `0` is dropped (`BitOr[0, x]` is `x`); any other constant
+     stays inline (`BitOr[-5, x]`).
+
+  There are no complement or absorption rules: `BitOr[x, BitNot[x]]` and
+  `BitOr[x, BitAnd[x, y]]` stay as they are.
+- **Packed / NDArray**: an exact int64 kernel (`ndk_BitOr_ii`, plus
+  vectorisable whole-buffer arms for array | scalar and array | array) in
+  `src/ndinteger.c`, on the `AWARE` and `INT64_OK` lists. The n-ary form
+  (`BitOr[v, w, 7]`, `BitOr[v, 8, 16]`) stays on the buffer, one pass per
+  operand; a combined constant of `0` costs no pass. A visible `NDArray` gives
+  a visible `NDArray`. Operands that no int64 buffer can hold (a bignum, a
+  symbol) take the exact List path. At 10^5 elements `BitOr[v, 255]`,
+  `BitOr[v, w]` and `BitOr[u, v, w]` take about 0.035, 0.044 and 0.089 ms,
+  level with NumPy's `bitwise_or` (0.034, 0.043, 0.085 ms).
+- **Compile[]**: `OP_BOR_I` (total, never bails), folded left for any arity.
+  It lowers at scalar shape, array | scalar, array | array and the n-ary array
+  form, and `CompileDiagnostics` reports `Compiled -> True` for each, so
+  auto-compilation picks it up. Scalar, List, packed, `NDArray` and compiled
+  results agree bit for bit, `INT64_MIN` included.
+
+```
+In[1]:= BitOr[61, 15]
+Out[1]= 63
+
+In[2]:= BitOr[3^100, 5^100]
+Out[2]= 7888609052210118054117297117069515706082347426840895402878464599718897
+
+In[3]:= BitOr[3333, 5555, 7777, 9999]
+Out[3]= 16383
+
+In[4]:= {BitOr[x, y, y, x], BitOr[1, 2, x], BitOr[-1, 2, x], BitOr[0, x]}
+Out[4]= {BitOr[x, y], BitOr[3, x], -1, x}
+
+In[5]:= Outer[BitOr, {1, 0}, {1, 0}]
+Out[5]= {{1, 1}, {1, 0}}
+```
+
+**Diagnostics**. None. A non-integer number (a Real, Rational or Complex) is
+left in the call silently, exactly as a symbol is (`BitOr[2.5, 3]` stays
+unevaluated and `Check` takes the value branch).

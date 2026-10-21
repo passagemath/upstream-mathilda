@@ -133,12 +133,13 @@ static bool kernel2_type(const NDBinaryKernel* k, CompileType ta, CompileType tb
  * arguments simply bail, exactly as they did before.
  *
  * `*pred` distinguishes the ones that answer True/False (CT_BOOL) from the ones
- * that answer an Integer.  GCD, LCM, BitXor and BitAnd are Flat and n-ary in the
+ * that answer an Integer.  GCD, LCM, BitXor, BitAnd and BitOr are Flat and n-ary in the
  * interpreter, so any arity from 2 up is accepted and folded left. */
 bool int_only_head(const char* h, size_t na, bool* pred) {
     *pred = false;
     if (na >= 2 && (strcmp(h, "GCD") == 0 || strcmp(h, "LCM") == 0
-                    || strcmp(h, "BitXor") == 0 || strcmp(h, "BitAnd") == 0)) return true;
+                    || strcmp(h, "BitXor") == 0 || strcmp(h, "BitAnd") == 0
+                    || strcmp(h, "BitOr") == 0)) return true;
     if ((na == 1 || na == 2)
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
     if (na == 1 && strcmp(h, "BitLength") == 0) return true;
@@ -905,7 +906,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     }
     if (na >= 3) {
         /* Flat + Listable + Orderless head with a binary kernel and no n-ary
-         * one (GCD, LCM, BitXor, BitAnd) and an array operand: folded left from an
+         * one (GCD, LCM, BitXor, BitAnd, BitOr) and an array operand: folded left from an
          * array operand, one kernel step per operand -- mirrors try_kernel. */
         SymbolDef* d = symtab_lookup(h);
         unsigned at = get_attributes(h);

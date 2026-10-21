@@ -4978,6 +4978,16 @@ void info_init(void) {
         "(BitAnd[3, 5, x] is BitAnd[1, x]), a 0 absorbs everything "
         "(BitAnd[1, 2, x] is 0) and a -1 is dropped (BitAnd[-1, x] is x).");
 
+    symtab_set_docstring("BitOr",
+        "BitOr[n1, n2, ...] gives the bitwise OR of the integers ni: the "
+        "integer whose binary representation has ones at positions where any "
+        "of the ni have ones.\n"
+        "Negative integers are taken in two's complement; integers of any size "
+        "are exact. BitOr[] is 0. BitOr threads over lists.\n"
+        "Identical arguments collapse (BitOr[x, x] is x), integers combine "
+        "(BitOr[1, 2, x] is BitOr[3, x]), a -1 absorbs everything "
+        "(BitOr[-1, 2, x] is -1) and a 0 is dropped (BitOr[0, x] is x).");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

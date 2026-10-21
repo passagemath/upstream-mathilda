@@ -2,9 +2,9 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength, BitXor and BitAnd (machine-int, bignum, negative,
+# Drives BitLength, BitXor, BitAnd and BitOr (machine-int, bignum, negative,
 # INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
-# cancellation / idempotence / 0-absorption, BitNot extraction, Compile, and
+# cancellation / idempotence / 0- and -1-absorption, BitNot extraction, Compile, and
 # error paths) under a leak checker and FAILS on any
 # leaked byte.
 #
@@ -106,6 +106,44 @@ cfa = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitAnd[v, w, 6]];
 Do[cfa[Range[32], Reverse[Range[32]]], {200}];
 cfs = Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, BitAnd[a, b, c]];
 Do[cfs[3333, 5555, -7], {200}];
+Do[BitOr[61, 15], {200}];
+Do[BitOr[3333, 5555, 7777, 9999], {200}];
+Do[BitOr[-2, -3], {200}];
+Do[BitOr[3^100, 5^100], {200}];
+Do[BitOr[3^100, 5^100, 6], {200}];
+Do[BitOr[2^63, -1], {200}];
+Do[BitOr[-5, 2^70], {200}];
+Do[BitOr[-2^70, 1], {200}];
+Do[BitOr[-3^50, -5^40, x, x], {200}];
+Do[BitOr[x, y, y, x], {200}];
+Do[BitOr[1, 2, x], {200}];
+Do[BitOr[-1, 2, x], {200}];
+Do[BitOr[-1, x, 1/2], {200}];
+Do[BitOr[0, x], {200}];
+Do[BitOr[0, x, y], {200}];
+Do[BitOr[2^70, x, 0], {200}];
+Do[BitOr[x, 2^70 + 3, 2^70 + 1], {200}];
+Do[BitOr[x, 2.5, 2.5], {200}];
+Do[BitOr[2.5, 3], {200}];
+Do[BitOr[I, I, x], {200}];
+Do[BitOr[], {200}];
+Do[BitOr[{}, {}], {200}];
+Do[BitOr[{1, 2}, 8, {4, 5}], {200}];
+Do[BitOr[Range[-40, 40], 17], {200}];
+Do[BitOr[Range[64], Reverse[Range[64]]], {200}];
+Do[BitOr[Range[64], 8, 16], {200}];
+Do[BitOr[Range[64], Range[64], 9], {200}];
+Do[BitOr[Range[64], 0, 0], {200}];
+Do[BitOr[Range[8], 2^70], {200}];
+Do[BitOr[Range[8], x, x], {200}];
+Do[BitOr[NDArray[{-9223372036854775808, -1, 0, 1}, DataType -> "int64"], 7], {200}];
+Do[BitOr[NDArray[{1, 2, 3}, DataType -> "int64"], NDArray[{3, 2, 1}, DataType -> "int64"], 16], {200}];
+Do[Quiet[BitOr[{1, 2}, {1, 2, 3}]], {200}];
+Do[Quiet[BitOr[Range[2], Range[3], 4]], {200}];
+cfo = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitOr[v, w, 6]];
+Do[cfo[Range[32], Reverse[Range[32]]], {200}];
+cfos = Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, BitOr[a, b, c]];
+Do[cfos[3333, 5555, -7], {200}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

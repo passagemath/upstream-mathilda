@@ -218,13 +218,13 @@ enum {
      * PowerMod is K_NARY because it is ternary and an Instr addresses only two \
      * source registers — same shape as KERNN, a run starting at `a`.          \
      *                                                                          \
-     * BitLength (OP_BLEN_I, unary: no base operand), BitXor (OP_BXOR_I) and  \
-     * BitAnd (OP_BAND_I) -- both Flat and n-ary, folded left; total on int64   \
-     * so they never bail -- are implemented.  The other COMBINATORS BitOr/     \
-     * BitNot/BitShiftLeft/BitShiftRight remain deliberately absent: not        \
-     * implemented in the INTERPRETER (they come back unevaluated), and a       \
-     * compiled path that                                                       \
-     * answered them would answer where the interpreter declines.               \
+     * BitLength (OP_BLEN_I, unary: no base operand), BitXor (OP_BXOR_I),     \
+     * BitAnd (OP_BAND_I) and BitOr (OP_BOR_I) -- all Flat and n-ary, folded    \
+     * left; total on int64 so they never bail -- are implemented.  The other   \
+     * COMBINATORS BitNot/BitShiftLeft/BitShiftRight remain deliberately        \
+     * absent: not implemented in the INTERPRETER (they come back unevaluated), \
+     * and a compiled path that answered them would answer where the            \
+     * interpreter declines.                                                    \
      *                                                                          \
      * PPQ_I is PrimePowerQ: CT_INT -> CT_BOOL (0/1 in .i), answered by the     \
      * interpreter's own mth_prime_power_base_u64 on |n|, so it never bails.    \
@@ -242,6 +242,7 @@ enum {
     X(POWMOD_I, K_NARY) X(BLEN_I, K_UN) X(PPQ_I, K_UN) X(DSIG_I, K_BIN)     \
     X(PHI_I, K_UN)    X(MU_I, K_UN)    X(JACOBI_I, K_BIN) X(PRIMEQ_I, K_UN) \
     X(PARTP_I, K_UN)  X(PARTQ_I, K_UN)  X(BXOR_I, K_BIN)  X(BAND_I, K_BIN)  \
+    X(BOR_I, K_BIN)                                                         \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \

@@ -30,12 +30,13 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
     {
         bool pred = false;
         if (int_only_head(h, na, &pred) && all_args_int(c, A, na)) {
-            /* GCD / LCM / BitXor / BitAnd: Flat and n-ary, folded left the
+            /* GCD / LCM / BitXor / BitAnd / BitOr: Flat and n-ary, folded left the
              * way the interpreter's own Flat attribute would associate them. */
             uint16_t fold = strcmp(h, "GCD") == 0    ? OP_GCD_I
                           : strcmp(h, "LCM") == 0    ? OP_LCM_I
                           : strcmp(h, "BitXor") == 0 ? OP_BXOR_I
                           : strcmp(h, "BitAnd") == 0 ? OP_BAND_I
+                          : strcmp(h, "BitOr") == 0  ? OP_BOR_I
                           : OP__COUNT;                   /* not a fold head */
             if (fold != OP__COUNT) {
                 Val acc; if (!emit(c, A[0], &acc)) return -1;

@@ -1233,7 +1233,7 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
     }
     if (na >= 3) {
         /* A Flat, Listable, Orderless head with a binary kernel and no n-ary
-         * one (GCD, LCM, BitXor, BitAnd) and an array among its operands: fold left,
+         * one (GCD, LCM, BitXor, BitAnd, BitOr) and an array among its operands: fold left,
          * one kernel pass per operand -- the association the interpreter's own
          * Flat attribute gives f[a, b, c].  All-scalar calls never get here:
          * their integer opcodes (emit_int) are tried first.  Anything else

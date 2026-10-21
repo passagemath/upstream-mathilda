@@ -478,6 +478,7 @@ set(COMMON_SRC
     ../src/numloop.c
     ../src/boolean.c
     ../src/names.c
+    ../src/quit.c
     ../src/list/table.c
     ../src/list/range.c
     ../src/list/array.c

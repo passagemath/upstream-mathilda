@@ -19,6 +19,7 @@
 #include "meminfo.h"
 #include "print_latex.h"
 #include "version.h"
+#include "quit.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,6 +176,14 @@ void process_input(const char* input, int line_number) {
     Expr* evaluated = evaluate(pre_input);
     expr_free(pre_input);
     mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
+
+    /* Quit[] was evaluated: the session is ending, so there is no Out[n] to
+     * store or print. The caller sees mth_quit_requested() and shuts down. */
+    if (mth_quit_requested()) {
+        expr_free(evaluated);
+        expr_free(parsed);
+        return;
+    }
 
     /* $Post: applied to the evaluator's result. Consumes our reference
      * to `evaluated`. */
@@ -357,16 +366,16 @@ void repl_loop() {
 
         add_history(line);
 
-        if (strcmp(line, "Quit[]") == 0) {
-            /* User-requested shutdown: run $Epilog first. */
-            repl_apply_epilog();
-            free(line);
-            break;
-        }
-
         process_input(line, line_number);
         line_number++;
         free(line);
+
+        if (mth_quit_requested()) {
+            /* Quit[] / Quit[n] evaluated anywhere in the input (a bare
+             * Quit[], If[c, Quit[]], a Get'd file, ...): run $Epilog first. */
+            repl_apply_epilog();
+            break;
+        }
     }
 
     printf("\n");
@@ -394,11 +403,11 @@ void repl_loop(void) {
         while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
             line[--len] = '\0';
         if (len == 0) continue;
-        if (strcmp(line, "Quit[]") == 0) {
+        process_input(line, line_number++);
+        if (mth_quit_requested()) {
             repl_apply_epilog();
             break;
         }
-        process_input(line, line_number++);
     }
     printf("\n");
 }
@@ -1468,6 +1477,11 @@ static int run_script_file(const char* path) {
         mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
         expr_free(evaluated);
         expr_free(parsed);
+        if (mth_quit_requested()) {
+            /* Quit[n] ends the script here, with exit status n. */
+            status = mth_quit_status();
+            break;
+        }
     }
 
     free(buffer);
@@ -1561,6 +1575,7 @@ int main(int argc, char** argv) {
         pipe_mode_loop();
     } else {
         repl_loop();
+        if (mth_quit_requested()) rc = mth_quit_status();
     }
     /* Tear down the context subsystem so its $Context / $ContextPath strings and
      * any open package frames are freed rather than lingering as leaks at exit.

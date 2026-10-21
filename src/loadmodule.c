@@ -27,6 +27,7 @@
 #include "parse.h"
 #include "eval.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "quit.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,6 +85,9 @@ Expr* mathilda_run_file(const char* path, int* opened) {
             last_eval = evaluated;
         }
         expr_free(parsed);
+        /* Quit[] inside the file ends the session: stop reading so the
+         * top-level driver can shut down without running the rest. */
+        if (mth_quit_requested()) break;
     }
 
     free(buffer);

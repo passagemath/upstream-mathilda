@@ -394,6 +394,24 @@ In[5]:= f[n_] := Module[{s = 0}, Do[s = s + i; If[s > 10, Return[i]], {i, 1, n}]
 Out[5]= 5
 ```
 
+## Quit / Exit
+Ends the Mathilda session.
+- `Quit[]`: ends the session, running `$Epilog` first. The exit status is 0.
+- `Quit[n]`: ends the session with process exit status `n` (a machine integer).
+- `Exit[]`, `Exit[n]`: synonyms for `Quit[]`, `Quit[n]`.
+
+**Features**:
+- Works wherever the expression is evaluated: at the REPL (`If[done, Quit[]]`,
+  not only a literal `Quit[]` line), in a `-file` script, and inside a file read
+  with `Get`. A `Get`'d file that quits ends the outer script too, with its status.
+- `Quit[...]` stays inert, so `CompoundExpression`, `Do`, `While`, `FixedPoint`
+  and friends stop at it exactly as they stop at `Abort[]`; nothing after it in
+  the current input runs. The top-level driver then shuts down.
+- `Quit[x]` with a non-integer argument emits `Quit::intm` and does not quit
+  (the script continues), as in WL. A bare `Quit` symbol does not quit.
+- Pipe (sidecar) mode ignores the request, so a notebook cell cannot kill its kernel.
+- Attributes: `Protected`.
+
 ## Catch / Throw
 Non-local exit: `Throw` stops evaluation and hands a value to the nearest
 enclosing `Catch`. Unlike `Return` (which only escapes a scope boundary), a

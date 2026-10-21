@@ -15,6 +15,7 @@
 #include "core.h"
 #include "print.h"
 #include "repl_hooks.h"
+#include "quit.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -584,6 +585,27 @@ static void test_hook_visible_via_ownvalues(void) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Quit / Exit (issue #106)                                           */
+/* ------------------------------------------------------------------ */
+
+/* The quit request is process-wide and sticky, so the non-quitting case
+ * runs first and the tests below are ordered accordingly. */
+static void test_quit_non_integer_does_not_request(void) {
+    assert_eval_eq("Quiet[Quit[\"x\"]]", "Quit[\"x\"]", 0);
+    ASSERT(!mth_quit_requested());
+}
+
+/* Exit is a synonym rewritten to Quit; Quit[n] records exit status n and
+ * stays inert so the enclosing CompoundExpression stops at it. */
+static void test_exit_requests_quit_with_status(void) {
+    assert_eval_eq("qy = 0; Module[{}, qy = 1; Exit[3]; qy = 2]; qy", "1", 0);
+    ASSERT(mth_quit_requested());
+    ASSERT(mth_quit_status() == 3);
+    assert_eval_eq("Attributes[Exit]", "{Protected}", 0);
+    assert_eval_eq("Attributes[Quit]", "{Protected}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -625,6 +647,9 @@ int main(void) {
 
     TEST(test_pre_holdall_intercepts_raw_input);
     TEST(test_hook_reassignment_replaces_behaviour);
+
+    TEST(test_quit_non_integer_does_not_request);
+    TEST(test_exit_requests_quit_with_status);
     TEST(test_pre_read_passes_raw_string);
     TEST(test_hook_visible_via_ownvalues);
 

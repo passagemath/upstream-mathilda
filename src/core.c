@@ -69,6 +69,7 @@
 #include "comparisons.h"
 #include "boolean.h"
 #include "names.h"
+#include "quit.h"
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
@@ -873,6 +874,7 @@ void core_init(void) {
     interval_init();
     boolean_init();
     names_init();
+    quit_init();
     list_init();
     vectors_init();
     assoc_init();

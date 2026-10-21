@@ -225,12 +225,10 @@ enum {
      * ndint_bitset_i64, the interpreter's and NDArray kernel's own helper; it  \
      * bails where that declines (k < 0, or a bignum: n >= 0 with k >= 63).     \
      * BGET_I is BitGet[n, k] through ndint_bitget_i64; always 0 or 1, it      \
-     * bails only for k < 0.                                                    \
-     * The other COMBINATORS                                                    \
-     * BitShiftLeft/BitShiftRight remain deliberately                           \
-     * absent: not implemented in the INTERPRETER (they come back unevaluated), \
-     * and a compiled path that answered them would answer where the            \
-     * interpreter declines.                                                    \
+     * bails only for k < 0.  BSHL_I / BSHR_I are BitShiftLeft / BitShiftRight  \
+     * [n, k] through ndint_bitshiftleft_i64 / ndint_bitshiftright_i64 (the     \
+     * one-argument forms get a constant k = 1 from the emitter); they bail     \
+     * only where a left shift has no int64 answer (a bignum).                  \
      *                                                                          \
      * PPQ_I is PrimePowerQ: CT_INT -> CT_BOOL (0/1 in .i), answered by the     \
      * interpreter's own mth_prime_power_base_u64 on |n|, so it never bails.    \
@@ -249,6 +247,7 @@ enum {
     X(PHI_I, K_UN)    X(MU_I, K_UN)    X(JACOBI_I, K_BIN) X(PRIMEQ_I, K_UN) \
     X(PARTP_I, K_UN)  X(PARTQ_I, K_UN)  X(BXOR_I, K_BIN)  X(BAND_I, K_BIN)  \
     X(BOR_I, K_BIN)   X(BNOT_I, K_UN)  X(BSET_I, K_BIN)  X(BGET_I, K_BIN)    \
+    X(BSHL_I, K_BIN)  X(BSHR_I, K_BIN)                                      \
     X(FLOOR_R, K_UN)  X(CEIL_R, K_UN)  X(ROUND_R, K_UN)  X(TRUNC_R, K_UN)   \
     X(RE_C, K_UN)     X(IM_C, K_UN)    X(ARG_C, K_UN)   X(CONJ_C, K_UN)    \
     X(ATAN2_R, K_BIN) X(MAX_I, K_BIN)  X(MAX_R, K_BIN)                     \

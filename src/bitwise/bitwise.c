@@ -39,4 +39,10 @@ void bitwise_init(void) {
 
     symtab_add_builtin("BitGet", builtin_bitget);
     symtab_get_def("BitGet")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+
+    symtab_add_builtin("BitShiftLeft", builtin_bitshiftleft);
+    symtab_get_def("BitShiftLeft")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+
+    symtab_add_builtin("BitShiftRight", builtin_bitshiftright);
+    symtab_get_def("BitShiftRight")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 }

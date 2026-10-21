@@ -643,6 +643,12 @@ P("bitget", "integer", "BitGet[iv, 3]", "np.bitwise_and(np.right_shift(iv, 3), 1
 P("bitget_vk", "integer", "BitGet[iv, Mod[kv, 64]]",
   "np.bitwise_and(np.right_shift(iv, kv % 64), 1)")
 P("bitshiftleft", "integer", "BitShiftLeft[iv, 3]", "np.left_shift(iv, 3)")
+P("bitshiftleft_vk", "integer", "BitShiftLeft[iv, Mod[kv, 20]]",
+  "np.left_shift(iv, kv % 20)")
+# iv is positive, so numpy's floor right shift and BitShiftRight's truncation agree.
+P("bitshiftright", "integer", "BitShiftRight[iv, 3]", "np.right_shift(iv, 3)")
+P("bitshiftright_vk", "integer", "BitShiftRight[iv, Mod[kv, 64]]",
+  "np.right_shift(iv, kv % 64)")
 P("integerlength", "integer", "IntegerLength[cv]",
   "np.floor(np.log10(cv)).astype(np.int64)+1")
 P("powermod", "integer", "PowerMod[cv, 3, 1009]", "pow(3, 1, 1009)*0 + "

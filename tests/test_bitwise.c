@@ -2069,6 +2069,418 @@ static void test_bitget_stress(void) {
     }
 }
 
+/* ---- BitShiftLeft / BitShiftRight --------------------------------------- */
+
+static void test_bitshift_documented_examples(void) {
+    assert_eval_eq("BitShiftLeft[32, 3]", "256", 0);
+    assert_eval_eq("BitShiftLeft[2^200 - 1, 7]",
+                   "205688069665150755269371147819668813122841983204197482918576000", 0);
+    assert_eval_eq("BitShiftLeft[{1, 2, 4, 16}, 2]", "{4, 8, 16, 64}", 0);
+    assert_eval_eq("BitShiftRight[32, 3]", "4", 0);
+    assert_eval_eq("BitShiftRight[32, 7]", "0", 0);
+    assert_eval_eq("BitShiftRight[2^200 - 1, 7]",
+                   "12554203470773361527671578846415332832204710888928069025791", 0);
+    assert_eval_eq("BitShiftRight[{1, 2, 4, 16}, 2]", "{0, 0, 1, 4}", 0);
+}
+
+static void test_bitshift_basic(void) {
+    assert_eval_eq("BitShiftLeft[5]", "10", 0);
+    assert_eval_eq("BitShiftRight[5]", "2", 0);
+    assert_eval_eq("BitShiftLeft[0, 1000]", "0", 0);
+    assert_eval_eq("BitShiftLeft[0, 10^9]", "0", 0);
+    assert_eval_eq("BitShiftLeft[0, -5]", "0", 0);
+    assert_eval_eq("BitShiftLeft[7, 0]", "7", 0);
+    assert_eval_eq("BitShiftRight[7, 0]", "7", 0);
+    assert_eval_eq("Table[BitShiftLeft[1, k], {k, 0, 8}]", "{1, 2, 4, 8, 16, 32, 64, 128, 256}", 0);
+    assert_eval_eq("Table[BitShiftRight[255, k], {k, 0, 9}]",
+                   "{255, 127, 63, 31, 15, 7, 3, 1, 0, 0}", 0);
+    /* A negative k shifts the other way. */
+    assert_eval_eq("BitShiftLeft[5, -1]", "2", 0);
+    assert_eval_eq("BitShiftRight[5, -2]", "20", 0);
+    assert_eval_eq("BitShiftRight[1, -62]", "4611686018427387904", 0);
+    assert_eval_eq("Head[BitShiftLeft[3, 2]]", "Integer", 0);
+}
+
+static void test_bitshift_negatives_truncate(void) {
+    /* A right shift truncates toward zero (IntegerPart), unlike the
+     * arithmetic shift's floor. */
+    assert_eval_eq("BitShiftRight[-5, 1]", "-2", 0);
+    assert_eval_eq("BitShiftRight[-7, 2]", "-1", 0);
+    assert_eval_eq("BitShiftRight[-1, 1]", "0", 0);
+    assert_eval_eq("BitShiftRight[-1, 100]", "0", 0);
+    assert_eval_eq("BitShiftLeft[-5, -1]", "-2", 0);
+    assert_eval_eq("BitShiftRight[-8, 3]", "-1", 0);
+    assert_eval_eq("BitShiftRight[-9, 3]", "-1", 0);
+    assert_eval_eq("BitShiftLeft[-3, 2]", "-12", 0);
+    assert_eval_eq("BitShiftRight[Range[-10, 10], 2]",
+                   "{-2, -2, -2, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2}", 0);
+}
+
+static void test_bitshift_int64_boundary(void) {
+    assert_eval_eq("BitShiftLeft[1, 62]", "4611686018427387904", 0);
+    assert_eval_eq("BitShiftLeft[1, 63]", "9223372036854775808", 0);
+    assert_eval_eq("BitShiftLeft[-1, 63]", "-9223372036854775808", 0);
+    assert_eval_eq("Head[BitShiftLeft[-1, 63]]", "Integer", 0);
+    assert_eval_eq("BitShiftLeft[-1, 64]", "-18446744073709551616", 0);
+    assert_eval_eq("BitShiftLeft[2^62, 1]", "9223372036854775808", 0);
+    assert_eval_eq("BitShiftLeft[-2^62, 1]", "-9223372036854775808", 0);
+    assert_eval_eq("BitShiftLeft[2^63 - 1, 1]", "18446744073709551614", 0);
+    assert_eval_eq("BitShiftRight[2^63 - 1, -1]", "18446744073709551614", 0);
+    assert_eval_eq("BitShiftRight[-2^63, 1]", "-4611686018427387904", 0);
+    assert_eval_eq("BitShiftRight[-2^63, 63]", "-1", 0);
+    assert_eval_eq("BitShiftRight[-2^63, 64]", "0", 0);
+    assert_eval_eq("BitShiftRight[2^63 - 1, 62]", "1", 0);
+    assert_eval_eq("BitShiftRight[2^63 - 1, 63]", "0", 0);
+    assert_eval_eq("BitShiftLeft[-2^63, 0]", "-9223372036854775808", 0);
+    assert_eval_eq("BitShiftLeft[5, -2^63]", "0", 0);
+    assert_eval_eq("BitShiftRight[5, 2^63 - 1]", "0", 0);
+    /* Zero shifts to 0 by any count, even -2^63, whose negation is no int64. */
+    assert_eval_eq("BitShiftRight[0, -2^63]", "0", 0);
+}
+
+static void test_bitshift_bignums(void) {
+    assert_eval_eq("BitShiftLeft[2^100, -100]", "1", 0);
+    assert_eval_eq("Head[BitShiftLeft[2^100, -100]]", "Integer", 0);
+    assert_eval_eq("BitShiftLeft[-(2^100) + 1, -99]", "-1", 0);
+    assert_eval_eq("BitShiftRight[2^64, 1]", "9223372036854775808", 0);
+    assert_eval_eq("BitShiftRight[2^64 + 5, -3]", "147573952589676412968", 0);
+    assert_eval_eq("BitShiftRight[-2^64, 1]", "-9223372036854775808", 0);
+    assert_eval_eq("BitShiftRight[-2^64 - 1, 1]", "-9223372036854775808", 0);
+    assert_eval_eq("BitShiftRight[-2^64 - 1, 2]", "-4611686018427387904", 0);
+    assert_eval_eq("BitShiftRight[3^200, 1000]", "0", 0);
+    assert_eval_eq("BitShiftRight[-3^200, 1000]", "0", 0);
+    assert_eval_eq("BitShiftRight[-3^200, 2^62]", "0", 0);
+    assert_eval_eq("BitShiftLeft[3, 70] == 3 2^70", "True", 0);
+    assert_eval_eq("BitShiftLeft[-3^50, 300] == -3^50 2^300", "True", 0);
+    assert_eval_eq("BitShiftRight[-3^50, 7] == IntegerPart[-3^50 / 2^7]", "True", 0);
+    assert_eval_eq("IntegerLength[BitShiftLeft[1, 100000], 2]", "100001", 0);
+}
+
+static void test_bitshift_operands_untouched(void) {
+    assert_eval_eq("p = 3^200; r = BitShiftLeft[p, 5]; p == 3^200", "True", 0);
+    assert_eval_eq("p = -2^90; r = BitShiftRight[p, 3]; {p == -2^90, r == -2^87}",
+                   "{True, True}", 0);
+    assert_eval_eq("l = {2^90, -2^91}; BitShiftRight[l, 5]; l == {2^90, -2^91}", "True", 0);
+    assert_eval_eq("q = 7; BitShiftLeft[q, 70]; q", "7", 0);
+}
+
+static void test_bitshift_non_integers(void) {
+    /* n * 2^k for any other number; a complex n shifts each part, so integer
+     * parts still truncate. */
+    assert_eval_eq("BitShiftLeft[2.5, 1]", "5.0", 0);
+    assert_eval_eq("BitShiftLeft[2.5]", "5.0", 0);
+    assert_eval_eq("BitShiftRight[2.5]", "1.25", 0);
+    assert_eval_eq("BitShiftRight[7.5, 1]", "3.75", 0);
+    assert_eval_eq("BitShiftRight[-7.5, 1]", "-3.75", 0);
+    assert_eval_eq("BitShiftLeft[2.5, -1]", "1.25", 0);
+    assert_eval_eq("BitShiftRight[1.5, -3]", "12.0", 0);
+    assert_eval_eq("BitShiftLeft[1.5, 1000] == 1.5 * 2.^1000", "True", 0);
+    assert_eval_eq("BitShiftLeft[0.0, 5000]", "0.0", 0);
+    assert_eval_eq("BitShiftLeft[1/2, 1]", "1", 0);
+    assert_eval_eq("BitShiftLeft[7/3, 1]", "14/3", 0);
+    assert_eval_eq("BitShiftRight[1/2, 1]", "1/4", 0);
+    assert_eval_eq("BitShiftRight[7/2, 1]", "7/4", 0);
+    assert_eval_eq("BitShiftRight[-7/2, 1]", "-7/4", 0);
+    assert_eval_eq("BitShiftLeft[1/3, -2]", "1/12", 0);
+    assert_eval_eq("BitShiftLeft[3 + I, 1]", "6 + 2*I", 0);
+    assert_eval_eq("BitShiftRight[3 + 5 I, 1]", "1 + 2*I", 0);
+    assert_eval_eq("BitShiftRight[-3 - 5 I, 1]", "-1 - 2*I", 0);
+    assert_eval_eq("BitShiftRight[Complex[1/2, 3], 1]", "1/4 + I", 0);
+    assert_eval_eq("BitShiftLeft[Complex[1/2, 3], 1]", "1 + 6*I", 0);
+    assert_eval_eq("BitShiftRight[1 + I, 1]", "0", 0);
+    assert_eval_eq("BitShiftRight[3.5 + 5 I, 1]", "1.75 + 2.5*I", 0);
+    /* Arbitrary precision: the scale is exact and keeps the precision. */
+    assert_eval_eq("Precision[BitShiftLeft[N[Pi, 30], 2]] == Precision[N[Pi, 30]]", "True", 0);
+    assert_eval_eq("BitShiftLeft[N[Pi, 30], 2] == 4 N[Pi, 30]", "True", 0);
+    assert_eval_eq("BitShiftRight[N[1, 25], 3] == N[1/8, 25]", "True", 0);
+    /* n * 2^k leaves these as they are. */
+    assert_eval_eq("BitShiftLeft[Infinity, 1]", "Infinity", 0);
+    assert_eval_eq("BitShiftRight[-Infinity, 3]", "-Infinity", 0);
+    assert_eval_eq("BitShiftLeft[ComplexInfinity]", "ComplexInfinity", 0);
+    assert_eval_eq("BitShiftRight[Indeterminate, 1]", "Indeterminate", 0);
+}
+
+/* Evaluate `in` capturing stderr; assert the printed result is `out` and that
+ * stderr carries `diag` (or no `::` at all when diag is NULL). */
+static void bitshift_expect_diag(const char* in, const char* out, const char* diag) {
+    char* result = NULL;
+    char* err = eval_capturing_stderr(in, &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, out);
+    if (diag)
+        ASSERT_MSG(err != NULL && strstr(err, diag) != NULL,
+                   "expected '%s' for %s, got: %s", diag, in, err ? err : "(null)");
+    else
+        ASSERT_MSG(err == NULL || strstr(err, "::") == NULL,
+                   "unexpected diagnostic for %s: %s", in, err ? err : "(null)");
+    free(result);
+    free(err);
+}
+
+static void test_bitshift_messages(void) {
+    bitshift_expect_diag("BitShiftLeft[5, 1.5]", "BitShiftLeft[5, 1.5]",
+        "BitShiftLeft::intm: Machine-sized integer expected at position 2 in "
+        "BitShiftLeft[5, 1.5].");
+    bitshift_expect_diag("BitShiftRight[5, 2.]", "BitShiftRight[5, 2.0]",
+        "BitShiftRight::intm: Machine-sized integer expected at position 2 in");
+    bitshift_expect_diag("BitShiftLeft[1.5, 2.]", "BitShiftLeft[1.5, 2.0]", "BitShiftLeft::intm");
+    bitshift_expect_diag("BitShiftLeft[5, 1/2]", "BitShiftLeft[5, 1/2]", "BitShiftLeft::intm");
+    bitshift_expect_diag("BitShiftLeft[x, 1.5]", "BitShiftLeft[x, 1.5]", "BitShiftLeft::intm");
+    bitshift_expect_diag("BitShiftLeft[0, 2^70]", "BitShiftLeft[0, 1180591620717411303424]",
+                         "BitShiftLeft::intm");
+    bitshift_expect_diag("BitShiftRight[5, -2^70]",
+                         "BitShiftRight[5, -1180591620717411303424]", "BitShiftRight::intm");
+    bitshift_expect_diag("BitShiftLeft[5, 1, 2]", "BitShiftLeft[5, 1, 2]",
+        "BitShiftLeft::argt: BitShiftLeft called with 3 arguments; 1 or 2 arguments "
+        "are expected.");
+    bitshift_expect_diag("BitShiftRight[]", "BitShiftRight[]",
+        "BitShiftRight::argt: BitShiftRight called with 0 arguments; 1 or 2 arguments "
+        "are expected.");
+    /* A shift too large to represent overflows instead of aborting. */
+    bitshift_expect_diag("BitShiftLeft[5, 2^63 - 1]", "Overflow[]",
+                         "General::ovfl: Overflow occurred in computation.");
+    bitshift_expect_diag("BitShiftRight[5, -2^63]", "Overflow[]", "General::ovfl");
+    bitshift_expect_diag("BitShiftLeft[1/2, 2^63 - 1]", "Overflow[]", "General::ovfl");
+    /* A non-integer shifted right that far underflows; a machine real is 0. */
+    bitshift_expect_diag("BitShiftRight[3/2, 2^63 - 1]", "Underflow[]",
+                         "General::unfl: Underflow occurred in computation.");
+    bitshift_expect_diag("BitShiftRight[N[3, 30], 2^63 - 1]", "Underflow[]", "General::unfl");
+    bitshift_expect_diag("BitShiftRight[3., 2^63 - 1]", "0.0", NULL);
+    bitshift_expect_diag("BitShiftLeft[0., 2^63 - 1]", "0.0", NULL);
+    bitshift_expect_diag("BitShiftLeft[0, 2^63 - 1]", "0", NULL);
+    /* Symbolic arguments wait, silently. */
+    const char* silent[] = { "BitShiftLeft[x, 2]", "BitShiftLeft[5, x]", "BitShiftRight[x]",
+                             "BitShiftLeft[Pi, 1]", "BitShiftLeft[True, 1]",
+                             "BitShiftRight[f[1], 2]", "BitShiftLeft[x, y]" };
+    for (size_t i = 0; i < sizeof silent / sizeof silent[0]; i++)
+        bitshift_expect_diag(silent[i], silent[i], NULL);
+    /* Every diagnostic honours Quiet and Check. */
+    const char* noisy[] = { "BitShiftLeft[5, 1.5]", "BitShiftLeft[5, 1, 2]",
+                            "BitShiftRight[]", "BitShiftLeft[5, 2^63 - 1]",
+                            "BitShiftRight[3/2, 2^63 - 1]",
+                            "BitShiftLeft[{1, 2}, {1, 2, 3}]" };
+    for (size_t i = 0; i < sizeof noisy / sizeof noisy[0]; i++) {
+        char src[128], *result = NULL, *err;
+        snprintf(src, sizeof src, "Quiet[%s]", noisy[i]);
+        err = eval_capturing_stderr(src, &result);
+        ASSERT_MSG(err == NULL || strstr(err, "::") == NULL,
+                   "Quiet leaked for %s: %s", noisy[i], err ? err : "(null)");
+        free(result);
+        free(err);
+        snprintf(src, sizeof src, "Check[%s, failed]", noisy[i]);
+        assert_eval_eq(src, "failed", 0);
+    }
+    assert_eval_eq("Check[BitShiftLeft[x, 2], failed]", "BitShiftLeft[x, 2]", 0);
+}
+
+static void test_bitshift_listable_shapes(void) {
+    assert_eval_eq("BitShiftLeft[{1, 2}, {1, 2}]", "{2, 8}", 0);
+    assert_eval_eq("BitShiftLeft[5, {0, 1, -1, 70}]", "{5, 10, 2, 5902958103587056517120}", 0);
+    assert_eval_eq("BitShiftLeft[{1, x, 2.5}, 3]", "{8, BitShiftLeft[x, 3], 20.0}", 0);
+    assert_eval_eq("BitShiftRight[{{1, 2}, {3, 4}}, {0, 1}]", "{{1, 2}, {1, 2}}", 0);
+    assert_eval_eq("BitShiftLeft[{}, 3]", "{}", 0);
+    assert_eval_eq("BitShiftLeft[{1, {2, 3}}]", "{2, {4, 6}}", 0);
+    assert_eval_eq("BitShiftLeft[{1.5, 2}, 1]", "{3.0, 4}", 0);
+    bitshift_expect_diag("BitShiftLeft[{1, 2}, {1, 2, 3}]", "BitShiftLeft[{1, 2}, {1, 2, 3}]",
+        "Thread::tdlen: Objects of unequal length in BitShiftLeft[{1, 2}, {1, 2, 3}] "
+        "cannot be combined.");
+}
+
+static void test_bitshift_properties(void) {
+    /* Independent oracles over every sign and size: n 2^k, IntegerPart, the
+     * two heads as each other's negation, and the round trip. */
+    assert_eval_eq(
+        "SeedRandom[41]; ns = Join[RandomInteger[{-2^200, 2^200}, 30], "
+        "RandomInteger[{-2^62, 2^62}, 30], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "ks = {0, 1, 5, 31, 32, 61, 62, 63, 64, 65, 127, 128, 300, 1000}; "
+        "And @@ Flatten[Table[BitShiftLeft[n, k] == n 2^k && "
+        "BitShiftRight[n, k] == IntegerPart[n / 2^k] && "
+        "BitShiftLeft[n, -k] == BitShiftRight[n, k] && "
+        "BitShiftRight[n, -k] == BitShiftLeft[n, k] && "
+        "BitShiftRight[BitShiftLeft[n, k], k] == n, "
+        "{n, ns}, {k, ks}]]", "True", 0);
+    /* Truncation toward zero is odd symmetry; floor would not be. */
+    assert_eval_eq(
+        "SeedRandom[42]; And @@ Flatten[Table[BitShiftRight[-n, k] == -BitShiftRight[n, k], "
+        "{n, RandomInteger[{0, 2^100}, 50]}, {k, {0, 1, 3, 63, 64, 99}}]]",
+        "True", 0);
+}
+
+static void test_bitshift_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitShiftLeft[Range[10], 2]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftRight[Range[-10, 10], 2]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftLeft[3, Range[0, 9]]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftRight[Range[8], Range[0, 7]]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftLeft[Range[8]]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftRight[-Range[8]]]", "True", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftLeft[Partition[Range[12], 3], -1]]", "True", 0);
+    assert_eval_eq("BitShiftLeft[3, Range[-2, 4]]", "{0, 1, 3, 6, 12, 24, 48}", 0);
+    assert_eval_eq("BitShiftRight[-Range[8]]", "{0, -1, -1, -2, -2, -3, -3, -4}", 0);
+    assert_eval_eq("BitShiftLeft[NDArray[{1, 2, 3}, DataType -> \"int64\"], 2]",
+                   "NDArray[{4, 8, 12}]", 0);
+    assert_eval_eq("BitShiftRight[NDArray[{-5, 7}, DataType -> \"int64\"]]", "NDArray[{-2, 3}]", 0);
+    assert_eval_eq("BitShiftLeft[NDArray[{-5, 7}, DataType -> \"int64\"]]", "NDArray[{-10, 14}]", 0);
+    assert_eval_eq("BitShiftRight[5, NDArray[{0, 1, -1}, DataType -> \"int64\"]]",
+                   "NDArray[{5, 2, 10}]", 0);
+    assert_eval_eq("BitShiftLeft[NDArray[{1, -2, 3}, DataType -> \"int64\"], "
+                   "NDArray[{0, 1, -1}, DataType -> \"int64\"]]", "NDArray[{1, -4, 1}]", 0);
+    assert_eval_eq("BitShiftRight[NDArray[{{-9, 9}, {17, -17}}, DataType -> \"int64\"], 3]",
+                   "NDArray[{{-1, 1}, {2, -2}}]", 0);
+    /* Every right shift is an int64, however far. */
+    assert_eval_eq("BitShiftRight[{-1, 0, 5, -5, -2^63}, 10^6]", "{0, 0, 0, 0, 0}", 0);
+    assert_eval_eq("PackedArrayQ[BitShiftRight[-Range[5], 10^6]]", "True", 0);
+    assert_eval_eq("BitShiftLeft[{0, 0}, 10^6]", "{0, 0}", 0);
+    /* A real buffer: the List path answers each element as n 2^k. */
+    assert_eval_eq("BitShiftLeft[NDArray[{1.5, 2.}], 1]", "{3.0, 4.0}", 0);
+    assert_eval_eq("BitShiftLeft[{1.5, 2.5}, 1]", "{3.0, 5.0}", 0);
+}
+
+static void test_bitshift_buffer_declines(void) {
+    /* A left shift that leaves int64 abandons the buffer -- never wraps. */
+    assert_eval_eq("BitShiftLeft[{1, 2^62}, 2]", "{4, 18446744073709551616}", 0);
+    assert_eval_eq("BitShiftLeft[NDArray[{1, 2^62}, DataType -> \"int64\"], 2]",
+                   "{4, 18446744073709551616}", 0);
+    assert_eval_eq("BitShiftLeft[{1, -1, 0}, 63]", "{9223372036854775808, -9223372036854775808, 0}", 0);
+    assert_eval_eq("BitShiftLeft[{-1, 0}, 63]", "{-9223372036854775808, 0}", 0);
+    /* Past 62 the constant arm declines, and the per-element loop still
+     * answers a buffer of -1s and 0s in int64. */
+    assert_eval_eq("PackedArrayQ[BitShiftLeft[Join[0 Range[5] - 1, 0 Range[5]], 63]]", "True", 0);
+    assert_eval_eq("BitShiftRight[{1, 3}, -63]", "{9223372036854775808, 27670116110564327424}", 0);
+    assert_eval_eq("BitShiftLeft[3, {1, 62, 2}]", "{6, 13835058055282163712, 12}", 0);
+    assert_eval_eq("BitShiftLeft[{1, 2}, {1, 63}]", "{2, 18446744073709551616}", 0);
+    assert_eval_eq("BitShiftRight[{1, 2}, {-1, -63}]", "{2, 18446744073709551616}", 0);
+    assert_eval_eq("BitShiftLeft[{2^62, 1}, {1, -1}]", "{9223372036854775808, 0}", 0);
+    assert_eval_eq("BitShiftLeft[5, {-70, 70}]", "{0, 5902958103587056517120}", 0);
+    /* A count of -2^63 (BitShiftRight) is a left shift by 2^63. */
+    assert_eval_eq("BitShiftRight[{0, 0}, -2^63]", "{0, 0}", 0);
+    assert_eval_eq("Quiet[BitShiftRight[{0, 1}, -2^63]]", "{0, Overflow[]}", 0);
+}
+
+static void test_bitshift_surfaces_agree(void) {
+    /* List == packed == NDArray == Compile (array and scalar), for every arm:
+     * scalar k, scalar n, two buffers, one argument -- with counts of both
+     * signs, so the fast and the general per-element passes both run. */
+    assert_eval_eq(
+        "SeedRandom[43]; na = Join[RandomInteger[{-2^40, 2^40}, 500], "
+        "{-2^63, 2^63 - 1, 0, -1, 1}]; ka = RandomInteger[{-70, 20}, Length[na]]; "
+        "kp = RandomInteger[{0, 20}, Length[na]]; "
+        "nd[x_] := NDArray[x, DataType -> \"int64\"]; "
+        "refL[a_, b_] := Table[If[b[[i]] >= 0, a[[i]] 2^b[[i]], IntegerPart[a[[i]] / 2^-b[[i]]]], "
+        "  {i, Length[a]}]; "
+        "refR[a_, b_] := refL[a, -b]; "
+        "sm = Select[na, Abs[#] < 2^40 &]; ks = RandomInteger[{-70, 20}, Length[sm]]; "
+        "kq = Take[kp, Length[sm]]; "
+        "Flatten[{"
+        " BitShiftLeft[sm, ks] === refL[sm, ks], "
+        " Normal[BitShiftLeft[nd[sm], nd[ks]]] === refL[sm, ks], "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitShiftLeft[v, w]][sm, ks] === refL[sm, ks], "
+        " BitShiftRight[sm, ks] === refR[sm, ks], "
+        " Normal[BitShiftRight[nd[sm], nd[ks]]] === refR[sm, ks], "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitShiftRight[v, w]][sm, ks] === refR[sm, ks], "
+        " BitShiftRight[na, kp] === refR[na, kp], "
+        " Normal[BitShiftRight[nd[na], nd[kp]]] === refR[na, kp], "
+        " BitShiftLeft[sm, kq] === refL[sm, kq], "
+        " BitShiftLeft[-12345, ka] === refL[Table[-12345, Length[ka]], ka], "
+        " Normal[BitShiftLeft[-12345, nd[ka]]] === refL[Table[-12345, Length[ka]], ka], "
+        " BitShiftRight[-12345, ka] === refR[Table[-12345, Length[ka]], ka], "
+        " Normal[BitShiftRight[-12345, nd[ka]]] === refR[Table[-12345, Length[ka]], ka], "
+        " Compile[{{v, _Integer, 1}}, BitShiftRight[-12345, v]][ka] === refR[Table[-12345, Length[ka]], ka], "
+        " Table[BitShiftRight[na, s] === refR[na, Table[s, Length[na]]], {s, {0, 1, 7, 62, 63, 64, -1, -20}}], "
+        " Table[Normal[BitShiftRight[nd[na], s]] === refR[na, Table[s, Length[na]]], {s, {0, 1, 7, 62, 63, 64}}], "
+        " Table[BitShiftLeft[sm, s] === refL[sm, Table[s, Length[sm]]], {s, {0, 1, 7, 22, 23, -1, -63, -64}}], "
+        " Table[Compile[{{v, _Integer, 1}}, BitShiftLeft[v, 7]][sm] === refL[sm, Table[7, Length[sm]]], {1}], "
+        " BitShiftLeft[sm] === refL[sm, Table[1, Length[sm]]], "
+        " BitShiftRight[na] === refR[na, Table[1, Length[na]]], "
+        " Normal[BitShiftRight[nd[na]]] === refR[na, Table[1, Length[na]]], "
+        " Compile[{{v, _Integer, 1}}, BitShiftRight[v]][na] === refR[na, Table[1, Length[na]]], "
+        " Table[Compile[{{s, _Integer}, {t, _Integer}}, BitShiftLeft[s, t]][sm[[i]], ks[[i]]], {i, Length[sm]}] === refL[sm, ks], "
+        " Table[BitShiftRight[FromPackedArray[sm][[i]], ks[[i]]], {i, Length[sm]}] === refR[sm, ks]"
+        "}] // Union",
+        "{True}", 0);
+}
+
+static void test_bitshift_compile(void) {
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftLeft[n, k]][5, 3]", "40", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftRight[n, k]][-5, 3]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftRight[n, k]][-7, 2]", "-1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftRight[n, k]][5, -2]", "20", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftLeft[n, k]][5, -2]", "1", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftRight[n, k]][-1, 64]", "0", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitShiftLeft[n]][-3]", "-6", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitShiftRight[n]][-3]", "-1", 0);
+    /* No int64 answer: the VM bails and the interpreter answers exactly. */
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitShiftLeft[n, k]][1, 64]",
+                   "18446744073709551616", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitShiftLeft[n, 70]][3]", "3541774862152233910272", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitShiftLeft[v, 2]][Range[5]]", "{4, 8, 12, 16, 20}", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, Sum[BitShiftRight[n, k], {k, 0, 10}]][1000]", "1994", 0);
+    assert_eval_eq("Compile[{{x, _Real}}, BitShiftLeft[x, 1]][2.5]", "5.0", 0);
+}
+
+static void test_bitshift_compile_diagnostics(void) {
+    const char* in[] = {
+        "CompileDiagnostics[{{n, _Integer}, {k, _Integer}}, BitShiftLeft[n, k]]",
+        "CompileDiagnostics[{{n, _Integer}, {k, _Integer}}, BitShiftRight[n, k]]",
+        "CompileDiagnostics[{{n, _Integer}}, BitShiftLeft[n]]",
+        "CompileDiagnostics[{{n, _Integer}}, BitShiftRight[n]]",
+        "CompileDiagnostics[{{v, _Integer, 1}}, BitShiftLeft[v, 3]]",
+        "CompileDiagnostics[{{v, _Integer, 1}}, BitShiftRight[v, 3]]",
+        "CompileDiagnostics[{{v, _Integer, 1}}, BitShiftLeft[7, v]]",
+        "CompileDiagnostics[{{v, _Integer, 1}}, BitShiftRight[v]]",
+        "CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitShiftLeft[v, w]]",
+        "CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitShiftRight[v, w]]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char src[256];
+        snprintf(src, sizeof src, "\"Compiled\" /. %s", in[i]);
+        assert_eval_eq(src, "True", 0);
+    }
+}
+
+static void test_bitshift_autocompile(void) {
+    const char* tbl = "Table[x + BitShiftRight[Floor[x], 2], {x, 0., 2000., 0.5}]";
+    const char* sm  = "Sum[Sin[x] BitShiftLeft[Floor[x], -1], {x, 0., 500., 0.25}]";
+    assert_eval_eq("Table[x + BitShiftLeft[Floor[x], 1], {x, 0., 2., 0.5}]",
+                   "{0.0, 0.5, 3.0, 3.5, 6.0}", 0);
+    autocompile_set_enabled(false);
+    Expr* t_off = bitnot_eval_owned(tbl);
+    Expr* s_off = bitnot_eval_owned(sm);
+    autocompile_set_enabled(true);
+    Expr* t_on = bitnot_eval_owned(tbl);
+    Expr* s_on = bitnot_eval_owned(sm);
+    ASSERT(expr_eq(t_off, t_on));
+    ASSERT(expr_eq(s_off, s_on));
+    ASSERT(s_on->type == EXPR_REAL);
+    expr_free(t_off); expr_free(s_off); expr_free(t_on); expr_free(s_on);
+}
+
+static void test_bitshift_attributes_docstrings(void) {
+    assert_eval_eq("Attributes[BitShiftLeft]", "{Listable, Protected}", 0);
+    assert_eval_eq("Attributes[BitShiftRight]", "{Listable, Protected}", 0);
+    SymbolDef* def = symtab_get_def("BitShiftLeft");
+    ASSERT(def != NULL && def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "shifts the binary bits in the integer n to the left") != NULL);
+    def = symtab_get_def("BitShiftRight");
+    ASSERT(def != NULL && def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "IntegerPart[n / 2^k]") != NULL);
+    ASSERT(SYM_BitShiftLeft != NULL && strcmp(SYM_BitShiftLeft, "BitShiftLeft") == 0);
+    ASSERT(SYM_BitShiftRight != NULL && strcmp(SYM_BitShiftRight, "BitShiftRight") == 0);
+}
+
+static void test_bitshift_stress(void) {
+    for (int k = 0; k < 50; k++) {
+        assert_eval_eq("BitShiftLeft[32, 3]", "256", 0);
+        assert_eval_eq("BitShiftRight[-5, 1]", "-2", 0);
+        assert_eval_eq("BitShiftLeft[2^100, -100]", "1", 0);
+        assert_eval_eq("BitShiftLeft[3, 70] == 3 2^70", "True", 0);
+        assert_eval_eq("BitShiftRight[3 + 5 I, 1]", "1 + 2*I", 0);
+        assert_eval_eq("BitShiftLeft[x, 1]", "BitShiftLeft[x, 1]", 0);
+        assert_eval_eq("BitShiftLeft[Range[4], {1, -1, 2, 70}]",
+                       "{2, 1, 12, 4722366482869645213696}", 0);
+        assert_eval_eq("BitShiftRight[-Range[4]]", "{0, -1, -1, -2}", 0);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -2240,6 +2652,25 @@ int main(void) {
     TEST(test_bitget_docstring_and_sym);
     TEST(test_bitget_stress);
 
-    printf("All BitLength / BitXor / BitAnd / BitOr / BitNot / BitSet tests passed!\n");
+    TEST(test_bitshift_documented_examples);
+    TEST(test_bitshift_basic);
+    TEST(test_bitshift_negatives_truncate);
+    TEST(test_bitshift_int64_boundary);
+    TEST(test_bitshift_bignums);
+    TEST(test_bitshift_operands_untouched);
+    TEST(test_bitshift_non_integers);
+    TEST(test_bitshift_messages);
+    TEST(test_bitshift_listable_shapes);
+    TEST(test_bitshift_properties);
+    TEST(test_bitshift_packed_and_ndarray);
+    TEST(test_bitshift_buffer_declines);
+    TEST(test_bitshift_surfaces_agree);
+    TEST(test_bitshift_compile);
+    TEST(test_bitshift_compile_diagnostics);
+    TEST(test_bitshift_autocompile);
+    TEST(test_bitshift_attributes_docstrings);
+    TEST(test_bitshift_stress);
+
+    printf("All BitLength / BitXor / BitAnd / BitOr / BitNot / BitSet / BitGet / BitShiftLeft / BitShiftRight tests passed!\n");
     return 0;
 }

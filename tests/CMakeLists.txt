@@ -320,6 +320,8 @@ set(COMMON_SRC
     ../src/bitwise/bitnot.c
     ../src/bitwise/bitset.c
     ../src/bitwise/bitget.c
+    ../src/bitwise/bitshiftleft.c
+    ../src/bitwise/bitshiftright.c
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c

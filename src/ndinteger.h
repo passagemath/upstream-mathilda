@@ -101,6 +101,47 @@ static inline bool ndint_bitget_i64(int64_t n, int64_t k, int64_t* out) {
     return true;
 }
 
+/* BitShiftLeft[n, k] in int64: n * 2^k, where a negative k shifts RIGHT and
+ * truncates toward zero (IntegerPart[n / 2^-k], so BitShiftLeft[-5, -1] is
+ * -2, not the arithmetic shift's -3). Shared by the scalar builtins
+ * (src/bitwise/bitshiftleft.c), the NDArray kernels and Compile's
+ * OP_BSHL_I / OP_BSHR_I, so every machine surface agrees bit for bit.
+ * Declines (false) only when a left shift has no int64 answer (the result
+ * is a bignum); every right shift is an int64. Shifting 0 is always 0.
+ *
+ * The right shift adds 2^s - 1 to a negative n before the arithmetic shift,
+ * which rounds toward zero instead of toward -infinity. It cannot overflow:
+ * the bias is added only to a negative n, and is at most 2^63 - 1. */
+static inline bool ndint_bitshiftleft_i64(int64_t n, int64_t k, int64_t* out) {
+    if (k >= 0) {
+        if (k > 62) {
+            /* 2^63 is no int64; only 0, and -1 with k == 63 (-2^63), fit. */
+            if (n == 0 || (n == -1 && k == 63)) { *out = n == 0 ? 0 : INT64_MIN; return true; }
+            return false;
+        }
+        int64_t r = (int64_t)((uint64_t)n << k);
+        if ((r >> k) != n) return false;
+        *out = r;
+        return true;
+    }
+    uint64_t s = (uint64_t)0 - (uint64_t)k;   /* -k, exact even for INT64_MIN */
+    if (s > 63) { *out = 0; return true; }
+    int64_t bias = (n >> 63) & (int64_t)((UINT64_C(1) << s) - 1);
+    *out = (n + bias) >> s;
+    return true;
+}
+
+/* BitShiftRight[n, k] = BitShiftLeft[n, -k]. -INT64_MIN is not an int64, but
+ * a left shift by 2^63 has an int64 answer only for n == 0. */
+static inline bool ndint_bitshiftright_i64(int64_t n, int64_t k, int64_t* out) {
+    if (k == INT64_MIN) {
+        if (n != 0) return false;
+        *out = 0;
+        return true;
+    }
+    return ndint_bitshiftleft_i64(n, -k, out);
+}
+
 Expr* ndint_prime(Expr* res);          /* Prime[arr] */
 Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */

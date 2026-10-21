@@ -2,10 +2,12 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength, BitXor, BitAnd, BitOr, BitNot, BitSet and BitGet (machine-int, bignum, negative,
+# Drives BitLength, BitXor, BitAnd, BitOr, BitNot, BitSet, BitGet, BitShiftLeft
+# and BitShiftRight (machine-int, bignum, negative,
 # INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
 # cancellation / idempotence / 0- and -1-absorption, BitNot extraction, BitSet
-# bignum growth and buffer declines, Compile, and
+# bignum growth and buffer declines, the shifts' reals / rationals / complex /
+# MPFR / Overflow / Underflow paths, Compile, and
 # error paths) under a leak checker and FAILS on any
 # leaked byte.
 #
@@ -243,6 +245,61 @@ Do[cfgs[42, 3], {200}];
 Do[cfgs[42, -1], {200}];
 Do[Table[x + BitGet[Floor[x], 3], {x, 0., 200., 0.5}], {20}];
 Do[{Floor[(2^63 - 1)/2^37], Ceiling[(2^54 + 1)/4], Round[-(2^54 + 6)/4], FractionalPart[-(2^63)/3]}, {200}];
+Do[BitShiftLeft[32, 3], {200}];
+Do[BitShiftRight[-5, 1], {200}];
+Do[BitShiftLeft[5], {200}];
+Do[BitShiftRight[5], {200}];
+Do[BitShiftLeft[5, -1], {200}];
+Do[BitShiftLeft[2^62, 1], {200}];
+Do[BitShiftLeft[-1, 63], {200}];
+Do[BitShiftLeft[3, 70], {200}];
+Do[BitShiftLeft[2^200 - 1, 7], {200}];
+Do[BitShiftRight[2^200 - 1, 7], {200}];
+Do[BitShiftLeft[2^100, -100], {200}];
+Do[BitShiftRight[-3^200, 1000], {200}];
+bsp = 3^200; Do[BitShiftRight[bsp, 7], {200}];
+Do[BitShiftLeft[2.5, 1], {200}];
+Do[BitShiftLeft[1.5, 2000], {200}];
+Do[BitShiftRight[7/2, 1], {200}];
+Do[BitShiftRight[3 + 5 I, 1], {200}];
+Do[BitShiftRight[Complex[1/2, 3], 1], {200}];
+Do[BitShiftLeft[N[Pi, 30], 2], {200}];
+Do[BitShiftLeft[Infinity, 1], {200}];
+Do[BitShiftLeft[x, 2], {200}];
+Do[Quiet[BitShiftLeft[5, 1.5]], {200}];
+Do[Quiet[BitShiftLeft[5, 2^70]], {200}];
+Do[Quiet[BitShiftLeft[5, 1, 2]], {200}];
+Do[Quiet[BitShiftRight[]], {200}];
+Do[Quiet[BitShiftLeft[5, 2^63 - 1]], {200}];
+Do[Quiet[BitShiftRight[3/2, 2^63 - 1]], {200}];
+Do[Quiet[BitShiftLeft[{1, 2}, {1, 2, 3}]], {200}];
+Do[BitShiftLeft[{1, x, 2.5, 2^70}, 3], {200}];
+Do[BitShiftLeft[Range[100], 5], {200}];
+Do[BitShiftRight[Range[-50, 50], 3], {200}];
+Do[BitShiftLeft[7, Range[-70, 30]], {200}];
+Do[BitShiftRight[Range[50], Range[-25, 24]], {200}];
+Do[BitShiftLeft[Range[64]], {200}];
+Do[BitShiftRight[-Range[64]], {200}];
+Do[BitShiftLeft[Range[3] + 2^61, 2], {200}];
+Do[BitShiftLeft[{1, 2}, {1, 63}], {200}];
+Do[BitShiftLeft[{1.5, 2.5}, 1], {200}];
+Do[BitShiftLeft[NDArray[{1, 2, 3}, DataType -> "int64"], 2], {200}];
+Do[BitShiftRight[5, NDArray[{0, 1, -1}, DataType -> "int64"]], {200}];
+Do[BitShiftLeft[NDArray[{1, -2, 3}, DataType -> "int64"], NDArray[{0, 1, -1}, DataType -> "int64"]], {200}];
+Do[BitShiftRight[NDArray[{-5, 7}, DataType -> "int64"]], {200}];
+Do[BitShiftLeft[NDArray[{1, 2^62}, DataType -> "int64"], 2], {200}];
+Do[BitShiftLeft[NDArray[{1.5, 2.}], 1], {200}];
+cbl = Compile[{{v, _Integer, 1}}, BitShiftLeft[v, 3]];
+Do[cbl[Range[-50, 50]], {200}];
+Do[cbl[Range[3] + 2^61], {200}];
+cbr = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitShiftRight[v, w]];
+Do[cbr[Range[32], Range[-16, 15]], {200}];
+cbs = Compile[{{n, _Integer}, {k, _Integer}}, BitShiftLeft[n, k]];
+Do[cbs[5, 3], {200}];
+Do[cbs[1, 64], {200}];
+cbu = Compile[{{n, _Integer}}, BitShiftRight[n]];
+Do[cbu[-3], {200}];
+Do[Table[x + BitShiftRight[Floor[x], 2], {x, 0., 200., 0.5}], {20}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

@@ -448,3 +448,116 @@ Out[4]= {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
 In[5]:= {BitGet[-1, 100], BitGet[-2^100, 99], BitGet[42, -1]}
 Out[5]= {1, 0, BitGet[42, -1]}
 ```
+
+## BitShiftLeft
+
+- `BitShiftLeft[n, k]`: shifts the binary bits in the integer `n` to the left
+  by `k` places, padding with zeros on the right -- `n 2^k`.
+- `BitShiftLeft[n]`: shifts one bit to the left.
+
+## BitShiftRight
+
+- `BitShiftRight[n, k]`: shifts the binary bits in the integer `n` to the right
+  by `k` places, dropping bits shifted past the units position --
+  `IntegerPart[n / 2^k]`.
+- `BitShiftRight[n]`: shifts one bit to the right.
+
+**Features** (both heads; `BitShiftRight[n, k]` is `BitShiftLeft[n, -k]` on
+every argument, and one core in `src/bitwise/bitshiftleft.c` serves both):
+- `Listable`, `Protected`. A negative `k` shifts the other way
+  (`BitShiftLeft[5, -1]` is `2`, `BitShiftRight[5, -2]` is `20`). Threads over
+  lists in either or both arguments; lists of unequal length emit
+  `Thread::tdlen`.
+- A right shift **truncates toward zero**, as `IntegerPart` does, so it is not
+  the arithmetic shift: `BitShiftRight[-5, 1]` is `-2` (NumPy's `right_shift`
+  gives `-3`), `BitShiftRight[-1, 100]` is `0`, `BitShiftRight[-2^63, 63]` is
+  `-1`.
+- Exact at any size. Machine integers use the shared helper
+  `ndint_bitshiftleft_i64`; a left shift that leaves int64 goes to GMP's
+  `mpz_mul_2exp`, and a bignum right shift to `mpz_tdiv_q_2exp`, normalised
+  back to int64 when it fits (`BitShiftLeft[2^100, -100]` is the machine `1`).
+  Zero shifts to `0` by any count.
+- Any other number `n` is scaled by `2^k`: `BitShiftLeft[2.5, 1]` is `5.`,
+  `BitShiftRight[1/2, 1]` is `1/4`. Machine reals use `ldexp` and MPFR reals
+  `mpfr_mul_2si`, so the scaling is exact and keeps the precision. A complex
+  `n` shifts each part, so integer parts still truncate:
+  `BitShiftRight[3 + 5 I, 1]` is `1 + 2 I`, `BitShiftRight[Complex[1/2, 3], 1]`
+  is `1/4 + I`. `Indeterminate` and the infinities are unchanged.
+- Messages, through the Quiet/Check funnel:
+  - `::intm` when `k` is a number but not a machine-sized integer
+    (`BitShiftLeft[5, 1.5]`, `BitShiftLeft[5, 2.]`, `BitShiftLeft[0, 2^70]`);
+  - `::argt` for 0 or 3+ arguments;
+  - `General::ovfl` and `Overflow[]` for a left shift too large for GMP to
+    represent (`BitShiftLeft[5, 2^63 - 1]`);
+  - `General::unfl` and `Underflow[]` for a non-integer shifted right that far
+    (`BitShiftRight[3/2, 2^63 - 1]`; a machine real gives `0.`).
+
+  A symbolic argument (`BitShiftLeft[x, 2]`, `BitShiftLeft[Pi, 1]`) stays
+  unevaluated with no message. Zero shifts to `0` by every count, including
+  `BitShiftRight[0, -2^63]`, whose count has no int64 negation.
+- **Packed / NDArray**: exact int64 kernels in `src/ndinteger.c` on the `AWARE`
+  and `INT64_OK` lists -- binary for `[n, k]`, unary for the one-argument form.
+  Whole-buffer arms:
+  - a buffer of `n` with a scalar `k`: constant logical shifts;
+  - a scalar `n` with a buffer of `k`, and two buffers: a fast single-direction
+    pass over per-element counts. If any count needs the other direction, a
+    general pass reruns the buffer.
+
+  x86 has no 64-bit arithmetic right shift short of AVX-512. So the arms use
+  logical shifts only:
+  - a left shift fits iff `(n ^ sign) >> (63 - k)` is 0;
+  - a right shift is `sign * (|n| >> k)`.
+
+  On x86-64 the per-element-count passes use AVX2 intrinsics, picked at
+  start-up. `vpsllvq`/`vpsrlvq` are defined for every count, so the lanes need
+  no masking and the range test is one OR of the counts. A left shift with no
+  int64 answer abandons the buffer, and the List path answers with bignums. It
+  never wraps, unlike NumPy's `left_shift`. A packed array stays packed and a
+  visible `NDArray` gives a visible `NDArray`. A real buffer is answered by
+  the List path, element by element. The binary kernel sees a scalar `k` only
+  as a double, so it cannot tell `2` from `2.`, and `2.` must give `::intm`.
+
+  Against NumPy on random int64 data (x86-64 i9-9880H, best of 5, n = 10^5;
+  all arms are memory-bound at parity by 10^7):
+
+  | arm                      | Mathilda  | NumPy     |
+  |--------------------------|-----------|-----------|
+  | `BitShiftLeft[v, 3]`     | 0.033 ms  | 0.031 ms  |
+  | `BitShiftRight[v, 3]`    | 0.035 ms  | 0.031 ms  |
+  | `BitShiftLeft[v, kv]`    | 0.043 ms  | 0.041 ms  |
+  | `BitShiftRight[v, kv]`   | 0.043 ms  | 0.045 ms  |
+  | `BitShiftLeft[7, kv]`    | 0.032 ms  | 0.031 ms  |
+  | `BitShiftRight[v]`       | 0.034 ms  | 0.031 ms  |
+
+  The remaining 1-3 µs is the per-call floor every buffer head pays
+  (`BitNot[v]` 0.031 ms vs `np.invert` 0.030 ms), not the kernels.
+- **Compile[]**: `OP_BSHL_I` / `OP_BSHR_I`, through the same helpers; the
+  one-argument form gets a constant `k = 1`. They bail to the interpreter only
+  where a left shift leaves int64, and the interpreter then answers exactly.
+  Both lower at scalar and array shape (array `n`, array `k`, or both), and
+  `CompileDiagnostics` reports `Compiled -> True` for each. Auto-compilation
+  follows. Scalar, List, packed, `NDArray` and compiled results agree bit for
+  bit.
+
+```
+In[1]:= BitShiftLeft[32, 3]
+Out[1]= 256
+
+In[2]:= BitShiftLeft[2^200 - 1, 7]
+Out[2]= 205688069665150755269371147819668813122841983204197482918576000
+
+In[3]:= BitShiftLeft[{1, 2, 4, 16}, 2]
+Out[3]= {4, 8, 16, 64}
+
+In[4]:= BitShiftRight[32, 7]
+Out[4]= 0
+
+In[5]:= BitShiftRight[2^200 - 1, 7]
+Out[5]= 12554203470773361527671578846415332832204710888928069025791
+
+In[6]:= BitShiftRight[{1, 2, 4, 16}, 2]
+Out[6]= {0, 0, 1, 4}
+
+In[7]:= {BitShiftRight[-5, 1], BitShiftLeft[5, -1], BitShiftRight[3 + 5 I, 1]}
+Out[7]= {-2, 2, 1 + 2*I}
+```

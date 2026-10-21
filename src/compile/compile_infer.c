@@ -144,6 +144,8 @@ bool int_only_head(const char* h, size_t na, bool* pred) {
         && (strcmp(h, "IntegerLength") == 0 || strcmp(h, "IntegerExponent") == 0)) return true;
     if (na == 1 && (strcmp(h, "BitLength") == 0 || strcmp(h, "BitNot") == 0)) return true;
     if (na == 2 && (strcmp(h, "BitSet") == 0 || strcmp(h, "BitGet") == 0)) return true;
+    if ((na == 1 || na == 2)
+        && (strcmp(h, "BitShiftLeft") == 0 || strcmp(h, "BitShiftRight") == 0)) return true;
     if (na == 1 && strcmp(h, "PrimePowerQ") == 0) { *pred = true; return true; }
     if (na == 1 && strcmp(h, "PrimeQ") == 0) { *pred = true; return true; }
     if (na == 2 && strcmp(h, "CoprimeQ") == 0) { *pred = true; return true; }

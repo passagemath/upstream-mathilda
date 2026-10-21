@@ -1182,6 +1182,18 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 if (!ndint_bitget_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
                 RD.i = (long long)r; NEXT();
             }
+            /* BitShiftLeft / BitShiftRight through the interpreter's own
+             * helpers; bail only where a left shift leaves int64. */
+            OP(BSHL_I): {
+                int64_t r;
+                if (!ndint_bitshiftleft_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
+                RD.i = (long long)r; NEXT();
+            }
+            OP(BSHR_I): {
+                int64_t r;
+                if (!ndint_bitshiftright_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
+                RD.i = (long long)r; NEXT();
+            }
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
             OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i

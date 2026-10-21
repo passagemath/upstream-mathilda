@@ -379,6 +379,264 @@ static bool ndk_BitGet_whole2(const int64_t* a, const int64_t* b, size_t sz,
     return ndi_bitget_an_fn(a, b, sz, out);
 }
 
+/* ---- BitShiftLeft / BitShiftRight --------------------------------------- *
+ * Every arm computes ndint_bitshiftleft_i64 (src/ndinteger.h): n * 2^s, a
+ * negative s shifting right with truncation toward zero. BitShiftRight is the
+ * same with s = -k. Where any lane has no int64 answer (a left shift that
+ * overflows), the whole-buffer arm DECLINES, the per-element loop finds the
+ * element, and the array takes the List path to GMP -- never wrapped, unlike
+ * numpy's left_shift. */
+static bool ndk_BitShiftLeft_ii(int64_t n, int64_t k, int64_t* out) {
+    return ndint_bitshiftleft_i64(n, k, out);
+}
+static bool ndk_BitShiftRight_ii(int64_t n, int64_t k, int64_t* out) {
+    return ndint_bitshiftright_i64(n, k, out);
+}
+static bool ndk_BitShiftLeft1_ii(int64_t n, int64_t* out) {
+    return ndint_bitshiftleft_i64(n, 1, out);
+}
+static bool ndk_BitShiftRight1_ii(int64_t n, int64_t* out) {
+    return ndint_bitshiftleft_i64(n, -1, out);
+}
+
+/* The BitShiftRight count as a left-shift count. -INT64_MIN saturates to
+ * INT64_MAX, which is just as far past every int64 answer (0 stays 0,
+ * anything else declines). */
+static inline int64_t ndi_bsh_neg(int64_t k) {
+    return k == INT64_MIN ? INT64_MAX : -k;
+}
+
+/* One lane with its own left-shift count s, branch-free so the loops below
+ * vectorise. Only LOGICAL 64-bit shifts are used: x86 has no 64-bit
+ * arithmetic right shift short of AVX-512 (no psraq / vpsravq), so a loop
+ * that needs one runs scalar there. With m the lane's sign mask (all ones for
+ * a negative n):
+ *   - left by ls in [0, 63]: n << ls fits in int64 iff (n ^ m) >> (63 - ls)
+ *     is 0 (n ^ m is n, or -n - 1, both in [0, 2^63)). A count past 62 is
+ *     flagged unless n is 0 (the helper also accepts -1 << 63, which the
+ *     per-element loop then answers).
+ *   - right by rs >= 1: truncation toward zero is sign * (|n| >> rs), with
+ *     |n| = (n ^ m) - m in unsigned arithmetic (exact for INT64_MIN); a count
+ *     past 63 leaves 0.
+ * Both directions are computed and the sign of s selects one; the clamped
+ * counts keep the discarded direction defined behaviour. */
+#define NDI_BSH_LANE(N, S)                                                    \
+    do {                                                                      \
+        uint64_t n_ = (uint64_t)(N), s_ = (uint64_t)(S);                      \
+        uint64_t m_ = (uint64_t)0 - (n_ >> 63);                               \
+        uint64_t neg_ = (uint64_t)0 - (s_ >> 63);  /* all ones: right shift */\
+        uint64_t ls_ = s_ & 63;                                               \
+        uint64_t l_ = n_ << ls_;                                              \
+        uint64_t lbad_ = ((n_ ^ m_) >> (63 - ls_))                            \
+                       | ((uint64_t)(s_ > 62) & (uint64_t)(n_ != 0));         \
+        uint64_t rs_ = (uint64_t)0 - s_;                                      \
+        uint64_t q_ = (((n_ ^ m_) - m_) >> (rs_ & 63)) & ((uint64_t)0 - (uint64_t)(rs_ < 64)); \
+        uint64_t r_ = (q_ ^ m_) - m_;                                         \
+        bad |= lbad_ & ~neg_;                                                 \
+        out[i] = (int64_t)((r_ & neg_) | (l_ & ~neg_));                       \
+    } while (0)
+
+/* Single-direction lanes for the common case, a few ops each. A count the
+ * lane cannot answer is flagged, and the caller reruns the whole buffer
+ * through the general NDI_BSH_LANE:
+ *   NDI_BSHL_FAST  left by k in [0, 63] (BitShiftLeft with k >= 0); the
+ *                  overflow test alone is exact even at k = 63, where only
+ *                  0 and -1 (giving -2^63) pass it;
+ *   NDI_BSHR_FAST  right by k in [0, 63] (BitShiftRight with k >= 0).
+ * Out of range is then just k >> 6 != 0 (a negative k reads as a huge
+ * unsigned), one shift rather than a 64-bit compare, which x86 only has
+ * signed. The masked counts keep a flagged lane defined behaviour. */
+#define NDI_BSHL_FAST(N, K)                                                   \
+    do {                                                                      \
+        int64_t ns_ = (N);                                                    \
+        uint64_t n_ = (uint64_t)ns_, k_ = (uint64_t)(K), kc_ = k_ & 63;       \
+        uint64_t m_ = (uint64_t)0 - (uint64_t)(ns_ < 0);  /* vpcmpgtq */      \
+        bad |= ((n_ ^ m_) >> (63 - kc_)) | (k_ >> 6);                         \
+        out[i] = (int64_t)(n_ << kc_);                                        \
+    } while (0)
+
+#define NDI_BSHR_FAST(N, K)                                                   \
+    do {                                                                      \
+        int64_t ns_ = (N);                                                    \
+        uint64_t n_ = (uint64_t)ns_, k_ = (uint64_t)(K);                      \
+        uint64_t m_ = (uint64_t)0 - (uint64_t)(ns_ < 0);                      \
+        uint64_t q_ = ((n_ ^ m_) - m_) >> (k_ & 63);                          \
+        bad |= k_ >> 6;                                                       \
+        out[i] = (int64_t)((q_ ^ m_) - m_);                                   \
+    } while (0)
+
+/* The fast pass, then -- only if it flagged a lane -- the general one. */
+#define NDI_BSH_FAST_PASS(FAST, AEXPR)                                        \
+    {                                                                         \
+        uint64_t bad = 0;                                                     \
+        for (size_t i = 0; i < sz; i++) FAST((AEXPR), ks[i]);                 \
+        if (bad == 0) return true;                                            \
+    }
+#define NDI_BSH_GENERAL_PASS(AEXPR, SEXPR)                                    \
+    {                                                                         \
+        uint64_t bad = 0;                                                     \
+        for (size_t i = 0; i < sz; i++) NDI_BSH_LANE((AEXPR), (SEXPR));       \
+        return bad == 0;                                                      \
+    }
+
+/* A buffer shifted by one constant left-shift count s: constant logical
+ * shifts only, which vectorise on baseline SSE2. Left: the shift plus an
+ * OR-accumulated overflow flag. Right: sign * (|n| >> rs). */
+#define NDI_BSH_CONST_BODY                                                    \
+    const uint64_t* u = (const uint64_t*)in;                                  \
+    if (s >= 0) {                                                             \
+        if (s > 62) return false;  /* only zeros fit; the per-element loop decides */ \
+        uint64_t bad = 0, top = 63 - (uint64_t)s;                             \
+        for (size_t i = 0; i < sz; i++) {                                     \
+            uint64_t m = (uint64_t)0 - (u[i] >> 63);                          \
+            bad |= (u[i] ^ m) >> top;                                         \
+            out[i] = (int64_t)(u[i] << s);                                    \
+        }                                                                     \
+        return bad == 0;                                                      \
+    }                                                                         \
+    uint64_t rs = (uint64_t)0 - (uint64_t)s;                                  \
+    if (rs > 63) {                                                            \
+        for (size_t i = 0; i < sz; i++) out[i] = 0;                           \
+        return true;                                                          \
+    }                                                                         \
+    for (size_t i = 0; i < sz; i++) {                                         \
+        uint64_t m = (uint64_t)0 - (u[i] >> 63);                              \
+        out[i] = (int64_t)(((((u[i] ^ m) - m) >> rs) ^ m) - m);               \
+    }                                                                         \
+    return true;
+
+/* The portable clones. On arm64 NEON shifts each lane by its own count, so
+ * these vectorise as they stand; baseline x86-64 (SSE2) has no per-lane
+ * shift at all and runs the per-element-count loops scalar. */
+static bool ndi_bshl_sn(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BSH_FAST_PASS(NDI_BSHL_FAST, n)
+    NDI_BSH_GENERAL_PASS(n, ks[i])
+}
+static bool ndi_bshl_an(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BSH_FAST_PASS(NDI_BSHL_FAST, a[i])
+    NDI_BSH_GENERAL_PASS(a[i], ks[i])
+}
+static bool ndi_bshr_sn(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BSH_FAST_PASS(NDI_BSHR_FAST, n)
+    NDI_BSH_GENERAL_PASS(n, ndi_bsh_neg(ks[i]))
+}
+static bool ndi_bshr_an(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BSH_FAST_PASS(NDI_BSHR_FAST, a[i])
+    NDI_BSH_GENERAL_PASS(a[i], ndi_bsh_neg(ks[i]))
+}
+static bool ndi_bsh_const(const int64_t* in, size_t sz, int64_t s, int64_t* out) {
+    NDI_BSH_CONST_BODY
+}
+
+#ifdef NDI_BITSET_AVX2
+#include <immintrin.h>
+
+/* The AVX2 fast passes, in intrinsics rather than C. vpsllvq / vpsrlvq are
+ * DEFINED for every count (64 and up give 0), where C's << is not, so the
+ * C lanes must mask each count to keep a flagged lane defined -- two extra
+ * ops a lane, which at cache-resident sizes left the loop compute-bound,
+ * ~1.3x behind numpy's bare left_shift. Here no masks are needed, and the
+ * range test is one OR of every k, checked once at the end: all k lie in
+ * [0, 63] iff (OR k) >> 6 == 0 (a negative k sets bit 63). The result is
+ * then bit-identical to NDI_BSHL_FAST / NDI_BSHR_FAST, which answer the
+ * sub-vector tail. RIGHT selects the direction; NB, when non-NULL, is the
+ * buffer of n, else every lane is N0. */
+#define NDI_BSH_AVX2_FAST(RIGHT, NB, N0)                                      \
+    const __m256i z = _mm256_setzero_si256(), c63 = _mm256_set1_epi64x(63);  \
+    const __m256i nbc = _mm256_set1_epi64x(N0);                               \
+    __m256i vbad = z, kor = z;                                                \
+    size_t i = 0;                                                             \
+    for (; i + 4 <= sz; i += 4) {                                             \
+        __m256i n = (NB) ? _mm256_loadu_si256((const __m256i*)((NB) + i)) : nbc; \
+        __m256i k = _mm256_loadu_si256((const __m256i*)(ks + i));             \
+        __m256i m = _mm256_cmpgt_epi64(z, n);                                 \
+        __m256i x = _mm256_xor_si256(n, m);                                   \
+        kor = _mm256_or_si256(kor, k);                                        \
+        if (RIGHT) {                                                          \
+            __m256i q = _mm256_srlv_epi64(_mm256_sub_epi64(x, m), k);         \
+            _mm256_storeu_si256((__m256i*)(out + i),                          \
+                _mm256_sub_epi64(_mm256_xor_si256(q, m), m));                 \
+        } else {                                                              \
+            vbad = _mm256_or_si256(vbad,                                      \
+                _mm256_srlv_epi64(x, _mm256_sub_epi64(c63, k)));              \
+            _mm256_storeu_si256((__m256i*)(out + i), _mm256_sllv_epi64(n, k)); \
+        }                                                                     \
+    }                                                                         \
+    vbad = _mm256_or_si256(vbad, _mm256_srli_epi64(kor, 6));                  \
+    uint64_t bad = (uint64_t)!_mm256_testz_si256(vbad, vbad);                 \
+    for (; i < sz; i++) {                                                     \
+        int64_t nt_ = (NB) ? (NB)[i] : (N0);                                  \
+        if (RIGHT) NDI_BSHR_FAST(nt_, ks[i]); else NDI_BSHL_FAST(nt_, ks[i]); \
+    }                                                                         \
+    if (bad == 0) return true;
+
+__attribute__((target("avx2")))
+static bool ndi_bshl_sn_avx2(int64_t n0, const int64_t* ks, size_t sz, int64_t* out) {
+    { NDI_BSH_AVX2_FAST(0, (const int64_t*)NULL, n0) }
+    NDI_BSH_GENERAL_PASS(n0, ks[i])
+}
+__attribute__((target("avx2")))
+static bool ndi_bshl_an_avx2(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    { NDI_BSH_AVX2_FAST(0, a, 0) }
+    NDI_BSH_GENERAL_PASS(a[i], ks[i])
+}
+__attribute__((target("avx2")))
+static bool ndi_bshr_sn_avx2(int64_t n0, const int64_t* ks, size_t sz, int64_t* out) {
+    { NDI_BSH_AVX2_FAST(1, (const int64_t*)NULL, n0) }
+    NDI_BSH_GENERAL_PASS(n0, ndi_bsh_neg(ks[i]))
+}
+__attribute__((target("avx2")))
+static bool ndi_bshr_an_avx2(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    { NDI_BSH_AVX2_FAST(1, a, 0) }
+    NDI_BSH_GENERAL_PASS(a[i], ndi_bsh_neg(ks[i]))
+}
+/* The constant arm vectorises on SSE2 already; AVX2 doubles the width. */
+__attribute__((target("avx2")))
+static bool ndi_bsh_const_avx2(const int64_t* in, size_t sz, int64_t s, int64_t* out) {
+    NDI_BSH_CONST_BODY
+}
+#endif
+
+static bool (*ndi_bshl_sn_fn)(int64_t, const int64_t*, size_t, int64_t*) = ndi_bshl_sn;
+static bool (*ndi_bshl_an_fn)(const int64_t*, const int64_t*, size_t, int64_t*) = ndi_bshl_an;
+static bool (*ndi_bshr_sn_fn)(int64_t, const int64_t*, size_t, int64_t*) = ndi_bshr_sn;
+static bool (*ndi_bshr_an_fn)(const int64_t*, const int64_t*, size_t, int64_t*) = ndi_bshr_an;
+static bool (*ndi_bsh_const_fn)(const int64_t*, size_t, int64_t, int64_t*) = ndi_bsh_const;
+
+/* Whole-buffer twins: a buffer of n with a scalar k is the constant arm; a
+ * scalar n over a buffer of k is the per-element-count loop. */
+static bool ndk_BitShiftLeft_whole(const int64_t* in, size_t sz, int64_t scal,
+                                   bool arr_first, int64_t* out) {
+    if (arr_first) return ndi_bsh_const_fn(in, sz, scal, out);
+    return ndi_bshl_sn_fn(scal, in, sz, out);
+}
+static bool ndk_BitShiftRight_whole(const int64_t* in, size_t sz, int64_t scal,
+                                    bool arr_first, int64_t* out) {
+    if (arr_first) {
+        if (scal == INT64_MIN) return false;
+        return ndi_bsh_const_fn(in, sz, -scal, out);
+    }
+    return ndi_bshr_sn_fn(scal, in, sz, out);
+}
+
+/* Two int64 buffers of the same shape: n from the first, k from the second. */
+static bool ndk_BitShiftLeft_whole2(const int64_t* a, const int64_t* b, size_t sz,
+                                    int64_t* out) {
+    return ndi_bshl_an_fn(a, b, sz, out);
+}
+static bool ndk_BitShiftRight_whole2(const int64_t* a, const int64_t* b, size_t sz,
+                                     int64_t* out) {
+    return ndi_bshr_an_fn(a, b, sz, out);
+}
+
+/* The one-argument forms shift by one place. */
+static bool ndk_BitShiftLeft1_whole(const int64_t* in, size_t sz, int64_t* out) {
+    return ndi_bsh_const_fn(in, sz, 1, out);
+}
+static bool ndk_BitShiftRight1_whole(const int64_t* in, size_t sz, int64_t* out) {
+    return ndi_bsh_const_fn(in, sz, -1, out);
+}
+
 /* LCM[a, b] = |a|/gcd * |b|, in that order so the product is formed from the
  * already-reduced factor. LCM[0, n] is 0. Overflow declines. */
 static bool ndk_LCM_ii(int64_t a, int64_t b, int64_t* out) {
@@ -602,6 +860,10 @@ static const NDUnaryKernel NDKU_BitLength =
     { NULL, NULL, false, false, NULL, ndk_BitLength_ii, true, NULL };
 static const NDUnaryKernel NDKU_BitNot =
     { NULL, NULL, false, false, NULL, ndk_BitNot_ii, true, ndk_BitNot_whole };
+static const NDUnaryKernel NDKU_BitShiftLeft =
+    { NULL, NULL, false, false, NULL, ndk_BitShiftLeft1_ii, true, ndk_BitShiftLeft1_whole };
+static const NDUnaryKernel NDKU_BitShiftRight =
+    { NULL, NULL, false, false, NULL, ndk_BitShiftRight1_ii, true, ndk_BitShiftRight1_whole };
 static const NDUnaryKernel NDKU_EulerPhi =
     { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true, ndk_EulerPhi_whole };
 static const NDUnaryKernel NDKU_MoebiusMu =
@@ -629,6 +891,12 @@ static const NDBinaryKernel NDKB_BitSet =
     { NULL, false, NULL, ndk_BitSet_ii, true, ndk_BitSet_whole, ndk_BitSet_whole2 };
 static const NDBinaryKernel NDKB_BitGet =
     { NULL, false, NULL, ndk_BitGet_ii, true, ndk_BitGet_whole, ndk_BitGet_whole2 };
+static const NDBinaryKernel NDKB_BitShiftLeft =
+    { NULL, false, NULL, ndk_BitShiftLeft_ii, true, ndk_BitShiftLeft_whole,
+      ndk_BitShiftLeft_whole2 };
+static const NDBinaryKernel NDKB_BitShiftRight =
+    { NULL, false, NULL, ndk_BitShiftRight_ii, true, ndk_BitShiftRight_whole,
+      ndk_BitShiftRight_whole2 };
 /* IntegerExponent[n, b]: the largest e with b^e | n. Declines n == 0
  * (Infinity, not an int64) and b < 2 (::ibase in the scalar builtin). */
 static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
@@ -1037,11 +1305,18 @@ void ndinteger_init(void) {
         ndi_bitset_an_fn = ndi_bitset_an_avx2;
         ndi_bitget_sn_fn = ndi_bitget_sn_avx2;
         ndi_bitget_an_fn = ndi_bitget_an_avx2;
+        ndi_bshl_sn_fn = ndi_bshl_sn_avx2;
+        ndi_bshl_an_fn = ndi_bshl_an_avx2;
+        ndi_bshr_sn_fn = ndi_bshr_sn_avx2;
+        ndi_bshr_an_fn = ndi_bshr_an_avx2;
+        ndi_bsh_const_fn = ndi_bsh_const_avx2;
     }
 #endif
     symtab_set_ndarray_unary_kernel("IntegerLength", &NDKU_IntegerLength);
     symtab_set_ndarray_unary_kernel("BitLength",     &NDKU_BitLength);
     symtab_set_ndarray_unary_kernel("BitNot",        &NDKU_BitNot);
+    symtab_set_ndarray_unary_kernel("BitShiftLeft",  &NDKU_BitShiftLeft);
+    symtab_set_ndarray_unary_kernel("BitShiftRight", &NDKU_BitShiftRight);
     symtab_set_ndarray_unary_kernel("EulerPhi",      &NDKU_EulerPhi);
     symtab_set_ndarray_unary_kernel("MoebiusMu",     &NDKU_MoebiusMu);
     symtab_set_ndarray_unary_kernel("PartitionsP",   &NDKU_PartitionsP);
@@ -1052,6 +1327,8 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("BitOr",        &NDKB_BitOr);
     symtab_set_ndarray_binary_kernel("BitSet",       &NDKB_BitSet);
     symtab_set_ndarray_binary_kernel("BitGet",       &NDKB_BitGet);
+    symtab_set_ndarray_binary_kernel("BitShiftLeft", &NDKB_BitShiftLeft);
+    symtab_set_ndarray_binary_kernel("BitShiftRight", &NDKB_BitShiftRight);
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
     symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);

@@ -5015,6 +5015,27 @@ void info_init(void) {
         "BitGet[n, k] with k < 0 or a non-integer argument is left "
         "unevaluated.");
 
+    symtab_set_docstring("BitShiftLeft",
+        "BitShiftLeft[n, k] shifts the binary bits in the integer n to the left "
+        "by k places, padding with zeros on the right.\n"
+        "BitShiftLeft[n]\n"
+        "shifts one bit to the left.\n"
+        "BitShiftLeft[n, k] is n 2^k, for integers of any size. A negative k "
+        "shifts to the right, truncating toward zero. A non-integer number n is "
+        "scaled by 2^k (each part of a complex n separately). k must be a "
+        "machine-sized integer. BitShiftLeft threads over lists.");
+
+    symtab_set_docstring("BitShiftRight",
+        "BitShiftRight[n, k] shifts the binary bits in the integer n to the right "
+        "by k places, dropping bits shifted past the units position.\n"
+        "BitShiftRight[n]\n"
+        "shifts one bit to the right.\n"
+        "BitShiftRight[n, k] is IntegerPart[n / 2^k], for integers of any size, "
+        "so a negative n rounds toward zero (BitShiftRight[-5, 1] is -2). A "
+        "negative k shifts to the left. A non-integer number n is scaled by "
+        "2^-k (each part of a complex n separately). k must be a machine-sized "
+        "integer. BitShiftRight threads over lists.");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

@@ -48,6 +48,7 @@ static SymbolAttr builtin_attrs[] = {
 #endif
     {"Out", ATTR_PROTECTED},
     {"Overflow", ATTR_PROTECTED},
+    {"Underflow", ATTR_PROTECTED},
     {"Apply", ATTR_PROTECTED},
     {"Map", ATTR_PROTECTED},
     {"MapAll", ATTR_PROTECTED},
@@ -160,6 +161,8 @@ static SymbolAttr builtin_attrs[] = {
     {"BitNot", ATTR_PROTECTED | ATTR_LISTABLE},
     {"BitSet", ATTR_PROTECTED | ATTR_LISTABLE},
     {"BitGet", ATTR_PROTECTED | ATTR_LISTABLE},
+    {"BitShiftLeft", ATTR_PROTECTED | ATTR_LISTABLE},
+    {"BitShiftRight", ATTR_PROTECTED | ATTR_LISTABLE},
     {"DigitCount", ATTR_PROTECTED},
     {"FromDigits", ATTR_PROTECTED},
     {"FractionalPart", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},

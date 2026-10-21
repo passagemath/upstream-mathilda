@@ -87,6 +87,21 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 if (!emit(c, A[1], &b)) return -1;
                 *out = binop(c, OP_BGET_I, a, b, CT_INT); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "BitShiftLeft") == 0 || strcmp(h, "BitShiftRight") == 0) {
+                /* n, k -> n * 2^k (Left) or IntegerPart[n / 2^k] (Right); the
+                 * one-argument form shifts by one place. Bails to the
+                 * interpreter only where a left shift leaves int64. */
+                uint16_t op = (h[8] == 'L') ? OP_BSHL_I : OP_BSHR_I;
+                Val a, b;
+                if (!emit(c, A[0], &a)) return -1;
+                if (na == 2) { if (!emit(c, A[1], &b)) return -1; }
+                else {
+                    memset(&imm, 0, sizeof imm); imm.i = 1;
+                    b = emit_const(c, imm, CT_INT);
+                    if (!c->ok) return -1;
+                }
+                *out = binop(c, op, a, b, CT_INT); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "CoprimeQ") == 0) {
                 /* CoprimeQ[a, b] is GCD[a, b] == 1; GCD_I's own guard hands
                  * an INT64_MIN operand back to the interpreter. */

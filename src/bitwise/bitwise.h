@@ -9,9 +9,10 @@
  *   - BitNot[n]             bitwise NOT, -1 - n (two's complement).
  *   - BitSet[n, k]          n with bit k (the 2^k coefficient) set to 1.
  *   - BitGet[n, k]          bit k (the 2^k coefficient) of n, as 0 or 1.
+ *   - BitShiftLeft[n, k]    n * 2^k; a negative k shifts right.
+ *   - BitShiftRight[n, k]   IntegerPart[n / 2^k]; a negative k shifts left.
  *
- * The rest of the Bit* family (BitShiftLeft / BitShiftRight, ...) is still
- * to come. Each builtin lives in its own <name>.c
+ * Each builtin lives in its own <name>.c
  * file and is registered by bitwise_init(); docstrings live in src/info.c.
  */
 
@@ -27,6 +28,12 @@ Expr* builtin_bitor(Expr* res);
 Expr* builtin_bitnot(Expr* res);
 Expr* builtin_bitset(Expr* res);
 Expr* builtin_bitget(Expr* res);
+Expr* builtin_bitshiftleft(Expr* res);
+Expr* builtin_bitshiftright(Expr* res);
+
+/* The shared core of BitShiftLeft (dir +1) and BitShiftRight (dir -1), in
+ * bitshiftleft.c. `head` names the caller in its messages. */
+Expr* bitshift_eval(Expr* res, const char* head, int dir);
 
 void bitwise_init(void);
 

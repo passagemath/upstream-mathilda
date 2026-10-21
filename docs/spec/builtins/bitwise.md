@@ -252,3 +252,61 @@ Out[5]= {{1, 1}, {1, 0}}
 **Diagnostics**. None. A non-integer number (a Real, Rational or Complex) is
 left in the call silently, exactly as a symbol is (`BitOr[2.5, 3]` stays
 unevaluated and `Check` takes the value branch).
+
+## BitNot
+
+- `BitNot[n]`: The bitwise NOT of the integer `n` -- ones become zeros and
+  vice versa.
+
+**Features**:
+- `Listable`, `Protected`. Integers are taken in two's complement with an
+  unlimited number of digits, so `BitNot[n]` is exactly `-1 - n`: `BitNot[0]`
+  is `-1` (all bits on) and `BitNot[7]` is `-8`. Threads over lists, including
+  nested and empty ones (`BitNot[{}]` is `{}`).
+- Exact at any size. Machine integers complement in int64, which is total
+  (`BitNot[-2^63]` is `2^63 - 1`). Bignums go through GMP's `mpz_com` into a
+  fresh node, never touching the operand; a result that fits in a machine
+  integer is returned as one (`BitNot[2^63]` is `-2^63 - 1`, `BitNot[-2^63 - 1]`
+  is `2^63`).
+- Automatic symbolic simplification: BitNot is an involution, so
+  `BitNot[BitNot[x]]` is `x`. This also completes BitXor's `-1` extraction:
+  `BitXor[-1, BitNot[x]]` is `x`. There are no other rules: `BitNot[-1 - x]`
+  and `BitAnd[x, BitNot[x]]` stay as they are.
+- **Packed / NDArray**: an exact int64 unary kernel (`ndk_BitNot_ii`, with a
+  vectorisable whole-buffer arm `ndk_BitNot_whole`) in `src/ndinteger.c`, on
+  the `AWARE` and `INT64_OK` lists. A packed array stays packed; a visible
+  `NDArray` gives a visible `NDArray`. A real buffer has no integer answer, so
+  its elements stay unevaluated, as the scalar does. At 10^5 elements
+  `BitNot[v]` takes about 0.038 ms, level with NumPy's `invert` (0.034 ms).
+  At 10^7 elements it takes 22 ms against 18.5 ms; both are bound by memory
+  bandwidth.
+- **Compile[]**: `OP_BNOT_I` (total, never bails). It lowers at scalar and
+  array shape, and `CompileDiagnostics` reports `Compiled -> True` for both.
+  Auto-compilation picks it up: `Table[x + BitNot[Floor[x]], {x, 0., 99999.}]`
+  takes 1.9 ms compiled and 84 ms interpreted, with the same answer. Scalar,
+  List, packed, `NDArray` and compiled results agree bit for bit, `INT64_MIN`
+  included.
+
+```
+In[1]:= BitNot[7]
+Out[1]= -8
+
+In[2]:= BitNot[Range[-10, 10]]
+Out[2]= {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11}
+
+In[3]:= BitNot[2^70]
+Out[3]= -1180591620717411303425
+
+In[4]:= {BitNot[BitNot[x]], BitXor[-1, BitNot[x]]}
+Out[4]= {x, x}
+
+In[5]:= BitNot[]
+BitNot::argx: BitNot called with 0 arguments; 1 argument is expected.
+Out[5]= BitNot[]
+```
+
+**Diagnostics**. `BitNot::argx` for a call that does not have exactly one
+argument (`BitNot[]`, `BitNot[1, 2]`). It goes through the message funnel, so
+`Quiet` silences it and `Check` sees it. A non-integer number (a Real,
+Rational or Complex) is left in the call silently, exactly as a symbol is
+(`BitNot[2.5]` stays unevaluated and `Check` takes the value branch).

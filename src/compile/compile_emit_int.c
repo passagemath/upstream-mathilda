@@ -65,6 +65,11 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_BLEN_I, a, CT_INT); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "BitNot") == 0) {
+                /* Unary two's-complement NOT, total on int64. */
+                Val a; if (!emit(c, A[0], &a)) return -1;
+                *out = unop(c, OP_BNOT_I, a, CT_INT); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "CoprimeQ") == 0) {
                 /* CoprimeQ[a, b] is GCD[a, b] == 1; GCD_I's own guard hands
                  * an INT64_MIN operand back to the interpreter. */

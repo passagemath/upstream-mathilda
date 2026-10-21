@@ -92,6 +92,21 @@ static bool ndk_BitLength_ii(int64_t n, int64_t* out) {
     return true;
 }
 
+/* BitNot[n] = ~n = -1 - n. Total on int64 (INT64_MIN <-> INT64_MAX), so it
+ * never declines; the scalar builtin and Compile's OP_BNOT_I compute the same
+ * `~n`, so every surface agrees bit for bit. */
+static bool ndk_BitNot_ii(int64_t n, int64_t* out) {
+    *out = ~n;
+    return true;
+}
+
+/* Whole-buffer twin: one branch-free loop the compiler vectorises, instead of
+ * an indirect call per element. */
+static bool ndk_BitNot_whole(const int64_t* in, size_t sz, int64_t* out) {
+    for (size_t i = 0; i < sz; i++) out[i] = ~in[i];
+    return true;
+}
+
 /* EulerPhi[n] = |n| * prod (1 - 1/p). EulerPhi[0] is 0 and the sign of n is
  * ignored, both matching the scalar builtin. Divide before multiplying so the
  * running value never exceeds |n| and cannot overflow. */
@@ -445,6 +460,8 @@ static const NDUnaryKernel NDKU_IntegerLength =
     { NULL, NULL, false, false, NULL, ndk_IntegerLength_ii, true, NULL };
 static const NDUnaryKernel NDKU_BitLength =
     { NULL, NULL, false, false, NULL, ndk_BitLength_ii, true, NULL };
+static const NDUnaryKernel NDKU_BitNot =
+    { NULL, NULL, false, false, NULL, ndk_BitNot_ii, true, ndk_BitNot_whole };
 static const NDUnaryKernel NDKU_EulerPhi =
     { NULL, NULL, false, false, NULL, ndk_EulerPhi_ii, true, ndk_EulerPhi_whole };
 static const NDUnaryKernel NDKU_MoebiusMu =
@@ -871,6 +888,7 @@ Expr* ndint_binary_predicate(Expr* res, NDBinPred which) {
 void ndinteger_init(void) {
     symtab_set_ndarray_unary_kernel("IntegerLength", &NDKU_IntegerLength);
     symtab_set_ndarray_unary_kernel("BitLength",     &NDKU_BitLength);
+    symtab_set_ndarray_unary_kernel("BitNot",        &NDKU_BitNot);
     symtab_set_ndarray_unary_kernel("EulerPhi",      &NDKU_EulerPhi);
     symtab_set_ndarray_unary_kernel("MoebiusMu",     &NDKU_MoebiusMu);
     symtab_set_ndarray_unary_kernel("PartitionsP",   &NDKU_PartitionsP);

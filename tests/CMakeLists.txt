@@ -317,6 +317,7 @@ set(COMMON_SRC
     ../src/bitwise/bitxor.c
     ../src/bitwise/bitand.c
     ../src/bitwise/bitor.c
+    ../src/bitwise/bitnot.c
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c

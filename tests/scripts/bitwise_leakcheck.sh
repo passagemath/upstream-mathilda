@@ -2,7 +2,7 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength, BitXor, BitAnd and BitOr (machine-int, bignum, negative,
+# Drives BitLength, BitXor, BitAnd, BitOr and BitNot (machine-int, bignum, negative,
 # INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
 # cancellation / idempotence / 0- and -1-absorption, BitNot extraction, Compile, and
 # error paths) under a leak checker and FAILS on any
@@ -144,6 +144,28 @@ cfo = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitOr[v, w, 6]];
 Do[cfo[Range[32], Reverse[Range[32]]], {200}];
 cfos = Compile[{{a, _Integer}, {b, _Integer}, {c, _Integer}}, BitOr[a, b, c]];
 Do[cfos[3333, 5555, -7], {200}];
+Do[BitNot[7], {200}];
+Do[BitNot[-9223372036854775808], {200}];
+Do[BitNot[2^63], {200}];
+Do[BitNot[-2^63 - 1], {200}];
+Do[BitNot[2^70], {200}];
+Do[BitNot[100!], {200}];
+Do[BitNot[BitNot[x]], {200}];
+Do[BitNot[BitNot[BitNot[x]]], {200}];
+bnz = BitNot[z]; Do[BitNot[bnz], {200}];
+Do[BitXor[-1, BitNot[x]], {200}];
+Do[BitNot[{1, {2, x}, 2.5, 2^70}], {200}];
+Do[BitNot[Range[-10, 10]], {200}];
+Do[BitNot[Partition[Range[12], 3]], {200}];
+Do[BitNot[NDArray[{-9223372036854775808, -1, 0, 9223372036854775807}, DataType -> "int64"]], {200}];
+Do[BitNot[NDArray[{1.5, 2.}]], {200}];
+Do[BitNot[2.5], {200}];
+Do[Quiet[BitNot[]], {200}];
+Do[Quiet[BitNot[1, 2]], {200}];
+cfn = Compile[{{v, _Integer, 1}}, BitNot[v]];
+Do[cfn[Range[-50, 50]], {200}];
+cfns = Compile[{{n, _Integer}}, BitNot[n]];
+Do[cfns[12345], {200}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

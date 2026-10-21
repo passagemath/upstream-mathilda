@@ -49,6 +49,7 @@
 #include "print.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "compile/autocompile.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1059,8 +1060,8 @@ static void test_bitor_integer_folding(void) {
                    "BitOr[-37802229124771058671937, x]", 0);
     assert_eval_eq("BitOr[2^70, 2^70 + 5, x]", "BitOr[1180591620717411303429, x]", 0);
     assert_eval_eq("BitOr[x, y, x, 1, 2, 4]", "BitOr[7, x, y]", 0);
-    assert_eval_eq("BitOr[1, 2, 2.5]", "BitOr[3, 2.5]", 0);
-    assert_eval_eq("BitOr[1, 2, 2.5, x]", "BitOr[3, 2.5, x]", 0);
+    assert_eval_eq("BitOr[1, 2, 2.5]", "BitOr[2.5, 3]", 0);
+    assert_eval_eq("BitOr[1, 2, 2.5, x]", "BitOr[2.5, 3, x]", 0);
 }
 
 static void test_bitor_minus_one_absorbs(void) {
@@ -1247,6 +1248,249 @@ static void test_bitor_stress(void) {
     }
 }
 
+/* ===================================================================== *
+ *  BitNot[n] = -1 - n (two's complement, unlimited digits)
+ * ===================================================================== */
+
+static void test_bitnot_documented_examples(void) {
+    assert_eval_eq("BitNot[0]", "-1", 0);
+    assert_eval_eq("BitNot[7]", "-8", 0);
+    assert_eval_eq("BitNot[Range[-10, 10]]",
+        "{9, 8, 7, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11}", 0);
+    assert_eval_eq("BitNot[BitNot[x]]", "x", 0);
+    assert_eval_eq("BitNot[{}]", "{}", 0);
+
+    char* result = NULL;
+    char* err = eval_capturing_stderr("BitNot[]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitNot[]");
+    ASSERT_MSG(err != NULL && strstr(err,
+        "BitNot::argx: BitNot called with 0 arguments; 1 argument is expected.") != NULL,
+        "expected argx diagnostic, got: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+}
+
+static void test_bitnot_basic(void) {
+    assert_eval_eq("BitNot[-1]", "0", 0);
+    assert_eval_eq("BitNot[1]", "-2", 0);
+    assert_eval_eq("BitNot[-8]", "7", 0);
+    assert_eval_eq("BitNot[255]", "-256", 0);
+    assert_eval_eq("BitNot[-256]", "255", 0);
+}
+
+static void test_bitnot_int64_extremes(void) {
+    /* ~INT64_MIN = INT64_MAX and vice versa: total on int64, no overflow. */
+    assert_eval_eq("BitNot[-9223372036854775808]", "9223372036854775807", 0);
+    assert_eval_eq("BitNot[9223372036854775807]", "-9223372036854775808", 0);
+    assert_eval_eq("BitNot[-2^63]", "9223372036854775807", 0);
+    assert_eval_eq("Head[BitNot[2^63 - 1]]", "Integer", 0);
+}
+
+static void test_bitnot_bignums(void) {
+    /* Crossing the int64 boundary in both directions. */
+    assert_eval_eq("BitNot[2^63]", "-9223372036854775809", 0);
+    assert_eval_eq("BitNot[-2^63 - 1]", "9223372036854775808", 0);
+    assert_eval_eq("BitNot[2^70]", "-1180591620717411303425", 0);
+    assert_eval_eq("BitNot[-2^70]", "1180591620717411303423", 0);
+    assert_eval_eq("BitNot[100!] == -1 - 100!", "True", 0);
+    assert_eval_eq("BitNot[-3^200] == 3^200 - 1", "True", 0);
+    /* A bignum whose complement lands back in int64 range is demoted. */
+    assert_eval_eq("BitNot[-9223372036854775809]", "9223372036854775808", 0);
+    assert_eval_eq("BitNot[9223372036854775808]", "-9223372036854775809", 0);
+    assert_eval_eq("BitNot[BitNot[2^63]] === 2^63", "True", 0);
+}
+
+static void test_bitnot_bignum_operands_untouched(void) {
+    /* mpz_com writes a fresh node; a bound / shared operand is unchanged. */
+    assert_eval_eq("p = 3^200; r = BitNot[p]; {p == 3^200, r == -1 - 3^200}",
+                   "{True, True}", 0);
+    assert_eval_eq("l = {2^90 + 1, -2^91}; BitNot[l]; l == {2^90 + 1, -2^91}",
+                   "True", 0);
+}
+
+static void test_bitnot_involution(void) {
+    assert_eval_eq("BitNot[BitNot[BitNot[x]]]", "BitNot[x]", 0);
+    assert_eval_eq("BitNot[BitNot[BitNot[BitNot[x]]]]", "x", 0);
+    assert_eval_eq("BitNot[BitNot[x + y]]", "x + y", 0);
+    assert_eval_eq("BitNot[BitNot[{x, 2.5}]]", "{x, 2.5}", 0);
+    /* The inner BitNot is shared, not mutated. */
+    assert_eval_eq("b = BitNot[z]; {BitNot[b], b}", "{z, BitNot[z]}", 0);
+    /* BitXor's -1 extraction now reduces against BitNot. */
+    assert_eval_eq("BitXor[-1, BitNot[x]]", "x", 0);
+    assert_eval_eq("BitNot[BitXor[-1, x]]", "x", 0);
+}
+
+static void test_bitnot_no_extra_rules(void) {
+    assert_eval_eq("BitNot[-1 - x]", "BitNot[-1 - x]", 0);
+    assert_eval_eq("BitAnd[x, BitNot[x]]", "BitAnd[x, BitNot[x]]", 0);
+    assert_eval_eq("BitNot[x]", "BitNot[x]", 0);
+}
+
+static void test_bitnot_non_integers_silent(void) {
+    const char* in[] = { "BitNot[2.5]", "BitNot[1.]", "BitNot[1/2]", "BitNot[I]",
+                         "BitNot[Pi]", "BitNot[2 + 3 I]", "BitNot[x]" };
+    const char* out[] = { "BitNot[2.5]", "BitNot[1.0]", "BitNot[1/2]", "BitNot[I]",
+                          "BitNot[Pi]", "BitNot[2 + 3*I]", "BitNot[x]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(in[i], &result);
+        ASSERT(result != NULL);
+        ASSERT_STR_EQ(result, out[i]);
+        ASSERT_MSG(err == NULL || strstr(err, "BitNot::") == NULL,
+                   "unexpected diagnostic for %s: %s", in[i], err ? err : "(null)");
+        free(result);
+        free(err);
+    }
+    assert_eval_eq("Check[BitNot[2.5], failed]", "BitNot[2.5]", 0);
+}
+
+static void test_bitnot_argx(void) {
+    char* result = NULL;
+    char* err = eval_capturing_stderr("BitNot[x, y]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitNot[x, y]");
+    ASSERT_MSG(err != NULL && strstr(err,
+        "BitNot::argx: BitNot called with 2 arguments; 1 argument is expected.") != NULL,
+        "expected argx diagnostic, got: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+    /* Routed through the message funnel: Quiet silences, Check sees it. */
+    assert_eval_eq("Check[BitNot[1, 2], failed]", "failed", 0);
+    err = eval_capturing_stderr("Quiet[BitNot[1, 2]]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "BitNot[1, 2]");
+    ASSERT_MSG(err == NULL || strstr(err, "BitNot::") == NULL,
+               "Quiet leaked: %s", err ? err : "(null)");
+    free(result);
+    free(err);
+}
+
+static void test_bitnot_listable_shapes(void) {
+    assert_eval_eq("BitNot[{1, {2, x}}]", "{-2, {-3, BitNot[x]}}", 0);
+    assert_eval_eq("BitNot[{{0, -1}, {2^70, 2.5}}]",
+                   "{{-1, 0}, {-1180591620717411303425, BitNot[2.5]}}", 0);
+    assert_eval_eq("BitNot[{{}, {}}]", "{{}, {}}", 0);
+}
+
+static void test_bitnot_properties(void) {
+    /* BitNot[n] == -1 - n and involution, over every sign and size. */
+    assert_eval_eq(
+        "SeedRandom[13]; ns = Join[RandomInteger[{-2^200, 2^200}, 40], "
+        "RandomInteger[{-2^62, 2^62}, 40], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "And @@ Table[BitNot[n] == -1 - n && BitNot[BitNot[n]] === n && "
+        "BitXor[n, -1] == BitNot[n] && BitAnd[n, BitNot[n]] == 0 && "
+        "BitOr[n, BitNot[n]] == -1, {n, ns}]", "True", 0);
+    /* De Morgan, both ways. */
+    assert_eval_eq(
+        "SeedRandom[14]; ns = Join[RandomInteger[{-2^100, 2^100}, 15], {-2^63, 2^63 - 1, 0, -1}]; "
+        "And @@ Flatten[Table[BitNot[BitAnd[m, n]] == BitOr[BitNot[m], BitNot[n]] && "
+        "BitNot[BitOr[m, n]] == BitAnd[BitNot[m], BitNot[n]], {m, ns}, {n, ns}]]",
+        "True", 0);
+    /* Independent oracle: flip each of the low 8 binary digits. */
+    assert_eval_eq(
+        "And @@ Table[Mod[BitNot[a], 256] == FromDigits[1 - IntegerDigits[a, 2, 8], 2], "
+        "{a, 0, 255}]", "True", 0);
+}
+
+static void test_bitnot_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitNot[Range[10]]]", "True", 0);
+    assert_eval_eq("BitNot[Range[5]]", "{-2, -3, -4, -5, -6}", 0);
+    assert_eval_eq(
+        "BitNot[NDArray[{-9223372036854775808, -1, 0, 9223372036854775807}, DataType -> \"int64\"]]",
+        "NDArray[{9223372036854775807, 0, -1, -9223372036854775808}]", 0);
+    assert_eval_eq("BitNot[NDArray[{{1, 2}, {3, 4}}, DataType -> \"int64\"]]",
+                   "NDArray[{{-2, -3}, {-4, -5}}]", 0);
+    assert_eval_eq("PackedArrayQ[BitNot[Partition[Range[12], 3]]]", "True", 0);
+    /* A real buffer has no integer answer: elements stay unevaluated. */
+    assert_eval_eq("BitNot[NDArray[{1.5, 2.}]]", "{BitNot[1.5], BitNot[2.0]}", 0);
+    /* Off-buffer elements take the exact List path. */
+    assert_eval_eq("BitNot[{1, 2^70, x}]", "{-2, -1180591620717411303425, BitNot[x]}", 0);
+    assert_eval_eq("BitNot[BitNot[Range[6]]] === Range[6]", "True", 0);
+}
+
+static void test_bitnot_surfaces_agree(void) {
+    assert_eval_eq(
+        "SeedRandom[10]; oa = Join[RandomInteger[{-2^62, 2^62}, 500], "
+        "{-2^63, 2^63 - 1, 0, -1}]; "
+        "ref = Table[-1 - oa[[i]], {i, Length[oa]}]; "
+        "{BitNot[oa] === ref, "
+        " Normal[BitNot[NDArray[oa, DataType -> \"int64\"]]] === ref, "
+        " Compile[{{v, _Integer, 1}}, BitNot[v]][oa] === ref, "
+        " Table[Compile[{{s, _Integer}}, BitNot[s]][oa[[i]]], {i, Length[oa]}] === ref, "
+        " Table[BitNot[oa[[i]]], {i, Length[oa]}] === ref}",
+        "{True, True, True, True, True}", 0);
+}
+
+static void test_bitnot_compile(void) {
+    assert_eval_eq("Compile[{{n, _Integer}}, BitNot[n]][5]", "-6", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitNot[n]][-9223372036854775808]",
+                   "9223372036854775807", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitNot[BitNot[n] + 3]][10]", "7", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitNot[v]][Range[-3, 3]]",
+                   "{2, 1, 0, -1, -2, -3, -4}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitAnd[v, BitNot[6]]][Range[8]]",
+                   "{1, 0, 1, 0, 1, 0, 1, 8}", 0);
+    /* Not an integer: the interpreter leaves it unevaluated, so must Compile. */
+    assert_eval_eq("Compile[{{x, _Real}}, BitNot[x]][2.5]", "BitNot[2.5]", 0);
+}
+
+static void test_bitnot_compile_diagnostics(void) {
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{n, _Integer}}, BitNot[n]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitNot[v]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitXor[v, BitNot[v]]]", "True", 0);
+}
+
+/* Auto-compilation (Table / Sum over a real iterator) lowers a body holding
+ * BitNot through OP_BNOT_I; switching it off must not change the answer. */
+static Expr* bitnot_eval_owned(const char* src) {
+    Expr* p = parse_expression(src);
+    Expr* e = evaluate(p);   /* evaluate borrows p */
+    expr_free(p);
+    return e;
+}
+
+static void test_bitnot_autocompile(void) {
+    const char* tbl = "Table[x + BitNot[Floor[x]], {x, 0., 2000., 0.5}]";
+    const char* sm  = "Sum[Sin[x] BitNot[Floor[x]], {x, 0., 500., 0.25}]";
+    assert_eval_eq("Table[x + BitNot[Floor[x]], {x, 0., 2., 0.5}]",
+                   "{-1.0, -0.5, -1.0, -0.5, -1.0}", 0);
+    autocompile_set_enabled(false);
+    Expr* t_off = bitnot_eval_owned(tbl);
+    Expr* s_off = bitnot_eval_owned(sm);
+    autocompile_set_enabled(true);
+    Expr* t_on = bitnot_eval_owned(tbl);
+    Expr* s_on = bitnot_eval_owned(sm);
+    ASSERT(expr_eq(t_off, t_on));
+    ASSERT(expr_eq(s_off, s_on));
+    ASSERT(s_on->type == EXPR_REAL);
+    expr_free(t_off); expr_free(s_off); expr_free(t_on); expr_free(s_on);
+}
+
+static void test_bitnot_attributes(void) {
+    assert_eval_eq("Attributes[BitNot]", "{Listable, Protected}", 0);
+}
+
+static void test_bitnot_docstring_and_sym(void) {
+    SymbolDef* def = symtab_get_def("BitNot");
+    ASSERT(def != NULL);
+    ASSERT(def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "bitwise NOT") != NULL);
+    ASSERT(SYM_BitNot != NULL && strcmp(SYM_BitNot, "BitNot") == 0);
+}
+
+static void test_bitnot_stress(void) {
+    for (int k = 0; k < 50; k++) {
+        assert_eval_eq("BitNot[7]", "-8", 0);
+        assert_eval_eq("BitNot[2^70]", "-1180591620717411303425", 0);
+        assert_eval_eq("BitNot[-2^63 - 1]", "9223372036854775808", 0);
+        assert_eval_eq("BitNot[BitNot[x]]", "x", 0);
+        assert_eval_eq("BitNot[{1, {2, x}}]", "{-2, {-3, BitNot[x]}}", 0);
+        assert_eval_eq("BitNot[Range[4]]", "{-2, -3, -4, -5}", 0);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1359,6 +1603,26 @@ int main(void) {
     TEST(test_bitor_docstring_and_sym);
     TEST(test_bitor_stress);
 
-    printf("All BitLength / BitXor / BitAnd / BitOr tests passed!\n");
+    TEST(test_bitnot_documented_examples);
+    TEST(test_bitnot_basic);
+    TEST(test_bitnot_int64_extremes);
+    TEST(test_bitnot_bignums);
+    TEST(test_bitnot_bignum_operands_untouched);
+    TEST(test_bitnot_involution);
+    TEST(test_bitnot_no_extra_rules);
+    TEST(test_bitnot_non_integers_silent);
+    TEST(test_bitnot_argx);
+    TEST(test_bitnot_listable_shapes);
+    TEST(test_bitnot_properties);
+    TEST(test_bitnot_packed_and_ndarray);
+    TEST(test_bitnot_surfaces_agree);
+    TEST(test_bitnot_compile);
+    TEST(test_bitnot_compile_diagnostics);
+    TEST(test_bitnot_autocompile);
+    TEST(test_bitnot_attributes);
+    TEST(test_bitnot_docstring_and_sym);
+    TEST(test_bitnot_stress);
+
+    printf("All BitLength / BitXor / BitAnd / BitOr / BitNot tests passed!\n");
     return 0;
 }

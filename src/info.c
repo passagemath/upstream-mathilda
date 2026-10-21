@@ -4988,6 +4988,14 @@ void info_init(void) {
         "(BitOr[1, 2, x] is BitOr[3, x]), a -1 absorbs everything "
         "(BitOr[-1, 2, x] is -1) and a 0 is dropped (BitOr[0, x] is x).");
 
+    symtab_set_docstring("BitNot",
+        "BitNot[n] gives the bitwise NOT of the integer n: ones become zeros "
+        "and vice versa.\n"
+        "Integers are taken in two's complement with an unlimited number of "
+        "digits, so BitNot[n] is -1 - n (BitNot[0] is -1); integers of any "
+        "size are exact. BitNot threads over lists.\n"
+        "BitNot[BitNot[x]] is x; non-integer arguments are left unevaluated.");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

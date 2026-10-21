@@ -30,4 +30,7 @@ void bitwise_init(void) {
     symtab_get_def("BitOr")->attributes |=
         (ATTR_FLAT | ATTR_LISTABLE | ATTR_ONEIDENTITY | ATTR_ORDERLESS |
          ATTR_PROTECTED);
+
+    symtab_add_builtin("BitNot", builtin_bitnot);
+    symtab_get_def("BitNot")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 }

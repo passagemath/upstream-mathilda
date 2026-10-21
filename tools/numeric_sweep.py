@@ -635,6 +635,7 @@ P("quotient_int", "integer", "Quotient[iv, 1000]", "iv // 1000")
 P("bitand", "integer", "BitAnd[iv, 255]", "np.bitwise_and(iv, 255)")
 P("bitor", "integer", "BitOr[iv, 255]", "np.bitwise_or(iv, 255)")
 P("bitxor", "integer", "BitXor[iv, 255]", "np.bitwise_xor(iv, 255)")
+P("bitnot", "integer", "BitNot[iv]", "np.invert(iv)")
 P("bitshiftleft", "integer", "BitShiftLeft[iv, 3]", "np.left_shift(iv, 3)")
 P("integerlength", "integer", "IntegerLength[cv]",
   "np.floor(np.log10(cv)).astype(np.int64)+1")

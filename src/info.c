@@ -191,7 +191,8 @@ void info_init(void) {
         "MultiplicativeOrder[k, n, {r1, r2, ...}]\n"
         "\tthe smallest m >= 1 with k^m congruent to one of the ri modulo n (a discrete log).\n"
         "\tThe order divides EulerPhi[n]. Unevaluated when gcd(k, n) != 1, when n <= 0, or\n"
-        "\twhen no power of k reaches a target. Exact for integers of any size.");
+        "\twhen no power of k reaches a target. Exact for integers of any size; the discrete\n"
+        "\tlog uses Pohlig-Hellman with baby-step giant-step / Pollard rho per prime of the order.");
     symtab_set_docstring("JacobiSymbol",
         "JacobiSymbol[n, m] gives the Jacobi symbol (n/m); for prime m it is the Legendre symbol, "
         "+-1 according to whether n is a quadratic residue modulo m (Euler's criterion) and 0 when "

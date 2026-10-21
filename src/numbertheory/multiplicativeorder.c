@@ -13,6 +13,8 @@
 #include "attr.h"
 #include "ndinteger.h" /* int64 phi / factor helpers */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "facint.h"    /* facint_factor_complete, mth_is_prime_mpz */
+#include "core.h"      /* tc_check_deadline */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,54 +32,78 @@
  * Returns unevaluated when:
  *   - n is 0 (no group);
  *   - gcd(k, n) != 1 (k is not a unit mod n, no finite order exists);
- *   - in the 3-arg form, no power of k lands in the residue set, or the
- *     order is too large to iterate over.
+ *   - in the 3-arg form, no power of k lands in the residue set.
+ * The 3-arg form is a discrete logarithm, solved by Pohlig-Hellman with
+ * baby-step giant-step / Pollard rho per prime of ord(k) (nt_dlog.c) -- no
+ * search cap, so any order whose primes are tractable answers.
  * All arithmetic is on GMP mpz_t so bignum k and n share the same code
  * path with machine integers.  Negative n is treated as |n|; negative or
  * out-of-range k is reduced modulo n.
  * ===================================================================*/
 
-/* phi(n) for n >= 1.  Uses the pr_collect_distinct_primes helper above to
- * gather the distinct prime factors of n, then applies the multiplicative
- * identity phi(n) = n * prod_{p | n} (1 - 1/p), iteratively realised as
- * (phi / p) * (p - 1).  This avoids needing the exact multiplicities. */
-static bool mo_eulerphi_mpz(const mpz_t n, mpz_t phi_out) {
-    if (mpz_sgn(n) <= 0) return false;
-    if (mpz_cmp_ui(n, 1) == 0) { mpz_set_ui(phi_out, 1); return true; }
-    mpz_t primes[PR_MAX_DISTINCT_PRIMES];
-    size_t nprimes = 0;
-    if (!pr_collect_distinct_primes(n, primes, &nprimes)) {
-        for (size_t i = 0; i < nprimes; i++) mpz_clear(primes[i]);
-        return false;
-    }
-    mpz_set(phi_out, n);
-    mpz_t pm1;
-    mpz_init(pm1);
-    for (size_t i = 0; i < nprimes; i++) {
-        mpz_divexact(phi_out, phi_out, primes[i]);
-        mpz_sub_ui(pm1, primes[i], 1);
-        mpz_mul(phi_out, phi_out, pm1);
-    }
-    mpz_clear(pm1);
-    for (size_t i = 0; i < nprimes; i++) mpz_clear(primes[i]);
+/* The prime factorisation of a group order: primes q[0..n) with exponents
+ * e[].  Entries are mpz_init'd as they are added; mo_factors_clear frees. */
+typedef struct {
+    mpz_t         q[PR_MAX_DISTINCT_PRIMES];
+    unsigned long e[PR_MAX_DISTINCT_PRIMES];
+    size_t        n;
+} MoFactors;
+
+static void mo_factors_clear(MoFactors* f) {
+    for (size_t i = 0; i < f->n; i++) mpz_clear(f->q[i]);
+    f->n = 0;
+}
+
+/* Multiply the recorded factorisation by p^e, merging a repeated prime. */
+static bool mo_factors_add(MoFactors* f, const mpz_t p, unsigned long e) {
+    if (e == 0) return true;
+    for (size_t i = 0; i < f->n; i++)
+        if (mpz_cmp(f->q[i], p) == 0) { f->e[i] += e; return true; }
+    if (f->n >= PR_MAX_DISTINCT_PRIMES) return false;
+    mpz_init_set(f->q[f->n], p);
+    f->e[f->n++] = e;
     return true;
+}
+
+/* Complete factorisation of m >= 1 (FactorInteger's engine), merged into f. */
+static bool mo_factor_into(MoFactors* f, const mpz_t m) {
+    mpz_t pr[PR_MAX_DISTINCT_PRIMES];
+    int64_t ex[PR_MAX_DISTINCT_PRIMES];
+    int cnt = 0;
+    if (!facint_factor_complete(m, pr, ex, PR_MAX_DISTINCT_PRIMES, &cnt)) return false;
+    bool ok = true;
+    for (int i = 0; i < cnt; i++) {
+        if (ok) ok = mo_factors_add(f, pr[i], (unsigned long)ex[i]);
+        mpz_clear(pr[i]);
+    }
+    return ok;
 }
 
 /* Multiplicative order of k_in modulo n_in.  Pre: order_out is mpz_init'd
  * by the caller; n_in / k_in are read-only.  Returns true on success.
  * Returns false (without setting order_out) when n is zero, k is not a
- * unit modulo n, or phi(n) cannot be factored.
+ * unit modulo n, or n cannot be factored.
  *
- * Strategy: any element order divides phi(n).  Compute phi, then for each
- * distinct prime p | phi successively divide phi by p as long as the
- * residual exponent still maps k to 1.  After the loop, the residual is
- * exactly the order. */
-static bool mo_order_mpz(const mpz_t k_in, const mpz_t n_in, mpz_t order_out) {
+ * Strategy: any element order divides phi(n).  Factor n, build phi(n) =
+ * prod p^(a-1) (p - 1) together with its factorisation (each p - 1 is
+ * factored on its own -- far easier than factoring phi whole), then for each
+ * prime q | phi divide it out of the candidate while k^(order/q) stays 1.
+ * The residual is exactly the order.  When fac is non-NULL it receives the
+ * factorisation of the order, and *cyclic whether (Z/nZ)^* is cyclic
+ * (n = 1, 2, 4, p^a, 2 p^a) -- what the discrete-log engine needs. */
+static bool mo_order_mpz(const mpz_t k_in, const mpz_t n_in, mpz_t order_out,
+                         MoFactors* fac, int* cyclic) {
     if (mpz_sgn(n_in) == 0) return false;
     mpz_t n;
     mpz_init_set(n, n_in);
     mpz_abs(n, n);                               /* allow negative n */
-    if (mpz_cmp_ui(n, 1) == 0) { mpz_set_ui(order_out, 1); mpz_clear(n); return true; }
+    if (mpz_cmp_ui(n, 1) == 0) {
+        mpz_set_ui(order_out, 1);
+        if (fac) fac->n = 0;
+        if (cyclic) *cyclic = 1;
+        mpz_clear(n);
+        return true;
+    }
 
     mpz_t k, g;
     mpz_inits(k, g, NULL);
@@ -87,87 +113,69 @@ static bool mo_order_mpz(const mpz_t k_in, const mpz_t n_in, mpz_t order_out) {
         mpz_clears(k, g, n, NULL);
         return false;                            /* not coprime */
     }
-    mpz_clear(g);
 
-    mpz_t phi;
-    mpz_init(phi);
-    if (!mo_eulerphi_mpz(n, phi)) {
-        mpz_clears(k, phi, n, NULL);
+    mpz_t np[PR_MAX_DISTINCT_PRIMES];
+    int64_t ne[PR_MAX_DISTINCT_PRIMES];
+    int nn = 0;
+    /* A prime modulus (the cryptographic case) skips FactorInteger's trial
+     * division: one primality test settles it. */
+    if (mth_is_prime_mpz(n)) {
+        mpz_init_set(np[0], n);
+        ne[0] = 1;
+        nn = 1;
+    } else if (!facint_factor_complete(n, np, ne, PR_MAX_DISTINCT_PRIMES, &nn)) {
+        mpz_clears(k, g, n, NULL);
         return false;
     }
 
-    /* phi == 1 means the unit group is trivial; the only unit is 1 and
-     * its order is 1. */
-    if (mpz_cmp_ui(phi, 1) == 0) {
-        mpz_set_ui(order_out, 1);
-        mpz_clears(k, phi, n, NULL);
-        return true;
+    /* phi(n) and its factorisation. */
+    MoFactors phi_f;
+    phi_f.n = 0;
+    mpz_t phi, pm1;
+    mpz_init_set_ui(phi, 1);
+    mpz_init(pm1);
+    bool ok = true;
+    for (int i = 0; i < nn && ok; i++) {
+        mpz_sub_ui(pm1, np[i], 1);
+        mpz_mul(phi, phi, pm1);
+        mpz_pow_ui(g, np[i], (unsigned long)(ne[i] - 1));
+        mpz_mul(phi, phi, g);
+        ok = mo_factors_add(&phi_f, np[i], (unsigned long)(ne[i] - 1)) &&
+             (mpz_cmp_ui(pm1, 1) <= 0 || mo_factor_into(&phi_f, pm1));
     }
-
-    mpz_t primes[PR_MAX_DISTINCT_PRIMES];
-    size_t nprimes = 0;
-    if (!pr_collect_distinct_primes(phi, primes, &nprimes)) {
-        for (size_t i = 0; i < nprimes; i++) mpz_clear(primes[i]);
-        mpz_clears(k, phi, n, NULL);
+    if (cyclic) {
+        bool two = nn > 0 && mpz_cmp_ui(np[0], 2) == 0;   /* ascending */
+        *cyclic = (nn == 1 && (!two || ne[0] <= 2)) ||
+                  (nn == 2 && two && ne[0] == 1);
+    }
+    for (int i = 0; i < nn; i++) mpz_clear(np[i]);
+    if (!ok) {
+        mo_factors_clear(&phi_f);
+        mpz_clears(k, g, n, phi, pm1, NULL);
         return false;
     }
 
+    /* Strip each prime of phi while k^(order/q) == 1. */
     mpz_t order, q, pow;
     mpz_inits(order, q, pow, NULL);
     mpz_set(order, phi);
-    for (size_t i = 0; i < nprimes; i++) {
-        while (mpz_divisible_p(order, primes[i])) {
-            mpz_divexact(q, order, primes[i]);
+    if (fac) fac->n = 0;
+    for (size_t i = 0; i < phi_f.n; i++) {
+        unsigned long left = phi_f.e[i];
+        while (left > 0) {
+            mpz_divexact(q, order, phi_f.q[i]);
             mpz_powm(pow, k, q, n);
-            if (mpz_cmp_ui(pow, 1) == 0) {
-                mpz_set(order, q);
-            } else {
-                break;
-            }
+            if (mpz_cmp_ui(pow, 1) != 0) break;
+            mpz_set(order, q);
+            left--;
         }
+        if (fac) mo_factors_add(fac, phi_f.q[i], left);   /* fits: <= phi_f.n */
     }
 
     mpz_set(order_out, order);
-    mpz_clears(order, q, pow, NULL);
-    for (size_t i = 0; i < nprimes; i++) mpz_clear(primes[i]);
-    mpz_clears(k, phi, n, NULL);
+    mo_factors_clear(&phi_f);
+    mpz_clears(order, q, pow, k, g, n, phi, pm1, NULL);
     return true;
-}
-
-/* Search for the smallest m in [1, order] such that k^m mod n equals one
- * of the residues.  Pre: m_out is mpz_init'd by caller; residues are all
- * already reduced modulo n.  Returns true on success.
- *
- * Cap: bails out if order doesn't fit in unsigned long, or exceeds the
- * MO_SEARCH_CAP iteration budget — for huge groups the enumeration would
- * not terminate in a useful timeframe.  Callers see this as "no match". */
-#define MO_SEARCH_CAP 100000000UL
-static bool mo_search_residues(const mpz_t k_in, const mpz_t n,
-                               const mpz_t order,
-                               const mpz_t* residues, size_t nres,
-                               mpz_t m_out) {
-    if (nres == 0) return false;
-    if (!mpz_fits_ulong_p(order)) return false;
-    unsigned long d = mpz_get_ui(order);
-    if (d > MO_SEARCH_CAP) return false;
-
-    mpz_t cur, k;
-    mpz_inits(cur, k, NULL);
-    mpz_mod(k, k_in, n);
-    mpz_set_ui(cur, 1);
-    for (unsigned long m = 1; m <= d; m++) {
-        mpz_mul(cur, cur, k);
-        mpz_mod(cur, cur, n);
-        for (size_t i = 0; i < nres; i++) {
-            if (mpz_cmp(cur, residues[i]) == 0) {
-                mpz_set_ui(m_out, m);
-                mpz_clears(cur, k, NULL);
-                return true;
-            }
-        }
-    }
-    mpz_clears(cur, k, NULL);
-    return false;
 }
 
 static Expr* mo_emit_argt(size_t argc) {
@@ -244,7 +252,10 @@ Expr* builtin_multiplicativeorder(Expr* res) {
 
     mpz_t order;
     mpz_init(order);
-    if (!mo_order_mpz(k, n, order)) {
+    MoFactors fac;
+    fac.n = 0;
+    int cyclic = 0;
+    if (!mo_order_mpz(k, n, order, argc == 3 ? &fac : NULL, &cyclic)) {
         mpz_clears(k, n, order, NULL);
         return NULL;                             /* not coprime / failure */
     }
@@ -258,52 +269,41 @@ Expr* builtin_multiplicativeorder(Expr* res) {
     /* 3-arg form: third argument must be a List of integer residues.  A
      * non-List or any non-integer element leaves the call unevaluated. */
     Expr* list = res->data.function.args[2];
-    if (list->type != EXPR_FUNCTION ||
-        list->data.function.head->type != EXPR_SYMBOL ||
-        list->data.function.head->data.symbol.name != SYM_List) {
-        mpz_clears(k, n, order, NULL);
-        return NULL;
-    }
-    size_t lcount = list->data.function.arg_count;
-    if (lcount == 0) {
-        mpz_clears(k, n, order, NULL);
-        return NULL;                             /* empty target list */
-    }
-
-    mpz_t abs_n;
-    mpz_init_set(abs_n, n);
-    mpz_abs(abs_n, abs_n);
-
-    mpz_t* residues = (mpz_t*)malloc(sizeof(mpz_t) * lcount);
-    if (!residues) {
-        mpz_clears(k, n, order, abs_n, NULL);
-        return NULL;
-    }
+    size_t lcount = 0;
+    if (list->type == EXPR_FUNCTION &&
+        list->data.function.head->type == EXPR_SYMBOL &&
+        list->data.function.head->data.symbol.name == SYM_List)
+        lcount = list->data.function.arg_count;
+    mpz_t* residues = lcount ? (mpz_t*)malloc(sizeof(mpz_t) * lcount) : NULL;
     size_t nres = 0;
-    bool list_ok = true;
-    for (size_t i = 0; i < lcount; i++) {
+    bool list_ok = residues != NULL;
+    for (size_t i = 0; list_ok && i < lcount; i++) {
         Expr* r = list->data.function.args[i];
         if (!expr_is_integer_like(r)) { list_ok = false; break; }
         expr_to_mpz(r, residues[nres]);   /* inits residues[nres] */
-        mpz_mod(residues[nres], residues[nres], abs_n);
         nres++;
     }
-    if (!list_ok) {
-        for (size_t j = 0; j < nres; j++) mpz_clear(residues[j]);
-        free(residues);
-        mpz_clears(k, n, order, abs_n, NULL);
-        return NULL;
-    }
 
+    Expr* out = NULL;
     mpz_t m;
     mpz_init(m);
-    bool found = mo_search_residues(k, abs_n, order,
-                                    (const mpz_t*)residues, nres, m);
-    Expr* out = NULL;
-    if (found) out = expr_bigint_normalize(expr_new_bigint_from_mpz(m));
+    /* The engine mallocs its tables outside GMP's guarded allocator, so defer
+     * TimeConstrained's async jump across it (it polls the deadline itself);
+     * tc_run_guarded restores the count if a GMP safepoint unwinds us. */
+    tc_async_defer_push();
+    bool hit = list_ok && nt_dlog_min(k, n, order, (const mpz_t*)fac.q, fac.e,
+                                      fac.n, cyclic, (const mpz_t*)residues,
+                                      nres, m);
+    tc_async_defer_pop();
+    if (hit) out = expr_bigint_normalize(expr_new_bigint_from_mpz(m));
 
     for (size_t i = 0; i < nres; i++) mpz_clear(residues[i]);
     free(residues);
-    mpz_clears(k, n, order, abs_n, m, NULL);
+    mo_factors_clear(&fac);
+    mpz_clears(k, n, order, m, NULL);
+    /* The engine returns cleanly when a TimeConstrained deadline passes;
+     * with everything freed, take the timeout here rather than leave the
+     * call unevaluated as if no target were a power of k. */
+    if (!out) tc_check_deadline();
     return out;
 }

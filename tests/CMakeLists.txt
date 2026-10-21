@@ -348,6 +348,7 @@ set(COMMON_SRC
     ../src/interval.c
     ../src/numbertheory/numbertheory.c
     ../src/numbertheory/nt_util.c
+    ../src/numbertheory/nt_dlog.c
     ../src/numbertheory/nt_gaussian.c
     ../src/numbertheory/gcd.c
     ../src/numbertheory/lcm.c

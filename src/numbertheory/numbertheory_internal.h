@@ -35,6 +35,16 @@ Expr*   nt_emit_int(const char* head, size_t pos, Expr* res);
  * have PR_MAX_DISTINCT_PRIMES capacity and *count must be 0 on entry. */
 bool    pr_collect_distinct_primes(const mpz_t m_in, mpz_t* out, size_t* count);
 
+/* --- nt_dlog.c : discrete logarithm (MultiplicativeOrder's 3-arg form) - */
+/* Smallest m >= 1 with k^m == targets[i] (mod n) over all i, written to
+ * m_out.  Pre: n >= 1, k a unit mod n of order d = prod q[j]^e[j] (q prime);
+ * cyclic says whether (Z/nZ)^* is cyclic.  Pohlig-Hellman with BSGS / Pollard
+ * rho per prime; every answer is verified.  Returns false when no target is a
+ * power of k, or on allocation failure / an expired TimeConstrained. */
+bool    nt_dlog_min(const mpz_t k, const mpz_t n, const mpz_t d,
+                    const mpz_t* q, const unsigned long* e, size_t nq,
+                    int cyclic, const mpz_t* targets, size_t nt, mpz_t m_out);
+
 /* --- nt_gaussian.c : Gaussian-integer & divisor enumeration ----------- */
 bool    is_gaussian_integer(Expr* e);
 bool    df_factor_mpz(const mpz_t m, mpz_t** out_primes,

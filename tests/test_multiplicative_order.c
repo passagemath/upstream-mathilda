@@ -2,7 +2,8 @@
  *
  * Coverage:
  *   - 2-arg form: smallest positive m with k^m == 1 (mod n).
- *   - 3-arg form: discrete-log search over a residue list.
+ *   - 3-arg form: discrete log over a residue list (Pohlig-Hellman with
+ *     BSGS and Pollard rho, both back-ends, non-cyclic groups).
  *   - Edge cases: n == 1, |n|, negative or out-of-range k, non-coprime
  *     gcd, empty list, list with non-integer / out-of-group elements.
  *   - Arg-count diagnostic (::argt).
@@ -175,6 +176,54 @@ static void test_mo_three_arg_edge_cases(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 3-arg form — the discrete-log engine (nt_dlog.c): Pohlig-Hellman    */
+/* with BSGS / Pollard rho, on both arithmetic back-ends.               */
+/* ------------------------------------------------------------------ */
+
+static void test_mo_dlog_bsgs(void) {
+    /* 32-bit prime-order subgroup, n > 2^32 (u64 Montgomery back-end);
+     * the old linear scan left this unevaluated. */
+    check_eq("MultiplicativeOrder[64, 18113842987, {7600772646}]", "2519424759");
+    /* 131-bit p with 75011-smooth p - 1 (mpz back-end). */
+    check_eq("MultiplicativeOrder[17, 2435453805216900026945200295720533381609, "
+             "{PowerMod[17, 10^30, 2435453805216900026945200295720533381609]}]",
+             "1000000000000000000000000000000");
+    /* Target 1 answers the order (smallest POSITIVE exponent), and the
+     * minimum over the list wins. */
+    check_eq("MultiplicativeOrder[17, 2435453805216900026945200295720533381609, {1}]",
+             "2435453805216900026945200295720533381608");
+    check_eq("MultiplicativeOrder[17, 2435453805216900026945200295720533381609, "
+             "{PowerMod[17, 10^30, 2435453805216900026945200295720533381609], "
+             "PowerMod[17, 12345, 2435453805216900026945200295720533381609]}]",
+             "12345");
+}
+
+static void test_mo_dlog_composite(void) {
+    /* Non-cyclic (Z/nZ)^*: a target of the right order outside <k> stays
+     * unevaluated. */
+    check_eq("MultiplicativeOrder[2, 15, {7, 4}]", "2");
+    check_eq("MultiplicativeOrder[2, 15, {3}]", "MultiplicativeOrder[2, 15, List[3]]");
+    check_eq("MultiplicativeOrder[5, 2016, {PowerMod[5, 5, 2016]}]", "5");
+    check_eq("MultiplicativeOrder[5, 2016, {11}]",
+             "MultiplicativeOrder[5, 2016, List[11]]");
+    /* Even modulus (no Montgomery form) and an odd prime power. */
+    check_eq("MultiplicativeOrder[3, 1024, {PowerMod[3, 200, 1024]}]", "200");
+    check_eq("MultiplicativeOrder[7, 3^7, {PowerMod[7, 1000, 3^7], PowerMod[7, 30, 3^7]}]",
+             "30");
+}
+
+static void test_mo_dlog_rho(void) {
+    /* q = 17592186049073 ~ 2^44 is past the BSGS threshold: u64 rho. */
+    check_eq("MultiplicativeOrder[9, 35184372098147, {PowerMod[9, 12345678901234, 35184372098147]}]",
+             "12345678901234");
+    /* q = NextPrime[2^40] in a 90-bit p: mpz rho. */
+    check_eq("With[{p = 1237940039302288564711063823, q = 1099511627791}, "
+             "With[{g = PowerMod[5, (p - 1)/q, p]}, "
+             "MultiplicativeOrder[g, p, {PowerMod[g, 987654321098, p]}]]]",
+             "987654321098");
+}
+
+/* ------------------------------------------------------------------ */
 /* Diagnostics — argument count.                                       */
 /* ------------------------------------------------------------------ */
 
@@ -262,6 +311,9 @@ int main(void) {
     TEST(test_mo_three_arg_basic);
     TEST(test_mo_three_arg_no_hit);
     TEST(test_mo_three_arg_edge_cases);
+    TEST(test_mo_dlog_bsgs);
+    TEST(test_mo_dlog_composite);
+    TEST(test_mo_dlog_rho);
 
     TEST(test_mo_diagnostics);
     TEST(test_mo_bignum);

@@ -20,13 +20,19 @@ echo "Building Mathilda for target: $TARGET"
 # Build the Mathilda binary (without ECM: the bundled app must not need a libecm
 # the user has not installed).
 #
-# The two sources that read -DNO_ECM are forced to recompile first. Object files
+# The sources that read -DNO_ECM are forced to recompile first. Object files
 # do not record the flags they were built with, so after a plain `make` (which
-# defaults to USE_ECM=1) these two are up to date as far as make is concerned,
-# and the USE_ECM=0 link then fails on a missing _ecm_init -- the objects still
+# defaults to USE_ECM=1) they are up to date as far as make is concerned, and
+# the USE_ECM=0 link then fails on a missing _ecm_init -- the objects still
 # carry the calls the flag was supposed to compile out. Touching them is the
 # whole fix; everything else in the tree is flag-independent.
-touch "$REPO_ROOT/src/facint.c" "$REPO_ROOT/src/version.c"
+#
+# They are FOUND by their NO_ECM guard rather than listed by name: the list used
+# to be hard-coded (src/facint.c), and when the ECM driver moved to
+# src/numbertheory/factorinteger/fi_ecm.c the stale fi_ecm.o broke this link.
+grep -rl --include='*.c' 'NO_ECM' "$REPO_ROOT/src" | while IFS= read -r f; do
+    touch "$f"
+done
 make -C "$REPO_ROOT" USE_ECM=0 -j4
 
 mkdir -p "$BINARIES_DIR"
@@ -38,7 +44,7 @@ echo "Sidecar installed: $BINARIES_DIR/mathilda-$TARGET"
 # person to use ./Mathilda for a factorisation would get the degraded path with no
 # indication of why, and `$Version` is the only visible difference.
 echo "NOTE: $REPO_ROOT/Mathilda is now the USE_ECM=0 build (the app must not need libecm)."
-echo "      Restore the default with:  make -C '$REPO_ROOT' -j"
+echo "      Restore the default with:  touch \$(grep -rl --include='*.c' NO_ECM '$REPO_ROOT/src') && make -C '$REPO_ROOT' -j"
 
 # ALSO refresh the copies cargo already made, because they are what a running dev app executes.
 #

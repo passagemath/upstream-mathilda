@@ -101,6 +101,73 @@ static void test_plain_list_unregressed(void) {
     run("MapAll[f, {a, {b}}]", "f[{f[a], f[{f[b]}]}]");
 }
 
+/* ---------- Heads that walked args and saw an atom ----------
+ * Apply, SortBy, Level, MaximalBy/MinimalBy, TakeLargestBy/TakeSmallestBy,
+ * Thread and Distribute each treated a visible NDArray as an atom with no
+ * elements. Several answered confidently and wrongly (SortBy unsorted,
+ * Apply[Times, nd] returning nd, Level[nd, {2}] = {}). Each must now answer
+ * as on the equivalent List, with a machine-array result presented as an
+ * NDArray. An int64 buffer keeps the printed values exact. */
+#define ND_M "NDArray[{{1, 2, 3}, {5, 6, 7}}, DataType -> \"int64\"]"
+#define ND_V "NDArray[{3, 1, 2}, DataType -> \"int64\"]"
+
+static void test_apply_ndarray(void) {
+    run("Apply[f, " ND_M "]", "f[{1, 2, 3}, {5, 6, 7}]");
+    run("Apply[f, " ND_M ", {1}]", "{f[1, 2, 3], f[5, 6, 7]}");
+    run("f @@@ " ND_M, "{f[1, 2, 3], f[5, 6, 7]}");
+    run("Apply[Plus, " ND_M ", {1}]", "NDArray[{6, 18}]");
+    run("Apply[Times, " ND_M "]", "NDArray[{5, 12, 21}]");
+    run("Apply[Plus, " ND_V "]", "6");
+    /* Rationals have no machine buffer: an ordinary List. */
+    run("Apply[#1/#2 &, " ND_M ", {1}]", "{1/2, 5/6}");
+}
+
+static void test_sortby_ndarray(void) {
+    run("SortBy[" ND_M ", -Total[#] &]", "NDArray[{{5, 6, 7}, {1, 2, 3}}]");
+    run("SortBy[" ND_V ", -# &]", "NDArray[{3, 2, 1}]");
+    run("SortBy[" ND_V ", Minus, Greater]", "NDArray[{1, 2, 3}]");
+    run("SortBy[" ND_V ", Identity]", "NDArray[{1, 2, 3}]");
+}
+
+static void test_maximalby_takeby_ndarray(void) {
+    run("MaximalBy[" ND_M ", Total]", "NDArray[{{5, 6, 7}}]");
+    run("MinimalBy[" ND_M ", Total]", "NDArray[{{1, 2, 3}}]");
+    run("MaximalBy[" ND_V ", Minus]", "NDArray[{1}]");
+    run("TakeLargestBy[" ND_M ", Total, 1]", "NDArray[{{5, 6, 7}}]");
+    run("TakeSmallestBy[" ND_V ", Minus, 2]", "NDArray[{3, 2}]");
+}
+
+static void test_level_ndarray(void) {
+    run("Level[" ND_M ", {2}]", "NDArray[{1, 2, 3, 5, 6, 7}]");
+    run("Level[" ND_M ", {1}]", "NDArray[{{1, 2, 3}, {5, 6, 7}}]");
+    run("Level[" ND_V ", {-1}, Heads -> True]", "{List, 3, 1, 2}");
+}
+
+static void test_thread_distribute_ndarray(void) {
+    run("Thread[f[" ND_M "]]", "{f[{1, 2, 3}], f[{5, 6, 7}]}");
+    run("Thread[f[" ND_V ", {a, b, c}]]", "{f[3, a], f[1, b], f[2, c]}");
+    run("Thread[f[" ND_V "], List, 1]", "{f[3], f[1], f[2]}");
+    run("Distribute[" ND_M ", List]",
+        "NDArray[{{1, 5}, {1, 6}, {1, 7}, {2, 5}, {2, 6}, {2, 7}, {3, 5}, {3, 6}, {3, 7}}]");
+    run("Distribute[f[" ND_V ", {a, b}], List]",
+        "{f[3, a], f[3, b], f[1, a], f[1, b], f[2, a], f[2, b]}");
+}
+
+static void test_visible_delist_heads_match_list(void) {
+    /* Same answer as the List, value for value, over a real buffer too. */
+    run("r = {{1.5, 2.5}, {0.5, 4.}}; nd = NDArray[r]; "
+        "{Normal[SortBy[nd, First]] == SortBy[r, First], "
+        " Normal[Apply[Plus, nd, {1}]] == Apply[Plus, r, {1}], "
+        " Normal[Level[nd, {2}]] == Level[r, {2}], "
+        " Normal[MaximalBy[nd, Last]] == MaximalBy[r, Last], "
+        " Normal[TakeLargestBy[nd, Total, 2]] == TakeLargestBy[r, Total, 2], "
+        " Thread[f[nd, x]] == Thread[f[r, x]]}",
+        "{True, True, True, True, True, True}");
+    /* Symbolic and List arguments are untouched. */
+    run("SortBy[x, f]", "x");
+    run("Apply[f, {1, 2}]", "f[1, 2]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -116,6 +183,12 @@ int main(void) {
     TEST(test_mapthread_ndarray_pair);
     TEST(test_mapall_ndarray_wraps_all_levels);
     TEST(test_plain_list_unregressed);
+    TEST(test_apply_ndarray);
+    TEST(test_sortby_ndarray);
+    TEST(test_maximalby_takeby_ndarray);
+    TEST(test_level_ndarray);
+    TEST(test_thread_distribute_ndarray);
+    TEST(test_visible_delist_heads_match_list);
 
     printf("All Map-family NDArray tests passed!\n");
     return 0;

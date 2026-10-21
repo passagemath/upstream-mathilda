@@ -420,6 +420,27 @@ Expr* ndarray_map_nary(Expr* const* args, size_t n, const NDNaryKernel* k);
  * `call` (never frees it); caller owns the returned Expr. */
 Expr* ndarray_delist_and_reeval(const Expr* call);
 
+/* A VISIBLE NDArray[...] reaching a head that walks `data.function.args`.
+ *
+ * An EXPR_NDARRAY has no args, so a head written for Lists sees an atom with
+ * no elements and either declines or -- worse -- answers confidently:
+ * SortBy[nd, f] returned nd unsorted, Apply[Times, nd] returned nd,
+ * Level[nd, {2}] was {}. The PACKED representation never gets here for heads
+ * off pack.c's AWARE list (the transparency gate materialises it first); the
+ * visible one is never touched by the gate, so it must be handled where it
+ * arrives. Same shape as patterns_delist_visible in src/patterns.c.
+ *
+ * If `call`'s args[argi] is an ndarray -- or, with `inner`, args[argi] is an
+ * expression one of whose own arguments is (Thread[f[nd]],
+ * Distribute[f[nd1, nd2], List]) -- rebuilds the call with each such array
+ * replaced by its nested List, evaluates it, and repacks a rectangular numeric
+ * List result with the source array's presentation (visible in, visible out,
+ * as Map and Select keep). The repack sniffs the result's own dtype, so it is
+ * lossless: a mixed or non-machine result stays an ordinary List. Returns
+ * NULL, touching nothing, when there is no array in that position. Borrows
+ * `call`; the caller owns the result. */
+Expr* ndarray_visible_delist_retry(const Expr* call, size_t argi, bool inner);
+
 /* Degrade path for an exact-integer buffer whose answer is not machine
  * representable (Rational, radical, exact Complex). Returns the re-evaluated
  * call on a List, or NULL when no operand is an int64 buffer. See the

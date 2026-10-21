@@ -856,6 +856,8 @@ Gives a list of all subexpressions of expr on levels specified by levelspec.
 - An association's parts are its values: `Level[<|a -> 1, b -> 2|>, {1}]` is
   `{1, 2}` (see [Association atomicity](data-structures.md#association-atomicity-structural-functions)).
 - Lists subexpressions in post-order (depth-first), resulting in lexicographic ordering of indices.
+- A visible `NDArray` answers as its List does:
+  `Level[NDArray[{{1, 2, 3}, {5, 6, 7}}], {2}]` is `NDArray[{1, 2, 3, 5, 6, 7}]`.
 
 ```mathematica
 In[1]:= Level[a + f[x, y^n], {-1}]

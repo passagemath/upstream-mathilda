@@ -228,6 +228,8 @@ static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpe
 
 Expr* builtin_apply(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 1, false); if (nd_) return nd_; }
     
     Expr* f = res->data.function.args[0];
     Expr* expr = res->data.function.args[1];
@@ -1710,7 +1712,10 @@ Expr* builtin_distribute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 5) {
         return NULL;
     }
-    
+    /* Distribute[nd, g] and Distribute[f[nd1, nd2], g] distribute over a
+     * visible NDArray as over its List. A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, true); if (nd_) return nd_; }
+
     Expr* expr = res->data.function.args[0];
     if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
 
@@ -3314,6 +3319,10 @@ Expr* builtin_thread(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1 || argc > 3) return NULL;
+
+    /* Thread[f[nd, ...]] threads over a visible NDArray as over its List.
+     * A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, true); if (nd_) return nd_; }
 
     Expr* expr = res->data.function.args[0];
 

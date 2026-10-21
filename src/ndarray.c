@@ -2059,6 +2059,61 @@ Expr* ndarray_delist_and_reeval(const Expr* call) {
     return eval_and_free(rebuilt);
 }
 
+/* See ndarray.h. `src` is the first array met, whose presentation the repack
+ * inherits. */
+static Expr* nd_delist_one(const Expr* e, const Expr** src) {
+    if (!*src) *src = e;
+    return ndarray_to_nested_list(e);
+}
+
+Expr* ndarray_visible_delist_retry(const Expr* call, size_t argi, bool inner) {
+    if (!call || call->type != EXPR_FUNCTION || argi >= call->data.function.arg_count)
+        return NULL;
+    const Expr* target = call->data.function.args[argi];
+    const Expr* src = NULL;
+    Expr* replaced = NULL;
+
+    if (is_ndarray(target)) {
+        replaced = nd_delist_one(target, &src);
+    } else if (inner && target->type == EXPR_FUNCTION) {
+        size_t m = target->data.function.arg_count;
+        bool any = false;
+        for (size_t j = 0; j < m && !any; j++)
+            any = is_ndarray(target->data.function.args[j]);
+        if (!any) return NULL;
+        Expr** targs = malloc(sizeof(Expr*) * m);
+        if (!targs) return NULL;
+        for (size_t j = 0; j < m; j++) {
+            const Expr* a = target->data.function.args[j];
+            targs[j] = is_ndarray(a) ? nd_delist_one(a, &src) : expr_copy((Expr*)a);
+        }
+        replaced = expr_new_function(expr_copy(target->data.function.head), targs, m);
+        free(targs);
+    } else {
+        return NULL;
+    }
+    if (!replaced) return NULL;
+
+    size_t n = call->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * n);
+    if (!args) { expr_free(replaced); return NULL; }
+    for (size_t i = 0; i < n; i++)
+        args[i] = (i == argi) ? replaced : expr_copy(call->data.function.args[i]);
+    Expr* rebuilt = expr_new_function(expr_copy(call->data.function.head), args, n);
+    free(args);
+    Expr* out = eval_and_free(rebuilt);
+
+    /* Visible in, visible out -- but only for a result that IS a machine
+     * array; pack_force sniffs its dtype and declines anything else. */
+    if (out && out->type == EXPR_FUNCTION && out->data.function.head->type == EXPR_SYMBOL &&
+        out->data.function.head->data.symbol.name == SYM_List && out->data.function.arg_count > 0) {
+        out = pack_force(out, false, NDT_FLOAT64);
+        if (is_ndarray(out) && out->refcount == 1)
+            out->data.ndarray.present_as = src->data.ndarray.present_as;
+    }
+    return out;
+}
+
 /* An operand whose true answer no machine float buffer can hold: 5/2 *
  * Range[300] is a list of Rationals, Range[300]^(1/2) a list of radicals,
  * Range[300] + I a list of exact Complex, and {True, False} + {True, True} a

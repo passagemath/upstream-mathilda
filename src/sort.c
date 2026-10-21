@@ -1078,6 +1078,10 @@ Expr* builtin_sort_by(Expr* res) {
     }
     if (argc != 2 && argc != 3) return NULL;
 
+    /* Without this a visible NDArray fell into the atom branch below and came
+     * back UNSORTED. A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
+
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
     if (coll->type != EXPR_FUNCTION) return argc == 2 ? expr_copy(coll) : NULL;
@@ -1156,6 +1160,8 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     if (argc != 2) return NULL;
+    /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
 
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
@@ -1401,6 +1407,8 @@ Expr* builtin_take_smallest(Expr* res) {
 
 Expr* builtin_take_largest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
     Expr* nexpr = res->data.function.args[2];
     if (nexpr->type != EXPR_INTEGER) return NULL;
     return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, true);
@@ -1408,6 +1416,8 @@ Expr* builtin_take_largest_by(Expr* res) {
 
 Expr* builtin_take_smallest_by(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    /* A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
     Expr* nexpr = res->data.function.args[2];
     if (nexpr->type != EXPR_INTEGER) return NULL;
     return take_extreme(res->data.function.args[0], res->data.function.args[1], nexpr->data.integer, false);

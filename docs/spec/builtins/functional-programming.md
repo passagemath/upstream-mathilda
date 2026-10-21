@@ -11,6 +11,9 @@ Implements the distributive law for operators `f` and `g`.
 - `Protected`.
 - `Distribute` explicitly constructs the complete result of a distribution; `Expand`, on the other hand, builds up results iteratively, simplifying at each stage.
 - For pure products, `Distribute` gives the same results as `Expand`.
+- A visible `NDArray`, as the expression or as one of its arguments,
+  distributes as its List does: `Distribute[NDArray[{{1, 2}, {3, 4}}], List]`
+  is `NDArray[{{1, 3}, {1, 4}, {2, 3}, {2, 4}}]`.
 
 ```mathematica
 In[1]:= Distribute[(a + b) . (x + y + z)]
@@ -592,6 +595,10 @@ Out[3]= {a + u + x, b + v + y, c + w + z}
 ## Apply (@@, @@@)
 - `f @@ expr`: Level 0.
 - `f @@@ expr`: Level 1.
+- A visible `NDArray` answers as its List does, at every level:
+  `Apply[Times, NDArray[{{1, 2, 3}, {5, 6, 7}}]]` is `NDArray[{5, 12, 21}]`
+  and `f @@@ nd` gives `{f[1, 2, 3], f[5, 6, 7]}`. A machine-array result is
+  presented as an `NDArray`; anything else (Rationals, symbolic) is a List.
 
 ## MapAll (//@)
 - `f //@ expr`: Recursive map (applies `f` at every level, `{0, Infinity}`).
@@ -1080,6 +1087,9 @@ Threads a function over the arguments that are lists (or have a given head).
   | `{m, n}` | elements `m` through `n` inclusive |
   | `{m, n, s}` | elements `m` through `n` in steps of `s` |
 
+- A visible `NDArray` argument threads as its List does:
+  `Thread[f[NDArray[{3, 1, 2}], {a, b, c}]]` is `{f[3, a], f[1, b], f[2, c]}`.
+
 ```mathematica
 In[1]:= Thread[f[{a, b, c}]]
 Out[1]= {f[a], f[b], f[c]}
@@ -1230,6 +1240,9 @@ Sort by a key function.
 - `SortBy[list, {f1, f2, ...}]`: sorts by `f1`, breaking ties with `f2`, and so on.
 - `SortBy[assoc, f]`: sorts an association by `f` applied to each value (keys follow their values).
 - `SortBy[f]`: operator form — `SortBy[f][expr]` is `SortBy[expr, f]`.
+- A visible `NDArray` sorts as its List does and the result stays an
+  `NDArray`: `SortBy[NDArray[{{1, 2, 3}, {5, 6, 7}}], -Total[#] &]` is
+  `NDArray[{{5, 6, 7}, {1, 2, 3}}]`.
 
 ```mathematica
 In[1]:= SortBy[{-3, 1, -2, 4}, Abs]
@@ -1251,6 +1264,8 @@ Select the extreme elements by a key function.
 - `MinimalBy[list, f]`: the element(s) for which `f` is minimal.
 - Over an association, gives the entries whose value maximises/minimises `f` (an association).
 - `MaximalBy[f]` / `MinimalBy[f]`: operator forms.
+- A visible `NDArray` answers as its List does, as an `NDArray`:
+  `MaximalBy[NDArray[{{1, 2, 3}, {5, 6, 7}}], Total]` is `NDArray[{{5, 6, 7}}]`.
 
 ```mathematica
 In[1]:= MaximalBy[{1, -5, 3, -5, 2}, Abs]
@@ -1267,6 +1282,8 @@ Take the ranked extreme elements.
 - `TakeLargestBy[list, f, n]` / `TakeSmallestBy[list, f, n]`: rank by `f[element]`.
 - Over an association these rank by value (or `f[value]`), returning an association.
 - If `n` exceeds the length, all elements are returned (still ranked).
+- `TakeLargestBy` / `TakeSmallestBy` over a visible `NDArray` answer as on
+  its List, presented as an `NDArray`.
 
 ```mathematica
 In[1]:= TakeLargest[{3, 1, 4, 1, 5, 9, 2, 6}, 3]

@@ -3979,6 +3979,8 @@ static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max
 
 Expr* builtin_level(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    /* Without this Level[nd, {2}] walked an atom and answered {}. A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
+    { Expr* nd_ = ndarray_visible_delist_retry(res, 0, false); if (nd_) return nd_; }
     Expr* e = res->data.function.args[0];
     Expr* ls = res->data.function.args[1];
 

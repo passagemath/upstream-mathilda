@@ -4779,3 +4779,19 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   coefficient `2` was read as `Sqrt[2]^2`. Re-run the existing corpus after a
   widening change. Look for a soft `FAIL:` line even when the binary prints
   "passed".
+
+## 2026-10-21 — A buffer fast path's decline must fall back, never return the input (AppendTo / Part-assign on packed, v0.522)
+
+- **Silent no-op class.** `AppendTo` tested its target for `EXPR_FUNCTION`, and
+  `nd_part_assign` handed back the array unchanged when `ndarray_part_set`
+  declined. Both turned "this representation is not handled here" into "the
+  assignment did nothing". Rule: on a decline, a fast path returns NULL and
+  the caller runs the general path. Returning the input as if it were the
+  answer is never a decline.
+- **A `HoldFirst` head that evaluates its own target bypasses the transparency
+  gate.** It sees `EXPR_NDARRAY` where every gated head sees a List. Grep such
+  heads for `->type != EXPR_FUNCTION` guards.
+- **Look for the sibling bug in the same function.** The packed-array probe
+  also exposed a flat `rhs_idx` counter that distributed a List rhs wrongly on
+  plain lists. Diff a few multi-axis spec shapes against wolframscript, not
+  just the one reported.

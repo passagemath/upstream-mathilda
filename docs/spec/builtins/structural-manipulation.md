@@ -796,6 +796,24 @@ Updates a variable by appending or prepending an element.
 - `AppendTo[symbol, elem]`
 - `PrependTo[symbol, elem]`
 
+**Features**:
+- `HoldFirst`. The target may be a symbol or any assignable form with a value,
+  such as `m[[1]]`, `f[1]`, `Options[f]`, or a `Module` local.
+- The new value is `Append[x, elem]` / `Prepend[x, elem]`, so these accept every
+  representation `Append` does. A packed array keeps its buffer
+  (`a = Range[5]; AppendTo[a, 6]` leaves `a` packed), and an element whose
+  type does not fit the buffer gives an ordinary List (`AppendTo[a, x]`).
+  Before v0.522 any packed variable was silently left unchanged.
+- An association appends by key; a non-rule element assigns the unevaluated
+  `Append[assoc, elem]`, as in the reference.
+- `X::rvalue` when the symbol has no value; `X::normal` when the value is an
+  atom (`b = 5; AppendTo[b, 1]`). Both leave the call unevaluated.
+
+```mathematica
+In[1]:= m = Table[i + j, {i, 2}, {j, 2}]; AppendTo[m[[1]], 9]; m
+Out[1]= {{2, 3, 9}, {3, 4}}
+```
+
 ## Insert, Delete
 Inserts or removes elements at specified positions.
 - `Insert[expr, elem, pos]`

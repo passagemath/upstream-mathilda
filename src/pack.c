@@ -547,13 +547,22 @@ static Expr* builtin_fromndarray(Expr* res) {
  *       tree -- which is exactly what makes the gate's O(argc) top-level scan
  *       complete rather than needing to be O(tree) on every unaware head.
  *   ListQ, VectorQ, MatrixQ, ArrayQ, AtomQ, Insert, Delete, Position,
- *   ReplacePart, Append, Prepend, AppendTo, PrependTo, LeafCount, Simplify
+ *   ReplacePart, AppendTo, PrependTo, LeafCount, Simplify
  *       Correct by omission: they get a materialised List and answer normally.
  *       Several would be actively wrong if marked aware -- is_listq is a bare
- *       head test that reports False, Append returns unevaluated on an
- *       ndarray, and LeafCount would count a 10^6-element list as one node and
- *       skew Simplify's complexity metric. Marking them aware is an
- *       optimisation with a correctness precondition, not a free win.
+ *       head test that reports False, and LeafCount would count a
+ *       10^6-element list as one node and skew Simplify's complexity metric.
+ *       Marking them aware is an optimisation with a correctness
+ *       precondition, not a free win.
+ *       AppendTo/PrependTo are HoldFirst, so the gate never sees their target:
+ *       they read the variable's value themselves -- a packed array arrives as
+ *       an EXPR_NDARRAY -- and hand it to builtin_append/builtin_prepend, whose
+ *       buffer path (ndstruct_append) is also what a visible NDArray reaches.
+ *       Until v0.522 they tested for EXPR_FUNCTION alone, so AppendTo on any
+ *       packed variable silently did nothing.
+ *   Sow
+ *       Its value ends up inside Reap's {value, {{...}}}, a List, so the
+ *       no-nesting invariant above would materialise it there anyway.
  * -------------------------------------------------------------------------- */
 static void pack_mark_aware_heads(void) {
     static const char* const AWARE[] = {

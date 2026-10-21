@@ -716,11 +716,19 @@ Expr* ndarray_part(const Expr* a, Expr** indices, size_t nindices, bool* degrade
  * never disagree about which elements that spec names.
  *
  * `rhs` is either a single number, broadcast to every selected position, or an
- * NDArray whose element count matches the selection (WL assigns a matching
- * sub-shape element-wise). Returns false for anything else — an unsupported
- * spec, an out-of-range subscript, a count mismatch, or a complex value into a
- * real buffer — having written nothing, so the compiled call fails cleanly and
- * the interpreter re-runs the whole body.
+ * NDArray whose SHAPE equals the selection's (the dims of the kept axes, in
+ * order), assigned element-wise. Returns false for anything else — an
+ * unsupported spec, an out-of-range subscript, a shape mismatch, or a complex
+ * value into a real buffer — having written nothing, so the compiled call fails
+ * cleanly and the interpreter re-runs the whole body.
+ *
+ * The shape test is exact, not an element count. WL distributes a list
+ * right-hand side level by level and broadcasts it whole wherever its length
+ * differs from the number of positions selected at that level: on a 4x4 `m`,
+ * `m[[{1, 2}]] = Range[8]` stores the 8-vector into BOTH rows. A count-only
+ * check saw 8 == 2*4 and filled the rows element-wise -- a different answer.
+ * Every other shape is left to the List path (src/part.c), which implements
+ * the level-wise rule.
  * ------------------------------------------------------------------------ */
 bool ndarray_part_set(Expr* a, Expr* const* indices, size_t nindices,
                       const Expr* rhs) {
@@ -752,8 +760,18 @@ bool ndarray_part_set(Expr* a, Expr* const* indices, size_t nindices,
     bool rhs_is_arr = (rhs->type == EXPR_NDARRAY);
     double sre = 0.0, sim = 0.0;
     if (rhs_is_arr) {
-        size_t rn = ndarray_size(rhs);
-        if (rn != total) { for (int i = 0; i < rank; i++) free(sel[i].pos); return false; }
+        int kept = 0;
+        bool shape_ok = true;
+        for (int i = 0; i < rank && shape_ok; i++) {
+            if (!sel[i].keep) continue;
+            shape_ok = kept < rhs->data.ndarray.rank &&
+                       rhs->data.ndarray.dims[kept] == sel[i].n;
+            kept++;
+        }
+        if (!shape_ok || kept != rhs->data.ndarray.rank) {
+            for (int i = 0; i < rank; i++) free(sel[i].pos);
+            return false;
+        }
         if (ndt_is_complex(rhs->data.ndarray.dtype) && !ndt_is_complex(dt)) {
             for (int i = 0; i < rank; i++) free(sel[i].pos);
             return false;

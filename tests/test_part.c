@@ -539,11 +539,91 @@ void test_extract() {
     assert_eval_eq("Extract[{1,2,3}, 1, f]", "f[1]", 0);
 }
 
+/* Part assignment into a PACKED target. The buffer path used to decline a
+ * literal-List rhs and hand the array back unchanged, so each of these was a
+ * silent no-op. Expected values are Wolfram's (checked with wolframscript). */
+void test_part_assign_packed() {
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2]] = {0,0,0,0}; m",
+                   "{{2, 3, 4, 5}, {0, 0, 0, 0}, {4, 5, 6, 7}, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2]] = {0,0,0,0}; PackedArrayQ[m]", "True", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2;;3]] = Table[0, {2},{4}]; m",
+                   "{{2, 3, 4, 5}, {0, 0, 0, 0}, {0, 0, 0, 0}, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[All, 1]] = {0,0,0,0}; m",
+                   "{{0, 3, 4, 5}, {0, 4, 5, 6}, {0, 5, 6, 7}, {0, 6, 7, 8}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[All, 2]] = Range[4]; m",
+                   "{{2, 1, 4, 5}, {3, 2, 5, 6}, {4, 3, 6, 7}, {5, 4, 7, 8}}", 0);
+    assert_eval_eq("v = Range[10]; v[[2;;4]] = {0,0,0}; v", "{1, 0, 0, 0, 5, 6, 7, 8, 9, 10}", 0);
+    /* Ragged / mixed results leave the buffer and stay a List. */
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2]] = {0,0,0}; m",
+                   "{{2, 3, 4, 5}, {0, 0, 0}, {4, 5, 6, 7}, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2;;3]] = {9,8}; m",
+                   "{{2, 3, 4, 5}, 9, 8, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[2]] = {}; m",
+                   "{{2, 3, 4, 5}, {}, {4, 5, 6, 7}, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("v = Range[10]; v[[{2,4}]] = {1.5, 2.5}; v",
+                   "{1, 1.5, 3, 2.5, 5, 6, 7, 8, 9, 10}", 0);
+    /* A length mismatch broadcasts the whole rhs -- the buffer must not fill
+     * a {2,4} selection element-wise from an 8-vector. */
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; m[[{1,2}]] = Range[8]; m",
+                   "{{1, 2, 3, 4, 5, 6, 7, 8}, {1, 2, 3, 4, 5, 6, 7, 8}, {4, 5, 6, 7}, {5, 6, 7, 8}}", 0);
+    /* A visible NDArray coerces into its dtype, and refuses -- with a message,
+     * not silently -- a value no buffer holds. */
+    assert_eval_eq("n = NDArray[{{1,2},{3,4}}, DataType -> \"int64\"]; n[[2]] = {0, 0}; Normal[n]",
+                   "{{1, 2}, {0, 0}}", 0);
+    assert_eval_eq("n = NDArray[{1,2,3}, DataType -> \"int64\"]; Quiet[n[[1]] = x]; Normal[n]",
+                   "{1, 2, 3}", 0);
+    assert_eval_eq("n = NDArray[{1,2,3}, DataType -> \"int64\"]; Check[n[[1]] = x, caught]", "caught", 0);
+    assert_eval_eq("ClearAll[m, v, n]", "Null", 0);
+}
+
+/* Wolfram distributes a List rhs level by level: split where its length equals
+ * the number of positions selected at that level, broadcast whole otherwise. */
+void test_part_assign_levelwise() {
+    assert_eval_eq("m = {{x,3,4},{3,4,5},{4,5,6}}; m[[{1,2},{1,2}]] = {{a,b},{c,d}}; m",
+                   "{{a, b, 4}, {c, d, 5}, {4, 5, 6}}", 0);
+    assert_eval_eq("m = {{x,3,4},{3,4,5},{4,5,6}}; m[[1;;2,1;;2]] = {{a,b},{c,d}}; m",
+                   "{{a, b, 4}, {c, d, 5}, {4, 5, 6}}", 0);
+    assert_eval_eq("m = {{x,3,4},{3,4,5},{4,5,6}}; m[[{1,2},{1,2}]] = {a,b}; m",
+                   "{{a, a, 4}, {b, b, 5}, {4, 5, 6}}", 0);
+    assert_eval_eq("m = {{x,3,4},{3,4,5},{4,5,6}}; m[[{1,2},{1,2}]] = {{a,b,e},{c,d,f}}; m",
+                   "{{{a, b, e}, {a, b, e}, 4}, {{c, d, f}, {c, d, f}, 5}, {4, 5, 6}}", 0);
+    assert_eval_eq("m = {{x,3,4},{3,4,5},{4,5,6}}; m[[All,2]] = {a,b}; m",
+                   "{{x, {a, b}, 4}, {3, {a, b}, 5}, {4, {a, b}, 6}}", 0);
+    assert_eval_eq("v = {1,x,3,4,5}; v[[2;;4]] = {0,0}; v", "{1, {0, 0}, {0, 0}, {0, 0}, 5}", 0);
+    assert_eval_eq("v = Range[10]; v[[1 ;; 10 ;; 3]] = {a,b,c,d}; v", "{a, 2, 3, b, 5, 6, c, 8, 9, d}", 0);
+    assert_eval_eq("w = {a,b,c,d}; w[[2;;3]] = Range[2]; w", "{a, 1, 2, d}", 0);
+    assert_eval_eq("ClearAll[m, v, w]", "Null", 0);
+}
+
+/* AppendTo/PrependTo read their target's value themselves (HoldFirst), and a
+ * packed value is an EXPR_NDARRAY: until v0.522 that left the call unevaluated
+ * and the variable unchanged. */
+void test_appendto_packed() {
+    assert_eval_eq("a = Range[5]; AppendTo[a, 6]; a", "{1, 2, 3, 4, 5, 6}", 0);
+    assert_eval_eq("a = Range[5]; AppendTo[a, 6]; PackedArrayQ[a]", "True", 0);
+    assert_eval_eq("a = Range[5]; PrependTo[a, 0]; a", "{0, 1, 2, 3, 4, 5}", 0);
+    assert_eval_eq("a = Range[5]; AppendTo[a, x]", "{1, 2, 3, 4, 5, x}", 0);
+    assert_eval_eq("a = N[Range[3]]; PrependTo[a, 0]; a", "{0, 1.0, 2.0, 3.0}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; AppendTo[m, {0,0,0,0}]; m",
+                   "{{2, 3, 4, 5}, {3, 4, 5, 6}, {4, 5, 6, 7}, {5, 6, 7, 8}, {0, 0, 0, 0}}", 0);
+    assert_eval_eq("m = Table[i+j, {i,4},{j,4}]; AppendTo[m[[1]], 5]; m",
+                   "{{2, 3, 4, 5, 5}, {3, 4, 5, 6}, {4, 5, 6, 7}, {5, 6, 7, 8}}", 0);
+    assert_eval_eq("Module[{z = Range[10]}, AppendTo[z, 11]; Length[z]]", "11", 0);
+    assert_eval_eq("t = Range[3]; Do[AppendTo[t, i], {i, 4, 6}]; t", "{1, 2, 3, 4, 5, 6}", 0);
+    /* Messages, as in Wolfram. */
+    assert_eval_eq("b = 5; Check[AppendTo[b, 1], caught]", "caught", 0);
+    assert_eval_eq("ClearAll[undefinedQQ]; Check[AppendTo[undefinedQQ, 1], caught]", "caught", 0);
+    assert_eval_eq("ClearAll[a, b, m, t]", "Null", 0);
+}
+
 // Part-specific test runner
 void run_part_tests() {
     TEST(test_extract);
     TEST(test_span_parsing);
     TEST(test_span_assignment);
+    TEST(test_part_assign_packed);
+    TEST(test_part_assign_levelwise);
+    TEST(test_appendto_packed);
     TEST(test_part_single_index);
     TEST(test_part_multiple_indices);
     TEST(test_part_nested_extraction);

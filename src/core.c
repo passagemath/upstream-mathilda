@@ -2208,83 +2208,67 @@ static Expr* inplace_assign_back(Expr* sym, Expr* new_val) {
     return assigned;
 }
 
-Expr* builtin_append_to(Expr* res) {
+/* AppendTo[x, e] / PrependTo[x, e]: x = Append[x, e], evaluated in place.
+ *
+ * The new value is computed by builtin_append / builtin_prepend themselves,
+ * not by a copy of their List loop, so AppendTo inherits every representation
+ * Append handles -- in particular a packed array, whose value arrives here as
+ * an EXPR_NDARRAY rather than an EXPR_FUNCTION. Before this routed through
+ * Append, that case returned NULL: AppendTo on any packed variable was left
+ * unevaluated and the variable silently unchanged. The buffer path
+ * (ndstruct_append) also keeps a packed variable packed. */
+static Expr* append_to_impl(Expr* res, bool prepend) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
     if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
+    const char* name = prepend ? "PrependTo" : "AppendTo";
+
+    if (sym->type == EXPR_SYMBOL && !symtab_get_own_values(sym->data.symbol.name)) {
+        mth_message(name, "rvalue",
+                    "%s is not a variable with a value, so its value cannot be changed.",
+                    sym->data.symbol.name);
+        return NULL;
+    }
 
     Expr* current_val = evaluate(sym);
-    if (!current_val || current_val->type != EXPR_FUNCTION) {
-        if (current_val) expr_free(current_val);
+    if (!current_val) return NULL;
+    if (current_val->type != EXPR_FUNCTION && !is_ndarray(current_val)) {
+        char* s = expr_to_string(res);
+        mth_message(name, "normal",
+                    "Nonatomic expression expected at position 1 in %s.", s);
+        free(s);
+        expr_free(current_val);
         return NULL;
     }
 
     /* An association appends by key (see assoc_add_rules); a non-rule elem
      * leaves AppendTo unevaluated, as in Mathematica. */
     if (is_association(current_val)) {
-        Expr* nv = assoc_add_rules(current_val, elem, false);
+        Expr* nv = assoc_add_rules(current_val, elem, prepend);
         if (!nv) {
             /* x = Append[x, elem] with Append left unevaluated -- exactly what
              * Mathematica assigns for a non-rule elem. */
             Expr* aa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
-            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Append"), aa, 2));
+            return inplace_assign_back(sym, expr_new_function(
+                expr_new_symbol(prepend ? "Prepend" : "Append"), aa, 2));
         }
         expr_free(current_val);
         return inplace_assign_back(sym, nv);
     }
 
-    size_t new_count = current_val->data.function.arg_count + 1;
-    Expr** new_args = malloc(sizeof(Expr*) * new_count);
-    for (size_t i = 0; i < current_val->data.function.arg_count; i++) {
-        new_args[i] = expr_copy(current_val->data.function.args[i]);
-    }
-    new_args[new_count - 1] = expr_copy(elem);
-    Expr* new_val = expr_new_function(expr_copy(current_val->data.function.head), new_args, new_count);
-    free(new_args);
-
-    Expr* result = inplace_assign_back(sym, new_val);
-
-    expr_free(current_val);
-    return result;
+    /* Borrowed call: the builtin only reads its arguments, and on its NULL
+     * path leaves them alone, so the temporary is freed here either way. */
+    Expr* ca[2] = { current_val, expr_copy(elem) };              /* adopts current_val */
+    Expr* call = expr_new_function(expr_new_symbol(prepend ? "Prepend" : "Append"), ca, 2);
+    Expr* new_val = prepend ? builtin_prepend(call) : builtin_append(call);
+    expr_free(call);
+    if (!new_val) return NULL;
+    return inplace_assign_back(sym, new_val);
 }
 
-Expr* builtin_prepend_to(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* sym = res->data.function.args[0];
-    Expr* elem = res->data.function.args[1];
-    if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
-
-    Expr* current_val = evaluate(sym);
-    if (!current_val || current_val->type != EXPR_FUNCTION) {
-        if (current_val) expr_free(current_val);
-        return NULL;
-    }
-
-    if (is_association(current_val)) {           /* see builtin_append_to */
-        Expr* nv = assoc_add_rules(current_val, elem, true);
-        if (!nv) {
-            Expr* pa[2] = { current_val, expr_copy(elem) };      /* adopts current_val */
-            return inplace_assign_back(sym, expr_new_function(expr_new_symbol("Prepend"), pa, 2));
-        }
-        expr_free(current_val);
-        return inplace_assign_back(sym, nv);
-    }
-
-    size_t new_count = current_val->data.function.arg_count + 1;
-    Expr** new_args = malloc(sizeof(Expr*) * new_count);
-    new_args[0] = expr_copy(elem);
-    for (size_t i = 0; i < current_val->data.function.arg_count; i++) {
-        new_args[i + 1] = expr_copy(current_val->data.function.args[i]);
-    }
-    Expr* new_val = expr_new_function(expr_copy(current_val->data.function.head), new_args, new_count);
-    free(new_args);
-
-    Expr* result = inplace_assign_back(sym, new_val);
-
-    expr_free(current_val);
-    return result;
-}
+Expr* builtin_append_to(Expr* res)  { return append_to_impl(res, false); }
+Expr* builtin_prepend_to(Expr* res) { return append_to_impl(res, true); }
 
 static Expr* rules_to_list(Rule* r) {
     size_t count = 0;

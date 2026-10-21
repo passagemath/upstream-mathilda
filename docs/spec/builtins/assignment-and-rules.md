@@ -16,6 +16,26 @@
   arguments makes its arity variable for DownValue dispatch:
   `q[PatternSequence[a_, b_], c_] := {a, b, c}` now fires for `q[1, 2, 3]`
   (v0.475).
+- **Part assignment** (`x[[spec...]] = rhs`). A List `rhs` is distributed
+  **level by level**: at a subscript that selects several positions (a list of
+  positions, `All`, a `Span`), an `rhs` whose length equals the number of
+  positions selected there is split across them, and each piece carries on to
+  the deeper subscripts; any other `rhs` is stored whole at every position.
+  A single-position subscript stores the whole `rhs` (v0.522):
+
+  ```mathematica
+  In[1]:= m = {{x, 3, 4}, {3, 4, 5}, {4, 5, 6}};
+  In[2]:= m[[{1, 2}, {1, 2}]] = {{a, b}, {c, d}}; m
+  Out[2]= {{a, b, 4}, {c, d, 5}, {4, 5, 6}}
+  In[3]:= m[[All, 2]] = {p, q}; m
+  Out[3]= {{a, {p, q}, 4}, {c, {p, q}, 5}, {4, {p, q}, 6}}
+  ```
+
+  A packed target is written on its buffer when the value fits (`m[[2]] =
+  {0, 0, 0, 0}` keeps `m` packed), and otherwise through the List path,
+  repacking when the result is again uniform. A visible `NDArray` coerces into
+  its dtype; a value no buffer holds (a symbol, a ragged row) leaves it
+  unchanged with `Set::ndarray`.
 
 ## AddTo (+=), SubtractFrom (-=), TimesBy (*=), DivideBy (/=)
 

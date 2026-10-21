@@ -8,6 +8,8 @@
 #include "ndarray.h"
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
+#include "message.h"
+#include "print.h"     /* expr_to_string -- Set::ndarray */
 #include "common.h"
 
 static bool is_atomic(Expr* e);
@@ -90,7 +92,46 @@ static bool span_resolve(const Expr* span, int64_t len,
     *start = s; *step = st; *count = n;
     return true;
 }
-static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list);
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+
+/* The piece of `rhs` that the k-th of `nsel` positions selected at one level
+ * receives. Returns a new reference.
+ *
+ * Wolfram distributes a List right-hand side LEVEL BY LEVEL. At a subscript
+ * that selects several positions (a list of positions, All, a Span), a List rhs
+ * whose length equals the number of positions selected there is split across
+ * them, and each piece carries on to the deeper subscripts. Any other rhs (an
+ * atom, or a List of a different length) is broadcast whole to every position
+ * and also carries on. So, on a 3x3 `m`:
+ *     m[[{1,2},{1,2}]] = {{a,b},{c,d}}   rows get {a,b} then {c,d}, split again
+ *     m[[{1,2},{1,2}]] = {a,b}           row 1 gets a twice, row 2 gets b twice
+ *     m[[All, 2]] = {a,b}                every row's column 2 gets {a,b}
+ * A single integer or key subscript passes rhs through untouched, which is why
+ * `m[[2]] = {1,2,3}` stores the whole list; callers pass nsel == 0 for that.
+ *
+ * This replaced a single running counter over all the leaves, which distributed
+ * {{a,b},{c,d}} as two whole lists into four cells and split a too-short list
+ * partway (`v[[2;;4]] = {0,0}` gave {1, 0, 0, {0, 0}, ...}). */
+static Expr* part_rhs_piece(Expr* rhs, size_t k, size_t nsel) {
+    if (nsel == 0) return expr_copy(rhs);       /* a single-position subscript */
+    if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol.name == SYM_List &&
+        rhs->data.function.arg_count == nsel)
+        return expr_copy(rhs->data.function.args[k]);
+    if (is_packed_list(rhs) && rhs->data.ndarray.dims[0] == (int64_t)nsel) {
+        /* Row k of a packed rhs, kept on the buffer when it is itself a row. */
+        Expr* ki = expr_new_integer((int64_t)k + 1);
+        bool degrade = false;
+        Expr* piece = ndarray_part(rhs, &ki, 1, &degrade);
+        expr_free(ki);
+        if (piece) return piece;
+        Expr* plain = ndarray_to_nested_list(rhs);
+        piece = expr_copy(plain->data.function.args[k]);
+        expr_free(plain);
+        return piece;
+    }
+    return expr_copy(rhs);
+}
 
 /* Assign through the value of association entry `entry`, recursing for any
  * remaining indices, and return the resulting entry. Takes ownership of `entry`
@@ -99,48 +140,81 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
  * caller's association holds. Assigning into args[1] here is what made
  * `u2 = u1; u2[["x"]] = 9` corrupt `u1`. Returns `entry` unchanged when it is
  * not a two-argument rule (Association[1, 2] can exist). */
-static Expr* assoc_entry_assigned(Expr* entry, Expr** rest, size_t nrest,
-                                  Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
+static Expr* assoc_entry_assigned(Expr* entry, Expr** rest, size_t nrest, Expr* rhs) {
     if (!part_is_entry(entry)) return entry;
-    Expr* nv = expr_part_assign_rec(entry->data.function.args[1], rest, nrest,
-                                    rhs, rhs_idx, is_rhs_list);
+    Expr* nv = expr_part_assign_rec(entry->data.function.args[1], rest, nrest, rhs);
     Expr* fresh = assoc_entry_with_value(entry, nv);   /* adopts nv */
     expr_free(entry);
     return fresh;
 }
 
+/* assoc_entry_assigned for the k-th of nsel selected entries. */
+static Expr* assoc_entry_assigned_kth(Expr* entry, Expr** rest, size_t nrest,
+                                      Expr* rhs, size_t k, size_t nsel) {
+    Expr* piece = part_rhs_piece(rhs, k, nsel);
+    Expr* out = assoc_entry_assigned(entry, rest, nrest, piece);
+    expr_free(piece);
+    return out;
+}
 
-/* Assign into a dense NDArray. Value semantics, as everywhere else in Part
- * assignment: a fresh NDArray comes back and `arr` is untouched.
+/* Replace *slot (owned) by the assignment of the k-th of nsel rhs pieces through
+ * the remaining subscripts. */
+static void part_assign_slot(Expr** slot, Expr** rest, size_t nrest,
+                             Expr* rhs, size_t k, size_t nsel) {
+    Expr* piece = part_rhs_piece(rhs, k, nsel);
+    Expr* replaced = expr_part_assign_rec(*slot, rest, nrest, piece);
+    expr_free(piece);
+    expr_free(*slot);
+    *slot = replaced;
+}
+
+
+/* Assign into a dense NDArray on the buffer. Value semantics, as everywhere else
+ * in Part assignment: a fresh NDArray comes back and `arr` is untouched.
  *
  * The whole Part spec vocabulary works — integer (including negative), All,
  * Span, a list of positions, and fewer subscripts than the rank — because the
  * write reuses ndarray_part_set, which selects positions through the same
- * per-axis selector ndarray_part reads through. Before that shared selector
- * existed this handled only a full run of integer subscripts and returned the
- * array UNCHANGED for anything else, so `a[[2 ;; 4]] = 0` on an NDArray silently
- * did nothing while the same code on a List worked.
+ * per-axis selector ndarray_part reads through.
  *
- * Returns the array unchanged (the old behaviour) for a spec or right-hand side
- * outside what the buffer can represent — a symbolic value, a complex value into
- * a real buffer, an out-of-range subscript. */
+ * A plain numeric List rhs is packed at the array's dtype first, so
+ * `m[[2]] = {0, 0, 0, 0}` stays on the buffer (and the result stays packed).
+ *
+ * Returns NULL -- a DECLINE, never the array unchanged -- when the buffer cannot
+ * hold the answer: a symbolic value, a shape that broadcasts or goes ragged, an
+ * out-of-range subscript. The caller then answers through the List path. This
+ * used to return the input untouched, which made `m[[2]] = {0, 0, 0, 0}` on any
+ * packed matrix a silent no-op: ndarray_part_set takes only a scalar or an
+ * NDArray rhs, and a literal List is neither. */
 static Expr* nd_part_assign(Expr* arr, Expr** indices, size_t nindices, Expr* rhs) {
+    NDType dt = arr->data.ndarray.dtype;
+    Expr* packed_rhs = NULL;
+    if (rhs->type == EXPR_FUNCTION) {
+        packed_rhs = pack_force(expr_copy(rhs), true, dt);
+        if (!is_ndarray(packed_rhs)) { expr_free(packed_rhs); return NULL; }
+        rhs = packed_rhs;
+    }
     /* An INDEPENDENT node with its own buffer.  Not expr_copy: that is a
      * refcount bump, so writing through it would reach every other holder of
      * the same array — including the symbol this assignment is meant to leave
      * untouched until the caller stores the result back. */
     size_t n = 1;
     for (int i = 0; i < arr->data.ndarray.rank; i++) n *= (size_t)arr->data.ndarray.dims[i];
-    size_t bytes = ndt_elem_size(arr->data.ndarray.dtype) * n;
+    size_t bytes = ndt_elem_size(dt) * n;
+    Expr* fresh = NULL;
     void* nb = malloc(bytes ? bytes : 1);
-    if (!nb) return expr_copy(arr);
-    memcpy(nb, arr->data.ndarray.data, bytes);
-    Expr* fresh = expr_new_ndarray_like(arr, arr->data.ndarray.rank, arr->data.ndarray.dims,
-                                   nb, arr->data.ndarray.dtype);   /* adopts nb */
-    if (!fresh) { free(nb); return expr_copy(arr); }
-    if (ndarray_part_set(fresh, (Expr* const*)indices, nindices, rhs)) return fresh;
-    expr_free(fresh);
-    return expr_copy(arr);
+    if (nb) {
+        memcpy(nb, arr->data.ndarray.data, bytes);
+        fresh = expr_new_ndarray_like(arr, arr->data.ndarray.rank, arr->data.ndarray.dims,
+                                      nb, dt);                          /* adopts nb */
+        if (!fresh) free(nb);
+    }
+    if (fresh && !ndarray_part_set(fresh, (Expr* const*)indices, nindices, rhs)) {
+        expr_free(fresh);
+        fresh = NULL;
+    }
+    if (packed_rhs) expr_free(packed_rhs);
+    return fresh;
 }
 
 /* True when every leaf of `rhs` can go into a `dt` buffer with its HEAD intact:
@@ -152,12 +226,13 @@ static Expr* nd_part_assign(Expr* arr, Expr** indices, size_t nindices, Expr* rh
  * {1, 2., 3.} -- an exact head on an inexact tail, which a uniform buffer
  * cannot express (src/numloop.h states the same rule for compiled loops).
  * Rationals, BigInts, arbitrary-precision reals, Complex and symbols all fail
- * here for the same reason.
+ * here for the same reason. A packed rhs qualifies when its dtype is `dt`.
  *
  * A List right-hand side distributes its elements across the selected
  * positions, so every leaf has to qualify. */
 static bool nd_rhs_fits_dtype(const Expr* rhs, NDType dt) {
     if (!rhs) return false;
+    if (is_ndarray(rhs)) return rhs->data.ndarray.dtype == dt;
     if (rhs->type == EXPR_FUNCTION &&
         rhs->data.function.head->type == EXPR_SYMBOL &&
         rhs->data.function.head->data.symbol.name == SYM_List) {
@@ -169,41 +244,49 @@ static bool nd_rhs_fits_dtype(const Expr* rhs, NDType dt) {
                              : (rhs->type == EXPR_REAL);
 }
 
-static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs, size_t* rhs_idx, bool is_rhs_list) {
-    if (nindices == 0) {
-        if (is_rhs_list) {
-            if (*rhs_idx < rhs->data.function.arg_count) {
-                return expr_copy(rhs->data.function.args[(*rhs_idx)++]);
-            } else {
-                return expr_copy(rhs);
-            }
-        }
-        return expr_copy(rhs);
+/* Part assignment into an NDArray `arr` (packed list or visible NDArray).
+ *
+ * The buffer answers when it can (nd_part_assign). Otherwise the array goes
+ * through the List path and is offered back to a buffer:
+ *
+ *   PACKED LIST   repacked only when the result is uniform with no change of
+ *                 head (pack_repack_like), so `p[[1]] = 1` on {1., 2., 3.} keeps
+ *                 the exact 1 and a ragged result stays a List -- as in WL.
+ *                 A packed list unpacks up front when the value cannot be stored
+ *                 with its head intact (nd_rhs_fits_dtype): the buffer path
+ *                 would coerce it.
+ *   VISIBLE       repacked at its own dtype, coercing -- the user asked for a
+ *                 machine buffer and the dtype is part of the value. A result no
+ *                 buffer holds (a symbol, a ragged shape) cannot be stored: the
+ *                 array is left unchanged, and said so with Set::ndarray rather
+ *                 than silently. */
+static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, Expr* rhs) {
+    bool packed = is_packed_list(arr);
+    NDType dt = arr->data.ndarray.dtype;
+    if (!packed || nd_rhs_fits_dtype(rhs, dt)) {
+        Expr* r = nd_part_assign(arr, indices, nindices, rhs);
+        if (r) return r;
     }
+    Expr* plain = ndarray_to_nested_list(arr);
+    Expr* out = expr_part_assign_rec(plain, indices, nindices, rhs);
+    expr_free(plain);
+    if (packed) return pack_repack_like(arr, out);
+    Expr* back = out ? ndarray_from_nested_list_like(arr, out, dt) : NULL;
+    if (back) { expr_free(out); return back; }
+    char* s = expr_to_string(rhs);
+    mth_message("Set", "ndarray",
+                "%s cannot be stored in an NDArray of type \"%s\"; the array is unchanged.",
+                s, ndt_to_string(dt));
+    free(s);
+    if (out) expr_free(out);
+    return expr_copy(arr);
+}
 
-    /* Dense NDArray element assignment (a[[i]] = v, a[[i,j]] = v).
-     *
-     * A PACKED LIST unpacks first when the value being written cannot be stored
-     * with its head intact. The buffer path coerces -- which is right for a
-     * visible NDArray[...], where the user asked for a machine buffer and the
-     * dtype is part of the value -- but on a packed list that would be a silent
-     * answer change on ordinary list code: `p[[1]] = 1` must give {1, 2., 3.},
-     * not {1., 2., 3.}, and `p[[1]] = 1/3` must give the exact Rational.
-     *
-     * The result is left unpacked. That is not laziness: every case that lands
-     * here produces a list the buffer could not have held anyway (mixed heads,
-     * a Rational, a symbol), so there is nothing to repack. */
-    if (expr->type == EXPR_NDARRAY) {
-        if (is_packed_list(expr) &&
-            !nd_rhs_fits_dtype(rhs, expr->data.ndarray.dtype)) {
-            Expr* plain = ndarray_to_nested_list(expr);
-            Expr* out = expr_part_assign_rec(plain, indices, nindices,
-                                             rhs, rhs_idx, is_rhs_list);
-            expr_free(plain);
-            return out;
-        }
-        return nd_part_assign(expr, indices, nindices, rhs);
-    }
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
+    if (nindices == 0) return expr_copy(rhs);
+
+    if (expr->type == EXPR_NDARRAY)
+        return nd_part_assign_or_list(expr, indices, nindices, rhs);
 
     if (is_atomic(expr)) return expr_copy(expr);
 
@@ -229,7 +312,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
          * Non-key structural indices must NOT be appended as literal keys. */
         if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
             for (size_t i = 0; i < len; i++)
-                new_args[i] = assoc_entry_assigned(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[i] = assoc_entry_assigned_kth(new_args[i], rest, nrest, rhs, i, len);
         } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
                    idx->data.function.head->data.symbol.name == SYM_Span) {
             int64_t start = 1, end = (int64_t)len, step = 1;
@@ -243,17 +326,22 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             if (sa >= 3 && idx->data.function.args[2]->type == EXPR_INTEGER) {
                 step = idx->data.function.args[2]->data.integer;
             }
-            if (step > 0)
+            if (step > 0) {
+                size_t nsel = 0;
+                for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step) nsel++;
+                size_t k = 0;
                 for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step)
-                    new_args[i - 1] = assoc_entry_assigned(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                    new_args[i - 1] = assoc_entry_assigned_kth(new_args[i - 1], rest, nrest, rhs, k++, nsel);
+            }
         } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
                    idx->data.function.head->data.symbol.name == SYM_List) {
-            for (size_t j = 0; j < idx->data.function.arg_count; j++) {
+            size_t nsel = idx->data.function.arg_count;
+            for (size_t j = 0; j < nsel; j++) {
                 Expr* sub = idx->data.function.args[j];
                 if (sub->type == EXPR_INTEGER) {
                     int64_t p = sub->data.integer; if (p < 0) p = (int64_t)len + p + 1;
                     if (p >= 1 && p <= (int64_t)len)
-                        new_args[p - 1] = assoc_entry_assigned(new_args[p - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                        new_args[p - 1] = assoc_entry_assigned_kth(new_args[p - 1], rest, nrest, rhs, j, nsel);
                 } else {
                     Expr* k = (sub->type == EXPR_FUNCTION && sub->data.function.head->type == EXPR_SYMBOL &&
                                sub->data.function.head->data.symbol.name == SYM_Key && sub->data.function.arg_count == 1)
@@ -261,7 +349,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                     for (size_t i = 0; i < len; i++)
                         if (new_args[i]->type == EXPR_FUNCTION && new_args[i]->data.function.arg_count == 2 &&
                             expr_eq(new_args[i]->data.function.args[0], k)) {
-                            new_args[i] = assoc_entry_assigned(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list); break;
+                            new_args[i] = assoc_entry_assigned_kth(new_args[i], rest, nrest, rhs, j, nsel); break;
                         }
                 }
             }
@@ -269,7 +357,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             int64_t pos = idx->data.integer;
             if (pos < 0) pos = (int64_t)len + pos + 1;
             if (pos >= 1 && pos <= (int64_t)len)
-                new_args[pos - 1] = assoc_entry_assigned(new_args[pos - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[pos - 1] = assoc_entry_assigned(new_args[pos - 1], rest, nrest, rhs);
         } else {
             /* Single key: Key[k] (unwrapped) or a literal key. */
             Expr* lookup_key = (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL &&
@@ -282,7 +370,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                     expr_eq(rule->data.function.args[0], lookup_key)) { found = (int64_t)i; break; }
             }
             if (found >= 0) {
-                new_args[found] = assoc_entry_assigned(new_args[found], rest, nrest, rhs, rhs_idx, is_rhs_list);
+                new_args[found] = assoc_entry_assigned(new_args[found], rest, nrest, rhs);
             } else {
                 /* The key is absent, so CREATE it.
                  *
@@ -302,8 +390,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                 Expr* seed = (nrest == 0)
                     ? NULL
                     : expr_new_function(expr_new_symbol(SYM_Association), NULL, 0);
-                Expr* nv = expr_part_assign_rec(seed ? seed : new_head,
-                                                rest, nrest, rhs, rhs_idx, is_rhs_list);
+                Expr* nv = expr_part_assign_rec(seed ? seed : new_head, rest, nrest, rhs);
                 if (seed) expr_free(seed);
                 Expr* krule_args[2] = { expr_copy(lookup_key), nv };
                 Expr* nrule = expr_new_function(expr_new_symbol(SYM_Rule), krule_args, 2);
@@ -315,23 +402,15 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     } else if (idx->type == EXPR_INTEGER) {
         int64_t k = idx->data.integer;
         if (k == 0) {
-            Expr* replaced = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
-            expr_free(new_head);
-            new_head = replaced;
+            part_assign_slot(&new_head, rest, nrest, rhs, 0, 0);
         } else {
             if (k < 0) k = len + k + 1;
-            if (k >= 1 && k <= (int64_t)len) {
-                Expr* replaced = expr_part_assign_rec(new_args[k - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                expr_free(new_args[k - 1]);
-                new_args[k - 1] = replaced;
-            }
+            if (k >= 1 && k <= (int64_t)len)
+                part_assign_slot(&new_args[k - 1], rest, nrest, rhs, 0, 0);
         }
     } else if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
-        for (size_t i = 0; i < len; i++) {
-            Expr* replaced = expr_part_assign_rec(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
-            expr_free(new_args[i]);
-            new_args[i] = replaced;
-        }
+        for (size_t i = 0; i < len; i++)
+            part_assign_slot(&new_args[i], rest, nrest, rhs, i, len);
     } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol.name == SYM_Span) {
         int64_t start = 1, end = len, step = 1;
         size_t span_argc = idx->data.function.arg_count;
@@ -361,35 +440,29 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
             else if (a3->type == EXPR_SYMBOL && a3->data.symbol.name == SYM_All) step = 1;
         }
 
+        /* Count first: the rhs splits only when its length equals the count. */
+        size_t nsel = 0, k = 0;
         if (step > 0) {
-            for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* replaced = expr_part_assign_rec(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = replaced;
-            }
+            for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step) nsel++;
+            for (int64_t i = start; i <= end && i >= 1 && i <= (int64_t)len; i += step)
+                part_assign_slot(&new_args[i - 1], rest, nrest, rhs, k++, nsel);
         } else if (step < 0) {
-            for (int64_t i = start; i >= end && i >= 1 && i <= (int64_t)len; i += step) {
-                Expr* replaced = expr_part_assign_rec(new_args[i - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                expr_free(new_args[i - 1]);
-                new_args[i - 1] = replaced;
-            }
+            for (int64_t i = start; i >= end && i >= 1 && i <= (int64_t)len; i += step) nsel++;
+            for (int64_t i = start; i >= end && i >= 1 && i <= (int64_t)len; i += step)
+                part_assign_slot(&new_args[i - 1], rest, nrest, rhs, k++, nsel);
         }
     } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol.name == SYM_List) {
-        for (size_t i = 0; i < idx->data.function.arg_count; i++) {
+        size_t nsel = idx->data.function.arg_count;
+        for (size_t i = 0; i < nsel; i++) {
             Expr* sub_idx = idx->data.function.args[i];
             if (sub_idx->type == EXPR_INTEGER) {
                 int64_t k = sub_idx->data.integer;
                 if (k == 0) {
-                    Expr* replaced = expr_part_assign_rec(new_head, rest, nrest, rhs, rhs_idx, is_rhs_list);
-                    expr_free(new_head);
-                    new_head = replaced;
+                    part_assign_slot(&new_head, rest, nrest, rhs, i, nsel);
                 } else {
                     if (k < 0) k = len + k + 1;
-                    if (k >= 1 && k <= (int64_t)len) {
-                        Expr* replaced = expr_part_assign_rec(new_args[k - 1], rest, nrest, rhs, rhs_idx, is_rhs_list);
-                        expr_free(new_args[k - 1]);
-                        new_args[k - 1] = replaced;
-                    }
+                    if (k >= 1 && k <= (int64_t)len)
+                        part_assign_slot(&new_args[k - 1], rest, nrest, rhs, i, nsel);
                 }
             }
         }
@@ -400,41 +473,20 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
     return new_func;
 }
 
-/* Does the index spec select MORE THAN ONE position at some level -- a List of
- * indices ({1,3}), a Span (1;;2), or All?  Only then does a List RHS distribute
- * element-by-element across the selected positions.  When every index is a
- * single scalar (an integer or a Key), the target is one position and the WHOLE
- * RHS is stored there: `m[[2]] = {1,2,3}` gives {0,{1,2,3},0}, and
- * `a[[Key[k]]] = {1,2,3}` stores the whole list -- matching Wolfram. */
-static bool part_indices_select_multiple(Expr** indices, size_t n) {
-    for (size_t i = 0; i < n; i++) {
-        Expr* idx = indices[i];
-        if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) return true;
-        if (idx->type == EXPR_FUNCTION && idx->data.function.head->type == EXPR_SYMBOL) {
-            const char* h = idx->data.function.head->data.symbol.name;
-            if (h == SYM_Span || h == SYM_List) return true;
-        }
-    }
-    return false;
-}
-
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol.name != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
-    
+
     Expr* sym = lhs->data.function.args[0];
     if (sym->type != EXPR_SYMBOL) return NULL;
-    
+
     Expr* current_val = symtab_get_own_values(sym->data.symbol.name) ? evaluate(sym) : NULL;
     if (!current_val) return NULL;
-    
-    bool is_rhs_list = (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL && rhs->data.function.head->data.symbol.name == SYM_List)
-                       && part_indices_select_multiple(lhs->data.function.args + 1, lhs->data.function.arg_count - 1);
 
-    size_t rhs_idx = 0;
-    Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs, &rhs_idx, is_rhs_list);
+    Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1,
+                                         lhs->data.function.arg_count - 1, rhs);
     expr_free(current_val);
-    
+
     if (new_val) {
         symtab_add_own_value(sym->data.symbol.name, sym, new_val);
         return new_val;

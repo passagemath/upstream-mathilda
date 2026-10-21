@@ -58,6 +58,13 @@ EXEMPT = {
     "Only one surfaces at a time because builtin_registry maps the shared C "
     "function to whichever head registers last; both are exempt so a registration "
     "reorder cannot flip which one the audit reports.",
+    "AppendTo": "HoldFirst: the target's packed value is read INSIDE the builtin "
+                "(evaluate(sym)), never through the gate, and handed to Append's "
+                "buffer path. Marking it aware would let a packed ELEMENT argument "
+                "through, and inplace_assign_back stores the new value without "
+                "re-evaluation -- AppendTo[s, Range[10]] would nest a buffer inside "
+                "a plain List, breaking the no-nesting invariant.",
+    "PrependTo": "as AppendTo -- the same append_to_impl.",
     "List": "enforces the no-nesting invariant -- a buffer must never sit inside "
     "a plain List, which is what keeps the gate an O(argc) top-level scan",
     "NDArray": "the packing constructor itself: its is_ndarray(arg) branch makes "

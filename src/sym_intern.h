@@ -31,6 +31,16 @@ const char* intern_symbol(const char* name);
  * package's private symbols, user identifiers) are NOT flagged. */
 void intern_mark_all_system(void);
 
+/* Kernel-module scope.  While at least one push is outstanding, a symbol that
+ * gains its first definition (DownValue, OwnValue, attribute, ...) is flagged
+ * System when it is spelled like a System name (a leading capital or `$`).
+ * mathilda_load_module brackets every internal .m load with it, so a head the
+ * bootstrap defines (DiracDelta in distributions.m) is System`, while a
+ * module's lowercase pattern variables, and symbols the user defines between
+ * loads, are not. */
+void intern_system_scope_push(void);
+void intern_system_scope_pop(void);
+
 /* True if `name` was flagged by intern_mark_all_system() -- i.e. it is a
  * built-in System symbol. The context resolver uses this to resolve such a
  * bare name to System` instead of qualifying it into the current context,

@@ -178,14 +178,11 @@ static int name_has_backtick(const char* s) {
 
 /* Fully context-qualified name of a symbol (caller frees). Names that already
  * carry an explicit context prefix are returned verbatim; bare names are
- * qualified with "System`" when the symbol is a builtin (or a kernel-interned
- * System symbol) and "Global`" otherwise, mirroring Context[]'s home-context
- * rule. */
+ * qualified with their home context -- context_home, the same rule as
+ * Context[]. */
 static char* full_qualified_name(const char* nm, SymbolDef* def) {
     if (name_has_backtick(nm)) return name_strdup(nm);
-    const char* ctx =
-        (def && (def->builtin_func != NULL || intern_is_system(nm)))
-            ? "System`" : "Global`";
+    const char* ctx = context_home(nm, def);
     size_t nc = strlen(ctx), nn = strlen(nm);
     char* r = (char*)malloc(nc + nn + 1);
     if (!r) return NULL;

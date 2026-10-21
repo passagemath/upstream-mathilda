@@ -1270,9 +1270,16 @@ Gives the current context, or the context of a symbol.
 **Features**:
 - `Protected`, `HoldFirst`.
 - A qualified symbol reports its prefix (`Context[a`b`x]` is `"a`b`"`).
-- A bare symbol reports `"System`"` for builtins and for kernel System symbols
-  without a function definition (`Pi`, `Automatic`, `List`, `$Version`,
-  `$Failed`, …), and `"Global`"` otherwise.
+- A bare symbol reports `"System`"` in three cases: builtins; kernel System
+  symbols without a function definition (`Pi`, `Automatic`, `List`,
+  `$Version`, `$Failed`, …); and heads defined by the kernel's own `.m`
+  modules, such as `DiracDelta`. Otherwise it reports `"Global`"`.
+  - The module case is decided when the symbol is first defined inside a
+    module load, and only for names spelled like System names (a leading
+    capital or `$`). A module's lowercase pattern variables stay ordinary, and
+    a scratch name the kernel interns (`x`, `t`) is `Global`` once you define it.
+  - `Names` uses the same rule (`context_home`), so `Names["Global`*"]` in a
+    fresh session lists no kernel symbols.
 - New symbols, **including `$`-prefixed ones**, are created in `$Context`: inside
   `BeginPackage["P`"]` or `Begin["P`"]`, `$x = 1` creates ``P`$x`` (issue #104).
   System `$`-variables (`$RecursionLimit`, `$Assumptions`, …) still resolve to

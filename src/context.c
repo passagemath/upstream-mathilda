@@ -154,6 +154,12 @@ const char* context_path_at(size_t i) {
     return NULL;
 }
 
+const char* context_home(const char* bare, const SymbolDef* def) {
+    if (def && def->builtin_func != NULL) return "System`";
+    bool spelled = bare[0] == '$' || (bare[0] >= 'A' && bare[0] <= 'Z');
+    return (spelled && intern_is_system(bare)) ? "System`" : "Global`";
+}
+
 /* -------------------- Assignment (Set / SetDelayed) -------------------- */
 
 bool context_is_state_var(const char* name) {
@@ -405,14 +411,8 @@ static Expr* builtin_context(Expr* res) {
      * If the name doesn't exist at all (string form), emit a notfound-style
      * warning and return unevaluated. */
     SymbolDef* def = symtab_lookup(name);
-    bool is_system = (name[0] == '$' || (name[0] >= 'A' && name[0] <= 'Z'))
-                     && intern_is_system(name);
-    if (def || is_system) {
-        const char* home = (is_system || (def && def->builtin_func != NULL))
-                         ? "System`" : "Global`";
-        Expr* out = expr_new_string(home);
-        return out;
-    }
+    const char* home = context_home(name, def);
+    if (def || strcmp(home, "System`") == 0) return expr_new_string(home);
 
     if (a->type == EXPR_STRING) {
         mth_message("Context", "notfound", "Symbol %s not found.", name);

@@ -21,6 +21,7 @@
 
 #include "loadmodule.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -343,7 +344,9 @@ int mathilda_load_module(const char* relpath) {
     char full[LM_PATH_MAX];
     if (mathilda_resolve_internal(relpath, full, sizeof(full))) {
         int opened = 0;
+        intern_system_scope_push();     /* heads this module defines are System */
         Expr* last = mathilda_run_file(full, &opened);
+        intern_system_scope_pop();
         if (last) expr_free(last);
         if (opened) { lm_mark_loaded(relpath); return 1; }
     }

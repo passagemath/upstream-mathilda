@@ -74,12 +74,27 @@ static void reset_node_payload(SymbolDef* d) {
  * `materialize` marks the node as a real definition (has_def=1). An already
  * interned input is recognised by pointer identity first (the common hot case),
  * falling back to strcmp only for fresh string literals. */
+/* Depth of intern_system_scope_push (see sym_intern.h). */
+static int g_system_scope = 0;
+
+void intern_system_scope_push(void) { g_system_scope++; }
+void intern_system_scope_pop(void)  { if (g_system_scope > 0) g_system_scope--; }
+
+/* A definition made inside a kernel-module load: flag the node System if its
+ * bare name is spelled like a System name. */
+static void note_materialized(SymbolDef* d) {
+    const char* nm = d->symbol_name;
+    if (g_system_scope > 0 && !d->has_def &&
+        (nm[0] == '$' || (nm[0] >= 'A' && nm[0] <= 'Z')) && !strchr(nm, '`'))
+        d->is_system = 1;
+}
+
 static SymbolDef* node_intern(const char* name, int materialize) {
     if (!name) return NULL;
     unsigned int idx = hash(name);
     for (SymbolDef* d = symtab[idx]; d; d = d->next) {
         if (d->symbol_name == name || strcmp(d->symbol_name, name) == 0) {
-            if (materialize) d->has_def = 1;
+            if (materialize) { note_materialized(d); d->has_def = 1; }
             return d;
         }
     }
@@ -90,6 +105,7 @@ static SymbolDef* node_intern(const char* name, int materialize) {
     char* copy = malloc(len + 1);
     memcpy(copy, name, len + 1);
     d->symbol_name = copy;
+    if (materialize) note_materialized(d);
     d->has_def = (uint8_t)(materialize ? 1 : 0);
     d->next = symtab[idx];
     symtab[idx] = d;

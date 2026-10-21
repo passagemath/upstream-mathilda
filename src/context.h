@@ -41,6 +41,13 @@ bool context_is_state_var(const char* name);
  * variable unchanged; returns whether the assignment happened. */
 bool context_assign(const char* name, Expr* value);
 
+/* Home context of a symbol stored under the bare name `bare` (def may be
+ * NULL): "System`" for a builtin, or for a System-flagged name spelled like a
+ * System name (leading capital or `$`); "Global`" otherwise. The single rule
+ * behind Context[] and Names, so the two cannot disagree. The spelling guard
+ * keeps scratch names the kernel interns (x, t, ...) out of System. */
+const char* context_home(const char* bare, const SymbolDef* def);
+
 /* Path access (read-only): the valid context strings of $ContextPath, in
  * order. Pointers borrow the OwnValue (valid until it is next assigned). */
 size_t context_path_count(void);

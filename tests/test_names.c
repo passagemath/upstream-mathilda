@@ -150,6 +150,19 @@ void test_names_protected() {
     assert_eval_eq("Names[\"Sin\"]", "{\"Sin\"}", 0);
 }
 
+/* ---- a fresh session has no kernel symbols in Global` ---- */
+void test_names_global_has_no_kernel_symbols() {
+    /* DiracDelta is defined by a kernel module (distributions.m), which the
+     * REPL loads through the module loader; load it the same way here. */
+    assert_eval_eq("LoadModule[\"distributions.m\"]", "True", 0);
+    assert_eval_eq("MemberQ[Names[\"Global`*\"], \"DiracDelta\"]", "False", 0);
+    assert_eval_eq("Context[DiracDelta]", "\"System`\"", 0);
+    /* A scratch name the kernel interns (x) is still the user's once defined. */
+    assert_eval_eq("x = 1; MemberQ[Names[\"Global`*\"], \"x\"]", "True", 0);
+    assert_eval_eq("Context[x]", "\"Global`\"", 0);
+    assert_eval_eq("Clear[x]; x", "x", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -167,6 +180,7 @@ int main() {
     TEST(test_names_system_context);
     TEST(test_names_global_context);
     TEST(test_names_other_context);
+    TEST(test_names_global_has_no_kernel_symbols);
     TEST(test_names_unevaluated);
     TEST(test_names_protected);
 

@@ -70,6 +70,15 @@ int emit_int(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out
                 Val a; if (!emit(c, A[0], &a)) return -1;
                 *out = unop(c, OP_BNOT_I, a, CT_INT); return c->ok ? 1 : -1;
             }
+            if (strcmp(h, "BitSet") == 0) {
+                /* Binary n, k -> n with bit k set; OP_BSET_I bails to the
+                 * interpreter where there is no int64 answer (k < 0, or a
+                 * bignum for n >= 0, k >= 63). */
+                Val a, b;
+                if (!emit(c, A[0], &a)) return -1;
+                if (!emit(c, A[1], &b)) return -1;
+                *out = binop(c, OP_BSET_I, a, b, CT_INT); return c->ok ? 1 : -1;
+            }
             if (strcmp(h, "CoprimeQ") == 0) {
                 /* CoprimeQ[a, b] is GCD[a, b] == 1; GCD_I's own guard hands
                  * an INT64_MIN operand back to the interpreter. */

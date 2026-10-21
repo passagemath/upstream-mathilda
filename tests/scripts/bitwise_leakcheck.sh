@@ -2,9 +2,10 @@
 # bitwise_leakcheck.sh -- leak gate for the bit-level integer builtins.
 #
 # The C test binary cannot detect a leak on its own, so this is the real gate.
-# Drives BitLength, BitXor, BitAnd, BitOr and BitNot (machine-int, bignum, negative,
+# Drives BitLength, BitXor, BitAnd, BitOr, BitNot and BitSet (machine-int, bignum, negative,
 # INT64_MIN, listable, packed, NDArray, n-ary buffer folds, symbolic
-# cancellation / idempotence / 0- and -1-absorption, BitNot extraction, Compile, and
+# cancellation / idempotence / 0- and -1-absorption, BitNot extraction, BitSet
+# bignum growth and buffer declines, Compile, and
 # error paths) under a leak checker and FAILS on any
 # leaked byte.
 #
@@ -166,6 +167,45 @@ cfn = Compile[{{v, _Integer, 1}}, BitNot[v]];
 Do[cfn[Range[-50, 50]], {200}];
 cfns = Compile[{{n, _Integer}}, BitNot[n]];
 Do[cfns[12345], {200}];
+Do[BitSet[42, 9], {200}];
+Do[BitSet[-5, 2], {200}];
+Do[BitSet[-7, 1000], {200}];
+Do[BitSet[0, 63], {200}];
+Do[BitSet[0, 64], {200}];
+Do[BitSet[2^70, 0], {200}];
+Do[BitSet[-2^70, 3], {200}];
+Do[BitSet[-2^64, 63], {200}];
+Do[BitSet[100!, 1000], {200}];
+Do[BitSet[1, 10^5], {50}];
+bsp = 3^200; Do[BitSet[bsp, 7], {200}];
+Do[BitSet[42, -1], {200}];
+Do[BitSet[1, 2^70], {200}];
+Do[BitSet[x, 1], {200}];
+Do[BitSet[2.5, 1], {200}];
+Do[BitSet[5], {200}];
+Do[BitSet[5, 1, 2], {200}];
+Do[BitSet[{1, {2, x}, 2.5, 2^70}, 3], {200}];
+Do[Quiet[BitSet[{1, 2, 3}, {0, 1}]], {200}];
+Do[BitSet[Range[100], 5], {200}];
+Do[BitSet[7, Range[0, 62]], {200}];
+Do[BitSet[Range[50], Range[0, 49]], {200}];
+Do[BitSet[Range[10], 63], {200}];
+Do[BitSet[-Range[10], 63], {200}];
+Do[BitSet[Range[3], {0, -1, 2}], {200}];
+Do[BitSet[1, {-1, 2, 70}], {200}];
+Do[BitSet[NDArray[{1, 2, 3}, DataType -> "int64"], 4], {200}];
+Do[BitSet[NDArray[{1, 2, 3}, DataType -> "int64"], NDArray[{0, 1, 64}, DataType -> "int64"]], {200}];
+Do[BitSet[NDArray[{1.5, 2.}], 1], {200}];
+cfs = Compile[{{v, _Integer, 1}}, BitSet[v, 3]];
+Do[cfs[Range[-50, 50]], {200}];
+Do[cfs[Range[3] + 2^62], {200}];
+cfs2 = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitSet[v, w]];
+Do[cfs2[Range[32], Range[0, 31]], {200}];
+cfss = Compile[{{n, _Integer}, {k, _Integer}}, BitSet[n, k]];
+Do[cfss[42, 9], {200}];
+Do[cfss[0, 63], {200}];
+Do[cfss[42, -1], {200}];
+Do[Table[x + BitSet[Floor[x], 3], {x, 0., 200., 0.5}], {20}];
 MSCRIPT
 
 if command -v leaks >/dev/null 2>&1; then

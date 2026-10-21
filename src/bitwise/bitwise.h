@@ -7,6 +7,7 @@
  *   - BitAnd[n1, n2, ...]   bitwise AND (two's complement for negatives).
  *   - BitOr[n1, n2, ...]    bitwise OR (two's complement for negatives).
  *   - BitNot[n]             bitwise NOT, -1 - n (two's complement).
+ *   - BitSet[n, k]          n with bit k (the 2^k coefficient) set to 1.
  *
  * The rest of the Bit* family (BitShiftLeft / BitShiftRight, ...) is still
  * to come. Each builtin lives in its own <name>.c
@@ -23,6 +24,7 @@ Expr* builtin_bitxor(Expr* res);
 Expr* builtin_bitand(Expr* res);
 Expr* builtin_bitor(Expr* res);
 Expr* builtin_bitnot(Expr* res);
+Expr* builtin_bitset(Expr* res);
 
 void bitwise_init(void);
 

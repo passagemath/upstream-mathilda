@@ -4996,6 +4996,16 @@ void info_init(void) {
         "size are exact. BitNot threads over lists.\n"
         "BitNot[BitNot[x]] is x; non-integer arguments are left unevaluated.");
 
+    symtab_set_docstring("BitSet",
+        "BitSet[n, k] sets to 1 the bit corresponding to the coefficient of "
+        "2^k in the integer n, the bit k places from the right.\n"
+        "Integers are taken in two's complement with an unlimited number of "
+        "digits: the result grows to the size it needs (BitSet[42, 9] is 554) "
+        "and a negative n already has every high bit set (BitSet[-1, 100] is "
+        "-1). BitSet threads over lists.\n"
+        "BitSet[n, k] with k < 0 or a non-integer argument is left "
+        "unevaluated.");
+
     symtab_set_docstring("IntegerExponent",
         "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
         "IntegerExponent[n]\n"

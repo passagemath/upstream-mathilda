@@ -310,3 +310,76 @@ argument (`BitNot[]`, `BitNot[1, 2]`). It goes through the message funnel, so
 `Quiet` silences it and `Check` sees it. A non-integer number (a Real,
 Rational or Complex) is left in the call silently, exactly as a symbol is
 (`BitNot[2.5]` stays unevaluated and `Check` takes the value branch).
+
+## BitSet
+
+- `BitSet[n, k]`: The integer `n` with the bit corresponding to the
+  coefficient of `2^k` set to 1 -- the bit `k` places from the right.
+
+**Features**:
+- `Listable`, `Protected`. Integers are taken in two's complement with an
+  unlimited number of digits. The result grows to whatever size the bit needs
+  (`BitSet[42, 9]` is `554`, `BitSet[0, 64]` is `2^64`). A negative `n`
+  already has every high bit set (`BitSet[-5, 1]` is `-5`, `BitSet[-1, 100]` is
+  `-1`). Threads over lists in either or both arguments (`BitSet[3, {0, 1, 5}]`
+  is `{3, 3, 35}`). Lists of unequal length emit `Thread::tdlen`.
+- Exact at any size. Machine integers set the bit in int64 when the answer
+  fits: k ≤ 62, or any k for a negative `n`. Everything else (a bignum `n`, or
+  bit 63 and up of a non-negative `n`) goes through GMP's `mpz_setbit` into a
+  fresh node, never touching the operand. A result that fits a machine
+  integer is returned as one (`BitSet[-2^64, 63]` is `-2^63`).
+- Left unevaluated **silently**, with no message: a negative `k`
+  (`BitSet[42, -1]`), a bignum `k`, any non-integer argument (`BitSet[2.5, 1]`,
+  `BitSet[5, 1.]`, `BitSet[x, 1]`), and the wrong argument count (`BitSet[5]`,
+  `BitSet[5, 1, 2]`). There are no symbolic rules:
+  `BitSet[BitSet[x, 1], 1]` stays as it is.
+- **Packed / NDArray**: an exact int64 binary kernel in `src/ndinteger.c`,
+  through the machine helper `ndint_bitset_i64`, on the `AWARE` and `INT64_OK`
+  lists. It has three whole-buffer arms:
+  - a buffer of `n` with a scalar `k`: one OR with a constant mask;
+  - a scalar `n` with a buffer of `k`;
+  - two buffers.
+
+  The last two are branch-free, with per-element shifts. On x86-64 they are
+  also compiled for AVX2 (`vpsllvq`) and chosen once at start-up from the
+  CPU's feature bits. Baseline SSE2 has no per-lane shift. A packed array stays
+  packed and a visible `NDArray` gives a visible `NDArray`. An element with no
+  int64 answer (bit 63 of a non-negative `n`, a negative `k`) abandons the
+  buffer, and the List path answers exactly; nothing is ever truncated
+  (`BitSet[Range[3], 63]` gives bignums). At 10^5 elements, against the NumPy
+  equivalents:
+  - `BitSet[v, 5]`: 0.049–0.054 ms vs `bitwise_or(v, 1 << 5)`
+    0.046–0.051 ms, level.
+  - `BitSet[7, kv]`: 0.061–0.069 ms vs `bitwise_or(7, left_shift(1, kv))`
+    0.091–0.105 ms.
+  - `BitSet[v, kv]`: 0.074–0.088 ms vs 0.117–0.129 ms.
+
+  At 10^7 elements, `BitSet[v, kv]` takes 26 ms vs 45 ms. `BitSet[v, 5]` takes
+  21 ms vs 20 ms; both are bound by memory bandwidth.
+- **Compile[]**: `OP_BSET_I`, through the same `ndint_bitset_i64`. It bails
+  to the interpreter where there is no int64 answer, so the bignum or the
+  unevaluated form comes back exactly as uncompiled. It lowers at scalar
+  shape and at array shape (array `n`, array `k`, or both), and
+  `CompileDiagnostics` reports `Compiled -> True` for each. Auto-compilation
+  follows. Scalar, List, packed, `NDArray` and compiled results agree bit for
+  bit.
+
+```
+In[1]:= IntegerDigits[42, 2]
+Out[1]= {1, 0, 1, 0, 1, 0}
+
+In[2]:= BitSet[42, 0]
+Out[2]= 43
+
+In[3]:= BitSet[42, 4]
+Out[3]= 58
+
+In[4]:= BitSet[42, 9]
+Out[4]= 554
+
+In[5]:= IntegerDigits[%, 2]
+Out[5]= {1, 0, 0, 0, 1, 0, 1, 0, 1, 0}
+
+In[6]:= {BitSet[-5, 2], BitSet[0, 64], BitSet[42, -1]}
+Out[6]= {-1, 18446744073709551616, BitSet[42, -1]}
+```

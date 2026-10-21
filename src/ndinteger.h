@@ -77,6 +77,19 @@ bool ndint_factor_i64(int64_t n, int64_t* p, int* e, int* np);
 bool ndint_moebius_mu_i64(int64_t n, int64_t* out);
 int64_t ndint_kronecker_i64(int64_t a, int64_t n);
 
+/* BitSet[n, k] in int64: n with bit k set, two's complement. Shared by the
+ * scalar builtin (src/bitwise/bitset.c), the NDArray kernels and Compile's
+ * OP_BSET_I, so every machine surface agrees bit for bit. Declines (false)
+ * for k < 0 (BitSet stays unevaluated) and for n >= 0 with k >= 63 (the
+ * answer is a bignum). A negative n already has every bit from 63 up set, so
+ * BitSet[n, k] is n there. Inline: it sits in the VM's dispatch loop. */
+static inline bool ndint_bitset_i64(int64_t n, int64_t k, int64_t* out) {
+    if (k < 0) return false;
+    if (k <= 62) { *out = (int64_t)((uint64_t)n | (UINT64_C(1) << k)); return true; }
+    if (n < 0) { *out = n; return true; }
+    return false;
+}
+
 Expr* ndint_prime(Expr* res);          /* Prime[arr] */
 Expr* ndint_powermod(Expr* res);       /* PowerMod[arr, e, m] */
 Expr* ndint_integerdigits(Expr* res);  /* IntegerDigits[arr] */

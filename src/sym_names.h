@@ -325,6 +325,7 @@ extern const char* SYM_BitXor;
 extern const char* SYM_BitAnd;
 extern const char* SYM_BitOr;
 extern const char* SYM_BitNot;
+extern const char* SYM_BitSet;
 extern const char* SYM_IntegerExponent;
 extern const char* SYM_DigitCount;
 extern const char* SYM_DigitSum;

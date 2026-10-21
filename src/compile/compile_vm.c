@@ -1168,6 +1168,13 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(BOR_I):   RD.i = RA.i | RB.i; NEXT();
             /* BitNot: two's-complement NOT (-1 - n), total on int64 -- never bails. */
             OP(BNOT_I):  RD.i = ~RA.i; NEXT();
+            /* BitSet: n with bit k set, through the interpreter's own
+             * ndint_bitset_i64; bails for k < 0 or a bignum answer. */
+            OP(BSET_I): {
+                int64_t r;
+                if (!ndint_bitset_i64((int64_t)RA.i, (int64_t)RB.i, &r)) goto vm_fail;
+                RD.i = (long long)r; NEXT();
+            }
             OP(PPQ_I):   RD.i = int_ppq(RA.i); NEXT();
             /* PrimeQ on |n|: the interpreter's own deterministic Miller-Rabin. */
             OP(PRIMEQ_I): RD.i = mth_is_prime_u64(RA.i >= 0 ? (uint64_t)RA.i

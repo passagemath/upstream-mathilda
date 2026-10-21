@@ -239,6 +239,80 @@ static bool ndk_BitOr_whole2(const int64_t* a, const int64_t* b, size_t sz,
     return true;
 }
 
+/* BitSet[n, k]: n with bit k set, through ndint_bitset_i64 -- the helper the
+ * scalar builtin and Compile's OP_BSET_I share. Declines k < 0 (BitSet stays
+ * unevaluated) and n >= 0 with k >= 63 (a bignum answer); the whole array
+ * then takes the List path. */
+static bool ndk_BitSet_ii(int64_t n, int64_t k, int64_t* out) {
+    return ndint_bitset_i64(n, k, out);
+}
+
+/* BitSet with a per-element k: n | (1 << k) for every lane, branch-free, with
+ * any k outside [0, 62] folded into a flag -- if one is seen the arm DECLINES
+ * and the per-element loop answers it (a negative n with k >= 63 is still an
+ * int64 there; anything else degrades to the List path). The masked shift
+ * count keeps the discarded lanes defined behaviour.
+ *
+ * The loop is bound by the VARIABLE 64-bit shift. arm64's NEON shifts each
+ * lane by its own count, so the plain loop vectorises there; baseline x86-64
+ * (SSE2) has no per-lane shift at all and runs it scalar, ~1.5x behind NumPy,
+ * which dispatches at run time. So on x86 the same body is also compiled for
+ * AVX2 (vpsllvq) and chosen once, in ndinteger_init, from the CPU's own
+ * feature bits. Both clones are the identical C body: bit-identical answers. */
+#define NDI_BITSET_VAR_BODY(AEXPR)                                          \
+    uint64_t bad = 0;                                                       \
+    for (size_t i = 0; i < sz; i++) {                                       \
+        uint64_t k = (uint64_t)ks[i];                                       \
+        bad |= (uint64_t)(k > 62);                                          \
+        out[i] = (int64_t)((uint64_t)(AEXPR) | (UINT64_C(1) << (k & 63)));  \
+    }                                                                       \
+    return bad == 0;
+
+static bool ndi_bitset_sn(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITSET_VAR_BODY(n)
+}
+static bool ndi_bitset_an(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITSET_VAR_BODY(a[i])
+}
+
+#if defined(__GNUC__) && !defined(__clang__) && defined(__x86_64__) && !defined(__AVX2__)
+#define NDI_BITSET_AVX2 1
+__attribute__((target("avx2")))
+static bool ndi_bitset_sn_avx2(int64_t n, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITSET_VAR_BODY(n)
+}
+__attribute__((target("avx2")))
+static bool ndi_bitset_an_avx2(const int64_t* a, const int64_t* ks, size_t sz, int64_t* out) {
+    NDI_BITSET_VAR_BODY(a[i])
+}
+#endif
+
+/* Selected once by ndinteger_init (before any evaluation, so no thread ever
+ * sees them change); the portable clones until then. */
+static bool (*ndi_bitset_sn_fn)(int64_t, const int64_t*, size_t, int64_t*) = ndi_bitset_sn;
+static bool (*ndi_bitset_an_fn)(const int64_t*, const int64_t*, size_t, int64_t*) = ndi_bitset_an;
+
+/* Whole-buffer twin. A buffer of n with a scalar k in [0, 62] is one OR with
+ * a constant mask, which vectorises everywhere; a scalar n over a buffer of
+ * k takes the per-element-k loop above. */
+static bool ndk_BitSet_whole(const int64_t* in, size_t sz, int64_t scal,
+                             bool arr_first, int64_t* out) {
+    if (arr_first) {
+        if (scal < 0 || scal > 62) return false;
+        uint64_t mask = UINT64_C(1) << scal;
+        for (size_t i = 0; i < sz; i++)
+            out[i] = (int64_t)((uint64_t)in[i] | mask);
+        return true;
+    }
+    return ndi_bitset_sn_fn(scal, in, sz, out);
+}
+
+/* Two int64 buffers of the same shape: n from the first, k from the second. */
+static bool ndk_BitSet_whole2(const int64_t* a, const int64_t* b, size_t sz,
+                              int64_t* out) {
+    return ndi_bitset_an_fn(a, b, sz, out);
+}
+
 /* LCM[a, b] = |a|/gcd * |b|, in that order so the product is formed from the
  * already-reduced factor. LCM[0, n] is 0. Overflow declines. */
 static bool ndk_LCM_ii(int64_t a, int64_t b, int64_t* out) {
@@ -485,6 +559,8 @@ static const NDBinaryKernel NDKB_BitAnd =
     { NULL, false, NULL, ndk_BitAnd_ii, true, ndk_BitAnd_whole, ndk_BitAnd_whole2 };
 static const NDBinaryKernel NDKB_BitOr =
     { NULL, false, NULL, ndk_BitOr_ii, true, ndk_BitOr_whole, ndk_BitOr_whole2 };
+static const NDBinaryKernel NDKB_BitSet =
+    { NULL, false, NULL, ndk_BitSet_ii, true, ndk_BitSet_whole, ndk_BitSet_whole2 };
 /* IntegerExponent[n, b]: the largest e with b^e | n. Declines n == 0
  * (Infinity, not an int64) and b < 2 (::ibase in the scalar builtin). */
 static bool ndk_IntegerExponent_ii(int64_t n, int64_t b, int64_t* out) {
@@ -886,6 +962,13 @@ Expr* ndint_binary_predicate(Expr* res, NDBinPred which) {
 /* ---- registration ------------------------------------------------------- */
 
 void ndinteger_init(void) {
+#ifdef NDI_BITSET_AVX2
+    __builtin_cpu_init();
+    if (__builtin_cpu_supports("avx2")) {
+        ndi_bitset_sn_fn = ndi_bitset_sn_avx2;
+        ndi_bitset_an_fn = ndi_bitset_an_avx2;
+    }
+#endif
     symtab_set_ndarray_unary_kernel("IntegerLength", &NDKU_IntegerLength);
     symtab_set_ndarray_unary_kernel("BitLength",     &NDKU_BitLength);
     symtab_set_ndarray_unary_kernel("BitNot",        &NDKU_BitNot);
@@ -897,6 +980,7 @@ void ndinteger_init(void) {
     symtab_set_ndarray_binary_kernel("BitXor",       &NDKB_BitXor);
     symtab_set_ndarray_binary_kernel("BitAnd",       &NDKB_BitAnd);
     symtab_set_ndarray_binary_kernel("BitOr",        &NDKB_BitOr);
+    symtab_set_ndarray_binary_kernel("BitSet",       &NDKB_BitSet);
     symtab_set_ndarray_binary_kernel("LCM",          &NDKB_LCM);
     symtab_set_ndarray_binary_kernel("DivisorSigma", &NDKB_DivisorSigma);
     symtab_set_ndarray_binary_kernel("JacobiSymbol", &NDKB_JacobiSymbol);

@@ -1491,6 +1491,284 @@ static void test_bitnot_stress(void) {
     }
 }
 
+/* ---- BitSet ------------------------------------------------------------ */
+
+static void test_bitset_documented_examples(void) {
+    assert_eval_eq("IntegerDigits[42, 2]", "{1, 0, 1, 0, 1, 0}", 0);
+    assert_eval_eq("BitSet[42, 0]", "43", 0);
+    assert_eval_eq("IntegerDigits[BitSet[42, 0], 2]", "{1, 0, 1, 0, 1, 1}", 0);
+    assert_eval_eq("BitSet[42, 4]", "58", 0);
+    assert_eval_eq("IntegerDigits[BitSet[42, 4], 2]", "{1, 1, 1, 0, 1, 0}", 0);
+    /* BitSet grows the integer to the size it needs. */
+    assert_eval_eq("BitSet[42, 9]", "554", 0);
+    assert_eval_eq("IntegerDigits[BitSet[42, 9], 2]",
+                   "{1, 0, 0, 0, 1, 0, 1, 0, 1, 0}", 0);
+}
+
+static void test_bitset_basic(void) {
+    assert_eval_eq("BitSet[0, 0]", "1", 0);
+    assert_eval_eq("BitSet[42, 1]", "42", 0);   /* already set */
+    assert_eval_eq("BitSet[42, 3]", "42", 0);
+    assert_eval_eq("BitSet[0, 10]", "1024", 0);
+    assert_eval_eq("BitSet[BitSet[0, 1], 2]", "6", 0);
+    assert_eval_eq("Table[BitSet[0, k], {k, 0, 7}]",
+                   "{1, 2, 4, 8, 16, 32, 64, 128}", 0);
+}
+
+static void test_bitset_negatives(void) {
+    /* Two's complement, infinitely sign-extended. */
+    assert_eval_eq("BitSet[-5, 1]", "-5", 0);
+    assert_eval_eq("BitSet[-5, 2]", "-1", 0);
+    assert_eval_eq("BitSet[-1, 0]", "-1", 0);
+    assert_eval_eq("BitSet[-1, 100]", "-1", 0);
+    assert_eval_eq("BitSet[-8, 0]", "-7", 0);
+    assert_eval_eq("BitSet[-256, 7]", "-128", 0);
+}
+
+static void test_bitset_int64_boundary(void) {
+    assert_eval_eq("BitSet[0, 62]", "4611686018427387904", 0);
+    assert_eval_eq("Head[BitSet[0, 62]]", "Integer", 0);
+    /* Bit 63 of a non-negative n is a bignum. */
+    assert_eval_eq("BitSet[0, 63]", "9223372036854775808", 0);
+    assert_eval_eq("BitSet[0, 64]", "18446744073709551616", 0);
+    assert_eval_eq("BitSet[9223372036854775807, 63]", "18446744073709551615", 0);
+    assert_eval_eq("BitSet[2^62, 62]", "4611686018427387904", 0);
+    /* A negative int64 already has every bit from 63 up set. */
+    assert_eval_eq("BitSet[-2^63, 63]", "-9223372036854775808", 0);
+    assert_eval_eq("BitSet[-2^63, 64]", "-9223372036854775808", 0);
+    assert_eval_eq("BitSet[-2^63, 62]", "-4611686018427387904", 0);
+    assert_eval_eq("BitSet[-2^63, 0]", "-9223372036854775807", 0);
+    assert_eval_eq("BitSet[-7, 1000]", "-7", 0);
+}
+
+static void test_bitset_bignums(void) {
+    assert_eval_eq("BitSet[2^70, 0]", "1180591620717411303425", 0);
+    assert_eval_eq("BitSet[2^70, 70]", "1180591620717411303424", 0);
+    assert_eval_eq("BitSet[2^70, 71] == 3 2^70", "True", 0);
+    assert_eval_eq("BitSet[-2^70, 0] == -2^70 + 1", "True", 0);
+    assert_eval_eq("BitSet[-2^70, 70]", "-1180591620717411303424", 0);
+    assert_eval_eq("BitSet[100!, 1000] == 100! + 2^1000", "True", 0);
+    assert_eval_eq("BitLength[BitSet[1, 10^6]]", "1000001", 0);
+    /* A negative bignum moved back into int64 range is demoted. */
+    assert_eval_eq("BitSet[-2^64, 63]", "-9223372036854775808", 0);
+    assert_eval_eq("Head[BitSet[-2^64, 63]]", "Integer", 0);
+    assert_eval_eq("BitSet[-2^63 - 1, 63] == -1", "True", 0);
+}
+
+static void test_bitset_bignum_operands_untouched(void) {
+    /* mpz_setbit writes a fresh node; a bound / shared operand is unchanged. */
+    assert_eval_eq("p = 3^200; r = BitSet[p, 0]; {p == 3^200, r == 3^200}",
+                   "{True, True}", 0);
+    assert_eval_eq("p = 2^90; r = BitSet[p, 3]; {p == 2^90, r == 2^90 + 8}",
+                   "{True, True}", 0);
+    assert_eval_eq("l = {2^90, -2^91}; BitSet[l, 5]; l == {2^90, -2^91}", "True", 0);
+}
+
+static void test_bitset_unevaluated_silent(void) {
+    /* No message for any of these, wrong argument counts included. */
+    const char* in[] = { "BitSet[42, -1]", "BitSet[-10, -2]", "BitSet[2.5, 1]",
+                         "BitSet[5, 1.]", "BitSet[x, 1]", "BitSet[5, x]",
+                         "BitSet[1/2, 1]", "BitSet[5, 1/2]", "BitSet[I, 0]",
+                         "BitSet[1, 2^70]", "BitSet[5]", "BitSet[5, 1, 2]",
+                         "BitSet[]", "BitSet[BitSet[x, 1], 1]" };
+    const char* out[] = { "BitSet[42, -1]", "BitSet[-10, -2]", "BitSet[2.5, 1]",
+                          "BitSet[5, 1.0]", "BitSet[x, 1]", "BitSet[5, x]",
+                          "BitSet[1/2, 1]", "BitSet[5, 1/2]", "BitSet[I, 0]",
+                          "BitSet[1, 1180591620717411303424]", "BitSet[5]",
+                          "BitSet[5, 1, 2]", "BitSet[]", "BitSet[BitSet[x, 1], 1]" };
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char* result = NULL;
+        char* err = eval_capturing_stderr(in[i], &result);
+        ASSERT(result != NULL);
+        ASSERT_STR_EQ(result, out[i]);
+        ASSERT_MSG(err == NULL || strstr(err, "::") == NULL,
+                   "unexpected diagnostic for %s: %s", in[i], err ? err : "(null)");
+        free(result);
+        free(err);
+    }
+    /* Check is the funnel-level oracle: no message of any kind fired. */
+    for (size_t i = 0; i < sizeof in / sizeof in[0]; i++) {
+        char src[128], want[128];
+        snprintf(src, sizeof src, "Check[%s, failed]", in[i]);
+        snprintf(want, sizeof want, "%s", out[i]);
+        assert_eval_eq(src, want, 0);
+    }
+}
+
+static void test_bitset_listable_shapes(void) {
+    assert_eval_eq("BitSet[{1, 2, 3}, {0, 1, 2}]", "{1, 2, 7}", 0);
+    assert_eval_eq("BitSet[{1, 2, 3}, 2]", "{5, 6, 7}", 0);
+    assert_eval_eq("BitSet[3, {0, 1, 5}]", "{3, 3, 35}", 0);
+    assert_eval_eq("BitSet[{1, {2, x}}, 3]", "{9, {10, BitSet[x, 3]}}", 0);
+    assert_eval_eq("BitSet[{0, 2^70, -1, 2.5}, 64] === {2^64, 2^70 + 2^64, -1, BitSet[2.5, 64]}",
+                   "True", 0);
+    assert_eval_eq("BitSet[{}, 3]", "{}", 0);
+    assert_eval_eq("BitSet[{{1, 2}, {3, 4}}, {1, 2}]", "{{3, 2}, {7, 4}}", 0);
+}
+
+static void test_bitset_ragged_tdlen(void) {
+    /* Unequal lengths: Thread::tdlen from the evaluator's Listable threader,
+     * the call left unevaluated (also from a packed operand). */
+    assert_eval_eq("BitSet[{1, 2, 3}, {0, 1}]", "BitSet[{1, 2, 3}, {0, 1}]", 0);
+    assert_eval_eq("BitSet[Range[3], Range[2]]", "BitSet[{1, 2, 3}, {1, 2}]", 0);
+}
+
+static void test_bitset_properties(void) {
+    /* BitSet[n, k] == BitOr[n, 2^k]; idempotent; the bit reads back as set;
+     * no other bit changes. Over every sign and size. */
+    assert_eval_eq(
+        "SeedRandom[21]; ns = Join[RandomInteger[{-2^200, 2^200}, 30], "
+        "RandomInteger[{-2^62, 2^62}, 30], "
+        "{-2^63, 2^63 - 1, 2^63, -2^63 - 1, 0, -1, 1, 3^100, -5^90}]; "
+        "ks = {0, 1, 5, 31, 32, 61, 62, 63, 64, 65, 127, 128, 300}; "
+        "And @@ Flatten[Table[BitSet[n, k] == BitOr[n, 2^k] && "
+        "BitSet[BitSet[n, k], k] == BitSet[n, k] && "
+        "BitAnd[BitSet[n, k], 2^k] == 2^k && "
+        "BitXor[BitSet[n, k], n] == If[BitAnd[n, 2^k] == 0, 2^k, 0], "
+        "{n, ns}, {k, ks}]]", "True", 0);
+    /* Independent oracle: the binary digits of a non-negative n. */
+    assert_eval_eq(
+        "And @@ Flatten[Table[IntegerDigits[BitSet[a, k], 2, 12] == "
+        "ReplacePart[IntegerDigits[a, 2, 12], 12 - k -> 1], {a, 0, 255}, {k, 0, 11}]]",
+        "True", 0);
+    /* Setting bits commutes. */
+    assert_eval_eq(
+        "And @@ Flatten[Table[BitSet[BitSet[n, j], k] == BitSet[BitSet[n, k], j], "
+        "{n, {-9, 0, 77, 2^80}}, {j, {0, 3, 63, 90}}, {k, {1, 62, 64}}]]", "True", 0);
+}
+
+static void test_bitset_packed_and_ndarray(void) {
+    assert_eval_eq("PackedArrayQ[BitSet[Range[10], 3]]", "True", 0);
+    assert_eval_eq("BitSet[Range[10], 3]", "{9, 10, 11, 12, 13, 14, 15, 8, 9, 10}", 0);
+    assert_eval_eq("PackedArrayQ[BitSet[5, Range[0, 9]]]", "True", 0);
+    assert_eval_eq("BitSet[5, Range[0, 4]]", "{5, 7, 5, 13, 21}", 0);
+    assert_eval_eq("PackedArrayQ[BitSet[Range[8], Range[0, 7]]]", "True", 0);
+    assert_eval_eq("BitSet[Range[8], Range[0, 7]]", "{1, 2, 7, 12, 21, 38, 71, 136}", 0);
+    assert_eval_eq("BitSet[NDArray[{1, 2, 3}, DataType -> \"int64\"], 4]",
+                   "NDArray[{17, 18, 19}]", 0);
+    assert_eval_eq("BitSet[5, NDArray[{0, 1, 2}, DataType -> \"int64\"]]",
+                   "NDArray[{5, 7, 5}]", 0);
+    assert_eval_eq("BitSet[NDArray[{1, 2, 3}, DataType -> \"int64\"], "
+                   "NDArray[{0, 1, 62}, DataType -> \"int64\"]]",
+                   "NDArray[{1, 2, 4611686018427387907}]", 0);
+    assert_eval_eq("BitSet[NDArray[{{1, 2}, {3, 4}}, DataType -> \"int64\"], 3]",
+                   "NDArray[{{9, 10}, {11, 12}}]", 0);
+    assert_eval_eq("PackedArrayQ[BitSet[Partition[Range[12], 3], 6]]", "True", 0);
+    /* A real buffer has no integer answer: elements stay unevaluated. */
+    assert_eval_eq("BitSet[NDArray[{1.5, 2.}], 1]", "{BitSet[1.5, 1], BitSet[2.0, 1]}", 0);
+}
+
+static void test_bitset_buffer_declines(void) {
+    /* Bit 63 of a non-negative buffer element is a bignum: the buffer is
+     * abandoned and the List path answers exactly -- never a truncation. */
+    assert_eval_eq("BitSet[Range[3], 63]",
+                   "{9223372036854775809, 9223372036854775810, 9223372036854775811}", 0);
+    assert_eval_eq("BitSet[NDArray[{0, 1}, DataType -> \"int64\"], 64]",
+                   "{18446744073709551616, 18446744073709551617}", 0);
+    /* All-negative buffer past bit 62: still int64, unchanged. */
+    assert_eval_eq("BitSet[-Range[5], 63]", "{-1, -2, -3, -4, -5}", 0);
+    assert_eval_eq("BitSet[-Range[5], 1000]", "{-1, -2, -3, -4, -5}", 0);
+    assert_eval_eq("BitSet[-5, Range[60, 66]]", "{-5, -5, -5, -5, -5, -5, -5}", 0);
+    /* Mixed signs past bit 62. */
+    assert_eval_eq("BitSet[{-1, 0, 1}, 63]",
+                   "{-1, 9223372036854775808, 9223372036854775809}", 0);
+    /* A negative k element: that element stays unevaluated. */
+    assert_eval_eq("BitSet[Range[3], {0, -1, 2}]", "{1, BitSet[2, -1], 7}", 0);
+    assert_eval_eq("BitSet[1, {-1, 2}]", "{BitSet[1, -1], 5}", 0);
+    assert_eval_eq("BitSet[NDArray[{1, 2}, DataType -> \"int64\"], -1]",
+                   "{BitSet[1, -1], BitSet[2, -1]}", 0);
+    assert_eval_eq("BitSet[{1, 2^70, x}, 1]",
+                   "{3, 1180591620717411303426, BitSet[x, 1]}", 0);
+}
+
+static void test_bitset_surfaces_agree(void) {
+    /* List == packed == NDArray == Compile (array and scalar), for every arm:
+     * array n with scalar k, scalar n with array k, and two arrays. */
+    assert_eval_eq(
+        "SeedRandom[22]; na = Join[RandomInteger[{-2^62, 2^62}, 500], "
+        "{-2^63, 2^63 - 1, 0, -1}]; ka = RandomInteger[{0, 62}, Length[na]]; "
+        "ref1 = Table[BitOr[na[[i]], 2^37], {i, Length[na]}]; "
+        "ref2 = Table[BitOr[-12345, 2^ka[[i]]], {i, Length[na]}]; "
+        "ref3 = Table[BitOr[na[[i]], 2^ka[[i]]], {i, Length[na]}]; "
+        "{BitSet[na, 37] === ref1, "
+        " Normal[BitSet[NDArray[na, DataType -> \"int64\"], 37]] === ref1, "
+        " Compile[{{v, _Integer, 1}}, BitSet[v, 37]][na] === ref1, "
+        " BitSet[-12345, ka] === ref2, "
+        " Normal[BitSet[-12345, NDArray[ka, DataType -> \"int64\"]]] === ref2, "
+        " Compile[{{v, _Integer, 1}}, BitSet[-12345, v]][ka] === ref2, "
+        " BitSet[na, ka] === ref3, "
+        " Normal[BitSet[NDArray[na, DataType -> \"int64\"], NDArray[ka, DataType -> \"int64\"]]] === ref3, "
+        " Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, BitSet[v, w]][na, ka] === ref3, "
+        " Table[Compile[{{s, _Integer}, {t, _Integer}}, BitSet[s, t]][na[[i]], ka[[i]]], {i, Length[na]}] === ref3, "
+        " Table[BitSet[na[[i]], ka[[i]]], {i, Length[na]}] === ref3}",
+        "{True, True, True, True, True, True, True, True, True, True, True}", 0);
+}
+
+static void test_bitset_compile(void) {
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitSet[n, k]][42, 9]", "554", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitSet[n, 4]][42]", "58", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitSet[n, 62]][0]", "4611686018427387904", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitSet[n, 70]][-7]", "-7", 0);
+    /* No int64 answer: the VM bails and the interpreter answers exactly. */
+    assert_eval_eq("Compile[{{n, _Integer}}, BitSet[n, 63]][0]", "9223372036854775808", 0);
+    assert_eval_eq("Compile[{{n, _Integer}, {k, _Integer}}, BitSet[n, k]][42, -1]",
+                   "BitSet[42, -1]", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitSet[v, 2]][Range[5]]", "{5, 6, 7, 4, 5}", 0);
+    assert_eval_eq("Compile[{{v, _Integer, 1}}, BitSet[v, 63]][Range[2]]",
+                   "{9223372036854775809, 9223372036854775810}", 0);
+    assert_eval_eq("Compile[{{n, _Integer}}, BitAnd[BitSet[n, 3], 15] + BitNot[n]][1]", "7", 0);
+    /* Not an integer: the interpreter leaves it unevaluated, so must Compile. */
+    assert_eval_eq("Compile[{{x, _Real}}, BitSet[x, 1]][2.5]", "BitSet[2.5, 1]", 0);
+}
+
+static void test_bitset_compile_diagnostics(void) {
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{n, _Integer}, {k, _Integer}}, BitSet[n, k]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitSet[v, 3]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}}, BitSet[7, v]]", "True", 0);
+    assert_eval_eq("\"Compiled\" /. CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, BitSet[v, w]]", "True", 0);
+}
+
+static void test_bitset_autocompile(void) {
+    const char* tbl = "Table[x + BitSet[Floor[x], 3], {x, 0., 2000., 0.5}]";
+    const char* sm  = "Sum[Sin[x] BitSet[Floor[x], 2], {x, 0., 500., 0.25}]";
+    assert_eval_eq("Table[x + BitSet[Floor[x], 3], {x, 0., 2., 0.5}]",
+                   "{8.0, 8.5, 10.0, 10.5, 12.0}", 0);
+    autocompile_set_enabled(false);
+    Expr* t_off = bitnot_eval_owned(tbl);
+    Expr* s_off = bitnot_eval_owned(sm);
+    autocompile_set_enabled(true);
+    Expr* t_on = bitnot_eval_owned(tbl);
+    Expr* s_on = bitnot_eval_owned(sm);
+    ASSERT(expr_eq(t_off, t_on));
+    ASSERT(expr_eq(s_off, s_on));
+    ASSERT(s_on->type == EXPR_REAL);
+    expr_free(t_off); expr_free(s_off); expr_free(t_on); expr_free(s_on);
+}
+
+static void test_bitset_attributes(void) {
+    assert_eval_eq("Attributes[BitSet]", "{Listable, Protected}", 0);
+}
+
+static void test_bitset_docstring_and_sym(void) {
+    SymbolDef* def = symtab_get_def("BitSet");
+    ASSERT(def != NULL);
+    ASSERT(def->docstring != NULL);
+    ASSERT(strstr(def->docstring, "coefficient of 2^k") != NULL);
+    ASSERT(SYM_BitSet != NULL && strcmp(SYM_BitSet, "BitSet") == 0);
+}
+
+static void test_bitset_stress(void) {
+    for (int k = 0; k < 50; k++) {
+        assert_eval_eq("BitSet[42, 9]", "554", 0);
+        assert_eval_eq("BitSet[0, 64]", "18446744073709551616", 0);
+        assert_eval_eq("BitSet[2^70, 0]", "1180591620717411303425", 0);
+        assert_eval_eq("BitSet[-2^64, 63]", "-9223372036854775808", 0);
+        assert_eval_eq("BitSet[x, 1]", "BitSet[x, 1]", 0);
+        assert_eval_eq("BitSet[Range[4], 63] == Range[4] + 2^63", "True", 0);
+        assert_eval_eq("BitSet[Range[4], 2]", "{5, 6, 7, 4}", 0);
+    }
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1623,6 +1901,26 @@ int main(void) {
     TEST(test_bitnot_docstring_and_sym);
     TEST(test_bitnot_stress);
 
-    printf("All BitLength / BitXor / BitAnd / BitOr / BitNot tests passed!\n");
+    TEST(test_bitset_documented_examples);
+    TEST(test_bitset_basic);
+    TEST(test_bitset_negatives);
+    TEST(test_bitset_int64_boundary);
+    TEST(test_bitset_bignums);
+    TEST(test_bitset_bignum_operands_untouched);
+    TEST(test_bitset_unevaluated_silent);
+    TEST(test_bitset_listable_shapes);
+    TEST(test_bitset_ragged_tdlen);
+    TEST(test_bitset_properties);
+    TEST(test_bitset_packed_and_ndarray);
+    TEST(test_bitset_buffer_declines);
+    TEST(test_bitset_surfaces_agree);
+    TEST(test_bitset_compile);
+    TEST(test_bitset_compile_diagnostics);
+    TEST(test_bitset_autocompile);
+    TEST(test_bitset_attributes);
+    TEST(test_bitset_docstring_and_sym);
+    TEST(test_bitset_stress);
+
+    printf("All BitLength / BitXor / BitAnd / BitOr / BitNot / BitSet tests passed!\n");
     return 0;
 }

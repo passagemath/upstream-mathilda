@@ -31,6 +31,17 @@
 Expr* mathilda_run_file(const char* path, int* opened);
 
 /*
+ * $InputFileName: the absolute path of the file currently being read (a -file
+ * script, a Get[] or an internal module load), "" otherwise.  A reader brackets
+ * its loop with these: enter sets $InputFileName to `path` made absolute and
+ * returns the previous value (owned by the caller); leave restores it and frees
+ * it.  The pair nests, so a Get inside a script sees the inner file and the
+ * script sees its own path again afterwards.
+ */
+Expr* mth_input_file_enter(const char* path);
+void  mth_input_file_leave(Expr* prev);
+
+/*
  * Resolve the internal module named by `relpath` (e.g. "simp/FullSimplify.m",
  * relative to the source tree's src/internal directory) to a readable file on
  * disk, writing the located path into `out` (a buffer of `outsz` bytes).

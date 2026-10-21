@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, and the `$InputFileName` system variable).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -655,6 +655,71 @@ FileBaseName["report.tar.gz"]    (* "report.tar" *)
 FileExtension["/etc/.bashrc"]    (* "" *)
 FileBaseName["/etc/.bashrc"]     (* ".bashrc" *)
 ```
+
+## DirectoryName
+Returns the directory portion of a path, including its final separator.
+- `DirectoryName["name"]`: everything up to and including the last separator.
+- `DirectoryName["name", n]`: goes up `n` levels (`n` a positive machine integer).
+
+**Features**:
+- `Protected`.
+- Pure string operation; it does not touch the filesystem.
+- Runs of separators are collapsed first, and a trailing separator names a
+  directory: `DirectoryName["/a/b/"]` is `"/a/"`.
+- `""` when there is no directory portion (`"c.txt"`, `"/"`, or more levels than the path has).
+- `DirectoryName::string` for a non-string, `DirectoryName::intpm` for a bad `n`.
+  Both leave the call unevaluated.
+- `\` is also a separator on Windows.
+
+**Example**:
+```
+DirectoryName["/a/b/c.txt"]      (* "/a/b/" *)
+DirectoryName["/a/b/c.txt", 2]   (* "/a/" *)
+DirectoryName["c.txt"]           (* "" *)
+DirectoryName[$InputFileName]    (* the running script's directory *)
+```
+
+## FileNames
+Lists files by name pattern.
+- `FileNames[]`: every entry in the working directory.
+- `FileNames[forms]`: entries whose names match `forms`.
+- `FileNames[forms, dirs]`: searches the directory, or list of directories, `dirs`.
+- `FileNames[forms, dirs, n]`: also searches subdirectories down to depth `n`
+  (a non-negative integer or `Infinity`).
+
+**Features**:
+- `Protected`. Option `IgnoreCase -> Automatic`, which is case-insensitive on
+  macOS and Windows and case-sensitive elsewhere. `True` or `False` overrides it.
+- `forms` is a string pattern (`"*.m"`, with `*` and `@`), a `StringExpression`,
+  a `RegularExpression`, or a list of these. It is matched against each
+  entry's name.
+- A string form containing a separator moves its directory part onto the
+  search directory: `FileNames["sub/*.m"]` is `{"sub/d.m"}`.
+- With `dirs` given, each name carries its directory (`"sub/d.m"`, `"./a.m"`).
+  Without `dirs`, names are bare.
+- Hidden files and directories count as entries. Subdirectories are found with
+  `lstat`, so a symlinked directory is listed but not followed.
+- The result is canonically sorted with duplicates removed. A missing
+  directory contributes nothing.
+- Depth `0` follows WL: `dirs` is ignored and the working directory is listed.
+  A negative depth emits `FileNames::innf` and leaves the call unevaluated.
+- Needs the PCRE2 string-pattern engine, like `StringMatchQ`.
+
+**Example**:
+```
+FileNames["*.m", "src/internal"]
+FileNames["*.m", ".", Infinity]       (* recursive *)
+FileNames[{"*.c", "*.h"}, "src"]
+```
+
+## $InputFileName
+The absolute path of the file currently being read, or `""` when none is.
+- Set while a `-file` script runs, and while `Get` (or an internal module load)
+  reads a file. It is restored afterwards, so a `Get` inside a script sees the
+  inner file, and the script sees its own path again once the `Get` returns.
+- The path is made absolute with `realpath` (`_fullpath` on Windows). If that
+  fails, the path is used as given.
+- No attributes, as in WL.
 
 ## FileNameJoin
 Assembles a file name from a list of path components (or canonicalizes a lone name).

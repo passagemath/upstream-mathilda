@@ -48,6 +48,34 @@
 /* Longest module path we build; comfortably above any real filesystem path. */
 #define LM_PATH_MAX 2048
 
+/* Set $InputFileName's OwnValue to `val` (borrowed). */
+static void input_file_set(Expr* val) {
+    Expr* sym = expr_new_symbol("$InputFileName");
+    symtab_add_own_value("$InputFileName", sym, val);
+    expr_free(sym);
+}
+
+Expr* mth_input_file_enter(const char* path) {
+    Rule* r = symtab_get_own_values("$InputFileName");
+    Expr* prev = (r && r->replacement) ? expr_copy(r->replacement)
+                                       : expr_new_string("");
+#ifdef _WIN32
+    char* abs = _fullpath(NULL, path, 0);
+#else
+    char* abs = realpath(path, NULL);
+#endif
+    Expr* val = expr_new_string(abs ? abs : path);   /* fall back to as given */
+    free(abs);
+    input_file_set(val);
+    expr_free(val);
+    return prev;
+}
+
+void mth_input_file_leave(Expr* prev) {
+    input_file_set(prev);
+    expr_free(prev);
+}
+
 Expr* mathilda_run_file(const char* path, int* opened) {
     FILE* fp = fopen(path, "r");
     if (!fp) {
@@ -75,6 +103,7 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     fclose(fp);
 
     Expr* last_eval = expr_new_symbol(SYM_Null);
+    Expr* prev_input = mth_input_file_enter(path);
     const char* ptr = buffer;
     while (*ptr != '\0') {
         Expr* parsed = parse_next_expression(&ptr);
@@ -89,6 +118,7 @@ Expr* mathilda_run_file(const char* path, int* opened) {
          * top-level driver can shut down without running the rest. */
         if (mth_quit_requested()) break;
     }
+    mth_input_file_leave(prev_input);
 
     free(buffer);
     return last_eval;

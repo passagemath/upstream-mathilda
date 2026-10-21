@@ -72,4 +72,12 @@ Expr* builtin_fileprint(Expr* res);
 Expr* builtin_filenamejoin(Expr* res);
 Expr* builtin_filenamesplit(Expr* res);
 
+/* DirectoryName["name"] / DirectoryName["name", n] -- directory portion of a
+ * path, as a pure string operation ("/a/b/c.txt" -> "/a/b/"). */
+Expr* builtin_directoryname(Expr* res);
+
+/* FileNames[forms, dirs, n] -- names of the files matching forms in dirs,
+ * searched to depth n; directories count as entries. */
+Expr* builtin_filenames(Expr* res);
+
 #endif /* FILES_H */

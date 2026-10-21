@@ -1452,6 +1452,7 @@ static int run_script_file(const char* path) {
     }
 
     int status = 0;
+    Expr* prev_input = mth_input_file_enter(path);   /* $InputFileName */
     const char* ptr = buffer;
     while (*ptr != '\0') {
         const char* stmt_start = ptr;
@@ -1483,6 +1484,7 @@ static int run_script_file(const char* path) {
             break;
         }
     }
+    mth_input_file_leave(prev_input);
 
     free(buffer);
 

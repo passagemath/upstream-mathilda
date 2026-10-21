@@ -16,6 +16,8 @@
  *                   pure-directory inputs).
  *   FileBaseName  — symmetric coverage with FileExtension, plus the
  *                   "split off last extension only" behaviour.
+ *   DirectoryName, FileNames, $InputFileName — reference cases checked
+ *                   against wolframscript, on a scratch directory tree.
  *
  * All scratch paths live under /tmp keyed by pid + tag so concurrent
  * test binaries don't collide; every test cleans up the files it
@@ -793,6 +795,133 @@ void test_filenamesplit_options(void) {
                    "{OperatingSystem -> \"Unix\"}", 0);
 }
 
+/* ===== DirectoryName ===== */
+
+void test_directoryname_cases(void) {
+    /* Reference values from wolframscript. */
+    assert_eval_eq("DirectoryName[\"/a/b/c.txt\"]", "\"/a/b/\"", 0);
+    assert_eval_eq("DirectoryName[\"/a/b/\"]", "\"/a/\"", 0);
+    assert_eval_eq("DirectoryName[\"c.txt\"]", "\"\"", 0);
+    assert_eval_eq("DirectoryName[\"/\"]", "\"\"", 0);
+    assert_eval_eq("DirectoryName[\"/a\"]", "\"/\"", 0);
+    assert_eval_eq("DirectoryName[\"a/b\"]", "\"a/\"", 0);
+    assert_eval_eq("DirectoryName[\"a//b\"]", "\"a/\"", 0);
+    assert_eval_eq("DirectoryName[\"///a//b//\"]", "\"/a/\"", 0);
+    assert_eval_eq("DirectoryName[\"/a/b/c\", 2]", "\"/a/\"", 0);
+    assert_eval_eq("DirectoryName[\"/a/b/c\", 5]", "\"\"", 0);
+}
+
+void test_directoryname_unevaluated_on_bad_args(void) {
+    assert_eval_eq("Quiet[DirectoryName[3]]", "DirectoryName[3]", 0);
+    assert_eval_eq("Quiet[DirectoryName[\"/a/b\", 0]]", "DirectoryName[\"/a/b\", 0]", 0);
+    assert_eval_eq("Check[DirectoryName[3], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[DirectoryName]", "{Protected}", 0);
+}
+
+/* ===== FileNames ===== */
+
+/* Build  root/{a.m, b.wl, c.txt, .hid, sub/{d.m, deep/e.m}}. */
+static void fn_tree(char* root, size_t cap) {
+    char p[512];
+    scratch_path(root, cap, "fntree");
+    ASSERT(mkdir(root, 0700) == 0);
+    const char* files[] = { "a.m", "b.wl", "c.txt", ".hid" };
+    for (size_t i = 0; i < 4; i++) {
+        snprintf(p, sizeof p, "%s/%s", root, files[i]);
+        FILE* fp = fopen(p, "w"); ASSERT(fp != NULL); fclose(fp);
+    }
+    snprintf(p, sizeof p, "%s/sub", root);       ASSERT(mkdir(p, 0700) == 0);
+    snprintf(p, sizeof p, "%s/sub/deep", root);  ASSERT(mkdir(p, 0700) == 0);
+    snprintf(p, sizeof p, "%s/sub/d.m", root);
+    FILE* fp = fopen(p, "w"); ASSERT(fp != NULL); fclose(fp);
+    snprintf(p, sizeof p, "%s/sub/deep/e.m", root);
+    fp = fopen(p, "w"); ASSERT(fp != NULL); fclose(fp);
+}
+
+static void fn_tree_rm(const char* root) {
+    char p[512];
+    const char* rel[] = { "sub/deep/e.m", "sub/d.m", "a.m", "b.wl", "c.txt", ".hid" };
+    for (size_t i = 0; i < 6; i++) {
+        snprintf(p, sizeof p, "%s/%s", root, rel[i]);
+        unlink(p);
+    }
+    snprintf(p, sizeof p, "%s/sub/deep", root); rmdir(p);
+    snprintf(p, sizeof p, "%s/sub", root);      rmdir(p);
+    rmdir(root);
+}
+
+/* Evaluate `fmt` with every %s replaced by the tree root, expect True. */
+static void fn_check(const char* root, const char* fmt) {
+    char src[2048], cur[2048];
+    snprintf(cur, sizeof cur, "%s", fmt);
+    for (;;) {
+        char* at = strstr(cur, "%s");
+        if (!at) break;
+        *at = '\0';
+        snprintf(src, sizeof src, "%s%s%s", cur, root, at + 2);
+        snprintf(cur, sizeof cur, "%s", src);
+    }
+    assert_eval_eq(cur, "True", 0);
+}
+
+void test_filenames_tree(void) {
+    char root[256];
+    fn_tree(root, sizeof root);
+    /* Depth 1, a dir prefix on every name, hidden files and dirs included. */
+    fn_check(root, "FileNames[\"*\", \"%s\"] === Sort[{\"%s/a.m\", \"%s/b.wl\", "
+                   "\"%s/c.txt\", \"%s/.hid\", \"%s/sub\"}]");
+    fn_check(root, "FileNames[\"*.m\", \"%s\"] === {\"%s/a.m\"}");
+    /* A trailing separator on the dir is not doubled. */
+    fn_check(root, "FileNames[\"*.m\", \"%s/\"] === {\"%s/a.m\"}");
+    /* Depth 2 and Infinity. */
+    fn_check(root, "FileNames[\"*.m\", \"%s\", 2] === Sort[{\"%s/a.m\", \"%s/sub/d.m\"}]");
+    fn_check(root, "FileNames[\"*.m\", \"%s\", Infinity] === "
+                   "Sort[{\"%s/a.m\", \"%s/sub/d.m\", \"%s/sub/deep/e.m\"}]");
+    /* Several dirs; the directory part of a form moves onto the dir. */
+    fn_check(root, "FileNames[\"*.m\", {\"%s\", \"%s/sub\"}] === "
+                   "Sort[{\"%s/a.m\", \"%s/sub/d.m\"}]");
+    fn_check(root, "FileNames[\"sub/*.m\", \"%s\"] === {\"%s/sub/d.m\"}");
+    /* List forms (deduplicated), StringExpression and RegularExpression. */
+    fn_check(root, "FileNames[{\"*.m\", \"a*\"}, \"%s\"] === {\"%s/a.m\"}");
+    fn_check(root, "FileNames[__ ~~ \".wl\", \"%s\"] === {\"%s/b.wl\"}");
+    fn_check(root, "FileNames[RegularExpression[\"[ab]\\\\..*\"], \"%s\"] === "
+                   "Sort[{\"%s/a.m\", \"%s/b.wl\"}]");
+    /* Case: explicit IgnoreCase overrides the platform default. */
+    fn_check(root, "FileNames[\"*.M\", \"%s\", IgnoreCase -> False] === {}");
+    fn_check(root, "FileNames[\"*.M\", \"%s\", IgnoreCase -> True] === {\"%s/a.m\"}");
+    /* A missing directory or a plain file contributes nothing. */
+    fn_check(root, "FileNames[\"*\", \"%s/nonexistent\"] === {}");
+    fn_check(root, "FileNames[\"*\", \"%s/a.m\"] === {}");
+    fn_tree_rm(root);
+}
+
+void test_filenames_bad_args(void) {
+    assert_eval_eq("Quiet[FileNames[\"*\", \".\", -1]]", "FileNames[\"*\", \".\", -1]", 0);
+    assert_eval_eq("Check[FileNames[\"*\", \".\", -1], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("FileNames[\"*\", 3]", "FileNames[\"*\", 3]", 0);
+    assert_eval_eq("Attributes[FileNames]", "{Protected}", 0);
+    assert_eval_eq("Options[FileNames]", "{IgnoreCase -> Automatic}", 0);
+}
+
+/* ===== $InputFileName ===== */
+
+void test_inputfilename_get(void) {
+    char path[256], src[512];
+    scratch_path(path, sizeof(path), "ifn.m");
+    FILE* fp = fopen(path, "w");
+    ASSERT(fp != NULL);
+    fputs("ifnSeen = $InputFileName;\n", fp);
+    fclose(fp);
+
+    assert_eval_eq("$InputFileName", "\"\"", 0);
+    snprintf(src, sizeof src, "Get[\"%s\"]; StringMatchQ[ifnSeen, \"/*%s\"]",
+             path, strrchr(path, '/'));
+    assert_eval_eq(src, "True", 0);
+    /* Restored once the file has been read. */
+    assert_eval_eq("$InputFileName", "\"\"", 0);
+    unlink(path);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -824,6 +953,13 @@ int main(void) {
     TEST(test_fileextension_ignores_directory);
     TEST(test_fileextension_directory_name);
     TEST(test_fileextension_unevaluated_on_bad_args);
+
+    /* DirectoryName / FileNames / $InputFileName */
+    TEST(test_directoryname_cases);
+    TEST(test_directoryname_unevaluated_on_bad_args);
+    TEST(test_filenames_tree);
+    TEST(test_filenames_bad_args);
+    TEST(test_inputfilename_get);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

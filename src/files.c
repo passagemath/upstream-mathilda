@@ -9,6 +9,11 @@
  *   FilePrint["name", ...] — streams file contents to stdout.
  *   FileNameJoin[{...}]    — assembles a file name from parts.
  *   FileNameSplit["name"]  — splits a file name into its parts.
+ *   DirectoryName["name"]  — directory portion of a path (pure string).
+ *   FileNames[forms, dirs, n] — files matching forms, searched to depth n.
+ *
+ * Also initialises $InputFileName to "" (loadmodule.c swaps it in and out
+ * around every file read).
  *
  * Both string builtins follow the POSIX convention: the path
  * separator is `/`, the directory portion is everything up to and
@@ -35,7 +40,10 @@
 #include "attr.h"
 #include "common.h"
 #include "message.h"
+#include "print.h"
+#include "regex_common.h"
 
+#include <dirent.h>
 #include <sys/stat.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -803,6 +811,300 @@ Expr* builtin_filenamesplit(Expr* res) {
     return list;
 }
 
+/* ------------------------------------------------------------------ */
+/* DirectoryName                                                      */
+/* ------------------------------------------------------------------ */
+
+static int dn_is_sep(char c) {
+    return c == '/' || (HOST_SEP == '\\' && c == '\\');
+}
+
+/* Emit Head::tag naming the whole call, e.g. "... in DirectoryName[3]." */
+static void files_arg_message(Expr* call, const char* head, const char* tag,
+                              const char* what) {
+    char* txt = expr_to_string_outputform(call);
+    mth_message(head, tag, "%s in %s.", what, txt ? txt : head);
+    free(txt);
+}
+
+/*
+ * DirectoryName["name"] / DirectoryName["name", n]
+ *
+ * Runs of separators are first collapsed to one ("a//b" -> "a/b"); each step
+ * then drops trailing separators and the final component, keeping the
+ * separator before it: "/a/b/c.txt" -> "/a/b/", "/a/b/" -> "/a/",
+ * "c.txt" -> "", "/" -> "".  n repeats the step.
+ */
+Expr* builtin_directoryname(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        files_arg_message(res, "DirectoryName", "string",
+                          "String expected at position 1");
+        return NULL;
+    }
+    int64_t n = 1;
+    if (argc == 2) {
+        Expr* a1 = res->data.function.args[1];
+        if (a1->type != EXPR_INTEGER || a1->data.integer < 1) {
+            files_arg_message(res, "DirectoryName", "intpm",
+                "Positive machine-sized integer expected at position 2");
+            return NULL;
+        }
+        n = a1->data.integer;
+    }
+
+    const char* src = a0->data.string;
+    char* buf = malloc(strlen(src) + 1);
+    if (!buf) return NULL;
+    size_t len = 0;
+    for (const char* p = src; *p; p++)
+        if (!(dn_is_sep(*p) && len > 0 && dn_is_sep(buf[len - 1])))
+            buf[len++] = *p;
+
+    for (int64_t i = 0; i < n && len > 0; i++) {
+        while (len > 0 && dn_is_sep(buf[len - 1])) len--;   /* trailing seps */
+        while (len > 0 && !dn_is_sep(buf[len - 1])) len--;  /* last component */
+    }
+    buf[len] = '\0';
+    Expr* out = expr_new_string(buf);
+    free(buf);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* FileNames                                                          */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    Expr** items;
+    size_t n, cap;
+} FnList;
+
+static void fn_push(FnList* l, const char* s) {
+    if (l->n == l->cap) {
+        size_t nc = l->cap ? 2 * l->cap : 32;
+        Expr** ni = realloc(l->items, nc * sizeof(Expr*));
+        if (!ni) return;                    /* OOM: drop the name */
+        l->items = ni;
+        l->cap = nc;
+    }
+    l->items[l->n++] = expr_new_string(s);
+}
+
+/* dir + separator + name; an empty dir yields name alone, and no separator
+ * is doubled when dir already ends in one.  Caller frees. */
+static char* fn_join(const char* dir, const char* name) {
+    size_t dl = strlen(dir), nl = strlen(name);
+    int sep = dl > 0 && !dn_is_sep(dir[dl - 1]);
+    char* r = malloc(dl + (size_t)sep + nl + 1);
+    if (!r) return NULL;
+    memcpy(r, dir, dl);
+    if (sep) r[dl] = HOST_SEP;
+    memcpy(r + dl + sep, name, nl + 1);
+    return r;
+}
+
+static int fn_matches(const char* name, RegexRule* rules, int nr) {
+    size_t len = strlen(name), ov[2];
+    for (int i = 0; i < nr; i++)
+        if (regex_match(rules[i].prog, name, len, 0, ov, 1) == 1) return 1;
+    return 0;
+}
+
+/* List `dir` ("" = the working directory), appending dir/name for every entry
+ * whose name matches, and descending into subdirectories while depth > 1
+ * (depth < 0 = unlimited).  Subdirectories are found with lstat, so a
+ * symlinked directory is listed but not followed (no cycles).  A directory
+ * that cannot be opened contributes nothing. */
+static void fn_walk(const char* dir, RegexRule* rules, int nr, int64_t depth,
+                    FnList* out) {
+    DIR* d = opendir(*dir ? dir : ".");
+    if (!d) return;
+    struct dirent* de;
+    while ((de = readdir(d)) != NULL) {
+        const char* nm = de->d_name;
+        if (strcmp(nm, ".") == 0 || strcmp(nm, "..") == 0) continue;
+        char* path = fn_join(dir, nm);
+        if (!path) continue;
+        if (fn_matches(nm, rules, nr)) fn_push(out, path);
+        struct stat st;
+        if (depth != 1 && lstat(path, &st) == 0 && S_ISDIR(st.st_mode))
+            fn_walk(path, rules, nr, depth < 0 ? depth : depth - 1, out);
+        free(path);
+    }
+    closedir(d);
+}
+
+static int fn_str_cmp(const void* a, const void* b) {
+    return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
+}
+
+/* IgnoreCase -> True / False / Automatic.  Automatic follows the host
+ * filesystem: case-insensitive on macOS and Windows.  Returns 1 if `e` is an
+ * IgnoreCase rule (and sets *caseless), else 0. */
+static int fn_ignorecase_opt(const Expr* e, int* caseless) {
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count != 2 ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        (e->data.function.head->data.symbol.name != SYM_Rule &&
+         e->data.function.head->data.symbol.name != SYM_RuleDelayed) ||
+        e->data.function.args[0]->type != EXPR_SYMBOL ||
+        e->data.function.args[0]->data.symbol.name != SYM_IgnoreCase)
+        return 0;
+    const Expr* v = e->data.function.args[1];
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True) *caseless = 1;
+    else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False) *caseless = 0;
+    else {
+#if defined(__APPLE__) || defined(_WIN32)
+        *caseless = 1;
+#else
+        *caseless = 0;
+#endif
+    }
+    return 1;
+}
+
+static int fn_is_list(const Expr* e) {
+    return e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
+}
+
+/* Search every dir for one form.  A string form containing a separator has
+ * its directory part moved onto the dirs (a form "sub/x*" searches sub/ for "x*").
+ * Returns 0, or -1 when the form cannot be compiled. */
+static int fn_search_form(Expr* form, Expr** dirs, size_t ndirs, int64_t depth,
+                          int caseless, FnList* out) {
+    const char* dpart = "";
+    char* dbuf = NULL;
+    Expr* patt = form;
+    Expr* tail = NULL;
+    if (form->type == EXPR_STRING) {
+        const char* s = form->data.string;
+        const char* last = NULL;
+        for (const char* p = s; *p; p++) if (dn_is_sep(*p)) last = p;
+        if (last) {
+            size_t dl = (size_t)(last - s) + 1;
+            dbuf = malloc(dl + 1);
+            if (!dbuf) return -1;
+            memcpy(dbuf, s, dl);
+            dbuf[dl] = '\0';
+            dpart = dbuf;
+            patt = tail = expr_new_string(last + 1);
+        }
+    }
+
+    RegexRule* rules;
+    int nr = regex_rules_build_opts(patt, REGEX_RULE_ANCHORED | REGEX_RULE_WILDCARDS,
+                                    caseless ? REGEX_CASELESS : 0u,
+                                    &rules, "FileNames");
+    if (tail) expr_free(tail);
+    if (nr < 0) { free(dbuf); return -1; }
+
+    for (size_t i = 0; i < ndirs; i++) {
+        const char* base = dirs ? dirs[i]->data.string : "";
+        char* dir = *dpart ? fn_join(base, dpart) : NULL;
+        fn_walk(dir ? dir : base, rules, nr, depth, out);
+        free(dir);
+    }
+    regex_rules_free(rules, nr);
+    free(dbuf);
+    return 0;
+}
+
+/*
+ * FileNames[] / FileNames[forms] / FileNames[forms, dirs] /
+ * FileNames[forms, dirs, n]
+ *
+ * forms is a string pattern ("*.m"), a StringExpression, a RegularExpression
+ * or a list of them, matched against each entry's name; dirs is a directory
+ * or list of them (default: the working directory, with names given bare);
+ * n is the search depth, a positive integer or Infinity (default 1; 0 lists
+ * the working directory, ignoring dirs).
+ * Directories count as entries.  The result is sorted canonically, without
+ * duplicates.  Option: IgnoreCase -> Automatic.
+ */
+Expr* builtin_filenames(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** a = res->data.function.args;
+
+    int caseless = 0;
+    Expr* defs = symtab_get_options("FileNames");   /* borrowed */
+    if (defs && fn_is_list(defs))
+        for (size_t i = 0; i < defs->data.function.arg_count; i++)
+            fn_ignorecase_opt(defs->data.function.args[i], &caseless);
+    while (argc > 0 && fn_ignorecase_opt(a[argc - 1], &caseless)) argc--;
+    if (argc > 3) return NULL;
+
+    /* dirs: a string or a list of strings */
+    Expr** dirs = NULL;
+    size_t ndirs = 1;
+    if (argc >= 2) {
+        if (a[1]->type == EXPR_STRING) {
+            dirs = &a[1];
+        } else if (fn_is_list(a[1])) {
+            dirs = a[1]->data.function.args;
+            ndirs = a[1]->data.function.arg_count;
+            for (size_t i = 0; i < ndirs; i++)
+                if (dirs[i]->type != EXPR_STRING) return NULL;
+        } else {
+            return NULL;
+        }
+    }
+
+    /* depth: n >= 0 or Infinity (< 0 here) */
+    int64_t depth = 1;
+    if (argc == 3) {
+        if (a[2]->type == EXPR_SYMBOL && a[2]->data.symbol.name == SYM_Infinity) {
+            depth = -1;
+        } else if (a[2]->type == EXPR_INTEGER && a[2]->data.integer >= 0) {
+            depth = a[2]->data.integer;
+        } else {
+            files_arg_message(res, "FileNames", "innf",
+                "Non-negative integer or Infinity expected at position 3");
+            return NULL;
+        }
+    }
+
+    /* Depth 0 is WL's odd corner: dirs are ignored and the working directory
+     * is listed one level deep, with bare names. */
+    if (depth == 0) { dirs = NULL; ndirs = 1; depth = 1; }
+
+    FnList out = { NULL, 0, 0 };
+    {
+        Expr* star = NULL;
+        Expr* forms = argc >= 1 ? a[0] : (star = expr_new_string("*"));
+        Expr** fl = fn_is_list(forms) ? forms->data.function.args : &forms;
+        size_t nf = fn_is_list(forms) ? forms->data.function.arg_count : 1;
+        int bad = 0;
+        for (size_t i = 0; i < nf && !bad; i++)
+            bad = fn_search_form(fl[i], dirs, ndirs, depth, caseless, &out) != 0;
+        if (star) expr_free(star);
+        if (bad) {
+            for (size_t i = 0; i < out.n; i++) expr_free(out.items[i]);
+            free(out.items);
+            return NULL;
+        }
+    }
+
+    /* Sort canonically and drop the duplicates overlapping forms produce. */
+    size_t k = 0;
+    if (out.n > 1) qsort(out.items, out.n, sizeof(Expr*), fn_str_cmp);
+    for (size_t i = 0; i < out.n; i++) {
+        if (k > 0 && expr_eq(out.items[k - 1], out.items[i])) {
+            expr_free(out.items[i]);
+            continue;
+        }
+        out.items[k++] = out.items[i];
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out.items, k);
+    free(out.items);
+    return r;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -828,4 +1130,21 @@ void files_init(void) {
 
     symtab_add_builtin("FilePrint", builtin_fileprint);
     symtab_get_def("FilePrint")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("DirectoryName", builtin_directoryname);
+    symtab_get_def("DirectoryName")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FileNames", builtin_filenames);
+    symtab_get_def("FileNames")->attributes |= ATTR_PROTECTED;
+    Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_Automatic) }, 2);
+    symtab_set_options("FileNames",
+        expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ ic }, 1));
+
+    /* $InputFileName: "" outside any file read (see mth_input_file_enter). */
+    Expr* ifn_sym = expr_new_symbol("$InputFileName");
+    Expr* ifn_val = expr_new_string("");
+    symtab_add_own_value("$InputFileName", ifn_sym, ifn_val);
+    expr_free(ifn_sym);
+    expr_free(ifn_val);
 }

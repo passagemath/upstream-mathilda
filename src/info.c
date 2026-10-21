@@ -4171,6 +4171,23 @@ void info_init(void) {
         "FileBaseName drops all directory specifications.\n"
         "FileBaseName[\"file.tar.gz\"] gives \"file.tar\" — only the final extension is split off.\n"
         "FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.");
+    symtab_set_docstring("DirectoryName",
+        "DirectoryName[\"name\"]\n"
+        "\tgives the directory portion of a file name, including its final separator.\n"
+        "DirectoryName[\"name\", n] goes n levels up.\n"
+        "DirectoryName[\"/a/b/c.txt\"] gives \"/a/b/\"; a trailing separator names a directory, so DirectoryName[\"/a/b/\"] gives \"/a/\".\n"
+        "DirectoryName gives \"\" when there is no directory portion. It is a pure string operation.");
+    symtab_set_docstring("FileNames",
+        "FileNames[]\n"
+        "\tlists all files in the current working directory.\n"
+        "FileNames[forms] lists the files whose names match forms: a string pattern such as \"*.m\", a StringExpression, a RegularExpression, or a list of these.\n"
+        "FileNames[forms, dirs] searches the directory or list of directories dirs and prefixes each name with its directory.\n"
+        "FileNames[forms, dirs, n] searches subdirectories down to depth n (an integer or Infinity).\n"
+        "Directories count as entries. A form containing a separator, e.g. \"sub/*.m\", searches that subdirectory. The result is sorted.\n"
+        "Option: IgnoreCase -> Automatic (case-insensitive on macOS and Windows).");
+    symtab_set_docstring("$InputFileName",
+        "$InputFileName\n"
+        "\tis the absolute path of the file currently being read by -file or Get, or \"\" when no file is being read.");
     symtab_set_docstring("FileNameJoin",
         "FileNameJoin[{\"name1\", \"name2\", ...}]\n"
         "\tjoins the namei into a file name suitable for your current operating system.\n"

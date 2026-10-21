@@ -221,6 +221,48 @@ static void test_context_of_system_symbols(void) {
     assert_eval_eq("$g104 = 1; Context[$g104]", "\"Global`\"", 0);
 }
 
+/* ---- $ContextPath / $Context are assignable (they ARE the state) ---- */
+static void test_contextpath_assignment(void) {
+    size_t n0 = context_path_count();
+    assert_eval_eq("CpFoo`bar = 1; Names[\"bar\"]", "{}", 0);
+    assert_eval_eq("$ContextPath = Append[$ContextPath, \"CpFoo`\"]; "
+                   "{Names[\"bar\"], ToString[Hold[CpFoo`bar]]}",
+                   "{{\"bar\"}, \"Hold[bar]\"}", 0);
+    ASSERT(context_path_count() == n0 + 1);
+    ASSERT_STR_EQ(context_path_at(n0), "CpFoo`");
+    /* A bare name now resolves through the new path entry. */
+    assert_eval_eq("bar", "1", 0);
+    /* Invalid values: message, old value kept, Set still returns the rhs. */
+    assert_eval_eq("Quiet[$ContextPath = 5]", "5", 0);
+    assert_eval_eq("Check[$ContextPath = {\"A`\", 3}, \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Last[$ContextPath]", "\"CpFoo`\"", 0);
+    /* AppendTo / DeleteCases round trip. */
+    assert_eval_eq("AppendTo[$ContextPath, \"CpZed`\"]; Last[$ContextPath]", "\"CpZed`\"", 0);
+    assert_eval_eq("$ContextPath = DeleteCases[$ContextPath, \"CpZed`\" | \"CpFoo`\"]; "
+                   "{Names[\"bar\"], ToString[Hold[CpFoo`bar]]}",
+                   "{{}, \"Hold[CpFoo`bar]\"}", 0);
+    ASSERT(context_path_count() == n0);
+    /* Block scopes it, and restores it on exit. */
+    assert_eval_eq("Block[{$ContextPath = {\"System`\", \"CpFoo`\"}}, Names[\"bar\"]]",
+                   "{\"bar\"}", 0);
+    assert_eval_eq("Names[\"bar\"]", "{}", 0);
+    assert_eval_eq("Attributes[$ContextPath]", "{}", 0);
+}
+
+static void test_context_assignment(void) {
+    assert_eval_eq("$Context = \"CpQ`\"", "\"CpQ`\"", 0);
+    ASSERT_STR_EQ(context_current(), "CpQ`");
+    /* New symbols are created in the new context. */
+    assert_eval_eq("cpNew = 1; Context[cpNew]", "\"CpQ`\"", 0);
+    assert_eval_eq("$Context = \"Global`\"; Names[\"CpQ`*\"]", "{\"CpQ`cpNew\"}", 0);
+    assert_eval_eq("Quiet[$Context = \"nobacktick\"]; $Context", "\"Global`\"", 0);
+    assert_eval_eq("Check[$Context = 3, \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[$Context]", "{}", 0);
+    /* Begin/End still nest on top of a directly assigned value. */
+    assert_eval_eq("Begin[\"CpB`\"]; c1 = $Context; End[]; {c1, $Context}",
+                   "{\"CpB`\", \"Global`\"}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -249,6 +291,8 @@ int main(void) {
     TEST(test_context_of_user_symbol);
     TEST(test_package_dollar_symbol);
     TEST(test_context_of_system_symbols);
+    TEST(test_contextpath_assignment);
+    TEST(test_context_assignment);
 
     printf("All context tests passed!\n");
     return 0;

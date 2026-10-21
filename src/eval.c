@@ -9,6 +9,7 @@
  */
 
 #include "eval.h"
+#include "context.h"
 #include "symtab.h"
 #include "ndarray.h"
 #include "pack.h"
@@ -1096,6 +1097,17 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                     "Symbol %s is Protected.", target);
             return true;
         }
+    }
+
+    if (lhs->type == EXPR_SYMBOL && context_is_state_var(lhs->data.symbol.name)) {
+        /* $Context / $ContextPath ARE the resolver's state, so they are
+         * validated before the write and always stored evaluated (a
+         * SetDelayed is evaluated here, once). An invalid value emits
+         * ::cxset / ::cxlist and keeps the old one; Set still returns rhs. */
+        Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+        context_assign(lhs->data.symbol.name, probe);
+        expr_free(probe);
+        return true;
     }
 
     if (lhs->type == EXPR_SYMBOL) {

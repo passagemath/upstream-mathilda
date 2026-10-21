@@ -28,10 +28,21 @@
 void context_init(void);
 void context_shutdown(void);
 
-/* Current $Context value (read-only borrow; never NULL after context_init). */
+/* Current $Context value (read-only borrow of its OwnValue, or "Global`" when
+ * that is not a context string; valid until $Context is next assigned). */
 const char* context_current(void);
 
-/* Path access (read-only). */
+/* True for $Context and $ContextPath, whose Set/SetDelayed go through
+ * context_assign so the context state is never left invalid. */
+bool context_is_state_var(const char* name);
+
+/* Assign `value` (borrowed, already evaluated) to $Context / $ContextPath.
+ * An invalid value emits $Context::cxset / $ContextPath::cxlist and leaves the
+ * variable unchanged; returns whether the assignment happened. */
+bool context_assign(const char* name, Expr* value);
+
+/* Path access (read-only): the valid context strings of $ContextPath, in
+ * order. Pointers borrow the OwnValue (valid until it is next assigned). */
 size_t context_path_count(void);
 const char* context_path_at(size_t i);
 

@@ -9,13 +9,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "print.h"     /* expr_to_string_outputform for ::cxlist / ::cxset */
 
 /* -------------------- State -------------------- */
 
-static char*  g_current     = NULL;   /* always ends with a backtick */
-static char** g_path        = NULL;   /* ordered; first entry is most-specific */
-static size_t g_path_count  = 0;
-static size_t g_path_cap    = 0;
+/* The context state IS the OwnValues of $Context and $ContextPath: every reader
+ * below consults them directly, so any write -- Set, AppendTo, Block, Clear,
+ * Begin/End -- takes effect at once and the symbols never disagree with the
+ * resolver.  Set/SetDelayed are validated first (context_assign, called from
+ * apply_assignment); a value written another way is read defensively: a
+ * $Context that is not a context string reads as "Global`", and entries of
+ * $ContextPath that are not context strings are skipped.  Pointers handed out
+ * (context_current, context_path_at) borrow the OwnValue and stay valid until
+ * the variable is next assigned. */
 
 typedef enum {
     FRAME_BEGIN,
@@ -24,13 +30,13 @@ typedef enum {
 
 typedef struct CtxFrame {
     FrameKind kind;
-    char*     saved_context;
-    char**    saved_path;
-    size_t    saved_path_count;
+    Expr*     saved_context;   /* owned copies of the values on entry (or NULL) */
+    Expr*     saved_path;
     struct CtxFrame* next;
 } CtxFrame;
 
 static CtxFrame* g_stack = NULL;
+static bool      g_inited = false;
 
 /* -------------------- Helpers -------------------- */
 
@@ -61,61 +67,41 @@ static bool has_backtick(const char* s) {
     return false;
 }
 
-/* ----- path manipulation ----- */
-
-static void path_ensure(size_t need) {
-    if (need <= g_path_cap) return;
-    size_t cap = g_path_cap ? g_path_cap : 4;
-    while (cap < need) cap *= 2;
-    g_path = (char**)realloc(g_path, cap * sizeof(char*));
-    g_path_cap = cap;
+static bool is_context_string(const Expr* e) {
+    return e && e->type == EXPR_STRING && ends_with_tick(e->data.string);
 }
 
-static void path_append(const char* s) {
-    path_ensure(g_path_count + 1);
-    g_path[g_path_count++] = ctx_strdup(s);
+static bool is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_List;
 }
 
-static void path_prepend(const char* s) {
-    path_ensure(g_path_count + 1);
-    for (size_t i = g_path_count; i > 0; i--) g_path[i] = g_path[i - 1];
-    g_path[0] = ctx_strdup(s);
-    g_path_count++;
+/* Borrowed OwnValue of a symbol, or NULL. */
+static Expr* own_value(const char* name) {
+    Rule* r = symtab_get_own_values(name);
+    return r ? r->replacement : NULL;
+}
+
+/* $ContextPath's List (borrowed), or NULL when it is not a List. */
+static Expr* path_list(void) {
+    Expr* v = own_value("$ContextPath");
+    return is_list(v) ? v : NULL;
 }
 
 static bool path_contains(const char* s) {
-    for (size_t i = 0; i < g_path_count; i++) {
-        if (strcmp(g_path[i], s) == 0) return true;
+    Expr* l = path_list();
+    if (!l) return false;
+    for (size_t i = 0; i < l->data.function.arg_count; i++) {
+        Expr* e = l->data.function.args[i];
+        if (is_context_string(e) && strcmp(e->data.string, s) == 0) return true;
     }
     return false;
 }
 
-static void path_clear(void) {
-    for (size_t i = 0; i < g_path_count; i++) free(g_path[i]);
-    g_path_count = 0;
-}
-
-static char** path_snapshot(size_t* out_count) {
-    *out_count = g_path_count;
-    if (g_path_count == 0) return NULL;
-    char** copy = (char**)malloc(g_path_count * sizeof(char*));
-    for (size_t i = 0; i < g_path_count; i++) copy[i] = ctx_strdup(g_path[i]);
-    return copy;
-}
-
-static void path_restore(char** snap, size_t count) {
-    path_clear();
-    path_ensure(count);
-    for (size_t i = 0; i < count; i++) g_path[i] = snap[i]; /* ownership transferred */
-    g_path_count = count;
-    free(snap);
-}
-
 /* -------------------- $Context / $ContextPath publishing -------------------- */
 
-/* Update the OwnValue of the named symbol to `replacement`. Replaces any
- * existing own-value by clearing them first. Used to republish $Context /
- * $ContextPath whenever state changes. */
+/* Replace the OwnValue of the named symbol with `replacement` (consumed). */
 static void publish_own(const char* name, Expr* replacement) {
     symtab_clear_symbol(name);
     Expr* pat = expr_new_symbol(name);
@@ -124,31 +110,82 @@ static void publish_own(const char* name, Expr* replacement) {
     expr_free(replacement);
 }
 
-static void republish_state(void) {
-    publish_own("$Context", context_as_string());
-    publish_own("$ContextPath", context_path_as_list());
-}
-
-Expr* context_as_string(void) {
-    return expr_new_string(g_current ? g_current : "Global`");
-}
-
-Expr* context_path_as_list(void) {
-    Expr** args = (Expr**)malloc(g_path_count * sizeof(Expr*));
-    for (size_t i = 0; i < g_path_count; i++) args[i] = expr_new_string(g_path[i]);
-    Expr* head = expr_new_symbol(SYM_List);
-    Expr* res = expr_new_function(head, args, g_path_count);
-    /* expr_new_function memcpy's the slot pointers into its own array;
-     * the caller-owned `args` buffer is no longer needed. */
+/* A fresh List of the given context strings. */
+static Expr* make_path(const char** ctxs, size_t n) {
+    Expr** args = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) args[i] = expr_new_string(ctxs[i]);
+    Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, n);
     free(args);
     return res;
 }
 
+Expr* context_as_string(void) {
+    return expr_new_string(context_current());
+}
+
+Expr* context_path_as_list(void) {
+    Expr* l = path_list();
+    return l ? expr_copy(l) : make_path(NULL, 0);
+}
+
 /* -------------------- Public accessors -------------------- */
 
-const char* context_current(void) { return g_current ? g_current : "Global`"; }
-size_t      context_path_count(void) { return g_path_count; }
-const char* context_path_at(size_t i) { return (i < g_path_count) ? g_path[i] : NULL; }
+const char* context_current(void) {
+    Expr* v = own_value("$Context");
+    return is_context_string(v) ? v->data.string : "Global`";
+}
+
+size_t context_path_count(void) {
+    Expr* l = path_list();
+    size_t n = 0;
+    if (l)
+        for (size_t i = 0; i < l->data.function.arg_count; i++)
+            n += is_context_string(l->data.function.args[i]);
+    return n;
+}
+
+const char* context_path_at(size_t i) {
+    Expr* l = path_list();
+    if (!l) return NULL;
+    for (size_t k = 0; k < l->data.function.arg_count; k++) {
+        Expr* e = l->data.function.args[k];
+        if (is_context_string(e) && i-- == 0) return e->data.string;
+    }
+    return NULL;
+}
+
+/* -------------------- Assignment (Set / SetDelayed) -------------------- */
+
+bool context_is_state_var(const char* name) {
+    return name && name[0] == '$' &&
+           (strcmp(name, "$Context") == 0 || strcmp(name, "$ContextPath") == 0);
+}
+
+bool context_assign(const char* name, Expr* value) {
+    bool ok;
+    if (strcmp(name, "$Context") == 0) {
+        ok = is_context_string(value);
+    } else {
+        ok = is_list(value);
+        for (size_t i = 0; ok && i < value->data.function.arg_count; i++)
+            ok = is_context_string(value->data.function.args[i]);
+    }
+    if (ok) {
+        publish_own(name, expr_copy(value));
+        return true;
+    }
+    char* txt = expr_to_string_outputform(value);
+    if (strcmp(name, "$Context") == 0)
+        mth_message("$Context", "cxset",
+                    "Cannot set $Context to %s; value is not a parsable context name ending in `.",
+                    txt ? txt : "?");
+    else
+        mth_message("$ContextPath", "cxlist",
+                    "Cannot set $ContextPath to %s; value must be a list of strings ending in `.",
+                    txt ? txt : "?");
+    free(txt);
+    return false;
+}
 
 /* -------------------- Resolution -------------------- */
 
@@ -163,7 +200,7 @@ static size_t context_prefix_len(const char* name) {
 bool context_is_visible(const char* prefix) {
     if (!prefix || *prefix == '\0') return false;
     if (strcmp(prefix, "System`") == 0) return true; /* System` always visible */
-    if (g_current && strcmp(prefix, g_current) == 0) return true;
+    if (strcmp(prefix, context_current()) == 0) return true;
     return path_contains(prefix);
 }
 
@@ -211,8 +248,9 @@ char* context_resolve_name(const char* raw) {
     if (symtab_lookup(probe)) return probe;
     free(probe);
 
-    for (size_t i = 0; i < g_path_count; i++) {
-        const char* prefix = g_path[i];
+    size_t np = context_path_count();
+    for (size_t i = 0; i < np; i++) {
+        const char* prefix = context_path_at(i);
         if (strcmp(prefix, "System`") == 0) continue; /* System is checked via bare */
         probe = ctx_concat(prefix, raw);
         if (symtab_lookup(probe)) return probe;
@@ -243,40 +281,42 @@ char* context_resolve_name(const char* raw) {
 
 /* -------------------- Stack ops -------------------- */
 
+static Expr* copy_or_null(Expr* e) { return e ? expr_copy(e) : NULL; }
+
 static void frame_push(FrameKind kind) {
     CtxFrame* f = (CtxFrame*)malloc(sizeof(CtxFrame));
     f->kind = kind;
-    f->saved_context = ctx_strdup(g_current);
-    f->saved_path = path_snapshot(&f->saved_path_count);
+    f->saved_context = copy_or_null(own_value("$Context"));
+    f->saved_path = copy_or_null(own_value("$ContextPath"));
     f->next = g_stack;
     g_stack = f;
+}
+
+/* Restore a saved value (consumed); NULL clears the variable. */
+static void restore_own(const char* name, Expr* saved) {
+    if (saved) publish_own(name, saved);
+    else symtab_clear_symbol(name);
 }
 
 static bool frame_pop(char** out_closed_ctx) {
     if (!g_stack) return false;
     CtxFrame* f = g_stack;
     g_stack = f->next;
-    if (out_closed_ctx) *out_closed_ctx = ctx_strdup(g_current);
-    free(g_current);
-    g_current = f->saved_context;
-    path_restore(f->saved_path, f->saved_path_count);
+    if (out_closed_ctx) *out_closed_ctx = ctx_strdup(context_current());
+    restore_own("$Context", f->saved_context);
+    restore_own("$ContextPath", f->saved_path);
     free(f);
     return true;
 }
 
 bool context_begin(const char* ctx) {
     if (!ctx || !ends_with_tick(ctx)) return false;
+    /* Relative context: extend the current one. */
+    char* new_ctx = (ctx[0] == '`') ? ctx_concat(context_current(), ctx + 1)
+                                    : ctx_strdup(ctx);
     frame_push(FRAME_BEGIN);
-    char* new_ctx;
-    if (ctx[0] == '`') {
-        /* Relative context: extend current. */
-        new_ctx = ctx_concat(g_current, ctx + 1);
-    } else {
-        new_ctx = ctx_strdup(ctx);
-    }
-    free(g_current);
-    g_current = new_ctx;
-    republish_state();
+    publish_own("$Context", expr_new_string(new_ctx));
+    free(new_ctx);
     return true;
 }
 
@@ -284,24 +324,25 @@ bool context_begin_package(const char* ctx, const char** needs, size_t needs_cou
     if (!ctx || !ends_with_tick(ctx)) return false;
     if (ctx[0] == '`') return false; /* BeginPackage requires absolute context */
     frame_push(FRAME_PACKAGE);
-    free(g_current);
-    g_current = ctx_strdup(ctx);
-    path_clear();
-    path_append(g_current);
-    path_append("System`");
+    /* $ContextPath = {ctx, "System`", needs...} (needs deduplicated). */
+    const char** path = (const char**)malloc((needs_count + 2) * sizeof(char*));
+    size_t n = 0;
+    path[n++] = ctx;
+    path[n++] = "System`";
     for (size_t i = 0; i < needs_count; i++) {
-        if (needs[i] && ends_with_tick(needs[i]) && !path_contains(needs[i])) {
-            path_append(needs[i]);
-        }
+        if (!needs[i] || !ends_with_tick(needs[i])) continue;
+        bool dup = false;
+        for (size_t k = 0; k < n && !dup; k++) dup = strcmp(path[k], needs[i]) == 0;
+        if (!dup) path[n++] = needs[i];
     }
-    republish_state();
+    publish_own("$Context", expr_new_string(ctx));
+    publish_own("$ContextPath", make_path(path, n));
+    free((void*)path);
     return true;
 }
 
 bool context_end(char** out_ended_ctx) {
-    bool ok = frame_pop(out_ended_ctx);
-    if (ok) republish_state();
-    return ok;
+    return frame_pop(out_ended_ctx);
 }
 
 bool context_end_package(char** out_ended_ctx) {
@@ -309,10 +350,16 @@ bool context_end_package(char** out_ended_ctx) {
     char* closed = NULL;
     if (!frame_pop(&closed)) return false;
     /* Prepend the closed package context to $ContextPath (if not already on it). */
-    if (closed && !path_contains(closed)) path_prepend(closed);
+    if (closed && !path_contains(closed)) {
+        size_t n = context_path_count();
+        const char** path = (const char**)malloc((n + 1) * sizeof(char*));
+        path[0] = closed;
+        for (size_t i = 0; i < n; i++) path[i + 1] = context_path_at(i);
+        publish_own("$ContextPath", make_path(path, n + 1));   /* copies first */
+        free((void*)path);
+    }
     if (out_ended_ctx) *out_ended_ctx = closed;
     else free(closed);
-    republish_state();
     return true;
 }
 
@@ -451,10 +498,8 @@ static Expr* builtin_end_package(Expr* res) {
 /* -------------------- Init / Shutdown -------------------- */
 
 void context_init(void) {
-    if (g_current) return; /* idempotent */
-    g_current = ctx_strdup("Global`");
-    path_append("Global`");
-    path_append("System`");
+    if (g_inited) return; /* idempotent */
+    g_inited = true;
 
     symtab_add_builtin("Context",       builtin_context);
     symtab_add_builtin("BeginPackage",  builtin_begin_package);
@@ -492,32 +537,32 @@ void context_init(void) {
         "just-closed package context to $ContextPath so its exported symbols are\n"
         "visible under short names. Returns Null.");
 
-    /* $Context / $ContextPath are ordinary symbols whose OwnValues track the
-     * internal state. Protect them so the user cannot reassign them directly;
-     * mutation goes through Begin/BeginPackage/End/EndPackage. */
-    republish_state();
-    symtab_get_def("$Context")->attributes     |= ATTR_PROTECTED;
-    symtab_get_def("$ContextPath")->attributes |= ATTR_PROTECTED;
+    /* $Context / $ContextPath are ordinary, assignable symbols, and their
+     * OwnValues ARE the context state (see the State comment above). */
+    publish_own("$Context", expr_new_string("Global`"));
+    {
+        const char* initial[] = { "Global`", "System`" };
+        publish_own("$ContextPath", make_path(initial, 2));
+    }
     symtab_set_docstring("$Context",
         "$Context is a string giving the current context. New symbols are created\n"
-        "in this context unless otherwise qualified. Modified by Begin[],\n"
-        "BeginPackage[], End[], and EndPackage[].");
+        "in this context unless otherwise qualified. Set by Begin[], BeginPackage[],\n"
+        "End[] and EndPackage[], or assigned directly ($Context = \"ctx`\").");
     symtab_set_docstring("$ContextPath",
         "$ContextPath is a list of contexts used (in order) to resolve bare\n"
-        "identifiers to existing qualified symbols. Modified by BeginPackage[]\n"
-        "and EndPackage[].");
+        "identifiers to existing qualified symbols, and whose symbols print\n"
+        "without their context. Set by BeginPackage[] and EndPackage[], or\n"
+        "assigned directly (e.g. AppendTo[$ContextPath, \"ctx`\"]); a Set to\n"
+        "anything but a list of context strings emits $ContextPath::cxlist.");
 }
 
 void context_shutdown(void) {
     while (g_stack) {
         CtxFrame* f = g_stack;
         g_stack = f->next;
-        free(f->saved_context);
-        for (size_t i = 0; i < f->saved_path_count; i++) free(f->saved_path[i]);
-        free(f->saved_path);
+        expr_free(f->saved_context);
+        expr_free(f->saved_path);
         free(f);
     }
-    free(g_current); g_current = NULL;
-    path_clear();
-    free(g_path); g_path = NULL; g_path_cap = 0;
+    g_inited = false;
 }

@@ -1289,6 +1289,32 @@ In[3]:= EndPackage[]; {Context[$T2], Context[$Version], Context[Pi], Context[x]}
 Out[3]= {"Test`", "System`", "System`", "Global`"}
 ```
 
+## $Context / $ContextPath
+The current context, and the list of contexts searched for bare names (whose
+symbols also print without their context).
+- `$Context = "ctx`"`: new symbols are now created in `ctx``.
+- `$ContextPath = {...}`, `AppendTo[$ContextPath, "ctx`"]`, and
+  `Block[{$ContextPath = ...}, ...]` all take effect at once. So does
+  `Begin`/`BeginPackage`/`End`/`EndPackage`.
+
+**Features**:
+- Ordinary, assignable symbols with no attributes, as in WL. Their OwnValues
+  *are* the resolver's state; nothing is mirrored, so the symbols can never
+  disagree with how names resolve and print.
+- A `Set`/`SetDelayed` to anything other than a context string ending in
+  `` ` `` emits `$Context::cxset`. Anything other than a list of such strings
+  emits `$ContextPath::cxlist`. In both cases the old value is kept, and the
+  assignment still returns its right-hand side. A `SetDelayed` is evaluated
+  once and stored as a value.
+- A value written some other way is read defensively: an invalid `$Context`
+  reads as `"Global`"`, and invalid `$ContextPath` entries are skipped.
+  `` System` `` is always visible.
+
+```
+In[1]:= Foo`bar = 1; AppendTo[$ContextPath, "Foo`"]; {Names["bar"], Hold[Foo`bar]}
+Out[1]= {{"bar"}, Hold[bar]}
+```
+
 ## Information
 Returns a formatted string containing the syntax and description of a symbol.
 - `Information[symbol]`

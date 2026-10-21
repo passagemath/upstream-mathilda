@@ -84,6 +84,21 @@ static void test_nextprime(void) {
     check("NextPrime[2^64, -1]", "18446744073709551557");
     check("NextPrime[10^20, 3]", "100000000000000000151");
     check("NextPrime[10, 1/2]", "NextPrime[10, 1/2]");
+    /* Non-integer starts beyond int64 and non-rational numeric starts
+     * (values from the reference). */
+    check("NextPrime[(355/113)^720 + 123948304759283749084] == "
+          "NextPrime[Floor[(355/113)^720 + 123948304759283749084]]", "True");
+    check("NextPrime[10^30 + 1/2]", "1000000000000000000000000000057");
+    check("NextPrime[10^30 + 1/2, -1]", "999999999999999999999999999989");
+    check("NextPrime[-(10^30 + 1/2), -1]", "-1000000000000000000000000000057");
+    check("NextPrime[Pi]", "5");
+    check("NextPrime[Sqrt[2]]", "2");
+    check("NextPrime[E, 2]", "5");
+    check("NextPrime[N[Pi, 40]]", "5");
+    check("NextPrime[7/2, 0]", "NextPrime[7/2, 0]");
+    check("NextPrime[x]", "NextPrime[x]");
+    check("NextPrime[1 + I]", "NextPrime[1 + I]");
+    check("NextPrime[Infinity]", "NextPrime[Infinity]");
     check("Check[NextPrime[], m, NextPrime::argt]", "m");
     check("Attributes[NextPrime]", "{Protected}");
 }

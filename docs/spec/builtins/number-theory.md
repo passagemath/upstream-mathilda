@@ -638,7 +638,7 @@ Out[3]= {4, 25}
 - `Protected`, **not** `Listable` (as in the reference), but a list in either argument is threaded explicitly: `NextPrime[{4, 10}, 2]` → `{7, 13}`, `NextPrime[4, {1, 2}]` → `{5, 7}`.
 - **Negative primes count**, as in the reference (v0.472). The primes are ordered …, −7, −5, −3, −2, 2, 3, 5, 7, …, so `NextPrime[-10]` → `-7`, `NextPrime[2, -1]` → `-2` and `NextPrime[3, -2]` → `-2`. Before v0.472, `NextPrime[-10]` was `2` and `NextPrime[2, -1]` stayed unevaluated.
 - `NextPrime[x, 0]` is `x` when `x` is a (signed) prime, and unevaluated otherwise.
-- A real or rational `x` starts from `Floor[x]` going up and `Ceiling[x]` going down: `NextPrime[2.5, -1]` → `2`.
+- A real or rational `x` starts from `Floor[x]` going up and `Ceiling[x]` going down: `NextPrime[2.5, -1]` → `2`. Rationals of any size are exact (`NextPrime[(355/113)^720 + 123948304759283749084]` needs no `Floor`), and any other real numeric quantity is rounded by `Floor`/`Ceiling` itself: `NextPrime[Pi]` → `5`, `NextPrime[Sqrt[2]]` → `2` (v0.525). A symbolic, complex or infinite `x` stays unevaluated.
 - A non-integer `k` leaves the call unevaluated. A wrong argument count draws `NextPrime::argt`.
 - Checked against the reference on the full grid $x \in [-15, 15]$, $k \in [-3, 3]$, plus non-integer starts.
 

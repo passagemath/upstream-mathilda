@@ -18,6 +18,7 @@
 #include "print.h"
 #include "ndarray.h"
 #include "ndinteger.h"
+#include "numeric.h"     /* expr_is_numeric_quantity */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -597,7 +598,8 @@ static void np_down(mpz_t cur) {
 /* NextPrime[x] / NextPrime[x, k]: the k-th prime after x (k > 0) or before it
  * (k < 0), counting the NEGATIVE primes too:
  * NextPrime[-10] is -7, NextPrime[3, -2] is -2. NextPrime[x, 0] is x when x is
- * a (signed) prime and unevaluated otherwise. x may be any real number (a
+ * a (signed) prime and unevaluated otherwise. x may be any real numeric
+ * quantity -- an exact rational of any size, a real, Pi, Sqrt[2], ... (a
  * non-integer starts from Floor[x] going up and Ceiling[x] going down); k must
  * be an integer. Not Listable, but a List in either
  * position is threaded explicitly. A wrong argument count draws
@@ -657,11 +659,27 @@ Expr* builtin_nextprime(Expr* res) {
     } else if (x_expr->type == EXPR_REAL && isfinite(x_expr->data.real)) {
         mpz_init_set_d(cur, k >= 0 ? floor(x_expr->data.real) : ceil(x_expr->data.real));
     } else {
-        int64_t n, d;
-        if (!is_rational(x_expr, &n, &d)) return NULL;     /* symbolic / complex */
-        int64_t f = n / d;
-        if (n % d != 0 && ((n < 0) == (k >= 0))) f += (k >= 0) ? -1 : 1;
-        mpz_init_set_si(cur, f);
+        mpq_t q;
+        mpq_init(q);
+        if (ppq_to_mpq(x_expr, q)) {
+            /* Exact rational of any size: GMP floor/ceiling division. */
+            mpz_init(cur);
+            if (k >= 0) mpz_fdiv_q(cur, mpq_numref(q), mpq_denref(q));
+            else        mpz_cdiv_q(cur, mpq_numref(q), mpq_denref(q));
+            mpq_clear(q);
+        } else {
+            mpq_clear(q);
+            /* Any other real numeric quantity (Pi, Sqrt[2], an MPFR real, ...):
+             * let Floor/Ceiling decide it exactly. A symbolic or complex x
+             * does not round to an integer, so NextPrime stays unevaluated. */
+            if (!expr_is_numeric_quantity(x_expr)) return NULL;
+            Expr* fa[1] = { expr_copy(x_expr) };
+            Expr* r = eval_and_free(expr_new_function(
+                expr_new_symbol(k >= 0 ? SYM_Floor : SYM_Ceiling), fa, 1));
+            if (!expr_is_integer_like(r)) { expr_free(r); return NULL; }
+            expr_to_mpz(r, cur);
+            expr_free(r);
+        }
     }
 
     if (k == 0) {

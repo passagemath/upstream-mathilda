@@ -22,13 +22,21 @@
  *
  * Context handling: symbols are stored under bare names for the System` and
  * Global` contexts (builtins and unqualified user symbols) and under explicit
- * backtick-qualified names for other contexts.  A pattern element that itself
- * contains a backtick (e.g. "System`*") is matched against -- and returns --
- * each symbol's fully context-qualified name (System`Sin, Global`x, ...); a
- * plain pattern (no backtick) is matched against, and returns, the stored name
- * exactly as before.  This is what makes Names["System`*"] enumerate the
- * builtins instead of returning {} (nothing is stored with a literal "System`"
- * prefix).
+ * backtick-qualified names for other contexts, so each symbol's fully
+ * context-qualified name (System`Sin, Global`x, Foo`bar) is reconstructed
+ * before matching.  Each name is RETURNED the way it prints -- without its
+ * context when that context is $Context or on $ContextPath, fully qualified
+ * otherwise (context_display_name) -- and the pattern decides what it is
+ * matched against:
+ *   - a pattern containing a backtick ("System`*", "*`x", a regex such as
+ *     "Foo`ba.") is matched against the fully-qualified name;
+ *   - a pattern without one ("Sin", "F*") names symbols as they are typed, so
+ *     it is matched against the short name of the symbols whose context is
+ *     visible, and never sees a symbol in a context off $ContextPath.
+ * So Names["System`File*"] gives {"File", ...}; Names["Foo`*"] gives
+ * {"Foo`bar", ...} while Foo` is off the path and {"bar", ...} inside
+ * Begin["Foo`"]; Names["bar"] finds Foo`bar only once Foo` is visible
+ * (issue #105).  Names[] lists every symbol, by display name.
  */
 
 #include "names.h"
@@ -37,6 +45,7 @@
 #include "sym_intern.h"
 #include "attr.h"
 #include "regex_engine.h"
+#include "context.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,6 +85,7 @@ static int wl_glob_match(const char* p, const char* s) {
 
 typedef struct {
     int          is_regex;   /* 1 -> use prog; 0 -> use glob */
+    int          has_ctx;    /* pattern text contains a backtick */
     const char*  glob;       /* borrowed from the input Expr (when !is_regex) */
     RegexProgram* prog;      /* owned (when is_regex); freed by free_pats */
 } NamePat;
@@ -99,6 +109,7 @@ static int build_pat(Expr* e, NamePat* out) {
     const char* re;
     if (e->type == EXPR_STRING) {
         out->is_regex = 0;
+        out->has_ctx = strchr(e->data.string, '`') != NULL;
         out->glob = e->data.string;
         out->prog = NULL;
         return 0;
@@ -125,6 +136,7 @@ static int build_pat(Expr* e, NamePat* out) {
             return -1;
         }
         out->is_regex = 1;
+        out->has_ctx = strchr(re, '`') != NULL;
         out->glob = NULL;
         out->prog = prog;
         return 0;
@@ -190,43 +202,28 @@ typedef struct {
     const NamePat* pats;
     int            npats;
     int            match_all;   /* Names[] with no argument: take every name */
-    char**         names;       /* owned emit strings (bare or context-qualified) */
+    char**         names;       /* owned emit strings (display names) */
     size_t         count, cap;
 } NameCollect;
 
-/* Determine the string to return for `name` under a single pattern, or NULL if
- * it does not match.  A glob containing a backtick matches (and yields) the
- * fully-qualified name; a plain glob matches (and yields) the stored name.  A
- * regex is tried against the stored name first, then the qualified name, so a
- * context-bearing regex works too.  `*full` caches the qualified name across
- * the caller's pattern loop; the caller frees it. */
-static char* match_one(const char* name, SymbolDef* def,
-                       const NamePat* p, char** full) {
-    if (!p->is_regex && p->glob && name_has_backtick(p->glob)) {
-        if (!*full) *full = full_qualified_name(name, def);
-        return (*full && pat_matches(p, *full)) ? name_strdup(*full) : NULL;
-    }
-    if (!p->is_regex) {
-        return pat_matches(p, name) ? name_strdup(name) : NULL;
-    }
-    /* regex */
-    if (pat_matches(p, name)) return name_strdup(name);
-    if (!*full) *full = full_qualified_name(name, def);
-    return (*full && pat_matches(p, *full)) ? name_strdup(*full) : NULL;
+/* Does a symbol match a single pattern?  `full` is its fully-qualified name
+ * and `disp` its display name (see the header comment for the rule). */
+static int match_one(const NamePat* p, const char* full, const char* disp) {
+    if (p->has_ctx) return pat_matches(p, full);
+    return !name_has_backtick(disp) && pat_matches(p, disp);
 }
 
 static void collect_visit(const char* name, SymbolDef* def, void* user) {
     NameCollect* c = (NameCollect*)user;
-    char* emit = NULL;
+    char* full = full_qualified_name(name, def);
+    if (!full) return;   /* OOM: drop this name rather than crash */
+    const char* disp = context_display_name(full);   /* points into full */
 
-    if (c->match_all) {
-        emit = name_strdup(name);
-    } else {
-        char* full = NULL;   /* lazily built, reused across patterns */
-        for (int i = 0; !emit && i < c->npats; i++)
-            emit = match_one(name, def, &c->pats[i], &full);
-        free(full);
-    }
+    int matched = c->match_all;
+    for (int i = 0; !matched && i < c->npats; i++)
+        matched = match_one(&c->pats[i], full, disp);
+    char* emit = matched ? name_strdup(disp) : NULL;
+    free(full);
     if (!emit) return;
 
     if (c->count == c->cap) {

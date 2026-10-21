@@ -3880,7 +3880,9 @@ void info_init(void) {
         "the string. Names[patt] matches a string pattern with metacharacters "
         "* (zero or more characters) and @ (one or more non-uppercase "
         "characters), or a RegularExpression[\"re\"]. Names[{p1, p2, ...}] "
-        "matches any of the patterns. Names[] lists all symbol names.");
+        "matches any of the patterns. Names[] lists all symbol names. Names are "
+        "returned as they print: without their context when it is $Context or "
+        "on $ContextPath.");
     symtab_set_docstring("OwnValues", "OwnValues[s] gives a list of own-value rules for s.");
     symtab_set_docstring("DownValues", "DownValues[s] gives a list of down-value rules for s.");
 #if UP_VALUES

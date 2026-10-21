@@ -38,7 +38,9 @@ void test_names_star_prefix() {
 /* ---- '*' in the middle and a bare "*" matching everything ---- */
 void test_names_star_forms() {
     assert_eval_eq("MemberQ[Names[\"*Plot\"], \"ListPlot\"]", "True", 0);
-    assert_eval_eq("Names[\"*\"] === Names[]", "True", 0);
+    /* "*" covers the visible symbols; "*`*" (every context) is Names[]. */
+    assert_eval_eq("Names[\"*`*\"] === Names[]", "True", 0);
+    assert_eval_eq("Complement[Names[\"*\"], Names[]]", "{}", 0);
 }
 
 /* ---- '@' matches one or more NON-uppercase characters ---- */
@@ -96,22 +98,44 @@ void test_names_system_context() {
     /* The reported bug: Names["System`*"] used to return {} because nothing is
      * stored under a literal "System`" prefix. It must now list the builtins. */
     assert_eval_eq("Length[Names[\"System`*\"]] > 0", "True", 0);
-    assert_eval_eq("MemberQ[Names[\"System`*\"], \"System`Sin\"]", "True", 0);
-    assert_eval_eq("MemberQ[Names[\"System`*\"], \"System`Plus\"]", "True", 0);
-    /* Results are the fully-qualified names, not the bare ones. */
-    assert_eval_eq("MemberQ[Names[\"System`*\"], \"Sin\"]", "False", 0);
+    /* Results print as the names do: System` is on $ContextPath, so the
+     * context is dropped (issue #105). */
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"Sin\"]", "True", 0);
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"Plus\"]", "True", 0);
+    assert_eval_eq("MemberQ[Names[\"System`*\"], \"System`Sin\"]", "False", 0);
     /* An exact context-qualified literal selects just that symbol. */
-    assert_eval_eq("Names[\"System`Sin\"]", "{\"System`Sin\"}", 0);
+    assert_eval_eq("Names[\"System`Sin\"]", "{\"Sin\"}", 0);
     /* Still canonically sorted. */
     assert_eval_eq("Names[\"System`*\"] === Sort[Names[\"System`*\"]]", "True", 0);
 }
 
 /* ---- Global` context reflects user-assigned symbols ---- */
 void test_names_global_context() {
-    assert_eval_eq("myNamesVar = 5; MemberQ[Names[\"Global`*\"], \"Global`myNamesVar\"]",
+    assert_eval_eq("myNamesVar = 5; MemberQ[Names[\"Global`*\"], \"myNamesVar\"]",
                    "True", 0);
     /* A builtin is not in Global`. */
-    assert_eval_eq("MemberQ[Names[\"Global`*\"], \"Global`Sin\"]", "False", 0);
+    assert_eval_eq("MemberQ[Names[\"Global`*\"], \"Sin\"]", "False", 0);
+    /* A symbol created with an explicit Global` prefix is found by its short
+     * name too. */
+    assert_eval_eq("Global`myNamesQual = 1; Names[\"myNamesQual\"]",
+                   "{\"myNamesQual\"}", 0);
+}
+
+/* ---- a context off $ContextPath stays qualified; inside it, short ---- */
+void test_names_other_context() {
+    assert_eval_eq("NmFoo`bar = 1; NmFoo`baz = 2; Names[\"NmFoo`*\"]",
+                   "{\"NmFoo`bar\", \"NmFoo`baz\"}", 0);
+    assert_eval_eq("Names[\"*`baz\"]", "{\"NmFoo`baz\"}", 0);
+    assert_eval_eq("Names[RegularExpression[\"NmFoo`ba.\"]]",
+                   "{\"NmFoo`bar\", \"NmFoo`baz\"}", 0);
+    /* A context-free pattern only sees visible symbols. */
+    assert_eval_eq("Names[\"bar\"]", "{}", 0);
+    assert_eval_eq("MemberQ[Names[\"*bar\"], \"NmFoo`bar\"]", "False", 0);
+    /* Names[] lists everything, by display name. */
+    assert_eval_eq("MemberQ[Names[], \"NmFoo`bar\"]", "True", 0);
+    /* Inside the context the names print short. */
+    assert_eval_eq("Begin[\"NmFoo`\"]; r = Names[\"NmFoo`*\"]; End[]; r",
+                   "{\"bar\", \"baz\"}", 0);
 }
 
 /* ---- arity / bad argument: stays unevaluated ---- */
@@ -142,6 +166,7 @@ int main() {
     TEST(test_names_regular_expression);
     TEST(test_names_system_context);
     TEST(test_names_global_context);
+    TEST(test_names_other_context);
     TEST(test_names_unevaluated);
     TEST(test_names_protected);
 

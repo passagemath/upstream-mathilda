@@ -1338,12 +1338,24 @@ PCRE2 a `RegularExpression` pattern emits `Names::regavail` and stays
 unevaluated. The result is always ordered so that `Names[patt]` is identical to
 `Sort[Names[patt]]`.
 
-**Context handling.** Symbols are stored under bare names for the `System`` and
-`Global`` contexts (builtins and unqualified user symbols). A pattern that
-contains a `` ` `` is matched against — and returns — each symbol's fully
-context-qualified name (`System`Sin`, `Global`x`, …); a plain pattern (no
-backtick) is matched against, and returns, the stored short name. This is what
-makes `Names["System`*"]` enumerate all builtins.
+**Context handling.** Each name is returned **the way it prints**: without its
+context when that context is `$Context` or on `$ContextPath`, fully qualified
+otherwise. So `Names["System`File*"]` gives `{"FileBaseName", …}`, not
+`{"System`FileBaseName", …}`. What the pattern is matched against depends on
+whether it names a context:
+
+- A pattern containing a `` ` `` (`"System`*"`, `"*`x"`, or a
+  `RegularExpression` such as `"Foo`ba."`) is matched against each symbol's
+  fully context-qualified name. This is how `Names["System`*"]` enumerates
+  every builtin.
+- A pattern without one (`"Sin"`, `"F*"`) names symbols the way they are typed.
+  It is matched against the short name of symbols whose context is visible, so
+  it never sees a symbol in a context that is off `$ContextPath`.
+
+`Names["Foo`*"]` therefore gives `{"Foo`bar", …}` while `Foo`` is off the path,
+and `{"bar", …}` inside `Begin["Foo`"]` or after `BeginPackage["Foo`"]`.
+`Names["*"]` lists only the visible symbols; `Names[]` (or `Names["*`*"]`)
+lists them all.
 
 **Features**: `Protected`. All symbols are candidates. A symbol's home context
 is `System`` when it is a builtin (or a kernel-interned System symbol) and
@@ -1359,8 +1371,11 @@ Out[2]= {"Arg", "Array", "Arrow"}          (* @ stops at the uppercase in ArcSin
 In[3]:= Names[RegularExpression["Si."]]
 Out[3]= {"Sin"}
 
-In[4]:= MemberQ[Names["System`*"], "System`Sin"]
-Out[4]= True
+In[4]:= Names["System`FileS*"]
+Out[4]= {"FileSize"}
+
+In[5]:= Foo`bar = 1; {Names["Foo`*"], Names["bar"]}
+Out[5]= {{"Foo`bar"}, {}}                    (* Foo` is not on $ContextPath *)
 ```
 
 ## MessageName

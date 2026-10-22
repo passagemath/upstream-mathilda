@@ -276,6 +276,35 @@ static void test_factor_trig_monomial(void) {
     fprintf(stderr, "  trig monomial: %.0f ms\n", ms);
 }
 
+/* Opaque kernels are independent generators.  The >=3-generator z-split
+ * step specialised x -> 0 by ReplaceAll, which also rewrote the x INSIDE
+ * BesselJ[-2/3, x] (= ComplexInfinity at 0) and leaked Infinity::indet out
+ * of Factor and Simplify; f[x] was silently specialised to f[0].  Factor
+ * now maps kernels to fresh symbols first.  Each case: Check returns the
+ * value (no message) and the result is equal to the input. */
+static void factor_kernel_case(const char* poly) {
+    char buf[2048];
+    snprintf(buf, sizeof buf, "Check[Expand[Factor[%s] - (%s)], $Failed]", poly, poly);
+    assert_eval_eq(buf, "0", 0);
+}
+
+static void test_factor_kernels_are_opaque(void) {
+    factor_kernel_case("x^2 BesselJ[-2/3, x]^2 + x BesselJ[1/3, x]^2 + 1");
+    factor_kernel_case("x^2 Log[x]^2 + x Log[2 x]^2 + 1");
+    factor_kernel_case("32 BesselJ[1/3, x]^3 + 81 x^4 BesselJ[1/3, x]^3 + 324 x^3 BesselJ[4/3, x]^3"
+        " - 360 x^2 BesselJ[1/3, x] BesselJ[4/3, x]^2 - 162 x^4 BesselJ[7/3, x] BesselJ[4/3, x]^2"
+        " - 108 x^3 BesselJ[-2/3, x] BesselJ[1/3, x]^2 - 108 x^3 BesselJ[-2/3, x] BesselJ[4/3, x]^2"
+        " - 81 x^4 BesselJ[7/3, x] BesselJ[1/3, x]^2 - 72 x^2 BesselJ[7/3, x] BesselJ[1/3, x]^2"
+        " - 48 x BesselJ[-2/3, x] BesselJ[1/3, x]^2 + 48 x BesselJ[4/3, x] BesselJ[1/3, x]^2"
+        " + 216 x^3 BesselJ[4/3, x] BesselJ[1/3, x]^2 + 144 x^2 BesselJ[-2/3, x] BesselJ[1/3, x] BesselJ[4/3, x]"
+        " + 162 x^4 BesselJ[-2/3, x] BesselJ[1/3, x] BesselJ[4/3, x]"
+        " + 216 x^3 BesselJ[1/3, x] BesselJ[4/3, x] BesselJ[7/3, x]");
+    /* genuinely factorable over kernels */
+    assert_eval_eq("Factor[x^2 a[x]^2 - b[x]^2]", "(x a[x] - b[x]) (x a[x] + b[x])", 0);
+    assert_eval_eq("Factor[x^2 Sin[x] + 2 x Sin[x] + Sin[x]]", "(1 + x)^2 Sin[x]", 0);
+    assert_eval_eq("Factor[E^x (x^2 - 1)]", "E^x (-1 + x) (1 + x)", 0);
+}
+
 /* User-reported case (2026-04): a trivariate 18-term polynomial whose
  * FactorSquareFree pre-check ran a univariate gcd over a degree-31
  * image.  The original Expr-level `poly_gcd_internal` (Knuth-style
@@ -333,6 +362,7 @@ int main(void) {
     TEST(test_factor_monomial_cube);
     TEST(test_factor_trig_monomial);
     TEST(test_factor_trivariate_high_degree_squarefree);
+    TEST(test_factor_kernels_are_opaque);
 
     printf("All baseline tests passed!\n");
     return 0;

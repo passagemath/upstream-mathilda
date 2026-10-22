@@ -278,6 +278,12 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
 Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                     const Expr* complexity_func);
 
+/* simp_bessel.c: rewrite Bessel J/Y/I/K families whose orders differ by
+ * integers onto an adjacent basis pair via the three-term recurrence.
+ * Returns NULL unless the rewrite strictly lowers the score. */
+Expr* simp_bessel_contiguous(const Expr* input, const AssumeCtx* ctx,
+                             const Expr* complexity_func);
+
 /* Used by simp_search.c gating logic; also called from simp_bottomup.c. */
 bool has_non_integer_power(const Expr* e);
 

@@ -532,6 +532,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/trigsimp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/radrat.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_bessel.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_complexity.c
@@ -3841,6 +3842,8 @@ target_include_directories(simp_log_tests PRIVATE ../src)
 
 add_executable(invtrig_simplify_tests test_invtrig_simplify.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(invtrig_simplify_tests PRIVATE ../src)
+add_executable(simp_bessel_tests test_simp_bessel.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(simp_bessel_tests PRIVATE ../src)
 
 add_executable(hyp_assume_simplify_tests test_hyp_assume_simplify.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hyp_assume_simplify_tests PRIVATE ../src)
@@ -3983,6 +3986,7 @@ if(USE_ECM)
     add_dependencies(logexp_simplify_tests build_ecm)
     add_dependencies(simp_log_tests build_ecm)
     add_dependencies(invtrig_simplify_tests build_ecm)
+    add_dependencies(simp_bessel_tests build_ecm)
     add_dependencies(hyp_assume_simplify_tests build_ecm)
     add_dependencies(integer_assume_simplify_tests build_ecm)
     add_dependencies(radical_simplify_tests build_ecm)

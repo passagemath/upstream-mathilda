@@ -307,6 +307,39 @@ Expr* builtin_factor(Expr* res) {
         }
     }
 
+    /* Opaque-kernel pass.  Every non-symbol generator (BesselJ[1/3, x], Log[x],
+     * f[x], E^x) is an independent indeterminate to the factoriser, so make it
+     * a real one: factor with each kernel replaced by a fresh symbol, then
+     * restore.  Without this, the multivariate paths specialise a symbol
+     * generator by ReplaceAll (facpoly_z_split.inc's x -> 0, the
+     * eval_others_at_alpha probes), which also rewrites the x INSIDE the
+     * kernels -- not a specialisation of the polynomial, and for BesselJ[-2/3, x]
+     * a 0*ComplexInfinity that leaked Infinity::indet out of Factor and
+     * Simplify.  It also lets the FLINT multivariate fast path, which declines
+     * on unknown heads, take these inputs.  Runs after the radical pass, whose
+     * u^(p/q) generators may themselves be kernels; the recursive Factor call
+     * sees symbols only, so this fires at most once per call. */
+    {
+        PolyKernelMap kmap;
+        Expr* kerned = poly_kernels_to_symbols(arg, &kmap);
+        if (kerned) {
+            size_t n = res->data.function.arg_count;
+            Expr** cargs = malloc(sizeof(Expr*) * n);
+            cargs[0] = kerned;
+            for (size_t i = 1; i < n; i++) cargs[i] = expr_copy(res->data.function.args[i]);
+            Expr* in_syms = eval_and_free(expr_new_function(expr_new_symbol("Factor"), cargs, n));
+            free(cargs);
+            Expr* final = eval_and_free(poly_symbols_to_kernels(in_syms, &kmap));
+            expr_free(in_syms);
+            poly_kernel_map_free(&kmap);
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, final);
+                expr_free(memo_key);
+            }
+            return final;
+        }
+    }
+
 #ifdef USE_FLINT
     /* Univariate integer-polynomial fast path via FLINT (fmpz_poly_factor):
      * fast, and bignum-safe. It must run BEFORE the Together / collect_variables

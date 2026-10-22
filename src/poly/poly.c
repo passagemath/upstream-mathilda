@@ -1145,6 +1145,83 @@ char* poly_make_fresh_gen(Expr* e) {
     return out;
 }
 
+/* Replace each kernel of `map` by its symbol.  Descends only through the
+ * ring structure collect_variables descends through (Plus, Times, List and
+ * Power), so a kernel is matched exactly where it acts as a generator. */
+static Expr* kern_forward(const Expr* e, const PolyKernelMap* map) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    for (size_t i = 0; i < map->n; i++)
+        if (expr_eq((Expr*)e, map->kern[i])) return expr_copy(map->sym[i]);
+    const Expr* h = e->data.function.head;
+    const char* hn = (h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (hn != SYM_Plus && hn != SYM_Times && hn != SYM_List && hn != SYM_Power)
+        return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = kern_forward(e->data.function.args[i], map);
+    Expr* r = expr_new_function(expr_copy((Expr*)h), args, n);
+    free(args);
+    return r;
+}
+
+Expr* poly_kernels_to_symbols(const Expr* e, PolyKernelMap* map) {
+    map->kern = NULL; map->sym = NULL; map->n = 0;
+    size_t vc = 0, vcap = 8;
+    Expr** vars = malloc(sizeof(Expr*) * vcap);
+    collect_variables((Expr*)e, &vars, &vc, &vcap);
+    size_t nk = 0;
+    for (size_t i = 0; i < vc; i++)
+        if (vars[i]->type == EXPR_FUNCTION) nk++;
+    if (nk == 0) {
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+        return NULL;
+    }
+    map->kern = malloc(sizeof(Expr*) * nk);
+    map->sym  = malloc(sizeof(Expr*) * nk);
+    /* Name the fresh symbols in the kernels' canonical order, with a prefix
+     * that sorts after ordinary symbols under both the canonical order and
+     * strcmp (the FLINT bridge's variable order).  The factorisation is the
+     * same either way, but its sign / ordering convention follows the
+     * variable order, so this keeps x before Sin[x] and Cos[x] before Sin[x]
+     * exactly as they compare as kernels. */
+    qsort(vars, vc, sizeof(Expr*), compare_expr_ptrs);
+    int ctr = 0;
+    char buf[48];
+    for (size_t i = 0; i < vc; i++) {
+        if (vars[i]->type != EXPR_FUNCTION) { expr_free(vars[i]); continue; }
+        do snprintf(buf, sizeof buf, "zzzk$%04d", ctr++);
+        while (walk_has_symbol_name((Expr*)e, buf));
+        map->kern[map->n] = vars[i];                  /* adopt */
+        map->sym[map->n]  = expr_new_symbol(buf);
+        map->n++;
+    }
+    free(vars);
+    return kern_forward(e, map);
+}
+
+Expr* poly_symbols_to_kernels(const Expr* e, const PolyKernelMap* map) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < map->n; i++)
+            if (strcmp(e->data.symbol.name, map->sym[i]->data.symbol.name) == 0)
+                return expr_copy(map->kern[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = poly_symbols_to_kernels(e->data.function.args[i], map);
+    Expr* r = expr_new_function(poly_symbols_to_kernels(e->data.function.head, map), args, n);
+    free(args);
+    return r;
+}
+
+void poly_kernel_map_free(PolyKernelMap* map) {
+    for (size_t i = 0; i < map->n; i++) { expr_free(map->kern[i]); expr_free(map->sym[i]); }
+    free(map->kern); free(map->sym);
+    map->kern = NULL; map->sym = NULL; map->n = 0;
+}
+
 Expr* builtin_variables(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     size_t count = 0, capacity = 16;

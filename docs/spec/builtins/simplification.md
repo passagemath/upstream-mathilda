@@ -81,6 +81,21 @@ canonical forms that the generic pipeline alone does not:
   `Cos[Pi/7] Cos[2 Pi/7] Cos[3 Pi/7] -> 1/8`,
   `Tan[Pi/7] Tan[2 Pi/7] Tan[3 Pi/7] -> Sqrt[7]`, and `RootReduce[Sin[Pi/7]]`
   is an exact `Root[...]`.
+- **Bessel functions of contiguous order** — `BesselJ`/`BesselY`/`BesselI`/`BesselK`
+  kernels with one argument and orders that differ by integers (rational,
+  integer or symbolic: `n - 1, n, n + 1`) are rewritten onto one adjacent basis
+  pair `{C[m], C[m+1]}` with the three-term recurrences (DLMF 10.6.1, 10.29.1):
+  `C[m-1] + C[m+1] = (2m/z) C[m]` for J and Y,
+  `I[m-1] - I[m+1] = (2m/z) I[m]`, and `K[m-1] - K[m+1] = -(2m/z) K[m]`.
+  For an order outside `1/2 + Z`, `C[m]` and `C[m+1]` are algebraically
+  independent over `C(z)`, so after the rewrite the combined numerator is zero
+  exactly when the expression is. That makes this a complete zero test for the
+  class. The rewrite is kept only when it strictly lowers the complexity. So
+  `Simplify[D[Integrate[x^2 BesselJ[1/3, x]^3, x], x]]` → `x^2 BesselJ[1/3, x]^3`,
+  `Simplify[BesselJ[n - 1, x] + BesselJ[n + 1, x]]` → `(2 n BesselJ[n, x])/x`, and
+  derivative forms, the Bessel ODEs and `D[Integrate[…]]` round trips reduce to
+  `0`. Cross-kind relations (the Wronskian `J Y' - J' Y = 2/(Pi z)`) are not
+  applied.
 - **Radical denesting** — `Sqrt[A + Sqrt[B]]` and cube-root towers collapse via
   the half-sum identity when the result is cleaner.
 - **Inverse trig / hyperbolic identities** — standard relations such as

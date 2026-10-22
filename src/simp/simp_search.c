@@ -1336,6 +1336,17 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
         if (rr) return rr;
     }
 
+    /* Bessel contiguous-order reduction: BesselJ/Y/I/K kernels whose orders
+     * differ by integers are linearly dependent over Q(z) (three-term
+     * recurrence), so rewrite each such family onto one adjacent basis pair
+     * before the shape pipelines treat them as independent generators.
+     * NULL (cheap tree scan) on inputs without such a family, and whenever
+     * the rewrite does not strictly lower the score. */
+    {
+        Expr* bz = simp_bessel_contiguous(input, ctx, complexity_func);
+        if (bz) return bz;
+    }
+
     SimpShape shape = simp_classify(input);
     switch (shape) {
         case SIMP_SHAPE_POLYNOMIAL:

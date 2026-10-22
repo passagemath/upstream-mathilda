@@ -4814,3 +4814,26 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   evaluated first, so `$Version` arrives as its string. Probe with direct calls.
 - **The context_tests harness printed `FAIL:` and still exited 0.** Grep test
   output for `FAIL:`; don't rely on the exit code.
+
+## 2026-10-22 — Simplify of Bessel contiguous orders; Factor kernel substitution (v0.534)
+
+- **Derive simplification targets from first principles. Never take them from
+  wolframscript.** User correction. The target and every test expectation come
+  from the defining identity (DLMF recurrence, ODE, derivative rule), and each
+  one gets a numeric check at sample points. Mathematica's own Simplify leaves
+  `J[n+1] - 2n/x J[n] + J[n-1]` alone, so using it as the oracle would have set
+  the wrong target.
+- **A fix for one reported expression is not done until it is general.** User
+  correction. Build a corpus of 50 or more cases spanning the whole function
+  class (all kinds, rational, integer, half-integer and symbolic parameters,
+  scaled arguments, derivatives, ODEs, round trips, and negatives that must stay
+  unchanged). Run it as a script first. The first corpus run found a real gap
+  that the single repro hid: symbolic powers `x^n` need `Expand`, not
+  `Together`, to cancel.
+- **Tail-only test checks hide failures.** I read the last 3 lines of each
+  suite, and `factor_baseline_tests` had died at an assert with no "passed"
+  line. For every suite, require the "passed" line, check rc, and grep `^FAIL`.
+- **Fresh-symbol substitution must preserve variable order.** The factoriser's
+  sign convention follows the variable order, so a fresh name sorting
+  differently from the kernel it replaces flips `-(…)` vs `(…)`. Sort the
+  kernels canonically and use a prefix that sorts after ordinary symbols.

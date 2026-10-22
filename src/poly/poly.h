@@ -99,6 +99,34 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
 Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
 char* poly_make_fresh_gen(Expr* e);
 
+/* ------------------------------------------------------------------ */
+/* Opaque-kernel generators.                                          */
+/*                                                                    */
+/* collect_variables enrols every non-symbol function atom -- Sin[x], */
+/* BesselJ[1/3, x], f[x], E^x -- as an independent polynomial         */
+/* generator.  Code that then specialises a SYMBOL generator by       */
+/* structural substitution (ReplaceAll[P, x -> 0]) also rewrites the  */
+/* x inside those kernels, which is not a specialisation of the       */
+/* polynomial at all (BesselJ[-2/3, 0] is ComplexInfinity).  Mapping  */
+/* each kernel to a fresh symbol first makes the generators the real  */
+/* indeterminates the polynomial algorithms assume.                   */
+/*                                                                    */
+/* poly_kernels_to_symbols: returns a new tree with every maximal     */
+/* kernel generator replaced by a fresh symbol (recording the map),   */
+/* or NULL when `e` has no kernel generator.                          */
+/* poly_symbols_to_kernels: the inverse (structural; the caller       */
+/* evaluates).                                                        */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    Expr** kern;    /* owned kernel atoms                 */
+    Expr** sym;     /* owned fresh symbols, parallel      */
+    size_t n;
+} PolyKernelMap;
+
+Expr* poly_kernels_to_symbols(const Expr* e, PolyKernelMap* map);
+Expr* poly_symbols_to_kernels(const Expr* e, const PolyKernelMap* map);
+void  poly_kernel_map_free(PolyKernelMap* map);
+
 /* True when `e` binds or differentiates in a variable (an unevaluated Integrate/D/
  * Sum/Product/Limit/Series/Dt, a Function, an Inactive[op][...] form, a Hold
  * wrapper): an opaque atom to every kernel -> generator substitution, which is

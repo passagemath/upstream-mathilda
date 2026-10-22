@@ -162,7 +162,7 @@ static Expr* canon_K(const Expr* atom, const Expr* root, const AssumeCtx* ctx) {
 /* Integer-order reflection for J, Y (sign (-1)^n) and I (no sign). */
 static Expr* canon_int_reflect(const Expr* atom, const AssumeCtx* ctx, bool signed_) {
     const Expr* mu = atom->data.function.args[0];
-    if (!ctx || !order_reads_negative(mu) || !prov_int(ctx, mu)) return NULL;
+    if (!ctx || !order_reads_negative(mu) || !sf_proved_integer(ctx, mu)) return NULL;
     const char* h = atom->data.function.head->data.symbol.name;
     Expr* flipped = sf_call(h, (Expr*[]){ neg_order(mu), sf_cp(atom->data.function.args[1]) }, 2);
     if (!signed_) return flipped;

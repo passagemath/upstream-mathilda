@@ -74,6 +74,11 @@ numerator vanishes exactly when the expression does.
 
 ### Normal form of a candidate (`normalize_form`)
 
+`sf_reduce_modulo` substitutes fresh symbols for the generator kernels before
+`Together` and `PolynomialReduce`, and substitutes them back afterwards. Without
+that, `Together` rewrites `AiryAi[1/3 + x]` as `AiryAi[(1 + 3 x)/3]` and the
+generator no longer matches.
+
 `Together` maps into function arguments, so a coefficient kernel such as
 `Gamma[x + 1/3]` comes back as `Gamma[1/3 (1 + 3 x)]`. Every candidate therefore
 has the **shift arguments** of its atoms expanded. Powers are put in the
@@ -331,13 +336,80 @@ own spelling of the same value:
   (`Cos[π/2 + π s] → −Sin[π s]`). Simplify's bottom-up pass hands the engine
   *subexpressions*, so the engine's output has to meet the spelling of the
   outer input.
-- **Powers.** As in §1.
+- **Powers.** As in §1. In addition, `(c w)^e → c^e w^e` and `(p/q)^e → p^e q^(−e)`
+  for positive rational c and p/q (principal branch: arg(c w) = arg w), so that
+  `(z/2)^n` meets `D`'s `2^(−n) z^n`.
 
 After the gate, a result that still contains a trig head (the residue of a
 reflection) is finished by Simplify's bottom-up pass instead of a single
 dispatch, and is then normalised once more, so that `Csc[u] Sin[u]` cancels.
 
-## 8. Out of scope (no builtin)
+## 8. Orthogonal polynomials (`simp_sf_orthopoly.c`)
+
+The functions are continued in the degree, and every recurrence below was
+checked numerically at **non-integer and complex** degree before it was encoded.
+The rank-2 up row gives `C[n+2] = A C[n] + B C[n+1]`.
+
+| head | recurrence | derivation |
+|---|---|---|
+| `LegendreP`, `LegendreQ` | `(n+1) C[n+1] = (2n+1) x C[n] − n C[n−1]` | Bonnet. Differentiate the generating function `(1 − 2xt + t²)^(−1/2)` in t. Q obeys the same recurrence, being the second solution of one ODE family. |
+| `LegendreP[n, m, x]` | `(n−m+1) P[n+1] = (2n+1) x P[n] − (n+m) P[n−1]` | apply `(1−x²)^(m/2) d^m/dx^m` to Bonnet |
+| `ChebyshevT`, `ChebyshevU` | `C[n+1] = 2x C[n] − C[n−1]` | `cos((n+1)t) + cos((n−1)t) = 2 cos t cos nt`, and likewise for `sin((n+1)t)/sin t` |
+| `HermiteH` | `H[n+1] = 2x H[n] − 2n H[n−1]` | generating function `e^(2xt − t²)` |
+| `LaguerreL[n, a, x]` | `(n+1) L[n+1] = (2n+1+a−x) L[n] − (n+a) L[n−1]` | generating function `(1−t)^(−a−1) e^(−xt/(1−t))` |
+| `LaguerreL` in `a` | `x L^(a+1)_n = (n+a+1) L^a_n − (n+1) L^a_{n+1}` | together with the n-recurrence this gives the a-direction matrix `[[(n+a+1)/x, −(n+1)/x], [(n+a+1)/x, (x−n−1)/x]]`, a 2-D (n, a) lattice. Its determinant `(n+a+1)/x` is non-zero generically, so the engine inverts it for down steps. |
+
+**Pair.** `P[n+1] Q[n] − P[n] Q[n+1] = 1/(n+1)`. By Abel's identity,
+`(1 − x²) W{P_n, Q_n}` is constant, and the recurrence turns W into the
+Casoratian. This was checked inside (−1, 1) and off the real axis. The sign was
+fixed by the numerics: the opposite sign is off by 2/(n+1).
+
+**Cross-family rewrites.** These are needed because `D` maps between families:
+
+- `T[n] = (U[n] − U[n−2])/2` holds for every n, since
+  `cos nt = (sin(n+1)t − sin(n−1)t)/(2 sin t)`. It is applied when a U of the
+  same x and order class is present, because `D[ChebyshevT[n, x], x] = n U[n−1]`.
+- `LaguerreL[n, x] = LaguerreL[n, 0, x]` is applied when a generalized L of x is
+  present, because `D[LaguerreL[n, x], x] = −LaguerreL[n−1, 1, x]`. A refold
+  pass restores the two-argument form.
+
+**Reflections.**
+
+- `T[−n] = T[n]`, `U[−n] = −U[n−2]` and `P[−n−1] = P[n]` all hold for every n.
+  The last follows because the Legendre ODE depends on n only through n(n+1).
+  Each of these maps an order class c to −c (mod 1), so the canonical sign uses
+  `sf_reflection_flips`: flip when the flipped class is the smaller one. That
+  keeps `T[−2/3]` beside `T[1/3]`, the same rule as for BesselK.
+- Parity `C[n, −x] = (−1)^n C[n, x]` for P, T, U and H holds for **integer** n
+  proved (`sf_proved_integer` sees `n + 1` from `Element[n, Integers]`). The
+  sign is written as `(−1)^c (−1)^s`.
+
+## 9. Airy, Struve, Whittaker, Fibonacci/Lucas (`simp_sf_airy.c`)
+
+- **Airy Wronskian.** `Ai Bi′ − Ai′ Bi = 1/π`. The equation `w″ = zw` has no
+  `w′` term, so by Abel the Wronskian is constant. At z = 0,
+  `Ai(0) = 3^(−2/3)/Γ(2/3)`, `Ai′(0) = −3^(−1/3)/Γ(1/3)`, `Bi = √3 Ai` and
+  `Bi′ = −√3 Ai′`, and `Γ(1/3)Γ(2/3) = 2π/√3` gives 1/π. A pass reduces any
+  expression holding `AiryAiPrime[z]` and `AiryBi[z]` modulo the relation,
+  eliminating `Ai′ Bi`. (This needed the v0.537 `PolynomialReduce` fix, because
+  `1/π` is its only coefficient.)
+- **StruveH.** `H[v−1] + H[v+1] = (2v/z) H[v] + (z/2)^v/(√π Γ(v+3/2))`, from the
+  series (DLMF 11.4.23). The inhomogeneous term creates Gamma atoms, which the
+  later family rounds reduce. The ODE
+  `z² H″ + z H′ + (z² − v²) H = 4 (z/2)^(v+1)/(√π Γ(v+1/2))` closes.
+- **Whittaker, in k.**
+  `W[k+1] + (2k − z) W[k] − (m − k + ½)(m + k − ½) W[k−1] = 0` and
+  `(2m + 2k + 1) M[k+1] + 2(z − 2k) M[k] − (2m − 2k + 1) M[k−1] = 0`. These are
+  contiguous relations of 1F1 and U, with
+  `M = z^(m+½) e^(−z/2) 1F1(m−k+½; 1+2m; z)`. **Both signs were determined
+  numerically**, at complex k, m and z, among the candidate forms.
+- **Fibonacci/LucasL**, numbers and polynomials. `C[n+2] = C[n+1] + C[n]` and
+  `C[n+2, x] = x C[n+1, x] + C[n, x]` hold for **every** n, by Binet with
+  `cos(π(n+2)) = cos(πn)`. The pair relation is
+  `F[n+1] L[n] − F[n] L[n+1] = 2 cos(πn)`, which holds at non-integer n as
+  checked.
+
+## 10. Out of scope (no builtin)
 
 `GegenbauerC`, `JacobiP`, `HankelH1`/`HankelH2` and `StruveL` have no evaluating
 builtin, so they have no descriptors. `MeijerG` has no shift relations beyond

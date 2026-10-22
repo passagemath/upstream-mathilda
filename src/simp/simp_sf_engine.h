@@ -140,6 +140,17 @@ bool sf_split(const Expr* mu, Expr** s, int64_t* num, int64_t* den);
  * sign of a reflected argument. */
 bool sf_reads_negative(const Expr* s);
 
+/* Is mu provably an integer under ctx?  mu = s + c with c an integer and s
+ * absent or provably integer (prov_int alone does not see n + 1). */
+bool sf_proved_integer(const AssumeCtx* ctx, const Expr* mu);
+
+/* Class-preserving canonical sign for an even/odd-in-order reflection
+ * mu <-> -mu - k (k an integer, k = 0 for BesselK and ChebyshevT): does
+ * the flipped order have the smaller class?  A symbolic order flips when
+ * its symbolic part reads negative; a numeric mu = num/den flips when
+ * frac(mu) > 1/2, or frac(mu) in {0, 1/2} and mu < -k/2. */
+bool sf_reflection_flips(const Expr* mu, int64_t k);
+
 /* Reduce e modulo the polynomial relation R == 0 in the generator atoms
  * vars[0..nv-1] (lex order, vars[0] highest): numerator remainder over the
  * common denominator.  Owned result or NULL (e borrowed, R/vars borrowed). */
@@ -158,5 +169,7 @@ extern const SfModule SF_MODULE_BESSEL;
 extern const SfModule SF_MODULE_GAMMA;
 extern const SfModule SF_MODULE_ZETA;
 extern const SfModule SF_MODULE_ERREXP;
+extern const SfModule SF_MODULE_ORTHOPOLY;
+extern const SfModule SF_MODULE_AIRY;
 
 #endif

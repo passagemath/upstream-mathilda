@@ -110,6 +110,18 @@ canonical forms that the generic pipeline alone does not:
     **Si/Ci/Shi/Chi** and **Fresnel S/C**. `CosIntegral[-x]` and
     `CoshIntegral[-x]` reflect under `x > 0`.
 
+  - **Orthogonal polynomials**: three-term recurrences in the degree, valid at
+    non-integer degree, for **LegendreP/Q** (and associated P), **ChebyshevT/U**,
+    **HermiteH** and **LaguerreL**. Generalized LaguerreL uses a 2-D (n, a)
+    lattice. Also:
+    - the Legendre P/Q Casoratian `1/(n+1)`;
+    - `T = (U[n] - U[n-2])/2` and the Laguerre `a = 0` embedding (so the
+      Chebyshev and Laguerre ODEs close);
+    - class-preserving reflections, and integer parity under assumptions.
+  - **Airy** Wronskian `Ai Bi' - Ai' Bi = 1/Pi`, the **StruveH** inhomogeneous
+    recurrence and ODE, **WhittakerM/W** k-recurrences, and **Fibonacci/LucasL**
+    (numbers and polynomials, every n) with `F[n+1] L[n] - F[n] L[n+1] = 2 Cos[Pi n]`.
+
   Every identity is checked numerically at real and complex points by the
   `tests/test_simp_sf_*.c` suites, with at least 50 cases per family.
   `MATHILDA_NO_SF_ENGINE=1` disables the pass for A/B comparison.

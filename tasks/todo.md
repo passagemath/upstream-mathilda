@@ -6,9 +6,10 @@ Plan: ~/.claude/plans/similar-to-our-simp-bessel-merry-pudding.md. Derivations: 
 - [x] W1 Gamma / incomplete Gamma / LogGamma / BarnesG / Pochhammer / Beta / Binomial / Factorial; reflection, multiplication
 - [x] W2 PolyGamma / HarmonicNumber / HurwitzZeta / Zeta[s,a] / LerchPhi / Riemann FE / PolyLog
 - [x] W3 Erf family, InverseErf, ExpIntegralE, LogIntegral/Ei, Si/Ci/Shi/Chi, Fresnel
-- [ ] W4 orthogonal polynomials, Airy, StruveH, Whittaker, Fibonacci/LucasL
+- [x] W4 orthogonal polynomials, Airy, StruveH, Whittaker, Fibonacci/LucasL
 - [ ] W5 hypergeometric (PFQ canonical order, contiguous lattices, Kummer/Euler)
 - [ ] W6 elliptic K/E (Legendre relation), ProductLog, QPochhammer
+- [ ] Follow-up: N[LaguerreL[nu, -1, x]] stays unevaluated (numeric generalized Laguerre at a = -1)
 - [ ] Follow-up: Simplify bottom-up spends minutes in TrigReduce on `E^-w (poly in w^(2a+j))` (no special function involved); see test_simp_sf_gamma.c GammaIncomplete note
 
 # DSolve — next 500 of Nasser's corpus (§2.2.41–§2.2.45)

@@ -167,6 +167,17 @@ static void sf_to_real(const char* e, const char* expected) {
     sf_numeric_zero_at("to-numeric", buf, SF_REAL_PTS, 2);
 }
 
+/* Simplify[e] == 0 (no assumptions), numeric check at caller points (a
+ * family whose identities were verified only on part of the plane, e.g.
+ * LegendreQ's Casoratian inside (-1, 1) and off the real axis). */
+static void sf_zero_at(const char* e, const char** pts, size_t npts) {
+    sf_case();
+    char buf[16384];
+    snprintf(buf, sizeof buf, "Simplify[%s]", e);
+    sf_expect("zero", buf, "0");
+    sf_numeric_zero_at("zero-numeric", e, pts, npts);
+}
+
 static void sf_sound(const char* e) {
     sf_case();
     char buf[16384];

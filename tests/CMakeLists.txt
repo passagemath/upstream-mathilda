@@ -537,6 +537,8 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_gamma.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_zeta.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_errexp.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_orthopoly.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_airy.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_complexity.c
@@ -3852,7 +3854,7 @@ add_test(NAME simp_bessel_tests COMMAND simp_bessel_tests)
 
 # Special-function Simplify engine suites (src/simp/simp_sf_engine.c): one
 # test_simp_sf_<module>.c per descriptor module, each registered with ctest.
-set(SIMP_SF_SUITES bessel gamma zeta errexp)
+set(SIMP_SF_SUITES bessel gamma zeta errexp orthopoly airy)
 foreach(sf ${SIMP_SF_SUITES})
     add_executable(simp_sf_${sf}_tests test_simp_sf_${sf}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(simp_sf_${sf}_tests PRIVATE ../src)

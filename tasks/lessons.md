@@ -4867,4 +4867,16 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 - **Test sample points must avoid poles of the identity.** For example,
   `Sin[Pi w/2] Gamma[1 - w]` at integer w is 0 times a pole. Numeric checks
   must also be relative: `Erfi[x^2]^2` is about 1e109.
+- **A pass you didn't see link is not a pass.** After editing a test file,
+  confirm the binary relinked (`Linking C executable`) before trusting
+  "passed". `test_polynomialreduce.c` had FullForm expectations written in
+  StandardForm, and a stale binary reported success. The bug was caught only
+  on the next full run.
+- **A copy and a consume in one call is a use-after-free.** For example,
+  `three_term(M, f(sf_cp(den)), g(den))`: C leaves argument evaluation order
+  unspecified, and GCC evaluated the consuming argument first. Build owned
+  temporaries in separate statements.
+- **Reflections that map class c to -c (mod 1) need a class-preserving
+  canonical sign.** This applies to BesselK, ChebyshevT/U and LegendreP alike.
+  Flipping on "the order reads negative" splits one family into two.
 

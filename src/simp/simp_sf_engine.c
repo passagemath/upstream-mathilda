@@ -40,6 +40,8 @@ static const SfModule* const SF_MODULES[] = {
     &SF_MODULE_GAMMA,
     &SF_MODULE_ZETA,
     &SF_MODULE_ERREXP,
+    &SF_MODULE_ORTHOPOLY,
+    &SF_MODULE_AIRY,
 };
 #define SF_NMODULES (sizeof SF_MODULES / sizeof SF_MODULES[0])
 
@@ -238,29 +240,75 @@ bool sf_reads_negative(const Expr* s) {
     return false;
 }
 
+bool sf_proved_integer(const AssumeCtx* ctx, const Expr* mu) {
+    if (mu->type == EXPR_INTEGER || mu->type == EXPR_BIGINT) return true;
+    if (!ctx) return false;
+    if (prov_int(ctx, mu)) return true;
+    Expr* s = NULL; int64_t num, den;
+    bool ok = sf_split(mu, &s, &num, &den) && den == 1 && (!s || prov_int(ctx, s));
+    if (s) expr_free(s);
+    return ok;
+}
+
+bool sf_reflection_flips(const Expr* mu, int64_t k) {
+    Expr* s = NULL; int64_t num, den;
+    if (!sf_split(mu, &s, &num, &den)) return false;
+    if (s) { bool neg = sf_reads_negative(s); expr_free(s); return neg; }
+    int64_t r = num % den; if (r < 0) r += den;      /* frac(mu) = r/den */
+    if (2 * r > den) return true;
+    if (2 * r == den || r == 0) return 2 * num < -k * den;
+    return false;
+}
+
 /* ---- reduction modulo a relation ----------------------------------------- */
 
-static Expr* normalize_shift_args(Expr* e);
+/* Replace every occurrence of from[i] in e by to[i] (structural; owned out). */
+static Expr* subst_exprs(const Expr* e, Expr* const* from, Expr* const* to, size_t n) {
+    for (size_t i = 0; i < n; i++)
+        if (expr_eq(e, from[i])) return sf_cp(to[i]);
+    if (e->type != EXPR_FUNCTION) return sf_cp(e);
+    size_t na = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (na ? na : 1));
+    for (size_t i = 0; i < na; i++) a[i] = subst_exprs(e->data.function.args[i], from, to, n);
+    Expr* r = expr_new_function(subst_exprs(e->data.function.head, from, to, n), a, na);
+    free(a);
+    return r;
+}
 
 Expr* sf_reduce_modulo(const Expr* e, const Expr* R, Expr* const* vars, size_t nv) {
-    /* Together maps into the kernels' arguments; restore their s + c
-     * spelling, or the generators would not match `vars` */
-    Expr* t = normalize_shift_args(together(sf_cp(e)));
+    /* The generator kernels become fresh symbols for the duration:
+     * Together maps into a kernel's arguments (AiryAi[1/3 + x] ->
+     * AiryAi[(1 + 3 x)/3]), and the generators must still match `vars`
+     * when PolynomialReduce sees them.  The symbols' names keep the
+     * variables' order irrelevant (PolynomialReduce takes it explicitly). */
+    Expr** sym = malloc(sizeof(Expr*) * (nv ? nv : 1));
+    for (size_t i = 0; i < nv; i++) {
+        char nm[32];
+        snprintf(nm, sizeof nm, "SfEngine$g%zu", i);
+        sym[i] = sf_sym(nm);
+    }
+    Expr* es = eval_and_free(subst_exprs(e, vars, sym, nv));
+    Expr* Rs = eval_and_free(subst_exprs(R, vars, sym, nv));
+    Expr* t = together(es);
     Expr* num = sf_mk1("Numerator", sf_cp(t));
     Expr* den = sf_mk1("Denominator", t);
     Expr** va = malloc(sizeof(Expr*) * (nv ? nv : 1));
-    for (size_t i = 0; i < nv; i++) va[i] = sf_cp(vars[i]);
+    for (size_t i = 0; i < nv; i++) va[i] = sf_cp(sym[i]);
     Expr* vlist = sf_call(SYM_List, va, nv);
     free(va);
-    Expr* rlist = sf_call(SYM_List, (Expr*[]){ sf_cp(R) }, 1);
+    Expr* rlist = sf_call(SYM_List, (Expr*[]){ Rs }, 1);
     Expr* pr = eval_and_free(sf_call("PolynomialReduce", (Expr*[]){ num, rlist, vlist }, 3));
     Expr* out = NULL;
     if (sf_is_call(pr, SYM_List, 2)) {
-        out = sf_div(sf_cp(pr->data.function.args[1]), den);
+        Expr* q = sf_div(sf_cp(pr->data.function.args[1]), den);
         den = NULL;
+        out = eval_and_free(subst_exprs(q, sym, vars, nv));
+        expr_free(q);
     }
     expr_free(pr);
     if (den) expr_free(den);
+    for (size_t i = 0; i < nv; i++) expr_free(sym[i]);
+    free(sym);
     return out;
 }
 
@@ -693,6 +741,30 @@ static Expr* normalize_numeric_powers(Expr* e) {
     if (!sf_is_call(r, SYM_Power, 2)) return r;
     const Expr* b = r->data.function.args[0];
     int64_t bn, bd, qn, qd;
+    /* (c w)^e -> c^e w^e for a positive rational c: arg(c w) = arg(w), so it
+     * holds on the principal branch ((z/2)^n meets D's 2^-n z^n) */
+    if (sf_is_call(b, SYM_Times, b->type == EXPR_FUNCTION ? b->data.function.arg_count : 0) &&
+        read_rational(b->data.function.args[0], &bn, &bd) && bn > 0 &&
+        r->data.function.args[1]->type != EXPR_INTEGER) {
+        size_t nb = b->data.function.arg_count;
+        Expr** rest = malloc(sizeof(Expr*) * nb);
+        for (size_t i = 1; i < nb; i++) rest[i - 1] = sf_cp(b->data.function.args[i]);
+        Expr* w = nb == 2 ? rest[0] : sf_call(SYM_Times, rest, nb - 1);
+        free(rest);
+        const Expr* ex = r->data.function.args[1];
+        Expr* out = sf_times(sf_pow(sf_cp(b->data.function.args[0]), sf_cp(ex)), sf_pow(w, sf_cp(ex)));
+        expr_free(r);
+        return normalize_numeric_powers(out);
+    }
+    /* (p/q)^e -> p^e q^-e for a positive rational base and symbolic e
+     * ((1/2)^(a + b) meets D's 2^(-a - b)) */
+    if (read_rational(b, &bn, &bd) && bn > 0 && bd > 1 && r->data.function.args[1]->type != EXPR_INTEGER &&
+        !sf_is_call(r->data.function.args[1], SYM_Rational, 2)) {
+        const Expr* ex = r->data.function.args[1];
+        Expr* out = sf_times(sf_pow(sf_int(bn), sf_cp(ex)), sf_pow(sf_int(bd), sf_times(sf_int(-1), sf_cp(ex))));
+        expr_free(r);
+        return normalize_numeric_powers(out);
+    }
     if (!read_rational(b, &bn, &bd) || bn <= 0) {
         /* symbolic base: undo Together's c (p + q) spelling of an exponent
          * (w^(7/2 + a) -> w^(1/2 (7 + 2 a))), so equal powers stay equal */
@@ -1265,12 +1337,21 @@ static int sf_engine_disabled(void) {
     return cached;
 }
 
+static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx,
+                                         const Expr* complexity_func);
+
+/* Entry: the kill switch and the prefilter (one tree walk), then the
+ * pipeline. */
 Expr* simp_special_functions(const Expr* input, const AssumeCtx* ctx,
                              const Expr* complexity_func) {
     if (sf_engine_disabled()) return NULL;
     registry_init();
     if (!any_registered_head(input)) return NULL;
+    return simp_special_functions_impl(input, ctx, complexity_func);
+}
 
+static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx,
+                                         const Expr* complexity_func) {
     size_t in_score = score_with_func(input, complexity_func);
 
     /* 1. canonical generators */

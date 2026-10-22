@@ -1975,6 +1975,10 @@ ideal-membership test.
 - Shares `GroebnerBasis`'s monomial orders (including `DegreeLexicographic`
   via the shared named-order weight matrix) and its parameter discovery: a
   free symbol outside the variable list is a coefficient-field parameter.
+- Exact constants outside Q, such as `Pi`, `E` and `Sqrt[2]`, are field
+  coefficients even when no free parameter is present (v0.537), so
+  `PolynomialReduce[b c, {Pi - b c}, {b, c}]` → `{{-1}, Pi}`. Before this, the
+  rational engine declined such input and the call stayed unevaluated.
 - The quotients and the remainder depend on the monomial order and on the
   order of the `pi` (as in `GroebnerBasis` / the multivariate division
   algorithm).

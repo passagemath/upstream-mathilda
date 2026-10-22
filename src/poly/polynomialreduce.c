@@ -535,7 +535,7 @@ static Expr* pr_reduce_field(const Expr* poly, Expr* const* divs, int ndiv,
     free(m);
 
     /* Assemble {List{a1..an}, b}. */
-    Expr** qs = (Expr**)malloc(sizeof(Expr*) * (size_t)ndiv);
+    Expr** qs = (Expr**)malloc(sizeof(Expr*) * (size_t)(ndiv > 0 ? ndiv : 1));
     for (int i = 0; i < ndiv; i++) qs[i] = rpoly_to_expr(&Q[i], mainvars);
     Expr* qlist = expr_new_function(expr_new_symbol(SYM_List), qs, (size_t)ndiv);
     free(qs);
@@ -799,6 +799,18 @@ Expr* builtin_polynomialreduce(Expr* res) {
         }
     } else {
         out = pr_reduce_rational(polyN, divsN, ndiv, mainvars, k, &ord);
+        /* No free parameter, yet a coefficient outside Q (Pi, E, Sqrt[2]):
+         * the rational engine declines, the field engine's Expr coefficient
+         * arithmetic does not.  PolynomialReduce[b c, {Pi - b c}, {b, c}]
+         * used to stay unevaluated while the same input with w for Pi
+         * reduced. */
+        if (!out && opt.domain != PR_DOM_RATIONALS) {
+            const int64_t* W; int rows; int64_t* Wbuf = NULL;
+            if (ord.is_matrix) { W = ord.mat; rows = ord.mat_rows; }
+            else { Wbuf = gb_build_order_matrix(k, ord.ds, ord.rev, ord.neg, &rows); W = Wbuf; }
+            out = pr_reduce_field(polyN, divsN, ndiv, mainvars, k, W, rows);
+            free(Wbuf);
+        }
     }
 
     /* ---- Cleanup. ---- */

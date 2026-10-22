@@ -125,6 +125,16 @@ static void test_rational_functions(void) {
              "Together[r-e] == 0]");
 }
 
+/* No free parameter, but a coefficient outside Q: the rational engine
+ * declines and the field engine takes it (it used to stay unevaluated). */
+static void test_constant_coefficients(void) {
+    run_test("PolynomialReduce[b c, {Pi - b c}, {b, c}]", "List[List[-1], Pi]");
+    run_test("PolynomialReduce[b c, {b c + Pi}, {b, c}]", "List[List[1], Times[-1, Pi]]");
+    run_test("PolynomialReduce[a d - b c, {a d - b c - 1/Pi}, {b, c, a, d}]", "List[List[1], Power[Pi, -1]]");
+    run_test("PolynomialReduce[x^2, {x - Sqrt[2]}, {x}]", "List[List[Plus[Power[2, Rational[1, 2]], x]], 2]");
+    run_test("PolynomialReduce[x y, {E x - 1}, {x, y}]", "List[List[Times[Power[E, -1], y]], Times[Power[E, -1], y]]");
+}
+
 static void test_modulus(void) {
     run_true("PolynomialReduce[x^3, {x^2+1}, {x}, Modulus->7] === {{x}, 6x}");
     /* Reconstruction mod p. */
@@ -185,6 +195,7 @@ int main(void) {
     TEST(test_variable_order);
     TEST(test_monomial_order);
     TEST(test_rational_functions);
+    TEST(test_constant_coefficients);
     TEST(test_modulus);
     TEST(test_decline);
     TEST(test_options_and_attributes);

@@ -102,6 +102,13 @@ typedef struct SfModule {
     /* heads that make the module's passes worth running */
     const char***  pass_heads;
     size_t         npass_heads;
+    /* Optional: called once before the registry reads the descriptor heads
+     * (a module interning private heads of its own). */
+    void         (*init)(void);
+    /* Optional: map the module's private heads back to public ones (owned
+     * in, owned out); applied to the final form before it is scored and
+     * returned, so no private head escapes the engine. */
+    Expr*        (*finalize)(Expr* e);
 } SfModule;
 
 /* ---- shared helpers for descriptor files ------------------------------- */
@@ -171,5 +178,6 @@ extern const SfModule SF_MODULE_ZETA;
 extern const SfModule SF_MODULE_ERREXP;
 extern const SfModule SF_MODULE_ORTHOPOLY;
 extern const SfModule SF_MODULE_AIRY;
+extern const SfModule SF_MODULE_HYPER;
 
 #endif

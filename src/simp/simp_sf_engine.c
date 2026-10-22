@@ -42,6 +42,7 @@ static const SfModule* const SF_MODULES[] = {
     &SF_MODULE_ERREXP,
     &SF_MODULE_ORTHOPOLY,
     &SF_MODULE_AIRY,
+    &SF_MODULE_HYPER,
 };
 #define SF_NMODULES (sizeof SF_MODULES / sizeof SF_MODULES[0])
 
@@ -97,6 +98,8 @@ static const SfDesc* desc_get(const char* key, size_t arity) {
 
 static void registry_init(void) {
     if (g_hash_ready) return;
+    for (size_t m = 0; m < SF_NMODULES; m++)
+        if (SF_MODULES[m]->init) SF_MODULES[m]->init();
     for (size_t m = 0; m < SF_NMODULES; m++) {
         const SfModule* mod = SF_MODULES[m];
         for (size_t i = 0; i < mod->npass_heads; i++) head_put(*mod->pass_heads[i]);
@@ -1424,6 +1427,13 @@ static Expr* simp_special_functions_impl(const Expr* input, const AssumeCtx* ctx
             }
         }
     }
+
+    /* private heads back to public ones before the result is scored */
+    for (size_t m = 0; m < SF_NMODULES; m++)
+        if (SF_MODULES[m]->finalize) {
+            Expr* f = SF_MODULES[m]->finalize(cur);
+            if (f != cur) { cur = f; cur_score = score_with_func(cur, complexity_func); }
+        }
 
     /* 4. gate */
     if (!changed || !sf_improves(cur_score, sf_atom_count(cur), in_score, sf_atom_count(input))) {

@@ -173,4 +173,5 @@ const SfModule SF_MODULE_AIRY = {
     AIRY_DESCS, sizeof AIRY_DESCS / sizeof AIRY_DESCS[0],
     AIRY_PASSES, sizeof AIRY_PASSES / sizeof AIRY_PASSES[0],
     AIRY_PASS_HEADS, sizeof AIRY_PASS_HEADS / sizeof AIRY_PASS_HEADS[0],
+    NULL, NULL,
 };

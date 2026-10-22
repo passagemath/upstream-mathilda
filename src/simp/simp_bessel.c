@@ -192,5 +192,5 @@ static const SfDesc BESSEL_DESCS[] = {
 };
 
 const SfModule SF_MODULE_BESSEL = {
-    BESSEL_DESCS, sizeof BESSEL_DESCS / sizeof BESSEL_DESCS[0], NULL, 0, NULL, 0
+    BESSEL_DESCS, sizeof BESSEL_DESCS / sizeof BESSEL_DESCS[0], NULL, 0, NULL, 0, NULL, NULL
 };

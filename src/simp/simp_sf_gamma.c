@@ -558,4 +558,5 @@ const SfModule SF_MODULE_GAMMA = {
     GAMMA_DESCS, sizeof GAMMA_DESCS / sizeof GAMMA_DESCS[0],
     GAMMA_PASSES, sizeof GAMMA_PASSES / sizeof GAMMA_PASSES[0],
     GAMMA_PASS_HEADS, sizeof GAMMA_PASS_HEADS / sizeof GAMMA_PASS_HEADS[0],
+    NULL, NULL,
 };

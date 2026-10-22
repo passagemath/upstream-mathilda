@@ -435,5 +435,5 @@ static const SfDesc ZETA_DESCS[] = {
 };
 
 const SfModule SF_MODULE_ZETA = {
-    ZETA_DESCS, sizeof ZETA_DESCS / sizeof ZETA_DESCS[0], NULL, 0, NULL, 0
+    ZETA_DESCS, sizeof ZETA_DESCS / sizeof ZETA_DESCS[0], NULL, 0, NULL, 0, NULL, NULL
 };

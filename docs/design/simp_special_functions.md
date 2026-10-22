@@ -409,7 +409,53 @@ fixed by the numerics: the opposite sign is off by 2/(n+1).
   `F[n+1] L[n] − F[n] L[n+1] = 2 cos(πn)`, which holds at non-integer n as
   checked.
 
-## 10. Out of scope (no builtin)
+## 10. Hypergeometric functions (`simp_sf_hyper.c`)
+
+**Lattice access.** The evaluator rewrites 2F1, 1F1 and 0F1 into
+`HypergeometricPFQ[{…}, {…}, z]`, whose shift parameters sit inside lists. The
+canon hook maps a PFQ of shape (2,1), (1,1) or (0,1) onto a private head that
+takes the parameters as direct arguments: `SfEngine$F21[a, b, c, z]`,
+`SfEngine$F11[a, b, z]`, `SfEngine$F01[b, z]`. The upper parameters are put in
+class order (symbolic part, then rational part mod 1), never in offset order,
+so `2F1(a, b; c)` and `2F1(1 + b, a; c)` land in one family. Any other PFQ just
+has both lists put in that canonical order. A module `finalize` hook maps the
+private heads back before the result is scored. (The engine gained `init` and
+`finalize` module hooks for this.)
+
+**Shift matrices from raising operators.** Let θ = z d/dz. Each function
+satisfies `θ²F = αF + βθF`, and each parameter direction has a raising relation
+`F(p + e_d) = (u_d + v_d θ)F(p)`. In the engine's basis `(F, F₀)` the up matrix
+follows mechanically:
+
+- `G = (u_d + v_d θ)F` and `G₀ = (u₀′ + v₀′θ)G`;
+- θ acts on coefficients as z d/dz, and on θF through the ODE;
+- `θF = (F₀ − u₀F)/v₀` converts the result to the basis.
+
+The coefficients are differentiated with a private symbol standing in for the
+argument, so that a function of `2 z` works. The data below are derived from
+the series and were checked numerically:
+
+| | ODE: `θ²F = αF + βθF` | raising operators |
+|---|---|---|
+| 2F1(a, b; c; z) | `α = abz/(1−z)`, `β = (z(a+b) − c + 1)/(1−z)` | a: `(1, 1/a)`; b: `(1, 1/b)`; c: `u = c(c−a−b)/((c−a)(c−b))`, `v = c(1−z)/((c−a)(c−b)z)`, from Gauss's c-relation and `(θ + c − 1)F = (c−1)F(c−1)` |
+| 1F1(a; b; z) | `α = az`, `β = z − b + 1` | a: `(1, 1/a)`; b: `u = b/(b−a)`, `v = −b/((b−a)z)` |
+| 0F1(; b; z) | `α = z`, `β = 1 − b` | b: `(0, b/z)`, from `d/dz 0F1(; b; z) = 0F1(; b+1; z)/b` |
+
+**HypergeometricU** gets only an a-direction three-term recurrence:
+`U(a−1) + (b−2a−z)U(a) + a(a−b+1)U(a+1) = 0`.
+
+**Transformations** (canon, applied when the partner atom is present):
+
+- Kummer, `1F1(a; b; z) = e^z 1F1(b−a; b; −z)`. The function is entire, so this
+  holds for all z.
+- Kummer for U, `U(a, b, z) = z^(1−b) U(a−b+1, 2−b, z)`, checked at all probed
+  points.
+- Euler, `2F1(a, b; c; z) = (1−z)^(c−a−b) 2F1(c−a, c−b; c; z)`, and Pfaff,
+  `(1−z)^(−a) 2F1(a, c−b; c; z/(z−1))`, are applied only for **z < 1 proved**.
+  The numerics cannot evaluate 2F1 on the cut (1, ∞), so its branch
+  convention there is unverified.
+
+## 11. Out of scope (no builtin)
 
 `GegenbauerC`, `JacobiP`, `HankelH1`/`HankelH2` and `StruveL` have no evaluating
 builtin, so they have no descriptors. `MeijerG` has no shift relations beyond

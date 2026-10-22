@@ -122,6 +122,14 @@ canonical forms that the generic pipeline alone does not:
     recurrence and ODE, **WhittakerM/W** k-recurrences, and **Fibonacci/LucasL**
     (numbers and polynomials, every n) with `F[n+1] L[n] - F[n] L[n+1] = 2 Cos[Pi n]`.
 
+  - **Hypergeometric** 2F1/1F1/0F1 (through `HypergeometricPFQ`) and
+    **HypergeometricU**. Covered:
+    - the parameter lists are canonically ordered;
+    - contiguous lattices: 2F1 in a, b and c, 1F1 in a and b, 0F1 in b, U in a.
+      Their shift matrices are derived from the ODE and the raising operators in
+      θ = z d/dz, so the hypergeometric ODEs and the Gauss relations close;
+    - Kummer for 1F1 and for U;
+    - Euler and Pfaff for 2F1, under `z < 1`.
   Every identity is checked numerically at real and complex points by the
   `tests/test_simp_sf_*.c` suites, with at least 50 cases per family.
   `MATHILDA_NO_SF_ENGINE=1` disables the pass for A/B comparison.

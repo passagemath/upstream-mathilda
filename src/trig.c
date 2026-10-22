@@ -639,7 +639,8 @@ static Expr* exact_csc(int64_t n, int64_t d) {
     else if (d == 3) res = make_times(expr_new_integer(2), make_power(expr_new_integer(3), make_rational(-1, 2)));
     else if (d == 4) res = make_sqrt(2);
     else if (d == 5) {
-        if (n == 1) res = make_power(make_sqrt_expr(make_plus(make_rational(5, 8), make_times(make_rational(1, 8), make_sqrt(5)))), expr_new_integer(-1));
+        /* Sin[Pi/5] = Sqrt[5/8 - Sqrt[5]/8], Sin[2 Pi/5] = Sqrt[5/8 + Sqrt[5]/8] */
+        if (n == 1) res = make_power(make_sqrt_expr(make_plus(make_rational(5, 8), make_times(make_rational(-1, 8), make_sqrt(5)))), expr_new_integer(-1));
         else if (n == 2) res = make_power(make_sqrt_expr(make_plus(make_rational(5, 8), make_times(make_rational(1, 8), make_sqrt(5)))), expr_new_integer(-1));
     }
     else if (d == 6) res = expr_new_integer(2);

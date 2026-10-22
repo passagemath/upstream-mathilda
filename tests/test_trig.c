@@ -373,9 +373,38 @@ void test_trig_degree() {
     }
 }
 
+/* Every exact table value of the six forward heads at k Pi/d (d in the
+ * tables' denominators, k over two periods, poles excluded) agrees with the
+ * MPFR value of the same head at the numeric angle.  Csc[k Pi/5] for
+ * k = +-1 mod 5 used to return Csc[2 Pi/5]'s magnitude. */
+void test_trig_exact_table_numeric() {
+    static const char* heads[] = { "Sin", "Cos", "Tan", "Cot", "Sec", "Csc" };
+    static const int dens[] = { 3, 4, 5, 6, 10, 12 };
+    char buf[512];
+    for (size_t h = 0; h < sizeof heads / sizeof heads[0]; h++)
+        for (size_t di = 0; di < sizeof dens / sizeof dens[0]; di++) {
+            int d = dens[di];
+            for (int k = -2 * d; k <= 2 * d; k++) {
+                if (k % d == 0) continue;                       /* Sin/Csc/Tan/Cot poles */
+                if (2 * k % d == 0 && (heads[h][0] == 'T' || heads[h][1] == 'e')) continue; /* Tan/Sec */
+                snprintf(buf, sizeof buf, "Chop[N[%s[%d Pi/%d], 30] - %s[N[%d Pi/%d, 40]], 10^-25]",
+                         heads[h], k, d, heads[h], k, d);
+                Expr* e = parse_expression(buf);
+                Expr* res = evaluate(e);
+                char* s = expr_to_string(res);
+                ASSERT_MSG(strcmp(s, "0") == 0, "%s[%d Pi/%d]: exact value off by %s", heads[h], k, d, s);
+                free(s);
+                expr_free(res);
+                expr_free(e);
+            }
+        }
+}
+
 int main() {
     symtab_init();
     core_init();
+
+    TEST(test_trig_exact_table_numeric);
 
     TEST(test_trig_forward);
     TEST(test_trig_inverse);

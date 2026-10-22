@@ -43,6 +43,7 @@ static const SfModule* const SF_MODULES[] = {
     &SF_MODULE_ORTHOPOLY,
     &SF_MODULE_AIRY,
     &SF_MODULE_HYPER,
+    &SF_MODULE_MISC,
 };
 #define SF_NMODULES (sizeof SF_MODULES / sizeof SF_MODULES[0])
 

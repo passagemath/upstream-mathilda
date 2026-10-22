@@ -130,6 +130,11 @@ canonical forms that the generic pipeline alone does not:
       θ = z d/dz, so the hypergeometric ODEs and the Gauss relations close;
     - Kummer for 1F1 and for U;
     - Euler and Pfaff for 2F1, under `z < 1`.
+  - **EllipticK/E**: Legendre's relation (`... = Pi/2`, at any m).
+  - **ProductLog**: `W E^W = z`, `E^(k W) = (z/W)^k`, `Log[W] = Log[z] - W`, and
+    `ProductLog[u E^u] = u` for u real, `u >= -1`.
+  - **QPochhammer**: the n-shift `(a; q)_{n+1} = (a; q)_n (1 - a q^n)`.
+
   Every identity is checked numerically at real and complex points by the
   `tests/test_simp_sf_*.c` suites, with at least 50 cases per family.
   `MATHILDA_NO_SF_ENGINE=1` disables the pass for A/B comparison.

@@ -8,7 +8,7 @@ Plan: ~/.claude/plans/similar-to-our-simp-bessel-merry-pudding.md. Derivations: 
 - [x] W3 Erf family, InverseErf, ExpIntegralE, LogIntegral/Ei, Si/Ci/Shi/Chi, Fresnel
 - [x] W4 orthogonal polynomials, Airy, StruveH, Whittaker, Fibonacci/LucasL
 - [x] W5 hypergeometric (PFQ canonical order, contiguous lattices, Kummer/Euler)
-- [ ] W6 elliptic K/E (Legendre relation), ProductLog, QPochhammer
+- [x] W6 elliptic K/E (Legendre relation), ProductLog, QPochhammer
 - [ ] Follow-up: N[LaguerreL[nu, -1, x]] stays unevaluated (numeric generalized Laguerre at a = -1)
 - [ ] Follow-up: Simplify bottom-up spends minutes in TrigReduce on `E^-w (poly in w^(2a+j))` (no special function involved); see test_simp_sf_gamma.c GammaIncomplete note
 

@@ -179,5 +179,6 @@ extern const SfModule SF_MODULE_ERREXP;
 extern const SfModule SF_MODULE_ORTHOPOLY;
 extern const SfModule SF_MODULE_AIRY;
 extern const SfModule SF_MODULE_HYPER;
+extern const SfModule SF_MODULE_MISC;
 
 #endif

@@ -455,7 +455,23 @@ the series and were checked numerically:
   The numerics cannot evaluate 2F1 on the cut (1, ∞), so its branch
   convention there is unverified.
 
-## 11. Out of scope (no builtin)
+## 11. Elliptic integrals, ProductLog, QPochhammer (`simp_sf_misc.c`)
+
+- **Legendre's relation** (m = k²):
+  `E(m)K(1−m) + E(1−m)K(m) − K(m)K(1−m) = π/2`. With
+  `K′ = (E − (1−m)K)/(2m(1−m))` and `E′ = (E − K)/(2m)`, the left side has zero
+  derivative, and its limit at m → 0 is π/2. It held at every probed m,
+  including complex m and m outside (0, 1). A pass reduces any expression holding
+  `EllipticE[m]` beside `EllipticK[1−m]`, with the complement matched by value,
+  modulo the relation.
+- **ProductLog.** `W e^W = z` by definition, so `e^(kW) = (z/W)^k` for integer k,
+  and `log W = log z − W`, which held at every probed z, including the cut
+  (−∞, −1/e). `ProductLog[u e^u] = u` is applied only for u real and u ≥ −1
+  proved: at u = −3/2 the principal branch gives 0.87.
+- **QPochhammer.** `(a; q)_{n+1} = (a; q)_n (1 − a qⁿ)`, and the bulk step is
+  `(a; q)_{n+k} = (a; q)_n (a qⁿ; q)_k`.
+
+## 12. Out of scope (no builtin)
 
 `GegenbauerC`, `JacobiP`, `HankelH1`/`HankelH2` and `StruveL` have no evaluating
 builtin, so they have no descriptors. `MeijerG` has no shift relations beyond

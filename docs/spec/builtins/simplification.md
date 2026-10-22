@@ -81,21 +81,38 @@ canonical forms that the generic pipeline alone does not:
   `Cos[Pi/7] Cos[2 Pi/7] Cos[3 Pi/7] -> 1/8`,
   `Tan[Pi/7] Tan[2 Pi/7] Tan[3 Pi/7] -> Sqrt[7]`, and `RootReduce[Sin[Pi/7]]`
   is an exact `Root[...]`.
-- **Bessel functions of contiguous order** — `BesselJ`/`BesselY`/`BesselI`/`BesselK`
-  kernels with one argument and orders that differ by integers (rational,
-  integer or symbolic: `n - 1, n, n + 1`) are rewritten onto one adjacent basis
-  pair `{C[m], C[m+1]}` with the three-term recurrences (DLMF 10.6.1, 10.29.1):
-  `C[m-1] + C[m+1] = (2m/z) C[m]` for J and Y,
-  `I[m-1] - I[m+1] = (2m/z) I[m]`, and `K[m-1] - K[m+1] = -(2m/z) K[m]`.
-  For an order outside `1/2 + Z`, `C[m]` and `C[m+1]` are algebraically
-  independent over `C(z)`, so after the rewrite the combined numerator is zero
-  exactly when the expression is. That makes this a complete zero test for the
-  class. The rewrite is kept only when it strictly lowers the complexity. So
-  `Simplify[D[Integrate[x^2 BesselJ[1/3, x]^3, x], x]]` → `x^2 BesselJ[1/3, x]^3`,
-  `Simplify[BesselJ[n - 1, x] + BesselJ[n + 1, x]]` → `(2 n BesselJ[n, x])/x`, and
-  derivative forms, the Bessel ODEs and `D[Integrate[…]]` round trips reduce to
-  `0`. Cross-kind relations (the Wronskian `J Y' - J' Y = 2/(Pi z)`) are not
-  applied.
+- **Special functions** (`src/simp/simp_sf_engine.c`; derivations in
+  [`docs/design/simp_special_functions.md`](../../design/simp_special_functions.md)).
+  Special functions whose shift arguments differ by integers form *families*
+  tied by exact recurrences. Each family is rewritten onto one basis:
+  `{C[m]}` for Gamma-type families, `{C[m], C[m+1]}` for three-term families.
+  Canonical generators, reflections and Wronskian pairs are applied too. A
+  rewrite is kept when it strictly lowers the complexity, or when it eliminates
+  special-function kernels at a bounded score cost. Covered:
+  - **Bessel J/Y/I/K** contiguous orders (DLMF 10.6.1, 10.29.1). For an order
+    outside `1/2 + Z` this is a complete zero test. Also:
+    - the Casoratians `J[m+1] Y[m] - J[m] Y[m+1] = 2/(Pi z)` and
+      `I[m+1] K[m] + I[m] K[m+1] = 1/z`;
+    - `BesselK` evenness;
+    - integer-order reflection under `Element[n, Integers]`.
+  - **Gamma** and the ratio heads **Pochhammer, Beta, Binomial, Factorial**
+    (onto Gamma), incomplete **Gamma[a, z]**, **LogGamma** and **BarnesG**.
+    Also Euler reflection and Gauss multiplication. `Simplify[Gamma[x+2]/Gamma[x]]`
+    → `x (1 + x)`, `Simplify[Beta[a, 1 - a]]` → `Pi Csc[Pi a]`, and Pascal's rule
+    closes. Factorial-only input is left to the FactorialRules pass.
+  - **PolyGamma** (integer order), **HarmonicNumber**, **HurwitzZeta**,
+    **Zeta[s, a]**, **LerchPhi**: shift recurrences, PolyGamma reflection and
+    multiplication, and the Riemann functional equation.
+  - **PolyLog**: reflection and duplication. Landen needs `u < 1` and inversion
+    needs `u < 0` proved, because both fail on a real half-line.
+  - **Erf/Erfc/Erfi**, Erf[z0, z1], **InverseErf/InverseErfc**,
+    **ExpIntegralE** (order recurrence), **LogIntegral/ExpIntegralEi**,
+    **Si/Ci/Shi/Chi** and **Fresnel S/C**. `CosIntegral[-x]` and
+    `CoshIntegral[-x]` reflect under `x > 0`.
+
+  Every identity is checked numerically at real and complex points by the
+  `tests/test_simp_sf_*.c` suites, with at least 50 cases per family.
+  `MATHILDA_NO_SF_ENGINE=1` disables the pass for A/B comparison.
 - **Radical denesting** — `Sqrt[A + Sqrt[B]]` and cube-root towers collapse via
   the half-sum identity when the result is cleaner.
 - **Inverse trig / hyperbolic identities** — standard relations such as

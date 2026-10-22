@@ -64,8 +64,10 @@ int main(void) {
     /* --- The driver is available and protected. --- */
     chk("Attributes[FullSimplify]", "{Protected}");
 
-    /* --- Genuine gaps: FullSimplify reduces where Simplify does not. --- */
-    chk("Simplify[Gamma[x+1]/Gamma[x]]", "Gamma[1 + x]/Gamma[x]"); /* sanity: gap */
+    /* --- Special-function identities (FullSimplify; plain Simplify closes
+     * the Gamma recurrence too since the special-function engine,
+     * src/simp/simp_sf_engine.c). --- */
+    chk("Simplify[Gamma[x+1]/Gamma[x]]", "x");
     chk("FullSimplify[Gamma[x+1]/Gamma[x]]", "x");
     chk("FullSimplify[Gamma[x+1] - x Gamma[x]]", "0");
     chk("FullSimplify[LogGamma[x+1] - LogGamma[x]]", "Log[x]");

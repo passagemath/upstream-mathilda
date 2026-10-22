@@ -1336,15 +1336,16 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
         if (rr) return rr;
     }
 
-    /* Bessel contiguous-order reduction: BesselJ/Y/I/K kernels whose orders
-     * differ by integers are linearly dependent over Q(z) (three-term
-     * recurrence), so rewrite each such family onto one adjacent basis pair
+    /* Special-function families: kernels whose shift arguments differ by
+     * integers (Bessel orders, Gamma arguments, hypergeometric parameters,
+     * ...) are tied by exact recurrences, so rewrite each family onto one
+     * basis -- plus canonical generators, reflections and Wronskian pairs --
      * before the shape pipelines treat them as independent generators.
-     * NULL (cheap tree scan) on inputs without such a family, and whenever
-     * the rewrite does not strictly lower the score. */
+     * NULL after one cheap tree scan on inputs with no registered head, and
+     * whenever the rewrite does not strictly lower the score. */
     {
-        Expr* bz = simp_bessel_contiguous(input, ctx, complexity_func);
-        if (bz) return bz;
+        Expr* sf = simp_special_functions(input, ctx, complexity_func);
+        if (sf) return sf;
     }
 
     SimpShape shape = simp_classify(input);

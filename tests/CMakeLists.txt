@@ -533,6 +533,10 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/radrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_bessel.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_engine.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_gamma.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_zeta.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_sf_errexp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_complexity.c
@@ -3844,6 +3848,16 @@ add_executable(invtrig_simplify_tests test_invtrig_simplify.c $<TARGET_OBJECTS:m
 target_include_directories(invtrig_simplify_tests PRIVATE ../src)
 add_executable(simp_bessel_tests test_simp_bessel.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(simp_bessel_tests PRIVATE ../src)
+add_test(NAME simp_bessel_tests COMMAND simp_bessel_tests)
+
+# Special-function Simplify engine suites (src/simp/simp_sf_engine.c): one
+# test_simp_sf_<module>.c per descriptor module, each registered with ctest.
+set(SIMP_SF_SUITES bessel gamma zeta errexp)
+foreach(sf ${SIMP_SF_SUITES})
+    add_executable(simp_sf_${sf}_tests test_simp_sf_${sf}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(simp_sf_${sf}_tests PRIVATE ../src)
+    add_test(NAME simp_sf_${sf}_tests COMMAND simp_sf_${sf}_tests)
+endforeach()
 
 add_executable(hyp_assume_simplify_tests test_hyp_assume_simplify.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hyp_assume_simplify_tests PRIVATE ../src)
@@ -3987,6 +4001,9 @@ if(USE_ECM)
     add_dependencies(simp_log_tests build_ecm)
     add_dependencies(invtrig_simplify_tests build_ecm)
     add_dependencies(simp_bessel_tests build_ecm)
+    foreach(sf ${SIMP_SF_SUITES})
+        add_dependencies(simp_sf_${sf}_tests build_ecm)
+    endforeach()
     add_dependencies(hyp_assume_simplify_tests build_ecm)
     add_dependencies(integer_assume_simplify_tests build_ecm)
     add_dependencies(radical_simplify_tests build_ecm)

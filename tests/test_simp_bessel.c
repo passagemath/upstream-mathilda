@@ -225,8 +225,12 @@ void test_unchanged(void) {
     bessel_unchanged("BesselJ[1/3, x] + BesselJ[1/3, 2 x]");     /* different arguments */
     bessel_unchanged("BesselJ[1/3, x] - BesselJ[1/3, y]");
     bessel_unchanged("BesselJ[1/3, x] + BesselJ[2/3, x]");       /* orders not congruent mod 1 */
-    bessel_unchanged("BesselJ[1/3, x] BesselY[4/3, x] - BesselJ[4/3, x] BesselY[1/3, x]");
-    bessel_unchanged("BesselJ[1/3, x] + BesselJ[7/3, x] + BesselY[7/3, x]");
+    /* (the J/Y Casoratian is NOT unchanged: it is -2/(Pi x), see
+     * test_simp_sf_bessel.c) */
+    /* J[1/3] + J[7/3] = (8/(3x)) J[4/3] (recurrence at m = 4/3): one kernel
+     * fewer, accepted by the kernel-count tiebreak */
+    bessel_to("BesselJ[1/3, x] + BesselJ[7/3, x] + BesselY[7/3, x]",
+              "(8 BesselJ[4/3, x])/(3 x) + BesselY[7/3, x]");
     bessel_unchanged("BesselJ[n, x] + x^2 BesselJ[n + 3, x]");
     bessel_unchanged("BesselJ[1/3, x]^2 + BesselJ[4/3, x]^2 + BesselJ[7/3, x]^2");
     bessel_unchanged("BesselJ[1/3, x] + BesselJ[301/3, x]");      /* wide span */

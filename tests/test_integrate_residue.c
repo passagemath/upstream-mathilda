@@ -582,9 +582,10 @@ static void test_sector(void) {
      * not excluded): the sector residue method must not fire.  The Mellin /
      * Ramanujan method, which runs later in the Automatic cascade, does close it
      * -- as a ConditionalExpression that states the missing convergence bound
-     * (n > 1), matching Wolfram.  (Beta[1/n, 1-1/n]/n = (Pi/n) Csc[Pi/n].) */
+     * (n > 1).  Beta[1/n, 1-1/n]/n = (Pi/n) Csc[Pi/n] by Euler reflection,
+     * which the special-function Simplify engine now applies to the Beta. */
     check_eq("Integrate[1/(1+x^n), {x, 0, Infinity}, Assumptions -> n > 0]",
-             "ConditionalExpression[Beta[1/n, 1 - 1/n]/n, 1/n > 0 && 1/n < 1]");
+             "ConditionalExpression[(Pi Csc[Pi/n])/n, 1/n > 0 && 1/n < 1]");
 
     /* Case In[19]: SYMBOLIC numerator and denominator exponents,
      * x^(2m)/(1 + x^(2n)) = (Pi/(2n)) Csc[Pi(2m+1)/(2n)].  The convergence

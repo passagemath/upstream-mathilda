@@ -1,3 +1,16 @@
+# Special-function Simplify engine (2026-10-22)
+
+Plan: ~/.claude/plans/similar-to-our-simp-bessel-merry-pudding.md. Derivations: docs/design/simp_special_functions.md.
+
+- [x] W0 engine (`simp_sf_engine.{c,h}`) + Bessel port; Casoratians, K evenness, integer reflection
+- [x] W1 Gamma / incomplete Gamma / LogGamma / BarnesG / Pochhammer / Beta / Binomial / Factorial; reflection, multiplication
+- [x] W2 PolyGamma / HarmonicNumber / HurwitzZeta / Zeta[s,a] / LerchPhi / Riemann FE / PolyLog
+- [x] W3 Erf family, InverseErf, ExpIntegralE, LogIntegral/Ei, Si/Ci/Shi/Chi, Fresnel
+- [ ] W4 orthogonal polynomials, Airy, StruveH, Whittaker, Fibonacci/LucasL
+- [ ] W5 hypergeometric (PFQ canonical order, contiguous lattices, Kummer/Euler)
+- [ ] W6 elliptic K/E (Legendre relation), ProductLog, QPochhammer
+- [ ] Follow-up: Simplify bottom-up spends minutes in TrigReduce on `E^-w (poly in w^(2a+j))` (no special function involved); see test_simp_sf_gamma.c GammaIncomplete note
+
 # DSolve — next 500 of Nasser's corpus (§2.2.41–§2.2.45)
 
 Plan: `~/.claude/plans/let-s-continue-our-implementation-sleepy-rain.md`

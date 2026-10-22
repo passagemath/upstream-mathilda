@@ -278,10 +278,13 @@ Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
 Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                     const Expr* complexity_func);
 
-/* simp_bessel.c: rewrite Bessel J/Y/I/K families whose orders differ by
- * integers onto an adjacent basis pair via the three-term recurrence.
- * Returns NULL unless the rewrite strictly lowers the score. */
-Expr* simp_bessel_contiguous(const Expr* input, const AssumeCtx* ctx,
+/* simp_sf_engine.c: table-driven special-function pass.  Rewrites families
+ * of special functions whose shift arguments differ by integers onto a
+ * basis via their recurrences, applies canonical generators, reflections
+ * and pair (Wronskian) relations.  Returns NULL unless the result strictly
+ * lowers the score.  Descriptor tables live in simp_bessel.c and the
+ * simp_sf_*.c files; see simp_sf_engine.h. */
+Expr* simp_special_functions(const Expr* input, const AssumeCtx* ctx,
                              const Expr* complexity_func);
 
 /* Used by simp_search.c gating logic; also called from simp_bottomup.c. */

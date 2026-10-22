@@ -4837,3 +4837,34 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   sign convention follows the variable order, so a fresh name sorting
   differently from the kernel it replaces flips `-(…)` vs `(…)`. Sort the
   kernels canonically and use a prefix that sorts after ordinary symbols.
+
+## 2026-10-23 — Special-function Simplify engine (v0.536)
+
+- **The numeric cross-check finds bugs outside the code under test.**
+  `Beta[a, 1 - a] - Pi/Sin[Pi a]` failed at a = 6/5 because exact `Csc[Pi/5]`
+  was wrong (fixed separately as v0.535). When a derived identity fails
+  numerically, test each side on its own before blaming the derivation.
+- **`Together` maps into function arguments and exponents.** It turns
+  `Gamma[x + 1/3]` into `Gamma[1/3 (1 + 3 x)]`, `w^(7/2 + a)` into
+  `w^(1/2 (7 + 2 a))`, and `Csc[Pi a + Pi b]` into `Csc[Pi (a + b)]`. Any pass
+  that matches kernels structurally after `Together` needs a normalisation
+  step, or kernels with equal values stop matching. That includes
+  `PolynomialReduce` generators.
+- **The evaluator leaves `-(a + b)` undistributed and folds odd functions only
+  for `-x`.** Erf[-I x], FresnelS[-1/3 - x] and Log[-(-2 + 3x)] all survive.
+  Reconcile spellings in one normal form, not in each rule.
+- **Bottom-up Simplify hands passes subexpressions.** A pass's output must use
+  the spelling the outer input uses (`Pi (a + b)`, not `Pi a + Pi b`). Otherwise
+  the outer level sees two kernels where there is one.
+- **An identity that fails on a real half-line must be gated**, for example
+  Landen on (1, ∞), Ci reflection off the positive reals, and Ci(iz) in the
+  second quadrant. Probe every identity in all four quadrants and on the cuts
+  before deciding it is unconditional.
+- **Greedy per-family adoption misses joint cancellation.** Pascal's rule spans
+  three Gamma families, and each rewrite alone raises the score. Try the
+  all-families canonical form first, and use greedy adoption only as a
+  fallback.
+- **Test sample points must avoid poles of the identity.** For example,
+  `Sin[Pi w/2] Gamma[1 - w]` at integer w is 0 times a pole. Numeric checks
+  must also be relative: `Erfi[x^2]^2` is about 1e109.
+

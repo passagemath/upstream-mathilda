@@ -1377,10 +1377,16 @@ otherwise. So `Names["System`File*"]` gives `{"FileBaseName", …}`, not
 `{"System`FileBaseName", …}`. What the pattern is matched against depends on
 whether it names a context:
 
-- A pattern containing a `` ` `` (`"System`*"`, `"*`x"`, or a
-  `RegularExpression` such as `"Foo`ba."`) is matched against each symbol's
-  fully context-qualified name. This is how `Names["System`*"]` enumerates
-  every builtin.
+- A string pattern containing a `` ` `` (`"System`*"`, `"*`x"`) is split at
+  its last backtick into a context part and a short-name part, matched
+  separately against each symbol's context and short name. This is how
+  `Names["System`*"]` enumerates every builtin. A `*` in the context part may
+  span subcontexts (`"Tes*`f*"` and `"*`fun"` both find `Test`Private`fun`),
+  but the short-name part never crosses a backtick, so `Names["Test`*"]` lists
+  only the symbols of `Test`` itself, not those of `Test`Private``; use
+  `"Test`*`*"` or `"Test`Private`*"` for those (issue #109).
+- A `RegularExpression` that contains a `` ` `` (`"Foo`ba."`) is matched
+  against the whole fully context-qualified name.
 - A pattern without one (`"Sin"`, `"F*"`) names symbols the way they are typed.
   It is matched against the short name of symbols whose context is visible, so
   it never sees a symbol in a context that is off `$ContextPath`.

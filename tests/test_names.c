@@ -138,6 +138,32 @@ void test_names_other_context() {
                    "{\"bar\", \"baz\"}", 0);
 }
 
+/* ---- "ctx`*" does not reach into subcontexts (issue #109) ---- */
+void test_names_subcontext() {
+    /* One statement per evaluation, as in a package file: a compound input is
+     * parsed (and its symbols created) before BeginPackage runs. */
+    assert_eval_eq("BeginPackage[\"NmPkg`\"];", "Null", 0);
+    assert_eval_eq("NmT1 = 137", "137", 0);
+    assert_eval_eq("Begin[\"`Private`\"]", "\"NmPkg`Private`\"", 0);
+    assert_eval_eq("nmfun[x_] := x; nmgg = 1;", "Null", 0);
+    assert_eval_eq("End[]", "\"NmPkg`Private`\"", 0);
+    assert_eval_eq("EndPackage[];", "Null", 0);
+    assert_eval_eq("Names[\"NmPkg`*\"]", "{\"NmT1\"}", 0);
+    /* The subcontext is reached by naming it ... */
+    assert_eval_eq("Names[\"NmPkg`*`*\"]",
+                   "{\"NmPkg`Private`nmfun\", \"NmPkg`Private`nmgg\"}", 0);
+    assert_eval_eq("Names[\"NmPkg`Private`nmf*\"]",
+                   "{\"NmPkg`Private`nmfun\"}", 0);
+    /* ... and a '*' in the CONTEXT part may span subcontexts, but one in the
+     * short-name part never crosses a backtick. */
+    assert_eval_eq("Names[\"NmPk*`nmf*\"]", "{\"NmPkg`Private`nmfun\"}", 0);
+    assert_eval_eq("Names[\"*`nmfun\"]", "{\"NmPkg`Private`nmfun\"}", 0);
+    assert_eval_eq("Names[\"NmPkg`P*\"]", "{}", 0);
+    assert_eval_eq("Names[\"NmPkg`P@\"]", "{}", 0);
+    /* A regex is matched against the whole qualified name. */
+    assert_eval_eq("Length[Names[RegularExpression[\"NmPkg`.*\"]]]", "3", 0);
+}
+
 /* ---- arity / bad argument: stays unevaluated ---- */
 void test_names_unevaluated() {
     assert_eval_eq("Names[5]", "Names[5]", 0);
@@ -180,6 +206,7 @@ int main() {
     TEST(test_names_system_context);
     TEST(test_names_global_context);
     TEST(test_names_other_context);
+    TEST(test_names_subcontext);
     TEST(test_names_global_has_no_kernel_symbols);
     TEST(test_names_unevaluated);
     TEST(test_names_protected);

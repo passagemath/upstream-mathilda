@@ -11,6 +11,12 @@
  *   *   matches zero or more characters
  *   @   matches one or more characters that are NOT uppercase letters
  * Every other character (including the ` used in context prefixes) is literal.
+ * A string pattern containing a backtick is split at its LAST backtick into a
+ * context part and a short-name part, matched separately against the symbol's
+ * context and short name: in the context part `*` may span subcontexts
+ * ("Tes*`f*" and "*`fun" both find Test`Private`fun), but the short-name part
+ * never crosses a backtick, so "Test`*" lists only the symbols of Test` itself,
+ * not those of Test`Private` (issue #109).
  *
  * A pattern element may instead be RegularExpression["re"], matched against the
  * whole name via the PCRE2 engine (src/strings/regex).  When the engine is
@@ -60,23 +66,30 @@ static int name_is_nonupper(char c) {
     return c != '\0' && !(c >= 'A' && c <= 'Z');
 }
 
-/* Recursive backtracking whole-string match of `p` against `s`. */
-static int wl_glob_match(const char* p, const char* s) {
-    if (*p == '\0') return *s == '\0';
+/* Recursive backtracking whole-string match of the pattern [p, pe) against
+ * the subject [s, se).  Bounded by end pointers so a context-qualified name
+ * can be matched piecewise (context part, then short-name part) in place. */
+static int wl_glob_match_n(const char* p, const char* pe,
+                           const char* s, const char* se) {
+    if (p == pe) return s == se;
     if (*p == '*') {
         /* zero or more of any character */
-        if (wl_glob_match(p + 1, s)) return 1;          /* consume nothing */
-        if (*s == '\0') return 0;
-        return wl_glob_match(p, s + 1);                 /* consume one char */
+        if (wl_glob_match_n(p + 1, pe, s, se)) return 1;  /* consume nothing */
+        if (s == se) return 0;
+        return wl_glob_match_n(p, pe, s + 1, se);         /* consume one char */
     }
     if (*p == '@') {
         /* one or more non-uppercase characters */
-        if (!name_is_nonupper(*s)) return 0;            /* need at least one */
-        if (wl_glob_match(p + 1, s + 1)) return 1;      /* run ends here */
-        return wl_glob_match(p, s + 1);                 /* run continues */
+        if (s == se || !name_is_nonupper(*s)) return 0;   /* need at least one */
+        if (wl_glob_match_n(p + 1, pe, s + 1, se)) return 1;  /* run ends here */
+        return wl_glob_match_n(p, pe, s + 1, se);             /* run continues */
     }
-    if (*p == *s) return wl_glob_match(p + 1, s + 1);   /* literal */
+    if (s != se && *p == *s) return wl_glob_match_n(p + 1, pe, s + 1, se);
     return 0;
+}
+
+static int wl_glob_match(const char* p, const char* s) {
+    return wl_glob_match_n(p, p + strlen(p), s, s + strlen(s));
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,6 +172,17 @@ static int pat_matches(const NamePat* p, const char* name) {
     return wl_glob_match(p->glob, name);
 }
 
+/* Context-qualified glob match: split both the pattern and the fully-qualified
+ * name `full` at their last backtick and match context against context, short
+ * name against short name (see the header comment; issue #109). */
+static int glob_matches_qualified(const char* glob, const char* full) {
+    const char* pb = strrchr(glob, '`');
+    const char* nb = strrchr(full, '`');
+    if (!pb || !nb) return 0;
+    return wl_glob_match_n(glob, pb + 1, full, nb + 1) &&
+           wl_glob_match(pb + 1, nb + 1);
+}
+
 /* ------------------------------------------------------------------ */
 /* Context-qualified name helpers                                     */
 /* ------------------------------------------------------------------ */
@@ -206,7 +230,9 @@ typedef struct {
 /* Does a symbol match a single pattern?  `full` is its fully-qualified name
  * and `disp` its display name (see the header comment for the rule). */
 static int match_one(const NamePat* p, const char* full, const char* disp) {
-    if (p->has_ctx) return pat_matches(p, full);
+    if (p->has_ctx)
+        return p->is_regex ? pat_matches(p, full)
+                           : glob_matches_qualified(p->glob, full);
     return !name_has_backtick(disp) && pat_matches(p, disp);
 }
 

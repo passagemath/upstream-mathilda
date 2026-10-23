@@ -832,6 +832,74 @@ static Expr* pattern_canonicalize(Expr* p) {
 static Expr* pattern_alpha_normalize(const Expr* p);
 static uint64_t pattern_alpha_hash(const Expr* p);
 
+/* ---- Conditions at the end of a scoping construct (`lhs := Module[{..}, v /; c]`) */
+
+static bool head_sym_is(const Expr* e, const char* sym, size_t argc) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == sym && e->data.function.arg_count == argc;
+}
+
+/* The tail position of a scoping construct: Module/With/Block[vars, body] ->
+ * body; CompoundExpression[..., last] -> last.  Returns the address of the
+ * slot holding the tail of `*slot`, or NULL when `*slot` is neither. */
+static Expr** scoped_tail_slot(Expr** slot) {
+    Expr* e = *slot;
+    if (head_sym_is(e, SYM_Module, 2) || head_sym_is(e, SYM_With, 2) || head_sym_is(e, SYM_Block, 2))
+        return &e->data.function.args[1];
+    if (e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_CompoundExpression && e->data.function.arg_count > 0)
+        return &e->data.function.args[e->data.function.arg_count - 1];
+    return NULL;
+}
+
+/* Does `rhs` -- a Module / With / Block, possibly nested and through a
+ * CompoundExpression's last statement -- end in Condition[val, cond]? */
+static bool rhs_has_scoped_condition(Expr* rhs) {
+    if (!(head_sym_is(rhs, SYM_Module, 2) || head_sym_is(rhs, SYM_With, 2) || head_sym_is(rhs, SYM_Block, 2)))
+        return false;
+    Expr* cur = rhs;
+    Expr** slot;
+    while ((slot = scoped_tail_slot(&cur)) != NULL) cur = *slot;
+    return head_sym_is(cur, SYM_Condition, 2);
+}
+
+/* An owned copy of the bound replacement with its tail Condition[val, cond]
+ * turned into If[TrueQ[cond], val, $ScopedConditionFail$], so evaluating it
+ * either yields the rule's value or the failure sentinel. */
+static Expr* scoped_condition_rewrite(Expr* rhs) {
+    Expr* root = expr_unshare(expr_copy(rhs));
+    Expr** slot = &root;
+    Expr** next;
+    while ((next = scoped_tail_slot(slot)) != NULL) {
+        *next = expr_unshare(*next);
+        slot = next;
+    }
+    Expr* cond = *slot;
+    if (!head_sym_is(cond, SYM_Condition, 2)) return root;
+    Expr* tq = expr_new_function(expr_new_symbol("TrueQ"),
+                                 (Expr*[]){ expr_copy(cond->data.function.args[1]) }, 1);
+    Expr* ifargs[3] = { tq, expr_copy(cond->data.function.args[0]),
+                        expr_new_symbol("$ScopedConditionFail$") };
+    Expr* iff = expr_new_function(expr_new_symbol(SYM_If), ifargs, 3);
+    expr_free(cond);
+    *slot = iff;
+    return root;
+}
+
+/* Try a conditional rule's bound replacement: its evaluated value, or NULL
+ * when the scoped guard did not give True (the rule does not apply).  An
+ * in-flight Throw/Abort is returned as the value. */
+static Expr* try_scoped_condition(Expr* bound) {
+    Expr* rw = scoped_condition_rewrite(bound);
+    Expr* v = evaluate(rw);
+    expr_free(rw);
+    if (v && v->type == EXPR_SYMBOL && strcmp(v->data.symbol.name, "$ScopedConditionFail$") == 0) {
+        expr_free(v);
+        return NULL;
+    }
+    return v;
+}
+
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
@@ -862,7 +930,12 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
      * once a stored rule passes the cheap key test: an OwnValue update (the
      * same symbol, caught by expr_eq) never hashes at all. */
     Expr* key = NULL;
+    uint8_t scoped = rhs_has_scoped_condition(replacement) ? 1 : 0;
     for (Rule* curr = *list; curr; curr = curr->next) {
+        /* A conditional rule (scoped guard) is not replaced by a same-LHS
+         * definition with a different RHS: both are kept, in order. */
+        if ((curr->scoped_cond || scoped) && !expr_eq(curr->replacement, replacement))
+            continue;
         if (expr_eq(curr->pattern, canon)) {
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
@@ -903,6 +976,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
     new_rule->specificity = spec;
     new_rule->alpha_hash = ahash;
     new_rule->delayed = delayed;
+    new_rule->scoped_cond = scoped;
     new_rule->next = NULL;
 
     /* §3.6 stable insertion: walk until we find a rule with strictly
@@ -1265,6 +1339,23 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
             ? replace_bindings(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
         match_set_rule_head(prev_head);
+        if (result && rule->scoped_cond) {
+            /* Resolve OptionValue first (below), then test the scoped guard. */
+            Expr* opts0 = env_get(env, "$OptionsPattern$");
+            if (opts0) {
+                const char* hs = def->symbol_name;
+                Expr* oh = env_get(env, "$OptionsPatternHead$");
+                if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
+                Expr* resolved = optionvalue_inject_context(result, hs, opts0);
+                expr_free(result);
+                result = resolved;
+            }
+            Expr* v = try_scoped_condition(result);
+            expr_free(result);
+            env_free(env);
+            if (v) return v;
+            continue;                       /* guard failed: next rule */
+        }
         if (result) {
             /* If the matched pattern carried an OptionsPattern, rewrite the
              * context-dependent OptionValue[...] nodes in the RHS into explicit
@@ -1417,6 +1508,13 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
             ? replace_bindings(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
         match_set_rule_head(prev_head);
+        if (result && rule->scoped_cond) {
+            Expr* v = try_scoped_condition(result);
+            expr_free(result);
+            env_free(env);
+            if (v) return v;
+            continue;
+        }
         if (result) {
             Expr* opts = env_get(env, "$OptionsPattern$");
             if (opts) {

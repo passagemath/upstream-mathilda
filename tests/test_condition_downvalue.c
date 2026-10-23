@@ -419,6 +419,48 @@ static void test_condition_chain_left_assoc(void) {
     assert_eval_eq("{ccg[ccu, 1], ccg[ccu, 5]}", "{\"up\", ccg[ccu, 5]}", 0);
 }
 
+/* A rule whose RHS is Module / With / Block ending in `val /; cond` is
+ * CONDITIONAL: the guard is tested inside the scope, a failing guard falls
+ * through to the next rule (side effects already made remain), and a later
+ * same-LHS definition does not replace it. */
+static void test_scoped_condition_rules(void) {
+    eval_and_drop("ClearAll[scm, scw, scb, scc, scn, sco, scSide]");
+    eval_and_drop("scm[x_] := Module[{t = x^2}, t /; t > 3]");
+    eval_and_drop("scm[x_] := \"fallback\"");
+    assert_eval_eq("{scm[1], scm[2]}", "{\"fallback\", 4}", 0);
+    assert_eval_eq("Length[DownValues[scm]]", "2", 0);
+    eval_and_drop("scw[x_] := With[{t = 2 x}, {t} /; t > 5]");
+    eval_and_drop("scw[x_] := \"fallback\"");
+    assert_eval_eq("{scw[1], scw[3]}", "{\"fallback\", {6}}", 0);
+    eval_and_drop("scb[x_] := Block[{bt = x}, bt + 1 /; bt < 0]");
+    eval_and_drop("scb[x_] := \"fallback\"");
+    assert_eval_eq("{scb[-1], scb[2]}", "{0, \"fallback\"}", 0);
+    /* No other rule: unevaluated, but the side effect before the guard happened. */
+    eval_and_drop("scc[x_] := Module[{t = x}, scSide = t; t /; t > 100]");
+    assert_eval_eq("{scc[5], scSide}", "{scc[5], 5}", 0);
+    /* Nested scopes and a CompoundExpression tail. */
+    eval_and_drop("scn[x_] := Module[{t = x}, Module[{u = t + 1}, u /; u > 2]]");
+    assert_eval_eq("{scn[1], scn[5]}", "{scn[1], 6}", 0);
+    eval_and_drop("sco[x_] := Module[{t = x}, t; (t /; t > 1)]");
+    assert_eval_eq("{sco[3], sco[0]}", "{3, sco[0]}", 0);
+    /* With OptionValue (resolved before the guard). */
+    eval_and_drop("Options[scop] = {mx -> 5}");
+    eval_and_drop("scop[x_, OptionsPattern[]] := Module[{t = OptionValue[mx]}, x + t /; t > 3]");
+    assert_eval_eq("{scop[1], scop[1, mx -> 0]}", "{6, scop[1, mx -> 0]}", 0);
+    /* Re-entering the identical conditional definition does not duplicate it. */
+    eval_and_drop("scm[x_] := Module[{t = x^2}, t /; t > 3]");
+    assert_eval_eq("Length[DownValues[scm]]", "2", 0);
+    /* Outside a rule a scoped Condition is an ordinary expression. */
+    assert_eval_eq("Head[Module[{t = 1}, t /; t > 0]]", "Condition", 0);
+    assert_eval_eq("With[{t = 1}, t /; t < 0]", "1 /; 1 < 0", 0);
+    /* Ordinary same-LHS redefinitions still replace. */
+    eval_and_drop("ClearAll[scr]; scr[x_] := 1; scr[x_] := 2");
+    assert_eval_eq("{scr[0], Length[DownValues[scr]]}", "{2, 1}", 0);
+    /* A Throw from inside the scoped guard propagates. */
+    eval_and_drop("ClearAll[sct]; sct[x_] := Module[{t = x}, t /; If[t == 2, Throw[\"in\"], True]]");
+    assert_eval_eq("Catch[sct[2]]", "\"in\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -446,6 +488,7 @@ int main(void) {
     TEST(test_cond_freeq_false_blocks_compound);
     TEST(test_crc_table_formula_fires);
 
+    TEST(test_scoped_condition_rules);
     TEST(test_condition_chain_left_assoc);
     printf("All Condition-DownValue dispatch tests passed!\n");
     return 0;

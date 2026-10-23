@@ -27,6 +27,27 @@ In[2]:= x
 Out[2]= 1
 ```
 
+## Conditions at the end of a scoping construct
+In a definition, a right-hand side that is `Module`, `With` or `Block`
+whose body ends in `val /; cond` makes the rule **conditional**. "Ends in"
+means through nested scopes and through the last statement of a
+`CompoundExpression`.
+- When the rule is tried, the body runs, and `cond` is evaluated inside the
+  scope, so it sees the local variables.
+- If `cond` is `True`, the rule's value is `val`. Otherwise the rule does not
+  apply: the next rule is tried, or the call stays unevaluated. Side effects
+  already made by the body remain.
+- A later definition with the same left-hand side does not replace a
+  conditional rule. Both are kept, in definition order.
+- Outside a definition, `Module[{t = 1}, t /; t > 0]` is an ordinary
+  `Condition` expression.
+
+```mathematica
+m[x_] := Module[{t = x^2}, t /; t > 3]
+m[x_] := "fallback"
+{m[1], m[2]}                                   (* {"fallback", 4} *)
+```
+
 ## Block
 Implements dynamic scoping by temporarily overriding symbol values.
 - `Block[{x, y, ...}, expr]`

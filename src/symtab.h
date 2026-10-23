@@ -41,6 +41,12 @@ typedef struct Rule {
      * for an immediate one (=, ^=, /: =). Presentation only: Definition
      * renders it; matching and rewriting never read it. */
     uint8_t delayed;
+    /* 1 when the replacement is a Module / With / Block whose body ends (in
+     * tail position) in `val /; cond`: the rule is CONDITIONAL -- the guard
+     * is tested inside the scope when the rule is tried, and a failing guard
+     * falls through to the next rule.  Such a rule is not replaced by a later
+     * definition with the same LHS. */
+    uint8_t scoped_cond;
     struct Rule* next;
 } Rule;
 

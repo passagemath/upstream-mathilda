@@ -126,6 +126,8 @@ Expr* builtin_setoptions(Expr* res);
  * f. The bare and two-argument forms only resolve inside a rule whose LHS used
  * OptionsPattern (see optionvalue_inject_context). */
 Expr* builtin_optionvalue(Expr* res);
+Expr* builtin_optionq(Expr* res);
+Expr* builtin_filterrules(Expr* res);
 
 /* Register the three builtins, their attributes, and the comprehensive table
  * of default options for option-accepting builtins. Call after every module

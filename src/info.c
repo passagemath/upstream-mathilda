@@ -3720,6 +3720,19 @@ void info_init(void) {
         "\tOptionValue[f, opts, name] resolves from the explicit rules opts then\n"
         "\tthe defaults from f; a trailing Hold wraps the result in Hold.");
 
+    symtab_set_docstring("OptionQ",
+        "OptionQ[e]\n"
+        "\tgives True if e is a rule or delayed rule with a symbol or string name, or a\n"
+        "\tpossibly nested list of such rules ({} included), and False otherwise.\n"
+        "\tTypical use: f[x_, opts___?OptionQ] := ...");
+    symtab_set_docstring("FilterRules",
+        "FilterRules[rules, spec]\n"
+        "\tgives the rules whose left-hand sides match spec, in order.  spec may be a\n"
+        "\tname (symbol or string; \"b\" and b select the same rule), a list of specs,\n"
+        "\ta list of rules such as Options[f] (selecting by their names), Except[spec],\n"
+        "\tor any pattern.  rules may be nested lists; a non-rule element gives\n"
+        "\tFilterRules::rep and leaves the call unevaluated.");
+
     // Numeric display formatting
     symtab_set_docstring("NumberForm",
         "NumberForm[expr, n] prints approximate real numbers in expr to n-digit\n"

@@ -11,6 +11,8 @@
  *   OptionValue[...]  resolve a single option value from explicit options plus
  *                     defaults; the bare/2-arg forms are resolved inside a rule
  *                     by optionvalue_inject_context (see apply_down_values).
+ *   OptionQ[e]        is e an option rule, or a (nested) list of them?
+ *   FilterRules[...]  select the rules whose names match a name/pattern spec.
  *   options_register_defaults  the comprehensive table wired from core_init.
  *
  * Memory: every result is freshly built. Sub-expressions taken from `res` or
@@ -24,6 +26,9 @@
 #include "sym_names.h"
 #include "attr.h"
 #include "eval.h"
+#include "match.h"
+#include "common.h"   /* builtin_arg_error */
+#include "print.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -1000,6 +1005,115 @@ void options_register_defaults(void) {
     ob_commit(&b, "NumberForm");
 }
 
+/* ---------- OptionQ ---------- */
+
+/* An option rule, or a List (nested to any depth, possibly empty) of them. */
+static bool is_option_item(const Expr* e) {
+    if (is_option_rule(e)) return true;
+    if (!is_list(e)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!is_option_item(e->data.function.args[i])) return false;
+    return true;
+}
+
+/* OptionQ[e] -- True when e is a Rule/RuleDelayed with a symbol or string
+ * name, or a possibly nested list of such rules ({} included); else False.
+ * Used as the test in opts___?OptionQ. */
+Expr* builtin_optionq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("OptionQ", argc, 1, 1);
+    return expr_new_symbol(is_option_item(res->data.function.args[0]) ? SYM_True : SYM_False);
+}
+
+/* ---------- FilterRules ---------- */
+
+/* Append every rule of `e` (a rule, or nested lists of rules) to items[].
+ * On the first element that is not a Rule/RuleDelayed, emits FilterRules::rep
+ * naming it and returns false. */
+static bool fr_collect(Expr* e, Expr*** items, size_t* n, size_t* cap) {
+    if (is_list(e)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!fr_collect(e->data.function.args[i], items, n, cap)) return false;
+        return true;
+    }
+    bool rule = e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && (e->data.function.head->data.symbol.name == SYM_Rule
+            || e->data.function.head->data.symbol.name == SYM_RuleDelayed)
+        && e->data.function.arg_count == 2;
+    if (!rule) {
+        char* txt = expr_to_string_outputform(e);
+        mth_message("FilterRules", "rep", "%s is not a valid replacement rule.", txt ? txt : "");
+        free(txt);
+        return false;
+    }
+    if (*n == *cap) {
+        *cap = *cap ? 2 * *cap : 8;
+        *items = realloc(*items, *cap * sizeof(Expr*));
+    }
+    (*items)[(*n)++] = e;
+    return true;
+}
+
+static bool head_argc_is(const Expr* e, const char* sym, size_t argc) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym
+        && e->data.function.arg_count == argc;
+}
+
+/* Does the option name `lhs` satisfy the FilterRules spec?
+ *   name (symbol/string)  same name, context-insensitive; "b" selects b
+ *   {s1, s2, ...}         any si
+ *   lhs -> v              the rule's name (so a list of rules -- Options[f] --
+ *                         selects by those rules' names)
+ *   Except[c] / Except[c, p]  not c (and p)
+ *   anything else         a pattern, matched against lhs */
+static bool fr_spec_match(Expr* spec, Expr* lhs) {
+    if (spec->type == EXPR_SYMBOL || spec->type == EXPR_STRING)
+        return opt_name_eq(spec, lhs);
+    if (is_list(spec)) {
+        for (size_t i = 0; i < spec->data.function.arg_count; i++)
+            if (fr_spec_match(spec->data.function.args[i], lhs)) return true;
+        return false;
+    }
+    if (head_argc_is(spec, SYM_Rule, 2) || head_argc_is(spec, SYM_RuleDelayed, 2))
+        return fr_spec_match(spec->data.function.args[0], lhs);
+    if (head_argc_is(spec, SYM_Except, 1))
+        return !fr_spec_match(spec->data.function.args[0], lhs);
+    if (head_argc_is(spec, SYM_Except, 2))
+        return !fr_spec_match(spec->data.function.args[0], lhs)
+            && fr_spec_match(spec->data.function.args[1], lhs);
+    MatchEnv* env = env_new();
+    bool ok = match(lhs, spec, env);
+    env_free(env);
+    return ok;
+}
+
+/* FilterRules[rules, spec] -- the rules (in order, duplicates kept) whose
+ * left-hand sides match spec.  rules may be one rule or nested lists of them;
+ * any other element gives FilterRules::rep and leaves the call unevaluated. */
+Expr* builtin_filterrules(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2) return builtin_arg_error("FilterRules", argc, 2, 2);
+    Expr** rules = NULL;
+    size_t n = 0, cap = 0;
+    if (!fr_collect(res->data.function.args[0], &rules, &n, &cap)) {
+        free(rules);
+        return NULL;
+    }
+    Expr* spec = res->data.function.args[1];
+    Expr** kept = malloc((n ? n : 1) * sizeof(Expr*));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++)
+        if (fr_spec_match(spec, rules[i]->data.function.args[0]))
+            kept[k++] = expr_copy(rules[i]);
+    free(rules);
+    Expr* out = list_from(kept, k);
+    free(kept);
+    return out;
+}
+
 void options_builtin_init(void) {
     symtab_add_builtin("Options", builtin_options);
     symtab_get_def("Options")->attributes |= ATTR_PROTECTED;
@@ -1009,6 +1123,12 @@ void options_builtin_init(void) {
 
     symtab_add_builtin("OptionValue", builtin_optionvalue);
     symtab_get_def("OptionValue")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("OptionQ", builtin_optionq);
+    symtab_get_def("OptionQ")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FilterRules", builtin_filterrules);
+    symtab_get_def("FilterRules")->attributes |= ATTR_PROTECTED;
 
     options_register_defaults();
 }

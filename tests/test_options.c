@@ -137,6 +137,57 @@ int main(void) {
     chk("oiOuter[\"opt\" -> 5]", "5");        /* an explicitly passed option still wins */
     chk("oiInner[]", "111");                  /* bare OptionsPattern[] unaffected */
 
+    /* ---- OptionQ ---- */
+    chk("{OptionQ[a -> 1], OptionQ[a :> 1], OptionQ[\"a\" -> 1], OptionQ[{a -> 1, b :> 2}]}",
+        "{True, True, True, True}");
+    chk("{OptionQ[{}], OptionQ[{{}}], OptionQ[{{a -> 1}, {b -> 2}}], OptionQ[{a -> 1, {b -> 2}}]}",
+        "{True, True, True, True}");
+    chk("{OptionQ[{a -> 1, 3}], OptionQ[3], OptionQ[x], OptionQ[1 -> 2], OptionQ[f[x] -> 2]}",
+        "{False, False, False, False, False}");
+    chk("OptionQ[<|a -> 1|>]", "False");
+    chk("Quiet[OptionQ[a -> 1, b -> 2]]", "OptionQ[a -> 1, b -> 2]");
+    chk("Check[OptionQ[], \"msg\"]", "\"msg\"");
+    chk("Attributes[OptionQ]", "{Protected}");
+    /* opts___?OptionQ -- the idiom the head exists for. */
+    run("oq[x_, o___?OptionQ] := {x, o}");
+    chk("{oq[1, a -> 2], oq[1], oq[1, a -> 2, {b -> 3}]}", "{{1, a -> 2}, {1}, {1, a -> 2, {b -> 3}}}");
+    chk("oq[1, 2]", "oq[1, 2]");
+
+    /* ---- FilterRules ---- */
+    run("Options[frg] = {p -> 1, q -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, a]", "{a -> 1}");
+    chk("FilterRules[{a -> 1, b -> 2, c :> 3}, {a, c}]", "{a -> 1, c :> 3}");
+    chk("FilterRules[{a -> 1, b -> 2}, Except[a]]", "{b -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, Except[{a}]]", "{b -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, Except[a | b]]", "{}");
+    chk("FilterRules[{a -> 1}, Except[a, b]]", "{}");
+    chk("FilterRules[{a -> 1, b -> 2}, Options[frg]]", "{}");
+    chk("FilterRules[{p -> 1, b -> 2}, Options[frg]]", "{p -> 1}");
+    chk("FilterRules[{p -> 1, b -> 2}, Except[Options[frg]]]", "{b -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, p -> 7]", "{}");
+    /* Names compare across strings and symbols. */
+    chk("FilterRules[{a -> 1, \"b\" -> 2}, \"b\"]", "{\"b\" -> 2}");
+    chk("FilterRules[{a -> 1, \"b\" -> 2}, b]", "{\"b\" -> 2}");
+    chk("FilterRules[{\"a\" -> 1, b -> 2}, a]", "{\"a\" -> 1}");
+    /* Patterns match the left-hand side. */
+    chk("FilterRules[{a -> 1, b -> 2}, _]", "{a -> 1, b -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, a | b]", "{a -> 1, b -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, x_ /; x === b]", "{b -> 2}");
+    chk("FilterRules[{1 -> 2, a -> 1}, 1]", "{1 -> 2}");
+    chk("FilterRules[{f[x] -> 2, a -> 1}, f[_]]", "{f[x] -> 2}");
+    /* Shapes: one rule, nested lists, duplicates kept, empty spec/rules. */
+    chk("FilterRules[a -> 1, a]", "{a -> 1}");
+    chk("FilterRules[{{a -> 1}, b -> 2}, a]", "{a -> 1}");
+    chk("FilterRules[{a -> 1, a -> 2}, a]", "{a -> 1, a -> 2}");
+    chk("FilterRules[{a -> 1, b -> 2}, {}]", "{}");
+    chk("FilterRules[{}, a]", "{}");
+    /* A non-rule element: FilterRules::rep, unevaluated. */
+    chk("Quiet[FilterRules[{a -> 1, x, b -> 2}, a]]", "FilterRules[{a -> 1, x, b -> 2}, a]");
+    chk("Check[FilterRules[{a -> 1, x, b -> 2}, a], \"msg\"]", "\"msg\"");
+    chk("Quiet[FilterRules[3, a]]", "FilterRules[3, a]");
+    chk("Check[FilterRules[{a -> 1}, a, b], \"msg\"]", "\"msg\"");
+    chk("Attributes[FilterRules]", "{Protected}");
+
     if (failures) {
         fprintf(stderr, "\n%d test(s) FAILED\n", failures);
         return 1;

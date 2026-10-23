@@ -8,6 +8,7 @@
 #include "ndarray.h"
 #include "pack.h"      /* pack_force -- lift a small gather source up to the buffer */
 #include "part.h"
+#include "sparse/sparse.h"
 #include "message.h"
 #include "print.h"     /* expr_to_string -- Set::ndarray */
 #include "common.h"
@@ -92,6 +93,11 @@ static bool span_resolve(const Expr* span, int64_t len,
     *start = s; *step = st; *count = n;
     return true;
 }
+bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* step,
+                       int64_t* count) {
+    return span_resolve(span, len, start, step, count);
+}
+
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
 
 /* The piece of `rhs` that the k-th of `nsel` positions selected at one level
@@ -287,6 +293,31 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
 
     if (expr->type == EXPR_NDARRAY)
         return nd_part_assign_or_list(expr, indices, nindices, rhs);
+
+    if (expr->type == EXPR_SPARSE) {
+        /* One element: rebuilt sparsely. Anything else (spans, All, a List
+         * right-hand side) goes through the dense array and back, keeping the
+         * background. A part that does not exist leaves the array as it was. */
+        bool err = false;
+        Expr* r = sp_part_assign(expr, indices, nindices, rhs, &err);
+        if (r) return r;
+        if (err) return expr_copy(expr);
+        const SparseArray* sa = expr->data.sparse;
+        Expr* dense = sp_normal(sa);
+        if (!dense) return expr_copy(expr);
+        Expr* nd = expr_part_assign_rec(dense, indices, nindices, rhs);
+        expr_free(dense);
+        if (!nd) return expr_copy(expr);
+        Expr** d = malloc(sizeof(Expr*) * (size_t)sa->rank);
+        for (int k = 0; k < sa->rank; k++) d[k] = expr_new_integer(sa->dims[k]);
+        Expr* dims = expr_new_function(expr_new_symbol(SYM_List), d, (size_t)sa->rank);
+        free(d);
+        Expr* args[3] = { nd, dims, expr_copy(sa->bg) };
+        Expr* call = expr_new_function(expr_new_symbol(SYM_SparseArray), args, 3);
+        Expr* out = evaluate(call);
+        expr_free(call);
+        return out;
+    }
 
     if (is_atomic(expr)) return expr_copy(expr);
 
@@ -523,6 +554,7 @@ Expr* expr_head(Expr* e) {
             return expr_new_symbol(is_packed_list(e) ? SYM_List : SYM_NDArray);
         case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
         case EXPR_STRING: return expr_new_symbol(SYM_String);
+        case EXPR_SPARSE: return expr_new_symbol(SYM_SparseArray);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);
         default: return NULL;
     }
@@ -893,6 +925,15 @@ Expr* builtin_part(Expr* res) {
         } else {
             expr_free(lifted);
         }
+    }
+
+    /* SparseArray: an element by binary search, or a SparseArray selection
+     * built from the stored entries only (sparse/sparse_part.c). NULL -- an
+     * out-of-range part (after Part::partw) or a spec it does not take --
+     * leaves the Part unevaluated. */
+    if (expr->type == EXPR_SPARSE) {
+        bool err = false;
+        return sp_part(expr, indices, nindices, &err);
     }
 
     /* NDArray: index the flat buffer directly. [[0]] (head extraction) falls

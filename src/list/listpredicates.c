@@ -1,6 +1,7 @@
 #include "list_common.h"
 #include "listpredicates.h"
 #include "ndarray.h"
+#include "sparse/sparse.h"
 
 Expr* builtin_listq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -14,6 +15,11 @@ Expr* builtin_listq(Expr* res) {
 Expr* builtin_vectorq(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SPARSE) {
+        bool ok = arg->data.sparse->rank == 1;
+        if (ok && res->data.function.arg_count == 2) ok = sp_elements_pass(arg, res->data.function.args[1]);
+        return expr_new_symbol(ok ? SYM_True : SYM_False);
+    }
     if (arg->type == EXPR_NDARRAY) {
         /* NDArray elements are always machine reals, so a user-supplied
          * test is only meaningful if it accepts reals; no test means the
@@ -58,6 +64,11 @@ Expr* builtin_vectorq(Expr* res) {
 Expr* builtin_matrixq(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
     Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SPARSE) {
+        bool ok = arg->data.sparse->rank == 2;
+        if (ok && res->data.function.arg_count == 2) ok = sp_elements_pass(arg, res->data.function.args[1]);
+        return expr_new_symbol(ok ? SYM_True : SYM_False);
+    }
     if (arg->type == EXPR_NDARRAY) {
         if (res->data.function.arg_count != 2) {
             return expr_new_symbol(arg->data.ndarray.rank == 2 ? SYM_True : SYM_False);

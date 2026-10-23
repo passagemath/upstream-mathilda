@@ -546,7 +546,7 @@ static Expr* builtin_fromndarray(Expr* res) {
  *       built, so a packed node can never sit inside a plain EXPR_FUNCTION
  *       tree -- which is exactly what makes the gate's O(argc) top-level scan
  *       complete rather than needing to be O(tree) on every unaware head.
- *   ListQ, VectorQ, MatrixQ, ArrayQ, AtomQ, Insert, Delete, Position,
+ *   ListQ, VectorQ, MatrixQ, AtomQ, Insert, Delete, Position,
  *   ReplacePart, AppendTo, PrependTo, LeafCount, Simplify
  *       Correct by omission: they get a materialised List and answer normally.
  *       Several would be actively wrong if marked aware -- is_listq is a bare
@@ -743,6 +743,12 @@ static void pack_mark_aware_heads(void) {
         "Length", "Dimensions", "Depth", "Part", "Head", "ByteCount",
         "NDArrayQ", "PackedArrayQ", "DataType", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* SparseArray reads a packed dense array, and a packed {positions} ->
+         * {values} rule, straight off the buffers (src/sparse/sparse_build.c);
+         * ArrayRules converts through it. ArrayQ and ArrayDepth answer a
+         * buffer from its rank/dims (and ArrayQ's element test reads through
+         * ndarray_element_to_expr), so neither needs the List. */
+        "SparseArray", "ArrayRules", "ArrayQ", "ArrayDepth",
         /* Spectral transforms. fourier.c has had a complete NDArray fast path
          * all along (`data->type == EXPR_NDARRAY` -> machine_path_ndarray,
          * FFTW under USE_FFTW), but the head was never marked aware, so the
@@ -1051,6 +1057,11 @@ static void pack_mark_aware_heads(void) {
          * Integer from an int64 buffer, so no element's head changes. */
         "Part", "Extract", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* SparseArray keeps an int64 buffer's values as exact Integers (an
+         * SPV_INT64 value buffer read through the exact accessor), and the
+         * array predicates read no element except through
+         * ndarray_element_to_expr. */
+        "SparseArray", "ArrayRules", "ArrayQ", "ArrayDepth",
         /* Fit reads an int64 data buffer through ndt_get exactly as it would the
          * materialised integers, and a least-squares fit is a machine-real
          * computation either way, so the float coefficients are identical -- the

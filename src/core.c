@@ -73,6 +73,7 @@
 #include "list.h"
 #include "assoc.h"
 #include "ndarray.h"
+#include "sparse/sparse.h"
 #include "ndinteger.h"
 #include "pack.h"
 #include "ndstruct.h"
@@ -938,6 +939,7 @@ void core_init(void) {
     vectors_init();
     assoc_init();
     ndarray_init();
+    sparse_init();      /* SparseArray, ArrayRules, ArrayQ, ArrayDepth */
     ndkernels_init();   /* elementary-function NDArray element-wise kernels */
     ndinteger_init();   /* exact-integer NDArray kernels (GCD, EulerPhi, ...) */
     pack_init();        /* ToNDArray / FromNDArray over the same storage */
@@ -1513,6 +1515,8 @@ Expr* builtin_length(Expr* res) {
         } else if (arg->type == EXPR_NDARRAY) {
             /* numpy len(): the leading-axis length (rank >= 1 always). */
             len = arg->data.ndarray.dims[0];
+        } else if (arg->type == EXPR_SPARSE) {
+            len = arg->data.sparse->dims[0];
         }
         return expr_new_integer(len);
     }
@@ -1593,6 +1597,10 @@ Expr* builtin_dimensions(Expr* res) {
         depth = arg->data.ndarray.rank;
         if (depth > max_depth) depth = max_depth;
         for (int i = 0; i < depth; i++) dims[i] = arg->data.ndarray.dims[i];
+    } else if (arg->type == EXPR_SPARSE) {
+        depth = arg->data.sparse->rank;
+        if (depth > max_depth) depth = max_depth;
+        for (int i = 0; i < depth; i++) dims[i] = arg->data.sparse->dims[i];
     } else if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL) {
         depth = get_dimensions(arg, dims, max_depth, arg->data.function.head->data.symbol.name);

@@ -4440,18 +4440,40 @@ void info_init(void) {
         "Normal[expr]\n"
         "\tconverts expr to a normal expression. If expr is a SeriesData object, the\n"
         "\tO-term is dropped and the truncated polynomial (or Laurent/Puiseux sum) is\n"
-        "\treturned. Normal[SparseArray[...]] gives the dense nested List the sparse\n"
-        "\tspecification denotes, Normal[assoc] its list of rules and Normal[ndarray]\n"
-        "\tits nested List. Other expressions pass through unchanged.");
+        "\treturned. Normal[s] gives the dense array a SparseArray represents (packed\n"
+        "\twhen its values and background are machine numbers of one type), Normal[assoc]\n"
+        "\tits list of rules and Normal[ndarray] its nested List. SparseArrays and\n"
+        "\tSeriesData nested inside expr are converted too. Other expressions pass\n"
+        "\tthrough unchanged.");
     symtab_set_docstring("SparseArray",
-        "SparseArray[{pos1 -> v1, ...}], SparseArray[rules, dims], SparseArray[rules, dims, default]\n"
-        "\tspecify an array whose listed positions hold vi and whose other entries are\n"
-        "\tthe default (0). Positions are Integer lists (an Integer for a vector);\n"
-        "\trules may be {p1, p2} -> {v1, v2}, patterns ({i_, i_} -> 1, needing dims) or\n"
-        "\tBand[start] -> v. SparseArray[list] and the internal form\n"
-        "\tSparseArray[Automatic, dims, default, {1, {rowptr, colidx}, vals}] are accepted.\n"
-        "Mathilda has no sparse storage: SparseArray stays inert, and Normal converts\n"
-        "\tit to the dense List.");
+        "SparseArray[{pos1 -> v1, pos2 -> v2, ...}] gives a sparse array whose elements are\n"
+        "\tzero except the vi at positions posi.\n"
+        "SparseArray[list] gives a sparse array version of list.\n"
+        "SparseArray[data, {d1, d2, ...}] gives a d1 x d2 x ... sparse array.\n"
+        "SparseArray[data, dims, val] takes unspecified elements to be val.\n"
+        "Rules may be {pos1, pos2, ...} -> {v1, v2, ...}, a pattern patt -> v or patt :> v\n"
+        "\t(every matching position), or Band[start(, end(, step))] -> v (a diagonal, vector\n"
+        "\tor subblocks); the first rule for a position wins. SparseArray[s] removes explicit\n"
+        "\tbackground entries. The result is a raw object in the standard form\n"
+        "\tSparseArray[Automatic, dims, val, {1, {rowptr, colidx}, vals}]; Normal gives the\n"
+        "\tdense array, and Listable functions (Plus, Times, Sin, ...) act element-wise.\n"
+        "\ts[\"prop\"] gives a property: \"NonzeroPositions\", \"NonzeroValues\",\n"
+        "\t\"Background\", \"Density\", \"RowPointers\", \"ColumnIndices\", \"Properties\", ...");
+    symtab_set_docstring("ArrayRules",
+        "ArrayRules[s] gives the rules {pos1 -> v1, ..., {_, _, ...} -> val} specifying\n"
+        "\tthe sparse array s (or the array a list represents).\n"
+        "ArrayRules[s, val] gives the rules with val as the default element.");
+    symtab_set_docstring("ArrayQ",
+        "ArrayQ[expr] gives True if expr is a full array (a list, or a SparseArray, with\n"
+        "\tevery element at the same depth).\n"
+        "ArrayQ[expr, patt] requires the depth to match patt.\n"
+        "ArrayQ[expr, patt, test] also requires test to give True on every element.");
+    symtab_set_docstring("ArrayDepth",
+        "ArrayDepth[expr] gives the depth to which expr is a full array (0 for an atom).");
+    symtab_set_docstring("Band",
+        "Band[{i, j, ...}] represents the positions on a diagonal starting at {i, j, ...}.\n"
+        "Band[start, end] and Band[start, end, step] bound the band and set its stride.\n"
+        "Used in SparseArray[Band[...] -> v, dims].");
     symtab_set_docstring("SeriesData",
         "SeriesData[x, x0, {a0, a1, ...}, nmin, nmax, den]\n"
         "\trepresents a power series in the variable x about the point x0.\n"

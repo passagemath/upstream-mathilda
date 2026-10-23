@@ -34,6 +34,8 @@
 #include "sym_names.h"
 #include "expr.h"
 #include "ndarray.h"     /* packed-list and NDArray[...] rendering */
+#include "sparse/sparse.h" /* SparseArray summary */
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -582,6 +584,20 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
         lb_cat(b, "\\text{\xe2\x80\x9c");
         lb_cat(b, e->data.string);
         lb_cat(b, "\xe2\x80\x9d}");
+        return;
+    }
+
+    /* ---- A SparseArray: its summary, SparseArray[<n>, dims] ---- */
+    if (e->type == EXPR_SPARSE) {
+        const SparseArray* sa = e->data.sparse;
+        char buf[128];
+        snprintf(buf, sizeof buf, "\\text{SparseArray}\\left[\\langle %" PRId64 "\\rangle ,\\{", sp_nnz(sa));
+        lb_cat(b, buf);
+        for (int k = 0; k < sa->rank; k++) {
+            snprintf(buf, sizeof buf, k ? ",%" PRId64 : "%" PRId64, sa->dims[k]);
+            lb_cat(b, buf);
+        }
+        lb_cat(b, "\\}\\right]");
         return;
     }
 

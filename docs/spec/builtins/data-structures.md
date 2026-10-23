@@ -1452,42 +1452,154 @@ Out[2]= {"a" -> <|"b" -> 1|>}
 
 ## SparseArray
 
-- `SparseArray[{pos1 -> v1, pos2 -> v2, ...}]` specifies an array whose listed
-  positions hold the `vi` and whose other entries are `0`.
-- `SparseArray[rules, dims]` and `SparseArray[rules, dims, default]` fix the
-  dimensions and the fill value.
-- `SparseArray[list]` and `SparseArray[list, dims, default]` take a dense array.
+- `SparseArray[{pos1 -> v1, pos2 -> v2, ...}]` gives a sparse array whose
+  elements are zero except the `vi` at the positions `posi`.
+- `SparseArray[list]` gives a sparse array version of a (dense, possibly packed)
+  array.
+- `SparseArray[data, {d1, d2, ...}]` gives a `d1 x d2 x ...` sparse array;
+  `SparseArray[data, n]` uses `n` for every dimension.
+- `SparseArray[data, dims, val]` takes unspecified elements to be `val`.
+- `SparseArray[s]`, `SparseArray[s, dims]`, `SparseArray[s, dims, val]` for an
+  existing sparse array: drop explicit background entries, crop or pad, or
+  change the background.
 
-**Features**:
-- Mathilda has **no sparse storage**: a `SparseArray[...]` expression stays
-  inert, exactly as written. `Normal` converts it to the dense nested List it
-  denotes; that is the conversion code written for the reference relies on, and until
-  2026-09-28 `Normal` handed the `SparseArray` back unchanged.
-- Positions are Integer lists (an Integer for a vector); without `dims` the
-  size is the per-coordinate maximum of the positions. Negative indices count
-  from the end once `dims` are known. When several rules name one position the
-  **first** wins, as in the reference.
-- Rule forms: `{p1, p2, ...} -> {v1, v2, ...}`; pattern rules
-  (`{i_, i_} -> 1`, `{i_, j_} :> i + j`, conditions allowed), which need `dims`;
-  and `Band[start] -> v`, `Band[start, end]`, `Band[start, end, step]`, with `v`
-  a scalar or a List of successive values.
-- The InputForm of the reference's own representation,
-  `SparseArray[Automatic, dims, default, {1, {rowptr, colidx}, vals}]`, is
-  accepted, so a value pasted out of the reference round-trips through `Normal`.
-- A specification Mathilda cannot densify (pattern rules without `dims`, a
-  position outside `dims`, a result over 2^27 entries) leaves `Normal[...]`
-  unevaluated.
+Attributes: `{Protected}`.
+
+**Representation.** A SparseArray is a native raw object (`EXPR_SPARSE`,
+`src/sparse/`), always in one standard form, which is what `InputForm` and
+`FullForm` print and what the constructor reads back:
+
+```
+SparseArray[Automatic, dims, val, {1, {rowptr, colidx}, vals}]
+```
+
+`rowptr` (0-based) delimits, for each index of the first dimension, the stored
+entries of that slice; `colidx` holds each entry's remaining coordinates
+(1-based tuples, increasing within a slice); `vals` the entries. A vector has a
+single slice (`rowptr = {0, nnz}`). The standard form is unique, so `===` is
+equality of arrays and hashing (`Union`, Association keys) works. Output shows
+the summary `SparseArray[<nnz>, dims]`.
+
+Storage is compressed sparse row generalised to any rank, with values in one
+typed machine buffer (Integer, Real or Complex) whenever every value has that
+type, boxed otherwise; column indices are 32-bit when every dimension allows.
+The index structure is shared by every array derived from it element-wise
+(`2 s`, `s + 1`, `Sin[s]`, `N[s]` copy no indices).
+
+**A raw object.** `AtomQ[s]` is `True`; only `_SparseArray` (or a SameQ literal)
+matches it, so `SparseArray[___]` patterns and `ReplaceAll` do not destructure
+it. Its values are never re-evaluated: after `s = SparseArray[{1 -> x}]; x = 7`,
+`s` still holds `x`.
+
+**Rules.**
+- A position is an Integer list (an Integer for a vector); negative indices
+  count from the end. Without dims the size is the per-coordinate maximum of
+  `|index|` over the explicit positions and Bands.
+- `{pos1, pos2, ...} -> {v1, v2, ...}` and `{pos1, pos2, ...} -> v`. With a
+  packed position matrix and a packed value vector the array is built straight
+  from the buffers (a stable radix sort; 10^6 entries in about 40 ms).
+- `patt -> v` and `patt :> v` fill every matching position (`{i_, i_}` walks
+  only the diagonal); conditions are allowed. A rule matching every position
+  (`_`, `x_`, `{_, _}`) sets the background when no `val` is given, and shadows
+  the rules after it.
+- `Band[start] -> v`, `Band[start, end]`, `Band[start, end, step]`: `v` a scalar
+  (the whole band), a vector (successive entries; `SparseArray::bndtr` when
+  they overflow the band), a rank-r block placed at `start`, or a list of
+  blocks placed successively down the diagonal.
+- When several rules name one position the **first** wins. Entries equal to
+  the background are not stored (`0.` counts as equal to `0`), except in the
+  standard form, which is taken at its word.
+- A dense array whose leaves are all machine Reals/Complexes has background
+  `0.`, otherwise `0`. An explicit Real background makes a machine-number array
+  Real.
+- Elements cannot be lists (`SparseArray::valnl`), nor can the background
+  (`SparseArray::ilist`). Malformed specifications emit `SparseArray::list`,
+  `::rect`, `::posd`, `::pos`, `::posr`, `::rule1`, `::adims`, `::exdims` or
+  `::drnk` and stay unevaluated; all route through `Quiet`/`Check`.
+
+**Structure.** `Normal[s]` is the dense array (a packed array when values and
+background share one machine type); `Normal` converts SparseArrays nested
+inside other expressions too. `Length`, `Dimensions`, `ArrayDepth`, `ArrayQ`,
+`VectorQ` and `MatrixQ` (with element tests) answer from the shape. `Part`
+reads an element by binary search, and a selection (`All`, spans, index lists,
+repeats) as a SparseArray built from the stored entries; `s[[0]]` is `List`.
+`s[[i, j]] = v` inserts, replaces or (for the background) removes one entry;
+other Part assignments go through the dense array and back.
+
+**Properties.** `s["prop"]` for `"NonzeroPositions"` / `"ExplicitPositions"`,
+`"NonzeroValues"` / `"ExplicitValues"`, `"Background"` / `"ImplicitValue"`,
+`"ExplicitLength"`, `"Density"`, `"RowPointers"`, `"ColumnIndices"`,
+`"AdjacencyLists"`, `"BandWidth"` and `"Properties"`; the bulk ones come back
+packed. An unknown name gives `SparseArray::nomthd`.
+
+**Element-wise operations.** Every Listable head threads over SparseArray
+arguments (and `N` numericalises one) by one rule: the result's background is
+`f` of the backgrounds, and its explicit entries are `f` at the union of the
+operands' explicit positions, an operand's background standing in where it has
+none. Times keeps only the common positions when every background is zero.
+Nothing is re-minimised (`s - s` keeps explicit zeros; `SparseArray[s]` drops
+them). Unequal dimensions give `Thread::tdlen`. A SparseArray beside a dense
+List gives the dense List.
+
+Three tiers, which agree: typed C loops for Plus/Times/Power (overflow-checked
+Integers, Reals, machine Complex); the head's own packed/NDArray kernel run over
+the value vector (Sin, Exp, BesselJ, Floor, ... -- the same kernel the packed
+surface uses); and per-entry evaluation for everything else, including symbolic
+values and user Listable functions. Against scipy.sparse on 10^6 entries, every
+tier-1/2 operation is faster (benchmarks/120-sparse-arrays).
+
+**Element-wise exactness.** Element-wise results are exactly the operation
+applied to `Normal[...]`, element by element: an exact Integer entry meeting a
+Real operand's implicit `0.` stays the Integer that sum gives, and no operand is
+coerced to Reals as a whole. Column indices within a slice are always sorted.
+
+**Not yet supported** (left unevaluated on a SparseArray): `Dot`, `Transpose`,
+`Tr`, `Total`, `LinearSolve`, `Det`, `Inverse`, `Eigenvalues` and the other
+linear algebra (planned next), `Map`, `MapIndexed`, `Flatten`, and graph
+functions returning SparseArrays.
 
 ```mathematica
-In[1]:= Normal[SparseArray[{1 -> 1, 3 -> 2}]]
-Out[1]= {1, 0, 2}
+In[1]:= s = SparseArray[{{1, 1} -> 1, {2, 3} -> x}, {3, 3}]
+Out[1]= SparseArray[<2>, {3, 3}]
 
-In[2]:= Normal[SparseArray[{{i_, i_} -> 1}, {3, 3}]]
-Out[2]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+In[2]:= InputForm[s]
+Out[2]= SparseArray[Automatic, {3, 3}, 0, {1, {{0, 1, 2, 2}, {{1}, {3}}}, {1, x}}]
 
-In[3]:= Normal[SparseArray[{{1, 1} -> a, {2, 3} -> b}, {2, 3}, x]]
-Out[3]= {{a, x, x}, {x, x, b}}
+In[3]:= Normal[s + 1]
+Out[3]= {{2, 1, 1}, {1, 1, 1 + x}, {1, 1, 1}}
 
-In[4]:= Normal[SparseArray[Band[{1, 2}] -> {p, q}, {3, 3}]]
-Out[4]= {{0, p, 0}, {0, 0, q}, {0, 0, 0}}
+In[4]:= InputForm[Cos[SparseArray[{1 -> 1.}, 3]]]
+Out[4]= SparseArray[Automatic, {3}, 1, {1, {{0, 1}, {{1}}}, {0.5403023058681398}}]
+
+In[5]:= Normal[SparseArray[Band[{1, 2}] -> {p, q}, {3, 3}]]
+Out[5]= {{0, p, 0}, {0, 0, q}, {0, 0, 0}}
+
+In[6]:= ArrayRules[s]
+Out[6]= {{1, 1} -> 1, {2, 3} -> x, {_, _} -> 0}
 ```
+
+## ArrayRules
+
+- `ArrayRules[s]` gives the rules `{pos1 -> v1, ..., {_, _, ...} -> val}` that
+  specify the sparse array `s`; `SparseArray[ArrayRules[s]]` rebuilds it.
+- `ArrayRules[list]` converts the dense array first; `ArrayRules[s, val]`
+  gives the rules with `val` as the default.
+
+Attributes: `{Protected}`.
+
+## ArrayQ
+
+- `ArrayQ[expr]` is `True` for a full array: a List (or SparseArray) whose
+  every element sits at the same depth.
+- `ArrayQ[expr, patt]` also requires the depth to match `patt`;
+  `ArrayQ[expr, patt, test]` requires `test` to give `True` on every element.
+
+Attributes: `{Protected}`. Reads packed arrays from their shape.
+
+## ArrayDepth
+
+- `ArrayDepth[expr]` gives the depth to which `expr` is a full array (`0` for
+  an atom); a SparseArray's rank.
+
+Attributes: `{Protected}`.
+

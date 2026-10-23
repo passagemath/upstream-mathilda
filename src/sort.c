@@ -13,6 +13,7 @@
 #include "list/list_common.h" /* is_real_numeric / is_infinity / is_minus_infinity / is_listq */
 #include "ndreduce.h"  /* ndred_ranked_min / ndred_ranked_max — NDArray order-statistic path */
 #include "numeric.h"   /* numericalize / numeric_machine_spec — key for symbolic reals */
+#include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
@@ -665,6 +666,17 @@ int expr_compare(const Expr* a, const Expr* b) {
         if (ma) expr_free(ma);
         if (mb) expr_free(mb);
         return c;
+    }
+
+    /* 0b. SparseArray raw objects sort after numbers and before everything
+     * else; two arrays order by dims, then size, then contents (sp_compare). */
+    if (a->type == EXPR_SPARSE || b->type == EXPR_SPARSE) {
+        if (a->type == EXPR_SPARSE && b->type == EXPR_SPARSE)
+            return sp_compare(a->data.sparse, b->data.sparse);
+        const Expr* other = a->type == EXPR_SPARSE ? b : a;
+        int sign = a->type == EXPR_SPARSE ? 1 : -1;
+        if (is_atomic_numeric(other) || is_complex_number(other)) return sign;
+        return -sign;
     }
 
     /* 1. Numeric atoms. */

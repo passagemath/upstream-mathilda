@@ -56,6 +56,13 @@ struct CompiledFunction* compiled_function_ref(struct CompiledFunction* cf);
 void                     compiled_function_free(struct CompiledFunction* cf);
 uint64_t                 compiled_function_identity(const struct CompiledFunction* cf);
 
+/* EXPR_SPARSE payload lifecycle and identity -- implemented in
+ * sparse/sparse_core.c, forward-declared for the same layering reason. */
+struct SparseArray* sp_retain(struct SparseArray* sa);
+void                sp_release(struct SparseArray* sa);
+bool                sp_eq(const struct SparseArray* a, const struct SparseArray* b);
+uint64_t            sp_hash(const struct SparseArray* sa);
+
 /* Portable strdup (strdup is POSIX, not C99). See expr.h. */
 char* mathilda_strdup(const char* s) {
     if (!s) return NULL;
@@ -400,6 +407,18 @@ Expr* expr_new_compiled(struct CompiledFunction* cf) {
     return e;
 }
 
+/* EXPR_SPARSE. Like EXPR_COMPILED, the payload is reference-counted in its own
+ * module and immutable once built; the node adopts the one reference. */
+Expr* expr_new_sparse(struct SparseArray* sa) {
+    Expr* e = expr_alloc_node();
+    if (!e) return NULL;
+    e->type = EXPR_SPARSE;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.sparse = sa;
+    return e;
+}
+
 #ifdef USE_MPFR
 /* MPFR constructors. All allocate an Expr and initialize the payload
  * `mpfr_t` at the requested precision; the caller owns the result and
@@ -577,6 +596,10 @@ Expr* expr_unshare(Expr* e) {
             /* Immutable payload: share it (inc its own refcount). */
             fresh->data.compiled = compiled_function_ref(e->data.compiled);
             break;
+        case EXPR_SPARSE:
+            /* Immutable payload: share it. */
+            fresh->data.sparse = sp_retain(e->data.sparse);
+            break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -660,6 +683,9 @@ void expr_free(Expr* e) {
             break;
         case EXPR_COMPILED:
             compiled_function_free(e->data.compiled);
+            break;
+        case EXPR_SPARSE:
+            sp_release(e->data.sparse);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -853,6 +879,10 @@ bool expr_eq(const Expr* a, const Expr* b) {
             /* Object identity: two CompiledFunctions are SameQ iff they wrap the
              * same payload (matches the opaque-object convention). */
             return a->data.compiled == b->data.compiled;
+        case EXPR_SPARSE:
+            /* Value identity: the representation is canonical (sparse.h), so
+             * equal arrays have equal dims, background, pattern and values. */
+            return sp_eq(a->data.sparse, b->data.sparse);
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -1022,6 +1052,9 @@ uint64_t expr_hash(const Expr* e) {
         case EXPR_COMPILED:
             /* Identity hash (see expr_eq): mix the payload's stable id. */
             h ^= compiled_function_identity(e->data.compiled); h *= prime;
+            break;
+        case EXPR_SPARSE:
+            h ^= sp_hash(e->data.sparse); h *= prime;
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR: {

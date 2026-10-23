@@ -14,6 +14,7 @@
 #include "sym_names.h"
 #include "numberform.h"
 #include "ndarray.h"
+#include "sparse/sparse.h"
 #include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include "graph_hyper.h"   /* hypergraph_is_valid, for Hypergraph[...] */
@@ -320,6 +321,14 @@ void expr_print_fullform(Expr* e) {
             printf("]");
             break;
         }
+        case EXPR_SPARSE: {
+            /* FullForm (and InputForm) print the canonical constructor form,
+             * which reads back to the same array. */
+            Expr* canon = sp_canonical_expr(e->data.sparse);
+            expr_print_fullform(canon);
+            expr_free(canon);
+            break;
+        }
         case EXPR_COMPILED: {
             const CompiledFunction* cf = e->data.compiled;
             size_t n = compiled_function_num_args(cf);
@@ -453,6 +462,22 @@ static void print_standard(Expr* e, int parent_prec) {
     if (is_packed_list(e)) {
         size_t idx = 0;
         print_packed_level(e, 0, &idx, false);
+        return;
+    }
+    if (e->type == EXPR_SPARSE) {
+        /* InputForm: the canonical SparseArray[Automatic, dims, bg, {...}]
+         * form, which reads back. Otherwise the summary SparseArray[<n>, dims]
+         * (n explicit entries), as the array is shown in output. */
+        const SparseArray* sa = e->data.sparse;
+        if (g_inputform_depth > 0) {
+            Expr* canon = sp_canonical_expr(sa);
+            print_standard(canon, parent_prec);
+            expr_free(canon);
+            return;
+        }
+        printf("SparseArray[<%" PRId64 ">, {", sp_nnz(sa));
+        for (int k = 0; k < sa->rank; k++) printf(k ? ", %" PRId64 : "%" PRId64, sa->dims[k]);
+        printf("}]");
         return;
     }
     if (e->type != EXPR_FUNCTION) {
@@ -1894,6 +1919,13 @@ static void print_tex(Expr* e, int parent_prec) {
         print_tex(nested, 0);
         expr_free(nested);
         printf("\\right]");
+        return;
+    }
+    if (e->type == EXPR_SPARSE) {
+        /* Typeset as the matrix / vector it represents. */
+        Expr* dense = sp_normal(e->data.sparse);
+        if (dense) { print_tex(dense, parent_prec); expr_free(dense); }
+        else printf("\\text{SparseArray}");
         return;
     }
     if (e->type == EXPR_COMPILED) {

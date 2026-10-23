@@ -24,7 +24,8 @@ typedef enum {
     EXPR_FUNCTION,
     EXPR_BIGINT,
     EXPR_NDARRAY,              /* dense machine-precision ndarray, see ndarray.h */
-    EXPR_COMPILED              /* compiled numeric function, see compile/compiled_function.h */
+    EXPR_COMPILED,             /* compiled numeric function, see compile/compiled_function.h */
+    EXPR_SPARSE                /* SparseArray raw object, see sparse/sparse.h */
 #ifdef USE_MPFR
     , EXPR_MPFR                /* arbitrary-precision real (MPFR) */
 #endif
@@ -234,6 +235,9 @@ typedef struct Expr {
          * only a forward declaration is visible here to keep the layering clean
          * (a bare pointer never grows the union). */
         struct CompiledFunction* compiled;
+        /* EXPR_SPARSE: opaque, reference-counted, immutable SparseArray
+         * payload (sparse/sparse.h); a bare pointer never grows the union. */
+        struct SparseArray* sparse;
 #ifdef USE_MPFR
         mpfr_t mpfr;          /* carries its own precision in bits */
 #endif
@@ -335,6 +339,10 @@ Expr* expr_new_compiled(struct CompiledFunction* cf);
 /* A stable per-object identity (used by expr_eq/hash/compare for EXPR_COMPILED).
  * Implemented in compile/compiled_function.c. */
 uint64_t compiled_function_identity(const struct CompiledFunction* cf);
+
+/* EXPR_SPARSE constructor. Takes ownership of one reference to `sa` (expr_free
+ * releases it). See sparse/sparse.h. */
+Expr* expr_new_sparse(struct SparseArray* sa);
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

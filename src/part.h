@@ -9,6 +9,11 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs);
 Expr* builtin_part(Expr* res);
 Expr* builtin_extract(Expr* res);
 Expr* expr_head(Expr* e);
+/* Resolve a Span[...] against a container of `len` elements: first selected
+ * 1-based index, stride and count (every selected index lies in 1..len).
+ * False for a malformed spec; a span selecting nothing succeeds with count 0. */
+bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* step,
+                       int64_t* count);
 Expr* builtin_head(Expr* res);
 Expr* builtin_first(Expr* res);
 Expr* builtin_last(Expr* res);

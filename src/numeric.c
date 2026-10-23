@@ -17,6 +17,7 @@
 #include "sym_names.h"
 #include "root_numeric.h"
 #include "root.h"        /* rootsum_expand_over_roots: N over a RootSum */
+#include "sparse/sparse.h"  /* N over a SparseArray */
 #include "ndarray.h"    /* ndt_get_i / ndarray_to_nested_list: N over a packed
                          * integer buffer widens it to float64 in place. */
 
@@ -873,9 +874,23 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
  *  numericalize() below, which is not necessarily the precision the caller
  *  asked for — see the "Working precision" section further down.
  * ---------------------------------------------------------------------- */
+/* N over a SparseArray: every explicit value and the background, sharing the
+ * pattern. At machine precision a typed value buffer converts directly. */
+static Expr* numericalize_sparse_cb(const Expr* v, void* ctx) {
+    return numericalize_rec(v, *(const NumericSpec*)ctx);
+}
+
+static Expr* numericalize_sparse(const Expr* e, NumericSpec spec) {
+    /* Inexact contagion never reaches into a raw object. */
+    if (spec.contagion) return expr_copy((Expr*)e);
+    Expr* r = sp_map_values(e, numericalize_sparse_cb, &spec, spec.mode == NUMERIC_MODE_MACHINE);
+    return r ? r : expr_copy((Expr*)e);
+}
+
 static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
     switch (e->type) {
+        case EXPR_SPARSE: return numericalize_sparse(e, spec);
         case EXPR_INTEGER: return leaf_from_integer(e->data.integer, spec);
         case EXPR_BIGINT:  return leaf_from_bigint(e->data.bigint, spec);
         case EXPR_REAL:

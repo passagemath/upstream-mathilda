@@ -325,7 +325,12 @@ set(COMMON_SRC
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c
-    ../src/sparsearray.c
+    ../src/sparse/sparse_core.c
+    ../src/sparse/sparse_build.c
+    ../src/sparse/sparse_thread.c
+    ../src/sparse/sparse_arith.c
+    ../src/sparse/sparse_part.c
+    ../src/sparse/sparse_builtins.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c

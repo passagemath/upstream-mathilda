@@ -102,6 +102,10 @@ static Expr* precision_of(const Expr* e) {
         case EXPR_COMPILED:
             /* Opaque object; carries no numeric value → exact. */
             return make_infinity();
+        case EXPR_SPARSE:
+            /* Precision of the array it represents (handled by the caller's
+             * sparse branch); an unhandled path sees it as exact. */
+            return make_infinity();
         case EXPR_FUNCTION: {
             /* Rational is exact; Complex reduces to min of parts;
              * anything else — conservatively take the min across parts. */
@@ -195,6 +199,7 @@ static Expr* accuracy_of(const Expr* e) {
         }
 #endif
         case EXPR_COMPILED:
+        case EXPR_SPARSE:
             /* Opaque object; carries no numeric value → exact (infinite accuracy). */
             return make_infinity();
         case EXPR_NDARRAY: {

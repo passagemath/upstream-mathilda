@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <limits.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -784,19 +785,77 @@ static bool dv_binds_opaquely(const SymbolDef* def) {
 }
 
 /* Classify the arguments of a Listable call in one pass: LA_LIST if any is an
- * explicit List, LA_ASSOC if any is an Association (either bit or both). */
-enum { LA_LIST = 1, LA_ASSOC = 2 };
+ * explicit List, LA_ASSOC if any is an Association, LA_SPARSE if any is a
+ * SparseArray (any combination). */
+enum { LA_LIST = 1, LA_ASSOC = 2, LA_SPARSE = 4 };
 static int listable_arg_kinds(const Expr* e) {
     int kinds = 0;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+    size_t n = e->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
         const Expr* arg = e->data.function.args[i];
+        if (arg->type == EXPR_SPARSE) { kinds |= LA_SPARSE; continue; }
         if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL)
             continue;
         const char* h = arg->data.function.head->data.symbol.name;
-        if (h == SYM_List) return kinds | LA_LIST;   /* List threading wins */
+        if (h == SYM_List) {
+            /* List threading wins; only a SparseArray further on still matters
+             * (it densifies first), and that is one type test per argument. */
+            for (size_t j = i + 1; j < n; j++)
+                if (e->data.function.args[j]->type == EXPR_SPARSE) kinds |= LA_SPARSE;
+            return kinds | LA_LIST;
+        }
         if (h == SYM_Association) kinds |= LA_ASSOC;
     }
     return kinds;
+}
+
+/* SparseArray[pos -> vals, ...] -- the constructor's standard spelling --
+ * reads a packed position matrix and value vector straight from their buffers
+ * (sparse/sparse_build.c). Rule is deliberately not packed-aware (the gate's
+ * no-nesting invariant, see pack.c), so evaluating the Rule as an ordinary
+ * argument would materialise 3 x 10^6 Exprs for a 10^6-entry array before
+ * SparseArray ever ran. So the Rule's two sides are evaluated directly and the
+ * Rule rebuilt around them: Rule has no rules of its own to apply, so this is
+ * the same value. If SparseArray then declines, it unpacks them in place
+ * (builtin_sparsearray), so no packed node is left inside the inert call. */
+static Expr* eval_sparse_rule_arg(const Expr* rule) {
+    Expr* lhs = evaluate(rule->data.function.args[0]);
+    Expr* rhs = evaluate(rule->data.function.args[1]);
+    Expr* args[2] = { lhs, rhs };
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Rule), args, 2);
+    if (is_packed_list(lhs) || is_packed_list(rhs)) return r;
+    Expr* e = evaluate(r);    /* nothing packed: the ordinary evaluation */
+    expr_free(r);
+    return e;
+}
+
+/* A Listable call with SparseArray arguments. Alongside a List (or a packed
+ * list) the sparse arrays densify -- a sparse array plus a dense one is a
+ * dense array -- and the rewritten call threads as Lists on the next step.
+ * Otherwise the call threads over the sparse arrays themselves
+ * (sparse/sparse_thread.c). NULL leaves the call to the steps below. */
+static Expr* listable_sparse(const Expr* res, int la_kind) {
+    /* N numericalises a SparseArray itself (numeric.c), keeping it sparse. */
+    const Expr* h = res->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_N) return NULL;
+    size_t n = res->data.function.arg_count;
+    bool dense = (la_kind & LA_LIST) != 0;
+    for (size_t i = 0; i < n && !dense; i++) dense = is_packed_list(res->data.function.args[i]);
+    if (!dense) return sp_thread_listable(res);
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* x = res->data.function.args[i];
+        Expr* d = x->type == EXPR_SPARSE ? sp_normal(x->data.sparse) : NULL;
+        if (x->type == EXPR_SPARSE && !d) {
+            for (size_t j = 0; j < i; j++) expr_free(a[j]);
+            free(a);
+            return NULL;
+        }
+        a[i] = d ? d : expr_copy(x);
+    }
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), a, n);
+    free(a);
+    return out;
 }
 
 static bool has_list_arg(Expr* e) {
@@ -1879,6 +1938,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
         case EXPR_BIGINT:
         case EXPR_NDARRAY:        /* dense ndarray: an atomic value */
         case EXPR_COMPILED:       /* compiled function object: an atomic value */
+        case EXPR_SPARSE:         /* SparseArray raw object: never re-evaluated */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
@@ -2030,6 +2090,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     switch (orig_arg->type) {
                         case EXPR_INTEGER: case EXPR_REAL: case EXPR_STRING:
                         case EXPR_BIGINT: case EXPR_NDARRAY: case EXPR_COMPILED:
+                        case EXPR_SPARSE:
 #ifdef USE_MPFR
                         case EXPR_MPFR:
 #endif
@@ -2037,7 +2098,14 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                             continue;   /* atoms are never Throw/Goto sentinels */
                         default: break;
                     }
-                    new_args[i] = evaluate(orig_arg);
+                    if (i == 0 && head->type == EXPR_SYMBOL &&
+                        head->data.symbol.name == SYM_SparseArray &&
+                        orig_arg->type == EXPR_FUNCTION && orig_arg->data.function.arg_count == 2 &&
+                        orig_arg->data.function.head->type == EXPR_SYMBOL &&
+                        orig_arg->data.function.head->data.symbol.name == SYM_Rule)
+                        new_args[i] = eval_sparse_rule_arg(orig_arg);
+                    else
+                        new_args[i] = evaluate(orig_arg);
                     arg_evaluated = true;
                     if (new_args[i] != orig_arg) *changed = true;
                 }
@@ -2382,6 +2450,16 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              * One pass classifies the arguments, so the List path pays only a
              * pointer compare per argument for the association check. */
             int la_kind = (attrs & ATTR_LISTABLE) ? listable_arg_kinds(res) : 0;
+            if (la_kind & LA_SPARSE) {
+                g_trace_suppress++;
+                Expr* sp_res = listable_sparse(res, la_kind);
+                g_trace_suppress--;
+                if (sp_res) {
+                    expr_free(res);
+                    *changed = true; /* threaded over (or densified) SparseArrays */
+                    return sp_res;
+                }
+            }
             if (la_kind == LA_ASSOC) {
                 Expr* assoc_res = assoc_thread_listable(res);
                 if (assoc_res) {
@@ -2898,6 +2976,17 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                  * Insert[e, n][x] -> Insert[x, e, n], ... (table in opform.c).
                  * NULL (head declined the rewritten call) keeps h[o][x]. */
                 Expr* applied = opform_apply(head, res->data.function.args[0]);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true;
+                    return applied;
+                }
+            } else if (head->type == EXPR_SPARSE) {
+                /* 7g. SparseArray[...]["prop"] -> property (sparse_builtins.c);
+                 * NULL (after SparseArray::nomthd for an unknown name) leaves
+                 * it unevaluated. */
+                Expr* applied = sp_apply(head, res->data.function.args,
+                                         res->data.function.arg_count);
                 if (applied) {
                     expr_free(res);
                     *changed = true;

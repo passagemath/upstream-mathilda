@@ -25,7 +25,7 @@
 
 #include "series.h"
 #include "../special_functions/meijer_g.h" /* meijerg_series_terms */
-#include "../sparsearray.h"
+#include "../sparse/sparse.h"
 #include "../message.h"    /* mth_message: the Quiet[]/Check[] funnel for Series::ivar. */
 #include "../print.h"      /* expr_to_string, to name the offending variable. */
 #include "expr.h"
@@ -645,7 +645,8 @@ static bool so_is_purely_numeric(Expr* e) {
         case EXPR_MPFR:
 #endif
             return true;
-        case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: case EXPR_COMPILED: return false;
+        case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: case EXPR_COMPILED:
+        case EXPR_SPARSE: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
@@ -3578,11 +3579,11 @@ static Expr* normal_recurse(Expr* e) {
         if (n) return n;
         /* Malformed SeriesData: fall through to a structural copy. */
     }
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    if (is_sparse_array(e)) {
-        Expr* dense = sparse_array_to_dense(e);
+    if (e->type == EXPR_SPARSE) {
+        Expr* dense = sp_normal(e->data.sparse);
         if (dense) return dense;
     }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
     Expr* head = normal_recurse(e->data.function.head);
     size_t n = e->data.function.arg_count;
@@ -3604,12 +3605,8 @@ Expr* builtin_normal(Expr* res) {
         arg->data.function.head->data.symbol.name == SYM_Dispatch && arg->data.function.arg_count == 1)
         return expr_copy(arg->data.function.args[0]);
 
-    /* Normal[SparseArray[...]] is the dense nested List it denotes. */
-    if (is_sparse_array(arg)) {
-        Expr* dense = sparse_array_to_dense(arg);
-        if (dense) return dense;
-        return NULL;                  /* unsupported spec: leave it alone */
-    }
+    /* Normal[SparseArray[...]] is the dense array it represents. */
+    if (arg->type == EXPR_SPARSE) return sp_normal(arg->data.sparse);
 
     /* Normal[ndarray] converts an NDArray back to its equivalent nested List. */
     if (arg->type == EXPR_NDARRAY) {

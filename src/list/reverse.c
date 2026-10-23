@@ -16,8 +16,16 @@ static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     return false;
 }
 
+/* Rational[p, q] and Complex[a, b] are numbers -- atoms -- even though they are
+ * stored as two-argument nodes: Reverse never reaches inside one, so
+ * Reverse[{5/4, 7/2}, 2] is the list unchanged (not {4/5, 2/7}). */
+static bool is_number_atom(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           (head_is(e, SYM_Rational) || head_is(e, SYM_Complex));
+}
+
 static Expr* reverse_rec(Expr* expr, Expr* level_spec, size_t current_level) {
-    if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
+    if (expr->type != EXPR_FUNCTION || is_number_atom(expr)) return expr_copy(expr);
 
     size_t len = expr->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * len);

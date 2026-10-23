@@ -1854,7 +1854,11 @@ Generates an identity matrix.
 **Features**:
 - `Protected`.
 - Generates exact integer outputs (`1` on main diagonal, `0` elsewhere).
-- Will remain unevaluated if arguments are symbolic or negative.
+- A number that is not a positive machine integer (`0`, `-1`, `2.5`, `5/2`,
+  `2^70`, `1 + I`) emits `IdentityMatrix::dims` ("Dimension specification 0
+  should be a positive machine integer or a pair of positive machine
+  integers.") and stays unevaluated. A symbol, or a pair with a non-positive
+  or non-integer entry (`{0, 3}`, `{2, -1}`), stays unevaluated silently.
 
 ```mathematica
 In[1]:= IdentityMatrix[3]
@@ -1862,6 +1866,82 @@ Out[1]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
 
 In[2]:= IdentityMatrix[{2, 3}]
 Out[2]= {{1, 0, 0}, {0, 1, 0}}
+```
+
+## KroneckerProduct
+The Kronecker (direct) product of arrays.
+- `KroneckerProduct[a, b]`: for matrices the block matrix whose `(i, j)` block
+  is `a[[i, j]] b`, of dimensions `(m p) x (n q)`.
+- `KroneckerProduct[a, b, c, ...]`: folds from the left.
+
+**Features**:
+- `Protected`.
+- **Vectors.** Two vectors give their outer product (a column times a row):
+  `KroneckerProduct[{1, 2}, {3, 4}]` is `{{3, 4}, {6, 8}}`. A leading vector
+  beside a matrix is a column, a trailing one a row:
+  `KroneckerProduct[{{1, 2}, {3, 4}}, {a, b}]` is
+  `{{a, b, 2 a, 2 b}, {3 a, 3 b, 4 a, 4 b}}`.
+- **Any rank.** For ranks `ra`, `rb` (`R = ra + rb`) the product regroups the
+  tensor product's `R` indices: with `h = Floor[R/2]`, result axis `j <= h`
+  joins index `j` (major) with index `h + j` (minor), and an odd `R` leaves the
+  last index as a final axis. So equal ranks multiply dimension-wise
+  (`{2,3,4} (x) {5,6,7}` is `{10, 18, 28}`), and `{2,3,4} (x) {5,6}` is
+  `{8, 15, 6}`. A vector beside an array of even rank `>= 4` gives the outer
+  product. With three or more arguments every argument but the last must have
+  rank 1 or 2 (otherwise the call stays unevaluated).
+- **Values.** Each entry is `a_i b_j`. If both operands consist of numbers and
+  either holds a machine number the whole product is machine
+  (`KroneckerProduct[{1/2, 2}, {3., 1}]` is `{{1.5, 0.5}, {6., 2.}}`); exact
+  integers stay exact past 2^63; a symbolic operand gives `Times` products.
+- **Buffers.** Packed / `NDArray` operands are read directly and the product is
+  written into a fresh buffer (int64 for two integer operands, abandoning to the
+  exact path on overflow; float64 or complex otherwise), inheriting the
+  operand's presentation. Compiles: `Compile[{{m, _Real, 2}, {p, _Real, 2}},
+  KroneckerProduct[m, p]]`.
+- A `SparseArray` operand is taken by the native sparse kernel (see
+  [data-structures.md](data-structures.md)).
+- Messages: `KroneckerProduct::argm` / `::argmu` for fewer than two arguments;
+  `KroneckerProduct::rect` ("Nonrectangular array encountered.") for a number
+  or a ragged array. A symbolic operand leaves the call unevaluated silently.
+
+```
+In[1]:= KroneckerProduct[{{1, 2}, {3, 4}}, {{0, 5}, {6, 7}}]
+Out[1]= {{0, 5, 0, 10}, {6, 7, 12, 14}, {0, 15, 0, 20}, {18, 21, 24, 28}}
+
+In[2]:= KroneckerProduct[{1, 2}, {3, 4}, {5, 6}]
+Out[2]= {{15, 18, 20, 24}, {30, 36, 40, 48}}
+```
+
+## UpperTriangularize, LowerTriangularize
+The triangular parts of a matrix.
+- `UpperTriangularize[m]`: `m` with every entry below the leading diagonal
+  replaced by zero.
+- `UpperTriangularize[m, k]`: keeps the entries on and above the `k`-th
+  diagonal (column - row >= `k`; `k > 0` above, `k < 0` below the leading one).
+- `LowerTriangularize[m]`, `LowerTriangularize[m, k]`: the entries on and
+  below the (k-th) diagonal (column - row <= `k`).
+
+**Features**:
+- `Protected`. `m` may be rectangular; `k` any machine integer.
+- **The zero.** A matrix holding a machine number anywhere gets the machine
+  zero `0.` (`UpperTriangularize[{{1.5, I}, {2, 3}}]` is `{{1.5, I}, {0., 3}}`);
+  any other matrix, an arbitrary-precision one included, gets the exact `0`.
+- A packed / `NDArray` matrix is answered as a buffer of the same dtype
+  (row runs copied, the rest zero); compiles (`Compile[{{m, _Real, 2}, {k,
+  _Integer}}, UpperTriangularize[m, k]]`). A `SparseArray` is taken by the
+  native sparse kernel.
+- Messages: `::matrix` ("Argument ... at position 1 is not a non-empty
+  rectangular matrix.") for a vector, a ragged matrix or a non-list; `::intm`
+  for a `k` that is not a machine integer; `::nonopt` for a third non-option
+  argument; `::argt` for no arguments. `{}` and an array of rank 3 or more stay
+  unevaluated silently.
+
+```
+In[1]:= UpperTriangularize[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, 1]
+Out[1]= {{0, 2, 3}, {0, 0, 6}, {0, 0, 0}}
+
+In[2]:= LowerTriangularize[{{1, 2, 3, 4}, {5, 6, 7, 8}}]
+Out[2]= {{1, 0, 0, 0}, {5, 6, 0, 0}}
 ```
 
 ## DiagonalMatrix

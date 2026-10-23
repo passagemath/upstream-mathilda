@@ -181,6 +181,17 @@ static Expr* dims_expr(int rank, const int64_t* dims) {
     return out;
 }
 
+/* The empty array of the given dims (a zero among them) as a nested List:
+ * {} for {0} or {0, 3}, {{}, {}, {}} for {3, 0}. */
+static Expr* empty_nested(int rank, const int64_t* dims) {
+    int64_t n = rank > 1 && dims[0] > 0 ? dims[0] : 0;
+    Expr** it = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    for (int64_t k = 0; k < n; k++) it[k] = empty_nested(rank - 1, dims + 1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), it, (size_t)n);
+    free(it);
+    return out;
+}
+
 /* ---- dims specification -------------------------------------------------- */
 
 typedef struct {
@@ -1003,6 +1014,10 @@ static Expr* from_rules(const Expr* call, const Expr* spec, Expr* const* rules, 
         sa_msg("ilist", "The implicit value %s in %s cannot be a list.", bg_arg, call, NULL);
         return NULL;
     }
+    /* Given dimensions with a zero among them hold no element at all: the
+     * answer is that empty array as an ordinary nested List ({} for {0},
+     * {{}, {}, {}} for {3, 0}), whatever the rules say. */
+    if (sp_total(rank, x.ds.dims) == 0) return empty_nested(rank, x.ds.dims);
     x.bg = bg_arg ? expr_copy((Expr*)bg_arg) : expr_new_integer(0);
     x.bg_explicit = bg_arg != NULL;
     sp_coo_init(&x.coo, rank, x.ds.dims, SPV_EXPR);

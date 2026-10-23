@@ -647,6 +647,8 @@ set(COMMON_SRC
     ../src/linalg/normalize.c
     ../src/linalg/tr.c
     ../src/linalg/construct.c
+    ../src/linalg/kronecker.c
+    ../src/linalg/triangularize.c
     ../src/linalg/diagonal.c
     ../src/linalg/hankelmat.c
     ../src/linalg/toeplitzmat.c
@@ -1802,6 +1804,10 @@ add_test(NAME sparsearray_tests COMMAND sparsearray_tests)
 add_executable(sparse_struct_tests test_sparse_struct.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sparse_struct_tests PRIVATE ../src)
 add_test(NAME sparse_struct_tests COMMAND sparse_struct_tests)
+
+add_executable(dense_struct_fixes_tests test_dense_struct_fixes.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dense_struct_fixes_tests PRIVATE ../src)
+add_test(NAME dense_struct_fixes_tests COMMAND dense_struct_fixes_tests)
 
 add_executable(sparse_reduce_tests test_sparse_reduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sparse_reduce_tests PRIVATE ../src)
@@ -3955,6 +3961,7 @@ if(USE_ECM)
     add_dependencies(sparsearray_tests build_ecm)
     add_dependencies(sparse_reduce_tests build_ecm)
     add_dependencies(sparse_struct_tests build_ecm)
+    add_dependencies(dense_struct_fixes_tests build_ecm)
     add_dependencies(sparse_dot_tests build_ecm)
     add_dependencies(piecewise_tests build_ecm)
     add_dependencies(purefunc_tests build_ecm)

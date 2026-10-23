@@ -752,8 +752,8 @@ typedef struct {
                         * (DuplicateFreeQ); the register is CT_BOOL */
 } NdRedSpec;
 
-typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED } NdFn2Rank;
-typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED, R2_KRON } NdFn2Rank;
+typedef enum { NDF2_PROMOTE, NDF2_SAME, NDF2_EXACT } NdFn2Elem;
 
 typedef struct {
     const char* head;

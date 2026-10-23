@@ -577,11 +577,11 @@ point, so the compiled answer is bit-identical, rounding included:
 
 | shape | heads |
 |---|---|
-| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` `FourierDCT` `FourierDST` |
+| array → array | `Reverse` `Sort` `Ordering` `Accumulate` `Flatten` `Transpose` `Diagonal` `Take` `Drop` `Differences` `Ratios` `Most` `Rest` `Clip` `RotateLeft` `RotateRight` `MovingAverage` `MovingMedian` `TakeLargest` `TakeSmallest` `Inverse` `Normalize` `MatrixPower` `ReverseSort` `ConjugateTranspose` `PseudoInverse` `FourierDCT` `FourierDST` `UpperTriangularize` `LowerTriangularize` |
 | array → complex array | `Fourier` `InverseFourier` (real/int in, complex out) |
 | vector → matrix | `DiagonalMatrix` `HankelMatrix` `ToeplitzMatrix` `VandermondeMatrix` (rank 1 → rank 2) |
 | array → scalar | `Total` `Length` `Mean` `Median` `Variance` `StandardDeviation` `RootMeanSquare` `Max` `Min` `Tr` `Det` `MatrixRank` `Norm` |
-| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` `HankelMatrix` (`[c, r]`) `ToeplitzMatrix` (`[c, r]`) |
+| two arrays → array | `Dot` (matrix) `LinearSolve` `Cross` `LeastSquares` `ListConvolve` `ListCorrelate` `Join` `HankelMatrix` (`[c, r]`) `ToeplitzMatrix` (`[c, r]`) `KroneckerProduct` |
 | two arrays → scalar | `Dot` (vector·vector inner product) |
 | elementwise | every registered kernel, including the narrowing ones (`Floor`, `Ceiling`, `Round`, `Sign`, `IntegerPart`, `UnitStep`, `Im`) and the exact-integer ones (`Mod`, `Quotient`, `GCD`, `LCM`, `DivisorSigma`, `MoebiusMu`, `EulerPhi`, `IntegerLength`) |
 

@@ -224,6 +224,13 @@ static const NdFnSpec ND_FNS[] = {
      * it declines to the interpreter's exact path (nd_covariance delists). */
     { "Covariance",         nd_covariance,             0, 2, false, NDF_REAL, false },
     { "Correlation",        nd_correlation,            0, 2, false, NDF_REAL, false },
+    /* Upper/LowerTriangularize[m] and [m, k]: a rank-2 buffer to a rank-2
+     * buffer of the same dtype (the kept run of each row copied, the rest
+     * zero bits: 0, 0. or 0. + 0. I), so any element type keeps its type. */
+    { "UpperTriangularize", builtin_uppertriangularize, 0, 2, false, 0, false },
+    { "UpperTriangularize", builtin_uppertriangularize, 1, 2, false, 0, false },
+    { "LowerTriangularize", builtin_lowertriangularize, 0, 2, false, 0, false },
+    { "LowerTriangularize", builtin_lowertriangularize, 1, 2, false, 0, false },
 };
 
 /* ---- delegated array -> scalar reductions ---------------------------------
@@ -406,6 +413,9 @@ CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
  *   R2_SOLVE  result rank = rb, requires ra == 2  (LinearSolve, LeastSquares)
  *   R2_VEC    requires ra == rb == 1, result rank 1  (Cross, ListConvolve/Correlate)
  *   R2_JOIN   requires ra == rb, result rank = ra
+ *   R2_KRON   KroneckerProduct: rank 2 for two vectors or a matrix and a
+ *             vector, ra + rb for a vector beside an even rank >= 4, else
+ *             ceil((ra + rb) / 2) (src/linalg/kronecker.c)
  *   R2_PRED   requires ra == rb == 1, result a Boolean SCALAR (IntersectingQ),
  *             routed to V_NDFN2 like Dot's rank-0 case
  *   R2_MATRIX requires ra == rb == 1, result rank 2  (the two-vector matrix
@@ -450,6 +460,11 @@ static const NdFn2Spec ND_FN2S[] = {
      * on the machine words and delists every other pair, so any int/real mix
      * is answered (SameQ: an int never equals a real). */
     { "IntersectingQ",  builtin_intersectingq,  NDF_INT | NDF_REAL, R2_PRED,   NDF2_PROMOTE },
+    /* KroneckerProduct[a, b]: the interpreter fills a fresh buffer (an int64
+     * pair stays int64 -- an overflow hands back the exact List, which the VM
+     * reads as a decline -- a real or complex operand makes it real or
+     * complex), so NDF2_EXACT; R2_KRON is its shape rule. */
+    { "KroneckerProduct", builtin_kroneckerproduct, NDF_INT | NDF_REAL | NDF_CPLX, R2_KRON, NDF2_EXACT },
 };
 
 /* Name accessor for the disassembler; see compile_internal.h. */
@@ -474,7 +489,10 @@ CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb) {
     int ra = CT_RANK(ta), rb = CT_RANK(tb);
 
     CompileType elem;
-    if (s->elem == NDF2_SAME) {
+    if (s->elem == NDF2_EXACT) {                     /* int pair stays int */
+        elem = (ea == (unsigned)CT_COMPLEX || eb == (unsigned)CT_COMPLEX) ? CT_COMPLEX
+             : (ea == (unsigned)CT_INT && eb == (unsigned)CT_INT) ? CT_INT : CT_REAL;
+    } else if (s->elem == NDF2_SAME) {
         if (ea != eb) return CT_ERR;                 /* Join needs equal operand dtypes */
         elem = CT_ELEM(ta);
     } else {                                          /* PROMOTE */
@@ -489,6 +507,12 @@ CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb) {
         case R2_JOIN:  if (ra != rb) return CT_ERR; rr = ra; break;
         case R2_MATRIX: if (ra != 1 || rb != 1) return CT_ERR; rr = 2; break;  /* Hankel/Toeplitz[c, r] */
         case R2_PRED:  if (ra != 1 || rb != 1) return CT_ERR; return CT_BOOL;    /* IntersectingQ */
+        case R2_KRON:
+            if (ra < 1 || rb < 1) return CT_ERR;
+            if ((ra == 1 && rb == 1) || (ra == 2 && rb == 1)) rr = 2;
+            else if ((ra == 1 && rb >= 4 && rb % 2 == 0) || (rb == 1 && ra >= 4 && ra % 2 == 0)) rr = ra + rb;
+            else rr = (ra + rb + 1) / 2;
+            break;
         default: return CT_ERR;
     }
     if (rr < 0 || rr > CT_MAX_RANK) return CT_ERR;

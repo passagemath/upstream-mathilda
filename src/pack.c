@@ -636,6 +636,11 @@ static void pack_mark_aware_heads(void) {
          * rank-1 pad by memcpy + nd_fill_run) — src/ndstruct.c. Both decline any
          * shape or fill the buffer cannot hold and materialise there. */
         "ArrayReshape", "ArrayPad",
+        /* KroneckerProduct and Upper/LowerTriangularize (src/linalg/kronecker.c,
+         * triangularize.c) read the buffer directly: the product fills a fresh
+         * buffer through one stride per tensor index, the triangular parts copy
+         * the kept run of each row and zero the rest. */
+        "KroneckerProduct", "UpperTriangularize", "LowerTriangularize",
         /* ListConvolve / ListCorrelate (src/convolutions.c). Both engines --
          * the direct O(L*m) loop and the FFT -- already worked on flat double
          * arrays; what they lacked was a way to GET one without boxing every
@@ -1164,6 +1169,10 @@ static void pack_mark_aware_heads(void) {
         /* ArrayReshape/ArrayPad move whole elements by memcpy and refuse any fill
          * not exact at int64 (nd_fill_value), so no element's head can change. */
         "ArrayReshape", "ArrayPad",
+        /* The triangular parts MOVE whole runs by memcpy (the zero is the int64
+         * 0); KroneckerProduct multiplies in int64 through ci_mul_i64 and
+         * abandons to the exact path on the first overflow. */
+        "KroneckerProduct", "UpperTriangularize", "LowerTriangularize",
         /* The iteration family reads no element at all -- it copies the value and
          * applies a function, so exactness is entirely the function's business. */
         "Nest", "NestList", "NestWhile", "NestWhileList",

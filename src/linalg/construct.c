@@ -10,6 +10,8 @@
 #include "common.h"
 #include "pack.h"
 #include "sparse/sparse.h"
+#include "message.h"
+#include "print.h"
 #include <stdlib.h>
 
 Expr* builtin_identitymatrix(Expr* res) {
@@ -33,6 +35,22 @@ Expr* builtin_identitymatrix(Expr* res) {
 
     int64_t m = -1, n = -1;
 
+    /* A number that is not a positive machine integer (0, -1, 2.5, 5/2, a
+     * BigInt, 1 + I) is IdentityMatrix::dims; a symbol or a malformed pair
+     * stays unevaluated silently. */
+    bool number = arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT || arg->type == EXPR_REAL ||
+                  head_is(arg, SYM_Rational) || head_is(arg, SYM_Complex);
+#ifdef USE_MPFR
+    number = number || arg->type == EXPR_MPFR;
+#endif
+    if (number && !(arg->type == EXPR_INTEGER && arg->data.integer > 0)) {
+        char* s = expr_to_string_outputform(arg);
+        mth_message("IdentityMatrix", "dims", "Dimension specification %s should be a positive "
+                    "machine integer or a pair of positive machine integers.", s ? s : "");
+        free(s);
+        return NULL;
+    }
+
     if (arg->type == EXPR_INTEGER) {
         m = arg->data.integer;
         n = m;
@@ -47,7 +65,7 @@ Expr* builtin_identitymatrix(Expr* res) {
         }
     }
 
-    if (m < 0 || n < 0) return expr_copy(res);
+    if (m <= 0 || n <= 0) return NULL;
 
     /* THE BUFFER PATH. Every entry is the exact Integer 0 or 1, so the matrix
      * is uniformly int64 and no element's head can change by writing it into a

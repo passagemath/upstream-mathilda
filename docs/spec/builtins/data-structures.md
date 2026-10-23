@@ -1516,6 +1516,11 @@ it. Its values are never re-evaluated: after `s = SparseArray[{1 -> x}]; x = 7`,
   (`SparseArray::ilist`). Malformed specifications emit `SparseArray::list`,
   `::rect`, `::posd`, `::pos`, `::posr`, `::rule1`, `::adims`, `::exdims` or
   `::drnk` and stay unevaluated; all route through `Quiet`/`Check`.
+- Given dimensions with a zero among them hold no element: the rules form
+  answers that empty array as an ordinary List, whatever the rules say --
+  `SparseArray[{}, {0}]` is `{}`, `SparseArray[{}, {3, 0}]` is
+  `{{}, {}, {}}`. (The standard form `SparseArray[Automatic, {0}, ...]` is kept
+  as a SparseArray.)
 
 **Structure.** `Normal[s]` is the dense array (a packed array when values and
 background share one machine type); `Normal` converts SparseArrays nested

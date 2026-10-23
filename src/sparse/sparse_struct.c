@@ -51,6 +51,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "checked_int.h"
+#include "list/flatten.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -748,6 +749,12 @@ static Expr* nat_flatten(const Expr* call) {
         if (is_sym(a, SYM_Infinity) || (head_is(a, SYM_DirectedInfinity) && NARGS(a) == 1 &&
                                         ARG(a, 0)->type == EXPR_INTEGER && ARG(a, 0)->data.integer == 1))
             n = SP_MAX_RANK;
+        else if (a->type == EXPR_INTEGER && a->data.integer < 0) {
+            /* Flatten::flev, reported against the call as written; the call
+             * rests (the gate must not re-ask on the dense form). */
+            flatten_flev_message(call);
+            return expr_copy((Expr*)call);
+        }
         else if (!get_i64(a, &n) || n < 0) return NULL;
     }
     if (n == 0 || sa->rank == 1) return expr_copy(ARG(call, 0));

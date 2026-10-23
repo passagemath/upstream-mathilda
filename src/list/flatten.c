@@ -2,6 +2,7 @@
 #include "flatten.h"
 #include "ndarray.h"
 #include "ndstruct.h"
+#include "message.h"
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
     /* A visible NDArray nested inside an ordinary List. `head_is` is false for
@@ -42,21 +43,55 @@ static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, 
     }
 }
 
+bool flatten_level_is_infinity(const Expr* lv) {
+    if (lv->type == EXPR_SYMBOL) return lv->data.symbol.name == SYM_Infinity;
+    return head_is(lv, SYM_DirectedInfinity) && lv->data.function.arg_count == 1 &&
+           lv->data.function.args[0]->type == EXPR_INTEGER &&
+           lv->data.function.args[0]->data.integer == 1;
+}
+
+void flatten_flev_message(const Expr* call) {
+    char* ls = expr_to_string_outputform(call->data.function.args[1]);
+    char* cs = expr_to_string_outputform((Expr*)call);
+    mth_message("Flatten", "flev",
+                "The level argument %s in position 2 of %s should be a non-negative integer or "
+                "Infinity giving the levels to flatten through or a list of lists of levels to "
+                "flatten together.", ls ? ls : "", cs ? cs : "");
+    free(ls);
+    free(cs);
+}
+
 Expr* builtin_flatten(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
 
     Expr* list = res->data.function.args[0];
 
+    /* The level: a non-negative integer, or Infinity (every level). A negative
+     * integer is Flatten::flev and the call stays as it is -- checked before
+     * any fast path, so a buffer argument gets the same answer. */
+    int64_t n = -1; // -1 means infinity
+    if (res->data.function.arg_count >= 2) {
+        Expr* lv = res->data.function.args[1];
+        if (flatten_level_is_infinity(lv)) {
+            n = -1;
+        } else {
+            if (lv->type != EXPR_INTEGER) return NULL;
+            n = lv->data.integer;
+            if (n < 0) {
+                /* A buffer is reported on its List form, once: declining with
+                 * the buffer in place would let the evaluator's post-gate
+                 * materialise it and ask (and report) a second time. */
+                if (is_ndarray(list)) return ndarray_delist_and_reeval(res);
+                flatten_flev_message(res);
+                return NULL;
+            }
+        }
+    }
+
     /* Flatten[ndarray]: reshape the flat buffer to rank 1 (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_flatten(res);
 
     if (list->type != EXPR_FUNCTION) return expr_copy(list);
-
-    int64_t n = -1; // -1 means infinity
-    if (res->data.function.arg_count >= 2) {
-        if (res->data.function.args[1]->type != EXPR_INTEGER) return NULL;
-        n = res->data.function.args[1]->data.integer;
-    }
 
     const char* h = SYM_List;
     if (res->data.function.arg_count == 3) {

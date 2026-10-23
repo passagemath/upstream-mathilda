@@ -17,6 +17,9 @@ Expr* builtin_tr(Expr* res);
 Expr* builtin_diagonal(Expr* res);
 Expr* builtin_identitymatrix(Expr* res);
 Expr* builtin_diagonalmatrix(Expr* res);
+Expr* builtin_kroneckerproduct(Expr* res);   /* kronecker.c */
+Expr* builtin_uppertriangularize(Expr* res); /* triangularize.c */
+Expr* builtin_lowertriangularize(Expr* res); /* triangularize.c */
 Expr* builtin_hilbertmatrix(Expr* res);
 Expr* builtin_hankelmatrix(Expr* res);
 Expr* builtin_toeplitzmatrix(Expr* res);

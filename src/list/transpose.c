@@ -2,6 +2,7 @@
 #include "transpose.h"
 #include "ndarray.h"
 #include "ndstruct.h"
+#include "message.h"
 
 static int get_array_dimensions(Expr* e, int64_t* dims, const char* head_name) {
     if (!head_is(e, intern_symbol(head_name))) {
@@ -89,9 +90,109 @@ static Expr* build_transposed(const char* head, int64_t* out_dims, size_t out_de
     return res;
 }
 
+static void tr_msg(const char* tag, const char* fmt, const Expr* a, const Expr* b) {
+    char* as = a ? expr_to_string_outputform((Expr*)a) : NULL;
+    char* bs = b ? expr_to_string_outputform((Expr*)b) : NULL;
+    mth_message("Transpose", tag, fmt, as ? as : "", bs ? bs : "");
+    free(as);
+    free(bs);
+}
+
+/* Is no element of `list` a List (a vector, whose transpose is itself)? */
+static bool is_flat_vector(const Expr* list) {
+    for (size_t i = 0; i < list->data.function.arg_count; i++) {
+        const Expr* x = list->data.function.args[i];
+        if (x->type == EXPR_NDARRAY || head_is(x, SYM_List)) return false;
+    }
+    return true;
+}
+
+/* Read and check the level specification of Transpose[list, spec] against an
+ * array of depth `in_depth` (dims `in_dims`): perm[k] (1-based) is the result
+ * level of input level k. Returns the spec's length, 0 when the call must stay
+ * unevaluated (after the message that says why), or -1 for a spec longer than
+ * the array that is the identity (the array comes back unchanged). */
+static int transpose_perm_spec(const Expr* spec, int in_depth, const int64_t* in_dims,
+                               const Expr* call, int64_t* perm) {
+    if (!head_is(spec, SYM_List)) {
+        if (head_is(spec, SYM_TwoWayRule)) return 0;
+        tr_msg("permspec", "Invalid permutation specification found at position 2 in %s.", call, NULL);
+        return 0;
+    }
+    size_t L = spec->data.function.arg_count;
+    if (L == 0 || L > 64) return 0;
+    int64_t sp[64];
+    for (size_t i = 0; i < L; i++) {
+        const Expr* x = spec->data.function.args[i];
+        if (x->type != EXPR_INTEGER || x->data.integer < 1) {
+            tr_msg("perm1", "Entry %s in permutation %s is not a positive machine integer.", x, spec);
+            return 0;
+        }
+        sp[i] = x->data.integer;
+    }
+    for (size_t i = 0; i < L; i++)
+        if (sp[i] > (int64_t)L) {
+            char* xs = expr_to_string_outputform(spec->data.function.args[i]);
+            char* ss = expr_to_string_outputform((Expr*)spec);
+            mth_message("Transpose", "perm2",
+                        "Entry %s in %s is out of bounds for a permutation of length %d.",
+                        xs ? xs : "", ss ? ss : "", (int)L);
+            free(xs);
+            free(ss);
+            return 0;
+        }
+    int64_t mx = 0;
+    for (size_t i = 0; i < L; i++) if (sp[i] > mx) mx = sp[i];
+    for (int64_t lvl = 1; lvl <= mx; lvl++) {
+        bool hit = false;
+        for (size_t i = 0; i < L && !hit; i++) hit = sp[i] == lvl;
+        if (!hit) {
+            char* ss = expr_to_string_outputform((Expr*)spec);
+            mth_message("Transpose", "newdims",
+                        "Level rearrangement %s does not specify destination for level %d.",
+                        ss ? ss : "", (int)lvl);
+            free(ss);
+            return 0;
+        }
+    }
+    if ((int)L > in_depth) {
+        bool ident = true;
+        for (size_t i = 0; i < L; i++) if (sp[i] != (int64_t)i + 1) ident = false;
+        if (ident) return -1;
+        Expr** d = malloc(sizeof(Expr*) * (size_t)(in_depth ? in_depth : 1));
+        for (int i = 0; i < in_depth; i++) d[i] = expr_new_integer(in_dims[i]);
+        Expr* dl = expr_new_function(expr_new_symbol(SYM_List), d, (size_t)in_depth);
+        free(d);
+        tr_msg("tperm", "Permutation %s is longer than the dimensions %s of the expression.", spec, dl);
+        expr_free(dl);
+        return 0;
+    }
+    /* levels past the spec stay where they are */
+    for (int i = 0; i < in_depth; i++) perm[i] = i < (int)L ? sp[i] : i + 1;
+    /* levels sent to one result level form a diagonal: equal lengths only */
+    for (int i = 0; i < in_depth; i++)
+        for (int j = i + 1; j < in_depth; j++)
+            if (perm[i] == perm[j] && in_dims[i] != in_dims[j]) {
+                tr_msg("diagnl", "Level rearrangement %s would require collapsing dimensions of "
+                       "unequal lengths.", spec, NULL);
+                return 0;
+            }
+    return (int)L;
+}
+
 Expr* builtin_transpose(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     Expr* list = res->data.function.args[0];
+    size_t argc = res->data.function.arg_count;
+
+    /* The transpose of a vector is the vector itself. */
+    if (is_ndarray(list) && list->data.ndarray.rank == 1) {
+        const Expr* sp = argc == 2 ? res->data.function.args[1] : NULL;
+        if (!sp || (head_is(sp, SYM_List) && sp->data.function.arg_count == 1 &&
+                    sp->data.function.args[0]->type == EXPR_INTEGER &&
+                    sp->data.function.args[0]->data.integer == 1))
+            return expr_copy(list);
+    }
 
     /* Transpose[ndarray] (rank 2) swaps axes on the buffer (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_transpose(res);
@@ -101,41 +202,42 @@ Expr* builtin_transpose(Expr* res) {
 
     int64_t in_dims[64];
     int in_depth = get_array_dimensions(list, in_dims, head);
-    if (in_depth < 2) {
-        /* Ragged deeper entries: the 1-arg form still transposes the top two
-         * levels when they are rectangular, treating level-2 entries as opaque
-         * (A8). The n-arg permutation form genuinely needs full rectangularity. */
+    if (in_depth < 1) return NULL;
+    bool vector = in_depth == 1 && head == SYM_List && is_flat_vector(list);
+    if (in_depth < 2 && argc == 1) {
+        /* A vector is its own transpose. Ragged deeper entries: the 1-arg form
+         * still transposes the top two levels when they are rectangular,
+         * treating level-2 entries as opaque (A8). */
+        if (vector) return expr_copy(list);
         int64_t nr, nc;
-        if (res->data.function.arg_count == 1 && get_top2_dims(list, head, &nr, &nc))
-            return transpose_top2(list, head, nr, nc);
+        if (get_top2_dims(list, head, &nr, &nc)) return transpose_top2(list, head, nr, nc);
+        if (head == SYM_List)
+            tr_msg("nmtx", "The first two levels of %s cannot be transposed.", list, NULL);
         return NULL;
     }
+    /* The n-arg permutation form genuinely needs full rectangularity. */
+    if (in_depth < 2 && !vector) return NULL;
 
     int64_t* perm = malloc(sizeof(int64_t) * in_depth);
-    if (res->data.function.arg_count == 1) {
+    if (argc == 1) {
         perm[0] = 2; perm[1] = 1;
         for (int i = 2; i < in_depth; i++) perm[i] = i + 1;
     } else {
-        Expr* spec = res->data.function.args[1];
-        if (spec->type != EXPR_FUNCTION || spec->data.function.head->data.symbol.name != SYM_List || 
-            spec->data.function.arg_count != (size_t)in_depth) {
-            free(perm); return NULL;
-        }
-        for (int i = 0; i < in_depth; i++) {
-            if (spec->data.function.args[i]->type != EXPR_INTEGER) { free(perm); return NULL; }
-            perm[i] = spec->data.function.args[i]->data.integer;
+        int L = transpose_perm_spec(res->data.function.args[1], in_depth, in_dims, res, perm);
+        if (L <= 0) {
+            free(perm);
+            return L < 0 ? expr_copy(list) : NULL;
         }
     }
 
     int out_depth = 0;
     for (int i = 0; i < in_depth; i++) if (perm[i] > out_depth) out_depth = (int)perm[i];
-    
+
     int64_t* out_dims = malloc(sizeof(int64_t) * out_depth);
     for (int i = 0; i < out_depth; i++) out_dims[i] = -1;
 
     for (int i = 0; i < in_depth; i++) {
         int target_idx = (int)perm[i] - 1;
-        if (target_idx < 0) { free(perm); free(out_dims); return NULL; }
         if (out_dims[target_idx] == -1 || in_dims[i] < out_dims[target_idx]) {
             out_dims[target_idx] = in_dims[i];
         }

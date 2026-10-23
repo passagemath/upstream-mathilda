@@ -34,6 +34,28 @@ void linalg_init(void) {
     symtab_get_def("IdentityMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DiagonalMatrix", builtin_diagonalmatrix);
     symtab_get_def("DiagonalMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("KroneckerProduct", builtin_kroneckerproduct);
+    symtab_get_def("KroneckerProduct")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("KroneckerProduct",
+        "KroneckerProduct[a, b, ...] gives the Kronecker product of the arrays a, b, ...\n"
+        "For matrices it is the block matrix of a[[i, j]] b; for two vectors the outer\n"
+        "product (a column times a row), and a vector after a matrix is a row. Arrays of\n"
+        "any rank are accepted; with three or more arguments all but the last must have\n"
+        "rank 1 or 2. Machine operands give a packed result; integer products stay exact.");
+    symtab_add_builtin("UpperTriangularize", builtin_uppertriangularize);
+    symtab_get_def("UpperTriangularize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("UpperTriangularize",
+        "UpperTriangularize[m] gives m with every entry below the leading diagonal replaced by 0.\n"
+        "UpperTriangularize[m, k] keeps the entries on and above the k-th diagonal (k > 0 above,\n"
+        "k < 0 below the leading one). m may be rectangular; a matrix holding machine numbers\n"
+        "gets the zero 0.");
+    symtab_add_builtin("LowerTriangularize", builtin_lowertriangularize);
+    symtab_get_def("LowerTriangularize")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("LowerTriangularize",
+        "LowerTriangularize[m] gives m with every entry above the leading diagonal replaced by 0.\n"
+        "LowerTriangularize[m, k] keeps the entries on and below the k-th diagonal (k > 0 above,\n"
+        "k < 0 below the leading one). m may be rectangular; a matrix holding machine numbers\n"
+        "gets the zero 0.");
     symtab_add_builtin("HilbertMatrix", builtin_hilbertmatrix);
     symtab_get_def("HilbertMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("HankelMatrix", builtin_hankelmatrix);

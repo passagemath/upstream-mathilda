@@ -147,6 +147,9 @@ Reverses the order of elements.
 - `Reverse[expr]`: Reverses top-level elements.
 - `Reverse[expr, n]`: Reverses elements at level `n`.
 - `Reverse[expr, {n1, n2, ...}]`: Reverses at levels `n1`, `n2`, etc.
+- Numbers are atoms: a level past the array never reaches inside a `Rational`
+  or a `Complex`, so `Reverse[{5/4, 7/2}, 2]` is `{5/4, 7/2}` (non-atomic
+  expressions of any head are reversed: `Reverse[{f[1, 2]}, 2]` is `{f[2, 1]}`).
 
 ## RotateLeft, RotateRight
 Cycles elements.
@@ -182,14 +185,23 @@ Out[2]= {{a, b, 0, 0, 0}, {c, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}
 Transposes levels in a rectangular array.
 - `Transpose[list]`: Transposes the first two levels.
 - `Transpose[list, {n1, n2, ...}]`: Level `k` becomes level `nk` in result.
-  The spec must be a permutation of `{1, ..., r}` where `r` is the depth of
-  `list`. A repeated index (e.g. `{1, 1}`) extracts the corresponding
-  diagonal.
+  A repeated index (e.g. `{1, 1}`) extracts the corresponding diagonal; a spec
+  shorter than the depth leaves the remaining levels in place.
 
 **Features**:
 - `Protected`.
 - Works only on rectangular arrays.
-- `Transpose[m, {1, 1}]` extracts the diagonal of a square matrix.
+- A vector is its own transpose: `Transpose[{1, 2, 3}]` and
+  `Transpose[{1, 2, 3}, {1}]` are `{1, 2, 3}` (a packed vector stays packed).
+- `Transpose[m, {1, 1}]` extracts the diagonal of a square matrix; levels of
+  unequal lengths emit `Transpose::diagnl` ("Level rearrangement {1, 1} would
+  require collapsing dimensions of unequal lengths.") and stay unevaluated --
+  for a `SparseArray` too.
+- Spec messages (the call stays unevaluated): `::perm1` (an entry that is not
+  a positive machine integer), `::perm2` (an entry beyond the spec's length),
+  `::newdims` (a result level with no source, `{2, 2}`), `::tperm` (a
+  non-identity spec longer than the depth), `::permspec` (a non-list spec),
+  `::nmtx` (`Transpose[{a, {b}}]`: the first two levels are not rectangular).
 
 ```mathematica
 In[1]:= Transpose[{{a, b}, {c, d}}]
@@ -255,8 +267,10 @@ Extract or remove sequences of elements.
 ## Flatten
 Flattens out nested lists.
 - `Flatten[list]`: Flattens all levels.
-- `Flatten[list, n]`: Flattens up to level `n`.
+- `Flatten[list, n]`: Flattens up to level `n`; `n` may be `Infinity`.
 - `Flatten[list, n, h]`: Flattens subexpressions with head `h`.
+- A negative level emits `Flatten::flev` and stays unevaluated, for a List, a
+  packed list and a `SparseArray` alike.
 
 ## FlattenAt
 Splices the subexpression at one or more positions into its parent, removing

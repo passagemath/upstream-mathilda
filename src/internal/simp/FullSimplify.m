@@ -32,7 +32,7 @@
 (* by the file loader (newlines are not statement separators).               *)
 (* ====================================================================== *)
 
-BeginPackage["FullSimplify`"];
+BeginPackage["FullSimplify`", {"Mathilda`"}];   (* LoadModule, SimplifyCount *)
 
 FullSimplify::usage =
     "FullSimplify[expr] tries a wide range of transformations on expr involving elementary and special functions and returns the simplest form it finds. FullSimplify[expr, assum] simplifies using the assumptions assum. It yields at least as simple a form as Simplify. Options: ComplexityFunction, TransformationFunctions, and TimeConstraint -> {tLoc, tTot}.";

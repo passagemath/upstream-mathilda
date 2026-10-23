@@ -1358,6 +1358,30 @@ Gives the current context, or the context of a symbol.
 - `Context["name"]` for a name that does not exist emits `Context::notfound`
   and stays unevaluated.
 
+**The `Mathilda`` context.** About 65 kernel builtins and variables have no
+counterpart among the reference language's `System`` names. Examples are
+`DataType`, `NDArray`, `ToNDArray`, `CompileDiagnostics`, `PDEClassify`, the
+`Hypergraph*` family and `$SimplifyDebug`. They report `"Mathilda`"`.
+- `Mathilda`` is on the default `$ContextPath`
+  (`{"Global`", "Mathilda`", "System`"}`, after any loaded packages) and is
+  listed in `$Packages`, so the names work bare at the top level.
+- `Mathilda`Name` reaches the builtin from anywhere.
+- `Needs["Mathilda`"]` is a no-op.
+
+**Resolution inside a package.** `BeginPackage["P`"]` sets `$ContextPath` to
+`{"P`", "System`"}`. A bare name then resolves to an existing symbol only if
+its home context is visible, meaning it is current or on `$ContextPath`.
+`System`` is always visible.
+- Neither a `Global`` symbol (even one that has a value, or one the kernel's
+  own `.m` code created) nor a Mathilda-only builtin is visible inside a
+  package. A package's `x` or `DataType` is therefore a new ``P`x`` or
+  ``P`DataType``, and defining it raises no `Set::wrsym`.
+- After `EndPackage[]` the package symbol comes first on the path.
+- A package that wants the kernel builtins asks for them:
+  `BeginPackage["P`", {"Mathilda`"}]`.
+- `Begin["ctx`"]` without `BeginPackage` leaves the path unchanged, so
+  `Global`` and `Mathilda`` stay visible.
+
 ```
 In[1]:= BeginPackage["Test`"]; T1 = 137; $T2 = 42;
 In[2]:= {Context[T1], Context[$T2]}

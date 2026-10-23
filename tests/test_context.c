@@ -22,10 +22,11 @@ static void test_initial_state(void) {
      * (FullSimplify, RegisterTransforms) resolve under their short names. The
      * current context returns to Global` and System` stays last. */
     ASSERT_STR_EQ(context_current(), "Global`");
-    ASSERT(context_path_count() == 3);
+    ASSERT(context_path_count() == 4);
     ASSERT_STR_EQ(context_path_at(0), "FullSimplify`");
     ASSERT_STR_EQ(context_path_at(1), "Global`");
-    ASSERT_STR_EQ(context_path_at(2), "System`");
+    ASSERT_STR_EQ(context_path_at(2), "Mathilda`");   /* Mathilda-only builtins */
+    ASSERT_STR_EQ(context_path_at(3), "System`");
 }
 
 static void test_resolve_bare_builtin(void) {
@@ -126,7 +127,7 @@ static void test_dollar_context_and_path(void) {
     /* The FullSimplify package, loaded by core_init, leaves its context on
      * $ContextPath (see test_initial_state). */
     assert_eval_eq("$ContextPath",
-                   "{\"FullSimplify`\", \"Global`\", \"System`\"}", 0);
+                   "{\"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
 }
 
 static void test_begin_changes_context(void) {
@@ -280,6 +281,58 @@ static void test_context_assignment(void) {
                    "{\"CpB`\", \"Global`\"}", 0);
 }
 
+/* ---- L7: the Mathilda` context, and package resolution ----
+ * Mathilda-only kernel names live in Mathilda` (on the default $ContextPath);
+ * genuine System names stay System`.  Inside BeginPackage -- whose path is
+ * {ctx`, System`} -- neither Mathilda-only builtins nor Global` symbols are
+ * visible, so a package gets its own symbols of those names. */
+static void test_mathilda_context(void) {
+    assert_eval_eq("{Context[DataType], Context[NDArray], Context[CompileDiagnostics], Context[$SimplifyDebug]}",
+                   "{\"Mathilda`\", \"Mathilda`\", \"Mathilda`\", \"Mathilda`\"}", 0);
+    assert_eval_eq("{Context[Plus], Context[List], Context[Sin], Context[$Version]}",
+                   "{\"System`\", \"System`\", \"System`\", \"System`\"}", 0);
+    assert_eval_eq("MemberQ[$ContextPath, \"Mathilda`\"] && MemberQ[$Packages, \"Mathilda`\"]", "True", 0);
+    /* Qualified spellings reach the same builtin. */
+    assert_eval_eq("{Mathilda`DataType === DataType, System`Plus === Plus}", "{True, True}", 0);
+    assert_eval_eq("Head[Mathilda`ToNDArray[{1., 2.}]] === Head[ToNDArray[{1., 2.}]]", "True", 0);
+    /* Needs["Mathilda`"] is satisfied already: no load, no message. */
+    assert_eval_eq("Check[Needs[\"Mathilda`\"], \"msg\"]", "Null", 0);
+}
+
+static void test_package_does_not_see_global_or_mathilda(void) {
+    assert_eval_eq("l7foo = 1;", "Null", 0);
+    assert_eval_eq("BeginPackage[\"L7P`\"];", "Null", 0);
+    /* A valued Global` symbol, an unvalued Global` symbol the kernel itself made
+     * (x), and a Mathilda-only builtin: all private to the package now. */
+    assert_eval_eq("l7ctx = {Context[l7foo], Context[x], Context[DataType], Context[Plus]};", "Null", 0);
+    /* Defining the package's own DataType: no Set::wrsym, no Protected clash. */
+    assert_eval_eq("Check[DataType[q_] := {\"pkg\", q}; DataType::usage = \"pkg\"; \"ok\", \"msg\"]",
+                   "\"ok\"", 0);
+    assert_eval_eq("EndPackage[];", "Null", 0);
+    assert_eval_eq("L7P`l7ctx", "{\"L7P`\", \"L7P`\", \"L7P`\", \"System`\"}", 0);
+    /* After EndPackage the package's symbol comes first; the kernel's is still
+     * reachable qualified, and the Global` one is untouched. */
+    assert_eval_eq("{DataType[1], Context[DataType], l7foo}", "{{\"pkg\", 1}, \"L7P`\", 1}", 0);
+    assert_eval_eq("Head[Mathilda`NDArray[{1, 2}]]", "NDArray", 0);
+}
+
+static void test_package_can_request_mathilda(void) {
+    /* A package that wants the kernel's own builtins asks for Mathilda`. */
+    assert_eval_eq("BeginPackage[\"L7Q`\", {\"Mathilda`\"}];", "Null", 0);
+    assert_eval_eq("l7q = {Context[ToNDArray], Context[CompileDiagnostics]};", "Null", 0);
+    assert_eval_eq("EndPackage[];", "Null", 0);
+    assert_eval_eq("L7Q`l7q", "{\"Mathilda`\", \"Mathilda`\"}", 0);
+    /* Begin without BeginPackage keeps the path: Global` and Mathilda` stay visible. */
+    assert_eval_eq("l7g = 5; Begin[\"L7R`\"];", "Null", 0);
+    assert_eval_eq("l7r = {Context[l7g], Context[DataType]};", "Null", 0);
+    assert_eval_eq("End[]", "\"L7R`\"", 0);
+    assert_eval_eq("L7R`l7r", "{\"Global`\", \"L7P`\"}", 0);
+    /* The kernel's own FullSimplify package declared its Mathilda` dependency:
+     * no private copies of the kernel builtins it uses. */
+    assert_eval_eq("Select[Names[\"FullSimplify`Private`*\"], "
+                   "MemberQ[{\"SimplifyCount\", \"LoadModule\"}, Last[StringSplit[#, \"`\"]]] &]", "{}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -309,6 +362,9 @@ int main(void) {
     TEST(test_package_dollar_symbol);
     TEST(test_context_of_system_symbols);
     TEST(test_inert_frontend_names_are_system);
+    TEST(test_mathilda_context);
+    TEST(test_package_does_not_see_global_or_mathilda);
+    TEST(test_package_can_request_mathilda);
     TEST(test_contextpath_assignment);
     TEST(test_context_assignment);
 

@@ -117,6 +117,15 @@ int main(void) {
 Helpers in `tests/test_utils.h`: `TEST`, `ASSERT`, `ASSERT_STR_EQ`,
 `ASSERT_MSG`, `assert_eval_eq(input, expected, is_fullform)`.
 
+### Step 5b — Mathilda-only names
+
+A builtin with no counterpart among the reference language's System names
+(Mathilda's own extensions, such as `NDArray` or `CompileDiagnostics`) belongs in
+the `Mathilda`` context. Add it to the `mathilda_only` table in
+`sym_mark_mathilda_context` (`src/sym_names.c`). Otherwise it is treated as a
+`System`` name, and a package that defines a symbol of the same name writes to
+the protected builtin instead of getting its own symbol.
+
 ### Step 6 — Update documentation
 
 Edit the matching `docs/spec/builtins/*.md` and add a changelog entry under

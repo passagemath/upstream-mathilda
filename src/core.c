@@ -1165,6 +1165,7 @@ void core_init(void) {
      * stray private symbol. This only sets a flag; it creates no SymbolDefs and
      * changes no evaluation behaviour. Must run before the first package load. */
     intern_mark_all_system();
+    sym_mark_mathilda_context();
 
     /* Eager-load the FullSimplify package (driver + manifest only; the heavy
      * per-function identity libraries load lazily on demand). Done last so

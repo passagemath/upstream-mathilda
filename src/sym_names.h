@@ -1135,4 +1135,7 @@ void sym_names_init(void);
 }
 #endif
 
+/* Flag the Mathilda-only kernel names as Mathilda` (after intern_mark_all_system). */
+void sym_mark_mathilda_context(void);
+
 #endif /* SYM_NAMES_H */

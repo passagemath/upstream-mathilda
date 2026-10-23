@@ -2143,3 +2143,29 @@ void sym_names_init(void) {
     SYM_SignPadding                = intern_symbol("SignPadding");
     SYM_DefaultPrintPrecision      = intern_symbol("DefaultPrintPrecision");
 }
+
+/* Kernel names with no counterpart among the reference System names: Mathilda's
+ * own builtins and variables.  They live in the Mathilda` context (see
+ * intern_is_mathilda), so a package -- whose BeginPackage path is
+ * {ctx`, System`} -- that defines, say, its own DataType gets its own symbol
+ * instead of writing to the protected builtin.  A NEW Mathilda-only builtin
+ * belongs in this table. */
+void sym_mark_mathilda_context(void) {
+    static const char* const mathilda_only[] = {
+        "$AutoArrayPacking", "$AutoCompilation", "$PlotLegendData", "$PlotResample", "$RaylibVerbose",
+        "$SimplifyDebug", "$StreamColorBar", "AnimatedStreamline", "AssociationComap", "BackwardForward",
+        "CompileDiagnostics", "CompilePrint", "ComplexQ", "ConnectedHypergraphQ", "DataType",
+        "Discard", "FindMinimumTransversal", "FromNDArray", "FromPackedArray", "GraphTriangleCount",
+        "HyperedgeConnectedComponents", "HyperedgeDistance", "HyperedgeSizes", "Hypergraph", "HypergraphCliqueExpansion",
+        "HypergraphConnectedComponents", "HypergraphCorank", "HypergraphDistance", "HypergraphDual", "HypergraphEdgeAdd",
+        "HypergraphEdgeDelete", "HypergraphLineGraph", "HypergraphPlot", "HypergraphQ", "HypergraphRank",
+        "HypergraphRestriction", "HypergraphStarExpansion", "HypergraphToGraph", "HypergraphVertexAdd", "HypergraphVertexDelete",
+        "Image3DQ", "ListGradient", "LoadModule", "MachineIntegerQ", "ND",
+        "NDArray", "NDArrayQ", "NLimit", "NResidue", "NSeries",
+        "PackedArrayQ", "PDEClassify", "PolynomialSqrt", "RandomHypergraph", "RatCanonCancel",
+        "RatCanonNormalize", "RatCanonPrototype", "RationalQ", "SimplifyCount", "StronglyConnectedComponents",
+        "Subhypergraph", "ToNDArray", "ToPackedArray", "TransversalHypergraph", "UniformHypergraphQ"
+    };
+    for (size_t i = 0; i < sizeof mathilda_only / sizeof mathilda_only[0]; i++)
+        intern_mark_mathilda(mathilda_only[i]);
+}

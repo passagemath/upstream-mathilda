@@ -76,7 +76,7 @@ typedef struct SymbolDef {
      *               symtab_remove_symbol / symtab_clear reset this to 0 (the
      *               node and its name survive so live Exprs' pointers stay
      *               valid); intern_clear frees the node outright. */
-    uint8_t  is_system;
+    uint8_t  is_system;      /* 1: System`, 2: Mathilda` (Mathilda-only), 0: neither */
     uint8_t  has_def;
     char* docstring;
     /* Default option settings for this symbol, the DefaultValues-equivalent

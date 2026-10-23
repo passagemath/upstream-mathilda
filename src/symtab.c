@@ -164,7 +164,17 @@ const char* intern_symbol(const char* name) {
 
 int intern_is_system(const char* name) {
     SymbolDef* d = node_find(name);
-    return d ? d->is_system : 0;
+    return d ? d->is_system == 1 : 0;
+}
+
+int intern_is_mathilda(const char* name) {
+    SymbolDef* d = node_find(name);
+    return d ? d->is_system == 2 : 0;
+}
+
+void intern_mark_mathilda(const char* name) {
+    SymbolDef* d = node_find(name);
+    if (d) d->is_system = 2;
 }
 
 void intern_mark_all_system(void) {

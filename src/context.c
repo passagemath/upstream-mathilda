@@ -240,6 +240,7 @@ const char* context_path_at(size_t i) {
 }
 
 const char* context_home(const char* bare, const SymbolDef* def) {
+    if (intern_is_mathilda(bare)) return "Mathilda`";
     if (def && def->builtin_func != NULL) return "System`";
     bool spelled = bare[0] == '$' || (bare[0] >= 'A' && bare[0] <= 'Z');
     return (spelled && intern_is_system(bare)) ? "System`" : "Global`";
@@ -330,8 +331,15 @@ char* context_resolve_name(const char* raw) {
         const char* q = aliased ? aliased : raw;
         const char* sys = "System`";
         size_t sn = 7; /* strlen("System`") */
-        char* out = (strncmp(q, sys, sn) == 0 && q[sn] != '\0')
-                        ? ctx_strdup(q + sn) : ctx_strdup(q);
+        const char* mth = "Mathilda`";
+        size_t mn = 9; /* strlen("Mathilda`") */
+        char* out;
+        if (strncmp(q, sys, sn) == 0 && q[sn] != '\0')
+            out = ctx_strdup(q + sn);
+        else if (strncmp(q, mth, mn) == 0 && q[mn] != '\0' && intern_is_mathilda(q + mn))
+            out = ctx_strdup(q + mn);                 /* Mathilda`Foo is stored bare too */
+        else
+            out = ctx_strdup(q);
         free(aliased);
         return out;
     }
@@ -365,7 +373,18 @@ char* context_resolve_name(const char* raw) {
      * never matched a real System`List. In the Global case this is a no-op:
      * the legacy branch below already returns the bare name. */
     SymbolDef* bare = symtab_lookup(raw);
-    if (bare || intern_is_system(raw)) return ctx_strdup(raw);
+    if (bare || intern_is_system(raw) || intern_is_mathilda(raw)) {
+        /* Bare keys hold System`, Mathilda` AND Global` symbols alike, so check
+         * the bare symbol's home context is visible: System` always is; a
+         * Mathilda-only builtin or a Global` symbol only while its context is
+         * current or on $ContextPath.  Inside BeginPackage (path {ctx`,
+         * System`}) a package's own x or DataType is therefore a new symbol in
+         * its context -- not Global`x left behind by earlier code, nor the
+         * kernel's DataType. */
+        const char* home = context_home(raw, bare);
+        if (strcmp(home, "System`") == 0 || context_is_visible(home))
+            return ctx_strdup(raw);
+    }
 
     /* If current context is Global`, keep bare for legacy behavior. Otherwise
      * qualify with the current context. */
@@ -751,10 +770,10 @@ void context_init(void) {
      * OwnValues ARE the context state (see the State comment above). */
     publish_own("$Context", expr_new_string("Global`"));
     {
-        const char* initial[] = { "Global`", "System`" };
-        publish_own("$ContextPath", make_path(initial, 2));
-        const char* packages[] = { "System`", "Global`" };
-        publish_own("$Packages", make_path(packages, 2));
+        const char* initial[] = { "Global`", "Mathilda`", "System`" };
+        publish_own("$ContextPath", make_path(initial, 3));
+        const char* packages[] = { "Mathilda`", "System`", "Global`" };
+        publish_own("$Packages", make_path(packages, 3));
     }
     publish_own("$ContextAliases", assoc_from_rules(NULL, 0));
     symtab_set_docstring("$Context",

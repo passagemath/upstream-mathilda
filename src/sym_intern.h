@@ -47,6 +47,12 @@ void intern_system_scope_pop(void);
  * even when the symbol has no SymbolDef yet (pure structural heads and
  * constants like List, Rule, Automatic, Infinity are created lazily). */
 int intern_is_system(const char* name);
+/* Mathilda-only kernel names (no counterpart among the reference System names)
+ * live in the Mathilda` context: flagged by intern_mark_mathilda, they resolve
+ * bare only while Mathilda` is current or on $ContextPath -- so a package,
+ * whose BeginPackage path is {ctx`, System`}, gets its own symbol of that name. */
+int intern_is_mathilda(const char* name);
+void intern_mark_mathilda(const char* name);
 
 /* Free every interned string and clear the table. Any previously-returned
  * pointer becomes invalid. Intended for end-of-program cleanup. */

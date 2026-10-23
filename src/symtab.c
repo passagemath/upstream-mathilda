@@ -1470,9 +1470,12 @@ Expr* apply_up_values(Expr* expr) {
         Expr* sym_node = NULL;
         if (a->type == EXPR_SYMBOL) {
             sym_node = a;
-        } else if (a->type == EXPR_FUNCTION && a->data.function.head &&
-                   a->data.function.head->type == EXPR_SYMBOL) {
-            sym_node = a->data.function.head;
+        } else if (a->type == EXPR_FUNCTION && a->data.function.head) {
+            /* g[...] -> g; a compound head g[x][y] -> its innermost symbol g,
+             * matching how the definition side keys the rule. */
+            Expr* h = a->data.function.head;
+            while (h->type == EXPR_FUNCTION && h->data.function.head) h = h->data.function.head;
+            if (h->type == EXPR_SYMBOL) sym_node = h;
         }
         if (!sym_node) continue;
 

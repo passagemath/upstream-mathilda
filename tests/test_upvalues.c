@@ -398,6 +398,42 @@ static void test_flat_matchq_whole_expression(void) {
     assert_eval_eq("MatchQ[aq + bq, x_ + y_]", "True", 0);
 }
 
+/* ---- S1: upvalues on the assignment heads ----
+ * `tag /: Set[tag[...], v_] := ...` intercepts the assignment (no DownValue is
+ * stored); the HoldPattern spelling and a bare-symbol tag work too; a tag
+ * nested in a compound head (g[x][y]) is accepted. */
+static void test_set_upvalues(void) {
+    assert_eval_eq("ClearAll[s1dt]; s1dt /: Set[s1dt[a_, b_], v_] := {\"r\", a, b, v}; s1r = (s1dt[1, 2] = True)",
+                   "{\"r\", 1, 2, True}", 0);
+    assert_eval_eq("{DownValues[s1dt], s1dt[1, 2]}", "{{}, s1dt[1, 2]}", 0);
+    assert_eval_eq("Length[UpValues[s1dt]]", "1", 0);
+    /* HoldPattern[Set[...]] -- no ::tagpos. */
+    assert_eval_eq("ClearAll[s1hp, s1cnt]; Check[s1hp /: HoldPattern[Set[s1hp[a_], v_]] := (s1cnt = {a, v}; v); \"ok\", \"msg\"]",
+                   "\"ok\"", 0);
+    assert_eval_eq("{s1hp[5] = 7, s1cnt, DownValues[s1hp]}", "{7, {5, 7}, {}}", 0);
+    /* Bookkeeping through the intercepted Set (FeynCalc's ScalarProduct[p, q] = ...). */
+    assert_eval_eq("ClearAll[s1sp, s1spv]; s1sp /: Set[s1sp[a_, b_], z_] := (s1spv[a, b] = z); s1sp[p, q] = m^2; "
+                   "{s1spv[p, q], DownValues[s1sp]}", "{m^2, {}}", 0);
+    /* SetDelayed: the RHS arrives held. */
+    assert_eval_eq("ClearAll[s1ft]; s1ft /: SetDelayed[s1ft[x_], rhs_] := (s1ftv = Hold[rhs]); s1ft[3] := 1 + 1; s1ftv",
+                   "Hold[1 + 1]", 0);
+    /* A bare-symbol tag: no OwnValue is stored. */
+    assert_eval_eq("ClearAll[s1gg]; s1gg /: Set[s1gg, v_] := (s1ggv = v); s1gg = 3; {OwnValues[s1gg], s1ggv}",
+                   "{{}, 3}", 0);
+    /* Unset can be intercepted too. */
+    assert_eval_eq("ClearAll[s1u]; s1u /: Unset[s1u[x_]] := (s1uv = x); s1u[4] =.; s1uv", "4", 0);
+    /* A Set the upvalue's pattern does not match is an ordinary assignment. */
+    assert_eval_eq("s1dt[1] = 9; {s1dt[1], Length[DownValues[s1dt]]}", "{9, 1}", 0);
+    /* A one-argument all-heads upvalue cannot hijack a two-argument Set. */
+    assert_eval_eq("ClearAll[s1g, s1y]; _[s1g[x_]] ^:= \"hijacked\"; s1g[s1y] = 1; s1g[s1y]", "1", 0);
+    /* Tag nested in a compound head: accepted silently (stored as an upvalue). */
+    assert_eval_eq("ClearAll[s1clc]; Check[s1clc /: MakeBoxes[s1clc[x___][y___], TraditionalForm] := \"box\"; \"ok\", \"msg\"]",
+                   "\"ok\"", 0);
+    assert_eval_eq("ClearAll[s1h]; s1h /: s1k[s1h[1][2]] := \"inner\"; s1k[s1h[1][2]]", "\"inner\"", 0);
+    /* Plain assignments are unaffected by unrelated upvalues in the session. */
+    assert_eval_eq("s1plainA = 5; s1plainB[2] = 6; {s1plainA, s1plainB[2]}", "{5, 6}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -449,6 +485,7 @@ int main(void) {
     TEST(test_upset_protected);
     TEST(test_flat_matchq_whole_expression);
 
+    TEST(test_set_upvalues);
     printf("All UpValues tests passed.\n");
     return 0;
 }

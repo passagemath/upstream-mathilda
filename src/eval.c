@@ -1393,10 +1393,14 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
 /* Heads whose held LHS must not be scanned for UpValues during evaluation --
  * otherwise an all-heads upvalue (_[g[x_]] ^= ...) could hijack the held LHS of
  * an assignment, e.g. Set[g[y], 1]. */
+/* Set / SetDelayed / Unset are NOT on this list: an upvalue defined for them
+ * (`dt /: Set[dt[a_, b_], v_] := ...`, `g /: Set[g, v_] := ...`) intercepts the
+ * assignment, as the reference does -- packages use it to keep bookkeeping
+ * (FeynCalc's DataType, $NonComm, ScalarProduct[p, q] = ...).  A rule only
+ * fires when its whole pattern matches the Set call, so an all-heads upvalue
+ * like _[g[x_]] ^= v (one argument) cannot hijack Set[g[y], 1]. */
 static inline bool is_assignment_primitive(const char* head_name) {
-    return head_name == SYM_Set || head_name == SYM_SetDelayed ||
-           head_name == SYM_Unset ||
-           head_name == SYM_UpSet || head_name == SYM_UpSetDelayed ||
+    return head_name == SYM_UpSet || head_name == SYM_UpSetDelayed ||
            head_name == SYM_TagSet || head_name == SYM_TagSetDelayed ||
            head_name == SYM_TagUnset;
 }
@@ -1410,8 +1414,15 @@ static inline bool is_assignment_primitive(const char* head_name) {
 static const char* element_dispatch_head(Expr* a) {
     if (!a) return NULL;
     if (a->type == EXPR_SYMBOL) return a->data.symbol.name;
-    if (a->type != EXPR_FUNCTION || !a->data.function.head ||
-        a->data.function.head->type != EXPR_SYMBOL) return NULL;
+    if (a->type != EXPR_FUNCTION || !a->data.function.head) return NULL;
+    /* A compound head g[x][y] dispatches on its innermost symbol head, g --
+     * `clc /: MakeBoxes[clc[x___][y___], fmt] := ...` keys on clc. */
+    if (a->data.function.head->type == EXPR_FUNCTION) {
+        Expr* hh = a->data.function.head;
+        while (hh->type == EXPR_FUNCTION && hh->data.function.head) hh = hh->data.function.head;
+        return hh->type == EXPR_SYMBOL ? hh->data.symbol.name : NULL;
+    }
+    if (a->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = a->data.function.head->data.symbol.name;
     if (h == SYM_Pattern && a->data.function.arg_count == 2)
         return element_dispatch_head(a->data.function.args[1]);   /* a_h -> head of the blank; a_ -> NULL */
@@ -1437,7 +1448,8 @@ static int collect_level_one_symbols(Expr* lhs, const char** out, int cap) {
     int n = 0;
     if (!lhs) return 0;
     while (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
-        lhs->data.function.head->data.symbol.name == SYM_Condition &&
+        (lhs->data.function.head->data.symbol.name == SYM_Condition ||
+         lhs->data.function.head->data.symbol.name == SYM_HoldPattern) &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
     if (lhs->type != EXPR_FUNCTION) return 0;
@@ -1483,7 +1495,8 @@ static TagPos classify_tag_position(const char* tag, Expr* lhs) {
      * `xr /: xr + y_ /; y > -2 := ...` finds xr inside the held Plus. */
     while (lhs->type == EXPR_FUNCTION &&
         lhs->data.function.head->type == EXPR_SYMBOL &&
-        lhs->data.function.head->data.symbol.name == SYM_Condition &&
+        (lhs->data.function.head->data.symbol.name == SYM_Condition ||
+         lhs->data.function.head->data.symbol.name == SYM_HoldPattern) &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
     if (lhs->type == EXPR_SYMBOL)

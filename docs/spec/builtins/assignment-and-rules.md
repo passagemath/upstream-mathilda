@@ -136,7 +136,10 @@ Out[3]= {h[2], f[k[2]]}
   The rule is installed as an **own-, down- or up-value as appropriate**:
   - `f` *is* `lhs` → OwnValue (the tag is redundant: same as `f = rhs`).
   - `f` is the **head of `lhs`** → DownValue (same as `f[…] = rhs`).
-  - `f` occurs as an **element of `lhs`, or the head of an element** → UpValue.
+  - `f` occurs as an **element of `lhs`, or the head of an element** (including
+    the innermost head of a compound head, `f[x][y]`) → UpValue.
+- `lhs` may be wrapped in `HoldPattern`, which is how a rule for an
+  assignment head is usually written: `f /: HoldPattern[Set[f[a_], v_]] := ...`.
 - `f /: lhs =.` (`TagUnset`): removes the matching own/down/up rule associated
   with the tag `f`. (Plain `lhs =.` does **not** reach an UpValue — the tag is
   required, matching the reference.)
@@ -153,6 +156,21 @@ Out[3]= {h[2], f[k[2]]}
   supported and are declined with a message.
 - The rule remembers whether it was made by `=` or `:=`; `Definition` renders it
   back that way (see `Definition`).
+- **Upvalues for the assignment heads.** An upvalue whose pattern is a `Set`,
+  `SetDelayed` or `Unset` call intercepts that assignment. Nothing is stored;
+  the rule's value is the result. Packages use this to keep bookkeeping when
+  a value is assigned:
+  ```mathematica
+  sp /: Set[sp[a_, b_], z_] := (spv[a, b] = z);  sp[p, q] = m^2;  spv[p, q]  (* m^2 *)
+  g /: Set[g, v_] := Print[v];  g = 3        (* prints 3; g gets no OwnValue *)
+  ```
+  A rule fires only when its whole pattern matches the assignment, so an
+  upvalue with a different shape cannot intercept an unrelated `Set`. The
+  definitional forms (`UpSet`, `TagSet`, ...) are not intercepted.
+- A `MakeBoxes`/`Format` rule tagged on a compound head
+  (`CLC /: MakeBoxes[CLC[x___][y___], fmt] := ...`) is stored as an upvalue.
+  The reference files such rules under `FormatValues`, which Mathilda does not
+  have.
 
 ```mathematica
 In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];

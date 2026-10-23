@@ -413,7 +413,8 @@ Expr* pack_eval_plain(Expr* e) {
  * Direct construction
  * -------------------------------------------------------------------------- */
 
-Expr* ndbuild_open(int rank, const int64_t* dims, NDType dtype, void** buf_out) {
+static Expr* ndbuild_open_impl(int rank, const int64_t* dims, NDType dtype, void** buf_out,
+                               bool zeroed) {
     *buf_out = NULL;
     if (!pack_enabled() || rank < 1 || rank >= NDARRAY_MAX_RANK) return NULL;
     size_t n = 1;
@@ -422,7 +423,7 @@ Expr* ndbuild_open(int rank, const int64_t* dims, NDType dtype, void** buf_out) 
         n *= (size_t)dims[i];
     }
     if (n < pack_min_elements()) return NULL;
-    void* buf = malloc(ndt_elem_size(dtype) * n);
+    void* buf = zeroed ? calloc(n, ndt_elem_size(dtype)) : malloc(ndt_elem_size(dtype) * n);
     if (!buf) return NULL;
     Expr* e = expr_new_ndarray_raw(rank, dims, buf, dtype);
     if (!e) { free(buf); return NULL; }
@@ -430,6 +431,14 @@ Expr* ndbuild_open(int rank, const int64_t* dims, NDType dtype, void** buf_out) 
     pack_g_any_created = true;
     *buf_out = buf;
     return e;
+}
+
+Expr* ndbuild_open(int rank, const int64_t* dims, NDType dtype, void** buf_out) {
+    return ndbuild_open_impl(rank, dims, dtype, buf_out, false);
+}
+
+Expr* ndbuild_open_zeroed(int rank, const int64_t* dims, NDType dtype, void** buf_out) {
+    return ndbuild_open_impl(rank, dims, dtype, buf_out, true);
 }
 
 Expr* ndbuild_open_like(const Expr* src, int rank, const int64_t* dims,

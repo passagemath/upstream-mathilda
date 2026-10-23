@@ -304,7 +304,7 @@ static bool push_dense(SpCoo* c, const Expr* e, int level, int64_t* coord,
         int64_t total = (int64_t)ndarray_size(e);
         int64_t sub[SP_MAX_RANK];
         memset(sub, 0, sizeof sub);
-        double bre = 0, bim = 0;
+        double bre = 0;
         bool bg_real = bg->type == EXPR_REAL, bg_int = bg->type == EXPR_INTEGER;
         if (bg_real) bre = bg->data.real;
         if (bg_int) bre = (double)bg->data.integer;
@@ -361,6 +361,66 @@ static bool push_dense(SpCoo* c, const Expr* e, int level, int64_t* coord,
     return true;
 }
 
+/* A packed Real or Integer array kept at its own dims: two passes over the
+ * flat buffer -- count the non-background elements, then emit their composite
+ * keys straight from the flat index (row = i / span, inner key = i mod span),
+ * already in canonical order. NULL when the shape or dtype is not this case
+ * (the caller then takes the general path). `bg` is borrowed. */
+static Expr* from_packed_dense(const Expr* nd, const Expr* bg, bool to_real) {
+    NDType dt = nd->data.ndarray.dtype;
+    if (dt != NDT_FLOAT64 && dt != NDT_INT64) return NULL;
+    int rank = nd->data.ndarray.rank;
+    const int64_t* dims = nd->data.ndarray.dims;
+    int kbits;
+    if (rank > SP_MAX_RANK || !sp_coo_composite(rank, dims, &kbits)) return NULL;
+    int64_t total = sp_total(rank, dims);
+    if (total <= 0) return NULL;
+    int64_t span = rank >= 2 ? total / dims[0] : total;
+    bool bg_int = bg->type == EXPR_INTEGER, bg_real = bg->type == EXPR_REAL;
+    double bd = bg_int ? (double)bg->data.integer : bg_real ? bg->data.real : 0.0;
+    int64_t bi = bg_int ? bg->data.integer : 0;
+    bool bg_num = bg_int || bg_real;
+    SpValKind kind = (dt == NDT_FLOAT64 || to_real) ? SPV_F64 : SPV_INT64;
+    int64_t m = 0;
+    if (dt == NDT_FLOAT64) {
+        const double* b = nd->data.ndarray.data;
+        if (bg_num) { for (int64_t i = 0; i < total; i++) m += b[i] != bd; }
+        else m = total;
+    } else {
+        const int64_t* b = nd->data.ndarray.data;
+        if (bg_int) { for (int64_t i = 0; i < total; i++) m += b[i] != bi; }
+        else if (bg_real) { for (int64_t i = 0; i < total; i++) m += (double)b[i] != bd; }
+        else m = total;
+    }
+    uint64_t* ck = malloc(sizeof(uint64_t) * (size_t)(m ? m : 1));
+    void* vals = malloc(sizeof(double) * (size_t)(m ? m : 1));   /* 8 bytes either kind */
+    if (!ck || !vals) { free(ck); free(vals); return NULL; }
+    int64_t q = 0;
+    for (int64_t i = 0; i < total; i++) {
+        bool keep;
+        double dv = 0; int64_t iv = 0;
+        if (dt == NDT_FLOAT64) { dv = ((const double*)nd->data.ndarray.data)[i]; keep = !bg_num || dv != bd; }
+        else {
+            iv = ((const int64_t*)nd->data.ndarray.data)[i];
+            keep = bg_int ? iv != bi : (!bg_real || (double)iv != bd);
+        }
+        if (!keep) continue;
+        uint64_t row = rank >= 2 ? (uint64_t)(i / span) : 0;
+        uint64_t key = rank >= 2 ? (uint64_t)(i % span) : (uint64_t)i;
+        ck[q] = rank >= 2 ? (row << kbits) | key : key;
+        if (kind == SPV_F64) ((double*)vals)[q] = dt == NDT_FLOAT64 ? dv : (double)iv;
+        else ((int64_t*)vals)[q] = iv;
+        q++;
+    }
+    SpCoo c;
+    sp_coo_init(&c, rank, dims, kind);
+    c.ck = ck;
+    c.vals = vals;
+    c.n = c.cap = m;
+    c.ordered = true;
+    return sp_to_expr(sp_coo_finish(&c, expr_copy((Expr*)bg), false));
+}
+
 /* SparseArray[list(, dims(, val))]. */
 static Expr* from_dense(const Expr* call, const Expr* list, const Expr* dims_arg,
                         const Expr* bg_arg) {
@@ -392,6 +452,15 @@ static Expr* from_dense(const Expr* call, const Expr* list, const Expr* dims_arg
      * array: its Integer leaves become Reals. */
     bool to_real = bg_arg && bg->type == EXPR_REAL && ls.all_machine_real_or_int;
 
+    bool own_dims = !ds.given;
+    if (ds.given && ds.rank == rank) {
+        own_dims = true;
+        for (int k = 0; k < rank; k++) own_dims = own_dims && ds.dims[k] == dims[k];
+    }
+    if (list->type == EXPR_NDARRAY && own_dims) {
+        Expr* fast = from_packed_dense(list, bg, to_real);
+        if (fast) { expr_free(bg); return fast; }
+    }
     SpValKind kind = SPV_EXPR;
     if (list->type == EXPR_NDARRAY) {
         NDType dt = list->data.ndarray.dtype;

@@ -407,6 +407,12 @@ which would have produced fictitious ~0.1 ms "wins" on eight of its fifteen test
 while computing nothing. That finding is recorded in the changelog; a guard for it
 belongs in `tests/`, not in a timing job.
 
+## Sparse arrays (120)
+
+| # | experiment | what it measures |
+|---|---|---|
+| 120 | `sparse-arrays` | SparseArray construction, element-wise arithmetic and functions, access, dense ⇄ sparse against scipy.sparse |
+
 ## Reading a group A case correctly
 
 Symbolic timings are frequently dominated by **algorithm choice, not execution

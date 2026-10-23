@@ -453,13 +453,18 @@ static Expr* normal_packed(const SparseArray* sa, int64_t total) {
         return NULL;
     }
     if (total > SP_NORMAL_MAX_TYPED) return NULL;
+    /* A zero background (+0.0, 0, 0.+0.I, all-zero bits): start from zeroed
+     * pages and write only the explicit entries. */
+    bool zero_bg = (dt == NDT_INT64) ? bg->data.integer == 0
+                                     : (bre == 0.0 && !signbit(bre) && bim == 0.0 && !signbit(bim));
     void* buf = NULL;
-    Expr* node = ndbuild_open(sa->rank, sa->dims, dt, &buf);
+    Expr* node = zero_bg ? ndbuild_open_zeroed(sa->rank, sa->dims, dt, &buf)
+                         : ndbuild_open(sa->rank, sa->dims, dt, &buf);
     if (!node) return NULL;
     const SparsePattern* p = sa->pat;
     if (dt == NDT_FLOAT64) {
         double* b = buf;
-        for (int64_t i = 0; i < total; i++) b[i] = bre;
+        if (!zero_bg) for (int64_t i = 0; i < total; i++) b[i] = bre;
         const double* v = sa->vals;
         for (int64_t r = 0; r < p->nrows; r++)
             for (int64_t k = p->rowptr[r]; k < p->rowptr[r + 1]; k++)
@@ -467,14 +472,14 @@ static Expr* normal_packed(const SparseArray* sa, int64_t total) {
     } else if (dt == NDT_INT64) {
         int64_t* b = buf;
         int64_t bv = bg->data.integer;
-        for (int64_t i = 0; i < total; i++) b[i] = bv;
+        if (!zero_bg) for (int64_t i = 0; i < total; i++) b[i] = bv;
         const int64_t* v = sa->vals;
         for (int64_t r = 0; r < p->nrows; r++)
             for (int64_t k = p->rowptr[r]; k < p->rowptr[r + 1]; k++)
                 b[entry_offset(sa, r, k)] = v[k];
     } else {
         double* b = buf;
-        for (int64_t i = 0; i < total; i++) { b[2 * i] = bre; b[2 * i + 1] = bim; }
+        if (!zero_bg) for (int64_t i = 0; i < total; i++) { b[2 * i] = bre; b[2 * i + 1] = bim; }
         const double* v = sa->vals;
         for (int64_t r = 0; r < p->nrows; r++)
             for (int64_t k = p->rowptr[r]; k < p->rowptr[r + 1]; k++) {

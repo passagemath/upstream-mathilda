@@ -34,6 +34,10 @@ bool is_complex(Expr* e, Expr** re, Expr** im);
 
 // Create a Complex expression
 Expr* make_complex(Expr* re, Expr* im);
+/* A numeric scalar exponent / base as the double pair the machine power
+ * kernels take: Integer, Real, BigInt, MPFR, Rational or a Complex of
+ * Integers/Reals. False for anything else. (src/power.c) */
+bool power_scalar_components(const Expr* e, double* re, double* im);
 
 // Infinity / Indeterminate predicates
 bool is_infinity_sym(Expr* e);

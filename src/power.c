@@ -583,7 +583,7 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
  * this is what routes Sqrt[NDArray] = NDArray^(1/2) and NDArray^(p/q) through
  * the C power loop instead of the generic Power that renames x^(1/2) → Sqrt[x].
  * Returns false for anything symbolic, which falls through to symbolic Power. */
-static bool power_scalar_components(const Expr* e, double* re, double* im) {
+bool power_scalar_components(const Expr* e, double* re, double* im) {
     int64_t rn, rd;
     *im = 0.0;
     if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; return true; }

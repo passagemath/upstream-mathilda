@@ -17,6 +17,7 @@
 #include "sym_names.h"
 #include "eval.h"
 #include "checked_int.h"
+#include "arithmetic.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -336,15 +337,18 @@ Expr* sp_arith_binary(bool is_plus, const SparseArray* a, const SparseArray* b) 
 
 Expr* sp_power_scalar(const SparseArray* sa, const Expr* c, bool sparse_is_base) {
     if (sa->kind == SPV_EXPR) return NULL;
-    if (c->type != EXPR_INTEGER && c->type != EXPR_REAL) return NULL;
-    double cv = c->type == EXPR_INTEGER ? (double)c->data.integer : c->data.real;
+    /* The scalar forms the packed surface's Power accepts (power.c), so the
+     * two surfaces take the same machine path. */
+    double cr, ci;
+    if (!power_scalar_components(c, &cr, &ci)) return NULL;
     /* An Integer exponent past 2^53 does not survive the double. */
-    if (c->type == EXPR_INTEGER && (c->data.integer > ((int64_t)1 << 53) ||
-                                    c->data.integer < -((int64_t)1 << 53))) return NULL;
+    if (c->type == EXPR_BIGINT || (c->type == EXPR_INTEGER &&
+        (c->data.integer > ((int64_t)1 << 53) || c->data.integer < -((int64_t)1 << 53))))
+        return NULL;
     Expr* view = sp_view(sa->kind, sa->vals, sa->pat->nnz);
     if (!view) return NULL;
-    Expr* nd = sparse_is_base ? ndarray_scalar_power(view, cv, 0.0)
-                              : ndarray_base_scalar_power(cv, 0.0, view);
+    Expr* nd = sparse_is_base ? ndarray_scalar_power(view, cr, ci)
+                              : ndarray_base_scalar_power(cr, ci, view);
     sp_view_free(view);
     SpValKind kind;
     void* vals;

@@ -208,6 +208,10 @@ Expr* pack_eval_plain(Expr* e);
  * every element before the node escapes.
  * ------------------------------------------------------------------------- */
 Expr* ndbuild_open(int rank, const int64_t* dims, NDType dtype, void** buf_out);
+/* As ndbuild_open, with the buffer already zero-filled (calloc), for a
+ * producer that writes only its nonzero elements -- a scatter into a zero
+ * array, where the OS supplies the zero pages instead of a fill pass. */
+Expr* ndbuild_open_zeroed(int rank, const int64_t* dims, NDType dtype, void** buf_out);
 
 /* Open a buffer for an array DERIVED from `src`, inheriting its presentation and
  * ignoring both the size threshold and pack_enabled().

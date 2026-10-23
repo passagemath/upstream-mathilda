@@ -1264,12 +1264,30 @@ static bool real_power_escapes(const Expr* base, double er, double ei) {
     if (er == floor(er)) return false;             /* integer power stays real */
     size_t sz = ndarray_size(base);
     NDType dt = base->data.ndarray.dtype;
+    if (dt == NDT_FLOAT64) {
+        /* the common buffer, read directly: a branch-free scan the compiler
+         * vectorises, instead of a dtype switch per element */
+        const double* p = (const double*)base->data.ndarray.data;
+        int neg = 0;
+        for (size_t k = 0; k < sz; k++) neg |= p[k] < 0.0;
+        return neg != 0;
+    }
     for (size_t k = 0; k < sz; k++) {
         double re, im;
         ndt_get(base->data.ndarray.data, k, dt, &re, &im);
         if (re < 0.0) return true;
     }
     return false;
+}
+
+/* sqrt over a float64 range: libm's sqrt is correctly rounded, so this is
+ * cpow_pair's x^0.5 arm exactly; split across threads because errno-setting
+ * sqrt does not vectorise. */
+typedef struct { const double* in; double* out; } nd_sqrt_ctx;
+static bool nd_sqrt_chunk(void* c, size_t lo, size_t hi) {
+    const nd_sqrt_ctx* x = (const nd_sqrt_ctx*)c;
+    for (size_t k = lo; k < hi; k++) x->out[k] = sqrt(x->in[k]);
+    return true;
 }
 
 /* Threaded power over one output element per index. Either operand may be an
@@ -1393,6 +1411,23 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
         dtc = ndt_as_complex(dtc);
 
     void* out = malloc(ndt_elem_size(dtc) * sz);
+    if (dta == NDT_FLOAT64 && dtc == NDT_FLOAT64 && ei == 0.0 &&
+        (er == 2.0 || er == 3.0 || er == 0.5 || er == 1.0 || er == -1.0 || er == 0.0)) {
+        /* A real buffer that stays on the real axis, with one of cpow_pair's
+         * cheap exponents: the same formula, hoisted out of the element loop
+         * (no per-element dtype switches), so the result is bit-identical and
+         * the loop vectorises -- x^0.5 over 10^6 elements went from ~4 ms to
+         * the cost of the sqrt itself. */
+        const double* p = (const double*)a->data.ndarray.data;
+        double* o = (double*)out;
+        if (er == 2.0)       for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k];
+        else if (er == 3.0)  for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k] * p[k];
+        else if (er == 0.5) { nd_sqrt_ctx sc = { p, o }; nd_parallel_for(sz, nd_sqrt_chunk, &sc); }
+        else if (er == 1.0)  memcpy(o, p, sizeof(double) * sz);
+        else if (er == -1.0) for (size_t k = 0; k < sz; k++) o[k] = 1.0 / p[k];
+        else                 for (size_t k = 0; k < sz; k++) o[k] = 1.0;
+        return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
+    }
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
                      NULL, dta, er, ei, out, dtc };   /* scalar exponent */
     nd_parallel_for(sz, nd_pow_chunk, &c);

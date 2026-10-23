@@ -80,6 +80,7 @@ static int g_system_scope = 0;
 
 void intern_system_scope_push(void) { g_system_scope++; }
 void intern_system_scope_pop(void)  { if (g_system_scope > 0) g_system_scope--; }
+int  intern_system_scope_depth(void) { return g_system_scope; }
 
 /* A definition made inside a kernel-module load: flag the node System if its
  * bare name is spelled like a System name. */

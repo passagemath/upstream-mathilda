@@ -40,6 +40,8 @@ void intern_mark_all_system(void);
  * loads, are not. */
 void intern_system_scope_push(void);
 void intern_system_scope_pop(void);
+/* Non-zero while a kernel module is loading (intern_system_scope_push). */
+int  intern_system_scope_depth(void);
 
 /* True if `name` was flagged by intern_mark_all_system() -- i.e. it is a
  * built-in System symbol. The context resolver uses this to resolve such a

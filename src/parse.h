@@ -62,8 +62,21 @@ Expr* parse_next_expression(const char** input_ptr);
 Expr* parse_statement_sequence(const char* input, int line_statements,
                                const char** err_pos);
 
+/* The same reader, one statement at a time: each statement is handed to `fn`
+ * (which takes ownership) as soon as it is parsed and before the next is read;
+ * `fn` returns 0 to stop.  Returns 1 when the input was read to the end, 0 on a
+ * syntax error (with *err_pos set, the earlier statements already handed over),
+ * 2 when `fn` stopped it. */
+typedef int (*ParseStatementFn)(Expr* stmt, void* ctx);
+int parse_statement_each(const char* input, int line_statements, const char** err_pos,
+                         ParseStatementFn fn, void* ctx);
+
 /* Suppress (quiet = 1) or restore the parser's own syntax-error printing;
  * returns the previous setting.  A failed parse still returns NULL. */
 int parse_set_quiet(int quiet);
+
+/* Make every symbol in a parsed user statement an existing symbol (outside a
+ * kernel module load); see parse.c. */
+void parse_materialize_user_symbols(const Expr* e);
 
 #endif // PARSE_H

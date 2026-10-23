@@ -10,6 +10,10 @@ Pure-ASCII strings take a byte-speed path. A byte that does not begin a valid
 UTF-8 sequence counts as one character, so malformed input never crashes or
 splits.
 
+`Style[expr, ...]` is presentation only. In OutputForm (`Print`,
+`ToString`) it shows as `expr`, because there is no front end to style it.
+`FullForm` and `InputForm` keep the wrapper.
+
 String literals accept the reference's character escapes: `\[Name]` (the 1100+
 named characters, e.g. `"\[Alpha]"`), `\:hhhh`, `\|hhhhhh`, `\.hh` and `\ooo`.
 A backslash at the end of a line is a line continuation, and both characters

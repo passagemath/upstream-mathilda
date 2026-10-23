@@ -2101,6 +2101,9 @@ void sym_names_init(void) {
             "SequenceForm", "StyleForm", "DisplayForm", "TableForm", "Subscript", "Superscript",
             "Infix", "LineBreak", "Labeled", "Column", "Grid", "Spacings", "Alignment", "SpanFromLeft",
             "PageWidth", "FormatType", "Trig", "Integral",
+            /* System names not implemented yet (they need DateObject): interned
+             * so a package's use of them does not create Global` symbols. */
+            "DateString", "FileDate", "DateObject",
         };
         for (size_t i = 0; i < sizeof inert_system / sizeof inert_system[0]; i++)
             intern_symbol(inert_system[i]);

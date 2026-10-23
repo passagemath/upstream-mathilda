@@ -1317,6 +1317,16 @@ In[5]:= ToExpression["x = 2\n y = x + 1"]
 Out[5]= 3
 ```
 
+- **Statement by statement.** Without a wrapper head, the statements of the
+  string are parsed and evaluated one at a time. A `Begin["ctx`"]` or
+  `BeginPackage` on one line therefore governs the symbols created by the
+  lines after it. If a later statement has a syntax error, the result is
+  `$Failed`, but the statements before it have already run. An abort or
+  throw stops the read. `ToExpression[s, form, h]` only parses, wrapping
+  every statement in `h`.
+- Reading creates the statement's symbols (outside kernel module loads), so
+  `ToExpression["v = Names[\"Global`*\"]"]` lists `v` itself.
+
 ## SyntaxQ
 `SyntaxQ["string"]` gives `True` if the string reads as a sequence of complete,
 syntactically valid statements, the way `ToExpression` reads it, and `False`

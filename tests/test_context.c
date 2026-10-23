@@ -333,6 +333,15 @@ static void test_package_can_request_mathilda(void) {
                    "MemberQ[{\"SimplifyCount\", \"LoadModule\"}, Last[StringSplit[#, \"`\"]]] &]", "{}", 0);
 }
 
+/* Global`x and x are the same symbol, whichever spelling came first. */
+static void test_global_qualified_is_bare(void) {
+    assert_eval_eq("gq2 = 2; {Global`gq2, Names[\"Global`gq2\"]}", "{2, {\"gq2\"}}", 0);
+    assert_eval_eq("Global`gq1 = 1; {gq1, Names[\"Global`gq1\"]}", "{1, {\"gq1\"}}", 0);
+    assert_eval_eq("Global`gq3 := 3; Global`gq3 =.; gq3", "gq3", 0);
+    /* A System name is not aliased by its Global` spelling. */
+    assert_eval_eq("Global`Sin === Sin", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -365,6 +374,7 @@ int main(void) {
     TEST(test_mathilda_context);
     TEST(test_package_does_not_see_global_or_mathilda);
     TEST(test_package_can_request_mathilda);
+    TEST(test_global_qualified_is_bare);
     TEST(test_contextpath_assignment);
     TEST(test_context_assignment);
 

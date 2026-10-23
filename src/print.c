@@ -440,6 +440,13 @@ static void fold_rational_coeff_into_den(Expr** num, size_t* nnum,
 
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
+    /* OutputForm (Print, ToString): Style[expr, opts...] is presentation only
+     * -- with no front end to style it, it prints as expr. */
+    if (g_print_output_form && e->type == EXPR_FUNCTION && e->data.function.arg_count >= 1 &&
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol.name == SYM_Style) {
+        print_standard(e->data.function.args[0], parent_prec);
+        return;
+    }
     /* Intercept before the delegation below: a packed list is not an
      * EXPR_FUNCTION, so it would otherwise fall through to
      * expr_print_fullform and come out as List[...] instead of {...}. */

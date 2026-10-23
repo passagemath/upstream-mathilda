@@ -334,10 +334,18 @@ char* context_resolve_name(const char* raw) {
         const char* mth = "Mathilda`";
         size_t mn = 9; /* strlen("Mathilda`") */
         char* out;
+        const char* glb = "Global`";
+        size_t gn = 7; /* strlen("Global`") */
         if (strncmp(q, sys, sn) == 0 && q[sn] != '\0')
             out = ctx_strdup(q + sn);
         else if (strncmp(q, mth, mn) == 0 && q[mn] != '\0' && intern_is_mathilda(q + mn))
             out = ctx_strdup(q + mn);                 /* Mathilda`Foo is stored bare too */
+        else if (strncmp(q, glb, gn) == 0 && q[gn] != '\0' && !has_backtick(q + gn) &&
+                 strcmp(context_home(q + gn, symtab_lookup(q + gn)), "Global`") == 0)
+            /* Global` symbols are stored under bare keys: Global`x IS x (unless
+             * the bare name is a System` / Mathilda` symbol, which Global`Sin
+             * must not alias). */
+            out = ctx_strdup(q + gn);
         else
             out = ctx_strdup(q);
         free(aliased);

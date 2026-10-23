@@ -971,6 +971,36 @@ void test_get_syntax_error_reported() {
     assert_eval_eq("SyntaxQ[\"(1+\"]", "False", 0);
 }
 
+/* ToExpression evaluates statement by statement: Begin["ctx`"] on one line
+ * governs the symbols of the lines after it; a syntax error further on gives
+ * $Failed after the earlier statements ran; the Hold form only parses. */
+void test_toexpression_sequencing() {
+    assert_eval_eq("ToExpression[\"Begin[\\\"TQ`Private`\\\"]\\ntqz = 1\\nEnd[]\"]; "
+                   "{Names[\"TQ`Private`*\"], Names[\"Global`tqz\"]}", "{{\"TQ`Private`tqz\"}, {}}", 0);
+    assert_eval_eq("tqr = Quiet[ToExpression[\"tqa = 1\\ntqc = (2 + \\ntqd = 3\"]]; {tqr, tqa, tqc, tqd}",
+                   "{$Failed, 1, tqc, tqd}", 0);
+    assert_eval_eq("ToExpression[\"tqf = 1\\ntqg = 2\", InputForm, Hold]", "Hold[tqf = 1, tqg = 2]", 0);
+    assert_eval_eq("{ToExpression[\"1+1\"], ToExpression[\"\"], ToExpression[\"q1;\\nq2\"]}", "{2, Null, q2}", 0);
+    /* An abort stops the read. */
+    assert_eval_eq("CheckAbort[ToExpression[\"tqh = 1\\nAbort[]\\ntqi = 2\"], \"ab\"]; {tqh, tqi}", "{1, tqi}", 0);
+}
+
+/* An unclosed "(" is a syntax error, not an expression ending at end of input. */
+void test_unclosed_paren_rejected() {
+    assert_eval_eq("Quiet[ToExpression[\"(2 + x\"]]", "$Failed", 0);
+    assert_eval_eq("SyntaxQ[\"(2 + x\"]", "False", 0);
+    assert_eval_eq("SyntaxQ[\"(2 + x)\"]", "True", 0);
+    assert_eval_eq("Quiet[ToExpression[\"f[(1)\"]]", "$Failed", 0);
+}
+
+/* Reading a statement creates its symbols (outside kernel module loads): the
+ * loader idiom v = Names["Global`*"] lists v itself. */
+void test_reading_creates_symbols() {
+    assert_eval_eq("ToExpression[\"Global`rcsv = Names[\\\"Global`*\\\"]\"]; MemberQ[rcsv, \"rcsv\"]", "True", 0);
+    assert_eval_eq("ToExpression[\"Function[rcsArg, rcsArg + 1][1]\"]; Names[\"Global`rcsArg\"]",
+                   "{\"rcsArg\"}", 0);
+}
+
 void test_toexpression_line_statements() {
     assert_eval_eq("Quiet[ToExpression[\"a = 2\\n b = 3\", InputForm, Hold]]", "Hold[Set[a, 2], Set[b, 3]]", 1);
     assert_eval_eq("Quiet[ToExpression[\"1+\\n2\", InputForm, Hold]]", "Hold[Plus[1, 2]]", 1);
@@ -1239,6 +1269,9 @@ int main() {
     TEST(test_string_line_continuation);
     TEST(test_statement_continuation_after_semicolon);
     TEST(test_get_syntax_error_reported);
+    TEST(test_toexpression_sequencing);
+    TEST(test_unclosed_paren_rejected);
+    TEST(test_reading_creates_symbols);
 
     printf("\nAll parser tests passed!\n");
     return 0;

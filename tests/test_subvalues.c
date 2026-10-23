@@ -87,6 +87,17 @@ static void test_unaffected_compound_heads(void) {
     assert_eval_eq("uv /: (hh[1])[uv] := \"up\"; hh[1][uv]", "\"up\"", 0);
 }
 
+/* Derivative is not Protected (NHoldAll): packages define
+ * Derivative[n...][f][x...] SubValues. */
+static void test_derivative_subvalues() {
+    assert_eval_eq("Attributes[Derivative]", "{NHoldAll}", 0);
+    assert_eval_eq("Check[Derivative[1, 0, 0][bzsv][pp_, m_, n_] := \"ok\"; \"stored\", \"msg\"]", "\"stored\"", 0);
+    assert_eval_eq("{Derivative[1, 0, 0][bzsv][1, 2, 3], Length[SubValues[Derivative]]}", "{\"ok\", 1}", 0);
+    assert_eval_eq("Check[Derivative[1, 0, 0][bzsv][1, 2, 3] =., \"norep\"]", "\"norep\"", 0);
+    assert_eval_eq("Derivative[1, 0, 0][bzsv][pp_, m_, n_] =.; Length[SubValues[Derivative]]", "0", 0);
+    assert_eval_eq("D[Sin[x]^2, x]", "2 Cos[x] Sin[x]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -97,6 +108,7 @@ int main(void) {
     TEST(test_clear_unset_tags);
     TEST(test_options_and_unwind);
     TEST(test_unaffected_compound_heads);
+    TEST(test_derivative_subvalues);
     printf("All SubValues tests passed.\n");
     return 0;
 }

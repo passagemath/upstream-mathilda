@@ -3852,5 +3852,5 @@ void deriv_init(void) {
      *     SetAttributes[Derivative, {Protected}] */
     symtab_get_def("D")->attributes          |= ATTR_PROTECTED;
     symtab_get_def("Dt")->attributes         |= ATTR_PROTECTED;
-    symtab_get_def("Derivative")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Derivative")->attributes |= ATTR_NHOLDALL;   /* not Protected: packages define Derivative[...][f][x] := ... SubValues */
 }

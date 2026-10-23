@@ -137,6 +137,15 @@ static void test_printtemporary(void) {
     assert_eval_eq("Quiet[PrintTemporary[]]; Attributes[PrintTemporary]", "{Protected}", 0);
 }
 
+/* Style is presentation only: OutputForm (Print, ToString) shows the content. */
+static void test_style_outputform(void) {
+    assert_stderr("Print[1]", "");      /* Print writes stdout; nothing on stderr */
+    assert_eval_eq("{ToString[Style[\"s\", Bold]], ToString[Style[x^2, Red, 12]], ToString[{Style[a, Italic], b}]}",
+                   "{\"s\", \"x^2\", \"{a, b}\"}", 0);
+    assert_eval_eq("FullForm[Style[\"s\", Bold]]", "Style[\"s\", Bold]", 0);
+    assert_eval_eq("{Context[DateString], Context[FileDate]}", "{\"System`\", \"System`\"}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -145,6 +154,7 @@ int main(void) {
     TEST(test_message_list);
     TEST(test_helper_warnings_routed);
     TEST(test_printtemporary);
+    TEST(test_style_outputform);
     printf("All message tests passed.\n");
     return 0;
 }

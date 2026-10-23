@@ -4411,6 +4411,21 @@ Expr* builtin_syntaxq(Expr* res) {
     return expr_new_symbol(SYM_True);
 }
 
+/* ToExpression's evaluate-as-you-go callback: each statement is evaluated as
+ * soon as it is read; the last value is kept, and an in-flight Throw / Abort
+ * stops the read (it becomes the result). */
+typedef struct { Expr* last; } ToExprEval;
+
+static int toexpr_eval_one(Expr* stmt, void* ctx) {
+    ToExprEval* t = (ToExprEval*)ctx;
+    parse_materialize_user_symbols(stmt);
+    Expr* v = evaluate(stmt);
+    expr_free(stmt);
+    expr_free(t->last);
+    t->last = v ? v : expr_new_symbol(SYM_Null);
+    return !eval_is_inflight_unwind(t->last);
+}
+
 Expr* builtin_toexpression(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -4435,10 +4450,32 @@ Expr* builtin_toexpression(Expr* res) {
     int line_statements = argc < 2
         || res->data.function.args[1]->data.symbol.name != SYM_StandardForm;
     const char* err_pos = NULL;
+
+    /* Without a wrapper head, statements are parsed and EVALUATED one at a
+     * time, so Begin["ctx`"] / BeginPackage on one line governs the symbols of
+     * the lines after it; a syntax error further on still gives $Failed, after
+     * the statements before it have run.  An abort or throw stops the read. */
+    if (argc < 3) {
+        ToExprEval st = { expr_new_symbol(SYM_Null) };
+        int prev_q = parse_set_quiet(1);
+        int rc = parse_statement_each(input->data.string, line_statements, &err_pos,
+                                      toexpr_eval_one, &st);
+        parse_set_quiet(prev_q);
+        if (rc == 0) {
+            expr_free(st.last);
+            mth_message("ToExpression", "sntx",
+                        "Invalid syntax in or before \"%s\".",
+                        err_pos && *err_pos ? err_pos : input->data.string);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+        return st.last;
+    }
+
     int prev_quiet = parse_set_quiet(1);     /* ToExpression::sntx reports it */
     Expr* stmts = parse_statement_sequence(input->data.string, line_statements,
                                            &err_pos);
     parse_set_quiet(prev_quiet);
+    if (stmts) parse_materialize_user_symbols(stmts);
     if (!stmts) {
         mth_message("ToExpression", "sntx",
                     "Invalid syntax in or before \"%s\".",

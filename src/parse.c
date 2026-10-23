@@ -1455,7 +1455,13 @@ static Expr* parse_primary(ParserState* s) {
             if (*s->pos == ')') {
                 s->pos++;
             } else {
+                /* An unclosed "(" is a syntax error, not an expression that
+                 * happens to end where the input does: "(2 + x" must not read
+                 * as 2 + x. */
                 parse_err( "Expected ')'\n");
+                close_bracket(s);
+                expr_free(inner);
+                return NULL;
             }
             close_bracket(s);
             return inner;
@@ -2232,6 +2238,26 @@ Expr* parse_expression(const char* input) {
     return result;
 }
 
+/* Reading user input CREATES its symbols, as the reference reader does: after
+ * `Global`v = Names["Global`*"]` the list already contains v, because the
+ * statement was read (creating v) before Names ran.  The interner alone only
+ * canonicalises a name; materialising it makes it a symbol Names lists.  Not
+ * done while a kernel module loads (its scratch names must not appear in a
+ * fresh session's Names["Global`*"]), nor by parse_expression, which C code
+ * uses for internal templates. */
+static void materialize_symbols(const Expr* e) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) { (void)symtab_get_def(e->data.symbol.name); return; }
+    if (e->type != EXPR_FUNCTION) return;
+    materialize_symbols(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        materialize_symbols(e->data.function.args[i]);
+}
+
+void parse_materialize_user_symbols(const Expr* e) {
+    if (intern_system_scope_depth() == 0) materialize_symbols(e);
+}
+
 /* Can the text at p only continue an expression -- does it start a binary or
  * postfix operator that no expression can begin with (`a; ::x` is a MessageName
  * of the compound, too)?  `+`, `-`, `!`, `.`
@@ -2306,6 +2332,7 @@ Expr* parse_next_expression(const char** input_ptr) {
     skip_whitespace(&state);
     if (*state.pos == ';' && state.pos[1] != ';') state.pos++;
 
+    parse_materialize_user_symbols(result);
     *input_ptr = state.pos;
     return result;
 }
@@ -2334,16 +2361,13 @@ static const char* skip_line_blanks(const char* p) {
     }
 }
 
-Expr* parse_statement_sequence(const char* input, int line_statements,
-                               const char** err_pos) {
+int parse_statement_each(const char* input, int line_statements, const char** err_pos,
+                         ParseStatementFn fn, void* ctx) {
     if (err_pos) *err_pos = NULL;
-    if (!input) return NULL;
-
-    size_t cap = 4, n = 0;
-    Expr** stmts = malloc(cap * sizeof *stmts);
-    if (!stmts) return NULL;
+    if (!input) return 0;
 
     const char* p = input;
+    int any = 0;
     for (;;) {
         Expr* stmt = NULL;
         p = skip_line_blanks(p);
@@ -2380,29 +2404,45 @@ Expr* parse_statement_sequence(const char* input, int line_statements,
             if (!ok) {
                 if (err_pos) *err_pos = p;
                 expr_free(stmt);
-                for (size_t i = 0; i < n; i++) expr_free(stmts[i]);
-                free(stmts);
-                return NULL;
+                return 0;
             }
         }
-        if (n == cap) {
-            cap *= 2;
-            Expr** grown = realloc(stmts, cap * sizeof *stmts);
-            if (!grown) {
-                expr_free(stmt);
-                for (size_t i = 0; i < n; i++) expr_free(stmts[i]);
-                free(stmts);
-                return NULL;
-            }
-            stmts = grown;
-        }
-        stmts[n++] = stmt;
+        any = 1;
+        /* The statement is handed over before the next is parsed, so a caller
+         * that evaluates it (ToExpression) lets Begin[...] / BeginPackage[...]
+         * govern the symbols of the statements after it. */
+        if (!fn(stmt, ctx)) return 2;
     }
     /* No statement at all (empty, blank or comment-only input) is Null. */
-    if (n == 0) stmts[n++] = expr_new_symbol(SYM_Null);
+    if (!any && !fn(expr_new_symbol(SYM_Null), ctx)) return 2;
+    return 1;
+}
 
-    Expr* list = expr_new_function(expr_new_symbol(SYM_List), stmts, n);
-    free(stmts);
+typedef struct { Expr** v; size_t n, cap; } StmtList;
+
+static int stmt_collect(Expr* stmt, void* ctx) {
+    StmtList* l = (StmtList*)ctx;
+    if (l->n == l->cap) {
+        size_t nc = l->cap ? 2 * l->cap : 4;
+        Expr** g = realloc(l->v, nc * sizeof(Expr*));
+        if (!g) { expr_free(stmt); return 0; }
+        l->v = g; l->cap = nc;
+    }
+    l->v[l->n++] = stmt;
+    return 1;
+}
+
+Expr* parse_statement_sequence(const char* input, int line_statements,
+                               const char** err_pos) {
+    StmtList l = { NULL, 0, 0 };
+    int rc = parse_statement_each(input, line_statements, err_pos, stmt_collect, &l);
+    if (rc != 1) {
+        for (size_t i = 0; i < l.n; i++) expr_free(l.v[i]);
+        free(l.v);
+        return NULL;
+    }
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), l.v, l.n);
+    free(l.v);
     return list;
 }
 

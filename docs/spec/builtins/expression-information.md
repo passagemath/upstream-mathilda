@@ -509,6 +509,24 @@ example, they evaluate in parallel only when `$KernelCount > 0`.
 
 All `Protected`. Defined in `src/core.c`.
 
+## Inert front-end and box symbols
+Mathilda has no notebook front end, so the following names have no
+definitions. They are still `System`` symbols, so a package that mentions one
+refers to the `System`` symbol rather than creating a private copy in its own
+context. They stay inert: `RowBox[{"a"}]` evaluates to itself.
+
+`Bold`, `Italic`, `Darker`, `FontSlant`, `BaseStyle`, `ButtonBox`, `ButtonData`,
+`ButtonNote`, `ButtonFunction`, `URL`, `Evaluator`, `$FrontEndSession`,
+`CurrentValue`, `CommonDefaultFormatTypes`, `FrontEndObject`, `CreateDialog`,
+`ChoiceDialog`, `TextCell`, `DefaultButton`, `Modal`, `WindowTitle`,
+`NotebookDirectory`, `SystemOpen`, `RowBox`, `SubscriptBox`, `SuperscriptBox`,
+`SubsuperscriptBox`, `OverscriptBox`, `TagBox`, `SequenceForm`, `StyleForm`,
+`DisplayForm`, `TableForm`, `Subscript`, `Superscript`, `Infix`, `LineBreak`,
+`Labeled`, `Column`, `Grid`, `Spacings`, `Alignment`, `SpanFromLeft`,
+`PageWidth`, `FormatType`, `Trig`, `Integral`.
+
+The list is in `src/sym_names.c`, next to `Surd`.
+
 ## $SystemMemory
 The total physical memory of the machine, in bytes, as an integer (`sysctl
 hw.memsize` on macOS, `sysconf` on Linux, `GlobalMemoryStatusEx` on Windows).

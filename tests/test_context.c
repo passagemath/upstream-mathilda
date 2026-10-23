@@ -221,6 +221,23 @@ static void test_context_of_system_symbols(void) {
     assert_eval_eq("$g104 = 1; Context[$g104]", "\"Global`\"", 0);
 }
 
+/* ---- inert front-end / box names are System`, even inside a package ---- */
+static void test_inert_frontend_names_are_system(void) {
+    /* A package that mentions these must reference the System` symbol rather
+     * than mint a private copy in its own context. */
+    /* Separate statements: symbols are resolved when a statement is parsed. */
+    assert_eval_eq("BeginPackage[\"ZZfe`\"]; Begin[\"`Private`\"];", "Null", 0);
+    assert_eval_eq("zzfe = {Context[Bold], Context[RowBox], Context[$FrontEndSession], "
+                   "Context[SubscriptBox], Context[TableForm], Context[Integral], Context[zzfeLocal]};",
+                   "Null", 0);
+    assert_eval_eq("End[]; EndPackage[];", "Null", 0);
+    assert_eval_eq("ZZfe`Private`zzfe",
+                   "{\"System`\", \"System`\", \"System`\", \"System`\", \"System`\", "
+                   "\"System`\", \"ZZfe`Private`\"}", 0);
+    /* They stay inert. */
+    assert_eval_eq("{Bold, RowBox[{\"a\", \"b\"}], Darker[x]}", "{Bold, RowBox[{\"a\", \"b\"}], Darker[x]}", 0);
+}
+
 /* ---- $ContextPath / $Context are assignable (they ARE the state) ---- */
 static void test_contextpath_assignment(void) {
     size_t n0 = context_path_count();
@@ -291,6 +308,7 @@ int main(void) {
     TEST(test_context_of_user_symbol);
     TEST(test_package_dollar_symbol);
     TEST(test_context_of_system_symbols);
+    TEST(test_inert_frontend_names_are_system);
     TEST(test_contextpath_assignment);
     TEST(test_context_assignment);
 

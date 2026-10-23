@@ -2083,6 +2083,27 @@ void sym_names_init(void) {
      * (Surd: real n-th root.) */
     intern_symbol("Surd");
 
+    /* Inert front-end, box and formatting names.  Mathilda has no notebook
+     * front end, so none of these evaluate, but they are System` names: a
+     * package that mentions Bold, RowBox, $FrontEndSession, ... must reference
+     * the System` symbol, not mint a private copy in its own context (which
+     * would also break any comparison against the System` name). */
+    {
+        static const char* const inert_system[] = {
+            "Bold", "Italic", "Darker", "FontSlant", "BaseStyle",
+            "ButtonBox", "ButtonData", "ButtonNote", "ButtonFunction", "URL", "Evaluator",
+            "$FrontEndSession", "CurrentValue", "CommonDefaultFormatTypes", "FrontEndObject",
+            "CreateDialog", "ChoiceDialog", "TextCell", "DefaultButton", "Modal", "WindowTitle",
+            "NotebookDirectory", "SystemOpen",
+            "RowBox", "SubscriptBox", "SuperscriptBox", "SubsuperscriptBox", "OverscriptBox", "TagBox",
+            "SequenceForm", "StyleForm", "DisplayForm", "TableForm", "Subscript", "Superscript",
+            "Infix", "LineBreak", "Labeled", "Column", "Grid", "Spacings", "Alignment", "SpanFromLeft",
+            "PageWidth", "FormatType", "Trig", "Integral",
+        };
+        for (size_t i = 0; i < sizeof inert_system / sizeof inert_system[0]; i++)
+            intern_symbol(inert_system[i]);
+    }
+
     /* FLINT` context: direct-access wrappers over the FLINT-backed kernels.
      * The backtick-qualified names live in the FLINT` context (not System`),
      * matching how they are typed at the REPL. Registered as builtins in the

@@ -54,6 +54,11 @@ REDUCTION = [
     "MinMax[S]", "Mean[S]", "Tr[S]", "Accumulate[S]", "Differences[S]",
     "Length[S]", "Dimensions[S]", "ArrayDepth[S]", "Depth[S]", "Norm[Flatten[S]]",
     "Total[Flatten[S]]", "Variance[Flatten[N[S]]]", "Median[Flatten[N[S]]]",
+    "Total[S, {1}]", "Total[S, Infinity]", "Total[S, {-1}]", "Total[S, {1, 2}]",
+    "Total[S, 0]", "Total[N[S]]", "Total[N[S], {2}]", "Mean[N[S]]", "Variance[S]",
+    "StandardDeviation[N[S]]", "Max[S, x]", "Min[S, -1, T]", "MinMax[S]",
+    "Accumulate[N[S]]", "S == T", "S != T", "Equal[S, T, S]", "S == Normal[T]",
+    "Unequal[S, Normal[S]]", "S == N[S]",
 ]
 STRUCTURAL = [
     "Transpose[S]", "Flatten[S]", "Reverse[S]", "Take[S, 1]", "Take[S, -1]",
@@ -76,12 +81,18 @@ MATRIX = [  # rank-2 square
     "LowerTriangularize[S]", "UpperTriangularize[S]", "S . S . v",
     "ArrayFlatten[{{S, T}, {T, S}}]", "Inner[Times, S, v, Plus]",
     "Eigenvalues[N[S + Transpose[S]]]",
+    "Norm[S]", "Norm[N[S]]", "Norm[S, 1]", "Norm[S, Infinity]", "Norm[S, \"Frobenius\"]",
+    "Norm[N[S], \"Frobenius\"]", "Tr[S]", "Tr[S, List]", "Accumulate[S]", "Mean[S]",
+    "Variance[N[S]]",
 ]
 VECTOR = [  # rank-1
     "S . T", "S . v", "Norm[S]", "Total[S]", "Accumulate[S]", "Reverse[S]",
     "Map[f, S]", "Select[S, # != 0 &]", "Outer[Times, S, T]",
     "KroneckerProduct[S, T]", "Riffle[S, T]", "DiagonalMatrix[S]",
     "Tally[S]", "Sort[Normal[S]]", "Ordering[Normal[S]]",
+    "Norm[S, 1]", "Norm[S, Infinity]", "Norm[S, 3]", "Norm[N[S], 3]", "Norm[S, 2.5]",
+    "Norm[N[S]]", "Max[S]", "Mean[S]", "Variance[S]", "StandardDeviation[N[S]]",
+    "Total[S]", "Tr[S]", "Accumulate[S]", "S == Normal[T]", "Norm[S, \"Frobenius\"]",
 ]
 
 # Known, accepted differences (template -> reason). Keep this short and

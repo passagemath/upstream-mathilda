@@ -4,12 +4,15 @@
 #include "ndreduce.h"
 #include "plus.h"
 
+/* The depth that negative and Infinity level specs count from: the nesting
+ * of Lists only. An element with any other head is a leaf, so
+ * Total[{z^2, 1}, Infinity] is 1 + z^2 (descending into Power[z, 2] made it
+ * 3 + z) and Total[{{a + 1, 2}}, {-1}] totals the rows. */
 static int64_t get_depth_for_total(Expr* e) {
+    if (e->type == EXPR_NDARRAY) return 1 + e->data.ndarray.rank;
     if (e->type != EXPR_FUNCTION) return 1;
-    if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol.name;
-        if (h == SYM_Rational || h == SYM_Complex) return 1;
-    }
+    if (e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List) return 1;
     int64_t max_d = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         int64_t d = get_depth_for_total(e->data.function.args[i]);

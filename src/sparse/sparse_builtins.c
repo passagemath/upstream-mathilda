@@ -7,6 +7,7 @@
  */
 
 #include "sparse.h"
+#include "sparse_internal.h"
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "symtab.h"
@@ -396,4 +397,5 @@ void sparse_init(void) {
     symtab_get_def(SYM_Band)->attributes |= ATTR_PROTECTED;
 
     sparse_gate_init();
+    sparse_reduce_init();
 }

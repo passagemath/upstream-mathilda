@@ -48,4 +48,9 @@ Expr* sp_arith_scalar(bool is_plus, const SparseArray* sa, const Expr* c);
 Expr* sp_arith_binary(bool is_plus, const SparseArray* a, const SparseArray* b);
 Expr* sp_power_scalar(const SparseArray* sa, const Expr* c, bool sparse_is_base);
 
+/* Native reductions and comparisons (sparse_reduce.c): Total, Mean,
+ * Variance, StandardDeviation, Max, Min, MinMax, Tr, Norm, Equal, Unequal,
+ * Accumulate. Registered by sparse_init after the gate. */
+void sparse_reduce_init(void);
+
 #endif /* MATHILDA_SPARSE_INTERNAL_H */

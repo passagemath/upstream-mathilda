@@ -1608,6 +1608,29 @@ In[4]:= {Count[s, 1], MemberQ[s, 2]}
 Out[4]= {0, False}
 ```
 
+**Reductions and comparisons (native).** `Total`, `Mean`, `Variance`,
+`StandardDeviation`, `Tr`, `Max`, `Min`, `MinMax`, `Norm`, `Accumulate`,
+`Equal` and `Unequal` read the explicit entries directly. The background is
+accounted for arithmetically: each implicit position of a reduced cell
+contributes it once. So `Total[s]` of a `10^5 x 10^5` array with `10^6` entries
+costs O(nnz).
+
+- **Exactness.** A value is exact exactly when every element combined is exact:
+  `Total[SparseArray[{{1, 1} -> 1.5}, {2, 2}, 3]]` is `{4.5, 6}`. Over machine
+  values and the exact background 0, an empty cell is `0.`.
+- **Result kind.** `Total` and `Mean` return a SparseArray when the result has
+  rank >= 2 and the background is the exact 0. Otherwise they return a dense
+  List or a scalar. Negative and `Infinity` levels count array depth.
+- **Max / Min** include the background only when some position is implicit.
+- **Norm** supports:
+  - vector p-norms: 1, 2, Infinity, integer and real p >= 1, and `"Frobenius"`;
+  - matrix 1, Infinity and `"Frobenius"` norms;
+  - the machine matrix 2-norm, by a Lanczos iteration on A^T A to machine
+    precision.
+- **Equal** merges the explicit positions of both operands, or walks a dense
+  one, with the scalar `Equal`'s tolerance. Arrays of different dimensions are
+  unequal.
+
 Densifying is implicit only up to 2^27 elements. Beyond that the call is left
 unevaluated with `SparseArray::dense`. For example, `Total` of a
 `10^5 x 10^5` array never allocates the 80 GB dense form.

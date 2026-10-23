@@ -178,6 +178,24 @@ Expr* builtin_norm(Expr* res) {
         }
     }
 
+    /* The induced 1- and Infinity-norms need no SVD: the largest absolute
+     * column sum and row sum. Exact and symbolic matrices get them here
+     * (Norm[{{1, 2}, {-3, 4}}, 1] is 6, Norm[{{a, 0}, {0, b}}, 1] is
+     * Max[Abs[a], Abs[b]]). */
+    if (rank == 2 && dims[0] > 0 && dims[1] > 0 && p &&
+        ((p->type == EXPR_INTEGER && p->data.integer == 1) ||
+         (p->type == EXPR_SYMBOL && p->data.symbol.name == SYM_Infinity))) {
+        bool rows = p->type == EXPR_SYMBOL;
+        Expr* absm = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs),
+                                                      (Expr*[]){ expr_copy(expr) }, 1));
+        Expr* tot = rows
+            ? expr_new_function(expr_new_symbol(SYM_Total),
+                  (Expr*[]){ absm, expr_new_function(expr_new_symbol(SYM_List),
+                                                      (Expr*[]){ expr_new_integer(2) }, 1) }, 2)
+            : expr_new_function(expr_new_symbol(SYM_Total), (Expr*[]){ absm }, 1);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), (Expr*[]){ tot }, 1));
+    }
+
     // Fallback for unhandled matrix norm (e.g. SVD max singular value)
     return NULL;
 }

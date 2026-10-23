@@ -507,8 +507,8 @@ static void test_gate(void) {
     chk("Select[V, Positive]", "{3}");
     chk_true("Head[First[Select[S, VectorQ]]] === SparseArray");
     /* a too-large implicit densification is refused, not attempted */
-    chk("Quiet[Total[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]]] // Head", "Total");
-    chk("Check[Total[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]], fail]", "fail");
+    chk("Quiet[Median[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]]] // Head", "Median");
+    chk("Check[Median[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]], fail]", "fail");
 }
 
 int main(void) {

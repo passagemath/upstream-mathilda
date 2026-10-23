@@ -789,6 +789,47 @@ static Expr* try_holonomic(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage: Bessel hypergeometric closed forms (src/internal/BesselHyper.m).
+ *
+ * c x^m Z1(b x^p) [Z2(b x^p)], Z in {J, Y, I, K}: the product's power series
+ * (the Cauchy product of two Bessel series sums by Chu-Vandermonde to a 2F3)
+ * integrated term by term into a HypergeometricPFQ, or -- for integer and
+ * symbolic orders of Y / K, where the series route divides by Sin[nu Pi] --
+ * its Mellin-Barnes MeijerG integrated under the contour.  Integer order
+ * differences reduce to diagonal products by the recurrences and the
+ * Wronskian.  Runs after Holonomic so an antiderivative that closes in Bessel
+ * functions keeps that form; this covers the ones that do not
+ * (Integrate[BesselJ[1/3, x]^2, x], Integrate[BesselK[0, x], x], ...).
+ * Exact by construction; anything outside the class is $Failed. */
+static bool bh_load_attempted = false;
+static bool bh_load_succeeded = false;
+
+static Expr* try_besselhyper(Expr* f, Expr* x) {
+    if (!hol_has_kernel(f)) return NULL;
+    if (!bh_load_attempted) {
+        bh_load_attempted = true;
+        mth_msg_suppress_push();
+        bh_load_succeeded = mathilda_load_module("BesselHyper.m") != 0;
+        mth_msg_suppress_pop();
+        if (!bh_load_succeeded)
+            mth_message("Integrate`BesselHypergeometric", "nofile",
+                "cannot locate src/internal/BesselHyper.m on disk.");
+    }
+    if (!bh_load_succeeded) return NULL;
+    mth_msg_suppress_push();
+    Expr* result = call_stage("BesselHyper`Integrate", f, x);
+    mth_msg_suppress_pop();
+    if (!result) return NULL;
+    if (result_is_unresolved(result, "BesselHyper`Integrate") ||
+        result->type != EXPR_FUNCTION ||
+        result_contains_head(result, "Integrate") ||
+        result_contains_head(result, "Return") || result_contains_head(result, "Throw")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
 /* Stage 2: recursive transcendental Risch integrator.
  * A decision procedure over a differential transcendental tower, with
  * rational / logarithmic / exponential / special-function cases, each
@@ -1304,6 +1345,7 @@ typedef enum {
     METHOD_CRCTABLE,
     METHOD_POLYLOG_LADDER,
     METHOD_HOLONOMIC,
+    METHOD_BESSEL_HYPERGEOMETRIC,
     METHOD_PARALLEL_MIXED_TOWER,
     METHOD_PARALLEL_MIXED_SPECIAL,
     METHOD_UNDEFINED,
@@ -1342,6 +1384,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(s, "PolyLogLadder") == 0) return METHOD_POLYLOG_LADDER;
     if (strcmp(s, "Holonomic") == 0) return METHOD_HOLONOMIC;
+    if (strcmp(s, "BesselHypergeometric") == 0) return METHOD_BESSEL_HYPERGEOMETRIC;
     if (strcmp(s, "ParallelMixedTower") == 0) return METHOD_PARALLEL_MIXED_TOWER;
     if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -1978,7 +2021,7 @@ typedef enum {
     IP_UNDEFINED = 0, IP_STEP, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
-    IP_HOLONOMIC, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
+    IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
     IP_NSTAGES
 } IntegrateProfStage;
 
@@ -1987,7 +2030,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
-    "14 CRCTable", "14b PolyLogLadder", "14c Holonomic", "15 LogByParts",
+    "14 CRCTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
@@ -2534,6 +2577,9 @@ Expr* builtin_integrate(Expr* res) {
             /* Bessel / Airy kernel products: one linear system in the kernels'
              * differential module, before the tower tail grinds on them. */
             IP_STAGE(IP_HOLONOMIC,    try_holonomic(effective_f, x));
+            /* ...and the hypergeometric / MeijerG closed form when no
+             * Bessel-product antiderivative exists. */
+            IP_STAGE(IP_BESSELHYPER,  try_besselhyper(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
@@ -2633,6 +2679,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_HOLONOMIC:
             result = try_holonomic(effective_f, x);
+            break;
+        case METHOD_BESSEL_HYPERGEOMETRIC:
+            result = try_besselhyper(effective_f, x);
             break;
         case METHOD_PARALLEL_MIXED_TOWER:
             result = try_parallelmixedtower(effective_f, x);

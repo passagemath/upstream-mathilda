@@ -5299,6 +5299,17 @@ else()
 endif()
 add_test(NAME integrate_holonomic_tests COMMAND integrate_holonomic_tests)
 
+# BesselHypergeometric indefinite-integration stage (src/internal/BesselHyper.m).
+add_executable(integrate_bessel_hyper_tests test_integrate_bessel_hyper.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_bessel_hyper_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_bessel_hyper_tests gmp m ${ECM_LIB})
+    add_dependencies(integrate_bessel_hyper_tests build_ecm)
+else()
+    target_link_libraries(integrate_bessel_hyper_tests gmp m)
+endif()
+add_test(NAME integrate_bessel_hyper_tests COMMAND integrate_bessel_hyper_tests)
+
 # Cauchy principal-value definite-integral stress battery (fractional branch cuts
 # over real poles, log branch cuts, trig/oscillatory poles, higher-order poles).
 # Same fork + per-case-timeout harness; WRONG baseline ratchets 4 -> 0.

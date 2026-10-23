@@ -551,11 +551,33 @@ static bool nl_contains_singular(const Expr* e) {
     return false;
 }
 
+/* True iff `e` contains 0^p with a non-numeric exponent p.  Such a power is an
+ * undecided boundary value, not a closed form: x^(1+nu) MeijerG[..., x^2/4]
+ * substituted at 0 gives 0^(1+nu) MeijerG[..., 0], a 0 * Infinity product
+ * whose true limit depends on how the exponents combine. */
+static bool nl_contains_zero_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_name_is((Expr*)e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        if (b->type == EXPR_INTEGER && b->data.integer == 0 &&
+            p->type != EXPR_INTEGER && p->type != EXPR_REAL && p->type != EXPR_BIGINT &&
+            !head_name_is((Expr*)p, "Rational"))
+            return true;
+    }
+    if (nl_contains_zero_power(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (nl_contains_zero_power(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* A boundary value is usable directly only if it is a finite closed form:
- * free of x, and free of any singular sentinel / unresolved Limit or Integrate. */
+ * free of x, and free of any singular sentinel / undecided 0^p / unresolved
+ * Limit or Integrate. */
 static bool nl_is_finite_closed(Expr* v, const Expr* x) {
     if (!v) return false;
     if (nl_contains_singular(v)) return false;
+    if (nl_contains_zero_power(v)) return false;
     if (head_name_is(v, "Interval")) return false;
     if (contains_head(v, "Limit") || contains_head(v, "Integrate")) return false;
     if (contains_symbol(v, x)) return false;
@@ -1244,7 +1266,7 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
      * decide -- leave the integral unevaluated. */
     if (contains_head(total, "Limit") || contains_head(total, "Integrate") ||
         head_name_is(total, "Interval") || contains_symbol(total, x) ||
-        nl_contains_singular(total)) {
+        nl_contains_singular(total) || nl_contains_zero_power(total)) {
         expr_free(total);
         return NULL;
     }

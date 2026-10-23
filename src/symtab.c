@@ -1250,9 +1250,11 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
         MatchEnv* env = env_new();
         /* Phase 1 stays inline (identical to the pre-feature fast path); only a
          * failed match falls through to Flat-head leftover matching (Phase 2). */
+        const char* prev_head = match_set_rule_head(def->symbol_name);
         Expr* result = match(expr, rule->pattern, env)
             ? replace_bindings(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
+        match_set_rule_head(prev_head);
         if (result) {
             /* If the matched pattern carried an OptionsPattern, rewrite the
              * context-dependent OptionValue[...] nodes in the RHS into explicit
@@ -1398,9 +1400,13 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
 
         MatchEnv* env = env_new();
         /* Phase 1 inline (unchanged fast path); failed match -> Flat leftover. */
+        const char* prev_head = match_set_rule_head(
+            (expr->data.function.head && expr->data.function.head->type == EXPR_SYMBOL)
+                ? expr->data.function.head->data.symbol.name : def->symbol_name);
         Expr* result = match(expr, rule->pattern, env)
             ? replace_bindings(rule->replacement, env)
             : match_flat_leftover(expr, rule->pattern, rule->replacement, env);
+        match_set_rule_head(prev_head);
         if (result) {
             Expr* opts = env_get(env, "$OptionsPattern$");
             if (opts) {

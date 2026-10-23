@@ -1,4 +1,5 @@
 #include "match.h"
+#include "options.h"   /* optionvalue_inject_context: OptionValue in /; guards */
 #include <gmp.h>
 #include "part.h"
 #include "modular.h"
@@ -575,8 +576,31 @@ static bool guard_all_true(Expr* g) {
     return t;
 }
 
+/* Head of the definition whose rule is being matched (see match_set_rule_head),
+ * so a `/;` guard can resolve OptionValue like the rule's RHS does. */
+static const char* g_guard_rule_head = NULL;
+
+const char* match_set_rule_head(const char* head) {
+    const char* prev = g_guard_rule_head;
+    g_guard_rule_head = head;
+    return prev;
+}
+
 static bool eval_guard_true(Expr* guard, MatchEnv* env) {
     Expr* expanded = replace_bindings(guard, env);
+    /* A guard of a rule whose LHS carries OptionsPattern[] sees OptionValue
+     * exactly as the RHS does: `f[x_, OptionsPattern[]] := x /; OptionValue[o] == 1`
+     * stores the condition in the pattern, so it is evaluated here, before
+     * the RHS is ever built. */
+    Expr* opts = g_guard_rule_head ? env_get(env, "$OptionsPattern$") : NULL;
+    if (opts) {
+        const char* head = g_guard_rule_head;
+        Expr* oh = env_get(env, "$OptionsPatternHead$");
+        if (oh && oh->type == EXPR_SYMBOL) head = oh->data.symbol.name;
+        Expr* resolved = optionvalue_inject_context(expanded, head, opts);
+        expr_free(expanded);
+        expanded = resolved;
+    }
     Expr* result = evaluate(expanded);
     expr_free(expanded);
     if (!result) return false;

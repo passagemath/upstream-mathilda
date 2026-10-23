@@ -33,6 +33,11 @@ Expr* env_get(MatchEnv* env, const char* symbol);
 // and populates the env with bindings.
 bool match(Expr* expr, Expr* pattern, MatchEnv* env);
 
+/* Publish the head of the definition whose rule is about to be matched, so a
+ * Condition guard can resolve OptionValue[...] against the rule's
+ * OptionsPattern; returns the previous head for the caller to restore. */
+const char* match_set_rule_head(const char* head);
+
 // Replace bound variables in expr with their values from env.
 // Returns a new expression (caller must free).
 Expr* replace_bindings(Expr* expr, MatchEnv* env);

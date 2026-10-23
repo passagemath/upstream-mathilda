@@ -137,6 +137,25 @@ int main(void) {
     chk("oiOuter[\"opt\" -> 5]", "5");        /* an explicitly passed option still wins */
     chk("oiInner[]", "111");                  /* bare OptionsPattern[] unaffected */
 
+    /* ---- OptionValue inside a /; guard: `lhs := rhs /; cond` stores cond in
+     * the pattern, so it is evaluated by the matcher before the RHS exists;
+     * it must see the same OptionValue context as the RHS. ---- */
+    run("Options[ovg] = {o -> 1}");
+    run("ovg[x_, OptionsPattern[]] := x /; OptionValue[o] == 1");
+    chk("{ovg[3], ovg[3, o -> 1], ovg[3, o -> 2]}", "{3, 3, ovg[3, o -> 2]}");
+    run("Options[ovk] = {o -> 1, p -> 2}");
+    run("ovk[x_, OptionsPattern[]] := {x, OptionValue[p]} /; MatchQ[OptionValue[o], _Integer?Positive]");
+    chk("{ovk[5], ovk[5, p -> 9], ovk[5, o -> -1]}", "{{5, 2}, {5, 9}, ovk[5, o -> -1]}");
+    /* A failing guard falls through to the next rule. */
+    run("Options[ovf] = {mode -> \"a\"}");
+    run("ovf[x_, OptionsPattern[]] := {\"a\", x} /; OptionValue[mode] === \"a\"");
+    run("ovf[x_, OptionsPattern[]] := {\"other\", x}");
+    chk("{ovf[1], ovf[1, mode -> \"b\"]}", "{{\"a\", 1}, {\"other\", 1}}");
+    /* The FeynCalc MemSet shape: the default option drives the guard. */
+    run("Options[ovm] = {budget -> 100}");
+    run("ovm[x_, OptionsPattern[]] := x^2 /; MatchQ[OptionValue[budget], _Integer?NonNegative]");
+    chk("{ovm[3], ovm[3, budget -> -1]}", "{9, ovm[3, budget -> -1]}");
+
     /* ---- OptionQ ---- */
     chk("{OptionQ[a -> 1], OptionQ[a :> 1], OptionQ[\"a\" -> 1], OptionQ[{a -> 1, b :> 2}]}",
         "{True, True, True, True}");

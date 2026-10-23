@@ -582,6 +582,19 @@ In[6]:= AppendTo[Options[f], c -> 3]
 Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 
+**`OptionValue` in a condition.** A rule whose LHS carries `OptionsPattern[]`
+resolves `OptionValue[name]` in its `/;` guard exactly as it does in its RHS,
+against the supplied options and then the head's defaults:
+```
+Options[g] = {o -> 1};
+g[x_, OptionsPattern[]] := x /; OptionValue[o] == 1
+{g[3], g[3, o -> 2]}                       (* {3, g[3, o -> 2]} *)
+```
+A failing guard falls through to the next rule. This also applies to a guard
+written on the LHS (`g[x_, OptionsPattern[]] /; OptionValue[o] == 1 := ...`).
+That case is deliberately more permissive than the reference, which leaves
+such a call unevaluated.
+
 ## OptionQ
 `OptionQ[e]` gives `True` if `e` is an option rule, or a possibly nested list of
 them, and `False` otherwise.

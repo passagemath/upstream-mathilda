@@ -153,6 +153,13 @@ int regex_match(RegexProgram* prog, const char* subj, size_t len, size_t start,
     prog->busy++;
     int rc = pcre2_match(prog->code, (PCRE2_SPTR)subj, (PCRE2_SIZE)len,
                          (PCRE2_SIZE)start, prog->match_opts, md, prog->mctx);
+    /* The JIT runs on a fixed 32 kB machine stack, which a backtracking
+     * pattern such as (a|b)* exhausts on a subject of a few kB.  The
+     * interpreter keeps its backtracking frames on the heap, so rerun there
+     * rather than failing the whole call. */
+    if (rc == PCRE2_ERROR_JIT_STACKLIMIT)
+        rc = pcre2_match(prog->code, (PCRE2_SPTR)subj, (PCRE2_SIZE)len,
+                         (PCRE2_SIZE)start, prog->match_opts | PCRE2_NO_JIT, md, prog->mctx);
     prog->busy--;
 
     int ret;

@@ -704,6 +704,18 @@ Replaces matches of a pattern in a string.
   `si`.
 - Zero-width matches (e.g. `\b`) insert `rep` at each boundary without dropping
   characters.
+- `StringReplace["string", {}]` returns the string unchanged.
+- **Options**: `IgnoreCase -> False`, `MetaCharacters -> None`.
+  - `MetaCharacters -> None` (the default) treats a literal string pattern
+    literally.
+  - `MetaCharacters -> Automatic` reads it as a regular expression, so
+    `StringReplace["a.b", "." -> "x", MetaCharacters -> Automatic]` is `"xxx"`.
+  - A custom set (a 3-character string or a list of three strings) is not
+    supported and stays unevaluated.
+  - Any other value emits `StringReplace::meta`.
+- A backtracking regular expression on a long subject (e.g. `(a|b)*` over a
+  few kB) would overflow the PCRE2 JIT's fixed stack. The match is rerun in
+  the interpreter rather than failing.
 - **Attributes**: `Protected`.
 
 ```mathematica

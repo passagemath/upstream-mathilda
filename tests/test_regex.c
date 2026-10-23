@@ -95,6 +95,32 @@ static void test_regularexpression_inert(void) {
     assert_eval_eq("Head[RegularExpression[\"a+\"]]", "RegularExpression", 0);
 }
 
+/* StringReplace: MetaCharacters, an empty rule list, and a backtracking
+ * pattern on a subject past the JIT's fixed stack. */
+static void test_stringreplace_meta_empty_jit(void) {
+    assert_eval_eq("Options[StringReplace]", "{IgnoreCase -> False, MetaCharacters -> None}", 0);
+    /* Automatic: a literal string pattern is a regular expression. */
+    assert_eval_eq("{StringReplace[\"a.b\", \".\" -> \"x\", MetaCharacters -> Automatic], "
+                   "StringReplace[\"a.b\", \".\" -> \"x\", MetaCharacters -> None], "
+                   "StringReplace[\"a.b\", \".\" -> \"x\"]}", "{\"xxx\", \"axb\", \"axb\"}", 0);
+    assert_eval_eq("StringReplace[\"a foo\", {RegularExpression[\"\\\\bfoo\\\\b\"] -> \"x\"}, "
+                   "MetaCharacters -> Automatic]", "\"a x\"", 0);
+    assert_eval_eq("StringReplace[\"aXb\", \"x\" -> \"-\", IgnoreCase -> True, MetaCharacters -> None]",
+                   "\"a-b\"", 0);
+    /* An invalid setting: StringReplace::meta, unevaluated. */
+    assert_eval_eq("Quiet[StringReplace[\"a.b\", \".\" -> \"x\", MetaCharacters -> \"Regex\"]]",
+                   "StringReplace[\"a.b\", \".\" -> \"x\", MetaCharacters -> \"Regex\"]", 0);
+    assert_eval_eq("Check[StringReplace[\"a.b\", \".\" -> \"x\", MetaCharacters -> 7], \"msg\"]", "\"msg\"", 0);
+    /* No rules: nothing replaced. */
+    assert_eval_eq("{StringReplace[\"abc\", {}], StringReplace[\"abc\", {}, 1], StringReplace[{\"ab\", \"cd\"}, {}]}",
+                   "{\"abc\", \"abc\", {\"ab\", \"cd\"}}", 0);
+    /* (a|b)* over 6 kB and 40 kB subjects: the JIT stack overflows, the
+     * interpreter answers (the whole run, then the empty match at the end). */
+    assert_eval_eq("StringReplace[StringJoin[Table[\"ab\", {3000}]], RegularExpression[\"(a|b)*\"] -> \"x\"]",
+                   "\"xx\"", 0);
+    assert_eval_eq("StringCount[StringJoin[Table[\"ab\", {20000}]], RegularExpression[\"(a|b)*\"]]", "2", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -110,6 +136,7 @@ int main(void) {
 #endif
 
     TEST(test_regularexpression_inert);
+    TEST(test_stringreplace_meta_empty_jit);
 
     printf("All regex tests passed!\n");
     return 0;

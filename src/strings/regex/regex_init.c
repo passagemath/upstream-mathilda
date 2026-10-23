@@ -44,6 +44,15 @@ static void register_ignorecase_option(const char* name) {
     symtab_set_options(name, opts);
 }
 
+/* Options[StringReplace]: IgnoreCase -> False, MetaCharacters -> None. */
+static void register_replace_options(const char* name) {
+    Expr* ic = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_IgnoreCase), expr_new_symbol(SYM_False) }, 2);
+    Expr* mc = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol("MetaCharacters"), expr_new_symbol(SYM_None) }, 2);
+    symtab_set_options(name, expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ ic, mc }, 2));
+}
+
 void regex_init(void) {
     symtab_add_builtin("RegularExpression", builtin_regularexpression);
     symtab_get_def("RegularExpression")->attributes |= ATTR_PROTECTED;
@@ -62,7 +71,7 @@ void regex_init(void) {
 
     symtab_add_builtin("StringReplace", builtin_stringreplace);
     symtab_get_def("StringReplace")->attributes |= ATTR_PROTECTED;
-    register_ignorecase_option("StringReplace");
+    register_replace_options("StringReplace");
 
     symtab_add_builtin("StringDelete", builtin_stringdelete);
     symtab_get_def("StringDelete")->attributes |= ATTR_PROTECTED;

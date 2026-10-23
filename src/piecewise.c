@@ -18,6 +18,10 @@
 #include "complex.h"
 #include "numeric.h"
 #include "sym_names.h"
+#include "zero_test.h"
+#include "message.h"
+#include "print.h"
+#include "common.h"
 
 void piecewise_init(void) {
     symtab_add_builtin("Floor", builtin_floor);
@@ -28,6 +32,7 @@ void piecewise_init(void) {
     symtab_add_builtin("UnitStep", builtin_unitstep);
     symtab_add_builtin("Ramp", builtin_ramp);
     symtab_add_builtin("UnitBox", builtin_unitbox);
+    symtab_add_builtin("Unitize", builtin_unitize);
 
     const char* funcs[] = {"Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart", NULL};
     for (int i = 0; funcs[i] != NULL; i++) {
@@ -52,6 +57,12 @@ void piecewise_init(void) {
      * comment); no pack.c AWARE entry yet (unmeasured, deferred). */
     symtab_get_def("UnitBox")->attributes |=
         (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_ORDERLESS);
+
+    /* Unitize: Listable and Protected only. Not NumericFunction -- its value
+     * is a 0/1 indicator decided exactly (Unitize[Pi] is the exact Integer 1),
+     * not a numeric function of its argument -- and not Orderless (the two
+     * arguments are a value and a threshold). */
+    symtab_get_def("Unitize")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
 }
 
 enum { OP_FLOOR, OP_CEILING, OP_ROUND, OP_INTPART, OP_FRACPART };
@@ -677,3 +688,175 @@ Expr* builtin_ceiling(Expr* res) {
 Expr* builtin_round(Expr* res) { return do_piecewise(res, OP_ROUND, "Round", true); }
 Expr* builtin_integerpart(Expr* res) { return do_piecewise(res, OP_INTPART, "IntegerPart", false); }
 Expr* builtin_fractionalpart(Expr* res) { return do_piecewise(res, OP_FRACPART, "FractionalPart", false); }
+
+
+/* ====================================================================== */
+/* Unitize                                                                */
+/* ====================================================================== */
+
+/* The machine helpers (declared in piecewise.h). These are the kernels the
+ * packed / NDArray surfaces run (src/ndkernels.c registers them directly) and
+ * what the scalar builtin below calls for machine arguments, so a machine
+ * scalar, an unpacked List, a packed List and an NDArray agree bit for bit. */
+bool unitize_machine_r(double x, int64_t* out) {
+    if (isnan(x)) return false;
+    *out = (x != 0.0) ? 1 : 0;                      /* -0. == 0. -> 0 */
+    return true;
+}
+bool unitize_machine_i(int64_t x, int64_t* out) {
+    *out = (x != 0) ? 1 : 0;
+    return true;
+}
+bool unitize_machine_tol_r(double x, double dx, int64_t* out) {
+    if (isnan(x) || !(dx > 0.0) || isinf(dx)) return false;
+    *out = (fabs(x) >= dx) ? 1 : 0;                 /* 0 iff |x| < dx */
+    return true;
+}
+bool unitize_machine_tol_i(int64_t x, int64_t dx, int64_t* out) {
+    if (dx <= 0) return false;
+    *out = (x >= dx || x <= -dx) ? 1 : 0;           /* no Abs: INT64_MIN safe */
+    return true;
+}
+
+/* An infinite quantity -- Infinity, -Infinity, ComplexInfinity or any
+ * DirectedInfinity[...] -- is a non-zero of unbounded magnitude. */
+static bool unitize_is_infinite(Expr* e) {
+    if (is_infinity(e) || is_minus_infinity(e)) return true;
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_DirectedInfinity;
+}
+
+/* Zero class of a single Unitize argument: 1 = zero, 0 = non-zero,
+ * -1 = cannot decide (symbolic, Indeterminate, NaN, or a numeric quantity the
+ * zero test leaves unknown). */
+static int unitize_zero_class(Expr* x) {
+    if (x->type == EXPR_SYMBOL && x->data.symbol.name == SYM_Indeterminate) return -1;
+    if (unitize_is_infinite(x)) return 0;
+    if (x->type == EXPR_REAL && isnan(x->data.real)) return -1;
+#ifdef USE_MPFR
+    if (x->type == EXPR_MPFR && mpfr_nan_p(x->data.mpfr)) return -1;
+#endif
+    int s = ustep_real_sign(x);                     /* real number leaves */
+    if (s != -2) return s == 0 ? 1 : 0;
+    Expr *re, *im;
+    if (is_complex(x, &re, &im)) {
+        int zr = unitize_zero_class(re), zi = unitize_zero_class(im);
+        if (zr == 0 || zi == 0) return 0;           /* either part non-zero */
+        if (zr == 1 && zi == 1) return 1;
+        return -1;
+    }
+    /* A closed-form numeric quantity (Pi, Sqrt[2] + Sqrt[3] - ..., ...): the
+     * same exact-or-numerically-certified zero test Equal uses on numeric
+     * constants. An undecided test leaves the call unevaluated. */
+    if (expr_is_numeric_quantity(x)) {
+        ZeroTestResult zt = zero_test_decide(x);
+        if (zt == ZERO_TEST_TRUE)  return 1;
+        if (zt == ZERO_TEST_FALSE) return 0;
+    }
+    return -1;
+}
+
+/* Is `e` a machine number the shared helpers take directly? */
+static bool unitize_is_machine(const Expr* e) {
+    return e->type == EXPR_INTEGER || e->type == EXPR_REAL;
+}
+static double unitize_as_double(const Expr* e) {
+    return e->type == EXPR_INTEGER ? (double)e->data.integer : e->data.real;
+}
+
+/* Classify the threshold of Unitize[x, dx]: 1 = certified positive real,
+ * 0 = not positive (Unitize::post has been issued), -1 = undecided or not a
+ * finite real (symbolic, Infinity, complex) -- left unevaluated silently. */
+static int unitize_threshold_class(Expr* dx) {
+    if (dx->type == EXPR_REAL && isnan(dx->data.real)) return -1;
+    int s = ustep_real_sign(dx);
+    if (s == -2) {
+        if (unitize_is_infinite(dx)) return -1;
+        if (!expr_is_numeric_quantity(dx)) return -1;
+        Expr *re, *im;
+        if (is_complex(dx, &re, &im)) return -1;
+        int c = ustep_class(dx);                    /* certified exact sign */
+        if (c == USTEP_UNKNOWN) return -1;
+        s = (c == USTEP_NEG) ? -1 : 1;
+    }
+    if (s > 0) return 1;
+    char* shown = expr_to_string(dx);
+    mth_message("Unitize", "post", "The threshold %s should be positive.",
+                shown ? shown : "");
+    free(shown);
+    return 0;
+}
+
+/*
+ * Unitize[x]     -> 0 if x is zero, 1 if x is any other number.
+ * Unitize[x, dx] -> 0 if Abs[x] < dx, else 1 (dx a positive real).
+ *
+ * The answer is always the exact Integer 0 or 1, whatever the argument's
+ * precision: Unitize[{1., 0.}] is {1, 0}. Machine Integer / Real arguments go
+ * straight to the shared helpers above (the same ones the packed and NDArray
+ * kernels run). Exact and arbitrary-precision numbers are decided exactly; a
+ * closed-form numeric quantity through zero_test_decide (one argument) or
+ * the certified sign of Abs[x] - dx (two arguments). Anything undecidable --
+ * a symbol, Indeterminate, a threshold that is not a finite positive real --
+ * is left unevaluated; a non-positive numeric threshold issues
+ * Unitize::post first.
+ */
+Expr* builtin_unitize(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n < 1 || n > 2) return builtin_arg_error("Unitize", n, 1, 2);
+    Expr* x = res->data.function.args[0];
+    int64_t r;
+
+    if (n == 1) {
+        if (x->type == EXPR_INTEGER) {
+            unitize_machine_i(x->data.integer, &r);
+            return expr_new_integer(r);
+        }
+        if (x->type == EXPR_REAL) {
+            if (!unitize_machine_r(x->data.real, &r)) return NULL;
+            return expr_new_integer(r);
+        }
+        int z = unitize_zero_class(x);
+        if (z < 0) return NULL;
+        return expr_new_integer(z ? 0 : 1);
+    }
+
+    Expr* dx = res->data.function.args[1];
+    if (unitize_threshold_class(dx) != 1) return NULL;
+
+    /* Machine fast path: the shared helpers, exact int64 when both are
+     * Integers, double otherwise (as the packed float64 arm reads them). */
+    if (unitize_is_machine(x) && unitize_is_machine(dx)) {
+        bool ok = (x->type == EXPR_INTEGER && dx->type == EXPR_INTEGER)
+            ? unitize_machine_tol_i(x->data.integer, dx->data.integer, &r)
+            : unitize_machine_tol_r(unitize_as_double(x), unitize_as_double(dx), &r);
+        return ok ? expr_new_integer(r) : NULL;
+    }
+
+    if (x->type == EXPR_SYMBOL && x->data.symbol.name == SYM_Indeterminate) return NULL;
+    if (unitize_is_infinite(x)) return expr_new_integer(1);   /* finite dx */
+    if (!expr_is_numeric_quantity(x)) return NULL;
+
+    /* General numeric case: the certified sign of Abs[x] - dx. Exact operands
+     * stay exact (Unitize[-3, 3] is 1, Unitize[Pi, 4] is 0); a difference the
+     * sign certification cannot separate from 0 is resolved by the zero test,
+     * where a zero means Abs[x] == dx, i.e. 1. */
+    Expr* abs_args[1] = { expr_copy(x) };
+    Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(dx) };
+    Expr* diff_args[2] = {
+        expr_new_function(expr_new_symbol(SYM_Abs), abs_args, 1),
+        expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2) };
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Plus), diff_args, 2);
+    Expr* d = evaluate(call);
+    expr_free(call);
+    int cls = ustep_class(d);
+    if (cls == USTEP_UNKNOWN && expr_is_numeric_quantity(d)
+        && zero_test_decide(d) == ZERO_TEST_TRUE)
+        cls = USTEP_NONNEG;
+    expr_free(d);
+    if (cls == USTEP_NEG)    return expr_new_integer(0);
+    if (cls == USTEP_NONNEG) return expr_new_integer(1);
+    return NULL;
+}

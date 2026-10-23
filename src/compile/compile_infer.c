@@ -456,6 +456,30 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         for (size_t i = 0; i < na; i++) { IT(i, ta); if (CT_IS_ARRAY(ta) || ta == CT_BOOL) return false; }
         *out = CT_INT; return true;                    /* UnitStep[0.5] is 1, not 1. */
     }
+    if (strcmp(h, "Unitize") == 0 && (na == 1 || na == 2)) {
+        /* Unitize answers with an exact Integer 0/1 (Unitize[2.5] is 1, not
+         * 1.), so CT_INT. One array argument routes to the narrowing kernel;
+         * Unitize[v, dx] maps the scalar lowering over a rank-1 buffer. The
+         * threshold is a real-valued scalar (guarded > 0 at run time). */
+        IT(0, ta);
+        if (na == 1 && CT_IS_ARRAY(ta)) return infer_arr_unary(c, h, ta, out);
+        if (na == 2) {
+            IT(1, tb);
+            if (CT_IS_ARRAY(tb) || tb == CT_BOOL || tb == CT_COMPLEX) return false;
+            if (CT_IS_ARRAY(ta)) {
+                /* Unitize[v, dx]: the registered binary narrowing kernel (the
+                 * same one the packed surface runs), like Mod / Quotient. */
+                SymbolDef* dk = symtab_lookup(h);
+                const NDBinaryKernel* kb = dk ? (const NDBinaryKernel*)dk->ndarray_binary_kernel : NULL;
+                CompileType er = nd_binary_elem(kb, CT_ELEM(ta), tb);
+                if ((int)er < 0) return false;
+                *out = CT_ARRAY(er, CT_RANK(ta));
+                return true;
+            }
+        }
+        if (ta == CT_BOOL) return false;
+        *out = CT_INT; return true;
+    }
     if (strcmp(h, "UnitBox") == 0 && na == 1) {
         /* Single-argument box, matching the interpreter (multi-arg UnitBox is
          * left unevaluated there). An array argument routes to the narrowing

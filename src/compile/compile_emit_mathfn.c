@@ -64,7 +64,7 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
                      * exactly the same shape (narrowing-only kernel, dedicated
                      * scalar branch below). */
                     || !strcmp(h, "IntegerPart") || !strcmp(h, "UnitStep")
-                    || !strcmp(h, "UnitBox"))
+                    || !strcmp(h, "UnitBox") || !strcmp(h, "Unitize"))
         && any_array_arg(c, A, na)) {
         Val a; if (!emit(c, A[0], &a)) return -1;
         if (!CT_IS_ARRAY(a.type)) { c->ok = false; return -1; }
@@ -402,6 +402,77 @@ int emit_mathfn(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* 
         }
         if (!have) { c->ok = false; return -1; }
         *out = acc;
+        return c->ok ? 1 : -1;
+    }
+    if (strcmp(h, "Unitize") == 0 && (na == 1 || na == 2)) {
+        /* Unitize[x] = (x != 0) and Unitize[x, dx] = (|x| >= dx), each an exact
+         * Integer 0/1 (CT_INT) -- the comparison result IS the answer, the same
+         * arithmetic as the shared machine helpers in piecewise.c that the
+         * interpreter's scalar and buffer paths run. A one-argument array was
+         * intercepted above (the narrowing kernel); Unitize[v, dx] runs the
+         * registered binary narrowing kernel over the buffer, which declines
+         * (handing the call back) on a threshold that is not positive. */
+        CompileType tx;
+        if (!infer_type(c, A[0], &tx) || tx == CT_BOOL) { c->ok = false; return -1; }
+        if (CT_IS_ARRAY(tx)) {
+            Val kv;
+            if (na == 2 && try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok ? 1 : -1; }
+            c->ok = false; return -1;
+        }
+        Slot kz; memset(&kz, 0, sizeof kz);          /* 0 / 0. (all-zero bits) */
+        if (na == 1) {
+            Val v; if (!emit(c, A[0], &v)) return -1;
+            if (v.type == CT_COMPLEX) v = unop(c, OP_ABS_C, v, CT_REAL);
+            if (v.type == CT_INT) {
+                *out = binop(c, OP_NE_I, v, emit_const(c, kz, CT_INT), CT_INT);
+            } else {
+                coerce(c, &v, CT_REAL);
+                *out = binop(c, OP_NE_R, v, emit_const(c, kz, CT_REAL), CT_INT);
+            }
+            return c->ok ? 1 : -1;
+        }
+        CompileType td;
+        if (!infer_type(c, A[1], &td) || CT_IS_ARRAY(td) || td == CT_BOOL
+            || td == CT_COMPLEX) { c->ok = false; return -1; }
+        bool both_int = (tx == CT_INT && td == CT_INT);
+        /* Run-time guard: a threshold that is not positive has no compiled
+         * answer (the interpreter issues Unitize::post and leaves the call
+         * unevaluated), so OP_FAIL hands the call back. */
+        {
+            Val g; if (!emit(c, A[1], &g)) return -1;
+            if (!both_int) coerce(c, &g, CT_REAL);
+            if (!c->ok) return -1;
+            Slot z; memset(&z, 0, sizeof z);
+            int rz = alloc_temp(c), rc = alloc_temp(c);
+            ins(c, OP_CONST, (uint32_t)rz, 0, 0, kz);
+            ins(c, both_int ? OP_LE_I : OP_LE_R, (uint32_t)rc, (uint32_t)g.reg, (uint32_t)rz, z);
+            size_t jz = c->n; ins(c, OP_JZ, 0, (uint32_t)rc, 0, z);   /* dx > 0 -> skip */
+            ins(c, OP_FAIL, 0, 0, 0, z);
+            if (c->ok) c->code[jz].b = (uint32_t)c->n;
+            c->temp_top -= 2;
+            free_if_tmp(c, g);
+        }
+        if (both_int) {
+            /* (x >= dx) + (x <= -dx): no Abs, so INT64_MIN cannot overflow;
+             * dx > 0 makes the two disjoint. */
+            Val x1; if (!emit(c, A[0], &x1)) return -1;
+            Val d1; if (!emit(c, A[1], &d1)) return -1;
+            Val hi = binop(c, OP_GE_I, x1, d1, CT_INT);
+            Val x2; if (!emit(c, A[0], &x2)) return -1;
+            Val d2; if (!emit(c, A[1], &d2)) return -1;
+            Val nd = unop(c, OP_NEG_I, d2, CT_INT);
+            Val lo = binop(c, OP_LE_I, x2, nd, CT_INT);
+            *out = binop(c, OP_ADD_I, hi, lo, CT_INT);
+            return c->ok ? 1 : -1;
+        }
+        Val x; if (!emit(c, A[0], &x)) return -1;
+        Val ax;
+        if (x.type == CT_COMPLEX) ax = unop(c, OP_ABS_C, x, CT_REAL);
+        else { coerce(c, &x, CT_REAL); ax = unop(c, OP_ABS_R, x, CT_REAL); }
+        Val d; if (!emit(c, A[1], &d)) return -1;
+        coerce(c, &d, CT_REAL);
+        if (!c->ok) return -1;
+        *out = binop(c, OP_GE_R, ax, d, CT_INT);
         return c->ok ? 1 : -1;
     }
     if (strcmp(h, "UnitBox") == 0 && na == 1) {

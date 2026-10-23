@@ -33,6 +33,7 @@
 #include "logintegral.h"
 #include "elliptic.h"
 #include "symtab.h"
+#include "piecewise.h"                         /* Unitize machine helpers */
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_gamma.h"
 #include "special_functions/sf_machine_expint.h"
@@ -327,6 +328,20 @@ static const NDUnaryKernel NDKU_UnitStep =
     { NULL, NULL, false, false, ndk_UnitStep_i, ndk_UnitStep_ii, true, NULL };
 static const NDUnaryKernel NDKU_UnitBox =
     { NULL, NULL, false, false, ndk_UnitBox_i, ndk_UnitBox_ii, true, NULL };
+
+/* Unitize: narrowing-only for the same reason as UnitStep -- the answer is the
+ * exact Integer 0/1 whatever the input precision (Unitize[{1., 0.}] is
+ * {1, 0}). The arms ARE the scalar builtin's machine helpers (piecewise.c), so
+ * the scalar, List, packed, NDArray and SparseArray surfaces share one
+ * implementation. No complex arm: a complex buffer declines and the List path
+ * answers (Unitize[1 + I] is 1). NaN declines the whole array. */
+static const NDUnaryKernel NDKU_Unitize =
+    { NULL, NULL, false, false, unitize_machine_r, unitize_machine_i, true, NULL };
+/* Unitize[x, dx]: |x| >= dx -> 1, both exact-integer arms. A threshold that is
+ * not a finite positive number makes the helper decline, so the List path
+ * issues Unitize::post per element exactly as it would unpacked. */
+static const NDBinaryKernel NDKB_Unitize =
+    { NULL, false, unitize_machine_tol_r, unitize_machine_tol_i, true, NULL, NULL };
 
 /* The other five keep their existing real-closed kernels untouched -- the
  * Compile VM and the scalar consumers still use those -- and gain the narrowing
@@ -1023,6 +1038,7 @@ void ndkernels_init(void) {
     REG_U(Re); symtab_set_ndarray_unary_kernel("Im", &NDKU_ImInt); REG_U(Arg);
     REG_U(Conjugate); REG_U(Sign);
     REG_U(UnitStep); REG_U(UnitBox); REG_U(Ramp);
+    REG_U(Unitize); REG_B(Unitize, NDKB_Unitize);
     REG_U(Floor); REG_U(Ceiling); REG_U(Round);
     REG_U(IntegerPart); REG_U(FractionalPart);
 

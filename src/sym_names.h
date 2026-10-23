@@ -699,6 +699,7 @@ extern const char* SYM_Union;
 extern const char* SYM_Unprotect;
 extern const char* SYM_UnitStep;
 extern const char* SYM_UnitBox;
+extern const char* SYM_Unitize;
 extern const char* SYM_Ramp;
 extern const char* SYM_UnitVector;
 extern const char* SYM_UnixTime;

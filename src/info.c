@@ -3346,6 +3346,17 @@ void info_init(void) {
         "The result is always exact. Exact symbolic real arguments are resolved\n"
         "by the same numerical certification UnitStep and Ramp use; non-real or\n"
         "unresolved arguments are left unevaluated. UnitBox is Listable.");
+    symtab_set_docstring("Unitize",
+        "Unitize[x]\n"
+        "\tgives 0 when x is zero and 1 when x is any other number.\n"
+        "Unitize[x, dx]\n"
+        "\tgives 0 when Abs[x] < dx and 1 otherwise; dx must be a positive\n"
+        "\treal (Unitize::post otherwise).\n"
+        "The result is always the exact Integer 0 or 1, for exact, machine,\n"
+        "arbitrary-precision and complex x alike. Closed-form numeric x (Pi,\n"
+        "Sqrt[2] - ...) is decided by an exact or certified numeric zero test;\n"
+        "symbolic or undecidable x is left unevaluated. Unitize is Listable;\n"
+        "a packed or NDArray argument maps to a packed Integer array.");
     symtab_set_docstring("Chop",
         "Chop[expr]\n"
         "\treplaces approximate real numbers in expr that are close to zero\n"

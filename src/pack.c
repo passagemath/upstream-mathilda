@@ -1206,6 +1206,10 @@ static void pack_mark_aware_heads(void) {
          * a real input that will not fit an int64 abandons the whole array so
          * the List path answers with a bignum. */
         "Floor", "Ceiling", "Round", "IntegerPart", "Sign", "UnitStep", "UnitBox",
+        /* Unitize is a trivial comparison too (x != 0, or x >= dx || x <= -dx
+         * with an exact Integer threshold); an int64 buffer with a Real
+         * threshold has no int64 arm and declines to the List path. */
+        "Unitize",
         /* Mod and Quotient, once ndkernels.c gave them exact int64 arms
          * (NDKB_Mod.to_int_i, NDKB_Quotient.to_int_i / .to_int_r). Until then
          * their kernel computed m - n*floor(m/n) in double and would have

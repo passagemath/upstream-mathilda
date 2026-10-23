@@ -1773,6 +1773,10 @@ add_executable(unitbox_tests test_unitbox.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(unitbox_tests PRIVATE ../src)
 add_test(NAME unitbox_tests COMMAND unitbox_tests)
 
+add_executable(unitize_tests test_unitize.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(unitize_tests PRIVATE ../src)
+add_test(NAME unitize_tests COMMAND unitize_tests)
+
 add_executable(symbol_tests test_symbol.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(symbol_tests PRIVATE ../src)
 

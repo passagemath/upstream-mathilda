@@ -714,6 +714,72 @@ In[7]:= UnitBox[x]
 Out[7]= UnitBox[x]
 ```
 
+## Unitize
+
+`Unitize[x]` is `0` when `x` is zero and `1` for any other number.
+`Unitize[x, dx]` is `0` when `Abs[x] < dx` and `1` otherwise.
+
+**Features**:
+- `Listable`, `Protected`.
+- The result is **always the exact Integer** `0` or `1`, whatever the
+  argument: Integer, Rational, Real, arbitrary-precision, Complex
+  (`Unitize[1 + I]` is `1`, `Unitize[0. + 0. I]` is `0`), so
+  `Unitize[{1., 0.}]` is `{1, 0}`. `-0.` and an arbitrary-precision zero
+  are zero. `Infinity`, `-Infinity` and `ComplexInfinity` give `1`;
+  `Indeterminate` is left unevaluated.
+- **Closed-form numeric arguments** (`Pi`, `Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]`,
+  `Sin[1]^2 + Cos[1]^2 - 1`) are decided by the same exact / certified-numeric
+  zero test `Equal` uses on numeric constants (`zero_test_decide`); an
+  undecided test leaves the call unevaluated. Symbolic arguments stay
+  unevaluated.
+- **Threshold form.** `dx` must be a positive real (exact, machine,
+  arbitrary-precision, or a closed-form constant such as `Pi`); a numeric
+  `dx <= 0` issues `Unitize::post` ("The threshold `dx` should be positive.")
+  and leaves the call unevaluated, as do a symbolic, complex or infinite `dx`.
+  Exact operands compare exactly (`Unitize[-3, 3]` is `1`,
+  `Unitize[Pi - 355/113, 1/10^9]` is `1`); `x` complex compares its modulus
+  (`Unitize[1 + I, 2]` is `0`). Wrong arity issues `Unitize::argt`.
+- **Fast paths.** The machine arithmetic lives in four helpers in
+  `src/piecewise.c` (`unitize_machine_r/_i/_tol_r/_tol_i`) that are at once the
+  scalar builtin's machine path and the narrowing NDArray kernels (`NDKU_Unitize`
+  real→int and int→int; `NDKB_Unitize` with a broadcast threshold), so a machine
+  scalar, an unpacked List, a packed List, a visible `NDArray` and a
+  `SparseArray` (whose value buffer threads through the same kernel) agree bit
+  for bit. `Unitize` is on `INT64_OK` in `src/pack.c`: a packed float64 or int64
+  buffer maps to a packed int64 buffer. An int64 buffer with a **Real**
+  threshold, a complex buffer, a NaN, or a non-positive threshold declines and
+  the List path answers (and issues `Unitize::post` per element).
+- **Compile.** Lowers at scalar (`_Integer`, `_Real`, `_Complex`) and rank-1
+  array shapes, typed Integer: `Unitize[x]` as `x != 0` (modulus for complex),
+  `Unitize[x, dx]` as `Abs[x] >= dx` (`x >= dx || x <= -dx` for two machine
+  integers, so `-2^63` cannot overflow an `Abs`), an array argument through the
+  same narrowing kernels. A run-time threshold `<= 0` hands the call back to the
+  interpreter (`OP_FAIL`), which issues `Unitize::post`.
+
+```
+In[1]:= Unitize[{0, 1/2, 2.5, 0., -0., 1 + I, 0. + 0. I}]
+Out[1]= {0, 1, 1, 0, 0, 1, 0}
+
+In[2]:= Unitize[0.001, 0.01]
+Out[2]= 0
+
+In[3]:= Unitize[{0.5, 2.}, 1]
+Out[3]= {0, 1}
+
+In[4]:= Unitize[Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]]
+Out[4]= 0
+
+In[5]:= Unitize[Pi, 4]
+Out[5]= 0
+
+In[6]:= Unitize[1, 0]
+Unitize::post: The threshold 0 should be positive.
+Out[6]= Unitize[1, 0]
+
+In[7]:= Unitize[x]
+Out[7]= Unitize[x]
+```
+
 ## UnitStep
 
 `UnitStep[x]` is the unit step (Heaviside) function: `0` for $x < 0$ and `1`

@@ -387,6 +387,27 @@ In[4]:= {f[2], f[x, y], h[], f[]} /. f[x__] -> "OK"
 Out[4]= {"OK", "OK", h[], f[]}
 ```
 
+## ReplaceRepeated (//.)
+`ReplaceRepeated[expr, rules]` (`expr //. rules`) applies `rules` repeatedly
+with `ReplaceAll` semantics until the expression stops changing.
+- A list of rule lists gives a list of results, one per rule list.
+- **Option** `MaxIterations -> 65536`: the maximum number of scans, a
+  non-negative integer or `Infinity`. It can be set with `SetOptions`.
+- If the expression is still changing after `n` scans, the call emits
+  `ReplaceRepeated::rrlim` ("Exiting after *expr* scanned *n* times", naming
+  the original expression) and returns the expression reached. A fixed point
+  reached on the `n`th scan still needs one more scan to confirm, so it
+  messages too.
+- An invalid `MaxIterations` value emits `ReplaceRepeated::iopnf`, and an
+  unknown option emits `ReplaceRepeated::optx`. Either way the call stays
+  unevaluated.
+- `Protected`.
+
+```
+ReplaceRepeated[f[a], {f[a] -> f[b]}, MaxIterations -> 20]   (* f[b] *)
+ReplaceRepeated[0, x_Integer :> x + 1, MaxIterations -> 5]   (* 5, with rrlim *)
+```
+
 ## CompoundExpression (;)
 - `expr1; expr2; ...`: Evaluates a sequence of expressions, returning the last one.
 

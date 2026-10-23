@@ -180,6 +180,26 @@ int main() {
     /* scale: a failing And[x_, Not[x_]] over a long chain is O(n), not O(n^3) */
     run_test("Length[(And @@ Array[av, 1500]) /. And[x_, Not[x_]] :> False]", "1500");
 
+    /* ReplaceRepeated MaxIterations: the default, a limit hit (rrlim, the
+     * expression reached is returned), a limit not hit, Infinity, a bad value
+     * (iopnf, unevaluated), an unknown option (optx), and SetOptions. */
+    run_test("Options[ReplaceRepeated]", "{MaxIterations -> 65536}");
+    run_test("ReplaceRepeated[f[a], {f[a] -> f[b]}, MaxIterations -> 20]", "f[b]");
+    run_test("Quiet[ReplaceRepeated[0, x_Integer :> x + 1, MaxIterations -> 5]]", "5");
+    run_test("Check[ReplaceRepeated[0, x_Integer :> x + 1, MaxIterations -> 5], \"msg\"]", "\"msg\"");
+    run_test("Quiet[ReplaceRepeated[0, x_Integer :> x + 1, MaxIterations -> 0]]", "0");
+    /* g[0] is reached on the 3rd scan, but confirming it needs a 4th. */
+    run_test("Quiet[ReplaceRepeated[g[3], g[n_ /; n > 0] :> g[n - 1], MaxIterations -> 3]]", "g[0]");
+    run_test("ReplaceRepeated[g[3], g[n_ /; n > 0] :> g[n - 1], MaxIterations -> 4]", "g[0]");
+    run_test("ReplaceRepeated[f[1], f[n_ /; n < 10] :> f[n + 1], MaxIterations -> Infinity]", "f[10]");
+    run_test("ReplaceRepeated[{a}, {{a -> b}, {a -> c}}, MaxIterations -> 2]", "{{b}, {c}}");
+    run_test("Quiet[ReplaceRepeated[x, x -> y, MaxIterations -> -1]]",
+             "ReplaceRepeated[x, x -> y, MaxIterations -> -1]");
+    run_test("Check[ReplaceRepeated[x, x -> y, MaxIterations -> \"a\"], \"msg\"]", "\"msg\"");
+    run_test("Check[ReplaceRepeated[x, {x -> y}, Method -> 1], \"msg\"]", "\"msg\"");
+    run_test("SetOptions[ReplaceRepeated, MaxIterations -> 4]; r = Quiet[0 //. x_Integer :> x + 1]; "
+             "SetOptions[ReplaceRepeated, MaxIterations -> 65536]; r", "4");
+
     printf("All Replace tests passed!\n");
     symtab_clear();
     return 0;

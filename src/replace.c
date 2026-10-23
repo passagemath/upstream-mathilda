@@ -7,6 +7,8 @@
 #include "assoc_struct.h"   /* associations are atomic: rules reach values only */
 #include "common.h"         /* head_is */
 #include "part.h"
+#include "print.h"          /* expr_to_string */
+#include "message.h"        /* mth_message */
 #include <stdlib.h>
 #include <string.h>
 
@@ -576,13 +578,17 @@ Expr* builtin_replace_all(Expr* res) {
     return apply_replace_all_nested(expr, rules_expr);
 }
 
-static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr) {
+/* ReplaceRepeated to a fixed point, at most `max_scans` scans (-1: no limit).
+ * Stopping at the limit while the expression is still changing emits
+ * ReplaceRepeated::rrlim naming the ORIGINAL expression, and returns the
+ * expression reached. */
+static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t max_scans) {
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i]);
+                args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i], max_scans);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
@@ -591,8 +597,7 @@ static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr) {
     }
 
     Expr* current = expr_copy(expr);
-    int iterations = 0;
-    while (iterations < 65536) {
+    for (int64_t scans = 0; max_scans < 0 || scans < max_scans; scans++) {
         Expr* next_raw = apply_replace_all_nested(current, rules_expr);
         Expr* next = eval_and_free(next_raw);
         if (expr_eq(current, next)) {
@@ -601,18 +606,60 @@ static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr) {
         }
         expr_free(current);
         current = next;
-        iterations++;
     }
-    
+    char* shown = expr_to_string_outputform(expr);
+    mth_message("ReplaceRepeated", "rrlim", "Exiting after %s scanned %lld times.",
+                shown ? shown : "", (long long)max_scans);
+    free(shown);
     return current;
 }
 
+/* Decode a MaxIterations value: a non-negative integer, or Infinity (-1).
+ * Returns false (with ReplaceRepeated::iopnf) for anything else. */
+static bool rr_max_iterations(const Expr* v, int64_t* out) {
+    if (v->type == EXPR_INTEGER && v->data.integer >= 0) { *out = v->data.integer; return true; }
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity) { *out = -1; return true; }
+    char* shown = expr_to_string_outputform((Expr*)v);
+    mth_message("ReplaceRepeated", "iopnf",
+                "Value of option MaxIterations -> %s should be a non-negative integer or Infinity.",
+                shown ? shown : "");
+    free(shown);
+    return false;
+}
+
+/* ReplaceRepeated[expr, rules] / ReplaceRepeated[expr, rules, MaxIterations -> n]:
+ * apply rules until the expression stops changing, scanning at most n times
+ * (default Options[ReplaceRepeated], MaxIterations -> 65536). */
 Expr* builtin_replace_repeated(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
     Expr* expr = res->data.function.args[0];
     Expr* rules_expr = res->data.function.args[1];
-    
-    return apply_replace_repeated_nested(expr, rules_expr);
+
+    int64_t max_scans = 65536;
+    Expr* defs = symtab_get_options("ReplaceRepeated");        /* borrowed */
+    for (size_t i = 0; defs && defs->type == EXPR_FUNCTION && i < defs->data.function.arg_count; i++) {
+        Expr* o = defs->data.function.args[i];
+        if (is_rule(o) && o->data.function.arg_count == 2 && o->data.function.args[0]->type == EXPR_SYMBOL &&
+            strcmp(o->data.function.args[0]->data.symbol.name, "MaxIterations") == 0 &&
+            !rr_max_iterations(o->data.function.args[1], &max_scans))
+            return NULL;
+    }
+    if (argc == 3) {
+        Expr* o = res->data.function.args[2];
+        if (!is_rule(o) || o->data.function.arg_count != 2 ||
+            o->data.function.args[0]->type != EXPR_SYMBOL) return NULL;
+        if (strcmp(o->data.function.args[0]->data.symbol.name, "MaxIterations") != 0) {
+            char* shown = expr_to_string_outputform(res);
+            mth_message("ReplaceRepeated", "optx", "Unknown option %s in %s.",
+                        o->data.function.args[0]->data.symbol.name, shown ? shown : "");
+            free(shown);
+            return NULL;
+        }
+        if (!rr_max_iterations(o->data.function.args[1], &max_scans)) return NULL;
+    }
+    return apply_replace_repeated_nested(expr, rules_expr, max_scans);
 }
 
 
@@ -779,6 +826,11 @@ void replace_init(void) {
     symtab_get_def("ReplaceAll")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReplaceRepeated", builtin_replace_repeated);
     symtab_get_def("ReplaceRepeated")->attributes |= ATTR_PROTECTED;
+    {
+        Expr* ra[2] = { expr_new_symbol("MaxIterations"), expr_new_integer(65536) };
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        symtab_set_options("ReplaceRepeated", expr_new_function(expr_new_symbol(SYM_List), &rule, 1));
+    }
     symtab_add_builtin("ReplaceList", builtin_replacelist);
     symtab_get_def("ReplaceList")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReplaceAt", builtin_replace_at);

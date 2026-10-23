@@ -506,6 +506,12 @@ static void test_gate(void) {
     chk("AtomQ[S]", "True");
     chk("Select[V, Positive]", "{3}");
     chk_true("Head[First[Select[S, VectorQ]]] === SparseArray");
+    /* a declined pos -> vals rule with only ONE packed side keeps the other
+     * side (it was replaced by NULL, and the next step crashed) */
+    chk("Quiet[SparseArray[g[1] -> N[Range[3]], {4}]] /. SparseArray[r_, __] :> r",
+        "g[1] -> {1.0, 2.0, 3.0}");
+    chk("Quiet[SparseArray[Transpose[{Range[3], Range[3]}] -> {h, k}, {4, 4}]] /. SparseArray[r_, __] :> First[r]",
+        "{{1, 1}, {2, 2}, {3, 3}}");
     /* a too-large implicit densification is refused, not attempted */
     chk("Quiet[Median[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]]] // Head", "Median");
     chk("Check[Median[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]], fail]", "fail");

@@ -1157,7 +1157,13 @@ Expr* builtin_sparsearray(Expr* res) {
     Expr* r = res->data.function.args[0];
     if (is_rule(r) && (is_packed_list(r->data.function.args[0]) ||
                        is_packed_list(r->data.function.args[1]))) {
-        Expr* a[2] = { pack_unpack(r->data.function.args[0]), pack_unpack(r->data.function.args[1]) };
+        /* pack_unpack is NULL for a side that is not a buffer: keep that
+         * side as it is (only one of the two may have been packed). */
+        Expr* a[2];
+        for (int k = 0; k < 2; k++) {
+            Expr* side = r->data.function.args[k];
+            a[k] = is_packed_list(side) ? pack_unpack(side) : expr_copy(side);
+        }
         Expr* plain = expr_new_function(expr_copy(r->data.function.head), a, 2);
         expr_free(r);
         res->data.function.args[0] = plain;

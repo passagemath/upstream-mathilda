@@ -533,6 +533,7 @@ extern const char* SYM_Protect;
 extern const char* SYM_Protected;
 extern const char* SYM_PseudoInverse;
 extern const char* SYM_Put;
+extern const char* SYM_Get;
 extern const char* SYM_PutAppend;
 extern const char* SYM_QRDecomposition;
 extern const char* SYM_Quartics;

@@ -1,11 +1,16 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
 - `Get["filename"]`
 - `Get["ctx`"]`: reads the file holding package `ctx`` (used by `Needs`).
+- `<<file` / `<< "file"`: the shorthand form. The name is a file token, not an
+  expression: letters, digits, `` !$*-./:?\_`~ `` and balanced `[...]`
+  (`<<f[x]` is `Get["f[x]"]`), ended by whitespace, `;`, `,`, `)`, `]` or `}`;
+  any other character right after it is a syntax error (`<<f+1`). `Get` binds
+  tighter than any operator: `a<<f` is `Times[a, Get["f"]]`.
 
 **Features**:
 - `Protected`.
@@ -618,7 +623,7 @@ Out[2]= Export
 ## Put
 Writes one or more expressions to a file, replacing any prior contents.
 - `expr >> "filename"` — shorthand for `Put[expr, "filename"]`.
-- `expr >> filename` — bare-word filename, equivalent to `expr >> "filename"`.
+- `expr >> filename` — bare-word filename, equivalent to `expr >> "filename"`. The bare name follows the same token rules as `<<file` (see `Get`): `x >> f[1]` writes to `"f[1]"`, and `x >> f+g` is a syntax error.
 - `Put[expr, "filename"]`
 - `Put[expr_1, expr_2, ..., expr_n, "filename"]` — writes the expressions one per line.
 - `Put["filename"]` — creates an empty file (or truncates an existing one).
@@ -655,7 +660,7 @@ Get["factorizations"]     (* {{2, 10}, {3, 5}, {5, 2}, {7, 1}, {11, 1}} *)
 
 ## FileExistsQ
 Tests for the existence of a filesystem object at the given path.
-- `FileExistsQ["name"]` — `True` if anything (file, directory, symlink, FIFO, socket, device, ...) exists at `"name"`, `False` otherwise.
+- `FileExistsQ["name"]` — `True` if anything (file, directory, symlink, FIFO, socket, device, ...) exists at `"name"`, `False` otherwise. `File["name"]` is accepted, and a leading `~` is the home directory.
 
 **Features**:
 - `Protected`.
@@ -776,8 +781,15 @@ or directory. A missing one emits `AbsoluteFileName::fdnfnd` and gives
 
 ## FileType
 `FileType["name"]` gives `File`, `Directory`, or `None` if nothing exists at
-`name`. Symbolic links are followed. A non-string argument emits
-`FileType::badfile`. `Protected`.
+`name`. Symbolic links are followed; `File["name"]` and a leading `~` are
+accepted. Any other argument emits `FileType::badfile`. `Protected`.
+
+## DirectoryQ
+`DirectoryQ["name"]` gives `True` if `name` is an existing directory (links
+followed; `File["name"]` and a leading `~` accepted), and `False` otherwise --
+including for a file, `""`, a list, or any non-string argument. A wrong
+argument count emits `DirectoryQ::argx` and leaves the call unevaluated.
+`Protected`.
 
 ## ToFileName
 The legacy file-name builder, superseded by `FileNameJoin`.

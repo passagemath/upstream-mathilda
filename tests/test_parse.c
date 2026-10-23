@@ -954,6 +954,47 @@ void test_infix_semicolon_before_operator() {
     assert_statement_list("a; != c", "Unequal[CompoundExpression[a, Null], c]");
 }
 
+/* `<<file` is Get["file"]; the name after `<<`, `>>` and `>>>` is a file
+ * token, not an expression: letters, digits, `` !$*-./:?\_`~ `` and balanced
+ * [...], ended by whitespace or ; , ) ] } -- any other character is a syntax
+ * error.  Get binds tighter than everything: a<<f is Times[a, Get["f"]]. */
+static void assert_parse_fails(const char* input);
+
+void test_get_put_file_tokens(void) {
+    assert_parse_eq("<<f", "Get[\"f\"]");
+    assert_parse_eq("<<a/b.m", "Get[\"a/b.m\"]");
+    assert_parse_eq("<<Foo`", "Get[\"Foo`\"]");
+    assert_parse_eq("<<  f.m  ", "Get[\"f.m\"]");
+    assert_parse_eq("<< \"x y.m\"", "Get[\"x y.m\"]");
+    assert_parse_eq("<<~/x-1.m", "Get[\"~/x-1.m\"]");
+    assert_parse_eq("<<f[x]", "Get[\"f[x]\"]");
+    assert_parse_eq("<<f//g", "Get[\"f//g\"]");
+    assert_parse_eq("<<f!g", "Get[\"f!g\"]");
+    assert_parse_eq("<<f;g", "CompoundExpression[Get[\"f\"], g]");
+    assert_parse_eq("{<<f, 2}", "List[Get[\"f\"], 2]");
+    assert_parse_eq("(<<f)", "Get[\"f\"]");
+    assert_parse_eq("f[<<g]", "f[Get[\"g\"]]");
+    assert_parse_eq("a<<f", "Times[a, Get[\"f\"]]");
+    assert_parse_eq("x=<<f", "Set[x, Get[\"f\"]]");
+    assert_parse_eq("<<\"f\"[x]", "Get[\"f\"][x]");
+    assert_parse_eq("<<\"a\" <> \"b\"", "StringJoin[Get[\"a\"], \"b\"]");
+    assert_parse_fails("<<f+1");
+    assert_parse_fails("<<f[g");
+    assert_parse_fails("<<f)g");
+    assert_parse_fails("<<");
+    /* >> and >>> read their file name with the same token rules. */
+    assert_parse_eq("x>>f[1]", "Put[x, \"f[1]\"]");
+    assert_parse_eq("x>>f*g", "Put[x, \"f*g\"]");
+    assert_parse_eq("x>>f`g", "Put[x, \"f`g\"]");
+    assert_parse_eq("x>>>f?g", "PutAppend[x, \"f?g\"]");
+    assert_parse_eq("x>>f;g", "CompoundExpression[Put[x, \"f\"], g]");
+    assert_parse_eq("{x>>f, 1}", "List[Put[x, \"f\"], 1]");
+    assert_parse_fails("x>>f+g");
+    /* The statement reader: <<file at the start of a line is one statement. */
+    assert_statement_list("<<f\ng", "Get[\"f\"] | g");
+    assert_statement_list("a; <<f", "a | Get[\"f\"]");
+}
+
 /* Get stops at a syntax error -- reporting Syntax::sntx through the message
  * funnel (Quiet / Check see it) with the line number -- and returns Null; the
  * parser's own diagnostics are not printed on top. */
@@ -1295,6 +1336,7 @@ int main() {
     TEST(test_string_line_continuation);
     TEST(test_statement_continuation_after_semicolon);
     TEST(test_infix_semicolon_before_operator);
+    TEST(test_get_put_file_tokens);
     TEST(test_get_syntax_error_reported);
     TEST(test_toexpression_sequencing);
     TEST(test_unclosed_paren_rejected);

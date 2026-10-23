@@ -1176,6 +1176,29 @@ static void test_temporary_directory(void) {
                    "{FileExistsQ[tdp], DeleteFile[tdp], FileExistsQ[tdp]}", "{True, Null, False}", 0);
 }
 
+/* DirectoryQ: True only for an existing directory; String or File[...],
+ * `~` expanded; any other argument (a list included) is False; a wrong
+ * argument count is DirectoryQ::argx and unevaluated.  FileType and
+ * FileExistsQ take File[...] and `~` the same way. */
+static void test_directoryq(void) {
+    assert_eval_eq("DirectoryQ[$TemporaryDirectory]", "True", 0);
+    assert_eval_eq("DirectoryQ[File[$TemporaryDirectory]]", "True", 0);
+    assert_eval_eq("DirectoryQ[\"~\"]", "True", 0);
+    assert_eval_eq("DirectoryQ[\"~/\"]", "True", 0);
+    assert_eval_eq("{DirectoryQ[\".\"], DirectoryQ[\"..\"], DirectoryQ[\"/\"]}", "{True, True, True}", 0);
+    assert_eval_eq("DirectoryQ[\"/no/such/dir/mth\"]", "False", 0);
+    assert_eval_eq("DirectoryQ[\"\"]", "False", 0);
+    assert_eval_eq("{DirectoryQ[3], DirectoryQ[x], DirectoryQ[{\"/tmp\"}]}", "{False, False, False}", 0);
+    assert_eval_eq("dqf = FileNameJoin[{$TemporaryDirectory, \"mth_dq_probe.txt\"}]; "
+                   "WriteString[OpenWrite[dqf], \"x\"]; Close[dqf]; r = DirectoryQ[dqf]; DeleteFile[dqf]; r",
+                   "False", 0);
+    assert_eval_eq("Quiet[DirectoryQ[]]", "DirectoryQ[]", 0);
+    assert_eval_eq("Check[DirectoryQ[\"/\", 2], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[DirectoryQ]", "{Protected}", 0);
+    assert_eval_eq("{FileType[\"~\"], FileType[File[$TemporaryDirectory]], FileExistsQ[\"~\"], "
+                   "FileExistsQ[File[$TemporaryDirectory]]}", "{Directory, Directory, True, True}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1290,6 +1313,7 @@ int main(void) {
     TEST(test_filenamesplit_protected);
     TEST(test_filenamesplit_options);
     TEST(test_temporary_directory);
+    TEST(test_directoryq);
 
     printf("All tests passed!\n");
     return 0;

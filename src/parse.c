@@ -1195,6 +1195,8 @@ static OperatorDef get_operator(const char* pos) {
      * the Pratt binary loop cleanly at a `|>` (rather than lexing `|` as
      * Alternatives / `>` as Greater) and prevents `<|` being read as Less. */
     if (strncmp(pos, "<|", 2) == 0 || strncmp(pos, "|>", 2) == 0) return def;
+    /* `<<file` is the prefix Get form, read in parse_primary; never Less Less. */
+    if (strncmp(pos, "<<", 2) == 0) return def;
 
     if (strncmp(pos, ">>>", 3) == 0) {
         /* PutAppend (expr >>> file). Lower than Set (500) so `a = 5 >>> "f"`
@@ -1434,6 +1436,45 @@ static Expr* parse_colon_suffix(ParserState* s, Expr* tok, ColonLhsKind kind) {
     return expr_new_function(expr_new_symbol(SYM_Optional), args, 2);
 }
 
+/* The file name after `<<`, `>>` or `>>>`: a string literal, or a bare token
+ * of letters, digits, `` !$*-./:?\_`~ `` and balanced `[...]` (so `<<f[x]` is
+ * Get["f[x]"]).  A bare token ends at whitespace, `;`, `,`, `)`, `]`, `}` or
+ * end of input; any other character there is a syntax error (`<<f+1`).
+ * Returns a String, or NULL after reporting the error. */
+static bool file_token_char(char c) {
+    return isalnum((unsigned char)c) || (unsigned char)c >= 0x80 ||
+           strchr("!$*-./:?\\_`~", c) != NULL;
+}
+
+static Expr* parse_file_token(ParserState* s, const char* who) {
+    skip_whitespace(s);
+    if (*s->pos == '"') return parse_string(s);
+    const char* start = s->pos;
+    const char* p = s->pos;
+    int depth = 0;
+    for (;;) {
+        char c = *p;
+        if (c && file_token_char(c)) { p++; continue; }
+        if (c == '[') { depth++; p++; continue; }
+        if (c == ']' && depth > 0) { depth--; p++; continue; }
+        break;
+    }
+    bool ends_cleanly = *p == '\0' || isspace((unsigned char)*p) || strchr(";,)]}", *p) != NULL;
+    if (p == start || depth != 0 || !ends_cleanly) {
+        parse_err("Expected a file name after %s\n", who);
+        return NULL;
+    }
+    size_t n = (size_t)(p - start);
+    char* buf = malloc(n + 1);
+    if (!buf) return NULL;
+    memcpy(buf, start, n);
+    buf[n] = '\0';
+    s->pos = p;
+    Expr* out = expr_new_string(buf);
+    free(buf);
+    return out;
+}
+
 static Expr* parse_primary(ParserState* s) {
     skip_whitespace(s);
     if (!*s->pos) return NULL;
@@ -1444,6 +1485,17 @@ static Expr* parse_primary(ParserState* s) {
     switch (*s->pos) {
         case '"': return parse_string(s);
         case '{': return parse_list(s);
+        case '<':
+            /* `<<file`: Get["file"].  The name is a token, not an expression. */
+            if (s->pos[1] == '<') {
+                s->pos += 2;
+                Expr* name = parse_file_token(s, "<<");
+                if (!name) return NULL;
+                Expr* a[1] = { name };
+                return expr_new_function(expr_new_symbol(SYM_Get), a, 1);
+            }
+            parse_err("Unexpected character: '<'\n");
+            return NULL;
         /* A bare '[' cannot start an expression: there is no head to apply.
          * Mathematica reports `f[x,[x]]` as a syntax error, and so do we.
          * (This used to build an EXPR_FUNCTION with a NULL head, which the
@@ -1690,7 +1742,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
      * prefix and is also left alone. */
     if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',' ||
         *s->pos == '*' || *s->pos == '/' || *s->pos == '^' || *s->pos == '=' ||
-        (*s->pos == '<' && s->pos[1] != '|') || /* '<|' begins an association */
+        (*s->pos == '<' && s->pos[1] != '|' && s->pos[1] != '<') || /* '<|' association, '<<' Get */
         *s->pos == '>' || *s->pos == '|' || *s->pos == '&' ||
         *s->pos == ':' || *s->pos == '@' ||
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
@@ -1816,9 +1868,10 @@ infix_loop:
         }
         
         // Handle implicit multiplication: if no explicit operator but another expression follows
-        // (an association literal `<|...|>` begins with `<|`, which is not a
-        // can_start_primary char, so admit it explicitly).
-        if (op_def.type == OP_NONE && (can_start_primary(*s->pos) || strncmp(s->pos, "<|", 2) == 0)) {
+        // (an association literal `<|...|>` and a `<<file` Get begin with `<`,
+        // which is not a can_start_primary char, so admit them explicitly).
+        if (op_def.type == OP_NONE && (can_start_primary(*s->pos) || strncmp(s->pos, "<|", 2) == 0 ||
+                                       strncmp(s->pos, "<<", 2) == 0)) {
             // A top-level newline terminates the statement rather than acting as
             // implicit multiplication: in a file `a\nb` is two statements (as in
             // Mathematica), not `a b`. Inside brackets newlines stay
@@ -1961,34 +2014,9 @@ infix_loop:
             left = expr_new_function(expr_new_symbol(SYM_RepeatedNull), args, 1);
             continue;
         } else if (op_def.type == OP_PUT || op_def.type == OP_PUTAPPEND) {
-            /* Right side of `>>` / `>>>` is a filename — either a quoted
-             * string or a bare token. Mathematica treats the right side
-             * literally rather than as an expression. */
-            skip_whitespace(s);
-            Expr* filename = NULL;
-            if (*s->pos == '"') {
-                filename = parse_string(s);
-            } else {
-                /* Scan identifier-ish chars plus a few path-safe extras. */
-                char buf[1024];
-                size_t bi = 0;
-                while (*s->pos && bi + 1 < sizeof(buf) &&
-                       (isalnum((unsigned char)*s->pos) ||
-                        *s->pos == '_' || *s->pos == '.' ||
-                        *s->pos == '/' || *s->pos == '\\' ||
-                        *s->pos == '-' || *s->pos == '~' ||
-                        *s->pos == '$')) {
-                    buf[bi++] = *s->pos++;
-                }
-                buf[bi] = '\0';
-                if (bi == 0) {
-                    parse_err( "Expected filename after %s\n",
-                            op_def.head_name);
-                    expr_free(left);
-                    return NULL;
-                }
-                filename = expr_new_string(buf);
-            }
+            /* Right side of `>>` / `>>>` is a file name, read literally
+             * (parse_file_token), not as an expression. */
+            Expr* filename = parse_file_token(s, op_def.head_name);
             if (!filename) {
                 expr_free(left);
                 return NULL;

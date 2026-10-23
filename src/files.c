@@ -16,7 +16,7 @@
  *   $HomeDirectory         — the user's home directory (from the environment).
  *   $TemporaryDirectory    — the host temporary directory (TMPDIR / TEMP / TMP).
  *   Environment["var"]     — an environment variable's value, or $Failed.
- *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, ToFileName,
+ *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, DirectoryQ, ToFileName,
  *   DeleteFile             — path manipulation and deletion.
  *   $PathnameSeparator     — the host pathname separator ("/" or "\\").
  *
@@ -95,6 +95,34 @@ static void fs_msg(const char* fmt, ...) {
     fputc('\n', stderr);
 }
 
+static char* home_from_env(void);
+
+/* The path a file argument names: a String or File["s"], with a leading `~`
+ * (alone or before a separator) expanded to the home directory.  Caller
+ * frees; NULL when the argument is neither form. */
+static char* file_arg_path(const Expr* a) {
+    const char* p = NULL;
+    if (a->type == EXPR_STRING) p = a->data.string;
+    else if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+             a->data.function.head->data.symbol.name == SYM_File &&
+             a->data.function.arg_count == 1 && a->data.function.args[0]->type == EXPR_STRING)
+        p = a->data.function.args[0]->data.string;
+    if (!p) return NULL;
+    if (p[0] == '~' && (p[1] == '\0' || p[1] == '/' || p[1] == '\\')) {
+        char* home = home_from_env();
+        if (home) {
+            size_t hl = strlen(home), rl = strlen(p + 1);
+            char* r = malloc(hl + rl + 1);
+            if (r) { memcpy(r, home, hl); memcpy(r + hl, p + 1, rl + 1); }
+            free(home);
+            return r;
+        }
+    }
+    char* r = malloc(strlen(p) + 1);
+    if (r) strcpy(r, p);
+    return r;
+}
+
 /* FileExistsQ["name"]
  *
  * Returns True if anything exists at the given path, False otherwise.
@@ -109,11 +137,12 @@ Expr* builtin_fileexistsq(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 1) return NULL;
 
-    Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_STRING) return NULL;
+    char* path = file_arg_path(res->data.function.args[0]);   /* String / File, `~` */
+    if (!path) return NULL;
 
     struct stat st;
-    int exists = (lstat(arg->data.string, &st) == 0);
+    int exists = (lstat(path, &st) == 0);
+    free(path);
     return expr_new_symbol(exists ? "True" : "False");
 }
 
@@ -1555,20 +1584,42 @@ Expr* builtin_absolutefilename(Expr* res) {
 
 /*
  * FileType["name"] -- File, Directory, or None when nothing exists there.
- * Symbolic links are followed.
+ * Symbolic links are followed; File["name"] and a leading `~` are accepted.
  */
 Expr* builtin_filetype(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc != 1) return builtin_arg_error("FileType", argc, 1, 1);
     Expr* a0 = res->data.function.args[0];
-    if (a0->type != EXPR_STRING) {
+    char* path = file_arg_path(a0);
+    if (!path) {
         badfile_message("FileType", a0);
         return NULL;
     }
     struct stat st;
-    if (stat(a0->data.string, &st) != 0) return expr_new_symbol(SYM_None);
+    int rc = stat(path, &st);
+    free(path);
+    if (rc != 0) return expr_new_symbol(SYM_None);
     return expr_new_symbol(S_ISDIR(st.st_mode) ? "Directory" : "File");
+}
+
+/*
+ * DirectoryQ["name"] -- True when name is an existing directory (links
+ * followed; File["name"] and `~` accepted), else False.  Any other argument,
+ * a list included, is simply False.
+ */
+Expr* builtin_directoryq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("DirectoryQ", argc, 1, 1);
+    char* path = file_arg_path(res->data.function.args[0]);
+    bool dir = false;
+    if (path && path[0] != '\0') {
+        struct stat st;
+        dir = stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+    }
+    free(path);
+    return expr_new_symbol(dir ? SYM_True : SYM_False);
 }
 
 /* Append path piece `p` to buf (capacity grows), separator-joined: trailing
@@ -1754,6 +1805,8 @@ void files_init(void) {
     symtab_get_def("AbsoluteFileName")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("FileType", builtin_filetype);
     symtab_get_def("FileType")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("DirectoryQ", builtin_directoryq);
+    symtab_get_def("DirectoryQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ToFileName", builtin_tofilename);
     symtab_get_def("ToFileName")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DeleteFile", builtin_deletefile);

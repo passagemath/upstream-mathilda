@@ -527,6 +527,7 @@ const char* SYM_Protect = NULL;
 const char* SYM_Protected = NULL;
 const char* SYM_PseudoInverse = NULL;
 const char* SYM_Put = NULL;
+const char* SYM_Get = NULL;
 const char* SYM_PutAppend = NULL;
 const char* SYM_QRDecomposition = NULL;
 const char* SYM_Quartics = NULL;
@@ -1566,6 +1567,7 @@ void sym_names_init(void) {
     SYM_Protected                  = intern_symbol("Protected");
     SYM_PseudoInverse              = intern_symbol("PseudoInverse");
     SYM_Put                        = intern_symbol("Put");
+    SYM_Get                        = intern_symbol("Get");
     SYM_PutAppend                  = intern_symbol("PutAppend");
     SYM_QRDecomposition            = intern_symbol("QRDecomposition");
     SYM_Quartics                   = intern_symbol("Quartics");

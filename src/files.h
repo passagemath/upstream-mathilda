@@ -87,6 +87,7 @@ Expr* builtin_setdirectory(Expr* res);
 Expr* builtin_resetdirectory(Expr* res);
 Expr* builtin_directorystack(Expr* res);
 Expr* builtin_environment(Expr* res);
+Expr* builtin_directoryq(Expr* res);
 
 /* Text-file helpers shared with Import (src/imageio.c) and ReadString (src/io/read.c). */
 size_t files_crlf_normalize(char* buf, size_t len);

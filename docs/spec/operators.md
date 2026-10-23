@@ -49,6 +49,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `=.`     | `Unset` (postfix) | 500 | None |
 | `+=`, `-=`, `*=`, `/=` | `AddTo`, `SubtractFrom`, `TimesBy`, `DivideBy` | 500 | Right |
 | `>>`, `>>>` | `Put`, `PutAppend` | 300 | Left |
+| `<<` (prefix) | `Get` | tightest | — |
 | `;`      | `CompoundExpression` | 100 | Left |
 
 (`_`/`__`/`___` blanks are recognised structurally in `parse_primary`, not via

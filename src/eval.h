@@ -41,6 +41,21 @@ Expr* eval_collect_trace(Expr* held_expr);
  * Throw (e.g. Hold[Throw[1]]) is never evaluated and so never becomes a
  * sentinel, which is why reusing the plain Throw[...] node is unambiguous. */
 bool eval_is_inflight_throw(const Expr* e);
+/* In-flight Abort[] sentinel; and "a Throw or an Abort" -- what every site
+ * that passes a Throw upward must pass upward too. */
+bool eval_is_inflight_abort(const Expr* e);
+bool eval_is_inflight_unwind(const Expr* e);
+/* True (once) if an abort reached the top level since the last call. */
+bool eval_take_top_abort(void);
+/* A Catch / CheckAbort that consumes an in-flight sentinel calls this so the
+ * enclosing frame does not re-raise it (see g_pending_unwind in eval.c). */
+void eval_unwind_consumed(void);
+/* Evaluate a user callback (a predicate, comparator, key function, pattern
+ * test or guard) for a builtin that only inspects its value: a Throw/Abort it
+ * produces is parked so the builtin's frame propagates it even if the builtin
+ * drops the value.  eval_park_unwind parks an already-evaluated result. */
+Expr* eval_callback(Expr* call);
+void eval_park_unwind(const Expr* r);
 
 /* True iff `e` is an in-flight Goto sentinel: Goto[tag] (head SYM_Goto, arity
  * 1). Like Throw, a Goto propagates by being returned up the evaluation stack;

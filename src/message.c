@@ -236,7 +236,7 @@ Expr* builtin_check(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     unsigned long before = mth_msg_fired_count();
     Expr* val = evaluate(res->data.function.args[0]);
-    if (val && eval_is_inflight_throw(val)) return val;
+    if (val && eval_is_inflight_unwind(val)) return val;
     if (mth_msg_fired_count() != before) {
         if (val) expr_free(val);
         return evaluate(res->data.function.args[1]);

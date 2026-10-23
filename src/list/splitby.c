@@ -24,6 +24,7 @@
  * peak overhead beyond the result itself is a single key plus the per-level
  * run vector. */
 
+#include "eval.h"
 #include "list_common.h"
 #include "splitby.h"
 
@@ -31,7 +32,7 @@
 static Expr* splitby_key(Expr* f, Expr* e) {
     Expr* args[1] = { expr_copy(e) };
     Expr* call = expr_new_function(expr_copy(f), args, 1);
-    Expr* key = evaluate(call);
+    Expr* key = eval_callback(call);
     expr_free(call);
     return key;
 }

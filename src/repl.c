@@ -1476,10 +1476,17 @@ static int run_script_file(const char* path) {
         /* evaluate() borrows its argument and returns a new tree; both are
          * ours to free. The result is discarded: a script speaks via
          * Print[], not via echoed values. */
+        (void)eval_take_top_abort();   /* clear any stale flag */
         Expr* evaluated = evaluate(parsed);
         mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
         expr_free(evaluated);
         expr_free(parsed);
+        if (eval_take_top_abort()) {
+            /* Abort[] reached the top level: the script ends here, with
+             * $Aborted shown as the result. */
+            printf("$Aborted\n");
+            break;
+        }
         if (mth_quit_requested()) {
             /* Quit[n] ends the script here, with exit status n. */
             status = mth_quit_status();

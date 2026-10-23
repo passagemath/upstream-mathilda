@@ -9,6 +9,7 @@
  */
 
 #include "eval.h"
+#include "arithmetic.h"   /* g_arith_warnings_muted: internal-probe marker */
 #include "context.h"
 #include "symtab.h"
 #include "ndarray.h"
@@ -96,10 +97,13 @@ void eval_set_recursion_limit(int n) {
  * had before the timed call entered the evaluator.  We also clear
  * eval_overflow so a future evaluate() is not falsely poisoned by the
  * aborted call. */
+void eval_unwind_consumed(void);
+
 void eval_reset_recursion_depth(int n) {
     if (n < 0) n = 0;
     eval_recursion_depth = n;
     eval_overflow = false;
+    eval_unwind_consumed();   /* a parked sentinel from the abandoned frames */
 }
 
 /* M3 phase-3 evaluation clock. Starts at 1 so a freshly-allocated Expr
@@ -402,6 +406,29 @@ bool eval_is_inflight_throw(const Expr* e) {
            e->data.function.head->type == EXPR_SYMBOL &&
            e->data.function.head->data.symbol.name == SYM_Throw &&
            e->data.function.arg_count >= 1 && e->data.function.arg_count <= 3;
+}
+
+/* Abort[]: the in-flight abort.  Like a Throw it is its own sentinel and rides
+ * the ordinary return path (so every frame's cleanup runs), but no Catch
+ * consumes it -- only CheckAbort, or the top level, which yields $Aborted. */
+bool eval_is_inflight_abort(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Abort &&
+           e->data.function.arg_count == 0;
+}
+
+bool eval_is_inflight_unwind(const Expr* e) {
+    return eval_is_inflight_throw(e) || eval_is_inflight_abort(e);
+}
+
+/* Set when an abort reaches the top level (see eval_take_top_abort). */
+static bool g_top_abort = false;
+
+bool eval_take_top_abort(void) {
+    bool a = g_top_abort;
+    g_top_abort = false;
+    return a;
 }
 
 bool eval_is_inflight_goto(const Expr* e) {
@@ -1737,7 +1764,50 @@ static inline bool eval_is_terminal_value(const Expr* v) {
     }
 }
 
+/* ---- Swallowed unwinds -----------------------------------------------------
+ *
+ * A Throw or Abort is a sentinel riding the ordinary return path.  The argument
+ * loop passes one upward, but a builtin (or the matcher) that evaluates user
+ * code and only inspects the result -- a Select criterion, a Sort comparator,
+ * a _?test or /; guard -- would otherwise drop it: Catch[Select[{1,2,3},
+ * If[# == 2, Throw[9], True] &]] gave {1, 3}.  So where a USER CALLBACK is
+ * evaluated (eval_callback / eval_park_unwind: the matcher's guards and tests,
+ * the predicate / comparator / key-function sites of the list builtins), a
+ * sentinel it yields is parked in g_pending_unwind.  Parking is deliberately
+ * not done for every evaluate(): Mathilda's symbolic engines evaluate user
+ * expressions speculatively (Sum probes its summand symbolically even for
+ * numeric bounds) and rightly ignore what such a probe throws.  Each
+ * evaluate_step frame saves and clears the slot on entry, and on exit, if the
+ * slot is set but the frame's own result is not a sentinel (it was swallowed),
+ * the parked sentinel becomes the result.  A genuine consumer -- Catch taking a
+ * Throw, CheckAbort taking an Abort -- clears the slot (eval_unwind_consumed). */
+static Expr* g_pending_unwind = NULL;
+
+void eval_unwind_consumed(void) {
+    if (g_pending_unwind) { expr_free(g_pending_unwind); g_pending_unwind = NULL; }
+}
+
+static Expr* evaluate_step_core(Expr* e, bool* changed);
+
 Expr* evaluate_step(Expr* e, bool* changed) {
+    Expr* saved = g_pending_unwind;
+    g_pending_unwind = NULL;
+    Expr* r = evaluate_step_core(e, changed);
+    if (g_pending_unwind) {
+        if (r && eval_is_inflight_unwind(r)) {
+            expr_free(g_pending_unwind);
+        } else {
+            if (r) expr_free(r);
+            r = g_pending_unwind;
+            if (changed) *changed = true;
+        }
+        g_pending_unwind = NULL;
+    }
+    g_pending_unwind = saved;
+    return r;
+}
+
+static Expr* evaluate_step_core(Expr* e, bool* changed) {
     /* Local sink so we can write through `*changed` unconditionally. */
     bool sink = false;
     if (!changed) changed = &sink;
@@ -1926,7 +1996,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                  * Plus/Times arguments too. A Goto bubbles the same way until an
                  * enclosing CompoundExpression consumes it (see
                  * builtin_compoundexpression). */
-                if (arg_evaluated && (eval_is_inflight_throw(new_args[i]) ||
+                if (arg_evaluated && (eval_is_inflight_unwind(new_args[i]) ||
                                       eval_is_inflight_goto(new_args[i]))) {
                     Expr* sentinel = new_args[i];
                     for (size_t j = 0; j < i; j++) expr_free(new_args[j]);
@@ -2818,6 +2888,15 @@ static Expr* eval_report_uncaught_throw(Expr* thr) {
     return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
 }
 
+/* An abort that reaches the top level ends the input: the result is $Aborted,
+ * and the front end learns of it through eval_take_top_abort (a -file script
+ * stops there).  Takes ownership of the sentinel. */
+static Expr* eval_report_uncaught_abort(Expr* ab) {
+    expr_free(ab);
+    g_top_abort = true;
+    return expr_new_symbol(SYM_DollarAborted);
+}
+
 /* An in-flight Goto that survives to the top level found no matching Label in
  * any enclosing CompoundExpression. Emit Goto::nolabel on stderr (same channel
  * as Throw::nocatch) and return the Goto[tag] node unchanged -- unlike Throw,
@@ -2846,7 +2925,26 @@ static Expr* eval_report_uncaught_break_continue(Expr* e) {
     return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
 }
 
+static Expr* evaluate_core(Expr* e);
+
 Expr* evaluate(Expr* e) {
+    return evaluate_core(e);
+}
+
+void eval_park_unwind(const Expr* r) {
+    if (eval_recursion_depth > 0 && r && eval_is_inflight_unwind(r) && !g_arith_warnings_muted) {
+        if (g_pending_unwind) expr_free(g_pending_unwind);
+        g_pending_unwind = expr_copy((Expr*)r);
+    }
+}
+
+Expr* eval_callback(Expr* call) {
+    Expr* r = evaluate(call);
+    eval_park_unwind(r);
+    return r;
+}
+
+static Expr* evaluate_core(Expr* e) {
     if (!e) return NULL;
 
     /* M3 phase-3 timestamp early-exit. If this expression has been fully
@@ -2939,6 +3037,8 @@ Expr* evaluate(Expr* e) {
             if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
             if (is_top_level && eval_is_inflight_throw(current))
                 current = eval_report_uncaught_throw(current);
+            else if (is_top_level && eval_is_inflight_abort(current))
+                current = eval_report_uncaught_abort(current);
             else if (is_top_level && eval_is_inflight_goto(current))
                 current = eval_report_uncaught_goto(current);
             else if (is_top_level && eval_is_inflight_break_continue(current))
@@ -3033,6 +3133,8 @@ Expr* evaluate(Expr* e) {
              * (any enclosing Catch would have consumed it at depth >= 1). */
             if (is_top_level && eval_is_inflight_throw(current))
                 current = eval_report_uncaught_throw(current);
+            else if (is_top_level && eval_is_inflight_abort(current))
+                current = eval_report_uncaught_abort(current);
             else if (is_top_level && eval_is_inflight_goto(current))
                 current = eval_report_uncaught_goto(current);
             else if (is_top_level && eval_is_inflight_break_continue(current))
@@ -3072,6 +3174,8 @@ Expr* evaluate(Expr* e) {
     if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
     if (is_top_level && eval_is_inflight_throw(current))
         current = eval_report_uncaught_throw(current);
+    else if (is_top_level && eval_is_inflight_abort(current))
+        current = eval_report_uncaught_abort(current);
     else if (is_top_level && eval_is_inflight_goto(current))
         current = eval_report_uncaught_goto(current);
     else if (is_top_level && eval_is_inflight_break_continue(current))

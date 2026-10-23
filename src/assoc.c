@@ -393,7 +393,7 @@ static Expr* lookup_core(Expr* res) {
                 if (argc == 3) largs[2] = expr_copy(deflt);
                 Expr* call = expr_new_function(expr_copy(res->data.function.head), largs, argc);
                 free(largs);
-                out[i] = evaluate(call);
+                out[i] = eval_callback(call);
                 expr_free(call);
             }
             Expr* list = make_list(out, m);
@@ -658,7 +658,7 @@ static Expr* key_drop_take(Expr* res, bool take) {
             for (size_t i = 0; i < m; i++) {
                 Expr* a2[2] = { expr_copy(assoc->data.function.args[i]), expr_copy(karg) };
                 Expr* call = expr_new_function(expr_copy(res->data.function.head), a2, 2);
-                out[i] = evaluate(call);
+                out[i] = eval_callback(call);
                 expr_free(call);
             }
             Expr* list = make_list(out, m);
@@ -993,7 +993,7 @@ Expr* builtin_groupby(Expr* res) {
         Expr* key_input = assoc_in ? rule_val(x) : x;
         Expr* fx_args[1] = { expr_copy(key_input) };
         Expr* fx = expr_new_function(expr_copy(keyfn), fx_args, 1);
-        Expr* key = evaluate(fx);      /* the group key */
+        Expr* key = eval_callback(fx);      /* the group key */
         expr_free(fx);
 
         size_t slot, idx = ki_lookup(&ki, keys, key, &slot);
@@ -1016,7 +1016,7 @@ Expr* builtin_groupby(Expr* res) {
         if (valfn) {
             Expr* vx_args[1] = { expr_copy(x) };
             Expr* vx = expr_new_function(expr_copy(valfn), vx_args, 1);
-            groups[idx][gcnt[idx]++] = evaluate(vx);
+            groups[idx][gcnt[idx]++] = eval_callback(vx);
             expr_free(vx);
         } else {
             groups[idx][gcnt[idx]++] = expr_copy(x);
@@ -1079,7 +1079,7 @@ Expr* assoc_gather_core(Expr* list, Expr* f) {
         if (f) {
             Expr* fx_args[1] = { expr_copy(key_input) };
             Expr* fx = expr_new_function(expr_copy(f), fx_args, 1);
-            key = evaluate(fx);
+            key = eval_callback(fx);
             expr_free(fx);
         } else {
             key = expr_copy(key_input);
@@ -1130,7 +1130,7 @@ Expr* builtin_merge(Expr* res) {
             Expr* vals = assoc_values_list(col);
             Expr* margs[2] = { vals, expr_copy(f) };
             Expr* call = expr_new_function(expr_new_symbol(SYM_Merge), margs, 2);
-            Expr* r = evaluate(call);
+            Expr* r = eval_callback(call);
             expr_free(call);
             return r;
         }
@@ -1232,7 +1232,7 @@ Expr* builtin_associate_to(Expr* res) {
 static Expr* apply1(Expr* f, const Expr* arg) {
     Expr* a = expr_copy((Expr*)arg);
     Expr* call = expr_new_function(expr_copy(f), &a, 1);
-    Expr* r = evaluate(call);
+    Expr* r = eval_callback(call);
     expr_free(call);
     return r;
 }
@@ -1302,7 +1302,7 @@ Expr* assoc_apply_over_values(Expr* res) {
     for (size_t i = 1; i < argc; i++) args[i] = expr_copy(res->data.function.args[i]);
     Expr* call = expr_new_function(expr_copy(res->data.function.head), args, argc);
     free(args);
-    Expr* r = evaluate(call);
+    Expr* r = eval_callback(call);
     expr_free(call);
     return r;
 }
@@ -1450,7 +1450,7 @@ static Expr* keysort_with_p(const Expr* assoc, Expr* p) {
     Expr* ord_args[3] = { make_list(keys, n), expr_new_symbol(SYM_All), expr_copy(p) };
     free(keys);
     Expr* call = expr_new_function(expr_new_symbol(SYM_Ordering), ord_args, 3);
-    Expr* perm = evaluate(call);
+    Expr* perm = eval_callback(call);
     expr_free(call);
 
     Expr* result = NULL;

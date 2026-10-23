@@ -918,7 +918,7 @@ static int cmp_with_p(Expr* ea, Expr* eb, Expr* p) {
     /* Call p[ea, eb]. */
     Expr* args[2] = { expr_copy(ea), expr_copy(eb) };
     Expr* call = expr_new_function(expr_copy(p), args, 2);
-    Expr* result = evaluate(call);
+    Expr* result = eval_callback(call);
     expr_free(call);
 
     int cmp = -1; /* default to "in order" (ea before eb) */
@@ -1128,7 +1128,7 @@ static Expr* sort_by_with_p(const Expr* coll, Expr* f, Expr* p, bool swap) {
     for (size_t i = 0; i < n; i++) {
         Expr* ca[1] = { expr_copy(pre[i].key) };
         Expr* call = expr_new_function(expr_copy(f), ca, 1);
-        fv[i] = evaluate(call);
+        fv[i] = eval_callback(call);
         expr_free(call);
     }
     size_t* perm = p_sort_perm(fv, n, p, swap, false);
@@ -1197,7 +1197,7 @@ Expr* builtin_sort_by(Expr* res) {
             for (size_t c = 0; c < nc; c++) {
                 Expr* ca[1] = { expr_copy(subject) };
                 Expr* call = expr_new_function(expr_copy(f->data.function.args[c]), ca, 1);
-                keyparts[c] = evaluate(call);
+                keyparts[c] = eval_callback(call);
                 expr_free(call);
             }
             pairs[i].key = expr_new_function(expr_new_symbol(SYM_List), keyparts, nc);
@@ -1205,7 +1205,7 @@ Expr* builtin_sort_by(Expr* res) {
         } else {
             Expr* call_args[1] = { expr_copy(subject) };
             Expr* call = expr_new_function(expr_copy(f), call_args, 1);
-            pairs[i].key = evaluate(call);
+            pairs[i].key = eval_callback(call);
             expr_free(call);
         }
     }
@@ -1261,7 +1261,7 @@ static Expr* maximal_minimal_by(Expr* res, int mode) {
             subject = elem->data.function.args[1];
         Expr* call_args[1] = { expr_copy(subject) };
         Expr* call = expr_new_function(expr_copy(f), call_args, 1);
-        keys[i] = evaluate(call);
+        keys[i] = eval_callback(call);
         expr_free(call);
     }
 
@@ -1442,7 +1442,7 @@ static Expr* take_extreme(Expr* coll, Expr* f, int64_t nreq, bool largest) {
         if (f) {
             Expr* call_args[1] = { expr_copy(subject) };
             Expr* call = expr_new_function(expr_copy(f), call_args, 1);
-            pairs[i].key = evaluate(call);
+            pairs[i].key = eval_callback(call);
             expr_free(call);
         } else {
             pairs[i].key = expr_copy(subject);
@@ -1681,7 +1681,7 @@ Expr* builtin_orderedq(Expr* res) {
         } else {
             Expr* args[2] = { expr_copy(ea), expr_copy(eb) };
             Expr* call = expr_new_function(expr_copy(current_sort_p), args, 2);
-            Expr* result = evaluate(call);
+            Expr* result = eval_callback(call);
             expr_free(call);
             
             cmp = -1; // Default to "in order" (ea <= eb)

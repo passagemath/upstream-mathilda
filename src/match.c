@@ -569,7 +569,7 @@ static bool guard_all_true(Expr* g) {
      * we hand it is ours to free -- keep it in a variable rather than inlining
      * expr_copy(g), which would orphan one node per non-True guard leaf. */
     Expr* gc = expr_copy(g);
-    Expr* leaf = evaluate(gc);
+    Expr* leaf = eval_callback(gc);
     expr_free(gc);
     bool t = leaf && leaf->type == EXPR_SYMBOL && leaf->data.symbol.name == SYM_True;
     if (leaf) expr_free(leaf);
@@ -601,7 +601,7 @@ static bool eval_guard_true(Expr* guard, MatchEnv* env) {
         expr_free(expanded);
         expanded = resolved;
     }
-    Expr* result = evaluate(expanded);
+    Expr* result = eval_callback(expanded);
     expr_free(expanded);
     if (!result) return false;
     bool ok = guard_all_true(result);
@@ -667,7 +667,7 @@ static bool blank_head_matches(Expr* expr, Expr* b_head) {
 static bool apply_pattern_test(Expr* elem, Expr* test_func) {
     Expr* call_args[1] = { expr_copy(elem) };
     Expr* test_call = expr_new_function(expr_copy(test_func), call_args, 1);
-    Expr* result = evaluate(test_call);
+    Expr* result = eval_callback(test_call);
     expr_free(test_call);
     bool ok = result && result->type == EXPR_SYMBOL
               && result->data.symbol.name == SYM_True;

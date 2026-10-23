@@ -448,6 +448,52 @@ In[5]:= Catch[Throw[v, tg], tg, {#1, #2} &]
 Out[5]= {v, tg}
 ```
 
+**Throws from callbacks.** A `Throw` raised inside a user callback leaves
+the builtin that called the callback:
+- predicates: `Select`, `TakeWhile`, `LengthWhile`, `KeySelect`;
+- comparators and same-tests: `Sort`, `Split`, `DeleteDuplicates`, `Union`
+  with `SameTest`, `Tally`;
+- key functions: `SortBy`, `GatherBy`, `SplitBy`, `GroupBy`, `MaximalBy`,
+  `MinimalBy`;
+- pattern tests and guards: `_?f` and `/; cond` in `Cases`, `Count`,
+  `DeleteCases`, `Position`, `MemberQ`, `FreeQ`, `MatchQ`, `ReplaceAll` and
+  DownValue dispatch.
+
+Before, such a builtin read the in-flight `Throw` as "not `True`" and dropped
+it, so `Catch[Select[{1, 2, 3}, If[# == 2, Throw[9], True] &]]` gave
+`{1, 3}`; it now gives `9`. Speculative internal evaluation is not a callback,
+so `Sum`'s symbolic probe of its summand does not leak a `Throw` that its
+numeric loop never reaches.
+
+## Abort / CheckAbort / AbortProtect / $Aborted
+- `Abort[]` aborts the current evaluation. The abort unwinds every enclosing
+  computation, including `Map`, `Table`, the loops, the functional iterators,
+  `Block`/`Module` (whose scoping is restored), user functions, and callbacks
+  as described above.
+  - `Catch`, `Check`, `Quiet` and `TimeConstrained` do not stop it.
+  - At the top level the result is `$Aborted`. A `-file` script prints
+    `$Aborted` and stops.
+  - `Get` stops reading and passes the abort on, so the statement containing
+    `Get` aborts too. `ToExpression`'s statements stop as well.
+- `CheckAbort[expr, failexpr]` gives `expr`'s value, or `failexpr` if an abort
+  occurs inside it. Scoping inside `expr` is unwound before `failexpr` runs. A
+  `Throw` passes through unchanged. `HoldAll`.
+- `AbortProtect[expr]` runs `expr` to completion even if `Abort[]` is called
+  inside it. The abort then takes effect when the outermost `AbortProtect`
+  returns. `HoldAll`.
+- `Abort[]` itself is the in-flight sentinel, like a `Throw` node. It rides the
+  ordinary return path, so every frame's cleanup runs (no `longjmp`).
+- `Interrupt[]` is not implemented: outside a notebook it ends the session in
+  the reference, which is not an abort.
+
+```mathematica
+In[1]:= CheckAbort[Map[If[# == 2, Abort[], #] &, {1, 2, 3}], "aborted"]
+Out[1]= "aborted"
+
+In[2]:= ap = 0; CheckAbort[AbortProtect[Abort[]; ap = 1]; ap = 2, {"ab", ap}]
+Out[2]= {"ab", 1}
+```
+
 ## Goto / Label
 Imperative jumps within a `CompoundExpression`. `Goto[tag]` transfers control to
 the `Label[tag]` in the compound expression the `Goto` appears in directly, then

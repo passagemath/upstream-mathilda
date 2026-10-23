@@ -1,3 +1,4 @@
+#include "eval.h"
 #include "list_common.h"
 #include "setops.h"
 #include "message.h"    /* mth_message: Quiet/Check funnel */
@@ -457,7 +458,7 @@ Expr* builtin_union(Expr* res) {
             } else {
                 Expr* call_args[2] = { expr_copy(all_args[i]), expr_copy(unique_args[unique_count - 1]) };
                 Expr* call = expr_new_function(expr_copy(same_test), call_args, 2);
-                Expr* eval_res = evaluate(call);
+                Expr* eval_res = eval_callback(call);
                 if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     is_dup = true;
                 }
@@ -487,7 +488,7 @@ Expr* builtin_union(Expr* res) {
 static bool same_test_equal(Expr* test, Expr* a, Expr* b) {
     Expr* call_args[2] = { expr_copy(a), expr_copy(b) };
     Expr* call = expr_new_function(expr_copy(test), call_args, 2);
-    Expr* r = evaluate(call);
+    Expr* r = eval_callback(call);
     bool eq = (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True);
     expr_free(r);
     expr_free(call);
@@ -808,7 +809,7 @@ Expr* builtin_tally(Expr* res) {
             for (size_t j = 0; j < unique_count; j++) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_elems[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
-                Expr* eval_res = evaluate(call);
+                Expr* eval_res = eval_callback(call);
                 if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     found_idx = (int)j;
                     expr_free(eval_res);
@@ -902,7 +903,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
             for (size_t j = 0; j < unique_count; j++) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_args[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
-                Expr* eval_res = evaluate(call);
+                Expr* eval_res = eval_callback(call);
                 if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
                     is_duplicate = true;
                     expr_free(eval_res);
@@ -944,7 +945,7 @@ Expr* builtin_deleteduplicatesby(Expr* res) {
         Expr* elem = coll->data.function.args[i];
         Expr* val  = assoc ? elem->data.function.args[1] : elem;  /* value for assoc */
         Expr* fcall = expr_new_function(expr_copy(f), (Expr*[]){ expr_copy(val) }, 1);
-        Expr* fk = evaluate(fcall);
+        Expr* fk = eval_callback(fcall);
         expr_free(fcall);
         bool dup = false;
         for (size_t j = 0; j < nkept; j++)

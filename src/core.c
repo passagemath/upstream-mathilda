@@ -599,6 +599,25 @@ void core_init(void) {
         "Throw[value]\n\tStops evaluation and returns value to the nearest enclosing\n"
         "\tCatch. Throw[value, tag] is caught only by Catch[expr, form] whose form\n"
         "\tmatches tag. Throw[value, tag, f] returns f[value, tag] if uncaught.");
+    symtab_add_builtin("Abort", builtin_abort);
+    symtab_get_def("Abort")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Abort",
+        "Abort[]\n\tAborts the current evaluation.  The abort unwinds every enclosing\n"
+        "\tcomputation (Catch does not stop it) up to the nearest CheckAbort, or to the top\n"
+        "\tlevel, where the result is $Aborted and a -file script stops.  Inside AbortProtect\n"
+        "\tit takes effect when the protected evaluation finishes.");
+    symtab_add_builtin("CheckAbort", builtin_checkabort);
+    symtab_get_def("CheckAbort")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("CheckAbort",
+        "CheckAbort[expr, failexpr]\n\tevaluates expr, returning failexpr if an abort occurs.\n"
+        "\tThrows pass through.  Scoping constructs inside expr are unwound before failexpr runs.");
+    symtab_add_builtin("AbortProtect", builtin_abortprotect);
+    symtab_get_def("AbortProtect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("AbortProtect",
+        "AbortProtect[expr]\n\tevaluates expr, saving any abort requested inside it until the\n"
+        "\tevaluation is complete; the abort then takes effect.");
+    symtab_get_def("$Aborted")->attributes |= ATTR_PROTECTED;
+    abort_init();
     symtab_add_builtin("Catch", builtin_catch);
     symtab_get_def("Catch")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_set_docstring("Catch",

@@ -274,7 +274,7 @@ Expr* builtin_reap(Expr* res) {
     g_reap_top = frame.prev;
 
     /* A Throw crossing the Reap unwinds: discard sown values, propagate. */
-    if (eval_is_inflight_throw(result)) {
+    if (eval_is_inflight_unwind(result)) {
         reap_frame_free_contents(&frame);
         return result;
     }

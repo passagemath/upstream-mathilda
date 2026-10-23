@@ -1,6 +1,7 @@
 #include "print.h"
 
 #include "funcprog.h"
+#include "core.h"        /* tc_register_unwind_counter */
 #include "eval.h"
 #include "arithmetic.h"
 #include "match.h"
@@ -1004,13 +1005,18 @@ Expr* builtin_select(Expr* res) {
         Expr* call = expr_new_function(expr_copy(crit), call_args, 1);
         
         Expr* eval_res = evaluate(call);
-        
+        expr_free(call);
+
+        /* A Throw or Abort from the criterion leaves Select. */
+        if (eval_is_inflight_unwind(eval_res)) {
+            for (size_t k = 0; k < kept_count; k++) expr_free(kept_args[k]);
+            free(kept_args);
+            return eval_res;
+        }
         if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol.name == SYM_True) {
             kept_args[kept_count++] = expr_copy(elem);
         }
-        
         expr_free(eval_res);
-        expr_free(call);
     }
     
     Expr* result = expr_new_function(expr_copy(list->data.function.head), kept_args, kept_count);
@@ -1039,7 +1045,7 @@ static size_t leading_run_length(Expr* crit, Expr** elems, size_t n, bool over_v
         Expr* e = over_values ? elems[k]->data.function.args[1] : elems[k];
         Expr* call_args[1] = { expr_copy(e) };
         Expr* call = expr_new_function(expr_copy(crit), call_args, 1);
-        Expr* v = evaluate(call);
+        Expr* v = eval_callback(call);
         expr_free(call);
         bool ok = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         expr_free(v);
@@ -1147,7 +1153,7 @@ Expr* builtin_select_first(Expr* res) {
         Expr* v = evaluate(call);
         expr_free(call);
         /* A Throw from the predicate propagates. */
-        if (eval_is_inflight_throw(v)) return v;
+        if (eval_is_inflight_unwind(v)) return v;
         bool is_true = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         expr_free(v);
         if (is_true) return expr_copy(elem);
@@ -1204,6 +1210,61 @@ Expr* builtin_label(Expr* res) {
  * returns f[value, tag]. Attribute HoldFirst: the body is held so we drive its
  * evaluation ourselves and consume any sentinel; form and f (args 1,2) are
  * evaluated normally by the arg loop. */
+/* ---------------------------------------------------------------- Abort */
+
+/* AbortProtect nesting depth, and whether an Abort[] was requested inside it.
+ * The depth is registered with TimeConstrained's unwind-counter registry
+ * (abort_init) so an asynchronous timeout cannot leave it raised. */
+static int g_abort_protect_depth = 0;
+static bool g_abort_pending = false;
+
+/* Abort[] -- abort the current evaluation.  The unevaluated Abort[] node is
+ * the in-flight sentinel (eval_is_inflight_abort): it short-circuits every
+ * enclosing call on the ordinary return path until a CheckAbort or the top
+ * level ($Aborted).  Inside AbortProtect the abort is only recorded, the
+ * call yields Null, and evaluation continues to the end of the protected
+ * body. */
+Expr* builtin_abort(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) return NULL;
+    if (g_abort_protect_depth > 0) {
+        g_abort_pending = true;
+        return expr_new_symbol(SYM_Null);
+    }
+    return NULL;   /* stays Abort[]: the sentinel */
+}
+
+/* CheckAbort[expr, failexpr] -- the value of expr, or, if an abort is raised
+ * while evaluating it, the value of failexpr (evaluated after expr's scoping
+ * constructs have been unwound).  Throws pass through; HoldAll. */
+Expr* builtin_checkabort(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* r = evaluate(res->data.function.args[0]);
+    if (!eval_is_inflight_abort(r)) return r;
+    eval_unwind_consumed();
+    expr_free(r);
+    return evaluate(res->data.function.args[1]);
+}
+
+/* AbortProtect[expr] -- evaluate expr to completion even if Abort[] is called
+ * inside it; a requested abort takes effect when the outermost AbortProtect
+ * returns.  HoldAll. */
+Expr* builtin_abortprotect(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    g_abort_protect_depth++;
+    Expr* r = evaluate(res->data.function.args[0]);
+    g_abort_protect_depth--;
+    if (g_abort_protect_depth == 0 && g_abort_pending) {
+        g_abort_pending = false;
+        expr_free(r);
+        return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
+    }
+    return r;
+}
+
+void abort_init(void) {
+    tc_register_unwind_counter(&g_abort_protect_depth);
+}
+
 Expr* builtin_catch(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1220,6 +1281,7 @@ Expr* builtin_catch(Expr* res) {
 
     /* 1-arg Catch catches ANY throw; tag/handler are irrelevant. */
     if (argc == 1) {
+        eval_unwind_consumed();
         Expr* out = expr_copy(value);
         expr_free(result);
         return out;
@@ -1239,6 +1301,7 @@ Expr* builtin_catch(Expr* res) {
     if (!matched)
         return result;   /* propagate the same sentinel to an outer Catch */
 
+    eval_unwind_consumed();   /* matched: this Catch takes the Throw */
     if (argc == 2) {
         Expr* out = expr_copy(value);
         expr_free(result);
@@ -1279,7 +1342,7 @@ static Expr* scan_apply(Expr* f, Expr* part) {
     Expr* call = expr_new_function(expr_copy(f), &part, 1);  /* adopts part */
     Expr* r = evaluate(call);
     expr_free(call);                                         /* frees f-copy + part */
-    if (eval_is_inflight_throw(r)) return r;                 /* propagate Throw */
+    if (eval_is_inflight_unwind(r)) return r;                 /* propagate Throw */
     Expr* rv = NULL;
     EvalReturnAction ra = eval_classify_return(r, SYM_Scan, &rv);
     if (ra == EVAL_RETURN_CONSUME)   { expr_free(r); return rv; }  /* Return[ret] */
@@ -1455,7 +1518,7 @@ static Expr* all_any_none_true(Expr* res, int mode) {
         Expr* v = evaluate(call);
         expr_free(call);
         /* A Throw from the test propagates. */
-        if (eval_is_inflight_throw(v)) return v;
+        if (eval_is_inflight_unwind(v)) return v;
         bool is_true  = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
         bool is_false = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
         expr_free(v);
@@ -2855,7 +2918,7 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
          * to the running value) short-circuits the whole iteration and
          * propagates as the result. Covers Nest/NestList/Fold/FoldList/
          * NestWhile(List)/FixedPoint(List) in one place. */
-        if (next && eval_is_inflight_throw(next)) {
+        if (next && eval_is_inflight_unwind(next)) {
             ebuf_free_all(buf);
             *out_early = next;
             return ITER_RUN_EARLY;
@@ -3136,7 +3199,7 @@ static IterStep nestwhile_step(ExprBuf* hist, void* vctx, Expr** out) {
         free(ta);
         Expr* tr = eval_and_free(test_call);
         /* A Throw from the while-test propagates as the result. */
-        if (eval_is_inflight_throw(tr)) { *out = tr; return ITER_STEP_RETURN; }
+        if (eval_is_inflight_unwind(tr)) { *out = tr; return ITER_STEP_RETURN; }
         bool keep = sym_is_true(tr);
         expr_free(tr);
         if (!keep) return ITER_STEP_HALT;
@@ -3299,7 +3362,7 @@ static IterStep fixedpoint_step(ExprBuf* hist, void* vctx, Expr** out) {
     } else {
         Expr* tr = apply_binary(c->same_test, last, next);
         /* A Throw from SameTest propagates as the result. */
-        if (eval_is_inflight_throw(tr)) { expr_free(next); *out = tr; return ITER_STEP_RETURN; }
+        if (eval_is_inflight_unwind(tr)) { expr_free(next); *out = tr; return ITER_STEP_RETURN; }
         same = sym_is_true(tr);
         expr_free(tr);
     }

@@ -312,8 +312,8 @@ void test_iter_autocompiled_boundary() {
     assert_eval_eq("Module[{s=0}, Do[s=s+i, {i, 9223372036854775805, 9223372036854775807}]; s]",
                    "27670116110564327418", 0);
     /* real accumulator (the double-block loop) */
-    assert_eval_eq("Module[{s=0.}, Do[s=s+1., {i, 9223372036854775805, 9223372036854775807}]; s]",
-                   "3.", 0);
+    assert_eval_eq("Module[{s=0.0}, Do[s=s+1.0, {i, 9223372036854775805, 9223372036854775807}]; s]",
+                   "3.0", 0);
     /* in-place Part-assignment loop (partloop) */
     assert_eval_eq("a=ConstantArray[0,3]; Do[a[[i-9223372036854775804]]=i, "
                    "{i, 9223372036854775805, 9223372036854775807}]; a",
@@ -344,9 +344,9 @@ void test_table_overcap_declines() {
  * mixed Integer/Rational stays exact, Real steps stay Real, descending works. */
 void test_iter_exactness_preserved() {
     assert_eval_eq("Table[i, {i, 0, 1, 1/3}]", "{0, 1/3, 2/3, 1}", 0);
-    assert_eval_eq("Table[i, {i, 0., 1., 0.25}]", "{0., 0.25, 0.5, 0.75, 1.}", 0);
+    assert_eval_eq("Table[i, {i, 0.0, 1.0, 0.25}]", "{0.0, 0.25, 0.5, 0.75, 1.0}", 0);
     assert_eval_eq("Table[i, {i, 5, 1, -1}]", "{5, 4, 3, 2, 1}", 0);
-    assert_eval_eq("Table[i, {i, 1, 2, 0.5}]", "{1., 1.5, 2.}", 0);
+    assert_eval_eq("Table[i, {i, 1, 2, 0.5}]", "{1.0, 1.5, 2.0}", 0);
     assert_eval_eq("Sum[1/i, {i, 1, 5}]", "137/60", 0);
     assert_eval_eq("Sum[i, {i, 0, 1, 1/4}]", "5/2", 0);
     assert_eval_eq("Product[i, {i, 1, 6}]", "720", 0);
@@ -384,7 +384,8 @@ void test_scoping_capture_avoid() {
     assert_eval_eq("gw[v_] := With[{e = 1}, v + e]; gw[e + 1]", "2 + e", 0);
     assert_eval_eq("gt[v_] := Table[v + e, {e, 1, 2}]; gt[e]", "{1 + e, 2 + e}", 0);
     assert_eval_eq("gf[v_] := Function[e, v + e][1]; gf[e]", "1 + e", 0);
-    assert_eval_eq("gb[v_] := Block[{e = 1}, v + e]; gb[e + 1]", "2 + e", 0);
+    /* Block is dynamic: inside it the argument's e is 1 too, so (e + 1) + e is 3. */
+    assert_eval_eq("gb[v_] := Block[{e = 1}, v + e]; gb[e + 1]", "3", 0);
     /* nested inner shadow: inner e (=2) wins; injected v = e stays free */
     assert_eval_eq("gn[v_] := Module[{e = 1}, Module[{e = 2}, v + e]]; gn[e]", "2 + e", 0);
     /* mirror case: local shadows the pattern variable of the same name */
@@ -431,7 +432,7 @@ void test_iter_packed_list() {
  * imin + k di up to the bound, as Mathematica does; these all stayed
  * unevaluated, and Do/Sum/Product spun forever on a symbolic running value. */
 static void test_iter_symbolic_numeric_bounds(void) {
-    assert_eval_eq("Table[x, {x, 0., 2 Pi, 1.}]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
+    assert_eval_eq("Table[x, {x, 0.0, 2 Pi, 1.0}]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
     assert_eval_eq("Table[x, {x, 0, Pi, 0.5}]", "{0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0}", 0);
     assert_eval_eq("Table[x, {x, 0, Pi}]", "{0, 1, 2, 3}", 0);
     assert_eval_eq("Table[x, {x, Pi}]", "{1, 2, 3}", 0);
@@ -442,13 +443,13 @@ static void test_iter_symbolic_numeric_bounds(void) {
     assert_eval_eq("Table[x, {x, 0, Log[8]/Log[2]}]", "{0, 1, 2, 3}", 0);
     /* A long symbolic range keeps its last point (no accumulated drift). */
     assert_eval_eq("Length[Table[x, {x, 0, 100 Pi, Pi}]]", "101", 0);
-    assert_eval_eq("Length[Table[x, {x, 0., 1000 Pi, Pi}]]", "1001", 0);
+    assert_eval_eq("Length[Table[x, {x, 0.0, 1000 Pi, Pi}]]", "1001", 0);
     /* A free symbol is still not a bound. */
     assert_eval_eq("Table[x, {x, 1, freeBoundSym}]", "Table[x, List[x, 1, freeBoundSym]]", 1);
 
     assert_eval_eq("Range[0, Pi]", "{0, 1, 2, 3}", 0);
     assert_eval_eq("Range[Pi]", "{1, 2, 3}", 0);
-    assert_eval_eq("Range[0, 2 Pi, 1.]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
+    assert_eval_eq("Range[0, 2 Pi, 1.0]", "{0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0}", 0);
     assert_eval_eq("Range[0, 2 Pi, Pi/2]", "{0, 1/2 Pi, Pi, 3/2 Pi, 2 Pi}", 0);
     assert_eval_eq("Range[Pi, 5]", "{Pi, 1 + Pi}", 0);
     assert_eval_eq("Length[Range[0, 100 Pi, Pi]]", "101", 0);
@@ -456,7 +457,7 @@ static void test_iter_symbolic_numeric_bounds(void) {
                    "{100000000000000000000, 100000000000000000001, 100000000000000000002}", 0);
 
     assert_eval_eq("Module[{s = 0}, Do[s += x, {x, 0, 2 Pi, Pi/2}]; s]", "5 Pi", 0);
-    assert_eval_eq("Module[{s = 0}, Do[s += 1, {x, 0., 2 Pi, 0.1}]; s]", "63", 0);
+    assert_eval_eq("Module[{s = 0}, Do[s += 1, {x, 0.0, 2 Pi, 0.1}]; s]", "63", 0);
     assert_eval_eq("Module[{s = 0}, Do[s += 1, {x, Pi, 10}]; s]", "7", 0);
 
     /* Sum's closed form must see the normalised bound: F(Pi + 1) - F(1) would

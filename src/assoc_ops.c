@@ -113,7 +113,7 @@ static Expr* mk_call1(const Expr* f, Expr* arg) {
 /* evaluate(f[arg]); borrows both, returns an owned result. */
 static Expr* eval_call1(const Expr* f, const Expr* arg) {
     Expr* call = mk_call1(f, expr_copy((Expr*)arg));
-    Expr* r = evaluate(call);
+    Expr* r = eval_callback(call);
     expr_free(call);
     return r;
 }
@@ -669,7 +669,7 @@ static Expr* builtin_applyto(Expr* res) {
     }
     Expr* cur = evaluate(lhs);
     Expr* call = mk_call1(f, cur);                   /* adopts cur */
-    Expr* nv = evaluate(call);
+    Expr* nv = eval_callback(call);
     expr_free(call);
     Expr* sargs[2] = { expr_copy(lhs), expr_copy(nv) };
     Expr* set = mk_fn(SYM_Set, sargs, 2);
@@ -1125,7 +1125,7 @@ static Expr* ops_lookup(Expr* res) {
                 for (size_t k = 1; k < argc; k++) la[k] = expr_copy(ARG(res, k));
                 Expr* call = expr_new_function(expr_copy(res->data.function.head), la, argc);
                 free(la);
-                out[i] = evaluate(call);
+                out[i] = eval_callback(call);
                 expr_free(call);
             }
             Expr* l = mk_fn(SYM_List, out, m);

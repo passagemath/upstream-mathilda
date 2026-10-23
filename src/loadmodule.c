@@ -161,6 +161,9 @@ Expr* mathilda_run_file(const char* path, int* opened) {
             last_eval = evaluated;
         }
         expr_free(parsed);
+        /* An abort stops the read and travels on out of Get (its value is
+         * the in-flight Abort[] sentinel). */
+        if (eval_is_inflight_abort(last_eval)) break;
         /* Quit[] inside the file ends the session: stop reading so the
          * top-level driver can shut down without running the rest. */
         if (mth_quit_requested()) break;

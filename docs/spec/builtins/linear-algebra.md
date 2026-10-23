@@ -1148,6 +1148,12 @@ Gives the rank of a matrix.
     `double`-complex kernel with tolerance-aware pivot selection: a
     column is skipped when its largest sub-pivot `|entry|` is `<= t`.
     `Method` does not affect this path.
+    An inexact matrix that also holds free symbols gets its *generic*
+    rank on this path: each symbol is replaced by a fixed complex value
+    off every proper subvariety, rows and then columns are scaled to unit
+    max-modulus, and the result is eliminated numerically
+    (`MatrixRank[{{a, 2. a}, {1., 2.}}]` is `1`, `MatrixRank[{{a, 1.}, {1., a}}]`
+    is `2`).
 - **Tolerance** accepted forms:
   - `Tolerance -> Automatic` (default) — `max(rows, cols) *
     MachineEpsilon * Max[|entries|]` for inexact matrices; `0`

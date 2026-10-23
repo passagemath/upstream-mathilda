@@ -280,6 +280,80 @@ static cplx_t* matrix_to_cplx(Expr** flat, int rows, int cols) {
     return M;
 }
 
+/* Collect (borrowed, deduplicated by interned name) the free symbols in
+ * argument positions of `e`: symbols that are not numeric constants (Pi, E,
+ * Degree, I, ... are NumericQ). */
+static void collect_free_symbols(Expr* e, const char*** syms, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < *n; i++) if ((*syms)[i] == e->data.symbol.name) return;
+        Expr* q = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+                                                  (Expr*[]){ expr_copy(e) }, 1));
+        bool numeric = q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+        expr_free(q);
+        if (numeric) return;
+        if (*n == *cap) {
+            *cap = *cap ? 2 * *cap : 8;
+            *syms = realloc((void*)*syms, sizeof(const char*) * *cap);
+        }
+        (*syms)[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_free_symbols(e->data.function.args[i], syms, n, cap);
+}
+
+/* The GENERIC numerical rank of an inexact matrix with free symbols: replace
+ * each symbol by a fixed, irrational-looking complex value and convert. A
+ * proper subvariety of parameter values drops the rank, and these values miss
+ * it with probability 1 -- the exact path (RowReduce over a mix of machine
+ * reals, symbols and big integers) instead swelled for tens of seconds on a
+ * 5 x 5. NULL when an entry still does not convert. */
+static cplx_t* matrix_to_cplx_generic(Expr** flat, int rows, int cols) {
+    const char** syms = NULL;
+    size_t ns = 0, cap = 0;
+    for (int i = 0; i < rows * cols; i++) collect_free_symbols(flat[i], &syms, &ns, &cap);
+    if (ns == 0) { free((void*)syms); return NULL; }
+    Expr** rules = malloc(sizeof(Expr*) * ns);
+    for (size_t k = 0; k < ns; k++) {
+        double re = 0.6180339887498949 + 0.7071067811865476 * (double)k;
+        double im = 0.3183098861837907 + 0.5772156649015329 * (double)k;
+        Expr* val = expr_new_function(expr_new_symbol(SYM_Complex),
+                                      (Expr*[]){ expr_new_real(re), expr_new_real(im) }, 2);
+        rules[k] = expr_new_function(expr_new_symbol(SYM_Rule),
+                                     (Expr*[]){ expr_new_symbol(syms[k]), val }, 2);
+    }
+    Expr* rule_list = expr_new_function(expr_new_symbol(SYM_List), rules, ns);
+    free(rules);
+    free((void*)syms);
+    cplx_t* M = malloc(sizeof(cplx_t) * (size_t)rows * (size_t)cols);
+    bool ok = M != NULL;
+    for (int i = 0; ok && i < rows * cols; i++) {
+        Expr* sub = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                (Expr*[]){ expr_copy(flat[i]), expr_copy(rule_list) }, 2) }, 1));
+        ok = entry_to_cplx(sub, &M[i]);
+        expr_free(sub);
+    }
+    expr_free(rule_list);
+    if (!ok) { free(M); return NULL; }
+    /* Equilibrate rows, then columns, to unit max-modulus: a generic rank is
+     * scale-invariant, and a 25-digit exact entry beside machine-sized ones
+     * must not swamp them under the caller's max-scaled tolerance. */
+    for (int i = 0; i < rows; i++) {
+        double mx = 0.0;
+        for (int j = 0; j < cols; j++) { double v = c_abs(M[i * cols + j]); if (v > mx) mx = v; }
+        if (mx > 0.0) for (int j = 0; j < cols; j++) { M[i * cols + j].re /= mx; M[i * cols + j].im /= mx; }
+    }
+    for (int j = 0; j < cols; j++) {
+        double mx = 0.0;
+        for (int i = 0; i < rows; i++) { double v = c_abs(M[i * cols + j]); if (v > mx) mx = v; }
+        if (mx > 0.0) for (int i = 0; i < rows; i++) { M[i * cols + j].re /= mx; M[i * cols + j].im /= mx; }
+    }
+    return M;
+}
+
 /* ------------------------------------------------------------------ *
  *  Numerical rank via partial-pivot Gaussian forward elimination.     *
  * ------------------------------------------------------------------ */
@@ -426,6 +500,7 @@ Expr* builtin_matrixrank(Expr* res) {
 
     if (numerical_path) {
         cplx_t* M = matrix_to_cplx(flat, rows, cols);
+        if (!M && inexact) M = matrix_to_cplx_generic(flat, rows, cols);
         if (M) {
             double tol = opts.tolerance;
             if (opts.tol_is_automatic) {

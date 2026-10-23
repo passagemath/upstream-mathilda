@@ -228,6 +228,17 @@ static void test_matrank_real_singular(void) {
                               "{1.3, 16.2, -15.7}}]", 2);
 }
 
+static void test_matrank_inexact_symbolic_generic(void) {
+    /* Machine reals beside free symbols: the generic rank, computed
+     * numerically (the exact RowReduce path swelled for > 30 s on the 5 x 5). */
+    assert_rank_eq("MatrixRank[{{a, 1.}, {1., a}}]", 2);
+    assert_rank_eq("MatrixRank[{{a, 2. a}, {1., 2.}}]", 1);
+    assert_rank_eq("MatrixRank[{{a, b}, {2. a, 2. b}}]", 1);
+    assert_rank_eq("MatrixRank[{{0, 0, 0, 0, -4.636}, {4.167, 0, Sqrt[2], 0, 4.568}, "
+                   "{0, -3.056, 2187240733513661918855063, 0, 0}, {-4.374, 0, 0, 0, 1 + a}, "
+                   "{-7496072801268305484722308, -1.072, -1.87 - 1.67*I, 0, 0}}]", 4);
+}
+
 static void test_matrank_complex_dep(void) {
     /* {{1+I, 2, 3-2I}, {0, 4, 5I}, {1+I, 6, 3+3I}} - row 3 = row 1 + row 2,
      * so rank is 2. */
@@ -417,6 +428,7 @@ int main(void) {
     TEST(test_matrank_complex_dep);
     TEST(test_matrank_tolerance_spec);
     TEST(test_matrank_exact_with_tolerance);
+    TEST(test_matrank_inexact_symbolic_generic);
     TEST(test_matrank_tolerance_rational);
     TEST(test_matrank_tolerance_invalid);
     TEST(test_matrank_method_and_tolerance);

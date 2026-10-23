@@ -173,6 +173,31 @@ In[4]:= area[sq[s_]] ^:= s^2 /; s > 0; UpValues[sq]   (* the moved condition *)
 Out[4]= {HoldPattern[area[sq[s_]] /; s > 0] :> s^2}
 ```
 
+## SubValues
+`SubValues[f]` lists the rules `{HoldPattern[lhs] :> rhs, ...}` whose
+left-hand side has a **compound head** with innermost symbol `f`, at any
+depth. Examples: `f[x_][y_] := ...`, `f[a][b] = v`, `f[a_][b_][c_] := ...`.
+- **Definition.** Rules come from `SetDelayed`/`Set`, from a guarded LHS
+  (`f[a_][b_] /; c := ...`), from a right-hand-side guard, from a scoped
+  guard, and from `TagSet` with `f` as the innermost head
+  (`f /: f[a_][b_] := ...`). An immediate `Set` evaluates the arguments
+  inside the head as well: `x = 5; f[x][1] = 3` defines `f[5][1]`.
+- **Evaluation.** A call whose head is compound has its head evaluated first.
+  The UpValues of its arguments are tried next, then the SubValues of the
+  innermost head symbol. So a DownValue of `f[1]` wins, and `f[1][3]` becomes
+  `"down"[3]`.
+- **Clearing.** `Clear`, `ClearAll` and `Remove` clear them. `f[x_][y_] =.`
+  removes one; a literal call that only a pattern rule covers gives
+  `Unset::norep`.
+- **Elsewhere.** `Definition` shows them. A `Protected` innermost symbol
+  refuses with `Set::write`.
+- `HoldAll`, `Protected`.
+
+```mathematica
+mem[h_][y_] := mem[h][y] = expensive[h, y]    (* memoised per (h, y) *)
+SubValues[mem]
+```
+
 ## Definition
 
 > Gated behind the `UP_VALUES` build flag.

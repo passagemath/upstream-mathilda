@@ -63,6 +63,7 @@ typedef struct SymbolDef {
     char* symbol_name;  // owned: the canonical interned name (freed by intern_clear)
     Rule* own_values;   // x = 4
     Rule* down_values;  // f[x_] = x + 1
+    Rule* sub_values;   // f[x_][y_] := ... -- keyed on the innermost head symbol
 #if UP_VALUES
     /* UpValues: rules keyed on THIS symbol but matched against an ENCLOSING
      * call in which this symbol appears at level one. Installed by UpSet (^=),
@@ -167,6 +168,18 @@ void symtab_remove_symbol(const char* symbol_name);
 // `lhs =.`. Returns true iff a matching rule was found and removed.
 bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
                                  bool own_value);
+
+// SubValues: rules whose left-hand side has a compound head, f[x_][y_] (any
+// depth), keyed on the innermost head symbol f.  Tried for a call whose head
+// is compound, after the head has been evaluated (see apply_sub_values).
+void symtab_add_sub_value(const char* symbol_name, Expr* pattern, Expr* replacement,
+                          bool delayed);
+Rule* symtab_get_sub_values(const char* symbol_name);
+Expr* apply_sub_values(SymbolDef* def, Expr* expr);
+// Unset of a SubValue (alpha-equivalent LHS); true iff one was removed.
+bool symtab_remove_matching_sub_value(const char* symbol_name, const Expr* lhs);
+// The innermost symbol of a compound head g[x][y] -> "g", or NULL.
+const char* symtab_innermost_head(const Expr* e);
 
 // Get definition for a symbol, or create it if it doesn't exist
 SymbolDef* symtab_get_def(const char* symbol_name);

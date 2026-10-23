@@ -1335,7 +1335,43 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                     symbol_name = inner_lhs->data.symbol.name;
                 }
             }
+            /* `f[x_][y_] /; c := ...`: the guarded LHS has a compound head --
+             * a SubValue of its innermost head symbol. */
+            if (symbol_name == SYM_Condition) {
+                Expr* inner = actual_pattern->data.function.args[0];
+                while (inner->type == EXPR_FUNCTION && inner->data.function.head->type == EXPR_SYMBOL &&
+                       inner->data.function.head->data.symbol.name == SYM_Condition &&
+                       inner->data.function.arg_count == 2)
+                    inner = inner->data.function.args[0];
+                const char* sub_sym = symtab_innermost_head(inner);
+                if (sub_sym) {
+                    if (get_attributes(sub_sym) & ATTR_PROTECTED) {
+                        mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                                    "Tag %s in the assignment is Protected.", sub_sym);
+                        if (actual_pattern != lhs) expr_free(actual_pattern);
+                        return true;
+                    }
+                    symtab_add_sub_value(sub_sym, actual_pattern, actual_rhs, is_delayed);
+                    if (actual_pattern != lhs) expr_free(actual_pattern);
+                    return true;
+                }
+            }
             symtab_add_down_value_as(symbol_name, actual_pattern, actual_rhs, is_delayed);
+            if (actual_pattern != lhs) expr_free(actual_pattern);
+            return true;
+        } else if (lhs->data.function.head->type == EXPR_FUNCTION) {
+            /* f[a][b] = v / f[x_][y_] := rhs: a SubValue of the innermost head
+             * symbol f (any depth: g[a][b][c]). */
+            const char* sub_sym = symtab_innermost_head(lhs);
+            if (!sub_sym) return false;
+            if (get_attributes(sub_sym) & ATTR_PROTECTED) {
+                mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                            "Tag %s in the assignment is Protected.", sub_sym);
+                return true;
+            }
+            Expr* actual_rhs = rhs;
+            Expr* actual_pattern = is_delayed ? hoist_rhs_conditions(lhs, rhs, &actual_rhs) : lhs;
+            symtab_add_sub_value(sub_sym, actual_pattern, actual_rhs, is_delayed);
             if (actual_pattern != lhs) expr_free(actual_pattern);
             return true;
         }
@@ -1380,8 +1416,17 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
         eval_args[i] = hold ? expr_copy(lhs->data.function.args[i])
                             : evaluate(lhs->data.function.args[i]);
     }
-    Expr* target = expr_new_function(expr_copy(lhs->data.function.head),
-                                     eval_args, lhs->data.function.arg_count);
+    /* A compound head f[a][b] (a SubValue target) has its own arguments
+     * evaluated the same way: x = 5; f[x][1] = 3 defines f[5][1]. */
+    Expr* head;
+    if (lhs->data.function.head->type == EXPR_FUNCTION) {
+        bool hfreed = false;
+        head = build_assignment_target(lhs->data.function.head, &hfreed);
+        if (!hfreed) head = expr_copy(head);
+    } else {
+        head = expr_copy(lhs->data.function.head);
+    }
+    Expr* target = expr_new_function(head, eval_args, lhs->data.function.arg_count);
     free(eval_args);
     *freed = true;
     return target;
@@ -1504,9 +1549,7 @@ static TagPos classify_tag_position(const char* tag, Expr* lhs) {
     if (lhs->type != EXPR_FUNCTION) return TAG_NOTFOUND;
     Expr* head = lhs->data.function.head;
     if (head->type == EXPR_SYMBOL && head->data.symbol.name == tag) return TAG_DOWN;
-    if (head->type == EXPR_FUNCTION && head->data.function.head &&
-        head->data.function.head->type == EXPR_SYMBOL &&
-        head->data.function.head->data.symbol.name == tag) return TAG_SUB;
+    if (head->type == EXPR_FUNCTION && symtab_innermost_head(lhs) == tag) return TAG_SUB;
     for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
         if (element_dispatch_head(lhs->data.function.args[i]) == tag) return TAG_UP;
     }
@@ -1583,12 +1626,6 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
         return false;
     }
     TagPos pos = classify_tag_position(tagn, lhs);
-    if (pos == TAG_SUB) {
-        mth_message(head, "tagpos",
-                    "Tag %s appears as the head of a head; SubValues are not supported.",
-                    tagn);
-        return false;
-    }
     if (pos == TAG_NOTFOUND) {
         /* Not at a position a rule can be keyed on. If the tag still occurs in
          * lhs it is merely too deep (h[sq[k[s_]]]: k sits two levels down, so
@@ -1609,6 +1646,7 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
     Expr* pat = move_rhs_condition(lhs, rhs, is_delayed, &owned, &body);
     if (pos == TAG_OWN)       symtab_add_own_value_as(tagn, pat, body, is_delayed);
     else if (pos == TAG_DOWN) symtab_add_down_value_as(tagn, pat, body, is_delayed);
+    else if (pos == TAG_SUB)  symtab_add_sub_value(tagn, pat, body, is_delayed);
     else                      symtab_add_up_value_as(tagn, pat, body, is_delayed); /* TAG_UP */
     if (owned) expr_free(pat);
     return true;
@@ -2360,6 +2398,39 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 }
             }
 
+            /* SubValues: a call with a compound head f[a][b] (the head already
+             * evaluated) tries UpValues of its arguments, then the SubValue
+             * rules of its innermost head symbol f. */
+            if (head->type == EXPR_FUNCTION && !hold_all_complete) {
+                /* The innermost head symbol's def via the node's cached pointer
+                 * (no hash): this branch runs for every pure-function call. */
+                Expr* inner = head;
+                while (inner->type == EXPR_FUNCTION && inner->data.function.head)
+                    inner = inner->data.function.head;
+                SymbolDef* sdef = NULL;
+                if (inner->type == EXPR_SYMBOL) {
+                    sdef = inner->data.symbol.def;
+                    if (!sdef) sdef = symtab_lookup(inner->data.symbol.name);
+                }
+#if UP_VALUES
+                if (symtab_up_value_count) {
+                    Expr* up = apply_up_values(res);
+                    if (up) {
+                        expr_free(res);
+                        *changed = true;
+                        return up;
+                    }
+                }
+#endif
+                if (sdef && sdef->sub_values) {
+                    Expr* sub = apply_sub_values(sdef, res);
+                    if (sub) {
+                        expr_free(res);
+                        *changed = true;
+                        return sub;
+                    }
+                }
+            }
             if (head->type == EXPR_SYMBOL) {
                 const char* head_name = head->data.symbol.name;
 

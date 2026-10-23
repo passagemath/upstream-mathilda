@@ -374,6 +374,12 @@ void core_init(void) {
     symtab_add_builtin("SetAttributes", builtin_set_attributes);
     symtab_add_builtin("OwnValues", builtin_own_values);
     symtab_add_builtin("DownValues", builtin_down_values);
+    symtab_add_builtin("SubValues", builtin_sub_values);
+    symtab_get_def("SubValues")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("SubValues",
+        "SubValues[f]\n\tgives the list of transformation rules for f[x][y]-style\n"
+        "\tcalls -- definitions whose left-hand side has a compound head with innermost\n"
+        "\tsymbol f, such as f[x_][y_] := ... or f[a][b] = v.");
 #if UP_VALUES
     symtab_add_builtin("UpValues", builtin_up_values);
 #endif
@@ -1277,6 +1283,25 @@ Expr* builtin_unset(Expr* res) {
     if (lhs->type == EXPR_SYMBOL) {
         symbol_name = lhs->data.symbol.name;
         own_value = true;
+    } else if (symtab_innermost_head(lhs) ||
+               (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+                lhs->data.function.head->data.symbol.name == SYM_Condition &&
+                lhs->data.function.arg_count == 2 &&
+                symtab_innermost_head(lhs->data.function.args[0]))) {
+        /* f[a][b] =. / f[x_][y_] /; c =. : a SubValue of the innermost head. */
+        Expr* inner = (lhs->data.function.head->type == EXPR_SYMBOL) ? lhs->data.function.args[0] : lhs;
+        const char* sub_sym = symtab_innermost_head(inner);
+        if (get_attributes(sub_sym) & ATTR_PROTECTED) {
+            mth_message("Unset", "wrsym", "Symbol %s is Protected.", sub_sym);
+            return expr_new_symbol(SYM_Null);
+        }
+        if (!symtab_remove_matching_sub_value(sub_sym, lhs)) {
+            char* shown = expr_to_string_outputform(lhs);
+            mth_message("Unset", "norep", "Assignment on %s for %s not found.", sub_sym, shown ? shown : "");
+            free(shown);
+            return expr_new_symbol(SYM_DollarFailed);
+        }
+        return expr_new_symbol(SYM_Null);
     } else if (lhs->type == EXPR_FUNCTION &&
                lhs->data.function.head &&
                lhs->data.function.head->type == EXPR_SYMBOL) {
@@ -2404,6 +2429,19 @@ Expr* builtin_down_values(Expr* res) {
 
     Rule* r = symtab_get_down_values(arg->data.symbol.name);
     return rules_to_list(r);
+}
+
+/* SubValues[f] -> {HoldPattern[f[..][..]] :> rhs, ...}: the rules whose
+ * left-hand side has a compound head with innermost symbol f.  HoldAll. */
+Expr* builtin_sub_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL) return rules_to_list(symtab_get_sub_values(arg->data.symbol.name));
+    if (arg->type == EXPR_STRING) {
+        SymbolDef* d = symtab_lookup(arg->data.string);
+        return rules_to_list(d ? d->sub_values : NULL);
+    }
+    return NULL;
 }
 
 #if UP_VALUES

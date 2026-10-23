@@ -402,6 +402,12 @@ static void print_definition_body(const char* name) {
         printf(r->delayed ? " := " : " = ");
         print_standard(r->replacement, 0);
     }
+    for (Rule* r = symtab_get_sub_values(name); r; r = r->next) {   /* f[x_][y_] := ... */
+        if (any++) printf("\n");
+        print_standard(r->pattern, 0);
+        printf(r->delayed ? " := " : " = ");
+        print_standard(r->replacement, 0);
+    }
     if (!any) printf("Null");
 }
 #endif

@@ -60,6 +60,7 @@ static void free_up_value_list(Rule* r) {
 static void reset_node_payload(SymbolDef* d) {
     free_rule_list(d->own_values);   d->own_values = NULL;
     free_rule_list(d->down_values);  d->down_values = NULL;
+    free_rule_list(d->sub_values);   d->sub_values = NULL;
 #if UP_VALUES
     free_up_value_list(d->up_values); d->up_values = NULL;
 #endif
@@ -1054,6 +1055,8 @@ void symtab_clear_symbol(const char* symbol_name) {
         curr = next;
     }
     def->down_values = NULL;
+    free_rule_list(def->sub_values);
+    def->sub_values = NULL;
 
 #if UP_VALUES
     free_up_value_list(def->up_values);
@@ -1239,6 +1242,85 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
 
     expr_free(key);
     return removed;
+}
+
+/* ---- SubValues ---------------------------------------------------------- */
+
+const char* symtab_innermost_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_FUNCTION) return NULL;      /* not compound */
+    while (h->type == EXPR_FUNCTION && h->data.function.head) h = h->data.function.head;
+    return h->type == EXPR_SYMBOL ? h->data.symbol.name : NULL;
+}
+
+void symtab_add_sub_value(const char* symbol_name, Expr* pattern, Expr* replacement,
+                          bool delayed) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    add_rule(&def->sub_values, pattern, replacement, delayed);
+}
+
+Rule* symtab_get_sub_values(const char* symbol_name) {
+    SymbolDef* d = symtab_lookup(symbol_name);
+    return d ? d->sub_values : NULL;
+}
+
+bool symtab_remove_matching_sub_value(const char* symbol_name, const Expr* lhs) {
+    if (!symbol_name || !lhs) return false;
+    Expr* canon = pattern_canonicalize(expr_copy((Expr*)lhs));
+    Expr* key = pattern_alpha_normalize(canon);
+    expr_free(canon);
+    SymbolDef* def = symtab_get_def(symbol_name);
+    Rule* prev = NULL;
+    bool removed = false;
+    for (Rule* curr = def->sub_values; curr; prev = curr, curr = curr->next) {
+        Expr* curr_key = pattern_alpha_normalize(curr->pattern);
+        int same = expr_eq(curr_key, key);
+        expr_free(curr_key);
+        if (!same) continue;
+        if (prev) prev->next = curr->next;
+        else def->sub_values = curr->next;
+        expr_free(curr->pattern);
+        expr_free(curr->replacement);
+        free(curr);
+        eval_clock_bump();
+        removed = true;
+        break;
+    }
+    expr_free(key);
+    return removed;
+}
+
+/* Try `def`'s SubValues on `expr` (a call with a compound head whose innermost
+ * symbol is def's): the first matching rule's bound right-hand side, with
+ * OptionValue resolved and a scoped guard tested, or NULL. */
+Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
+    if (!def || !def->sub_values || !expr || expr->type != EXPR_FUNCTION) return NULL;
+    for (Rule* rule = def->sub_values; rule; rule = rule->next) {
+        MatchEnv* env = env_new();
+        const char* prev_head = match_set_rule_head(def->symbol_name);
+        Expr* result = match(expr, rule->pattern, env) ? replace_bindings(rule->replacement, env) : NULL;
+        match_set_rule_head(prev_head);
+        if (!result) { env_free(env); continue; }
+        Expr* opts = env_get(env, "$OptionsPattern$");
+        if (opts) {
+            const char* hs = def->symbol_name;
+            Expr* oh = env_get(env, "$OptionsPatternHead$");
+            if (oh && oh->type == EXPR_SYMBOL) hs = oh->data.symbol.name;
+            Expr* resolved = optionvalue_inject_context(result, hs, opts);
+            expr_free(result);
+            result = resolved;
+        }
+        env_free(env);
+        if (rule->scoped_cond) {
+            Expr* v = try_scoped_condition(result);
+            expr_free(result);
+            if (v) return v;
+            continue;
+        }
+        return result;
+    }
+    return NULL;
 }
 
 void symtab_for_each(void (*visit)(const char* name, SymbolDef* def,

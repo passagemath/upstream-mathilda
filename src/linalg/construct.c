@@ -9,10 +9,26 @@
 #include "sym_names.h"
 #include "common.h"
 #include "pack.h"
+#include "sparse/sparse.h"
 #include <stdlib.h>
 
 Expr* builtin_identitymatrix(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* IdentityMatrix[n | {m, n}, SparseArray]: built sparse directly, one
+     * stored entry per row (sparse/sparse_struct.c). */
+    if (res->data.function.arg_count == 2 &&
+        res->data.function.args[1]->type == EXPR_SYMBOL &&
+        res->data.function.args[1]->data.symbol.name == SYM_SparseArray) {
+        Expr* d = res->data.function.args[0];
+        if (d->type == EXPR_INTEGER) return sp_identity_matrix(d->data.integer, d->data.integer);
+        if (d->type == EXPR_FUNCTION && d->data.function.head->type == EXPR_SYMBOL &&
+            d->data.function.head->data.symbol.name == SYM_List && d->data.function.arg_count == 2 &&
+            d->data.function.args[0]->type == EXPR_INTEGER && d->data.function.args[1]->type == EXPR_INTEGER)
+            return sp_identity_matrix(d->data.function.args[0]->data.integer,
+                                      d->data.function.args[1]->data.integer);
+        return NULL;
+    }
+    if (res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
     int64_t m = -1, n = -1;

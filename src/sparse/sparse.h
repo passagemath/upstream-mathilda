@@ -254,6 +254,10 @@ bool sp_elements_pass(const Expr* s, const Expr* test);
  * Borrows everything. */
 Expr* sp_apply(const Expr* s, Expr* const* args, size_t n);
 
+/* IdentityMatrix[{m, n}, SparseArray]: the m x n identity as a SparseArray
+ * (sparse_struct.c). NULL for a non-positive dimension. */
+Expr* sp_identity_matrix(int64_t m, int64_t n);
+
 /* ---- transparency gate (sparse_gate.c) ----------------------------------- */
 
 /* SymbolDef.sparse_mode: how a head treats a SparseArray argument. 0 (the

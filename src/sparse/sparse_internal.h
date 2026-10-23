@@ -52,5 +52,9 @@ Expr* sp_power_scalar(const SparseArray* sa, const Expr* c, bool sparse_is_base)
  * Variance, StandardDeviation, Max, Min, MinMax, Tr, Norm, Equal, Unequal,
  * Accumulate. Registered by sparse_init after the gate. */
 void sparse_reduce_init(void);
+/* Native structural kernels (sparse_struct.c): Transpose, Flatten, Join,
+ * Take, KroneckerProduct, ArrayFlatten, ... Registered by sparse_init after
+ * the gate, whose modes stay the fallback. */
+void sparse_struct_init(void);
 
 #endif /* MATHILDA_SPARSE_INTERNAL_H */

@@ -71,6 +71,14 @@ STRUCTURAL = [
     "PadRight[S, Dimensions[S] + 1]", "ArrayPad[S, 1]", "Thread[S]",
     "Outer[Times, Flatten[S], {1, 2}]", "Equal[S, Normal[S]]",
     "S == T", "S === S",
+    # native structural kernels (src/sparse/sparse_struct.c)
+    "Flatten[S, 1]", "Take[S, {1, -1, 2}]",
+    "Take[S, {-1, 1, -2}]", "Take[S, 0]", "Drop[S, {1, -1, 2}]", "Drop[S, {2}]",
+    "Drop[S, -1]", "Join[S, T, 1]", "Partition[S, 2]", "Partition[S, 2, 1]",
+    "ArrayReshape[S, {2, 3}]", "ArrayReshape[S, {3, 3}, x]", "ArrayPad[S, {1, 2}]",
+    "ArrayPad[S, 1, x]", "PadLeft[S, Dimensions[S] + 2, 7]", "PadRight[S, Dimensions[S] + 1, x]",
+    "Transpose[S, Range[ArrayDepth[S]]]", "Flatten[S, {Reverse[Range[ArrayDepth[S]]]}]",
+    "Append[S, S[[-1]]]", "Prepend[S, x]",
 ]
 MATRIX = [  # rank-2 square
     "Transpose[S]", "S . S", "S . T", "S . v", "v . S", "S . Normal[T]",
@@ -84,6 +92,12 @@ MATRIX = [  # rank-2 square
     "Norm[S]", "Norm[N[S]]", "Norm[S, 1]", "Norm[S, Infinity]", "Norm[S, \"Frobenius\"]",
     "Norm[N[S], \"Frobenius\"]", "Tr[S]", "Tr[S, List]", "Accumulate[S]", "Mean[S]",
     "Variance[N[S]]",
+    # native structural kernels (src/sparse/sparse_struct.c)
+    "Transpose[S, {2, 1}]", "Reverse[S, 2]", "Reverse[S, {1, 2}]", "Diagonal[S, -1]", "UpperTriangularize[S, 1]",
+    "LowerTriangularize[S, -1]", "Join[S, T, 2]", "KroneckerProduct[S, Normal[T]]",
+    "KroneckerProduct[S, v]", "ArrayFlatten[{{S, 0}, {0, T}}]", "ArrayFlatten[{{S, Normal[T]}}]",
+    "Partition[S, 2]", "DiagonalMatrix[Diagonal[S]]", "Take[S, -1, {1, -1, 2}]",
+    "Drop[S, {1}, {-1}]", "Append[S, v]", "Map[f, S]",
 ]
 VECTOR = [  # rank-1
     "S . T", "S . v", "Norm[S]", "Total[S]", "Accumulate[S]", "Reverse[S]",
@@ -93,7 +107,37 @@ VECTOR = [  # rank-1
     "Norm[S, 1]", "Norm[S, Infinity]", "Norm[S, 3]", "Norm[N[S], 3]", "Norm[S, 2.5]",
     "Norm[N[S]]", "Max[S]", "Mean[S]", "Variance[S]", "StandardDeviation[N[S]]",
     "Total[S]", "Tr[S]", "Accumulate[S]", "S == Normal[T]", "Norm[S, \"Frobenius\"]",
+    # native structural kernels (src/sparse/sparse_struct.c)
+    "DiagonalMatrix[S, 1]", "DiagonalMatrix[S, -1, Length[S] + 2]", "Partition[S, 2, 1]",
+    "Map[Sin, S]", "Map[{#} &, S]", "Append[S, x]", "Prepend[S, 0]",
+    "PadLeft[S, Length[S] + 2, x]", "KroneckerProduct[S, v]", "Take[S, {-1, 1, -2}]",
+    "Join[S, T]", "Rest[S]", "Most[S]", "Last[S]",
 ]
+
+# Heads (or call forms) with no dense builtin to compare against: the dense
+# side of these templates is the stated formula instead (a function of S, T,
+# v as Normal).
+DENSE_REF = {
+    "KroneckerProduct[S, T]":
+        "If[ArrayDepth[S] == 1, Outer[Times, S, T], ArrayFlatten[Outer[Times, S, T]]]",
+    "KroneckerProduct[S, Normal[T]]": "ArrayFlatten[Outer[Times, S, T]]",
+    "KroneckerProduct[S, v]":
+        "If[ArrayDepth[S] == 1, Outer[Times, S, v], ArrayFlatten[Outer[Times, S, {v}]]]",
+    # the dense Transpose leaves a vector unevaluated; a vector's transpose
+    # is itself
+    "Transpose[S]": "If[ArrayDepth[S] == 1, S, Transpose[S]]",
+    "Transpose[S, Range[ArrayDepth[S]]]": "S",
+    "Flatten[S, {Reverse[Range[ArrayDepth[S]]]}]":
+        "If[ArrayDepth[S] == 1, S, Flatten[Transpose[S, Reverse[Range[ArrayDepth[S]]]]]]",
+    "UpperTriangularize[S]":
+        "Table[If[j >= i, S[[i, j]], 0], {i, Length[S]}, {j, Length[S[[1]]]}]",
+    "UpperTriangularize[S, 1]":
+        "Table[If[j >= i + 1, S[[i, j]], 0], {i, Length[S]}, {j, Length[S[[1]]]}]",
+    "LowerTriangularize[S]":
+        "Table[If[j <= i, S[[i, j]], 0], {i, Length[S]}, {j, Length[S[[1]]]}]",
+    "LowerTriangularize[S, -1]":
+        "Table[If[j <= i - 1, S[[i, j]], 0], {i, Length[S]}, {j, Length[S[[1]]]}]",
+}
 
 # Known, accepted differences (template -> reason). Keep this short and
 # commented: every line is a semantics decision, not a bug to hide.
@@ -188,9 +232,10 @@ numClose[a_, b_] := Module[{d = Quiet[Check[N[deN[a] - deN[b]], $Failed]]},
    Quiet[Check[Max[Abs[Flatten[{d}]]] < 1.*^-8 (1 + Max[Abs[N[Flatten[{deN[b]}]]]]), False]]];
 same[a_, b_] := deN[a] === deN[b] || numClose[a, b] ||
    Quiet[Check[Simplify[deN[a] - deN[b]] === 0 || Union[Flatten[{Simplify[deN[a] - deN[b]]}]] === {0}, False]];
-C[id_, op_, s_, t_, v_] := Module[{S = s, T = t, r1, r2},
+C[id_, op_, s_, t_, v_] := C[id, op, op, s, t, v];
+C[id_, op_, ref_, s_, t_, v_] := Module[{S = s, T = t, r1, r2},
    r1 = Quiet[TimeConstrained[op[S, T, v], 10, $TIMEOUT]];
-   r2 = Quiet[TimeConstrained[op[Normal[S], Normal[T], v], 10, $TIMEOUT]];
+   r2 = Quiet[TimeConstrained[ref[Normal[S], Normal[T], v], 10, $TIMEOUT]];
    If[r1 === $TIMEOUT || r2 === $TIMEOUT, Print["TIMEOUT\t", id],
      If[! same[r1, r2],
        Print["FAIL\t", id, "\t", ToString[deN[r1], InputForm], "\t", ToString[deN[r2], InputForm]]]]];
@@ -200,6 +245,9 @@ C[id_, op_, s_, t_, v_] := Module[{S = s, T = t, r1, r2},
 def case_line(c):
     i, op, s, t, v = c
     # the op as a pure function of (S, T, v); x and f stay symbolic
+    if op in DENSE_REF:
+        return (f'C[{i}, Function[{{S, T, v}}, {op}], Function[{{S, T, v}}, {DENSE_REF[op]}], '
+                f'{s}, {t}, {v}];')
     return f'C[{i}, Function[{{S, T, v}}, {op}], {s}, {t}, {v}];'
 
 

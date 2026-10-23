@@ -333,6 +333,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_builtins.c
     ../src/sparse/sparse_gate.c
     ../src/sparse/sparse_reduce.c
+    ../src/sparse/sparse_struct.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c
@@ -1793,6 +1794,9 @@ target_include_directories(logexp_tests PRIVATE ../src)
 add_executable(sparsearray_tests test_sparsearray.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sparsearray_tests PRIVATE ../src)
 add_test(NAME sparsearray_tests COMMAND sparsearray_tests)
+add_executable(sparse_struct_tests test_sparse_struct.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sparse_struct_tests PRIVATE ../src)
+add_test(NAME sparse_struct_tests COMMAND sparse_struct_tests)
 
 add_executable(sparse_reduce_tests test_sparse_reduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(sparse_reduce_tests PRIVATE ../src)
@@ -3941,6 +3945,7 @@ if(USE_ECM)
     add_dependencies(logexp_tests build_ecm)
     add_dependencies(sparsearray_tests build_ecm)
     add_dependencies(sparse_reduce_tests build_ecm)
+    add_dependencies(sparse_struct_tests build_ecm)
     add_dependencies(piecewise_tests build_ecm)
     add_dependencies(purefunc_tests build_ecm)
     add_dependencies(modular_tests build_ecm)

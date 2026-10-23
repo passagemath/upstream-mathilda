@@ -1608,6 +1608,35 @@ In[4]:= {Count[s, 1], MemberQ[s, 2]}
 Out[4]= {0, False}
 ```
 
+**Structural operations (native).** The following work directly on the stored
+entries, at O(rows + nnz) cost (O(rows + nnz in range) for a slice), and
+answer with a SparseArray over the operand's background:
+
+- `Transpose` (any level permutation) and `ConjugateTranspose`;
+- `Flatten` (`n` and level groups), `ArrayReshape` (with pad) and `Partition`;
+- `Join` (levels 1 and 2), `Append` and `Prepend`;
+- `Take`, `Drop`, `Rest`, `Most`, `First`, `Last` and `Reverse` (any levels);
+- `Diagonal`, `DiagonalMatrix` and `KroneckerProduct`;
+- `ArrayFlatten`, `UpperTriangularize` and `LowerTriangularize`;
+- `ArrayPad`, `PadLeft` and `PadRight`;
+- `Map` over a vector.
+
+`IdentityMatrix[n, SparseArray]` and `IdentityMatrix[{m, n}, SparseArray]`
+build the identity sparse.
+
+The answer is dense where the semantics make it so:
+
+- a triangular part or Kronecker product over a non-zero background;
+- `ArrayFlatten` with a dense block or mismatched backgrounds;
+- a ragged `Join` or `Append`;
+- `PadRight[matrix, n]` with a scalar length;
+- an empty selection, which gives `{}`;
+- `Map` whose values are lists.
+
+A Kronecker product or `DiagonalMatrix` of an all-numeric array that contains
+machine numbers is a machine array with background `0.`. `Join` keeps the
+first operand's background when the backgrounds are equal in value.
+
 **Reductions and comparisons (native).** `Total`, `Mean`, `Variance`,
 `StandardDeviation`, `Tr`, `Max`, `Min`, `MinMax`, `Norm`, `Accumulate`,
 `Equal` and `Unequal` read the explicit entries directly. The background is

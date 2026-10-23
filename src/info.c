@@ -1719,7 +1719,7 @@ void info_init(void) {
         "Options:\n"
         "\tWorkingPrecision    Automatic, or a digit count for the search.\n"
         "\tZeroTest            Automatic, or a function applied to the residual.");
-    symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
+    symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.\nIdentityMatrix[n, SparseArray] or IdentityMatrix[{m, n}, SparseArray] gives it as a SparseArray.");
     symtab_set_docstring("Fit", "Fit[data, {f1, ..., fn}, vars] finds a least-squares fit a1 f1 + ... + an fn to data for functions of the variables vars (a symbol or list of symbols).\nFit[{m, v}] gives the coefficient vector minimizing ||m.a - v|| for design matrix m and response vector v.\nData may be a list of values {v1, ...} (coordinates 1, 2, ...), univariate pairs {{x, v}, ...}, or multivariate rows {{x, y, ..., v}, ...}.\nOptions: WorkingPrecision (Automatic | n | Infinity), FitRegularization ({\"Tikhonov\"|\"L2\"|\"RidgeRegression\"|\"LASSO\"|\"L1\", lambda}), NormFunction.");
     symtab_set_docstring("DesignMatrix", "DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.\nData shapes match Fit. The WorkingPrecision option converts entries to machine or n-digit reals; otherwise they are exact.");
     symtab_set_docstring("Diagonal",

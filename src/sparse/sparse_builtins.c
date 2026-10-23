@@ -398,4 +398,5 @@ void sparse_init(void) {
 
     sparse_gate_init();
     sparse_reduce_init();
+    sparse_struct_init();
 }

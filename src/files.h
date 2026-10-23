@@ -86,5 +86,6 @@ Expr* builtin_directory(Expr* res);
 Expr* builtin_setdirectory(Expr* res);
 Expr* builtin_resetdirectory(Expr* res);
 Expr* builtin_directorystack(Expr* res);
+Expr* builtin_environment(Expr* res);
 
 #endif /* FILES_H */

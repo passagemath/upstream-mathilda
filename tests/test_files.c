@@ -16,6 +16,7 @@
  *                   pure-directory inputs).
  *   FileBaseName  — symmetric coverage with FileExtension, plus the
  *                   "split off last extension only" behaviour.
+ *   Environment   — set/unset variables and the bad-argument messages.
  *   DirectoryName, FileNames, $InputFileName — reference cases checked
  *                   against wolframscript, on a scratch directory tree.
  *
@@ -943,6 +944,22 @@ void test_directory_stack(void) {
     fn_tree_rm(root);
 }
 
+/* ===== Environment ===== */
+
+void test_environment(void) {
+    /* A set variable comes back as its string value (PATH is set in every
+     * environment the suite runs in); an unset one is $Failed. */
+    assert_eval_eq("StringQ[Environment[\"PATH\"]] && StringLength[Environment[\"PATH\"]] > 0",
+                   "True", 0);
+    assert_eval_eq("Environment[\"MATHILDA_SURELY_UNSET_VARIABLE_42\"]", "$Failed", 0);
+    /* Non-string argument: Environment::string, unevaluated; wrong arity: argx. */
+    assert_eval_eq("Quiet[Environment[3]]", "Environment[3]", 0);
+    assert_eval_eq("Check[Environment[3], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Check[Environment[], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Quiet[Environment[\"PATH\", 1]]", "Environment[\"PATH\", 1]", 0);
+    assert_eval_eq("Attributes[Environment]", "{Protected}", 0);
+}
+
 /* ===== $InputFileName ===== */
 
 void test_inputfilename_get(void) {
@@ -1001,6 +1018,7 @@ int main(void) {
     TEST(test_filenames_bad_args);
     TEST(test_inputfilename_get);
     TEST(test_directory_stack);
+    TEST(test_environment);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

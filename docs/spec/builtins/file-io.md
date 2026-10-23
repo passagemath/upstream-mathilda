@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, and the `$InputFileName` / `$HomeDirectory` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, and the `$InputFileName` / `$HomeDirectory` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -749,6 +749,20 @@ SetDirectory["src"]; FileNames["*.c"]; ResetDirectory[]
 ## $HomeDirectory
 The user's home directory. It is read from `HOME` at startup; on Windows from
 `USERPROFILE`, or else `HOMEDRIVE` + `HOMEPATH`. `Protected`.
+
+## Environment
+The value of an operating-system environment variable.
+- `Environment["var"]`: the value of `var` as a string, or `$Failed` if it is not set.
+
+**Features**:
+- `Protected`.
+- A non-string argument emits `Environment::string` and leaves the call
+  unevaluated. A wrong argument count emits `Environment::argx`.
+
+```
+Environment["HOME"]          (* "/Users/..." *)
+Environment["NO_SUCH_VAR"]   (* $Failed *)
+```
 
 ## $InputFileName
 The absolute path of the file currently being read, or `""` when none is.

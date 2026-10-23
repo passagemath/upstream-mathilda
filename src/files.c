@@ -14,6 +14,7 @@
  *   Directory[], SetDirectory["dir"], ResetDirectory[], DirectoryStack[]
  *                          — the working directory and its push/pop stack.
  *   $HomeDirectory         — the user's home directory (from the environment).
+ *   Environment["var"]     — an environment variable's value, or $Failed.
  *
  * Also initialises $InputFileName to "" (loadmodule.c swaps it in and out
  * around every file read).
@@ -1234,6 +1235,26 @@ Expr* builtin_directorystack(Expr* res) {
     return r;
 }
 
+/*
+ * Environment["var"] -- the value of the operating-system environment variable
+ * var as a string, or $Failed when it is not set.  A non-string argument gives
+ * Environment::string and leaves the call unevaluated; a wrong argument count
+ * gives Environment::argx.
+ */
+Expr* builtin_environment(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("Environment", argc, 1, 1);
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        files_arg_message(res, "Environment", "string",
+                          "String expected at position 1");
+        return NULL;
+    }
+    const char* v = getenv(a0->data.string);
+    return v ? expr_new_string(v) : expr_new_symbol(SYM_DollarFailed);
+}
+
 /* $HomeDirectory from the environment: HOME, else (Windows) USERPROFILE or
  * HOMEDRIVE + HOMEPATH.  Caller frees; NULL when none is set. */
 static char* home_from_env(void) {
@@ -1296,6 +1317,8 @@ void files_init(void) {
     symtab_get_def("ResetDirectory")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DirectoryStack", builtin_directorystack);
     symtab_get_def("DirectoryStack")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Environment", builtin_environment);
+    symtab_get_def("Environment")->attributes |= ATTR_PROTECTED;
 
     char* home = home_from_env();
     if (home) {

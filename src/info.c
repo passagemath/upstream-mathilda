@@ -4228,6 +4228,9 @@ void info_init(void) {
     symtab_set_docstring("DirectoryStack",
         "DirectoryStack[]\n"
         "\tgives the directories SetDirectory has left, most recent first.");
+    symtab_set_docstring("Environment",
+        "Environment[\"var\"]\n"
+        "\tgives the value of the operating-system environment variable var as a string, or $Failed if it is not set.");
     symtab_set_docstring("$HomeDirectory",
         "$HomeDirectory\n"
         "\tgives your home directory, from the HOME (or USERPROFILE) environment variable.");

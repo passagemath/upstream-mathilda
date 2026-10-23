@@ -342,6 +342,17 @@ static void test_global_qualified_is_bare(void) {
     assert_eval_eq("Global`Sin === Sin", "False", 0);
 }
 
+/* Developer`ToPackedArray / FromPackedArray / PackedArrayQ are the bare
+ * builtins: the Developer` spelling reaches the same symbol. */
+static void test_developer_packing_aliases(void) {
+    assert_eval_eq("Developer`PackedArrayQ[Developer`ToPackedArray[{1, 2, 3}]]", "True", 0);
+    assert_eval_eq("Developer`PackedArrayQ[Developer`FromPackedArray[ToPackedArray[{1, 2}]]]", "False", 0);
+    assert_eval_eq("Developer`ToPackedArray === ToPackedArray", "True", 0);
+    assert_eval_eq("Context[Developer`PackedArrayQ] === Context[PackedArrayQ]", "True", 0);
+    /* Only the listed names alias: any other Developer` name is its own symbol. */
+    assert_eval_eq("Context[Developer`NotAnAliasName]", "\"Developer`\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -376,6 +387,7 @@ int main(void) {
     TEST(test_package_can_request_mathilda);
     TEST(test_global_qualified_is_bare);
     TEST(test_contextpath_assignment);
+    TEST(test_developer_packing_aliases);
     TEST(test_context_assignment);
 
     printf("All context tests passed!\n");

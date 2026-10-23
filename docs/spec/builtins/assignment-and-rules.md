@@ -83,6 +83,9 @@ the same machinery; the first two return the **old** value, the rest the new one
   guard against a trailing digit keeps `k =.5` parsing as `Set[k, 0.5]`.
 - `Unset` has attributes `{HoldFirst, Protected}`; it holds `lhs`, so the symbol
   (not its value) is operated on. `Protected` symbols are not affected.
+- The *arguments* of `lhs` are evaluated exactly as `Set` evaluates them, so
+  `i = 2; f[i] = 1; f[i] =.` removes the `f[2]` rule, and `sv[i][j] =.` finds a
+  SubValue at every level. Patterns and Hold-attributed positions stay held.
 - Always returns `Null`, whether or not a matching rule was found.
 
 ```mathematica

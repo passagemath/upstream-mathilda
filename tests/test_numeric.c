@@ -460,6 +460,26 @@ static void test_mpfr_complex_corner_cases(void) {
 
 #endif /* USE_MPFR */
 
+/* N inside a position the head HOLDS numericalizes the structure but never
+ * evaluates it: If's branches, a Function body.  N used to rebuild and
+ * evaluate every argument, so N[If[c, Print[a], b]] printed and lost the
+ * branch -- and Equal, which numericalizes symbolic sides, ran every held
+ * side effect of `If[...] == 2`. */
+static void test_n_does_not_evaluate_held_arguments(void) {
+    assert_eval_eq("ClearAll[nhc, y]; nhc = 0; N[If[y == 2, nhc++, y + 1]]",
+                   "If[y == 2.0, nhc++, 1.0 + y]", 0);
+    assert_eval_eq("nhc", "0", 0);
+    assert_eval_eq("nhc = 0; If[y == 2, nhc++, y + 1] == 2; nhc", "0", 0);
+    assert_eval_eq("nhc = 0; FixedPoint[If[# == 2, nhc++, # + 1] &, 0, 6]; nhc", "1", 0);
+    assert_eval_eq("N[If[y > 1, Sin[1], Cos[1]]]", "If[y > 1.0, Sin[1.0], Cos[1.0]]", 0);
+    assert_eval_eq("N[Function[x, x^2 + 1/3]][2]", "4.333333333333333", 0);
+    /* Non-held positions still evaluate: the If condition is numericalized
+     * and decided, and an evaluated head computes as before. */
+    assert_eval_eq("N[If[True, 1/3, Pi]]", "0.3333333333333333", 0);
+    assert_eval_eq("N[f[1/3, Sqrt[2]]]", "f[0.3333333333333333, 1.4142135623730951]", 0);
+    assert_eval_eq("ClearAll[nhc]", "Null", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -498,6 +518,7 @@ int main(void) {
     TEST(test_listable_prec);
     TEST(test_n_prec_complex_pow);
     TEST(test_mpfr_complex_corner_cases);
+    TEST(test_n_does_not_evaluate_held_arguments);
 #endif
 
     printf("All numeric_tests passed.\n");

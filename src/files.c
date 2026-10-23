@@ -14,6 +14,7 @@
  *   Directory[], SetDirectory["dir"], ResetDirectory[], DirectoryStack[]
  *                          — the working directory and its push/pop stack.
  *   $HomeDirectory         — the user's home directory (from the environment).
+ *   $TemporaryDirectory    — the host temporary directory (TMPDIR / TEMP / TMP).
  *   Environment["var"]     — an environment variable's value, or $Failed.
  *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, ToFileName,
  *   DeleteFile             — path manipulation and deletion.
@@ -300,18 +301,29 @@ static char* fileprint_slurp(const char* filename, size_t* out_size) {
     return buf;
 }
 
-/* Drop every '\r' that is immediately followed by '\n' (CRLF -> LF), in
- * place; returns the new length.  Text reads (Import "Text"/"String"/"Lines",
- * ReadString) see the file with normalised line ends. */
+/* Normalise line ends in place -- CRLF and a lone CR each become one LF --
+ * and return the new length.  Import "Text"/"Lines" see the file this way;
+ * "String" and ReadString keep the bytes as they are. */
 size_t files_crlf_normalize(char* buf, size_t len) {
     size_t w = 0;
-    for (size_t r = 0; r < len; r++)
-        if (!(buf[r] == '\r' && r + 1 < len && buf[r + 1] == '\n')) buf[w++] = buf[r];
+    for (size_t r = 0; r < len; r++) {
+        if (buf[r] == '\r') {
+            if (r + 1 < len && buf[r + 1] == '\n') continue;   /* CRLF: keep the LF */
+            buf[w++] = '\n';                                   /* lone CR */
+        } else {
+            buf[w++] = buf[r];
+        }
+    }
     buf[w] = '\0';
     return w;
 }
 
-/* Whole file as text with CRLF normalised; NULL if it cannot be read. */
+/* Whole file, bytes untouched; NULL if it cannot be read. */
+char* files_slurp_raw(const char* path, size_t* len) {
+    return fileprint_slurp(path, len);
+}
+
+/* Whole file as text with line ends normalised; NULL if it cannot be read. */
 char* files_slurp_text(const char* path, size_t* len) {
     char* buf = fileprint_slurp(path, len);
     if (buf) *len = files_crlf_normalize(buf, *len);
@@ -320,9 +332,10 @@ char* files_slurp_text(const char* path, size_t* len) {
 
 /*
  * Import[path, fmt] for the text formats, fmt one of:
- *   "String"  the contents (line ends normalised to "\n")
- *   "Text"    the same less ONE trailing line break
- *   "Lines"   a list of lines, trailing empty lines dropped
+ *   "String"  the contents, byte for byte
+ *   "Text"    the contents with line ends (CRLF, CR) normalised to "\n",
+ *             less ONE trailing line break
+ *   "Lines"   a list of lines, leading and trailing empty lines dropped
  * A file that cannot be read gives Import::nffil and $Failed.  Returns NULL
  * for any other fmt.
  */
@@ -331,7 +344,7 @@ Expr* files_import_text(const char* path, const char* fmt) {
              : strcmp(fmt, "Lines") == 0 ? 2 : -1;
     if (kind < 0) return NULL;
     size_t len = 0;
-    char* buf = files_slurp_text(path, &len);
+    char* buf = kind == 1 ? files_slurp_raw(path, &len) : files_slurp_text(path, &len);
     if (!buf) {
         mth_message("Import", "nffil", "File %s not found during Import.", path);
         return expr_new_symbol(SYM_DollarFailed);
@@ -344,10 +357,11 @@ Expr* files_import_text(const char* path, const char* fmt) {
         out = expr_new_string(buf);
     } else {
         while (len > 0 && buf[len - 1] == '\n') buf[--len] = '\0';
+        size_t start = 0;                      /* leading empty lines go too */
+        while (start < len && buf[start] == '\n') start++;
         size_t n = 0, cap = 16;
         Expr** lines = malloc(cap * sizeof(Expr*));
-        size_t start = 0;
-        for (size_t i = 0; len > 0 && i <= len; i++) {
+        for (size_t i = start; start < len && i <= len; i++) {
             if (i == len || buf[i] == '\n') {
                 if (n == cap) { cap *= 2; lines = realloc(lines, cap * sizeof(Expr*)); }
                 buf[i] = '\0';
@@ -1666,6 +1680,26 @@ static char* home_from_env(void) {
     return r;
 }
 
+/* $TemporaryDirectory: TMPDIR (POSIX), else TEMP / TMP (Windows), else the
+ * host default.  A trailing separator is dropped, so FileNameJoin[{
+ * $TemporaryDirectory, "f"}] never doubles it.  Caller frees. */
+static char* tempdir_from_env(void) {
+    const char* names[] = { "TMPDIR", "TEMP", "TMP" };
+    const char* t = NULL;
+    for (size_t i = 0; i < sizeof names / sizeof names[0] && !(t && *t); i++)
+        t = getenv(names[i]);
+#ifdef _WIN32
+    if (!t || !*t) t = "C:\\Windows\\Temp";
+#else
+    if (!t || !*t) t = "/tmp";
+#endif
+    size_t n = strlen(t);
+    while (n > 1 && (t[n - 1] == '/' || t[n - 1] == '\\')) n--;
+    char* r = malloc(n + 1);
+    if (r) { memcpy(r, t, n); r[n] = '\0'; }
+    return r;
+}
+
 void files_init(void) {
     /* Docstrings live in info.c alongside the other File-I/O entries.
      * All builtins are Protected with no special evaluation behaviour —
@@ -1735,6 +1769,17 @@ void files_init(void) {
         free(home);
     }
     symtab_get_def("$HomeDirectory")->attributes |= ATTR_PROTECTED;
+
+    char* tmpdir = tempdir_from_env();
+    if (tmpdir) {
+        Expr* tsym = expr_new_symbol("$TemporaryDirectory");
+        Expr* tval = expr_new_string(tmpdir);
+        symtab_add_own_value("$TemporaryDirectory", tsym, tval);
+        expr_free(tsym);
+        expr_free(tval);
+        free(tmpdir);
+    }
+    symtab_get_def("$TemporaryDirectory")->attributes |= ATTR_PROTECTED;
 
     /* $PathnameSeparator: the host separator FileNameJoin uses by default. */
     {

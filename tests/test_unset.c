@@ -207,6 +207,23 @@ static void test_unset_define_unset_loop(void) {
     assert_eval_eq("loopV", "loopV", 0);
 }
 
+/* The LHS arguments are evaluated as Set evaluates them: `f[i] =.` with i = 2
+ * removes the f[2] rule `f[i] = v` installed (it was searched for literally,
+ * so the rule silently survived).  Patterns and held positions stay held. */
+static void test_unset_evaluates_lhs_arguments(void) {
+    assert_eval_eq("ClearAll[ua, ui]; ui = 2; ua[ui] = 1; ua[ui] =.; DownValues[ua]", "{}", 0);
+    assert_eval_eq("ClearAll[ua]; ua[3] = 1; ua[1 + 2] =.; DownValues[ua]", "{}", 0);
+    assert_eval_eq("ClearAll[ua, ui]; ui = 2; ua[ui, 5] = 1; ua[7] = 2; ua[ui, 5] =.; DownValues[ua]",
+                   "{HoldPattern[ua[7]] :> 2}", 0);
+    /* A pattern LHS is not evaluated: x_ is still the stored rule's x_. */
+    assert_eval_eq("ClearAll[ua, x]; x = 9; ua[x_] := x^2; ua[x_] =.; DownValues[ua]", "{}", 0);
+    /* A HoldAll head keeps its argument unevaluated, as Set did. */
+    assert_eval_eq("ClearAll[uh2, ui]; SetAttributes[uh2, HoldAll]; ui = 2; uh2[ui] = 1; "
+                   "uh2[ui] =.; DownValues[uh2]", "{}", 0);
+    assert_eval_eq("ClearAll[ua, ui]; ui = 2; ua[ui] = 1; ui = 3; ua[2] =.; DownValues[ua]", "{}", 0);
+    assert_eval_eq("ClearAll[ui]", "Null", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -230,6 +247,7 @@ int main(void) {
     TEST(test_unset_selective_downvalue);
     TEST(test_unset_specific_keeps_general);
     TEST(test_unset_condition_lhs);
+    TEST(test_unset_evaluates_lhs_arguments);
 
     /* No-ops / guards / return value */
     TEST(test_unset_nonexistent_is_harmless);

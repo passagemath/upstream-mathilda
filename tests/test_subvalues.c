@@ -98,6 +98,18 @@ static void test_derivative_subvalues() {
     assert_eval_eq("D[Sin[x]^2, x]", "2 Cos[x] Sin[x]", 0);
 }
 
+/* sv[i][j] =. evaluates i and j at every level (as sv[i][j] = v does), so it
+ * finds the rule: it used to search for sv[i][j] literally and report
+ * Unset::norep. */
+static void test_unset_evaluates_compound_arguments(void) {
+    assert_eval_eq("ClearAll[usv, ui, uj]; ui = 3; uj = 4; usv[ui][uj] = 7; usv[ui][uj] =.; SubValues[usv]",
+                   "{}", 0);
+    assert_eval_eq("ClearAll[usv, ui, uj]; usv[1][2] = 5; usv[1][3] = 6; ui = 1; uj = 3; usv[ui][uj] =.; "
+                   "SubValues[usv]", "{HoldPattern[usv[1][2]] :> 5}", 0);
+    assert_eval_eq("ClearAll[usv]; usv[1][2][3] = 1; usv[0 + 1][1 + 1][1 + 2] =.; SubValues[usv]", "{}", 0);
+    assert_eval_eq("ClearAll[usv, ui, uj]", "Null", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -109,6 +121,7 @@ int main(void) {
     TEST(test_options_and_unwind);
     TEST(test_unaffected_compound_heads);
     TEST(test_derivative_subvalues);
+    TEST(test_unset_evaluates_compound_arguments);
     printf("All SubValues tests passed.\n");
     return 0;
 }

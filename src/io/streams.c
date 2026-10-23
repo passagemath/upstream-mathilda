@@ -41,7 +41,7 @@ static void streams_shutdown(void) {
         if (s->id == 0) continue;
         free(s->name);
         free(s->buf);
-        if (s->fp) fclose(s->fp);
+        if (s->fp && !s->borrowed) fclose(s->fp);
     }
     free(g_streams);
     g_streams = NULL;
@@ -103,8 +103,18 @@ int stream_open_input(const char* name) {
     return s->id;
 }
 
+/* "stdout" and "stderr" name the process's own streams, not files: Write /
+ * WriteString["stdout", ...] print (to the same FILE* Print uses), and never
+ * create a file called "stdout" in the working directory. */
+static FILE* standard_stream(const char* name) {
+    if (strcmp(name, "stdout") == 0) return stdout;
+    if (strcmp(name, "stderr") == 0) return stderr;
+    return NULL;
+}
+
 int stream_open_output(const char* name, int append) {
-    FILE* fp = fopen(name, append ? "ab" : "wb");
+    FILE* std = standard_stream(name);
+    FILE* fp = std ? std : fopen(name, append ? "ab" : "wb");
     if (!fp) return -1;
     Stream* s = alloc_slot();
     memset(s, 0, sizeof(Stream));
@@ -112,6 +122,7 @@ int stream_open_output(const char* name, int append) {
     s->is_output = 1;
     s->name = dup_str(name);
     s->fp = fp;
+    s->borrowed = std != NULL;
     return s->id;
 }
 
@@ -139,7 +150,8 @@ int stream_close_id(int id) {
     if (!s) return 0;
     free(s->name);
     free(s->buf);
-    if (s->fp) fclose(s->fp);
+    if (s->fp && s->borrowed) fflush(s->fp);
+    else if (s->fp) fclose(s->fp);
     memset(s, 0, sizeof(Stream));   /* id -> 0: slot free */
     return 1;
 }
@@ -371,7 +383,8 @@ static Stream* resolve_output(const Expr* a, const char* who, int* fail) {
     return stream_by_id(nid);
 }
 
-/* Write[out, e1, e2, ...] — each eᵢ in re-readable text, then one newline. */
+/* Write[out, e1, e2, ...] — each eᵢ in re-readable text, then one newline.
+ * On "stdout"/"stderr" the text is OutputForm (strings unquoted), as Print. */
 Expr* builtin_write(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
     int fail = 0;
@@ -380,7 +393,8 @@ Expr* builtin_write(Expr* res) {
 
     size_t argc = res->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
-        char* str = expr_to_string(res->data.function.args[i]);
+        Expr* e = res->data.function.args[i];
+        char* str = s->borrowed ? expr_to_string_outputform(e) : expr_to_string(e);
         if (str) { fputs(str, s->fp); free(str); }
     }
     fputc('\n', s->fp);

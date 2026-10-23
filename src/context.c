@@ -308,6 +308,16 @@ const char* context_display_name(const char* name) {
     if (context_is_visible(prefix)) return name + plen;
     return name;
 }
+/* Developer` names that are Mathilda builtins under their bare name: code
+ * written for the reference kernel spells the packing helpers with their
+ * Developer` context, and that spelling must reach the same builtin. */
+static bool is_developer_alias(const char* name) {
+    static const char* const names[] = { "ToPackedArray", "FromPackedArray", "PackedArrayQ" };
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; i++)
+        if (strcmp(name, names[i]) == 0) return true;
+    return false;
+}
+
 
 char* context_resolve_name(const char* raw) {
     if (!raw || *raw == '\0') return ctx_strdup(raw ? raw : "");
@@ -340,6 +350,8 @@ char* context_resolve_name(const char* raw) {
             out = ctx_strdup(q + sn);
         else if (strncmp(q, mth, mn) == 0 && q[mn] != '\0' && intern_is_mathilda(q + mn))
             out = ctx_strdup(q + mn);                 /* Mathilda`Foo is stored bare too */
+        else if (strncmp(q, "Developer`", 10) == 0 && is_developer_alias(q + 10))
+            out = ctx_strdup(q + 10);                 /* Developer`ToPackedArray IS ToPackedArray */
         else if (strncmp(q, glb, gn) == 0 && q[gn] != '\0' && !has_backtick(q + gn) &&
                  strcmp(context_home(q + gn, symtab_lookup(q + gn)), "Global`") == 0)
             /* Global` symbols are stored under bare keys: Global`x IS x (unless

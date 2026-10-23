@@ -28,7 +28,7 @@
 #include "parse.h"
 #include "eval.h"
 #include "options.h"
-#include "files.h"     /* files_slurp_text */
+#include "files.h"     /* files_slurp_raw */
 #include "message.h"   /* mth_message */
 
 #include <stdio.h>
@@ -216,15 +216,17 @@ static char* next_record(ReadCursor* c, const ReadCfg* cfg) {
     }
 }
 
-/* Next String: a line terminated by '\n', trailing '\r' stripped. Empty lines
- * are preserved. Returns malloc'd string or NULL at EOF. */
+/* Next String: a line terminated by LF, CRLF or a lone CR. Empty lines are
+ * preserved. Returns malloc'd string or NULL at EOF. */
 static char* next_string_line(ReadCursor* c) {
     if (c->pos >= c->len) return NULL;
     size_t start = c->pos;
-    while (c->pos < c->len && c->buf[c->pos] != '\n') c->pos++;
+    while (c->pos < c->len && c->buf[c->pos] != '\n' && c->buf[c->pos] != '\r') c->pos++;
     size_t end = c->pos;
-    if (c->pos < c->len) c->pos++;           /* consume the newline */
-    if (end > start && c->buf[end - 1] == '\r') end--;
+    if (c->pos < c->len) {                   /* consume the line break */
+        if (c->buf[c->pos] == '\r' && c->pos + 1 < c->len && c->buf[c->pos + 1] == '\n') c->pos++;
+        c->pos++;
+    }
     return dup_n(c->buf + start, end - start);
 }
 
@@ -510,14 +512,12 @@ Expr* builtin_skip(Expr* res) {
 /* ReadString                                                          */
 /* ------------------------------------------------------------------ */
 
-/* Copy buf[from, to) into a new string Expr with CRLF normalised; a '\r'
- * whose '\n' lies just past `to` (a "\n" terminator after a CRLF) goes too. */
-static Expr* rs_chunk(const char* buf, size_t len, size_t from, size_t to) {
+/* Copy buf[from, to) into a new string Expr, bytes untouched: ReadString
+ * returns the file as it is, CRLF line ends included. */
+static Expr* rs_chunk(const char* buf, size_t from, size_t to) {
     char* t = malloc(to - from + 1);
-    size_t w = 0;
-    for (size_t r = from; r < to; r++)
-        if (!(buf[r] == '\r' && r + 1 < len && buf[r + 1] == '\n')) t[w++] = buf[r];
-    t[w] = '\0';
+    memcpy(t, buf + from, to - from);
+    t[to - from] = '\0';
     Expr* e = expr_new_string(t);
     free(t);
     return e;
@@ -570,21 +570,21 @@ Expr* builtin_readstring(Expr* res) {
         if (!s) return NULL;
         if (s->pos >= s->len) return expr_new_symbol(SYM_EndOfFile);
         size_t end = term ? rs_find(s->buf, s->len, s->pos, term) : s->len;
-        Expr* out = rs_chunk(s->buf, s->len, s->pos, end);
+        Expr* out = rs_chunk(s->buf, s->pos, end);
         s->pos = end;
         return out;
     }
     const char* name = stream_filename_arg(src);
     if (!name) return NULL;
     size_t len = 0;
-    char* buf = files_slurp_text(name, &len);
+    char* buf = files_slurp_raw(name, &len);
     if (!buf) {
         mth_message("OpenRead", "noopen", "Cannot open %s.", name);
         return expr_new_symbol(SYM_DollarFailed);
     }
     Expr* out;
     if (len == 0) out = expr_new_symbol(SYM_EndOfFile);
-    else out = rs_chunk(buf, len, 0, term ? rs_find(buf, len, 0, term) : len);
+    else out = rs_chunk(buf, 0, term ? rs_find(buf, len, 0, term) : len);
     free(buf);
     return out;
 }

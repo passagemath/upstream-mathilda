@@ -124,6 +124,11 @@ symbols created by later statements.
   `Condition[CompoundExpression[f[x_] := g[x], Null], x > 0]`. Evaluating it
   defines `f` unconditionally.
 - An operator at the start of the next line is a syntax error.
+- The same rule holds for `;` inside one expression (`ToExpression`, a
+  parenthesised body): `(a; b; -> c)` is
+  `Rule[CompoundExpression[a, b, Null], c]`. `;` associates left, so the whole
+  chain is built before the operator binds, and a parenthesised compound stays
+  nested: `(a; b); c` is `CompoundExpression[CompoundExpression[a, b], c]`.
 - On a syntax error, `Get` emits `Syntax::sntx` ("Invalid syntax in or before
   "...` (line n of "file")"), stops reading, and returns `Null`. The message
   goes through the funnel, so `Quiet` and `Check` see it. An expression left

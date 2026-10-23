@@ -928,6 +928,32 @@ void test_statement_continuation_after_semicolon() {
     assert_statement_list("f[x_] := g[x];\n/; x > 0", "SetDelayed[f[Pattern[x, Blank[]]], g[x]]");
 }
 
+/* The same continuation inside one expression (ToExpression, a bracketed
+ * body): the infix `;` must decide "implicit Null" BEFORE parsing an operand.
+ * Parsing first let a prefix minus swallow the `-` of `->` / `-=`, so
+ * `a; -> c` came back as Greater[..., c] and `a; -= c` as Set[..., c]. */
+void test_infix_semicolon_before_operator() {
+    assert_parse_eq("a; -> c", "Rule[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; -= c", "SubtractFrom[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; += c", "AddTo[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; != c", "Unequal[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; >= c", "GreaterEqual[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; || c", "Or[CompoundExpression[a, Null], c]");
+    assert_parse_eq("a; /; c", "Condition[CompoundExpression[a, Null], c]");
+    assert_parse_eq("f[a; -> c]", "f[Rule[CompoundExpression[a, Null], c]]");
+    assert_parse_eq("(a; b; -> c)", "Rule[CompoundExpression[a, b, Null], c]");
+    assert_parse_eq("a; b; c", "CompoundExpression[a, b, c]");
+    assert_parse_eq("(a; b); c", "CompoundExpression[CompoundExpression[a, b], c]");
+    assert_parse_eq("a; (b; c)", "CompoundExpression[a, CompoundExpression[b, c]]");
+    assert_parse_eq("a; b; c;", "CompoundExpression[a, b, c, Null]");
+    /* Operands that DO begin an expression are still the next statement. */
+    assert_parse_eq("a; -c", "CompoundExpression[a, Times[-1, c]]");
+    assert_parse_eq("a; !c", "CompoundExpression[a, Not[c]]");
+    assert_parse_eq("a; -1", "CompoundExpression[a, -1]");
+    assert_parse_eq("a; <|x -> 1|>", "CompoundExpression[a, Association[Rule[x, 1]]]");
+    assert_statement_list("a; != c", "Unequal[CompoundExpression[a, Null], c]");
+}
+
 /* Get stops at a syntax error -- reporting Syntax::sntx through the message
  * funnel (Quiet / Check see it) with the line number -- and returns Null; the
  * parser's own diagnostics are not printed on top. */
@@ -1268,6 +1294,7 @@ int main() {
     TEST(test_toexpression_line_statements);
     TEST(test_string_line_continuation);
     TEST(test_statement_continuation_after_semicolon);
+    TEST(test_infix_semicolon_before_operator);
     TEST(test_get_syntax_error_reported);
     TEST(test_toexpression_sequencing);
     TEST(test_unclosed_paren_rejected);

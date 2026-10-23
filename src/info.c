@@ -4286,6 +4286,9 @@ void info_init(void) {
     symtab_set_docstring("$HomeDirectory",
         "$HomeDirectory\n"
         "\tgives your home directory, from the HOME (or USERPROFILE) environment variable.");
+    symtab_set_docstring("$TemporaryDirectory",
+        "$TemporaryDirectory\n"
+        "\tgives the directory for temporary files, from TMPDIR (or TEMP / TMP), else /tmp.");
     symtab_set_docstring("$InputFileName",
         "$InputFileName\n"
         "\tis the absolute path of the file currently being read by -file or Get, or \"\" when no file is being read.");

@@ -1432,6 +1432,12 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
     return target;
 }
 
+/* Public face of build_assignment_target for Unset, which lives in core.c:
+ * `f[i] =.` with i = 2 removes the f[2] rule, exactly as `f[i] = v` set it. */
+Expr* eval_assignment_target(Expr* lhs, bool* freed) {
+    return build_assignment_target(lhs, freed);
+}
+
 #if UP_VALUES
 #define UP_MAX_LEVEL1 64
 

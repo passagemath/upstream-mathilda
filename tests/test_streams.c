@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 /* Unique-ish per-test scratch path under /tmp (pid + tag), pre-unlinked. */
 static void scratch_path(char* out, size_t cap, const char* tag) {
@@ -342,6 +343,57 @@ static void test_stream_messages_routed(void) {
     assert_eval_eq("Check[OpenRead[\"/no/such/file/at/all\"], \"msg\"]", "\"msg\"", 0);
 }
 
+/* Evaluate `src` with fd `fd` (1 or 2) captured; returns the bytes written
+ * (caller frees). */
+static char* fd_output_of(int fd, const char* src) {
+    char path[128];
+    snprintf(path, sizeof path, "/tmp/Mathilda_streams_std_%d", (int)getpid());
+    fflush(stdout); fflush(stderr);
+    int saved = dup(fd);
+    int tf = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    ASSERT(saved >= 0 && tf >= 0);
+    dup2(tf, fd);
+    close(tf);
+    Expr* e = parse_expression(src);
+    ASSERT(e != NULL);
+    Expr* v = evaluate(e);
+    expr_free(e);
+    expr_free(v);
+    fflush(stdout); fflush(stderr);
+    dup2(saved, fd);
+    close(saved);
+    FILE* fp = fopen(path, "r");
+    ASSERT(fp != NULL);
+    char* buf = calloc(1, 4096);
+    size_t n = fread(buf, 1, 4095, fp);
+    buf[n] = '\0';
+    fclose(fp);
+    unlink(path);
+    return buf;
+}
+
+/* "stdout" / "stderr" are the process streams, not files in the working
+ * directory: WriteString and Write print there (Write in OutputForm, strings
+ * unquoted), Close leaves them open, and no file named "stdout" appears. */
+static void test_standard_stream_names(void) {
+    char cwd_file[] = "stdout";
+    unlink(cwd_file);
+    char* o = fd_output_of(1, "WriteString[\"stdout\", 3, \" x\\n\", \"ab\"]");
+    ASSERT_STR_EQ(o, "3 x\nab");
+    free(o);
+    o = fd_output_of(1, "Write[\"stdout\", 1 + 1, \"q\"]");
+    ASSERT_STR_EQ(o, "2q\n");
+    free(o);
+    o = fd_output_of(2, "WriteString[\"stderr\", \"err\"]");
+    ASSERT_STR_EQ(o, "err");
+    free(o);
+    o = fd_output_of(1, "Close[\"stdout\"]; WriteString[\"stdout\", \"still\"]");
+    ASSERT_STR_EQ(o, "still");
+    free(o);
+    ASSERT(access(cwd_file, F_OK) != 0);
+    assert_eval_eq("FileExistsQ[\"stdout\"]", "False", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -394,6 +446,7 @@ int main(void) {
     TEST(test_stringtostream);
     TEST(test_skip);
     TEST(test_stream_messages_routed);
+    TEST(test_standard_stream_names);
 
     printf("All stream tests passed.\n");
     return 0;

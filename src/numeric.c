@@ -590,6 +590,15 @@ static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
  * picks the working precision and rounds the result back. */
 static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
 
+/* > 0 while numericalizing inside an argument the enclosing head HOLDS (If's
+ * branches, a Function body): the structure is numericalized but never
+ * evaluated, so N[If[c, Print[a], b]] is If[c., Print[a], b.] and nothing
+ * prints.  A counter, not a NumericSpec field: callers across the tree build
+ * specs field by field, and a new field would be stack garbage there.  The
+ * public numericalize() saves, zeroes and restores it, so a nested N and any
+ * state an unwind left behind never leak into an unrelated call. */
+static int g_n_held_depth = 0;
+
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     /* Root[Function[p_in_slot1], k] → companion-matrix all-roots backend,
      * canonical sort, Newton refinement.  Runs first because Root is
@@ -815,6 +824,12 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     if (!dirichlet_l && e->data.function.head->type == EXPR_SYMBOL)
         nhold = get_attributes(e->data.function.head->data.symbol.name) &
                 (ATTR_NHOLDFIRST | ATTR_NHOLDREST);
+    /* Evaluation-hold positions (If's branches, Function / Module bodies):
+     * numericalized, but under no_eval, so a held Print never runs. */
+    uint32_t ehold = 0;
+    if (e->data.function.head->type == EXPR_SYMBOL)
+        ehold = get_attributes(e->data.function.head->data.symbol.name) &
+                (ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE);
 
     /* Numericalize args left-to-right. For Power, decide whether to preserve
      * the exponent based on the (already-computed) numericalized base. */
@@ -837,10 +852,15 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
                 continue;
             }
         }
+        bool held = (ehold & ATTR_HOLDALLCOMPLETE) || (i == 0 && (ehold & ATTR_HOLDFIRST)) ||
+                    (i > 0 && (ehold & ATTR_HOLDREST));
+        if (held) g_n_held_depth++;
         new_args[i] = numericalize_rec(e->data.function.args[i], spec);
+        if (held) g_n_held_depth--;
     }
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);  /* expr_new_function copies the pointer list. */
+    if (g_n_held_depth > 0) return rebuilt;
 
     /* eval_and_free consumes `rebuilt` and returns a fresh evaluated Expr. */
     return eval_and_free(rebuilt);
@@ -1681,7 +1701,17 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
 /* ------------------------------------------------------------------------
  *  Top-level dispatch
  * ---------------------------------------------------------------------- */
+static Expr* numericalize_top(const Expr* e, NumericSpec spec);
+
 Expr* numericalize(const Expr* e, NumericSpec spec) {
+    int saved = g_n_held_depth;
+    g_n_held_depth = 0;
+    Expr* r = numericalize_top(e, spec);
+    g_n_held_depth = saved;
+    return r;
+}
+
+static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
 
 #ifndef USE_MPFR

@@ -1269,13 +1269,23 @@ Expr* builtin_clear(Expr* res) {
 /* Unset[lhs] / `lhs =.`: remove the single rule whose left-hand side is
  * `lhs` (up to renaming of bound pattern variables). A bare symbol clears
  * its OwnValue; a function form clears the matching DownValue on the head
- * symbol. Unset carries HoldFirst, so `lhs` arrives unevaluated. Always
- * returns Null, matching Mathematica -- whether or not a rule was found. */
+ * symbol. Unset carries HoldFirst, so `lhs` arrives unevaluated; its
+ * arguments are evaluated here exactly as Set evaluates them, so `f[i] =.`
+ * with i = 2 removes the f[2] rule that `f[i] = v` installed. */
+static Expr* unset_lhs(Expr* lhs);
+
 Expr* builtin_unset(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return NULL;
     }
-    Expr* lhs = res->data.function.args[0];
+    bool freed = false;
+    Expr* target = eval_assignment_target(res->data.function.args[0], &freed);
+    Expr* ret = unset_lhs(target);
+    if (freed) expr_free(target);
+    return ret;
+}
+
+static Expr* unset_lhs(Expr* lhs) {
 
     const char* symbol_name = NULL;
     bool own_value = false;

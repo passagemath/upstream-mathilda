@@ -47,6 +47,10 @@ bool eval_is_inflight_abort(const Expr* e);
 bool eval_is_inflight_unwind(const Expr* e);
 /* True (once) if an abort reached the top level since the last call. */
 bool eval_take_top_abort(void);
+/* Evaluate an assignment LHS's arguments as Set does (patterns and Hold
+ * positions held, compound heads f[a][b] too).  Returns a new node with
+ * *freed = true (caller frees), or `lhs` itself with *freed = false. */
+Expr* eval_assignment_target(Expr* lhs, bool* freed);
 /* A Catch / CheckAbort that consumes an in-flight sentinel calls this so the
  * enclosing frame does not re-raise it (see g_pending_unwind in eval.c). */
 void eval_unwind_consumed(void);

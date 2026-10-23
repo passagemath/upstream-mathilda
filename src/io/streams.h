@@ -29,6 +29,7 @@ typedef struct {
     size_t pos;         /* current read point */
     /* output streams */
     FILE*  fp;          /* open output handle */
+    int    borrowed;    /* fp is the process stdout/stderr: flushed, never closed */
 } Stream;
 
 /* Open `name` for reading: slurp it and register an input stream.  Returns the

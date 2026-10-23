@@ -1090,14 +1090,15 @@ void test_import_text(void) {
     write_bytes(e, sizeof e, "it_e", "");
     write_bytes(v, sizeof v, "it_v", "abc\n\n\n");
     write_bytes(x, sizeof x, "it_x", "a\r\nb\r\n");
-    /* "Text" drops ONE trailing line break; "String" is exact; "Lines" drops
-     * trailing empty lines; CRLF reads as LF throughout. */
+    /* "Text" drops ONE trailing line break; "String" is the bytes exactly;
+     * "Lines" drops trailing empty lines.  Text and Lines read CRLF and a lone
+     * CR as one line break; String and ReadString keep the CR bytes. */
     snprintf(src, sizeof src, "{Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"], "
              "Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"]}", t, u, e, v, x);
     assert_eval_eq(src, "{\"line1\\nline2\\n\\nline4\", \"abc\", \"\", \"abc\\n\\n\", \"a\\nb\"}", 0);
     snprintf(src, sizeof src, "{Import[\"%s\", \"String\"], Import[\"%s\", \"String\"], Import[\"%s\", {\"Text\"}]}",
              u, x, u);
-    assert_eval_eq(src, "{\"abc\\n\", \"a\\nb\\n\", \"abc\"}", 0);
+    assert_eval_eq(src, "{\"abc\\n\", \"a\\r\\nb\\r\\n\", \"abc\"}", 0);
     snprintf(src, sizeof src, "{Import[\"%s\", \"Lines\"], Import[\"%s\", \"Lines\"], Import[\"%s\", \"Lines\"], "
              "Import[\"%s\", \"Lines\"]}", t, e, v, x);
     assert_eval_eq(src, "{{\"line1\", \"line2\", \"\", \"line4\"}, {}, {\"abc\"}, {\"a\", \"b\"}}", 0);
@@ -1115,7 +1116,21 @@ void test_import_text(void) {
     /* ReadString: whole file, terminator, EndOfFile, streams. */
     snprintf(src, sizeof src, "{ReadString[\"%s\"], ReadString[\"%s\"], ReadString[\"%s\"], "
              "ReadString[\"%s\", \"\\n\"], ReadString[\"%s\", {\"2\", \"1\"}]}", txt, x, e, t, t);
-    assert_eval_eq(src, "{\"abc\\n\", \"a\\nb\\n\", EndOfFile, \"line1\", \"line\"}", 0);
+    assert_eval_eq(src, "{\"abc\\n\", \"a\\r\\nb\\r\\n\", EndOfFile, \"line1\", \"line\"}", 0);
+    /* A lone CR is a line break for Text, Lines and String records. */
+    {
+        char y[256];
+        write_bytes(y, sizeof y, "it_y", "x\ry\r");
+        snprintf(src, sizeof src, "{Import[\"%s\", \"Text\"], Import[\"%s\", \"Lines\"], "
+                 "ToCharacterCode[Import[\"%s\", \"String\"]], ReadList[\"%s\", String]}", y, y, y, y);
+        assert_eval_eq(src, "{\"x\\ny\", {\"x\", \"y\"}, {120, 13, 121, 13}, {\"x\", \"y\"}}", 0);
+        unlink(y);
+        /* Leading empty lines are dropped as trailing ones are; interior stay. */
+        write_bytes(y, sizeof y, "it_y", "\n\nab\n\ncd\n\n");
+        snprintf(src, sizeof src, "Import[\"%s\", \"Lines\"]", y);
+        assert_eval_eq(src, "{\"ab\", \"\", \"cd\"}", 0);
+        unlink(y);
+    }
     /* On a stream the terminator is left unread, and the stream advances. */
     snprintf(src, sizeof src, "rs = OpenRead[\"%s\"]; r = {ReadString[rs, \"\\n\"], ReadString[rs], ReadString[rs]}; "
              "Close[rs]; r", t);
@@ -1146,6 +1161,19 @@ void test_inputfilename_get(void) {
     /* Restored once the file has been read. */
     assert_eval_eq("$InputFileName", "\"\"", 0);
     unlink(path);
+}
+
+/* $TemporaryDirectory: a Protected System` string with no trailing separator,
+ * naming an existing directory. */
+static void test_temporary_directory(void) {
+    assert_eval_eq("StringQ[$TemporaryDirectory] && StringLength[$TemporaryDirectory] > 0", "True", 0);
+    assert_eval_eq("FileType[$TemporaryDirectory]", "Directory", 0);
+    assert_eval_eq("StringTake[$TemporaryDirectory, -1] =!= \"/\" || $TemporaryDirectory === \"/\"", "True", 0);
+    assert_eval_eq("{Attributes[$TemporaryDirectory], Context[$TemporaryDirectory]}",
+                   "{{Protected}, \"System`\"}", 0);
+    assert_eval_eq("tdp = FileNameJoin[{$TemporaryDirectory, \"mth_td_probe.txt\"}]; "
+                   "WriteString[OpenWrite[tdp], \"x\"]; Close[tdp]; "
+                   "{FileExistsQ[tdp], DeleteFile[tdp], FileExistsQ[tdp]}", "{True, Null, False}", 0);
 }
 
 int main(void) {
@@ -1261,6 +1289,7 @@ int main(void) {
     TEST(test_filenamesplit_zero_args_is_unevaluated);
     TEST(test_filenamesplit_protected);
     TEST(test_filenamesplit_options);
+    TEST(test_temporary_directory);
 
     printf("All tests passed!\n");
     return 0;

@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -114,7 +114,7 @@ Reads text from a file or an input stream.
 
 **Features**:
 - `Protected`.
-- Line ends are normalised to `"\n"`.
+- The bytes are returned exactly as they are; CRLF line ends stay `"\r\n"`.
 - At end of file the result is `EndOfFile`.
 - A file that cannot be opened emits `OpenRead::noopen` and gives `$Failed`.
 - Implemented in `src/io/read.c`.
@@ -306,6 +306,8 @@ Write to an output stream.
 
 `stream` may be an `OutputStream` object, a `"file"`, or `File["file"]`; a named file that is not already open is opened for writing (truncating) and left open.
 
+The names `"stdout"` and `"stderr"` are the process's own output streams, not files: `WriteString["stdout", ...]` prints (alongside `Print`), `Write` there uses OutputForm (strings unquoted), and `Close` flushes them without closing.
+
 **Features**:
 - `Protected`. Return `$Failed` if the file cannot be opened.
 - `Write` evaluates its expression arguments before writing (use `Hold[...]` to write an unevaluated form), and output is flushed after each call so it round-trips with `Read`/`ReadList`.
@@ -387,9 +389,9 @@ with no format given imports as `"Text"`.
 
 | Format | Result for a file containing `"a\r\nb\n\n"` |
 |---|---|
-| `"String"` | the contents exactly, with line ends normalised: `"a\nb\n\n"` |
-| `"Text"` | the same, less one trailing line break: `"a\nb\n"` |
-| `"Lines"` | a list of lines, with trailing empty lines dropped: `{"a", "b"}` |
+| `"String"` | the contents byte for byte: `"a\r\nb\n\n"` |
+| `"Text"` | the contents with CRLF and lone CR read as `"\n"`, less one trailing line break: `"a\nb\n"` |
+| `"Lines"` | a list of lines (split at LF, CRLF or a lone CR), with leading and trailing empty lines dropped: `{"a", "b"}` |
 
 A file that cannot be read emits `Import::nffil` and gives `$Failed`.
 
@@ -869,6 +871,11 @@ The value of an operating-system environment variable.
 Environment["HOME"]          (* "/Users/..." *)
 Environment["NO_SUCH_VAR"]   (* $Failed *)
 ```
+
+## $TemporaryDirectory
+The directory for temporary files: `TMPDIR`, else (Windows) `TEMP` or `TMP`,
+else `/tmp`. A trailing separator is dropped, so
+`FileNameJoin[{$TemporaryDirectory, "f"}]` never doubles it. `Protected`.
 
 ## $PathnameSeparator
 The separator between directory names in a file name: `"/"`, or `"\\"` on

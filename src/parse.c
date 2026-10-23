@@ -123,27 +123,6 @@ static bool extend_flat_head(Expr* left, const char* head_name, Expr* right) {
     return true;
 }
 
-/* If `right` is an n-ary call whose head is `head_name`, prepend `left` as its
- * new first argument in-place (taking ownership of `left`) and return true.
- * Mirrors extend_flat_head but for a right-associative operator: `;` is parsed
- * right-associatively, so `a; b; c` accumulates the CompoundExpression on the
- * right (right = CompoundExpression[b, c]). Prepending yields the flat
- * CompoundExpression[a, b, c] WL produces, which matters for control flow:
- * Goto/Label scanning treats each ';'-chain as one flat statement list. */
-static bool prepend_flat_head(Expr* left, const char* head_name, Expr* right) {
-    if (!head_is(right, intern_symbol(head_name))) return false;
-
-    size_t old_count = right->data.function.arg_count;
-    Expr** new_args = malloc(sizeof(Expr*) * (old_count + 1));
-    if (!new_args) return false;
-    new_args[0] = left;
-    for (size_t k = 0; k < old_count; k++) new_args[k + 1] = right->data.function.args[k];
-    free(right->data.function.args);
-    right->data.function.args = new_args;
-    right->data.function.arg_count = old_count + 1;
-    return true;
-}
-
 /* Heads that participate in Mathematica-style chained comparisons. WL
  * collapses `a < b <= c == d > e` into one Inequality[...] node. Unequal
  * (`!=`) is handled separately: a run of `!=` alone is the variadic
@@ -266,6 +245,31 @@ static void skip_whitespace(ParserState* s) {
         }
     }
     s->ws_end = s->pos;
+}
+
+/* Can the text at p only continue an expression -- does it start a binary or
+ * postfix operator that no expression can begin with (`a; ::x` is a MessageName
+ * of the compound, too)?  `+`, `-`, `!`, `.` (a number), `?`, `'`, `;;`, `<|`
+ * and `<<` are excluded: each may begin a new statement.  Shared by the
+ * top-level statement reader and the infix `;` operator. */
+static bool starts_binary_operator(const char* p) {
+    switch (p[0]) {
+        case '*': case '/': case '^': case '=': case '>': case '|':
+        case '&': case '@': case '~':
+            return true;
+        case ':':                               /* := :> :: (MessageName) */
+            return true;
+        case '<':                               /* <| association, << Get */
+            return p[1] != '|' && p[1] != '<';
+        case '!':
+            return p[1] == '=';                 /* != ; !x is a new statement */
+        case '-':
+            return p[1] == '>' || p[1] == '=';  /* -> and -= ; -x is a new statement */
+        case '+':
+            return p[1] == '=';                 /* += ; +x is a new statement */
+        default:
+            return false;
+    }
 }
 
 /* Skip the whitespace after an operator whose right operand may be omitted
@@ -1236,7 +1240,7 @@ static OperatorDef get_operator(const char* pos) {
     } else if (strncmp(pos, ";;", 2) == 0) {
         def.type = OP_SPAN; def.prec = 3200; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
     } else if (*pos == ';') {
-        def.type = OP_COMPOUND; def.prec = 100; def.right_assoc = 1; def.head_name = "CompoundExpression"; def.len = 1;
+        def.type = OP_COMPOUND; def.prec = 100; def.right_assoc = 0; def.head_name = "CompoundExpression"; def.len = 1;
     } else if (strncmp(pos, "~~", 2) == 0) {
         /* StringExpression (a ~~ b ~~ c): concatenation of string patterns.
          * Precedence just below Alternatives (2300) so `a ~~ b | c` groups as
@@ -1662,6 +1666,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     const char* left_start;
     Expr* left = NULL;
     bool left_bare_compare = false;
+    /* `left` is a `;`-chain built at this level (not a parenthesised one), so
+     * a further `;` appends to it: a;b;c is flat, (a;b);c stays nested. */
+    bool left_bare_compound = false;
     if (s->seed_left) {
         /* A caller-supplied left operand: straight to the infix loop. */
         left = s->seed_left;
@@ -1844,6 +1851,8 @@ infix_loop:
          * comparison sets it back to true, so any other operator in between breaks the chain. */
         bool prev_bare_compare = left_bare_compare;
         left_bare_compare = false;
+        bool prev_bare_compound = left_bare_compound;
+        left_bare_compound = false;
         
         s->pos += op_def.len;
 
@@ -2065,7 +2074,13 @@ infix_loop:
         /* `a;` ending a line: the omitted statement is an implicit Null and
          * the line break ends the CompoundExpression. */
         Expr* right = NULL;
-        if (op_def.type == OP_COMPOUND && operand_omitted_at_line_end(s))
+        /* `a; -> c`: an operator that can only continue an expression
+         * means the operand after `;` is an implicit Null and the compound is
+         * that operator's left operand.  Decide BEFORE parsing an operand: a
+         * failed operand parse would already have consumed the `-` of `->`
+         * or `-=` as a prefix minus, leaving `> c` / `= c` behind. */
+        if (op_def.type == OP_COMPOUND &&
+            (operand_omitted_at_line_end(s) || starts_binary_operator(s->pos)))
             right = expr_new_symbol(SYM_Null);
         if (!right) right = parse_expression_prec(s, next_min_prec);
         if (!right) {
@@ -2154,12 +2169,14 @@ infix_loop:
             }
         } else if (op_def.type == OP_COMPOUND) {
             /* Flatten `;` chains at parse time so a;b;c parses as the n-ary
-             * CompoundExpression[a, b, c] rather than a right-nested binary
-             * tree. `;` is right-associative, so `right` holds the already-built
-             * tail: prepend `left` into it when it is a CompoundExpression. */
-            if (prepend_flat_head(left, op_def.head_name, right)) {
-                left = right;
-            } else {
+             * CompoundExpression[a, b, c] rather than a nested binary tree.
+             * `;` associates LEFT, so the chain is complete before a later
+             * continuation operator binds: `a; b; -> c` is
+             * Rule[CompoundExpression[a, b, Null], c], not a Rule on `(b;)`.
+             * Only a bare chain is extended: `(a; b); c` keeps the inner
+             * compound as its first statement. */
+            left_bare_compound = true;
+            if (!(prev_bare_compound && extend_flat_head(left, op_def.head_name, right))) {
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
             }
@@ -2256,28 +2273,6 @@ static void materialize_symbols(const Expr* e) {
 
 void parse_materialize_user_symbols(const Expr* e) {
     if (intern_system_scope_depth() == 0) materialize_symbols(e);
-}
-
-/* Can the text at p only continue an expression -- does it start a binary or
- * postfix operator that no expression can begin with (`a; ::x` is a MessageName
- * of the compound, too)?  `+`, `-`, `!`, `.`
- * (a number), `?`, `'` and `;;` are excluded: each may begin a new statement. */
-static bool starts_binary_operator(const char* p) {
-    switch (p[0]) {
-        case '*': case '/': case '^': case '=': case '>': case '|':
-        case '&': case '@': case '~':
-            return true;
-        case ':':                               /* := :> :: (MessageName) */
-            return true;
-        case '<':
-            return p[1] != '|';                 /* <| begins an association */
-        case '-':
-            return p[1] == '>' || p[1] == '=';  /* -> and -= ; -x is a new statement */
-        case '+':
-            return p[1] == '=';                 /* += ; +x is a new statement */
-        default:
-            return false;
-    }
 }
 
 Expr* parse_next_expression(const char** input_ptr) {

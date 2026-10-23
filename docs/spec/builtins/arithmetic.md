@@ -60,6 +60,13 @@ Numerical evaluation.
 - `N[expr]` — machine-precision approximation.
 - `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
 
+**Held arguments**: in a position its head holds (`If`'s branches, a
+`Function` body, any `HoldFirst`/`HoldRest`/`HoldAll` slot) `N` numericalizes the
+structure but does not evaluate it: `N[If[y == 2, Print[a], y + 1]]` is
+`If[y == 2., Print[a], y + 1.]` and prints nothing. The same holds for the
+numericalization `Equal` does on a symbolic side, so `If[...] == 2` never runs
+a held branch.
+
 **Precision semantics**:
 - `N[expr]` gives a **machine-precision** approximation of the whole result. It
   targets machine precision even when `expr` is already an approximate

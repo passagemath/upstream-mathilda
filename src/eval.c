@@ -1845,6 +1845,43 @@ static bool strip_nothing(Expr* e) {
 /* Does any argument of the call `res` hold a dense buffer (a packed List or a
  * visible NDArray)? The packed-array gate in evaluate_step has work to do only
  * then. */
+/* Collect the distinct symbols of `e` (heads included) into names[]. Returns
+ * false when there are more than `cap`. */
+static bool eval_collect_symbols(const Expr* e, const char** names, size_t* n, size_t cap) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < *n; i++) if (names[i] == e->data.symbol.name) return true;
+        if (*n == cap) return false;
+        names[(*n)++] = e->data.symbol.name;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    if (!eval_collect_symbols(e->data.function.head, names, n, cap)) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!eval_collect_symbols(e->data.function.args[i], names, n, cap)) return false;
+    return true;
+}
+
+static bool eval_mentions_any(const Expr* e, const char* const* names, size_t n) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < n; i++) if (names[i] == e->data.symbol.name) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (eval_mentions_any(e->data.function.head, names, n)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (eval_mentions_any(e->data.function.args[i], names, n)) return true;
+    return false;
+}
+
+/* Does `e` mention any symbol that occurs in `lhs` (the assignment target)?
+ * Conservatively true for a left side with very many symbols. */
+static bool eval_mentions_symbols_of(const Expr* e, const Expr* lhs) {
+    const char* names[32];
+    size_t n = 0;
+    if (!eval_collect_symbols(lhs, names, &n, 32)) return true;
+    return eval_mentions_any(e, names, n);
+}
+
 /* Are `res`'s arguments still exactly the `n` pointers in `snap`? */
 static inline bool eval_args_untouched(const Expr* res, Expr* const* snap, size_t n) {
     return res->type == EXPR_FUNCTION && res->data.function.arg_count == n &&
@@ -2800,10 +2837,22 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     Expr* target_lhs = build_assignment_target(lhs, &free_target);
 
                     if (apply_assignment(target_lhs, rhs, is_delayed)) {
-                        Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : evaluate(rhs);
+                        /* The value of x = rhs is rhs, already evaluated as this
+                         * step's argument. It needs another evaluation only if
+                         * the assignment can have changed it -- if it mentions a
+                         * symbol of the left side (y = y + 1 re-evaluates, and
+                         * recurses, as it should). Otherwise it is final: the
+                         * re-evaluation repeated every message of a declining
+                         * call (z = Det[{{1, 2}}] printed Det::matsq twice). */
+                        bool final_value = !is_delayed && settle_ok && settle_argc == 2 &&
+                                           settle_snap[1] == rhs &&
+                                           !eval_mentions_symbols_of(rhs, target_lhs);
+                        Expr* ret = is_delayed ? expr_new_symbol(SYM_Null)
+                                  : final_value ? expr_copy(rhs) : evaluate(rhs);
                         if (free_target) expr_free(target_lhs);
                         expr_free(res);
                         *changed = true; /* Set/SetDelayed installed a rule */
+                        if (final_value) g_step_settled_depth = eval_recursion_depth;
                         return ret;
                     }
                     if (free_target) expr_free(target_lhs);

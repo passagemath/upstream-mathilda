@@ -270,15 +270,53 @@ def run_chunk(cases, valgrind=False, timeout=900):
         path = fh.name
     cmd = [BINARY, "-file", path]
     if valgrind:
+        # Memory errors (invalid reads/writes, uninitialised use) fail the run
+        # through the exit code. Leaks are compared against an empty script's
+        # (the startup baseline), so they are measured, not counted as errors.
         cmd = ["valgrind", "--error-exitcode=99", "--leak-check=full",
-               "--errors-for-leak-kinds=definite", "-q"] + cmd
+               "--errors-for-leak-kinds=none"] + cmd
     try:
         p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
         rc, out, err = p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
         rc, out, err = -1, "", "chunk timeout"
     os.unlink(path)
+    if valgrind:
+        lost = definitely_lost(err)
+        base = leak_baseline()
+        if lost is not None and base is not None and lost > base:
+            out += f"LEAK\t{cases[0][0]}\tdefinitely lost {lost} bytes (startup baseline {base})\n"
     return rc, out, err
+
+
+def definitely_lost(valgrind_err):
+    import re
+    m = re.search(r"definitely lost: ([0-9,]+) bytes", valgrind_err)
+    return int(m.group(1).replace(",", "")) if m else 0
+
+
+_LEAK_BASE = []
+
+
+def leak_baseline():
+    # what an empty script leaks (one-time initialisation), measured once
+    if not _LEAK_BASE:
+        rc, out, err = run_chunk_raw(PRELUDE, valgrind=True)
+        _LEAK_BASE.append(definitely_lost(err))
+    return _LEAK_BASE[0]
+
+
+def run_chunk_raw(text, valgrind=False, timeout=900):
+    with tempfile.NamedTemporaryFile("w", suffix=".m", delete=False) as fh:
+        fh.write(text)
+        path = fh.name
+    cmd = [BINARY, "-file", path]
+    if valgrind:
+        cmd = ["valgrind", "--error-exitcode=99", "--leak-check=full",
+               "--errors-for-leak-kinds=none"] + cmd
+    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    os.unlink(path)
+    return p.returncode, p.stdout, p.stderr
 
 
 def run_all(cases, chunk, valgrind):
@@ -289,7 +327,7 @@ def run_all(cases, chunk, valgrind):
         rc, out, err = run_chunk(part, valgrind)
         for line in out.splitlines():
             f = line.split("\t")
-            if f[0] in ("FAIL", "TIMEOUT"):
+            if f[0] in ("FAIL", "TIMEOUT", "LEAK"):
                 results.append((int(f[1]), f[0], f[2:] if len(f) > 2 else []))
         if rc != 0:
             if len(part) == 1:

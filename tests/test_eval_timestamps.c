@@ -724,6 +724,27 @@ static void test_symbolic_valued_assoc_updates_after_set(void) {
 
 /* ------------------------------------------------------------------ */
 
+/* The value of x = rhs is evaluated once: a declining call on the right is not
+ * re-asked after the assignment (its messages printed twice), unless the right
+ * side mentions a symbol of the left, which the assignment may have changed. */
+static void eval_str_is(const char* in, const char* want) {
+    Expr* p = parse_expression(in);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, want) != 0) fprintf(stderr, "FAIL: %s\n  Expected: %s\n  Actual:   %s\n", in, want, s);
+    ASSERT(strcmp(s, want) == 0);
+    free(s); expr_free(r); expr_free(p);
+}
+
+static void test_set_value_evaluated_once(void) {
+    eval_str_is("zcnt = 0; zg[_] /; (zcnt++; False) := 0; zv = zg[1]; zcnt", "1");
+    eval_str_is("zcnt = 0; zw = {zg[2], zw0}; zcnt", "1");
+    /* mentions the assigned symbol: evaluated again with the new value */
+    eval_str_is("Clear[zq]; zq = 5; zq = zq + 1", "6");
+    eval_str_is("Clear[zq]; zq = {zq0, 1}; zq0 = 3; zq", "{3, 1}");
+    eval_str_is("Clear[zcnt, zg, zv, zw, zq, zq0]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -748,6 +769,7 @@ int main(void) {
     TEST(test_ground_survives_soft_clock_bump);
     TEST(test_ground_invalidated_by_rule_epoch);
     TEST(test_symbolic_valued_assoc_updates_after_set);
+    TEST(test_set_value_evaluated_once);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

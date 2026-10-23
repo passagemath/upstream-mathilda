@@ -125,4 +125,11 @@ void message_init(void);
  * switched off.  The funnel drops such a message entirely. */
 int mth_msg_is_off(const char* head, const char* tag);
 
+/* Reset $MessageList to {} -- called by the front ends at each new input line. */
+void mth_message_list_reset(void);
+
+/* Emit a preformatted "Head::tag: text" line through the funnel (with the same
+ * extra_mute meaning as mth_message_gated).  For arith_warn's fixed strings. */
+void mth_message_line(int extra_mute, const char* line);
+
 #endif /* MATHILDA_MESSAGE_H */

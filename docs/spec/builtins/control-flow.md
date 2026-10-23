@@ -1100,3 +1100,11 @@ Switch messages off and back on.
 In[1]:= Off[f::m]; Check[Message[f::m, 1, 2]; ok, caught]
 Out[1]= ok
 ```
+
+## $MessageList
+The messages printed during the current input line, each as `HoldForm[sym::tag]`.
+- The REPL and the notebook pipe reset it to `{}` at each new input line. A
+  `-file` script accumulates it.
+- A message silenced by `Quiet` or `Off` is not listed.
+- It is an ordinary variable, so `Block[{$MessageList = {}}, ...]` scopes it to
+  one evaluation.

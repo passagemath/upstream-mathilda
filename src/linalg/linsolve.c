@@ -131,7 +131,7 @@ void matsol_warn_once(uint64_t* last_hash, Expr* key, const char* msg) {
     uint64_t h = expr_hash(key);
     if (h == *last_hash) return;
     *last_hash = h;
-    fputs(msg, stderr);
+    mth_message_line(0, msg);   /* the funnel: Quiet, Off, Check, $MessageList */
 }
 
 /* ------------------------------------------------------------------

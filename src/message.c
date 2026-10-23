@@ -111,6 +111,39 @@ int mth_msg_is_off(const char* head, const char* tag) {
     return off;
 }
 
+/* ------------------------------------------------------------ $MessageList */
+/* $MessageList: HoldForm[sym::tag] for each message PRINTED during the current
+ * input line (a message silenced by Quiet or Off is not listed).  It is an
+ * ordinary OwnValue, so Block[{$MessageList = {}}, ...] localises it. */
+static void message_list_set(Expr* val) {
+    Expr* sym = expr_new_symbol("$MessageList");
+    symtab_add_own_value("$MessageList", sym, val);
+    expr_free(sym);
+}
+
+void mth_message_list_reset(void) {
+    Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+    message_list_set(empty);
+    expr_free(empty);
+}
+
+static void message_list_append(const char* head, const char* tag) {
+    Rule* r = symtab_get_own_values("$MessageList");
+    Expr* cur = (r && r->replacement) ? r->replacement : NULL;
+    size_t n = (cur && cur->type == EXPR_FUNCTION && cur->data.function.head->type == EXPR_SYMBOL &&
+                cur->data.function.head->data.symbol.name == SYM_List) ? cur->data.function.arg_count : 0;
+    Expr** items = malloc((n + 1) * sizeof(Expr*));
+    if (!items) return;
+    for (size_t i = 0; i < n; i++) items[i] = expr_copy(cur->data.function.args[i]);
+    Expr* mn_args[2] = { expr_new_symbol(head), expr_new_string(tag) };
+    Expr* mn = expr_new_function(expr_new_symbol(SYM_MessageName), mn_args, 2);
+    items[n] = expr_new_function(expr_new_symbol(SYM_HoldForm), &mn, 1);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), items, n + 1);
+    free(items);
+    message_list_set(l);
+    expr_free(l);
+}
+
 /* ------------------------------------------------------------- The funnel */
 /* The single choke-point for user-facing diagnostics: note (always), then
  * print "Head::tag: <formatted>\n" unless Quiet[] (or an extra local mute) is
@@ -132,6 +165,7 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
     if (mth_msg_is_off(head, tag)) return;
     mth_msg_note_fired();                 /* Check sees it, even under Quiet */
     if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
+    message_list_append(head, tag);
     fprintf(stderr, "%s::%s: ", head, tag);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
@@ -150,6 +184,25 @@ void mth_message_gated(int extra_mute, const char* head, const char* tag,
     va_start(ap, fmt);
     mth_message_v(extra_mute != 0, head, tag, fmt, ap);
     va_end(ap);
+}
+
+void mth_message_line(int extra_mute, const char* line) {
+    /* "Head::tag: text\n" -> mth_message_v(extra_mute, Head, tag, "%s", text). */
+    const char* sep = strstr(line, "::");
+    const char* colon = sep ? strstr(sep + 2, ": ") : NULL;
+    if (!sep || !colon || sep - line >= 128 || colon - (sep + 2) >= 64) {
+        mth_message_gated(extra_mute, "General", "msg", "%s", line);
+        return;
+    }
+    char head[128], tag[64];
+    memcpy(head, line, (size_t)(sep - line));
+    head[sep - line] = '\0';
+    memcpy(tag, sep + 2, (size_t)(colon - (sep + 2)));
+    tag[colon - (sep + 2)] = '\0';
+    const char* text = colon + 2;
+    size_t tl = strlen(text);
+    while (tl > 0 && text[tl - 1] == '\n') tl--;
+    mth_message_gated(extra_mute, head, tag, "%.*s", (int)tl, text);
 }
 
 void mth_message_cont(int extra_mute, const char* fmt, ...) {
@@ -422,6 +475,11 @@ void message_init(void) {
         "\tprints the message sym::tag as \"sym::tag: text\", with the slots `1`, `2`, ... (or ``)\n"
         "\tof its text filled by the ei.  The text is sym::tag's, else General::tag's.  Quiet and\n"
         "\tOff[sym::tag] silence it; Check sees it unless it is switched off.");
+
+    mth_message_list_reset();
+    symtab_set_docstring("$MessageList",
+        "$MessageList\n\tis a list of the messages printed during the current input line, each as\n"
+        "\tHoldForm[sym::tag].  Messages silenced by Quiet or Off are not listed.");
 
     symtab_add_builtin("Off", builtin_off);
     symtab_get_def("Off")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

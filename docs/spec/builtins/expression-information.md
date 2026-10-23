@@ -722,6 +722,11 @@ Plus[x, y]
 Out[2]= Null
 ```
 
+## PrintTemporary
+`PrintTemporary[expr1, ...]` prints like `Print` and returns `Null`. Mathilda
+has no notebook front end that could remove the output afterwards, so it stays.
+`Protected`.
+
 ## FullForm
 - `FullForm[expr]` causes `expr` to be printed in its full internal form.
 - `expr // FullForm` is a common shortcut.

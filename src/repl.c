@@ -9,6 +9,7 @@
 #include "print.h"
 #include "part.h"
 #include "eval.h"
+#include "message.h"
 #include "symtab.h"
 #include "repl_hooks.h"
 #include "sym_names.h"
@@ -114,6 +115,7 @@ static Expr* out_value_unwrapped(Expr* e) {
  * Out[$Line - 1], so $Line has to already name the line being evaluated for
  * `%` to mean "the previous result". */
 static void repl_set_line(int line) {
+    mth_message_list_reset();     /* $MessageList covers one input line */
     Expr* line_sym = expr_new_symbol(SYM_DollarLine);
     Expr* line_val = expr_new_integer(line);
     symtab_add_own_value("$Line", line_sym, line_val);

@@ -1,6 +1,7 @@
 /* NDArray — see ndarray.h for the design rationale. */
 
 #include "ndarray.h"
+#include "message.h"
 #include "checked_int.h"   /* ci_*_i64 — exact int64 arithmetic, bail on overflow */
 #include "ndarray_internal.h"
 #include "sym_names.h"
@@ -2221,7 +2222,9 @@ static void format_shape(const Expr* a, char* buf, size_t buflen) {
  * hash of the message: an identical warning prints once per evaluation but
  * still fires on a later input. Respects the arithmetic-warning mute. */
 void ndarray_warn_once(const char* msg) {
-    if (arith_warnings_muted()) return;
+    /* Only the internal-probe mute drops it here; Quiet / Off / Check are the
+     * funnel's business (mth_message_line below). */
+    if (g_arith_warnings_muted) return;
     static uint64_t last_clock = 0;
     static uint64_t last_key = 0;
     uint64_t key = 1469598103934665603ULL; /* FNV-1a over the text */
@@ -2229,7 +2232,7 @@ void ndarray_warn_once(const char* msg) {
         key = (key ^ (unsigned char)*c) * 1099511628211ULL;
     uint64_t clock = eval_clock_get();
     if (clock == last_clock && key == last_key) return;
-    fputs(msg, stderr);
+    mth_message_line(0, msg);
     last_clock = clock;
     last_key = key;
 }

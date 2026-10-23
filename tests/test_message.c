@@ -112,11 +112,39 @@ static void test_off_on(void) {
     assert_eval_eq("On[tm::n]", "Null", 0);
 }
 
+static void test_message_list(void) {
+    /* Each PRINTED message, as HoldForm[sym::tag]; Quiet / Off ones are not listed. */
+    assert_eval_eq("FullForm[Block[{$MessageList = {}}, Quiet[Message[tm::n]]; Off[tm::n]; Message[tm::n]; "
+                   "On[tm::n]; Quiet[1/0]; $MessageList]]", "List[]", 0);
+    assert_stderr("ml = Block[{$MessageList = {}}, Message[tm::n]; 1/0; Environment[3]; $MessageList]",
+                  "tm::n: no slots\nPower::infy: Infinite expression 1/0 encountered.\n"
+                  "Environment::string: String expected at position 1 in Environment[3].\n");
+    assert_eval_eq("FullForm[ml]", "List[HoldForm[MessageName[tm, \"n\"]], HoldForm[MessageName[Power, \"infy\"]], "
+                   "HoldForm[MessageName[Environment, \"string\"]]]", 0);
+}
+
+/* The arithmetic, NDArray and linear-algebra warning helpers emit through the
+ * funnel: Off, Quiet and Check all apply to them. */
+static void test_helper_warnings_routed(void) {
+    assert_stderr("Off[Power::infy]; r = 1/0", "");
+    assert_eval_eq("Check[1/0, \"caught\"]", "ComplexInfinity", 0);
+    assert_eval_eq("On[Power::infy]; Quiet[Check[1/0, \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[NDArray[{1, 2}, DataType -> \"bogus\"], \"caught\"]]", "\"caught\"", 0);
+    assert_stderr("Quiet[Clip[{x}, {0, 1}]]", "");
+}
+
+static void test_printtemporary(void) {
+    assert_eval_eq("Quiet[PrintTemporary[]]; Attributes[PrintTemporary]", "{Protected}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_message_formatting);
     TEST(test_off_on);
+    TEST(test_message_list);
+    TEST(test_helper_warnings_routed);
+    TEST(test_printtemporary);
     printf("All message tests passed.\n");
     return 0;
 }

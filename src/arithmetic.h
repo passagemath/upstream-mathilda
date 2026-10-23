@@ -74,10 +74,8 @@ static inline int  arith_warnings_muted(void)       { return g_arith_warnings_mu
  * expects, so an enclosing Check[] must not catch it), while Quiet silences only
  * the print and the firing is still noted so Check[] sees it. */
 static inline void arith_warn(const char* msg) {
-    if (g_arith_warnings_muted) return;   /* internal probe: not a user event */
-    mth_msg_note_fired();                 /* Check sees it, even under Quiet */
-    if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
-    fputs(msg, stderr);
+    /* Through the funnel proper, so Off[Power::infy] and $MessageList see it. */
+    mth_message_line(g_arith_warnings_muted, msg);
 }
 
 Expr* builtin_divide(Expr* res);

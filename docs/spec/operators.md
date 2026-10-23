@@ -38,7 +38,7 @@ and, in lockstep, by the printer's parenthesiser (`get_expr_prec` in
 | `\|`     | `Alternatives` | 2300 | Left |
 | `~~`     | `StringExpression` | 2100 | Left |
 | `:`      | `Pattern` (`sym:p`) / `Optional` (`p:v`) — see below | 2200 / 2150 | Left |
-| `/;`     | `Condition` | 1700 | Right |
+| `/;`     | `Condition` | 1700 | Left (`a /; b /; c` is `Condition[Condition[a, b], c]`) |
 | `->`, `→` | `Rule` | 1500 | Right |
 | `:>`     | `RuleDelayed` | 1500 | Right |
 | `/.`, `//.` | `ReplaceAll`, `ReplaceRepeated` | 1200 | Left |
@@ -107,3 +107,24 @@ unnoticed: every symmetric-looking test passed.
 `Plus`/`Times` flattening in the same part of the parser has the identical shape and is harmless, because
 those heads are associative — `(a + b) + c` and `a + b + c` mean the same thing. Chaining changes
 *meaning*, so comparisons need provenance tracked rather than guessed.
+
+## Statements in a file (`Get`, `-file`)
+A file is read one statement at a time, and each statement is evaluated before
+the next is parsed. That way a `BeginPackage`/`Begin` prologue governs the
+symbols created by later statements.
+- A top-level `;` ends a statement, with one exception. If the next token on
+  the same line can only continue an expression, the `;` is the
+  `CompoundExpression` operator with an implicit `Null`, and that compound is
+  the operator's left operand.
+- The tokens that continue a statement are the binary and postfix operators:
+  `/;`, `//`, `/.`, `//.`, `->`, `:>`, `:=`, `=`, `==`, `===`, `&&`, `||`, `&`,
+  `@@`, `/@`, `@`, `^`, `*`, `<`, `<=`, `>`, `>=`, `<>`, `~~`, `|`, `::`, `-=`
+  and `+=`.
+- So `f[x_] := g[x];/; x > 0` reads as
+  `Condition[CompoundExpression[f[x_] := g[x], Null], x > 0]`. Evaluating it
+  defines `f` unconditionally.
+- An operator at the start of the next line is a syntax error.
+- On a syntax error, `Get` emits `Syntax::sntx` ("Invalid syntax in or before
+  "...` (line n of "file")"), stops reading, and returns `Null`. The message
+  goes through the funnel, so `Quiet` and `Check` see it. An expression left
+  unfinished at end of file counts as a syntax error.

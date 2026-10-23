@@ -4345,7 +4345,9 @@ Expr* builtin_syntaxq(Expr* res) {
         return NULL;
     }
     if (a0->data.string[0] == '\0') return expr_new_symbol(SYM_False);
+    int prev_quiet = parse_set_quiet(1);     /* a question, not an error */
     Expr* stmts = parse_statement_sequence(a0->data.string, 1, NULL);
+    parse_set_quiet(prev_quiet);
     if (!stmts) return expr_new_symbol(SYM_False);
     expr_free(stmts);
     return expr_new_symbol(SYM_True);
@@ -4375,8 +4377,10 @@ Expr* builtin_toexpression(Expr* res) {
     int line_statements = argc < 2
         || res->data.function.args[1]->data.symbol.name != SYM_StandardForm;
     const char* err_pos = NULL;
+    int prev_quiet = parse_set_quiet(1);     /* ToExpression::sntx reports it */
     Expr* stmts = parse_statement_sequence(input->data.string, line_statements,
                                            &err_pos);
+    parse_set_quiet(prev_quiet);
     if (!stmts) {
         mth_message("ToExpression", "sntx",
                     "Invalid syntax in or before \"%s\".",

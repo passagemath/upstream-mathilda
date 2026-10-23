@@ -77,6 +77,38 @@ void mth_input_file_leave(Expr* prev) {
     expr_free(prev);
 }
 
+/* Skip whitespace and (* comments *) -- what may legitimately trail the last
+ * statement of a file. */
+static const char* lm_skip_blanks(const char* p) {
+    for (;;) {
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v') p++;
+        if (p[0] == '(' && p[1] == '*') {
+            int depth = 1;
+            p += 2;
+            while (*p && depth > 0) {
+                if (p[0] == '(' && p[1] == '*') { depth++; p += 2; }
+                else if (p[0] == '*' && p[1] == ')') { depth--; p += 2; }
+                else p++;
+            }
+            continue;
+        }
+        return p;
+    }
+}
+
+/* Syntax::sntx for the statement starting at err in buffer: the rest of its
+ * line, and its 1-based line number in the file. */
+static void lm_syntax_message(const char* buffer, const char* err, const char* path) {
+    int line = 1;
+    for (const char* q = buffer; q < err; q++) if (*q == '\n') line++;
+    const char* eol = err;
+    while (*eol && *eol != '\n' && *eol != '\r') eol++;
+    int len = (int)(eol - err);
+    if (len > 200) len = 200;
+    mth_message("Syntax", "sntx", "Invalid syntax in or before \"%.*s\" (line %d of \"%s\").",
+                len, err, line, path);
+}
+
 Expr* mathilda_run_file(const char* path, int* opened) {
     FILE* fp = fopen(path, "r");
     if (!fp) {
@@ -107,8 +139,22 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     Expr* prev_input = mth_input_file_enter(path);
     const char* ptr = buffer;
     while (*ptr != '\0') {
+        const char* stmt_start = ptr;
+        int prev_quiet = parse_set_quiet(1);
         Expr* parsed = parse_next_expression(&ptr);
-        if (!parsed) break; /* EOF or unparseable: stop. */
+        parse_set_quiet(prev_quiet);
+        if (!parsed) {
+            /* End of input, or a syntax error: either way reading stops (as
+             * the reference does), but an error is reported, through the
+             * message funnel, and the result is Null. */
+            const char* err = lm_skip_blanks(stmt_start);
+            if (*err != '\0') {
+                lm_syntax_message(buffer, err, path);
+                expr_free(last_eval);
+                last_eval = expr_new_symbol(SYM_Null);
+            }
+            break;
+        }
         Expr* evaluated = evaluate(parsed);
         if (evaluated) {
             expr_free(last_eval);

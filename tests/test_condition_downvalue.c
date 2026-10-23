@@ -387,6 +387,38 @@ static void test_cond_freeq_false_blocks_compound(void) {
 
 /* ----- driver ----------------------------------------------------- */
 
+/* `/;` is LEFT-associative: `p /; c1 /; c2` is Condition[Condition[p, c1], c2].
+ * A chain of guards -- on the LHS, on the RHS (hoisted into the pattern), or
+ * inside a pattern -- applies every guard, innermost first. */
+static void test_condition_chain_left_assoc(void) {
+    assert_eval_eq("FullForm[Hold[a /; b /; c /; d]]", "Hold[Condition[Condition[Condition[a, b], c], d]]", 0);
+    assert_eval_eq("FullForm[Hold[f[x_] := y /; b /; c]]",
+                   "Hold[SetDelayed[f[Pattern[x, Blank[]]], Condition[Condition[y, b], c]]]", 0);
+    /* LHS chain. */
+    eval_and_drop("ClearAll[cca]");
+    eval_and_drop("cca[x_] /; x > 0 /; x < 5 := {\"in\", x}");
+    eval_and_drop("cca[x_] := {\"out\", x}");
+    assert_eval_eq("{cca[3], cca[7], cca[-1]}", "{{\"in\", 3}, {\"out\", 7}, {\"out\", -1}}", 0);
+    /* RHS chain: every guard is hoisted, the body is the innermost value. */
+    eval_and_drop("ClearAll[ccb]");
+    eval_and_drop("ccb[x_] := {\"in\", x} /; x > 0 /; x < 5");
+    eval_and_drop("ccb[x_] := {\"out\", x}");
+    assert_eval_eq("{ccb[3], ccb[7], ccb[-1]}", "{{\"in\", 3}, {\"out\", 7}, {\"out\", -1}}", 0);
+    /* Three guards; the later ones see the bindings of all arguments. */
+    eval_and_drop("ClearAll[ccc]");
+    eval_and_drop("ccc[x_, y_] /; x > 0 /; y > x /; EvenQ[y] := \"ok\"");
+    assert_eval_eq("{ccc[1, 2], ccc[1, 3], ccc[3, 2], ccc[-1, 2]}",
+                   "{\"ok\", ccc[1, 3], ccc[3, 2], ccc[-1, 2]}", 0);
+    /* Inside patterns. */
+    assert_eval_eq("{MatchQ[3, x_ /; x > 0 /; x < 5], MatchQ[7, x_ /; x > 0 /; x < 5]}", "{True, False}", 0);
+    assert_eval_eq("Cases[{-1, 2, 4, 6, 9}, x_ /; x > 0 /; x < 5]", "{2, 4}", 0);
+    assert_eval_eq("{1, 2, 3, 4} /. x_ /; x > 1 /; x < 4 :> 0", "{1, 0, 0, 4}", 0);
+    /* UpValue (TagSetDelayed) with a guard chain. */
+    eval_and_drop("ClearAll[ccu]");
+    eval_and_drop("ccu /: ccg[ccu, n_] /; n > 0 /; n < 3 := \"up\"");
+    assert_eval_eq("{ccg[ccu, 1], ccg[ccu, 5]}", "{\"up\", ccg[ccu, 5]}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -414,6 +446,7 @@ int main(void) {
     TEST(test_cond_freeq_false_blocks_compound);
     TEST(test_crc_table_formula_fires);
 
+    TEST(test_condition_chain_left_assoc);
     printf("All Condition-DownValue dispatch tests passed!\n");
     return 0;
 }

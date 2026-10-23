@@ -4,6 +4,7 @@
 #include "test_utils.h"
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "symtab.h"
 #include "core.h"
 #include "eval.h"
@@ -840,6 +841,136 @@ void test_string_line_continuation() {
     assert_eval_eq("ToExpression[\"\\\"p\\\\\nq\\\"\"]", "\"pq\"", 0);
 }
 
+/* The statement reader (parse_next_expression, used by Get and -file): the
+ * FullForm of each statement it yields from `src`, joined by " | ". */
+static void statements_of(const char* src, char* out, size_t cap) {
+    out[0] = '\0';
+    const char* p = src;
+    for (int k = 0; k < 16; k++) {
+        Expr* e = parse_next_expression(&p);
+        if (!e) break;
+        char* t = expr_to_string_fullform(e);
+        if (k) strncat(out, " | ", cap - strlen(out) - 1);
+        strncat(out, t, cap - strlen(out) - 1);
+        free(t);
+        expr_free(e);
+    }
+}
+
+static void assert_statement_list(const char* src, const char* expected) {
+    char got[2048];
+    statements_of(src, got, sizeof got);
+    if (strcmp(got, expected) != 0) {
+        printf("FAIL statements: %s\n  Expected: %s\n  Actual:   %s\n", src, expected, got);
+        ASSERT(0);
+    }
+}
+
+/* A top-level `;` ends a statement unless what follows can only continue an
+ * expression: then the `;` is CompoundExpression with an implicit Null and that
+ * compound is the operator's left operand.  Every row's expected shape is the
+ * reference reader's (a reference CompoundExpression[a, s2] of two statements
+ * is the two statements here, which evaluate identically). */
+void test_statement_continuation_after_semicolon() {
+    static const char* const cases[][2] = {
+        { "a; // f", "f[CompoundExpression[a, Null]]" },
+        { "a; /. x -> 1", "ReplaceAll[CompoundExpression[a, Null], Rule[x, 1]]" },
+        { "a; //. x -> 1", "ReplaceRepeated[CompoundExpression[a, Null], Rule[x, 1]]" },
+        { "a; -> b", "Rule[CompoundExpression[a, Null], b]" },
+        { "a; :> b", "RuleDelayed[CompoundExpression[a, Null], b]" },
+        { "a; == b", "Equal[CompoundExpression[a, Null], b]" },
+        { "a; === b", "SameQ[CompoundExpression[a, Null], b]" },
+        { "a; && b", "And[CompoundExpression[a, Null], b]" },
+        { "a; || b", "Or[CompoundExpression[a, Null], b]" },
+        { "a; &", "Function[CompoundExpression[a, Null]]" },
+        { "a; @@ b", "Apply[CompoundExpression[a, Null], b]" },
+        { "a; /@ b", "Map[CompoundExpression[a, Null], b]" },
+        { "a; @ b", "CompoundExpression[a, Null][b]" },
+        { "a; ^ b", "Power[CompoundExpression[a, Null], b]" },
+        { "a; * b", "Times[CompoundExpression[a, Null], b]" },
+        { "a; > b", "Greater[CompoundExpression[a, Null], b]" },
+        { "a; >= b", "GreaterEqual[CompoundExpression[a, Null], b]" },
+        { "a; < b", "Less[CompoundExpression[a, Null], b]" },
+        { "a; <= b", "LessEqual[CompoundExpression[a, Null], b]" },
+        { "a; <> b", "StringJoin[CompoundExpression[a, Null], b]" },
+        { "a; ~~ b", "StringExpression[CompoundExpression[a, Null], b]" },
+        { "a; | b", "Alternatives[CompoundExpression[a, Null], b]" },
+        { "a; := b", "SetDelayed[CompoundExpression[a, Null], b]" },
+        { "a; = b", "Set[CompoundExpression[a, Null], b]" },
+        { "a; /; b /; c", "Condition[Condition[CompoundExpression[a, Null], b], c]" },
+        { "a; /; b; /; c", "Condition[CompoundExpression[Condition[CompoundExpression[a, Null], b], Null], c]" },
+        { "a; -b", "a | Times[-1, b]" },
+        { "a; !b", "a | Not[b]" },
+        { "a;;b", "Span[a, b]" },
+        { "a; <|x->1|>", "a | Association[Rule[x, 1]]" },
+        { "a; ::x", "MessageName[CompoundExpression[a, Null], \"x\"]" },
+        { "a; .5", "a | 0.5" },
+        { "a; +b", "a | Plus[b]" },
+        { "a; b", "a | b" },
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++)
+        assert_statement_list(cases[i][0], cases[i][1]);
+    /* The FeynCalc shape (SharedTools.m): a definition, `;/;` guard, and the
+     * statement after it still read as its own statement. */
+    assert_statement_list("FCFactorOut[expr_, pref_] := pref f[expr/pref];/; !MemberQ[{List}, Head[expr]];\nnext = 1",
+                      "Condition[CompoundExpression[SetDelayed[FCFactorOut[Pattern[expr, Blank[]], "
+                      "Pattern[pref, Blank[]]], Times[pref, f[Times[expr, Power[pref, -1]]]]], Null], "
+                      "Not[MemberQ[List[List], Head[expr]]]] | Set[next, 1]");
+    assert_statement_list("a; -= 2", "SubtractFrom[CompoundExpression[a, Null], 2]");
+    assert_statement_list("a; += 2", "AddTo[CompoundExpression[a, Null], 2]");
+    /* Statements still split at `;` -- the context-prologue guarantee. */
+    assert_statement_list("BeginPackage[\"P`\"]; foo; EndPackage[]",
+                      "BeginPackage[\"P`\"] | foo | EndPackage[]");
+    assert_statement_list("a := b; c := d", "SetDelayed[a, b] | SetDelayed[c, d]");
+    assert_statement_list("a;\n\nb;", "a | b");
+    /* A guard on the next line is a syntax error (the reference rejects it too):
+     * the reader yields the first statement, then stops. */
+    assert_statement_list("f[x_] := g[x];\n/; x > 0", "SetDelayed[f[Pattern[x, Blank[]]], g[x]]");
+}
+
+/* Get stops at a syntax error -- reporting Syntax::sntx through the message
+ * funnel (Quiet / Check see it) with the line number -- and returns Null; the
+ * parser's own diagnostics are not printed on top. */
+void test_get_syntax_error_reported() {
+    char path[128], src[512];
+    snprintf(path, sizeof path, "/tmp/Mathilda_parse_get_%d.m", (int)getpid());
+    FILE* fp = fopen(path, "w");
+    ASSERT(fp != NULL);
+    fputs("gsA = 1;\ngsB = (2 + ;\ngsC = 3;\n", fp);
+    fclose(fp);
+    snprintf(src, sizeof src, "{Quiet[Get[\"%s\"]], gsA, gsB, gsC}", path);
+    assert_eval_eq(src, "{Null, 1, gsB, gsC}", 0);
+    snprintf(src, sizeof src, "Check[Get[\"%s\"], \"caught\"]", path);
+    assert_eval_eq(src, "\"caught\"", 0);
+    /* An unfinished expression at end of file is an error too, not "complete". */
+    fp = fopen(path, "w");
+    ASSERT(fp != NULL);
+    fputs("gsD = 1;\ngsE = (1 + \n", fp);
+    fclose(fp);
+    snprintf(src, sizeof src, "{Quiet[Get[\"%s\"]], gsD, gsE}", path);
+    assert_eval_eq(src, "{Null, 1, gsE}", 0);
+    /* The `;/;` form loads, and the statements after it run. */
+    fp = fopen(path, "w");
+    ASSERT(fp != NULL);
+    fputs("gsF[x_] := gsG[x];/; x > 0;\ngsH = 5;\n", fp);
+    fclose(fp);
+    snprintf(src, sizeof src, "Get[\"%s\"]; {gsF[2], gsH}", path);
+    assert_eval_eq(src, "{gsG[2], 5}", 0);
+    /* With the guard on the next line: the first definition stands, then a
+     * syntax error stops the read (gsJ stays unset). */
+    fp = fopen(path, "w");
+    ASSERT(fp != NULL);
+    fputs("gsI[x_] := gsG[x];\n/; x > 0;\ngsJ = 5;\n", fp);
+    fclose(fp);
+    snprintf(src, sizeof src, "{Quiet[Get[\"%s\"]], gsI[2], gsJ}", path);
+    assert_eval_eq(src, "{Null, gsG[2], gsJ}", 0);
+    unlink(path);
+    /* ToExpression / SyntaxQ parse quietly: Quiet leaks nothing, Check sees the error. */
+    assert_eval_eq("Quiet[ToExpression[\"(1+\"]]", "$Failed", 0);
+    assert_eval_eq("Check[ToExpression[\"(1+\"], \"caught\"]", "\"caught\"", 0);
+    assert_eval_eq("SyntaxQ[\"(1+\"]", "False", 0);
+}
+
 void test_toexpression_line_statements() {
     assert_eval_eq("Quiet[ToExpression[\"a = 2\\n b = 3\", InputForm, Hold]]", "Hold[Set[a, 2], Set[b, 3]]", 1);
     assert_eval_eq("Quiet[ToExpression[\"1+\\n2\", InputForm, Hold]]", "Hold[Plus[1, 2]]", 1);
@@ -1106,6 +1237,8 @@ int main() {
     TEST(test_parse_colon_atom_level);
     TEST(test_toexpression_line_statements);
     TEST(test_string_line_continuation);
+    TEST(test_statement_continuation_after_semicolon);
+    TEST(test_get_syntax_error_reported);
 
     printf("\nAll parser tests passed!\n");
     return 0;

@@ -996,6 +996,37 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
     return true;
 }
 
+/* `lhs := body /; t1 /; t2` -- the delayed RHS Condition[Condition[body, t1], t2]
+ * -- is stored as the pattern Condition[Condition[lhs, t1], t2] with RHS body,
+ * so the guards run at match time, innermost first, exactly as the same chain
+ * written on the LHS (`lhs /; t1 /; t2 := body`).  Returns the pattern: lhs
+ * itself when the RHS has no guard (borrowed), else a new tree the caller
+ * frees; *body is set to the RHS to store (borrowed from rhs). */
+static Expr* hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body) {
+    size_t n = 0;
+    Expr* g = rhs;
+    while (g->type == EXPR_FUNCTION && g->data.function.head->type == EXPR_SYMBOL &&
+           g->data.function.head->data.symbol.name == SYM_Condition && g->data.function.arg_count == 2) {
+        n++;
+        g = g->data.function.args[0];
+    }
+    *body = g;
+    if (n == 0) return lhs;
+    Expr** guards = malloc(n * sizeof(Expr*));
+    g = rhs;
+    for (size_t k = 0; k < n; k++) {             /* outermost first */
+        guards[k] = g->data.function.args[1];
+        g = g->data.function.args[0];
+    }
+    Expr* pat = expr_copy(lhs);
+    for (size_t k = n; k-- > 0; ) {              /* innermost guard nearest lhs */
+        Expr* a[2] = { pat, expr_copy(guards[k]) };
+        pat = expr_new_function(expr_new_symbol(SYM_Condition), a, 2);
+    }
+    free(guards);
+    return pat;
+}
+
 /*
  * apply_assignment:
  * Helper to handle the 'Set' (=) and 'SetDelayed' (:=) primitives.
@@ -1261,22 +1292,16 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             /* If the RHS is Condition[body, test], move the condition to the LHS.
              * This makes f[x_] := body /; test equivalent to f[x_] /; test := body.
              * This is standard Mathematica semantics. */
-            if (is_delayed && rhs->type == EXPR_FUNCTION &&
-                rhs->data.function.head->type == EXPR_SYMBOL &&
-                rhs->data.function.head->data.symbol.name == SYM_Condition &&
-                rhs->data.function.arg_count == 2) {
-                /* Build Condition[lhs, test] as the new pattern */
-                Expr** cond_args = malloc(sizeof(Expr*) * 2);
-                cond_args[0] = expr_copy(lhs);
-                cond_args[1] = expr_copy(rhs->data.function.args[1]);
-                actual_pattern = expr_new_function(expr_new_symbol(SYM_Condition), cond_args, 2);
-                free(cond_args);
-                /* The actual replacement is just the body */
-                actual_rhs = rhs->data.function.args[0];
-            }
+            if (is_delayed)
+                actual_pattern = hoist_rhs_conditions(lhs, rhs, &actual_rhs);
 
             if (symbol_name == SYM_Condition && actual_pattern->data.function.arg_count == 2) {
+                /* `lhs /; c1 /; c2` nests to the LEFT: peel every guard. */
                 Expr* inner_lhs = actual_pattern->data.function.args[0];
+                while (inner_lhs->type == EXPR_FUNCTION && inner_lhs->data.function.head->type == EXPR_SYMBOL &&
+                       inner_lhs->data.function.head->data.symbol.name == SYM_Condition &&
+                       inner_lhs->data.function.arg_count == 2)
+                    inner_lhs = inner_lhs->data.function.args[0];
                 if (inner_lhs->type == EXPR_FUNCTION && inner_lhs->data.function.head->type == EXPR_SYMBOL) {
                     symbol_name = inner_lhs->data.function.head->data.symbol.name;
                 } else if (inner_lhs->type == EXPR_SYMBOL) {
@@ -1384,7 +1409,7 @@ static const char* element_dispatch_head(Expr* a) {
 static int collect_level_one_symbols(Expr* lhs, const char** out, int cap) {
     int n = 0;
     if (!lhs) return 0;
-    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+    while (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.head->data.symbol.name == SYM_Condition &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
@@ -1408,7 +1433,7 @@ bool upvalue_renders_as_upset(const char* tag, Expr* lhs) {
     const char* syms[UP_MAX_LEVEL1];
     int n = collect_level_one_symbols(lhs, syms, UP_MAX_LEVEL1);
     if (n != 1 || syms[0] != tag) return false;
-    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+    while (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.head->data.symbol.name == SYM_Condition &&
         lhs->data.function.arg_count >= 1)
         lhs = lhs->data.function.args[0];
@@ -1429,7 +1454,7 @@ static TagPos classify_tag_position(const char* tag, Expr* lhs) {
     /* A Condition wrapper (lhs /; test) is part of the pattern, not a position
      * for the tag -- classify against the underlying lhs so e.g.
      * `xr /: xr + y_ /; y > -2 := ...` finds xr inside the held Plus. */
-    if (lhs->type == EXPR_FUNCTION &&
+    while (lhs->type == EXPR_FUNCTION &&
         lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.head->data.symbol.name == SYM_Condition &&
         lhs->data.function.arg_count >= 1)
@@ -1455,20 +1480,11 @@ static TagPos classify_tag_position(const char* tag, Expr* lhs) {
  * caller frees it); *body is set to the RHS to store (borrowed either way). */
 static Expr* move_rhs_condition(Expr* lhs, Expr* rhs, bool is_delayed,
                                 bool* owned, Expr** body) {
-    *owned = false;
     *body = rhs;
-    if (is_delayed && rhs->type == EXPR_FUNCTION &&
-        rhs->data.function.head->type == EXPR_SYMBOL &&
-        rhs->data.function.head->data.symbol.name == SYM_Condition &&
-        rhs->data.function.arg_count == 2) {
-        Expr* cond_args[2] = { expr_copy(lhs),
-                               expr_copy(rhs->data.function.args[1]) };
-        Expr* pat = expr_new_function(expr_new_symbol(SYM_Condition), cond_args, 2);
-        *owned = true;
-        *body = rhs->data.function.args[0];
-        return pat;
-    }
-    return lhs;
+    if (!is_delayed) { *owned = false; return lhs; }
+    Expr* pat = hoist_rhs_conditions(lhs, rhs, body);
+    *owned = (pat != lhs);
+    return pat;
 }
 
 /* lhs ^= rhs / lhs ^:= rhs : install the rule on the up_values of every distinct

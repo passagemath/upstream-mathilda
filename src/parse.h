@@ -62,4 +62,8 @@ Expr* parse_next_expression(const char** input_ptr);
 Expr* parse_statement_sequence(const char* input, int line_statements,
                                const char** err_pos);
 
+/* Suppress (quiet = 1) or restore the parser's own syntax-error printing;
+ * returns the previous setting.  A failed parse still returns NULL. */
+int parse_set_quiet(int quiet);
+
 #endif // PARSE_H

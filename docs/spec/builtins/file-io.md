@@ -18,6 +18,12 @@ Reads a sequence of Mathilda expressions from a file, evaluates each in order, a
   (`AppendTo[$Path, "dir"]`). Non-string and empty entries are skipped.
 - Returns `$Failed`, with `Get::noopen` (Quiet/Check-aware), if the file cannot
   be found or opened.
+- **Syntax errors.** At a syntax error `Get` emits `Syntax::sntx` (with the
+  offending text and its line number), stops reading, and returns `Null`.
+  The statements before the error keep their effect. The message goes through
+  the funnel, so `Quiet` and `Check` see it, and the parser's own diagnostics
+  are not printed as well. The statement-splitting rules, including
+  `lhs := rhs;/; cond` on one line, are in `docs/spec/operators.md`.
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
 - Files conventionally end with `.m`.
 

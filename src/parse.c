@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <gmp.h>
 #include "numeric.h"
@@ -46,7 +47,31 @@ typedef struct {
                         // a top-level parse ws_start is the tight end of the
                         // statement, before the whitespace and line breaks the
                         // infix loop skipped while looking for an operator.
+    Expr* seed_left;    // When non-NULL, parse_expression_prec takes it (owned)
+                        // as its already-parsed left operand and goes straight
+                        // to the infix loop -- how parse_next_expression
+                        // continues `lhs := rhs;/; cond` past a statement `;`.
 } ParserState;
+
+/* Quiet mode: syntax errors are not printed, only signalled by the NULL result,
+ * so a caller that reports through the message funnel (Get, ToExpression,
+ * SyntaxQ) is not doubled by -- or, under Quiet[], leaked through -- the
+ * parser's own diagnostics.  Out-of-memory notes are always printed. */
+static int g_parse_quiet = 0;
+
+int parse_set_quiet(int quiet) {
+    int prev = g_parse_quiet;
+    g_parse_quiet = quiet;
+    return prev;
+}
+
+static void parse_err(const char* fmt, ...) {
+    if (g_parse_quiet) return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
 
 /* Record the half-open byte range [start, end) of one subexpression into the
  * sink. No-op when no sink is attached (the normal path) or the range is empty.
@@ -399,7 +424,7 @@ static Expr* build_precision_literal(const char* mantissa_str, double digits,
     (void)accuracy_mode; (void)digits;
     static bool warned = false;
     if (!warned) {
-        fprintf(stderr,
+        parse_err(
                 "parser: precision literal ignored (USE_MPFR=0); using "
                 "machine precision.\n");
         warned = true;
@@ -741,7 +766,7 @@ static Expr* parse_number(ParserState* s) {
         const char* exp_start = s->pos;
         while (isdigit((unsigned char)*s->pos)) s->pos++;
         if (s->pos == exp_start) {
-            fprintf(stderr, "Expected exponent digits after '*^'\n");
+            parse_err( "Expected exponent digits after '*^'\n");
             s->pos = save;
             expr_free(result);
             return NULL;
@@ -749,7 +774,7 @@ static Expr* parse_number(ParserState* s) {
         errno = 0;
         long exp_val = strtol(exp_start, NULL, 10);
         if (errno == ERANGE) {
-            fprintf(stderr, "Exponent in '*^' suffix out of range\n");
+            parse_err( "Exponent in '*^' suffix out of range\n");
             expr_free(result);
             return NULL;
         }
@@ -917,7 +942,7 @@ static Expr* parse_string(ParserState* s) {
 
     if (*s->pos != '"') {
         if (buffer != stackbuf) free(buffer);
-        fprintf(stderr, "Unterminated string\n");
+        parse_err( "Unterminated string\n");
         return NULL;
     }
     s->pos++;  // Skip closing quote
@@ -965,7 +990,7 @@ static Expr** parse_sequence(ParserState* s, char close, const char* what,
 
             if (*s->pos == ',') { s->pos++; continue; }
             if (*s->pos == close) break;
-            fprintf(stderr, "Expected '%c' to close %s\n", close, what);
+            parse_err( "Expected '%c' to close %s\n", close, what);
             goto fail;                                  /* junk or EOF */
         }
     }
@@ -1027,7 +1052,7 @@ static Expr* parse_association(ParserState* s) {
     }
 
     if (strncmp(s->pos, "|>", 2) != 0) {
-        fprintf(stderr, "Expected '|>' to close association\n");
+        parse_err( "Expected '|>' to close association\n");
         while (count--) expr_free(entries[count]);
         free(entries);
         return NULL;
@@ -1207,7 +1232,7 @@ static OperatorDef get_operator(const char* pos) {
          * bytes E2 86 92. */
         def.type = OP_RULE; def.prec = 1500; def.right_assoc = 1; def.head_name = "Rule"; def.len = 3;
     } else if (strncmp(pos, "/;", 2) == 0) {
-        def.type = OP_CONDITION; def.prec = 1700; def.right_assoc = 1; def.head_name = "Condition"; def.len = 2;
+        def.type = OP_CONDITION; def.prec = 1700; def.right_assoc = 0; def.head_name = "Condition"; def.len = 2;
     } else if (strncmp(pos, ";;", 2) == 0) {
         def.type = OP_SPAN; def.prec = 3200; def.right_assoc = 0; def.head_name = "Span"; def.len = 2;
     } else if (*pos == ';') {
@@ -1430,7 +1455,7 @@ static Expr* parse_primary(ParserState* s) {
             if (*s->pos == ')') {
                 s->pos++;
             } else {
-                fprintf(stderr, "Expected ')'\n");
+                parse_err( "Expected ')'\n");
             }
             close_bracket(s);
             return inner;
@@ -1565,7 +1590,7 @@ static Expr* parse_primary(ParserState* s) {
             if (isdigit(*s->pos) || ((*s->pos == '-' || *s->pos == '+') && (isdigit(s->pos[1]) || (s->pos[1] == '.' && isdigit(s->pos[2])))) || (*s->pos == '.' && isdigit(s->pos[1]))) {
                 return parse_number(s);
             }
-            fprintf(stderr, "Unexpected character: '%c'\n", *s->pos);
+            parse_err( "Unexpected character: '%c'\n", *s->pos);
             return NULL;
     }
 }
@@ -1628,6 +1653,16 @@ static bool flat_continuation(const Expr* left, const OperatorDef* op) {
 
 // Pratt parser for operator precedence
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
+    const char* left_start;
+    Expr* left = NULL;
+    bool left_bare_compare = false;
+    if (s->seed_left) {
+        /* A caller-supplied left operand: straight to the infix loop. */
+        left = s->seed_left;
+        s->seed_left = NULL;
+        left_start = s->pos;
+        goto infix_loop;
+    }
     skip_whitespace(s);
     if (!*s->pos) return NULL;
     /* No expression token follows a closing delimiter, a comma, or a
@@ -1648,9 +1683,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         (*s->pos == ';' && s->pos[1] != ';')) return NULL;
 
     /* Start of this (sub)expression, for structural-selection span recording. */
-    const char* left_start = s->pos;
+    left_start = s->pos;
 
-    Expr* left = NULL;
     /* Did `left` come from an UNPARENTHESISED chainable comparison at this level?
      *
      * Chained comparisons are folded into one variadic Inequality, and the fold used to decide by
@@ -1664,8 +1698,6 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
      * Plus/Times flattening a few branches below has the same shape and is harmless there, because
      * Plus is associative so `(a + b) + c` and `a + b + c` mean the same thing. Chaining changes
      * MEANING, so comparisons need the provenance tracked rather than guessed. */
-    bool left_bare_compare = false;
-    
     if (*s->pos == '?') {
         s->pos++;
         /* `?Name` looks up one docstring; `?Pat*` searches the symbol table.
@@ -1750,7 +1782,8 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     }
     
     if (!left) return NULL;
-    
+
+infix_loop:
     while (1) {
         /* End of `left` at its current extent, captured BEFORE the trailing
          * whitespace is skipped so a recorded span's end is tight. */
@@ -1826,7 +1859,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 }
                 buf[bi] = '\0';
                 if (bi == 0) {
-                    fprintf(stderr, "Expected message tag after '::'\n");
+                    parse_err( "Expected message tag after '::'\n");
                     expr_free(left);
                     return NULL;
                 }
@@ -1857,7 +1890,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 skip_whitespace(s);
             }
             if (strncmp(s->pos, "]]", 2) != 0) {
-                fprintf(stderr, "Expected ']]'\n");
+                parse_err( "Expected ']]'\n");
                 while (count--) expr_free(args[count]);
                 return NULL;
             }
@@ -1934,7 +1967,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 }
                 buf[bi] = '\0';
                 if (bi == 0) {
-                    fprintf(stderr, "Expected filename after %s\n",
+                    parse_err( "Expected filename after %s\n",
                             op_def.head_name);
                     expr_free(left);
                     return NULL;
@@ -2014,7 +2047,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 left = expr_new_function(expr_new_symbol(SYM_TagSet), ta, 3);
                 continue;
             } else {
-                fprintf(stderr, "Expected '=', ':=' or '=.' after /: (TagSet)\n");
+                parse_err( "Expected '=', ':=' or '=.' after /: (TagSet)\n");
                 expr_free(tag); expr_free(tlhs);
                 return NULL;
             }
@@ -2185,13 +2218,13 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input, 0, 0, NULL, 0, 0, NULL, NULL};
+    ParserState state = {input, input, 0, 0, NULL, 0, 0, NULL, NULL, NULL};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
     skip_whitespace(&state);
     if (*state.pos != '\0') {
-        fprintf(stderr, "Extra characters after expression: %s\n", state.pos);
+        parse_err( "Extra characters after expression: %s\n", state.pos);
         expr_free(result);
         return NULL;
     }
@@ -2199,9 +2232,31 @@ Expr* parse_expression(const char* input) {
     return result;
 }
 
+/* Can the text at p only continue an expression -- does it start a binary or
+ * postfix operator that no expression can begin with (`a; ::x` is a MessageName
+ * of the compound, too)?  `+`, `-`, `!`, `.`
+ * (a number), `?`, `'` and `;;` are excluded: each may begin a new statement. */
+static bool starts_binary_operator(const char* p) {
+    switch (p[0]) {
+        case '*': case '/': case '^': case '=': case '>': case '|':
+        case '&': case '@': case '~':
+            return true;
+        case ':':                               /* := :> :: (MessageName) */
+            return true;
+        case '<':
+            return p[1] != '|';                 /* <| begins an association */
+        case '-':
+            return p[1] == '>' || p[1] == '=';  /* -> and -= ; -x is a new statement */
+        case '+':
+            return p[1] == '=';                 /* += ; +x is a new statement */
+        default:
+            return false;
+    }
+}
+
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL, NULL};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
@@ -2221,6 +2276,30 @@ Expr* parse_next_expression(const char** input_ptr) {
      * CompoundExpression up front (prec 0), every symbol would be resolved
      * under the context in force before BeginPackage had a chance to run. */
     Expr* result = parse_expression_prec(&state, 101);
+
+    /* A statement normally ends at a top-level ';'.  But when what follows the
+     * ';' can only CONTINUE an expression -- a binary or postfix operator such
+     * as `/;`, `//`, `/.`, `->`, `:=`, `==`, `&&`, `&` -- the ';' is the
+     * CompoundExpression operator with an implicit Null, and that compound is
+     * the operator's left operand: `f[x_] := g[x];/; x > 0` is
+     * Condition[CompoundExpression[f[x_] := g[x], Null], x > 0], as the
+     * reference reader parses it.  Repeat for a chain of such continuations.  The
+ * operator must be on the same line as the `;`. */
+    while (result) {
+        skip_whitespace(&state);
+        if (!(*state.pos == ';' && state.pos[1] != ';')) break;
+        ParserState peek = state;
+        peek.pos++;
+        peek.saw_newline = 0;
+        skip_whitespace(&peek);
+        /* Only on the same line: across a line break the `;` has ended a
+         * complete statement, and a leading operator is a syntax error. */
+        if (peek.saw_newline || !starts_binary_operator(peek.pos)) break;
+        Expr* cargs[2] = { result, expr_new_symbol(SYM_Null) };
+        state.seed_left = expr_new_function(expr_new_symbol(SYM_CompoundExpression), cargs, 2);
+        state.pos = peek.pos;
+        result = parse_expression_prec(&state, 101);
+    }
 
     /* Consume one trailing top-level ';' separator so the next call begins at
      * the following statement. */
@@ -2282,7 +2361,7 @@ Expr* parse_statement_sequence(const char* input, int line_statements,
              * whitespace: start one bracket level deep so no newline can
              * terminate the expression, and require it to fill the input. */
             ParserState st = {input, p, line_statements ? 0 : 1, 0, NULL, 0,
-                              line_statements, NULL, NULL};
+                              line_statements, NULL, NULL, NULL};
             stmt = parse_expression_prec(&st, 0);
             int ok = stmt != NULL;
             if (ok && line_statements) {
@@ -2337,7 +2416,7 @@ MthSpanSink* mth_parse_spans(const char* input) {
     if (!sink || !input) return sink;
     const char* p = input;
     while (*p) {
-        ParserState state = {input, p, 0, 0, sink, 0, 0, NULL, NULL};
+        ParserState state = {input, p, 0, 0, sink, 0, 0, NULL, NULL, NULL};
         /* Skip leading whitespace, comments, and empty ';' separators. */
         for (;;) {
             skip_whitespace(&state);

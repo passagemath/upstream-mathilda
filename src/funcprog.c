@@ -2496,6 +2496,133 @@ Expr* builtin_permutations(Expr* res) {
     return final_res;
 }
 
+/* Is e List[...] (any length)? */
+static bool permute_is_list(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_List;
+}
+
+static void permute_message(const char* tag, const char* fmt, const Expr* x, int64_t a, int64_t b) {
+    char* txt = expr_to_string_outputform((Expr*)x);
+    if (strcmp(tag, "lowlen") == 0)
+        mth_message("Permute", tag, fmt, a, b, txt ? txt : "");
+    else
+        mth_message("Permute", tag, fmt, txt ? txt : "");
+    free(txt);
+}
+
+/*
+ * Permute[expr, perm] -- move the element at position i of expr to position
+ * perm(i).  perm is a permutation list {p1, ..., pk} (pi moves element i;
+ * positions beyond k stay put) or Cycles[{{c1, c2, ...}, ...}] (the element
+ * at c1 moves to c2, c2 to c3, ..., the last to c1).  Any head is kept.
+ * An invalid permutation gives Permute::permlist; one that moves a position
+ * past the end of expr gives Permute::lowlen.  Other perm forms (e.g. a
+ * PermutationGroup) leave the call unevaluated.
+ */
+Expr* builtin_permute(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2) return builtin_arg_error("Permute", argc, 2, 2);
+    Expr* x = res->data.function.args[0];
+    Expr* perm = res->data.function.args[1];
+    if (is_ndarray(x)) return ndarray_delist_and_reeval(res);
+    if (x->type != EXPR_FUNCTION) return NULL;
+    size_t n = x->data.function.arg_count;
+
+    /* dest[i] = 0-based target of the element at 0-based position i. */
+    size_t* dest = malloc((n ? n : 1) * sizeof(size_t));
+    for (size_t i = 0; i < n; i++) dest[i] = i;
+    int64_t maxpos = 0;
+    bool ok = true;
+
+    if (permute_is_list(perm)) {
+        size_t k = perm->data.function.arg_count;
+        unsigned char* seen = calloc(k ? k : 1, 1);
+        for (size_t i = 0; i < k && ok; i++) {
+            Expr* p = perm->data.function.args[i];
+            ok = p->type == EXPR_INTEGER && p->data.integer >= 1 && (size_t)p->data.integer <= k
+                 && !seen[p->data.integer - 1];
+            if (ok) seen[p->data.integer - 1] = 1;
+        }
+        free(seen);
+        if (!ok) {
+            permute_message("permlist", "Invalid permutation list %s.", perm, 0, 0);
+            free(dest);
+            return NULL;
+        }
+        /* Fixed points beyond the length are harmless; a moved position is not. */
+        for (size_t i = 0; i < k; i++)
+            if (perm->data.function.args[i]->data.integer != (int64_t)i + 1) {
+                if ((int64_t)i + 1 > maxpos) maxpos = (int64_t)i + 1;
+                if (perm->data.function.args[i]->data.integer > maxpos)
+                    maxpos = perm->data.function.args[i]->data.integer;
+            }
+        if (maxpos > (int64_t)n) {
+            permute_message("lowlen", "Required length %lld is smaller than maximum %lld of support of %s.",
+                            perm, (long long)n, (long long)maxpos);
+            free(dest);
+            return NULL;
+        }
+        for (size_t i = 0; i < k && i < n; i++)
+            dest[i] = (size_t)perm->data.function.args[i]->data.integer - 1;
+    } else if (perm->type == EXPR_FUNCTION && perm->data.function.head->type == EXPR_SYMBOL
+               && strcmp(perm->data.function.head->data.symbol.name, "Cycles") == 0
+               && perm->data.function.arg_count == 1
+               && permute_is_list(perm->data.function.args[0])) {
+        Expr* cyc = perm->data.function.args[0];
+        /* Validate: lists of distinct positive integers, disjoint across cycles. */
+        for (size_t c = 0; c < cyc->data.function.arg_count && ok; c++) {
+            Expr* cl = cyc->data.function.args[c];
+            ok = permute_is_list(cl);
+            for (size_t j = 0; ok && j < cl->data.function.arg_count; j++) {
+                Expr* p = cl->data.function.args[j];
+                ok = p->type == EXPR_INTEGER && p->data.integer >= 1;
+                if (ok && p->data.integer > maxpos) maxpos = p->data.integer;
+            }
+        }
+        if (ok && maxpos > 0) {
+            unsigned char* seen = calloc((size_t)maxpos, 1);
+            for (size_t c = 0; c < cyc->data.function.arg_count && ok; c++) {
+                Expr* cl = cyc->data.function.args[c];
+                for (size_t j = 0; ok && j < cl->data.function.arg_count; j++) {
+                    int64_t v = cl->data.function.args[j]->data.integer;
+                    ok = !seen[v - 1];
+                    seen[v - 1] = 1;
+                }
+            }
+            free(seen);
+        }
+        if (!ok) {
+            free(dest);
+            return NULL;
+        }
+        if (maxpos > (int64_t)n) {
+            permute_message("lowlen", "Required length %lld is smaller than maximum %lld of support of %s.",
+                            perm, (long long)n, (long long)maxpos);
+            free(dest);
+            return NULL;
+        }
+        for (size_t c = 0; c < cyc->data.function.arg_count; c++) {
+            Expr* cl = cyc->data.function.args[c];
+            size_t m = cl->data.function.arg_count;
+            for (size_t j = 0; j < m; j++)
+                dest[cl->data.function.args[j]->data.integer - 1] =
+                    (size_t)cl->data.function.args[(j + 1) % m]->data.integer - 1;
+        }
+    } else {
+        free(dest);
+        return NULL;
+    }
+
+    Expr** out = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) out[dest[i]] = expr_copy(x->data.function.args[i]);
+    free(dest);
+    Expr* r = expr_new_function(expr_copy(x->data.function.head), out, n);
+    free(out);
+    return r;
+}
+
 /* ================================================================= *
  * Shared iteration machinery for Nest/NestList, Fold/FoldList,
  * NestWhile/NestWhileList, and FixedPoint/FixedPointList.

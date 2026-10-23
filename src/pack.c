@@ -686,6 +686,10 @@ static void pack_mark_aware_heads(void) {
          * int64. It now dedups on the machine words -- direct-indexed when the
          * value range is bounded, an inline-key hash set otherwise. */
         "DeleteDuplicates",
+        /* The set predicates. Two int64 buffers intersect, and one int64
+         * buffer dedups, on the machine words (setop_packed /
+         * setop_packed_delete_duplicates); every other shape delists. */
+        "IntersectingQ", "DuplicateFreeQ",
         /* Clip came BACK on 2026-07-31. It was pulled because an exact bound
          * makes Clip[reals, {1, 2}] answer with exact Integers where it clipped,
          * which no uniform buffer holds -- but clearing the whole head to fix the
@@ -1169,6 +1173,9 @@ static void pack_mark_aware_heads(void) {
          * differently, so over Reals WHICH of two equal elements survives would
          * differ between the buffer and the List path. */
         "Union", "Intersection", "Complement", "DeleteDuplicates",
+        /* The set predicates answer True/False, so an int64 buffer cannot
+         * change any element's head. */
+        "IntersectingQ", "DuplicateFreeQ",
         /* The narrowing kernels. Exact on an int64 buffer because that arm is
          * written in int64 throughout: Floor/Ceiling/Round/IntegerPart are the
          * identity on an integer, Sign and UnitStep are trivial comparisons, and

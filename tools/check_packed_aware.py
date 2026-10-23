@@ -45,6 +45,10 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "Permute": "structural reorder with no buffer kernel (src/funcprog.c). Its "
+    "ndarray_delist_and_reeval branch exists only so a VISIBLE NDArray is answered "
+    "rather than left unevaluated; for a packed argument the gate's materialisation "
+    "is exactly the work that delist would do, so going on AWARE would buy nothing.",
     "StandardForm": "inert display wrapper -- StandardForm and TraditionalForm "
     "both register builtin_display_form (src/core.c), which returns NULL and has "
     "NO evaluation-time NDArray path. The EXPR_NDARRAY the audit attributes here "

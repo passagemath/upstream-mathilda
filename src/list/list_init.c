@@ -260,6 +260,15 @@ void list_init(void) {
     symtab_get_def("Intersection")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
     symtab_get_def("Complement")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DeleteDuplicates")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("IntersectingQ", builtin_intersectingq);
+    symtab_get_def("IntersectingQ")->attributes |= ATTR_PROTECTED;
+    {
+        Expr* ra[2] = { expr_new_symbol(SYM_SameTest), expr_new_symbol(SYM_Automatic) };
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), ra, 2);
+        symtab_set_options("IntersectingQ", expr_new_function(expr_new_symbol(SYM_List), &rule, 1));
+    }
+    symtab_add_builtin("DuplicateFreeQ", builtin_duplicatefreeq);
+    symtab_get_def("DuplicateFreeQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Split")->attributes |= ATTR_PROTECTED;
     symtab_get_def("SplitBy")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Total")->attributes |= ATTR_PROTECTED;

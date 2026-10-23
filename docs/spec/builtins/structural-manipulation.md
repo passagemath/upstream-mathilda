@@ -623,6 +623,28 @@ In[1]:= DeleteDuplicates[{a, a, b, a, c, b, a}]
 Out[1]= {a, b, c}
 ```
 
+## IntersectingQ
+`IntersectingQ[a, b]` gives `True` if `a` and `b` have at least one element in
+common, and `False` otherwise.
+- Elements are compared with `SameQ`, so `1` and `1.` differ.
+- `SameTest -> f` counts `x` and `y` as common when `f[x, y] === True`.
+- `a` and `b` may have any head, but it must be the same head for both. A
+  mismatch emits `IntersectingQ::heads`; an atom emits `IntersectingQ::lsa`.
+- `Protected`. Options: `SameTest -> Automatic`.
+- Performance: the default test hashes `b` and probes `a`. Two packed int64
+  lists intersect on their machine words, and any other packed or `NDArray`
+  shape is delisted. `SameTest` is O(|a| |b|).
+
+## DuplicateFreeQ
+`DuplicateFreeQ[list]` gives `True` if no two elements of `list` are the same
+(`SameQ`), and `False` otherwise.
+- `DuplicateFreeQ[list, test]` counts `x` and `y` as the same when
+  `test[x, y]` gives `True`.
+- Any head is accepted. An atom emits `DuplicateFreeQ::normal`.
+- `Protected`.
+- Performance: one hash pass that stops at the first repeat. A packed int64
+  list is checked on its machine words.
+
 ## Tally
 Counts occurrences of elements.
 - `Tally[list]`

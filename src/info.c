@@ -2606,6 +2606,15 @@ void info_init(void) {
         "\tuses f[a, b] to decide whether elements a and b are the same.");
     symtab_set_docstring("Tally", "Tally[list] counts the number of occurrences of each distinct element in list.");
     symtab_set_docstring("Commonest", "Commonest[list] gives a list of the elements that are the most common in list.\nCommonest[list, n] gives a list of the n most common elements in list.");
+    symtab_set_docstring("IntersectingQ",
+        "IntersectingQ[a, b]\n"
+        "\tgives True if a and b have at least one element in common, and False otherwise.\n"
+        "Elements are compared with SameQ; the option SameTest -> f uses f[x, y] === True instead.\n"
+        "a and b must have the same head.");
+    symtab_set_docstring("DuplicateFreeQ",
+        "DuplicateFreeQ[list]\n"
+        "\tgives True if no two elements of list are the same (SameQ), and False otherwise.\n"
+        "DuplicateFreeQ[list, test] treats x and y as the same when test[x, y] gives True.");
     symtab_set_docstring("DeleteDuplicates",
         "DeleteDuplicates[list]\n"
         "\treturns list with duplicate elements removed, keeping the first\n"
@@ -5320,6 +5329,11 @@ void info_init(void) {
     symtab_set_docstring("Inner", "Inner[f,list1,list2,g]\n\tis a generalization of Dot in which f plays the role of multiplication and g of addition.\nInner[f,list1,list2]\n\tuses Plus for g.\nInner[f,list1,list2,g,n]\n\tcontracts index n of the first tensor with the first index of the second tensor.");
     symtab_set_docstring("Outer", "Outer[f,list1,list2,...]\n\tgives the generalized outer product of the listi, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to f.\nOuter[f,list1,list2,...,n]\n\ttreats as separate elements only sublists at level n in the listi.\nOuter[f,list1,list2,...,n1,n2,...]\n\ttreats as separate elements only sublists at level ni in the corresponding listi.");
     symtab_set_docstring("Tuples", "Tuples[list,n]\n\tgenerates a list of all possible n-tuples of elements from list.\nTuples[{list1,list2,...}]\n\tgenerates a list of all possible tuples whose ith element is from listi.\nTuples[list,{n1,n2,...}]\n\tgenerates a list of all possible n1 x n2 x ... arrays of elements in list.");
+    symtab_set_docstring("Permute",
+        "Permute[expr, perm]\n"
+        "\tpermutes the elements of expr: the element at position i moves to position perm[[i]].\n"
+        "perm is a permutation list {p1, ..., pk} or Cycles[{{c1, c2, ...}, ...}], under which the\n"
+        "element at c1 moves to c2, c2 to c3, and the last back to c1.  The head of expr is kept.");
     symtab_set_docstring("Permutations", "Permutations[list]\n\tgenerates a list of all possible permutations of the elements in list.\nPermutations[list,n]\n\tgives all permutations containing at most n elements.\nPermutations[list,{n}]\n\tgives all permutations containing exactly n elements.");
     symtab_set_docstring("Min", "Min[x1, x2, ...]\n\tyields the numerically smallest of the xi.\nMin[{x1, x2, ...}, {y1, ...}, ...]\n\tyields the smallest element of any of the lists.");
     symtab_set_docstring("Max", "Max[x1, x2, ...]\n\tyields the numerically largest of the xi.\nMax[{x1, x2, ...}, {y1, ...}, ...]\n\tyields the largest element of any of the lists.");

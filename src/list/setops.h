@@ -10,5 +10,7 @@ Expr* builtin_complement(Expr* res);
 Expr* builtin_deleteduplicates(Expr* res);
 Expr* builtin_deleteduplicatesby(Expr* res);
 Expr* builtin_commonest(Expr* res);
+Expr* builtin_intersectingq(Expr* res);
+Expr* builtin_duplicatefreeq(Expr* res);
 
 #endif /* SETOPS_H */

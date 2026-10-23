@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "setops.h"
+#include "message.h"    /* mth_message: Quiet/Check funnel */
 #include "assoc.h"
 #include "ndarray.h"    /* is_ndarray */
 #include "ndarray_internal.h"  /* nd_sort_i64_asc — the packed set-op fast path */
@@ -1096,4 +1097,140 @@ Expr* builtin_commonest(Expr* res) {
     Expr* out = expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
     free(result_args);
     return out;
+}
+
+/* ---------------- IntersectingQ / DuplicateFreeQ ---------------- */
+
+/* Length of a set-op fast-path result: a packed list, or the plain {} the
+ * fast paths return for an empty answer. */
+static size_t setop_result_len(const Expr* r) {
+    return is_ndarray(r) ? (size_t)r->data.ndarray.dims[0] : r->data.function.arg_count;
+}
+
+/* "Nonatomic expression expected at position 1 in call." style messages. */
+static void setop_call_message(const char* head, const char* tag, const char* what, Expr* call) {
+    char* txt = expr_to_string_outputform(call);
+    mth_message(head, tag, "%s in %s.", what, txt ? txt : head);
+    free(txt);
+}
+
+/* IntersectingQ[a, b] / IntersectingQ[a, b, SameTest -> f]
+ *
+ * True when a and b share at least one element: SameQ by default (so 1 and
+ * 1. do not), f[x, y] === True under SameTest.  Both must be non-atomic with
+ * the same head.  The default test hashes b and probes each element of a,
+ * O(|a| + |b|); two packed int64 lists intersect on the machine words.
+ * SameTest is O(|a| |b|). */
+Expr* builtin_intersectingq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return builtin_arg_error("IntersectingQ", argc, 2, 2);
+    Expr* test = NULL;
+    if (argc == 3) {
+        Expr* o = res->data.function.args[2];
+        if (o->type != EXPR_FUNCTION || o->data.function.arg_count != 2
+            || o->data.function.head->type != EXPR_SYMBOL
+            || (o->data.function.head->data.symbol.name != SYM_Rule
+                && o->data.function.head->data.symbol.name != SYM_RuleDelayed)
+            || o->data.function.args[0]->type != EXPR_SYMBOL
+            || o->data.function.args[0]->data.symbol.name != SYM_SameTest)
+            return NULL;
+        test = o->data.function.args[1];
+        if (test->type == EXPR_SYMBOL && test->data.symbol.name == SYM_Automatic) test = NULL;
+    }
+    Expr* a = res->data.function.args[0];
+    Expr* b = res->data.function.args[1];
+
+    if (is_ndarray(a) || is_ndarray(b)) {
+        if (!test && setop_i64(a) && setop_i64(b)) {
+            Expr* pair[2] = { a, b };
+            Expr* common = setop_packed(pair, 2, 1);
+            if (common) {
+                bool any = setop_result_len(common) > 0;
+                expr_free(common);
+                return expr_new_symbol(any ? SYM_True : SYM_False);
+            }
+        }
+        return ndarray_delist_and_reeval(res);
+    }
+    for (size_t i = 0; i < 2; i++) {
+        Expr* x = res->data.function.args[i];
+        if (x->type != EXPR_FUNCTION) {
+            char* txt = expr_to_string_outputform(x);
+            mth_message("IntersectingQ", "lsa", "List or association expected instead of %s.",
+                        txt ? txt : "");
+            free(txt);
+            return NULL;
+        }
+    }
+    if (!expr_eq(a->data.function.head, b->data.function.head)) {
+        char* ha = expr_to_string_outputform(a->data.function.head);
+        char* hb = expr_to_string_outputform(b->data.function.head);
+        mth_message("IntersectingQ", "heads",
+                    "Heads %s and %s at positions 1 and 2 are expected to be the same.",
+                    ha ? ha : "", hb ? hb : "");
+        free(ha); free(hb);
+        return NULL;
+    }
+    size_t na = a->data.function.arg_count, nb = b->data.function.arg_count;
+    bool found = false;
+    if (test) {
+        for (size_t i = 0; i < na && !found; i++)
+            for (size_t j = 0; j < nb && !found; j++)
+                found = same_test_equal(test, a->data.function.args[i], b->data.function.args[j]);
+    } else if (na && nb) {
+        HashTable* ht = ht_create(nb * 2 + 1);
+        for (size_t j = 0; j < nb; j++)
+            if (!ht_find(ht, b->data.function.args[j])) ht_insert(ht, b->data.function.args[j], j);
+        for (size_t i = 0; i < na && !found; i++)
+            found = ht_find(ht, a->data.function.args[i]) != NULL;
+        ht_free(ht, false);
+    }
+    return expr_new_symbol(found ? SYM_True : SYM_False);
+}
+
+/* DuplicateFreeQ[list] / DuplicateFreeQ[list, test]
+ *
+ * True when no two elements are the same: SameQ by default, test[x, y] ===
+ * True otherwise.  Any head is accepted; an atom gives DuplicateFreeQ::normal.
+ * The default test is one hash pass that stops at the first repeat; a packed
+ * int64 list compares its deduplicated length on the machine words. */
+Expr* builtin_duplicatefreeq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("DuplicateFreeQ", argc, 1, 2);
+    Expr* list = res->data.function.args[0];
+    Expr* test = argc == 2 ? res->data.function.args[1] : NULL;
+
+    if (is_ndarray(list)) {
+        if (!test && setop_i64(list)) {
+            Expr* uniq = setop_packed_delete_duplicates(list);
+            if (uniq) {
+                bool free_q = setop_result_len(uniq) == (size_t)list->data.ndarray.dims[0];
+                expr_free(uniq);
+                return expr_new_symbol(free_q ? SYM_True : SYM_False);
+            }
+        }
+        return ndarray_delist_and_reeval(res);
+    }
+    if (list->type != EXPR_FUNCTION) {
+        setop_call_message("DuplicateFreeQ", "normal", "Nonatomic expression expected at position 1", res);
+        return NULL;
+    }
+    size_t n = list->data.function.arg_count;
+    Expr** xs = list->data.function.args;
+    bool dup = false;
+    if (test) {
+        for (size_t i = 1; i < n && !dup; i++)
+            for (size_t j = 0; j < i && !dup; j++)
+                dup = same_test_equal(test, xs[j], xs[i]);
+    } else if (n > 1) {
+        HashTable* ht = ht_create(n * 2 + 1);
+        for (size_t i = 0; i < n && !dup; i++) {
+            if (ht_find(ht, xs[i])) dup = true;
+            else ht_insert(ht, xs[i], i);
+        }
+        ht_free(ht, false);
+    }
+    return expr_new_symbol(dup ? SYM_False : SYM_True);
 }

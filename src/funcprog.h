@@ -41,3 +41,4 @@ Expr* builtin_inner(Expr* res);
 Expr* builtin_outer(Expr* res);
 Expr* builtin_tuples(Expr* res);
 Expr* builtin_permutations(Expr* res);
+Expr* builtin_permute(Expr* res);

@@ -90,6 +90,20 @@ Out[6]= {{1, 2, 3, 4}, {1, 2, 4, 3}, {1, 3, 2, 4}, {1, 3, 4, 2}, {1, 4, 2, 3}, {
 In[7]:= Permutations[f[a, b, c]]
 Out[7]= {f[a, b, c], f[a, c, b], f[b, a, c], f[b, c, a], f[c, a, b], f[c, b, a]}
 ```
+## Permute
+`Permute[expr, perm]` moves the element at position `i` of `expr` to position `perm(i)`.
+- `perm` can be a permutation list `{p1, ..., pk}`. Element `i` moves to `pi`,
+  and positions after `k` stay put. For example,
+  `Permute[{a, b, c}, {3, 1, 2}]` is `{b, c, a}`.
+- `perm` can be `Cycles[{{c1, c2, ...}, ...}]`. The element at `c1` moves to
+  `c2`, `c2` to `c3`, and the last back to `c1`. For example,
+  `Permute[{a, b, c, d}, Cycles[{{1, 3}}]]` is `{c, b, a, d}`.
+- The head of `expr` is kept.
+- An invalid list emits `Permute::permlist`. A permutation that moves a
+  position past the end emits `Permute::lowlen`.
+- A `PermutationGroup` argument is not yet supported and stays unevaluated.
+- `Protected`.
+
 ## Table
 Generates a list of expressions.
 - `Table[expr, n]`

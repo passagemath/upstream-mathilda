@@ -284,7 +284,9 @@ Expr* sp_gate(const Expr* call, int mode_bits, bool* rest);
 /* A native SparseArray kernel (SymbolDef.sparse_native): borrows the whole
  * call, which has at least one SparseArray argument, and returns the answer,
  * or NULL to decline (the head's sparse_mode gate, if any, then answers).
- * Register with symtab_set_sparse_native. */
+ * Returning expr_copy(call) -- the call itself -- leaves it unevaluated
+ * WITHOUT the gate (the kernel has reported why, e.g. Dot::dotsh), and the
+ * evaluator does not ask again. Register with symtab_set_sparse_native. */
 typedef Expr* (*SpNativeFn)(const Expr* call);
 
 /* Register the gate modes of the heads that opt in (called by sparse_init). */

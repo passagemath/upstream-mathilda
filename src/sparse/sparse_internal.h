@@ -56,5 +56,8 @@ void sparse_reduce_init(void);
  * Take, KroneckerProduct, ArrayFlatten, ... Registered by sparse_init after
  * the gate, whose modes stay the fallback. */
 void sparse_struct_init(void);
+/* Native Dot / MatrixPower / Inner kernels (sparse_dot.c), registered after
+ * the gate so they take the call first. */
+void sparse_dot_init(void);
 
 #endif /* MATHILDA_SPARSE_INTERNAL_H */

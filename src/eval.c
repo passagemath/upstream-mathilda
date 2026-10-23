@@ -2481,6 +2481,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 eval_sparse_gate_applies(res, hdef->sparse_mode)) {
                 /* A native sparse kernel (sparse/sparse_*.c) gets first try. */
                 Expr* nat = ((SpNativeFn)hdef->sparse_native)(res);
+                if (nat == res) {
+                    /* The call itself back (expr_copy): the kernel settled it
+                     * as it stands, after its own message (Dot::dotsh). It
+                     * rests here -- neither the gate nor a further step
+                     * re-asks and repeats the message. */
+                    expr_free(nat);
+                    g_step_settled_depth = eval_recursion_depth;
+                    return res;
+                }
                 if (nat) { expr_free(res); *changed = true; return nat; }
             }
             if (hdef && (hdef->sparse_mode & SPG_MODE_MASK) &&

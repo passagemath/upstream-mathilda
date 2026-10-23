@@ -1608,6 +1608,33 @@ In[4]:= {Count[s, 1], MemberQ[s, 2]}
 Out[4]= {0, False}
 ```
 
+**Dot, MatrixPower and Inner (native).**
+
+| product | answer |
+|---|---|
+| `s . v`, `v . s`, `s . m`, `m . s` (a dense operand) | dense, packed |
+| `s1 . s2`, `s . sv`, `sv . s` | SparseArray |
+| `sv1 . sv2`, `sv . v` | scalar |
+
+- **Explicit entries.** An entry of a sparse product is explicit when a product
+  of two explicit entries lands on it, even if those products cancel.
+- **Background.** It is `0.` for a machine result with entries, and `0`
+  otherwise. A factor with no explicit entries makes the product an empty
+  SparseArray.
+- **Values.**
+  - Integer, Real and machine-Complex values use typed, threaded kernels:
+    two-pass Gustavson for sparse x sparse.
+  - Integer overflow, and exact or symbolic values, are computed exactly.
+  - A machine number in an all-numeric pair makes the product machine.
+- **Backgrounds and shapes.** Only zero backgrounds are handled natively; a
+  nonzero background gives the dense answer. Mismatched shapes report
+  `Dot::dotsh` once and leave the call unevaluated without densifying.
+- **MatrixPower and Inner.**
+  - `MatrixPower[s, k]` with `k >= 1` is sparse, by repeated squaring.
+  - `MatrixPower[s, k, v]` is dense.
+  - Other exponents and nonzero backgrounds are computed on the dense form.
+  - `Inner[Times, a, b, Plus]` equals Dot, with a dense answer.
+
 **Structural operations (native).** The following work directly on the stored
 entries, at O(rows + nnz) cost (O(rows + nnz in range) for a slice), and
 answer with a SparseArray over the operand's background:

@@ -88,6 +88,10 @@ MATRIX = [  # rank-2 square
     "MatrixPower[S, 2]", "KroneckerProduct[S, T]", "ConjugateTranspose[S]",
     "LowerTriangularize[S]", "UpperTriangularize[S]", "S . S . v",
     "ArrayFlatten[{{S, T}, {T, S}}]", "Inner[Times, S, v, Plus]",
+    "MatrixPower[S, 3]", "MatrixPower[S, 2, v]", "MatrixPower[S, 1]",
+    "Dot[S, T, S]", "v . S . T", "S . T . v", "N[S] . T", "S . N[T]",
+    "N[S] . N[T]", "S . N[v]", "N[v] . S", "S . Transpose[Normal[T]]",
+    "Normal[T] . S . v", "Inner[Times, S, T, Plus]", "(S - x) . v",
     "Eigenvalues[N[S + Transpose[S]]]",
     "Norm[S]", "Norm[N[S]]", "Norm[S, 1]", "Norm[S, Infinity]", "Norm[S, \"Frobenius\"]",
     "Norm[N[S], \"Frobenius\"]", "Tr[S]", "Tr[S, List]", "Accumulate[S]", "Mean[S]",
@@ -101,6 +105,8 @@ MATRIX = [  # rank-2 square
 ]
 VECTOR = [  # rank-1
     "S . T", "S . v", "Norm[S]", "Total[S]", "Accumulate[S]", "Reverse[S]",
+    "v . S", "N[S] . T", "S . N[v]", "S . Normal[T]", "Normal[S] . T",
+    "S . Outer[Times, v, v]", "Outer[Times, v, v] . S",
     "Map[f, S]", "Select[S, # != 0 &]", "Outer[Times, S, T]",
     "KroneckerProduct[S, T]", "Riffle[S, T]", "DiagonalMatrix[S]",
     "Tally[S]", "Sort[Normal[S]]", "Ordering[Normal[S]]",
@@ -227,9 +233,14 @@ PRELUDE = r"""
    on purpose: a sparse result's background positions are exact even where the
    dense computation produced 0.) *)
 deN[e_] := (e /. a_SparseArray :> Normal[a]) /. r_Real /; r == 0 :> 0;
-numClose[a_, b_] := Module[{d = Quiet[Check[N[deN[a] - deN[b]], $Failed]]},
+(* Numerically equal, with values put in for the free symbols: a product over
+   symbolic entries can carry an exact coefficient on one side and its machine
+   value on the other (the dense sum also adds 0 * 1.5 -> 0. terms, the sparse
+   one never forms them), and the two are the same number. *)
+symSub = {a -> 0.3711, b -> 1.1353, y -> -0.7137, z -> 0.5311, x -> 0.2917};
+numClose[p_, q_] := Module[{d = Quiet[Check[N[(deN[p] - deN[q]) /. symSub], $Failed]]},
    d =!= $Failed && VectorQ[Flatten[{d}], NumericQ] &&
-   Quiet[Check[Max[Abs[Flatten[{d}]]] < 1.*^-8 (1 + Max[Abs[N[Flatten[{deN[b]}]]]]), False]]];
+   Quiet[Check[Max[Abs[Flatten[{d}]]] < 1.*^-8 (1 + Max[Abs[N[Flatten[{deN[q] /. symSub}]]]]), False]]];
 same[a_, b_] := deN[a] === deN[b] || numClose[a, b] ||
    Quiet[Check[Simplify[deN[a] - deN[b]] === 0 || Union[Flatten[{Simplify[deN[a] - deN[b]]}]] === {0}, False]];
 C[id_, op_, s_, t_, v_] := C[id, op, op, s, t, v];

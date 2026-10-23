@@ -120,7 +120,7 @@ void test_direct_2x2_known(void) {
 void test_direct_2x2_negative(void) {
     /* [[1, 2], [2, -1]] -> eigenvalues sqrt(5) and -sqrt(5). */
     double A[4] = { 1.0, 2.0, 2.0, -1.0 };
-    double expected[2] = { sqrt(5.0), -sqrt(5.0) };  /* same |lambda|, stable. */
+    double expected[2] = { -sqrt(5.0), sqrt(5.0) };  /* |lambda| tie: negative first */
     char* in = corpus_matrix_to_eigenvalues_input(A, 2);
     corpus_check_real_eigenvalues("[[1,2],[2,-1]] machine", in, expected, 2, 1e-12);
     free(in);

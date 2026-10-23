@@ -160,9 +160,11 @@ static const Expr* first_sparse(const Expr* a, int depth) {
     return NULL;
 }
 
-/* Did evaluation give back the call itself (same head, the head declined)? */
-static bool declined(const Expr* r, const Expr* call) {
-    return r->type == EXPR_FUNCTION && expr_eq(r->data.function.head, call->data.function.head);
+/* Did evaluation give back the densified call unchanged -- the head declined
+ * it? (A same-head answer that DID change, such as Max[0, x] from Max over an
+ * array holding x, is an answer, not a decline.) */
+static bool declined(const Expr* r, const Expr* rewritten) {
+    return r->type == EXPR_FUNCTION && expr_eq(r, rewritten);
 }
 
 /* An array answer, made sparse over `bg`. Consumes `r`. */
@@ -262,8 +264,9 @@ Expr* sp_gate(const Expr* call, int mode_bits, bool* rest) {
     if (mode == SPG_ROWS) return rewritten;
 
     Expr* r = evaluate(rewritten);
+    bool no_answer = declined(r, rewritten);
     expr_free(rewritten);
-    if (declined(r, call)) {
+    if (no_answer) {
         expr_free(r);
         *rest = true;
         return NULL;

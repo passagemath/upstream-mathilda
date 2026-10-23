@@ -1049,16 +1049,54 @@ Out[3]= caughtit
 
 ## Message
 Prints a named message.
-- `Message[sym::tag, e1, e2, ...]`: Notes that a diagnostic fired (so an enclosing `Check` sees it) and, unless messages are suppressed, prints the message text defined by `sym::tag`.
+- `Message[sym::tag, e1, e2, ...]` prints `sym::tag: text`.
+
+**Text and slots**:
+- The text is `sym::tag`'s own. If `sym::tag` has none, the text of
+  `General::tag` is used. Without either, the text is
+  `-- Message text not found --`, followed by each `ei` in parentheses.
+- Mathilda has the standard `General::` texts built in: `argx`, `argr`,
+  `argrx`, `argt`, `argb`, `argm`, `string`, `int`, `intp`, `optx`, `sym`,
+  `normal`, `heads`, `partw`, `wrsym` and others. An assignment
+  `General::tag = "..."` takes precedence over the built-in text.
+- The slots `` `1` ``, `` `2` ``, ... of the text are filled with the `ei` in
+  OutputForm, and each ` `` ` takes the next argument in turn.
+- A slot with no matching argument emits `StringForm::sfr` and is left as written.
 
 **Features**:
-- `HoldFirst`.
-- Returns `Null`.
+- `HoldFirst`. Returns `Null`.
+- The message goes through the diagnostic funnel. `Quiet` silences the print,
+  but `Check` still sees the message.
+- A message switched off with `Off` is neither printed nor seen by `Check`.
 
 ```mathematica
-In[1]:= Quiet[Check[Message[g::x]; 7, flagged]]
-Out[1]= flagged
+In[1]:= f::m = "bad `1` and `2`"; Message[f::m, 7, x^2]
+f::m: bad 7 and x^2
 
-In[2]:= Message[myfun::warn]  (* fires a diagnostic; returns Null *)
-Out[2]= Null
+In[2]:= Message[f::argx, f, 3]
+f::argx: f called with 3 arguments; 1 argument is expected.
+
+In[3]:= Quiet[Check[Message[g::x]; 7, flagged]]
+Out[3]= flagged
+```
+
+## Off, On
+Switch messages off and back on.
+- `Off[sym::tag]`: from now on `sym::tag` is not printed and `Check` does not
+  see it. This applies to messages from builtins as well as from `Message`.
+- `Off[General::tag]`: switches `tag` off for every symbol.
+- `Off[sym]`: switches off every message of `sym`.
+- `Off[s1, s2, ...]`, `Off[{s1, ...}]`: several specs at once.
+- `On[...]`: undoes the matching `Off`.
+
+**Features**:
+- `HoldAll`, `Protected`. Both return `Null`.
+- A message-group string such as `Off["Global`*"]` is not supported; it emits
+  `Off::mgre` (or `On::mgre`).
+- `Off` is session-wide, unlike `Quiet`, which applies only during one
+  evaluation.
+
+```mathematica
+In[1]:= Off[f::m]; Check[Message[f::m, 1, 2]; ok, caught]
+Out[1]= ok
 ```

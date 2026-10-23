@@ -8,7 +8,10 @@
 #include "eval.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "print.h"     /* expr_to_string_outputform: Message argument text */
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* Suppression nesting depth.  Zero => messages print; > 0 => suppressed. */
 static int g_msg_suppress_depth = 0;
@@ -55,6 +58,59 @@ void          mth_msg_note_fired(void)  { g_msg_fired++; }
 unsigned long mth_msg_fired_count(void) { return g_msg_fired; }
 void          mth_msg_fired_restore(unsigned long n) { if (n < g_msg_fired) g_msg_fired = n; }
 
+/* ------------------------------------------------------------- Off / On */
+/* The set of switched-off messages, as "head::tag" keys.  "General::tag"
+ * switches tag off for every head; "head::*" (from Off[head]) every tag of
+ * head.  Small and rarely non-empty, so a linear scan of a flat array is
+ * cheaper than any table -- and the funnel skips it entirely when empty. */
+static char** g_off = NULL;
+static size_t g_off_n = 0, g_off_cap = 0;
+
+static long off_find(const char* key) {
+    for (size_t i = 0; i < g_off_n; i++)
+        if (strcmp(g_off[i], key) == 0) return (long)i;
+    return -1;
+}
+
+static char* off_key(const char* head, const char* tag) {
+    size_t n = strlen(head) + strlen(tag) + 3;
+    char* k = malloc(n);
+    if (k) snprintf(k, n, "%s::%s", head, tag);
+    return k;
+}
+
+/* Switch head::tag off (on = 0) or back on (on = 1). */
+static void off_set(const char* head, const char* tag, int on) {
+    char* k = off_key(head, tag);
+    if (!k) return;
+    long i = off_find(k);
+    if (!on && i < 0) {
+        if (g_off_n == g_off_cap) {
+            size_t nc = g_off_cap ? 2 * g_off_cap : 8;
+            char** ng = realloc(g_off, nc * sizeof(char*));
+            if (!ng) { free(k); return; }
+            g_off = ng; g_off_cap = nc;
+        }
+        g_off[g_off_n++] = k;
+        return;
+    }
+    if (on && i >= 0) {
+        free(g_off[i]);
+        g_off[i] = g_off[--g_off_n];
+    }
+    free(k);
+}
+
+int mth_msg_is_off(const char* head, const char* tag) {
+    if (g_off_n == 0) return 0;
+    char* k;
+    int off = 0;
+    if ((k = off_key(head, tag)))      { off = off_find(k) >= 0; free(k); }
+    if (!off && (k = off_key("General", tag))) { off = off_find(k) >= 0; free(k); }
+    if (!off && (k = off_key(head, "*")))      { off = off_find(k) >= 0; free(k); }
+    return off;
+}
+
 /* ------------------------------------------------------------- The funnel */
 /* The single choke-point for user-facing diagnostics: note (always), then
  * print "Head::tag: <formatted>\n" unless Quiet[] (or an extra local mute) is
@@ -71,6 +127,9 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
      * silence the print of a real message, so the firing is still noted and an
      * enclosing Check[] still sees it (the Quiet[Check[...]] idiom). */
     if (extra_mute) return;
+    /* Off[head::tag]: the message does not exist for this session -- neither
+     * printed nor seen by Check. */
+    if (mth_msg_is_off(head, tag)) return;
     mth_msg_note_fired();                 /* Check sees it, even under Quiet */
     if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
     fprintf(stderr, "%s::%s: ", head, tag);
@@ -132,25 +191,216 @@ Expr* builtin_check(Expr* res) {
     return val;
 }
 
-/* Message[sym::tag, e1, e2, ...]: note that a diagnostic fired (so an enclosing
- * Check sees it) and, unless suppressed, print its template.  HoldFirst -- the
- * message name is held; when a template string is defined for it, evaluating it
- * yields that string.  Argument substitution into the template is not
- * performed: the port uses Message only in error branches immediately followed
- * by Throw, so the printed text is diagnostic, not load-bearing.  Returns Null. */
+/* Is e MessageName[sym, "tag"]?  Sets *head / *tag (borrowed). */
+static int message_name_parts(const Expr* e, const char** head, const char** tag) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_MessageName ||
+        e->data.function.arg_count < 2) return 0;
+    const Expr* s = e->data.function.args[0];
+    const Expr* t = e->data.function.args[1];
+    if (s->type != EXPR_SYMBOL || t->type != EXPR_STRING) return 0;
+    *head = s->data.symbol.name;
+    *tag = t->data.string;
+    return 1;
+}
+
+/* Texts of the standard General:: messages, used when General::tag has no
+ * definition of its own (an assignment General::tag = "..." takes precedence).
+ * They let Message[f::argx, f, 3] and friends print the usual text. */
+static const struct { const char* tag; const char* text; } GENERAL_TEXTS[] = {
+    { "argx", "`1` called with `2` arguments; 1 argument is expected." },
+    { "argr", "`1` called with 1 argument; `2` arguments are expected." },
+    { "argrx", "`1` called with `2` arguments; `3` arguments are expected." },
+    { "argt", "`1` called with `2` arguments; `3` or `4` arguments are expected." },
+    { "argtu", "`1` called with 1 argument; `2` or `3` arguments are expected." },
+    { "argb", "`1` called with `2` arguments; between `3` and `4` arguments are expected." },
+    { "argbu", "`1` called with 1 argument; between `2` and `3` arguments are expected." },
+    { "argm", "`1` called with `2` arguments; `3` or more arguments are expected." },
+    { "argmu", "`1` called with 1 argument; `2` or more arguments are expected." },
+    { "args", "`1` called with invalid parameters." },
+    { "string", "String expected at position `1` in `2`." },
+    { "strse", "String or list of strings expected at position `1` in `2`." },
+    { "int", "Integer expected at position `2` in `1`." },
+    { "intp", "Positive integer expected at position `2` in `1`." },
+    { "intpm", "Positive machine-sized integer expected at position `2` in `1`." },
+    { "intm", "Machine-sized integer expected at position `2` in `1`." },
+    { "optx", "Unknown option `1` in `2`." },
+    { "sym", "Argument `1` at position `2` is expected to be a symbol." },
+    { "normal", "Nonatomic expression expected at position `1` in `2`." },
+    { "list", "List expected at position `2` in `1`." },
+    { "heads", "Heads `1` and `2` at positions `3` and `4` are expected to be the same." },
+    { "partw", "Part `1` of `2` does not exist." },
+    { "partd", "Part specification `1` is longer than depth of object." },
+    { "pkspec1", "The expression `1` cannot be used as a part specification." },
+    { "nonopt", "Options expected (instead of `1`) beyond position `2` in `3`. An option must be a rule or a list of rules." },
+    { "noopen", "Cannot open `1`." },
+    { "nffil", "File not found during `1`." },
+    { "ovfl", "Overflow occurred in computation." },
+    { "unfl", "Underflow occurred in computation." },
+    { "infy", "Infinite expression `1` encountered." },
+    { "indet", "Indeterminate expression `1` encountered." },
+    { "wrsym", "Symbol `1` is Protected." },
+    { "write", "Tag `1` in `2` is Protected." },
+    { "level", "Level specification `1` is not of the form n, {n}, or {m, n}." },
+    { "stop", "Further output of `1` will be suppressed during this calculation." },
+    { "obspkg", "`1` is now obsolete. The legacy version being loaded may conflict with current functionality. See the Compatibility Guide for updating information." },
+    { "ivar", "`1` is not a valid variable." },
+    { "fnsym", "First argument in `1` is not a symbol or a string naming a symbol." },
+    { "pspec", "Part specification `1` is neither a machine-sized integer nor a list of machine-sized integers." },
+    { "rvalue", "`1` is not a variable with a value, so its value cannot be changed." },
+    { "shdw", "Symbol `1` appears in multiple contexts `2`; definitions in context `3` may shadow or be shadowed by other definitions." },
+    { "nonopt1", "Options expected (instead of `1`) beyond position `2` in `3`." },
+    { "seqs", "Sequence specification (+n, -n, {+n}, {-n}, {m, n}, or {m, n, s}) expected at position `2` in `1`." },
+};
+
+static const char* general_text(const char* tag) {
+    for (size_t i = 0; i < sizeof GENERAL_TEXTS / sizeof GENERAL_TEXTS[0]; i++)
+        if (strcmp(GENERAL_TEXTS[i].tag, tag) == 0) return GENERAL_TEXTS[i].text;
+    return NULL;
+}
+
+/* The text of head::tag, or NULL when none is defined (caller frees). */
+static char* message_text(const char* head, const char* tag) {
+    Expr* a[2] = { expr_new_symbol(head), expr_new_string(tag) };
+    Expr* mn = expr_new_function(expr_new_symbol(SYM_MessageName), a, 2);
+    Expr* v = evaluate(mn);
+    expr_free(mn);
+    char* out = NULL;
+    if (v && v->type == EXPR_STRING) {
+        size_t n = strlen(v->data.string) + 1;
+        out = malloc(n);
+        if (out) memcpy(out, v->data.string, n);
+    }
+    if (v) expr_free(v);
+    return out;
+}
+
+/* Growable output buffer for the formatted message. */
+typedef struct { char* p; size_t n, cap; } MsgBuf;
+static void mb_put(MsgBuf* b, const char* s, size_t len) {
+    if (b->n + len + 1 > b->cap) {
+        size_t nc = b->cap ? b->cap : 64;
+        while (b->n + len + 1 > nc) nc *= 2;
+        char* np = realloc(b->p, nc);
+        if (!np) return;
+        b->p = np; b->cap = nc;
+    }
+    memcpy(b->p + b->n, s, len);
+    b->n += len;
+    b->p[b->n] = '\0';
+}
+
+/* Fill the `n` and `` slots of `tmpl` with args[0..nargs) in OutputForm.
+ * A slot past the last argument is left as written, after StringForm::sfr. */
+static char* message_fill(const char* tmpl, Expr** args, size_t nargs) {
+    MsgBuf b = { NULL, 0, 0 };
+    mb_put(&b, "", 0);
+    size_t seq = 0;
+    for (const char* p = tmpl; *p; ) {
+        if (*p == '`') {
+            const char* q = p + 1;
+            while (*q >= '0' && *q <= '9') q++;
+            if (*q == '`') {
+                size_t k = (q == p + 1) ? ++seq : (size_t)strtoul(p + 1, NULL, 10);
+                if (k >= 1 && k <= nargs) {
+                    char* t = expr_to_string_outputform(args[k - 1]);
+                    if (t) { mb_put(&b, t, strlen(t)); free(t); }
+                } else {
+                    mth_message("StringForm", "sfr",
+                                "Item %zu requested in \"%s\" out of range; %zu items available.",
+                                k, tmpl, nargs);
+                    mb_put(&b, p, (size_t)(q - p) + 1);
+                }
+                p = q + 1;
+                continue;
+            }
+        }
+        mb_put(&b, p, 1);
+        p++;
+    }
+    return b.p;
+}
+
+/* Message[sym::tag, e1, e2, ...] -- emit the message sym::tag with its `n`
+ * slots filled from the ei (in OutputForm).  The text is sym::tag's, else
+ * General::tag's, else "-- Message text not found --" followed by each ei in
+ * parentheses.  It goes through the mth_message funnel, so it prints as
+ * "sym::tag: text", is silenced by Quiet and by Off[sym::tag], and is seen by
+ * Check unless switched off.  HoldFirst.  Returns Null. */
 Expr* builtin_message(Expr* res) {
-    mth_msg_note_fired();
-    if (!mth_msg_suppressed() && res->type == EXPR_FUNCTION &&
-        res->data.function.arg_count >= 1) {
-        Expr* mn = evaluate(res->data.function.args[0]);
-        if (mn) {
-            if (mn->type == EXPR_STRING)
-                fprintf(stderr, "%s\n", mn->data.string);
-            expr_free(mn);
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    const char* head;
+    const char* tag;
+    if (!message_name_parts(res->data.function.args[0], &head, &tag)) {
+        /* Not sym::tag: still a fired diagnostic for Check. */
+        mth_msg_note_fired();
+        return expr_new_symbol(SYM_Null);
+    }
+    if (mth_msg_is_off(head, tag)) return expr_new_symbol(SYM_Null);
+    Expr** args = res->data.function.args + 1;
+    size_t nargs = res->data.function.arg_count - 1;
+    char* tmpl = message_text(head, tag);
+    if (!tmpl) tmpl = message_text("General", tag);
+    if (!tmpl) {
+        const char* g = general_text(tag);
+        if (g) {
+            size_t n = strlen(g) + 1;
+            tmpl = malloc(n);
+            if (tmpl) memcpy(tmpl, g, n);
         }
     }
+    char* text;
+    if (tmpl) {
+        text = message_fill(tmpl, args, nargs);
+        free(tmpl);
+    } else {
+        MsgBuf b = { NULL, 0, 0 };
+        const char* nf = "-- Message text not found --";
+        mb_put(&b, nf, strlen(nf));
+        for (size_t i = 0; i < nargs; i++) {
+            char* t = expr_to_string_outputform(args[i]);
+            mb_put(&b, " (", 2);
+            if (t) { mb_put(&b, t, strlen(t)); free(t); }
+            mb_put(&b, ")", 1);
+        }
+        text = b.p;
+    }
+    mth_message(head, tag, "%s", text ? text : "");
+    free(text);
     return expr_new_symbol(SYM_Null);
 }
+
+/* Off[s::t, ...] / On[s::t, ...]: switch messages off or on.  A spec is a
+ * message name s::t (General::t covers every head), a symbol s (every message
+ * of s), or a list of specs.  HoldAll.  Returns Null. */
+static void off_on_spec(const Expr* e, int on) {
+    const char* head;
+    const char* tag;
+    if (message_name_parts(e, &head, &tag)) { off_set(head, tag, on); return; }
+    if (e->type == EXPR_SYMBOL) { off_set(e->data.symbol.name, "*", on); return; }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            off_on_spec(e->data.function.args[i], on);
+        return;
+    }
+    /* A message group ("name" strings, ...) is not supported. */
+    char* txt = expr_to_string_outputform((Expr*)e);
+    mth_message(on ? "On" : "Off", "mgre",
+                "Message group %s was not resolved to a list of messages of the form "
+                "symbol::name or symbol::name::language.", txt ? txt : "");
+    free(txt);
+}
+
+static Expr* off_on(Expr* res, int on) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        off_on_spec(res->data.function.args[i], on);
+    return expr_new_symbol(SYM_Null);
+}
+
+Expr* builtin_off(Expr* res) { return off_on(res, 0); }
+Expr* builtin_on(Expr* res)  { return off_on(res, 1); }
 
 void message_init(void) {
     symtab_add_builtin("Quiet", builtin_quiet);
@@ -168,5 +418,22 @@ void message_init(void) {
     symtab_add_builtin("Message", builtin_message);
     symtab_get_def("Message")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_set_docstring("Message",
-        "Message[sym::tag, args] prints the named message unless messages are suppressed.");
+        "Message[sym::tag, e1, e2, ...]\n"
+        "\tprints the message sym::tag as \"sym::tag: text\", with the slots `1`, `2`, ... (or ``)\n"
+        "\tof its text filled by the ei.  The text is sym::tag's, else General::tag's.  Quiet and\n"
+        "\tOff[sym::tag] silence it; Check sees it unless it is switched off.");
+
+    symtab_add_builtin("Off", builtin_off);
+    symtab_get_def("Off")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Off",
+        "Off[sym::tag]\n"
+        "\tswitches off the message sym::tag, so it is neither printed nor seen by Check.\n"
+        "Off[General::tag] switches tag off for every symbol; Off[sym] every message of sym;\n"
+        "Off[s1, s2, ...] several at once.");
+    symtab_add_builtin("On", builtin_on);
+    symtab_get_def("On")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("On",
+        "On[sym::tag]\n"
+        "\tswitches the message sym::tag back on.  On[General::tag], On[sym] and\n"
+        "On[s1, s2, ...] undo the matching Off.");
 }

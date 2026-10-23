@@ -121,4 +121,8 @@ void mth_message_cont(int extra_mute, const char* fmt, ...) MTH_PRINTF_FMT(2, 3)
 /* Registers the Quiet / Check / Message builtins.  Called from core_init(). */
 void message_init(void);
 
+/* Off[head::tag] / Off[General::tag] / Off[head]: non-zero iff head::tag is
+ * switched off.  The funnel drops such a message entirely. */
+int mth_msg_is_off(const char* head, const char* tag);
+
 #endif /* MATHILDA_MESSAGE_H */

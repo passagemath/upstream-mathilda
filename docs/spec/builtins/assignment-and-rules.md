@@ -453,6 +453,14 @@ Out[2]= {HoldPattern[a] :> 5}
   `Remove`/`ClearAll` from ever deleting or wiping a built-in.
 - `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
 - Both return `Null`.
+- **String specs are name patterns.** A string argument is resolved the way
+  `Names` resolves it: `*` matches any characters, `@` matches characters that
+  are not uppercase letters, and a context prefix restricts the match. So
+  `Remove["Global`x*"]`, `Remove["ctx`*"]`, `ClearAll["b*"]` and
+  `Clear["c*"]` act on every symbol `Names[spec]` lists. A plain name, with or
+  without its context, names that one symbol.
+- `Remove` emits `Remove::rmnsm` when a string spec matches nothing, and
+  `Remove::rmptc` for each `Protected` symbol it skips.
 
 ```mathematica
 In[1]:= f[x_] := x^2; SetAttributes[f, Listable]; Attributes[f]

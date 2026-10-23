@@ -223,6 +223,7 @@ typedef struct {
     const NamePat* pats;
     int            npats;
     int            match_all;   /* Names[] with no argument: take every name */
+    int            want_keys;   /* emit symbol-table keys, not display names */
     char**         names;       /* owned emit strings (display names) */
     size_t         count, cap;
 } NameCollect;
@@ -245,7 +246,7 @@ static void collect_visit(const char* name, SymbolDef* def, void* user) {
     int matched = c->match_all;
     for (int i = 0; !matched && i < c->npats; i++)
         matched = match_one(&c->pats[i], full, disp);
-    char* emit = matched ? name_strdup(disp) : NULL;
+    char* emit = matched ? name_strdup(c->want_keys ? name : disp) : NULL;
     free(full);
     if (!emit) return;
 
@@ -310,7 +311,7 @@ Expr* builtin_names(Expr* res) {
         }
     }
 
-    NameCollect c = { pats, npats, match_all, NULL, 0, 0 };
+    NameCollect c = { pats, npats, match_all, 0, NULL, 0, 0 };
     symtab_for_each(collect_visit, &c);
     free_pats(pats, npats);
 
@@ -333,6 +334,34 @@ Expr* builtin_names(Expr* res) {
     for (size_t i = 0; i < c.count; i++) free(c.names[i]);
     free(c.names);
     return out;
+}
+
+/* The symbol-table keys of every symbol a single Names-style pattern
+ * (a string with * and @, or a RegularExpression) matches, resolved exactly
+ * as Names[pattern] resolves it, in canonical order.  Returns a malloc'd
+ * array of malloc'd strings (free with names_free_keys) and sets *n; NULL
+ * with *n = 0 when nothing matches or the pattern is not one. */
+char** names_match_keys(Expr* pattern, size_t* n) {
+    *n = 0;
+    NamePat pat;
+    memset(&pat, 0, sizeof pat);
+    if (build_pat(pattern, &pat) != 0) return NULL;
+    NameCollect c = { &pat, 1, 0, 1, NULL, 0, 0 };
+    symtab_for_each(collect_visit, &c);
+    if (pat.is_regex) regex_free(pat.prog);
+    if (c.count == 0) { free(c.names); return NULL; }
+    /* Deterministic order for the messages a caller emits per name. */
+    for (size_t i = 1; i < c.count; i++)
+        for (size_t j = i; j > 0 && strcmp(c.names[j - 1], c.names[j]) > 0; j--) {
+            char* t = c.names[j]; c.names[j] = c.names[j - 1]; c.names[j - 1] = t;
+        }
+    *n = c.count;
+    return c.names;
+}
+
+void names_free_keys(char** keys, size_t n) {
+    for (size_t i = 0; i < n; i++) free(keys[i]);
+    free(keys);
 }
 
 /* ------------------------------------------------------------------ */

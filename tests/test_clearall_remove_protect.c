@@ -330,6 +330,45 @@ static void test_remove_loop(void) {
     assert_eval_eq("rmLoop", "rmLoop", 0);
 }
 
+/* Remove / ClearAll / Clear with string patterns: a string is resolved the
+ * way Names resolves it ("x*", "ctx`*", "x@", a plain or context-qualified
+ * name), so these act on every symbol Names[spec] lists. */
+static void test_string_pattern_specs(void) {
+    run("rpX1 = 5; rpX2 = 6; rpXy = 7; rpY1 = 8;");
+    assert_eval_eq("Remove[\"Global`rpX*\"]; {Names[\"Global`rpX*\"], rpY1}", "{{}, 8}", 0);
+    run("rpA1 = 1; rpA2 = 2;");
+    assert_eval_eq("Remove[\"rpA*\"]; Names[\"rpA*\"]", "{}", 0);
+    /* @ matches a run of characters that are not uppercase letters. */
+    run("rpe1 = 1; rpeA = 2;");
+    assert_eval_eq("Remove[\"rpe@\"]; Names[\"rpe*\"]", "{\"rpeA\"}", 0);
+    /* A list of names, and a context-qualified plain name. */
+    run("rpG1 = 1; rpG2 = 2;");
+    assert_eval_eq("Remove[{\"rpG1\", \"Global`rpG2\"}]; Names[\"rpG*\"]", "{}", 0);
+    /* Package symbols, by context. */
+    run("BeginPackage[\"RPkg`\"];");
+    run("rpk1 = 1;");
+    run("rpk2 = 2;");
+    run("EndPackage[];");
+    assert_eval_eq("Names[\"RPkg`*\"]", "{\"rpk1\", \"rpk2\"}", 0);
+    assert_eval_eq("Remove[\"RPkg`*\"]; Names[\"RPkg`*\"]", "{}", 0);
+    /* No match: Remove::rmnsm.  Protected: Remove::rmptc, kept. */
+    assert_eval_eq("Check[Remove[\"rpNoSuchSymbol*\"], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Check[Remove[\"rpNoSuchSymbol\"], \"msg\"]", "\"msg\"", 0);
+    run("rpP1 = 1; Protect[rpP1];");
+    assert_eval_eq("Quiet[Remove[\"rpP*\"]]; Names[\"rpP*\"]", "{\"rpP1\"}", 0);
+    assert_eval_eq("Check[Remove[\"rpP*\"], \"msg\"]", "\"msg\"", 0);
+    run("Unprotect[rpP1]; Remove[rpP1];");
+    assert_eval_eq("Quiet[Remove[\"Sin*\"]]; Sin[0]", "0", 0);
+    /* ClearAll / Clear keep the symbols and drop their values. */
+    run("rpB1 = 1; rpB2[x_] := x;");
+    assert_eval_eq("ClearAll[\"rpB*\"]; {Names[\"rpB*\"], rpB1, rpB2[3]}",
+                   "{{\"rpB1\", \"rpB2\"}, rpB1, rpB2[3]}", 0);
+    run("rpC1 = 1;");
+    assert_eval_eq("Clear[\"rpC*\"]; {Names[\"rpC*\"], rpC1}", "{{\"rpC1\"}, rpC1}", 0);
+    /* Clear never touches a Protected symbol through a pattern. */
+    assert_eval_eq("Clear[\"Pi\"]; N[Pi] > 3", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -377,6 +416,7 @@ int main(void) {
     /* Memory hygiene */
     TEST(test_define_clear_loop);
     TEST(test_remove_loop);
+    TEST(test_string_pattern_specs);
 
     printf("All clearall_remove_protect_tests passed.\n");
     return 0;

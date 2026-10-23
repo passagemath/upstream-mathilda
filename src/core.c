@@ -1207,12 +1207,23 @@ Expr* builtin_compoundexpression(Expr* res) {
      * statement; yield Null so we never return NULL ("cannot evaluate"). */
     return last_val ? last_val : expr_new_symbol(SYM_Null);
 }
+static void core_apply_one_spec(Expr* spec, void (*action)(const char*), const char* head);
+
+/* Clear's action for a pattern-matched name: drop values unless Protected. */
+static void core_clear_values_one(const char* name) {
+    if (!name || (get_attributes(name) & ATTR_PROTECTED)) return;
+    symtab_clear_symbol(name);
+}
+
 Expr* builtin_clear(Expr* res) {
     if (res->type == EXPR_FUNCTION) {
         for (size_t i = 0; i < res->data.function.arg_count; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_SYMBOL) {
                 symtab_clear_symbol(arg->data.symbol.name);
+            } else if (arg->type == EXPR_STRING) {
+                /* Clear["x*"]: every matching symbol that is not Protected. */
+                core_apply_one_spec(arg, core_clear_values_one, NULL);
             }
         }
         return expr_new_symbol(SYM_Null);
@@ -1319,7 +1330,11 @@ static void core_clear_all_one(const char* name) {
 static void core_remove_one(const char* name) {
     if (!name) return;
     uint32_t attrs = get_attributes(name);
-    if (attrs & ATTR_PROTECTED) return;
+    if (attrs & ATTR_PROTECTED) {
+        mth_message("Remove", "rmptc", "Symbol %s is Protected and cannot be removed.",
+                    context_display_name(name));
+        return;
+    }
     symtab_remove_symbol(name);
 }
 
@@ -1348,27 +1363,41 @@ static bool core_unprotect_one(const char* name) {
 /* Apply `action` to every symbol spec in `res`'s argument list, where a
  * spec is a symbol/string or a flat List of them. Used by ClearAll and
  * Remove, which both return Null. */
-static Expr* core_apply_symbol_action(Expr* res, void (*action)(const char*)) {
+/* Apply `action` to the symbol(s) one spec names.  A symbol names itself.
+ * A string is a Names-style pattern ("x*", "ctx`*", or a plain name, with or
+ * without its context) and names every symbol Names[spec] would list; when it
+ * names none, `head` (if non-NULL) emits head::rmnsm. */
+static void core_apply_one_spec(Expr* spec, void (*action)(const char*), const char* head) {
+    if (spec->type == EXPR_SYMBOL) { action(spec->data.symbol.name); return; }
+    if (spec->type != EXPR_STRING) return;
+    size_t n = 0;
+    char** keys = names_match_keys(spec, &n);
+    if (n == 0 && head)
+        mth_message(head, "rmnsm", "There are no symbols matching \"%s\".", spec->data.string);
+    for (size_t k = 0; k < n; k++) action(keys[k]);
+    names_free_keys(keys, n);
+}
+
+static Expr* core_apply_symbol_action(Expr* res, void (*action)(const char*), const char* nomatch_head) {
     if (res->type != EXPR_FUNCTION) return NULL;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* arg = res->data.function.args[i];
         if (head_is(arg, SYM_List)) {
-            for (size_t j = 0; j < arg->data.function.arg_count; j++) {
-                action(core_symbol_name_of(arg->data.function.args[j]));
-            }
+            for (size_t j = 0; j < arg->data.function.arg_count; j++)
+                core_apply_one_spec(arg->data.function.args[j], action, nomatch_head);
         } else {
-            action(core_symbol_name_of(arg));
+            core_apply_one_spec(arg, action, nomatch_head);
         }
     }
     return expr_new_symbol(SYM_Null);
 }
 
 Expr* builtin_clear_all(Expr* res) {
-    return core_apply_symbol_action(res, core_clear_all_one);
+    return core_apply_symbol_action(res, core_clear_all_one, NULL);
 }
 
 Expr* builtin_remove(Expr* res) {
-    return core_apply_symbol_action(res, core_remove_one);
+    return core_apply_symbol_action(res, core_remove_one, "Remove");
 }
 
 /* Shared driver for Protect / Unprotect. Walks the spec arguments,

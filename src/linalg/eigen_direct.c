@@ -1128,20 +1128,20 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
                 ? mat_lapack_dsyev((int)n, Ac, (int)n, w)          /* jobz='V' */
                 : mat_lapack_dsyev_values((int)n, Ac, (int)n, w);  /* jobz='N' */
             if (info == 0) {
-                /* dsyev returns eigenvalues ASCENDING. Present them DESCENDING
-                 * (algebraically) before the |lambda| sort so a +/-v tie breaks
-                 * positive-first -- matching Mathematica and the hand-rolled
-                 * kernel, whose sort breaks ties by earliest index. */
+                /* dsyev returns eigenvalues ASCENDING, and the stable |lambda|
+                 * sort keeps that order on a tie, so +/-v comes out
+                 * negative-first: {{0., 1.}, {1., 0.}} -> {-1., 1.}, the same
+                 * order the packed-matrix path always gave. */
                 double* wd = (double*)malloc(sizeof(double) * n);
-                for (size_t k = 0; k < n; k++) wd[k] = w[n - 1 - k];
+                memcpy(wd, w, sizeof(double) * n);
                 size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
                 direct_sort_perm_desc_abs(wd, n, perm);
                 Expr* out;
                 if (want_Q) {
                     double* Q = (double*)malloc(sizeof(double) * n * n);
                     for (size_t i = 0; i < n; i++)
-                        for (size_t j = 0; j < n; j++)   /* desc col j = dsyev col n-1-j */
-                            Q[i * n + j] = Ac[i + (n - 1 - j) * n];
+                        for (size_t j = 0; j < n; j++)   /* col j = dsyev col j */
+                            Q[i * n + j] = Ac[i + j * n];
                     out = direct_build_real_eigenvector_list(Q, n, perm);
                     free(Q);
                 } else {

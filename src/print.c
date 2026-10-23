@@ -263,6 +263,7 @@ static void print_function_fullform(Expr* e) {
  * the input syntax *^. */
 static void print_real_roundtrip(double d) {
     char buf[64];
+    if (d == 0.0) d = 0.0;   /* a negative zero prints as 0.0 (it compares equal) */
     int digits = 15;
     for (; digits <= 17; digits++) {
         snprintf(buf, sizeof(buf), "%.*g", digits, d);
@@ -293,7 +294,9 @@ void expr_print_fullform(Expr* e) {
                 break;
             }
             char buf[64];
-            snprintf(buf, sizeof(buf), "%g", e->data.real);
+            /* -0.0 prints as 0.0: it is SameQ to 0.0, and printing the sign
+             * made exact-zero products like 0 (-1.2) look negative */
+            snprintf(buf, sizeof(buf), "%g", e->data.real == 0.0 ? 0.0 : e->data.real);
             if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL && strchr(buf, 'E') == NULL) printf("%s.0", buf);
             else printf("%s", buf);
             break;
@@ -1771,7 +1774,7 @@ static void print_tex_number(Expr* e) {
         case EXPR_INTEGER: printf("%" PRId64, e->data.integer); break;
         case EXPR_REAL: {
             char buf[64];
-            snprintf(buf, sizeof(buf), "%g", e->data.real);
+            snprintf(buf, sizeof(buf), "%g", e->data.real == 0.0 ? 0.0 : e->data.real);
             if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL && strchr(buf, 'E') == NULL) printf("%s.", buf);
             else printf("%s", buf);
             break;

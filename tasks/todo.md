@@ -1,3 +1,19 @@
+# SparseArray stress test, fixes, and beating scipy.sparse (2026-10-24)
+
+Plan: ~/.claude/plans/let-s-thoroughly-stress-test-indexed-hopcroft.md.
+
+- [x] Phase 0: head sweep (1247 heads x 22 call shapes) -> gate modes; `tools/sparse_stress.py` differential fuzzer
+- [x] Phase 1: transparency gate (`src/sparse/sparse_gate.c`, `SymbolDef.sparse_mode`, eval pre/post hooks, 2^27 cap + SparseArray::dense, MATHILDA_SPARSE_DIAG=gate)
+- [x] Fuzz-found fixes: packed 0^0, `{0.,1.}^0` -> 1, `2.5^0` -> 1., -0.0 printing, symmetric Eigenvalues tie order, linalg FullForm messages, double message on declining builtins (evaluator settled step)
+- [ ] Full suite A/B vs HEAD worktree (core evaluator change) before push
+- [ ] Phase 2: native kernels (Dot SpMV/SpMM/SpGEMM, Transpose, structural ops, reductions, IdentityMatrix/DiagonalMatrix/KroneckerProduct sparse constructors, sparse LinearSolve direct+Krylov, Eigenvalues[s, k] Lanczos/Arnoldi)
+- [ ] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
+- [ ] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
+- [ ] Follow-up (pre-existing, not sparse): `x = Total[t]` re-emits a message after Set (eval clock churn invalidates the stamp)
+- [ ] Follow-up (pre-existing): `Eigensystem` does not exist
+- [ ] Follow-up (pre-existing): non-symmetric machine Eigenvalues tie order: {{1.,2.},{0.,-1.}} -> {1.,-1.}, expected {-1.,1.}
+- [ ] Follow-up (pre-existing): `ReplaceAll[s, 1]` (a non-rule) returns s; it should stay unevaluated
+
 # SparseArray (2026-10-23)
 
 Plan: ~/.claude/plans/pasted-content-id-bdcb-let-s-plan-smooth-shore.md. Spec: docs/spec/builtins/data-structures.md.

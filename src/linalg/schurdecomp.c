@@ -183,7 +183,7 @@ Expr* builtin_schurdecomposition(Expr* res) {
     if (!generalized) {
         n = schur_matrix_order(arg0);
         if (n < 1) {
-            char* s = expr_to_string_fullform((Expr*)arg0);
+            char* s = expr_to_string((Expr*)arg0);
             mth_message("SchurDecomposition", "sqma", "Argument %s at position 1 is not a non-empty square matrix or a pair of square matrices.", s ? s : "?");
             free(s);
             return NULL;

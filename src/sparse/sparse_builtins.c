@@ -394,4 +394,6 @@ void sparse_init(void) {
 
     /* Band[...] is an inert specification for SparseArray. */
     symtab_get_def(SYM_Band)->attributes |= ATTR_PROTECTED;
+
+    sparse_gate_init();
 }

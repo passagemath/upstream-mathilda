@@ -563,7 +563,7 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
     if (e->type == EXPR_REAL) {
         /* Use up to 6 significant digits; strip trailing zeros */
         char buf[64];
-        snprintf(buf, sizeof(buf), "%g", e->data.real);
+        snprintf(buf, sizeof(buf), "%g", e->data.real == 0.0 ? 0.0 : e->data.real);
         lb_cat(b, buf);
         return;
     }

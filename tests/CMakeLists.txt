@@ -331,6 +331,7 @@ set(COMMON_SRC
     ../src/sparse/sparse_arith.c
     ../src/sparse/sparse_part.c
     ../src/sparse/sparse_builtins.c
+    ../src/sparse/sparse_gate.c
     ../src/symtab.c
     ../src/match.c
     ../src/part.c

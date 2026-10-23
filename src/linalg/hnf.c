@@ -159,7 +159,7 @@ Expr* builtin_hermite_decomposition(Expr* res) {
     int64_t dims[64];
     int rank = get_tensor_dims(mexpr, dims);
     if (rank != 2 || dims[0] == 0 || dims[1] == 0) {
-        char* s = expr_to_string_fullform(mexpr);
+        char* s = expr_to_string(mexpr);
         mth_message("HermiteDecomposition", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;

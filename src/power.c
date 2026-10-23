@@ -716,6 +716,14 @@ Expr* builtin_power(Expr* res) {
     if (is_ndarray(base) || is_ndarray(exp)) {
         Expr* retry = ndarray_int64_delist_retry(res);
         if (retry) return retry;
+        /* A real or complex buffer the kernel declined (0^0 is Indeterminate,
+         * which a buffer cannot hold): an invisible packed List answers as the
+         * plain List does. Without this the identity x^0 -> 1 below took the
+         * whole buffer for x, and {0., 1.}^0 came back as 1. */
+        if ((is_packed_list(base) || is_packed_list(exp)) &&
+            !(is_ndarray(base) && !is_packed_list(base)) &&
+            !(is_ndarray(exp) && !is_packed_list(exp)))
+            return ndarray_delist_and_reeval(res);
     }
 
     /* NDArray combined with a symbolic base or exponent (NDArray^n): purely
@@ -836,7 +844,18 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
-    if (exp->type == EXPR_INTEGER && exp->data.integer == 0) return expr_new_integer(1);
+    if (exp->type == EXPR_INTEGER && exp->data.integer == 0) {
+        /* A machine base keeps its inexactness: 2.5^0 is 1., as is a machine
+         * complex base (whose 1. + 0. I collapses to 1.); an exact or
+         * arbitrary-precision base gives the exact 1. */
+        bool machine = base->type == EXPR_REAL ||
+            (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL &&
+             base->data.function.head->data.symbol.name == SYM_Complex &&
+             base->data.function.arg_count == 2 &&
+             base->data.function.args[0]->type == EXPR_REAL &&
+             base->data.function.args[1]->type == EXPR_REAL);
+        return machine ? expr_new_real(1.0) : expr_new_integer(1);
+    }
     if (exp->type == EXPR_INTEGER && exp->data.integer == 1) return expr_copy(base);
     if (base->type == EXPR_INTEGER && base->data.integer == 1) return expr_new_integer(1);
 

@@ -472,7 +472,7 @@ Expr* builtin_latticereduce(Expr* res) {
     int64_t dims[64];
     int rank = get_tensor_dims(m, dims);
     if (rank != 2 || dims[0] == 0 || dims[1] == 0) {
-        char* s = expr_to_string_fullform(m);
+        char* s = expr_to_string(m);
         mth_message("LatticeReduce", "matrix", "Argument %s at position 1 is not a non-empty rectangular matrix.", s);
         free(s);
         return NULL;
@@ -694,7 +694,7 @@ static int finv_user_zerotest(Expr* fn, Expr* residual) {
 
 /* Emit a FindIntegerNullVector::tag diagnostic naming the input list. */
 static void finv_msg(const char* tag, const char* body, Expr* list) {
-    char* s = expr_to_string_fullform(list);
+    char* s = expr_to_string(list);
     mth_message("FindIntegerNullVector", tag, "%s %s.", body, s);
     free(s);
 }

@@ -1578,6 +1578,40 @@ In[6]:= ArrayRules[s]
 Out[6]= {{1, 1} -> 1, {2, 3} -> x, {_, _} -> 0}
 ```
 
+**Other functions on a SparseArray** (the transparency gate,
+`src/sparse/sparse_gate.c`). Outside the Listable heads, a function sees a
+SparseArray in one of four ways (each head's way was settled call shape by
+call shape), and `tools/sparse_stress.py` re-checks the invariant
+`Normal[f[s]] == f[Normal[s]]` on random arrays:
+
+| behaviour | heads (selection) | `f[s]` |
+|---|---|---|
+| answers as on `Normal[s]` | `Total`, `Max`, `Min`, `Mean`, `Tr`, `Det`, `Inverse`, `LinearSolve`, `Eigenvalues`, `MatrixRank`, `Accumulate`, `Differences`, `Equal`, `Tally`, `Inner`, `s . v` | the dense answer |
+| array answer stays sparse | `Transpose`, `Flatten`, `ArrayReshape`, `Reverse`, `Take`, `Drop`, `First`, `Rest`, `Join`, `Append`, `Partition`, `Diagonal`, `KroneckerProduct`, `Outer`, `ArrayFlatten`, `PadRight`, `Chop`, `Expand` | a SparseArray over the leading array's background |
+| walks level 1 | `Map`, `Apply`, `MapIndexed`, `Scan`, `Select`, `MapThread` | the rows, themselves SparseArrays (`Map` over a vector maps the elements and the background) |
+| atom | `Count`, `Cases`, `Position`, `MemberQ`, `ReplaceAll`, `Level`, `Sort`, `Fold`, `Union`, containers, user functions | the SparseArray itself |
+
+An array answer stays sparse only when an array leads: `Join[s, s]` is sparse
+and `Join[s, m]` with a dense `m` is dense. `Outer[f, s, v]` and
+`ArrayFlatten[{{s, s}}]` are sparse when any argument is.
+
+```mathematica
+In[1]:= s = SparseArray[{{1, 1} -> 1, {2, 3} -> 2, {3, 2} -> -1, {3, 3} -> 4}, {3, 3}];
+
+In[2]:= {Total[s], Det[s], s . {1, 2, 3}}
+Out[2]= {{1, -1, 6}, 2, {1, 6, 10}}
+
+In[3]:= Transpose[s]
+Out[3]= SparseArray[<4>, {3, 3}]
+
+In[4]:= {Count[s, 1], MemberQ[s, 2]}
+Out[4]= {0, False}
+```
+
+Densifying is implicit only up to 2^27 elements. Beyond that the call is left
+unevaluated with `SparseArray::dense`. For example, `Total` of a
+`10^5 x 10^5` array never allocates the 80 GB dense form.
+
 ## ArrayRules
 
 - `ArrayRules[s]` gives the rules `{pos1 -> v1, ..., {_, _, ...} -> val}` that

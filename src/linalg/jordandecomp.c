@@ -861,7 +861,7 @@ Expr* builtin_jordandecomposition(Expr* res) {
     Expr* arg = res->data.function.args[0];
     int n = jd_matrix_order(arg);
     if (n < 0) {
-        char* s = expr_to_string_fullform(arg);
+        char* s = expr_to_string(arg);
         mth_message("JordanDecomposition", "matsq", "Argument %s at position 1 is not a non-empty square matrix.", s);
         free(s);
         return NULL;

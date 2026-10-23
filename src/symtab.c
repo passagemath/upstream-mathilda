@@ -235,6 +235,16 @@ void symtab_set_packed_aware(const char* symbol_name) {
     symtab_get_def(symbol_name)->packed_aware = 1;
 }
 
+/* See SymbolDef.sparse_mode. */
+void symtab_set_sparse_mode(const char* symbol_name, int mode) {
+    symtab_get_def(symbol_name)->sparse_mode = (uint8_t)mode;
+}
+
+/* See SymbolDef.sparse_native. */
+void symtab_set_sparse_native(const char* symbol_name, const void* fn) {
+    symtab_get_def(symbol_name)->sparse_native = fn;
+}
+
 /* See SymbolDef.packed_broadcast_ok. Implies packed_aware: a head cannot claim
  * to handle a rank mismatch on a buffer without handling the buffer at all. */
 void symtab_set_packed_broadcast_ok(const char* symbol_name) {

@@ -144,6 +144,17 @@ typedef struct SymbolDef {
      * same_shape), and packing there would route the call somewhere its kernel
      * declines. So this is the narrow claim: "a rank mismatch is still mine". */
     uint8_t  packed_broadcast_ok;
+    /* How this head treats a SparseArray (EXPR_SPARSE) argument: 0 leaves it an
+     * atom, otherwise an SPG_* mode from sparse/sparse.h that the evaluator's
+     * sparse transparency gate applies (sparse/sparse_gate.c). Opt-in, because
+     * the language itself treats a SparseArray as an atom for pattern and
+     * container heads. */
+    uint8_t  sparse_mode;
+    /* A native SparseArray kernel for this head (an SpNativeFn from
+     * sparse/sparse.h), tried before the sparse_mode gate whenever an argument
+     * is a SparseArray. It borrows the call and returns the answer, or NULL to
+     * decline -- and then the gate (if any) answers. NULL: no kernel. */
+    const void* sparse_native;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 
@@ -227,6 +238,10 @@ void symtab_clear_packed_aware(const char* symbol_name);
 void symtab_set_packed_int64_ok(const char* symbol_name);
 /* SymbolDef.packed_broadcast_ok. Implies packed_aware. */
 void symtab_set_packed_broadcast_ok(const char* symbol_name);
+/* SymbolDef.sparse_mode (an SPG_* value from sparse/sparse.h). */
+void symtab_set_sparse_mode(const char* symbol_name, int mode);
+/* SymbolDef.sparse_native (an SpNativeFn from sparse/sparse.h). */
+void symtab_set_sparse_native(const char* symbol_name, const void* fn);
 
 // Set/get the default option settings (a List[Rule[name,val], ...]) for a
 // symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options

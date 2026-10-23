@@ -462,6 +462,55 @@ static void test_fast_paths(void) {
     chk_true("Normal[2.^fa] == 2.^Normal[fa]");
 }
 
+/* The transparency gate (sparse_gate.c): heads that answer on Normal[s], heads
+ * whose array answer comes back sparse, level-1 walkers, and the pattern heads
+ * that keep treating the array as an atom. */
+static void test_gate(void) {
+    chk("S = SparseArray[{{1,1}->1,{2,3}->2,{3,2}->-1,{3,3}->4},{3,3}]; "
+        "V = SparseArray[{1->3,4->-2},{5}]; Null", "Null");
+    /* SPG_DENSE */
+    chk("Total[S]", "{1, -1, 6}");
+    chk("Total[S, 2]", "6");
+    chk("Max[S]", "4");
+    chk("Min[V]", "-2");
+    chk("Tr[S]", "5");
+    chk("Mean[V]", "1/5");
+    chk("Accumulate[V]", "{3, 3, 3, 1, 1}");
+    chk("Det[S]", "2");
+    chk("Inverse[S]", "{{1, 0, 0}, {0, 2, -1}, {0, 1/2, 0}}");
+    chk("MatrixRank[S]", "3");
+    chk("S . {1, 2, 3}", "{1, 6, 10}");
+    chk("{1, 2, 3} . S", "{1, -3, 16}");
+    chk_true("S == Normal[S]");
+    chk("Equal[S, {{1, 0, 2}, {0, 3, 0}, {4, 0, 5}}]", "False");
+    /* SPG_RESPARSE: sparse when the array leads */
+    chk_true("Head[Transpose[S]] === SparseArray && Normal[Transpose[S]] === Transpose[Normal[S]]");
+    chk_true("Head[Reverse[V]] === SparseArray && Normal[Reverse[V]] === {0, -2, 0, 0, 3}");
+    chk_true("Normal[Take[S, 2]] === {{1, 0, 0}, {0, 0, 2}}");
+    chk_true("Normal[Flatten[S]] === {1, 0, 0, 0, 0, 2, 0, -1, 4}");
+    chk_true("Head[First[S]] === SparseArray && Normal[Rest[V]] === {0, 0, -2, 0}");
+    chk_true("Head[Join[S, S]] === SparseArray && Normal[Join[S, S]] === Join[Normal[S], Normal[S]]");
+    chk("Head[Join[S, {{1, 0, 2}}]]", "List");
+    chk_true("Head[Outer[Times, V, {1, 2}]] === SparseArray");
+    chk_true("Head[ArrayFlatten[{{S, S}}]] === SparseArray && Dimensions[ArrayFlatten[{{S, S}}]] === {3, 6}");
+    chk_true("Normal[Diagonal[S]] === {1, 0, 4}");
+    /* Map: rows of a matrix, elements of a vector (and the background maps) */
+    chk("Map[g, S] /. a_SparseArray :> Normal[a]", "{g[{1, 0, 0}], g[{0, 0, 2}], g[{0, -1, 4}]}");
+    chk("Map[g, V][\"Background\"]", "g[0]");
+    chk_true("Normal[Map[g, V]] === {g[3], g[0], g[0], g[-2], g[0]}");
+    chk("Apply[Plus, S] // Normal", "{1, -1, 6}");
+    /* pattern heads keep the atom */
+    chk("Count[S, 1]", "0");
+    chk("Position[S, 2]", "{}");
+    chk("MemberQ[S, 2]", "False");
+    chk("AtomQ[S]", "True");
+    chk("Select[V, Positive]", "{3}");
+    chk_true("Head[First[Select[S, VectorQ]]] === SparseArray");
+    /* a too-large implicit densification is refused, not attempted */
+    chk("Quiet[Total[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]]] // Head", "Total");
+    chk("Check[Total[SparseArray[{{1, 1} -> 1}, {10^5, 10^5}]], fail]", "fail");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -473,6 +522,7 @@ int main(void) {
     test_arithmetic();
     test_functions();
     test_fast_paths();
+    test_gate();
     if (failures) {
         fprintf(stderr, "\n%d SparseArray test(s) FAILED\n", failures);
         return 1;

@@ -238,8 +238,8 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
         if (fast) { expr_free(tmp_a); expr_free(tmp_b); return fast; }
         if (shape_error) {
             if (!*error_printed) {
-                char* a_str = expr_to_string_fullform(fa);
-                char* b_str = expr_to_string_fullform(fb);
+                char* a_str = expr_to_string(fa);
+                char* b_str = expr_to_string(fb);
                 mth_message("Dot", "dotsh", "Tensors %s and %s have incompatible shapes.", a_str, b_str);
                 free(a_str);
                 free(b_str);
@@ -279,8 +279,8 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     int64_t K = dimsA[rankA - 1];
     if (K != dimsB[0]) {
         if (!*error_printed) {
-            char* a_str = expr_to_string_fullform(a);
-            char* b_str = expr_to_string_fullform(b);
+            char* a_str = expr_to_string(a);
+            char* b_str = expr_to_string(b);
             mth_message("Dot", "dotsh", "Tensors %s and %s have incompatible shapes.", a_str, b_str);
             free(a_str);
             free(b_str);

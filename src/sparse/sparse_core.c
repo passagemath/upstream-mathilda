@@ -176,8 +176,11 @@ static void free_vals(SpValKind kind, void* vals, int64_t nnz) {
 /* Arrays                                                                   */
 /* ======================================================================== */
 
+bool sp_g_any_created = false;
+
 SparseArray* sp_new(int rank, const int64_t* dims, Expr* bg, SparsePattern* pat,
                     SpValKind kind, void* vals) {
+    sp_g_any_created = true;
     SparseArray* sa = malloc(sizeof *sa);
     int64_t* d = malloc(sizeof(int64_t) * (size_t)(rank > 0 ? rank : 1));
     if (!sa || !d) {

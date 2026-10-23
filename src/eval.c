@@ -319,6 +319,10 @@ static bool        g_tracing           = false; /* true only inside a Trace[]  *
  * the rule's own internal reductions are hidden, matching Mathematica (Range[10]
  * and x^{1..10} each appear as a single rewrite, not a decomposed one). */
 static int         g_trace_suppress    = 0;
+/* The recursion depth of the evaluate() frame whose current step came to rest
+ * without any rewrite (set at evaluate_step_core's rest return, read by the
+ * evaluate loop right after the step); -1 otherwise. */
+static int         g_step_settled_depth = -1;
 #define TRACE_ACTIVE() (g_tracing && g_trace_suppress == 0)
 
 /* Append an already-owned entry to a frame, growing on demand. On OOM the
@@ -1841,6 +1845,30 @@ static bool strip_nothing(Expr* e) {
 /* Does any argument of the call `res` hold a dense buffer (a packed List or a
  * visible NDArray)? The packed-array gate in evaluate_step has work to do only
  * then. */
+/* Are `res`'s arguments still exactly the `n` pointers in `snap`? */
+static inline bool eval_args_untouched(const Expr* res, Expr* const* snap, size_t n) {
+    return res->type == EXPR_FUNCTION && res->data.function.arg_count == n &&
+           (n == 0 || memcmp(snap, res->data.function.args, sizeof(Expr*) * n) == 0);
+}
+
+/* Does the sparse gate have anything to convert in this call: a SparseArray
+ * argument, or (SPG_DEEP) one inside a List argument, two levels down? */
+static bool eval_sparse_in(const Expr* e, int depth) {
+    if (e->type == EXPR_SPARSE) return true;
+    if (depth == 0 || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol.name != SYM_List)
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (eval_sparse_in(e->data.function.args[i], depth - 1)) return true;
+    return false;
+}
+static bool eval_sparse_gate_applies(const Expr* res, int mode_bits) {
+    int depth = (mode_bits & SPG_DEEP) ? 2 : 0;
+    for (size_t i = 0; i < res->data.function.arg_count; i++)
+        if (eval_sparse_in(res->data.function.args[i], depth)) return true;
+    return false;
+}
+
 static inline bool eval_any_ndarray_arg(const Expr* res) {
     for (size_t i = 0; i < res->data.function.arg_count; i++)
         if (res->data.function.args[i]->type == EXPR_NDARRAY) return true;
@@ -2136,6 +2164,18 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             Expr* res = expr_new_function(head, new_args, argc);
             if (new_args != new_args_stack) free(new_args);
 
+            /* The node as argument evaluation left it. If nothing after this
+             * point touches it -- no Sequence splice, Unevaluated strip, Flat
+             * (which flattens one level per step), Orderless, gate or builtin
+             * rewriting arguments in place (And stores its evaluated held
+             * arguments) -- and it comes to rest, a further step would only
+             * replay this one: see g_step_settled_depth. */
+            enum { SETTLE_SNAP_MAX = 64 };
+            Expr* settle_snap[SETTLE_SNAP_MAX];
+            const size_t settle_argc = res->data.function.arg_count;
+            const bool settle_ok = settle_argc <= SETTLE_SNAP_MAX;
+            if (settle_ok) memcpy(settle_snap, res->data.function.args, sizeof(Expr*) * settle_argc);
+
             /* Trace: snapshot the reassembled f[evaluated_args] form, before
              * flatten/Flat/Listable/Orderless and before any rule fires, so the
              * trace can show e.g. `8 + 16 + 1` rather than the pre-arg-eval
@@ -2428,6 +2468,33 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     res->data.function.args[i] = ndarray_to_nested_list(pa);
                     expr_free(pa);
                     *changed = true;
+                }
+            }
+
+            /* The SparseArray transparency gate (sparse/sparse_gate.c): a head
+             * that opted in by sparse_mode sees an array argument densified,
+             * densified and re-sparsified, or split into its rows -- after its
+             * registered native kernel (sparse_native), if any, declines. A
+             * builtin that reads sparse arguments itself (SPG_NATIVE) gets
+             * the gate only if it declines -- see the post-gate below. */
+            if (hdef && hdef->sparse_native && sp_any_created() &&
+                eval_sparse_gate_applies(res, hdef->sparse_mode)) {
+                /* A native sparse kernel (sparse/sparse_*.c) gets first try. */
+                Expr* nat = ((SpNativeFn)hdef->sparse_native)(res);
+                if (nat) { expr_free(res); *changed = true; return nat; }
+            }
+            if (hdef && (hdef->sparse_mode & SPG_MODE_MASK) &&
+                !(hdef->sparse_mode & SPG_NATIVE) && sp_any_created() &&
+                eval_sparse_gate_applies(res, hdef->sparse_mode)) {
+                bool rest = false;
+                g_trace_suppress++;
+                Expr* g = sp_gate(res, hdef->sparse_mode, &rest);
+                g_trace_suppress--;
+                if (g) { expr_free(res); *changed = true; return g; }
+                if (rest) {
+                    if (settle_ok && eval_args_untouched(res, settle_snap, settle_argc))
+                        g_step_settled_depth = eval_recursion_depth;
+                    return res;
                 }
             }
 
@@ -3006,6 +3073,17 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 }
             }
 
+            /* A head with a native sparse path declined this call: the
+             * transparency gate is its fallback (see the pre-gate above). */
+            if (hdef && (hdef->sparse_mode & SPG_NATIVE) && sp_any_created() &&
+                eval_sparse_gate_applies(res, hdef->sparse_mode)) {
+                bool rest = false;
+                g_trace_suppress++;
+                Expr* g = sp_gate(res, hdef->sparse_mode, &rest);
+                g_trace_suppress--;
+                if (g) { expr_free(res); *changed = true; return g; }
+            }
+
             /* THE POST-GATE. Nothing above rewrote this node, so it is coming to
              * REST -- and a packed argument that is still here was kept for a
              * fast path that did not fire. Whatever the head is, it has now
@@ -3020,6 +3098,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
              *
              * Converges in one extra pass: the retry finds no packed argument
              * left, so nothing changes and the node rests for real. */
+            bool post_gated = false;
             if (pack_any_created()) {
                 for (size_t i = 0; i < res->data.function.arg_count; i++) {
                     Expr* pa = res->data.function.args[i];
@@ -3028,10 +3107,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     res->data.function.args[i] = ndarray_to_nested_list(pa);
                     expr_free(pa);
                     *changed = true;
+                    post_gated = true;
                     g_pack_gate_ticks++;
                 }
             }
 
+            /* Nothing rewrote the node: it comes to rest here, and a further
+             * step would only replay this one (see g_step_settled_depth). */
+            if (!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc))
+                g_step_settled_depth = eval_recursion_depth;
             return res;
         }
     }
@@ -3227,8 +3311,18 @@ static Expr* evaluate_core(Expr* e) {
 
         bool step_changed = false;
         uint64_t gate_mark = g_pack_gate_ticks;
+        g_step_settled_depth = -1;
         next = evaluate_step(current, &step_changed);
         bool gate_fired = (g_pack_gate_ticks != gate_mark);
+        /* The step changed the node (its head or arguments evaluated, Flat /
+         * Orderless reshaped it) and then came to REST: no builtin, rule or
+         * gate rewrote it. Another step would re-evaluate the same stamped
+         * arguments and re-ask the same declining builtin -- re-emitting its
+         * message (Det[m] printed Det::matsq twice) for nothing. So the step's
+         * result is the fixed point. Only the rest return of THIS frame's step
+         * sets this depth; a nested evaluate runs deeper, and a step that
+         * returns by any other path leaves -1 or a deeper depth here. */
+        bool step_settled = (g_step_settled_depth == eval_recursion_depth);
 
         /* M3 phase-4 (§3.4): eager early exit. evaluate_step signals via
          * the `step_changed` out-parameter whether any rewrite fired
@@ -3259,6 +3353,11 @@ static Expr* evaluate_core(Expr* e) {
              * builtin -- F[x_machine] -> Real -- so take `next` as the fixed
              * point directly. Same result, same stamp, one step fewer. Not
              * taken while tracing: the rewrite branch below records the step. */
+            expr_free(current);
+            current = next;
+            next = NULL;
+            is_fixed_point = true;
+        } else if (step_changed && step_settled && !trace_here && !gate_fired) {
             expr_free(current);
             current = next;
             next = NULL;

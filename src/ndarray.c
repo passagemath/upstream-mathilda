@@ -1304,6 +1304,9 @@ static bool nd_pow_chunk(void* c, size_t lo, size_t hi) {
         double ar, ai, er, ei, rr, ri;
         if (x->abuf) ndt_get(x->abuf, k, x->adt, &ar, &ai); else { ar = x->sar; ai = x->sai; }
         if (x->bbuf) ndt_get(x->bbuf, k, x->bdt, &er, &ei); else { er = x->sbr; ei = x->sbi; }
+        /* 0^0 is Indeterminate (with Power::indet), which no buffer holds:
+         * decline, so the List path answers and reports it. */
+        if (ar == 0.0 && ai == 0.0 && er == 0.0 && ei == 0.0) return false;
         cpow_pair(ar, ai, er, ei, &rr, &ri);
         ndt_set(x->out, k, x->dtc, rr, ri);
     }
@@ -1323,7 +1326,8 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
         if (dta != NDT_INT64 || dtb != NDT_INT64) return NULL;
         const int64_t* pa = (const int64_t*)a->data.ndarray.data;
         const int64_t* pb = (const int64_t*)b->data.ndarray.data;
-        for (size_t k = 0; k < sz; k++) if (pb[k] < 0) return NULL;
+        for (size_t k = 0; k < sz; k++)
+            if (pb[k] < 0 || (pb[k] == 0 && pa[k] == 0)) return NULL;   /* 0^0: see nd_pow_chunk */
         int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
         if (!o) return NULL;
         for (size_t k = 0; k < sz; k++)
@@ -1347,7 +1351,7 @@ Expr* ndarray_elementwise_power(const Expr* a, const Expr* b) {
     void* out = malloc(ndt_elem_size(dtc) * sz);
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
                      b->data.ndarray.data, dtb, 0, 0, out, dtc };
-    nd_parallel_for(sz, nd_pow_chunk, &c);
+    if (!nd_parallel_for(sz, nd_pow_chunk, &c)) { free(out); return NULL; }
     return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 
@@ -1378,7 +1382,7 @@ Expr* ndarray_base_scalar_power(double br, double bi, const Expr* exp_arr) {
     void* out = malloc(ndt_elem_size(dtc) * sz);
     nd_pow_ctx c = { NULL, dte, br, bi,             /* scalar base */
                      exp_arr->data.ndarray.data, dte, 0, 0, out, dtc };
-    nd_parallel_for(sz, nd_pow_chunk, &c);
+    if (!nd_parallel_for(sz, nd_pow_chunk, &c)) { free(out); return NULL; }
     return expr_new_ndarray_like(exp_arr, exp_arr->data.ndarray.rank,
                             exp_arr->data.ndarray.dims, out, dtc);
 }
@@ -1396,9 +1400,11 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
          * both go to the List path. ci_powi_i64 abandons on overflow the same
          * way, so Total[Range[10^6]^3] still reaches GMP and answers exactly. */
         if (ei != 0.0 || er != floor(er) || er < 0.0) return NULL;
+        const int64_t* p = (const int64_t*)a->data.ndarray.data;
+        if (er == 0.0)                           /* 0^0: see nd_pow_chunk */
+            for (size_t k = 0; k < sz; k++) if (p[k] == 0) return NULL;
         int64_t* o = malloc(sizeof(int64_t) * (sz ? sz : 1));
         if (!o) return NULL;
-        const int64_t* p = (const int64_t*)a->data.ndarray.data;
         for (size_t k = 0; k < sz; k++)
             if (ci_powi_i64(p[k], (int64_t)er, &o[k])) { free(o); return NULL; }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims,
@@ -1420,6 +1426,8 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
          * the cost of the sqrt itself. */
         const double* p = (const double*)a->data.ndarray.data;
         double* o = (double*)out;
+        if (er == 0.0)                           /* 0^0: see nd_pow_chunk */
+            for (size_t k = 0; k < sz; k++) if (p[k] == 0.0) { free(out); return NULL; }
         if (er == 2.0)       for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k];
         else if (er == 3.0)  for (size_t k = 0; k < sz; k++) o[k] = p[k] * p[k] * p[k];
         else if (er == 0.5) { nd_sqrt_ctx sc = { p, o }; nd_parallel_for(sz, nd_sqrt_chunk, &sc); }
@@ -1430,7 +1438,7 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
     }
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
                      NULL, dta, er, ei, out, dtc };   /* scalar exponent */
-    nd_parallel_for(sz, nd_pow_chunk, &c);
+    if (!nd_parallel_for(sz, nd_pow_chunk, &c)) { free(out); return NULL; }
     return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
 }
 

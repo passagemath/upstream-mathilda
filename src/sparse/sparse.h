@@ -254,6 +254,43 @@ bool sp_elements_pass(const Expr* s, const Expr* test);
  * Borrows everything. */
 Expr* sp_apply(const Expr* s, Expr* const* args, size_t n);
 
+/* ---- transparency gate (sparse_gate.c) ----------------------------------- */
+
+/* SymbolDef.sparse_mode: how a head treats a SparseArray argument. 0 (the
+ * default) leaves it an atom. See sparse_gate.c for the modes. */
+enum {
+    SPG_NONE     = 0,
+    SPG_DENSE    = 1,     /* answer as on Normal[s] */
+    SPG_RESPARSE = 2,     /* ... and an array answer comes back sparse */
+    SPG_ROWS     = 3,     /* replace the array by the List of its level-1 parts */
+    SPG_MAP      = 4,     /* SPG_ROWS for rank >= 2; SPG_RESPARSE for a vector */
+    SPG_MODE_MASK = 0x0f,
+    SPG_NATIVE   = 0x10,  /* the builtin handles sparse itself; gate on decline */
+    SPG_DEEP     = 0x20,  /* also convert arrays inside List arguments (2 levels) */
+    SPG_ANYPOS   = 0x40,  /* SPG_RESPARSE: any array argument makes the answer sparse */
+    SPG_ALLARR   = 0x80   /* SPG_RESPARSE: ... only if EVERY array argument is sparse */
+};
+
+/* Apply the gate to `call` (borrowed), whose head has sparse_mode `mode_bits`.
+ * Returns the answer, or NULL: with *rest set the call must be left as it is
+ * (the head declined, or densifying was refused), otherwise the gate had
+ * nothing to do. */
+Expr* sp_gate(const Expr* call, int mode_bits, bool* rest);
+
+/* A native SparseArray kernel (SymbolDef.sparse_native): borrows the whole
+ * call, which has at least one SparseArray argument, and returns the answer,
+ * or NULL to decline (the head's sparse_mode gate, if any, then answers).
+ * Register with symtab_set_sparse_native. */
+typedef Expr* (*SpNativeFn)(const Expr* call);
+
+/* Register the gate modes of the heads that opt in (called by sparse_init). */
+void sparse_gate_init(void);
+
+/* Has any SparseArray been built in this session? The evaluator's argument
+ * scan for the gate is skipped until one has. */
+extern bool sp_g_any_created;
+static inline bool sp_any_created(void) { return sp_g_any_created; }
+
 /* ---- module -------------------------------------------------------------- */
 
 void sparse_init(void);

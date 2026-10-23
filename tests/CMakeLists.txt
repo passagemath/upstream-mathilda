@@ -604,6 +604,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/meminfo.c
+    ../src/parallel.c
     ../src/image.c
     ../src/imagefilter.c
     ../src/imagegeom.c
@@ -5363,6 +5364,16 @@ else()
     target_link_libraries(message_tests gmp m)
 endif()
 add_test(NAME message_tests COMMAND message_tests)
+
+add_executable(parallel_tests test_parallel.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(parallel_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(parallel_tests gmp m ${ECM_LIB})
+    add_dependencies(parallel_tests build_ecm)
+else()
+    target_link_libraries(parallel_tests gmp m)
+endif()
+add_test(NAME parallel_tests COMMAND parallel_tests)
 
 add_executable(readlist_tests test_readlist.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(readlist_tests PRIVATE ../src ../src/io)

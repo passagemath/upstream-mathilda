@@ -99,6 +99,7 @@
 #include "fit.h"
 #include "info.h"
 #include "meminfo.h"
+#include "parallel.h"
 #include "image.h"
 #include "imageio.h"
 #include "imagecompose.h"
@@ -1016,6 +1017,7 @@ void core_init(void) {
     nsolve_init();
     info_init();
     meminfo_init();
+    parallel_init();
     image_init();
     imagefilter_init();
     imagegeom_init();

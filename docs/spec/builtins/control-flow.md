@@ -1108,3 +1108,25 @@ The messages printed during the current input line, each as `HoldForm[sym::tag]`
 - A message silenced by `Quiet` or `Off` is not listed.
 - It is an ordinary variable, so `Block[{$MessageList = {}}, ...]` scopes it to
   one evaluation.
+
+## Parallel computation: ParallelMap, ParallelTable, ParallelEvaluate, Kernels, LaunchKernels, DistributeDefinitions
+Mathilda runs a single kernel: `$KernelCount` is `0` and `$KernelID` is `0`.
+The parallel functions therefore have the serial meaning of a kernel with no
+subkernels. Code that branches on `$KernelCount` or `$KernelID` runs
+unchanged.
+
+| Call | Result |
+|---|---|
+| `ParallelMap[f, expr]`, `ParallelMap[f, expr, levelspec]` | `Map[f, expr, ...]` |
+| `ParallelTable[body, iterators...]` | `Table[body, iterators...]` (`HoldAll`) |
+| `ParallelEvaluate[expr]` | `{}`: there is no subkernel to run on, and `expr` is not evaluated (`HoldFirst`) |
+| `Kernels[]` | `{}` |
+| `DistributeDefinitions[s1, ...]` | `{}` (`HoldAll`) |
+| `LaunchKernels[...]` | emits `LaunchKernels::nopar` and gives `{}` |
+
+- Trailing options are ignored, because they only control how work is split
+  between subkernels. Examples: `DistributedContexts -> ...`,
+  `Method -> "CoarsestGrained"`, `Method -> "ItemsPerEvaluation" -> n`.
+- The option names `ParallelKernels` and `DistributedContexts` are `System``
+  symbols.
+- All heads are `Protected`. Implemented in `src/parallel.c`.

@@ -28,6 +28,8 @@
 #include "parse.h"
 #include "eval.h"
 #include "options.h"
+#include "files.h"     /* files_slurp_text */
+#include "message.h"   /* mth_message */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -467,6 +469,89 @@ Expr* builtin_read(Expr* res) {
 }
 
 /* ------------------------------------------------------------------ */
+/* ReadString                                                          */
+/* ------------------------------------------------------------------ */
+
+/* Copy buf[from, to) into a new string Expr with CRLF normalised; a '\r'
+ * whose '\n' lies just past `to` (a "\n" terminator after a CRLF) goes too. */
+static Expr* rs_chunk(const char* buf, size_t len, size_t from, size_t to) {
+    char* t = malloc(to - from + 1);
+    size_t w = 0;
+    for (size_t r = from; r < to; r++)
+        if (!(buf[r] == '\r' && r + 1 < len && buf[r + 1] == '\n')) t[w++] = buf[r];
+    t[w] = '\0';
+    Expr* e = expr_new_string(t);
+    free(t);
+    return e;
+}
+
+/* First position >= pos where any terminator string starts, or len. */
+static size_t rs_find(const char* buf, size_t len, size_t pos, const Expr* term) {
+    size_t best = len;
+    size_t nt = term->type == EXPR_STRING ? 1 : term->data.function.arg_count;
+    for (size_t k = 0; k < nt; k++) {
+        const char* ts = (term->type == EXPR_STRING ? term : term->data.function.args[k])->data.string;
+        size_t tl = strlen(ts);
+        if (tl == 0) continue;
+        for (size_t i = pos; i + tl <= len && i < best; i++)
+            if (memcmp(buf + i, ts, tl) == 0) { best = i; break; }
+    }
+    return best;
+}
+
+/*
+ * ReadString["file"] / ReadString[stream] / ReadString[src, term]
+ *
+ * The text from the source's current point to its end -- or up to, but not
+ * including, the first occurrence of the string term (or of any string in a
+ * list of them), which is left unread.  Line ends are normalised to "\n".  At
+ * end of file the result is EndOfFile.  A file name is read whole each time
+ * without registering a stream; a stream advances.  A file that cannot be
+ * opened gives OpenRead::noopen and $Failed.
+ */
+Expr* builtin_readstring(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    const Expr* term = NULL;
+    if (argc == 2) {
+        term = res->data.function.args[1];
+        bool ok = term->type == EXPR_STRING;
+        if (!ok && term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL
+            && term->data.function.head->data.symbol.name == SYM_List) {
+            ok = true;
+            for (size_t k = 0; k < term->data.function.arg_count && ok; k++)
+                ok = term->data.function.args[k]->type == EXPR_STRING;
+        }
+        if (!ok) return NULL;
+    }
+    Expr* src = res->data.function.args[0];
+    int id, is_output;
+    if (stream_handle(src, &id, &is_output)) {
+        Stream* s = is_output ? NULL : stream_by_id(id);
+        if (!s) return NULL;
+        if (s->pos >= s->len) return expr_new_symbol(SYM_EndOfFile);
+        size_t end = term ? rs_find(s->buf, s->len, s->pos, term) : s->len;
+        Expr* out = rs_chunk(s->buf, s->len, s->pos, end);
+        s->pos = end;
+        return out;
+    }
+    const char* name = stream_filename_arg(src);
+    if (!name) return NULL;
+    size_t len = 0;
+    char* buf = files_slurp_text(name, &len);
+    if (!buf) {
+        mth_message("OpenRead", "noopen", "Cannot open %s.", name);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    Expr* out;
+    if (len == 0) out = expr_new_symbol(SYM_EndOfFile);
+    else out = rs_chunk(buf, len, 0, term ? rs_find(buf, len, 0, term) : len);
+    free(buf);
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
 /* Registration                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -490,6 +575,16 @@ static Expr* rule_of(const char* name_sym, Expr* value) {
 void read_init(void) {
     symtab_add_builtin("Read", builtin_read);
     symtab_get_def("Read")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("ReadString", builtin_readstring);
+    symtab_get_def("ReadString")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ReadString",
+        "ReadString[\"file\"]\n"
+        "\treads the complete contents of a file and returns them as a string.\n"
+        "ReadString[stream] reads from the stream's current point to the end.\n"
+        "ReadString[src, term] reads up to, but not including, the first occurrence of the string\n"
+        "term (or any of a list of strings), which is left unread.  Line ends are normalised to\n"
+        "\"\\n\".  At end of file the result is EndOfFile.");
 
     /* Same default separator settings as ReadList; SetOptions[Read, ...] works
      * with no extra code because Options[Read] is the single source of truth. */

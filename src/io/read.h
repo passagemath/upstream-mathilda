@@ -69,6 +69,9 @@ int read_spec_valid(const Expr* spec);
 /* Read[stream|"file"|File["file"], spec?] with trailing separator options. */
 Expr* builtin_read(Expr* res);
 
+/* ReadString["file"|stream, term?] -- the text up to EOF or up to term. */
+Expr* builtin_readstring(Expr* res);
+
 /* Registers Read, its Protected attribute, and Options[Read]. */
 void read_init(void);
 

@@ -30,6 +30,7 @@
 #include "random.h"
 #include "options.h"
 #include "sym_names.h"
+#include "files.h"      /* files_import_text */
 #include "graphics/graphics_export.h"
 #include "graphics/render.h"       /* graphics_raster_dims: aspect-aware export sizing */
 
@@ -182,6 +183,23 @@ static Expr* builtin_import(Expr* res)
 
     path = str_arg(res, 0);
     if (!path) return NULL;
+
+    /* The text formats: "Text" / "String" / "Lines", also spelled {"Text"}; a
+     * bare ".txt" file imports as "Text". */
+    if (res->data.function.arg_count == 2) {
+        const Expr* f2 = res->data.function.args[1];
+        if (f2->type == EXPR_FUNCTION && f2->data.function.arg_count == 1
+            && f2->data.function.head->type == EXPR_SYMBOL
+            && f2->data.function.head->data.symbol.name == SYM_List)
+            f2 = f2->data.function.args[0];
+        if (f2->type == EXPR_STRING) {
+            Expr* t = files_import_text(path, f2->data.string);
+            if (t) return t;
+        }
+    } else {
+        size_t pl = strlen(path);
+        if (pl > 4 && strcmp(path + pl - 4, ".txt") == 0) return files_import_text(path, "Text");
+    }
 
     /* A second argument is an element or format request. Only the ones that mean "the image
      * itself" are handled; "Data" or a channel request would be a different return type and is
@@ -435,7 +453,10 @@ void imageio_init(void)
         "returns an Image. Import[\"file\", \"Image\"] is the same. Samples are scaled by 1/255 "
         "into the unit interval, so the result is a \"Real\" image whatever the file's bit depth, "
         "and the file's channel count is preserved -- grey stays 1 channel, RGBA keeps its alpha. "
-        "Gives $Failed for a missing or malformed file.");
+        "Gives $Failed for a missing or malformed file.\n"
+        "Import[\"file\", \"Text\"] gives the file's contents as a string, less one trailing line "
+        "break; \"String\" gives them exactly; \"Lines\" gives a list of lines. Line ends are "
+        "normalised to \\n. A \".txt\" file imports as \"Text\" by default.");
 
     symtab_add_builtin("Export", builtin_export);
     symtab_get_def("Export")->attributes |= ATTR_PROTECTED;

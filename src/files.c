@@ -300,6 +300,68 @@ static char* fileprint_slurp(const char* filename, size_t* out_size) {
     return buf;
 }
 
+/* Drop every '\r' that is immediately followed by '\n' (CRLF -> LF), in
+ * place; returns the new length.  Text reads (Import "Text"/"String"/"Lines",
+ * ReadString) see the file with normalised line ends. */
+size_t files_crlf_normalize(char* buf, size_t len) {
+    size_t w = 0;
+    for (size_t r = 0; r < len; r++)
+        if (!(buf[r] == '\r' && r + 1 < len && buf[r + 1] == '\n')) buf[w++] = buf[r];
+    buf[w] = '\0';
+    return w;
+}
+
+/* Whole file as text with CRLF normalised; NULL if it cannot be read. */
+char* files_slurp_text(const char* path, size_t* len) {
+    char* buf = fileprint_slurp(path, len);
+    if (buf) *len = files_crlf_normalize(buf, *len);
+    return buf;
+}
+
+/*
+ * Import[path, fmt] for the text formats, fmt one of:
+ *   "String"  the contents (line ends normalised to "\n")
+ *   "Text"    the same less ONE trailing line break
+ *   "Lines"   a list of lines, trailing empty lines dropped
+ * A file that cannot be read gives Import::nffil and $Failed.  Returns NULL
+ * for any other fmt.
+ */
+Expr* files_import_text(const char* path, const char* fmt) {
+    int kind = strcmp(fmt, "Text") == 0 ? 0 : strcmp(fmt, "String") == 0 ? 1
+             : strcmp(fmt, "Lines") == 0 ? 2 : -1;
+    if (kind < 0) return NULL;
+    size_t len = 0;
+    char* buf = files_slurp_text(path, &len);
+    if (!buf) {
+        mth_message("Import", "nffil", "File %s not found during Import.", path);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    Expr* out;
+    if (kind == 0) {
+        if (len > 0 && buf[len - 1] == '\n') buf[--len] = '\0';
+        out = expr_new_string(buf);
+    } else if (kind == 1) {
+        out = expr_new_string(buf);
+    } else {
+        while (len > 0 && buf[len - 1] == '\n') buf[--len] = '\0';
+        size_t n = 0, cap = 16;
+        Expr** lines = malloc(cap * sizeof(Expr*));
+        size_t start = 0;
+        for (size_t i = 0; len > 0 && i <= len; i++) {
+            if (i == len || buf[i] == '\n') {
+                if (n == cap) { cap *= 2; lines = realloc(lines, cap * sizeof(Expr*)); }
+                buf[i] = '\0';
+                lines[n++] = expr_new_string(buf + start);
+                start = i + 1;
+            }
+        }
+        out = expr_new_function(expr_new_symbol(SYM_List), lines, n);
+        free(lines);
+    }
+    free(buf);
+    return out;
+}
+
 /* Walk `buf` once and record one LineSpan per line.  A line ends at the
  * next '\n' (inclusive) or at end-of-buffer.  An empty buffer yields
  * zero lines; a buffer that is exactly "\n" yields one (empty-with-LF)

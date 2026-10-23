@@ -79,6 +79,23 @@ In[7]:= ReadList["/tmp/mathilda_io_csv.txt", Word, WordSeparators -> {","}]  (* 
 Out[7]= {"a", "b", "c"}
 ```
 
+## ReadString
+Reads text from a file or an input stream.
+- `ReadString["file"]`: the complete contents of a file. The file is read whole
+  each time, and no stream is registered.
+- `ReadString[stream]`: reads from the stream's current point to the end, and
+  advances the stream.
+- `ReadString[src, "term"]` or `ReadString[src, {"t1", ...}]`: reads up to, but
+  not including, the first occurrence of a terminator. The terminator is left
+  unread.
+
+**Features**:
+- `Protected`.
+- Line ends are normalised to `"\n"`.
+- At end of file the result is `EndOfFile`.
+- A file that cannot be opened emits `OpenRead::noopen` and gives `$Failed`.
+- Implemented in `src/io/read.c`.
+
 ## Read
 Reads **one** object (or one nested type structure) from an input stream, advancing the stream's current point, so successive `Read` calls return successive objects. `Read` is the primitive that `ReadList` loops.
 - `Read[stream]` — read one expression; equivalent to `Read[stream, Expression]`.
@@ -338,9 +355,20 @@ Out[3]= False
 ```
 
 ## Import
-Reads a raster image file and returns an `Image`.
+Reads a raster image file and returns an `Image`, or reads a text file.
 - `Import["file"]` — decodes PNG, JPEG, BMP, GIF, TGA, PSD, HDR or PNM by content.
 - `Import["file", "Image"]` — the same, stated explicitly.
+
+**Text formats.** These also accept the list form `{"Text"}`. A `.txt` file
+with no format given imports as `"Text"`.
+
+| Format | Result for a file containing `"a\r\nb\n\n"` |
+|---|---|
+| `"String"` | the contents exactly, with line ends normalised: `"a\nb\n\n"` |
+| `"Text"` | the same, less one trailing line break: `"a\nb\n"` |
+| `"Lines"` | a list of lines, with trailing empty lines dropped: `{"a", "b"}` |
+
+A file that cannot be read emits `Import::nffil` and gives `$Failed`.
 
 **Features**:
 - `Protected`.

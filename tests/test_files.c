@@ -1072,6 +1072,63 @@ void test_syntaxq(void) {
     assert_eval_eq("Attributes[SyntaxQ]", "{Protected}", 0);
 }
 
+/* ===== Import text formats / ReadString ===== */
+
+/* Write `bytes` (exact, binary) to a scratch file named by tag. */
+static void write_bytes(char* path, size_t cap, const char* tag, const char* bytes) {
+    scratch_path(path, cap, tag);
+    FILE* fp = fopen(path, "wb");
+    ASSERT(fp != NULL);
+    fputs(bytes, fp);
+    fclose(fp);
+}
+
+void test_import_text(void) {
+    char t[256], u[256], e[256], v[256], x[256], txt[300], src[2048];
+    write_bytes(t, sizeof t, "it_t", "line1\nline2\n\nline4");
+    write_bytes(u, sizeof u, "it_u", "abc\n");
+    write_bytes(e, sizeof e, "it_e", "");
+    write_bytes(v, sizeof v, "it_v", "abc\n\n\n");
+    write_bytes(x, sizeof x, "it_x", "a\r\nb\r\n");
+    /* "Text" drops ONE trailing line break; "String" is exact; "Lines" drops
+     * trailing empty lines; CRLF reads as LF throughout. */
+    snprintf(src, sizeof src, "{Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"], "
+             "Import[\"%s\", \"Text\"], Import[\"%s\", \"Text\"]}", t, u, e, v, x);
+    assert_eval_eq(src, "{\"line1\\nline2\\n\\nline4\", \"abc\", \"\", \"abc\\n\\n\", \"a\\nb\"}", 0);
+    snprintf(src, sizeof src, "{Import[\"%s\", \"String\"], Import[\"%s\", \"String\"], Import[\"%s\", {\"Text\"}]}",
+             u, x, u);
+    assert_eval_eq(src, "{\"abc\\n\", \"a\\nb\\n\", \"abc\"}", 0);
+    snprintf(src, sizeof src, "{Import[\"%s\", \"Lines\"], Import[\"%s\", \"Lines\"], Import[\"%s\", \"Lines\"], "
+             "Import[\"%s\", \"Lines\"]}", t, e, v, x);
+    assert_eval_eq(src, "{{\"line1\", \"line2\", \"\", \"line4\"}, {}, {\"abc\"}, {\"a\", \"b\"}}", 0);
+    /* A .txt file imports as Text by default. */
+    snprintf(txt, sizeof txt, "%s.txt", u);
+    rename(u, txt);
+    snprintf(src, sizeof src, "Import[\"%s\"]", txt);
+    assert_eval_eq(src, "\"abc\"", 0);
+    /* Missing file: Import::nffil, $Failed. */
+    snprintf(src, sizeof src, "Quiet[Import[\"%s.nope\", \"Text\"]]", t);
+    assert_eval_eq(src, "$Failed", 0);
+    snprintf(src, sizeof src, "Check[Import[\"%s.nope\", \"Text\"], \"msg\"]", t);
+    assert_eval_eq(src, "\"msg\"", 0);
+
+    /* ReadString: whole file, terminator, EndOfFile, streams. */
+    snprintf(src, sizeof src, "{ReadString[\"%s\"], ReadString[\"%s\"], ReadString[\"%s\"], "
+             "ReadString[\"%s\", \"\\n\"], ReadString[\"%s\", {\"2\", \"1\"}]}", txt, x, e, t, t);
+    assert_eval_eq(src, "{\"abc\\n\", \"a\\nb\\n\", EndOfFile, \"line1\", \"line\"}", 0);
+    /* On a stream the terminator is left unread, and the stream advances. */
+    snprintf(src, sizeof src, "rs = OpenRead[\"%s\"]; r = {ReadString[rs, \"\\n\"], ReadString[rs], ReadString[rs]}; "
+             "Close[rs]; r", t);
+    assert_eval_eq(src, "{\"line1\", \"\\nline2\\n\\nline4\", EndOfFile}", 0);
+    snprintf(src, sizeof src, "Quiet[ReadString[\"%s.nope\"]]", t);
+    assert_eval_eq(src, "$Failed", 0);
+    snprintf(src, sizeof src, "Check[ReadString[\"%s.nope\"], \"msg\"]", t);
+    assert_eval_eq(src, "\"msg\"", 0);
+    assert_eval_eq("ReadString[3]", "ReadString[3]", 0);
+    assert_eval_eq("Attributes[ReadString]", "{Protected}", 0);
+    unlink(t); unlink(txt); unlink(e); unlink(v); unlink(x);
+}
+
 /* ===== $InputFileName ===== */
 
 void test_inputfilename_get(void) {
@@ -1137,6 +1194,7 @@ int main(void) {
     TEST(test_tofilename);
     TEST(test_deletefile);
     TEST(test_syntaxq);
+    TEST(test_import_text);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

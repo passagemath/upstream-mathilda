@@ -4280,14 +4280,16 @@ void info_init(void) {
     symtab_set_docstring("ToExpression",
         "ToExpression[input]\n"
         "\tparses input (a String) as Mathilda input and returns the resulting\n"
-        "\texpression after evaluation.\n"
+        "\texpression after evaluation. Statements on separate lines are\n"
+        "\tevaluated in turn and the last result is returned.\n"
         "ToExpression[input, form]\n"
-        "\tuses interpretation rules for the specified form. form may be\n"
-        "\tInputForm or FullForm (both currently use the same parser).\n"
+        "\tuses interpretation rules for the specified form: InputForm or\n"
+        "\tFullForm (a line break ends a statement) or StandardForm (line\n"
+        "\tbreaks are whitespace).\n"
         "ToExpression[input, form, h]\n"
-        "\twraps the head h around the parsed expression before evaluation;\n"
-        "\tuse h = Hold to obtain the unevaluated parsed form.\n"
-        "Returns $Failed if a syntax error is encountered.");
+        "\twraps the head h around the parsed statements before evaluation:\n"
+        "\tToExpression[\"a = 2\\n b = 3\", InputForm, Hold] is Hold[a = 2, b = 3].\n"
+        "Returns $Failed, with ToExpression::sntx, on a syntax error.");
     symtab_set_docstring("Symbol",
         "Symbol[\"name\"]\n"
         "\trefers to the symbol with the specified name, creating it in\n"

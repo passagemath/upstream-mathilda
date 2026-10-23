@@ -1213,13 +1213,20 @@ Out[5]= "\"a\\\"b\""
 ```
 
 ## ToExpression
-- `ToExpression[input]`: parses the string `input` as Mathilda input (`InputForm`) and returns the resulting expression after evaluation.
-- `ToExpression[input, form]`: uses interpretation rules corresponding to the specified form. Currently `InputForm`, `FullForm`, and `StandardForm` are accepted (all route through the same parser, which is form-agnostic).
-- `ToExpression[input, form, h]`: wraps the head `h` around the parsed expression before it is returned to the evaluator. Using `h = Hold` produces an unevaluated `Hold[...]` wrapper.
+- `ToExpression[input]`: parses the string `input` as Mathilda input (`InputForm`) and returns the resulting expression after evaluation. Several statements on separate lines are evaluated in turn and the last result is returned.
+- `ToExpression[input, form]`: uses interpretation rules corresponding to the specified form. `InputForm`, `FullForm`, and `StandardForm` are accepted.
+- `ToExpression[input, form, h]`: wraps the head `h` around the parsed statements before they are returned to the evaluator. Using `h = Hold` produces an unevaluated `Hold[...]` wrapper, with one argument per statement.
 
 **Features**:
 - `Protected`, `Listable`. `ToExpression[{"1+1", "2+2"}]` evaluates to `{2, 4}`.
-- Returns the symbol `$Failed` if the parser cannot consume the input.
+- **Line breaks (InputForm, FullForm).** The input is a sequence of statements:
+  - A line break after a complete expression ends that statement, whatever the next line starts with. `"a\n+b"` is `Hold[a, +b]`, and `"a\n// f"` is a syntax error.
+  - An expression that is incomplete at the end of a line continues onto the next: `"1 +\n 2"` is `Hold[1 + 2]`. So does anything inside brackets: `"{a\n b}"` is `Hold[{a b}]`.
+  - A `;` at the end of a line takes an implicit `Null`: `"a;\nb"` is `Hold[a;, b]`. A `;` chain on one line stays one `CompoundExpression`.
+  - Each empty, blank or comment-only line between statements is a `Null` statement: `"a\n\nb"` is `Hold[a, Null, b]`. LF and CR each end a line, so a CRLF line break also yields a `Null`.
+  - Input with no statement at all (`""`, `"\n"`) is `Null`.
+- **StandardForm.** Line breaks are whitespace, and the whole string must be one expression: `"a\nb"` is `Hold[a b]`.
+- Returns the symbol `$Failed`, with a `ToExpression::sntx` message, if the input has a syntax error.
 - A non-string input or an unsupported `form` leaves the call unevaluated.
 
 ```mathematica
@@ -1230,7 +1237,14 @@ In[2]:= ToExpression["1+1", InputForm, Hold]
 Out[2]= Hold[1 + 1]
 
 In[3]:= ToExpression["x+"]
+ToExpression::sntx: Invalid syntax in or before "x+".
 Out[3]= $Failed
+
+In[4]:= ToExpression["a = 2\n b = 3", InputForm, Hold]
+Out[4]= Hold[a = 2, b = 3]
+
+In[5]:= ToExpression["x = 2\n y = x + 1"]
+Out[5]= 3
 ```
 
 ## Symbol

@@ -34,6 +34,18 @@ typedef struct {
                         // `:` ends the pattern and becomes its Optional default
                         // (`a:b:c` is Optional[a:b, c]), so parse_colon_suffix
                         // must not claim it for an inner token.
+    int line_statements; // Set only by parse_statement_sequence (ToExpression
+                        // in InputForm): a top-level line break ends the
+                        // statement before ANY operator, not just before an
+                        // implicit Times, and a `;` at the end of a line takes
+                        // an implicit Null instead of continuing onto the next
+                        // line -- so `a\n// f` is a syntax error and `a;\nb` is
+                        // two statements, as in the reference language.
+    const char* ws_start; // [ws_start, ws_end) is the most recent run of
+    const char* ws_end;   // whitespace/comments skip_whitespace crossed. After
+                        // a top-level parse ws_start is the tight end of the
+                        // statement, before the whitespace and line breaks the
+                        // infix loop skipped while looking for an operator.
 } ParserState;
 
 /* Record the half-open byte range [start, end) of one subexpression into the
@@ -176,6 +188,15 @@ static bool fold_into_inequality(Expr** left, const char* op_name, Expr* right) 
 
 /* ------------------- Basic Token Parsers ------------------- */
 
+/* Leave one bracket level. A line break seen inside the brackets is not a
+ * statement boundary, so the sticky saw_newline flag is cleared with it:
+ * otherwise `f[x\n] b` would look as though a newline separated `f[x]` from
+ * `b` and split into two statements. */
+static void close_bracket(ParserState* s) {
+    s->bracket_depth--;
+    s->saw_newline = 0;
+}
+
 // Skips whitespace and comments
 static void skip_whitespace(ParserState* s) {
     /* saw_newline is sticky: set here when a genuine line break is skipped, and
@@ -183,6 +204,10 @@ static void skip_whitespace(ParserState* s) {
      * parse_primary). This survives the nested skip_whitespace calls made while
      * parsing a sub-expression's right operand, so the infix loop can still see
      * that a newline separated two juxtaposed statements. */
+    /* A skip that starts where the previous one ended is still inside that
+     * run (nested parse levels each skip after the same token), so it keeps
+     * the run's start. */
+    if (s->pos != s->ws_end) s->ws_start = s->pos;
     while (1) {
         if (s->pos[0] == '\\' && (s->pos[1] == '\n' || s->pos[1] == '\r')) {
             /* Line continuation: a backslash immediately before a newline
@@ -195,7 +220,7 @@ static void skip_whitespace(ParserState* s) {
             if (s->pos[0] == '\r') s->pos++;       /* CR (or CR of CRLF) */
             if (s->pos[0] == '\n') s->pos++;       /* LF (or LF of CRLF) */
         } else if (isspace(*s->pos)) {
-            if (*s->pos == '\n') s->saw_newline = 1;
+            if (*s->pos == '\n' || *s->pos == '\r') s->saw_newline = 1;
             s->pos++;
         } else if (s->pos[0] == '(' && s->pos[1] == '*') {
             int depth = 1;
@@ -215,6 +240,26 @@ static void skip_whitespace(ParserState* s) {
             break;
         }
     }
+    s->ws_end = s->pos;
+}
+
+/* Skip the whitespace after an operator whose right operand may be omitted
+ * (`a;`, `a;;`). In line-statement mode a top-level line break there ends the
+ * statement: rewind to just after the operator, so the infix loop still sees
+ * the break, and return 1 -- the operand is omitted. Otherwise return 0 with
+ * the whitespace skipped. */
+static int operand_omitted_at_line_end(ParserState* s) {
+    if (!s->line_statements || s->bracket_depth != 0) {
+        skip_whitespace(s);
+        return 0;
+    }
+    const char* after = s->pos;
+    s->saw_newline = 0;
+    skip_whitespace(s);
+    if (!s->saw_newline) return 0;
+    s->pos = s->ws_start = s->ws_end = after;
+    s->saw_newline = 0;
+    return 1;
 }
 
 // Parses a symbol (x, `name`, $var) and resolves it through the context
@@ -933,7 +978,7 @@ static Expr* parse_list(ParserState* s) {
     Expr** elements = parse_sequence(s, '}', "list", &count);
     if (!elements) return NULL;
     s->pos++;  // Skip '}'
-    s->bracket_depth--;
+    close_bracket(s);
 
     // Create List[...] expression
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), elements, count);
@@ -981,7 +1026,7 @@ static Expr* parse_association(ParserState* s) {
         return NULL;
     }
     s->pos += 2;  // Skip '|>'
-    s->bracket_depth--;
+    close_bracket(s);
 
     Expr* assoc = expr_new_function(expr_new_symbol(SYM_Association), entries, count);
     free(entries);
@@ -999,7 +1044,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
         return NULL;
     }
     s->pos++;  // Skip ']'
-    s->bracket_depth--;
+    close_bracket(s);
 
     if (head && head->type == EXPR_SYMBOL && head->data.symbol.name == SYM_Sqrt && count == 1) {
         expr_free(head);
@@ -1380,7 +1425,7 @@ static Expr* parse_primary(ParserState* s) {
             } else {
                 fprintf(stderr, "Expected ')'\n");
             }
-            s->bracket_depth--;
+            close_bracket(s);
             return inner;
         }
 
@@ -1704,6 +1749,9 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
          * whitespace is skipped so a recorded span's end is tight. */
         const char* tight_end = s->pos;
         skip_whitespace(s);
+        /* Line-statement mode: a complete expression at the end of a line is
+         * a complete statement, whatever the next line starts with. */
+        if (s->line_statements && s->bracket_depth == 0 && s->saw_newline) break;
         OperatorDef op_def = get_operator(s->pos);
 
         /* Lenient `:` fallback (the standard forms are handled at atom level by
@@ -1807,7 +1855,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 return NULL;
             }
             s->pos += 2; // skip ']]'
-            s->bracket_depth--;
+            close_bracket(s);
             left = expr_new_function(expr_new_symbol(SYM_Part), args, count);
             continue;
         } else if (op_def.type == OP_CALL) {
@@ -1898,22 +1946,21 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             Expr* span_args[3];
             span_args[0] = left;
             int next_prec = op_def.prec + 1; // 3201
-            skip_whitespace(s);
             Expr* right = NULL;
-            if (*s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';' || strncmp(s->pos, ";;", 2) == 0) {
+            if (operand_omitted_at_line_end(s) || *s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';' || strncmp(s->pos, ";;", 2) == 0) {
                 right = expr_new_symbol(SYM_All);
             } else {
                 right = parse_expression_prec(s, next_prec);
                 if (!right) right = expr_new_symbol(SYM_All);
             }
             span_args[1] = right;
-            
+
             skip_whitespace(s);
-            if (strncmp(s->pos, ";;", 2) == 0) {
+            if (!(s->line_statements && s->bracket_depth == 0 && s->saw_newline)
+                && strncmp(s->pos, ";;", 2) == 0) {
                 s->pos += 2;
-                skip_whitespace(s);
                 Expr* step = NULL;
-                if (*s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';') {
+                if (operand_omitted_at_line_end(s) || *s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';') {
                     step = expr_new_symbol(SYM_All);
                 } else {
                     step = parse_expression_prec(s, next_prec);
@@ -1968,8 +2015,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
 #endif
 
         int next_min_prec = op_def.right_assoc ? op_def.prec : op_def.prec + 1;
-        
-        Expr* right = parse_expression_prec(s, next_min_prec);
+
+        /* `a;` ending a line: the omitted statement is an implicit Null and
+         * the line break ends the CompoundExpression. */
+        Expr* right = NULL;
+        if (op_def.type == OP_COMPOUND && operand_omitted_at_line_end(s))
+            right = expr_new_symbol(SYM_Null);
+        if (!right) right = parse_expression_prec(s, next_min_prec);
         if (!right) {
             skip_whitespace(s);
             if (op_def.type == OP_COMPOUND && *s->pos != '[') {
@@ -2126,7 +2178,7 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input, 0, 0, NULL, 0};
+    ParserState state = {input, input, 0, 0, NULL, 0, 0, NULL, NULL};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
@@ -2142,7 +2194,7 @@ Expr* parse_expression(const char* input) {
 
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
@@ -2173,6 +2225,101 @@ Expr* parse_next_expression(const char** input_ptr) {
 }
 
 
+/* Skip blanks, comments and backslash line continuations on the current line,
+ * stopping at a line terminator (LF or CR) or the end of input. A comment may
+ * itself span lines; its line breaks are not statement boundaries. */
+static const char* skip_line_blanks(const char* p) {
+    for (;;) {
+        if (*p == ' ' || *p == '\t' || *p == '\f' || *p == '\v') {
+            p++;
+        } else if (p[0] == '\\' && (p[1] == '\n' || p[1] == '\r')) {
+            p += (p[1] == '\r' && p[2] == '\n') ? 3 : 2;
+        } else if (p[0] == '(' && p[1] == '*') {
+            int depth = 1;
+            p += 2;
+            while (*p && depth > 0) {
+                if (p[0] == '(' && p[1] == '*') { depth++; p += 2; }
+                else if (p[0] == '*' && p[1] == ')') { depth--; p += 2; }
+                else p++;
+            }
+        } else {
+            return p;
+        }
+    }
+}
+
+Expr* parse_statement_sequence(const char* input, int line_statements,
+                               const char** err_pos) {
+    if (err_pos) *err_pos = NULL;
+    if (!input) return NULL;
+
+    size_t cap = 4, n = 0;
+    Expr** stmts = malloc(cap * sizeof *stmts);
+    if (!stmts) return NULL;
+
+    const char* p = input;
+    for (;;) {
+        Expr* stmt = NULL;
+        p = skip_line_blanks(p);
+        if (*p == '\0') break;
+        if ((*p == '\n' || *p == '\r') && !line_statements) {
+            p++;                   /* StandardForm: a line break is whitespace */
+            continue;
+        }
+        if (*p == '\n' || *p == '\r') {
+            /* An empty (or blank/comment-only) line is a Null statement. */
+            stmt = expr_new_symbol(SYM_Null);
+            p++;
+        } else {
+            /* Without line_statements (StandardForm) line breaks are plain
+             * whitespace: start one bracket level deep so no newline can
+             * terminate the expression, and require it to fill the input. */
+            ParserState st = {input, p, line_statements ? 0 : 1, 0, NULL, 0,
+                              line_statements, NULL, NULL};
+            stmt = parse_expression_prec(&st, 0);
+            int ok = stmt != NULL;
+            if (ok && line_statements) {
+                /* Resume at the statement's tight end: the rest of its line
+                 * must be blank, and exactly one line break is consumed so a
+                 * following empty line still reads as a Null statement. */
+                p = st.ws_start;
+                if (p < input || p > st.pos) p = st.pos;
+                p = skip_line_blanks(p);
+                if (*p == '\n' || *p == '\r') p++;
+                else ok = *p == '\0';
+            } else if (ok) {
+                p = st.pos;        /* already past trailing whitespace */
+                ok = *p == '\0';
+            }
+            if (!ok) {
+                if (err_pos) *err_pos = p;
+                expr_free(stmt);
+                for (size_t i = 0; i < n; i++) expr_free(stmts[i]);
+                free(stmts);
+                return NULL;
+            }
+        }
+        if (n == cap) {
+            cap *= 2;
+            Expr** grown = realloc(stmts, cap * sizeof *stmts);
+            if (!grown) {
+                expr_free(stmt);
+                for (size_t i = 0; i < n; i++) expr_free(stmts[i]);
+                free(stmts);
+                return NULL;
+            }
+            stmts = grown;
+        }
+        stmts[n++] = stmt;
+    }
+    /* No statement at all (empty, blank or comment-only input) is Null. */
+    if (n == 0) stmts[n++] = expr_new_symbol(SYM_Null);
+
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), stmts, n);
+    free(stmts);
+    return list;
+}
+
 /* Parse `input` for structural selection, recording every subexpression's source
  * range without evaluating. Multi-statement input (a;b;c) is walked statement by
  * statement with absolute offsets, mirroring parse_next_expression; a hard parse
@@ -2183,7 +2330,7 @@ MthSpanSink* mth_parse_spans(const char* input) {
     if (!sink || !input) return sink;
     const char* p = input;
     while (*p) {
-        ParserState state = {input, p, 0, 0, sink, 0};
+        ParserState state = {input, p, 0, 0, sink, 0, 0, NULL, NULL};
         /* Skip leading whitespace, comments, and empty ';' separators. */
         for (;;) {
             skip_whitespace(&state);

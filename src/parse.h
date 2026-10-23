@@ -45,4 +45,21 @@ void mth_span_sink_free(MthSpanSink* sink);
  */
 Expr* parse_next_expression(const char** input_ptr);
 
+/*
+ * Parses `input` as ToExpression reads a string: a sequence of statements,
+ * returned as List[s1, s2, ...] (NULL on a syntax error, with *err_pos -- if
+ * err_pos is non-NULL -- set near the offending text).
+ *
+ * With line_statements set (InputForm), a top-level line break ends a
+ * complete statement whatever follows it (`a\n+b` is {a, +b}, `a\n// f` is a
+ * syntax error), a `;` ending a line takes an implicit Null (`a;\nb` is
+ * {a;, b}), and each empty, blank or comment-only line between statements is
+ * a Null statement (`a\n\nb` is {a, Null, b}); LF and CR each terminate a
+ * line. A `;` chain on one line stays a single CompoundExpression. Without it
+ * (StandardForm), line breaks are whitespace and the whole input must be one
+ * expression (`a\nb` is {a b}). Input with no statement at all is {Null}.
+ */
+Expr* parse_statement_sequence(const char* input, int line_statements,
+                               const char** err_pos);
+
 #endif // PARSE_H

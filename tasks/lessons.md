@@ -4880,3 +4880,14 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   canonical sign.** This applies to BesselK, ChebyshevT/U and LegendreP alike.
   Flipping on "the order reads negative" splits one family into two.
 
+
+## 2026-10-23 — issue #108 (ToExpression line statements): test scope, again
+
+- **Run only the suites the change touches, never the whole tree.** For a
+  parser + `ToExpression` change that means `parse_tests`,
+  `parser_precision_tests`, `tostring_toexpression_tests`, `core_tests` and
+  `stringfns_tests`, plus new cases in `tests/test_parse.c` and a
+  wolframscript diff. I ran all 572 binaries and began a HEAD-worktree A/B of
+  the ~50 pre-existing failures (for example `upvalues_tests` expects
+  `mod70[3,5]` with no space). That was wasted time and gave no signal about
+  the change. The user corrected it.

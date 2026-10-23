@@ -4251,13 +4251,15 @@ Expr* builtin_tostring(Expr* res) {
  *
  * Parses input (a string) and returns the resulting expression for the
  * evaluator to further reduce.  The optional `form` argument may be
- * InputForm, FullForm, or StandardForm — all currently route through the
- * same Mathilda parser because the parser is form-agnostic.  When the
- * three-argument form is used, the head h is wrapped around the parsed
- * expression before it is handed back; common use cases include
- * Hold (to delay evaluation) and HoldComplete.
+ * InputForm, FullForm, or StandardForm.  The string is a sequence of
+ * statements (parse_statement_sequence): in InputForm/FullForm a line break
+ * ends a complete statement and a blank line is a Null statement; in
+ * StandardForm line breaks are whitespace.  When the three-argument form is
+ * used, the head h is wrapped around ALL the statements before they are handed
+ * back (Hold[a = 2, b = 3]); common use cases include Hold (to delay
+ * evaluation) and HoldComplete.
  *
- * On a parse failure we return the symbol $Failed, matching Mathematica.
+ * On a parse failure we emit ToExpression::sntx and return $Failed.
  * A non-string input (or unrecognised form) leaves the call unevaluated
  * by returning NULL so the user sees the call shape they wrote.
  */
@@ -4280,20 +4282,37 @@ Expr* builtin_toexpression(Expr* res) {
         }
     }
 
-    Expr* parsed = parse_expression(input->data.string);
-    if (!parsed) {
+    /* InputForm/FullForm read line-oriented statements; StandardForm treats
+     * line breaks as whitespace (issue #108). */
+    int line_statements = argc < 2
+        || res->data.function.args[1]->data.symbol.name != SYM_StandardForm;
+    const char* err_pos = NULL;
+    Expr* stmts = parse_statement_sequence(input->data.string, line_statements,
+                                           &err_pos);
+    if (!stmts) {
+        mth_message("ToExpression", "sntx",
+                    "Invalid syntax in or before \"%s\".",
+                    err_pos && *err_pos ? err_pos : input->data.string);
         return expr_new_symbol(SYM_DollarFailed);
     }
 
-    if (argc == 3) {
-        Expr* h = res->data.function.args[2];
-        Expr* wrap_args[1];
-        wrap_args[0] = parsed;
-        Expr* wrapped = expr_new_function(expr_copy(h), wrap_args, 1);
-        return wrapped;
+    /* ToExpression[s, form, h] wraps h around ALL the statements:
+     * Hold[a = 2, b = 3]. Without h, each statement is evaluated in turn and
+     * the last result returned -- exactly CompoundExpression's semantics. */
+    Expr* head = argc == 3 ? expr_copy(res->data.function.args[2])
+               : stmts->data.function.arg_count == 1 ? NULL
+               : expr_new_symbol(SYM_CompoundExpression);
+    if (!head) {
+        Expr* only = stmts->data.function.args[0];
+        stmts->data.function.args[0] = NULL;
+        expr_free(stmts);
+        return only;
     }
-
-    return parsed;
+    size_t n = stmts->data.function.arg_count;
+    Expr* out = expr_new_function(head, stmts->data.function.args, n);
+    for (size_t i = 0; i < n; i++) stmts->data.function.args[i] = NULL;
+    expr_free(stmts);
+    return out;
 }
 
 /* A single Mathematica symbol-name segment (the part between two backticks,

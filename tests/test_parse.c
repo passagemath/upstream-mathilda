@@ -818,6 +818,83 @@ void test_parse_headless_bracket() {
     }
 }
 
+/* ToExpression reads a string as a sequence of line-oriented statements --
+ * issue #108, where "a = 2\n b = 3" was a syntax error. Every expected form
+ * below was taken from the reference implementation (ToString[FullForm[
+ * ToExpression[s, InputForm, Hold]]]): a line break ends a complete statement
+ * whatever the next line starts with, an incomplete one continues, a `;` at
+ * the end of a line takes an implicit Null, and each blank or comment-only
+ * line between statements is a Null statement. */
+void test_toexpression_line_statements() {
+    assert_eval_eq("Quiet[ToExpression[\"a = 2\\n b = 3\", InputForm, Hold]]", "Hold[Set[a, 2], Set[b, 3]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"1+\\n2\", InputForm, Hold]]", "Hold[Plus[1, 2]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"f[1,\\n2]\\n\\n g[3]\\n\", InputForm, Hold]]", "Hold[f[1, 2], Null, g[3]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a;\\n b\", InputForm, Hold]]", "Hold[CompoundExpression[a, Null], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a b\", InputForm, Hold]]", "Hold[Times[a, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"(a\\n b)\", InputForm, Hold]]", "Hold[Times[a, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"{a\\n b}\", InputForm, Hold]]", "Hold[List[Times[a, b]]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"\\n\", InputForm, Hold]]", "Hold[Null]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"\", InputForm, Hold]]", "Hold[Null]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n\", InputForm, Hold]]", "Hold[a]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n b +\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a // f\\n b\", InputForm, Hold]]", "Hold[f[a], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"{\\\"a\\n b\\\"}\", InputForm, Hold]]", "Hold[List[\"a\\n b\"]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a (* c\\n *) b\", InputForm, Hold]]", "Hold[Times[a, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n (* c *) b\", InputForm, Hold]]", "Hold[a, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n\\nb\", InputForm, Hold]]", "Hold[a, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n\\n\\nb\", InputForm, Hold]]", "Hold[a, Null, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n \\nb\", InputForm, Hold]]", "Hold[a, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"\\na\\nb\", InputForm, Hold]]", "Hold[Null, a, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"\\n\\na\", InputForm, Hold]]", "Hold[Null, Null, a]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n\\n\", InputForm, Hold]]", "Hold[a, Null]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\r\\nb\", InputForm, Hold]]", "Hold[a, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a ;b\\nc\", InputForm, Hold]]", "Hold[CompoundExpression[a, b], c]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n)\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n\\n(* x *)\\n\\nb\", InputForm, Hold]]", "Hold[a, Null, Null, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n(* x *)\\nb\", InputForm, Hold]]", "Hold[a, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n  \\n  \\nb\", InputForm, Hold]]", "Hold[a, Null, Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n+b\", InputForm, Hold]]", "Hold[a, Plus[b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n-b\", InputForm, Hold]]", "Hold[a, Times[-1, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a +\\n\\nb\", InputForm, Hold]]", "Hold[Plus[a, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a;\\n\\nb\", InputForm, Hold]]", "Hold[CompoundExpression[a, Null], Null, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"f\\n[x]\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n// f\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\n;b\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a;\", InputForm, Hold]]", "Hold[CompoundExpression[a, Null]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a;\\n\", InputForm, Hold]]", "Hold[CompoundExpression[a, Null]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\";\", InputForm, Hold]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a = \\n 2\", InputForm, Hold]]", "Hold[Set[a, 2]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"  a  \\n  b  \", InputForm, Hold]]", "Hold[a, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\tb\", InputForm, Hold]]", "Hold[Times[a, b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"x=1;y=2\\nz\", InputForm, Hold]]", "Hold[CompoundExpression[Set[x, 1], Set[y, 2]], z]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a (* \\n *)\\n b\", InputForm, Hold]]", "Hold[a, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a; (* c *)\\n b\", InputForm, Hold]]", "Hold[CompoundExpression[a, Null], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a;;\\nb\", InputForm, Hold]]", "Hold[Span[a, All], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"f[x\\n] b\", InputForm, Hold]]", "Hold[Times[f[x], b]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"{a}\\n b\", InputForm, Hold]]", "Hold[List[a], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"f[x_] :=\\n x^2\\ng[2]\", InputForm, Hold]]", "Hold[SetDelayed[f[Pattern[x, Blank[]]], Power[x, 2]], g[2]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"If[a,\\n b,\\n c]\\nd\", InputForm, Hold]]", "Hold[If[a, b, c], d]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"(* only *)\", InputForm, Hold]]", "Hold[Null]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a\\rb\", InputForm, Hold]]", "Hold[a, b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"x = 1 (* t *)\\n\", InputForm, Hold]]", "Hold[Set[x, 1]]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"<|a -> 1,\\n b -> 2|>\\nc\", InputForm, Hold]]", "Hold[Association[Rule[a, 1], Rule[b, 2]], c]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"a[[1\\n]]\\nb\", InputForm, Hold]]", "Hold[Part[a, 1], b]", 1);
+    assert_eval_eq("Quiet[ToExpression[\"-x\\n!y\", InputForm, Hold]]", "Hold[Times[-1, x], Not[y]]", 1);
+    /* StandardForm: line breaks are whitespace. */
+    assert_eval_eq("ToExpression[\"a\\nb\", StandardForm, Hold]", "Hold[Times[a, b]]", 1);
+    assert_eval_eq("ToExpression[\"a\\n\\nb\\n\", StandardForm, Hold]", "Hold[Times[a, b]]", 1);
+    /* Without a head each statement is evaluated in turn; the last result
+     * is returned. */
+    assert_eval_eq("ToExpression[\"tx0 = 2\\n ty0 = tx0 + 1\"]", "3", 0);
+    assert_eval_eq("{tx0, ty0}", "{2, 3}", 0);
+    assert_eval_eq("ToExpression[\"a\\n\\n\"]", "Null", 0);
+    assert_eval_eq("ToExpression[\"a\\nb\", InputForm, f]", "f[a, b]", 1);
+    assert_eval_eq("ToExpression[{\"a\\nb\", \"c\"}, InputForm, Hold]",
+                   "List[Hold[a, b], Hold[c]]", 1);
+    /* A syntax error is a message Check can see. */
+    assert_eval_eq("Check[ToExpression[\"a\\n// f\"], err, ToExpression::sntx]", "err", 0);
+}
+
 /* Empty argument / element slots are Null, as in Mathematica: `f[,x]` is
  * f[Null, x] (the leading comma used to be swallowed, giving f[x]), and
  * `f[x,]` / `f[x,,y]` used to be syntax errors. `f[]` / `{}` stay empty. */
@@ -1012,6 +1089,7 @@ int main() {
     TEST(test_parse_headless_bracket);
     TEST(test_parse_empty_slots_are_null);
     TEST(test_parse_colon_atom_level);
+    TEST(test_toexpression_line_statements);
 
     printf("\nAll parser tests passed!\n");
     return 0;

@@ -12,4 +12,6 @@ Expr* builtin_replace_at(Expr* res);
 
 void replace_init(void);
 
+Expr* builtin_dispatch(Expr* res);
+
 #endif

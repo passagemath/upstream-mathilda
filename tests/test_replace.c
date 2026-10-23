@@ -200,6 +200,32 @@ int main() {
     run_test("SetOptions[ReplaceRepeated, MaxIterations -> 4]; r = Quiet[0 //. x_Integer :> x + 1]; "
              "SetOptions[ReplaceRepeated, MaxIterations -> 65536]; r", "4");
 
+    /* Dispatch: normalisation, Normal, and every Replace* form accepting it. */
+    run_test("Dispatch[a -> 1]", "Dispatch[{a -> 1}]");
+    run_test("Dispatch[Dispatch[{a -> 1}]]", "Dispatch[{a -> 1}]");
+    run_test("Dispatch[3]", "Dispatch[3]");
+    run_test("Normal[Dispatch[{a -> 1, b -> 2}]]", "{a -> 1, b -> 2}");
+    run_test("dsp = Dispatch[{a -> 1, b -> 2, f[x_] :> x^2}]; {a, b, f[3], c} /. dsp", "{1, 2, 9, c}");
+    run_test("ReplaceAll[g[a], dsp]", "g[1]");
+    run_test("{Replace[a, dsp], Replace[{a}, dsp, {1}], ReplaceList[a, dsp]}", "{1, {1}, {1}}");
+    run_test("f[f[2]] //. dsp", "16");
+    run_test("{a} /. Dispatch[{{a -> 1}, {a -> 2}}]", "{{1}, {2}}");
+    /* The index never changes which rule wins: keyed rules, wild rules, guards,
+     * Optional arguments (x^n_. matches a bare x), Verbatim, heads. */
+    run_test("{x, x^2, x^3} /. Dispatch[{x^n_. :> p[n]}]", "{p[1], p[2], p[3]}");
+    run_test("{f[1], f[2], h[0], h[5]} /. Dispatch[{f[1] -> one, z_Integer :> int[z], h[q_] /; q > 1 -> big}]",
+             "{one, f[int[2]], h[int[0]], big}");
+    run_test("{1, 2, a} /. Dispatch[{_Integer -> i, 1 -> one}]", "{i, i, a}");
+    run_test("{x_, y} /. Dispatch[{Verbatim[x_] -> v}]", "{v, y}");
+    run_test("a + b + z /. Dispatch[{a + b -> s}]", "s + z");
+    /* Randomised: Dispatch and the plain rule list agree. */
+    run_test("SeedRandom[3]; pool = {a, b, 1, f[x_], f[1], g[a, y_], h[q_] /; q > 1, x_Integer, _g, a | b, "
+             "x^n_., p_?EvenQ, a + z_, 1/2, u_[1]}; "
+             "ex = {a, b, 1, 2, f[1], f[2], f[a], g[a, 3], h[0], h[5], x, x^2, a + b + z, 1/2, k[1], {f[f[a]]}}; "
+             "And @@ Table[rs = Table[RandomChoice[pool] -> RandomInteger[{100, 999}], {RandomInteger[{1, 10}]}]; "
+             "(ex /. rs) === (ex /. Dispatch[rs]), {300}]", "True");
+    run_test("Attributes[Dispatch]", "{Protected}");
+
     printf("All Replace tests passed!\n");
     symtab_clear();
     return 0;

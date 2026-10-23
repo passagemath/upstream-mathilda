@@ -3599,6 +3599,11 @@ Expr* builtin_normal(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Normal[Dispatch[rules]] is the rule list it was built from. */
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol.name == SYM_Dispatch && arg->data.function.arg_count == 1)
+        return expr_copy(arg->data.function.args[0]);
+
     /* Normal[SparseArray[...]] is the dense nested List it denotes. */
     if (is_sparse_array(arg)) {
         Expr* dense = sparse_array_to_dense(arg);

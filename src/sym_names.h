@@ -705,6 +705,7 @@ extern const char* SYM_UpperTriangularMatrixQ;
 extern const char* SYM_VandermondeMatrix;
 extern const char* SYM_VectorQ;
 extern const char* SYM_Verbatim;
+extern const char* SYM_Dispatch;
 extern const char* SYM_PatternSequence;
 extern const char* SYM_OrderlessPatternSequence;
 extern const char* SYM_VerifySolutions;

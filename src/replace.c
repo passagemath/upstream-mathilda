@@ -441,6 +441,8 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
     return new_e;
 }
 
+static Expr* dispatch_unwrap(Expr* rules_expr, bool* indexed);
+
 static bool is_rule(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
@@ -512,7 +514,7 @@ Expr* builtin_replace(Expr* res) {
         }
     }
     
-    return apply_replace_nested(expr, rules_expr, min_l, max_l, heads);
+    return apply_replace_nested(expr, dispatch_unwrap(rules_expr, NULL), min_l, max_l, heads);
 }
 
 static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
@@ -543,52 +545,238 @@ static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
     return expr_copy(e);
 }
 
-static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr) {
+/* ---- Dispatch: a rule set hashed by left-hand side --------------------------
+ *
+ * ReplaceAll normally tries every rule at every node, O(nodes x rules).  When
+ * the rules come wrapped in Dispatch[...] -- the user's explicit request for a
+ * dispatch table -- each rule is keyed by what its LHS can possibly match:
+ *   ATOM  a literal atom (x, 1, "s"): matches only that atom;
+ *   HEAD  a literal symbol head f[...]: matches only an f[...] node.
+ * HoldPattern / Condition / PatternTest / Pattern wrappers are looked through
+ * (the guard still runs) and Verbatim[x] keys on x.  Everything else -- a
+ * pattern-construct LHS (x_, _h, a | b, ...), a compound head, an association
+ * entry, or an LHS with an Optional / x_. argument (x^n_. matches a bare x,
+ * which has no Power head) -- is WILD and tried at every node.  At a node the
+ * candidates are its bucket merged with the wild rules in ORIGINAL rule order,
+ * so the first rule that matches is exactly the one the linear scan finds. */
+
+enum { RK_WILD = 0, RK_ATOM = 1, RK_HEAD = 2 };
+
+typedef struct {
+    Expr* key;          /* borrowed: an atom, or a head symbol */
+    int kind;
+    size_t* idx;        /* rule indices, ascending */
+    size_t n, cap;
+} RuleBucket;
+
+typedef struct {
+    RuleBucket* tab;    /* open addressing; key == NULL marks an empty slot */
+    size_t cap;         /* power of two */
+    size_t* wild;       /* ascending */
+    size_t nwild;
+} RuleIndex;
+
+static bool rk_pattern_head(const char* h) {
+    return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
+           h == SYM_Pattern || h == SYM_Alternatives || h == SYM_Except ||
+           h == SYM_PatternTest || h == SYM_Condition || h == SYM_Optional ||
+           h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_HoldPattern ||
+           h == SYM_Verbatim || h == SYM_Longest || h == SYM_Shortest ||
+           h == SYM_OptionsPattern || h == SYM_PatternSequence ||
+           h == SYM_OrderlessPatternSequence || h == SYM_KeyValuePattern;
+}
+
+/* Strip the wrappers that do not change what a pattern can match. */
+static Expr* rk_unwrap(Expr* p) {
+    for (;;) {
+        if (p->type != EXPR_FUNCTION || p->data.function.head->type != EXPR_SYMBOL) return p;
+        const char* h = p->data.function.head->data.symbol.name;
+        size_t n = p->data.function.arg_count;
+        if (h == SYM_HoldPattern && n == 1)                     p = p->data.function.args[0];
+        else if ((h == SYM_Condition || h == SYM_PatternTest) && n == 2) p = p->data.function.args[0];
+        else if (h == SYM_Pattern && n == 2)                    p = p->data.function.args[1];
+        else return p;
+    }
+}
+
+/* The key of a rule's LHS (see above); RK_WILD when it has none. */
+static int rk_rule_key(const ReplaceRule* r, Expr** key) {
+    if (!r->pattern) return RK_WILD;
+    Expr* p = rk_unwrap(r->pattern);
+    bool verbatim = false;
+    if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+        p->data.function.head->data.symbol.name == SYM_Verbatim && p->data.function.arg_count == 1) {
+        p = p->data.function.args[0];
+        verbatim = true;
+    }
+    if (p->type != EXPR_FUNCTION) { *key = p; return RK_ATOM; }
+    Expr* h = p->data.function.head;
+    if (h->type != EXPR_SYMBOL) return RK_WILD;
+    if (!verbatim) {
+        if (rk_pattern_head(h->data.symbol.name)) return RK_WILD;
+        for (size_t i = 0; i < p->data.function.arg_count; i++) {
+            Expr* a = rk_unwrap(p->data.function.args[i]);
+            if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+                a->data.function.head->data.symbol.name == SYM_Optional)
+                return RK_WILD;
+        }
+    }
+    *key = h;
+    return RK_HEAD;
+}
+
+static size_t rk_slot(const RuleIndex* ix, Expr* key, int kind) {
+    size_t mask = ix->cap - 1;
+    size_t h = (size_t)(expr_hash(key) * 2u + (uint64_t)kind) & mask;
+    while (ix->tab[h].key &&
+           !(ix->tab[h].kind == kind && expr_eq(ix->tab[h].key, key)))
+        h = (h + 1) & mask;
+    return h;
+}
+
+static void rule_index_build(RuleIndex* ix, const ReplaceRule* rules, size_t n) {
+    ix->cap = 16;
+    while (ix->cap < 2 * n) ix->cap *= 2;
+    ix->tab = calloc(ix->cap, sizeof(RuleBucket));
+    ix->wild = malloc((n ? n : 1) * sizeof(size_t));
+    ix->nwild = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* key = NULL;
+        int kind = rk_rule_key(&rules[i], &key);
+        if (kind == RK_WILD) { ix->wild[ix->nwild++] = i; continue; }
+        RuleBucket* b = &ix->tab[rk_slot(ix, key, kind)];
+        if (!b->key) { b->key = key; b->kind = kind; }
+        if (b->n == b->cap) {
+            b->cap = b->cap ? 2 * b->cap : 2;
+            b->idx = realloc(b->idx, b->cap * sizeof(size_t));
+        }
+        b->idx[b->n++] = i;
+    }
+}
+
+static void rule_index_free(RuleIndex* ix) {
+    for (size_t i = 0; i < ix->cap; i++) free(ix->tab[i].idx);
+    free(ix->tab);
+    free(ix->wild);
+}
+
+/* do_replace_all over an indexed rule set: only the node's bucket and the wild
+ * rules are tried, in original order. */
+static Expr* do_replace_all_idx(Expr* e, ReplaceRule* rules, const RuleIndex* ix) {
+    const RuleBucket* b = NULL;
+    if (e->type != EXPR_FUNCTION) {
+        const RuleBucket* s = &ix->tab[rk_slot(ix, e, RK_ATOM)];
+        if (s->key) b = s;
+    } else if (e->data.function.head->type == EXPR_SYMBOL) {
+        const RuleBucket* s = &ix->tab[rk_slot(ix, e->data.function.head, RK_HEAD)];
+        if (s->key) b = s;
+    }
+    size_t i = 0, j = 0, nb = b ? b->n : 0;
+    while (i < nb || j < ix->nwild) {
+        size_t r = (j >= ix->nwild || (i < nb && b->idx[i] < ix->wild[j])) ? b->idx[i++]
+                                                                           : ix->wild[j++];
+        Expr* repl = rule_try(&rules[r], e);
+        if (repl) return repl;
+    }
+
+    if (e->type == EXPR_FUNCTION) {
+        Expr* new_head = do_replace_all_idx(e->data.function.head, rules, ix);
+        bool assoc = assoc_is_wellformed(e);
+        size_t count = e->data.function.arg_count;
+        Expr** new_args = count ? malloc(sizeof(Expr*) * count) : NULL;
+        for (size_t k = 0; k < count; k++)
+            new_args[k] = do_replace_all_idx(struct_part(e, k, assoc), rules, ix);
+        Expr* new_e = struct_rebuild(e, assoc, new_head, new_args, count, true);
+        free(new_args);
+        return new_e;
+    }
+    return expr_copy(e);
+}
+
+/* Dispatch[rules] -> rules (borrowed), noting that an index was asked for. */
+static Expr* dispatch_unwrap(Expr* rules_expr, bool* indexed) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->type == EXPR_SYMBOL &&
+        rules_expr->data.function.head->data.symbol.name == SYM_Dispatch &&
+        rules_expr->data.function.arg_count == 1) {
+        if (indexed) *indexed = true;
+        return rules_expr->data.function.args[0];
+    }
+    return rules_expr;
+}
+
+static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr, bool indexed) {
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_all_nested(expr, rules_expr->data.function.args[i]);
+                args[i] = apply_replace_all_nested(expr, rules_expr->data.function.args[i], indexed);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
             return res;
         }
     }
-    
+
     size_t num_rules = 0;
     ReplaceRule* rules = rules_collect(rules_expr, &num_rules);
 
     Expr* result;
-    if (num_rules > 0) {
-        result = do_replace_all(expr, rules, num_rules);
-    } else {
+    if (num_rules == 0) {
         result = expr_copy(expr);
+    } else if (indexed) {
+        RuleIndex ix;
+        rule_index_build(&ix, rules, num_rules);
+        result = do_replace_all_idx(expr, rules, &ix);
+        rule_index_free(&ix);
+    } else {
+        result = do_replace_all(expr, rules, num_rules);
     }
     free(rules);
     return result;
 }
 
+/* Dispatch[rules] -- a dispatch table over a rule set: ReplaceAll and
+ * ReplaceRepeated index it by left-hand side (see above), and Replace,
+ * ReplaceList and ReplaceAt accept it as the rules.  Normalisation only:
+ * Dispatch[rule] is Dispatch[{rule}], Dispatch[Dispatch[r]] is Dispatch[r];
+ * a list of rules (or of rule lists) stays as it is; anything else stays
+ * unevaluated.  Normal[Dispatch[r]] gives r. */
+Expr* builtin_dispatch(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_Dispatch && a->data.function.arg_count == 1)
+        return expr_copy(a);
+    if (is_rule(a) && a->data.function.arg_count == 2) {
+        Expr* l = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(a) }, 1);
+        return expr_new_function(expr_new_symbol(SYM_Dispatch), &l, 1);
+    }
+    return NULL;
+}
+
 Expr* builtin_replace_all(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* expr = res->data.function.args[0];
-    Expr* rules_expr = res->data.function.args[1];
-    
-    return apply_replace_all_nested(expr, rules_expr);
+    bool indexed = false;
+    Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], &indexed);
+
+    return apply_replace_all_nested(expr, rules_expr, indexed);
 }
 
 /* ReplaceRepeated to a fixed point, at most `max_scans` scans (-1: no limit).
  * Stopping at the limit while the expression is still changing emits
  * ReplaceRepeated::rrlim naming the ORIGINAL expression, and returns the
  * expression reached. */
-static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t max_scans) {
+static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t max_scans,
+                                           bool indexed) {
     if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol.name == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
-                args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i], max_scans);
+                args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i], max_scans,
+                                                        indexed);
             }
             Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
@@ -598,7 +786,7 @@ static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr, int64_t
 
     Expr* current = expr_copy(expr);
     for (int64_t scans = 0; max_scans < 0 || scans < max_scans; scans++) {
-        Expr* next_raw = apply_replace_all_nested(current, rules_expr);
+        Expr* next_raw = apply_replace_all_nested(current, rules_expr, indexed);
         Expr* next = eval_and_free(next_raw);
         if (expr_eq(current, next)) {
             expr_free(next);
@@ -659,7 +847,9 @@ Expr* builtin_replace_repeated(Expr* res) {
         }
         if (!rr_max_iterations(o->data.function.args[1], &max_scans)) return NULL;
     }
-    return apply_replace_repeated_nested(expr, rules_expr, max_scans);
+    bool indexed = false;
+    rules_expr = dispatch_unwrap(rules_expr, &indexed);
+    return apply_replace_repeated_nested(expr, rules_expr, max_scans, indexed);
 }
 
 
@@ -697,8 +887,8 @@ Expr* builtin_replacelist(Expr* res) {
     if (argc < 2 || argc > 3) return NULL;
 
     Expr* expr = res->data.function.args[0];
-    Expr* rules_expr = res->data.function.args[1];
-    
+    Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], NULL);
+
     int64_t limit = -1;
     if (argc == 3) {
         Expr* l_expr = res->data.function.args[2];
@@ -800,7 +990,7 @@ Expr* builtin_replace_at(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
 
     Expr* expr = res->data.function.args[0];
-    Expr* rules_expr = res->data.function.args[1];
+    Expr* rules_expr = dispatch_unwrap(res->data.function.args[1], NULL);
     Expr* pos = res->data.function.args[2];
 
     size_t num_rules = 0;
@@ -824,6 +1014,14 @@ void replace_init(void) {
     symtab_get_def("Replace")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReplaceAll", builtin_replace_all);
     symtab_get_def("ReplaceAll")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Dispatch", builtin_dispatch);
+    symtab_get_def("Dispatch")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Dispatch",
+        "Dispatch[{lhs1 -> rhs1, lhs2 -> rhs2, ...}]\n"
+        "\tgenerates an optimized dispatch table of rules: ReplaceAll (/.) and\n"
+        "\tReplaceRepeated (//.) index the rules by left-hand side, so each subexpression\n"
+        "\ttries only the rules that could match it.  Replace, ReplaceList and ReplaceAt\n"
+        "\taccept it too, and Normal[Dispatch[rules]] gives the rules.");
     symtab_add_builtin("ReplaceRepeated", builtin_replace_repeated);
     symtab_get_def("ReplaceRepeated")->attributes |= ATTR_PROTECTED;
     {

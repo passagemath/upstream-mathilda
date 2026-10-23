@@ -408,6 +408,34 @@ ReplaceRepeated[f[a], {f[a] -> f[b]}, MaxIterations -> 20]   (* f[b] *)
 ReplaceRepeated[0, x_Integer :> x + 1, MaxIterations -> 5]   (* 5, with rrlim *)
 ```
 
+## Dispatch
+`Dispatch[{lhs1 -> rhs1, ...}]` is a rule set that `ReplaceAll` and
+`ReplaceRepeated` index by left-hand side. Each subexpression then tries only
+the rules that could match it, instead of every rule.
+- `Replace`, `ReplaceList` and `ReplaceAt` accept it as their rules.
+- A list of rule lists gives a list of results, as with plain rules.
+- `Normal[Dispatch[rules]]` gives `rules`.
+- `Dispatch[rule]` is `Dispatch[{rule}]`, and `Dispatch[Dispatch[r]]` is
+  `Dispatch[r]`. Anything else stays unevaluated. `Protected`.
+
+**How the index keys a rule:**
+- A literal atom LHS (`a`, `1`, `"s"`) is keyed by that atom.
+- A literal-headed LHS (`f[...]`) is keyed by its head.
+- `HoldPattern`, `/;`, `?` and named-pattern wrappers are looked through, and
+  `Verbatim[x]` is keyed by `x`.
+- Every other rule is tried at every node: a pattern construct (`x_`, `_h`,
+  `a | b`), a compound head, an association, or an LHS with an
+  `Optional`/`x_.` argument (`x^n_.` matches a bare `x`).
+- At each node the candidate rules are tried in their original order, so the
+  rule that wins is always the one the plain list would pick.
+
+**Performance:** for 5000 rules `vi -> i` over 20,000 symbols, the indexed
+rule set takes 3.8 ms against 772 ms for the plain list.
+
+**Divergence:** `Dispatch[...]` is a normal expression here, so `Length` and
+`AtomQ` see its argument. The reference treats it as an atom, which prints as
+`Dispatch[<n>]`.
+
 ## CompoundExpression (;)
 - `expr1; expr2; ...`: Evaluates a sequence of expressions, returning the last one.
 

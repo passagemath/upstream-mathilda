@@ -254,6 +254,26 @@ static void system_constants_init(void) {
      * which is CLOCKS_PER_SEC ticks per second. Also the granularity Pause
      * documents itself against. */
     register_system_constant("$TimeUnit", expr_new_real(1.0 / (double)CLOCKS_PER_SEC));
+    /* Session environment.  Mathilda is a single kernel with no notebook front
+     * end, no cloud, and no parallel subkernels, so these hold the values a
+     * standalone kernel reports.  Packages test them to choose code paths
+     * (e.g. serial versus parallel evaluation when $KernelCount is 0). */
+    register_system_constant("$Notebooks", expr_new_symbol(SYM_False));
+    register_system_constant("$FrontEnd", expr_new_symbol(SYM_Null));
+    register_system_constant("$CloudEvaluation", expr_new_symbol(SYM_False));
+    register_system_constant("$KernelID", expr_new_integer(0));
+    register_system_constant("$KernelCount", expr_new_integer(0));
+    symtab_set_docstring("$Notebooks",
+        "$Notebooks\n\tis True if a notebook front end is in use; always False in Mathilda.");
+    symtab_set_docstring("$FrontEnd",
+        "$FrontEnd\n\tis the front end currently in use; Null when there is none, as in Mathilda.");
+    symtab_set_docstring("$CloudEvaluation",
+        "$CloudEvaluation\n\tis True if the evaluation is happening in a cloud kernel; always False in Mathilda.");
+    symtab_set_docstring("$KernelID",
+        "$KernelID\n\tgives the ID of the current kernel among parallel subkernels; 0 for the main kernel.");
+    symtab_set_docstring("$KernelCount",
+        "$KernelCount\n\tgives the number of running parallel subkernels; always 0 in Mathilda, "
+        "so parallel functions evaluate serially.");
     symtab_set_docstring("$Version",
         "$Version\n\tgives a string describing the version of Mathilda, "
         "including the versions of the libraries it was built against.");

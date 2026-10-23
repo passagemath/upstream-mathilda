@@ -4231,6 +4231,9 @@ void info_init(void) {
     symtab_set_docstring("Environment",
         "Environment[\"var\"]\n"
         "\tgives the value of the operating-system environment variable var as a string, or $Failed if it is not set.");
+    symtab_set_docstring("$PathnameSeparator",
+        "$PathnameSeparator\n"
+        "\tgives the separator between directory names in a file name: \"/\", or \"\\\\\" on Windows.");
     symtab_set_docstring("$HomeDirectory",
         "$HomeDirectory\n"
         "\tgives your home directory, from the HOME (or USERPROFILE) environment variable.");

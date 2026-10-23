@@ -1,4 +1,4 @@
-/* test_meminfo.c -- MemoryInUse and MaxMemoryUsed.
+/* test_meminfo.c -- MemoryInUse, MaxMemoryUsed, $SystemMemory, and the session constants.
  *
  * Memory figures are the awkward opposite of the usual test: the VALUE is machine-dependent
  * and cannot be pinned at all, so every assertion here has to be a relation that must hold
@@ -79,6 +79,29 @@ static void test_both_are_protected(void) {
     assert_eval_eq("MemberQ[Attributes[MaxMemoryUsed], Protected]", "True", 0);
 }
 
+static void test_system_memory(void) {
+    /* Total physical memory: a positive integer at least as large as what this process
+     * holds resident, and fixed for the session. */
+    assert_eval_eq("IntegerQ[$SystemMemory] && $SystemMemory > 0", "True", 0);
+    assert_eval_eq("$SystemMemory >= MaxMemoryUsed[]", "True", 0);
+    assert_eval_eq("$SystemMemory === $SystemMemory", "True", 0);
+    /* A package's memory budget derived from it is an integer. */
+    assert_eval_eq("IntegerQ[Floor[$SystemMemory/10^6/4]]", "True", 0);
+    assert_eval_eq("MemberQ[Attributes[$SystemMemory], Protected]", "True", 0);
+}
+
+static void test_session_constants(void) {
+    /* A standalone kernel: no notebook, no front end, no cloud, no subkernels. */
+    assert_eval_eq("{$Notebooks, $FrontEnd, $CloudEvaluation, $KernelID, $KernelCount}",
+                   "{False, Null, False, 0, 0}", 0);
+    assert_eval_eq("$PathnameSeparator", "\"/\"", 0);
+    assert_eval_eq("{Attributes[$Notebooks], Attributes[$FrontEnd], Attributes[$CloudEvaluation], "
+                   "Attributes[$KernelID], Attributes[$KernelCount], Attributes[$PathnameSeparator]}",
+                   "{{Protected}, {Protected}, {Protected}, {Protected}, {Protected}, {Protected}}", 0);
+    /* Protected: an assignment is refused and the value survives. */
+    assert_eval_eq("Quiet[$KernelCount = 4]; $KernelCount", "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -88,6 +111,8 @@ int main(void) {
     TEST(test_it_responds_to_a_real_allocation);
     TEST(test_argument_forms_decline);
     TEST(test_both_are_protected);
+    TEST(test_system_memory);
+    TEST(test_session_constants);
 
     printf("All meminfo tests passed.\n");
     return 0;

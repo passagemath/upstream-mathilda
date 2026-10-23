@@ -1,4 +1,4 @@
-/* meminfo.c -- MemoryInUse and MaxMemoryUsed.
+/* meminfo.c -- MemoryInUse, MaxMemoryUsed and $SystemMemory.
  *
  * WHAT THESE MEASURE, AND HOW IT DIFFERS FROM MATHEMATICA. Wolfram's MemoryInUse[] reports
  * the bytes used to store the data of the current session -- expressions, definitions,
@@ -63,6 +63,7 @@
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
+#include <sys/sysctl.h>     /* sysctlbyname("hw.memsize") */
 #endif
 #if defined(__linux__)
 #include <unistd.h>
@@ -144,6 +145,37 @@ bool meminfo_peak(uint64_t* bytes) {
 #endif
 }
 
+bool meminfo_physical(uint64_t* bytes) {
+    if (!bytes) return false;
+
+#if defined(__APPLE__)
+    uint64_t mem = 0;
+    size_t len = sizeof mem;
+    if (sysctlbyname("hw.memsize", &mem, &len, NULL, 0) != 0 || mem == 0) return false;
+    *bytes = mem;
+    return true;
+
+#elif defined(__linux__)
+    /* Pages times page size; _SC_PHYS_PAGES is exposed by _DEFAULT_SOURCE above. */
+    long pages = sysconf(_SC_PHYS_PAGES);
+    long page = sysconf(_SC_PAGESIZE);
+    if (pages <= 0 || page <= 0) return false;
+    *bytes = (uint64_t)pages * (uint64_t)page;
+    return true;
+
+#elif defined(_WIN32)
+    MEMORYSTATUSEX ms;
+    ms.dwLength = sizeof ms;
+    if (!GlobalMemoryStatusEx(&ms)) return false;
+    *bytes = (uint64_t)ms.ullTotalPhys;
+    return true;
+
+#else
+    (void)bytes;
+    return false;
+#endif
+}
+
 /* MemoryInUse[] -- current resident bytes.
  *
  * Takes no arguments. Mathematica's one-argument form reports a subkernel's usage, and there
@@ -180,6 +212,20 @@ void meminfo_init(void) {
         "figure Activity Monitor and top report, not a count of session data alone. "
         "Returns unevaluated on a platform that offers no way to ask, rather than "
         "reporting zero.");
+
+    /* $SystemMemory -- total physical memory, fixed for the session.  Left
+     * undefined (rather than 0) on a platform that offers no way to ask. */
+    uint64_t phys = 0;
+    if (meminfo_physical(&phys)) {
+        Expr* sym = expr_new_symbol("$SystemMemory");
+        Expr* val = expr_new_integer((int64_t)phys);
+        symtab_add_own_value("$SystemMemory", sym, val);
+        expr_free(sym);
+        expr_free(val);
+    }
+    symtab_get_def("$SystemMemory")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("$SystemMemory",
+        "$SystemMemory\n\tgives the total number of bytes of physical memory on the computer.");
 
     symtab_add_builtin("MaxMemoryUsed", builtin_maxmemoryused);
     symtab_get_def("MaxMemoryUsed")->attributes |= ATTR_PROTECTED;

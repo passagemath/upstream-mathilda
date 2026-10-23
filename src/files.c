@@ -15,6 +15,7 @@
  *                          — the working directory and its push/pop stack.
  *   $HomeDirectory         — the user's home directory (from the environment).
  *   Environment["var"]     — an environment variable's value, or $Failed.
+ *   $PathnameSeparator     — the host pathname separator ("/" or "\\").
  *
  * Also initialises $InputFileName to "" (loadmodule.c swaps it in and out
  * around every file read).
@@ -1330,6 +1331,17 @@ void files_init(void) {
         free(home);
     }
     symtab_get_def("$HomeDirectory")->attributes |= ATTR_PROTECTED;
+
+    /* $PathnameSeparator: the host separator FileNameJoin uses by default. */
+    {
+        const char sep[2] = { HOST_SEP, '\0' };
+        Expr* psym = expr_new_symbol("$PathnameSeparator");
+        Expr* pval = expr_new_string(sep);
+        symtab_add_own_value("$PathnameSeparator", psym, pval);
+        expr_free(psym);
+        expr_free(pval);
+        symtab_get_def("$PathnameSeparator")->attributes |= ATTR_PROTECTED;
+    }
 
     /* $InputFileName: "" outside any file read (see mth_input_file_enter). */
     Expr* ifn_sym = expr_new_symbol("$InputFileName");

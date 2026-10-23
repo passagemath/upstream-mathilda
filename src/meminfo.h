@@ -14,4 +14,8 @@ bool meminfo_current(uint64_t* bytes);
 /* Peak resident set size in bytes, over the life of the process. */
 bool meminfo_peak(uint64_t* bytes);
 
+/* Total physical memory of the machine, in bytes.  False when the platform
+ * offers no way to ask. */
+bool meminfo_physical(uint64_t* bytes);
+
 #endif /* MATHILDA_MEMINFO_H */

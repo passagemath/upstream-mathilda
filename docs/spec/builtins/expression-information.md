@@ -493,6 +493,28 @@ In[2]:= $Version
 Out[2]= "Mathilda 0.019 (Apple LLVM 17.0.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)"
 ```
 
+## $Notebooks, $FrontEnd, $CloudEvaluation, $KernelID, $KernelCount
+Session-environment constants. Mathilda is a single kernel with no notebook
+front end, no cloud and no parallel subkernels, so they hold the values a
+standalone kernel reports. Packages test them to choose a code path; for
+example, they evaluate in parallel only when `$KernelCount > 0`.
+
+| Symbol | Value |
+|---|---|
+| `$Notebooks` | `False` |
+| `$FrontEnd` | `Null` |
+| `$CloudEvaluation` | `False` |
+| `$KernelID` | `0` |
+| `$KernelCount` | `0` |
+
+All `Protected`. Defined in `src/core.c`.
+
+## $SystemMemory
+The total physical memory of the machine, in bytes, as an integer (`sysctl
+hw.memsize` on macOS, `sysconf` on Linux, `GlobalMemoryStatusEx` on Windows).
+On a platform with no way to ask, it is left undefined rather than set to 0.
+`Protected`. Defined in `src/meminfo.c`.
+
 ## ListQ, VectorQ, MatrixQ
 Predicates for testing lists and their structures.
 - `ListQ[expr]`: `True` if the head of `expr` is `List`.

@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, and the `$InputFileName` / `$HomeDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -687,6 +687,61 @@ DirectoryName["/a/b/c.txt", 2]   (* "/a/" *)
 DirectoryName["c.txt"]           (* "" *)
 DirectoryName[$InputFileName]    (* the running script's directory *)
 ```
+
+## ParentDirectory
+The parent of an existing directory, as an absolute canonical path.
+- `ParentDirectory[]`: the parent of the working directory.
+- `ParentDirectory["dir"]`: the parent of `dir`. A relative `dir` is resolved
+  against the working directory, and symbolic links and `..` are resolved.
+- `ParentDirectory["dir", n]`: goes `n` levels up. The root is its own parent.
+
+**Features**:
+- `Protected`.
+- A path that is not an existing directory emits `ParentDirectory::dirnex` and
+  leaves the call unevaluated. This differs from `DirectoryName`, which is a
+  pure string operation.
+
+## FileNameTake
+Selects components of a file name, as `FileNameSplit` gives them, and rejoins them.
+
+| Call | Result for `"/a/b/c.txt"` |
+|---|---|
+| `FileNameTake[name]` | `"c.txt"` (the last component) |
+| `FileNameTake[name, n]` / `-n` | first / last `n`: `2` → `"/a"`, `-2` → `"b/c.txt"` |
+| `FileNameTake[name, {k}]` | the `k`-th: `{2}` → `"a"`, `{1}` → `"/"` |
+| `FileNameTake[name, {m, n}]` | `{2, 3}` → `"a/b"` |
+
+- An `n` larger than the number of components takes them all.
+- `0`, or an index `{k}` out of range, gives `""`.
+- Any other spec emits `FileNameTake::seqso`.
+- `Protected`.
+
+## AbsoluteFileName
+`AbsoluteFileName["name"]` gives the absolute canonical path of an existing file
+or directory. A missing one emits `AbsoluteFileName::fdnfnd` and gives
+`$Failed`. `Protected`.
+
+## FileType
+`FileType["name"]` gives `File`, `Directory`, or `None` if nothing exists at
+`name`. Symbolic links are followed. A non-string argument emits
+`FileType::badfile`. `Protected`.
+
+## ToFileName
+The legacy file-name builder, superseded by `FileNameJoin`.
+- `ToFileName[{"dir1", ...}, "name"]` gives `"dir1/.../name"`.
+- `ToFileName[dirs]` gives the directory with a trailing separator:
+  `ToFileName[{"a", "b"}]` is `"a/b/"`.
+- `dirs` may be a single string.
+- Doubled separators are collapsed (`{"a/", "b"}` gives `"a/b/"`), and empty
+  pieces are skipped.
+- `Protected`.
+
+## DeleteFile
+`DeleteFile["file"]` or `DeleteFile[{"file1", ...}]` deletes files and returns `Null`.
+- A missing file emits `DeleteFile::fdnfnd`, and a directory emits
+  `DeleteFile::fdir`. In either case the result is `$Failed`, and the other
+  files of a list are still deleted.
+- `Protected`.
 
 ## FileNames
 Lists files by name pattern.

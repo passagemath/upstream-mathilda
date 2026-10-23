@@ -66,6 +66,7 @@ Expr* builtin_releasehold(Expr* res);
 Expr* builtin_activate(Expr* res);
 Expr* builtin_tostring(Expr* res);
 Expr* builtin_toexpression(Expr* res);
+Expr* builtin_syntaxq(Expr* res);
 Expr* builtin_symbol(Expr* res);
 Expr* builtin_increment(Expr* res);
 Expr* builtin_decrement(Expr* res);

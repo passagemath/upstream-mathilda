@@ -87,5 +87,11 @@ Expr* builtin_setdirectory(Expr* res);
 Expr* builtin_resetdirectory(Expr* res);
 Expr* builtin_directorystack(Expr* res);
 Expr* builtin_environment(Expr* res);
+Expr* builtin_parentdirectory(Expr* res);
+Expr* builtin_filenametake(Expr* res);
+Expr* builtin_absolutefilename(Expr* res);
+Expr* builtin_filetype(Expr* res);
+Expr* builtin_tofilename(Expr* res);
+Expr* builtin_deletefile(Expr* res);
 
 #endif /* FILES_H */

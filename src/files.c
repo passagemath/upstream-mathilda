@@ -15,6 +15,8 @@
  *                          — the working directory and its push/pop stack.
  *   $HomeDirectory         — the user's home directory (from the environment).
  *   Environment["var"]     — an environment variable's value, or $Failed.
+ *   ParentDirectory, FileNameTake, AbsoluteFileName, FileType, ToFileName,
+ *   DeleteFile             — path manipulation and deletion.
  *   $PathnameSeparator     — the host pathname separator ("/" or "\\").
  *
  * Also initialises $InputFileName to "" (loadmodule.c swaps it in and out
@@ -1256,6 +1258,334 @@ Expr* builtin_environment(Expr* res) {
     return v ? expr_new_string(v) : expr_new_symbol(SYM_DollarFailed);
 }
 
+/* ---------------- path builtins: ParentDirectory, FileNameTake, ... ---------------- */
+
+static bool is_sep(char c) {
+    return c == '/' || c == HOST_SEP;
+}
+
+/* Absolute, canonical form of an EXISTING path (symlinks and ".." resolved),
+ * malloc'd; NULL when the path does not exist. */
+static char* abs_existing(const char* path) {
+#ifdef _WIN32
+    struct stat st;
+    if (stat(path, &st) != 0) return NULL;
+    return _fullpath(NULL, path, 0);
+#else
+    return realpath(path, NULL);
+#endif
+}
+
+/* "The specified argument, arg, should be a valid string or File." */
+static void badfile_message(const char* head, Expr* arg) {
+    char* txt = expr_to_string_outputform(arg);
+    mth_message(head, "badfile", "The specified argument, %s, should be a valid string or File.",
+                txt ? txt : "");
+    free(txt);
+}
+
+static void fdnfnd_message(const char* head, const char* path) {
+    mth_message(head, "fdnfnd", "Directory or file \"%s\" not found.", path);
+}
+
+/*
+ * ParentDirectory[] / ParentDirectory["dir"] / ParentDirectory["dir", n]
+ *
+ * The parent of an existing directory, as an absolute path; n repeats the
+ * step, and the root is its own parent.  ParentDirectory[] is the parent of
+ * the working directory.  A path that is not an existing directory gives
+ * ParentDirectory::dirnex and leaves the call unevaluated.
+ */
+Expr* builtin_parentdirectory(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc > 2) return builtin_arg_error("ParentDirectory", argc, 0, 2);
+    int64_t n = 1;
+    if (argc == 2) {
+        Expr* a1 = res->data.function.args[1];
+        if (a1->type != EXPR_INTEGER || a1->data.integer < 1) {
+            files_arg_message(res, "ParentDirectory", "intpm",
+                "Positive machine-sized integer expected at position 2");
+            return NULL;
+        }
+        n = a1->data.integer;
+    }
+    char* dir;
+    if (argc == 0) {
+        dir = cwd_dup();
+        if (!dir) return NULL;
+    } else {
+        Expr* a0 = res->data.function.args[0];
+        if (a0->type != EXPR_STRING) {
+            files_arg_message(res, "ParentDirectory", "string", "String expected at position 1");
+            return NULL;
+        }
+        dir = abs_existing(a0->data.string);
+        struct stat st;
+        if (!dir || stat(dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
+            free(dir);
+            mth_message("ParentDirectory", "dirnex", "Directory %s does not exist.",
+                        a0->data.string);
+            return NULL;
+        }
+    }
+    for (int64_t i = 0; i < n; i++) {
+        size_t len = strlen(dir);
+        while (len > 1 && is_sep(dir[len - 1])) dir[--len] = '\0';
+        char* last = NULL;
+        for (char* c = dir; *c; c++) if (is_sep(*c)) last = c;
+        if (!last) break;
+        /* Keep the separator of a root: "/" or (Windows) "C:\". */
+        size_t keep = (size_t)(last - dir);
+        if (keep == 0 || (keep == 2 && dir[1] == ':')) keep++;
+        if (keep >= len) break;          /* already the root */
+        dir[keep] = '\0';
+    }
+    Expr* r = expr_new_string(dir);
+    free(dir);
+    return r;
+}
+
+/* Split a file name into components.  A leading separator gives a leading ""
+ * component (the root); empty components and trailing separators are dropped.
+ * Returns the count; comps[] are malloc'd strings, freed by fnt_free. */
+static size_t fnt_split(const char* s, char*** out) {
+    size_t n = 0, cap = 8;
+    char** comps = malloc(cap * sizeof(char*));
+    if (is_sep(*s)) comps[n++] = fns_dup("", 0);
+    const char* p = s;
+    while (*p) {
+        while (*p && is_sep(*p)) p++;
+        if (!*p) break;
+        const char* q = p;
+        while (*q && !is_sep(*q)) q++;
+        if (n == cap) { cap *= 2; comps = realloc(comps, cap * sizeof(char*)); }
+        comps[n++] = fns_dup(p, (size_t)(q - p));
+        p = q;
+    }
+    *out = comps;
+    return n;
+}
+
+static void fnt_free(char** comps, size_t n) {
+    for (size_t i = 0; i < n; i++) free(comps[i]);
+    free(comps);
+}
+
+/* Join comps[lo..hi] (0-based, inclusive) with "/"; a leading root component
+ * "" gives a leading "/".  An empty range is "". */
+static Expr* fnt_join(char** comps, size_t n, int64_t lo, int64_t hi) {
+    if (lo < 0) lo = 0;
+    if (hi >= (int64_t)n) hi = (int64_t)n - 1;
+    if (lo > hi) return expr_new_string("");
+    size_t len = 2;
+    for (int64_t i = lo; i <= hi; i++) len += strlen(comps[i]) + 1;
+    char* buf = malloc(len);
+    buf[0] = '\0';
+    for (int64_t i = lo; i <= hi; i++) {
+        /* The root component is "/" itself; others are "/"-separated. */
+        if (comps[i][0] == '\0') strcat(buf, "/");
+        else {
+            if (i > lo && comps[i - 1][0] != '\0') strcat(buf, "/");
+            strcat(buf, comps[i]);
+        }
+    }
+    Expr* r = expr_new_string(buf);
+    free(buf);
+    return r;
+}
+
+/* Resolve a 1-based (negative: from the end) index into 0-based; out of
+ * range gives -1 or n. */
+static int64_t fnt_index(int64_t k, size_t n) {
+    return k > 0 ? k - 1 : (int64_t)n + k;
+}
+
+/*
+ * FileNameTake["name"] / FileNameTake["name", spec]
+ *
+ * Components of name as FileNameSplit gives them, rejoined:
+ *   (none) the last component       n / -n  the first / last n (all if fewer)
+ *   {k}    the k-th (negative: from the end; "" if out of range)
+ *   {m, k} components m through k   0       ""
+ * Any other spec gives FileNameTake::seqso and leaves the call unevaluated.
+ */
+Expr* builtin_filenametake(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("FileNameTake", argc, 1, 2);
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        files_arg_message(res, "FileNameTake", "string", "String expected at position 1");
+        return NULL;
+    }
+    int64_t lo, hi;
+    char** comps;
+    size_t n = fnt_split(a0->data.string, &comps);
+    Expr* spec = argc == 2 ? res->data.function.args[1] : NULL;
+    if (!spec) {
+        lo = hi = (int64_t)n - 1;
+    } else if (spec->type == EXPR_INTEGER) {
+        int64_t k = spec->data.integer;
+        if (k >= 0) { lo = 0; hi = k - 1; }
+        else        { lo = (int64_t)n + k; hi = (int64_t)n - 1; }
+    } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL
+               && spec->data.function.head->data.symbol.name == SYM_List
+               && (spec->data.function.arg_count == 1 || spec->data.function.arg_count == 2)
+               && spec->data.function.args[0]->type == EXPR_INTEGER
+               && spec->data.function.args[spec->data.function.arg_count - 1]->type == EXPR_INTEGER
+               && spec->data.function.args[0]->data.integer != 0
+               && spec->data.function.args[spec->data.function.arg_count - 1]->data.integer != 0) {
+        lo = fnt_index(spec->data.function.args[0]->data.integer, n);
+        hi = fnt_index(spec->data.function.args[spec->data.function.arg_count - 1]->data.integer, n);
+        /* An index outside the name selects nothing rather than clamping. */
+        if (lo < 0 || hi < 0 || lo >= (int64_t)n || hi >= (int64_t)n) lo = 1, hi = 0;
+    } else {
+        fnt_free(comps, n);
+        char* txt = expr_to_string_outputform(spec);
+        mth_message("FileNameTake", "seqso",
+                    "Sequence specification (+n, -n, {+n}, {-n}, or {m, n}) expected at position 2 in %s.",
+                    txt ? txt : "");
+        free(txt);
+        return NULL;
+    }
+    Expr* r = fnt_join(comps, n, lo, hi);
+    fnt_free(comps, n);
+    return r;
+}
+
+/*
+ * AbsoluteFileName["name"] -- the absolute, canonical path of an existing file
+ * or directory.  A missing one gives AbsoluteFileName::fdnfnd and $Failed.
+ */
+Expr* builtin_absolutefilename(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("AbsoluteFileName", argc, 1, 1);
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        badfile_message("AbsoluteFileName", a0);
+        return NULL;
+    }
+    char* abs = abs_existing(a0->data.string);
+    if (!abs) {
+        fdnfnd_message("AbsoluteFileName", a0->data.string);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    Expr* r = expr_new_string(abs);
+    free(abs);
+    return r;
+}
+
+/*
+ * FileType["name"] -- File, Directory, or None when nothing exists there.
+ * Symbolic links are followed.
+ */
+Expr* builtin_filetype(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("FileType", argc, 1, 1);
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        badfile_message("FileType", a0);
+        return NULL;
+    }
+    struct stat st;
+    if (stat(a0->data.string, &st) != 0) return expr_new_symbol(SYM_None);
+    return expr_new_symbol(S_ISDIR(st.st_mode) ? "Directory" : "File");
+}
+
+/* Append path piece `p` to buf (capacity grows), separator-joined: trailing
+ * separators of the piece are dropped and exactly one is written after it.
+ * A piece made only of separators is the root. */
+static void tfn_append(char** buf, size_t* len, size_t* cap, const char* p, bool trailing_sep) {
+    size_t pl = strlen(p);
+    while (pl > 0 && is_sep(p[pl - 1])) pl--;
+    bool root = pl == 0 && p[0] != '\0';
+    if (pl == 0 && !root) return;
+    while (*len + pl + 2 > *cap) { *cap *= 2; *buf = realloc(*buf, *cap); }
+    if (!root) { memcpy(*buf + *len, p, pl); *len += pl; }
+    if (trailing_sep || root) (*buf)[(*len)++] = '/';
+    (*buf)[*len] = '\0';
+}
+
+/*
+ * ToFileName[dirs, "name"] / ToFileName[dirs] -- the legacy file-name builder.
+ * dirs is a string or a list of strings; each directory is followed by one
+ * "/", so ToFileName[{"a", "b"}] is "a/b/" and ToFileName[{"a", "b"}, "c.m"]
+ * is "a/b/c.m".  Empty pieces are skipped.
+ */
+Expr* builtin_tofilename(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("ToFileName", argc, 1, 2);
+    Expr* dirs = res->data.function.args[0];
+    Expr* name = argc == 2 ? res->data.function.args[1] : NULL;
+    if (name && name->type != EXPR_STRING) return NULL;
+    bool list = dirs->type == EXPR_FUNCTION && dirs->data.function.head->type == EXPR_SYMBOL
+        && dirs->data.function.head->data.symbol.name == SYM_List;
+    if (!list && dirs->type != EXPR_STRING) return NULL;
+    size_t nd = list ? dirs->data.function.arg_count : 1;
+    for (size_t i = 0; list && i < nd; i++)
+        if (dirs->data.function.args[i]->type != EXPR_STRING) return NULL;
+    size_t len = 0, cap = 64;
+    char* buf = malloc(cap);
+    buf[0] = '\0';
+    for (size_t i = 0; i < nd; i++)
+        tfn_append(&buf, &len, &cap, list ? dirs->data.function.args[i]->data.string
+                                          : dirs->data.string, true);
+    if (name) tfn_append(&buf, &len, &cap, name->data.string, false);
+    Expr* r = expr_new_string(buf);
+    free(buf);
+    return r;
+}
+
+/* Delete one file; false (with a message) when it is missing, is a
+ * directory, or cannot be removed. */
+static bool delete_one(const char* path) {
+    struct stat st;
+    if (lstat(path, &st) != 0) {
+        fdnfnd_message("DeleteFile", path);
+        return false;
+    }
+    if (S_ISDIR(st.st_mode)) {
+        mth_message("DeleteFile", "fdir",
+                    "The specified path %s refers to a directory; a file path was expected.", path);
+        return false;
+    }
+    if (remove(path) != 0) {
+        mth_message("DeleteFile", "nffil", "File %s could not be deleted.", path);
+        return false;
+    }
+    return true;
+}
+
+/*
+ * DeleteFile["file"] / DeleteFile[{"file1", ...}] -- delete files; Null on
+ * success, $Failed (with a message) when any file is missing, is a directory,
+ * or cannot be removed.  The remaining files of a list are still deleted.
+ */
+Expr* builtin_deletefile(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("DeleteFile", argc, 1, 1);
+    Expr* a0 = res->data.function.args[0];
+    bool list = a0->type == EXPR_FUNCTION && a0->data.function.head->type == EXPR_SYMBOL
+        && a0->data.function.head->data.symbol.name == SYM_List;
+    size_t n = list ? a0->data.function.arg_count : 1;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = list ? a0->data.function.args[i] : a0;
+        if (f->type != EXPR_STRING) {
+            badfile_message("DeleteFile", f);
+            return NULL;
+        }
+    }
+    bool ok = true;
+    for (size_t i = 0; i < n; i++)
+        ok &= delete_one((list ? a0->data.function.args[i] : a0)->data.string);
+    return expr_new_symbol(ok ? SYM_Null : SYM_DollarFailed);
+}
+
 /* $HomeDirectory from the environment: HOME, else (Windows) USERPROFILE or
  * HOMEDRIVE + HOMEPATH.  Caller frees; NULL when none is set. */
 static char* home_from_env(void) {
@@ -1320,6 +1650,18 @@ void files_init(void) {
     symtab_get_def("DirectoryStack")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Environment", builtin_environment);
     symtab_get_def("Environment")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ParentDirectory", builtin_parentdirectory);
+    symtab_get_def("ParentDirectory")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FileNameTake", builtin_filenametake);
+    symtab_get_def("FileNameTake")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("AbsoluteFileName", builtin_absolutefilename);
+    symtab_get_def("AbsoluteFileName")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FileType", builtin_filetype);
+    symtab_get_def("FileType")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ToFileName", builtin_tofilename);
+    symtab_get_def("ToFileName")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("DeleteFile", builtin_deletefile);
+    symtab_get_def("DeleteFile")->attributes |= ATTR_PROTECTED;
 
     char* home = home_from_env();
     if (home) {

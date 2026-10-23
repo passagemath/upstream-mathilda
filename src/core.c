@@ -788,6 +788,8 @@ void core_init(void) {
     symtab_add_builtin("ToString", builtin_tostring);
     symtab_get_def("ToString")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ToExpression", builtin_toexpression);
+    symtab_add_builtin("SyntaxQ", builtin_syntaxq);
+    symtab_get_def("SyntaxQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("ToExpression")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_add_builtin("Symbol", builtin_symbol);
     symtab_get_def("Symbol")->attributes |= ATTR_PROTECTED;
@@ -4283,6 +4285,30 @@ Expr* builtin_tostring(Expr* res) {
  * A non-string input (or unrecognised form) leaves the call unevaluated
  * by returning NULL so the user sees the call shape they wrote.
  */
+/*
+ * SyntaxQ["string"] -- True when the string reads as a sequence of complete,
+ * syntactically valid statements (the way ToExpression reads it), else False.
+ * Nothing is evaluated.  The empty string is False; whitespace or a comment
+ * alone is True.
+ */
+Expr* builtin_syntaxq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return builtin_arg_error("SyntaxQ", argc, 1, 1);
+    Expr* a0 = res->data.function.args[0];
+    if (a0->type != EXPR_STRING) {
+        char* txt = expr_to_string_outputform(res);
+        mth_message("SyntaxQ", "string", "String expected at position 1 in %s.", txt ? txt : "");
+        free(txt);
+        return NULL;
+    }
+    if (a0->data.string[0] == '\0') return expr_new_symbol(SYM_False);
+    Expr* stmts = parse_statement_sequence(a0->data.string, 1, NULL);
+    if (!stmts) return expr_new_symbol(SYM_False);
+    expr_free(stmts);
+    return expr_new_symbol(SYM_True);
+}
+
 Expr* builtin_toexpression(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;

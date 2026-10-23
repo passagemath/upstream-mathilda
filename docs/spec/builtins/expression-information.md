@@ -1269,6 +1269,18 @@ In[5]:= ToExpression["x = 2\n y = x + 1"]
 Out[5]= 3
 ```
 
+## SyntaxQ
+`SyntaxQ["string"]` gives `True` if the string reads as a sequence of complete,
+syntactically valid statements, the way `ToExpression` reads it, and `False`
+otherwise. Nothing is evaluated.
+- `SyntaxQ[""]` is `False`. Whitespace alone, or a comment alone, is `True`.
+- Newline-separated statements are accepted: `SyntaxQ["a=1\nb=2"]` is `True`.
+- A non-string argument emits `SyntaxQ::string`. `Protected`.
+
+```
+{SyntaxQ["1+2"], SyntaxQ["1+"], SyntaxQ["f[x"]}    (* {True, False, False} *)
+```
+
 ## Symbol
 Refers to a symbol with the specified name, creating it if necessary.
 - `Symbol["name"]`: returns the symbol named `"name"`.

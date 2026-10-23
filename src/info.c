@@ -4244,6 +4244,33 @@ void info_init(void) {
     symtab_set_docstring("Environment",
         "Environment[\"var\"]\n"
         "\tgives the value of the operating-system environment variable var as a string, or $Failed if it is not set.");
+    symtab_set_docstring("ParentDirectory",
+        "ParentDirectory[]\n"
+        "\tgives the parent of the current working directory.\n"
+        "ParentDirectory[\"dir\"] gives the parent of the existing directory dir, as an absolute path.\n"
+        "ParentDirectory[\"dir\", n] goes n levels up; the root is its own parent.\n"
+        "A path that is not an existing directory gives ParentDirectory::dirnex.");
+    symtab_set_docstring("FileNameTake",
+        "FileNameTake[\"name\"]\n"
+        "\tgives the last component of a file name.\n"
+        "FileNameTake[\"name\", n] gives the first n components; -n the last n; {k} the k-th;\n"
+        "{m, n} components m through n.  Components are those of FileNameSplit.");
+    symtab_set_docstring("AbsoluteFileName",
+        "AbsoluteFileName[\"name\"]\n"
+        "\tgives the absolute, canonical path of an existing file or directory, or $Failed\n"
+        "\twith AbsoluteFileName::fdnfnd if it does not exist.");
+    symtab_set_docstring("FileType",
+        "FileType[\"name\"]\n"
+        "\tgives File, Directory, or None if nothing exists at name.  Symbolic links are followed.");
+    symtab_set_docstring("ToFileName",
+        "ToFileName[{\"dir1\", \"dir2\", ...}, \"name\"]\n"
+        "\tassembles a full file name from directory names and a file name.\n"
+        "ToFileName[dirs] gives the directory with a trailing separator.  Superseded by FileNameJoin.");
+    symtab_set_docstring("DeleteFile",
+        "DeleteFile[\"file\"]\n"
+        "\tdeletes a file.\n"
+        "DeleteFile[{\"file1\", ...}] deletes several.  Returns Null, or $Failed with a message if a\n"
+        "file is missing or is a directory.");
     symtab_set_docstring("$PathnameSeparator",
         "$PathnameSeparator\n"
         "\tgives the separator between directory names in a file name: \"/\", or \"\\\\\" on Windows.");
@@ -4326,6 +4353,10 @@ void info_init(void) {
         "ToString[expr, form]\n"
         "\tuses the specified output form.\n"
         "Supported forms: OutputForm (default, linear), InputForm, FullForm, TeXForm.");
+    symtab_set_docstring("SyntaxQ",
+        "SyntaxQ[\"string\"]\n"
+        "\tgives True if the string reads as a sequence of complete, syntactically valid\n"
+        "\tstatements, and False otherwise.  Nothing is evaluated.  SyntaxQ[\"\"] is False.");
     symtab_set_docstring("ToExpression",
         "ToExpression[input]\n"
         "\tparses input (a String) as Mathilda input and returns the resulting\n"

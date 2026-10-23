@@ -960,6 +960,118 @@ void test_environment(void) {
     assert_eval_eq("Attributes[Environment]", "{Protected}", 0);
 }
 
+/* ===== ParentDirectory / FileNameTake / AbsoluteFileName / FileType /
+ *       ToFileName / DeleteFile ===== */
+
+void test_parentdirectory(void) {
+    char root[256], src[1200];
+    fn_tree(root, sizeof root);
+    /* Canonical absolute form of the scratch root (on macOS /tmp is a symlink). */
+    snprintf(src, sizeof src, "pdRoot = AbsoluteFileName[\"%s\"]; StringQ[pdRoot]", root);
+    assert_eval_eq(src, "True", 0);
+    snprintf(src, sizeof src, "ParentDirectory[\"%s/sub\"] === pdRoot", root);
+    assert_eval_eq(src, "True", 0);
+    snprintf(src, sizeof src, "ParentDirectory[\"%s/sub/\"] === pdRoot", root);
+    assert_eval_eq(src, "True", 0);
+    snprintf(src, sizeof src, "ParentDirectory[\"%s/sub\", 2] === ParentDirectory[pdRoot]", root);
+    assert_eval_eq(src, "True", 0);
+    assert_eval_eq("{ParentDirectory[\"/\"], ParentDirectory[\"/tmp\", 50]}", "{\"/\", \"/\"}", 0);
+    assert_eval_eq("ParentDirectory[] === ParentDirectory[Directory[]]", "True", 0);
+    /* A relative directory resolves against the working directory. */
+    snprintf(src, sizeof src, "SetDirectory[\"%s\"]; pd = ParentDirectory[\"sub\"]; ResetDirectory[]; pd === pdRoot", root);
+    assert_eval_eq(src, "True", 0);
+    /* Not an existing directory: dirnex, unevaluated. */
+    snprintf(src, sizeof src, "Quiet[ParentDirectory[\"%s/a.m\"]] === ParentDirectory[\"%s/a.m\"]", root, root);
+    assert_eval_eq(src, "True", 0);
+    assert_eval_eq("Check[ParentDirectory[\"/no/such/dir\"], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Quiet[ParentDirectory[3]]", "ParentDirectory[3]", 0);
+    assert_eval_eq("Quiet[ParentDirectory[\"/\", 0]]", "ParentDirectory[\"/\", 0]", 0);
+    assert_eval_eq("Attributes[ParentDirectory]", "{Protected}", 0);
+    fn_tree_rm(root);
+}
+
+void test_filenametake(void) {
+    assert_eval_eq("FileNameTake[\"/a/b/c.txt\"]", "\"c.txt\"", 0);
+    assert_eval_eq("{FileNameTake[\"/a/b/c.txt\", 1], FileNameTake[\"/a/b/c.txt\", 2]}", "{\"/\", \"/a\"}", 0);
+    assert_eval_eq("FileNameTake[\"/a/b/c.txt\", -2]", "\"b/c.txt\"", 0);
+    assert_eval_eq("{FileNameTake[\"/a/b/c.txt\", {2}], FileNameTake[\"/a/b/c.txt\", {-1}], "
+                   "FileNameTake[\"/a/b/c.txt\", {1}]}", "{\"a\", \"c.txt\", \"/\"}", 0);
+    assert_eval_eq("FileNameTake[\"/a/b/c.txt\", {2, 3}]", "\"a/b\"", 0);
+    assert_eval_eq("{FileNameTake[\"/a/b/c.txt\", 10], FileNameTake[\"/a/b/c.txt\", -10]}",
+                   "{\"/a/b/c.txt\", \"/a/b/c.txt\"}", 0);
+    assert_eval_eq("{FileNameTake[\"/a/b/c.txt\", 0], FileNameTake[\"/a/b/c.txt\", {5}], "
+                   "FileNameTake[\"\", 1]}", "{\"\", \"\", \"\"}", 0);
+    assert_eval_eq("{FileNameTake[\"a/b/\"], FileNameTake[\"a/b/c.txt\", 1]}", "{\"b\", \"a\"}", 0);
+    assert_eval_eq("Quiet[FileNameTake[\"/a\", All]]", "FileNameTake[\"/a\", All]", 0);
+    assert_eval_eq("Check[FileNameTake[\"/a\", x], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[FileNameTake]", "{Protected}", 0);
+}
+
+void test_absolutefilename_filetype(void) {
+    char root[256], src[1200];
+    fn_tree(root, sizeof root);
+    snprintf(src, sizeof src, "afn = AbsoluteFileName[\"%s/sub/../a.m\"]; "
+             "{StringMatchQ[afn, \"/*/a.m\"], StringFreeQ[afn, \"..\"]}", root);
+    assert_eval_eq(src, "{True, True}", 0);
+    snprintf(src, sizeof src, "Quiet[AbsoluteFileName[\"%s/nope\"]]", root);
+    assert_eval_eq(src, "$Failed", 0);
+    snprintf(src, sizeof src, "Check[AbsoluteFileName[\"%s/nope\"], \"msg\"]", root);
+    assert_eval_eq(src, "\"msg\"", 0);
+    snprintf(src, sizeof src, "{FileType[\"%s/a.m\"], FileType[\"%s/sub\"], FileType[\"%s/nope\"]}",
+             root, root, root);
+    assert_eval_eq(src, "{File, Directory, None}", 0);
+    assert_eval_eq("Quiet[FileType[3]]", "FileType[3]", 0);
+    assert_eval_eq("Check[FileType[3], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("{Attributes[AbsoluteFileName], Attributes[FileType]}", "{{Protected}, {Protected}}", 0);
+    fn_tree_rm(root);
+}
+
+void test_tofilename(void) {
+    assert_eval_eq("{ToFileName[{\"a\", \"b\"}, \"c.m\"], ToFileName[\"a\", \"c.m\"], ToFileName[{\"a\", \"b\"}]}",
+                   "{\"a/b/c.m\", \"a/c.m\", \"a/b/\"}", 0);
+    assert_eval_eq("{ToFileName[\"\", \"c.m\"], ToFileName[{}, \"c.m\"]}", "{\"c.m\", \"c.m\"}", 0);
+    assert_eval_eq("{ToFileName[{\"/a\", \"b\"}, \"c\"], ToFileName[{\"a/\", \"b\"}, \"c\"], ToFileName[{\"/\", \"a\"}, \"c\"]}",
+                   "{\"/a/b/c\", \"a/b/c\", \"/a/c\"}", 0);
+    assert_eval_eq("ToFileName[3, \"c\"]", "ToFileName[3, \"c\"]", 0);
+    assert_eval_eq("Attributes[ToFileName]", "{Protected}", 0);
+}
+
+void test_deletefile(void) {
+    char root[256], src[1200];
+    fn_tree(root, sizeof root);
+    snprintf(src, sizeof src, "Put[1, \"%s/del.txt\"]; {DeleteFile[\"%s/del.txt\"], FileExistsQ[\"%s/del.txt\"]}",
+             root, root, root);
+    assert_eval_eq(src, "{Null, False}", 0);
+    /* Missing file and directory: a message and $Failed. */
+    snprintf(src, sizeof src, "Quiet[{DeleteFile[\"%s/del.txt\"], DeleteFile[\"%s/sub\"]}]", root, root);
+    assert_eval_eq(src, "{$Failed, $Failed}", 0);
+    snprintf(src, sizeof src, "Check[DeleteFile[\"%s/del.txt\"], \"msg\"]", root);
+    assert_eval_eq(src, "\"msg\"", 0);
+    snprintf(src, sizeof src, "FileType[\"%s/sub\"]", root);
+    assert_eval_eq(src, "Directory", 0);
+    /* List form. */
+    snprintf(src, sizeof src, "Put[1, \"%s/d1\"]; Put[2, \"%s/d2\"]; "
+             "{DeleteFile[{\"%s/d1\", \"%s/d2\"}], FileExistsQ[\"%s/d1\"], FileExistsQ[\"%s/d2\"], DeleteFile[{}]}",
+             root, root, root, root, root, root);
+    assert_eval_eq(src, "{Null, False, False, Null}", 0);
+    assert_eval_eq("Quiet[DeleteFile[3]]", "DeleteFile[3]", 0);
+    assert_eval_eq("Attributes[DeleteFile]", "{Protected}", 0);
+    fn_tree_rm(root);
+}
+
+void test_syntaxq(void) {
+    assert_eval_eq("{SyntaxQ[\"1+2\"], SyntaxQ[\"a=1\\nb=2\"], SyntaxQ[\"a;;b\"], SyntaxQ[\"(*c*) x\"], "
+                   "SyntaxQ[\"(*c*)\"], SyntaxQ[\" \"], SyntaxQ[\"a;\"]}",
+                   "{True, True, True, True, True, True, True}", 0);
+    assert_eval_eq("{SyntaxQ[\"1+\"], SyntaxQ[\"f[x\"], SyntaxQ[\"x)\"], SyntaxQ[\"\"], SyntaxQ[\"\\\"abc\"]}",
+                   "{False, False, False, False, False}", 0);
+    /* Nothing is evaluated. */
+    assert_eval_eq("synQ = 0; {SyntaxQ[\"synQ = 5\"], synQ}", "{True, 0}", 0);
+    assert_eval_eq("Quiet[SyntaxQ[3]]", "SyntaxQ[3]", 0);
+    assert_eval_eq("Check[SyntaxQ[3], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[SyntaxQ]", "{Protected}", 0);
+}
+
 /* ===== $InputFileName ===== */
 
 void test_inputfilename_get(void) {
@@ -1019,6 +1131,12 @@ int main(void) {
     TEST(test_inputfilename_get);
     TEST(test_directory_stack);
     TEST(test_environment);
+    TEST(test_parentdirectory);
+    TEST(test_filenametake);
+    TEST(test_absolutefilename_filetype);
+    TEST(test_tofilename);
+    TEST(test_deletefile);
+    TEST(test_syntaxq);
     TEST(test_fileextension_protected);
 
     /* FileBaseName */

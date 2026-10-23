@@ -553,3 +553,40 @@ In[6]:= AppendTo[Options[f], c -> 3]
 Out[6]= {a -> 1, b -> 20, c -> 3}
 ```
 
+## OptionQ
+`OptionQ[e]` gives `True` if `e` is an option rule, or a possibly nested list of
+them, and `False` otherwise.
+- An option rule is a `Rule` or `RuleDelayed` whose name is a symbol or a
+  string: `a -> 1`, `"a" :> 1`. A rule with any other name (`1 -> 2`,
+  `f[x] -> 2`) is not one.
+- Lists may nest and may be empty: `{}`, `{{a -> 1}, {b -> 2}}`.
+- An `Association` is `False`.
+- `Protected`. A wrong argument count emits `OptionQ::argx`.
+
+The usual use is as a pattern test that collects trailing options:
+```
+f[x_, opts___?OptionQ] := {x, opts}
+f[1, a -> 2]                      (* {1, a -> 2} *)
+```
+
+## FilterRules
+`FilterRules[rules, spec]` gives the rules whose left-hand sides match `spec`,
+in their original order. Duplicates are kept.
+
+| `spec` | Selects |
+|---|---|
+| a symbol or string | rules with that name, ignoring context; `"b"` and `b` select the same rule |
+| `{s1, s2, ...}` | rules any `si` selects |
+| a rule, or a list of rules such as `Options[f]` | rules with those rules' names |
+| `Except[s]`, `Except[c, p]` | the complement |
+| any other pattern | rules whose name matches it, e.g. `_`, `a \| b`, `x_ /; cond` |
+
+- `rules` may be a single rule or nested lists of rules.
+- A non-rule element emits `FilterRules::rep` and leaves the call unevaluated.
+- `Protected`.
+
+```
+FilterRules[{a -> 1, b -> 2, c :> 3}, {a, c}]     (* {a -> 1, c :> 3} *)
+FilterRules[{opts}, Options[Plot]]                 (* the options Plot accepts *)
+FilterRules[{opts}, Except[Options[Plot]]]         (* the rest *)
+```

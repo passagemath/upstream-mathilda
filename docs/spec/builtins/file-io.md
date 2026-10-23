@@ -5,10 +5,19 @@ Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
 - `Get["filename"]`
+- `Get["ctx`"]`: reads the file holding package `ctx`` (used by `Needs`).
 
 **Features**:
 - `Protected`.
-- Returns `$Failed` if the file cannot be opened.
+- **`$Path` search.** A relative file name that does not open as given is
+  looked for under each directory of `$Path` in turn. A context name ``"A`B`"``
+  is tried as `A/B.m`, `A/B.wl`, `A/B/init.m`, `A/B/init.wl`,
+  `A/B/Kernel/init.m`, `A/B/Kernel/init.wl` under each `$Path` directory.
+  Absolute paths are used as given.
+- `$Path` is an ordinary assignable list of directory strings, default `{"."}`
+  (`AppendTo[$Path, "dir"]`). Non-string and empty entries are skipped.
+- Returns `$Failed`, with `Get::noopen` (Quiet/Check-aware), if the file cannot
+  be found or opened.
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
 - Files conventionally end with `.m`.
 

@@ -88,6 +88,10 @@ bool context_begin_package(const char* ctx,
 bool context_end(char** out_ended_ctx);
 bool context_end_package(char** out_ended_ctx);
 
+/* True when `ctx` is listed in $Packages (the contexts of loaded packages;
+ * BeginPackage prepends to it).  Needs loads only contexts not yet listed. */
+bool context_packages_contains(const char* ctx);
+
 /* Produce Expr* copies of current state, for use as $Context/$ContextPath
  * OwnValues. Caller owns the returned expressions. */
 Expr* context_as_string(void);

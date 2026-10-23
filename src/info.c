@@ -3974,8 +3974,38 @@ void info_init(void) {
         "\treads expressions from a file, evaluates them in order, and returns the last result.\n"
         "Expressions are separated by a newline or a semicolon; a trailing ; is not required.\n"
         "A line break inside (), [], {} or <||> is insignificant, so one expression may span lines.\n"
-        "Returns $Failed if the file cannot be opened.\n"
-        "It is conventional to use names ending in .m for files containing Mathilda input.");
+        "Returns $Failed (with Get::noopen) if the file cannot be opened.\n"
+        "It is conventional to use names ending in .m for files containing Mathilda input.\n"
+        "Get[\"context`\"]\n"
+        "\treads the file holding the package context`: \"A`B`\" is looked for as\n"
+        "\tA/B.m, A/B.wl, A/B/init.m, A/B/init.wl, A/B/Kernel/init.m, A/B/Kernel/init.wl\n"
+        "\tunder each directory of $Path in turn. A relative file name that does not\n"
+        "\topen as given is also searched for along $Path.");
+    symtab_set_docstring("$Path",
+        "$Path is the list of directories (strings) that Get and Needs search, in\n"
+        "order, for a relative file name or a package context. Default {\".\"};\n"
+        "extend it with AppendTo[$Path, \"dir\"].");
+    symtab_set_docstring("Needs",
+        "Needs[\"context`\"]\n"
+        "\tloads the package for context` with Get[\"context`\"] unless context` is\n"
+        "\talready in $Packages, then adds context` to $ContextPath.\n"
+        "Needs[\"context`\", \"file\"]\n"
+        "\tloads file instead when context` is not already in $Packages.\n"
+        "Needs[\"context`\" -> \"alias`\"]\n"
+        "\tloads context` without adding it to $ContextPath and adds\n"
+        "\t\"alias`\" -> \"context`\" to $ContextAliases, so alias`sym names context`sym.\n"
+        "Needs[\"context`\" -> None]\n"
+        "\tloads context` and changes neither $ContextPath nor $ContextAliases.\n"
+        "Returns Null. If loading does not create context`, Needs::nocont is issued\n"
+        "and the value of the Get is returned ($Failed when no file was found).");
+    symtab_set_docstring("$Packages",
+        "$Packages is the list of contexts of the packages loaded in this session,\n"
+        "most recent first. BeginPackage[\"ctx`\"] puts \"ctx`\" at its front; Needs\n"
+        "loads a context only when it is not listed here.");
+    symtab_set_docstring("$ContextAliases",
+        "$ContextAliases is an Association of context aliases \"alias`\" -> \"ctx`\":\n"
+        "a symbol written alias`name is read as ctx`name. Needs[\"ctx`\" -> \"alias`\"]\n"
+        "adds entries; it may also be assigned directly.");
     symtab_set_docstring("Put",
         "Put[expr, \"filename\"] or expr >> \"filename\"\n"
         "\twrites expr to the file, replacing any prior contents.\n"

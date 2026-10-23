@@ -10,6 +10,9 @@
 #include <string.h>
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "print.h"     /* expr_to_string_outputform for ::cxlist / ::cxset */
+#include "assoc.h"     /* $ContextAliases is an Association */
+#include "common.h"    /* builtin_arg_error */
+#include "readwrite.h" /* readwrite_get: Needs loads through Get */
 
 /* -------------------- State -------------------- */
 
@@ -21,7 +24,11 @@
  * $Context that is not a context string reads as "Global`", and entries of
  * $ContextPath that are not context strings are skipped.  Pointers handed out
  * (context_current, context_path_at) borrow the OwnValue and stay valid until
- * the variable is next assigned. */
+ * the variable is next assigned.
+ *
+ * $Packages (the contexts of loaded packages; BeginPackage prepends) and
+ * $ContextAliases (an Association "alias`" -> "ctx`", consulted when a
+ * qualified name is resolved) follow the same convention. */
 
 typedef enum {
     FRAME_BEGIN,
@@ -99,6 +106,23 @@ static bool path_contains(const char* s) {
     return false;
 }
 
+static bool is_rule(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rule ||
+            e->data.function.head->data.symbol.name == SYM_RuleDelayed);
+}
+
+/* True when the string list `l` holds context string `s`. */
+static bool list_has_string(const Expr* l, const char* s) {
+    if (!is_list(l)) return false;
+    for (size_t i = 0; i < l->data.function.arg_count; i++) {
+        Expr* e = l->data.function.args[i];
+        if (is_context_string(e) && strcmp(e->data.string, s) == 0) return true;
+    }
+    return false;
+}
+
 /* -------------------- $Context / $ContextPath publishing -------------------- */
 
 /* Replace the OwnValue of the named symbol with `replacement` (consumed). */
@@ -117,6 +141,67 @@ static Expr* make_path(const char** ctxs, size_t n) {
     Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, n);
     free(args);
     return res;
+}
+
+/* A fresh List: `first`, then the context strings of `rest` (borrowed; may be
+ * NULL or a non-List) other than `first`. */
+static Expr* prepend_unique(const char* first, const Expr* rest) {
+    size_t n = is_list(rest) ? rest->data.function.arg_count : 0;
+    const char** v = (const char**)malloc((n + 1) * sizeof(char*));
+    size_t k = 0;
+    v[k++] = first;
+    for (size_t i = 0; i < n; i++) {
+        Expr* e = rest->data.function.args[i];
+        if (is_context_string(e) && strcmp(e->data.string, first) != 0)
+            v[k++] = e->data.string;
+    }
+    Expr* out = make_path(v, k);
+    free((void*)v);
+    return out;
+}
+
+/* Put `ctx` at the front of $ContextPath unless it is already on it. */
+static void path_prepend(const char* ctx) {
+    if (path_contains(ctx)) return;
+    publish_own("$ContextPath", prepend_unique(ctx, path_list()));  /* copies first */
+}
+
+bool context_packages_contains(const char* ctx) {
+    return list_has_string(own_value("$Packages"), ctx);
+}
+
+/* Record a loaded package: move/put `ctx` at the front of $Packages. */
+static void packages_prepend(const char* ctx) {
+    publish_own("$Packages", prepend_unique(ctx, own_value("$Packages")));
+}
+
+/* Rewrite a leading context alias of the qualified name `raw`
+ * ("al`x" -> "Pkg`x" when $ContextAliases holds "al`" -> "Pkg`"); the longest
+ * matching alias wins.  Returns a malloc'd name, or NULL when no alias
+ * applies.  $ContextAliases is read defensively: an Association or a List of
+ * rules, with non-context-string entries skipped. */
+static char* alias_rewrite(const char* raw) {
+    Expr* a = own_value("$ContextAliases");
+    if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count == 0 ||
+        a->data.function.head->type != EXPR_SYMBOL ||
+        (a->data.function.head->data.symbol.name != SYM_Association &&
+         a->data.function.head->data.symbol.name != SYM_List))
+        return NULL;
+    const char* target = NULL;
+    size_t best = 0;
+    for (size_t i = 0; i < a->data.function.arg_count; i++) {
+        Expr* r = a->data.function.args[i];
+        if (!is_rule(r)) continue;
+        Expr* k = r->data.function.args[0];
+        Expr* v = r->data.function.args[1];
+        if (!is_context_string(k) || !is_context_string(v)) continue;
+        size_t kn = strlen(k->data.string);
+        if (kn > best && strncmp(raw, k->data.string, kn) == 0) {
+            best = kn;
+            target = v->data.string;
+        }
+    }
+    return target ? ctx_concat(target, raw + best) : NULL;
 }
 
 Expr* context_as_string(void) {
@@ -238,14 +323,17 @@ char* context_resolve_name(const char* raw) {
     }
 
     if (has_backtick(raw)) {
-        /* Absolute qualified name. Canonicalize "System`Foo" -> bare "Foo"
-         * because builtins are stored under bare names. */
+        /* Absolute qualified name: first expand a $ContextAliases alias, then
+         * canonicalize "System`Foo" -> bare "Foo" because builtins are stored
+         * under bare names. */
+        char* aliased = alias_rewrite(raw);
+        const char* q = aliased ? aliased : raw;
         const char* sys = "System`";
         size_t sn = 7; /* strlen("System`") */
-        if (strncmp(raw, sys, sn) == 0 && raw[sn] != '\0') {
-            return ctx_strdup(raw + sn);
-        }
-        return ctx_strdup(raw);
+        char* out = (strncmp(q, sys, sn) == 0 && q[sn] != '\0')
+                        ? ctx_strdup(q + sn) : ctx_strdup(q);
+        free(aliased);
+        return out;
     }
 
     /* Bare name. Search {current} U path for an existing qualified match. */
@@ -344,6 +432,7 @@ bool context_begin_package(const char* ctx, const char** needs, size_t needs_cou
     publish_own("$Context", expr_new_string(ctx));
     publish_own("$ContextPath", make_path(path, n));
     free((void*)path);
+    packages_prepend(ctx);
     return true;
 }
 
@@ -356,14 +445,7 @@ bool context_end_package(char** out_ended_ctx) {
     char* closed = NULL;
     if (!frame_pop(&closed)) return false;
     /* Prepend the closed package context to $ContextPath (if not already on it). */
-    if (closed && !path_contains(closed)) {
-        size_t n = context_path_count();
-        const char** path = (const char**)malloc((n + 1) * sizeof(char*));
-        path[0] = closed;
-        for (size_t i = 0; i < n; i++) path[i + 1] = context_path_at(i);
-        publish_own("$ContextPath", make_path(path, n + 1));   /* copies first */
-        free((void*)path);
-    }
+    if (closed) path_prepend(closed);
     if (out_ended_ctx) *out_ended_ctx = closed;
     else free(closed);
     return true;
@@ -495,6 +577,132 @@ static Expr* builtin_end_package(Expr* res) {
     return expr_new_symbol(SYM_Null);
 }
 
+/* -------------------- Needs -------------------- */
+
+/* A loadable context name: one or more symbol-name segments, each followed by
+ * a backtick ("Pkg`", "A`B`").  Non-ASCII bytes count as letters. */
+static bool is_valid_context_name(const char* s) {
+    if (!s || !*s || !ends_with_tick(s)) return false;
+    bool seg_start = true;
+    for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
+        unsigned char c = *p;
+        if (c == '`') {
+            if (seg_start) return false;            /* empty segment */
+            seg_start = true;
+            continue;
+        }
+        bool letter = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                      c == '$' || c >= 0x80;
+        bool digit = c >= '0' && c <= '9';
+        if (seg_start ? !letter : !(letter || digit)) return false;
+        seg_start = false;
+    }
+    return true;
+}
+
+static void needs_msg(const char* tag, const char* fmt, Expr* res) {
+    char* txt = expr_to_string_outputform(res);
+    mth_message("Needs", tag, fmt, txt ? txt : "Needs[...]");
+    free(txt);
+}
+
+/* $ContextAliases["alias`"] = "ctx`", keeping the variable an Association. */
+static void add_alias(const char* alias, const char* ctx) {
+    Expr* cur = own_value("$ContextAliases");
+    Expr* key = expr_new_string(alias);
+    Expr* updated = NULL;
+    if (cur && is_association(cur)) {
+        Expr* val = expr_new_string(ctx);
+        updated = assoc_set_key(cur, key, val);
+        if (!updated) expr_free(val);
+    }
+    if (!updated) {
+        /* Missing, a List of rules, or garbage: rebuild from its valid rules. */
+        size_t n = (cur && cur->type == EXPR_FUNCTION) ? cur->data.function.arg_count : 0;
+        Expr** rules = (Expr**)malloc((n + 1) * sizeof(Expr*));
+        size_t k = 0;
+        for (size_t i = 0; i < n; i++)
+            if (is_rule(cur->data.function.args[i])) rules[k++] = cur->data.function.args[i];
+        Expr** rargs = (Expr**)malloc(2 * sizeof(Expr*));
+        rargs[0] = expr_copy(key);
+        rargs[1] = expr_new_string(ctx);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), rargs, 2);
+        free(rargs);
+        rules[k++] = rule;
+        updated = assoc_from_rules(rules, k);
+        expr_free(rule);
+        free(rules);
+    }
+    expr_free(key);
+    publish_own("$ContextAliases", updated);
+}
+
+/* Needs["ctx`"]                 Get["ctx`"] unless ctx` is in $Packages, then
+ *                               put ctx` on $ContextPath.
+ * Needs["ctx`", "file"]         the same, loading "file" instead.
+ * Needs["ctx`" -> "alias`"]     load, keep ctx` off $ContextPath (undoing the
+ *                               package's own EndPackage), and record the
+ *                               alias in $ContextAliases.
+ * Needs["ctx`" -> None]         load only.
+ * Returns Null; when the load does not create ctx`, emits Needs::nocont and
+ * returns what Get returned ($Failed if the file could not be opened). */
+static Expr* builtin_needs(Expr* res) {
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return builtin_arg_error("Needs", argc, 1, 2);
+
+    Expr* spec = res->data.function.args[0];
+    const char* ctx = NULL;
+    const char* alias = NULL;
+    bool rule_form = false;
+    if (spec->type == EXPR_STRING) {
+        ctx = spec->data.string;
+    } else if (is_rule(spec) && spec->data.function.args[0]->type == EXPR_STRING) {
+        Expr* rhs = spec->data.function.args[1];
+        rule_form = true;
+        ctx = spec->data.function.args[0]->data.string;
+        if (rhs->type == EXPR_STRING && is_valid_context_name(rhs->data.string))
+            alias = rhs->data.string;
+        else if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol.name == SYM_None))
+            ctx = NULL;
+    }
+    if (!ctx) {
+        needs_msg("cxru", "Context or appropriately structured rule expected at position 1 in %s.", res);
+        return NULL;
+    }
+    if (!is_valid_context_name(ctx)) {
+        needs_msg("cxt", "Invalid context specified at position 1 in %s. A context must consist of "
+                  "valid symbol names separated by and ending with `.", res);
+        return NULL;
+    }
+    const char* file = NULL;
+    if (argc == 2) {
+        Expr* f = res->data.function.args[1];
+        if (f->type != EXPR_STRING) {
+            needs_msg("string", "String expected at position 2 in %s.", res);
+            return NULL;
+        }
+        file = f->data.string;
+    }
+
+    if (!context_packages_contains(ctx)) {
+        /* The rule form keeps ctx` off $ContextPath, so the path the package's
+         * EndPackage extends is put back afterwards. */
+        Expr* saved_path = rule_form ? copy_or_null(own_value("$ContextPath")) : NULL;
+        Expr* got = readwrite_get(file ? file : ctx);
+        if (rule_form) restore_own("$ContextPath", saved_path);
+        if (!context_packages_contains(ctx)) {
+            mth_message("Needs", "nocont",
+                        "Context %s was not created when Needs was evaluated.", ctx);
+            return got;
+        }
+        expr_free(got);
+    }
+
+    if (!rule_form) path_prepend(ctx);
+    if (alias) add_alias(alias, ctx);
+    return expr_new_symbol(SYM_Null);
+}
+
 /* -------------------- Init / Shutdown -------------------- */
 
 void context_init(void) {
@@ -506,6 +714,7 @@ void context_init(void) {
     symtab_add_builtin("Begin",         builtin_begin);
     symtab_add_builtin("End",           builtin_end);
     symtab_add_builtin("EndPackage",    builtin_end_package);
+    symtab_add_builtin("Needs",         builtin_needs);
 
     /* Attributes. Context must not evaluate its symbol argument. */
     symtab_get_def("Context")->attributes      |= ATTR_HOLDFIRST | ATTR_PROTECTED;
@@ -513,6 +722,7 @@ void context_init(void) {
     symtab_get_def("Begin")->attributes        |= ATTR_PROTECTED;
     symtab_get_def("End")->attributes          |= ATTR_PROTECTED;
     symtab_get_def("EndPackage")->attributes   |= ATTR_PROTECTED;
+    symtab_get_def("Needs")->attributes        |= ATTR_PROTECTED;
 
     /* Docstrings. */
     symtab_set_docstring("Context",
@@ -543,7 +753,10 @@ void context_init(void) {
     {
         const char* initial[] = { "Global`", "System`" };
         publish_own("$ContextPath", make_path(initial, 2));
+        const char* packages[] = { "System`", "Global`" };
+        publish_own("$Packages", make_path(packages, 2));
     }
+    publish_own("$ContextAliases", assoc_from_rules(NULL, 0));
     symtab_set_docstring("$Context",
         "$Context is a string giving the current context. New symbols are created\n"
         "in this context unless otherwise qualified. Set by Begin[], BeginPackage[],\n"

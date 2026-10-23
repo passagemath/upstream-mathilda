@@ -1336,6 +1336,60 @@ In[1]:= Foo`bar = 1; AppendTo[$ContextPath, "Foo`"]; {Names["bar"], Hold[Foo`bar
 Out[1]= {{"bar"}, Hold[bar]}
 ```
 
+## Needs
+Loads a package once and makes its context available.
+- `Needs["ctx`"]`: `Get["ctx`"]` unless `ctx`` is already in `$Packages`, then
+  put `ctx`` at the front of `$ContextPath` (if it is not already on it).
+- `Needs["ctx`", "file"]`: the same, but load `"file"` instead.
+- `Needs["ctx`" -> "alias`"]`: load as above, keep `ctx`` **off**
+  `$ContextPath`, and add `"alias`" -> "ctx`"` to `$ContextAliases`.
+- `Needs["ctx`" -> None]`: load only; `$ContextPath` and `$ContextAliases` are
+  left unchanged.
+
+**Features**:
+- `Protected`. Returns `Null`.
+- Load-once: a context created by `BeginPackage` (from any file, or typed in)
+  is listed in `$Packages`, and `Needs` does not read it again. `Get` always
+  re-reads.
+- `Get["ctx`"]` finds the file along `$Path` (see `Get`): ``"A`B`"`` is
+  `A/B.m`, `A/B.wl`, `A/B/init.m`, `A/B/init.wl`, `A/B/Kernel/init.m` or
+  `A/B/Kernel/init.wl`.
+- The rule forms put back the `$ContextPath` the package's own `EndPackage`
+  extended, so only the alias (if any) makes the context reachable.
+- Messages, all through the Quiet/Check funnel:
+  - `Needs::nocont` when the load does not create `ctx``. The value of the
+    `Get` is returned (`$Failed`, after `Get::noopen`, when no file was found).
+  - `Needs::cxt` for a string that is not a context name (`"NoTick"`,
+    ``"`Rel`"``, ``"A``B`"``).
+  - `Needs::cxru` for anything else at position 1, including a rule whose
+    right side is neither a context string nor `None`.
+  - `Needs::string` for a non-string file, `Needs::argt` for a wrong
+    argument count. The call stays unevaluated.
+
+```
+In[1]:= Needs["MyPkg`"]; f[3]           (* MyPkg.m on $Path exports f *)
+Out[1]= 9
+
+In[2]:= Needs["Other`" -> "O`"]; O`g[2]  (* Other` is not on $ContextPath *)
+Out[2]= 4
+
+In[3]:= $ContextAliases
+Out[3]= <|"O`" -> "Other`"|>
+```
+
+## $Packages / $ContextAliases
+- `$Packages`: the contexts of the packages loaded in this session, most recent
+  first. Starts as `{"System`", "Global`"}`. `BeginPackage["ctx`"]` moves
+  `ctx`` to the front, so the bootstrap's `"FullSimplify`"` is listed too.
+  `Needs` loads only contexts that are not listed.
+- `$ContextAliases`: an `Association` of `"alias`" -> "ctx`"`, initially
+  `<||>`. A name read as ``alias`rest`` resolves to ``ctx`rest``: the longest
+  matching leading alias wins, ``alias`Private`x`` also maps, and an alias for
+  ``System` `` canonicalises to the bare name. It is filled by
+  `Needs["ctx`" -> "alias`"]` and is assignable (an `Association` or a `List`
+  of rules; anything else reads as no aliases). Names without a backtick never
+  consult it.
+
 ## Information
 Returns a formatted string containing the syntax and description of a symbol.
 - `Information[symbol]`

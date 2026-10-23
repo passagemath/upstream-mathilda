@@ -12,6 +12,11 @@ splits.
 
 String literals accept the reference's character escapes: `\[Name]` (the 1100+
 named characters, e.g. `"\[Alpha]"`), `\:hhhh`, `\|hhhhhh`, `\.hh` and `\ooo`.
+A backslash at the end of a line is a line continuation, and both characters
+are dropped: `"ab\` followed by a newline and `cd"` is `"abcd"`. Leading
+whitespace on the next line is kept. Before a CRLF only the CR is dropped, so
+the LF stays. An escaped backslash `\\` before a newline gives a backslash
+followed by a real newline.
 
 Invalid arguments emit the reference's diagnostics through the message system
 (`StringLength::string`, `StringPadLeft::intnm`, `StringRepeat::intp`,

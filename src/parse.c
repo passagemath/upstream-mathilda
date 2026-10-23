@@ -877,6 +877,13 @@ static Expr* parse_string(ParserState* s) {
             s->pos += esc_len;
             continue;
         }
+        if (c == '\\' && (s->pos[1] == '\n' || s->pos[1] == '\r')) {
+            /* Line continuation: a backslash at the end of a line drops both
+             * characters, so "ab\<newline>cd" is "abcd".  Before a CRLF only
+             * the CR goes with it, and the LF stays. */
+            s->pos += 2;
+            continue;
+        }
         if (c == '\\' && s->pos[1] != '\0') {
             /* Decode standard C-style escapes. `\\` and `\"` decode to the
              * literal character (unchanged from the historical behaviour);

@@ -825,6 +825,21 @@ void test_parse_headless_bracket() {
  * whatever the next line starts with, an incomplete one continues, a `;` at
  * the end of a line takes an implicit Null, and each blank or comment-only
  * line between statements is a Null statement. */
+/* A backslash at the end of a line inside a string literal is a line
+ * continuation: both characters are dropped.  An escaped backslash before a
+ * newline is a backslash and a real newline; before CRLF only the CR goes. */
+void test_string_line_continuation() {
+    /* C source "ab\\\ncd" is the Mathilda source "ab\<LF>cd". */
+    assert_eval_eq("\"ab\\\ncd\"", "\"abcd\"", 0);
+    assert_eval_eq("StringLength[\"ab\\\ncd\"]", "4", 0);
+    assert_eval_eq("\"a\\\n\\\nb\"", "\"ab\"", 0);
+    assert_eval_eq("\"tab\\\n   cd\"", "\"tab   cd\"", 0);
+    assert_eval_eq("\"x\\\\\ny\"", "\"x\\\\\\ny\"", 0);
+    assert_eval_eq("\"ab\\\r\ncd\"", "\"ab\\ncd\"", 0);
+    /* Through ToExpression too. */
+    assert_eval_eq("ToExpression[\"\\\"p\\\\\nq\\\"\"]", "\"pq\"", 0);
+}
+
 void test_toexpression_line_statements() {
     assert_eval_eq("Quiet[ToExpression[\"a = 2\\n b = 3\", InputForm, Hold]]", "Hold[Set[a, 2], Set[b, 3]]", 1);
     assert_eval_eq("Quiet[ToExpression[\"1+\\n2\", InputForm, Hold]]", "Hold[Plus[1, 2]]", 1);
@@ -1090,6 +1105,7 @@ int main() {
     TEST(test_parse_empty_slots_are_null);
     TEST(test_parse_colon_atom_level);
     TEST(test_toexpression_line_statements);
+    TEST(test_string_line_continuation);
 
     printf("\nAll parser tests passed!\n");
     return 0;

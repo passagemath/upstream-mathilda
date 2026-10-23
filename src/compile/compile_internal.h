@@ -748,9 +748,11 @@ typedef struct {
                         * reduction's numeric kind (MatrixRank: a rank is an int) */
     int   nextra;      /* trailing INTEGER args past the array (RankedMin/Max: 1),
                         * passed through as written; 0 for the plain reductions */
+    bool  bool_result; /* a predicate: True/False for an int or real operand
+                        * (DuplicateFreeQ); the register is CT_BOOL */
 } NdRedSpec;
 
-typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX } NdFn2Rank;
+typedef enum { R2_DOT, R2_SOLVE, R2_VEC, R2_JOIN, R2_MATRIX, R2_PRED } NdFn2Rank;
 typedef enum { NDF2_PROMOTE, NDF2_SAME } NdFn2Elem;
 
 typedef struct {

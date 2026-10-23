@@ -1,5 +1,5 @@
 /*
- * test_setpredicates.c -- IntersectingQ, DuplicateFreeQ and Permute.
+ * test_setpredicates.c -- IntersectingQ, DuplicateFreeQ, Permute and Signature.
  *
  * Each head is checked on plain lists, on packed int64 lists (the machine-word
  * paths in src/list/setops.c), on visible NDArrays (which must delist rather
@@ -84,12 +84,63 @@ static void test_permute(void) {
     assert_eval_eq("Attributes[Permute]", "{Protected}", 0);
 }
 
+static void test_predicates_compile(void) {
+    /* Both lower to a Boolean, delegated to the same builtin the REPL uses. */
+    assert_eval_eq("First /@ {CompileDiagnostics[{{v, _Integer, 1}}, DuplicateFreeQ[v]], "
+                   "CompileDiagnostics[{{v, _Real, 1}}, DuplicateFreeQ[v]], "
+                   "CompileDiagnostics[{{v, _Integer, 1}, {w, _Integer, 1}}, IntersectingQ[v, w]], "
+                   "CompileDiagnostics[{{v, _Real, 1}, {w, _Integer, 1}}, IntersectingQ[v, w]]}",
+                   "{\"Compiled\" -> True, \"Compiled\" -> True, \"Compiled\" -> True, \"Compiled\" -> True}", 0);
+    assert_eval_eq("cf = Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, "
+                   "If[IntersectingQ[v, w], 1, 0] + Boole[DuplicateFreeQ[v]]]; "
+                   "{cf[{1, 2}, {2, 3}], cf[{1, 1}, {5}], cf[{1, 2}, {3}]}", "{2, 0, 1}", 0);
+    assert_eval_eq("cg = Compile[{{v, _Real, 1}}, DuplicateFreeQ[v]]; {cg[{1., 2.}], cg[{1., 1.}]}",
+                   "{True, False}", 0);
+    /* SameQ: a real never equals an integer. */
+    assert_eval_eq("Compile[{{v, _Real, 1}, {w, _Integer, 1}}, IntersectingQ[v, w]][{1., 2.}, {1}]",
+                   "False", 0);
+}
+
+static void test_signature(void) {
+    assert_eval_eq("{Signature[{2, 1, 3}], Signature[{1, 2, 3}], Signature[{1, 1, 2}], Signature[{}], "
+                   "Signature[{7}]}", "{-1, 1, 0, 1, 1}", 0);
+    assert_eval_eq("{Signature[{c, a, b}], Signature[{b, a}], Signature[f[b, a]], Signature[{a, a}]}",
+                   "{1, -1, -1, 0}", 0);
+    /* Canonical order: 1 precedes 1. (distinct), 0. and -0. are equal, numbers
+     * precede symbols, lists compare elementwise. */
+    assert_eval_eq("{Signature[{1., 1}], Signature[{1, 1.}], Signature[{0., -0.}], Signature[{x, 1}], "
+                   "Signature[{{2, 1}, {1, 2}}], Signature[{1.5, 1}]}", "{-1, 1, 0, -1, -1, -1}", 0);
+    assert_eval_eq("{Signature[Range[5]], Signature[Reverse[Range[6]]], Signature[Reverse[Range[7]]]}",
+                   "{1, -1, -1}", 0);
+    /* Surfaces agree: plain List, packed int64, packed real, visible NDArray. */
+    assert_eval_eq("v = {5, 3, 9, 1, 7, 2}; {Signature[v], Signature[ToPackedArray[v]], "
+                   "Signature[N[v]], Signature[NDArray[v, DataType -> \"int64\"]], Signature[NDArray[N[v]]]}",
+                   "{-1, -1, -1, -1, -1}", 0);
+    assert_eval_eq("{Signature[{3, 1, 3}], Signature[NDArray[{3, 1, 3}, DataType -> \"int64\"]], "
+                   "Signature[NDArray[{0., -0.}]]}", "{0, 0, 0}", 0);
+    assert_eval_eq("w = RandomSample[Range[2000]]; Signature[w] === Signature[N[w]] === "
+                   "Signature[FromPackedArray[w]]", "True", 0);
+    /* Compile: an int or real vector gives an Integer, from the same buffer kernel. */
+    assert_eval_eq("First[CompileDiagnostics[{{v, _Integer, 1}}, Signature[v]]]", "\"Compiled\" -> True", 0);
+    assert_eval_eq("First[CompileDiagnostics[{{v, _Real, 1}}, Signature[v]]]", "\"Compiled\" -> True", 0);
+    assert_eval_eq("{Compile[{{v, _Integer, 1}}, Signature[v]][{2, 1, 3}], "
+                   "Compile[{{v, _Real, 1}}, Signature[v]][{1., 2., 3.}], "
+                   "Compile[{{v, _Integer, 1}}, Signature[v]][{2, 2}]}", "{-1, 1, 0}", 0);
+    /* Bad arguments. */
+    assert_eval_eq("Quiet[Signature[3]]", "Signature[3]", 0);
+    assert_eval_eq("Check[Signature[3], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Check[Signature[], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Attributes[Signature]", "{Protected}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
     TEST(test_intersectingq);
     TEST(test_duplicatefreeq);
     TEST(test_permute);
+    TEST(test_signature);
+    TEST(test_predicates_compile);
     printf("All set-predicate tests passed.\n");
     return 0;
 }

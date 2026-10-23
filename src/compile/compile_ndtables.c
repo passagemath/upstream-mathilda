@@ -23,7 +23,8 @@
 #include "../sort.h"               /* builtin_reverse_sort */
 #include "../convolutions.h"       /* builtin_list_convolve / _correlate */
 #include "../fourier.h"            /* fourier_compile / inverse_fourier_compile, DCT/DST */
-#include "../ndinteger.h"          /* ndint_powermod */
+#include "../ndinteger.h"
+#include "../list/setops.h"         /* IntersectingQ / DuplicateFreeQ */          /* ndint_powermod */
 #include <string.h>
 #include <stddef.h>
 #include <math.h>     /* INFINITY / NAN — the V_NORM p encoding */
@@ -242,30 +243,30 @@ static const NdFnSpec ND_FNS[] = {
  * integer vector gives an Integer — and carry int_ok to say so. */
 
 static const NdRedSpec ND_REDS[] = {
-    { "Mean",              ndred_mean,      false, 1, false, 0 },
-    { "Median",            ndred_median,    false, 1, false, 0 },
-    { "Variance",          ndred_variance,  false, 1, false, 0 },
+    { "Mean",              ndred_mean,      false, 1, false, 0, false },
+    { "Median",            ndred_median,    false, 1, false, 0, false },
+    { "Variance",          ndred_variance,  false, 1, false, 0, false },
     /* Standardized central moments (real vector -> Real scalar; an int vector's
      * value is a radical, so it declines to the interpreter, like Variance). */
-    { "Skewness",          ndred_skewness,  false, 1, false, 0 },
-    { "Kurtosis",          ndred_kurtosis,  false, 1, false, 0 },
-    { "StandardDeviation", ndred_std,       false, 1, false, 0 },
-    { "RootMeanSquare",    ndred_rms,       false, 1, false, 0 },
-    { "Max",               ndred_max,       true,  1, false, 0 },
-    { "Min",               ndred_min,       true,  1, false, 0 },
+    { "Skewness",          ndred_skewness,  false, 1, false, 0, false },
+    { "Kurtosis",          ndred_kurtosis,  false, 1, false, 0, false },
+    { "StandardDeviation", ndred_std,       false, 1, false, 0, false },
+    { "RootMeanSquare",    ndred_rms,       false, 1, false, 0, false },
+    { "Max",               ndred_max,       true,  1, false, 0, false },
+    { "Min",               ndred_min,       true,  1, false, 0, false },
     /* Order statistics with a trailing rank (nextra 1): RankedMin[v, n] /
      * RankedMax[v, n] SELECT an element, so an int vector yields an Integer
      * (int_ok), like Max/Min.  The sign of n is a runtime register value, so it
      * does not affect the static result type. */
-    { "RankedMin",         ndred_ranked_min, true, 1, false, 1 },
-    { "RankedMax",         ndred_ranked_max, true, 1, false, 1 },
+    { "RankedMin",         ndred_ranked_min, true, 1, false, 1, false },
+    { "RankedMax",         ndred_ranked_max, true, 1, false, 1, false },
     /* Moment[v, r] (raw (1/n)Sum[x^r]) and CentralMoment[v, r] (moment about the
      * mean): the same array+trailing-int shape as Ranked* (nextra 1). A real
      * vector answers a Real; an int vector's exact answer is a Rational no machine
      * slot holds, so both decline (int_ok false) and the interpreter answers
      * exactly, exactly like Variance/Mean. */
-    { "Moment",            ndred_moment,         false, 1, false, 1 },
-    { "CentralMoment",     ndred_central_moment, false, 1, false, 1 },
+    { "Moment",            ndred_moment,         false, 1, false, 1, false },
+    { "CentralMoment",     ndred_central_moment, false, 1, false, 1, false },
     /* Linalg rank-2 -> scalar reductions (COMPILE_MISSING.md §1), each delegating
      * to its ndla_* interpreter entry point (src/linalg/ndlinalg.h).  Real operand
      * only: an exact-integer Tr / Det / Norm is an exact number no machine slot
@@ -274,10 +275,18 @@ static const NdRedSpec ND_REDS[] = {
      * ndla_* functions in the interpreter (all four are on pack.c's AWARE list),
      * so the compiled answer is identical by construction.  MatrixRank answers an
      * Integer for a real matrix (int_result).  Norm accepts rank 1 or 2 (rank 0). */
-    { "Tr",                ndla_tr,         false, 2, false, 0 },
-    { "Det",               ndla_det,        false, 2, false, 0 },
-    { "Norm",              ndla_norm,       false, 0, false, 0 },
-    { "MatrixRank",        ndla_matrixrank, false, 2, true , 0 },
+    { "Tr",                ndla_tr,         false, 2, false, 0, false },
+    { "Det",               ndla_det,        false, 2, false, 0, false },
+    { "Norm",              ndla_norm,       false, 0, false, 0, false },
+    { "MatrixRank",        ndla_matrixrank, false, 2, true , 0, false },
+    /* Signature[v]: the sign of v's sorting permutation, an Integer for an int
+     * or real vector alike (int_ok + int_result).  ndred_signature is the same
+     * function the interpreter dispatches a packed/NDArray vector to. */
+    { "Signature",         ndred_signature, true,  1, true , 0, false },
+    /* DuplicateFreeQ[v]: a predicate (bool_result), delegated to the builtin
+     * itself -- it answers an int64 buffer on the machine words and delists any
+     * other operand, so it always returns True/False. */
+    { "DuplicateFreeQ",    builtin_duplicatefreeq, true, 1, false, 0, true },
 };
 
 /* Name accessors for the disassembler; see compile_internal.h. */
@@ -308,7 +317,10 @@ CompileType nd_red_result(const NdRedSpec* s, CompileType ta) {
     if (s->rank == 0) { if (rk != 1 && rk != 2) return CT_ERR; }  /* Norm: 1 or 2 */
     else if (rk != s->rank) return CT_ERR;
     CompileType el = CT_ELEM(ta);
-    if (s->int_result) return (el == CT_REAL) ? CT_INT : CT_ERR;  /* MatrixRank: real -> Integer */
+    if (s->bool_result) return (el == CT_REAL || el == CT_INT) ? CT_BOOL : CT_ERR;
+    /* MatrixRank: real -> Integer; Signature (int_ok too): real or int -> Integer. */
+    if (s->int_result)
+        return (el == CT_REAL || (el == CT_INT && s->int_ok)) ? CT_INT : CT_ERR;
     if (el == CT_REAL) return CT_REAL;
     if (el == CT_INT)  return s->int_ok ? CT_INT : CT_ERR;
     return CT_ERR;                       /* complex: no ND reduction promises it */
@@ -394,6 +406,8 @@ CompileType nd_fn_result(const NdFnSpec* s, CompileType ta) {
  *   R2_SOLVE  result rank = rb, requires ra == 2  (LinearSolve, LeastSquares)
  *   R2_VEC    requires ra == rb == 1, result rank 1  (Cross, ListConvolve/Correlate)
  *   R2_JOIN   requires ra == rb, result rank = ra
+ *   R2_PRED   requires ra == rb == 1, result a Boolean SCALAR (IntersectingQ),
+ *             routed to V_NDFN2 like Dot's rank-0 case
  *   R2_MATRIX requires ra == rb == 1, result rank 2  (the two-vector matrix
  *             PRODUCERS HankelMatrix[c, r] / ToeplitzMatrix[c, r] — a rank-1
  *             column and a rank-1 row build a rank-2 matrix; COMPILE_MISSING.md §5)
@@ -431,6 +445,11 @@ static const NdFn2Spec ND_FN2S[] = {
      * answer is identical by construction. */
     { "Covariance",     nd_covariance,          NDF_REAL,           R2_DOT,    NDF2_PROMOTE },
     { "Correlation",    nd_correlation,         NDF_REAL,           R2_DOT,    NDF2_PROMOTE },
+    /* IntersectingQ[v, w]: two vectors -> a Boolean scalar (R2_PRED, routed to
+     * V_NDFN2 like Dot's inner product).  The builtin answers two int64 buffers
+     * on the machine words and delists every other pair, so any int/real mix
+     * is answered (SameQ: an int never equals a real). */
+    { "IntersectingQ",  builtin_intersectingq,  NDF_INT | NDF_REAL, R2_PRED,   NDF2_PROMOTE },
 };
 
 /* Name accessor for the disassembler; see compile_internal.h. */
@@ -469,6 +488,7 @@ CompileType nd_fn2_result(const NdFn2Spec* s, CompileType ta, CompileType tb) {
         case R2_VEC:   if (ra != 1 || rb != 1) return CT_ERR; rr = 1; break;
         case R2_JOIN:  if (ra != rb) return CT_ERR; rr = ra; break;
         case R2_MATRIX: if (ra != 1 || rb != 1) return CT_ERR; rr = 2; break;  /* Hankel/Toeplitz[c, r] */
+        case R2_PRED:  if (ra != 1 || rb != 1) return CT_ERR; return CT_BOOL;    /* IntersectingQ */
         default: return CT_ERR;
     }
     if (rr < 0 || rr > CT_MAX_RANK) return CT_ERR;

@@ -434,6 +434,76 @@ static double nd_median_of(const void* buf, NDType dt, size_t base,
     return med;
 }
 
+/* ---------------------------------------------------------------- Signature */
+
+typedef struct { int64_t v; size_t i; } NdSigI;
+typedef struct { double v; size_t i; } NdSigR;
+
+static int nd_sig_cmp_i(const void* a, const void* b) {
+    int64_t x = ((const NdSigI*)a)->v, y = ((const NdSigI*)b)->v;
+    return (x > y) - (x < y);
+}
+static int nd_sig_cmp_r(const void* a, const void* b) {
+    double x = ((const NdSigR*)a)->v, y = ((const NdSigR*)b)->v;
+    return (x > y) - (x < y);
+}
+
+/* Sign of the permutation perm[0..n) (perm[k] = source index of the k-th
+ * smallest element): (-1)^(n - number of cycles). Consumes `seen`. */
+static int64_t nd_perm_sign(const size_t* perm, size_t n, unsigned char* seen) {
+    size_t cycles = 0;
+    for (size_t k = 0; k < n; k++) {
+        if (seen[k]) continue;
+        cycles++;
+        for (size_t j = k; !seen[j]; j = perm[j]) seen[j] = 1;
+    }
+    return ((n - cycles) & 1) ? -1 : 1;
+}
+
+/* Signature[v] over a rank-1 int64 or float64 buffer: the sign of the
+ * permutation that sorts v, or 0 when two elements are equal (0. and -0.
+ * included, matching the canonical order the List path sorts by).  O(n log n).
+ * Any other shape delists. */
+Expr* ndred_signature(Expr* res) {
+    if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
+    Expr* a = res->data.function.args[0];
+    NDType dt = a->data.ndarray.dtype;
+    if (a->data.ndarray.rank != 1 || (dt != NDT_INT64 && dt != NDT_FLOAT64))
+        return ndarray_delist_and_reeval(res);
+    size_t n = (size_t)a->data.ndarray.dims[0];
+    if (n < 2) return expr_new_integer(1);
+    size_t* perm = malloc(n * sizeof(size_t));
+    unsigned char* seen = calloc(n, 1);
+    void* pairs = malloc(n * (dt == NDT_INT64 ? sizeof(NdSigI) : sizeof(NdSigR)));
+    if (!perm || !seen || !pairs) {
+        free(perm); free(seen); free(pairs);
+        return ndarray_delist_and_reeval(res);
+    }
+    bool dup = false;
+    if (dt == NDT_INT64) {
+        const int64_t* x = (const int64_t*)a->data.ndarray.data;
+        NdSigI* p = (NdSigI*)pairs;
+        for (size_t k = 0; k < n; k++) { p[k].v = x[k]; p[k].i = k; }
+        qsort(p, n, sizeof *p, nd_sig_cmp_i);
+        for (size_t k = 0; k < n; k++) {
+            perm[k] = p[k].i;
+            if (k && p[k].v == p[k - 1].v) dup = true;
+        }
+    } else {
+        const double* x = (const double*)a->data.ndarray.data;
+        NdSigR* p = (NdSigR*)pairs;
+        for (size_t k = 0; k < n; k++) { p[k].v = x[k]; p[k].i = k; }
+        qsort(p, n, sizeof *p, nd_sig_cmp_r);
+        for (size_t k = 0; k < n; k++) {
+            perm[k] = p[k].i;
+            if (k && p[k].v == p[k - 1].v) dup = true;
+        }
+    }
+    int64_t sign = dup ? 0 : nd_perm_sign(perm, n, seen);
+    free(perm); free(seen); free(pairs);
+    return expr_new_integer(sign);
+}
+
 Expr* ndred_median(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];

@@ -2496,6 +2496,62 @@ Expr* builtin_permutations(Expr* res) {
     return final_res;
 }
 
+/* Comparator context for Signature's index sort (qsort has no user pointer;
+ * the sort is not reentrant through evaluation, so a file-static is safe). */
+static Expr** g_sig_elems;
+static int sig_cmp(const void* a, const void* b) {
+    size_t i = *(const size_t*)a, j = *(const size_t*)b;
+    int c = expr_compare(g_sig_elems[i], g_sig_elems[j]);
+    return c ? c : (i > j) - (i < j);
+}
+
+/*
+ * Signature[list] -- the sign of the permutation that puts the elements of
+ * list (any head) into canonical order: 1 for an even permutation, -1 for an
+ * odd one, 0 when two elements are equal in that order.  O(n log n).  A
+ * packed or NDArray rank-1 vector is answered on its buffer (ndred_signature),
+ * which agrees with this path element for element.
+ */
+Expr* builtin_signature(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0 || argc > 2) return builtin_arg_error("Signature", argc, 1, 2);
+    if (argc != 1) return NULL;
+    Expr* x = res->data.function.args[0];
+    if (is_ndarray(x)) return ndred_signature(res);
+    if (x->type != EXPR_FUNCTION) {
+        char* txt = expr_to_string_outputform(res);
+        mth_message("Signature", "normal", "Nonatomic expression expected at position 1 in %s.",
+                    txt ? txt : "");
+        free(txt);
+        return NULL;
+    }
+    size_t n = x->data.function.arg_count;
+    if (n < 2) return expr_new_integer(1);
+    size_t* perm = malloc(n * sizeof(size_t));
+    unsigned char* seen = calloc(n, 1);
+    for (size_t k = 0; k < n; k++) perm[k] = k;
+    g_sig_elems = x->data.function.args;
+    qsort(perm, n, sizeof(size_t), sig_cmp);
+    int64_t sign = 0;
+    bool dup = false;
+    for (size_t k = 1; k < n && !dup; k++)
+        dup = expr_compare(g_sig_elems[perm[k]], g_sig_elems[perm[k - 1]]) == 0;
+    if (!dup) {
+        size_t cycles = 0;
+        for (size_t k = 0; k < n; k++) {
+            if (seen[k]) continue;
+            cycles++;
+            for (size_t j = k; !seen[j]; j = perm[j]) seen[j] = 1;
+        }
+        sign = ((n - cycles) & 1) ? -1 : 1;
+    }
+    g_sig_elems = NULL;
+    free(perm);
+    free(seen);
+    return expr_new_integer(sign);
+}
+
 /* Is e List[...] (any length)? */
 static bool permute_is_list(const Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL

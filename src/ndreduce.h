@@ -53,6 +53,7 @@ Expr* ndred_central_moment(Expr* res); /* CentralMoment[a, r] (integer r; Compil
 Expr* ndred_skewness(Expr* res);    /* Skewness[a]  = m_3 / m_2^(3/2) (Compile ND_REDS delegate) */
 Expr* ndred_kurtosis(Expr* res);    /* Kurtosis[a]  = m_4 / m_2^2     (Compile ND_REDS delegate) */
 Expr* ndred_median(Expr* res);      /* Median[a] */
+Expr* ndred_signature(Expr* res);   /* Signature[v]: rank-1 int64/float64 */
 Expr* ndred_quartiles(Expr* res);   /* Quartiles[a] */
 
 /* Covariance / Correlation buffer kernels (implemented in src/linalg/ndcorrcov.c

@@ -568,6 +568,8 @@ void core_init(void) {
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Permute", builtin_permute);
     symtab_get_def("Permute")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Signature", builtin_signature);
+    symtab_get_def("Signature")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Select", builtin_select);
     symtab_add_builtin("TakeWhile", builtin_takewhile);
     symtab_get_def("TakeWhile")->attributes |= ATTR_PROTECTED;

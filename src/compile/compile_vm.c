@@ -342,6 +342,14 @@ static bool vm_num_pair(const Expr* e, double* re, double* im) {
  * the program promised: a value that left the real axis where the program
  * promised a real one fails the call. */
 static bool vm_write_scalar(const Expr* e, unsigned relem, Slot* d) {
+    /* A predicate delegate (DuplicateFreeQ / IntersectingQ) answers a symbol;
+     * a Boolean register holds 0/1 in .i. */
+    if (relem == (unsigned)CT_BOOL) {
+        if (!e || e->type != EXPR_SYMBOL) return false;
+        if (e->data.symbol.name == SYM_True)  { d->i = 1; return true; }
+        if (e->data.symbol.name == SYM_False) { d->i = 0; return true; }
+        return false;
+    }
     double re, im;
     if (!vm_num_pair(e, &re, &im)) return false;
     if (relem == (unsigned)CT_COMPLEX) { d->z = re + im * I; return true; }

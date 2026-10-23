@@ -104,6 +104,24 @@ Out[7]= {f[a, b, c], f[a, c, b], f[b, a, c], f[b, c, a], f[c, a, b], f[c, b, a]}
 - A `PermutationGroup` argument is not yet supported and stays unevaluated.
 - `Protected`.
 
+## Signature
+`Signature[list]` gives the sign of the permutation that puts the elements of
+`list` (any head) into canonical order: `1` if it is even, `-1` if it is odd,
+and `0` if two elements are equal.
+- The order is canonical order: `1` comes before `1.` (so they are distinct),
+  `0.` and `-0.` are equal, and numbers come before symbols.
+- An atom emits `Signature::normal`. `Protected`.
+- Performance: O(n log n) through an index sort and a cycle count.
+- Packed int64 and float64 vectors, and visible `NDArray`s, are sorted as
+  `(value, index)` pairs on the buffer (`ndred_signature`, `src/ndreduce.c`).
+  The head is on `AWARE` and `INT64_OK`.
+- `Compile` lowers `Signature[v]` for an `_Integer` or `_Real` vector to an
+  Integer, through the same `ndred_signature`.
+
+```
+{Signature[{2, 1, 3}], Signature[{c, a, b}], Signature[{1, 1, 2}]}   (* {-1, 1, 0} *)
+```
+
 ## Table
 Generates a list of expressions.
 - `Table[expr, n]`

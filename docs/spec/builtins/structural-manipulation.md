@@ -634,6 +634,8 @@ common, and `False` otherwise.
 - Performance: the default test hashes `b` and probes `a`. Two packed int64
   lists intersect on their machine words, and any other packed or `NDArray`
   shape is delisted. `SameTest` is O(|a| |b|).
+- `Compile`: `IntersectingQ[v, w]` over two `_Integer` or `_Real` vectors
+  lowers to a Boolean, delegated to this builtin.
 
 ## DuplicateFreeQ
 `DuplicateFreeQ[list]` gives `True` if no two elements of `list` are the same
@@ -644,6 +646,8 @@ common, and `False` otherwise.
 - `Protected`.
 - Performance: one hash pass that stops at the first repeat. A packed int64
   list is checked on its machine words.
+- `Compile`: `DuplicateFreeQ[v]` over an `_Integer` or `_Real` vector lowers to
+  a Boolean.
 
 ## Tally
 Counts occurrences of elements.

@@ -16,6 +16,7 @@
  */
 
 #include "streams.h"
+#include "message.h"   /* mth_message */
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -194,10 +195,39 @@ static Expr* open_common(Expr* res, int output, int append, const char* who) {
     if (!name) return NULL;
     int id = output ? stream_open_output(name, append) : stream_open_input(name);
     if (id < 0) {
-        printf("%s::noopen: Cannot open %s.\n", who, name);
+        mth_message(who, "noopen", "Cannot open %s.", name);
         return expr_new_symbol(SYM_DollarFailed);
     }
     return stream_make_object(stream_by_id(id));
+}
+
+/* StringToStream["string"] -- an input stream over a copy of the string, as
+ * InputStream["String", id].  Read, ReadList, ReadString, Skip,
+ * StreamPosition and Close all work on it exactly as on a file stream (an
+ * input stream is an in-memory buffer either way).  A non-string argument
+ * gives StringToStream::string and $Failed. */
+Expr* builtin_stringtostream(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* a = res->data.function.args[0];
+    if (a->type != EXPR_STRING) {
+        char* txt = expr_to_string_outputform(res);
+        mth_message("StringToStream", "string", "String expected at position 1 in %s.", txt ? txt : "");
+        free(txt);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
+    size_t len = strlen(a->data.string);
+    char* buf = malloc(len + 1);
+    if (!buf) return NULL;
+    memcpy(buf, a->data.string, len + 1);
+    Stream* st = alloc_slot();
+    memset(st, 0, sizeof(Stream));
+    st->id = g_next_id++;
+    st->is_output = 0;
+    st->name = dup_str("String");
+    st->buf = buf;
+    st->len = len;
+    st->pos = 0;
+    return stream_make_object(st);
 }
 
 Expr* builtin_openread(Expr* res)   { return open_common(res, 0, 0, "OpenRead"); }
@@ -218,7 +248,7 @@ Expr* builtin_close(Expr* res) {
         s = stream_find_by_name(name, -1);
     }
     if (!s) {
-        printf("Close::stream: the stream is not open.\n");
+        mth_message("Close", "stream", "the stream is not open.");
         return expr_new_symbol(SYM_DollarFailed);
     }
     Expr* name_result = expr_new_string(s->name);
@@ -264,7 +294,7 @@ static Stream* resolve_open(const Expr* a, const char* who) {
         const char* name = stream_filename_arg(a);
         if (name) s = stream_find_by_name(name, -1);
     }
-    if (!s) printf("%s::stream: the stream is not open.\n", who);
+    if (!s) mth_message(who, "stream", "the stream is not open.");
     return s;
 }
 
@@ -316,13 +346,13 @@ static Stream* resolve_output(const Expr* a, const char* who, int* fail) {
     int id, is_output;
     if (stream_handle(a, &id, &is_output)) {
         if (!is_output) {
-            printf("%s::openx: an InputStream is not open for writing.\n", who);
+            mth_message(who, "openx", "an InputStream is not open for writing.");
             *fail = 1;
             return NULL;
         }
         Stream* s = stream_by_id(id);
         if (!s) {
-            printf("%s::openx: the stream is not open.\n", who);
+            mth_message(who, "openx", "the stream is not open.");
             *fail = 1;
             return NULL;
         }
@@ -334,7 +364,7 @@ static Stream* resolve_output(const Expr* a, const char* who, int* fail) {
     if (s) return s;
     int nid = stream_open_output(name, 0);
     if (nid < 0) {
-        printf("%s::noopen: Cannot open %s.\n", who, name);
+        mth_message(who, "noopen", "Cannot open %s.", name);
         *fail = 1;
         return NULL;
     }
@@ -392,6 +422,11 @@ void streams_init(void) {
     symtab_add_builtin("OpenWrite", builtin_openwrite);         protect("OpenWrite");
     symtab_add_builtin("OpenAppend", builtin_openappend);       protect("OpenAppend");
     symtab_add_builtin("Close", builtin_close);                 protect("Close");
+    symtab_add_builtin("StringToStream", builtin_stringtostream); protect("StringToStream");
+    symtab_set_docstring("StringToStream",
+        "StringToStream[\"string\"]\n"
+        "\topens an input stream for reading from a string, as InputStream[\"String\", id].\n"
+        "Read, ReadList, ReadString, Skip, StreamPosition and Close work on it as on a file stream.");
     symtab_add_builtin("Streams", builtin_streams);             protect("Streams");
     symtab_add_builtin("StreamPosition", builtin_streamposition);
     protect("StreamPosition");

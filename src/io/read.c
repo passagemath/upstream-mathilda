@@ -229,8 +229,7 @@ static char* next_string_line(ReadCursor* c) {
 }
 
 static void readn_message(const ReadCfg* cfg, const char* tok) {
-    printf("%s::readn: Invalid input `%s` found when a number was expected.\n",
-           cfg->msg_head, tok ? tok : "");
+    mth_message(cfg->msg_head, "readn", "Invalid input `%s` found when a number was expected.", tok ? tok : "");
 }
 
 /* Read one numeric token. `as_real` forces an approximate result. Returns a
@@ -387,13 +386,13 @@ static Stream* resolve_input(const Expr* a, int* fail) {
     int id, is_output;
     if (stream_handle(a, &id, &is_output)) {
         if (is_output) {
-            printf("Read::openx: %s is not open for reading.\n", "OutputStream");
+            mth_message("Read", "openx", "%s is not open for reading.", "OutputStream");
             *fail = 1;
             return NULL;
         }
         Stream* s = stream_by_id(id);
         if (!s) {
-            printf("Read::openx: the stream is not open.\n");
+            mth_message("Read", "openx", "the stream is not open.");
             *fail = 1;
             return NULL;
         }
@@ -405,7 +404,7 @@ static Stream* resolve_input(const Expr* a, int* fail) {
     if (s) return s;
     int nid = stream_open_input(name);
     if (nid < 0) {
-        printf("Read::noopen: Cannot open %s.\n", name);
+        mth_message("Read", "noopen", "Cannot open %s.", name);
         *fail = 1;
         return NULL;
     }
@@ -466,6 +465,45 @@ Expr* builtin_read(Expr* res) {
         return NULL;                        /* invalid type spec: leave unevaluated */
     }
     return result ? result : expr_new_symbol(SYM_EndOfFile);
+}
+
+/* ------------------------------------------------------------------ */
+/* Skip                                                                */
+/* ------------------------------------------------------------------ */
+
+/* Skip[src, type] / Skip[src, type, n] -- read and discard one (or n) objects
+ * of the given type, exactly as Read would read them (same separator options).
+ * Returns Null, or EndOfFile if the source ran out first. */
+Expr* builtin_skip(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2) return NULL;
+    /* Trailing options pass through to Read; an optional count sits at 3. */
+    size_t pos_args = 2;
+    int64_t n = 1;
+    if (argc >= 3 && res->data.function.args[2]->type == EXPR_INTEGER) {
+        n = res->data.function.args[2]->data.integer;
+        if (n < 0) return NULL;
+        pos_args = 3;
+    }
+    size_t nopts = argc - pos_args;
+    Expr** ra = malloc((2 + nopts) * sizeof(Expr*));
+    ra[0] = expr_copy(res->data.function.args[0]);
+    ra[1] = expr_copy(res->data.function.args[1]);
+    for (size_t i = 0; i < nopts; i++) ra[2 + i] = expr_copy(res->data.function.args[pos_args + i]);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Read), ra, 2 + nopts);
+    free(ra);
+    Expr* out = expr_new_symbol(SYM_Null);
+    for (int64_t k = 0; k < n; k++) {
+        Expr* r = builtin_read(call);
+        if (!r) { expr_free(out); out = NULL; break; }       /* not a valid Read */
+        bool stop = (r->type == EXPR_SYMBOL &&
+                     (r->data.symbol.name == SYM_EndOfFile || r->data.symbol.name == SYM_DollarFailed));
+        if (stop) { expr_free(out); out = r; break; }
+        expr_free(r);
+    }
+    expr_free(call);
+    return out;
 }
 
 /* ------------------------------------------------------------------ */
@@ -576,6 +614,12 @@ void read_init(void) {
     symtab_add_builtin("Read", builtin_read);
     symtab_get_def("Read")->attributes |= ATTR_PROTECTED;
 
+    symtab_add_builtin("Skip", builtin_skip);
+    symtab_get_def("Skip")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Skip",
+        "Skip[stream, type]\n"
+        "\tskips one object of the given type (as Read would read it) in an input stream.\n"
+        "Skip[stream, type, n] skips n objects.  Returns Null, or EndOfFile if the stream ends first.");
     symtab_add_builtin("ReadString", builtin_readstring);
     symtab_get_def("ReadString")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("ReadString",

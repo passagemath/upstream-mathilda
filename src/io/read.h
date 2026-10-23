@@ -71,6 +71,7 @@ Expr* builtin_read(Expr* res);
 
 /* ReadString["file"|stream, term?] -- the text up to EOF or up to term. */
 Expr* builtin_readstring(Expr* res);
+Expr* builtin_skip(Expr* res);
 
 /* Registers Read, its Protected attribute, and Options[Read]. */
 void read_init(void);

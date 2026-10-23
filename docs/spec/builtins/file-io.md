@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -78,6 +78,23 @@ In[6]:= str = OpenWrite["/tmp/mathilda_io_csv.txt"]; WriteString[str, "a,b,c\n"]
 In[7]:= ReadList["/tmp/mathilda_io_csv.txt", Word, WordSeparators -> {","}]  (* comma-separated fields *)
 Out[7]= {"a", "b", "c"}
 ```
+
+## StringToStream
+`StringToStream["string"]` opens an input stream that reads from a copy of the
+string. The stream object is `InputStream["String", id]`.
+- `Read`, `ReadList`, `ReadString`, `Skip`, `StreamPosition`,
+  `SetStreamPosition` and `Close` work on it exactly as on a file stream.
+  `Close` returns `"String"`.
+- `Read[s, Hold[Expression]]` reads statements one at a time, unevaluated,
+  which is how a loader can read a package header.
+- A non-string argument emits `StringToStream::string` and gives `$Failed`.
+- `Protected`.
+
+## Skip
+`Skip[stream, type]` reads and discards one object of the given type, exactly
+as `Read` would read it, with the same separator options. `Skip[stream, type, n]`
+skips `n` objects. It returns `Null`, or `EndOfFile` if the stream ends first.
+`Protected`.
 
 ## ReadString
 Reads text from a file or an input stream.

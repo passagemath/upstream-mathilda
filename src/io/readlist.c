@@ -24,6 +24,7 @@
 #include "readlist.h"
 #include "read.h"
 #include "streams.h"
+#include "message.h"   /* mth_message */
 #include "sym_names.h"
 #include "symtab.h"
 #include "attr.h"
@@ -43,13 +44,13 @@ static Stream* resolve_input(const Expr* a, int* opened_here, int* fail) {
     int id, is_output;
     if (stream_handle(a, &id, &is_output)) {
         if (is_output) {
-            printf("ReadList::openx: an OutputStream is not open for reading.\n");
+            mth_message("ReadList", "openx", "an OutputStream is not open for reading.");
             *fail = 1;
             return NULL;
         }
         Stream* s = stream_by_id(id);
         if (!s) {
-            printf("ReadList::openx: the stream is not open.\n");
+            mth_message("ReadList", "openx", "the stream is not open.");
             *fail = 1;
             return NULL;
         }
@@ -61,7 +62,7 @@ static Stream* resolve_input(const Expr* a, int* opened_here, int* fail) {
     if (s) return s;                        /* already open: use it, leave open */
     int nid = stream_open_input(name);
     if (nid < 0) {
-        printf("ReadList::noopen: Cannot open %s.\n", name);
+        mth_message("ReadList", "noopen", "Cannot open %s.", name);
         *fail = 1;
         return NULL;
     }

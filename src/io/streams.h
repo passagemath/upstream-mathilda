@@ -66,6 +66,8 @@ Expr* stream_make_object(const Stream* s);
 
 /* Register the stream-management builtins, the inert InputStream/OutputStream/
  * File heads, and their attributes. */
+Expr* builtin_stringtostream(Expr* res);
+
 void streams_init(void);
 
 #endif /* MATHILDA_IO_STREAMS_H */

@@ -300,6 +300,48 @@ void test_readlist_from_open_stream(void) {
           "Close[s]; {a, rest} === {1, {2, 3}}", "True");
 }
 
+/* StringToStream: an input stream over a string, read by the same engine. */
+static void test_stringtostream(void) {
+    assert_eval_eq("sts = StringToStream[\"x=1\\nBegin[\\\"a`\\\"]\\nf[y_] := y^2\\n\"]; "
+                   "{Head[sts], sts[[1]], Attributes[StringToStream]}",
+                   "{InputStream, \"String\", {Protected}}", 0);
+    assert_eval_eq("{Read[sts, Hold[Expression]], Read[sts, Hold[Expression]], "
+                   "Read[sts, Hold[Expression]], Read[sts, Hold[Expression]]}",
+                   "{Hold[x = 1], Hold[Begin[\"a`\"]], Hold[f[y_] := y^2], EndOfFile}", 0);
+    assert_eval_eq("Close[sts]", "\"String\"", 0);
+    assert_eval_eq("st2 = StringToStream[\"1 2 3\\nabc def\"]; "
+                   "{Read[st2, Number], Read[st2, Number], ReadList[st2, Word], Read[st2, Word], "
+                   "StreamPosition[st2]}", "{1, 2, {\"3\", \"abc\", \"def\"}, EndOfFile, 13}", 0);
+    assert_eval_eq("Close[st2]", "\"String\"", 0);
+    assert_eval_eq("st3 = StringToStream[\"hello world\"]; "
+                   "r = {ReadString[st3, \" \"], Read[st3, Character], ReadString[st3]}; Close[st3]; r",
+                   "{\"hello\", \" \", \"world\"}", 0);
+    assert_eval_eq("ReadList[StringToStream[\"1 2 3\"], Number]", "{1, 2, 3}", 0);
+    /* Close removes it from Streams[]. */
+    assert_eval_eq("st4 = StringToStream[\"q\"]; {MemberQ[Streams[], st4], Close[st4], MemberQ[Streams[], st4]}",
+                   "{True, \"String\", False}", 0);
+    assert_eval_eq("Quiet[StringToStream[3]]", "$Failed", 0);
+    assert_eval_eq("Check[StringToStream[3], \"msg\"]", "\"msg\"", 0);
+}
+
+/* Skip: discard objects as Read would read them. */
+static void test_skip(void) {
+    assert_eval_eq("sk = StringToStream[\"a b c d\"]; {Skip[sk, Word], Read[sk, Word]}", "{Null, \"b\"}", 0);
+    assert_eval_eq("{Skip[sk, Word, 1], Read[sk, Word]}", "{Null, \"d\"}", 0);
+    assert_eval_eq("Skip[sk, Word]", "EndOfFile", 0);
+    assert_eval_eq("Close[sk]", "\"String\"", 0);
+    assert_eval_eq("sk2 = StringToStream[\"1 2 3 4\"]; {Skip[sk2, Number, 3], Read[sk2, Number], Close[sk2]}",
+                   "{Null, 4, \"String\"}", 0);
+    assert_eval_eq("Attributes[Skip]", "{Protected}", 0);
+}
+
+/* Stream diagnostics go through the message funnel (Quiet / Check). */
+static void test_stream_messages_routed(void) {
+    assert_eval_eq("Check[Close[InputStream[\"none\", 987654]], \"msg\"]", "\"msg\"", 0);
+    assert_eval_eq("Quiet[OpenRead[\"/no/such/file/at/all\"]]", "$Failed", 0);
+    assert_eval_eq("Check[OpenRead[\"/no/such/file/at/all\"], \"msg\"]", "\"msg\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -349,6 +391,9 @@ int main(void) {
 
     TEST(test_readlist_still_flat);
     TEST(test_readlist_from_open_stream);
+    TEST(test_stringtostream);
+    TEST(test_skip);
+    TEST(test_stream_messages_routed);
 
     printf("All stream tests passed.\n");
     return 0;

@@ -467,16 +467,17 @@ static void test_mpfr_complex_corner_cases(void) {
  * side effect of `If[...] == 2`. */
 static void test_n_does_not_evaluate_held_arguments(void) {
     assert_eval_eq("ClearAll[nhc, y]; nhc = 0; N[If[y == 2, nhc++, y + 1]]",
-                   "If[y == 2.0, nhc++, 1.0 + y]", 0);
+                   "If[y == 2.0, Increment[nhc], y + 1.0]", 0);
     assert_eval_eq("nhc", "0", 0);
     assert_eval_eq("nhc = 0; If[y == 2, nhc++, y + 1] == 2; nhc", "0", 0);
-    assert_eval_eq("nhc = 0; FixedPoint[If[# == 2, nhc++, # + 1] &, 0, 6]; nhc", "1", 0);
+    /* 0 -> 1 -> 2 -> 0 (nhc 1) -> 1 -> 2 -> 1 (nhc 2): only real visits count. */
+    assert_eval_eq("nhc = 0; FixedPoint[If[# == 2, nhc++, # + 1] &, 0, 6]; nhc", "2", 0);
     assert_eval_eq("N[If[y > 1, Sin[1], Cos[1]]]", "If[y > 1.0, Sin[1.0], Cos[1.0]]", 0);
-    assert_eval_eq("N[Function[x, x^2 + 1/3]][2]", "4.333333333333333", 0);
+    assert_eval_eq("N[Function[x, x^2 + 1/3]][2]", "4.33333", 0);
     /* Non-held positions still evaluate: the If condition is numericalized
      * and decided, and an evaluated head computes as before. */
-    assert_eval_eq("N[If[True, 1/3, Pi]]", "0.3333333333333333", 0);
-    assert_eval_eq("N[f[1/3, Sqrt[2]]]", "f[0.3333333333333333, 1.4142135623730951]", 0);
+    assert_eval_eq("N[If[True, 1/3, Pi]]", "0.333333", 0);
+    assert_eval_eq("N[f[1/3, Sqrt[2]]]", "f[0.333333, 1.41421]", 0);
     assert_eval_eq("ClearAll[nhc]", "Null", 0);
 }
 

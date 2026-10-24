@@ -1048,6 +1048,47 @@ static bool lhs_pattern_mentions_valued_symbol(Expr* e) {
     return false;
 }
 
+/* The parts of a pattern-bearing LHS argument that cannot be patterns,
+ * evaluated: an assignment evaluates its LHS arguments, so the reference stores
+ * h[y_ - 4] := ... as h[-4 + y_] and the rule fires on h[x - 4]. Held whole,
+ * the parse's Plus[y_, Times[-1, 4]] matched nothing, so FeynCalc's Pair rules
+ * on dim_Symbol - 4 never fired. Pattern nodes themselves stay unevaluated (see
+ * lhs_arg_contains_pattern for why), so only a pattern-free subexpression -- a
+ * constant, a symbol with a value, a call on concrete arguments -- is
+ * evaluated, exactly as it would be outside a pattern. A pattern name, a held
+ * guard or test, a HoldPattern / Verbatim body and the held arguments of a
+ * Hold-attributed head are left as written. Returns a new expression. */
+static Expr* lhs_fold_pattern_free(Expr* e) {
+    if (!lhs_arg_contains_pattern(e)) return evaluate(e);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    uint32_t attrs = ATTR_NONE;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_HoldPattern || hn == SYM_Verbatim || hn == SYM_Blank ||
+            hn == SYM_BlankSequence || hn == SYM_BlankNullSequence)
+            return expr_copy(e);
+        attrs = get_attributes(hn);
+        /* Pattern[name, p]: the name is held; Condition / PatternTest hold
+         * their guard. Their pattern slot is folded. */
+        if (hn == SYM_Pattern) attrs = ATTR_HOLDFIRST;
+        else if (hn == SYM_Condition || hn == SYM_PatternTest) attrs = ATTR_HOLDREST;
+    }
+    Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        bool hold = (attrs & ATTR_HOLDALLCOMPLETE) == ATTR_HOLDALLCOMPLETE ||
+                    (attrs & ATTR_HOLDALL) == ATTR_HOLDALL ||
+                    (i == 0 && (attrs & ATTR_HOLDFIRST)) ||
+                    (i > 0 && (attrs & ATTR_HOLDREST));
+        args[i] = hold ? expr_copy(e->data.function.args[i])
+                       : lhs_fold_pattern_free(e->data.function.args[i]);
+    }
+    Expr* out = expr_new_function(expr_copy(h), args, n);
+    free(args);
+    return out;
+}
+
 /*
  * assignment_target_symbol:
  * Returns the name of the symbol whose OwnValue/DownValue/Part would be
@@ -1525,8 +1566,8 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
         else if (i == 0 && (lhs_attrs & ATTR_HOLDFIRST)) hold = true;
         else if (i > 0 && (lhs_attrs & ATTR_HOLDREST)) hold = true;
         if (is_part && i == 0) hold = true;
-        if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i]) &&
-            !lhs_pattern_mentions_valued_symbol(lhs->data.function.args[i])) hold = true;
+        bool fold = !hold && lhs_arg_contains_pattern(lhs->data.function.args[i]) &&
+                    !lhs_pattern_mentions_valued_symbol(lhs->data.function.args[i]);
         if (is_list) {
             Expr* child = lhs->data.function.args[i];
             if (child->type == EXPR_SYMBOL) hold = true;
@@ -1535,6 +1576,7 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
                      child->data.function.head->data.symbol.name == SYM_List) hold = true;
         }
         eval_args[i] = hold ? expr_copy(lhs->data.function.args[i])
+                     : fold ? lhs_fold_pattern_free(lhs->data.function.args[i])
                             : evaluate(lhs->data.function.args[i]);
     }
     /* A compound head f[a][b] (a SubValue target) has its own arguments

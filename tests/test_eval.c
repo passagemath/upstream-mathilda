@@ -794,6 +794,25 @@ void test_feyncalc_semantics() {
                    "List[List[1], PropD[1], PropD[2]]", 1);
 }
 
+/* The pattern-free parts of an assignment's LHS pattern are evaluated
+ * (lhs_fold_pattern_free): h[y_ - 4] is stored as h[-4 + y_], not as the
+ * parse's Plus[y_, Times[-1, 4]], which matched nothing.  FeynCalc's BMHV Pair
+ * rules on dim_Symbol - 4 depend on it.  Pattern names, guards and HoldPattern
+ * bodies stay as written. */
+void test_lhs_pattern_constants_folded() {
+    assert_eval_eq("ClearAll[lf1, lf2, lf3, lf4, lf5, lf6, lfpr, li, mo, x, y, D4]", "Null", 0);
+    assert_eval_eq("lf1[y_ - 4] := ok; {lf1[x - 4], lf1[x + 4]}", "List[ok, lf1[Plus[4, x]]]", 1);
+    assert_eval_eq("lf2[y_, z_ - 4] := {y, z}; lf2[D4, D4 - 4]", "List[D4, D4]", 1);
+    assert_eval_eq("lf3[x_/2] := x; lf3[y/2]", "y", 0);
+    assert_eval_eq("lf4[x_ /; x > 2 - 1] := big; {lf4[3], lf4[0]}", "List[big, lf4[0]]", 1);
+    assert_eval_eq("lf5[HoldPattern[y_ - 4]] := held; DownValues[lf5]",
+                   "List[RuleDelayed[HoldPattern[lf5[HoldPattern[Plus[Pattern[y, Blank[]], Times[-1, 4]]]]], held]]", 1);
+    assert_eval_eq("SetAttributes[lfpr, Orderless]; "
+                   "lfpr[(a : li | mo)[x_, dim_Symbol], (b : li | mo)[y_, dim_Symbol - 4]] := lfpr[a[x, dim - 4], b[y, dim - 4]]; "
+                   "{lfpr[li[mu, D4], mo[p, D4 - 4]], lfpr[mo[p, D4 - 4], li[mu, D4]]}",
+                   "List[lfpr[li[mu, Plus[-4, D4]], mo[p, Plus[-4, D4]]], lfpr[li[mu, Plus[-4, D4]], mo[p, Plus[-4, D4]]]]", 1);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -827,6 +846,7 @@ int main() {
     TEST(test_compoundexpression);
     TEST(test_assignment_evaluates_lhs_head);
     TEST(test_feyncalc_semantics);
+    TEST(test_lhs_pattern_constants_folded);
     printf("All tests passed!\n");
     return 0;
 }

@@ -8,8 +8,13 @@
   h[x_] := ...` defines `g`, and so does a scoped local holding a computed
   symbol, `ch = ToExpression["cache" <> name]; ch[a_] := ...`), and any pattern
   argument that mentions a symbol with a value (`PD = PropagatorDenominator;
-  f[a__PD] := ...` is a rule for `__PropagatorDenominator`). Other pattern
-  arguments are held, which is equivalent since patterns are inert (v0.586).
+  f[a__PD] := ...` is a rule for `__PropagatorDenominator`). In any other
+  pattern argument, every pattern-free subexpression is evaluated, as it would
+  be outside a pattern, while the pattern nodes stay as written: `h[y_ - 4] :=
+  ...` is stored as `h[-4 + y_]` and fires on `h[x - 4]`, and `x_/2` holds
+  `1/2`. Pattern names, guards (`/;`), tests (`?`), `HoldPattern` bodies and
+  the held arguments of a Hold-attributed head are not evaluated (v0.586,
+  v0.589).
 - **Rule order.** A literal-headed call in a pattern (`{f___}`, `h[__]`) ranks
   at least as specific as a typed blank, so `c[e_, {f___}, o:OptionsPattern[]]`
   is tried before `c[e_, f_, o:OptionsPattern[]]` whichever was defined first

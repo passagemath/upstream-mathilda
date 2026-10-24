@@ -70,11 +70,12 @@
  * own internals.  A bare fprintf(stderr, ...) bypassed both and could storm
  * when a caller looped.  Matches the ops_msg / root_warn pattern. */
 static void inv_warn(const char* fmt, ...) {
-    mth_msg_note_fired();
-    if (mth_msg_suppressed()) return;
+    /* Through the funnel by name (mth_message_line parses "Inverse::tag: "),
+     * so Check[Inverse[m], f, Inverse::sing] and Quiet[..., Inverse::sing]
+     * see which message this is. */
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_linev(0, fmt, ap);
     va_end(ap);
 }
 

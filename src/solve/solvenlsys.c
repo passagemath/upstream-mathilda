@@ -139,7 +139,7 @@ static void warn_nsdim(uint64_t input_hash) {
     /* Note the firing so an enclosing Check[] sees it even when the print is
      * quieted (internal probe) or de-duplicated; only the PRINT is gated. */
     if (mth_msg_suppressed() || input_hash == last_warned_hash) {
-        mth_msg_note_fired();
+        mth_msg_note_named("Solve", "nsdim");
         return;
     }
     last_warned_hash = input_hash;

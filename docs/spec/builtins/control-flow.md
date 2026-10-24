@@ -1059,11 +1059,12 @@ Bailed on   Integrate[x, x]
 ## Quiet
 Evaluates an expression with messages suppressed.
 - `Quiet[expr]`: Evaluates `expr` and returns its value, suppressing any messages generated during the evaluation.
-- `Quiet[expr, spec]`: Same; `spec` (a message name or list) is accepted and ignored — all messages are suppressed.
+- `Quiet[expr, spec]`: Suppresses only the messages `spec` names: `sym::tag`, `General::tag` (that tag under every head), `All`, `None`, or a list of these. Other messages print as usual.
 
 **Features**:
-- `HoldAll`, so the argument is evaluated under the suppression, not before it.
-- A message still *fires* while suppressed (an enclosing `Check` sees it); only the printing is silenced.
+- `HoldAll`, so the argument is evaluated under the suppression, not before it. The `spec` is read as written: a symbol whose value is a list of messages names nothing, as in the reference.
+- A suppressed message is hidden from every `Check` *outside* the `Quiet`, and seen by a `Check` *inside* it: `Check[Quiet[1/0]; 5, 7]` is `5`, while `Quiet[Check[1/0; 5, 7]]` is `7`. It is not added to `$MessageList`.
+- `Quiet[expr, moff, mon]`: the third argument (messages to switch back on) is ignored.
 
 ```mathematica
 In[1]:= Quiet[1/0]
@@ -1076,10 +1077,11 @@ Out[2]= -Infinity
 ## Check
 Detects whether a message was generated while evaluating an expression.
 - `Check[expr, failexpr]`: Returns `failexpr` if any message is generated during the evaluation of `expr`, otherwise the value of `expr`.
-- `Check[expr, failexpr, spec]`: Same; `spec` is accepted and ignored (any message counts).
+- `Check[expr, failexpr, spec]`: Same, but only the messages `spec` names count (`sym::tag`, `General::tag`, or a list).
 
 **Features**:
 - `HoldAll`. A `Throw` inside `expr` propagates (it is not a message).
+- A message suppressed by a `Quiet` *inside* the `Check` does not count (`Check[Quiet[1/0]; 5, 7]` is `5`). A message an inner `Check` already caught still counts for an outer one (`Check[Check[1/0, a], b]` is `b`).
 - Typically wrapped as `Quiet[Check[expr, failexpr]]` to detect a failure without printing its message.
 
 ```mathematica

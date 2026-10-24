@@ -146,6 +146,38 @@ static void test_style_outputform(void) {
     assert_eval_eq("{Context[DateString], Context[FileDate]}", "{\"System`\", \"System`\"}", 0);
 }
 
+/* Quiet / Check nesting (src/message.c frame model).  Every row was checked
+ * against the reference: a message is silenced by the innermost Quiet whose
+ * spec names it and is seen only by the Checks inside that Quiet. */
+static void test_check_quiet_nesting(void) {
+    assert_eval_eq("Check[Quiet[1/0]; 5, 7]", "5", 0);
+    assert_eval_eq("Quiet[Check[1/0; 5, 7]]", "7", 0);
+    assert_eval_eq("Check[Quiet[Check[1/0; 5, 7]], 9]", "7", 0);
+    assert_eval_eq("Quiet[Check[Check[1/0, a], b]]", "b", 0);
+    assert_eval_eq("Quiet[Check[Quiet[1/0]; 5, 7]]", "5", 0);
+    assert_eval_eq("Check[Quiet[Message[cqn::x]]; 1, 2]", "1", 0);
+    assert_eval_eq("Check[Off[Power::infy]; 1/0; On[Power::infy]; 5, 7]", "5", 0);
+    /* Quiet with a message spec silences only what it names. */
+    assert_eval_eq("Check[Quiet[1/0, Power::infy]; 5, 7]", "5", 0);
+    assert_eval_eq("Quiet[Check[Quiet[1/0, General::foo]; 5, 7]]", "7", 0);
+    assert_eval_eq("Check[Quiet[1/0, {General::foo, Power::infy}]; 5, 7]", "5", 0);
+    assert_eval_eq("Check[Quiet[1/0, All]; 5, 7]", "5", 0);
+    assert_eval_eq("Quiet[Check[Quiet[1/0, None]; 5, 7]]", "7", 0);
+    assert_eval_eq("Check[Quiet[Message[cqn::argx, cqn, 2], General::argx]; 5, 7]", "5", 0);
+    /* The spec is held: a symbol whose value is a list names nothing. */
+    assert_eval_eq("cqnms = {Power::infy}; Quiet[Check[Quiet[1/0, cqnms]; 5, 7]]", "7", 0);
+    assert_stderr("Quiet[1/0, General::foo]", "Power::infy: Infinite expression 1/0 encountered.\n");
+    /* Check with a spec counts only what it names. */
+    assert_eval_eq("Quiet[Check[1/0; 5, 7, Power::infy]]", "7", 0);
+    assert_eval_eq("Quiet[Check[1/0; 5, 7, General::foo]]", "5", 0);
+    assert_eval_eq("Quiet[Check[1/0; 5, 7, {Power::infy}]]", "7", 0);
+    /* $MessageList holds only the messages that were not silenced. */
+    assert_eval_eq("Block[{$MessageList = {}}, Quiet[1/0]; $MessageList]", "{}", 0);
+    assert_eval_eq("Block[{$MessageList = {}}, Quiet[Check[1/0, 0]]; $MessageList]", "{}", 0);
+    /* A TimeConstrained timeout inside Check / Quiet leaves no stale frame. */
+    assert_eval_eq("TimeConstrained[Check[Quiet[While[True, 1]], 0], 0.2, t]; Check[1/0; 5, 7]", "7", 1);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -155,6 +187,7 @@ int main(void) {
     TEST(test_helper_warnings_routed);
     TEST(test_printtemporary);
     TEST(test_style_outputform);
+    TEST(test_check_quiet_nesting);
     printf("All message tests passed.\n");
     return 0;
 }

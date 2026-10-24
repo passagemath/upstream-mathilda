@@ -93,8 +93,7 @@ static int function_is_slot_form(Expr* fn) {
  *   Function::slot1  -- the first argument is not an association at all
  * The slot is then left in place (WL returns e.g. `1 + #b`). */
 static void named_slot_message(Expr* fn, const char* name, Expr** args, size_t arg_count) {
-    mth_msg_note_fired();
-    if (mth_msg_suppressed()) return;
+    if (mth_msg_suppressed()) { mth_msg_note_named("Function", arg_count >= 1 && is_association(args[0]) ? "slota" : "slot1"); return; }
     char* fs = fn ? expr_to_string(fn) : NULL;
     if (arg_count >= 1 && is_association(args[0])) {
         char* as = expr_to_string(args[0]);

@@ -31,14 +31,16 @@
 #  define MTH_PRINTF_FMT(a, b)
 #endif
 
-/* Enter a quiet region (increment the suppression depth). */
+/* Enter a quiet region that silences every message, as Quiet[expr] does
+ * (push a Quiet frame; see the frame model in message.c).  A message silenced
+ * here is also hidden from any Check[] entered outside the region. */
 void mth_msg_suppress_push(void);
-/* Leave a quiet region (decrement; saturates at zero). */
+/* Leave a quiet region (pop a frame; saturates at zero). */
 void mth_msg_suppress_pop(void);
-/* Non-zero iff messages are currently suppressed. */
+/* Non-zero iff a quiet region silencing every message is active. */
 int  mth_msg_suppressed(void);
-/* Save / restore the whole suppression depth (used by TimeConstrained to undo a
- * Quiet[] region abandoned by a timeout siglongjmp). */
+/* Save / restore the Quiet and Check frame depths as one value (used by
+ * TimeConstrained to undo regions abandoned by a timeout siglongjmp). */
 int  mth_msg_suppress_depth_save(void);
 void mth_msg_suppress_depth_load(int d);
 
@@ -63,16 +65,21 @@ void mth_msg_ifun_suppress_depth_load(int d);
 
 /*
  * Message-fired counter.  Distinct from the suppression depth above: a message
- * still "fires" (and bumps this counter) even while suppressed, so that
- * Check[expr, failexpr] -- typically wrapped as Quiet[Check[expr, failexpr]] --
- * can detect that a diagnostic was generated during expr's evaluation without
- * that diagnostic reaching the user.  Emission sites call mth_msg_note_fired()
- * at the point the message is generated (before the suppression check);
- * builtin_check snapshots mth_msg_fired_count() around the evaluation of its
- * first argument.  Coverage is incremental -- a site that does not yet note is
- * simply invisible to Check, never a wrong answer.
+ * still "fires" (and bumps this counter) even while suppressed, so internal
+ * code can snapshot mth_msg_fired_count() around a call to learn whether it
+ * reported anything.  An emission site that does not route through the funnel
+ * calls mth_msg_note_fired(): that counts it and marks the enclosing Check[]
+ * frames that can see an anonymous diagnostic (those inside the innermost
+ * Quiet that silences everything).  Check itself does not use the counter: it
+ * keeps a frame of its own, so a message silenced by a Quiet INSIDE the Check
+ * does not count (Check[Quiet[1/0]; 5, 7] is 5), while one silenced by a Quiet
+ * OUTSIDE it does (Quiet[Check[1/0; 5, 7]] is 7).
  */
 void          mth_msg_note_fired(void);
+/* Note head::tag as fired without printing it: for a site that has already
+ * printed it once (a de-duplicated repeat) or skips the formatting work under
+ * a Quiet that covers everything.  Quiet / Check frames see it by name. */
+void          mth_msg_note_named(const char* head, const char* tag);
 unsigned long mth_msg_fired_count(void);
 /* Roll the counter back to an earlier snapshot.  For an internal PROBE region
  * whose diagnostics are sampling noise (a speculative sub-solve whose result the
@@ -84,8 +91,9 @@ void          mth_msg_fired_restore(unsigned long n);
 /* ------------------------------------------------------------- The funnel */
 /*
  * mth_message is the ONE place the two-step Quiet/Check contract lives: it
- * notes the firing (so an enclosing Check[] sees it, ALWAYS) and then prints
- * "Head::tag: <formatted>\n" to stderr UNLESS Quiet[] is active.  Every
+ * notes the firing (so every enclosing Check[] entered inside the Quiet that
+ * silences it -- all of them when none does -- sees it) and then prints
+ * "Head::tag: <formatted>\n" to stderr UNLESS a Quiet[] covering it is active.  Every
  * user-facing diagnostic routes through it (or through a subsystem helper that
  * delegates to it); a raw fprintf(stderr, "Head::tag: ...") bypasses both
  * Quiet[] and Check[] and is a bug.  `head` and `tag` are separate arguments,
@@ -102,7 +110,7 @@ void mth_message(const char* head, const char* tag, const char* fmt, ...)
  * probe is poking at divergent forms and the diagnostic is sampling noise, not a
  * user-facing event, so it is suppressed ENTIRELY: neither printed NOR noted, so
  * an enclosing Check[] does not catch the noise.  (Quiet, by contrast, silences
- * only the print and is still seen by Check.)
+ * the print and hides the message only from the Checks outside the Quiet.)
  */
 void mth_message_gated(int extra_mute, const char* head, const char* tag,
                        const char* fmt, ...) MTH_PRINTF_FMT(4, 5);
@@ -131,5 +139,9 @@ void mth_message_list_reset(void);
 /* Emit a preformatted "Head::tag: text" line through the funnel (with the same
  * extra_mute meaning as mth_message_gated).  For arith_warn's fixed strings. */
 void mth_message_line(int extra_mute, const char* line);
+/* printf-style mth_message_line: formats "Head::tag: text" (any length) and
+ * emits it through the funnel by name.  For legacy helpers whose format
+ * strings carry the "Head::tag: " prefix. */
+void mth_message_linev(int extra_mute, const char* fmt, va_list ap);
 
 #endif /* MATHILDA_MESSAGE_H */

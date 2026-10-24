@@ -9,27 +9,139 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "print.h"     /* expr_to_string_outputform: Message argument text */
+#include "context.h"   /* context_display_name: the printed message head */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* Suppression nesting depth.  Zero => messages print; > 0 => suppressed. */
-static int g_msg_suppress_depth = 0;
+/* ------------------------------------------------- Quiet and Check frames */
+/* Which messages a Quiet silences, and which a Check sees, follow the
+ * reference's nesting rule: a message is silenced by the innermost active
+ * Quiet whose spec covers it, and is seen only by the Checks entered INSIDE
+ * that Quiet.  So Check[Quiet[1/0]; 5, 7] is 5 (the Quiet stands between the
+ * Check and the message) while Quiet[Check[1/0; 5, 7]] is 7, and a message no
+ * Quiet covers is seen by every enclosing Check (Check[Check[1/0, a], b] is b).
+ *
+ * The Quiet frames form a stack; frame i holds its spec (NULL = every message:
+ * Quiet[expr] and every internal mth_msg_suppress_push).  Its depth is the
+ * suppression depth.  A Check frame records the Quiet depth at its entry, its
+ * own spec (NULL = any message) and whether a message it sees has fired. */
+typedef struct { Expr* spec; } QuietFrame;          /* spec owned, or NULL */
+static void g_msg_fired_bump(void);
+typedef struct { int quiet_height; int fired; const Expr* spec; } CheckFrame;
 
-void mth_msg_suppress_push(void) { g_msg_suppress_depth++; }
+static QuietFrame* g_quiet = NULL;
+static int g_quiet_cap = 0;
+static int g_msg_suppress_depth = 0;                /* number of Quiet frames */
+static CheckFrame* g_checks = NULL;
+static int g_checks_cap = 0;
+static int g_check_depth = 0;                       /* number of Check frames */
 
-void mth_msg_suppress_pop(void) {
-    if (g_msg_suppress_depth > 0) g_msg_suppress_depth--;
+/* Make room for frame index `need` in a growable frame array. */
+static int frames_reserve(void** arr, int* cap, int need, size_t elt) {
+    if (need < *cap) return 1;
+    int nc = *cap ? *cap * 2 : 16;
+    while (nc <= need) nc *= 2;
+    void* g = realloc(*arr, (size_t)nc * elt);
+    if (!g) return 0;
+    *arr = g;
+    *cap = nc;
+    return 1;
 }
 
-int mth_msg_suppressed(void) { return g_msg_suppress_depth > 0; }
+/* Push a Quiet frame; `spec` is adopted (NULL = all messages).  Without memory
+ * for the frame the spec widens to "all", which only silences more. */
+static void quiet_push(Expr* spec) {
+    if (!frames_reserve((void**)&g_quiet, &g_quiet_cap, g_msg_suppress_depth,
+                        sizeof(QuietFrame))) {
+        if (spec) expr_free(spec);
+        spec = NULL;
+        if (g_msg_suppress_depth >= g_quiet_cap) { g_msg_suppress_depth++; return; }
+    }
+    g_quiet[g_msg_suppress_depth++].spec = spec;
+}
 
-/* Save / restore the suppression depth as one value.  TimeConstrained's timeout
- * siglongjmp can unwind out of a Quiet[] region (its mth_msg_suppress_pop then
- * never runs, leaving messages silenced for the rest of the session); the guard
- * captures the depth before the body and restores it after the jump. */
-int  mth_msg_suppress_depth_save(void)     { return g_msg_suppress_depth; }
-void mth_msg_suppress_depth_load(int d)    { g_msg_suppress_depth = d; }
+/* Drop the Quiet frames above depth d. */
+static void quiet_truncate(int d) {
+    if (d < 0) d = 0;
+    while (g_msg_suppress_depth > d) {
+        g_msg_suppress_depth--;
+        if (g_msg_suppress_depth < g_quiet_cap && g_quiet[g_msg_suppress_depth].spec) {
+            expr_free(g_quiet[g_msg_suppress_depth].spec);
+            g_quiet[g_msg_suppress_depth].spec = NULL;
+        }
+    }
+}
+
+void mth_msg_suppress_push(void) { quiet_push(NULL); }
+
+void mth_msg_suppress_pop(void) {
+    if (g_msg_suppress_depth > 0) quiet_truncate(g_msg_suppress_depth - 1);
+}
+
+/* Does message spec `spec` name head::tag?  A spec is All, None, a message
+ * name sym::tag (General::tag names tag under every head) or a list of these;
+ * anything else -- including a symbol whose VALUE is a list, since Quiet and
+ * Check hold the spec -- names nothing, as in the reference.  head == NULL
+ * asks about an anonymous diagnostic, which only All covers. */
+static int spec_covers(const Expr* spec, const char* head, const char* tag) {
+    if (!spec) return 1;
+    if (spec->type == EXPR_SYMBOL) return spec->data.symbol.name == SYM_All;
+    if (spec->type != EXPR_FUNCTION || spec->data.function.head->type != EXPR_SYMBOL)
+        return 0;
+    const char* h = spec->data.function.head->data.symbol.name;
+    if (h == SYM_List) {
+        for (size_t i = 0; i < spec->data.function.arg_count; i++)
+            if (spec_covers(spec->data.function.args[i], head, tag)) return 1;
+        return 0;
+    }
+    if (h == SYM_MessageName && head && spec->data.function.arg_count >= 2) {
+        const Expr* s = spec->data.function.args[0];
+        const Expr* t = spec->data.function.args[1];
+        if (s->type != EXPR_SYMBOL || t->type != EXPR_STRING) return 0;
+        return strcmp(t->data.string, tag) == 0 &&
+               (strcmp(s->data.symbol.name, head) == 0 ||
+                strcmp(s->data.symbol.name, "General") == 0);
+    }
+    return 0;
+}
+
+/* Index of the innermost Quiet frame silencing head::tag, or -1. */
+static int quiet_cover_index(const char* head, const char* tag) {
+    int top = g_msg_suppress_depth < g_quiet_cap ? g_msg_suppress_depth : g_quiet_cap;
+    if (g_msg_suppress_depth > top) return g_msg_suppress_depth - 1;   /* OOM frames */
+    for (int i = top - 1; i >= 0; i--)
+        if (spec_covers(g_quiet[i].spec, head, tag)) return i;
+    return -1;
+}
+
+/* A message fired: count it, and mark the Checks that see it -- those entered
+ * inside the silencing Quiet frame q (all of them when q == -1). */
+static void note_fired_for(int q, const char* head, const char* tag) {
+    g_msg_fired_bump();
+    for (int i = g_check_depth - 1; i >= 0 && g_checks[i].quiet_height > q; i--)
+        if (!g_checks[i].spec || spec_covers(g_checks[i].spec, head, tag))
+            g_checks[i].fired = 1;
+}
+
+/* Non-zero iff a Quiet that silences every message is active: what a caller
+ * can ask without naming the message (mth_message_cont, internal probes). */
+int mth_msg_suppressed(void) { return quiet_cover_index(NULL, NULL) >= 0; }
+
+/* Save / restore the Quiet and Check frame depths as one value (Quiet depth in
+ * the low 16 bits, Check depth above).  TimeConstrained's timeout siglongjmp
+ * can unwind out of a Quiet[] or Check[] region (its pop then never runs,
+ * leaving messages silenced, or a stale Check frame marked, for the rest of the
+ * session); the guard captures the depths before the body and restores them
+ * after the jump. */
+int mth_msg_suppress_depth_save(void) {
+    return (g_msg_suppress_depth & 0xFFFF) | (g_check_depth << 16);
+}
+void mth_msg_suppress_depth_load(int d) {
+    quiet_truncate(d & 0xFFFF);
+    int c = (d >> 16) & 0x7FFF;
+    if (g_check_depth > c) g_check_depth = c;
+}
 
 /* Depth for the `Solve::ifun` advisory scope (see message.h).  Zero => the
  * message may print; > 0 => a complete-solution caller (Reduce) is on the
@@ -54,7 +166,12 @@ void mth_msg_ifun_suppress_depth_load(int d) { g_ifun_suppress_depth = d; }
 
 /* Message-fired counter (see message.h). */
 static unsigned long g_msg_fired = 0;
-void          mth_msg_note_fired(void)  { g_msg_fired++; }
+static void g_msg_fired_bump(void) { g_msg_fired++; }
+void          mth_msg_note_fired(void)  { note_fired_for(quiet_cover_index(NULL, NULL), NULL, NULL); }
+void mth_msg_note_named(const char* head, const char* tag) {
+    if (mth_msg_is_off(head, tag)) return;
+    note_fired_for(quiet_cover_index(head, tag), head, tag);
+}
 unsigned long mth_msg_fired_count(void) { return g_msg_fired; }
 void          mth_msg_fired_restore(unsigned long n) { if (n < g_msg_fired) g_msg_fired = n; }
 
@@ -156,17 +273,22 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
      * suppressed ENTIRELY -- neither printed nor noted -- otherwise an enclosing
      * Check would catch the noise (e.g. Check[Limit[Sin[x]/x, x -> 0], bad]
      * must return 1, not bad, though the 0*ComplexInfinity probe fires
-     * Infinity::indet internally).  Quiet is different: it is a USER request to
-     * silence the print of a real message, so the firing is still noted and an
-     * enclosing Check[] still sees it (the Quiet[Check[...]] idiom). */
+     * Infinity::indet internally).  Quiet is different: it is a request to
+     * silence the print of a real message, so the firing is still noted, and a
+     * Check[] inside the Quiet still sees it (the Quiet[Check[...]] idiom). */
     if (extra_mute) return;
     /* Off[head::tag]: the message does not exist for this session -- neither
      * printed nor seen by Check. */
     if (mth_msg_is_off(head, tag)) return;
-    mth_msg_note_fired();                 /* Check sees it, even under Quiet */
-    if (mth_msg_suppressed()) return;     /* Quiet: silence the print only */
+    /* Seen by the Checks inside the Quiet that silences it (all of them when
+     * none does); a silenced message is not printed and not in $MessageList. */
+    int q = quiet_cover_index(head, tag);
+    note_fired_for(q, head, tag);
+    if (q >= 0) return;
     message_list_append(head, tag);
-    fprintf(stderr, "%s::%s: ", head, tag);
+    /* FeynCalc`DiracTrick::failmsg prints as DiracTrick::failmsg while
+     * FeynCalc` is on $ContextPath, as the reference prints it. */
+    fprintf(stderr, "%s::%s: ", context_display_name(head), tag);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
 }
@@ -205,6 +327,25 @@ void mth_message_line(int extra_mute, const char* line) {
     mth_message_gated(extra_mute, head, tag, "%.*s", (int)tl, text);
 }
 
+void mth_message_linev(int extra_mute, const char* fmt, va_list ap) {
+    char stack[512];
+    va_list ap2;
+    va_copy(ap2, ap);
+    int n = vsnprintf(stack, sizeof stack, fmt, ap);
+    if (n < 0) { va_end(ap2); return; }
+    if ((size_t)n < sizeof stack) {
+        va_end(ap2);
+        mth_message_line(extra_mute, stack);
+        return;
+    }
+    char* big = malloc((size_t)n + 1);
+    if (!big) { va_end(ap2); mth_message_line(extra_mute, stack); return; }
+    vsnprintf(big, (size_t)n + 1, fmt, ap2);
+    va_end(ap2);
+    mth_message_line(extra_mute, big);
+    free(big);
+}
+
 void mth_message_cont(int extra_mute, const char* fmt, ...) {
     if (extra_mute || mth_msg_suppressed()) return;    /* no note: already fired */
     va_list ap;
@@ -216,28 +357,43 @@ void mth_message_cont(int extra_mute, const char* fmt, ...) {
 
 /* ------------------------------------------------- Quiet / Check / Message */
 
-/* Quiet[expr] / Quiet[expr, spec]: evaluate expr with diagnostics suppressed
- * and return its value.  HoldAll -- the argument arrives unevaluated.  The
- * `spec` of the two-argument form (a message name or list) is IGNORED: all
- * messages are suppressed, a harmless superset of the requested set. */
+/* Quiet[expr] / Quiet[expr, spec]: evaluate expr with the messages spec names
+ * silenced -- every message, or All, None, sym::tag (General::tag: that tag
+ * under any head) or a list of these -- and return its value.  HoldAll: the
+ * spec is read as written, so a symbol whose value is a list names nothing.
+ * A silenced message is hidden from the Checks outside this Quiet (see the
+ * frame model above).  Quiet[expr, moff, mon]'s third argument (messages to
+ * switch back on inside an outer Quiet) is ignored. */
 Expr* builtin_quiet(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
-    mth_msg_suppress_push();
+    Expr* spec = res->data.function.arg_count >= 2 ? expr_copy(res->data.function.args[1]) : NULL;
+    int depth = g_msg_suppress_depth;
+    quiet_push(spec);
     Expr* val = evaluate(res->data.function.args[0]);
-    mth_msg_suppress_pop();
+    quiet_truncate(depth);
     return val;   /* an in-flight Throw sentinel propagates unchanged */
 }
 
 /* Check[expr, failexpr] / Check[expr, failexpr, spec]: evaluate expr; if a
- * message fired during that evaluation, return the evaluated failexpr,
- * otherwise expr's value.  HoldAll.  A Throw propagates (it is not a
- * message).  The `spec` argument is ignored: any message counts. */
+ * message it can see fired during that evaluation -- one no Quiet inside the
+ * Check silenced, and, with a spec, one the spec names -- return the
+ * evaluated failexpr, otherwise expr's value.  HoldAll.  A Throw propagates
+ * (it is not a message). */
 Expr* builtin_check(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
-    unsigned long before = mth_msg_fired_count();
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 ||
+        res->data.function.arg_count > 3) return NULL;
+    int frame = g_check_depth;
+    if (!frames_reserve((void**)&g_checks, &g_checks_cap, frame, sizeof(CheckFrame)))
+        return NULL;
+    g_checks[frame].quiet_height = g_msg_suppress_depth;
+    g_checks[frame].fired = 0;
+    g_checks[frame].spec = res->data.function.arg_count == 3 ? res->data.function.args[2] : NULL;
+    g_check_depth = frame + 1;
     Expr* val = evaluate(res->data.function.args[0]);
+    int fired = g_check_depth > frame && g_checks[frame].fired;
+    g_check_depth = frame;
     if (val && eval_is_inflight_unwind(val)) return val;
-    if (mth_msg_fired_count() != before) {
+    if (fired) {
         if (val) expr_free(val);
         return evaluate(res->data.function.args[1]);
     }
@@ -459,14 +615,18 @@ void message_init(void) {
     symtab_add_builtin("Quiet", builtin_quiet);
     symtab_get_def("Quiet")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Quiet",
-        "Quiet[expr] evaluates expr with messages suppressed and returns its value. "
-        "Quiet[expr, spec] suppresses all messages regardless of spec.");
+        "Quiet[expr] evaluates expr with messages suppressed and returns its value.\n"
+        "Quiet[expr, {s1::t1, ...}] suppresses only the named messages (General::t names t\n"
+        "\tunder every head; All and None also work). A suppressed message is not seen by a\n"
+        "\tCheck outside the Quiet, so Check[Quiet[1/0]; 5, 7] is 5.");
 
     symtab_add_builtin("Check", builtin_check);
     symtab_get_def("Check")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Check",
         "Check[expr, failexpr] returns failexpr if a message is generated while "
-        "evaluating expr, otherwise the value of expr.");
+        "evaluating expr, otherwise the value of expr.\n"
+        "Check[expr, failexpr, {s1::t1, ...}] checks only for the named messages.\n"
+        "\tA message suppressed by a Quiet inside the Check does not count.");
 
     symtab_add_builtin("Message", builtin_message);
     symtab_get_def("Message")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;

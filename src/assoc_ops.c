@@ -45,13 +45,12 @@
 /* Emit a Wolfram-style diagnostic ("Head::tag: text") unless Quiet is active.
  * The firing is always noted so Check[] sees it. */
 static void ops_msg(const char* fmt, ...) {
-    mth_msg_note_fired();
-    if (mth_msg_suppressed()) return;
+    /* Through the funnel by name, so Quiet[e, Head::tag] and
+     * Check[e, f, Head::tag] see which message this is. */
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+    mth_message_linev(0, fmt, ap);
     va_end(ap);
-    fputc('\n', stderr);
 }
 
 #define ARGC(e)   ((e)->data.function.arg_count)

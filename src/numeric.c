@@ -558,7 +558,63 @@ static Expr* leaf_from_bigint(const mpz_t v, NumericSpec spec) {
  *  A recognized constant → its numeric value.
  *  Anything else (Infinity, True, user symbols) → a fresh copy.
  * ---------------------------------------------------------------------- */
+static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
+
+/* Depth of N-value rewrites in progress (n_value below): a rule whose value
+ * mentions its own tag again must not recurse without bound. */
+static int g_n_value_depth = 0;
+
+/* Does `tag` carry an UpValue for N -- z2 /: N[z2] = 1.5, h /: N[h[x_]] := ...,
+ * or N[z4] = 5, which is stored the same way? */
+static bool has_n_upvalue(const char* tag) {
+    for (Rule* r = symtab_get_up_values(tag); r; r = r->next) {
+        const Expr* p = r->pattern;
+        while (p && p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+               (p->data.function.head->data.symbol.name == SYM_HoldPattern ||
+                p->data.function.head->data.symbol.name == SYM_Condition) &&
+               p->data.function.arg_count >= 1)
+            p = p->data.function.args[0];
+        if (p && p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+            p->data.function.head->data.symbol.name == SYM_N)
+            return true;
+    }
+    return false;
+}
+
+/* The value an N rule gives the symbol or call `e` whose tag is `tag`, at the
+ * working precision -- N[e] at machine precision, N[e, digits] otherwise -- then
+ * numericalized itself (z2 /: N[z2] = 3/2 gives 1.5); NULL when no N rule of
+ * tag applies.  This is how N[2 + z2] reaches z2's rule inside a sum, as in the
+ * reference.  A rule written N[z2] = ... has no precision argument, so like the
+ * reference's N-value for {MachinePrecision, MachinePrecision} it serves only
+ * machine N. */
+static Expr* n_value(const Expr* e, const char* tag, NumericSpec spec) {
+    if (symtab_up_value_count == 0 || g_n_value_depth > 64 || !has_n_upvalue(tag)) return NULL;
+    Expr* call;
+    if (spec.mode == NUMERIC_MODE_MACHINE) {
+        Expr* a[1] = { expr_copy((Expr*)e) };
+        call = expr_new_function(expr_new_symbol(SYM_N), a, 1);
+    } else {
+        Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)(spec.bits * 0.30102999566398120 + 0.5)) };
+        call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
+    }
+    Expr* v = apply_up_values(call);
+    expr_free(call);
+    if (!v) return NULL;
+    g_n_value_depth++;
+    Expr* ev = evaluate(v);
+    expr_free(v);
+    Expr* out = numericalize_rec(ev, spec);
+    expr_free(ev);
+    g_n_value_depth--;
+    return out;
+}
+
 static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
+    {
+        Expr* nv = n_value(e, e->data.symbol.name, spec);
+        if (nv) return nv;
+    }
     const NumericConstant* c = find_constant(e->data.symbol.name);
     if (c) {
 #ifdef USE_MPFR
@@ -601,6 +657,11 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
 static int g_n_held_depth = 0;
 
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
+    /* An N rule on the head (h /: N[h[x_]] := ...) gives the whole call's value. */
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
+        Expr* nv = n_value(e, e->data.function.head->data.symbol.name, spec);
+        if (nv) return nv;
+    }
     /* Root[Function[p_in_slot1], k] → companion-matrix all-roots backend,
      * canonical sort, Newton refinement.  Runs first because Root is
      * HoldAll and we must NOT numericalize its arguments (Slot[1] and the

@@ -219,12 +219,13 @@ void test_besselk_listable() {
 /* ---- derivative ----------------------------------------------------- */
 
 void test_besselk_derivative() {
-    /* Sign differs from BesselJ: -(K_{n-1} + K_{n+1})/2. */
+    /* Sign differs from BesselJ: -(K_{n-1} + K_{n+1})/2, which (as in the
+     * reference) the sign distribution writes (-K_{n-1} - K_{n+1})/2. */
     assert_eval_eq("D[BesselK[n, x], x]",
-                   "-1/2 (BesselK[-1 + n, x] + BesselK[1 + n, x])", 0);
+                   "1/2 (-BesselK[-1 + n, x] - BesselK[1 + n, x])", 0);
     /* Chain rule through the argument. */
     assert_eval_eq("D[BesselK[n, x^2], x]",
-                   "-x (BesselK[-1 + n, x^2] + BesselK[1 + n, x^2])", 0);
+                   "x (-BesselK[-1 + n, x^2] - BesselK[1 + n, x^2])", 0);
     /* No x-dependence -> 0. */
     assert_eval_eq("D[BesselK[n, y], x]", "0", 0);
 }
@@ -237,7 +238,7 @@ void test_besselk_series_zero() {
         "1/8 (2 - 2 EulerGamma + 2 Log[2] - 2 Log[x]) x^2 + O[x]^4", 0);
     /* Integer order >= 1 carries a pole and a logarithmic part. */
     assert_eval_eq("Series[BesselK[1, x], {x, 0, 1}]",
-        "1/x - 1/4 (1 - 2 EulerGamma + 2 Log[2] - 2 Log[x]) x + O[x]^2", 0);
+        "1/x + 1/4 (-1 + 2 EulerGamma - 2 Log[2] + 2 Log[x]) x + O[x]^2", 0);
     assert_eval_eq("Series[BesselK[2, x], {x, 0, 0}]",
         "2/x^2 - 1/2 + O[x]^1", 0);
 }

@@ -273,6 +273,10 @@ void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* repl
 // Get rules
 Rule* symtab_get_own_values(const char* symbol_name);
 Rule* symtab_get_down_values(const char* symbol_name);
+// Unlink the DownValue whose LHS is exactly `lhs` (canonicalised); caller owns
+// the returned rule (or NULL). Free a detached rule with symtab_rule_free.
+Rule* symtab_detach_down_value_exact(const char* symbol_name, Expr* lhs);
+void  symtab_rule_free(Rule* r);
 
 // Apply DownValues to an expression f[...]
 // Returns new evaluated expression if a rule applied, else NULL

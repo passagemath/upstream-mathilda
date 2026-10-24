@@ -114,6 +114,87 @@ static bool is_lit_zero(Expr* e) {
     return false;
 }
 
+/* The sum factor of a term c P (P a Plus) with its coefficient c (owned), or
+ * NULL when the term has not exactly one sum factor. */
+static const Expr* coef_term_sum(const Expr* t, Expr** coef) {
+    if (!t || t->type != EXPR_FUNCTION || t->data.function.head->type != EXPR_SYMBOL ||
+        t->data.function.head->data.symbol.name != SYM_Times)
+        return NULL;
+    const Expr* sum = NULL;
+    size_t n = t->data.function.arg_count, k = 0;
+    Expr** rest = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = t->data.function.args[i];
+        bool is_sum = f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                      f->data.function.head->data.symbol.name == SYM_Plus;
+        if (is_sum && !sum) sum = f;
+        else rest[k++] = expr_copy((Expr*)f);
+    }
+    if (!sum || k == n) { for (size_t i = 0; i < k; i++) expr_free(rest[i]); free(rest); return NULL; }
+    *coef = k == 0 ? expr_new_integer(1)
+          : k == 1 ? rest[0]
+          : expr_new_function(expr_new_symbol(SYM_Times), rest, k);
+    free(rest);
+    return sum;
+}
+
+/* A summed series coefficient holding a cancelling pair c P + c Q, Q being P
+ * negated term by term -- 1/2 (a + b) + 1/2 (-a - b), the shape -(1/2)(a + b)
+ * takes once the sign distributes; Plus does not collect it (nor does the
+ * reference's) -- has the pair removed. The test is structural (Q against
+ * the term-wise negation of P), linear in the size of the pair: no Expand,
+ * which on the large coefficients of a deep tower would not finish. Consumes
+ * `sum`. */
+static Expr* coef_cancel(Expr* sum) {
+    if (!sum || sum->type != EXPR_FUNCTION || sum->data.function.head->type != EXPR_SYMBOL ||
+        sum->data.function.head->data.symbol.name != SYM_Plus)
+        return sum;
+    size_t n = sum->data.function.arg_count;
+    bool* gone = NULL;
+    for (size_t i = 0; i < n; i++) {
+        if (gone && gone[i]) continue;
+        Expr* ci = NULL;
+        const Expr* pi = coef_term_sum(sum->data.function.args[i], &ci);
+        if (!pi) continue;
+        Expr* neg = NULL;          /* -P term by term, built on demand */
+        for (size_t j = i + 1; j < n; j++) {
+            if (gone && gone[j]) continue;
+            Expr* cj = NULL;
+            const Expr* pj = coef_term_sum(sum->data.function.args[j], &cj);
+            if (!pj) continue;
+            bool same_c = expr_eq(ci, cj);
+            expr_free(cj);
+            if (!same_c || pj->data.function.arg_count != pi->data.function.arg_count) continue;
+            if (!neg) {
+                size_t m = pi->data.function.arg_count;
+                Expr** t = malloc(sizeof(Expr*) * (m ? m : 1));
+                for (size_t k = 0; k < m; k++)
+                    t[k] = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(pi->data.function.args[k]) }, 2);
+                neg = simp(expr_new_function(expr_new_symbol(SYM_Plus), t, m));
+                free(t);
+            }
+            if (expr_eq(neg, pj)) {
+                if (!gone) gone = calloc(n, sizeof(bool));
+                gone[i] = gone[j] = true;
+                break;
+            }
+        }
+        if (neg) expr_free(neg);
+        expr_free(ci);
+    }
+    if (!gone) return sum;
+    Expr** keep = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++)
+        if (!gone[i]) keep[m++] = expr_copy(sum->data.function.args[i]);
+    free(gone);
+    expr_free(sum);
+    Expr* out = simp(expr_new_function(expr_new_symbol(SYM_Plus), keep, m));
+    free(keep);
+    return out;
+}
+
 static bool has_symbol_head(Expr* e, const char* name) {
     return e && e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
@@ -529,7 +610,7 @@ static SeriesObj* so_add(SeriesObj* a, SeriesObj* b) {
         int64_t ib = k - bb->nmin;
         if (ia >= 0 && (size_t)ia < aa->coef_count) sum = simp(mk_plus(sum, expr_copy(aa->coefs[ia])));
         if (ib >= 0 && (size_t)ib < bb->coef_count) sum = simp(mk_plus(sum, expr_copy(bb->coefs[ib])));
-        so_set_coef(r, (size_t)(k - new_nmin), sum);
+        so_set_coef(r, (size_t)(k - new_nmin), coef_cancel(sum));
     }
     so_free(aa); so_free(bb);
     return r;
@@ -579,6 +660,8 @@ static SeriesObj* so_mul(SeriesObj* a, SeriesObj* b) {
             so_set_coef(r, idx, sum);
         }
     }
+    for (size_t idx = 0; idx < r->coef_count; idx++)
+        so_set_coef(r, idx, coef_cancel(expr_copy(r->coefs[idx])));
     so_free(aa); so_free(bb);
     return r;
 }

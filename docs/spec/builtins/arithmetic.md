@@ -60,6 +60,15 @@ Numerical evaluation.
 - `N[expr]` — machine-precision approximation.
 - `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
 
+**N-values**: a rule for `N` attached to a symbol or a head is used wherever
+that symbol or call occurs, not only at the top: after `z2 /: N[z2] = 3/2` and
+`h /: N[h[x_]] := 2 x`, `N[2 + z2]` is `3.5` and `N[1 + h[3]]` is `7.`. The
+assignment `N[x] = v` (or `N[f[...]] := v`) stores the same rule on `x` (or on
+`f`), since `N` itself is `Protected`. A rule's value is numericalized itself
+(`N[x] = 5` makes `N[x]` `5.`). A rule written without a precision argument
+serves machine-precision `N` only, as the reference's N-value for
+`{MachinePrecision, MachinePrecision}` does. `NValues` is not provided.
+
 **Held arguments**: in a position its head holds (`If`'s branches, a
 `Function` body, any `HoldFirst`/`HoldRest`/`HoldAll` slot) `N` numericalizes the
 structure but does not evaluate it: `N[If[y == 2, Print[a], y + 1]]` is
@@ -410,6 +419,12 @@ Symbolic product.
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.
+- **Sign distribution.** A product of exactly two factors, a coefficient `-1`
+  or `-1/n` and a sum, distributes the sign over the sum, as in the reference:
+  `-(-1 + x)` is `1 - x`, `-(x + y) z` is `(-x - y) z` (the parser reads it as
+  `Times[Times[-1, x + y], z]`), and `Times[-1/2, x + y]` is `(-x - y)/2`. Any
+  other shape stays as it is: `Times[-1, x + y, z]`, `Times[-3/2, x + y]`,
+  `Times[-1., x + y]` and `-(x + y)^2`.
 - **Sqrt-coefficient absorption**: a non-trivial rational/integer coefficient
   combined with a single `Power[r, -1/2]` group folds into the canonical
   reference form `sign(c) * Sqrt[c^2 / r]`, then Power's existing
@@ -513,6 +528,13 @@ Exponentiation.
 - `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
+- A negative exact coefficient (other than `-1`) in a product under a rational
+  power comes out as its magnitude, the sign staying inside:
+  `Sqrt[-4 (1 - x^2)]` is `2 Sqrt[-1 + x^2]` and `(-8 a)^(1/3)` is
+  `2 (-a)^(1/3)`, as in the reference (`(c w)^p = (-c)^p (-w)^p` for `c < 0`).
+  Gated, like the positive case, on the magnitude reducing cleanly
+  (v0.591). The reference also splits a coefficient that does not reduce
+  (`Sqrt[12 a]` is `2 Sqrt[3] Sqrt[a]`); Mathilda keeps `Sqrt[12 a]`.
 - Supports complex results for negative bases (e.g., `(-1)^(1/2)` becomes `I`).
   Higher-power cases for `q == 2` now also reduce: `(-1)^(3/2) → -I`,
   `(-1)^(5/2) → I`, `(-12)^(3/2) → -24 I Sqrt[3]` (the principal-branch

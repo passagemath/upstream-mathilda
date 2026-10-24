@@ -198,8 +198,8 @@ static void test_nullspace_symbolic_3x3(void) {
      * as Times[-1, Plus[Times[a, Power[b,-1]], Times[Power[b,-1], c]]];
      * mathematically equivalent to -(a+c)/b. */
     run_test("NullSpace[{{a, b, c}, {c, b, a}, {0, 0, 0}}]",
-             "List[List[1, Times[-1, Plus[Times[a, Power[b, -1]], "
-             "Times[Power[b, -1], c]]], 1]]");
+             "List[List[1, Plus[Times[-1, a, Power[b, -1]], "
+             "Times[-1, Power[b, -1], c]], 1]]");
 }
 
 /* Rectangular non-square: shape 3x4, rank 3, one free col.

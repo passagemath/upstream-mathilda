@@ -353,6 +353,78 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     return node;
 }
 
+/* Split a term c P (P a sum, c the product of the other factors) into its
+ * sum factor P (borrowed) and coefficient c (owned); NULL when the term has
+ * not exactly one sum factor. */
+static const Expr* fe_term_sum(const Expr* t, Expr** coef) {
+    if (!fe_is_head(t, SYM_Times)) return NULL;
+    const Expr* sum = NULL;
+    size_t n = t->data.function.arg_count;
+    Expr** rest = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* f = t->data.function.args[i];
+        if (fe_is_head(f, SYM_Plus)) {
+            if (sum) { for (size_t j = 0; j < k; j++) expr_free(rest[j]); free(rest); return NULL; }
+            sum = f;
+        } else {
+            rest[k++] = expr_copy((Expr*)f);
+        }
+    }
+    if (!sum) { for (size_t j = 0; j < k; j++) expr_free(rest[j]); free(rest); return NULL; }
+    *coef = k == 0 ? expr_new_integer(1)
+          : k == 1 ? rest[0]
+          : expr_new_function(expr_new_symbol(SYM_Times), rest, k);
+    free(rest);
+    return sum;
+}
+
+/* Drop the pairs c P + c Q of a sum whose sum factors cancel, P + Q = 0 --
+ * the conjugate Clausen parts of PolyLog at a root of unity are built so
+ * they do, but -(c P) is c (-P) (the sign distributes over P), which Plus
+ * does not collect against c P. Only the cancelling pairs go; every other
+ * term keeps its form. Consumes `sum`. */
+static Expr* fe_cancel_pairs(Expr* sum) {
+    if (!fe_is_head(sum, SYM_Plus)) return sum;
+    size_t n = sum->data.function.arg_count;
+    bool* gone = calloc(n ? n : 1, sizeof(bool));
+    bool any = false;
+    for (size_t i = 0; i < n; i++) {
+        if (gone[i]) continue;
+        Expr* ci = NULL;
+        const Expr* pi = fe_term_sum(sum->data.function.args[i], &ci);
+        if (!pi) continue;
+        for (size_t j = i + 1; j < n && !gone[i]; j++) {
+            if (gone[j]) continue;
+            Expr* cj = NULL;
+            const Expr* pj = fe_term_sum(sum->data.function.args[j], &cj);
+            if (!pj) continue;
+            if (expr_eq(ci, cj)) {
+                Expr* z = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                    (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy((Expr*)pi), expr_copy((Expr*)pj) }, 2) }, 1));
+                if (z && z->type == EXPR_INTEGER && z->data.integer == 0) {
+                    gone[i] = gone[j] = true;
+                    any = true;
+                }
+                if (z) expr_free(z);
+            }
+            expr_free(cj);
+        }
+        expr_free(ci);
+    }
+    if (!any) { free(gone); return sum; }
+    Expr** keep = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t m = 0;
+    for (size_t i = 0; i < n; i++)
+        if (!gone[i]) keep[m++] = expr_copy(sum->data.function.args[i]);
+    free(gone);
+    expr_free(sum);
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), keep, m));
+    free(keep);
+    return out;
+}
+
 Expr* builtin_function_expand(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t na = res->data.function.arg_count;
@@ -360,6 +432,7 @@ Expr* builtin_function_expand(Expr* res) {
     bool changed = false;
     Expr* out = fe_walk(res->data.function.args[0], &changed, FE_ALL);
     /* Unchanged: hand back the (already evaluated) argument itself. */
+    if (out && changed) out = fe_cancel_pairs(eval_and_free(out));
     return out;
 }
 

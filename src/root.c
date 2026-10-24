@@ -32,9 +32,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Held builtin: the evaluator already left the call unevaluated by
- * the time we get here, so there is nothing to compute.  Returning
- * NULL preserves the input verbatim. */
+/* Held builtin: the evaluator already left the call unevaluated by the time
+ * we get here.  Only canonical forms are computed (the transcendental x0, the
+ * sign of the polynomial form); NULL preserves the input verbatim. */
+static Expr* subst_slot1(const Expr* e, const Expr* replacement);   /* fwd */
+
 static Expr* builtin_root(Expr* res) {
     /* Transcendental form Root[{f, x0}]: certify that f has a unique simple
      * root next to x0 and canonicalise x0 to the nearest machine number of
@@ -53,6 +55,62 @@ static Expr* builtin_root(Expr* res) {
             free(x0); free(fn);
         }
         return canon;
+    }
+    /* Polynomial form Root[f, k (, 0)]: the reference keeps f with a positive
+     * leading coefficient -- Root[-#^3 - 2 # + 1 &, 1] is
+     * Root[-1 + 2 #1 + #1^3 &, 1] -- which leaves the roots and their index
+     * unchanged. A non-numeric leading coefficient is left alone. */
+    if (res->data.function.arg_count >= 2) {
+        Expr* fn = res->data.function.args[0];
+        if (fn->type != EXPR_FUNCTION || fn->data.function.head->type != EXPR_SYMBOL ||
+            fn->data.function.head->data.symbol.name != SYM_Function ||
+            fn->data.function.arg_count != 1)
+            return NULL;
+        Expr* t = expr_new_symbol("Root`Private`t");
+        Expr* body = subst_slot1(fn->data.function.args[0], t);
+        Expr* deg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Exponent),
+                        (Expr*[]){ expr_copy(body), expr_copy(t) }, 2));
+        Expr* lc = (deg && deg->type == EXPR_INTEGER && deg->data.integer >= 1)
+            ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                  (Expr*[]){ expr_copy(body), expr_copy(t), expr_copy(deg) }, 3))
+            : NULL;
+        bool negative = lc && ((lc->type == EXPR_INTEGER && lc->data.integer < 0) ||
+                               (lc->type == EXPR_BIGINT && mpz_sgn(lc->data.bigint) < 0) ||
+                               (lc->type == EXPR_FUNCTION && lc->data.function.head->type == EXPR_SYMBOL &&
+                                lc->data.function.head->data.symbol.name == SYM_Rational &&
+                                lc->data.function.args[0]->type == EXPR_INTEGER &&
+                                lc->data.function.args[0]->data.integer < 0));
+        if (lc) expr_free(lc);
+        if (deg) expr_free(deg);
+        if (!negative) { expr_free(body); expr_free(t); return NULL; }
+        /* Negate term by term, keeping the polynomial's term order (Function
+         * holds its body, so nothing re-sorts it); a non-sum is expanded. */
+        expr_free(body);
+        expr_free(t);
+        Expr* old = fn->data.function.args[0];
+        Expr* neg;
+        if (old->type == EXPR_FUNCTION && old->data.function.head->type == EXPR_SYMBOL &&
+            old->data.function.head->data.symbol.name == SYM_Plus) {
+            size_t m = old->data.function.arg_count;
+            Expr** terms = malloc(sizeof(Expr*) * (m ? m : 1));
+            for (size_t i = 0; i < m; i++)
+                terms[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(old->data.function.args[i]) }, 2));
+            neg = expr_new_function(expr_new_symbol(SYM_Plus), terms, m);
+            free(terms);
+        } else {
+            neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                      (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(-1), expr_copy(old) }, 2) }, 1));
+        }
+        Expr* nf = expr_new_function(expr_new_symbol(SYM_Function), &neg, 1);
+        size_t n = res->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * n);
+        a[0] = nf;
+        for (size_t i = 1; i < n; i++) a[i] = expr_copy(res->data.function.args[i]);
+        Expr* out = expr_new_function(expr_new_symbol(SYM_Root), a, n);
+        free(a);
+        return out;
     }
     return NULL;
 }

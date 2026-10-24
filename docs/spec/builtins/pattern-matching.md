@@ -195,6 +195,12 @@ Gives the number of elements or subexpressions that match a pattern.
   defaults, which `OptionValue` uses for an option that was not passed:
   `q[x_, OptionsPattern[{o -> 1}]] := OptionValue[o]` gives `q[1] == 1` and
   `q[1, o -> 2] == 2` (v0.475).
+- **Named and guarded.** `opts:OptionsPattern[]` binds `opts` to the option
+  arguments as written: a list of rules stays a list (`f[x_, o:OptionsPattern[]]
+  := {o}; f[1, {a -> 1}, b -> 2]` is `{{a -> 1}, b -> 2}`). A guard on it,
+  `(opts:OptionsPattern[]) /; test`, is checked once the options are bound
+  (`Isolate[ex_, (opts:OptionsPattern[]) /; opts =!= {}] := ...`); it used to
+  never match (v0.591).
 
 ```mathematica
 In[1]:= Options[g] = {a -> 1, b -> 2};

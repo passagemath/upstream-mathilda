@@ -1449,6 +1449,49 @@ Expr* builtin_times(Expr* res) {
      * the ORDERLESS block in eval.c. The leading numeric coefficient still
      * sorts first (numbers precede symbols/powers in expr_compare). */
     if (idx >= 2 && orderless) expr_orderless_sort(final_args, idx);   /* memoized symbol sets */
+    /* A product of exactly a coefficient -1 or -1/n and a sum distributes the
+     * sign, as in the reference: -(-1 + x) is 1 - x, Times[-1/2, x + y] is
+     * (-x - y)/2. Only these two shapes: Times[-3/2, x + y], Times[-1., x + y],
+     * Times[-1, x + y, z] and -(x + y)^2 stay as they are. */
+    if (idx == 2 && final_args[1]->type == EXPR_FUNCTION &&
+        final_args[1]->data.function.head->type == EXPR_SYMBOL &&
+        final_args[1]->data.function.head->data.symbol.name == SYM_Plus) {
+        Expr* c = final_args[0];
+        bool minus_one = c->type == EXPR_INTEGER && c->data.integer == -1;
+        bool minus_unit_frac = c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+            c->data.function.head->data.symbol.name == SYM_Rational && c->data.function.arg_count == 2 &&
+            c->data.function.args[0]->type == EXPR_INTEGER && c->data.function.args[0]->data.integer == -1;
+        if (minus_one || minus_unit_frac) {
+            Expr* sum = final_args[1];
+            size_t m = sum->data.function.arg_count;
+            Expr** terms = malloc(sizeof(Expr*) * (m ? m : 1));
+            for (size_t i = 0; i < m; i++)
+                terms[i] = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(sum->data.function.args[i]) }, 2);
+            Expr* neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, m));
+            free(terms);
+            expr_free(sum);
+            Expr* out;
+            if (minus_one) {
+                expr_free(c);
+                out = neg;
+            } else {
+                Expr* inv = make_rational(1, c->data.function.args[1]->type == EXPR_INTEGER
+                                             ? c->data.function.args[1]->data.integer : 1);
+                bool big_den = c->data.function.args[1]->type != EXPR_INTEGER;
+                if (big_den) {
+                    /* -1/n with a bignum n: 1/n is Rational[1, n]. */
+                    expr_free(inv);
+                    inv = expr_new_function(expr_new_symbol(SYM_Rational),
+                        (Expr*[]){ expr_new_integer(1), expr_copy(c->data.function.args[1]) }, 2);
+                }
+                expr_free(c);
+                out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ inv, neg }, 2));
+            }
+            if (heap_bufs) free(final_args);
+            return out;
+        }
+    }
     Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     if (heap_bufs) free(final_args);
     return result;

@@ -1519,6 +1519,7 @@ Gives a list of the irreducible factors of a polynomial together with their expo
 - `Listable`, `Protected`.
 - A thin wrapper over `Factor`: it factors via `Factor[poly, opts...]` (options are forwarded verbatim) and splits the product into `{factor, exponent}` pairs.
 - The first element is always the overall numerical factor `{c, 1}` — it is `{1, 1}` when there is no numerical factor.
+- Every factor has a positive leading coefficient (lexicographic, as `CoefficientRules` orders terms), its sign going into the numerical factor: `FactorList[-x - 1]` is `{{-1, 1}, {1 + x, 1}}`, `FactorList[y - x]` is `{{-1, 1}, {x - y, 1}}`. Needed since `-(1 + x)` itself evaluates to `-1 - x` (v0.591).
 - Denominator factors of a rational function appear with negative exponents.
 - `Times @@ Power @@@ FactorList[poly]` reconstructs `poly` (up to `Factor`'s normal form).
 - Because it delegates to `Factor`, the factorisation depth and normal form (factor ordering, `Extension`/`GaussianIntegers` handling) are exactly `Factor`'s.

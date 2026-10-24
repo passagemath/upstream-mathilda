@@ -141,6 +141,8 @@ def main():
     ap.add_argument("--timeout", type=int, default=60, help="per-test budget, seconds")
     ap.add_argument("--shard-timeout", type=int, default=3600, help="per-process budget, seconds")
     ap.add_argument("--binary", default=os.path.join(REPO, "Mathilda"))
+    ap.add_argument("--results-dir", default=os.path.join(HARNESS, "results"),
+                    help="where the per-directory .tsv go (an A/B run against another binary)")
     ap.add_argument("--update-baseline", action="store_true")
     ap.add_argument("--triage", action="store_true", help="print verdict and message histograms")
     ap.add_argument("--quiet", action="store_true")
@@ -171,14 +173,14 @@ def main():
                       f"{c['PASS']}/{len(r['results'])} in {r['secs']:.0f}s{bad}", flush=True)
 
     # Results per label.
-    os.makedirs(os.path.join(HARNESS, "results"), exist_ok=True)
+    os.makedirs(a.results_dir, exist_ok=True)
     per = collections.defaultdict(dict)
     for r in runs:
         for i, (v, secs) in r["results"].items():
             d = r["details"].get(i, ["", "", ""])
             per[r["shard"]["label"]][i] = (v, secs, r["shard"]["file"], *d[:3])
     for lab, res in per.items():
-        path = os.path.join(HARNESS, "results", lab.replace("/", "_") + ".tsv")
+        path = os.path.join(a.results_dir, lab.replace("/", "_") + ".tsv")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write("id\tverdict\tseconds\tfile\tgot\texpected\tmessages\n")
             for i in sorted(res):

@@ -51,6 +51,10 @@ typedef struct {
                         // as its already-parsed left operand and goes straight
                         // to the infix loop -- how parse_next_expression
                         // continues `lhs := rhs;/; cond` past a statement `;`.
+    const char* chain_head; // Set by parse_expression_prec on return: the
+                        // flat operator chain (Plus/Times/...) it built its
+                        // result with, or NULL -- so a caller can tell a bare
+                        // `b c` operand from a parenthesised `(b c)`.
 } ParserState;
 
 /* Quiet mode: syntax errors are not printed, only signalled by the NULL result,
@@ -623,7 +627,14 @@ static Expr* parse_number(ParserState* s) {
      * longest munch, as in the Wolfram Language: `0..` is Repeated[0] and
      * `0...` is RepeatedNull[0], so a '.' that is itself followed by '.' is
      * never the literal's decimal point (issue #100). */
-    if ((*p == '.' && p[1] != '.') || *p == 'e' || *p == 'E') {
+    /* An `e`/`E` exponent (a Mathilda extension: the reference has only
+     * `*^`) counts only when digits follow it: `2e5` is 200000., while
+     * `2ep` is 2 ep and `3E` is 3 E, as the reference reads them -- the 'e'
+     * starts a symbol. It used to make `2ep` the Real 2. times ep. */
+    if ((*p == '.' && p[1] != '.') ||
+        ((*p == 'e' || *p == 'E') &&
+         (isdigit((unsigned char)p[1]) ||
+          ((p[1] == '+' || p[1] == '-') && isdigit((unsigned char)p[2]))))) {
         is_real = 1;
     }
 
@@ -1862,6 +1873,7 @@ static bool flat_continuation(const Expr* left, const OperatorDef* op) {
 
 // Pratt parser for operator precedence
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
+    s->chain_head = NULL;
     const char* left_start;
     Expr* left = NULL;
     bool left_bare_compare = false;
@@ -1870,6 +1882,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
      * parenthesized (a \[CenterDot] b) \[CenterDot] c nests, as in the
      * reference language. NULL when `left` is anything else. */
     const char* left_named_flat = NULL;
+    /* Head of the Plus / Times / NonCommutativeMultiply / StringJoin chain this
+     * loop built `left` with, so the next operator of that kind extends it
+     * (a b c is Times[a, b, c]). Anything else stays one operand, as the
+     * reference reads it: (a b) c and Times[a, b] c are Times[Times[a, b], c],
+     * and a prefix minus -(x + y) z is Times[Times[-1, x + y], z], so the
+     * negated sum distributes before the product forms. NULL otherwise. */
+    const char* left_flat_head = NULL;
     /* `left` is a `;`-chain built at this level (not a parenthesised one), so
      * a further `;` appends to it: a;b;c is flat, (a;b);c stays nested. */
     bool left_bare_compound = false;
@@ -2067,6 +2086,8 @@ infix_loop:
         left_bare_compare = false;
         const char* prev_named_flat = left_named_flat;
         left_named_flat = NULL;
+        const char* prev_flat_head = left_flat_head;
+        left_flat_head = NULL;
         bool prev_bare_compound = left_bare_compound;
         left_bare_compound = false;
         
@@ -2278,6 +2299,7 @@ infix_loop:
             (operand_omitted_at_line_end(s) || starts_binary_operator(s->pos)))
             right = expr_new_symbol(SYM_Null);
         if (!right) right = parse_expression_prec(s, next_min_prec);
+        const char* right_chain = right ? s->chain_head : NULL;
         if (!right) {
             skip_whitespace(s);
             if (op_def.type == OP_COMPOUND && *s->pos != '[') {
@@ -2292,15 +2314,31 @@ infix_loop:
         }
         
         if (op_def.type == OP_MINUS) {
-            Expr* minus_one = expr_new_integer(-1);
-            Expr* args_times[2] = { minus_one, right };
-            Expr* neg_right = expr_new_function(expr_new_symbol(SYM_Times), args_times, 2);
-            if (extend_flat_head(left, "Plus", neg_right)) {
+            /* a - b c is Plus[a, Times[-1, b, c]]: the -1 joins a bare product
+             * operand, while a - (b c) keeps Times[-1, Times[b, c]]. */
+            Expr* neg_right;
+            if (right_chain && strcmp(right_chain, "Times") == 0 && right->type == EXPR_FUNCTION &&
+                right->data.function.head->type == EXPR_SYMBOL &&
+                right->data.function.head->data.symbol.name == SYM_Times) {
+                size_t rn = right->data.function.arg_count;
+                Expr** ta = malloc(sizeof(Expr*) * (rn + 1));
+                ta[0] = expr_new_integer(-1);
+                for (size_t i = 0; i < rn; i++) ta[i + 1] = expr_copy(right->data.function.args[i]);
+                expr_free(right);
+                neg_right = expr_new_function(expr_new_symbol(SYM_Times), ta, rn + 1);
+                free(ta);
+            } else {
+                Expr* args_times[2] = { expr_new_integer(-1), right };
+                neg_right = expr_new_function(expr_new_symbol(SYM_Times), args_times, 2);
+            }
+            if (prev_flat_head && strcmp(prev_flat_head, "Plus") == 0 &&
+                extend_flat_head(left, "Plus", neg_right)) {
                 /* left is now the extended Plus; keep it */
             } else {
                 Expr* args_plus[2] = { left, neg_right };
                 left = expr_new_function(expr_new_symbol(SYM_Plus), args_plus, 2);
             }
+            left_flat_head = "Plus";
         } else if (op_def.type == OP_DIVIDE) {
             if (left->type == EXPR_INTEGER && right->type == EXPR_INTEGER) {
                 Expr* rat_args[2] = { left, right };
@@ -2415,13 +2453,10 @@ infix_loop:
             /* Flatten repeated Plus/Times/NonCommutativeMultiply at parse time
              * so that held expressions reflect the n-ary form
              * (a+b+c -> Plus[a,b,c]; a**b**c -> NonCommutativeMultiply[a,b,c]). */
-            else if (op_def.head_name &&
-                (strcmp(op_def.head_name, "Plus") == 0 ||
-                 strcmp(op_def.head_name, "Times") == 0 ||
-                 strcmp(op_def.head_name, "NonCommutativeMultiply") == 0 ||
-                 strcmp(op_def.head_name, "StringJoin") == 0) &&
+            else if (op_def.head_name && prev_flat_head &&
+                strcmp(prev_flat_head, op_def.head_name) == 0 &&
                 extend_flat_head(left, op_def.head_name, right)) {
-                /* left was extended in place */
+                left_flat_head = prev_flat_head;      /* left was extended in place */
             } else {
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
@@ -2432,10 +2467,16 @@ infix_loop:
                 if (op_def.head_name && (is_chain_compare_head(op_def.head_name)
                                          || is_nary_compare_head(op_def.head_name)))
                     left_bare_compare = true;
+                if (op_def.head_name &&
+                    (strcmp(op_def.head_name, "Plus") == 0 || strcmp(op_def.head_name, "Times") == 0 ||
+                     strcmp(op_def.head_name, "NonCommutativeMultiply") == 0 ||
+                     strcmp(op_def.head_name, "StringJoin") == 0))
+                    left_flat_head = op_def.head_name;
             }
         }
     }
 
+    s->chain_head = left_flat_head;
     return left;
 }
 
@@ -2445,7 +2486,7 @@ static Expr* parse_expression_state(ParserState* s) {
 
 // Public interface
 Expr* parse_expression(const char* input) {
-    ParserState state = {input, input, 0, 0, NULL, 0, 0, NULL, NULL, NULL};
+    ParserState state = {input, input, 0, 0, NULL, 0, 0, NULL, NULL, NULL, NULL};
     Expr* result = parse_expression_state(&state);
     
     // Check for trailing garbage
@@ -2481,7 +2522,7 @@ void parse_materialize_user_symbols(const Expr* e) {
 
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
-    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL, NULL};
+    ParserState state = {*input_ptr, *input_ptr, 0, 0, NULL, 0, 0, NULL, NULL, NULL, NULL};
 
     /* Skip leading whitespace, comments, and empty ';' separators so that a
      * stray or doubled separator never yields a spurious empty statement. */
@@ -2598,7 +2639,7 @@ int parse_statement_each(const char* input, int line_statements, const char** er
              * whitespace: start one bracket level deep so no newline can
              * terminate the expression, and require it to fill the input. */
             ParserState st = {input, p, line_statements ? 0 : 1, 0, NULL, 0,
-                              line_statements, NULL, NULL, NULL};
+                              line_statements, NULL, NULL, NULL, NULL};
             stmt = parse_expression_prec(&st, 0);
             int ok = stmt != NULL;
             if (ok && line_statements) {
@@ -2669,7 +2710,7 @@ MthSpanSink* mth_parse_spans(const char* input) {
     if (!sink || !input) return sink;
     const char* p = input;
     while (*p) {
-        ParserState state = {input, p, 0, 0, sink, 0, 0, NULL, NULL, NULL};
+        ParserState state = {input, p, 0, 0, sink, 0, 0, NULL, NULL, NULL, NULL};
         /* Skip leading whitespace, comments, and empty ';' separators. */
         for (;;) {
             skip_whitespace(&state);

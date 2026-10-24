@@ -60,6 +60,15 @@ bool iter_spec_parse(Expr* spec, IterSpec* out);
  */
 bool iter_spec_parse_lattice(Expr* spec, IterSpec* out);
 
+/* Is the iterator variable an indexed one, v[k] (only the discrete iterators
+ * accept it)? Such a variable is bound as the DownValue v[k] = value. */
+bool iter_var_is_indexed(const Expr* var);
+
+/* Bind the iterator variable to `value` for one step: an OwnValue of a symbol,
+ * or the DownValue v[k] = value of an indexed variable.  Pair the loop with
+ * iter_spec_shadow / iter_spec_restore, which save and restore either kind. */
+void iter_bind(Expr* var, Expr* value);
+
 /* Free every Expr* owned by `s` and zero it.  NULL-safe. */
 void iter_spec_free(IterSpec* s);
 

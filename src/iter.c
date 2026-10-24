@@ -150,6 +150,15 @@ bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di) {
     return true;
 }
 
+/* Set by iter_spec_parse_lattice while it parses: Table, Do, Sum and Product
+ * accept an indexed iterator variable (v[1], ll[k]); the plotters do not. */
+static bool g_iter_allow_indexed = false;
+
+bool iter_var_is_indexed(const Expr* v) {
+    return v && v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+           v->data.function.head->data.symbol.name != SYM_List;
+}
+
 bool iter_spec_parse(Expr* spec, IterSpec* out) {
     memset(out, 0, sizeof(*out));
     out->kind = ITER_KIND_COUNT;
@@ -163,9 +172,12 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
         }
         if (len < 2) return false;             /* {} -- malformed */
 
-        /* {i, ...} -- first arg must be the iterator symbol. */
+        /* {i, ...} -- first arg must be the iterator symbol, or for the
+         * discrete iterators an indexed variable v[k] (Table[v[1], {v[1], 3}]
+         * binds v[1] = 1, 2, 3 as a DownValue, restored afterwards). */
         Expr* v = spec->data.function.args[0];
-        if (v->type != EXPR_SYMBOL) return false;
+        if (v->type != EXPR_SYMBOL && !(g_iter_allow_indexed && iter_var_is_indexed(v)))
+            return false;
         out->var = expr_copy(v);
 
         if (len == 2) {
@@ -238,7 +250,10 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
 }
 
 bool iter_spec_parse_lattice(Expr* spec, IterSpec* out) {
-    if (!iter_spec_parse(spec, out)) return false;
+    g_iter_allow_indexed = true;
+    bool ok = iter_spec_parse(spec, out);
+    g_iter_allow_indexed = false;
+    if (!ok) return false;
     if (out->kind == ITER_KIND_RANGE)
         iter_normalize_bounds(out->imin, &out->imax, out->di);
     return true;
@@ -331,6 +346,8 @@ bool iter_range_continue_bigint(const Expr* curr_e, const Expr* imax_e, double d
 }
 
 Rule* iter_spec_shadow(Expr* var) {
+    if (iter_var_is_indexed(var))
+        return symtab_detach_down_value_exact(var->data.function.head->data.symbol.name, var);
     if (!var || var->type != EXPR_SYMBOL) return NULL;
     SymbolDef* def = symtab_get_def(var->data.symbol.name);
     Rule* old = def->own_values;
@@ -338,7 +355,24 @@ Rule* iter_spec_shadow(Expr* var) {
     return old;
 }
 
+void iter_bind(Expr* var, Expr* value) {
+    if (iter_var_is_indexed(var))
+        symtab_add_down_value_as(var->data.function.head->data.symbol.name, var, value, false);
+    else
+        symtab_add_own_value(var->data.symbol.name, var, value);
+}
+
 void iter_spec_restore(Expr* var, Rule* saved_own) {
+    if (iter_var_is_indexed(var)) {
+        const char* h = var->data.function.head->data.symbol.name;
+        Rule* ours = symtab_detach_down_value_exact(h, var);
+        if (ours) symtab_rule_free(ours);
+        if (saved_own) {
+            symtab_add_down_value_as(h, saved_own->pattern, saved_own->replacement, saved_own->delayed);
+            symtab_rule_free(saved_own);
+        }
+        return;
+    }
     if (!var || var->type != EXPR_SYMBOL) return;
     SymbolDef* def = symtab_get_def(var->data.symbol.name);
     Rule* r = def->own_values;
@@ -524,6 +558,7 @@ Expr* builtin_do(Expr* res) {
         Expr* fast = numloop_do_count(expr, imax_e->data.integer);
         if (fast) { iter_spec_free(&s); return fast; }
     } else if (!is_n_times && !is_list_iter && !is_inf && !is_real && var_sym &&
+               var_sym->type == EXPR_SYMBOL &&
                imin_e && imin_e->type == EXPR_INTEGER &&
                imax_e && imax_e->type == EXPR_INTEGER &&
                (!di_e || di_e->type == EXPR_INTEGER)) {
@@ -560,7 +595,7 @@ Expr* builtin_do(Expr* res) {
     } else if (is_list_iter) {
         /* {i, {a, b, c, ...}} -- iterate over explicit list elements. */
         for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
-            symtab_add_own_value(var_sym->data.symbol.name, var_sym, list_e->data.function.args[i]);
+            iter_bind(var_sym, list_e->data.function.args[i]);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
             IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
@@ -585,7 +620,7 @@ Expr* builtin_do(Expr* res) {
         Expr* curr_e = expr_copy(imin_e);
         while (iter_range_continue(is_real, is_inf, curr_e, imax_e, val, max_val, di_val)) {
             Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-            symtab_add_own_value(var_sym->data.symbol.name, var_sym, i_val);
+            iter_bind(var_sym, i_val);
 
             Expr* eval_expr = evaluate(expr);
             expr_free(i_val);

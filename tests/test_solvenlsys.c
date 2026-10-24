@@ -53,9 +53,9 @@ static void run_test(const char* input, const char* expected) {
 static void test_symmetric_pair(void) {
     run_test("Solve[x y == 1 && x + y == 3, {x, y}]",
         "List["
-          "List[Rule[x, Times[Rational[-1, 2], Plus[-3, Power[5, Rational[1, 2]]]]], "
+          "List[Rule[x, Times[Rational[1, 2], Plus[3, Times[-1, Power[5, Rational[1, 2]]]]]], "
                "Rule[y, Times[Rational[1, 2], Plus[3, Power[5, Rational[1, 2]]]]]], "
-          "List[Rule[x, Times[Rational[-1, 2], Plus[-3, Times[-1, Power[5, Rational[1, 2]]]]]], "
+          "List[Rule[x, Times[Rational[1, 2], Plus[3, Power[5, Rational[1, 2]]]]], "
                "Rule[y, Times[Rational[1, 2], Plus[3, Times[-1, Power[5, Rational[1, 2]]]]]]]]");
 }
 

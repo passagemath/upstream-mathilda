@@ -1869,6 +1869,7 @@ void sym_names_init(void) {
     SYM_Sum                        = intern_symbol("Sum");
     SYM_Together                   = intern_symbol("Together");
     SYM_Variables                  = intern_symbol("Variables");
+    SYM_CoefficientRules           = intern_symbol("CoefficientRules");
     SYM_Variance                   = intern_symbol("Variance");
     SYM_Moment                     = intern_symbol("Moment");
     SYM_CentralMoment              = intern_symbol("CentralMoment");

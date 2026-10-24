@@ -1774,7 +1774,19 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         if (is_pattern(base, &iname, &ipat)) seqcheck = ipat;
         Expr* dh = NULL; int dml = 0;
         Expr* drp = NULL; int drmin = 0, drmax = -1;
-        if (is_sequence_blank(seqcheck, &dh, &dml)
+        bool opts_pat = seqcheck->type == EXPR_FUNCTION
+            && seqcheck->data.function.head->type == EXPR_SYMBOL
+            && seqcheck->data.function.head->data.symbol.name == SYM_OptionsPattern;
+        if (opts_pat) {
+            /* (opts:OptionsPattern[]) /; test: the guard is checked once the
+             * options are bound (the OptionsPattern block below), as for a
+             * sequence blank. It used to never match: FeynCalc's
+             * Isolate[ex_, (opts:OptionsPattern[]) /; opts =!= {}] was dead. */
+            seq_cond = opt_pat;
+            if (iname && !bind_sym) bind_sym = iname;
+            else if (iname) extra_bind_sym = iname;
+            opt_pat = seqcheck;
+        } else if (is_sequence_blank(seqcheck, &dh, &dml)
             || is_repeated(seqcheck, &drp, &drmin, &drmax)) {
             seq_cond = opt_pat;              /* guard chain, evaluated at commit */
             if (iname && bind_sym) {         /* x:(block___ /; c): two names, one seq */
@@ -1898,17 +1910,24 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
              * empty match binds Sequence[] which vanishes on splice. Without
              * this only OptionValue (via $OptionsPattern$) works, not the
              * common opts-forwarding idiom. */
-            if (bind_sym && bind_sym->type == EXPR_SYMBOL) {
-                Expr** sitems = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
-                for (size_t i = 0; i < cnt; i++) sitems[i] = expr_copy(collected[i]);
-                Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), sitems, cnt);
+            /* The name binds the arguments as written -- {a -> 1}, b -> 2 stays
+             * a list and a rule, not the flattened rules -- as in the reference
+             * (f[x_, o:OptionsPattern[]] := {o}; f[1, {a->1}, b->2] is
+             * {{a -> 1}, b -> 2}). */
+            Expr* named[2] = { bind_sym, extra_bind_sym };
+            for (int nb = 0; nb < 2; nb++) {
+                if (!named[nb] || named[nb]->type != EXPR_SYMBOL) continue;
+                Expr** sitems = malloc(sizeof(Expr*) * (n_exprs ? n_exprs : 1));
+                for (size_t i = 0; i < n_exprs; i++) sitems[i] = expr_copy(exprs[i]);
+                Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), sitems, n_exprs);
                 free(sitems);
-                env_set(env, bind_sym->data.symbol.name, seq);
+                env_set(env, named[nb]->data.symbol.name, seq);
                 expr_free(seq);
             }
             /* Consume every remaining expr; the rest of the pattern list must
              * match against zero arguments. */
-            if (match_args_internal(exprs + n_exprs, 0, pats + 1, n_pats - 1, env,
+            if ((!seq_cond || eval_seq_conditions(seq_cond, env)) &&
+                match_args_internal(exprs + n_exprs, 0, pats + 1, n_pats - 1, env,
                                     condition, pat_head, total_pats, parent)) {
                 free(collected);
                 return true;

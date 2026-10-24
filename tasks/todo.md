@@ -4,7 +4,13 @@ Plan: ~/.claude/plans/let-s-continue-our-feyncalc-humble-karp.md. Gap doc: packa
 
 - [x] P1 named characters in source: WL classification table, lexer (letters/operators/constants/space), tests, docs ; v0.587 (full-suite A/B vs HEAD clean; match_stress_corpus 2000-deep case overflows only the unoptimised main test build)
 - [x] P2 harness: tools/feyncalc/run_fc_tests.m, tools/check_feyncalc.py, make check-feyncalc
-- [ ] P3 first baseline over the ten unit directories + root-cause triage (FEYNCALC_GAPS.md §7)
+- [x] T2 Check/Quiet nesting, Quiet/Check message specs, named emission of legacy helpers ; v0.588 (A/B Release vs Release: one regression found and fixed -- Inverse::sing via an anonymous helper)
+- [x] T3 assignment LHS pattern-free parts evaluated (h[y_ - 4]) ; v0.589 (Contract 67 -> 92 / 119)
+- [x] T7 Cycles/PermutationGroup/GroupElements/Permute over a group ; v0.590
+- [x] P3 first baseline (11362 pass, ~85% of runnable) + three triage agents (NCA+Tables, Dirac+Feynman, Shared+LoopIntegrals) -> FEYNCALC_GAPS.md §7
+- [x] Batch 1 ; v0.591: -(x+y) sign distribution + flat-chain parse provenance (+ Root sign, negative coefficient under radicals, FactorList sign, series/FunctionExpand cancelling pairs), HoldPattern LHS, ::write, N-values, indexed iterators, valued pattern heads, OptionsPattern guard/binding, 2ep lexer. Full A/B Release vs Release clean except pre-existing Fit WorkingPrecision sequence bug
+- [ ] Follow-up (pre-existing): Fit[..., WorkingPrecision -> 24] returns the exact fit after a WorkingPrecision -> Infinity call in the same session
+- [ ] Follow-up: positive non-reducing coefficient under radicals (Sqrt[12 a] -> 2 Sqrt[3] Sqrt[a] in the reference)
 - [ ] P4 acceptance loop: fix largest root-cause groups in the kernel, ratchet
 
 # SparseArray through the functional and procedural builtins (2026-10-24)

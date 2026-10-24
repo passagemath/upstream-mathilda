@@ -813,6 +813,65 @@ void test_lhs_pattern_constants_folded() {
                    "List[lfpr[li[mu, Plus[-4, D4]], mo[p, Plus[-4, D4]]], lfpr[li[mu, Plus[-4, D4]], mo[p, Plus[-4, D4]]]]", 1);
 }
 
+/* Kernel semantics found by FeynCalc's unit tests (v0.591), each checked
+ * against the reference: the sign of a -1 or -1/n coefficient distributes
+ * over a sum; HoldPattern[f[...]] := ... is a rule for f; a protected tag is
+ * Set::write; N uses N-values (x /: N[x] = v, N[x] = v, h /: N[h[x_]] := ...)
+ * inside an expression and numericalizes their values. */
+void test_feyncalc_semantics_v591() {
+    assert_eval_eq("ClearAll[x, y, z, w, g, k, q, m, h, z2, z4]", "Null", 0);
+    assert_eval_eq("{-(-1 + x), -(x + y) z, Times[-1/2, x + y], -(x + y)/2, -(2 x + 3)}",
+                   "List[Plus[1, Times[-1, x]], Times[Plus[Times[-1, x], Times[-1, y]], z], "
+                   "Times[Rational[1, 2], Plus[Times[-1, x], Times[-1, y]]], "
+                   "Times[Rational[1, 2], Plus[Times[-1, x], Times[-1, y]]], Plus[-3, Times[-2, x]]]", 1);
+    assert_eval_eq("{Times[-1, x + y, z], Times[-3/2, x + y], Times[-2, x + y], -(x + y)^2, Times[-I, x + y]}",
+                   "List[Times[-1, Plus[x, y], z], Times[Rational[-3, 2], Plus[x, y]], Times[-2, Plus[x, y]], "
+                   "Times[-1, Power[Plus[x, y], 2]], Times[Complex[0, -1], Plus[x, y]]]", 1);
+    assert_eval_eq("HoldPattern[g[__, _]] := False; {g[1, 2], g[1], DownValues[g], DownValues[HoldPattern]}",
+                   "List[False, g[1], List[RuleDelayed[HoldPattern[HoldPattern[g[BlankSequence[], Blank[]]]], False]], List[]]", 1);
+    assert_eval_eq("HoldPattern[k[x_]] = 3; HoldPattern[q] = 5; HoldPattern[m[x_] /; x > 1] := big; {k[1], q, m[2], m[0]}",
+                   "{3, 5, big, m[0]}", 0);
+    assert_eval_eq("h /: N[h[x_]] := 2 x; z2 /: N[z2] = 3/2; {N[h[3]], N[1 + h[3]], N[2 + z2], N[z2]}",
+                   "{6.0, 7.0, 3.5, 1.5}", 0);
+    assert_eval_eq("N[z4] = 5; {N[z4], N[1 + z4], z4}", "{5.0, 6.0, z4}", 0);
+    /* an N-value without a precision argument serves machine N only */
+    assert_eval_eq("FreeQ[N[z2, 20], z2]", "False", 0);
+
+    /* Indexed iterator variables bind v[k] as a DownValue, restored after. */
+    assert_eval_eq("ClearAll[ll, kk, rr]; Table[ll[1], {ll[1], 0, 2}]", "{0, 1, 2}", 0);
+    assert_eval_eq("rr = {}; Do[rr = Append[rr, {ll[1], ll[2]}], {ll[1], 0, 1}, {ll[2], 0, ll[1]}]; rr",
+                   "{{0, 0}, {1, 0}, {1, 1}}", 0);
+    assert_eval_eq("{Sum[kk[1]^2, {kk[1], 1, 3}], Product[kk[2], {kk[2], 1, 4}], Sum[f[kk[1]], {kk[1], 0}]}",
+                   "{14, 24, 0}", 0);
+    assert_eval_eq("ll[1] = 99; {Table[ll[1], {ll[1], 2}], ll[1]}", "{{1, 2}, 99}", 0);
+    /* A head symbol with a value inside an LHS pattern is evaluated. */
+    assert_eval_eq("ClearAll[hh9, gg9, f9, DD9, ds9]; hh9 = gg9; f9[hh9[a_]] := {a}; f9[gg9[1]]", "{1}", 0);
+    assert_eval_eq("DD9 = Dot; ds9[DD9[a_, b_]] := ds9[a, b]; ds9[x . y]", "ds9[x, y]", 0);
+    /* OptionsPattern under a Condition; a named OptionsPattern binds the
+     * arguments as written. */
+    assert_eval_eq("ClearAll[iso9, f8]; iso9[ex_, (o:OptionsPattern[]) /; {o} =!= {}] := {ex, {o}}; {iso9[x, aa -> 3], iso9[x]}",
+                   "{{x, {aa -> 3}}, iso9[x]}", 0);
+    assert_eval_eq("f8[x_, o:OptionsPattern[]] := {o}; f8[1, {a -> 1}, b -> 2]", "{{a -> 1}, b -> 2}", 0);
+    assert_eval_eq("MatchQ[f[1], f[x_, (o:OptionsPattern[]) /; True]]", "True", 0);
+}
+
+/* Normal forms the sign distribution leans on (v0.591), checked against the
+ * reference: Root keeps a positive leading coefficient; a negative numeric
+ * factor under a radical comes out as its magnitude; FactorList reports the
+ * -1 of a factor whose sign the product absorbed; series coefficients and
+ * FunctionExpand pairs that cancel only after expansion are recognised. */
+void test_sign_normal_forms_v591() {
+    assert_eval_eq("ClearAll[x, y, s, a, b]", "Null", 0);
+    assert_eval_eq("Coefficient[First[First[Root[-#^3 - 2 # + 1 &, 1]]] /. Slot[1] -> y, y, 3]", "1", 0);
+    assert_eval_eq("{Sqrt[-4 (1 - x^2)], Sqrt[-4 a], (-8 a)^(1/3)}",
+                   "{2 Sqrt[-1 + x^2], 2 Sqrt[-a], 2 (-a)^(1/3)}", 0);
+    assert_eval_eq("Solve[1 - x^2 + y^2 == 0, y]", "{{y -> -Sqrt[-1 + x^2]}, {y -> Sqrt[-1 + x^2]}}", 0);
+    assert_eval_eq("{FactorList[-x - 1], FactorList[1 - x], FactorList[x - y], FactorList[y - x], FactorList[-x/2 - 1/2]}",
+                   "{{{-1, 1}, {1 + x, 1}}, {{-1, 1}, {-1 + x, 1}}, {{1, 1}, {x - y, 1}}, {{-1, 1}, {x - y, 1}}, {{-1/2, 1}, {1 + x, 1}}}", 0);
+    assert_eval_eq("Series[Beta[s, 1], {s, 0, 1}]", "1/s + O[s]^2", 0);
+    assert_eval_eq("FunctionExpand[PolyLog[2, E^(I Pi/3)] + PolyLog[2, E^(-I Pi/3)]]", "1/18 Pi^2", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -847,6 +906,8 @@ int main() {
     TEST(test_assignment_evaluates_lhs_head);
     TEST(test_feyncalc_semantics);
     TEST(test_lhs_pattern_constants_folded);
+    TEST(test_feyncalc_semantics_v591);
+    TEST(test_sign_normal_forms_v591);
     printf("All tests passed!\n");
     return 0;
 }

@@ -169,6 +169,14 @@ Generates a list of expressions.
 **Features**:
 - `HoldAll`: `expr` is evaluated once for each step.
 - Supports nested iterators to create matrices.
+- **Indexed iterator variables.** The variable can be `v[k]` as well as a
+  symbol: `Table[ll[1], {ll[1], 0, 2}]` is `{0, 1, 2}`. Each step binds the
+  DownValue `v[k] = value`, so later iterator bounds and anything the body
+  calls see it (`Do[..., {ll[1], 0, 1}, {ll[2], 0, ll[1]}]`), and a `v[k]` rule
+  that existed before is restored afterwards. The same holds for `Do`, `Sum`
+  and `Product`; `Sum`/`Product` only enumerate such a variable (a symbolic or
+  infinite range over one stays unevaluated), and the compiled fast paths
+  apply to symbol variables only (v0.591).
 - **Machine-real iterators take a compiled fast path.** When the iterator is
   inexact (`{x, 0., 1., 0.01}`) and `expr` is in the compilable subset, the body
   is compiled once and run per point over machine numbers instead of through the

@@ -1040,6 +1040,37 @@ void symtab_add_own_value_as(const char* symbol_name, Expr* pattern, Expr* repla
     if (get_attributes_def(def) & ATTR_PROTECTED) eval_rule_epoch_mark();
 }
 
+/* Unlink and return the DownValue of symbol_name whose left-hand side is
+ * exactly lhs (after the canonicalisation every stored LHS gets), or NULL.
+ * The caller owns the returned rule (free it with symtab_rule_free, or
+ * re-install its pattern and replacement). Backs the iterators' indexed
+ * variables (Table[..., {v[1], 3}]), which bind v[1] as a DownValue and put
+ * back any v[1] rule that was there before. */
+Rule* symtab_detach_down_value_exact(const char* symbol_name, Expr* lhs) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    if (!def->down_values) return NULL;
+    Expr* canon = pattern_canonicalize(expr_copy(lhs));
+    Rule** pp = &def->down_values;
+    Rule* found = NULL;
+    for (; *pp; pp = &(*pp)->next) {
+        if (expr_eq((*pp)->pattern, canon)) {
+            found = *pp;
+            *pp = found->next;
+            found->next = NULL;
+            eval_clock_bump();
+            break;
+        }
+    }
+    expr_free(canon);
+    return found;
+}
+
+void symtab_rule_free(Rule* r) {
+    if (!r) return;
+    r->next = NULL;
+    free_rule_list(r);
+}
+
 void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                               bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
@@ -1646,7 +1677,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
     return NULL;
 }
 
-Expr* apply_up_values(Expr* expr) {
+static Expr* apply_up_values_core(Expr* expr) {
     /* Cheap global early-out: with no UpValues defined anywhere, every function
      * call pays just this load+branch before DownValue dispatch. */
     if (symtab_up_value_count == 0) return NULL;
@@ -1720,6 +1751,25 @@ Expr* apply_up_values(Expr* expr) {
         if (r) return r;
     }
     return NULL;
+}
+
+/* The public entry: an N-value -- an UpValue matching N[x] or N[x, p], as
+ * x /: N[x] = v or N[x] = v store it -- gives its value numericalized,
+ * N[v, p], as the reference's NValues do (N[z4] = 5 makes N[z4] 5., not 5). */
+Expr* apply_up_values(Expr* expr) {
+    Expr* r = apply_up_values_core(expr);
+    if (r && expr->data.function.head->type == EXPR_SYMBOL &&
+        expr->data.function.head->data.symbol.name == SYM_N &&
+        !(r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+          r->data.function.head->data.symbol.name == SYM_N)) {
+        size_t n = expr->data.function.arg_count;
+        Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+        a[0] = r;
+        for (size_t i = 1; i < n; i++) a[i] = expr_copy(expr->data.function.args[i]);
+        r = expr_new_function(expr_new_symbol(SYM_N), a, n ? n : 1);
+        free(a);
+    }
+    return r;
 }
 
 bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs) {

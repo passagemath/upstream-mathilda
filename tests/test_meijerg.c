@@ -341,7 +341,7 @@ void test_mg_reductions() {
     assert_str("MeijerG[{{1/2},{}},{{0},{0}},x]", "Sqrt[Pi] BesselI[0, 1/2 x] E^(-1/2 x)");
     assert_str("MeijerG[{{1/2,3/2},{}},{{0},{0}},x]", "-4 EllipticE[-x]");
     assert_str("MeijerG[{{},{}},{{b},{}},-x]", "E^x (-x)^b");
-    assert_str("MeijerG[{{a},{}},{{d},{}},x]", "Gamma[1 - a + d] x^d (1 + x)^(-(1 - a + d))");
+    assert_str("MeijerG[{{a},{}},{{d},{}},x]", "Gamma[1 - a + d] x^d (1 + x)^(-1 + a - d)");   /* as the reference */
     assert_str("MeijerG[{{},{}},{{b,c},{}},z]", "2 z^(1/2 (b + c)) BesselK[b - c, 2 Sqrt[z]]");
     assert_str("MeijerG[{{1,1},{}},{{1},{0}},z]", "Log[1 + z]");
     /* stays: two 2F2 terms; p == q with m + n == p; the log case */

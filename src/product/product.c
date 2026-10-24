@@ -238,7 +238,7 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
 
     Rule* saved = iter_spec_shadow(var);
     for (size_t i = 0; i < n; i++) {
-        symtab_add_own_value(var->data.symbol.name, var, list->data.function.args[i]);
+        iter_bind(var, list->data.function.args[i]);
         terms[count++] = evaluate(f);
     }
     iter_spec_restore(var, saved);
@@ -270,7 +270,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
         if ((int64_t)count >= PRODUCT_MAX_FINITE_TERMS) { overflow = true; break; }
 
         Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-        symtab_add_own_value(var->data.symbol.name, var, i_val);
+        iter_bind(var, i_val);
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
         terms[count++] = evaluate(f);
         expr_free(i_val);
@@ -381,7 +381,7 @@ static bool prod_body_probe_inexact(const Expr* e) {
 static Expr* product_try_compiled(Expr* f, const IterSpec* s,
                                   double min_val, double max_val, double di_val,
                                   bool is_real) {
-    if (!autocompile_enabled()) return NULL;
+    if (!autocompile_enabled() || s->var->type != EXPR_SYMBOL) return NULL;
 
     bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
                                  : (min_val >= max_val - 1e-14);
@@ -392,7 +392,7 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
 
     Rule* saved = iter_spec_shadow(s->var);
     Expr* first_val = is_real ? expr_new_real(min_val) : expr_copy(s->imin);
-    symtab_add_own_value(s->var->data.symbol.name, s->var, first_val);
+    iter_bind(s->var, first_val);
     Expr* probe = evaluate(f);
     bool inexact = prod_body_probe_inexact(probe);
     expr_free(probe);
@@ -467,6 +467,16 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     bool numeric = iter_spec_resolve_numeric(&s, /*allow_inf=*/true,
                                              &min_val, &max_val, &di_val,
                                              &is_real, &is_inf);
+    /* An indexed iterator variable (v[1]) is only enumerated: the closed-form
+     * and compiled paths work on a symbol. A symbolic or infinite range over
+     * one is left unevaluated. */
+    if (iter_var_is_indexed(s.var)) {
+        Expr* r = (numeric && !is_inf)
+                      ? expand_range(f, s.var, s.imin, s.imax, s.di, min_val, max_val, di_val, is_real)
+                      : NULL;
+        iter_spec_free(&s);
+        return r;
+    }
     if (numeric && !is_inf) {
         /* Closed form first: for a unit-step, non-empty, integer-bounded range
          * a rational/geometric body collapses to g(imax+1)/g(imin), whose cost

@@ -145,6 +145,32 @@ static void absorb_factor(const Expr* f, Expr** numeric,
  * into the pair-list {{numeric, 1}, {base_i, exp_i}, ...}.  Takes ownership of
  * `fac` (frees it).  Shared by FactorList and FactorSquareFreeList, whose only
  * difference is which head produced the product. */
+/* Does the sum p lead with a negative coefficient -- the first term of
+ * CoefficientRules[p, Variables[p]], lexicographic as in the reference? Then
+ * FactorList reports a -1 for it: FactorList[1 - x] is {{-1, 1}, {-1 + x, 1}},
+ * FactorList[x - y] keeps {x - y, 1}. (Factor's own normal form, -(1 - x)
+ * = -1 + x times -1, is gone once the product evaluates: -(1 + x) is
+ * -1 - x.) */
+static bool sum_leads_negative(const Expr* p) {
+    Expr* vars = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables),
+                                                 (Expr*[]){ expr_copy((Expr*)p) }, 1));
+    Expr* cr = eval_and_free(expr_new_function(expr_new_symbol(SYM_CoefficientRules),
+                                               (Expr*[]){ expr_copy((Expr*)p), vars }, 2));
+    bool neg = false;
+    if (head_name_is(cr, SYM_List) && cr->data.function.arg_count >= 1) {
+        Expr* r = cr->data.function.args[0];
+        if (is_rule_head(r)) {
+            Expr* c = r->data.function.args[1];
+            neg = (c->type == EXPR_INTEGER && c->data.integer < 0) ||
+                  (c->type == EXPR_BIGINT && mpz_sgn(c->data.bigint) < 0) ||
+                  (head_name_is(c, SYM_Rational) && c->data.function.args[0]->type == EXPR_INTEGER &&
+                   c->data.function.args[0]->data.integer < 0);
+        }
+    }
+    expr_free(cr);
+    return neg;
+}
+
 static Expr* product_to_pair_list(Expr* fac) {
     Expr* numeric = mk_int(1);
     size_t cap = 8, n = 0;
@@ -159,6 +185,25 @@ static Expr* product_to_pair_list(Expr* fac) {
         absorb_factor(fac, &numeric, &bases, &exps, &n, &cap);
     }
     expr_free(fac);
+
+    /* A simple factor whose sign the evaluated product absorbed -- -(1 + x)
+     * is -1 - x, and (-1/2) (1 + x) is 1/2 (-1 - x) -- gets its -1 back into
+     * the numerical factor, so its leading coefficient is positive again. */
+    for (size_t i = 0; i < n; i++) {
+        if (!(exps[i]->type == EXPR_INTEGER && exps[i]->data.integer == 1)) continue;
+        if (!head_name_is(bases[i], SYM_Plus) || !sum_leads_negative(bases[i])) continue;
+        Expr* p = bases[i];
+        size_t m = p->data.function.arg_count;
+        Expr** terms = malloc(sizeof(Expr*) * (m ? m : 1));
+        for (size_t k = 0; k < m; k++)
+            terms[k] = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ mk_int(-1), expr_copy(p->data.function.args[k]) }, 2);
+        bases[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, m));
+        free(terms);
+        expr_free(p);
+        numeric = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                                  (Expr*[]){ mk_int(-1), numeric }, 2));
+    }
 
     /* Assemble {{numeric, 1}, {base_i, exp_i}, ...}. */
     size_t total = n + 1;

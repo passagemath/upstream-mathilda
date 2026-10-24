@@ -112,6 +112,27 @@ reference prints `\[Mu]`. Box input (`\!\(\*SuperscriptBox[...]\)`) is not read.
 
 
 
+## Number literals: `e` exponents
+
+The reference writes an exponent only as `*^` (`1.5*^-3`). Mathilda also
+accepts `e`/`E` (`1.5e-3`, `2e5`) as an extension, but only when digits follow
+it: `2ep` is `2 ep` and `3E` is `3 E`, as the reference reads them (it used to
+make `2ep` the Real `2.` times `p`, v0.591).
+
+## Flat operator chains
+
+`+`, `*` (and implicit multiplication), `**` and `<>` build one n-ary node per
+chain: `a b c` is `Times[a, b, c]`. Only the chain itself is flattened: a
+parenthesised or explicitly written operand stays one argument, as in the
+reference (`(a b) c` and `Times[a, b] c` are `Times[Times[a, b], c]`,
+`(a + b) - c` is `Plus[Plus[a, b], Times[-1, c]]`).
+
+Prefix minus binds tighter than `*` and is one operand too: `-a b` is
+`Times[Times[-1, a], b]` and `-(x + y) z` is `Times[Times[-1, Plus[x, y]], z]`,
+so the negated sum distributes before the product forms. Binary minus puts its
+`-1` into a bare product: `a - b c` is `Plus[a, Times[-1, b, c]]`, while
+`a - (b c)` is `Plus[a, Times[-1, Times[b, c]]]`.
+
 ## Parenthesised comparisons break chains
 
 A run of comparisons folds into one variadic `Inequality` at parse time, so `a < b <= c` becomes

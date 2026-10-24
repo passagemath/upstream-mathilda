@@ -1562,6 +1562,44 @@ rat_imag_fallthrough: ;
                     rest_n++;
                 }
             }
+            /* A negative exact coefficient c != -1 (one, among other factors):
+             * (c w)^(p/q) = (-c)^(p/q) (-w)^(p/q), since -c is a positive real,
+             * so Sqrt[-4 (1 - x^2)] is 2 Sqrt[-1 + x^2], as in the reference.
+             * Under the same "fully reduces" gate as a positive coefficient. */
+            if (pos_n == 0 && rest_n >= 2) {
+                int64_t neg_i = -1;
+                for (size_t i = 0; i < bc; i++) {
+                    Expr* f = base->data.function.args[i];
+                    bool neg = (f->type == EXPR_INTEGER && f->data.integer < -1) ||
+                               (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                                f->data.function.head->data.symbol.name == SYM_Rational &&
+                                f->data.function.args[0]->type == EXPR_INTEGER &&
+                                f->data.function.args[0]->data.integer < 0);
+                    if (neg) { neg_i = (int64_t)i; break; }
+                }
+                if (neg_i >= 0) {
+                    Expr* c = base->data.function.args[neg_i];
+                    Expr* mc = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(-1), expr_copy(c) }, 2));
+                    if (is_positive_numeric(mc) && factor_fully_reduces_under_q(mc, qq_pt)) {
+                        Expr** rest = malloc(sizeof(Expr*) * bc);
+                        size_t ri = 0;
+                        rest[ri++] = expr_new_integer(-1);
+                        for (size_t i = 0; i < bc; i++)
+                            if ((int64_t)i != neg_i) rest[ri++] = expr_copy(base->data.function.args[i]);
+                        Expr* rest_base = expr_new_function(expr_new_symbol(SYM_Times), rest, ri);
+                        free(rest);
+                        Expr* coef_pow = expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ mc, expr_copy(exp) }, 2);
+                        Expr* rest_pow = expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ rest_base, expr_copy(exp) }, 2);
+                        Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ coef_pow, rest_pow }, 2);
+                        return eval_and_free(result);
+                    }
+                    expr_free(mc);
+                }
+            }
             if (pos_n >= 1 && rest_n >= 1 && coef_reduces) {
                 Expr** coef = malloc(sizeof(Expr*) * pos_n);
                 Expr** rest = malloc(sizeof(Expr*) * rest_n);

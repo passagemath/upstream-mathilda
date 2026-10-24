@@ -551,16 +551,15 @@ static void test_inverse_isolation(void) {
  *   Solve[Log[x^2 + 1] + 1 == 0, x]
  * Peel Log -> 1 + x^2 == E^-1, the inner is a binomial that
  * solvepoly handles.  Expected ±I Sqrt[1 - 1/E]; Mathilda's
- * canonical form factors out 1/(2E) and groups the Sqrt
- * (mathematically equivalent). */
+ * canonical form is ±Sqrt[-E (-1 + E)]/E (mathematically equivalent). */
 static void test_inverse_log_composite(void) {
     run_test("Solve[Log[x^2 + 1] + 1 == 0, x]",
              "List[List[Rule[x, "
-               "Times[Rational[-1, 2], Power[E, -1], "
-                     "Power[Times[-4, E, Plus[-1, E]], Rational[1, 2]]]]], "
+               "Times[-1, Power[E, -1], "
+                     "Power[Times[-1, E, Plus[-1, E]], Rational[1, 2]]]]], "
                   "List[Rule[x, "
-               "Times[Rational[1, 2], Power[E, -1], "
-                     "Power[Times[-4, E, Plus[-1, E]], Rational[1, 2]]]]]]");
+               "Times[Power[E, -1], "
+                     "Power[Times[-1, E, Plus[-1, E]], Rational[1, 2]]]]]]");
 }
 
 /* ArcSin[x] == a -- inverse-of-inverse with the principal-strip
@@ -771,9 +770,9 @@ static void test_rational_denominator_only(void) {
  * a spurious Sqrt[(a-c)^2] term appears that cannot simplify for
  * symbolic a, c. */
 static void test_rational_quadratic_zero_const(void) {
-    run_test("Solve[a/x + b == c/x, x]",
-             "List[List[Rule[x, Times[-1, Power[b, -1], "
-                                        "Plus[a, Times[-1, c]]]]]]");
+    run_test("Solve[a/x + b == c/x, x]",     /* (-a + c)/b, as the reference */
+             "List[List[Rule[x, Times[Power[b, -1], "
+                                        "Plus[Times[-1, a], c]]]]]");
 }
 
 /* Sum-of-fractions reduction: 1/(x-1) - 2/(x+1) == 0  →  -x + 3 = 0. */
@@ -1336,14 +1335,7 @@ static void test_linsys_many_indexed_unknowns(void) {
 static void test_linsys_nonlinear_declined(void) {
     /* x^2 + y == 1, x == y  =>  x^2 + x - 1 == 0  =>  x = (-1 +/- Sqrt[5])/2. */
     run_test("Solve[x^2 + y == 1 && x - y == 0, {x, y}]",
-             "List[List[Rule[x, Times[Rational[-1, 2], "
-                       "Plus[1, Times[-1, Power[5, Rational[1, 2]]]]]], "
-                  "Rule[y, Times[Rational[1, 2], "
-                       "Plus[-1, Power[5, Rational[1, 2]]]]]], "
-                  "List[Rule[x, Times[Rational[-1, 2], "
-                       "Plus[1, Power[5, Rational[1, 2]]]]], "
-                  "Rule[y, Times[Rational[1, 2], "
-                       "Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]]]]");
+             "List[List[Rule[x, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]]], List[Rule[x, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]]]]");
     /* Cross-term x*y: x y == 1, x + y == 2  =>  x = y = 1 (double root). */
     run_test("Solve[x y == 1 && x + y == 2, {x, y}]",
              "List[List[Rule[x, 1], Rule[y, 1]]]");

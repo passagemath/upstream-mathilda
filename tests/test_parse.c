@@ -1372,6 +1372,42 @@ void test_named_characters_in_source() {
 }
 #undef MU
 
+/* Flat operator chains flatten only what the chain itself built (src/parse.c
+ * left_flat_head / chain_head); a parenthesised or explicitly written Plus /
+ * Times, or a prefix minus, stays one operand.  Checked against the reference. */
+void test_flat_chain_provenance() {
+    assert_parse_eq("a b c",          "Times[a, b, c]");
+    assert_parse_eq("(a b) c",        "Times[Times[a, b], c]");
+    assert_parse_eq("Times[a, b] c",  "Times[Times[a, b], c]");
+    assert_parse_eq("Times[a, b]*c",  "Times[Times[a, b], c]");
+    assert_parse_eq("a (b c)",        "Times[a, Times[b, c]]");
+    assert_parse_eq("(a + b) + c",    "Plus[Plus[a, b], c]");
+    assert_parse_eq("Plus[a, b] + c", "Plus[Plus[a, b], c]");
+    assert_parse_eq("a + b - c",      "Plus[a, b, Times[-1, c]]");
+    assert_parse_eq("a - b + c",      "Plus[a, Times[-1, b], c]");
+    assert_parse_eq("(a + b) - c",    "Plus[Plus[a, b], Times[-1, c]]");
+    assert_parse_eq("(a<>b)<>c",      "StringJoin[StringJoin[a, b], c]");
+    assert_parse_eq("(a**b)**c",      "NonCommutativeMultiply[NonCommutativeMultiply[a, b], c]");
+    /* prefix minus binds tighter than Times and is not flattened into it */
+    assert_parse_eq("-a b",           "Times[Times[-1, a], b]");
+    assert_parse_eq("-x y z",         "Times[Times[-1, x], y, z]");
+    assert_parse_eq("-(x + y) z",     "Times[Times[-1, Plus[x, y]], z]");
+    assert_parse_eq("-(x + y)^2",     "Times[-1, Power[Plus[x, y], 2]]");
+    /* binary minus: the -1 joins a bare product operand only */
+    assert_parse_eq("a - b c",        "Plus[a, Times[-1, b, c]]");
+    assert_parse_eq("a - 2 b",        "Plus[a, Times[-1, 2, b]]");
+    assert_parse_eq("a - (b c)",      "Plus[a, Times[-1, Times[b, c]]]");
+    assert_parse_eq("a - (x + y) z",  "Plus[a, Times[-1, Plus[x, y], z]]");
+    assert_parse_eq("a - b/c",        "Plus[a, Times[-1, Times[b, Power[c, -1]]]]");
+    /* An e/E exponent needs digits after it (a Mathilda extension; the
+     * reference has only *^): 2ep is 2 ep and 3E is 3 E, as it reads them. */
+    assert_parse_eq("2ep",            "Times[2, ep]");
+    assert_parse_eq("3E",             "Times[3, E]");
+    assert_parse_eq("2e-x",           "Plus[Times[2, e], Times[-1, x]]");
+    assert_parse_eq("2e5",            "200000.0");
+    assert_parse_eq("1.5e-3",         "0.0015");
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -1416,6 +1452,7 @@ int main() {
     TEST(test_unclosed_paren_rejected);
     TEST(test_reading_creates_symbols);
     TEST(test_named_characters_in_source);
+    TEST(test_flat_chain_provenance);
 
     printf("\nAll parser tests passed!\n");
     return 0;

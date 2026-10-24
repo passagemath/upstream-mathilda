@@ -1055,20 +1055,28 @@ static bool lhs_pattern_mentions_valued_symbol(Expr* e) {
  * on dim_Symbol - 4 never fired. Pattern nodes themselves stay unevaluated (see
  * lhs_arg_contains_pattern for why), so only a pattern-free subexpression -- a
  * constant, a symbol with a value, a call on concrete arguments -- is
- * evaluated, exactly as it would be outside a pattern. A pattern name, a held
+ * evaluated, exactly as it would be outside a pattern, and so is a head symbol
+ * with a value (DOT = Dot; f[DOT[a_, b_]] := ...). A pattern name, a held
  * guard or test, a HoldPattern / Verbatim body and the held arguments of a
  * Hold-attributed head are left as written. Returns a new expression. */
 static Expr* lhs_fold_pattern_free(Expr* e) {
     if (!lhs_arg_contains_pattern(e)) return evaluate(e);
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    Expr* h = e->data.function.head;
+    Expr* h0 = e->data.function.head;
     size_t n = e->data.function.arg_count;
+    /* A head symbol with a value is evaluated too: DOT = Dot;
+     * f[DOT[a_, b_]] := ... is a rule on Dot[a_, b_], as in the reference. */
+    Expr* nh = (h0->type == EXPR_SYMBOL && symtab_get_own_values(h0->data.symbol.name))
+                   ? evaluate(h0) : expr_copy(h0);
+    Expr* h = nh;
     uint32_t attrs = ATTR_NONE;
     if (h->type == EXPR_SYMBOL) {
         const char* hn = h->data.symbol.name;
         if (hn == SYM_HoldPattern || hn == SYM_Verbatim || hn == SYM_Blank ||
-            hn == SYM_BlankSequence || hn == SYM_BlankNullSequence)
+            hn == SYM_BlankSequence || hn == SYM_BlankNullSequence) {
+            expr_free(nh);
             return expr_copy(e);
+        }
         attrs = get_attributes(hn);
         /* Pattern[name, p]: the name is held; Condition / PatternTest hold
          * their guard. Their pattern slot is folded. */
@@ -1084,7 +1092,7 @@ static Expr* lhs_fold_pattern_free(Expr* e) {
         args[i] = hold ? expr_copy(e->data.function.args[i])
                        : lhs_fold_pattern_free(e->data.function.args[i]);
     }
-    Expr* out = expr_new_function(expr_copy(h), args, n);
+    Expr* out = expr_new_function(nh, args, n);
     free(args);
     return out;
 }
@@ -1267,6 +1275,31 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     }
 
 #if UP_VALUES
+    /* N[x] = v, N[f[...]] := v (and N[x, p] = v): an N-value of the symbol x or
+     * the head f, which the reference keeps in NValues; stored here as the
+     * UpValue x /: N[x] = v, which N consults (numeric.c n_value). N itself
+     * is Protected, so this is intercepted before the Protected guard. */
+    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
+        lhs->data.function.head->data.symbol.name == SYM_N &&
+        (lhs->data.function.arg_count == 1 || lhs->data.function.arg_count == 2)) {
+        Expr* x = lhs->data.function.args[0];
+        const char* tag = NULL;
+        if (x->type == EXPR_SYMBOL) tag = x->data.symbol.name;
+        else if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL)
+            tag = x->data.function.head->data.symbol.name;
+        if (tag) {
+            if (get_attributes(tag) & ATTR_PROTECTED) {
+                char* lt = expr_to_string_outputform(lhs);
+                mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                            "Tag %s in %s is Protected.", tag, lt ? lt : "");
+                free(lt);
+                return true;
+            }
+            symtab_add_up_value_as(tag, lhs, rhs, is_delayed);
+            return true;
+        }
+    }
+
     /* UpValues[sym] = list / DownValues[sym] = list / OwnValues[sym] = list:
      * replace the whole rule list from a List of (Rule|RuleDelayed) rules.
      * Intercepted before the Protected guard because these heads are themselves
@@ -1312,8 +1345,17 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     if (!lhs_is_list) {
         const char* target = assignment_target_symbol(lhs);
         if (target && (get_attributes(target) & ATTR_PROTECTED)) {
-            mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
-                    "Symbol %s is Protected.", target);
+            /* A symbol LHS is ::wrsym; a rule for a protected tag is ::write,
+             * naming the LHS, as the reference reports them. */
+            if (lhs->type == EXPR_SYMBOL) {
+                mth_message(is_delayed ? "SetDelayed" : "Set", "wrsym",
+                            "Symbol %s is Protected.", target);
+            } else {
+                char* lt = expr_to_string_outputform(lhs);
+                mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                            "Tag %s in %s is Protected.", target, lt ? lt : "");
+                free(lt);
+            }
             return true;
         }
     }
@@ -1495,6 +1537,25 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 } else if (inner_lhs->type == EXPR_SYMBOL) {
                     symbol_name = inner_lhs->data.symbol.name;
                 }
+            }
+            /* HoldPattern[f[...]] := rhs (also under a guard, and with a guard
+             * inside): a rule for f, stored with its HoldPattern, as the
+             * reference stores it. HoldPattern[s] = v is an OwnValue of s.
+             * The rule used to land on HoldPattern itself, silently. */
+            if (symbol_name == SYM_HoldPattern) {
+                Expr* inner = lhs;
+                while (inner->type == EXPR_FUNCTION && inner->data.function.head->type == EXPR_SYMBOL &&
+                       (inner->data.function.head->data.symbol.name == SYM_HoldPattern ||
+                        inner->data.function.head->data.symbol.name == SYM_Condition) &&
+                       inner->data.function.arg_count >= 1)
+                    inner = inner->data.function.args[0];
+                if (inner->type == EXPR_SYMBOL && actual_pattern == lhs) {
+                    return apply_assignment(inner, rhs, is_delayed);
+                }
+                if (inner->type == EXPR_FUNCTION && inner->data.function.head->type == EXPR_SYMBOL &&
+                    inner->data.function.head->data.symbol.name != SYM_List &&
+                    inner->data.function.head->data.symbol.name != SYM_Part)
+                    symbol_name = inner->data.function.head->data.symbol.name;
             }
             /* `f[x_][y_] /; c := ...`: the guarded LHS has a compound head --
              * a SubValue of its innermost head symbol. */

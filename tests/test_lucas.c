@@ -65,7 +65,7 @@ static void test_polynomials(void) {
     assert_eval_eq("Table[LucasL[10, x], {x, 1, 5}]",
         "{123, 6726, 154451, 1860498, 14250627}", 0);
     /* Negative order: L_{-n}(x) = (-1)^n L_n(x). */
-    assert_eval_eq("LucasL[-7, x]", "-(7 x + 14 x^3 + 7 x^5 + x^7)", 0);
+    assert_eval_eq("LucasL[-7, x]", "-7 x - 14 x^3 - 7 x^5 - x^7", 0);   /* as the reference */
     assert_eval_eq("LucasL[-6, x]", "2 + 9 x^2 + 6 x^4 + x^6", 0);
     /* Exact complex argument stays exact (integer order). */
     assert_eval_eq("LucasL[3, 2 + I]", "8 + 14*I", 0);

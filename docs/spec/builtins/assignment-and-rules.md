@@ -15,6 +15,13 @@
   `1/2`. Pattern names, guards (`/;`), tests (`?`), `HoldPattern` bodies and
   the held arguments of a Hold-attributed head are not evaluated (v0.586,
   v0.589).
+- **`HoldPattern[f[...]] := rhs`** is a rule for `f`, stored with its
+  `HoldPattern` (also under a guard, `HoldPattern[f[x_]] /; c := ...`, or with
+  one inside); `HoldPattern[s] = v` is an OwnValue of `s`. Before v0.591 the
+  rule silently landed on `HoldPattern`.
+- **Protected targets.** Assigning to a protected symbol is `Set::wrsym`
+  ("Symbol Pi is Protected."); a rule for a protected tag is `Set::write`
+  ("Tag Sin in Sin[x] is Protected."), as in the reference.
 - **Rule order.** A literal-headed call in a pattern (`{f___}`, `h[__]`) ranks
   at least as specific as a typed blank, so `c[e_, {f___}, o:OptionsPattern[]]`
   is tried before `c[e_, f_, o:OptionsPattern[]]` whichever was defined first

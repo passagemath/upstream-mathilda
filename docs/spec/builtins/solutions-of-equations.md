@@ -1772,6 +1772,9 @@ Out[4]= {{b -> a}}
 Held symbolic representation of an indexed root of a univariate polynomial.
 
 - `Root[Function[t, p[t]], k]` — the `k`-th root of `p` (1-indexed).
+- The polynomial is kept with a positive leading coefficient, as in the
+  reference: `Root[-#^3 - 2 # + 1 &, 1]` is `Root[-1 + 2 #1 + #1^3 &, 1]`; the
+  roots and their index are unchanged (v0.591).
 
 **Canonical index `k`** (matches the reference):
 

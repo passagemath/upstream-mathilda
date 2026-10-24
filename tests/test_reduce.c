@@ -718,15 +718,15 @@ static void test_cad_real(void) {
      * closing the x-range to -1 <= x <= 1. */
     run_test("Reduce[x^2 + y^2 <= 1, {x, y}, Reals]",
              "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
-             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
              "LessEqual, y, LessEqual, "
-             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]");
+             "Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]]]");
 
     /* Closed unit circle (the curve): the two symbolic arcs, x-range closed. */
     run_test("Reduce[x^2 + y^2 == 1, {x, y}, Reals]",
              "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
-             "Or[Equal[y, Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
-             "Equal[y, Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]]");
+             "Or[Equal[y, Times[-1, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]]], "
+             "Equal[y, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]]]]");
 
     /* Open region (strict <): sections vanish, so the answer merges cleanly. */
     run_test("Reduce[x^2 - y^2 > 1, {x, y}, Reals]",
@@ -741,9 +741,9 @@ static void test_cad_real(void) {
      * half-disk merges to 0 <= x <= 1. */
     run_test("Reduce[x^2 + y^2 <= 1 && x >= 0, {x, y}, Reals]",
              "And[Inequality[0, LessEqual, x, LessEqual, 1], "
-             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
              "LessEqual, y, LessEqual, "
-             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]]]");
+             "Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]]]");
 
     /* A parametric coefficient the linear (Fourier-Motzkin) engine cannot take,
      * but whose single base cell is sign-invariant, is solved by CAD. */
@@ -777,10 +777,10 @@ static void test_cad_nvar(void) {
      * outer variables. */
     run_test("Reduce[x^2 + y^2 + z^2 < 1, {x, y, z}, Reals]",
              "And[Inequality[-1, Less, x, Less, 1], "
-             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
              "Less, y, Less, "
-             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
-             "Inequality[Times[Rational[-1, 2], Power[Times[-4, Plus[-1, Power[x, 2], Power[y, 2]]], Rational[1, 2]]], "
+             "Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]], "
              "Less, z, Less, "
              "Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
 
@@ -788,10 +788,10 @@ static void test_cad_nvar(void) {
      * non-strict nested conjunction (-1 <= x <= 1 && ... && ...). */
     run_test("Reduce[x^2 + y^2 + z^2 <= 1, {x, y, z}, Reals]",
              "And[Inequality[-1, LessEqual, x, LessEqual, 1], "
-             "Inequality[Times[Rational[-1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
              "LessEqual, y, LessEqual, "
-             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
-             "Inequality[Times[Rational[-1, 2], Power[Times[-4, Plus[-1, Power[x, 2], Power[y, 2]]], Rational[1, 2]]], "
+             "Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
+             "Inequality[Times[-1, Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]], "
              "LessEqual, z, LessEqual, "
              "Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
 
@@ -863,7 +863,7 @@ static void test_cad_algebraic_fibre(void) {
     run_test("Reduce[x^2 + y^2 + z^2 == 1 && x > 0 && y > 0 && z > 0, {x, y, z}, Reals]",
              "And[Inequality[0, Less, x, Less, 1], "
              "Inequality[0, Less, y, Less, "
-             "Times[Rational[1, 2], Power[Plus[4, Times[-4, Power[x, 2]]], Rational[1, 2]]]], "
+             "Power[Plus[1, Times[-1, Power[x, 2]]], Rational[1, 2]]], "
              "Equal[z, Power[Plus[1, Times[-1, Power[x, 2]], Times[-1, Power[y, 2]]], Rational[1, 2]]]]");
 
     /* Non-quadratic irrational fibre: a cubic curve. */
@@ -1388,7 +1388,8 @@ static void test_find_instance(void) {
              "List[List[Rule[x, -1], Rule[y, -1]]]");
     /* Rational equation with an excluded pole: Reduce yields the roots; the exact
      * zero-test verifier confirms frac==0 and root!=1 at the complex radical. */
-    run_contains("FindInstance[(x^3 - 1)/(x - 1) == 0 && x != 1, x, Complexes]", "Complex[0, 1]");
+    /* Either complex cube root of unity is an instance: (-1 +- I Sqrt[3])/2. */
+    run_contains("FindInstance[(x^3 - 1)/(x - 1) == 0 && x != 1, x, Complexes]", "Power[3, Rational[1, 2]]");
     /* Sum-of-squares bounds the integer box; the bilinear equation is then checked. */
     run_contains("FindInstance[a b + b c + c d + d e == 0 && a^2 + b^2 + c^2 + d^2 + e^2 == 5, "
                  "{a, b, c, d, e}, Integers]", "Rule[a");

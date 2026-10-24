@@ -120,6 +120,43 @@ VECTOR = [  # rank-1
     "Join[S, T]", "Rest[S]", "Most[S]", "Last[S]",
 ]
 
+# Functional heads: level specs below level 1, folds, ordering and set heads
+# answered as on Normal, threading and nesting (src/sparse/sparse_func.c).
+FUNCTIONAL = [
+    "Map[f, S, {ArrayDepth[S]}]", "Map[f, S, {-1}]", "Map[f, S, {1, 2}]", "Map[f, S, All]",
+    "Map[f, S, {0, 1}]", "Map[f, S, 2]", "Map[f, S, Infinity]", "Map[f, S, {-2}]",
+    "MapIndexed[f, S]", "MapIndexed[f, S, {-1}]", "MapIndexed[f, S, {ArrayDepth[S]}]",
+    "Apply[f, S, {1}]", "Apply[f, S, {0, 1}]", "f @@ S", "Apply[Plus, S, {1}]",
+    "Reap[Scan[Sow, S, {-1}]]", "Reap[Scan[Sow, S]]", "Reap[Scan[Sow, S, {ArrayDepth[S]}]]",
+    "MapAt[f, S, 1]", "MapAt[f, S, -1]", "Fold[Plus, 0, S]", "FoldList[Plus, S]",
+    "Fold[f, x, S]", "Fold[Plus, S, {S, T}]", "Nest[Reverse, S, 3]", "NestList[f /@ # &, S, 2]",
+    "FixedPoint[Clip[# - 1, {0, 3}] &, S, 4]", "Sort[S]", "Union[S]", "DeleteDuplicates[S]",
+    "Split[S]", "Gather[S]", "Ordering[S]", "Counts[S]", "Tally[S]", "Reverse[Sort[S]]",
+    "AnyTrue[S, # === 0 &]", "AllTrue[S, # =!= x &]", "NoneTrue[S, ListQ]",
+    "Select[S, # =!= 0 &]", "Thread[f[S, T]]", "Thread[f[S]]", "Thread[{S, T}]",
+    "Flatten[{S, T}]", "Flatten[{S, {x}}, 1]", "Outer[f, S, {1, 2}]",
+    "Outer[Times, S, {1, 2}]", "Outer[f, {x}, S]", "S Normal[T]", "Normal[T] S",
+    "S + Normal[T]", "x S Normal[T]", "Clip[S, {-1, 1}]", "Chop[N[S]]",
+    "Composition[f, Reverse][S]", "Through[{Length, First}[S]]", "MapThread[f, {S, T}]",
+    "S + First[S]", "S First[T]",
+]
+# Procedural programming over a SparseArray: iterators, loops, scoping and
+# in-place mutation.
+PROCEDURAL = [
+    "Table[i, {i, S}]", "Table[f[i], {i, S}]", "Sum[i, {i, S}]", "Product[f[i], {i, S}]",
+    "Module[{l = {}}, Do[AppendTo[l, i], {i, S}]; l]",
+    "Module[{c = 0}, Do[If[i === 0, Continue[]]; c++, {i, S}]; c]",
+    "Catch[Do[If[i =!= 0, Throw[i]], {i, S}]; none]",
+    "Module[{c = 0}, Do[c++; If[c == 2, Break[]], {i, S}]; c]",
+    "Module[{w = S}, AppendTo[w, First[S]]; w]", "Module[{w = S}, PrependTo[w, Last[S]]; w]",
+    "Module[{w = S}, w[[1]] = x; w]", "Module[{w = S}, w[[-1]] = First[T]; w]",
+    "Module[{w = S}, w += T; w]", "Module[{w = S}, w *= 2; w]",
+    "Module[{w = S, i}, For[i = 1, i <= Length[w], i++, w[[i]] = f[w[[i]]]]; w]",
+    "Module[{i = 1, acc = 0}, While[i <= Length[S], acc += Total[Flatten[{S[[i]]}]]; i++]; acc]",
+    "With[{w = S}, Reverse[w]]", "Block[{w = S}, Length[w] + Total[Flatten[{w}]]]",
+    "Reap[Do[Sow[i], {i, S}]]", "Module[{w = S}, w[[All]] = 0; w]",
+]
+
 # Heads (or call forms) with no dense builtin to compare against: the dense
 # side of these templates is the stated formula instead (a function of S, T,
 # v as Normal).
@@ -197,12 +234,15 @@ def rand_array(rng, dims, kind, bg, density):
     return f"SparseArray[{{{', '.join(rules)}}}, {dims_s}, {bg}]"
 
 
-def gen_cases(n, seed):
+FAMILIES = ["elem", "red", "struct", "lin", "func", "proc"]
+
+
+def gen_cases(n, seed, families=FAMILIES):
     rng = random.Random(seed)
     cases = []
     for i in range(n):
         rank = rng.choice([1, 1, 2, 2, 2, 3])
-        family = rng.choice(["elem", "red", "struct", "lin"])
+        family = rng.choice(families)
         square = family == "lin" and rank == 2
         dims = rand_dims(rng, rank, square)
         kind = rng.choice(KINDS)
@@ -217,6 +257,10 @@ def gen_cases(n, seed):
             op = rng.choice(REDUCTION)
         elif family == "struct":
             op = rng.choice(STRUCTURAL)
+        elif family == "func":
+            op = rng.choice(FUNCTIONAL)
+        elif family == "proc":
+            op = rng.choice(PROCEDURAL)
         else:
             op = rng.choice(MATRIX if rank == 2 else VECTOR if rank == 1 else STRUCTURAL)
             if any(h in op for h in NUMERIC_ONLY) and kind not in ("int", "real", "rational"):
@@ -349,9 +393,11 @@ def main():
     ap.add_argument("--valgrind", action="store_true")
     ap.add_argument("--keep", metavar="FILE")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--families", default=",".join(FAMILIES),
+                    help="comma-separated subset of " + ",".join(FAMILIES))
     a = ap.parse_args()
 
-    cases = gen_cases(a.n, a.seed)
+    cases = gen_cases(a.n, a.seed, a.families.split(","))
     if a.keep:
         with open(a.keep, "w") as fh:
             fh.write(PRELUDE + "\n".join(case_line(c) for c in cases) + "\n")

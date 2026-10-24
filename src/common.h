@@ -72,6 +72,12 @@ bool head_is(const Expr* e, const char* sym);
  * message and returns the expression unchanged. */
 Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max);
 
+/* Emit Head::normal ("Nonatomic expression expected at position `pos` in
+ * call.") for an atom where a builtin needs an expression with parts, and
+ * return NULL so the call stays unevaluated -- the reference behaviour of
+ * Sort[x], Union[x], Split[x], .... Borrows `call`. */
+Expr* builtin_normal_error(const char* head, const Expr* call, int pos);
+
 /* Result of common_scan_inexact.
  *
  *   has_inexact: true iff `e` contains any inexact numeric leaf

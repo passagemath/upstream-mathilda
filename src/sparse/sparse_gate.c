@@ -7,9 +7,11 @@
  * unevaluated. The packed surface met the same problem with its transparency
  * gate (pack.c), which MATERIALISES a buffer for every head that has not opted
  * in. That default cannot be copied here: the language treats a SparseArray as
- * an atom for the pattern heads (Count[s, 0] is 0, Cases/Position/MemberQ/
- * Select see nothing inside), Sort/Fold/Union reject it with ::normal, and a
- * container -- List[s], Rule[a, s], a user's f[s_] -- must keep the object.
+ * an atom for the pattern heads (Count[s, 0] is 0, Cases/Position/MemberQ
+ * see nothing inside), and a container -- List[s], Rule[a, s], a user's
+ * f[s_] -- must keep the object. (Sort, Fold, Union, Split, Gather, Ordering
+ * reject an array with ::normal in the reference; here they answer as on
+ * Normal[s], a deliberate extension -- see data-structures.md.)
  *
  * So the gate is OPT-IN per head, by SymbolDef.sparse_mode, and the modes
  * record which of three behaviours the head has on an array argument
@@ -167,20 +169,87 @@ static bool declined(const Expr* r, const Expr* rewritten) {
     return r->type == EXPR_FUNCTION && expr_eq(r, rewritten);
 }
 
-/* An array answer, made sparse over `bg`. Consumes `r`. */
+/* The most common element of the full array `sa` (its Normal flattened to
+ * the array level), as the background of a re-sparsified answer whose own
+ * background never occurs. NULL if it cannot be found. */
+static Expr* commonest_element(const Expr* s) {
+    const SparseArray* sa = sp_of(s);
+    Expr* nrm = sp_normal(sa);
+    if (!nrm) return NULL;
+    Expr* fa[2] = { nrm, expr_new_integer(sa->rank - 1) };
+    Expr* flat = expr_new_function(expr_new_symbol("Flatten"), fa, 2);
+    Expr* ca[2] = { flat, expr_new_integer(1) };
+    Expr* cc = expr_new_function(expr_new_symbol("Commonest"), ca, 2);
+    Expr* r = evaluate(cc);
+    expr_free(cc);
+    Expr* out = NULL;
+    if (r->type == EXPR_FUNCTION && is_list(r) && r->data.function.arg_count >= 1)
+        out = expr_copy(r->data.function.args[0]);
+    expr_free(r);
+    return out;
+}
+
+/* An array answer, made sparse over `bg`. Consumes `r`.
+ *
+ * `bg` is the leading array's background, which is the answer's background
+ * whenever the head maps a background element to itself (Reverse, Take,
+ * Transpose, ...). A head that changes elements may not: Clip[v - 1, {0, 10}]
+ * maps the background -1 to 0. Kept anyway, every element would be explicit
+ * over a background that occurs nowhere -- and the next step would carry that
+ * stale background along, so two arrays with equal Normal stop being SameQ.
+ * So when `bg` does not occur in the answer at all, the answer's commonest
+ * element becomes the background instead. */
 static Expr* resparse(Expr* r, const Expr* bg) {
     if (!(r->type == EXPR_NDARRAY || is_list(r))) return r;
     Expr* args[3] = { r, expr_new_symbol(SYM_Automatic), expr_copy((Expr*)bg) };
     Expr* call = expr_new_function(expr_new_symbol(SYM_SparseArray), args, 3);
     Expr* out = evaluate(call);
+    if (out->type == EXPR_SPARSE) {
+        const SparseArray* sa = sp_of(out);
+        int64_t total = sp_total(sa->rank, sa->dims);
+        if (total > 0 && sp_nnz(sa) == total) {
+            Expr* nbg = commonest_element(out);
+            if (nbg && !expr_eq(nbg, sa->bg)) {
+                Expr* a2[3] = { expr_copy(call->data.function.args[0]),
+                                expr_new_symbol(SYM_Automatic), nbg };
+                Expr* c2 = expr_new_function(expr_new_symbol(SYM_SparseArray), a2, 3);
+                Expr* again = evaluate(c2);
+                expr_free(c2);
+                if (again->type == EXPR_SPARSE) { expr_free(out); out = again; }
+                else expr_free(again);
+            } else {
+                expr_free(nbg);
+            }
+        }
+        expr_free(call);
+        return out;
+    }
     expr_free(call);
-    if (out->type == EXPR_SPARSE) return out;
     /* Not a full array (ragged, or a List of non-array values): keep the
      * dense answer the densified call produced. */
     Expr* dense = expr_copy(out->data.function.arg_count ? out->data.function.args[0] : out);
     expr_free(out);
     return dense;
 }
+
+/* Public forms of the helpers above, for the native kernels (sparse.h). */
+Expr* sp_gate_dense(const Expr* s, bool* refused) {
+    *refused = false;
+    return gate_dense(s, refused);
+}
+
+Expr* sp_gate_rows(const Expr* s, bool* refused) {
+    *refused = false;
+    const SparseArray* sa = sp_of(s);
+    if (sa->rank == 1 && sa->dims[0] > SP_GATE_MAX) {
+        Expr* none = gate_dense(s, refused);   /* the SparseArray::dense refusal */
+        expr_free(none);
+        return NULL;
+    }
+    return gate_rows(s);
+}
+
+Expr* sp_gate_resparse(Expr* r, const Expr* bg) { return resparse(r, bg); }
 
 /* ---------------------------------------------------------------------- */
 /* Diagnostics: MATHILDA_SPARSE_DIAG=gate                                  */
@@ -308,8 +377,8 @@ Expr* sp_gate(const Expr* call, int mode_bits, bool* rest) {
 
 /* Each list was settled call shape by call shape. A head absent from
  * every list keeps treating a SparseArray as an atom -- which is right for the
- * pattern heads (Count, Cases, Position, MemberQ, ReplaceAll, Level),
- * for Sort / Fold / Union (an atom error there too), and for every container. */
+ * pattern heads (Count, Cases, Position, MemberQ, ReplaceAll, Level) and for
+ * every container. */
 
 /* Answer as on Normal[s]. */
 static const char* const GATE_DENSE[] = {
@@ -340,23 +409,38 @@ static const char* const GATE_DENSE[] = {
     /* selection, ordering and combinatorics over the level-1 parts */
     "Tally", "Pick", "Riffle", "TakeLargest", "TakeSmallest",
     "RankedMax", "RankedMin", "Quantile", "RootMeanSquare", "Standardize",
-    "FlattenAt", "Thread", "HankelMatrix",
+    "FlattenAt", "HankelMatrix",
     "ToeplitzMatrix", "PrincipalComponents",
+    /* answered on Normal[s] (the reference refuses them with ::normal) */
+    "Union", "Split", "SplitBy", "Gather", "GatherBy", "Ordering",
+    "Counts", "CountsBy", "Nearest",
+    /* functional heads whose answer is a List in the reference */
+    "MapAt", "DeleteDuplicates", "DeleteDuplicatesBy", "AnyTrue", "AllTrue",
+    "NoneTrue", "Subsets", "Complement", "Intersection", "MapAll",
+    /* an array is not a polynomial or an objective: answer (or decline) as
+     * on Normal[s], never treat the atom as a variable */
+    "CoefficientRules", "CoefficientArrays", "CoefficientList", "MonomialList",
+    "Decompose", "FactorTermsList", "Minimize", "Maximize",
+    "NMinimize", "NMaximize", "FindMinimum", "FindMaximum",
     NULL
 };
 
 /* As SPG_DENSE, with an array answer re-sparsified over the leading array's
  * background. */
 static const char* const GATE_RESPARSE[] = {
-    "Transpose", "ConjugateTranspose", "Flatten", "ArrayReshape", "Reverse",
+    "Transpose", "ConjugateTranspose", "ArrayReshape", "Reverse",
     "Take", "Drop", "Rest", "Most", "First", "Last", "Append",
     "Prepend", "Partition", "RotateLeft", "RotateRight", "ArrayPad",
     "Diagonal", "DiagonalMatrix", "KroneckerProduct", "MatrixPower",
     "Extract", "ReplacePart", "Insert", "Delete", "Chop", "Clip",
-    "Expand", "ExpandAll", "Together", "Simplify", "Factor", "D", "Dt",
+    "Expand", "ExpandAll", "Together", "Simplify", "FullSimplify", "Factor", "D", "Dt",
     "MovingAverage", "ExponentialMovingAverage", "LowerTriangularize",
     "UpperTriangularize", "Permute", "MovingMedian", "PadLeft", "PadRight",
     "Normalize",
+    /* order-only rearrangements: answered on Normal[s], kept sparse */
+    "Sort", "SortBy", "ReverseSort",
+    /* an array of polynomials is an array of answers */
+    "HornerForm",
     NULL
 };
 
@@ -372,7 +456,12 @@ void sparse_gate_init(void) {
     for (const char* const* p = GATE_ROWS; *p; p++) symtab_set_sparse_mode(*p, SPG_ROWS);
     /* Arrays inside List arguments, two levels down. */
     symtab_set_sparse_mode("ArrayFlatten", SPG_RESPARSE | SPG_DEEP | SPG_ANYPOS);
-    symtab_set_sparse_mode("Outer", SPG_RESPARSE | SPG_ANYPOS);
+    /* Outer is dense unless f is Times over a leading sparse array -- the
+     * native kernel (sparse_func.c) decides; this is its fallback. */
+    symtab_set_sparse_mode("Outer", SPG_DENSE | SPG_DEEP);
+    /* Arrays nested in a List argument: Flatten[{s, s}]. (Thread reads the
+     * arrays inside its f[...] itself, funcprog.c.) */
+    symtab_set_sparse_mode("Flatten", SPG_RESPARSE | SPG_DEEP);
     symtab_set_sparse_mode("Join", SPG_RESPARSE | SPG_ALLARR);
     symtab_set_sparse_mode("Map", SPG_MAP);
     symtab_set_sparse_mode("MapThread", SPG_ROWS | SPG_DEEP);

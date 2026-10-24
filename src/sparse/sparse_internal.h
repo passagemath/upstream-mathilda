@@ -59,5 +59,9 @@ void sparse_struct_init(void);
 /* Native Dot / MatrixPower / Inner kernels (sparse_dot.c), registered after
  * the gate so they take the call first. */
 void sparse_dot_init(void);
+/* Native kernels for the functional heads (sparse_func.c): Map at any level,
+ * MapIndexed / Apply / Scan with a level spec, Fold / FoldList, Outer, Clip,
+ * Chop. Registered by sparse_init after the gate. */
+void sparse_func_init(void);
 
 #endif /* MATHILDA_SPARSE_INTERNAL_H */

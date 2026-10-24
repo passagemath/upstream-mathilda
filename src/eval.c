@@ -837,7 +837,11 @@ static Expr* eval_sparse_rule_arg(const Expr* rule) {
  * list) the sparse arrays densify -- a sparse array plus a dense one is a
  * dense array -- and the rewritten call threads as Lists on the next step.
  * Otherwise the call threads over the sparse arrays themselves
- * (sparse/sparse_thread.c). NULL leaves the call to the steps below. */
+ * (sparse/sparse_thread.c). NULL leaves the call to the steps below; the call
+ * itself back (expr_copy) settles it as it stands, after a message
+ * (Thread::tdlen for unequal lengths, SparseArray::dense over the implicit
+ * densify cap) -- the List threading below must not then run, since it would
+ * treat the SparseArray as a scalar. */
 static Expr* listable_sparse(const Expr* res, int la_kind) {
     /* N numericalises a SparseArray itself (numeric.c), keeping it sparse. */
     const Expr* h = res->data.function.head;
@@ -846,14 +850,39 @@ static Expr* listable_sparse(const Expr* res, int la_kind) {
     bool dense = (la_kind & LA_LIST) != 0;
     for (size_t i = 0; i < n && !dense; i++) dense = is_packed_list(res->data.function.args[i]);
     if (!dense) return sp_thread_listable(res);
+    /* Every threaded operand must share the leading length. */
+    int64_t len = -1;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* x = res->data.function.args[i];
+        int64_t li = x->type == EXPR_SPARSE ? x->data.sparse->dims[0]
+                   : is_packed_list(x) ? x->data.ndarray.dims[0]
+                   : (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+                      x->data.function.head->data.symbol.name == SYM_List)
+                         ? (int64_t)x->data.function.arg_count : -1;
+        if (li < 0) continue;
+        if (len >= 0 && li != len) {
+            char* shown = expr_to_string_outputform((Expr*)res);
+            mth_message("Thread", "tdlen", "Objects of unequal length in %s cannot be combined.",
+                        shown ? shown : "");
+            free(shown);
+            return expr_copy((Expr*)res);
+        }
+        len = li;
+    }
+    /* Times keeps a zero-background factor's sparsity: v Range[n] is sparse. */
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Times) {
+        Expr* t = sp_thread_times_dense(res);
+        if (t) return t;
+    }
     Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) {
         Expr* x = res->data.function.args[i];
-        Expr* d = x->type == EXPR_SPARSE ? sp_normal(x->data.sparse) : NULL;
+        bool refused = false;
+        Expr* d = x->type == EXPR_SPARSE ? sp_gate_dense(x, &refused) : NULL;
         if (x->type == EXPR_SPARSE && !d) {
             for (size_t j = 0; j < i; j++) expr_free(a[j]);
             free(a);
-            return NULL;
+            return refused ? expr_copy((Expr*)res) : NULL;
         }
         a[i] = d ? d : expr_copy(x);
     }
@@ -2567,6 +2596,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 g_trace_suppress++;
                 Expr* sp_res = listable_sparse(res, la_kind);
                 g_trace_suppress--;
+                if (sp_res == res) {
+                    /* settled after its message: no List threading, no re-ask */
+                    expr_free(sp_res);
+                    g_step_settled_depth = eval_recursion_depth;
+                    return res;
+                }
                 if (sp_res) {
                     expr_free(res);
                     *changed = true; /* threaded over (or densified) SparseArrays */

@@ -2362,6 +2362,15 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
 
     Expr* current_val = evaluate(sym);
     if (!current_val) return NULL;
+    /* A SparseArray appends through Append's native sparse kernel (a dense
+     * answer for an element that is not a row of the array). */
+    if (current_val->type == EXPR_SPARSE) {
+        Expr* aa[2] = { current_val, expr_copy(elem) };          /* adopts current_val */
+        Expr* call = expr_new_function(expr_new_symbol(prepend ? "Prepend" : "Append"), aa, 2);
+        Expr* new_val = evaluate(call);
+        expr_free(call);
+        return inplace_assign_back(sym, new_val);
+    }
     if (current_val->type != EXPR_FUNCTION && !is_ndarray(current_val)) {
         char* s = expr_to_string(res);
         mth_message(name, "normal",

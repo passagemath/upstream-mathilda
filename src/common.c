@@ -5,7 +5,8 @@
 #include "numeric.h"
 #include "rationalize.h"
 #include "sym_names.h"   /* SYM_Rule / SYM_RuleDelayed / SYM_Method */
-#include "message.h"     /* mth_message: route arg-count errors through Quiet/Check */
+#include "message.h"
+#include "print.h"     /* expr_to_string for the ::normal message */     /* mth_message: route arg-count errors through Quiet/Check */
 
 #include <stdio.h>
 #include <stdint.h>
@@ -47,6 +48,14 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max) {
                 "%s called with %zu argument%s; between %zu and %zu arguments are expected.",
                 head, got, got_s, min, max);
     }
+    return NULL;
+}
+
+Expr* builtin_normal_error(const char* head, const Expr* call, int pos) {
+    char* shown = expr_to_string((Expr*)call);
+    mth_message(head, "normal", "Nonatomic expression expected at position %d in %s.",
+                pos, shown ? shown : "");
+    free(shown);
     return NULL;
 }
 

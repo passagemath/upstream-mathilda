@@ -226,6 +226,15 @@ SparseArray* sp_coo_finish(SpCoo* c, Expr* bg, bool drop_bg);
  * alone, e.g. on a dimension mismatch, after the message). Borrows `call`. */
 Expr* sp_thread_listable(const Expr* call);
 
+/* Times[...] with a SparseArray of background 0 among dense arrays (Lists or
+ * packed lists whose dimensions are a prefix of its own, threading as Listable
+ * does) and scalars: the product vanishes wherever that factor does, so the
+ * answer is sparse on its pattern -- v Range[n] and m {1, 2, 3} stay sparse.
+ * NULL (nothing done) when no factor qualifies, a dense operand does not fit,
+ * or an operand holds an infinity / Indeterminate (0 x Infinity is not 0).
+ * Borrows `call`. */
+Expr* sp_thread_times_dense(const Expr* call);
+
 /* Part[s, i1, ..., ik]. NULL with *err set when a part does not exist (the
  * caller reports Part::partw); NULL with *err clear when the spec is not one
  * this path handles. Borrows everything. */
@@ -280,6 +289,21 @@ enum {
  * (the head declined, or densifying was refused), otherwise the gate had
  * nothing to do. */
 Expr* sp_gate(const Expr* call, int mode_bits, bool* rest);
+
+/* The gate's helpers, for native kernels:
+ *   sp_gate_dense     Normal[s], or NULL after SparseArray::dense (*refused
+ *                     set) when it would exceed the implicit-densify cap.
+ *   sp_gate_rows      the List of level-1 parts (sparse rows, or a vector's
+ *                     elements); NULL with *refused set over the cap.
+ *   sp_gate_resparse  an array answer made sparse over `bg` (consumes `r`),
+ *                     or `r` itself when it is not a full array. */
+Expr* sp_gate_dense(const Expr* s, bool* refused);
+Expr* sp_gate_rows(const Expr* s, bool* refused);
+Expr* sp_gate_resparse(Expr* r, const Expr* bg);
+
+/* Is `r` an array of exactly `sa`'s dimensions -- a List nest (or a packed
+ * list) whose elements at depth rank are not Lists (sparse_func.c)? */
+bool sp_same_shape(const Expr* r, const SparseArray* sa);
 
 /* A native SparseArray kernel (SymbolDef.sparse_native): borrows the whole
  * call, which has at least one SparseArray argument, and returns the answer,

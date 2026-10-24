@@ -8,7 +8,7 @@ Expr* builtin_split(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     
-    if (list->type != EXPR_FUNCTION) return expr_copy(list);
+    if (list->type != EXPR_FUNCTION) return builtin_normal_error("Split", res, 1);
     
     size_t count = list->data.function.arg_count;
     if (count == 0) return expr_copy(list);

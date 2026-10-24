@@ -2004,7 +2004,11 @@ static int eq_pair(const Expr* a, const Expr* b) {
     if (is_sparse(a) && is_sparse(b)) {
         const SparseArray* x = sp_of(a);
         const SparseArray* y = sp_of(b);
-        if (x->rank != y->rank) return EQ_FALSE;
+        /* Unequal lengths are unequal; equal lengths but a different rank
+         * compare a row with an element -- {1, 2} == {{1, 2}, {1, 2}} stays
+         * unevaluated, as on the dense forms. */
+        if (x->dims[0] != y->dims[0]) return EQ_FALSE;
+        if (x->rank != y->rank) return EQ_UNKNOWN;
         return eq_sparse_sparse(x, y);
     }
     const Expr* s = is_sparse(a) ? a : b;

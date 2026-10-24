@@ -414,7 +414,9 @@ Expr* builtin_union(Expr* res) {
 
     // Check if first arg is a function
     Expr* first_list = res->data.function.args[0];
-    if (first_list->type != EXPR_FUNCTION) return expr_copy(first_list);
+    for (size_t i = 0; i < last_arg; i++)
+        if (res->data.function.args[i]->type != EXPR_FUNCTION)
+            return builtin_normal_error("Union", res, (int)i + 1);
     
     Expr* common_head = first_list->data.function.head;
     
@@ -422,7 +424,7 @@ Expr* builtin_union(Expr* res) {
     size_t total_count = 0;
     for (size_t i = 0; i < last_arg; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type != EXPR_FUNCTION || !expr_eq(arg->data.function.head, common_head)) {
+        if (!expr_eq(arg->data.function.head, common_head)) {
             // Heads must match
             return NULL;
         }
@@ -539,13 +541,15 @@ Expr* builtin_intersection(Expr* res) {
     }
 
     Expr* first = res->data.function.args[0];
-    if (first->type != EXPR_FUNCTION) return expr_copy(first);
+    /* Every operand must share the head of the first; an atom is the
+     * reference's Intersection::normal, not an answer. */
+    for (size_t i = 0; i < last_arg; i++)
+        if (res->data.function.args[i]->type != EXPR_FUNCTION)
+            return builtin_normal_error("Intersection", res, (int)i + 1);
     Expr* common_head = first->data.function.head;
-
-    /* Every operand must share the head of the first. */
     for (size_t i = 0; i < last_arg; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type != EXPR_FUNCTION || !expr_eq(arg->data.function.head, common_head))
+        if (!expr_eq(arg->data.function.head, common_head))
             return NULL;
     }
 
@@ -679,13 +683,15 @@ Expr* builtin_complement(Expr* res) {
     }
 
     Expr* first = res->data.function.args[0];
-    if (first->type != EXPR_FUNCTION) return expr_copy(first);
+    /* Every operand must share the head of the first; an atom is the
+     * reference's Complement::normal, not an answer. */
+    for (size_t i = 0; i < last_arg; i++)
+        if (res->data.function.args[i]->type != EXPR_FUNCTION)
+            return builtin_normal_error("Complement", res, (int)i + 1);
     Expr* common_head = first->data.function.head;
-
-    /* Every operand must share the head of the first. */
     for (size_t i = 0; i < last_arg; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type != EXPR_FUNCTION || !expr_eq(arg->data.function.head, common_head))
+        if (!expr_eq(arg->data.function.head, common_head))
             return NULL;
     }
 
@@ -876,7 +882,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
         return ndarray_delist_and_reeval(res);
     }
 
-    if (list->type != EXPR_FUNCTION) return expr_copy(list);
+    if (list->type != EXPR_FUNCTION) return builtin_normal_error("DeleteDuplicates", res, 1);
     
     size_t count = list->data.function.arg_count;
     if (count == 0) return expr_copy(list);

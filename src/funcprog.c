@@ -1,6 +1,7 @@
 #include "print.h"
 
 #include "funcprog.h"
+#include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
 #include "eval.h"
 #include "arithmetic.h"
@@ -27,6 +28,14 @@ typedef struct {
     int64_t max;
     bool heads;
 } LevelSpec;
+
+/* Rational and Complex numbers are atoms to the level walkers: their parts
+ * are never visited (Map[f, {1/2}, {-1}] is {f[1/2]}, not {f[1]/f[2]}). */
+static bool is_atomic_number(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rational ||
+            e->data.function.head->data.symbol.name == SYM_Complex);
+}
 
 static int64_t get_depth(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
@@ -73,6 +82,9 @@ static LevelSpec parse_level_spec(Expr* ls, int64_t default_min, int64_t default
         }
     } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
         spec.min = 1;
+        spec.max = LEVEL_SPEC_INF;
+    } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
+        spec.min = 0;                       /* All is {0, Infinity} */
         spec.max = LEVEL_SPEC_INF;
     }
     return spec;
@@ -169,7 +181,7 @@ static Expr* apply_child(Expr* f, Expr* child, int64_t child_level, LevelSpec sp
 }
 
 static Expr* apply_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec spec) {
-    if (expr->type != EXPR_FUNCTION) {
+    if (expr->type != EXPR_FUNCTION || is_atomic_number(expr)) {
         return expr_copy(expr);
     }
 
@@ -304,7 +316,8 @@ static Expr* map_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec 
      * shared wholesale as `intermediate` -- no per-child recursion and no
      * structural rebuild -- and f (if it applies at this level) wraps the shared
      * subtree. */
-    if (expr->type == EXPR_FUNCTION && !(nonneg && current_level + 1 > spec.max)) {
+    if (expr->type == EXPR_FUNCTION && !is_atomic_number(expr) &&
+        !(nonneg && current_level + 1 > spec.max)) {
         // Recurse first (Bottom-up)
         /* An atomic association's parts are its values; keys and Rule/
          * RuleDelayed wrappers are kept, never mapped (assoc_struct.h). */
@@ -1365,7 +1378,7 @@ static Expr* scan_at_level(Expr* f, Expr* expr, int64_t current_level, LevelSpec
     if (spec.max >= 0 && current_level > spec.max)
         return NULL;
 
-    if (expr->type == EXPR_FUNCTION) {
+    if (expr->type == EXPR_FUNCTION && !is_atomic_number(expr)) {
         if (spec.heads) {
             Expr* s = scan_at_level(f, expr->data.function.head, current_level + 1, spec);
             if (s) return s;
@@ -3561,6 +3574,55 @@ static bool thread_parse_spec(Expr* spec, size_t K, bool* mask) {
     return false;
 }
 
+/* Thread[f[..., s, ...], ...] with a SparseArray s among f's arguments (or
+ * Thread[s] itself): the same call over Normal[s], which threads as the List
+ * it stands for.
+ * NULL when no argument is sparse, or when densifying was refused (after
+ * SparseArray::dense) -- the call then stays as it is. */
+static Expr* thread_densify_sparse(const Expr* res) {
+    const Expr* inner = res->data.function.args[0];
+    if (!sp_any_created()) return NULL;
+    if (inner->type == EXPR_SPARSE) {
+        /* Thread[s]: the array is the List it stands for */
+        bool refused = false;
+        Expr* d = sp_gate_dense(inner, &refused);
+        if (!d) return NULL;
+        size_t argc = res->data.function.arg_count;
+        Expr** ta = malloc(sizeof(Expr*) * argc);
+        ta[0] = d;
+        for (size_t j = 1; j < argc; j++) ta[j] = expr_copy(res->data.function.args[j]);
+        Expr* out = expr_new_function(expr_copy(res->data.function.head), ta, argc);
+        free(ta);
+        return out;
+    }
+    if (inner->type != EXPR_FUNCTION) return NULL;
+    size_t K = inner->data.function.arg_count;
+    size_t i = 0;
+    while (i < K && inner->data.function.args[i]->type != EXPR_SPARSE) i++;
+    if (i == K) return NULL;
+    Expr** a = malloc(sizeof(Expr*) * K);
+    if (!a) return NULL;
+    for (size_t j = 0; j < K; j++) {
+        Expr* aj = inner->data.function.args[j];
+        bool refused = false;
+        a[j] = aj->type == EXPR_SPARSE ? sp_gate_dense(aj, &refused) : expr_copy(aj);
+        if (!a[j]) {
+            for (size_t q = 0; q < j; q++) expr_free(a[q]);
+            free(a);
+            return NULL;
+        }
+    }
+    Expr* dense_inner = expr_new_function(expr_copy(inner->data.function.head), a, K);
+    free(a);
+    size_t argc = res->data.function.arg_count;
+    Expr** ta = malloc(sizeof(Expr*) * argc);
+    ta[0] = dense_inner;
+    for (size_t j = 1; j < argc; j++) ta[j] = expr_copy(res->data.function.args[j]);
+    Expr* out = expr_new_function(expr_copy(res->data.function.head), ta, argc);
+    free(ta);
+    return out;
+}
+
 Expr* builtin_thread(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -3569,6 +3631,8 @@ Expr* builtin_thread(Expr* res) {
     /* Thread[f[nd, ...]] threads over a visible NDArray as over its List.
      * A visible NDArray is an atom here; see ndarray_visible_delist_retry. */
     { Expr* nd_ = ndarray_visible_delist_retry(res, 0, true); if (nd_) return nd_; }
+    /* ... and over a SparseArray as over its Normal. */
+    { Expr* sp_ = thread_densify_sparse(res); if (sp_) return sp_; }
 
     Expr* expr = res->data.function.args[0];
 

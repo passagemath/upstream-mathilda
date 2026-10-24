@@ -269,7 +269,15 @@ static bool nd_rhs_fits_dtype(const Expr* rhs, NDType dt) {
 static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, Expr* rhs) {
     bool packed = is_packed_list(arr);
     NDType dt = arr->data.ndarray.dtype;
-    if (!packed || nd_rhs_fits_dtype(rhs, dt)) {
+    /* A packed list is a List: l[[All]] = 0 on a matrix replaces each ROW by
+     * 0 ({0, 0, 0}), it does not fill the buffer (that is a visible NDArray's
+     * machine-buffer semantics). A scalar written above the element level
+     * takes the List path. */
+    bool above_elements = packed && nindices < (size_t)arr->data.ndarray.rank &&
+                          !(rhs->type == EXPR_NDARRAY ||
+                            (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL &&
+                             rhs->data.function.head->data.symbol.name == SYM_List));
+    if (!above_elements && (!packed || nd_rhs_fits_dtype(rhs, dt))) {
         Expr* r = nd_part_assign(arr, indices, nindices, rhs);
         if (r) return r;
     }
@@ -305,9 +313,22 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         const SparseArray* sa = expr->data.sparse;
         Expr* dense = sp_normal(sa);
         if (!dense) return expr_copy(expr);
-        Expr* nd = expr_part_assign_rec(dense, indices, nindices, rhs);
+        /* A SparseArray right-hand side is spliced as the values it holds:
+         * s[[All, 1]] = SparseArray[{p, q, r}] fills a column, it does not put
+         * the vector object into every row. */
+        Expr* rhs_dense = NULL;
+        if (rhs->type == EXPR_SPARSE) {
+            bool refused = false;
+            rhs_dense = sp_gate_dense(rhs, &refused);
+            if (!rhs_dense) { expr_free(dense); return expr_copy(expr); }
+        }
+        Expr* nd = expr_part_assign_rec(dense, indices, nindices, rhs_dense ? rhs_dense : rhs);
         expr_free(dense);
+        if (rhs_dense) expr_free(rhs_dense);
         if (!nd) return expr_copy(expr);
+        /* An assignment that breaks the array (a row replaced by an atom,
+         * s[[All]] = 0) leaves an ordinary List, as on the dense form. */
+        if (!sp_same_shape(nd, sa)) return nd;
         Expr** d = malloc(sizeof(Expr*) * (size_t)sa->rank);
         for (int k = 0; k < sa->rank; k++) d[k] = expr_new_integer(sa->dims[k]);
         Expr* dims = expr_new_function(expr_new_symbol(SYM_List), d, (size_t)sa->rank);

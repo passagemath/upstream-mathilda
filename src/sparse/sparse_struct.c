@@ -2188,34 +2188,6 @@ static Expr* nat_padright(const Expr* call) { return pad_side(call, true); }
 static Expr* nat_padleft(const Expr* call) { return pad_side(call, false); }
 
 /* ======================================================================== */
-/* Map over a vector                                                        */
-/* ======================================================================== */
-
-/* Map[f, v] for a sparse vector: f over the stored values and once over the
- * background, by the Listable-threading tiers (a head's ND kernel over a
- * typed buffer, else f per value). A matrix is the gate's: Map walks its
- * rows. */
-static Expr* nat_map(const Expr* call) {
-    if (NARGS(call) != 2) return NULL;
-    const SparseArray* sa = sp_of(ARG(call, 1));
-    if (!sa || sa->rank != 1 || ARG(call, 0)->type == EXPR_SPARSE) return NULL;
-    Expr* a[1] = { expr_copy(ARG(call, 1)) };
-    Expr* fcall = expr_new_function(expr_copy(ARG(call, 0)), a, 1);
-    Expr* r = sp_thread_listable(fcall);
-    expr_free(fcall);
-    if (r) return r;
-    /* f giving a List on the background: the answer is a dense List of
-     * Lists, not an array with list-valued elements */
-    Expr* fa[1] = { expr_copy(sa->bg) };
-    Expr* fb = expr_new_function(expr_copy(ARG(call, 0)), fa, 1);
-    Expr* v = evaluate(fb);
-    expr_free(fb);
-    bool listy = is_arraylike(v);
-    expr_free(v);
-    return listy ? dense_answer(call, 0) : NULL;
-}
-
-/* ======================================================================== */
 /* Registration                                                             */
 /* ======================================================================== */
 
@@ -2244,5 +2216,4 @@ void sparse_struct_init(void) {
     symtab_set_sparse_native("ArrayPad", (const void*)nat_arraypad);
     symtab_set_sparse_native("PadRight", (const void*)nat_padright);
     symtab_set_sparse_native("PadLeft", (const void*)nat_padleft);
-    symtab_set_sparse_native("Map", (const void*)nat_map);
 }

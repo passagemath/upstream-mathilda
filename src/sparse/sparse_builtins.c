@@ -400,4 +400,5 @@ void sparse_init(void) {
     sparse_reduce_init();
     sparse_struct_init();
     sparse_dot_init();
+    sparse_func_init();
 }

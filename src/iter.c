@@ -39,6 +39,7 @@
  */
 
 #include "iter.h"
+#include "sparse/sparse.h"   /* {i, s}: iterate a SparseArray */
 #include "symtab.h"
 #include "eval.h"
 #include "core.h"
@@ -184,6 +185,17 @@ bool iter_spec_parse(Expr* spec, IterSpec* out) {
                 Expr* plain = ndarray_to_nested_list(bound);
                 expr_free(bound);
                 bound = plain;
+            }
+            /* A SparseArray iterates over its level-1 parts in order -- a
+             * vector's elements (background included), a matrix's sparse
+             * rows -- exactly as its Normal would. Too long a vector is
+             * refused (SparseArray::dense) and the spec is malformed. */
+            if (bound->type == EXPR_SPARSE) {
+                bool refused = false;
+                Expr* parts = sp_gate_rows(bound, &refused);
+                expr_free(bound);
+                if (!parts) { iter_spec_free(out); return false; }
+                bound = parts;
             }
             if (is_list_expr(bound)) {
                 out->kind = ITER_KIND_LIST;

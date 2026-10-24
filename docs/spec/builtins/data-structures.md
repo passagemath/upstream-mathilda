@@ -1558,10 +1558,11 @@ applied to `Normal[...]`, element by element: an exact Integer entry meeting a
 Real operand's implicit `0.` stays the Integer that sum gives, and no operand is
 coerced to Reals as a whole. Column indices within a slice are always sorted.
 
-**Not yet supported** (left unevaluated on a SparseArray): `Dot`, `Transpose`,
-`Tr`, `Total`, `LinearSolve`, `Det`, `Inverse`, `Eigenvalues` and the other
-linear algebra (planned next), `Map`, `MapIndexed`, `Flatten`, and graph
-functions returning SparseArrays.
+**Not yet supported:** native sparse `LinearSolve` / `Eigenvalues` (they
+answer on the dense form, under the densify cap), and graph functions
+returning SparseArrays. Every other builtin either has a native sparse kernel,
+answers through the transparency gate below, or treats the array as an atom
+by design.
 
 ```mathematica
 In[1]:= s = SparseArray[{{1, 1} -> 1, {2, 3} -> x}, {3, 3}]
@@ -1591,14 +1592,52 @@ call shape), and `tools/sparse_stress.py` re-checks the invariant
 
 | behaviour | heads (selection) | `f[s]` |
 |---|---|---|
-| answers as on `Normal[s]` | `Total`, `Max`, `Min`, `Mean`, `Tr`, `Det`, `Inverse`, `LinearSolve`, `Eigenvalues`, `MatrixRank`, `Accumulate`, `Differences`, `Equal`, `Tally`, `Inner`, `s . v` | the dense answer |
-| array answer stays sparse | `Transpose`, `Flatten`, `ArrayReshape`, `Reverse`, `Take`, `Drop`, `First`, `Rest`, `Join`, `Append`, `Partition`, `Diagonal`, `KroneckerProduct`, `Outer`, `ArrayFlatten`, `PadRight`, `Chop`, `Expand` | a SparseArray over the leading array's background |
-| walks level 1 | `Map`, `Apply`, `MapIndexed`, `Scan`, `Select`, `MapThread` | the rows, themselves SparseArrays (`Map` over a vector maps the elements and the background) |
-| atom | `Count`, `Cases`, `Position`, `MemberQ`, `ReplaceAll`, `Level`, `Sort`, `Fold`, `Union`, containers, user functions | the SparseArray itself |
+| answers as on `Normal[s]` | `Total`, `Max`, `Min`, `Mean`, `Tr`, `Det`, `Inverse`, `LinearSolve`, `Eigenvalues`, `MatrixRank`, `Accumulate`, `Differences`, `Equal`, `Tally`, `Inner`, `s . v`, `Union`, `Split`, `Gather`, `Ordering`, `Counts`, `MapAt`, `MapAll`, `AnyTrue`, `Complement`, `Intersection` | the dense answer |
+| array answer stays sparse | `Transpose`, `Flatten`, `ArrayReshape`, `Reverse`, `Take`, `Drop`, `First`, `Rest`, `Join`, `Append`, `Partition`, `Diagonal`, `KroneckerProduct`, `ArrayFlatten`, `PadRight`, `Chop`, `Clip`, `Expand`, `Sort`, `SortBy` | a SparseArray over the leading array's background (or, when the head changed every background element -- `Clip[v - 1, {0, 10}]` -- over the answer's commonest element) |
+| walks level 1 | `Map`, `Apply`, `MapIndexed`, `Scan`, `Select`, `MapThread`, `Fold` | the rows, themselves SparseArrays (`Map` over a vector maps the elements and the background) |
+| atom | `Count`, `Cases`, `Position`, `MemberQ`, `ReplaceAll`, `Level`, containers, user functions | the SparseArray itself |
 
 An array answer stays sparse only when an array leads: `Join[s, s]` is sparse
-and `Join[s, m]` with a dense `m` is dense. `Outer[f, s, v]` and
-`ArrayFlatten[{{s, s}}]` are sparse when any argument is.
+and `Join[s, m]` with a dense `m` is dense. `ArrayFlatten[{{s, s}}]` is sparse
+when any block is. A SparseArray nested in a List is seen by `Flatten`
+(`Flatten[{s, s}]`), `Thread` (`Thread[f[s, v]]`, `Thread[{s, v}]`), `Outer`
+and `MapThread`.
+
+**Functional and procedural heads** (`src/sparse/sparse_func.c`, `src/iter.c`).
+
+| call | answer |
+|---|---|
+| `Map[f, s, lev]`, `lev` the leaf level (`{r}`, or `{-1}` / `Infinity` over atomic elements) | f over the stored values and once over the background, O(nnz): a SparseArray with background `f[bg]` |
+| `Map[f, s, lev]`, any other level | as on `Normal[s]`; sparse again when the answer keeps the array's shape (`Map[f, s, {-1}]` over `x^2` entries) |
+| `MapIndexed`, `Apply`, `Scan` with a level spec | as on `Normal[s]` (`f @@@ m`, `Scan[f, m, {2}]`, `MapIndexed[f, m, {2}]`) |
+| `Table`, `Do`, `Sum`, `Product` over `{i, s}` | iterate the level-1 parts: a vector's elements, a matrix's sparse rows (`Sum[i, {i, m}]` is a sparse vector) |
+| `Fold[f, x, s]`, `FoldList[f, s]` | over the level-1 parts; a SparseArray *initial value* stays one (`Fold[Plus, s0, {s1, s2}]`) |
+| `Sort`, `SortBy`, `ReverseSort` | answered on `Normal[s]`, kept sparse |
+| `Union`, `DeleteDuplicates`, `Split`, `Gather`, `GatherBy`, `Ordering`, `Counts`, `AnyTrue` / `AllTrue` / `NoneTrue`, `MapAt`, `Subsets`, `Complement`, `Intersection` | answered on `Normal[s]` |
+| `AppendTo[s, e]`, `PrependTo`, `s += t`, `s *= c`, `s[[i]] = e`, `s[[All, k]] = t` | assigned back; sparse while the array keeps its shape (a SparseArray right-hand side is spliced as its values), an ordinary List when the assignment breaks it (`s[[1]] = x` on a matrix) |
+| `Thread[f[s, v]]`, `Thread[s]` | thread over `Normal[s]` |
+| `Outer[Times, s, v]`, `Outer[f, s]` | sparse; any other `Outer` is dense |
+| `s v`, `s m` (Times with dense arrays whose dimensions prefix `s`'s) | sparse on `s`'s pattern when `s`'s background is `0` and no operand holds an infinity; `s + v` is dense |
+| `s + v`, `s v` with both sparse, `v` of lower rank | `v` broadcasts as Listable pairs it (`m + v` adds `v[[i]]` to row `i`) |
+
+Two deliberate differences from the reference:
+
+- **Traversal order.** `Scan`, `Select`, `Do`, `Table` and `Fold` visit the
+  elements in order, background included, exactly as over `Normal[s]`. The
+  reference visits the stored values first and then the background once
+  (`Scan[Print, SparseArray[{2 -> 3}, 3]]` prints `3`, `0` there and `0`, `3`,
+  `0` here), and `Do[..., {i, s}]` with `Break[]` then stops at a different
+  element.
+- **Computed instead of refused.** `Sort`, `SortBy`, `Union`, `Split`,
+  `Gather`, `GatherBy`, `Ordering`, `Fold` and `FoldList` answer on a
+  SparseArray; the reference leaves them unevaluated with `H::normal`. A
+  genuine atom still gets the message (`Sort[x]` prints `Sort::normal`), and
+  `Table[i, {i, s}]` is a List where the reference re-sparsifies a
+  one-dimensional Table.
+
+A level spec or an iterator that has to visit every position of an array
+larger than the densify cap is refused with `SparseArray::dense`, once
+(`Scan[f, s, {2}]` on a 10^5 x 10^5 array); a leaf-level `Map` never densifies.
 
 ```mathematica
 In[1]:= s = SparseArray[{{1, 1} -> 1, {2, 3} -> 2, {3, 2} -> -1, {3, 3} -> 4}, {3, 3}];

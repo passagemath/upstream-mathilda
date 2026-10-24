@@ -163,8 +163,9 @@ static void test_visible_delist_heads_match_list(void) {
         " Normal[TakeLargestBy[nd, Total, 2]] == TakeLargestBy[r, Total, 2], "
         " Thread[f[nd, x]] == Thread[f[r, x]]}",
         "{True, True, True, True, True, True}");
-    /* Symbolic and List arguments are untouched. */
-    run("SortBy[x, f]", "x");
+    /* Symbolic and List arguments are untouched (an atom is SortBy::normal,
+     * unevaluated, as in the reference). */
+    run("Quiet[SortBy[x, f]]", "SortBy[x, f]");
     run("Apply[f, {1, 2}]", "f[1, 2]");
 }
 

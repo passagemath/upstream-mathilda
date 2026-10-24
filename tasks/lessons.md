@@ -4891,3 +4891,9 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   the ~50 pre-existing failures (for example `upvalues_tests` expects
   `mod70[3,5]` with no space). That was wasted time and gave no signal about
   the change. The user corrected it.
+
+## 2026-10-24 — Don't launch the full suite for a scoped change (again)
+
+I started a full HEAD-vs-new A/B of all ~585 test binaries (DSolve corpus included) for the SparseArray functional-heads work. My reason was that it touched "core paths" (eval.c listable_sparse, iter.c, part.c). The user asked: "If DSolve doesn't use SparseArray, then why are we running its test corpus?"
+
+Rule: the full suite is only for Plus/Times/Power canonical-form changes. For anything else, run the binaries for the heads actually touched: grep `tests/test_*.c` for the heads and files changed. Add the static audits and the wolframscript diffs. A change to a shared file is not a reason to run everything.

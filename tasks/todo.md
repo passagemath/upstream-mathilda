@@ -1,3 +1,12 @@
+# FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
+
+Plan: ~/.claude/plans/let-s-continue-our-feyncalc-humble-karp.md. Gap doc: packages/feyncalc/FEYNCALC_GAPS.md (local).
+
+- [x] P1 named characters in source: WL classification table, lexer (letters/operators/constants/space), tests, docs ; v0.587 (full-suite A/B vs HEAD clean; match_stress_corpus 2000-deep case overflows only the unoptimised main test build)
+- [x] P2 harness: tools/feyncalc/run_fc_tests.m, tools/check_feyncalc.py, make check-feyncalc
+- [ ] P3 first baseline over the ten unit directories + root-cause triage (FEYNCALC_GAPS.md §7)
+- [ ] P4 acceptance loop: fix largest root-cause groups in the kernel, ratchet
+
 # SparseArray through the functional and procedural builtins (2026-10-24)
 
 Plan: ~/.claude/plans/let-s-continue-our-implementation-clever-frog.md. Spec: docs/spec/builtins/data-structures.md ("Functional and procedural heads").

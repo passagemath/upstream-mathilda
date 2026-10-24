@@ -1,0 +1,1102 @@
+AAcute	00e1	LETTER			
+ABar	0101	LETTER			
+ACup	0103	LETTER			
+ADoubleDot	00e4	LETTER			
+AE	00e6	LETTER			
+AGrave	00e0	LETTER			
+AHat	00e2	LETTER			
+ARing	00e5	LETTER			
+ATilde	00e3	LETTER			
+Akuz	f728	LETTER			
+Aleph	2135	LETTER			
+AliasDelimiter	f764	LETTER			
+AliasIndicator	f768	LETTER			
+AlignmentMarker	f760	SPACE			
+Alpha	03b1	LETTER			
+AltKey	f7d1	LETTER			
+And	2227	INFIX	And	FLAT	215.
+Andy	f729	LETTER			
+Angle	2220	LETTER			
+Angstrom	212b	LETTER			
+Application	f530	INFIX	Application	FLAT	645.
+AquariusSign	2652	LETTER			
+AriesSign	2648	LETTER			
+AscendingEllipsis	22f0	LETTER			
+AutoLeftMatch	f3a8	OTHER			
+AutoOperand	f3ae	LETTER			
+AutoPlaceholder	f3a4	LETTER			
+AutoRightMatch	f3a9	OTHER			
+AutoSpace	f3ad	SPACE			
+Backslash	2216	INFIX	Backslash	FLAT	460.
+BeamedEighthNote	266b	LETTER			
+BeamedSixteenthNote	266c	LETTER			
+Because	2235	INFIX	Because	LEFT	50.
+Bet	2136	LETTER			
+Beta	03b2	LETTER			
+BlackBishop	265d	LETTER			
+BlackKing	265a	LETTER			
+BlackKnight	265e	LETTER			
+BlackPawn	265f	LETTER			
+BlackQueen	265b	LETTER			
+BlackRook	265c	LETTER			
+Breve	02d8	LETTER			
+Bullet	2022	LETTER			
+CAcute	0107	LETTER			
+CCedilla	00e7	LETTER			
+CHacek	010d	LETTER			
+COMPATIBILITYKanjiSpace	3000	SPACE			
+COMPATIBILITYNoBreak	f3a2	SPACE			
+CancerSign	264b	LETTER			
+Cap	2322	INFIX	Cap	FLAT	350.
+CapitalAAcute	00c1	LETTER			
+CapitalABar	0100	LETTER			
+CapitalACup	0102	LETTER			
+CapitalADoubleDot	00c4	LETTER			
+CapitalAE	00c6	LETTER			
+CapitalAGrave	00c0	LETTER			
+CapitalAHat	00c2	LETTER			
+CapitalARing	00c5	LETTER			
+CapitalATilde	00c3	LETTER			
+CapitalAlpha	0391	LETTER			
+CapitalBeta	0392	LETTER			
+CapitalCAcute	0106	LETTER			
+CapitalCCedilla	00c7	LETTER			
+CapitalCHacek	010c	LETTER			
+CapitalChi	03a7	LETTER			
+CapitalDHacek	010e	LETTER			
+CapitalDelta	0394	LETTER			
+CapitalDifferentialD	f74b	PREFIX	CapitalDifferentialD		550.
+CapitalDigamma	03dc	LETTER			
+CapitalEAcute	00c9	LETTER			
+CapitalEBar	0112	LETTER			
+CapitalECup	0114	LETTER			
+CapitalEDoubleDot	00cb	LETTER			
+CapitalEGrave	00c8	LETTER			
+CapitalEHacek	011a	LETTER			
+CapitalEHat	00ca	LETTER			
+CapitalEpsilon	0395	LETTER			
+CapitalEta	0397	LETTER			
+CapitalEth	00d0	LETTER			
+CapitalGamma	0393	LETTER			
+CapitalIAcute	00cd	LETTER			
+CapitalICup	012c	LETTER			
+CapitalIDoubleDot	00cf	LETTER			
+CapitalIGrave	00cc	LETTER			
+CapitalIHat	00ce	LETTER			
+CapitalIota	0399	LETTER			
+CapitalKappa	039a	LETTER			
+CapitalKoppa	03de	LETTER			
+CapitalLSlash	0141	LETTER			
+CapitalLambda	039b	LETTER			
+CapitalMu	039c	LETTER			
+CapitalNHacek	0147	LETTER			
+CapitalNTilde	00d1	LETTER			
+CapitalNu	039d	LETTER			
+CapitalOAcute	00d3	LETTER			
+CapitalODoubleAcute	0150	LETTER			
+CapitalODoubleDot	00d6	LETTER			
+CapitalOE	0152	LETTER			
+CapitalOGrave	00d2	LETTER			
+CapitalOHat	00d4	LETTER			
+CapitalOSlash	00d8	LETTER			
+CapitalOTilde	00d5	LETTER			
+CapitalOmega	03a9	LETTER			
+CapitalOmicron	039f	LETTER			
+CapitalPhi	03a6	LETTER			
+CapitalPi	03a0	LETTER			
+CapitalPsi	03a8	LETTER			
+CapitalRHacek	0158	LETTER			
+CapitalRho	03a1	LETTER			
+CapitalSHacek	0160	LETTER			
+CapitalSampi	03e0	LETTER			
+CapitalSigma	03a3	LETTER			
+CapitalStigma	03da	LETTER			
+CapitalTHacek	0164	LETTER			
+CapitalTau	03a4	LETTER			
+CapitalTheta	0398	LETTER			
+CapitalThorn	00de	LETTER			
+CapitalUAcute	00da	LETTER			
+CapitalUDoubleAcute	0170	LETTER			
+CapitalUDoubleDot	00dc	LETTER			
+CapitalUGrave	00d9	LETTER			
+CapitalUHat	00db	LETTER			
+CapitalURing	016e	LETTER			
+CapitalUpsilon	03a5	LETTER			
+CapitalXi	039e	LETTER			
+CapitalYAcute	00dd	LETTER			
+CapitalZHacek	017d	LETTER			
+CapitalZeta	0396	LETTER			
+CapricornSign	2651	LETTER			
+Cedilla	00b8	LETTER			
+Cent	00a2	LETTER			
+CenterDot	00b7	INFIX	CenterDot	FLAT	410.
+CenterEllipsis	22ef	LETTER			
+CheckedBox	2612	LETTER			
+Checkmark	2713	LETTER			
+CheckmarkedBox	2611	LETTER			
+Chi	03c7	LETTER			
+CircleDot	2299	INFIX	CircleDot	FLAT	520.
+CircleMinus	2296	INFIX	CircleMinus	LEFT	330.
+CirclePlus	2295	INFIX	CirclePlus	FLAT	330.
+CircleTimes	2297	INFIX	CircleTimes	FLAT	420.
+ClockwiseContourIntegral	2232	PREFIX	ClockwiseContourIntegral		670.
+CloseCurlyDoubleQuote	201d	OTHER			
+CloseCurlyQuote	2019	OTHER			
+CloverLeaf	2318	LETTER			
+ClubSuit	2663	LETTER			
+Colon	2236	INFIX	Colon	FLAT	80.
+CommandKey	f76a	LETTER			
+Conditioned	f3d3	INFIX	Conditioned	FLAT	195.
+Congruent	2261	INFIX	Congruent	FLAT	290.
+Conjugate	f3c8	POSTFIX	Conjugate		670.
+ConjugateTranspose	f3c9	POSTFIX	ConjugateTranspose		670.
+ConstantC	f7da	LETTER			
+Continuation	f3b1	SPACE			
+ContinuedFractionK	f3d9	PREFIX	ContinuedFractionK		380.
+ContourIntegral	222e	PREFIX	ContourIntegral		670.
+ControlKey	f763	LETTER			
+Coproduct	2210	INFIX	Coproduct	FLAT	360.
+Copyright	00a9	LETTER			
+CounterClockwiseContourIntegral	2233	PREFIX	CounterClockwiseContourIntegral		670.
+Cross	f4a0	INFIX	Cross	FLAT	500.
+CubeRoot	221b	PREFIX	CubeRoot		670.
+Cup	2323	INFIX	Cup	FLAT	340.
+CupCap	224d	INFIX	CupCap	FLAT	290.
+CurlyCapitalUpsilon	03d2	LETTER			
+CurlyEpsilon	03b5	LETTER			
+CurlyKappa	03f0	LETTER			
+CurlyPhi	03c6	LETTER			
+CurlyPi	03d6	LETTER			
+CurlyRho	03f1	LETTER			
+CurlyTheta	03d1	LETTER			
+Currency	00a4	LETTER			
+DHacek	010f	LETTER			
+Dagger	2020	LETTER			
+Dalet	2138	LETTER			
+Dash	2013	LETTER			
+Degree	00b0	LETTER	Degree		
+Del	2207	PREFIX	Del		550.
+DeleteKey	f7d0	LETTER			
+Delta	03b4	LETTER			
+DescendingEllipsis	22f1	LETTER			
+Diameter	2300	LETTER			
+Diamond	22c4	INFIX	Diamond	FLAT	450.
+DiamondSuit	2662	LETTER			
+DifferenceDelta	f4a4	OTHER			
+DifferentialD	f74c	PREFIX	DifferentialD		550.
+Digamma	03dd	LETTER			
+DirectedEdge	f3d5	INFIX	DirectedEdge	RIGHT	295.
+DiscreteRatio	f4a5	OTHER			
+DiscreteShift	f4a3	OTHER			
+DiscretionaryHyphen	00ad	LETTER			
+DiscretionaryLineSeparator	f76e	OTHER			
+DiscretionaryPageBreakAbove	f3bf	SPACE			
+DiscretionaryPageBreakBelow	f3c6	SPACE			
+DiscretionaryParagraphSeparator	f76f	OTHER			
+Distributed	f3d2	INFIX	Distributed	FLAT	250.
+Divide	00f7	OTHER			
+Divides	2223	OTHER			
+DivisionSlash	2215	OTHER			
+DotEqual	2250	INFIX	DotEqual	FLAT	290.
+DotlessI	0131	LETTER			
+DotlessJ	f700	LETTER			
+DottedSquare	f751	LETTER			
+DoubleContourIntegral	222f	PREFIX	DoubleContourIntegral		670.
+DoubleDagger	2021	LETTER			
+DoubleDot	00a8	LETTER			
+DoubleDownArrow	21d3	INFIX	DoubleDownArrow	FLAT	580.
+DoubleLeftArrow	21d0	INFIX	DoubleLeftArrow	FLAT	270.
+DoubleLeftRightArrow	21d4	INFIX	DoubleLeftRightArrow	FLAT	270.
+DoubleLeftTee	2ae4	INFIX	DoubleLeftTee	LEFT	190.
+DoubleLongLeftArrow	27f8	INFIX	DoubleLongLeftArrow	FLAT	580.
+DoubleLongLeftRightArrow	27fa	INFIX	DoubleLongLeftRightArrow	FLAT	580.
+DoubleLongRightArrow	27f9	INFIX	DoubleLongRightArrow	FLAT	580.
+DoublePrime	2033	LETTER			
+DoubleRightArrow	21d2	INFIX	DoubleRightArrow	FLAT	270.
+DoubleRightTee	22a8	INFIX	DoubleRightTee	RIGHT	190.
+DoubleStruckA	f6e6	LETTER			
+DoubleStruckB	f6e7	LETTER			
+DoubleStruckC	f6e8	LETTER			
+DoubleStruckCapitalA	f7a4	LETTER			
+DoubleStruckCapitalB	f7a5	LETTER			
+DoubleStruckCapitalC	f7a6	LETTER			
+DoubleStruckCapitalD	f7a7	LETTER			
+DoubleStruckCapitalE	f7a8	LETTER			
+DoubleStruckCapitalF	f7a9	LETTER			
+DoubleStruckCapitalG	f7aa	LETTER			
+DoubleStruckCapitalH	f7ab	LETTER			
+DoubleStruckCapitalI	f7ac	LETTER			
+DoubleStruckCapitalJ	f7ad	LETTER			
+DoubleStruckCapitalK	f7ae	LETTER			
+DoubleStruckCapitalL	f7af	LETTER			
+DoubleStruckCapitalM	f7b0	LETTER			
+DoubleStruckCapitalN	f7b1	LETTER			
+DoubleStruckCapitalO	f7b2	LETTER			
+DoubleStruckCapitalP	f7b3	LETTER			
+DoubleStruckCapitalQ	f7b4	LETTER			
+DoubleStruckCapitalR	f7b5	LETTER			
+DoubleStruckCapitalS	f7b6	LETTER			
+DoubleStruckCapitalT	f7b7	LETTER			
+DoubleStruckCapitalU	f7b8	LETTER			
+DoubleStruckCapitalV	f7b9	LETTER			
+DoubleStruckCapitalW	f7ba	LETTER			
+DoubleStruckCapitalX	f7bb	LETTER			
+DoubleStruckCapitalY	f7bc	LETTER			
+DoubleStruckCapitalZ	f7bd	LETTER			
+DoubleStruckD	f6e9	LETTER			
+DoubleStruckE	f6ea	LETTER			
+DoubleStruckEight	f7e3	LETTER			
+DoubleStruckF	f6eb	LETTER			
+DoubleStruckFive	f7e0	LETTER			
+DoubleStruckFour	f7df	LETTER			
+DoubleStruckG	f6ec	LETTER			
+DoubleStruckH	f6ed	LETTER			
+DoubleStruckI	f6ee	LETTER			
+DoubleStruckJ	f6ef	LETTER			
+DoubleStruckK	f6f0	LETTER			
+DoubleStruckL	f6f1	LETTER			
+DoubleStruckM	f6f2	LETTER			
+DoubleStruckN	f6f3	LETTER			
+DoubleStruckNine	f7e4	LETTER			
+DoubleStruckO	f6f4	LETTER			
+DoubleStruckOne	f7dc	LETTER			
+DoubleStruckP	f6f5	LETTER			
+DoubleStruckQ	f6f6	LETTER			
+DoubleStruckR	f6f7	LETTER			
+DoubleStruckS	f6f8	LETTER			
+DoubleStruckSeven	f7e2	LETTER			
+DoubleStruckSix	f7e1	LETTER			
+DoubleStruckT	f6f9	LETTER			
+DoubleStruckThree	f7de	LETTER			
+DoubleStruckTwo	f7dd	LETTER			
+DoubleStruckU	f6fa	LETTER			
+DoubleStruckV	f6fb	LETTER			
+DoubleStruckW	f6fc	LETTER			
+DoubleStruckX	f6fd	LETTER			
+DoubleStruckY	f6fe	LETTER			
+DoubleStruckZ	f6ff	LETTER			
+DoubleStruckZero	f7db	LETTER			
+DoubleUpArrow	21d1	INFIX	DoubleUpArrow	FLAT	580.
+DoubleUpDownArrow	21d5	INFIX	DoubleUpDownArrow	FLAT	580.
+DoubleVerticalBar	2225	INFIX	DoubleVerticalBar	FLAT	280.
+DoubledGamma	f74a	LETTER			
+DoubledPi	f749	LETTER			
+DownArrow	2193	INFIX	DownArrow	FLAT	580.
+DownArrowBar	2913	INFIX	DownArrowBar	FLAT	580.
+DownArrowUpArrow	21f5	INFIX	DownArrowUpArrow	FLAT	580.
+DownBreve	f755	LETTER			
+DownExclamation	00a1	LETTER			
+DownLeftRightVector	2950	INFIX	DownLeftRightVector	FLAT	270.
+DownLeftTeeVector	295e	INFIX	DownLeftTeeVector	FLAT	270.
+DownLeftVector	21bd	INFIX	DownLeftVector	FLAT	270.
+DownLeftVectorBar	2956	INFIX	DownLeftVectorBar	FLAT	270.
+DownPointer	25be	LETTER			
+DownQuestion	00bf	LETTER			
+DownRightTeeVector	295f	INFIX	DownRightTeeVector	FLAT	270.
+DownRightVector	21c1	INFIX	DownRightVector	FLAT	270.
+DownRightVectorBar	2957	INFIX	DownRightVectorBar	FLAT	270.
+DownTee	22a4	INFIX	DownTee	LEFT	190.
+DownTeeArrow	21a7	INFIX	DownTeeArrow	FLAT	580.
+EAcute	00e9	LETTER			
+EBar	0113	LETTER			
+ECup	0115	LETTER			
+EDoubleDot	00eb	LETTER			
+EGrave	00e8	LETTER			
+EHacek	011b	LETTER			
+EHat	00ea	LETTER			
+Earth	f3df	LETTER			
+EighthNote	266a	LETTER			
+Element	2208	INFIX	Element	FLAT	250.
+Ellipsis	2026	LETTER			
+EmptyCircle	25cb	LETTER			
+EmptyDiamond	25c7	LETTER			
+EmptyDownTriangle	25bd	LETTER			
+EmptyRectangle	25af	LETTER			
+EmptySet	2205	LETTER			
+EmptySmallCircle	25e6	LETTER			
+EmptySmallSquare	25fb	LETTER			
+EmptySquare	25a1	LETTER			
+EmptyUpTriangle	25b3	LETTER			
+EmptyVerySmallSquare	25ab	LETTER			
+EnterKey	f7d4	LETTER			
+EntityEnd	f3b9	LETTER			
+EntityStart	f3b8	LETTER			
+Epsilon	03f5	LETTER			
+Equal	f431	INFIX	Equal	FLAT	290.
+EqualTilde	2242	INFIX	EqualTilde	FLAT	290.
+Equilibrium	21cc	INFIX	Equilibrium	FLAT	290.
+Equivalent	29e6	INFIX	Equivalent	FLAT	205.
+ErrorIndicator	f767	OTHER			
+EscapeKey	f769	LETTER			
+Eta	03b7	LETTER			
+Eth	00f0	LETTER			
+Euro	20ac	LETTER			
+Exists	2203	PREFIX	Exists		240.
+ExpectationE	f3dd	PREFIX	ExpectationE		325.
+ExponentialE	f74d	LETTER	E		
+FiLigature	fb01	LETTER			
+FilledCircle	25cf	LETTER			
+FilledDiamond	25c6	LETTER			
+FilledDownTriangle	25bc	LETTER			
+FilledLeftTriangle	25c0	LETTER			
+FilledRectangle	25ae	LETTER			
+FilledRightTriangle	25b6	LETTER			
+FilledSmallCircle	f750	LETTER			
+FilledSmallSquare	25fc	LETTER			
+FilledSquare	25a0	LETTER			
+FilledUpTriangle	25b2	LETTER			
+FilledVerySmallSquare	25aa	LETTER			
+FinalSigma	03c2	LETTER			
+FirstPage	f7fa	LETTER			
+FivePointedStar	2605	LETTER			
+FlLigature	fb02	LETTER			
+Flat	266d	LETTER			
+Florin	0192	LETTER			
+ForAll	2200	PREFIX	ForAll		240.
+FormalA	f800	LETTER			
+FormalAlpha	f854	LETTER			
+FormalB	f801	LETTER			
+FormalBeta	f855	LETTER			
+FormalC	f802	LETTER			
+FormalCapitalA	f81a	LETTER			
+FormalCapitalAlpha	f834	LETTER			
+FormalCapitalB	f81b	LETTER			
+FormalCapitalBeta	f835	LETTER			
+FormalCapitalC	f81c	LETTER			
+FormalCapitalChi	f84a	LETTER			
+FormalCapitalD	f81d	LETTER			
+FormalCapitalDelta	f837	LETTER			
+FormalCapitalDigamma	f87f	LETTER			
+FormalCapitalE	f81e	LETTER			
+FormalCapitalEpsilon	f838	LETTER			
+FormalCapitalEta	f83a	LETTER			
+FormalCapitalF	f81f	LETTER			
+FormalCapitalG	f820	LETTER			
+FormalCapitalGamma	f836	LETTER			
+FormalCapitalH	f821	LETTER			
+FormalCapitalI	f822	LETTER			
+FormalCapitalIota	f83c	LETTER			
+FormalCapitalJ	f823	LETTER			
+FormalCapitalK	f824	LETTER			
+FormalCapitalKappa	f83d	LETTER			
+FormalCapitalKoppa	f881	LETTER			
+FormalCapitalL	f825	LETTER			
+FormalCapitalLambda	f83e	LETTER			
+FormalCapitalM	f826	LETTER			
+FormalCapitalMu	f83f	LETTER			
+FormalCapitalN	f827	LETTER			
+FormalCapitalNu	f840	LETTER			
+FormalCapitalO	f828	LETTER			
+FormalCapitalOmega	f84c	LETTER			
+FormalCapitalOmicron	f842	LETTER			
+FormalCapitalP	f829	LETTER			
+FormalCapitalPhi	f849	LETTER			
+FormalCapitalPi	f843	LETTER			
+FormalCapitalPsi	f84b	LETTER			
+FormalCapitalQ	f82a	LETTER			
+FormalCapitalR	f82b	LETTER			
+FormalCapitalRho	f844	LETTER			
+FormalCapitalS	f82c	LETTER			
+FormalCapitalSampi	f883	LETTER			
+FormalCapitalSigma	f846	LETTER			
+FormalCapitalStigma	f87d	LETTER			
+FormalCapitalT	f82d	LETTER			
+FormalCapitalTau	f847	LETTER			
+FormalCapitalTheta	f83b	LETTER			
+FormalCapitalU	f82e	LETTER			
+FormalCapitalUpsilon	f848	LETTER			
+FormalCapitalV	f82f	LETTER			
+FormalCapitalW	f830	LETTER			
+FormalCapitalX	f831	LETTER			
+FormalCapitalXi	f841	LETTER			
+FormalCapitalY	f832	LETTER			
+FormalCapitalZ	f833	LETTER			
+FormalCapitalZeta	f839	LETTER			
+FormalChi	f86a	LETTER			
+FormalCurlyCapitalUpsilon	f875	LETTER			
+FormalCurlyEpsilon	f858	LETTER			
+FormalCurlyKappa	f885	LETTER			
+FormalCurlyPhi	f869	LETTER			
+FormalCurlyPi	f879	LETTER			
+FormalCurlyRho	f886	LETTER			
+FormalCurlyTheta	f874	LETTER			
+FormalD	f803	LETTER			
+FormalDelta	f857	LETTER			
+FormalDigamma	f880	LETTER			
+FormalE	f804	LETTER			
+FormalEpsilon	f88a	LETTER			
+FormalEta	f85a	LETTER			
+FormalF	f805	LETTER			
+FormalFinalSigma	f865	LETTER			
+FormalG	f806	LETTER			
+FormalGamma	f856	LETTER			
+FormalH	f807	LETTER			
+FormalI	f808	LETTER			
+FormalIota	f85c	LETTER			
+FormalJ	f809	LETTER			
+FormalK	f80a	LETTER			
+FormalKappa	f85d	LETTER			
+FormalKoppa	f882	LETTER			
+FormalL	f80b	LETTER			
+FormalLambda	f85e	LETTER			
+FormalM	f80c	LETTER			
+FormalMu	f85f	LETTER			
+FormalN	f80d	LETTER			
+FormalNu	f860	LETTER			
+FormalO	f80e	LETTER			
+FormalOmega	f86c	LETTER			
+FormalOmicron	f862	LETTER			
+FormalP	f80f	LETTER			
+FormalPhi	f878	LETTER			
+FormalPi	f863	LETTER			
+FormalPsi	f86b	LETTER			
+FormalQ	f810	LETTER			
+FormalR	f811	LETTER			
+FormalRho	f864	LETTER			
+FormalS	f812	LETTER			
+FormalSampi	f884	LETTER			
+FormalScriptA	a000	LETTER			
+FormalScriptB	a001	LETTER			
+FormalScriptC	a002	LETTER			
+FormalScriptCapitalA	a01a	LETTER			
+FormalScriptCapitalB	a01b	LETTER			
+FormalScriptCapitalC	a01c	LETTER			
+FormalScriptCapitalD	a01d	LETTER			
+FormalScriptCapitalE	a01e	LETTER			
+FormalScriptCapitalF	a01f	LETTER			
+FormalScriptCapitalG	a020	LETTER			
+FormalScriptCapitalH	a021	LETTER			
+FormalScriptCapitalI	a022	LETTER			
+FormalScriptCapitalJ	a023	LETTER			
+FormalScriptCapitalK	a024	LETTER			
+FormalScriptCapitalL	a025	LETTER			
+FormalScriptCapitalM	a026	LETTER			
+FormalScriptCapitalN	a027	LETTER			
+FormalScriptCapitalO	a028	LETTER			
+FormalScriptCapitalP	a029	LETTER			
+FormalScriptCapitalQ	a02a	LETTER			
+FormalScriptCapitalR	a02b	LETTER			
+FormalScriptCapitalS	a02c	LETTER			
+FormalScriptCapitalT	a02d	LETTER			
+FormalScriptCapitalU	a02e	LETTER			
+FormalScriptCapitalV	a02f	LETTER			
+FormalScriptCapitalW	a030	LETTER			
+FormalScriptCapitalX	a031	LETTER			
+FormalScriptCapitalY	a032	LETTER			
+FormalScriptCapitalZ	a033	LETTER			
+FormalScriptD	a003	LETTER			
+FormalScriptE	a004	LETTER			
+FormalScriptF	a005	LETTER			
+FormalScriptG	a006	LETTER			
+FormalScriptH	a007	LETTER			
+FormalScriptI	a008	LETTER			
+FormalScriptJ	a009	LETTER			
+FormalScriptK	a00a	LETTER			
+FormalScriptL	a00b	LETTER			
+FormalScriptM	a00c	LETTER			
+FormalScriptN	a00d	LETTER			
+FormalScriptO	a00e	LETTER			
+FormalScriptP	a00f	LETTER			
+FormalScriptQ	a010	LETTER			
+FormalScriptR	a011	LETTER			
+FormalScriptS	a012	LETTER			
+FormalScriptT	a013	LETTER			
+FormalScriptU	a014	LETTER			
+FormalScriptV	a015	LETTER			
+FormalScriptW	a016	LETTER			
+FormalScriptX	a017	LETTER			
+FormalScriptY	a018	LETTER			
+FormalScriptZ	a019	LETTER			
+FormalSigma	f866	LETTER			
+FormalStigma	f87e	LETTER			
+FormalT	f813	LETTER			
+FormalTau	f867	LETTER			
+FormalTheta	f85b	LETTER			
+FormalU	f814	LETTER			
+FormalUpsilon	f868	LETTER			
+FormalV	f815	LETTER			
+FormalW	f816	LETTER			
+FormalX	f817	LETTER			
+FormalXi	f861	LETTER			
+FormalY	f818	LETTER			
+FormalZ	f819	LETTER			
+FormalZeta	f859	LETTER			
+FreakedSmiley	f721	LETTER			
+FreeformPrompt	f351	LETTER			
+Function	f4a1	INFIX	Function	RIGHT	90.
+Gamma	03b3	LETTER			
+GeminiSign	264a	LETTER			
+Gimel	2137	LETTER			
+GothicA	f6cc	LETTER			
+GothicB	f6cd	LETTER			
+GothicC	f6ce	LETTER			
+GothicCapitalA	f78a	LETTER			
+GothicCapitalB	f78b	LETTER			
+GothicCapitalC	212d	LETTER			
+GothicCapitalD	f78d	LETTER			
+GothicCapitalE	f78e	LETTER			
+GothicCapitalF	f78f	LETTER			
+GothicCapitalG	f790	LETTER			
+GothicCapitalH	210c	LETTER			
+GothicCapitalI	2111	LETTER			
+GothicCapitalJ	f793	LETTER			
+GothicCapitalK	f794	LETTER			
+GothicCapitalL	f795	LETTER			
+GothicCapitalM	f796	LETTER			
+GothicCapitalN	f797	LETTER			
+GothicCapitalO	f798	LETTER			
+GothicCapitalP	f799	LETTER			
+GothicCapitalQ	f79a	LETTER			
+GothicCapitalR	211c	LETTER			
+GothicCapitalS	f79c	LETTER			
+GothicCapitalT	f79d	LETTER			
+GothicCapitalU	f79e	LETTER			
+GothicCapitalV	f79f	LETTER			
+GothicCapitalW	f7a0	LETTER			
+GothicCapitalX	f7a1	LETTER			
+GothicCapitalY	f7a2	LETTER			
+GothicCapitalZ	2128	LETTER			
+GothicD	f6cf	LETTER			
+GothicE	f6d0	LETTER			
+GothicEight	f7ed	LETTER			
+GothicF	f6d1	LETTER			
+GothicFive	f7ea	LETTER			
+GothicFour	f7e9	LETTER			
+GothicG	f6d2	LETTER			
+GothicH	f6d3	LETTER			
+GothicI	f6d4	LETTER			
+GothicJ	f6d5	LETTER			
+GothicK	f6d6	LETTER			
+GothicL	f6d7	LETTER			
+GothicM	f6d8	LETTER			
+GothicN	f6d9	LETTER			
+GothicNine	f7ef	LETTER			
+GothicO	f6da	LETTER			
+GothicOne	f7e6	LETTER			
+GothicP	f6db	LETTER			
+GothicQ	f6dc	LETTER			
+GothicR	f6dd	LETTER			
+GothicS	f6de	LETTER			
+GothicSeven	f7ec	LETTER			
+GothicSix	f7eb	LETTER			
+GothicT	f6df	LETTER			
+GothicThree	f7e8	LETTER			
+GothicTwo	f7e7	LETTER			
+GothicU	f6e0	LETTER			
+GothicV	f6e1	LETTER			
+GothicW	f6e2	LETTER			
+GothicX	f6e3	LETTER			
+GothicY	f6e4	LETTER			
+GothicZ	f6e5	LETTER			
+GothicZero	f7e5	LETTER			
+GrayCircle	f753	LETTER			
+GraySquare	f752	LETTER			
+GreaterEqual	2265	INFIX	GreaterEqual	FLAT	290.
+GreaterEqualLess	22db	INFIX	GreaterEqualLess	FLAT	290.
+GreaterFullEqual	2267	INFIX	GreaterFullEqual	FLAT	290.
+GreaterGreater	226b	INFIX	GreaterGreater	FLAT	290.
+GreaterLess	2277	INFIX	GreaterLess	FLAT	290.
+GreaterSlantEqual	2a7e	INFIX	GreaterEqual	FLAT	290.
+GreaterTilde	2273	INFIX	GreaterTilde	FLAT	290.
+HBar	210f	LETTER			
+Hacek	02c7	LETTER			
+HappySmiley	263a	LETTER			
+HeartSuit	2661	LETTER			
+HermitianConjugate	f3ce	POSTFIX	ConjugateTranspose		670.
+HorizontalLine	2500	LETTER			
+HumpDownHump	224e	INFIX	HumpDownHump	FLAT	290.
+HumpEqual	224f	INFIX	HumpEqual	FLAT	290.
+Hyphen	2010	LETTER			
+IAcute	00ed	LETTER			
+ICup	012d	LETTER			
+IDoubleDot	00ef	LETTER			
+IGrave	00ec	LETTER			
+IHat	00ee	LETTER			
+ImaginaryI	f74e	LETTER	I		
+ImaginaryJ	f74f	LETTER	I		
+ImplicitPlus	f39e	INFIX	Plus	LEFT	310.
+Implies	f523	INFIX	Implies	RIGHT	200.
+IndentingNewLine	f3a3	NEWLINE			
+Infinity	221e	LETTER	Infinity		
+InlinePart	f51e	OTHER			
+Integral	222b	PREFIX	Integral		670.
+Intersection	22c2	INFIX	Intersection	FLAT	305.
+InvisibleApplication	f76d	OTHER			
+InvisibleComma	f765	OTHER			
+InvisiblePostfixScriptBase	f3b4	POSTFIX	InvisiblePostfixScriptBase		670.
+InvisiblePrefixScriptBase	f3b3	PREFIX	InvisiblePrefixScriptBase		670.
+InvisibleSpace	f360	SPACE			
+InvisibleTimes	2062	INFIX	Times	FLAT	400.
+Iota	03b9	LETTER			
+Jupiter	2643	LETTER			
+Kappa	03ba	LETTER			
+KernelIcon	f756	LETTER			
+KeyBar	f7d3	LETTER			
+Koppa	03df	LETTER			
+LSlash	0142	LETTER			
+Lambda	03bb	LETTER			
+LastPage	f7fb	LETTER			
+LeftAngleBracket	2329	OTHER			
+LeftArrow	2190	INFIX	LeftArrow	FLAT	270.
+LeftArrowBar	21e4	INFIX	LeftArrowBar	FLAT	270.
+LeftArrowRightArrow	21c6	INFIX	LeftArrowRightArrow	FLAT	270.
+LeftAssociation	f113	OTHER			
+LeftBracketingBar	f603	OTHER			
+LeftCeiling	2308	OTHER			
+LeftDoubleBracket	301a	OTHER			
+LeftDoubleBracketingBar	f605	OTHER			
+LeftDownTeeVector	2961	INFIX	LeftDownTeeVector	FLAT	580.
+LeftDownVector	21c3	INFIX	LeftDownVector	FLAT	580.
+LeftDownVectorBar	2959	INFIX	LeftDownVectorBar	FLAT	580.
+LeftFloor	230a	OTHER			
+LeftGuillemet	00ab	LETTER			
+LeftModified	f76b	LETTER			
+LeftPointer	25c2	LETTER			
+LeftRightArrow	2194	INFIX	LeftRightArrow	FLAT	270.
+LeftRightVector	294e	INFIX	LeftRightVector	FLAT	270.
+LeftSkeleton	f761	OTHER			
+LeftTee	22a3	INFIX	LeftTee	LEFT	190.
+LeftTeeArrow	21a4	INFIX	LeftTeeArrow	FLAT	270.
+LeftTeeVector	295a	INFIX	LeftTeeVector	FLAT	270.
+LeftTriangle	22b2	INFIX	LeftTriangle	FLAT	290.
+LeftTriangleBar	29cf	INFIX	LeftTriangleBar	FLAT	290.
+LeftTriangleEqual	22b4	INFIX	LeftTriangleEqual	FLAT	290.
+LeftUpDownVector	2951	INFIX	LeftUpDownVector	FLAT	580.
+LeftUpTeeVector	2960	INFIX	LeftUpTeeVector	FLAT	580.
+LeftUpVector	21bf	INFIX	LeftUpVector	FLAT	580.
+LeftUpVectorBar	2958	INFIX	LeftUpVectorBar	FLAT	580.
+LeftVector	21bc	INFIX	LeftVector	FLAT	270.
+LeftVectorBar	2952	INFIX	LeftVectorBar	FLAT	270.
+LeoSign	264c	LETTER			
+LessEqual	2264	INFIX	LessEqual	FLAT	290.
+LessEqualGreater	22da	INFIX	LessEqualGreater	FLAT	290.
+LessFullEqual	2266	INFIX	LessFullEqual	FLAT	290.
+LessGreater	2276	INFIX	LessGreater	FLAT	290.
+LessLess	226a	INFIX	LessLess	FLAT	290.
+LessSlantEqual	2a7d	INFIX	LessEqual	FLAT	290.
+LessTilde	2272	INFIX	LessTilde	FLAT	290.
+LetterSpace	f754	LETTER			
+LibraSign	264e	LETTER			
+LightBulb	f723	LETTER			
+Limit	f438	OTHER			
+LineSeparator	2028	NEWLINE			
+LongDash	2014	LETTER			
+LongEqual	f7d9	INFIX	Equal	FLAT	290.
+LongLeftArrow	27f5	INFIX	LongLeftArrow	FLAT	580.
+LongLeftRightArrow	27f7	INFIX	LongLeftRightArrow	FLAT	580.
+LongRightArrow	27f6	INFIX	LongRightArrow	FLAT	580.
+LowerLeftArrow	2199	INFIX	LowerLeftArrow	FLAT	270.
+LowerRightArrow	2198	INFIX	LowerRightArrow	FLAT	270.
+Mars	2642	LETTER			
+MathematicaIcon	f757	LETTER			
+MaxLimit	f439	OTHER			
+MeasuredAngle	2221	LETTER			
+MediumSpace	205f	SPACE			
+Mercury	263f	LETTER			
+Mho	2127	LETTER			
+Micro	00b5	LETTER			
+MinLimit	f43a	OTHER			
+Minus	2212	OTHER			
+MinusPlus	2213	INFIX	MinusPlus	LEFT	310.
+Mod1Key	f7d6	LETTER			
+Mod2Key	f7d7	LETTER			
+Moon	263e	LETTER			
+Mu	03bc	LETTER			
+NHacek	0148	LETTER			
+NTilde	00f1	LETTER			
+Nand	22bc	INFIX	Nand	FLAT	215.
+Natural	266e	LETTER			
+NegativeMediumSpace	f383	SPACE			
+NegativeThickSpace	f384	SPACE			
+NegativeThinSpace	f382	SPACE			
+NegativeVeryThinSpace	f380	SPACE			
+Neptune	2646	LETTER			
+NestedGreaterGreater	2aa2	INFIX	NestedGreaterGreater	FLAT	290.
+NestedLessLess	2aa1	INFIX	NestedLessLess	FLAT	290.
+NeutralSmiley	f722	LETTER			
+NewLine	000a	NEWLINE			
+NoBreak	2060	SPACE			
+NonBreakingSpace	00a0	SPACE			
+Nor	22bd	INFIX	Nor	FLAT	215.
+Not	00ac	PREFIX	Not		230.
+NotCongruent	2262	INFIX	NotCongruent	FLAT	290.
+NotCupCap	226d	INFIX	NotCupCap	FLAT	290.
+NotDoubleVerticalBar	2226	INFIX	NotDoubleVerticalBar	FLAT	280.
+NotElement	2209	INFIX	NotElement	FLAT	250.
+NotEqual	2260	INFIX	Unequal	FLAT	290.
+NotEqualTilde	f400	INFIX	NotEqualTilde	FLAT	290.
+NotExists	2204	PREFIX	NotExists		240.
+NotGreater	226f	INFIX	NotGreater	FLAT	290.
+NotGreaterEqual	2271	INFIX	NotGreaterEqual	FLAT	290.
+NotGreaterFullEqual	2269	INFIX	NotGreaterFullEqual	FLAT	290.
+NotGreaterGreater	f427	INFIX	NotGreaterGreater	FLAT	290.
+NotGreaterLess	2279	INFIX	NotGreaterLess	FLAT	290.
+NotGreaterSlantEqual	f429	INFIX	NotGreaterSlantEqual	FLAT	290.
+NotGreaterTilde	2275	INFIX	NotGreaterTilde	FLAT	290.
+NotHumpDownHump	f402	INFIX	NotHumpDownHump	FLAT	290.
+NotHumpEqual	f401	INFIX	NotHumpEqual	FLAT	290.
+NotLeftTriangle	22ea	INFIX	NotLeftTriangle	FLAT	290.
+NotLeftTriangleBar	f412	INFIX	NotLeftTriangleBar	FLAT	290.
+NotLeftTriangleEqual	22ec	INFIX	NotLeftTriangleEqual	FLAT	290.
+NotLess	226e	INFIX	NotLess	FLAT	290.
+NotLessEqual	2270	INFIX	NotLessEqual	FLAT	290.
+NotLessFullEqual	2268	INFIX	NotLessFullEqual	FLAT	290.
+NotLessGreater	2278	INFIX	NotLessGreater	FLAT	290.
+NotLessLess	f422	INFIX	NotLessLess	FLAT	290.
+NotLessSlantEqual	f424	INFIX	NotLessSlantEqual	FLAT	290.
+NotLessTilde	2274	INFIX	NotLessTilde	FLAT	290.
+NotNestedGreaterGreater	f428	INFIX	NotNestedGreaterGreater	FLAT	290.
+NotNestedLessLess	f423	INFIX	NotNestedLessLess	FLAT	290.
+NotPrecedes	2280	INFIX	NotPrecedes	FLAT	290.
+NotPrecedesEqual	f42b	INFIX	NotPrecedesEqual	FLAT	290.
+NotPrecedesSlantEqual	22e0	INFIX	NotPrecedesSlantEqual	FLAT	290.
+NotPrecedesTilde	22e8	INFIX	NotPrecedesTilde	FLAT	290.
+NotReverseElement	220c	INFIX	NotReverseElement	FLAT	250.
+NotRightTriangle	22eb	INFIX	NotRightTriangle	FLAT	290.
+NotRightTriangleBar	f413	INFIX	NotRightTriangleBar	FLAT	290.
+NotRightTriangleEqual	22ed	INFIX	NotRightTriangleEqual	FLAT	290.
+NotSquareSubset	f42e	INFIX	NotSquareSubset	FLAT	250.
+NotSquareSubsetEqual	22e2	INFIX	NotSquareSubsetEqual	FLAT	250.
+NotSquareSuperset	f42f	INFIX	NotSquareSuperset	FLAT	250.
+NotSquareSupersetEqual	22e3	INFIX	NotSquareSupersetEqual	FLAT	250.
+NotSubset	2284	INFIX	NotSubset	FLAT	250.
+NotSubsetEqual	2288	INFIX	NotSubsetEqual	FLAT	250.
+NotSucceeds	2281	INFIX	NotSucceeds	FLAT	290.
+NotSucceedsEqual	f42d	INFIX	NotSucceedsEqual	FLAT	290.
+NotSucceedsSlantEqual	22e1	INFIX	NotSucceedsSlantEqual	FLAT	290.
+NotSucceedsTilde	22e9	INFIX	NotSucceedsTilde	FLAT	290.
+NotSuperset	2285	INFIX	NotSuperset	FLAT	250.
+NotSupersetEqual	2289	INFIX	NotSupersetEqual	FLAT	250.
+NotTilde	2241	INFIX	NotTilde	FLAT	290.
+NotTildeEqual	2244	INFIX	NotTildeEqual	FLAT	290.
+NotTildeFullEqual	2247	INFIX	NotTildeFullEqual	FLAT	290.
+NotTildeTilde	2249	INFIX	NotTildeTilde	FLAT	290.
+NotVerticalBar	f3d1	INFIX	NotVerticalBar	FLAT	280.
+Nu	03bd	LETTER			
+Null	f3a0	LETTER			
+NumberComma	f7fc	LETTER			
+NumberSign	f724	LETTER			
+OAcute	00f3	LETTER			
+ODoubleAcute	0151	LETTER			
+ODoubleDot	00f6	LETTER			
+OE	0153	LETTER			
+OGrave	00f2	LETTER			
+OHat	00f4	LETTER			
+OSlash	00f8	LETTER			
+OTilde	00f5	LETTER			
+Omega	03c9	LETTER			
+Omicron	03bf	LETTER			
+OpenCurlyDoubleQuote	201c	OTHER			
+OpenCurlyQuote	2018	OTHER			
+OptionKey	f7d2	LETTER			
+Or	2228	INFIX	Or	FLAT	215.
+OverBrace	fe37	LETTER			
+OverBracket	23b4	LETTER			
+OverParenthesis	fe35	LETTER			
+PageBreakAbove	f3bd	SPACE			
+PageBreakBelow	f3be	SPACE			
+Paragraph	00b6	LETTER			
+ParagraphSeparator	2029	NEWLINE			
+PartialD	2202	OTHER			
+PermutationProduct	f3de	INFIX	PermutationProduct	FLAT	520.
+Perpendicular	27c2	INFIX	Perpendicular	LEFT	190.
+Phi	03d5	LETTER			
+Pi	03c0	LETTER	Pi		
+Piecewise	f361	PREFIX	Piecewise		480.
+PiscesSign	2653	LETTER			
+Placeholder	f528	LETTER			
+PlusMinus	00b1	INFIX	PlusMinus	LEFT	310.
+Pluto	2647	LETTER			
+Precedes	227a	INFIX	Precedes	FLAT	290.
+PrecedesEqual	2aaf	INFIX	PrecedesEqual	FLAT	290.
+PrecedesSlantEqual	227c	INFIX	PrecedesSlantEqual	FLAT	290.
+PrecedesTilde	227e	INFIX	PrecedesTilde	FLAT	290.
+Prime	2032	LETTER			
+ProbabilityPr	f3dc	PREFIX	ProbabilityPr		325.
+Product	220f	PREFIX	Product		380.
+Proportion	2237	INFIX	Proportion	FLAT	290.
+Proportional	221d	INFIX	Proportional	FLAT	290.
+Psi	03c8	LETTER			
+QuarterNote	2669	LETTER			
+RHacek	0159	LETTER			
+RawAmpersand	0026	POSTFIX	Function		90.
+RawAt	0040	OTHER			
+RawBackquote	0060	OTHER			
+RawBackslash	005c	OTHER			
+RawColon	003a	INFIX	Pattern	OTHER	150.
+RawComma	002c	OTHER			
+RawDash	002d	OTHER			
+RawDollar	0024	LETTER			
+RawDot	002e	INFIX	Dot	FLAT	490.
+RawDoubleQuote	0022	OTHER			
+RawEqual	003d	INFIX	Set	RIGHT	40.
+RawEscape	001b	LETTER			
+RawExclamation	0021	PREFIX	Not		230.
+RawGreater	003e	INFIX	Greater	FLAT	290.
+RawLeftBrace	007b	OTHER			
+RawLeftBracket	005b	OTHER			
+RawLeftParenthesis	0028	OTHER			
+RawLess	003c	INFIX	Less	FLAT	290.
+RawNumberSign	0023	OTHER			
+RawPercent	0025	OTHER			
+RawPlus	002b	INFIX	Plus	FLAT	310.
+RawQuestion	003f	INFIX	PatternTest	OTHER	680.
+RawQuote	0027	POSTFIX	Derivative[1]		1000.
+RawReturn	000d	NEWLINE			
+RawRightBrace	007d	OTHER			
+RawRightBracket	005d	OTHER			
+RawRightParenthesis	0029	OTHER			
+RawSemicolon	003b	INFIX	CompoundExpression	FLAT	10.
+RawSlash	002f	OTHER			
+RawSpace	0020	SPACE			
+RawStar	002a	INFIX	Times	FLAT	400.
+RawTab	0009	SPACE			
+RawTilde	007e	OTHER			
+RawUnderscore	005f	PREFIX	Blank		730.
+RawVerticalBar	007c	INFIX	Alternatives	FLAT	160.
+RawWedge	005e	INFIX	Power	RIGHT	590.
+RegisteredTrademark	00ae	LETTER			
+ReturnIndicator	21b5	LETTER			
+ReturnKey	f766	LETTER			
+ReverseDoublePrime	2036	LETTER			
+ReverseElement	220b	INFIX	ReverseElement	FLAT	250.
+ReverseEquilibrium	21cb	INFIX	ReverseEquilibrium	FLAT	290.
+ReversePrime	2035	LETTER			
+ReverseUpEquilibrium	296f	INFIX	ReverseUpEquilibrium	FLAT	580.
+Rho	03c1	LETTER			
+RightAngle	221f	LETTER			
+RightAngleBracket	232a	OTHER			
+RightArrow	2192	INFIX	RightArrow	FLAT	270.
+RightArrowBar	21e5	INFIX	RightArrowBar	FLAT	270.
+RightArrowLeftArrow	21c4	INFIX	RightArrowLeftArrow	FLAT	270.
+RightAssociation	f114	OTHER			
+RightBracketingBar	f604	OTHER			
+RightCeiling	2309	OTHER			
+RightDoubleBracket	301b	OTHER			
+RightDoubleBracketingBar	f606	OTHER			
+RightDownTeeVector	295d	INFIX	RightDownTeeVector	FLAT	580.
+RightDownVector	21c2	INFIX	RightDownVector	FLAT	580.
+RightDownVectorBar	2955	INFIX	RightDownVectorBar	FLAT	580.
+RightFloor	230b	OTHER			
+RightGuillemet	00bb	LETTER			
+RightModified	f76c	LETTER			
+RightPointer	25b8	LETTER			
+RightSkeleton	f762	OTHER			
+RightTee	22a2	INFIX	RightTee	RIGHT	190.
+RightTeeArrow	21a6	INFIX	RightTeeArrow	FLAT	270.
+RightTeeVector	295b	INFIX	RightTeeVector	FLAT	270.
+RightTriangle	22b3	INFIX	RightTriangle	FLAT	290.
+RightTriangleBar	29d0	INFIX	RightTriangleBar	FLAT	290.
+RightTriangleEqual	22b5	INFIX	RightTriangleEqual	FLAT	290.
+RightUpDownVector	294f	INFIX	RightUpDownVector	FLAT	580.
+RightUpTeeVector	295c	INFIX	RightUpTeeVector	FLAT	580.
+RightUpVector	21be	INFIX	RightUpVector	FLAT	580.
+RightUpVectorBar	2954	INFIX	RightUpVectorBar	FLAT	580.
+RightVector	21c0	INFIX	RightVector	FLAT	270.
+RightVectorBar	2953	INFIX	RightVectorBar	FLAT	270.
+RoundImplies	2970	INFIX	RoundImplies	RIGHT	240.
+RoundSpaceIndicator	f3b2	SPACE			
+Rule	f522	INFIX	Rule	RIGHT	120.
+RuleDelayed	f51f	INFIX	RuleDelayed	RIGHT	120.
+Rupee	20b9	LETTER			
+SHacek	0161	LETTER			
+SZ	00df	LETTER			
+SadSmiley	2639	LETTER			
+SagittariusSign	2650	LETTER			
+Sampi	03e1	LETTER			
+Saturn	2644	LETTER			
+ScorpioSign	264f	LETTER			
+ScriptA	f6b2	LETTER			
+ScriptB	f6b3	LETTER			
+ScriptC	f6b4	LETTER			
+ScriptCapitalA	f770	LETTER			
+ScriptCapitalB	212c	LETTER			
+ScriptCapitalC	f772	LETTER			
+ScriptCapitalD	f773	LETTER			
+ScriptCapitalE	2130	LETTER			
+ScriptCapitalF	2131	LETTER			
+ScriptCapitalG	f776	LETTER			
+ScriptCapitalH	210b	LETTER			
+ScriptCapitalI	2110	LETTER			
+ScriptCapitalJ	f779	LETTER			
+ScriptCapitalK	f77a	LETTER			
+ScriptCapitalL	2112	LETTER			
+ScriptCapitalM	2133	LETTER			
+ScriptCapitalN	f77d	LETTER			
+ScriptCapitalO	f77e	LETTER			
+ScriptCapitalP	f77f	LETTER			
+ScriptCapitalQ	f780	LETTER			
+ScriptCapitalR	211b	LETTER			
+ScriptCapitalS	f782	LETTER			
+ScriptCapitalT	f783	LETTER			
+ScriptCapitalU	f784	LETTER			
+ScriptCapitalV	f785	LETTER			
+ScriptCapitalW	f786	LETTER			
+ScriptCapitalX	f787	LETTER			
+ScriptCapitalY	f788	LETTER			
+ScriptCapitalZ	f789	LETTER			
+ScriptD	f6b5	LETTER			
+ScriptDotlessI	f730	LETTER			
+ScriptDotlessJ	f731	LETTER			
+ScriptE	212f	LETTER			
+ScriptEight	f7f8	LETTER			
+ScriptF	f6b7	LETTER			
+ScriptFive	f7f5	LETTER			
+ScriptFour	f7f4	LETTER			
+ScriptG	210a	LETTER			
+ScriptH	f6b9	LETTER			
+ScriptI	f6ba	LETTER			
+ScriptJ	f6bb	LETTER			
+ScriptK	f6bc	LETTER			
+ScriptL	2113	LETTER			
+ScriptM	f6be	LETTER			
+ScriptN	f6bf	LETTER			
+ScriptNine	f7f9	LETTER			
+ScriptO	2134	LETTER			
+ScriptOne	f7f1	LETTER			
+ScriptP	f6c1	LETTER			
+ScriptQ	f6c2	LETTER			
+ScriptR	f6c3	LETTER			
+ScriptS	f6c4	LETTER			
+ScriptSeven	f7f7	LETTER			
+ScriptSix	f7f6	LETTER			
+ScriptT	f6c5	LETTER			
+ScriptThree	f7f3	LETTER			
+ScriptTwo	f7f2	LETTER			
+ScriptU	f6c6	LETTER			
+ScriptV	f6c7	LETTER			
+ScriptW	f6c8	LETTER			
+ScriptX	f6c9	LETTER			
+ScriptY	f6ca	LETTER			
+ScriptZ	f6cb	LETTER			
+ScriptZero	f7f0	LETTER			
+Section	00a7	LETTER			
+SelectionPlaceholder	f527	LETTER			
+Shah	f11d	LETTER			
+Sharp	266f	LETTER			
+ShiftKey	f7d5	LETTER			
+ShortDownArrow	f52b	INFIX	ShortDownArrow	FLAT	580.
+ShortLeftArrow	f526	INFIX	ShortLeftArrow	FLAT	270.
+ShortRightArrow	f525	INFIX	ShortRightArrow	FLAT	270.
+ShortUpArrow	f52a	INFIX	ShortUpArrow	FLAT	580.
+Sigma	03c3	LETTER			
+SixPointedStar	2736	LETTER			
+SkeletonIndicator	2043	OTHER			
+SmallCircle	2218	INFIX	SmallCircle	FLAT	530.
+SpaceIndicator	2423	SPACE			
+SpaceKey	f7bf	LETTER			
+SpadeSuit	2660	LETTER			
+SpanFromAbove	f3bb	LETTER			
+SpanFromBoth	f3bc	LETTER			
+SpanFromLeft	f3ba	LETTER			
+SphericalAngle	2222	LETTER			
+Spooky	f72a	LETTER			
+Sqrt	221a	PREFIX	Sqrt		670.
+Square	f520	PREFIX	Square		540.
+SquareIntersection	2293	INFIX	SquareIntersection	FLAT	305.
+SquareSubset	228f	INFIX	SquareSubset	FLAT	250.
+SquareSubsetEqual	2291	INFIX	SquareSubsetEqual	FLAT	250.
+SquareSuperset	2290	INFIX	SquareSuperset	FLAT	250.
+SquareSupersetEqual	2292	INFIX	SquareSupersetEqual	FLAT	250.
+SquareUnion	2294	INFIX	SquareUnion	FLAT	300.
+Star	22c6	INFIX	Star	FLAT	390.
+StepperDown	f3cd	LETTER			
+StepperLeft	f3cb	LETTER			
+StepperRight	f3ca	LETTER			
+StepperUp	f3cc	LETTER			
+Sterling	00a3	LETTER			
+Stigma	03db	LETTER			
+Subset	2282	INFIX	Subset	FLAT	250.
+SubsetEqual	2286	INFIX	SubsetEqual	FLAT	250.
+Succeeds	227b	INFIX	Succeeds	FLAT	290.
+SucceedsEqual	2ab0	INFIX	SucceedsEqual	FLAT	290.
+SucceedsSlantEqual	227d	INFIX	SucceedsSlantEqual	FLAT	290.
+SucceedsTilde	227f	INFIX	SucceedsTilde	FLAT	290.
+SuchThat	220d	INFIX	SuchThat	RIGHT	180.
+Sum	2211	PREFIX	Sum		320.
+Sun	2609	LETTER			
+Superset	2283	INFIX	Superset	FLAT	250.
+SupersetEqual	2287	INFIX	SupersetEqual	FLAT	250.
+SystemEnterKey	f75f	LETTER			
+SystemsModelDelay	f3af	LETTER			
+THacek	0165	LETTER			
+TabKey	f7be	LETTER			
+Tau	03c4	LETTER			
+TaurusSign	2649	LETTER			
+TensorProduct	f3da	INFIX	TensorProduct	FLAT	495.
+TensorWedge	f3db	INFIX	TensorWedge	FLAT	500.
+Therefore	2234	INFIX	Therefore	RIGHT	50.
+Theta	03b8	LETTER			
+ThickSpace	2005	SPACE			
+ThinSpace	2009	SPACE			
+Thorn	00fe	LETTER			
+Tilde	223c	INFIX	Tilde	FLAT	290.
+TildeEqual	2243	INFIX	TildeEqual	FLAT	290.
+TildeFullEqual	2245	INFIX	TildeFullEqual	FLAT	290.
+TildeTilde	2248	INFIX	TildeTilde	FLAT	290.
+Times	00d7	INFIX	Times	FLAT	400.
+Trademark	2122	LETTER			
+Transpose	f3c7	POSTFIX	Transpose		670.
+TripleDot	f758	LETTER			
+TwoWayRule	f120	INFIX	TwoWayRule	RIGHT	125.
+UAcute	00fa	LETTER			
+UDoubleAcute	0171	LETTER			
+UDoubleDot	00fc	LETTER			
+UGrave	00f9	LETTER			
+UHat	00fb	LETTER			
+URing	016f	LETTER			
+UnderBrace	fe38	LETTER			
+UnderBracket	23b5	LETTER			
+UnderParenthesis	fe36	LETTER			
+UndirectedEdge	f3d4	INFIX	UndirectedEdge	RIGHT	295.
+Union	22c3	INFIX	Union	FLAT	300.
+UnionPlus	228e	INFIX	UnionPlus	FLAT	300.
+UnknownGlyph	fffd	LETTER			
+UpArrow	2191	INFIX	UpArrow	FLAT	580.
+UpArrowBar	2912	INFIX	UpArrowBar	FLAT	580.
+UpArrowDownArrow	21c5	INFIX	UpArrowDownArrow	FLAT	580.
+UpDownArrow	2195	INFIX	UpDownArrow	FLAT	580.
+UpEquilibrium	296e	INFIX	UpEquilibrium	FLAT	580.
+UpPointer	25b4	LETTER			
+UpTee	22a5	INFIX	UpTee	LEFT	190.
+UpTeeArrow	21a5	INFIX	UpTeeArrow	FLAT	580.
+UpperLeftArrow	2196	INFIX	UpperLeftArrow	FLAT	270.
+UpperRightArrow	2197	INFIX	UpperRightArrow	FLAT	270.
+Upsilon	03c5	LETTER			
+Uranus	26e2	LETTER			
+VectorGreater	f434	OTHER			
+VectorGreaterEqual	f435	OTHER			
+VectorLess	f436	OTHER			
+VectorLessEqual	f437	OTHER			
+Vee	22c1	INFIX	Vee	FLAT	430.
+Venus	2640	LETTER			
+VerticalBar	f3d0	INFIX	VerticalBar	FLAT	280.
+VerticalEllipsis	22ee	LETTER			
+VerticalLine	2502	LETTER			
+VerticalSeparator	f432	INFIX	VerticalSeparator	FLAT	60.
+VerticalTilde	2240	INFIX	VerticalTilde	FLAT	370.
+VeryThinSpace	200a	SPACE			
+Villa	f727	LETTER			
+VirgoSign	264d	LETTER			
+WarningSign	f725	LETTER			
+WatchIcon	231a	LETTER			
+Wedge	22c0	INFIX	Wedge	FLAT	440.
+WeierstrassP	2118	LETTER			
+WhiteBishop	2657	LETTER			
+WhiteKing	2654	LETTER			
+WhiteKnight	2658	LETTER			
+WhitePawn	2659	LETTER			
+WhiteQueen	2655	LETTER			
+WhiteRook	2656	LETTER			
+Wolf	f720	LETTER			
+WolframAlphaPrompt	f352	LETTER			
+WolframLanguageLogo	f11e	LETTER			
+WolframLanguageLogoCircle	f11f	LETTER			
+Xi	03be	LETTER			
+Xnor	f4a2	INFIX	Xnor	FLAT	215.
+Xor	22bb	INFIX	Xor	FLAT	215.
+YAcute	00fd	LETTER			
+YDoubleDot	00ff	LETTER			
+Yen	00a5	LETTER			
+ZHacek	017e	LETTER			
+Zeta	03b6	LETTER			

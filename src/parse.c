@@ -73,6 +73,55 @@ static void parse_err(const char* fmt, ...) {
     va_end(ap);
 }
 
+/* ------------------------------------------------------------------ */
+/* Non-ASCII characters in source code                                */
+/* ------------------------------------------------------------------ */
+
+static long char_escape_cp(const char* p, size_t* esc_len);
+
+/* The non-ASCII character at p -- a raw UTF-8 sequence or a character escape
+ * (\[Name], \:hhhh, \|hhhhhh, ...) -- as a code point.  Returns its length in
+ * the source, or 0 when p starts an ASCII character (an escape that names an
+ * ASCII character, \[RawPlus], counts as ASCII: it is not lexed here). */
+static size_t src_nonascii(const char* p, uint32_t* cp) {
+    unsigned char c = (unsigned char)p[0];
+    if (c >= 0x80) {
+        size_t n = 0, i = 0;
+        while (n < 4 && p[n]) n++;
+        *cp = u8_decode(p, n, &i);
+        return i;
+    }
+    if (c == '\\') {
+        size_t len = 0;
+        long v = char_escape_cp(p, &len);
+        if (v >= 0x80) { *cp = (uint32_t)v; return len; }
+    }
+    return 0;
+}
+
+/* Length of the identifier letter at p that is not ASCII (\[Mu], a raw "μ"),
+ * or 0.  Every non-ASCII character is a letter unless the class table
+ * (u8_char_class) says it is an operator, whitespace or not source at all. */
+static size_t src_letter(const char* p) {
+    uint32_t cp;
+    size_t n = src_nonascii(p, &cp);
+    if (!n) return 0;
+    const U8CharInfo* ci = u8_char_class(cp);
+    return (!ci || ci->cls == U8C_LETTER) ? n : 0;
+}
+
+/* The class entry of the non-letter, non-ASCII character at p (an operator,
+ * whitespace, ...), with its source length in *len; NULL otherwise. */
+static const U8CharInfo* src_special(const char* p, size_t* len) {
+    uint32_t cp;
+    size_t n = src_nonascii(p, &cp);
+    if (!n) return NULL;
+    const U8CharInfo* ci = u8_char_class(cp);
+    if (!ci || ci->cls == U8C_LETTER) return NULL;
+    *len = n;
+    return ci;
+}
+
 /* Record the half-open byte range [start, end) of one subexpression into the
  * sink. No-op when no sink is attached (the normal path) or the range is empty.
  * `start`/`end` are pointers into s->input, so offsets are absolute even across
@@ -226,6 +275,14 @@ static void skip_whitespace(ParserState* s) {
         } else if (isspace(*s->pos)) {
             if (*s->pos == '\n' || *s->pos == '\r') s->saw_newline = 1;
             s->pos++;
+        } else if ((unsigned char)s->pos[0] >= 0x80 || s->pos[0] == '\\') {
+            /* \[InvisibleSpace], \[VeryThinSpace], ... are whitespace and
+             * \[IndentingNewLine] is a line break, raw or escaped. */
+            size_t n = 0;
+            const U8CharInfo* ci = src_special(s->pos, &n);
+            if (!ci || (ci->cls != U8C_SPACE && ci->cls != U8C_NEWLINE)) break;
+            if (ci->cls == U8C_NEWLINE) s->saw_newline = 1;
+            s->pos += n;
         } else if (s->pos[0] == '(' && s->pos[1] == '*') {
             int depth = 1;
             s->pos += 2;
@@ -303,8 +360,12 @@ static Expr* parse_symbol(ParserState* s) {
     size_t cap = sizeof(stackbuf);
     size_t i = 0;
 
-    while (isalnum(*s->pos) || *s->pos == '`' || *s->pos == '$') {
-        if (i + 1 >= cap) {
+    /* A non-ASCII letter (\[Mu], a raw "μ") is stored as its UTF-8 encoding,
+     * so every spelling of a character names the same symbol. */
+    size_t letter_len = 0;
+    while (isalnum((unsigned char)*s->pos) || *s->pos == '`' || *s->pos == '$' ||
+           (letter_len = src_letter(s->pos)) > 0) {
+        if (i + 5 >= cap) {
             size_t ncap = cap * 2;
             char* nb = (buffer == stackbuf) ? (char*)malloc(ncap)
                                             : (char*)realloc(buffer, ncap);
@@ -317,10 +378,33 @@ static Expr* parse_symbol(ParserState* s) {
             buffer = nb;
             cap = ncap;
         }
+        if (letter_len) {
+            uint32_t cp = 0;
+            src_nonascii(s->pos, &cp);
+            i += u8_encode(cp, buffer + i);
+            s->pos += letter_len;
+            letter_len = 0;
+            continue;
+        }
         buffer[i++] = *s->pos;
         s->pos++;
     }
     buffer[i] = '\0';
+
+    /* A one-character name that is a constant's letter is that constant:
+     * \[Pi] is Pi and \[ImaginaryI] is I, while a\[Pi] stays one symbol. */
+    {
+        uint32_t cp = 0;
+        size_t k = 0;
+        if ((unsigned char)buffer[0] >= 0x80 && (cp = u8_decode(buffer, i, &k), k == i)) {
+            const U8CharInfo* ci = u8_char_class(cp);
+            if (ci && ci->cls == U8C_LETTER && ci->head) {
+                Expr* out = expr_new_symbol(ci->head);
+                if (buffer != stackbuf) free(buffer);
+                return out;
+            }
+        }
+    }
 
     char* resolved = context_resolve_name(buffer);
     Expr* out = expr_new_symbol(resolved ? resolved : buffer);
@@ -827,11 +911,11 @@ static long hexnum(const char* p, int ndig) {
     return v;
 }
 
-/* Decode a Mathematica character escape at p (p[0] == '\\'): \[Name], \:hhhh,
- * \|hhhhhh, \.hh or \ooo. On success writes the UTF-8 encoding to enc (>= 4
- * bytes), the escape's source length to *esc_len, and returns the encoded
- * length; returns 0 if p does not start such an escape. */
-static size_t decode_char_escape(const char* p, size_t* esc_len, char* enc) {
+/* The code point of the character escape at p (p[0] == '\\'): \[Name],
+ * \:hhhh, \|hhhhhh, \.hh or \ooo, with the escape's source length in
+ * *esc_len; -1 if p does not start such an escape.  Shared by string literals
+ * and by escapes in source code (src_nonascii). */
+static long char_escape_cp(const char* p, size_t* esc_len) {
     long cp = -1;
     size_t len = 0;
     if (p[1] == '[') {
@@ -851,6 +935,16 @@ static size_t decode_char_escape(const char* p, size_t* esc_len, char* enc) {
                p[3] >= '0' && p[3] <= '7') {
         cp = (p[1] - '0') * 64 + (p[2] - '0') * 8 + (p[3] - '0'); len = 4;
     }
+    if (cp >= 0) *esc_len = len;
+    return cp;
+}
+
+/* Decode the character escape at p to UTF-8 in enc (>= 4 bytes): writes the
+ * escape's source length to *esc_len and returns the encoded length, or 0 if
+ * p does not start such an escape. */
+static size_t decode_char_escape(const char* p, size_t* esc_len, char* enc) {
+    size_t len = 0;
+    long cp = char_escape_cp(p, &len);
     if (cp < 0) return 0;
     size_t n = u8_encode((uint32_t)cp, enc);
     if (n) *esc_len = len;
@@ -1172,6 +1266,9 @@ typedef enum {
     OP_PUT,
     OP_PUTAPPEND,
     OP_NONCOMMULT,    /* a ** b ** c -> NonCommutativeMultiply[a, b, c] */
+    OP_NAMED_INFIX,   /* a \[CenterDot] b: a named-character operator with no
+                         ASCII spelling; head_name is its head */
+    OP_NAMED_POSTFIX, /* a \[Transpose] -> Transpose[a] */
 #if UP_VALUES
     OP_UPSET,         /* lhs ^= rhs   */
     OP_UPSETDELAYED,  /* lhs ^:= rhs  */
@@ -1185,10 +1282,49 @@ typedef struct {
     int right_assoc;
     const char* head_name;
     int len;
+    int flat;          /* OP_NAMED_INFIX: a<op>b<op>c is one n-ary head */
 } OperatorDef;
 
+/* The ASCII spelling of the operators a named character can also be written
+ * with, so \[Rule], \[LessEqual], \[Times], ... reuse their ASCII forms'
+ * parsing (Inequality chains, Times flattening, ...). */
+static const char* named_operator_ascii(const char* head) {
+    static const struct { const char* head; const char* ascii; } k[] = {
+        {"Rule", "->"}, {"RuleDelayed", ":>"}, {"Equal", "=="}, {"Unequal", "!="},
+        {"Less", "<"}, {"Greater", ">"}, {"LessEqual", "<="}, {"GreaterEqual", ">="},
+        {"Times", "*"}, {"Plus", "+"}, {"And", "&&"}, {"Or", "||"}, {"Dot", "."},
+        {"Power", "^"}, {"Alternatives", "|"}, {"TwoWayRule", "<->"},
+    };
+    for (size_t i = 0; i < sizeof k / sizeof k[0]; i++)
+        if (strcmp(k[i].head, head) == 0) return k[i].ascii;
+    return NULL;
+}
+
 static OperatorDef get_operator(const char* pos) {
-    OperatorDef def = {OP_NONE, -1, 0, NULL, 0};
+    OperatorDef def = {OP_NONE, -1, 0, NULL, 0, 0};
+
+    /* A named-character operator, raw (U+00D7) or escaped (\[Times]).  The
+     * raw U+2192 is excluded: it stays the Rule synonym matched below. */
+    if (((unsigned char)pos[0] >= 0x80 || pos[0] == '\\') &&
+        !((unsigned char)pos[0] == 0xE2 && (unsigned char)pos[1] == 0x86 &&
+          (unsigned char)pos[2] == 0x92)) {
+        size_t n = 0;
+        const U8CharInfo* ci = src_special(pos, &n);
+        if (ci && (ci->cls == U8C_INFIX || ci->cls == U8C_POSTFIX) && ci->head) {
+            const char* ascii = ci->cls == U8C_INFIX ? named_operator_ascii(ci->head) : NULL;
+            if (ascii) {
+                def = get_operator(ascii);
+            } else {
+                def.type = ci->cls == U8C_INFIX ? OP_NAMED_INFIX : OP_NAMED_POSTFIX;
+                def.prec = ci->prec;
+                def.right_assoc = ci->assoc == U8A_RIGHT;
+                def.flat = ci->assoc == U8A_FLAT;
+                def.head_name = ci->head;
+            }
+            def.len = (int)n;
+        }
+        return def;
+    }
 
     /* Association delimiters `<|` and `|>` are never operators: they are
      * handled structurally by parse_association. Returning OP_NONE here stops
@@ -1589,7 +1725,8 @@ static Expr* parse_primary(ParserState* s) {
         }
         
         default:
-            if (isalpha(*s->pos) || *s->pos == '`' || *s->pos == '$' || *s->pos == '_') {
+            if (isalpha((unsigned char)*s->pos) || *s->pos == '`' || *s->pos == '$' ||
+                *s->pos == '_' || src_letter(s->pos)) {
                 Expr* head = NULL;
                 if (*s->pos != '_') {
                     head = parse_symbol(s);
@@ -1604,7 +1741,8 @@ static Expr* parse_primary(ParserState* s) {
                 if (underscores > 0) {
                     Expr* blank = NULL;
                     Expr* blank_head = NULL;
-                    if (isalpha(*s->pos) || *s->pos == '`' || *s->pos == '$') {
+                    if (isalpha((unsigned char)*s->pos) || *s->pos == '`' || *s->pos == '$' ||
+                        src_letter(s->pos)) {
                         blank_head = parse_symbol(s);
                     }
                     
@@ -1657,8 +1795,17 @@ static Expr* parse_primary(ParserState* s) {
     }
 }
 
-static bool can_start_primary(char c) {
-    return isalpha(c) || isdigit(c) || c == '.' || c == '{' || c == '(' || c == '"' || c == '_' || c == '`' || c == '$' || c == '#' || c == '%';
+/* Does the parser position start a named-character prefix operator? */
+static bool named_prefix(const ParserState* s) {
+    size_t n = 0;
+    const U8CharInfo* ci = src_special(s->pos, &n);
+    return ci && ci->cls == U8C_PREFIX && ci->head;
+}
+
+static bool can_start_primary(const char* p) {
+    unsigned char c = (unsigned char)*p;
+    return isalpha(c) || isdigit(c) || c == '.' || c == '{' || c == '(' || c == '"' || c == '_' || c == '`' || c == '$' || c == '#' || c == '%' ||
+           src_letter(p) > 0;
 }
 
 /* Scan a numeric literal starting at `p` (pointing at the first digit, or a
@@ -1718,6 +1865,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     const char* left_start;
     Expr* left = NULL;
     bool left_bare_compare = false;
+    /* Head of the flat named-character operator chain `left` was built by
+     * (a \[CenterDot] b), so a further \[CenterDot] appends to it, while a
+     * parenthesized (a \[CenterDot] b) \[CenterDot] c nests, as in the
+     * reference language. NULL when `left` is anything else. */
+    const char* left_named_flat = NULL;
     /* `left` is a `;`-chain built at this level (not a parenthesised one), so
      * a further `;` appends to it: a;b;c is flat, (a;b);c stays nested. */
     bool left_bare_compound = false;
@@ -1842,6 +1994,15 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         if (!right) return NULL;
         Expr* args[1] = { right };
         left = expr_new_function(expr_new_symbol(SYM_Not), args, 1);
+    } else if (((unsigned char)*s->pos >= 0x80 || *s->pos == '\\') && named_prefix(s)) {
+        /* A named-character prefix operator: \[Not] x, \[Del] f, \[Sqrt] x. */
+        size_t n = 0;
+        const U8CharInfo* ci = src_special(s->pos, &n);
+        s->pos += n;
+        Expr* right = parse_expression_prec(s, ci->prec);
+        if (!right) return NULL;
+        Expr* args[1] = { right };
+        left = expr_new_function(expr_new_symbol(ci->head), args, 1);
     } else {
         left = parse_primary(s);
     }
@@ -1870,7 +2031,7 @@ infix_loop:
         // Handle implicit multiplication: if no explicit operator but another expression follows
         // (an association literal `<|...|>` and a `<<file` Get begin with `<`,
         // which is not a can_start_primary char, so admit them explicitly).
-        if (op_def.type == OP_NONE && (can_start_primary(*s->pos) || strncmp(s->pos, "<|", 2) == 0 ||
+        if (op_def.type == OP_NONE && (can_start_primary(s->pos) || strncmp(s->pos, "<|", 2) == 0 ||
                                        strncmp(s->pos, "<<", 2) == 0)) {
             // A top-level newline terminates the statement rather than acting as
             // implicit multiplication: in a file `a\nb` is two statements (as in
@@ -1904,6 +2065,8 @@ infix_loop:
          * comparison sets it back to true, so any other operator in between breaks the chain. */
         bool prev_bare_compare = left_bare_compare;
         left_bare_compare = false;
+        const char* prev_named_flat = left_named_flat;
+        left_named_flat = NULL;
         bool prev_bare_compound = left_bare_compound;
         left_bare_compound = false;
         
@@ -1999,6 +2162,10 @@ infix_loop:
         } else if (op_def.type == OP_DECREMENT) {
             Expr* args[1] = { left };
             left = expr_new_function(expr_new_symbol(SYM_Decrement), args, 1);
+            continue;
+        } else if (op_def.type == OP_NAMED_POSTFIX) {
+            Expr* args[1] = { left };
+            left = expr_new_function(expr_new_symbol(op_def.head_name), args, 1);
             continue;
         } else if (op_def.type == OP_UNSET) {
             /* Postfix `lhs =.` -> Unset[lhs]. */
@@ -2178,6 +2345,15 @@ infix_loop:
                 Expr* args[2] = { left, right };
                 left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
             }
+        } else if (op_def.type == OP_NAMED_INFIX) {
+            if (op_def.flat && prev_named_flat && strcmp(prev_named_flat, op_def.head_name) == 0 &&
+                extend_flat_head(left, op_def.head_name, right)) {
+                /* left is the extended chain */
+            } else {
+                Expr* args[2] = { left, right };
+                left = expr_new_function(expr_new_symbol(op_def.head_name), args, 2);
+            }
+            if (op_def.flat) left_named_flat = op_def.head_name;
         } else if (op_def.type == OP_CONDITION) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_Condition), args, 2);
@@ -2364,10 +2540,23 @@ Expr* parse_next_expression(const char** input_ptr) {
 /* Skip blanks, comments and backslash line continuations on the current line,
  * stopping at a line terminator (LF or CR) or the end of input. A comment may
  * itself span lines; its line breaks are not statement boundaries. */
+/* Length of the line break at p: 1 for '\n' / '\r', the source length of a
+ * named-character line break (\[IndentingNewLine]), else 0. */
+static size_t line_break_len(const char* p) {
+    if (*p == '\n' || *p == '\r') return 1;
+    size_t n = 0;
+    const U8CharInfo* ci = src_special(p, &n);
+    return (ci && ci->cls == U8C_NEWLINE) ? n : 0;
+}
+
 static const char* skip_line_blanks(const char* p) {
+    size_t n = 0;
+    const U8CharInfo* ci;
     for (;;) {
         if (*p == ' ' || *p == '\t' || *p == '\f' || *p == '\v') {
             p++;
+        } else if ((ci = src_special(p, &n)) != NULL && ci->cls == U8C_SPACE) {
+            p += n;                /* \[InvisibleSpace], \[VeryThinSpace], ... */
         } else if (p[0] == '\\' && (p[1] == '\n' || p[1] == '\r')) {
             p += (p[1] == '\r' && p[2] == '\n') ? 3 : 2;
         } else if (p[0] == '(' && p[1] == '*') {
@@ -2395,14 +2584,15 @@ int parse_statement_each(const char* input, int line_statements, const char** er
         Expr* stmt = NULL;
         p = skip_line_blanks(p);
         if (*p == '\0') break;
-        if ((*p == '\n' || *p == '\r') && !line_statements) {
-            p++;                   /* StandardForm: a line break is whitespace */
+        size_t brk = line_break_len(p);
+        if (brk && !line_statements) {
+            p += brk;              /* StandardForm: a line break is whitespace */
             continue;
         }
-        if (*p == '\n' || *p == '\r') {
+        if (brk) {
             /* An empty (or blank/comment-only) line is a Null statement. */
             stmt = expr_new_symbol(SYM_Null);
-            p++;
+            p += brk;
         } else {
             /* Without line_statements (StandardForm) line breaks are plain
              * whitespace: start one bracket level deep so no newline can
@@ -2418,7 +2608,7 @@ int parse_statement_each(const char* input, int line_statements, const char** er
                 p = st.ws_start;
                 if (p < input || p > st.pos) p = st.pos;
                 p = skip_line_blanks(p);
-                if (*p == '\n' || *p == '\r') p++;
+                if ((brk = line_break_len(p)) > 0) p += brk;
                 else ok = *p == '\0';
             } else if (ok) {
                 p = st.pos;        /* already past trailing whitespace */

@@ -78,9 +78,37 @@ parsed as `Optional[n_.*a, _g]`, which is a silently wrong pattern (issue #102).
 A left operand that the reference rejects (`(a):_g`, `f[x]:0`) is still accepted, as
 `Pattern`/`Optional` of the whole left expression.
 
-The Unicode rightwards arrow `→` (U+2192, the reference `\[Rule]`) is accepted as a
-synonym for `->`, so rules and associations written for the reference paste and parse
-directly.
+The raw Unicode rightwards arrow `→` (U+2192) is accepted as a synonym for `->`, so rules and
+associations pasted from rendered text parse directly. This is a deliberate deviation: the
+reference's `\[Rule]` is the private-use U+F522, and it reads U+2192 (`\[RightArrow]`) as
+`RightArrow[a, b]`. `\[Rule]` itself, raw or escaped, is `Rule`.
+
+## Named characters in source
+
+A non-ASCII character in source code (outside a string literal) is read as the reference
+reads it. It can be written raw (`μ`), as a named character (`\[Mu]`), or as a hex escape
+(`\:03bc`, `\|0003bc`); all spellings give the same token, and a symbol name stores the
+UTF-8 character. The class of every named character comes from the reference parser
+(`tools/classify_named_chars.wls` writes the table, which `tools/gen_named_chars.py --classes`
+turns into `src/strings/named_char_class.inc`):
+
+| class | examples | reads as |
+|---|---|---|
+| letter | `\[Mu]`, `\[CapitalSigma]`, `\[CurlyEpsilon]`, `\[Dagger]`, `\[Prime]` | part of an identifier: `a\[Mu]1` and `\[Mu]$` are each one symbol, `\[Alpha] \[Beta]` is a product |
+| constant letter | `\[Pi]`, `\[ImaginaryI]`, `\[ExponentialE]`, `\[Infinity]`, `\[Degree]` | alone, the constant (`2\[Pi]` is `Times[2, Pi]`); inside a name, a letter (`a\[Pi]` is one symbol) |
+| operator with an ASCII form | `\[Rule]`, `\[RuleDelayed]`, `\[Equal]`, `\[NotEqual]`, `\[LessEqual]`, `\[Times]`, `\[And]`, `\[Not]` | exactly that ASCII operator (`a < b \[LessEqual] c` is one `Inequality`) |
+| infix operator | `\[CenterDot]`, `\[Cross]`, `\[Element]`, `\[LeftRightArrow]`, `\[Perpendicular]`, `\[Function]`, `\[Union]`, ... (about 230) | its head, n-ary when the reference groups it so (`a\[CenterDot]b\[CenterDot]c` is `CenterDot[a, b, c]`, while `(a\[CenterDot]b)\[CenterDot]c` nests), otherwise left- or right-associative |
+| prefix / postfix operator | `\[Del]`, `\[Sqrt]`, `\[ForAll]` / `\[Transpose]`, `\[Conjugate]` | its head applied to the operand |
+| whitespace | `\[InvisibleSpace]`, `\[VeryThinSpace]`, `\[NoBreak]`, `\[MediumSpace]` | a space (`a\[InvisibleSpace]b` is `Times[a, b]`) |
+| line break | `\[IndentingNewLine]`, `\[NewLine]` | a newline, which ends a top-level statement as `\n` does |
+| not source | `\[PartialD]`, brackets such as `\[LeftDoubleBracket]` | a syntax error |
+
+Operator precedences come from the reference too and are mapped onto the 1–10000 ladder
+between the operators both share (`\[CenterDot]` is 4571, just tighter than `*` at 4500).
+A character missing from the table, such as an accented or CJK letter, is a letter.
+
+Known differences: `FullForm` prints a non-ASCII symbol as the character itself, where the
+reference prints `\[Mu]`. Box input (`\!\(\*SuperscriptBox[...]\)`) is not read.
 
 
 

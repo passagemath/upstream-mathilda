@@ -163,3 +163,23 @@ long u8_named_char(const char* name, size_t len) {
     }
     return -1;
 }
+
+/* ------------------------------------------------------------------ */
+/* Source-code classes of non-ASCII characters                        */
+/* ------------------------------------------------------------------ */
+
+/* Sorted by code point; only the exceptions to "a letter" are listed. */
+static const U8CharInfo k_char_class[] = {
+#include "named_char_class.inc"
+};
+
+const U8CharInfo* u8_char_class(uint32_t cp) {
+    size_t lo = 0, hi = sizeof k_char_class / sizeof k_char_class[0];
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (k_char_class[mid].cp == cp) return &k_char_class[mid];
+        if (k_char_class[mid].cp < cp) lo = mid + 1;
+        else                            hi = mid;
+    }
+    return NULL;
+}

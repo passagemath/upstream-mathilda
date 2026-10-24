@@ -1298,6 +1298,80 @@ void test_repeated_print_roundtrip() {
     }
 }
 
+
+/* Named characters in source code (src/parse.c src_nonascii / u8_char_class).
+ * Every expectation was checked against the reference parser
+ * (ToExpression[s, InputForm, Hold]); the reference prints a non-ASCII name as
+ * \[Mu] in FullForm where Mathilda prints the character itself.  A non-ASCII
+ * letter is stored as UTF-8, so the escape, the hex escape and the raw
+ * character are the same symbol. */
+#define MU "\xce\xbc"
+void test_named_characters_in_source() {
+    /* Letters form identifiers, whatever the spelling. */
+    assert_parse_eq("\\[Mu]+1",            "Plus[" MU ", 1]");
+    assert_parse_eq(MU "+1",               "Plus[" MU ", 1]");
+    assert_parse_eq("\\:03bc+1",           "Plus[" MU ", 1]");
+    assert_parse_eq("a\\[Mu]1",            "a" MU "1");
+    assert_parse_eq("\\[Mu]$",             MU "$");
+    assert_parse_eq("\\[Alpha] \\[Beta]",  "Times[\xce\xb1, \xce\xb2]");
+    assert_parse_eq("1\\[Mu]",             "Times[1, " MU "]");
+    assert_parse_eq("f[\\[Mu]_, x_\\[Mu]]",
+                    "f[Pattern[" MU ", Blank[]], Pattern[x, Blank[" MU "]]]");
+    assert_parse_eq("\\[CapitalSigma][x]", "\xce\xa3[x]");
+    /* A constant's letter alone is the constant; inside a name it is a letter. */
+    assert_parse_eq("\\[Pi]",              "Pi");
+    assert_parse_eq("\xcf\x80",            "Pi");
+    assert_parse_eq("2\\[Pi]",             "Times[2, Pi]");
+    assert_parse_eq("a\\[Pi]",             "a\xcf\x80");
+    assert_parse_eq("\\[ImaginaryI]",      "I");
+    assert_parse_eq("\\[Infinity]",        "Infinity");
+    assert_parse_eq("\\[ExponentialE]",    "E");
+    assert_parse_eq("\\[Degree]",          "Degree");
+    /* Operators with an ASCII spelling reuse it. */
+    assert_parse_eq("a\\[Rule]b",          "Rule[a, b]");
+    assert_parse_eq("a\\[Rule]b\\[Rule]c", "Rule[a, Rule[b, c]]");
+    assert_parse_eq("a\\[RuleDelayed]b",   "RuleDelayed[a, b]");
+    assert_parse_eq("\\[Theta]\\[Rule]\\[Phi]", "Rule[\xce\xb8, \xcf\x95]");
+    assert_parse_eq("a\\[Equal]b",         "Equal[a, b]");
+    assert_parse_eq("a\\[NotEqual]b",      "Unequal[a, b]");
+    assert_parse_eq("a < b \\[LessEqual] c", "Inequality[a, Less, b, LessEqual, c]");
+    assert_parse_eq("a\\[Times]b",         "Times[a, b]");
+    assert_parse_eq("a\\[And]b",           "And[a, b]");
+    assert_parse_eq("\\[Not]a",            "Not[a]");
+    /* Operators without one: precedence and grouping from the reference. */
+    assert_parse_eq("a\\[CenterDot]b",     "CenterDot[a, b]");
+    assert_parse_eq("a\\[CenterDot]b\\[CenterDot]c", "CenterDot[a, b, c]");
+    assert_parse_eq("(a\\[CenterDot]b)\\[CenterDot]c", "CenterDot[CenterDot[a, b], c]");
+    assert_parse_eq("a + b \\[CenterDot] c", "Plus[a, CenterDot[b, c]]");
+    assert_parse_eq("a\\[CenterDot]b^2",   "CenterDot[a, Power[b, 2]]");
+    assert_parse_eq("a \\[Cross] b \\[CenterDot] c", "CenterDot[Cross[a, b], c]");
+    assert_parse_eq("a\\[Perpendicular]b\\[Perpendicular]c",
+                    "Perpendicular[Perpendicular[a, b], c]");
+    assert_parse_eq("x\\[Element]y",       "Element[x, y]");
+    assert_parse_eq("a \\[Element] b \\[Element] c", "Element[a, b, c]");
+    assert_parse_eq("a\\[LeftRightArrow]b", "LeftRightArrow[a, b]");
+    assert_parse_eq("a\\[Function]b",      "Function[a, b]");
+    assert_parse_eq("\\[Del]f",            "Del[f]");
+    assert_parse_eq("\\[Sqrt]x",           "Sqrt[x]");
+    assert_parse_eq("a\\[Transpose]",      "Transpose[a]");
+    assert_parse_eq("x^2\\[Transpose]",    "Power[x, Transpose[2]]");
+    /* Whitespace characters. */
+    assert_parse_eq("a\\[InvisibleSpace]b", "Times[a, b]");
+    assert_parse_eq("a\\[VeryThinSpace]b", "Times[a, b]");
+    assert_parse_eq("{a \\[IndentingNewLine] b}", "List[Times[a, b]]");
+    assert_eval_eq("Quiet[ToExpression[\"a \\[IndentingNewLine] b\", InputForm, Hold]]",
+                   "Hold[a, b]", 1);
+    /* Through ToExpression (the FeynCalc test files' path), and contexts. */
+    assert_eval_eq("ToExpression[\"{\\[Mu], \\[Nu]} /. \\[Mu] \\[Rule] 1\"]",
+                   "{1, \xce\xbd}", 0);
+    assert_eval_eq("Global`\\[Mu] === " MU, "True", 0);
+    assert_eval_eq("Context[\\[Mu]]", "\"Global`\"", 0);
+    assert_eval_eq("ToString[a \\[Rule] \\[Mu], InputForm]", "\"a -> " MU "\"", 0);
+    /* Not source characters at all. */
+    ASSERT(parse_expression("\\[PartialD]x") == NULL);
+}
+#undef MU
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -1341,6 +1415,7 @@ int main() {
     TEST(test_toexpression_sequencing);
     TEST(test_unclosed_paren_rejected);
     TEST(test_reading_creates_symbols);
+    TEST(test_named_characters_in_source);
 
     printf("\nAll parser tests passed!\n");
     return 0;

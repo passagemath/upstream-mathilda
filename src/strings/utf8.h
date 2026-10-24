@@ -67,4 +67,33 @@ size_t u8_encode(uint32_t cp, char* out);
  * `len`), or -1 if unknown. Covers Mathematica's named-character table. */
 long u8_named_char(const char* name, size_t len);
 
+/* How the parser treats a non-ASCII code point in source code (outside a
+ * string literal).  A code point not in the table is a LETTER: it forms
+ * identifiers, as Greek letters do (a\[Mu]1 is one symbol). */
+typedef enum {
+    U8C_LETTER,   /* identifier character; `head` names the System symbol a
+                     one-character identifier aliases (\[Pi] alone is Pi) */
+    U8C_SPACE,    /* whitespace (\[InvisibleSpace], \[VeryThinSpace], ...) */
+    U8C_NEWLINE,  /* a line break (\[IndentingNewLine]) */
+    U8C_INFIX,    /* binary operator `head` (\[CenterDot], \[Element], ...) */
+    U8C_PREFIX,   /* prefix operator `head` (\[Not], \[Del], ...) */
+    U8C_POSTFIX,  /* postfix operator `head` (\[Transpose], ...) */
+    U8C_OTHER     /* cannot appear in source (brackets, \[PartialD], ...) */
+} U8CharClass;
+
+typedef enum { U8A_NONE, U8A_FLAT, U8A_LEFT, U8A_RIGHT } U8Assoc;
+
+typedef struct {
+    uint32_t cp;
+    U8CharClass cls;
+    U8Assoc assoc;     /* INFIX: a<c>b<c>d is h[a,b,d] / h[h[a,b],d] / h[a,h[b,d]] */
+    int prec;          /* operator precedence on the parser's 1..10000 ladder */
+    const char* head;  /* operator head, letter alias, or NULL */
+} U8CharInfo;
+
+/* The source-code class of non-ASCII code point `cp`, or NULL when it is a
+ * plain letter.  Generated from the reference parser's behaviour by
+ * tools/classify_named_chars.wls + tools/gen_named_chars.py --classes. */
+const U8CharInfo* u8_char_class(uint32_t cp);
+
 #endif /* MATHILDA_UTF8_H */

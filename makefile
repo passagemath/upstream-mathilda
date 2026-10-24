@@ -855,6 +855,15 @@ check-packed-aware:
 check-messages:
 	python3 tools/check_message_routing.py
 
+# `make check-feyncalc` — FeynCalc's ~14k upstream unit tests, run UNMODIFIED
+# under a minimal MUnit`Test (tools/feyncalc/run_fc_tests.m), one process per
+# .test file, ratcheted against the local pass baseline: a test that passed must
+# keep passing. The vendored package (packages/feyncalc/) is local and
+# untracked; without it the check prints a skip and succeeds.
+# FC_ARGS passes options through, e.g. FC_ARGS="--dir Lorentz --triage".
+check-feyncalc: Mathilda
+	python3 tools/check_feyncalc.py $(FC_ARGS)
+
 # `make check-corpus-indvar` — does every DSolve corpus record ask the question
 # the book printed? A converted record can PARSE cleanly and still encode a
 # DIFFERENT equation, because the converter promoted a PARAMETER to the
@@ -1036,7 +1045,7 @@ print-flags:
 	@echo "CFLAGS = $(CFLAGS)"
 	@echo "LDFLAGS = $(LDFLAGS)"
 
-.PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-interval check-packed-aware \
+.PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

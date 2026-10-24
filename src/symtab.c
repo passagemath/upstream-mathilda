@@ -577,6 +577,13 @@ static int32_t pattern_specificity(const Expr* p) {
     for (size_t i = 0; i < p->data.function.arg_count; i++) {
         score += pattern_specificity(p->data.function.args[i]);
     }
+    /* A literal-headed call h[...] matches only expressions with head h, so it
+     * is at least as specific as the typed blank _h (20) -- and so as any plain
+     * blank -- however loose its arguments. Without this floor the sequence
+     * penalties of {f___} (-50) sank it below a sibling f_ (-10), and
+     * c[e_, f_, o:OptionsPattern[]] was tried before c[e_, {f___}, o:...],
+     * binding f to the whole List. */
+    if (head && head->type == EXPR_SYMBOL && score < 21) score = 21;
     return score;
 }
 
@@ -911,6 +918,9 @@ static Expr* try_scoped_condition(Expr* bound) {
     }
     return v;
 }
+
+bool  symtab_rhs_has_scoped_condition(Expr* rhs) { return rhs_has_scoped_condition(rhs); }
+Expr* symtab_try_scoped_condition(Expr* bound)   { return try_scoped_condition(bound); }
 
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     /* Any change to an OwnValue/DownValue list could change the meaning
@@ -1405,6 +1415,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
      * bound, not an exact arity, and the matched run need not start at arg 0,
      * so both pre-filters relax for a Flat head. */
     const bool down_flat = (def->attributes & ATTR_FLAT) != 0;
+    const bool down_relaxed = (def->attributes & (ATTR_FLAT | ATTR_ORDERLESS)) != 0;
 
     for (Rule* rule = def->down_values; rule; rule = rule->next) {
         /* Arity filter: only skip when both sides committed to a
@@ -1418,8 +1429,12 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
         /* First-arg head filter: only skip when the rule expects a
          * specific head and we determined the input's first-arg head and
          * the two disagree. Pointer compare is sound because both are
-         * interned. Skipped for a Flat head: the matched run can sit anywhere. */
-        if (!down_flat && rule->first_arg_head_canon && input_first_head &&
+         * interned. Skipped for a Flat head (the matched run can sit
+         * anywhere) and for an Orderless one, whose matcher may bind the
+         * pattern's first slot to any argument: Pair[n_ x_Momentum, y_] fires
+         * on Pair[Momentum[p], lm Momentum[p]] through the second, as the
+         * UpValue filter below already allowed. */
+        if (!down_relaxed && rule->first_arg_head_canon && input_first_head &&
             rule->first_arg_head_canon != input_first_head) {
             continue;
         }

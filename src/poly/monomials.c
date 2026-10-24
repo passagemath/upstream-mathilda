@@ -38,6 +38,7 @@
 #include "internal.h"
 #include "expand.h"
 #include "symtab.h"
+#include "sparse/sparse.h"   /* CoefficientArrays builds SparseArrays */
 #include "attr.h"
 #include "groebner.h"   /* gb_build_order_matrix, gb_classify_named_order */
 #include "flint_bridge.h" /* flint_field_monomials — field-coefficient fast path */
@@ -141,11 +142,15 @@ static int64_t* explicit_matrix(const Expr* v, int k, int* rows_out) {
  * weight matrix. Returns NULL on an unknown order string / malformed matrix. */
 static int64_t* order_weight_matrix(const Expr* order_arg, int k, int* rows_out) {
     if (!order_arg) return named_matrix(k, 0, 0, 0, rows_out);   /* Lexicographic */
-    if (order_arg->type == EXPR_STRING) {
+    /* A named order, as a string or a symbol:
+     * "DegreeReverseLexicographic" or DegreeReverseLexicographic. */
+    if (order_arg->type == EXPR_STRING || order_arg->type == EXPR_SYMBOL) {
+        const char* name = order_arg->type == EXPR_STRING ? order_arg->data.string
+                                                          : order_arg->data.symbol.name;
         int ds = 0, rv = 0, nl = 0; GBOrder hint;
-        if (gb_classify_named_order(order_arg->data.string, &ds, &rv, &nl, &hint))
+        if (gb_classify_named_order(name, &ds, &rv, &nl, &hint))
             return named_matrix(k, ds, rv, nl, rows_out);
-        return NULL;                                /* unknown order string */
+        return NULL;                                /* unknown order name */
     }
     if (is_list_head(order_arg))
         return explicit_matrix(order_arg, k, rows_out);
@@ -577,14 +582,19 @@ Expr* builtin_monomiallist(Expr* res) {
  * equation index as the LEADING axis, so element d + 1 has rank d + 1; a single
  * polynomial has rank d (element 1 is then a bare scalar, not a vector).
  *
- * Divergence from Mathematica, deliberate: Mathematica returns SparseArrays and
- * these are dense Lists. `Normal` of a List is the identity, so the usual
- * `Normal[CoefficientArrays[...]]` spelling is unaffected, and every other list
- * operation works on the result where a SparseArray here would not (see
- * MATHILDA_DIVERGENCES.md A27 -- the head is still inert). Density is capped:
- * a degree-d element over k variables has k^d entries, so a request whose total
- * would exceed CA_MAX_ENTRIES is declined rather than silently exhausting
- * memory. */
+ * Result type. Every array element is a SparseArray with
+ * background 0 -- built straight from the monomials through a COO builder, so
+ * storage is proportional to the number of terms, not to k^d. The one scalar is
+ * the constant term of a SINGLE polynomial (rank 0). A system's constant vector
+ * is a rank-1 SparseArray. Callers test `Head[ca[[2]]] === SparseArray` (a
+ * symbolic-algebra package's collector aborts otherwise), and `Normal` recovers
+ * the dense form.
+ *
+ * Rank beyond SP_MAX_RANK (a degree-33 element) has no SparseArray, and such an
+ * element is cheap only when k is tiny, so it alone falls back to a dense
+ * nested List. The density guard applies to those dense elements only: a
+ * total over CA_MAX_ENTRIES is declined with ::dense rather than silently
+ * exhausting memory. */
 
 #define CA_MAX_ENTRIES 20000000L
 
@@ -703,19 +713,22 @@ Expr* builtin_coefficientarrays(Expr* res) {
     }
     free(W);
 
-    /* Density guard: element d + 1 holds m * k^d entries. */
+    /* Element d + 1 has rank d (+ 1 for a system). Up to SP_MAX_RANK it is a
+     * SparseArray; past that it is dense, holding m * k^d entries -- guard
+     * the dense total only. */
+    int sys_off = is_system ? 1 : 0;
     if (ok) {
         double total = 0.0, kd = 1.0;
         for (int d = 0; d <= maxdeg; d++) {
-            total += (double)m * kd;
+            if (d + sys_off > SP_MAX_RANK) total += (double)m * kd;
             if (total > (double)CA_MAX_ENTRIES) break;
             kd *= (double)k;
         }
         if (total > (double)CA_MAX_ENTRIES) {
             mth_message("CoefficientArrays", "dense",
                 "the dense result for degree %d in %d variables exceeds %ld entries; "
-                "CoefficientArrays returns dense arrays and declines this size.",
-                maxdeg, k, CA_MAX_ENTRIES);
+                "arrays of rank above %d are dense and this size is declined.",
+                maxdeg, k, CA_MAX_ENTRIES, SP_MAX_RANK);
             ok = 0;
         }
     }
@@ -728,10 +741,22 @@ Expr* builtin_coefficientarrays(Expr* res) {
         return NULL;
     }
 
-    /* Build one element per total degree. */
-    Expr** out = malloc(sizeof(Expr*) * (size_t)(maxdeg + 1));
+    /* One builder per sparse element (degree d with rank d + sys_off in
+     * 1..SP_MAX_RANK); a dense nested List for the single polynomial's scalar
+     * slot (d == 0, initially 0) and for any element past SP_MAX_RANK. */
+    size_t nel  = (size_t)(maxdeg >= 0 ? maxdeg : 0) + 1;
+    Expr** out  = calloc(nel, sizeof(Expr*));
+    SpCoo* coo  = calloc(nel, sizeof(SpCoo));
+    bool*  spd  = calloc(nel, sizeof(bool));
+    int64_t dims[SP_MAX_RANK];
     for (int d = 0; d <= maxdeg; d++) {
-        if (is_system) {
+        int rank = d + sys_off;
+        if (rank >= 1 && rank <= SP_MAX_RANK) {
+            if (is_system) dims[0] = (int64_t)m;
+            for (int r = sys_off; r < rank; r++) dims[r] = (int64_t)k;
+            sp_coo_init(&coo[d], rank, dims, SPV_EXPR);
+            spd[d] = true;
+        } else if (is_system) {
             Expr** rowsv = malloc(sizeof(Expr*) * (m > 0 ? m : 1));
             for (size_t i = 0; i < m; i++) rowsv[i] = ca_zeros(k, d);
             out[d] = expr_new_function(expr_new_symbol(SYM_List), rowsv, m);
@@ -741,33 +766,46 @@ Expr* builtin_coefficientarrays(Expr* res) {
         }
     }
 
-    /* Place each monomial at its sorted variable-index tuple. */
-    int* idx = malloc(sizeof(int) * (size_t)(maxdeg > 0 ? maxdeg : 1));
-    for (size_t i = 0; i < m; i++) {
+    /* Place each monomial at (equation,) its sorted variable-index tuple. */
+    int*     idx = malloc(sizeof(int) * (size_t)(maxdeg > 0 ? maxdeg : 1));
+    int64_t* co  = malloc(sizeof(int64_t) * nel);
+    for (size_t i = 0; i < m && ok; i++) {
         for (size_t t = 0; t < counts[i]; t++) {
             int d = 0;
             for (int j = 0; j < k; j++)
                 for (int r = 0; r < all[i][t].exps[j]; r++) idx[d++] = j;
             Expr* coeff = all[i][t].coeff; all[i][t].coeff = NULL;   /* move */
-            Expr* target = out[d];
-            if (is_system) {
-                if (d == 0) {           /* the constant vector: one slot per eq */
-                    expr_free(target->data.function.args[i]);
-                    target->data.function.args[i] = coeff;
-                    continue;
-                }
-                target = target->data.function.args[i];
-            } else if (d == 0) {
+            if (spd[d]) {
+                if (is_system) co[0] = (int64_t)i;
+                for (int r = 0; r < d; r++) co[r + sys_off] = idx[r];
+                if (!sp_coo_push_expr(&coo[d], co, coeff)) { ok = 0; break; }
+                continue;
+            }
+            if (!is_system && d == 0) {        /* the scalar constant term */
                 expr_free(out[0]);
                 out[0] = coeff;
                 continue;
             }
-            ca_set(target, idx, d, coeff);
+            ca_set(is_system ? out[d]->data.function.args[i] : out[d], idx, d, coeff);
         }
     }
-    free(idx);
+    free(idx); free(co);
 
-    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, (size_t)(maxdeg + 1));
+    for (int d = 0; d <= maxdeg; d++) {
+        if (!spd[d]) continue;
+        if (!ok) { sp_coo_free(&coo[d]); continue; }
+        SparseArray* sa = sp_coo_finish(&coo[d], expr_new_integer(0), true);
+        if (sa) out[d] = sp_to_expr(sa);
+        else    ok = 0;
+    }
+    free(coo); free(spd);
+
+    Expr* result = NULL;
+    if (ok) {
+        result = expr_new_function(expr_new_symbol(SYM_List), out, nel);
+    } else {
+        for (int d = 0; d <= maxdeg; d++) if (out[d]) expr_free(out[d]);
+    }
     free(out);
 
     for (size_t i = 0; i < m; i++) monos_free(all[i], counts[i]);
@@ -850,6 +888,85 @@ fail:
 }
 
 /* ------------------------------------------------------------------ */
+/*  GroebnerBasis`DistributedTermsList                                 */
+/* ------------------------------------------------------------------ */
+/* GroebnerBasis`DistributedTermsList[poly, vars, MonomialOrder -> o] gives the
+ * distributed form {{{e1, ..., ek}, c}, ...}, vars} -- CoefficientRules with
+ * {exps, coeff} pairs instead of rules, the term list paired with the
+ * variables, in descending monomial order (Lexicographic by default). A List
+ * of polynomials gives one term list per polynomial. An internal
+ * helper, which symbolic packages call directly (a loop-integral package reads
+ * Feynman-parameter polynomials this way); a generalised variable it would
+ * adjoin (y^(1/2) in vars {x, y}) is declined. */
+
+/* One polynomial's {{exps, coeff}, ...}, or NULL when it is not polynomial. */
+static Expr* dtl_terms(Expr* poly, Expr** vars, int k, const int64_t* W, int rows) {
+    size_t n;
+    Mono* monos = build_monomials(poly, vars, k, W, rows, NULL, &n);
+    if (!monos) return NULL;
+    Expr** out = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr** es = malloc(sizeof(Expr*) * (size_t)(k > 0 ? k : 1));
+        for (int j = 0; j < k; j++) es[j] = expr_new_integer(monos[i].exps[j]);
+        Expr* explist = expr_new_function(expr_new_symbol(SYM_List), es, (size_t)k);
+        free(es);
+        Expr* coeff = monos[i].coeff; monos[i].coeff = NULL;    /* move */
+        out[i] = expr_new_function(expr_new_symbol(SYM_List),
+                                   (Expr*[]){ explist, coeff }, 2);
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List), out, n);
+    free(out);
+    monos_free(monos, n);
+    return r;
+}
+
+Expr* builtin_distributedtermslist(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    Expr** args = res->data.function.args;
+    Expr* order_arg = NULL;
+    size_t npos = argc;
+    while (npos > 0 && is_rule_head(args[npos - 1])) {
+        Expr* key = args[npos - 1]->data.function.args[0];
+        if (key->type == EXPR_SYMBOL && key->data.symbol.name == SYM_MonomialOrder)
+            order_arg = args[npos - 1]->data.function.args[1];
+        npos--;
+    }
+    if (npos != 2 || !is_list_head(args[1])) return NULL;
+
+    int k;
+    Expr* owned = NULL;
+    Expr** vars = resolve_vars(args[0], args[1], &k, &owned);
+    int rows;
+    int64_t* W = order_weight_matrix(order_arg, k, &rows);
+    if (!W) { free(vars); return NULL; }
+
+    Expr* terms;
+    if (is_list_head(args[0])) {
+        size_t m = args[0]->data.function.arg_count;
+        Expr** each = malloc(sizeof(Expr*) * (m > 0 ? m : 1));
+        size_t done = 0;
+        for (; done < m; done++) {
+            each[done] = dtl_terms(args[0]->data.function.args[done], vars, k, W, rows);
+            if (!each[done]) break;
+        }
+        if (done < m) {
+            for (size_t i = 0; i < done; i++) expr_free(each[i]);
+            terms = NULL;
+        } else {
+            terms = expr_new_function(expr_new_symbol(SYM_List), each, m);
+        }
+        free(each);
+    } else {
+        terms = dtl_terms(args[0], vars, k, W, rows);
+    }
+    free(W); free(vars);
+    if (!terms) return NULL;
+    return expr_new_function(expr_new_symbol(SYM_List),
+                             (Expr*[]){ terms, expr_copy(args[1]) }, 2);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Registration                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -870,7 +987,16 @@ void monomials_init(void) {
         "permutation being 0; a list of polynomials carries the equation index "
         "as the leading axis. CoefficientArrays[poly, vars] treats a non-List "
         "first argument as a single polynomial. Option Modulus -> p reduces the "
-        "coefficients. The arrays are dense Lists rather than SparseArrays.");
+        "coefficients. Each array is a SparseArray (background 0); the "
+        "constant term of a single polynomial is a scalar.");
+    symtab_add_builtin("GroebnerBasis`DistributedTermsList", builtin_distributedtermslist);
+    symtab_get_def("GroebnerBasis`DistributedTermsList")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("GroebnerBasis`DistributedTermsList",
+        "GroebnerBasis`DistributedTermsList[poly, vars] gives {{{e1, ..., ek}, c}, ...}, vars}: "
+        "the terms of the polynomial poly in vars as exponent vectors with their "
+        "coefficients, in descending monomial order. A list of polynomials gives "
+        "one term list each. Option MonomialOrder -> o (default Lexicographic) "
+        "selects the order.");
     symtab_add_builtin("FromCoefficientRules", builtin_fromcoefficientrules);
     symtab_get_def("FromCoefficientRules")->attributes |= ATTR_PROTECTED;
 }

@@ -733,6 +733,67 @@ void test_compoundexpression() {
     expr_free(res2); expr_free(e2);
 }
 
+/* An assignment evaluates its LHS head: h = g; h[x_] := ... defines g, and so
+ * does a scoped local holding a computed symbol -- a package's cache builds
+ * ch = ToExpression["cacheFunc" <> name] inside a Block and defines
+ * ch[a_, b_, c_] := ...; before, the rule landed on the local and every cached
+ * call stayed unevaluated. */
+void test_assignment_evaluates_lhs_head() {
+    assert_eval_eq("hh = gg; hh[x_] := x^2; hh[1] = 5; {gg[3], gg[1], Length[DownValues[gg]], DownValues[hh]}",
+                   "{9, 5, 2, {}}", 0);
+    assert_eval_eq("hh[1] =.; {gg[1], Length[DownValues[gg]]}", "{1, 1}", 0);
+    assert_eval_eq("Block[{k = q2}, k[x_] := x^3]; q2[2]", "8", 0);
+    assert_eval_eq("f1[a_] := Block[{ch}, ch = ToExpression[\"cf\" <> ToString[a]]; "
+                   "ch[u_, v_] := {u, v, a}; ch[1, 2]]; {f1[zz], cfzz[3, 4]}",
+                   "{{1, 2, zz}, {3, 4, zz}}", 0);
+    assert_eval_eq("Module[{loc}, loc = gg2; loc[1] = 9]; gg2[1]", "9", 0);
+    /* a head without an OwnValue is untouched */
+    assert_eval_eq("ff3[x_] := x + 1; ff3[1]", "2", 0);
+}
+
+/* Semantics that FeynCalc's TID / FCApart / DiracTrace / Collect2 paths
+ * rely on, each a kernel divergence found by running the package (v0.586):
+ * rule order (a literal-headed call outranks a blank), Orderless DownValue
+ * dispatch, a guard on a delayed rule's RHS (ReplaceAll, Cases, ReplaceList,
+ * scoped), Unevaluated replacements, Delete/Extract with {} positions, nested
+ * Part assignment, Together/ExpandAll leaving held parts alone, an aliased
+ * option key, GroebnerBasis`DistributedTermsList and valued symbols inside an
+ * assignment's LHS patterns. */
+void test_feyncalc_semantics() {
+    /* earlier groups leave x = 11, y = 12 and friends: start from clean symbols */
+    assert_eval_eq("ClearAll[x, y, a, b, c, d, e, f, g, m, p, q, M]", "Null", 0);
+    assert_eval_eq("c2[e_, {f___}, o:OptionsPattern[]] := c2 @@ Prepend[{f, o}, e]; c2[e_, f_, o:OptionsPattern[]] := {1, f}; c2[e_, f_, g__, o:OptionsPattern[]] := {2, f, g}; {c2[x, {F, G}], c2[x, {G}]}",
+                   "List[List[2, F, G], List[1, G]]", 1);
+    assert_eval_eq("SetAttributes[pr, Orderless]; pr[n_ x_mo, y_] := n pr[x, y]; {pr[mo[1], lm mo[1]], pr[lm mo[1], lm mo[1]]}",
+                   "List[Times[lm, pr[mo[1], mo[1]]], Times[Power[lm, 2], pr[mo[1], mo[1]]]]", 1);
+    assert_eval_eq("{f[2] /. f[x_] :> (x /; x > 1), f[0] /. f[x_] :> (x /; x > 1), f[2] /. f[x_] -> (x /; x > 1)}",
+                   "List[2, f[0], Condition[2, Greater[2, 1]]]", 1);
+    assert_eval_eq("Cases[{1, 2, 3}, x_ :> (x^2 /; x > 1)]",
+                   "List[4, 9]", 1);
+    assert_eval_eq("ReplaceList[a + b + c, x_ + y_ :> ({x, y} /; x === b)]",
+                   "List[List[b, Plus[a, c]]]", 1);
+    assert_eval_eq("{f[2] /. f[x_] :> Module[{t = x}, t /; t > 1], f[0] /. f[x_] :> Module[{t = x}, t /; t > 1]}",
+                   "List[2, f[0]]", 1);
+    assert_eval_eq("{f[2], g[3]} /. {f[x_] :> (x /; x > 5), f[x_] :> -x}",
+                   "List[-2, g[3]]", 1);
+    assert_eval_eq("(2 M[p] - M[q]) /. (n3_. M[x_] + n4_. M[y_]) :> (M[n3 x + n4 y] /; NumberQ[n3] && NumberQ[n4])",
+                   "M[Plus[Times[2, p], Times[-1, q]]]", 1);
+    assert_eval_eq("{d^2 f /. d -> Unevaluated[Sequence[]], d^2 /. d :> Unevaluated[Sequence[]], Hold[d] /. d :> Unevaluated[1 + 1], Hold[d, e] /. d :> Unevaluated[Sequence[a, b]]}",
+                   "List[Times[2, f], 2, Hold[Plus[1, 1]], Hold[a, b, e]]", 1);
+    assert_eval_eq("{Delete[{a, b}, {}], Delete[f[a, b], {}], Extract[{a, b}, {}], Extract[{a, b}, {{}}]}",
+                   "List[List[a, b], f[a, b], List[], List[List[a, b]]]", 1);
+    assert_eval_eq("vs = {{a, b}, {c}, {-1, 1, 1}}; vs[[3]][[1]] = vs[[3]][[1]] + 1; m = {{1, 2}, {3, 4}}; m[[2]][[1]] += 9; {vs, m}",
+                   "List[List[List[a, b], List[c], List[0, 1, 1]], List[List[1, 2], List[12, 4]]]", 1);
+    assert_eval_eq("ic[1] = a + b; {ExpandAll[f[HoldForm[ic[1]]]], Together[f[HoldForm[ic[1]]]]}",
+                   "List[f[HoldForm[ic[1]]], f[HoldForm[ic[1]]]]", 1);
+    assert_eval_eq("Options[fo3] = {al2 -> True}; al2 = real2; fo3[OptionsPattern[]] := OptionValue[al2]; fo3[]",
+                   "True", 1);
+    assert_eval_eq("{GroebnerBasis`DistributedTermsList[a x^2 + 3 x y + 5 y^3, {x, y}], GroebnerBasis`DistributedTermsList[y^2 + x, {x, y}, MonomialOrder -> DegreeReverseLexicographic], GroebnerBasis`DistributedTermsList[0, {x, y}]}",
+                   "List[List[List[List[List[2, 0], a], List[List[1, 1], 3], List[List[0, 3], 5]], List[x, y]], List[List[List[List[0, 2], 1], List[List[1, 0], 1]], List[x, y]], List[List[], List[x, y]]]", 1);
+    assert_eval_eq("PDx = PropD; fs[l_List][a__PDx] := {l, a}; fs[{1}][PropD[1], PropD[2]]",
+                   "List[List[1], PropD[1], PropD[2]]", 1);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -764,6 +825,8 @@ int main() {
     TEST(test_select);
     TEST(test_matchq);
     TEST(test_compoundexpression);
+    TEST(test_assignment_evaluates_lhs_head);
+    TEST(test_feyncalc_semantics);
     printf("All tests passed!\n");
     return 0;
 }

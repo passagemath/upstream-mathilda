@@ -530,6 +530,35 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     if (lhs->data.function.arg_count < 2) return NULL;
 
     Expr* sym = lhs->data.function.args[0];
+    /* A nested target x[[i]][[j]] = v is x[[i, j]] = v when every inner index
+     * is an integer (then composing the Parts is concatenating the specs; an
+     * inner All or Span would not compose that way and stays unsupported).
+     * The inner indices were held with the target, so they are evaluated
+     * here: v[[k]][[i]] = ... with k = 3 updates v[[3, i]]. */
+    if (sym->type == EXPR_FUNCTION && sym->data.function.head->type == EXPR_SYMBOL &&
+        sym->data.function.head->data.symbol.name == SYM_Part &&
+        sym->data.function.arg_count >= 2) {
+        size_t nin = sym->data.function.arg_count - 1;
+        size_t nout = lhs->data.function.arg_count - 1;
+        Expr** idx = malloc(sizeof(Expr*) * (nin + nout + 1));
+        bool ok = true;
+        for (size_t i = 0; i < nin; i++) {
+            idx[i + 1] = evaluate(sym->data.function.args[i + 1]);
+            if (idx[i + 1]->type != EXPR_INTEGER) ok = false;
+        }
+        if (!ok) {
+            for (size_t i = 0; i < nin; i++) expr_free(idx[i + 1]);
+            free(idx);
+            return NULL;
+        }
+        for (size_t i = 0; i < nout; i++) idx[nin + 1 + i] = expr_copy(lhs->data.function.args[i + 1]);
+        idx[0] = expr_copy(sym->data.function.args[0]);
+        Expr* flat = expr_new_function(expr_new_symbol(SYM_Part), idx, nin + nout + 1);
+        free(idx);
+        Expr* r = expr_part_assign(flat, rhs);
+        expr_free(flat);
+        return r;
+    }
     if (sym->type != EXPR_SYMBOL) return NULL;
 
     Expr* current_val = symtab_get_own_values(sym->data.symbol.name) ? evaluate(sym) : NULL;
@@ -604,8 +633,9 @@ Expr* builtin_head(Expr* res) {
 static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
 
 Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
-    if (!expr || !indices) return NULL;
-    if (nindices == 0) return expr_copy(expr);
+    if (!expr) return NULL;
+    if (nindices == 0) return expr_copy(expr);   /* the empty path: expr itself */
+    if (!indices) return NULL;
 
     Expr* idx = indices[0];
     Expr** rest = indices + 1;
@@ -615,6 +645,16 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
      * integer / key / Key[k] selects one VALUE; All, a Span or a List of
      * positions or keys selects a sub-ASSOCIATION. */
     if (is_association(expr)) return assoc_part(expr, idx, rest, nrest);
+
+    /* A SparseArray reached below the top level ({c0, sa}[[2, 1]]): the
+     * remaining spec is its own Part. builtin_part dispatches the top level;
+     * this covers the recursion, where the atomic test below would otherwise
+     * leave the whole Part unevaluated. [[0]] included: sp_part answers List,
+     * for a SparseArray's part 0. */
+    if (expr->type == EXPR_SPARSE) {
+        bool err = false;
+        return sp_part(expr, indices, nindices, &err);
+    }
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {
@@ -1058,7 +1098,13 @@ Expr* builtin_extract(Expr* res) {
         }
     }
     /* Otherwise pos is treated as a single position (a scalar like an integer,
-     * or a single-position list); extract_single handles both forms. */
+     * or a single-position list); extract_single handles both forms. The
+     * exception is {}: an empty LIST of positions, so the answer is {} ({{}}
+     * is the one position naming the whole expression). */
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL &&
+        pos->data.function.head->data.symbol.name == SYM_List &&
+        pos->data.function.arg_count == 0)
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     if (is_list_of_pos) {
         size_t npos = pos->data.function.arg_count;
@@ -1594,6 +1640,11 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
             return current;
         }
         
+        /* {} is an empty list of positions, not the path to the whole
+         * expression ({{}} is that): nothing is deleted.
+         * Delete[l, Position[l, 0]] is the idiom it serves. */
+        if (pos->data.function.arg_count == 0) return expr_copy(expr);
+
         // Case 2: Single path
         return delete_path(expr, pos->data.function.args, pos->data.function.arg_count);
     }

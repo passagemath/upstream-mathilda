@@ -183,6 +183,12 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
 // SubValues: rules whose left-hand side has a compound head, f[x_][y_] (any
 // depth), keyed on the innermost head symbol f.  Tried for a call whose head
 // is compound, after the head has been evaluated (see apply_sub_values).
+/* A delayed replacement that is a Module/With/Block ending in val /; cond (a
+ * scoped guard): does `rhs` have one, and -- for a bound replacement -- its
+ * evaluated value, or NULL when the guard did not give True. Shared by the
+ * DownValue dispatcher and the rule-applying builtins (ReplaceAll, Cases). */
+bool  symtab_rhs_has_scoped_condition(Expr* rhs);
+Expr* symtab_try_scoped_condition(Expr* bound);
 void symtab_add_sub_value(const char* symbol_name, Expr* pattern, Expr* replacement,
                           bool delayed);
 Rule* symtab_get_sub_values(const char* symbol_name);

@@ -504,6 +504,13 @@ typedef struct ParentMatch {
 } ParentMatch;
 
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
+/* Is `h` a OneIdentity symbol? Out of line so the recursive matcher's frame
+ * does not grow (deep-nesting cases sit close to the C stack limit). */
+static bool head_is_oneidentity(const Expr* h) {
+    return h->type == EXPR_SYMBOL &&
+           (get_attributes(h->data.symbol.name) & ATTR_ONEIDENTITY);
+}
+
 static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent);
 /* Success continuation for rep_units_match: called once the units cover the
@@ -1048,14 +1055,19 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
         if (!inner_is_wrapper
             && inner_pat->type == EXPR_FUNCTION && expr->type == EXPR_FUNCTION) {
             size_t saved_env_count = env->count;
-            if (!match_internal(expr->data.function.head, inner_pat->data.function.head, env, NULL)) {
-                env_rollback(env, saved_env_count);
-                return false;
+            if (match_internal(expr->data.function.head, inner_pat->data.function.head, env, NULL)) {
+                bool res = match_args_internal(expr->data.function.args, expr->data.function.arg_count,
+                                     inner_pat->data.function.args, inner_pat->data.function.arg_count, env, cond, inner_pat->data.function.head, inner_pat->data.function.arg_count, parent);
+                if (!res) env_rollback(env, saved_env_count);
+                return res;
             }
-            bool res = match_args_internal(expr->data.function.args, expr->data.function.arg_count,
-                                 inner_pat->data.function.args, inner_pat->data.function.arg_count, env, cond, inner_pat->data.function.head, inner_pat->data.function.arg_count, parent);
-            if (!res) env_rollback(env, saved_env_count);
-            return res;
+            env_rollback(env, saved_env_count);
+            /* A head mismatch is final -- unless the inner head is OneIdentity,
+             * where f[p1, ..., pn] can still match a lone non-f subject through
+             * an Optional's default (h[g] against Times[a_., h[b_]] as a -> 1).
+             * That reading lives at the end of match_internal, which the
+             * generic path below reaches with the guard as continuation. */
+            if (!head_is_oneidentity(inner_pat->data.function.head)) return false;
         }
 
         /* The guard is the inner match's continuation (an empty argument level

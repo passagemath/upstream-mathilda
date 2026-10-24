@@ -186,6 +186,58 @@ static void test_field_coefficients(void) {
              "List[Times[AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]], Power[x, 2]], 3]");
 }
 
+/* CoefficientArrays returns SparseArrays (background 0) for every array
+ * element; the constant term of a single polynomial stays a scalar. Each
+ * SparseArray is viewed as {Dimensions, ArrayRules} so the FullForm is
+ * stable. */
+#define CA_VIEW(e) "(" e ") /. s_SparseArray :> {Dimensions[s], ArrayRules[s]}"
+static void test_coefficientarrays_sparse(void) {
+    run_test(CA_VIEW("CoefficientArrays[{x + 2 y - 1}, {x, y}]"),
+             "List[List[List[1], List[Rule[List[1], -1], Rule[List[Blank[]], 0]]], "
+             "List[List[1, 2], List[Rule[List[1, 1], 1], Rule[List[1, 2], 2], "
+             "Rule[List[Blank[], Blank[]], 0]]]]");
+    /* single polynomial: scalar constant term, upper-triangular degree 2 */
+    run_test(CA_VIEW("CoefficientArrays[x y + c y^2 + a x, {x, y}]"),
+             "List[0, List[List[2], List[Rule[List[1], a], Rule[List[Blank[]], 0]]], "
+             "List[List[2, 2], List[Rule[List[1, 2], 1], Rule[List[2, 2], c], "
+             "Rule[List[Blank[], Blank[]], 0]]]]");
+    /* zero and constant inputs: no array element at all */
+    run_test("CoefficientArrays[0, {x, y}]", "List[0]");
+    run_test("CoefficientArrays[5, {x, y}]", "List[5]");
+    /* a system's constant vector is a (here empty) SparseArray */
+    run_test(CA_VIEW("CoefficientArrays[{0}, {x, y}]"),
+             "List[List[List[1], List[Rule[List[Blank[]], 0]]]]");
+    /* an absent degree is an empty SparseArray of the full dimensions */
+    run_test(CA_VIEW("CoefficientArrays[3 + x^2, {x, y}]"),
+             "List[3, List[List[2], List[Rule[List[Blank[]], 0]]], "
+             "List[List[2, 2], List[Rule[List[1, 1], 1], Rule[List[Blank[], Blank[]], 0]]]]");
+    run_test("Head /@ CoefficientArrays[{x^2 + 1, y + x}, {x, y}]",
+             "List[SparseArray, SparseArray, SparseArray]");
+    /* Normal recovers the dense arrays */
+    run_test("Normal[CoefficientArrays[{a x + b y + c, x - y}, {x, y}]]",
+             "List[List[c, 0], List[List[a, b], List[1, -1]]]");
+    run_test(CA_VIEW("CoefficientArrays[x + y, {x, y}, Modulus -> 3]"),
+             "List[0, List[List[2], List[Rule[List[1], 1], Rule[List[2], 1], "
+             "Rule[List[Blank[]], 0]]]]");
+    /* storage follows the terms: 30 variables, degree 5, one entry per term
+     * (the dense form would be 30^5 entries per element) */
+    run_test("Module[{v = Array[z, 30], r}, "
+             "r = CoefficientArrays[Sum[i z[i]^3 z[Mod[i, 30] + 1]^2, {i, 30}], v]; "
+             "{Dimensions[r[[6]]], Length[ArrayRules[r[[6]]]]}]",
+             "List[List[30, 30, 30, 30, 30], 31]");
+    /* past SP_MAX_RANK an element is dense (and cheap: one variable) */
+    run_test("Module[{r = CoefficientArrays[x^40 + 2, {x}]}, "
+             "{Length[r], Head[r[[33]]], Head[r[[34]]], Flatten[r[[41]]]}]",
+             "List[41, SparseArray, List, List[1]]");
+    /* the idiom of a symbolic package's collector: test the head, map over
+     * the linear coefficients, then dot with the variables */
+    run_test("Module[{ca = CoefficientArrays[a x + b y + c, {x, y}]}, "
+             "{Head[ca[[2]]] === SparseArray, Expand[((2 #)&) /@ ca[[2]] . {x, y}]}]",
+             "List[True, Plus[Times[2, a, x], Times[2, b, y]]]");
+    /* Part through the List into an element */
+    run_test("CoefficientArrays[{a x + b y + c, x - y}, {x, y}][[2, 1, 2]]", "b");
+}
+
 int main(void) {
     setbuf(stdout, NULL);
     printf("Starting coefficient_rules_tests\n");
@@ -199,6 +251,7 @@ int main(void) {
     TEST(test_fromcoefficientrules);
     TEST(test_decline);
     TEST(test_field_coefficients);
+    TEST(test_coefficientarrays_sparse);
 
     printf("All MonomialList / CoefficientRules / FromCoefficientRules tests passed!\n");
     return 0;

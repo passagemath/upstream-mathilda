@@ -747,10 +747,17 @@ static Expr* expr_expand_all_impl(Expr* e, Expr* patt, bool overflow_mode) {
      * this level.  Inequality carries operator-symbol slots at odd indices that
      * must be passed through untouched. */
     bool is_ineq = (strcmp(head, "Inequality") == 0);
+    /* Held positions are passed through: expanding inside HoldForm[x] would
+     * rebuild and evaluate x; held parts stay untouched. */
+    uint32_t hattr = (e->data.function.head->type == EXPR_SYMBOL)
+        ? get_attributes(e->data.function.head->data.symbol.name) : 0;
+    bool hold_all  = (hattr & (ATTR_HOLDALL | ATTR_HOLDALLCOMPLETE)) != 0;
     Expr* new_head = expr_expand_all_impl(e->data.function.head, patt, overflow_mode);
     Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
-        if (is_ineq && (i & 1u) == 1)
+        bool held = hold_all || (i == 0 && (hattr & ATTR_HOLDFIRST)) ||
+                    (i > 0 && (hattr & ATTR_HOLDREST));
+        if ((is_ineq && (i & 1u) == 1) || held)
             args[i] = expr_copy(e->data.function.args[i]);
         else
             args[i] = expr_expand_all_impl(e->data.function.args[i], patt, overflow_mode);

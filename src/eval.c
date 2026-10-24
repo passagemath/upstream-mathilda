@@ -1020,6 +1020,34 @@ static bool lhs_arg_contains_pattern(Expr* e) {
     return false;
 }
 
+/* Does the pattern `e` mention a symbol with an OwnValue where evaluation can
+ * reach it? An assignment evaluates its LHS arguments, patterns
+ * included, so PD = PropagatorDenominator; f[a__PD] := ... is a rule for
+ * __PropagatorDenominator. Pattern arguments are otherwise held here (they
+ * are inert, and holding keeps every existing definition byte-identical), so
+ * only such an argument is evaluated. A pattern name (Pattern's first slot)
+ * and a held test or guard are not reachable. */
+static bool lhs_pattern_mentions_valued_symbol(Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return symtab_get_own_values(e->data.symbol.name) != NULL;
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_HoldPattern || hn == SYM_Verbatim) return false;
+        if (hn == SYM_Pattern)
+            return n == 2 && lhs_pattern_mentions_valued_symbol(e->data.function.args[1]);
+        if (hn == SYM_Condition || hn == SYM_PatternTest)
+            return n >= 1 && lhs_pattern_mentions_valued_symbol(e->data.function.args[0]);
+    } else if (lhs_pattern_mentions_valued_symbol(h)) {
+        return true;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (lhs_pattern_mentions_valued_symbol(e->data.function.args[i])) return true;
+    return false;
+}
+
 /*
  * assignment_target_symbol:
  * Returns the name of the symbol whose OwnValue/DownValue/Part would be
@@ -1497,7 +1525,8 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
         else if (i == 0 && (lhs_attrs & ATTR_HOLDFIRST)) hold = true;
         else if (i > 0 && (lhs_attrs & ATTR_HOLDREST)) hold = true;
         if (is_part && i == 0) hold = true;
-        if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i])) hold = true;
+        if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i]) &&
+            !lhs_pattern_mentions_valued_symbol(lhs->data.function.args[i])) hold = true;
         if (is_list) {
             Expr* child = lhs->data.function.args[i];
             if (child->type == EXPR_SYMBOL) hold = true;
@@ -1517,11 +1546,31 @@ static Expr* build_assignment_target(Expr* lhs, bool* freed) {
         if (!hfreed) head = expr_copy(head);
     } else {
         head = expr_copy(lhs->data.function.head);
+        /* The head is evaluated too: h = g; h[x_] := ... defines g, and so
+         * does a Block/Module-local holding a computed symbol
+         * (ch = ToExpression["cache" <> name]; ch[a_] := ...). Only a head
+         * with an OwnValue can change, so the common case pays one lookup.
+         * Only a symbol value retargets: a = <||>; a[k] = v is an element
+         * assignment into the Association (apply_assignment's own path), and
+         * a number or pure function is no assignable head. */
+        if (head->type == EXPR_SYMBOL && symtab_get_own_values(head->data.symbol.name)) {
+            Expr* hv = evaluate(head);
+            if (hv->type == EXPR_SYMBOL) {
+                expr_free(head);
+                head = hv;
+            } else {
+                expr_free(hv);
+            }
+        }
     }
     Expr* target = expr_new_function(head, eval_args, lhs->data.function.arg_count);
     free(eval_args);
     *freed = true;
     return target;
+}
+
+Expr* eval_hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body) {
+    return hoist_rhs_conditions(lhs, rhs, body);
 }
 
 /* Public face of build_assignment_target for Unset, which lives in core.c:

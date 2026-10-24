@@ -706,6 +706,10 @@ Out[1]= <|"a" -> 10, "b" -> 2, "c" -> 30|>
 ```
 
 ## Delete
+`Delete[expr, {}]` is `expr`: `{}` is an empty list of positions, so
+`Delete[l, Position[l, 0]]` with no zeros deletes nothing (v0.586); `{{}}` is the
+path to the whole expression.
+
 `Delete[assoc, {Key[k]}]` removes an entry by key position; a nested position
 (`{Key[k1], Key[k2]}`) descends into inner associations, and a list of positions
 (`{{Key[k1]}, {Key[k2]}}`) removes several. (`KeyDrop` is the key-oriented
@@ -1528,6 +1532,9 @@ inside other expressions too. `Length`, `Dimensions`, `ArrayDepth`, `ArrayQ`,
 `VectorQ` and `MatrixQ` (with element tests) answer from the shape. `Part`
 reads an element by binary search, and a selection (`All`, spans, index lists,
 repeats) as a SparseArray built from the stored entries; `s[[0]]` is `List`.
+A SparseArray reached through an enclosing List takes the rest of the
+spec the same way: `{c0, s}[[2, 1, 2]]` and `Extract[{1, s}, {2, 1, 1}]` read
+`s` (v0.586; such a Part used to stay unevaluated).
 `s[[i, j]] = v` inserts, replaces or (for the background) removes one entry;
 other Part assignments go through the dense array and back.
 

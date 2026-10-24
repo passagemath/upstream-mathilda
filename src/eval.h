@@ -51,6 +51,12 @@ bool eval_take_top_abort(void);
  * positions held, compound heads f[a][b] too).  Returns a new node with
  * *freed = true (caller frees), or `lhs` itself with *freed = false. */
 Expr* eval_assignment_target(Expr* lhs, bool* freed);
+/* lhs :> body /; t1 /; t2 as the pattern Condition[Condition[lhs, t1], t2]
+ * with replacement body (the guards then run during matching, so the matcher
+ * can backtrack into other assignments). Returns lhs itself (borrowed) when
+ * rhs carries no Condition, else a new pattern the caller frees; *body is set
+ * to the replacement to use (borrowed from rhs). */
+Expr* eval_hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body);
 /* A Catch / CheckAbort that consumes an in-flight sentinel calls this so the
  * enclosing frame does not re-raise it (see g_pending_unwind in eval.c). */
 void eval_unwind_consumed(void);

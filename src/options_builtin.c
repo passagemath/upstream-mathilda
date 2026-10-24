@@ -50,11 +50,30 @@ static const char* strip_context(const char* s) {
     const char* bt = strrchr(s, '`');
     return bt ? bt + 1 : s;
 }
+/* The option name an aliased key stands for: a symbol with an OwnValue that
+ * evaluates to a symbol (FDS = FeynAmpDenominatorSimplify) names that symbol.
+ * A key is stored as written, and Options[f] = {FDS -> True} may run before
+ * the alias is assigned; the key is resolved at lookup, so
+ * OptionValue[FDS] -- which arrives evaluated -- still finds it. NULL when
+ * the key is no such alias. */
+static const char* opt_alias_text(const Expr* e) {
+    if (!e || e->type != EXPR_SYMBOL || !symtab_get_own_values(e->data.symbol.name)) return NULL;
+    Expr* v = evaluate((Expr*)e);
+    const char* r = (v && v->type == EXPR_SYMBOL) ? v->data.symbol.name : NULL;
+    expr_free(v);
+    return r;      /* interned: outlives v */
+}
+
 static bool opt_name_eq(const Expr* a, const Expr* b) {
     const char* sa = opt_name_text(a);
     const char* sb = opt_name_text(b);
     if (!sa || !sb) return false;
-    return strcmp(strip_context(sa), strip_context(sb)) == 0;
+    if (strcmp(strip_context(sa), strip_context(sb)) == 0) return true;
+    const char* ra = opt_alias_text(a);
+    const char* rb = opt_alias_text(b);
+    if (ra && strcmp(strip_context(ra), strip_context(sb)) == 0) return true;
+    if (rb && strcmp(strip_context(sa), strip_context(rb)) == 0) return true;
+    return ra && rb && strcmp(strip_context(ra), strip_context(rb)) == 0;
 }
 
 /* True for Rule[name, val] / RuleDelayed[name, val] with a symbol/string name. */

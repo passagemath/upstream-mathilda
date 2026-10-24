@@ -127,7 +127,11 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
             Expr* res;
             if (replacement) {
                 Expr* repl_bound = replace_bindings(replacement, env);
-                if (delayed) {
+                if (delayed && symtab_rhs_has_scoped_condition(replacement)) {
+                    /* p :> Module[{...}, v /; c]: a failing guard is no match */
+                    res = symtab_try_scoped_condition(repl_bound);
+                    expr_free(repl_bound);
+                } else if (delayed) {
                     res = eval_and_free(repl_bound);
                 } else {
                     res = repl_bound;
@@ -135,6 +139,7 @@ static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int
             } else {
                 res = expr_copy(e);
             }
+            if (!res) { env_free(env); return; }
             if (*count >= *cap) {
                 *cap = (*cap == 0) ? 16 : (*cap * 2);
                 *results = realloc(*results, sizeof(Expr*) * (*cap));
@@ -354,6 +359,7 @@ Expr* builtin_cases(Expr* res) {
     }
 
     Expr* pattern = patt_arg;
+    Expr* owned_pattern = NULL;
     Expr* replacement = NULL;
     bool delayed = false;
 
@@ -361,6 +367,11 @@ Expr* builtin_cases(Expr* res) {
         pattern = patt_arg->data.function.args[0];
         replacement = patt_arg->data.function.args[1];
         delayed = (patt_arg->data.function.head->data.symbol.name == SYM_RuleDelayed);
+        /* p :> v /; c is the case p /; c :> v (see eval_hoist_rhs_conditions) */
+        if (delayed) {
+            Expr* hoisted = eval_hoist_rhs_conditions(pattern, replacement, &replacement);
+            if (hoisted != pattern) pattern = owned_pattern = hoisted;
+        }
     } else if (patt_arg->type == EXPR_FUNCTION && patt_arg->data.function.head->data.symbol.name == SYM_HoldPattern && patt_arg->data.function.arg_count == 1) {
         Expr* hp_arg = patt_arg->data.function.args[0];
         if (hp_arg->type == EXPR_FUNCTION && (hp_arg->data.function.head->data.symbol.name == SYM_Rule || hp_arg->data.function.head->data.symbol.name == SYM_RuleDelayed) && hp_arg->data.function.arg_count == 2) {
@@ -373,6 +384,7 @@ Expr* builtin_cases(Expr* res) {
     Expr** results = malloc(sizeof(Expr*) * cap);
 
     do_cases_at_level(expr, 0, min_l, max_l, heads, pattern, replacement, delayed, &results, &count, &cap, max_results);
+    if (owned_pattern) expr_free(owned_pattern);
 
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);

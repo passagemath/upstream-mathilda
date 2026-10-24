@@ -83,6 +83,8 @@ Gives a list of elements that match a pattern.
 - Defaults to level `{1}`.
 - Option `Heads -> True` includes heads of expressions.
 - Operates in depth-first post-order traversal.
+- `Cases[expr, p :> v /; test]` takes the guard as part of the match, as
+  `ReplaceAll` does: `Cases[{1, 2, 3}, x_ :> (x^2 /; x > 1)]` is `{4, 9}` (v0.586).
 
 ## DeleteCases
 Removes the elements of an expression that match a pattern.
@@ -172,6 +174,8 @@ Gives the number of elements or subexpressions that match a pattern.
   `f[a, b]`, and `f[]` under Flat+OneIdentity does not match `f[x_]` (before
   v0.475 all three matched). Under Flat, a subject that already has head `f`
   is covered by the ordinary path, so its default match is listed once.
+  A guarded form keeps this: `MatchQ[h[g], a_. h[b_] /; FreeQ[{a, b}, h]]` is
+  `True` with `a -> 1` (before v0.586 the guard made a head mismatch final).
 - **Flat without OneIdentity** differs from the reference in `ReplaceList` enumeration.
   The reference binds a one-operand slice both as `h[b]` and as `b` and repeats matches;
   Mathilda binds `b` once. These cases are recorded, report-only, in

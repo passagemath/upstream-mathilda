@@ -95,6 +95,9 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
 **Features**:
 - `Protected`, `Listable`.
 - Makes a sum of terms into a single rational function.
+- Never descends into held parts (`HoldForm[x]`, `Hold[...]`, any position its
+  head holds): `Together[f[HoldForm[iso[1]]]]` is unchanged even when `iso[1]`
+  has a value (v0.586).
 - **Value-preserving on every kernel** (2026-10-17). Transcendental kernels are
   replaced by fresh generators only OUTSIDE variable-binding operators: an
   unevaluated `Integrate`/`D`/`Sum`/`Product`/`Limit`/`Series`, a `Function`, an

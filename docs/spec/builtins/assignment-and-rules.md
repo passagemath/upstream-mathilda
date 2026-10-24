@@ -4,6 +4,21 @@
 - `lhs = rhs`: `Set`. Immediate evaluation of `rhs`.
 - `lhs := rhs`: `SetDelayed`. Delayed evaluation of `rhs`.
 - `lhs := rhs /; condition`: When the RHS of `SetDelayed` is a `Condition`, it is automatically moved to the LHS pattern. This makes `f[x_] := body /; test` equivalent to `f[x_] /; test := body`.
+- **The left-hand side is evaluated**: its head (`h = g;
+  h[x_] := ...` defines `g`, and so does a scoped local holding a computed
+  symbol, `ch = ToExpression["cache" <> name]; ch[a_] := ...`), and any pattern
+  argument that mentions a symbol with a value (`PD = PropagatorDenominator;
+  f[a__PD] := ...` is a rule for `__PropagatorDenominator`). Other pattern
+  arguments are held, which is equivalent since patterns are inert (v0.586).
+- **Rule order.** A literal-headed call in a pattern (`{f___}`, `h[__]`) ranks
+  at least as specific as a typed blank, so `c[e_, {f___}, o:OptionsPattern[]]`
+  is tried before `c[e_, f_, o:OptionsPattern[]]` whichever was defined first
+  (v0.586).
+- **Orderless heads.** A DownValue whose first pattern slot names a head fires
+  through any argument of an `Orderless` head: `Pair[n_ x_Momentum, y_] := ...`
+  applies to `Pair[Momentum[p], lm Momentum[p]]` (v0.586).
+- **Nested Part targets.** `x[[i]][[j]] = v` (and `+=`) is `x[[i, j]] = v` when
+  the inner indices are integers (v0.586).
 - **Redefinition.** A new rule replaces an existing one whose left-hand side
   (together with any `/;` condition) is the same up to renaming of pattern
   variables. The replacement covers both the pattern and the right-hand side:
@@ -389,6 +404,17 @@ Applies a rule or list of rules to transform each subpart of an expression.
 - Applies a rule only once to an expression.
 - Returns `expr` unmodified if no rules apply.
 - Maps across lists of rules appropriately.
+- **A guard on a delayed rule's right-hand side** is part of the match:
+  `lhs :> body /; test` behaves as `lhs /; test :> body`, so a failing guard
+  backtracks into other assignments of the pattern (which pair of a `Plus`)
+  and then lets the next rule try; a scoped guard
+  (`lhs :> Module[{t = ...}, v /; cond]`) is evaluated in its scope. The same
+  holds for `Replace`, `ReplaceRepeated`, `ReplaceList` and `Cases`. A `Rule`
+  (`->`) keeps a `Condition` value (v0.586).
+- **Unevaluated replacements.** The outer `Unevaluated` of a replacement is
+  removed as it is inserted: `x /. d -> Unevaluated[Sequence[]]` deletes `d`
+  (also in `d^2`, giving `Power[2]` = `2`), and `Hold[d] /. d :> Unevaluated[1 + 1]`
+  is `Hold[1 + 1]`. `ReplacePart` does the same (v0.586).
 - Inside an association the rules reach the values only, never the keys:
   `<|a -> 1, b -> 2|> /. b -> a` is unchanged. An association is itself a rule
   set with literal keys: `{x, y} /. <|x -> 1|>` is `{1, y}` (see
@@ -643,6 +669,10 @@ A failing guard falls through to the next rule. This also applies to a guard
 written on the LHS (`g[x_, OptionsPattern[]] /; OptionValue[o] == 1 := ...`).
 That case is deliberately more permissive than the reference, which leaves
 such a call unevaluated.
+
+- **An aliased option name** resolves at lookup: after `Options[f] = {al -> 1}`
+  and a later `al = real`, `OptionValue[al]` (which arrives as `real`) still
+  finds the option (v0.586).
 
 ## OptionQ
 `OptionQ[e]` gives `True` if `e` is an option rule, or a possibly nested list of

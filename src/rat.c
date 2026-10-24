@@ -959,8 +959,20 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha);
  * rather than dropping into the multivariate Q[α, x] subresultant-PRS
  * path, which is exponentially slow on Sqrt[α]-laden coefficients.
  * Re-enabled now that PolynomialQuotient/Remainder accept Extension. */
+/* A head that holds any of its arguments (Hold, HoldForm, HoldComplete,
+ * HoldPattern, Unevaluated, If, ...). Together never descends into it: the
+ * recursion would rebuild and EVALUATE the held part -- HoldForm[iso[1]] came
+ * back as HoldForm[value of iso[1]], breaking a package's abbreviation
+ * scheme (Isolate / FRH). Held parts are left untouched. */
+static bool together_head_holds(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           (get_attributes(e->data.function.head->data.symbol.name) &
+            (ATTR_HOLDALL | ATTR_HOLDFIRST | ATTR_HOLDREST | ATTR_HOLDALLCOMPLETE)) != 0;
+}
+
 static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (together_head_holds(e)) return expr_copy(e);
 
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;
@@ -1911,6 +1923,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
 
 static Expr* together_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (together_head_holds(e)) return expr_copy(e);
     
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;

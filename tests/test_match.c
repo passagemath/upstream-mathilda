@@ -203,6 +203,27 @@ void test_match_condition_backtracks_into_nested() {
                    "(x^(1 + 1/(-1 + a)) y^(1/(-1 + a)))/(1 + 1/(-1 + a))", 0);
 }
 
+/* A Condition over a OneIdentity head with an Optional element: the subject
+ * need not carry the head, because the Optional takes its default (h[g]
+ * against Times[a_., h[b_]] as a -> 1), exactly as the unguarded pattern
+ * matches. The guarded form used to fail the head test outright, so a
+ * package's per-term structure check (a_. h[b_] /; ...) rejected every
+ * coefficient-free term. */
+void test_match_condition_oneidentity_optional_default() {
+    assert_eval_eq("MatchQ[h[g], a_. h[b_] /; FreeQ[{a, b}, h]]", "True", 0);
+    assert_eval_eq("Replace[h[g], a_. h[b_] /; b === g :> {a, b}]", "{1, g}", 0);
+    assert_eval_eq("Replace[h[k], a_. h[b_] /; b === g :> {a, b}]", "h[k]", 0);
+    assert_eval_eq("MatchQ[3 h[g], a_. h[b_] /; a == 3]", "True", 0);
+    assert_eval_eq("Replace[x, a_. + y_ /; y === x :> {a, y}]", "{0, x}", 0);
+    assert_eval_eq("Cases[{h[1], 2 h[3], h[4] h[5], k[1]}, a_. h[b_] /; OddQ[b] :> {a, b}]",
+                   "{{1, 1}, {2, 3}, {h[4], 5}}", 0);
+    /* a head that is not OneIdentity still fails on a mismatch */
+    assert_eval_eq("MatchQ[g[x], f[x_] /; True]", "False", 0);
+    /* and as a DownValue */
+    assert_eval_eq("qq[a_. h[b_] /; b > 1] := {a, b}; {qq[h[2]], qq[5 h[3]], qq[h[0]]}",
+                   "{{1, 2}, {5, 3}, qq[h[0]]}", 0);
+}
+
 /* A TimeConstrained timeout restores registered nesting counters (v0.451): an
  * aborted nested DSolve must not leave DSolve's depth raised, which silently
  * disabled the top-level-only methods for the rest of the session.  After the
@@ -224,6 +245,7 @@ int main() {
     TEST(test_match_multiple_bindings);
     TEST(test_match_patterntest);
     TEST(test_match_condition_backtracks_into_nested);
+    TEST(test_match_condition_oneidentity_optional_default);
     TEST(test_timeconstrained_restores_dsolve_depth);
     printf("All match tests passed!\n");
     return 0;

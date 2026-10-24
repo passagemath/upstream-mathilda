@@ -134,6 +134,36 @@ static bool check_match(RawRule* rules, size_t num_rules, PathElement* path, siz
     return false;
 }
 
+/* A rule's replacement is inserted with its outer Unevaluated layers removed,
+ * for Rule and RuleDelayed alike (a Rule keeps an
+ * Unevaluated RHS as an argument): x /. d -> Unevaluated[Sequence[]] deletes
+ * d (the bare Sequence[] then splices, even into Power[d, 2] -> Power[2] ->
+ * 2), and Hold[d] /. d :> Unevaluated[1 + 1] is Hold[1 + 1]. Consumes `e`. */
+static Expr* strip_unevaluated(Expr* e) {
+    while (e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_Unevaluated) {
+        Expr* inner;
+        if (e->data.function.arg_count == 1) {
+            inner = expr_copy(e->data.function.args[0]);
+        } else {
+            /* Binding already spliced a Sequence into the wrapper:
+             * Unevaluated[Sequence[]] arrives as Unevaluated[], and
+             * Unevaluated[Sequence[a, b]] as Unevaluated[a, b]. */
+            size_t n = e->data.function.arg_count;
+            Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+            for (size_t i = 0; i < n; i++) a[i] = expr_copy(e->data.function.args[i]);
+            inner = expr_new_function(expr_new_symbol(SYM_Sequence), a, n);
+            free(a);
+        }
+        expr_free(e);
+        e = inner;
+        if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+            e->data.function.head->data.symbol.name == SYM_Sequence) break;
+    }
+    return e;
+}
+
 static Expr* replace_part_rec(Expr* expr, RawRule* rules, size_t num_rules, PathElement* current_path, size_t depth) {
     Expr* replacement_expr = NULL;
     bool delayed = false;
@@ -146,6 +176,7 @@ static Expr* replace_part_rec(Expr* expr, RawRule* rules, size_t num_rules, Path
             expr_free(res);
             res = eval_res;
         }
+        res = strip_unevaluated(res);
         env_free(env);
         return res;
     }
@@ -307,6 +338,7 @@ typedef struct {
     Expr* pattern;
     Expr* replacement;
     bool delayed;
+    Expr* owned;     /* a hoisted pattern lhs /; t (owned), else NULL */
 } ReplaceRule;
 
 /* Append the rule(s) `r` to a growable rule array: a two-argument Rule or
@@ -320,6 +352,7 @@ static void rules_push(ReplaceRule** rules, size_t* cap, size_t* count, Expr* r)
         *rules = realloc(*rules, sizeof(ReplaceRule) * (*cap));
     }
     ReplaceRule* slot = &(*rules)[(*count)++];
+    slot->owned = NULL;
     if (dict) {
         slot->pattern = NULL;
         slot->replacement = r;
@@ -328,7 +361,39 @@ static void rules_push(ReplaceRule** rules, size_t* cap, size_t* count, Expr* r)
         slot->pattern = r->data.function.args[0];
         slot->replacement = r->data.function.args[1];
         slot->delayed = r->data.function.head->data.symbol.name == SYM_RuleDelayed;
+        /* lhs :> body /; test is the rule lhs /; test :> body: the guard is
+         * part of the match, so a failing guard backtracks into the pattern's
+         * other assignments (which pair of a Plus) and then lets the next rule
+         * try. A Rule (->) keeps a Condition value. */
+        if (slot->delayed) {
+            Expr* body = slot->replacement;
+            Expr* pat = eval_hoist_rhs_conditions(slot->pattern, slot->replacement, &body);
+            if (pat != slot->pattern) {
+                slot->owned = pat;
+                slot->pattern = pat;
+                slot->replacement = body;
+            }
+        }
     }
+}
+
+/* Release a rule array from rules_collect, with any hoisted patterns. */
+static void rules_free(ReplaceRule* rules, size_t count) {
+    for (size_t i = 0; i < count; i++)
+        if (rules[i].owned) expr_free(rules[i].owned);
+    free(rules);
+}
+
+/* A delayed rule's bound replacement, honouring a scoped guard
+ * (lhs :> Module[{t = ...}, val /; cond]): its value, or NULL when the guard
+ * fails and the rule does not apply. Consumes `bound`. */
+static Expr* rule_finish(const ReplaceRule* r, Expr* bound) {
+    if (!bound) return NULL;
+    if (!r->delayed || !symtab_rhs_has_scoped_condition(r->replacement))
+        return strip_unevaluated(bound);
+    Expr* v = symtab_try_scoped_condition(bound);
+    expr_free(bound);
+    return v;
 }
 
 /* Collect the rules of `rules_expr` (a rule, an association, or a List of
@@ -363,7 +428,7 @@ static Expr* rule_try(const ReplaceRule* r, Expr* e) {
         ? replace_bindings(r->replacement, env)
         : match_flat_leftover(e, r->pattern, r->replacement, env);
     env_free(env);
-    return out;
+    return rule_finish(r, out);
 }
 
 static int64_t get_expr_depth_replace(Expr* e, bool heads) {
@@ -473,7 +538,7 @@ static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, i
     } else {
         result = expr_copy(expr);
     }
-    free(rules);
+    rules_free(rules, num_rules);
     return result;
 }
 
@@ -732,7 +797,7 @@ static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr, bool indexed
     } else {
         result = do_replace_all(expr, rules, num_rules);
     }
-    free(rules);
+    rules_free(rules, num_rules);
     return result;
 }
 
@@ -854,6 +919,7 @@ Expr* builtin_replace_repeated(Expr* res) {
 
 
 typedef struct {
+    const ReplaceRule* rule;
     Expr* replacement;
     bool delayed;
     Expr** results;
@@ -868,7 +934,10 @@ static bool replacelist_callback(struct MatchEnv* env, void* user_data) {
     if (state->limit >= 0 && (int64_t)state->count >= state->limit) return true;
     
     Expr* repl = replace_bindings(state->replacement, env);
-    if (state->delayed) {
+    if (state->delayed && symtab_rhs_has_scoped_condition(state->replacement)) {
+        repl = rule_finish(state->rule, repl);   /* already evaluated */
+        if (!repl) return false;                  /* guard failed: next match */
+    } else if (state->delayed) {
         repl = eval_and_free(repl);
     }
     
@@ -920,6 +989,7 @@ Expr* builtin_replacelist(Expr* res) {
             }
             continue;
         }
+        state.rule = &rules[i];
         state.replacement = rules[i].replacement;
         state.delayed = rules[i].delayed;
         
@@ -935,7 +1005,7 @@ Expr* builtin_replacelist(Expr* res) {
         }
     }
     
-    free(rules);
+    rules_free(rules, num_rules);
     
     Expr* list = expr_new_function(expr_new_symbol(SYM_List), state.results, state.count);
     free(state.results);
@@ -997,14 +1067,14 @@ Expr* builtin_replace_at(Expr* res) {
     ReplaceRule* rules = parse_replace_rules(rules_expr, &num_rules);
 
     if (num_rules == 0) {
-        free(rules);
+        rules_free(rules, num_rules);
         return expr_copy(expr);
     }
 
     ReplaceAtCtx ctx = { rules, num_rules };
     Expr* result = expr_apply_at_positions(expr, pos, replaceat_leaf, &ctx);
 
-    free(rules);
+    rules_free(rules, num_rules);
     return result;
 }
 

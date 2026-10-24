@@ -35,6 +35,8 @@ Extracts the part of an expression at the position specified by `pos`.
 - `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
 - `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
 - You can use `Extract[expr, ..., Hold]` to extract parts without evaluation.
+- `Extract[expr, {}]` is `{}` (an empty list of positions), and `Extract[expr, {{}}]`
+  is `{expr}` (the one empty path) (v0.586).
 - Reads a [packed list](packed-arrays.md) through the buffer, the same gather
   `Part` uses, so pulling three elements out of a 10^6-element array costs three
   reads rather than a materialisation of the whole array. An element from an
@@ -1086,6 +1088,9 @@ Expands out all products and integer powers in *any* part of an expression.
   where a top-level `Expand` reaches none of them.
 - `ExpandAll[expr, patt]` avoids expanding parts of `expr` that do not contain
   terms matching the pattern `patt`.
+- Held parts are left alone: an argument that its head holds (`HoldForm[x]`,
+  `Hold[...]`, the branches of `If`) is not descended into, so a held
+  abbreviation is never evaluated (v0.586).
 - Threads over `List`, equations, inequalities, and logic functions.
 - Called with a number of arguments other than 1 or 2, emits `ExpandAll::argt`
   and stays unevaluated.
@@ -1309,6 +1314,55 @@ Out[2]= {{1, 2, 0} -> a, {2, 0, 1} -> b}
 
 In[3]:= CoefficientRules[(x + 1)^5, x, Modulus -> 2]
 Out[3]= {{5} -> 1, {4} -> 1, {1} -> 1, {0} -> 1}
+```
+
+## CoefficientArrays
+Gives the coefficient arrays of a polynomial or polynomial system, grouped by total degree.
+- `CoefficientArrays[polys, vars]`
+- `CoefficientArrays[poly, vars]` (a non-List first argument is one polynomial)
+
+**Features**:
+- `Protected`. `vars` may be `All` or omitted (then `Variables` of the whole input).
+- Element `d + 1` holds every degree-`d` coefficient at the index tuple naming its
+  variables in non-decreasing order (upper-triangular, not symmetric); a system
+  carries the equation index as the leading axis, so `{b, m} = CoefficientArrays[eqs, vars]`
+  is the constant vector and the coefficient matrix of a linear system.
+- **Every array element is a `SparseArray`** with background `0`;
+  the constant term of a single polynomial is a scalar. Storage follows the number of
+  terms, not `k^d`. `Normal` gives the dense arrays; `Part`, `Dot`, `Map`, `Transpose`
+  and the linear-algebra heads accept the result (v0.586).
+- An element of rank above 32 (degree 33 or more) has no SparseArray and is a dense
+  nested List; a dense total over 2·10⁷ entries is declined with `CoefficientArrays::dense`.
+- `Modulus -> p` reduces the coefficients (a Mathilda extension).
+
+```mathematica
+In[1]:= CoefficientArrays[{x + 2 y - 1, 3 x - y}, {x, y}]
+Out[1]= {SparseArray[<1>, {2}], SparseArray[<4>, {2, 2}]}
+
+In[2]:= Normal[%]
+Out[2]= {{-1, 0}, {{1, 2}, {3, -1}}}
+
+In[3]:= CoefficientArrays[x y + c y^2 + a x, {x, y}] // Normal
+Out[3]= {0, {a, 0}, {{0, 1}, {0, c}}}
+```
+
+## GroebnerBasis`DistributedTermsList
+The distributed form of a polynomial: its terms as exponent vectors with coefficients.
+- ``GroebnerBasis`DistributedTermsList[poly, vars]``
+- ``GroebnerBasis`DistributedTermsList[{poly1, ...}, vars]``
+
+**Features**:
+- `Protected`. An internal helper that symbolic packages call directly.
+- Returns `{{{e1, ..., ek}, c}, ...}, vars}` in descending monomial order; a list of
+  polynomials gives one term list per polynomial. `{{}, vars}` for `0`.
+- Option `MonomialOrder -> o` (default `Lexicographic`); `o` may be a string or a
+  symbol, as in `CoefficientRules` (which now also accepts a symbol order).
+- A generalised variable that would have to be adjoined (`y^(1/2)` in `vars` `{x, y}`)
+  is declined.
+
+```mathematica
+In[1]:= GroebnerBasis`DistributedTermsList[a x^2 + 3 x y + 5 y^3, {x, y}]
+Out[1]= {{{{2, 0}, a}, {{1, 1}, 3}, {{0, 3}, 5}}, {x, y}}
 ```
 
 ## FromCoefficientRules

@@ -36,9 +36,15 @@
 
 /* lstat is POSIX, not C99.  glibc hides it under -std=c99 unless we
  * declare the feature-test macro before any include.  Darwin exposes
- * it implicitly but accepts the macro. */
+ * it implicitly but accepts the macro.  realpath is X/Open: glibc's
+ * <stdlib.h> declares it only under __USE_XOPEN_EXTENDED or __USE_MISC,
+ * which _POSIX_C_SOURCE alone never sets (issue #110; Ubuntu's gcc hid
+ * this because its default _FORTIFY_SOURCE declares realpath unguarded). */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
 #endif
 
 #include "files.h"

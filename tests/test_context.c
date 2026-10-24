@@ -331,6 +331,13 @@ static void test_package_can_request_mathilda(void) {
      * no private copies of the kernel builtins it uses. */
     assert_eval_eq("Select[Names[\"FullSimplify`Private`*\"], "
                    "MemberQ[{\"SimplifyCount\", \"LoadModule\"}, Last[StringSplit[#, \"`\"]]] &]", "{}", 0);
+    /* Nor the lazily-loaded ParallelMixed package (issue #111): without the
+     * {"Mathilda`"} request its LoadModule["mixed/logrewrite.m"] became an
+     * inert ParallelMixed`Private`LoadModule and Integrate printed
+     * "logrewrite.m not found". */
+    assert_eval_eq("LoadModule[\"mixed/ParallelMixed.m\"]", "True", 0);
+    assert_eval_eq("Select[Names[\"ParallelMixed`Private`*\"], "
+                   "MemberQ[Names[\"Mathilda`*\"], Last[StringSplit[#, \"`\"]]] &]", "{}", 0);
 }
 
 /* Global`x and x are the same symbol, whichever spelling came first. */

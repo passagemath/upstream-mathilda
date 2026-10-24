@@ -57,7 +57,7 @@
    The function names are the Python names in CamelCase; the verbose trace
    lines are the same, so sessions can be compared between the two.          *)
 
-BeginPackage["ParallelMixed`"];
+BeginPackage["ParallelMixed`", {"Mathilda`"}];   (* LoadModule *)
 
 Tower::usage = "Tower[gens, derivs, q, m] builds the differential tower L = F(gens)(y), y^m = q (m = 2 by default), over which ParallelIntegrateMixed works. For m >= 3 the elements are m-tuples of coordinates on the Trager basis w_i = y^i/E_i, q must be m-th-power-free, and the Association also carries \"m\", \"n\" (the tuple length), \"E\", the multiplication table \"mul\", the logarithmic derivatives \"Lam\" (D w_i = Lam_i w_i) and \"Dw\" = {D w_0, ..., D w_{m-1}}.
   gens   -- list of generator symbols {t1, ..., tn}; t1 = x is the base variable and must satisfy D(x) = 1.

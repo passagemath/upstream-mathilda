@@ -156,7 +156,7 @@ FUNCTIONS = {
     "asprintf": _GNU_ONLY, "vasprintf": _GNU_ONLY,
     # <stdlib.h>
     "setenv": _P200112, "unsetenv": _P200112, "putenv": _XSI,
-    "realpath": _P200112, "mkstemp": _P200112, "mkdtemp": _P200809,
+    "realpath": _XSI, "mkstemp": _P200112, "mkdtemp": _P200809,
     "random": _XSI, "srandom": _XSI, "drand48": _XSI, "lrand48": _XSI,
     # <unistd.h> -- glibc hides essentially all of it without _POSIX_C_SOURCE.
     "access": _P1, "isatty": _P1, "unlink": _P1, "rmdir": _P1,
@@ -390,6 +390,9 @@ def feature_test_macros(text):
     return effective, late
 
 
+STATEMENT_KEYWORD_RE = re.compile(r"\b(?:return|else|case|do|goto|sizeof)\b")
+
+
 def declares_locally(text, sym):
     """True if this file declares or defines its own `sym`.
 
@@ -404,7 +407,10 @@ def declares_locally(text, sym):
     for m in pat.finditer(text):
         end = text.find("\n", m.start())
         line = text[m.start():len(text) if end < 0 else end]
-        if "=" not in line.split(sym, 1)[0]:
+        prefix = line.split(sym, 1)[0]
+        # `return realpath(...)` is a call, not a declaration whose type is
+        # `return` (issue #110 slipped through exactly this way).
+        if "=" not in prefix and not STATEMENT_KEYWORD_RE.search(prefix):
             return True
     return False
 

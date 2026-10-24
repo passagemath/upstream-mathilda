@@ -133,6 +133,36 @@ static void test_signature(void) {
     assert_eval_eq("Attributes[Signature]", "{Protected}", 0);
 }
 
+/* Cycles, PermutationGroup and the permutation builtins (src/permutations.c).
+ * Every expected value was checked against the reference. */
+static void test_permutation_groups(void) {
+    assert_eval_eq("{Cycles[{{3, 1, 2}, {5, 4}}], Cycles[{{1}}], Cycles[{{4, 5}, {2, 1}}], Cycles[{{2, 1}, {3}}], Cycles[{{a, b}}]}",
+                   "{Cycles[{{1, 2, 3}, {4, 5}}], Cycles[{}], Cycles[{{1, 2}, {4, 5}}], Cycles[{{1, 2}}], Cycles[{{a, b}}]}", 0);
+    assert_eval_eq("Quiet[{Check[Cycles[{{1, 2}, {2, 3}}], rep], Check[Cycles[{{0, 1}}], pos], Check[Cycles[{{1, 2.5}}], int]}]",
+                   "{rep, pos, int}", 0);
+    assert_eval_eq("{PermutationList[Cycles[{{1, 3, 2}}]], PermutationList[Cycles[{{1, 3}}], 5], PermutationList[Cycles[{}]], PermutationList[{3, 1, 2}]}",
+                   "{{3, 1, 2}, {3, 2, 1, 4, 5}, {}, {3, 1, 2}}", 0);
+    assert_eval_eq("Quiet[PermutationList[Cycles[{{2, 3}}], 2]]", "PermutationList[Cycles[{{2, 3}}], 2]", 0);
+    assert_eval_eq("{PermutationCycles[{2, 3, 1}], PermutationCycles[{1, 2, 3}], PermutationCycles[{3, 2, 1, 4}]}",
+                   "{Cycles[{{1, 2, 3}}], Cycles[{}], Cycles[{{1, 3}}]}", 0);
+    assert_eval_eq("{GroupOrder[PermutationGroup[{Cycles[{{1, 2}}], Cycles[{{1, 2, 3, 4}}]}]], GroupOrder[PermutationGroup[{}]]}",
+                   "{24, 1}", 0);
+    assert_eval_eq("GroupElements[PermutationGroup[Cycles[{#}] & /@ Subsets[Range[3], {2, 3}]]]",
+                   "{Cycles[{}], Cycles[{{2, 3}}], Cycles[{{1, 2}}], Cycles[{{1, 2, 3}}], Cycles[{{1, 3, 2}}], Cycles[{{1, 3}}]}", 0);
+    assert_eval_eq("GroupElements[PermutationGroup[{Cycles[{{1, 2, 3}}]}], {-1, 2}]",
+                   "{Cycles[{{1, 3, 2}}], Cycles[{{1, 2, 3}}]}", 0);
+    /* Permute over a group: expr[[PermutationList[g, n]]] for every element. */
+    assert_eval_eq("Permute[{a, b, c}, PermutationGroup[Cycles[{#}] & /@ Subsets[Range[3], {2, 3}]]]",
+                   "{{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}", 0);
+    assert_eval_eq("Permute[{a, b, c, d}, PermutationGroup[{Cycles[{{1, 2, 3}}]}]]",
+                   "{{a, b, c, d}, {b, c, a, d}, {c, a, b, d}}", 0);
+    assert_eval_eq("Permute[{a, b, c}, PermutationGroup[{}]]", "{{a, b, c}}", 0);
+    assert_eval_eq("Quiet[Permute[{a, b}, PermutationGroup[{Cycles[{{1, 3}}]}]]]",
+                   "Permute[{a, b}, PermutationGroup[{Cycles[{{1, 3}}]}]]", 0);
+    /* Cycles is a System symbol: a package's Cycles is this one. */
+    assert_eval_eq("{Context[Cycles], Context[PermutationGroup]}", "{\"System`\", \"System`\"}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -140,6 +170,7 @@ int main(void) {
     TEST(test_duplicatefreeq);
     TEST(test_permute);
     TEST(test_signature);
+    TEST(test_permutation_groups);
     TEST(test_predicates_compile);
     printf("All set-predicate tests passed.\n");
     return 0;

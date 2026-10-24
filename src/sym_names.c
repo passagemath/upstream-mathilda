@@ -15,6 +15,8 @@ const char* SYM_AbsRules = NULL;
 const char* SYM_AbsoluteTime = NULL;
 const char* SYM_AbsoluteTiming = NULL;
 const char* SYM_Accumulate = NULL;
+const char* SYM_Cycles = NULL;
+const char* SYM_PermutationGroup = NULL;
 const char* SYM_AccuracyGoal = NULL;
 const char* SYM_AlgebraicIntegerQ = NULL;
 const char* SYM_AlgebraicNumber = NULL;
@@ -1072,6 +1074,8 @@ void sym_names_init(void) {
     SYM_AbsoluteTime               = intern_symbol("AbsoluteTime");
     SYM_AbsoluteTiming             = intern_symbol("AbsoluteTiming");
     SYM_Accumulate                 = intern_symbol("Accumulate");
+    SYM_Cycles                     = intern_symbol("Cycles");
+    SYM_PermutationGroup           = intern_symbol("PermutationGroup");
     SYM_AccuracyGoal               = intern_symbol("AccuracyGoal");
     SYM_Algebraics                 = intern_symbol("Algebraics");
     SYM_All                        = intern_symbol("All");

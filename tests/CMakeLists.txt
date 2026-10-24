@@ -484,6 +484,7 @@ set(COMMON_SRC
     ../src/special_functions/besseljzero.c
     ../src/power.c
     ../src/funcprog.c
+    ../src/permutations.c
     ../src/geometry.c
     ../src/numloop.c
     ../src/boolean.c

@@ -17,6 +17,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "message.h"    /* message_init(): Quiet / Check / Message */
+#include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
 #include "parse.h"
 #include "arithmetic.h"
 #include "numbertheory.h"
@@ -575,6 +576,7 @@ void core_init(void) {
     symtab_add_builtin("Permutations", builtin_permutations);
     symtab_get_def("Permutations")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Permute", builtin_permute);
+    permutations_init();   /* Cycles, PermutationGroup, GroupElements, ... */
     symtab_get_def("Permute")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Signature", builtin_signature);
     symtab_get_def("Signature")->attributes |= ATTR_PROTECTED;

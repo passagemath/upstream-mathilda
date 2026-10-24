@@ -30,6 +30,8 @@ extern const char* SYM_AbsRules;
 extern const char* SYM_AbsoluteTime;
 extern const char* SYM_AbsoluteTiming;
 extern const char* SYM_Accumulate;
+extern const char* SYM_Cycles;
+extern const char* SYM_PermutationGroup;
 extern const char* SYM_AccuracyGoal;
 extern const char* SYM_AlgebraicIntegerQ;
 extern const char* SYM_AlgebraicNumber;

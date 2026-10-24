@@ -20,7 +20,8 @@ second, which is what a shard costs on top of its tests.
 Verdicts, per test id: PASS, FAIL (wrong value), MSG (right value, unexpected
 messages), ABORT, TIMEOUT, SKIP (typesetting tests: box output is out of
 scope), NOTRUN (an id in a .test file that no line reported: its shard crashed
-or timed out).  Results are written to packages/feyncalc/harness/results/
+or timed out; an id in a group the upstream driver never runs is not counted).
+Results are written to packages/feyncalc/harness/results/
 <Dir>.tsv.  The ratchet: every id in harness/BASELINE_PASS.txt that was run
 must still PASS (exit 1 otherwise); newly passing ids are listed so the
 baseline can be raised with --update-baseline."""
@@ -103,12 +104,20 @@ def run_shard(sh, binary, timeout, shard_timeout):
             details.setdefault(f[1], f[2:])
         elif line == "FCEND":
             ended = True
+    # An id no line reported: lost if the shard died before FCEND, otherwise
+    # in a group the driver itself never runs (upstream skips it too: the
+    # typesetting groups behind $VersionNumber >= 10, the Abort groups a
+    # driver does not list), which is not counted.
+    unused = 0
     for i in sh["ids"]:
         if i not in results:
-            results[i] = ("NOTRUN", "")
+            if ended:
+                unused += 1
+            else:
+                results[i] = ("NOTRUN", "")
     msgs = collections.Counter(m.group(1) for m in
                                re.finditer(r"^([A-Za-z$`]+::[A-Za-z0-9]+)", out, re.M))
-    return {"shard": sh, "results": results, "details": details, "ended": ended,
+    return {"shard": sh, "results": results, "details": details, "ended": ended, "unused": unused,
             "rc": rc, "secs": time.time() - t0, "msgs": msgs,
             "tail": "\n".join(out.splitlines()[-5:])}
 
@@ -187,7 +196,8 @@ def main():
     n = sum(tot.values())
     print(f"{'ALL':<28}" + "".join(f"{tot[v]:>8}" for v in VERDICTS) +
           f"{n:>8}{100.0 * tot['PASS'] / max(1, n - tot['SKIP']):>7.1f}%")
-    print(f"wall {time.time() - t0:.0f}s, {len(runs)} shards, {a.jobs} jobs")
+    print(f"wall {time.time() - t0:.0f}s, {len(runs)} shards, {a.jobs} jobs; "
+          f"{sum(r['unused'] for r in runs)} ids in groups the drivers do not run")
 
     if a.triage:
         msgs = collections.Counter()

@@ -3,6 +3,7 @@
 #include "funcprog.h"
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
+#include "permutations.h" /* perm_group_elements: Permute[expr, group] */
 #include "eval.h"
 #include "arithmetic.h"
 #include "match.h"
@@ -2649,8 +2650,9 @@ static void permute_message(const char* tag, const char* fmt, const Expr* x, int
  * positions beyond k stay put) or Cycles[{{c1, c2, ...}, ...}] (the element
  * at c1 moves to c2, c2 to c3, ..., the last to c1).  Any head is kept.
  * An invalid permutation gives Permute::permlist; one that moves a position
- * past the end of expr gives Permute::lowlen.  Other perm forms (e.g. a
- * PermutationGroup) leave the call unevaluated.
+ * past the end of expr gives Permute::lowlen.  With a PermutationGroup the
+ * result is the list of expr permuted by every group element, in
+ * GroupElements order.
  */
 Expr* builtin_permute(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -2699,7 +2701,7 @@ Expr* builtin_permute(Expr* res) {
         for (size_t i = 0; i < k && i < n; i++)
             dest[i] = (size_t)perm->data.function.args[i]->data.integer - 1;
     } else if (perm->type == EXPR_FUNCTION && perm->data.function.head->type == EXPR_SYMBOL
-               && strcmp(perm->data.function.head->data.symbol.name, "Cycles") == 0
+               && perm->data.function.head->data.symbol.name == SYM_Cycles
                && perm->data.function.arg_count == 1
                && permute_is_list(perm->data.function.args[0])) {
         Expr* cyc = perm->data.function.args[0];
@@ -2742,6 +2744,33 @@ Expr* builtin_permute(Expr* res) {
                 dest[cl->data.function.args[j]->data.integer - 1] =
                     (size_t)cl->data.function.args[(j + 1) % m]->data.integer - 1;
         }
+    } else if (perm->type == EXPR_FUNCTION && perm->data.function.head->type == EXPR_SYMBOL
+               && perm->data.function.head->data.symbol.name == SYM_PermutationGroup) {
+        /* Permute[expr, group]: expr permuted by every element, in
+         * GroupElements order -- element g gives expr[[PermutationList[g, n]]]. */
+        free(dest);
+        size_t order = 0, deg = 0;
+        uint32_t* el = perm_group_elements(perm, &order, &deg);
+        if (!el) return NULL;
+        if (deg > n) {
+            permute_message("lowlen", "Required length %lld is smaller than maximum %lld of support of %s.",
+                            perm, (long long)n, (long long)deg);
+            free(el);
+            return NULL;
+        }
+        Expr** rows = malloc((order ? order : 1) * sizeof(Expr*));
+        Expr** row = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t k = 0; k < order; k++) {
+            const uint32_t* img = el + k * deg;
+            for (size_t j = 0; j < n; j++)
+                row[j] = expr_copy(x->data.function.args[j < deg ? img[j] : j]);
+            rows[k] = expr_new_function(expr_copy(x->data.function.head), row, n);
+        }
+        free(row);
+        free(el);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), rows, order);
+        free(rows);
+        return r;
     } else {
         free(dest);
         return NULL;

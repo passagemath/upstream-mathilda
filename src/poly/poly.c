@@ -39,6 +39,7 @@
 
 #include "internal.h"
 #include "poly.h"
+#include "expsplit.h"
 #include "expand.h"
 #include "eval.h"
 #include "symtab.h"
@@ -1345,6 +1346,37 @@ void poly_kernel_map_free(PolyKernelMap* map) {
 
 Expr* builtin_variables(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    /* x^(1 + e) is the monomial x (x^e): its variables are x and x^e, as in
+     * the reference (expsplit.c). */
+    ExpSplitTab st = {0};
+    Expr* split = expsplit_abstract(res->data.function.args[0], &st);
+    if (split) {
+        size_t count = 0, capacity = 16;
+        Expr** vars = malloc(sizeof(Expr*) * capacity);
+        collect_variables(split, &vars, &count, &capacity);
+        size_t k = 0;
+        for (size_t i = 0; i < count; i++) {
+            int g = expsplit_index(&st, vars[i]);
+            if (g >= 0) {
+                expr_free(vars[i]);
+                vars[i] = NULL;
+                if (expr_is_numeric_quantity(st.base[g])) continue;   /* 2^e: a constant */
+                Expr* gen = expsplit_generator(&st, (size_t)g);
+                bool dup = false;
+                for (size_t j = 0; j < k && !dup; j++) dup = expr_eq(vars[j], gen);
+                if (dup) { expr_free(gen); continue; }
+                vars[k++] = gen;
+            } else {
+                vars[k++] = vars[i];
+            }
+        }
+        if (k > 0) qsort(vars, k, sizeof(Expr*), compare_expr_ptrs);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), vars, k);
+        free(vars);
+        expr_free(split);
+        expsplit_free(&st);
+        return list;
+    }
     size_t count = 0, capacity = 16;
     Expr** vars = malloc(sizeof(Expr*) * capacity);
     collect_variables(res->data.function.args[0], &vars, &count, &capacity);

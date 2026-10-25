@@ -24,6 +24,7 @@
  */
 
 #include "facpoly_list.h"
+#include "expsplit.h"
 
 #include "eval.h"
 #include "symtab.h"
@@ -235,6 +236,91 @@ Expr* builtin_factorlist(Expr* res) {
             last_bad = res->data.function.args[i];
     }
     if (last_bad) return factorlist_emit_nonopt(last_bad, 1, res);
+
+    /* (x + y)^(-3 + 3 e) lists as {(x + y)^e, 3}, {x + y, -3}: powers with a
+     * symbolic exponent factor over their generators (expsplit.c), which come
+     * right after the constant, in order of appearance, as in the reference. */
+    {
+        ExpSplitTab st = {0};
+        Expr* split = expsplit_abstract(res->data.function.args[0], &st);
+        if (split) {
+            Expr** fa = malloc(argc * sizeof(Expr*));
+            fa[0] = split;
+            for (size_t i = 1; i < argc; i++) fa[i] = expr_copy(res->data.function.args[i]);
+            Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList), fa, argc));
+            free(fa);
+            Expr* out = NULL;
+            if (fl && fl->type == EXPR_FUNCTION && fl->data.function.head->type == EXPR_SYMBOL &&
+                fl->data.function.head->data.symbol.name == SYM_List) {
+                size_t np = fl->data.function.arg_count;
+                Expr** pairs = malloc((np ? np : 1) * sizeof(Expr*));
+                size_t k = 0;
+                /* the constant, then the generators in table order, then the rest */
+                for (int pass = 0; pass < 3; pass++)
+                    for (size_t i = 0; i < np; i++) {
+                        Expr* pr = fl->data.function.args[i];
+                        Expr* f = (pr->type == EXPR_FUNCTION && pr->data.function.arg_count == 2)
+                                  ? pr->data.function.args[0] : NULL;
+                        int g = f ? expsplit_index(&st, f) : -1;
+                        int cls = (i == 0 && f && expr_is_numeric_like(f)) ? 0 : (g >= 0 ? 1 : 2);
+                        if (cls != pass) continue;
+                        if (g >= 0)
+                            pairs[k++] = expr_new_function(expr_new_symbol(SYM_List),
+                                (Expr*[]){ expsplit_generator(&st, (size_t)g),
+                                           expr_copy(pr->data.function.args[1]) }, 2);
+                        else
+                            pairs[k++] = expsplit_restore(expr_copy(pr), &st);
+                    }
+                /* The ordinary factors keep FactorList's own order: refactor
+                 * their product (it has no splittable power left), so the
+                 * generator symbols' names cannot reorder x[3] after x[2] + x[3]. */
+                size_t r0 = 0;
+                while (r0 < k && expsplit_index(&st, pairs[r0]) < 0) {
+                    const Expr* f0 = pairs[r0]->data.function.args[0];
+                    bool gen = false;
+                    for (size_t g = 0; g < st.n && !gen; g++) {
+                        Expr* gx = expsplit_generator(&st, g);
+                        gen = expr_eq(gx, (Expr*)f0);
+                        expr_free(gx);
+                    }
+                    bool cst = (r0 == 0 && expr_is_numeric_like(f0));
+                    if (!gen && !cst) break;
+                    r0++;
+                }
+                if (k - r0 >= 2) {
+                    Expr** pw = malloc((k - r0) * sizeof(Expr*));
+                    for (size_t i = r0; i < k; i++)
+                        pw[i - r0] = expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ expr_copy(pairs[i]->data.function.args[0]),
+                                       expr_copy(pairs[i]->data.function.args[1]) }, 2);
+                    Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), pw, k - r0));
+                    free(pw);
+                    Expr* rl = eval_and_free(expr_new_function(expr_new_symbol(SYM_FactorList), &prod, 1));
+                    if (rl && rl->type == EXPR_FUNCTION && rl->data.function.arg_count >= 1 &&
+                        rl->data.function.head->type == EXPR_SYMBOL &&
+                        rl->data.function.head->data.symbol.name == SYM_List) {
+                        size_t m = rl->data.function.arg_count;
+                        Expr* c0 = rl->data.function.args[0];
+                        bool unit = c0->type == EXPR_FUNCTION && c0->data.function.arg_count == 2 &&
+                                    c0->data.function.args[0]->type == EXPR_INTEGER &&
+                                    c0->data.function.args[0]->data.integer == 1;
+                        size_t skip = unit ? 1 : 0;
+                        if (m - skip == k - r0) {           /* same factors, FactorList's order */
+                            for (size_t i = r0; i < k; i++) expr_free(pairs[i]);
+                            for (size_t i = skip; i < m; i++)
+                                pairs[r0 + i - skip] = expr_copy(rl->data.function.args[i]);
+                        }
+                    }
+                    expr_free(rl);
+                }
+                out = expr_new_function(expr_new_symbol(SYM_List), pairs, k);
+                free(pairs);
+            }
+            expr_free(fl);
+            expsplit_free(&st);
+            if (out) return out;
+        }
+    }
 
     /* Factor[poly, opts...] -- forward every argument verbatim. */
     Expr** fargs = malloc(argc * sizeof(Expr*));

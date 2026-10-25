@@ -981,6 +981,12 @@ Gives an ordered list of all independent variables in a polynomial.
 - Looks for variables only inside `Plus`, `Times`, and `Power` with rational exponents.
 - Returns a sorted `List` of variables.
 - Symbolic constants like `Pi`, `E`, and `I` are not treated as variables.
+- **A power with a symbolic exponent splits** as the reference reads it:
+  `b^(n + k t)` is `b^n (b^t)^k`, so `Variables[x^(1 + e) + x^(2 + e)]` is
+  `{x, x^e}`. `x^(2 e)` and `x^(-e)` give `x^e`, while `x^(e/2)` and
+  `x^(a e)` are their own variables. A numeric base is a constant:
+  `Variables[2^(1 + x)]` is `{}`. The same generators drive `Factor` and
+  `FactorList` (`src/poly/expsplit.c`).
 
 ```mathematica
 In[1]:= Variables[(x + y)^2 + 3 z^2 - y z + 7]
@@ -1498,6 +1504,11 @@ Factors a polynomial over the integers.
 - `Listable`, `Protected`.
 - **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — the conventional normalisation), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
 - When given a rational expression, first resolves dependencies over `Together` before factoring.
+- **Powers with a symbolic exponent factor over their generators.** The input
+  is rewritten with each `b^t` as a private symbol, factored, and put back
+  together, as in the reference: `Factor[x^(2 + e) - x^e]` is
+  `(-1 + x) x^e (1 + x)`, and `Factor[x^(1 + e) + x^(2 + e)]` is
+  `x^(1 + e) (1 + x)`. A single power such as `(x + y)^(-3 + 3 e)` stays.
 - Uses exact root isolation (Rational Root Theorem limits) and binomial descents structured identically to Zassenhaus recombination, evaluating combinations exact and memory safe.
 - Threads natively across lists, logic structures, and numeric groupings perfectly.
 - Bivariate inputs whose leading coefficient (in some variable) is the constant `-1` are handled via Wang's leading-coefficient correction, Stage 1: the input is pre-negated to make it monic, the existing monic Hensel pipeline runs on `-P`, and the overall sign is absorbed into the highest-degree factor via `Expand`.  This unlocks inputs of shape `Factor[(1 - x^k)(x - y^m)]` (and similar non-monic cases with constant `±1` LC) that previously fell back to the legacy linear-trial-division loop.
@@ -1543,6 +1554,12 @@ Gives a list of the irreducible factors of a polynomial together with their expo
 **Features**:
 - `Listable`, `Protected`.
 - A thin wrapper over `Factor`: it factors via `Factor[poly, opts...]` (options are forwarded verbatim) and splits the product into `{factor, exponent}` pairs.
+- **A power with a symbolic exponent lists its generators** as the reference
+  does: `FactorList[(x + y)^(-3 + 3 e)]` is
+  `{{1, 1}, {(x + y)^e, 3}, {x + y, -3}}`, and `FactorList[x^(1 + e) y^(2 - e)]`
+  is `{{1, 1}, {x^e, 1}, {y^e, -1}, {x, 1}, {y, 2}}`. The generators come right
+  after the constant, in order of appearance, and the ordinary factors keep
+  `FactorList`'s own order.
 - The first element is always the overall numerical factor `{c, 1}` — it is `{1, 1}` when there is no numerical factor.
 - Every factor has a positive leading coefficient (lexicographic, as `CoefficientRules` orders terms), its sign going into the numerical factor: `FactorList[-x - 1]` is `{{-1, 1}, {1 + x, 1}}`, `FactorList[y - x]` is `{{-1, 1}, {x - y, 1}}`. Needed since `-(1 + x)` itself evaluates to `-1 - x` (v0.591).
 - Denominator factors of a rational function appear with negative exponents.

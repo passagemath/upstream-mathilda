@@ -252,6 +252,35 @@ void test_polynomialgcd_compound_variables() {
              "Plus[Power[m, 2], Pair[p, q]]");
 }
 
+/* Powers with a symbolic exponent are polynomial generators: b^(n + k t) is
+ * b^n (b^t)^k (expected values are the reference's). FeynCalc's FactorList2
+ * reads FactorList's split. */
+void test_exponent_generators() {
+    run_test("Variables[x^(1+e) + x^(2+e)]", "List[x, Power[x, e]]");
+    run_test("{Variables[x^(2 e)], Variables[x^(-e)], Variables[x^(a e)], Variables[x^(e+f)]}",
+             "List[List[Power[x, e]], List[Power[x, e]], List[Power[x, Times[a, e]]], List[Power[x, e], Power[x, f]]]");
+    run_test("{Variables[x^(1/2+e)], Variables[2^(1+x)], Variables[x^(1+e/2)]}",
+             "List[List[x, Power[x, e]], List[], List[x, Power[x, Times[Rational[1, 2], e]]]]");
+    run_test("FactorList[(x+y)^(-3+3e)]",
+             "List[List[1, 1], List[Power[Plus[x, y], e], 3], List[Plus[x, y], -3]]");
+    run_test("FactorList[(x+y)^(2e)]", "List[List[1, 1], List[Power[Plus[x, y], e], 2]]");
+    run_test("FactorList[x^(2+e) - x^e]",
+             "List[List[1, 1], List[Power[x, e], 1], List[Plus[-1, x], 1], List[Plus[1, x], 1]]");
+    run_test("FactorList[x^(1+e) y^(2-e)]",
+             "List[List[1, 1], List[Power[x, e], 1], List[Power[y, e], -1], List[x, 1], List[y, 2]]");
+    run_test("FactorList[(x^2 y + x^2 z)^(1-2e)]",
+             "List[List[1, 1], List[Power[Plus[Times[Power[x, 2], y], Times[Power[x, 2], z]], e], -2], "
+             "List[x, 2], List[Plus[y, z], 1]]");
+    run_test("FactorList[2^(1+e) + 2^(2+e) x]", "List[List[2, 1], List[Power[2, e], 1], List[Plus[1, Times[2, x]], 1]]");
+    run_test("Factor[x^(2+e) - x^e]", "Times[Plus[-1, x], Power[x, e], Plus[1, x]]");
+    run_test("Factor[x^(1+e) + x^(2+e)]", "Times[Power[x, Plus[1, e]], Plus[1, x]]");
+    run_test("Factor[(a + b)^(1 + e) - (a + b)^e]", "Times[Plus[-1, a, b], Power[Plus[a, b], e]]");
+    run_test("Factor[x^(1/2+e) + x^(3/2+e)]", "Times[Power[x, Plus[Rational[1, 2], e]], Plus[1, x]]");
+    /* a single generator power is left as it is */
+    run_test("{Factor[(x+y)^(-3+3e)], FactorList[(x+y)^(e/2)]}",
+             "List[Power[Plus[x, y], Plus[-3, Times[3, e]]], List[List[1, 1], List[Power[Plus[x, y], Times[Rational[1, 2], e]], 1]]]");
+}
+
 int main() {
     setbuf(stdout, NULL);
     printf("Starting poly_tests\n");
@@ -266,6 +295,7 @@ int main() {
     TEST(test_expand_coeff);
     TEST(test_polynomialgcd);
     TEST(test_polynomialgcd_compound_variables);
+    TEST(test_exponent_generators);
     TEST(test_polynomialextendedgcd);
     TEST(test_polynomiallcm);
     TEST(test_polynomial_div_rem);

@@ -774,6 +774,7 @@ set(COMMON_SRC
     ../src/poly/squarefreeq.c
     ../src/poly/exponent.c
     ../src/poly/facpoly_list.c
+    ../src/poly/expsplit.c
     ../src/poly/irrpolyq.c
     ../src/poly/gbmod.c
     ../src/poly/groebner.c

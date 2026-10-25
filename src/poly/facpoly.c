@@ -106,6 +106,7 @@ static bool factor_has_leftover_denominator(const Expr* e) {
 #include "facpoly_tv_hensel.inc"
 #include "facpoly_heuristic.inc"
 #include "facpoly_memo.inc"
+#include "expsplit.h"
 #include "facpoly_factor_builtin.inc"
 #include "facpoly_factorterms.inc"
 #include "facpoly_bz_uni.inc"

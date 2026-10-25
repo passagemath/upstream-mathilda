@@ -1,6 +1,25 @@
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+    /* x^(2 + e) - x^e factors as (-1 + x) x^e (1 + x): powers with a symbolic
+     * exponent factor over their generators b^t (expsplit.c), as in the
+     * reference, and are put back together afterwards. */
+    {
+        ExpSplitTab st = {0};
+        Expr* split = expsplit_abstract(res->data.function.args[0], &st);
+        if (split) {
+            size_t n = res->data.function.arg_count;
+            Expr** fa = malloc(n * sizeof(Expr*));
+            fa[0] = split;
+            for (size_t i = 1; i < n; i++) fa[i] = expr_copy(res->data.function.args[i]);
+            Expr* f = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), fa, n));
+            free(fa);
+            Expr* out = f ? expsplit_restore(f, &st) : NULL;
+            expsplit_free(&st);
+            if (out) return out;
+        }
+    }
+
     /* Modulus -> p asks for the factorisation in F_p[x], and it was being
      * IGNORED -- the option was simply not recognised here, so the polynomial
      * was factored over Q and the answer came back as if the option were absent:

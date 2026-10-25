@@ -1301,6 +1301,10 @@ Out[5]= "\"a\\\"b\""
 
 **Features**:
 - `Protected`, `Listable`. `ToExpression[{"1+1", "2+2"}]` evaluates to `{2, 4}`.
+- **A non-string input** (v0.6015), as in the reference: an atom is its own
+  value (`ToExpression[4]` is `4`, `ToExpression[x]` is `x`). Any other
+  expression gives `ToExpression::notstrbox` and `$Failed`. With a format type,
+  a non-string gives `ToExpression::notstr` and stays unevaluated.
 - **Line breaks (InputForm, FullForm).** The input is a sequence of statements:
   - A line break after a complete expression ends that statement, whatever the next line starts with. `"a\n+b"` is `Hold[a, +b]`, and `"a\n// f"` is a syntax error.
   - An expression that is incomplete at the end of a line continues onto the next: `"1 +\n 2"` is `Hold[1 + 2]`. So does anything inside brackets: `"{a\n b}"` is `Hold[{a b}]`.

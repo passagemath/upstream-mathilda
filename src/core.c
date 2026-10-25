@@ -4509,7 +4509,29 @@ Expr* builtin_toexpression(Expr* res) {
     if (argc < 1 || argc > 3) return NULL;
 
     Expr* input = res->data.function.args[0];
-    if (input->type != EXPR_STRING) return NULL;
+    if (input->type != EXPR_STRING) {
+        /* A non-string, as the reference treats it: alone, an atom is its own
+         * value (ToExpression[4] is 4, ToExpression[x] is x) and anything else
+         * is ToExpression::notstrbox and $Failed; with a format type it is
+         * ToExpression::notstr and stays unevaluated. (A List has already been
+         * threaded over by Listable.) */
+        if (argc >= 2) {
+            Expr* form_arg = res->data.function.args[1];
+            char* ft = expr_to_string_outputform(form_arg);
+            mth_message("ToExpression", "notstr",
+                        "The format type %s is valid only for string input.", ft ? ft : "");
+            free(ft);
+            return NULL;
+        }
+        if (input->type != EXPR_FUNCTION) return expr_copy(input);
+        if (expr_is_numeric_like(input)) return expr_copy(input);     /* 1/2, 1 + I */
+        char* shown = expr_to_string_outputform(input);
+        mth_message("ToExpression", "notstrbox",
+                    "%s is not a string or a box. ToExpression can only interpret strings "
+                    "or boxes as Wolfram Language input.", shown ? shown : "");
+        free(shown);
+        return expr_new_symbol(SYM_DollarFailed);
+    }
 
     if (argc >= 2) {
         Expr* form_arg = res->data.function.args[1];

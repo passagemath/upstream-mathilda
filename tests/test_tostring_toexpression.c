@@ -97,8 +97,10 @@ void test_toexpression_parse_failure(void) {
 }
 
 void test_toexpression_non_string(void) {
-    /* Non-string input leaves the call unevaluated. */
-    assert_eval_eq("ToExpression[123]", "ToExpression[123]", 0);
+    /* An atom is its own value, as in the reference (v0.6015); a compound
+     * non-string is ToExpression::notstrbox and $Failed. */
+    assert_eval_eq("ToExpression[123]", "123", 0);
+    assert_eval_eq("Quiet[ToExpression[f[x]]]", "$Failed", 0);
 }
 
 void test_toexpression_listable(void) {

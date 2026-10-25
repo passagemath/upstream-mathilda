@@ -1435,6 +1435,14 @@ static void test_linear_box_syntax(void) {
     assert_eval_eq("\\!\\(\\*SuperscriptBox[\\(q\\), \\(3\\)]\\) + 1", "Plus[1, Power[q, 3]]", 1);
 }
 
+/* ToExpression of a non-string, as the reference treats it. */
+static void test_toexpression_nonstring(void) {
+    assert_eval_eq("{ToExpression[4], ToExpression[x], ToExpression[1/2], ToExpression[{1, \"2+2\"}]}",
+                   "List[4, x, Rational[1, 2], List[1, 4]]", 1);
+    assert_eval_eq("Quiet[ToExpression[f[x]]]", "$Failed", 1);
+    assert_eval_eq("Quiet[ToExpression[3, InputForm]]", "ToExpression[3, InputForm]", 1);
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -1481,6 +1489,7 @@ int main() {
     TEST(test_named_characters_in_source);
     TEST(test_flat_chain_provenance);
     TEST(test_linear_box_syntax);
+    TEST(test_toexpression_nonstring);
 
     printf("\nAll parser tests passed!\n");
     return 0;

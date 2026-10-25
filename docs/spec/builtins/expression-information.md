@@ -319,6 +319,16 @@ Pipeline (each stage exits early on a definite verdict):
    on a few points to reject cancellation-hidden small non-zeros before
    declaring an identity.
 
+   At a huge operand scale (a cancellation of `1 - Tanh[x/2]^2` at `|x| ~ 34`
+   loses ~100 bits) the machine verdict is not trusted and the point is
+   re-evaluated up the ladder. The sample is drawn as a machine real, and a
+   machine number stays one under `N`, so the climb uses the point's **exact**
+   dyadic value. Otherwise every rung would recompute the same rounded point and
+   read its noise as a plateaued non-zero. A residual that keeps falling at least
+   half as fast as the bits added, through the top rung, is a zero (v0.593). Half
+   of a family of shifted `Tanh`-antiderivative round-trips
+   (`D[F[x + k], x] - Cosh[x + k] Cosh[2 x + 2 k]`) came out `False` before.
+
    A sample point can land where the evaluator cannot reduce the expression to a
    number for a *magnitude* reason — either a symbol-dependent exponent overflows
    the numeric range (`E^(-100 t)` at a negative `t`, or `E^(x^2)` at a moderate

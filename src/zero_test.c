@@ -1214,20 +1214,72 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
  *     it).
  *   - If MPFR is unavailable, keep the lenient machine verdict (TRUE) — the same
  *     fallback decide_numeric uses, and never worse than HEAD's wrong FALSE. */
+/* e with every finite machine real replaced by the exact dyadic rational it
+ * stands for, or NULL when e holds none.  A sample point drawn as a machine
+ * real pins every MPFR rung to machine precision -- a machine number stays
+ * one under N -- so climbing the ladder on it could not tell a cancellation
+ * artifact from a value: the residual plateaus at its rung-0 noise and reads
+ * as non-zero. */
+static Expr* zt_exactify_reals(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type == EXPR_REAL) {
+        if (!isfinite(e->data.real)) return NULL;
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_d(q, e->data.real);
+        Expr* r = make_rational_mpz(mpq_numref(q), mpq_denref(q));
+        mpq_clear(q);
+        return r;
+    }
+    if (e->type != EXPR_FUNCTION) return NULL;
+    size_t n = e->data.function.arg_count;
+    Expr* h = zt_exactify_reals(e->data.function.head);
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = zt_exactify_reals(e->data.function.args[i]);
+        if (!a) continue;
+        if (!args) {
+            args = malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < n; j++) args[j] = NULL;
+        }
+        args[i] = a;
+    }
+    if (!h && !args) return NULL;
+    Expr** out = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        out[i] = (args && args[i]) ? args[i] : expr_copy(e->data.function.args[i]);
+    Expr* r = expr_new_function(h ? h : expr_copy(e->data.function.head), out, n);
+    free(out);
+    free(args);
+    return r;
+}
+
 static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
                                                 double scale) {
+    /* Climb on the exact point: the MPFR rungs then carry real precision. */
+    Expr* exact = zt_exactify_reals(e);
+    if (exact) e = exact;
     double prev = mag0;
     ZeroTestResult rr = ZERO_TEST_TRUE;
+    /* On an exact point, a residual that keeps falling at least half as fast
+     * as the bits added, through the top rung, is a zero whose cancellation
+     * runs deeper than the floor assumes (1 - Tanh[x]^2 at |x| ~ 17 costs ~100
+     * bits); a genuine value plateaus instead. */
+    bool tracks_bits = exact != NULL;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         /* Reuse the machine-precision operand scale (precision-independent). */
         rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
                            scale > 0.0 ? scale : -1.0, NULL);
-        if (rr == ZERO_TEST_UNKNOWN) return ZERO_TEST_TRUE;  /* MPFR gone: lenient */
-        if (m >= prev * 0.5) return rr;   /* plateaued: value resolved, trust rung */
+        if (rr == ZERO_TEST_UNKNOWN) { rr = ZERO_TEST_TRUE; break; }  /* MPFR gone: lenient */
+        if (m >= prev * 0.5) break;       /* plateaued: value resolved, trust rung */
+        long gained = PRECISION_LADDER[i] - PRECISION_LADDER[i - 1];
+        if (!(m <= prev * ldexp(1.0, (int)(-gained / 2)))) tracks_bits = false;
         prev = m;
+        if (i == PRECISION_LADDER_LEN - 1 && tracks_bits) rr = ZERO_TEST_TRUE;
     }
-    return rr;   /* shrank to the top-rung floor: trust its verdict */
+    if (exact) expr_free(exact);
+    return rr;   /* the plateau rung's verdict, or the top-rung floor's */
 }
 
 /* Numeric Stage 2.  Strategy:

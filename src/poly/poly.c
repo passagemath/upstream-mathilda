@@ -438,6 +438,83 @@ static int64_t get_k(BPList* term_bp, BPList* target_bp) {
     return k_val == -1 ? 0 : k_val;
 }
 
+/* get_k for Coefficient: the multiplier k (negative allowed: a/x has k = -1
+ * for form x), with *ok = false for a term that contains a target factor at
+ * a power that is not a whole multiple of it (x^3 for form x^2), which is
+ * then no term of any order. 0 with *ok when the target is absent. get_k
+ * itself conflates both with 0, which Collect's grouping relies on. */
+static int64_t get_k_strict(BPList* term_bp, BPList* target_bp, bool* ok) {
+    *ok = true;
+    if (target_bp->count == 0) return 0;
+    int64_t k_val = INT64_MIN;
+    size_t absent = 0;
+    for (size_t i = 0; i < target_bp->count; i++) {
+        Expr* t_base = target_bp->data[i].base;
+        Expr* t_exp = target_bp->data[i].exp;
+        bool found = false;
+        for (size_t j = 0; j < term_bp->count; j++) {
+            if (!expr_eq(t_base, term_bp->data[j].base)) continue;
+            found = true;
+            Expr* trm_exp = term_bp->data[j].exp;
+            int64_t r;
+            if (t_exp->type == EXPR_INTEGER && trm_exp->type == EXPR_INTEGER &&
+                t_exp->data.integer != 0) {
+                if (trm_exp->data.integer % t_exp->data.integer != 0) { *ok = false; return 0; }
+                r = trm_exp->data.integer / t_exp->data.integer;
+            } else if (expr_eq(t_exp, trm_exp)) {
+                r = 1;
+            } else {
+                BPList one_t, one_target;
+                bp_init(&one_t); bp_init(&one_target);
+                bp_add(&one_t, term_bp->data[j].base, trm_exp);
+                bp_add(&one_target, t_base, t_exp);
+                r = get_k(&one_t, &one_target);
+                bp_free(&one_t); bp_free(&one_target);
+                if (r == 0) { *ok = false; return 0; }
+            }
+            if (k_val == INT64_MIN) k_val = r;
+            else if (k_val != r) { *ok = false; return 0; }
+            break;
+        }
+        if (!found) absent++;
+    }
+    if (absent == target_bp->count) return 0;
+    if (absent > 0) { *ok = false; return 0; }   /* x y form, term with x only */
+    return k_val;
+}
+
+/* Does e contain sub (structurally)? */
+static bool coef_contains(const Expr* e, const Expr* sub) {
+    if (expr_eq(e, sub)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (coef_contains(e->data.function.head, sub)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (coef_contains(e->data.function.args[i], sub)) return true;
+    return false;
+}
+
+/* Does a factor of the term (other than the target factors themselves) put
+ * a target base in a denominator -- x/(1 + x) for form x? Such a term is not
+ * a polynomial term in the form, and has no coefficient of any order. */
+static bool coef_term_has_var_denominator(BPList* term_bp, BPList* target_bp) {
+    for (size_t j = 0; j < term_bp->count; j++) {
+        Expr* e = term_bp->data[j].exp;
+        bool neg = (e->type == EXPR_INTEGER && e->data.integer < 0) ||
+                   (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+                    e->data.function.head->data.symbol.name == SYM_Rational &&
+                    e->data.function.args[0]->type == EXPR_INTEGER &&
+                    e->data.function.args[0]->data.integer < 0);
+        if (!neg) continue;
+        bool is_target = false;
+        for (size_t t = 0; t < target_bp->count; t++)
+            if (expr_eq(term_bp->data[j].base, target_bp->data[t].base)) { is_target = true; break; }
+        if (is_target) continue;
+        for (size_t t = 0; t < target_bp->count; t++)
+            if (coef_contains(term_bp->data[j].base, target_bp->data[t].base)) return true;
+    }
+    return false;
+}
+
 /* Coefficient[expr, form, n=1]                                        */
 /*                                                                     */
 /* Mathematica-compatible coefficient extraction supporting compound   */
@@ -461,12 +538,54 @@ Expr* builtin_coefficient(Expr* res) {
         return NULL;
     int64_t n = (res->data.function.arg_count == 3) ? res->data.function.args[2]->data.integer : 1;
 
-    Expr* expanded = expr_expand(original_expr);
-    if (!expanded) return NULL;
-
     BPList target_bp;
     bp_init(&target_bp);
     decompose_to_bp(form, &target_bp);
+
+    /* As the reference does: a factor free of the form comes out first --
+     * Coefficient[(a l^2 + b l^2 + c)/d, l, 2] is (a + b)/d -- and the rest
+     * is expanded only in the form (Expand[e, x]), so a coefficient keeps its
+     * shape: Coefficient[(a + b) x/c + d x, x] is (a + b)/c + d. */
+    Expr* outer = NULL;          /* product of the factors free of the form */
+    Expr* inner = original_expr; /* borrowed or owned (inner_owned) */
+    bool inner_owned = false;
+    if (original_expr->type == EXPR_FUNCTION && original_expr->data.function.head->type == EXPR_SYMBOL &&
+        original_expr->data.function.head->data.symbol.name == SYM_Times) {
+        size_t na = original_expr->data.function.arg_count, nf = 0, nd = 0;
+        Expr** fr = malloc(sizeof(Expr*) * na);
+        Expr** dp = malloc(sizeof(Expr*) * na);
+        for (size_t i = 0; i < na; i++) {
+            Expr* f = original_expr->data.function.args[i];
+            bool dep = false;
+            for (size_t t = 0; t < target_bp.count && !dep; t++)
+                dep = coef_contains(f, target_bp.data[t].base);
+            if (dep) dp[nd++] = expr_copy(f); else fr[nf++] = expr_copy(f);
+        }
+        if (nf > 0 && nd > 0) {
+            outer = nf == 1 ? fr[0] : internal_times(fr, nf);
+            inner = nd == 1 ? dp[0] : expr_new_function(expr_new_symbol(SYM_Times), dp, nd);
+            if (nd == 1) dp[0] = NULL;
+            inner_owned = true;
+        } else {
+            for (size_t i = 0; i < nf; i++) expr_free(fr[i]);
+            for (size_t i = 0; i < nd; i++) expr_free(dp[i]);
+        }
+        free(fr); free(dp);
+    }
+    /* Expand in the form's bases only. */
+    Expr* expanded = NULL;
+    {
+        Expr** alts = malloc(sizeof(Expr*) * (target_bp.count ? target_bp.count : 1));
+        for (size_t t = 0; t < target_bp.count; t++) alts[t] = expr_copy(target_bp.data[t].base);
+        Expr* patt = target_bp.count == 1 ? alts[0]
+                   : expr_new_function(expr_new_symbol(SYM_Alternatives), alts, target_bp.count);
+        free(alts);
+        if (target_bp.count == 0) { expanded = expr_expand(inner); expr_free(patt); }
+        else expanded = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                            (Expr*[]){ expr_copy(inner), patt }, 2));
+    }
+    if (inner_owned) expr_free(inner);
+    if (!expanded) { if (outer) expr_free(outer); bp_free(&target_bp); return NULL; }
 
     size_t term_count = 1;
     Expr** terms = &expanded;
@@ -484,9 +603,10 @@ Expr* builtin_coefficient(Expr* res) {
         bp_init(&term_bp);
         decompose_to_bp(term, &term_bp);
 
-        int64_t k = get_k(&term_bp, &target_bp);
+        bool kok = true;
+        int64_t k = get_k_strict(&term_bp, &target_bp, &kok);
 
-        if (k == n) {
+        if (kok && k == n && !coef_term_has_var_denominator(&term_bp, &target_bp)) {
             if (n == 0) {
                 coeffs[c_count++] = expr_copy(term);
             } else {
@@ -527,6 +647,7 @@ Expr* builtin_coefficient(Expr* res) {
     else final_res = internal_plus(coeffs, c_count);
 
     free(coeffs);
+    if (outer) final_res = internal_times((Expr*[]){ outer, final_res }, 2);
     return final_res;
 }
 

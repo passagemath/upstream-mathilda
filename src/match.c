@@ -1858,22 +1858,29 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
         size_t cap = (n_exprs ? n_exprs : 1), cnt = 0;
         Expr** collected = malloc(sizeof(Expr*) * cap);
         bool ok = true;
-        for (size_t i = 0; i < n_exprs && ok; i++) {
-            Expr* a = exprs[i];
+        /* Each argument is a rule or a list of rules, lists nested to any
+         * depth ({{a -> 5}}), flattened in order, as the reference accepts. */
+        size_t sp = 0, scap = 8;
+        Expr** stack = malloc(sizeof(Expr*) * scap);
+        for (size_t i = n_exprs; i-- > 0; ) {
+            if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
+            stack[sp++] = exprs[i];
+        }
+        while (sp > 0 && ok) {
+            Expr* a = stack[--sp];
             if (mo_is_option_rule(a)) {
                 if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
                 collected[cnt++] = a;
             } else if (mo_is_list(a)) {
-                for (size_t j = 0; j < a->data.function.arg_count; j++) {
-                    Expr* e2 = a->data.function.args[j];
-                    if (!mo_is_option_rule(e2)) { ok = false; break; }
-                    if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
-                    collected[cnt++] = e2;
+                for (size_t j = a->data.function.arg_count; j-- > 0; ) {
+                    if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
+                    stack[sp++] = a->data.function.args[j];
                 }
             } else {
                 ok = false;
             }
         }
+        free(stack);
         if (ok) {
             /* OptionsPattern[{o -> v, ...}] (or a single rule) carries its own
              * defaults: append them AFTER the passed options, so OptionValue's
@@ -2447,28 +2454,33 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
             skip_flattening = true;
         }
 
-        // Temporarily store replaced args to check for Sequence expansion
+        /* A Sequence is spliced only where a pattern variable's value is
+         * substituted (f[x__] := HoldComplete[x] gives HoldComplete[1, 2]), as
+         * in the reference. A literal Sequence written in the replacement is
+         * left to the evaluator, which removes it except where the head keeps
+         * it -- Unevaluated[Sequence[]] and HoldComplete[Sequence[], n] stay.
+         * Splicing it here made Unevaluated[], so a Table whose body returns
+         * Unevaluated[Sequence[]] gave {Unevaluated[], ...} instead of {}. */
         Expr** temp_args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
+        bool* spliced = malloc(sizeof(bool) * (expr->data.function.arg_count ? expr->data.function.arg_count : 1));
         size_t new_count = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
             /* rb_rec, not replace_bindings: the danger set belongs to the whole
              * substitution and must not be rebuilt once per argument node. */
-            temp_args[i] = rb_rec(expr->data.function.args[i], env, danger);
-            if (!skip_flattening && temp_args[i]->type == EXPR_FUNCTION && 
+            Expr* a = expr->data.function.args[i];
+            temp_args[i] = rb_rec(a, env, danger);
+            spliced[i] = !skip_flattening && a->type == EXPR_SYMBOL &&
+                env_get(env, a->data.symbol.name) != NULL &&
+                temp_args[i]->type == EXPR_FUNCTION &&
                 temp_args[i]->data.function.head->type == EXPR_SYMBOL &&
-                temp_args[i]->data.function.head->data.symbol.name == SYM_Sequence) {
-                new_count += temp_args[i]->data.function.arg_count;
-            } else {
-                new_count++;
-            }
+                temp_args[i]->data.function.head->data.symbol.name == SYM_Sequence;
+            new_count += spliced[i] ? temp_args[i]->data.function.arg_count : 1;
         }
         
-        Expr** final_args = malloc(sizeof(Expr*) * new_count);
+        Expr** final_args = malloc(sizeof(Expr*) * (new_count ? new_count : 1));
         size_t idx = 0;
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
-            if (!skip_flattening && temp_args[i]->type == EXPR_FUNCTION && 
-                temp_args[i]->data.function.head->type == EXPR_SYMBOL &&
-                temp_args[i]->data.function.head->data.symbol.name == SYM_Sequence) {
+            if (spliced[i]) {
                 for (size_t j = 0; j < temp_args[i]->data.function.arg_count; j++) {
                     final_args[idx++] = expr_copy(temp_args[i]->data.function.args[j]);
                 }
@@ -2478,6 +2490,7 @@ static Expr* rb_rec(Expr* expr, MatchEnv* env, RbDanger* danger) {
             }
         }
         free(temp_args);
+        free(spliced);
         
         Expr* result = expr_new_function(new_head, final_args, new_count);
         free(final_args);

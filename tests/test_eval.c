@@ -872,6 +872,36 @@ void test_sign_normal_forms_v591() {
     assert_eval_eq("FunctionExpand[PolyLog[2, E^(I Pi/3)] + PolyLog[2, E^(-I Pi/3)]]", "1/18 Pi^2", 0);
 }
 
+/* Substitution splices a Sequence only where a pattern variable's value goes
+ * (match.c rb_rec); a literal Sequence in the replacement is the evaluator's
+ * to remove, and Unevaluated / HoldComplete keep it. Checked against the
+ * reference. */
+void test_sequence_substitution_v592() {
+    assert_eval_eq("ClearAll[hz, h5, q2, hc, g, a, b, x, y]; hz[n_] := Table[If[i > 5, {i}, Unevaluated[Sequence[]]], {i, 1, n}]; hz[3]",
+                   "{}", 0);
+    assert_eval_eq("h5[n_] := HoldComplete[Sequence[], n]; h5[3]", "HoldComplete[Sequence[], 3]", 0);
+    assert_eval_eq("q2[] := Hold[Unevaluated[Sequence[]]]; q2[]", "Hold[Unevaluated[Sequence[]]]", 0);
+    assert_eval_eq("hc[x__] := HoldComplete[x]; hc[1, 2]", "HoldComplete[1, 2]", 0);
+    assert_eval_eq("g[a, b] /. g[x_, y_] :> g[x, If[True, Unevaluated[Sequence[]], 1], y]", "g[a, b]", 0);
+}
+
+/* Coefficient as the reference computes it, and nested option lists. */
+void test_coefficient_v592() {
+    assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
+    assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
+                   "{a, a, a}", 0);
+    assert_eval_eq("{Coefficient[x1/ep + x2 + ep x3, ep, 0], Coefficient[x/(1 + x), x], Coefficient[x/(1 + x), x, 0]}",
+                   "{x2, 0, 0}", 0);
+    assert_eval_eq("{Coefficient[x^3 + 1, x^2, 0], Coefficient[x Sin[x] + x, x], Coefficient[a x y + b x, x y]}",
+                   "{1, 1 + Sin[x], a}", 0);
+    assert_eval_eq("Coefficient[(a l^2 + b l^2 + c)/d, l, 2] === (a + b)/d", "True", 0);
+    assert_eval_eq("Coefficient[(a + b) x/c + d x, x] === (a + b)/c + d", "True", 0);
+    assert_eval_eq("{OptionValue[ff, {{a -> 1}}, a], OptionValue[ff, {{a -> 1}, b -> 2}, b], OptionValue[ff, {{{a -> 5}}}, a]}",
+                   "{1, 2, 5}", 0);
+    assert_eval_eq("Options[ff] = {a -> 0}; gg[x_, OptionsPattern[ff]] := {x, OptionValue[a]}; {gg[1, {{a -> 5}}], gg[3]}",
+                   "{{1, 5}, {3, 0}}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -908,6 +938,8 @@ int main() {
     TEST(test_lhs_pattern_constants_folded);
     TEST(test_feyncalc_semantics_v591);
     TEST(test_sign_normal_forms_v591);
+    TEST(test_sequence_substitution_v592);
+    TEST(test_coefficient_v592);
     printf("All tests passed!\n");
     return 0;
 }

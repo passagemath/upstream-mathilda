@@ -485,6 +485,7 @@ set(COMMON_SRC
     ../src/power.c
     ../src/funcprog.c
     ../src/permutations.c
+    ../src/tc_unwind_safe.c
     ../src/geometry.c
     ../src/numloop.c
     ../src/boolean.c

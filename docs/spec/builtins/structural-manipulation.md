@@ -1212,9 +1212,17 @@ Gives the coefficient of a specific form in a polynomial.
 **Features**:
 - `Protected`, `Listable`.
 - `Coefficient[expr, form, 0]` picks out terms that do NOT contain `form`.
+- `n` may be negative: `Coefficient[a/x + b x, x, -1]` is `a`, and a term in
+  `1/x` is not part of the `x^0` coefficient (`Coefficient[x1/e + x2, e, 0]`
+  is `x2`).
+- A term whose other factors put `form` in a denominator (`x/(1 + x)` for form
+  `x`) has no coefficient of any order; factors that merely contain `form`
+  elsewhere count (`Coefficient[x Sin[x] + x, x]` is `1 + Sin[x]`).
 - `Coefficient[expr, form, n]` stays unevaluated when `n` is not an explicit
   integer (a symbol, `Real`, or `Rational`).
-- Works whether or not `expr` is explicitly given in expanded form (it automatically expands internally).
+- Expands only in `form`, as the reference does, after taking out the factors
+  free of it: `Coefficient[(a l^2 + b l^2 + c)/d, l, 2]` is `(a + b)/d` and
+  `Coefficient[(a + b) x/c + d x, x]` is `(a + b)/c + d` (v0.592).
 - Treats distinct transcendental powers as algebraically unrelated (e.g., `x^s` is treated as a separate base from `x`).
 
 ```mathematica

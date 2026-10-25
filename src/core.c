@@ -18,6 +18,7 @@
 #include "eval.h"
 #include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
+#include "tc_unwind_safe.h" /* may the SIGPROF handler unwind here? */
 #include "parse.h"
 #include "arithmetic.h"
 #include "numbertheory.h"
@@ -289,6 +290,7 @@ void core_init(void) {
      * else can allocate a bignum, so TimeConstrained's async abort can never
      * unwind out of a held libmalloc lock (see tc_install_alloc_guard). */
     tc_install_alloc_guard();
+    tc_unwind_safe_init();
     /* The arithmetic-warning probe mute (arith_warnings_mute_push/pop) is a
      * nesting counter like any other: a timeout unwinding out of a muted probe
      * (Limit, Integrate's stages) would skip the pop and silence Power::infy /
@@ -4600,7 +4602,12 @@ Expr* builtin_symbol(Expr* res) {
  *      the deadline; run evaluate() inside TC_SETJMP.  The timer is only
  *      the WAKE-UP for the async preemption -- the handler compares the
  *      monotonic clock with the deadline and, if it has not yet passed,
- *      re-arms for the remainder and returns.  ITIMER_PROF counts the CPU
+ *      re-arms for the remainder and returns.  At the deadline it only
+ *      records the timeout and grants TC_ASYNC_GRACE_US for layer 2 to
+ *      take the jump at a safe point; it unwinds asynchronously itself
+ *      only when that grace runs out (a long C loop), and then only once
+ *      no frame of the interrupted stack is inside the C library
+ *      (tc_unwind_safe.c).  ITIMER_PROF counts the CPU
  *      time of the whole process, summed over threads: a single busy
  *      thread accrues CPU no faster than wall time, so the timer fires at
  *      (or just after) the deadline, while N busy threads (the parallel
@@ -4761,9 +4768,12 @@ static void tc_arm_prof_us(long long us) {
  * deadline less than 0.1 ms away counts as reached. */
 #define TC_REARM_MIN_US   1000LL
 #define TC_DEADLINE_SLACK 1e-4
+/* CPU time a timed-out computation gets to reach a safe point before the
+ * handler unwinds it asynchronously (see tc_sigprof_handler). */
+#define TC_ASYNC_GRACE_US 50000LL
 
-static void tc_sigprof_handler(int sig) {
-    (void)sig;
+static void tc_sigprof_handler(int sig, siginfo_t* info, void* uctx) {
+    (void)sig; (void)info;
     if (!tc_body_live) return;          /* body finished; teardown disarms */
     /* The CPU timer is only the wake-up; the budget is elapsed time.  Woken
      * before the deadline (threads accrue CPU faster than wall time), re-arm
@@ -4774,11 +4784,32 @@ static void tc_sigprof_handler(int sig) {
         tc_arm_prof_us(us < TC_REARM_MIN_US ? TC_REARM_MIN_US : us);
         return;
     }
-    tc_timed_out = 1;
+    /* First expiry: record the timeout and do NOT unwind from here.  The
+     * signal can land on any instruction, including inside a plain malloc /
+     * realloc / free (an Expr node, a growing argument array) that holds
+     * libmalloc's zone lock; a jump from there leaves the lock owned and the
+     * next allocation traps (SIGILL, _os_unfair_lock_recursive_abort).  The
+     * evaluator's per-step poll (tc_check_deadline) and the guarded GMP
+     * allocators (tc_alloc_safepoint) take the jump at a safe point, which a
+     * computation that is still rewriting reaches within microseconds.  Only
+     * a computation that reaches no safe point for TC_ASYNC_GRACE_US of CPU
+     * -- a pure C loop -- is unwound asynchronously, on the next firing. */
+    if (!tc_timed_out) {
+        tc_timed_out = 1;
+        tc_arm_prof_us(TC_ASYNC_GRACE_US);
+        return;
+    }
     /* If the signal landed inside a GMP allocation, do NOT unwind here: that
-     * would abandon libmalloc's held zone lock.  Record the timeout and let
-     * tc_alloc_safepoint() take the jump the instant the allocator returns. */
+     * would abandon libmalloc's held zone lock.  Let tc_alloc_safepoint()
+     * take the jump the instant the allocator returns. */
     if (tc_gmp_alloc_busy || tc_async_deferred) return;
+    /* Any other allocation, a stdio call, a pthread mutex: when a frame of
+     * the interrupted stack is inside the C library, a jump would abandon
+     * its lock just the same.  Try again in a millisecond. */
+    if (tc_interrupted_in_libc(uctx)) {
+        tc_arm_prof_us(TC_REARM_MIN_US);
+        return;
+    }
     siglongjmp(tc_jmp_env, 1);
 }
 #endif /* !_WIN32 */
@@ -5153,9 +5184,9 @@ Expr* builtin_time_constrained(Expr* res) {
     struct sigaction sa, old_sa;
     struct itimerval old_it;
     memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = tc_sigprof_handler;
+    sa.sa_sigaction = tc_sigprof_handler;
     sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
+    sa.sa_flags = SA_SIGINFO;
     memset(&old_it, 0, sizeof(old_it));
     getitimer(ITIMER_PROF, &old_it);
     sigaction(SIGPROF, &sa, &old_sa);

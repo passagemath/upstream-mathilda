@@ -104,23 +104,35 @@ static Expr* list_from(Expr** items, size_t n) {
 }
 
 /* First matching rule's RHS (copied), else NULL. */
+/* First matching rule's value (copied), else NULL. Nested lists of rules are
+ * searched in order, as the reference reads them: OptionValue[f, {{a -> 1}},
+ * a] is 1. (A named OptionsPattern binds the arguments as written, so a rule
+ * guard re-reading its own options sees {{FCI -> False, ...}}.) */
 static Expr* lookup_value(const Expr* list, const Expr* name) {
     if (!is_list(list)) return NULL;
     for (size_t i = 0; i < list->data.function.arg_count; i++) {
         Expr* r = list->data.function.args[i];
         if (is_option_rule(r) && opt_name_eq(r->data.function.args[0], name))
             return expr_copy(r->data.function.args[1]);
+        if (is_list(r)) {
+            Expr* v = lookup_value(r, name);
+            if (v) return v;
+        }
     }
     return NULL;
 }
 
-/* First matching whole rule (copied), else NULL. */
+/* First matching whole rule (copied), else NULL; nested lists as above. */
 static Expr* lookup_rule(const Expr* list, const Expr* name) {
     if (!is_list(list)) return NULL;
     for (size_t i = 0; i < list->data.function.arg_count; i++) {
         Expr* r = list->data.function.args[i];
         if (is_option_rule(r) && opt_name_eq(r->data.function.args[0], name))
             return expr_copy(r);
+        if (is_list(r)) {
+            Expr* v = lookup_rule(r, name);
+            if (v) return v;
+        }
     }
     return NULL;
 }

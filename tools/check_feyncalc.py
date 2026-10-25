@@ -63,8 +63,10 @@ def drivers(dirs, integration):
     return out
 
 
-def shards(label, mt, tdir, only_files):
-    """One shard per .test file: its groups (for $OnlySubTest) and test ids."""
+def shards(label, mt, tdir, only_files, per_dir=False):
+    """One shard per .test file: its groups (for $OnlySubTest) and test ids.
+    per_dir: one shard for the whole directory (the reference kernel's run,
+    where a process per file would pay its ~30 s load 260 times)."""
     out = []
     for f in sorted(os.listdir(tdir)):
         if not f.endswith(".test") or (only_files and f not in only_files):
@@ -74,13 +76,17 @@ def shards(label, mt, tdir, only_files):
         if groups:
             out.append({"label": label, "mt": mt, "file": f, "groups": groups,
                         "ids": ID_RE.findall(text)})
+    if per_dir and out:
+        out = [{"label": label, "mt": mt, "file": "*", "ids": [i for s in out for i in s["ids"]],
+                "groups": [g for s in out for g in s["groups"]]}]
     return out
 
 
 def run_shard(sh, binary, timeout, shard_timeout):
     # `X$ after a backtick: the runner wraps each as .*re.*, and a bare group
-    # name would also select every group it is a prefix of.
-    only = "|".join("`" + g.split("`")[-1] + "$" for g in sh["groups"])
+    # name would also select every group it is a prefix of. A whole-directory
+    # shard selects everything ("" is the upstream "no filter").
+    only = "" if sh["file"] == "*" else "|".join("`" + g.split("`")[-1] + "$" for g in sh["groups"])
     env = dict(os.environ, FC_ROOT=PKG, FC_MT=sh["mt"], FC_ONLYSUB=only,
                FC_TIMEOUT=str(timeout))
     t0 = time.time()
@@ -141,6 +147,9 @@ def main():
     ap.add_argument("--timeout", type=int, default=60, help="per-test budget, seconds")
     ap.add_argument("--shard-timeout", type=int, default=3600, help="per-process budget, seconds")
     ap.add_argument("--binary", default=os.path.join(REPO, "Mathilda"))
+    ap.add_argument("--per-dir", action="store_true",
+                    help="one process per directory (for the reference kernel: --binary wolframscript)")
+    ap.add_argument("--no-ratchet", action="store_true", help="report only; never fail on the baseline")
     ap.add_argument("--results-dir", default=os.path.join(HARNESS, "results"),
                     help="where the per-directory .tsv go (an A/B run against another binary)")
     ap.add_argument("--update-baseline", action="store_true")
@@ -153,7 +162,7 @@ def main():
         return 0
     dirs = a.dir or UNIT_DIRS
     work = [s for (lab, mt, td) in drivers(dirs, a.integration)
-            for s in shards(lab, mt, td, set(a.file or []))]
+            for s in shards(lab, mt, td, set(a.file or []), a.per_dir)]
     if not work:
         print("check-feyncalc: nothing selected")
         return 2
@@ -232,7 +241,7 @@ def main():
                 fh.write(f"{lab}\t{i}\n")
         print(f"baseline: {len(keep | now_pass)} passing ids written to {os.path.relpath(BASELINE, REPO)}")
         return 0
-    if regressed:
+    if regressed and not a.no_ratchet:
         print(f"\nREGRESSED: {len(regressed)} baseline ids no longer pass:")
         for lab, i in regressed[:50]:
             v = per[lab].get(i, ("?",))[0]

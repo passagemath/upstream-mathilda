@@ -17,6 +17,7 @@
  *
  *   - Elapsed-time budget: Pause is charged and cut short, nested scopes
  *     clamp and charge the outer, a CPU loop aborts at its budget.
+ *   - Timeouts that land mid-allocation are taken at a safe point.
  *
  * The CPU-burning tests use Do[expensive, {many}].  On very fast
  * machines the body may finish before the budget expires; those cases
@@ -369,6 +370,22 @@ void test_tc_cpu_loop_elapsed(void) {
     free(s);
 }
 
+void test_tc_abort_mid_allocation_stress(void) {
+    /* Hundreds of timeouts that land while the body is allocating (a growing
+     * Sum, Expand, Table).  An asynchronous unwind out of malloc leaves the
+     * allocator's lock held and the next allocation traps (SIGILL); the
+     * timeout must be taken at a safe point.  Probabilistic: before v0.592
+     * the same loop crashed the -O3 binary in 3 of 4 runs (rarely at -O0,
+     * whose time inside malloc is a smaller share).  The session must
+     * survive every abort. */
+    char* s = eval_string(
+        "Module[{n = 0}, Do[TimeConstrained[Sum[tcP[i], {i, 1, 400000}]; "
+        "Expand[(a + b + c)^60]; Table[tcF[i], {i, 300000}], "
+        "0.01 + RandomReal[0.05]]; n++, {200}]; n]");
+    ASSERT_STR_EQ(s, "200");
+    free(s);
+}
+
 void test_tc_holdall_blocks_premature_eval(void) {
     /* If TimeConstrained lacked HoldAll, the body Print[...] would be
      * evaluated by the caller before the builtin saw it.  With HoldAll,
@@ -425,6 +442,7 @@ int main(void) {
     TEST(test_tc_nested_pause_clamped_by_outer);
     TEST(test_tc_nested_time_charged_to_outer);
     TEST(test_tc_cpu_loop_elapsed);
+    TEST(test_tc_abort_mid_allocation_stress);
 
     printf("All TimeConstrained tests passed!\n");
     return 0;

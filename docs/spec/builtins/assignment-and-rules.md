@@ -622,7 +622,8 @@ and user symbols.
   rule whose left-hand side used `OptionsPattern[]` (see
   [Pattern Matching](pattern-matching.md)). Option names may be symbols or
   strings interchangeably, ignoring contexts; a trailing `Hold` wraps the
-  resolved value in `Hold`.
+  resolved value in `Hold`. Lists of rules may nest (`OptionValue[f, {{a -> 1}},
+  a]` is `1`), searched in order (v0.592).
 
 **Features**:
 - `Options`, `SetOptions`, and `OptionValue` all have attribute `{Protected}`.

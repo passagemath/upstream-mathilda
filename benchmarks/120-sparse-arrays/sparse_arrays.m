@@ -80,3 +80,59 @@ bench["dense: 2000 x 2000 dense -> sparse", Dm = SparseArray[dense]];
 check["dense: 2000 x 2000 dense -> sparse", digest[Dm]];
 bench["dense: 2000 x 2000 sparse -> dense", r = Normal[Dm]];
 check["dense: 2000 x 2000 sparse -> dense", Round[1000 Total[r, 2]]];
+
+(* ---- products ------------------------------------------------------------ *)
+
+x = N[Mod[Range[$n], 13]]/7.;
+bench["dot: A . x (SpMV) x100", Do[r = A . x, {100}]];
+check["dot: A . x (SpMV) x100", Round[1000 Total[A . x]]];
+bench["dot: x . A x10", Do[r = x . A, {10}]];
+check["dot: x . A x10", Round[1000 Total[x . A]]];
+bench["dot: A . A (SpGEMM)", r = A . A];
+check["dot: A . A (SpGEMM)", digest[r]];
+bench["struct: Transpose[A]", At = Transpose[A]];
+check["struct: Transpose[A]", digest[At]];
+bench["dot: A . Transpose[A] (SpGEMM)", r = A . At];
+check["dot: A . Transpose[A] (SpGEMM)", digest[r]];
+
+(* ---- reductions ----------------------------------------------------------- *)
+
+bench["reduce: Total[A] (column sums)", r = Total[A]];
+check["reduce: Total[A] (column sums)", Round[1000 Total[r]]];
+bench["reduce: Total[A, {2}] (row sums)", r = Total[A, {2}]];
+check["reduce: Total[A, {2}] (row sums)", Round[1000 Total[r]]];
+bench["reduce: Total[A, 2]", r = Total[A, 2]];
+check["reduce: Total[A, 2]", Round[1000 r]];
+bench["reduce: Max[A]", r = Max[A]];
+check["reduce: Max[A]", Round[1000 r]];
+bench["reduce: Norm[A, Frobenius]", r = Norm[A, "Frobenius"]];
+check["reduce: Norm[A, Frobenius]", Round[1000 r]];
+
+(* ---- assembly ------------------------------------------------------------- *)
+
+bench["struct: Join[A, B] (vstack)", r = Join[A, B]];
+check["struct: Join[A, B] (vstack)", digest[r]];
+bench["struct: ArrayFlatten 2x2 blocks", r = ArrayFlatten[{{A, B}, {B, A}}]];
+check["struct: ArrayFlatten 2x2 blocks", digest[r]];
+bench["struct: IdentityMatrix[10^6, SparseArray]", r = IdentityMatrix[10^6, SparseArray]];
+check["struct: IdentityMatrix[10^6, SparseArray]", Round[Total[r["NonzeroValues"]]]];
+
+(* ---- 2-D Poisson: 5-point Laplacian on a 300 x 300 grid ------------------- *)
+
+$m = 300;
+bench["poisson: build L (Band, KroneckerProduct)",
+      (T1 = SparseArray[{Band[{1, 1}] -> 2., Band[{1, 2}] -> -1., Band[{2, 1}] -> -1.}, {$m, $m}];
+       I1 = IdentityMatrix[$m, SparseArray];
+       L = KroneckerProduct[T1, I1] + KroneckerProduct[I1, T1])];
+check["poisson: build L (Band, KroneckerProduct)", digest[L]];
+bb = N[Mod[Range[$m^2], 7]] - 3.;
+bench["poisson: LinearSolve[L, b] direct", sol = LinearSolve[L, bb]];
+check["poisson: LinearSolve[L, b] direct", Round[1000 Total[sol]]];
+bench["poisson: LinearSolve[L, b] CG 1e-10",
+      solcg = LinearSolve[L, bb, Method -> {"Krylov", Method -> "ConjugateGradient",
+                                            "Preconditioner" -> None, Tolerance -> 10^-10}]];
+check["poisson: LinearSolve[L, b] CG 1e-10", Round[Total[solcg]]];
+bench["poisson: 6 largest eigenvalues", ev = Eigenvalues[L, 6]];
+check["poisson: 6 largest eigenvalues", Round[10^6 Total[ev]]];
+bench["poisson: 6 smallest eigenvalues", ev = Eigenvalues[L, -6]];
+check["poisson: 6 smallest eigenvalues", Round[10^6 Total[ev]]];

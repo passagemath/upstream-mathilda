@@ -80,6 +80,18 @@ def find_wolfram():
 
 WOLFRAM = find_wolfram()
 
+
+def find_gp():
+    """PARI/GP, the fourth column -- used by group F (cryptographic number
+    theory), whose experiments carry a .gp half beside the .m and .py."""
+    env = os.environ.get("BENCH_GP")
+    if env:
+        return env if os.path.exists(env) else None
+    return shutil.which("gp")
+
+
+GP = find_gp()
+
 # A case is a finding once it is at least this many times the best other system.
 # 1.5 rather than 1.0 because run-to-run spread on large-working-set cases is
 # documented at +-20% in docs/experiments/README.md; 1.5 sits outside that.
@@ -89,15 +101,18 @@ SLOWER_AT = 1.5
 # compared as normalised text.
 CHECK_RTOL = 1e-6
 
-SYSTEMS = ("mathilda", "wolfram", "python")
-PRETTY = {"mathilda": "Mathilda", "wolfram": "Mathematica", "python": "Python"}
+SYSTEMS = ("mathilda", "wolfram", "python", "pari")
+PRETTY = {"mathilda": "Mathilda", "wolfram": "Mathematica", "python": "Python",
+          "pari": "PARI/GP"}
 
 
 # --------------------------------------------------------------------------
 # Discovery
 # --------------------------------------------------------------------------
 
-EXP_RE = re.compile(r"^(\d{2})-(.+)$")
+# Two or three digits: group F starts at 100.  discover() sorts numerically, so
+# "100-..." does not land between "10-..." and "11-...".
+EXP_RE = re.compile(r"^(\d{2,3})-(.+)$")
 
 # Standalone studies shelved under an NN-slug name for ordering but which are
 # NOT run_all .m/.py harness pairs: they drive their own multi-engine sweep and
@@ -109,12 +124,15 @@ STANDALONE = {"97-special-functions", "98-factorinteger-shootout"}
 
 
 def discover(only=None):
-    """Every benchmarks/NN-slug/ folder holding at least one .m or .py.
+    """Every benchmarks/NN-slug/ folder holding at least one .m, .py or .gp.
 
     Excludes STANDALONE studies, which carry an NN- name for shelving order but
     are not harness .m/.py pairs (they run their own sweep and write a PDF)."""
     out = []
-    for name in sorted(os.listdir(BENCH)):
+    names = sorted(os.listdir(BENCH),
+                   key=lambda n: (int(EXP_RE.match(n).group(1)), n)
+                   if EXP_RE.match(n) else (10**9, n))
+    for name in names:
         m = EXP_RE.match(name)
         if not m:
             continue
@@ -128,10 +146,11 @@ def discover(only=None):
             continue
         mfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".m")), None)
         pyfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".py")), None)
-        if not mfile and not pyfile:
+        gpfile = next((f for f in sorted(os.listdir(d)) if f.endswith(".gp")), None)
+        if not mfile and not pyfile and not gpfile:
             continue
         out.append({"num": num, "slug": slug, "name": name, "dir": d,
-                    "m": mfile, "py": pyfile,
+                    "m": mfile, "py": pyfile, "gp": gpfile,
                     "group": group_of(int(num))})
     return out
 
@@ -168,6 +187,12 @@ def group_of(num):
         return "C array substrate (numpy)"
     if 53 <= num <= 62:
         return "E numerical analysis (scipy)"
+    if 100 <= num <= 119:
+        # Cryptographic number theory: protocols written in each language from
+        # primitives ("app:" cases) plus each system's native builtin for the
+        # core step ("prim:" cases).  Baselines: gmpy2/sympy/pycryptodome, and
+        # PARI/GP, the reference number-theory engine.
+        return "F cryptography (python+pari)"
     return "D uncovered subsystems"
 
 
@@ -418,6 +443,13 @@ def run_one(system, exp, timeout, tick=None):
         if not exp["m"] or not WOLFRAM:
             return None
         cmd = [WOLFRAM, "-file", exp["m"]]
+    elif system == "pari":
+        if not exp.get("gp") or not GP:
+            return None
+        # -q: no banner.  stdin is closed (DEVNULL) so a .gp file that errors
+        # before its quit() exits instead of sitting at the interactive prompt
+        # until the timeout.
+        cmd = [GP, "-q", exp["gp"]]
     else:
         if not exp["py"]:
             return None
@@ -442,7 +474,7 @@ def run_one(system, exp, timeout, tick=None):
     fe = tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace")
     try:
         proc = subprocess.Popen(cmd, cwd=exp["dir"], stdout=fo, stderr=fe,
-                                text=True)
+                                stdin=subprocess.DEVNULL, text=True)
     except OSError as e:
         fo.close(); fe.close()
         return {"error": str(e), "bench": {}, "check": {}, "require": {},
@@ -607,6 +639,17 @@ def classify(exp, runs):
 # whole research pass, so this is recorded on every run.
 # --------------------------------------------------------------------------
 
+def gp_version():
+    if not GP:
+        return "absent"
+    try:
+        out = subprocess.run([GP, "-q"], input="print(version());quit();\n",
+                             capture_output=True, text=True, timeout=30).stdout
+        return "%s (%s)" % (out.strip(), GP)
+    except Exception as e:
+        return "error: %s" % e
+
+
 def host_block():
     def ver(mod):
         try:
@@ -665,6 +708,7 @@ def host_block():
         "python_bin": PYTHON,
         "python_libs": pyver,
         "wolframscript": WOLFRAM or "absent",
+        "gp": gp_version(),
         "runner_python": sys.version.split()[0],
         "local_versions": {m: ver(m) for m in
                            ("numpy", "scipy", "sympy", "mpmath", "numba",
@@ -883,6 +927,7 @@ def history_record(rows, requires, host, elapsed):
                               ("INCOMPLETE", "CHECK-FAIL")),
             "median_vs_wolfram": rel(gr, "wolfram"),
             "median_vs_python": rel(gr, "python"),
+            "median_vs_pari": rel(gr, "pari"),
         }
 
     commit = "unknown"
@@ -903,6 +948,7 @@ def history_record(rows, requires, host, elapsed):
         "counts": counts,
         "median_vs_wolfram": rel(rows, "wolfram"),
         "median_vs_python": rel(rows, "python"),
+        "median_vs_pari": rel(rows, "pari"),
         "groups": groups,
         "wall_min": round(elapsed / 60.0, 2),
         "missing_optional_deps": host.get("missing_optional_deps", []),
@@ -1030,8 +1076,8 @@ def write_report(path, rows, requires, host, exps, elapsed):
     if not slower:
         L.append("_No case is %.1f× or more behind its best baseline._" % SLOWER_AT)
     else:
-        L.append("| × behind | case | Mathilda | Mathematica | Python | vs |")
-        L.append("|---|---|---|---|---|---|")
+        L.append("| × behind | case | Mathilda | Mathematica | Python | PARI/GP | vs |")
+        L.append("|---|---|---|---|---|---|---|")
         any_floored = False
         for r in slower:
             t = r["times"]
@@ -1039,9 +1085,10 @@ def write_report(path, rows, requires, host, exps, elapsed):
             bo = min(others) if others else None
             if bo is not None and bo < RATIO_FLOOR_MS:
                 any_floored = True
-            L.append("| %s | `%s` · %s | %s | %s | %s | %s |" % (
+            L.append("| %s | `%s` · %s | %s | %s | %s | %s | %s |" % (
                 fmt_ratio(r["ratio"], bo), r["experiment"], r["label"],
                 ms(t.get("mathilda")), ms(t.get("wolfram")), ms(t.get("python")),
+                ms(t.get("pari")),
                 PRETTY.get(r.get("best_other"), "—")))
         if any_floored:
             L.append("")
@@ -1056,13 +1103,13 @@ def write_report(path, rows, requires, host, exps, elapsed):
     if not ahead:
         L.append("_None._")
     else:
-        L.append("| case | Mathilda | Mathematica | Python | ratio |")
-        L.append("|---|---|---|---|---|")
+        L.append("| case | Mathilda | Mathematica | Python | PARI/GP | ratio |")
+        L.append("|---|---|---|---|---|---|")
         for r in ahead:
             t = r["times"]
-            L.append("| `%s` · %s | %s | %s | %s | %s |" % (
+            L.append("| `%s` · %s | %s | %s | %s | %s | %s |" % (
                 r["experiment"], r["label"], ms(t.get("mathilda")),
-                ms(t.get("wolfram")), ms(t.get("python")),
+                ms(t.get("wolfram")), ms(t.get("python")), ms(t.get("pari")),
                 ("%.2f×" % r["ratio"]) if r["ratio"] else "—"))
     L.append("")
 
@@ -1087,8 +1134,8 @@ def write_report(path, rows, requires, host, exps, elapsed):
              "of 1.0 means the typical case in that area is at parity.")
     L.append("")
     L.append("| area | cases | slower | ahead | absent | incomplete | "
-             "median vs Mathematica | median vs Python |")
-    L.append("|---|---|---|---|---|---|---|---|")
+             "median vs Mathematica | median vs Python | median vs PARI/GP |")
+    L.append("|---|---|---|---|---|---|---|---|---|")
 
     def _rel(gr, sysname):
         """Median of (Mathilda / that system) over cases where both timed."""
@@ -1101,15 +1148,16 @@ def write_report(path, rows, requires, host, exps, elapsed):
 
     for g in sorted({r["group"] for r in rows}):
         gr = [r for r in rows if r["group"] == g]
-        mw, mp = _rel(gr, "wolfram"), _rel(gr, "python")
-        L.append("| %s | %d | %d | %d | %d | %d | %s | %s |" % (
+        mw, mp, mg = _rel(gr, "wolfram"), _rel(gr, "python"), _rel(gr, "pari")
+        L.append("| %s | %d | %d | %d | %d | %d | %s | %s | %s |" % (
             g, len(gr),
             sum(1 for r in gr if r["klass"] == "SLOWER"),
             sum(1 for r in gr if r["klass"] == "AHEAD"),
             sum(1 for r in gr if r["klass"] == "ABSENT"),
             sum(1 for r in gr if r["klass"] in ("INCOMPLETE", "CHECK-FAIL")),
             ("%.2f×" % mw) if mw else "—",
-            ("%.2f×" % mp) if mp else "—"))
+            ("%.2f×" % mp) if mp else "—",
+            ("%.2f×" % mg) if mg else "—"))
     L.append("")
     L.append("Read the two right-hand columns against each other. Behind "
              "Mathematica is a gap against a *competitor* — the same evaluation "
@@ -1267,8 +1315,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", help="comma-separated experiment numbers or slugs")
-    ap.add_argument("--system", default="mathilda,wolfram,python",
-                    help="comma-separated subset of mathilda,wolfram,python")
+    ap.add_argument("--system", default="mathilda,wolfram,python,pari",
+                    help="comma-separated subset of mathilda,wolfram,python,pari")
     ap.add_argument("--timeout", type=int, default=300,
                     help="per-file wall-clock seconds (default 300)")
     ap.add_argument("--list", action="store_true", help="list experiments and exit")
@@ -1297,7 +1345,18 @@ def main():
               % (args.from_json, len(rows), len(exps_seen)), file=sys.stderr)
         return 0
 
-    only = set(x.strip() for x in args.only.split(",")) if args.only else None
+    only = None
+    if args.only:
+        only = set()
+        for x in (t.strip() for t in args.only.split(",")):
+            # "100-119" is a numeric range; anything else (a number, a slug,
+            # a folder name) is taken as written.
+            rng = re.match(r"^(\d{2,3})-(\d{2,3})$", x)
+            if rng:
+                lo, hi = int(rng.group(1)), int(rng.group(2))
+                only |= {"%02d" % k for k in range(lo, hi + 1)}
+            elif x:
+                only.add(x)
     want = [s.strip() for s in args.system.split(",") if s.strip()]
     exps = discover(only)
 
@@ -1368,12 +1427,14 @@ def main():
                 if all_requires.get(h) != "absent":
                     all_requires[h] = state
 
-        # Label-set agreement between the two halves of the experiment.
-        if "mathilda" in runs and "python" in runs:
-            a = set(runs["mathilda"]["bench"]) | set(runs["mathilda"]["skip"])
-            b = set(runs["python"]["bench"]) | set(runs["python"]["skip"])
-            if a != b:
-                label_problems.append((e["name"], sorted(a - b), sorted(b - a)))
+        # Label-set agreement between the .m half and each other half.
+        for other in ("python", "pari"):
+            if "mathilda" in runs and other in runs:
+                a = set(runs["mathilda"]["bench"]) | set(runs["mathilda"]["skip"])
+                b = set(runs[other]["bench"]) | set(runs[other]["skip"])
+                if a != b:
+                    label_problems.append((e["name"] + " (.m vs %s)" % other,
+                                           sorted(a - b), sorted(b - a)))
 
         all_rows.extend(classify(e, runs))
         raw[e["name"]] = {s: runs[s] for s in runs}
@@ -1439,13 +1500,14 @@ def main():
              if partial else ""), file=sys.stderr)
 
     if label_problems:
-        print("\nLABEL MISMATCH between the .m and .py halves:", file=sys.stderr)
+        print("\nLABEL MISMATCH between the .m and the .py/.gp halves:",
+              file=sys.stderr)
         for name, onlym, onlypy in label_problems:
             print("  %s" % name, file=sys.stderr)
             for l in onlym:
                 print("      only .m : %s" % l, file=sys.stderr)
             for l in onlypy:
-                print("      only .py: %s" % l, file=sys.stderr)
+                print("      only other: %s" % l, file=sys.stderr)
         if args.check_labels:
             return 1
     return 0

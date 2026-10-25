@@ -17,3 +17,11 @@ mpmath>=1.3
 # Optional: enables the LASSO comparison case in 61-regularized-least-squares.
 # Absent -> that single case emits SKIP on the Python side; the rest run.
 # scikit-learn>=1.3
+
+# Group F (100-119, cryptographic number theory). Run under the same Python 3.11.
+# gmpy2 is the GMP baseline for every bignum primitive; pycryptodome supplies the
+# compiled AES / ChaCha20 references; sympy supplies discrete_log, sqrt_mod,
+# factorint, LLL. The PARI/GP column needs `gp` on PATH (or BENCH_GP), not pip.
+gmpy2>=2.1
+sympy>=1.12
+pycryptodome>=3.19

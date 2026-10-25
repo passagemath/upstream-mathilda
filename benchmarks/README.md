@@ -228,11 +228,13 @@ the fallback stays in the binary. This cost a full diagnosis pass to notice.
 
 ```
 benchmarks/
-  harness.m / harness.py    THE ONLY copy of bench / check / require
+  harness.m / harness.py / harness.gp   THE ONLY copy of bench / check / require
   data.m    / data.py       shared deterministic input generators
+  crypto_data.{m,py,gp}     group F's shared LCG inputs and curve/group constants
   run_all.py                the job
   NN-slug/slug.m            kernels only, 2 lines of preamble
   NN-slug/slug.py           kernels only, 2 lines of preamble
+  NNN-slug/slug.gp          group F only: the PARI/GP half
 ```
 
 The existing corpus duplicates its reporting helpers into every file ("shared
@@ -390,6 +392,66 @@ a Python and the group needs no code change to select 3.11:
 /usr/local/bin/python3.11 -m pip install -r benchmarks/requirements.txt
 HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 53,54,55,56,57,58,59,60,61,62 --check-labels
 ```
+
+## Group F — cryptographic number theory (100–119), with a PARI/GP column
+
+Twenty experiments that build cryptographic applications from Mathilda's
+integer kernels. Each is written three times: the `.m` (which also runs
+unchanged in Mathematica), a `.py` on gmpy2 / sympy / hashlib / pycryptodome,
+and a `.gp` for **PARI/GP**, the reference number-theory engine. PARI is a
+fourth system in `run_all.py` (`--system ...,pari`; `gp` found on `PATH` or via
+`BENCH_GP`). Folders with no `.gp` file are not affected.
+
+Two kinds of case appear in every experiment:
+
+- **`app:`** — the protocol written *in each language* from primitives (keygen
+  search loops, EC point arithmetic, NTT butterflies, product trees). These
+  measure interpreter, loop and bignum overhead on real programs.
+- **`prim:`** — each system's native builtin for the core step (`PowerMod` vs
+  `gmpy2.powmod` vs `Mod(a,n)^e`, `LatticeReduce` vs `qflll`, …). A head
+  Mathilda lacks is `benchIf`'d, so the row is `ABSENT`, never a ratio. Some
+  heads exist but do not evaluate the form a protocol needs
+  (`Hash[s, "SHA256"]`, `Inverse[m, Modulus -> q]`). These use an explicit
+  probe and also emit `SKIP`.
+
+Every input comes from `crypto_data.{m,py,gp}`: one 64-bit LCG, spelled
+identically in three languages and verified to produce bit-identical integers.
+The four systems cannot share an RNG stream, and a protocol run on different
+primes is not the same benchmark. Checks are single integers folded mod
+10⁹+7, because `{…}` and `[…]` list syntax would never compare equal.
+
+| # | slug | application |
+|---|---|---|
+| 100 | `rsa-keygen` | prime search, e⁻¹ mod λ, CRT parameters |
+| 101 | `rsa-crt-decrypt` | textbook RSA, Garner CRT decryption |
+| 102 | `primality-testing` | Miller–Rabin, BPSW in-language vs `PrimeQ`; Carmichael / strong-pseudoprime inputs |
+| 103 | `diffie-hellman` | safe primes, `PrimitiveRoot`, MODP-2048 exchange |
+| 104 | `discrete-log` | BSGS, Pollard ρ, Pohlig–Hellman vs `MultiplicativeOrder[g,p,{h}]` / `znlog` |
+| 105 | `ec-arithmetic` | secp256k1 affine/Jacobian arithmetic, ladders vs `ellmul` |
+| 106 | `ecdsa` | sign/verify on 105's arithmetic; SHA-256 |
+| 107 | `elgamal` | MODP-2048 ElGamal, homomorphism |
+| 108 | `paillier` | 4096-bit-modulus additive homomorphic encryption |
+| 109 | `rsa-attacks` | Wiener (continued fractions), common modulus, Håstad |
+| 110 | `factoring-cryptanalysis` | Pollard ρ / p−1 / Fermat vs `FactorInteger` / `factor` |
+| 111 | `shamir-secret-sharing` | shares and Lagrange reconstruction over F_p |
+| 112 | `rabin-sqrt-mod` | Tonelli–Shanks, Cipolla vs `PowerMod[a,1/2,p]`; Rabin decryption |
+| 113 | `lattice-attacks` | knapsack and hidden-number lattices vs `LatticeReduce` / `qflll` |
+| 114 | `aes-gf256` | GF(2⁸), S-box, AES-128 (bitwise and no-bitwise variants) |
+| 115 | `arx-hash-stream` | SHA-256, HMAC, ChaCha20 |
+| 116 | `ntt-ring-mult` | NTT negacyclic multiplication in Z_q[x]/(xⁿ+1) |
+| 117 | `lwe-kyber-lite` | Module-LWE encryption, modular linear algebra |
+| 118 | `qr-prngs` | Blum–Blum–Shub, Goldwasser–Micali, Jacobi/Kronecker |
+| 119 | `batch-gcd` | product/remainder trees for weak RSA keys |
+
+The group needs Python 3.11 with gmpy2, sympy and pycryptodome (see
+`requirements.txt`). The results, and the improvement roadmap derived from them,
+are in [`CRYPTO_GAPS.md`](CRYPTO_GAPS.md).
+
+```bash
+HPC_PYTHON=/usr/local/bin/python3.11 python3 benchmarks/run_all.py --only 100-119 --check-labels
+```
+
+`--only` accepts numeric ranges (`100-119`) as well as numbers and slugs.
 
 ### Why there is no WolframMark group
 

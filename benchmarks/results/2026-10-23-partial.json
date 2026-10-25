@@ -1,0 +1,292 @@
+{
+ "host": {
+  "date": "2026-10-23",
+  "missing_optional_deps": [],
+  "platform": "macOS-15.7.4-x86_64-i386-64bit-Mach-O",
+  "machine": "x86_64",
+  "processor": "i386",
+  "mathilda": "Mathilda 0.572 (GCC 16.1.0, GMP 6.3.0, MPFR 4.2.2, FLINT 3.6.0, ECM 7.0.7, Raylib 5.5, Accelerate, Readline)",
+  "mathilda_bin": "/Users/user/Mathilda_dev/Mathilda/Mathilda",
+  "python_bin": "benchmarks/.venv/bin/python",
+  "python_libs": "3.14.7 2.5.2 1.18.1 1.14.0",
+  "wolframscript": "/Applications/Mathematica.app/Contents/MacOS/wolframscript",
+  "gp": "[2, 17, 3] (/usr/local/bin/gp)",
+  "runner_python": "3.14.7",
+  "local_versions": {
+   "numpy": "absent",
+   "scipy": "absent",
+   "sympy": "absent",
+   "mpmath": "1.4.1",
+   "numba": "absent",
+   "networkx": "absent"
+  }
+ },
+ "rows": [
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "build: 10^6 entries, 10^5 x 10^5 (coordinates -> rows)",
+   "times": {
+    "mathilda": 28.709
+   },
+   "checks": {
+    "mathilda": "4899908200"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "arith: A + B",
+   "times": {
+    "mathilda": 6.653
+   },
+   "checks": {
+    "mathilda": "9799816400"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "arith: A B (element-wise)",
+   "times": {
+    "mathilda": 5.285
+   },
+   "checks": {
+    "mathilda": "15924634380"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "arith: 2.5 A",
+   "times": {
+    "mathilda": 1.7
+   },
+   "checks": {
+    "mathilda": "12249770500"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "arith: A^2 (element-wise)",
+   "times": {
+    "mathilda": 1.826
+   },
+   "checks": {
+    "mathilda": "31849217180"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "arith: A + A",
+   "times": {
+    "mathilda": 1.697
+   },
+   "checks": {
+    "mathilda": "9799816400"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "fn: Sin[A]",
+   "times": {
+    "mathilda": 2.732
+   },
+   "checks": {
+    "mathilda": "200750267"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "fn: Sqrt[A]",
+   "times": {
+    "mathilda": 4.587
+   },
+   "checks": {
+    "mathilda": "2091686849"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "access: row 500 x100",
+   "times": {
+    "mathilda": 5.165
+   },
+   "checks": {
+    "mathilda": "40900"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "access: element (500, 600) x1000",
+   "times": {
+    "mathilda": 0.315
+   },
+   "checks": {},
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "access: explicit positions and values",
+   "times": {
+    "mathilda": 6.944
+   },
+   "checks": {
+    "mathilda": "100003793659"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "dense: 2000 x 2000 dense -> sparse",
+   "times": {
+    "mathilda": 7.165
+   },
+   "checks": {
+    "mathilda": "167979000"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  },
+  {
+   "experiment": "120-sparse-arrays",
+   "group": "D uncovered subsystems",
+   "label": "dense: 2000 x 2000 sparse -> dense",
+   "times": {
+    "mathilda": 5.5
+   },
+   "checks": {
+    "mathilda": "167979000"
+   },
+   "ratio": null,
+   "note": "no baseline recorded",
+   "klass": "AHEAD"
+  }
+ ],
+ "requires": {
+  "SparseArray": "present",
+  "ArrayRules": "present",
+  "Normal": "present"
+ },
+ "raw": {
+  "120-sparse-arrays": {
+   "mathilda": {
+    "bench": {
+     "build: 10^6 entries, 10^5 x 10^5 (coordinates -> rows)": 28.709,
+     "arith: A + B": 6.653,
+     "arith: A B (element-wise)": 5.285,
+     "arith: 2.5 A": 1.7,
+     "arith: A^2 (element-wise)": 1.826,
+     "arith: A + A": 1.697,
+     "fn: Sin[A]": 2.732,
+     "fn: Sqrt[A]": 4.587,
+     "access: row 500 x100": 5.165,
+     "access: element (500, 600) x1000": 0.315,
+     "access: explicit positions and values": 6.944,
+     "dense: 2000 x 2000 dense -> sparse": 7.165,
+     "dense: 2000 x 2000 sparse -> dense": 5.5
+    },
+    "check": {
+     "build: 10^6 entries, 10^5 x 10^5 (coordinates -> rows)": "4899908200",
+     "arith: A + B": "9799816400",
+     "arith: A B (element-wise)": "15924634380",
+     "arith: 2.5 A": "12249770500",
+     "arith: A^2 (element-wise)": "31849217180",
+     "arith: A + A": "9799816400",
+     "fn: Sin[A]": "200750267",
+     "fn: Sqrt[A]": "2091686849",
+     "access: row 500 x100": "40900",
+     "access: explicit positions and values": "100003793659",
+     "dense: 2000 x 2000 dense -> sparse": "167979000",
+     "dense: 2000 x 2000 sparse -> dense": "167979000"
+    },
+    "require": {
+     "SparseArray": "present",
+     "ArrayRules": "present",
+     "Normal": "present"
+    },
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": 0,
+    "error": null
+   },
+   "python": {
+    "error": "[Errno 2] No such file or directory: 'benchmarks/.venv/bin/python'",
+    "bench": {},
+    "check": {},
+    "require": {},
+    "skip": {},
+    "stderr": "",
+    "timed_out": false,
+    "rc": null
+   }
+  }
+ },
+ "elapsed_s": 8.539854049682617,
+ "durations": {
+  "120-sparse-arrays": 5.820065021514893
+ },
+ "partial": true,
+ "label_problems": [
+  [
+   "120-sparse-arrays (.m vs python)",
+   [
+    "access: element (500, 600) x1000",
+    "access: explicit positions and values",
+    "access: row 500 x100",
+    "arith: 2.5 A",
+    "arith: A + A",
+    "arith: A + B",
+    "arith: A B (element-wise)",
+    "arith: A^2 (element-wise)",
+    "build: 10^6 entries, 10^5 x 10^5 (coordinates -> rows)",
+    "dense: 2000 x 2000 dense -> sparse",
+    "dense: 2000 x 2000 sparse -> dense",
+    "fn: Sin[A]",
+    "fn: Sqrt[A]"
+   ],
+   []
+  ]
+ ]
+}

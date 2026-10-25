@@ -118,23 +118,76 @@ static long leaf_count(const Expr* e) {
     return n;
 }
 
+/* Collect the distinct arguments of every Gamma[z] in `e` into args[] (borrowed
+ * pointers, at most `cap`); returns the count. */
+static size_t collect_gamma_args(const Expr* e, const Expr** args, size_t n, size_t cap) {
+    if (!e || e->type != EXPR_FUNCTION) return n;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol.name, "Gamma") == 0 &&
+        e->data.function.arg_count == 1) {
+        const Expr* z = e->data.function.args[0];
+        bool seen = false;
+        for (size_t i = 0; i < n && !seen; i++) seen = expr_eq(args[i], z);
+        if (!seen && n < cap) args[n++] = z;
+    }
+    n = collect_gamma_args(h, args, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        n = collect_gamma_args(e->data.function.args[i], args, n, cap);
+    return n;
+}
+
 /* Final cleanup.  The pFq reductions can leave Gamma-ratio artifacts such as
  * Gamma[1+a]/Gamma[a]; the bounded, terminating rewrite
  * Gamma[z+n] -> Pochhammer[z,n] Gamma[z] exposes them for Simplify to cancel.
- * But that same rewrite un-consolidates an isolated Gamma[1+nu-s] into a bulkier
- * product when there is nothing to cancel.  So simplify both with and without
- * the rewrite and keep whichever is structurally smaller -- the cancellation
- * cases shrink, the isolated-Gamma cases keep their compact form.  (FullSimplify
- * would subsume this but can hang on symbolic-exponent forms like (1-s)^(-nu).) */
+ * The rewrite is applied ONLY to a Gamma whose argument differs by a nonzero
+ * integer from another Gamma argument in the expression -- the only ones that
+ * can cancel.  An isolated Gamma[1 - s/2] is never shifted: rewriting it to
+ * (-s/2) Gamma[-s/2] cancels nothing and plants a removable singularity (the
+ * value at s = 0 becomes 0 * ComplexInfinity), yet the shifted form can be the
+ * smaller by leaf count -- e.g. once a loose 1/2 coefficient absorbs the -1/2 --
+ * so a size tie-break alone cannot be trusted to reject it.  Among the
+ * candidates (plain Simplify, and Simplify after the partnered rewrite) keep the
+ * structurally smaller.  (FullSimplify would subsume this but can hang on
+ * symbolic-exponent forms like (1-s)^(-nu).) */
 static Expr* fullsimp2(Expr* e, Expr* as) {
     Expr* plain = as ? ev2("Simplify", cp(e), cp(as)) : ev1("Simplify", cp(e));
+    enum { GCAP = 32 };
+    const Expr* gargs[GCAP];
+    size_t ng = collect_gamma_args(e, gargs, 0, GCAP);
+    bool partnered[GCAP] = { false };
+    size_t npart = 0;
+    for (size_t i = 0; i < ng; i++)
+        for (size_t j = i + 1; j < ng; j++) {
+            if (partnered[i] && partnered[j]) continue;
+            Expr* d = ev1("Expand", Pls(cp(gargs[i]), Neg(cp(gargs[j]))));
+            bool shift = d && expr_is_integer_like(d) &&
+                         !(d->type == EXPR_INTEGER && d->data.integer == 0);
+            if (d) expr_free(d);
+            if (shift) {
+                if (!partnered[i]) { partnered[i] = true; npart++; }
+                if (!partnered[j]) { partnered[j] = true; npart++; }
+            }
+        }
+    Expr* norm = NULL;
     static const char* GRULE =
         "Gamma[z_ + n_Integer] :> Pochhammer[z, n] Gamma[z]";
-    Expr* rule = parse_expression(GRULE);
-    Expr* norm = NULL;
-    if (rule) {
-        Expr* repl = ev2("ReplaceRepeated", cp(e), rule);
-        norm = as ? ev2("Simplify", repl, cp(as)) : ev1("Simplify", repl);
+    Expr* grule = npart ? parse_expression(GRULE) : NULL;
+    if (grule) {
+        /* {Gamma[g] -> (Gamma[g] //. GRULE), ...} over the partnered g only. */
+        Expr** rules = malloc(npart * sizeof(Expr*));
+        size_t k = 0;
+        for (size_t i = 0; i < ng && rules; i++) {
+            if (!partnered[i]) continue;
+            Expr* rhs = ev2("ReplaceRepeated", Gamma_(cp(gargs[i])), cp(grule));
+            rules[k++] = mk_fn2("Rule", Gamma_(cp(gargs[i])), rhs);
+        }
+        if (rules) {
+            Expr* lst = expr_new_function(mk_sym("List"), rules, k);
+            free(rules);
+            Expr* repl = ev2("ReplaceAll", cp(e), lst);
+            norm = as ? ev2("Simplify", repl, cp(as)) : ev1("Simplify", repl);
+        }
+        expr_free(grule);
     }
     expr_free(e);
     if (norm && (!plain || leaf_count(norm) < leaf_count(plain))) {

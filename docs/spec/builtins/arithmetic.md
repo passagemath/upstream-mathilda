@@ -436,6 +436,22 @@ Symbolic product.
   - Otherwise a group whose exponents all agree keeps that exponent
     (`3^-a 5^-a` is `15^(-a)`), and a mixed group takes the sign without a
     negative leading coefficient (`a`, not `-a`).
+- **A power of a product splits off its positive numeric factors** (v0.6005),
+  as in the reference, when it is a factor of a larger product and its
+  exponent is not a number:
+  - `y (2 x)^b` is `2^b x^b y`, and `x^a (Pi x)^b` is `Pi^b x^(a + b)`.
+  - `(x/2)^b` contributes `2^-b`; `(3/2 x)^b` keeps `(3/2)^b`.
+  - A negative number contributes its absolute value: `(-2 x)^b` gives
+    `2^b (-x)^b`. A pure-imaginary coefficient does the same: `(2 I x)^b`
+    gives `2^b (I x)^b`.
+  - The rest of the base stays as one power: `(2 x y)^b` gives `2^b (x y)^b`.
+  - A base that is all numeric, such as `(2 Pi)^b`, splits only when another
+    factor shares one of its bases. So `Pi^a (2 Pi)^b` is `2^b Pi^(a + b)`
+    and `Pi^(D/2) (2 Pi)^-D` is `2^-D Pi^(-D/2)`, while `y (2 Pi)^b` and
+    `(-2 Pi)^b y` stay.
+  - A lone `(2 x)^b` is not a product and stays.
+  - The split factors are spliced into one flat product, so like bases
+    combine before the numeric-base merge above can rebuild `(2 Pi)^b`.
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.

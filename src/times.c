@@ -437,6 +437,165 @@ static Expr* algnum_times_combine(Expr** args, size_t n) {
  * back apart (see there). Single-threaded like the evaluator itself. */
 static int g_radical_fusion_probe = 0;
 
+/* ---- O3: a power of a product splits off its positive numeric factors ----
+ *
+ * In a product, the reference writes Power[Times[c, rest], e] (e not a
+ * number) as c^e rest^e when c is a positive number or numeric quantity:
+ * y (2 x)^b is 2^b x^b y, Pi^a (Pi x)^b is Pi^b x^(a + b), and a negative
+ * number contributes its absolute value, (-2 x)^b x^a being 2^b (-x)^b x^a.
+ * A base with no symbolic factor ((2 Pi)^b) splits only when another factor
+ * of the product shares one of its bases, so the powers can combine:
+ * Pi^a (2 Pi)^b is 2^b Pi^(a + b), while y (2 Pi)^b stays. A lone (2 x)^b is
+ * not a product and stays too. */
+static bool o3_is_number(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    return is_rational((Expr*)e, NULL, NULL) || is_complex((Expr*)e, NULL, NULL);
+}
+
+static int o3_real_sign(const Expr* e) {
+    if (e->type == EXPR_INTEGER) return (e->data.integer > 0) - (e->data.integer < 0);
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
+    if (e->type == EXPR_REAL) return (e->data.real > 0) - (e->data.real < 0);
+    int64_t n, d;
+    if (is_rational((Expr*)e, &n, &d)) return (n > 0) - (n < 0);
+    return 0;
+}
+
+static const Expr* o3_base_of(const Expr* e) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power && e->data.function.arg_count == 2)
+        return e->data.function.args[0];
+    return e;
+}
+
+static bool o3_is_power_of_times(const Expr* a) {
+    if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL ||
+        a->data.function.head->data.symbol.name != SYM_Power || a->data.function.arg_count != 2)
+        return false;
+    const Expr* b = a->data.function.args[0];
+    if (b->type != EXPR_FUNCTION || b->data.function.head->type != EXPR_SYMBOL ||
+        b->data.function.head->data.symbol.name != SYM_Times) return false;
+    return !o3_is_number(a->data.function.args[1]);
+}
+
+/* The split of factor args[k] = Power[Times[...], e], or NULL when it stays. */
+static Expr* o3_split_one(Expr* const* args, size_t n, size_t k) {
+    Expr* pw = args[k];
+    Expr* B = pw->data.function.args[0];
+    Expr* e = pw->data.function.args[1];
+    size_t m = B->data.function.arg_count;
+    bool symbolic = false;
+    for (size_t j = 0; j < m; j++)
+        if (!expr_is_numeric_quantity(B->data.function.args[j])) { symbolic = true; break; }
+    if (!symbolic) {
+        /* (B): only when a factor's base is another factor's base. */
+        bool shared = false;
+        for (size_t j = 0; j < m && !shared; j++) {
+            const Expr* fb = o3_base_of(B->data.function.args[j]);
+            for (size_t i = 0; i < n && !shared; i++)
+                if (i != k && expr_eq((Expr*)o3_base_of(args[i]), (Expr*)fb)) shared = true;
+        }
+        if (!shared) return NULL;
+    }
+    Expr** out = malloc(sizeof(Expr*) * (m + 2));
+    Expr** rest = malloc(sizeof(Expr*) * (m + 1));
+    size_t no = 0, nr = 0;
+    for (size_t j = 0; j < m; j++) {
+        Expr* f = B->data.function.args[j];
+        int s = o3_real_sign(f);
+        if (s > 0 || (s == 0 && !o3_is_number(f) && expr_is_numeric_quantity(f) && numeric_base_positive(f))) {
+            int64_t p, q;
+            if (is_rational(f, &p, &q) && p == 1)      /* (1/q)^e is q^-e */
+                out[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_integer(q),
+                               expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_new_integer(-1), expr_copy(e) }, 2) }, 2);
+            else
+                out[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(f), expr_copy(e) }, 2);
+        } else if (symbolic && is_complex(f, NULL, NULL) && o3_real_sign(f->data.function.args[0]) == 0 &&
+                   f->data.function.args[0]->type == EXPR_INTEGER &&
+                   !(f->data.function.args[1]->type == EXPR_INTEGER &&
+                     (f->data.function.args[1]->data.integer == 1 || f->data.function.args[1]->data.integer == -1))) {
+            /* 2 I in (2 I x)^b: 2 out, I (or -I) stays with x */
+            Expr* im = f->data.function.args[1];
+            int sg = o3_real_sign(im);
+            Expr* absim = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(sg), expr_copy(im) }, 2));
+            out[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ absim, expr_copy(e) }, 2);
+            rest[nr++] = make_complex(expr_new_integer(0), expr_new_integer(sg));
+        } else if (s < 0 && symbolic && !(f->type == EXPR_INTEGER && f->data.integer == -1)) {
+            /* -2 in (-2 x)^b: 2 out, -1 stays with x */
+            Expr* absf = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2));
+            out[no++] = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ absf, expr_copy(e) }, 2);
+            rest[nr++] = expr_new_integer(-1);
+        } else {
+            rest[nr++] = expr_copy(f);
+        }
+    }
+    if (no == 0) {
+        for (size_t j = 0; j < nr; j++) expr_free(rest[j]);
+        free(out); free(rest);
+        return NULL;
+    }
+    if (nr == 1) {
+        out[no++] = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ rest[0], expr_copy(e) }, 2);
+    } else if (nr > 1) {
+        Expr* rt = expr_new_function(expr_new_symbol(SYM_Times), rest, nr);
+        out[no++] = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ rt, expr_copy(e) }, 2);
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), out, no);
+    free(out); free(rest);
+    return r;
+}
+
+/* The product with every splittable power replaced by its split, evaluated;
+ * NULL when nothing splits. */
+static Expr* o3_split_powers(Expr* const* args, size_t n) {
+    bool any = false;
+    for (size_t i = 0; i < n && !any; i++) any = o3_is_power_of_times(args[i]);
+    if (!any) return NULL;
+    static int off = -1;                 /* MATHILDA_NO_O3: A/B kill switch */
+    if (off < 0) off = getenv("MATHILDA_NO_O3") != NULL;
+    if (off) return NULL;
+    /* The split factors are spliced into ONE flat product: wrapped in an
+     * inner Times they would evaluate on their own first, and the numeric-base
+     * merge would rebuild (2 Pi)^b from 2^b Pi^b before Pi^b met Pi. */
+    size_t cap = n + 8, nn = 0;
+    Expr** na = malloc(sizeof(Expr*) * cap);
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* s = o3_is_power_of_times(args[i]) ? o3_split_one(args, n, i) : NULL;
+        size_t add = s ? s->data.function.arg_count : 1;
+        if (nn + add > cap) { cap = 2 * (nn + add); na = realloc(na, sizeof(Expr*) * cap); }
+        if (s) {
+            changed = true;
+            for (size_t j = 0; j < s->data.function.arg_count; j++) {
+                na[nn++] = s->data.function.args[j];
+                s->data.function.args[j] = NULL;
+            }
+            s->data.function.arg_count = 0;
+            expr_free(s);
+        } else {
+            na[nn++] = expr_copy(args[i]);
+        }
+    }
+    if (!changed) {
+        for (size_t i = 0; i < nn; i++) expr_free(na[i]);
+        free(na);
+        return NULL;
+    }
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), na, nn);
+    free(na);
+    return eval_and_free(r);
+}
+
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
@@ -625,6 +784,10 @@ Expr* builtin_times(Expr* res) {
     }
 
     times_grouping:;   /* fused special-case guard jumps here for an ordinary product */
+    {
+        Expr* split = o3_split_powers(res->data.function.args, n);
+        if (split) return split;
+    }
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
     Expr* interval_val = NULL;   /* running product of Interval factors */

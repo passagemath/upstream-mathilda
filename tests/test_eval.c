@@ -905,6 +905,34 @@ void test_numeric_base_power_merge_v594() {
     assert_eval_eq("Simplify[Sinh[1]^a (1 + Cosh[1])^(-a)]", "Tanh[1/2]^a", 0);
 }
 
+/* A power of a product splits off its positive numeric factors inside a
+ * product, as in the reference (every expected FullForm is the reference's);
+ * a lone power of a product, and a numeric base with nothing to combine
+ * with, stay. FeynCalc's FCFeynmanParametrize needs Pi^(D/2) (2 Pi)^(-D) as
+ * 2^(-D) Pi^(-D/2). */
+void test_power_of_product_split_o3() {
+    assert_eval_eq("ClearAll[a, b, c, x, y, D]", "Null", 0);
+    assert_eval_eq("y (2 x)^b", "Times[Power[2, b], Power[x, b], y]", 1);
+    assert_eval_eq("x^a (2 x)^b", "Times[Power[2, b], Power[x, Plus[a, b]]]", 1);
+    assert_eval_eq("x^a (-2 x)^b", "Times[Power[2, b], Power[Times[-1, x], b], Power[x, a]]", 1);
+    assert_eval_eq("x^a (2 x y)^b", "Times[Power[2, b], Power[x, a], Power[Times[x, y], b]]", 1);
+    assert_eval_eq("x^a (x/2)^b", "Times[Power[2, Times[-1, b]], Power[x, Plus[a, b]]]", 1);
+    assert_eval_eq("y (3/2 x)^b", "Times[Power[Rational[3, 2], b], Power[x, b], y]", 1);
+    assert_eval_eq("y (2 I x)^b", "Times[Power[2, b], Power[Times[Complex[0, 1], x], b], y]", 1);
+    assert_eval_eq("y (2 Sqrt[2] x)^b", "Times[Power[2, Times[Rational[3, 2], b]], Power[x, b], y]", 1);
+    assert_eval_eq("(2 x)^b (3 x)^b", "Times[Power[6, b], Power[x, Times[2, b]]]", 1);
+    assert_eval_eq("(2 x)^b (2 x)^c", "Times[Power[2, Plus[b, c]], Power[x, Plus[b, c]]]", 1);
+    assert_eval_eq("x^a (Pi x)^b", "Times[Power[Pi, b], Power[x, Plus[a, b]]]", 1);
+    /* a numeric base splits only to combine with another factor */
+    assert_eval_eq("Pi^a (2 Pi)^b", "Times[Power[2, b], Power[Pi, Plus[a, b]]]", 1);
+    assert_eval_eq("2^a (2 Pi)^b", "Times[Power[2, Plus[a, b]], Power[Pi, b]]", 1);
+    assert_eval_eq("Pi^a (-2 Pi)^b", "Times[Power[-2, b], Power[Pi, Plus[a, b]]]", 1);
+    assert_eval_eq("Pi^(D/2) (2 Pi)^(-D)", "Times[Power[2, Times[-1, D]], Power[Pi, Times[Rational[-1, 2], D]]]", 1);
+    assert_eval_eq("(-2 Pi)^b y", "Times[Power[Times[-2, Pi], b], y]", 1);
+    assert_eval_eq("{(2 x)^b, (2 Pi)^b}", "List[Power[Times[2, x], b], Power[Times[2, Pi], b]]", 1);
+    assert_eval_eq("(x^a (I x)^b)", "Times[Power[Times[Complex[0, 1], x], b], Power[x, a]]", 1);
+}
+
 void test_coefficient_v592() {
     assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
     assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
@@ -960,6 +988,7 @@ int main() {
     TEST(test_sequence_substitution_v592);
     TEST(test_coefficient_v592);
     TEST(test_numeric_base_power_merge_v594);
+    TEST(test_power_of_product_split_o3);
     printf("All tests passed!\n");
     return 0;
 }

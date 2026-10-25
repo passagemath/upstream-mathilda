@@ -452,6 +452,17 @@ Symbolic product.
   - A lone `(2 x)^b` is not a product and stays.
   - The split factors are spliced into one flat product, so like bases
     combine before the numeric-base merge above can rebuild `(2 Pi)^b`.
+- **Numeric powers whose bases share a factor are written over one coprime
+  basis** (v0.6008) when an exponent is symbolic, as in the reference.
+  - Examples: `4^a 6^b` is `2^(2 a + b) 3^b`, `8 2^a 4^b` is
+    `2^(3 + a + 2 b)`, `12 2^n` is `3 2^(2 + n)`, `4^a/2` is `2^(-1 + 2 a)`, and
+    `(2/3)^a (9/4)^b` is `(2/3)^(a - 2 b)`.
+  - Powers with equal exponents are multiplied first, so `2^a 8^a` is `16^a`;
+    the equal-exponent merge then recombines what ends up equal or opposite.
+  - The basis comes from gcds alone. A product of huge prime powers such as
+    `m^-7 (p/m^4)^(-1 - 3 e) (r/m^3)^(-1 + 4 e)` collapses with no integer
+    factoring.
+  - Bases that share nothing stay as they are (`3 4^a`, `2^a 3^b`).
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.

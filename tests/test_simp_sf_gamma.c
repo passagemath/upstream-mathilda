@@ -100,7 +100,7 @@ static void test_gamma_multiplication(void) {
     static const char* Z[] = { "x", "x + 1", "a", "x + 1/3", "a + b" };
     for (size_t i = 0; i < sizeof Z / sizeof Z[0]; i++)
         sf_zero(FMT("Gamma[2 (%s)] - 2^(2 (%s) - 1)/Sqrt[Pi] Gamma[%s] Gamma[%s + 1/2]", Z[i], Z[i], Z[i], Z[i]));
-    sf_to("Gamma[2 x]/(Gamma[x] Gamma[x + 1/2])", "2^(2 x)/(2 Sqrt[Pi])");
+    sf_to("Gamma[2 x]/(Gamma[x] Gamma[x + 1/2])", "2^(-1 + 2 x)/Sqrt[Pi]");   /* 2 2^-1 absorbed (O4) */
     sf_to("Gamma[3 x]/(Gamma[x] Gamma[x + 1/3] Gamma[x + 2/3])", "3^(-1/2 + 3 x)/(2 Pi)");
     sf_zero("Gamma[3 x] - (2 Pi)^(-1) 3^(3 x - 1/2) Gamma[x] Gamma[x + 1/3] Gamma[x + 2/3]");
     sf_zero("Gamma[4 x] - (2 Pi)^(-3/2) 4^(4 x - 1/2) Gamma[x] Gamma[x + 1/4] Gamma[x + 1/2] Gamma[x + 3/4]");

@@ -167,7 +167,7 @@ void test_hermite_h_seriescoefficient() {
     assert_eval_eq("SeriesCoefficient[HermiteH[10, x], {x, 0, 4}]", "-403200", 0);
     /* Symbolic order, concrete index (m = 2). */
     assert_eval_eq("SeriesCoefficient[HermiteH[n, x], {x, 0, 2}]",
-                   "(2 2^(-2 + n) (-1 + n) n Sqrt[Pi])/Gamma[1/2 (3 - n)]", 0);
+                   "(2^(-1 + n) (-1 + n) n Sqrt[Pi])/Gamma[1/2 (3 - n)]", 0);   /* the reference's form */
     /* Symbolic index yields a Piecewise; check it reduces to the concrete value
      * at a sample. H_7 = -1680 x + 3360 x^3 - 1344 x^5 + 128 x^7, so the x^4
      * coefficient is 0 and the x^3 coefficient is 3360. */

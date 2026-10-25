@@ -12,6 +12,7 @@
 #include "ndarray.h"
 #include "checked_int.h"
 #include "flint_qqbar.h"
+#include "expand.h"       /* expr_expand: O4 exponent sums */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -459,8 +460,13 @@ static int o3_real_sign(const Expr* e) {
     if (e->type == EXPR_INTEGER) return (e->data.integer > 0) - (e->data.integer < 0);
     if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
     if (e->type == EXPR_REAL) return (e->data.real > 0) - (e->data.real < 0);
-    int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) return (n > 0) - (n < 0);
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_sgn(e->data.mpfr);
+#endif
+    /* Rational[n, d] with int64 or bignum parts (d > 0): the sign of n */
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational && e->data.function.arg_count == 2)
+        return o3_real_sign(e->data.function.args[0]);
     return 0;
 }
 
@@ -553,6 +559,196 @@ static Expr* o3_split_one(Expr* const* args, size_t n, size_t k) {
     Expr* r = expr_new_function(expr_new_symbol(SYM_Times), out, no);
     free(out); free(rest);
     return r;
+}
+
+/* ---- O4: numeric powers over a coprime basis -----------------------------
+ *
+ * The reference writes a product of numeric powers whose bases share factors
+ * over a common coprime basis when an exponent is symbolic: 4^a 6^b is
+ * 2^(2 a + b) 3^b, 8 2^a 4^b is 2^(3 + a + 2 b), 4^a/2 is 2^(-1 + 2 a),
+ * 12^a 2^-a is 6^a, and (2/3)^a (9/4)^b is (2/3)^(a - 2 b) (the equal-exponent
+ * merge below recombines bases whose exponents end up equal or opposite).
+ * The basis comes from gcds alone (no integer factoring), so huge bases cost
+ * only gcds: FeynCalc's FactorList2 check multiplies m^-7 (p/m^4)^a
+ * (r/m^3)^b, which must collapse to p^a r^b.  Bases that share nothing stay
+ * as they are (3 4^a, 2^a 3^b). */
+typedef struct { mpz_t v; Expr* e; } O4Atom;      /* v^e, v > 1 */
+
+static bool o4_rat_parts(const Expr* x, mpz_t num, mpz_t den) {
+    if (expr_is_integer_like(x)) {
+        mpz_t t; expr_to_mpz(x, t); mpz_set(num, t); mpz_clear(t);
+        mpz_set_ui(den, 1);
+        return mpz_sgn(num) != 0;
+    }
+    if (x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol.name == SYM_Rational && x->data.function.arg_count == 2 &&
+        expr_is_integer_like(x->data.function.args[0]) && expr_is_integer_like(x->data.function.args[1])) {
+        mpz_t t;
+        expr_to_mpz(x->data.function.args[0], t); mpz_set(num, t); mpz_clear(t);
+        expr_to_mpz(x->data.function.args[1], t); mpz_set(den, t); mpz_clear(t);
+        return true;
+    }
+    return false;
+}
+
+/* Is a a candidate power: a positive rational base, an exponent that is not
+ * an integer?  *sym when the exponent is not numeric at all. */
+static bool o4_power(const Expr* a, bool* sym) {
+    if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL ||
+        a->data.function.head->data.symbol.name != SYM_Power || a->data.function.arg_count != 2) return false;
+    const Expr* b = a->data.function.args[0];
+    const Expr* e = a->data.function.args[1];
+    if (expr_is_integer_like(e)) return false;
+    mpz_t n, d; mpz_init(n); mpz_init(d);
+    bool ok = o4_rat_parts(b, n, d) && mpz_sgn(n) > 0 &&
+              !(mpz_cmp_ui(n, 1) == 0 && mpz_cmp_ui(d, 1) == 0);
+    mpz_clear(n); mpz_clear(d);
+    if (!ok) return false;
+    *sym = !expr_is_numeric_like(e);
+    return true;
+}
+
+static void o4_add(O4Atom** at, size_t* na, size_t* cap, const mpz_t v, Expr* e) {
+    if (mpz_cmp_ui(v, 1) == 0) { expr_free(e); return; }
+    if (*na == *cap) { *cap = *cap ? 2 * *cap : 8; *at = realloc(*at, *cap * sizeof(O4Atom)); }
+    mpz_init_set((*at)[*na].v, v);
+    (*at)[*na].e = e;
+    (*na)++;
+}
+
+static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
+    size_t nsym = 0;
+    for (size_t i = 0; i < n; i++) { bool s; if (o4_power(args[i], &s) && s) nsym++; }
+    if (nsym == 0) return NULL;
+    static int off = -1;                 /* MATHILDA_NO_O4: A/B kill switch */
+    if (off < 0) off = getenv("MATHILDA_NO_O4") != NULL;
+    if (off) return NULL;
+
+    /* atoms: v^e from every candidate power and from the rational coefficient */
+    O4Atom* at = NULL; size_t na = 0, cap = 0;
+    bool* used = calloc(n, sizeof(bool));
+    int sign = 1;
+    mpz_t num, den; mpz_init(num); mpz_init(den);
+    for (size_t i = 0; i < n; i++) {
+        bool s;
+        if (o4_power(args[i], &s)) {
+            o4_rat_parts(args[i]->data.function.args[0], num, den);
+            Expr* e = args[i]->data.function.args[1];
+            o4_add(&at, &na, &cap, num, expr_copy(e));
+            o4_add(&at, &na, &cap, den, eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer(-1), expr_copy(e) }, 2)));
+            used[i] = true;
+        } else if (o4_rat_parts(args[i], num, den)) {
+            if (mpz_sgn(num) < 0) { sign = -sign; mpz_neg(num, num); }
+            o4_add(&at, &na, &cap, num, expr_new_integer(1));
+            o4_add(&at, &na, &cap, den, expr_new_integer(-1));
+            used[i] = true;
+        }
+    }
+    /* interaction: two atoms with different exponents whose values share a
+     * factor.  Atoms with equal exponents are multiplied together first, as
+     * the reference merges 2^a 8^a into 16^a before anything else; only a
+     * factor still shared across different exponents calls for the basis. */
+    bool share = false;
+    mpz_t g; mpz_init(g);
+    {
+        size_t nm = 0;
+        mpz_t* mv = malloc((na ? na : 1) * sizeof(mpz_t));
+        Expr** me = malloc((na ? na : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < na; i++) {
+            size_t k = 0;
+            while (k < nm && !expr_eq(me[k], at[i].e)) k++;
+            if (k == nm) { mpz_init_set(mv[nm], at[i].v); me[nm] = at[i].e; nm++; }
+            else mpz_mul(mv[k], mv[k], at[i].v);
+        }
+        for (size_t i = 0; i < nm && !share; i++)
+            for (size_t j = i + 1; j < nm && !share; j++) {
+                mpz_gcd(g, mv[i], mv[j]);
+                if (mpz_cmp_ui(g, 1) > 0) share = true;
+            }
+        for (size_t i = 0; i < nm; i++) mpz_clear(mv[i]);
+        free(mv); free(me);
+    }
+    Expr* out = NULL;
+    if (share) {
+        /* coprime basis by gcd refinement */
+        size_t nb = 0, bcap = na * 2 + 4;
+        mpz_t* B = malloc(bcap * sizeof(mpz_t));
+        for (size_t i = 0; i < na; i++) {
+            bool dup = false;
+            for (size_t k = 0; k < nb && !dup; k++) dup = mpz_cmp(B[k], at[i].v) == 0;
+            if (!dup) mpz_init_set(B[nb++], at[i].v);
+        }
+        bool again = true;
+        while (again) {
+            again = false;
+            for (size_t i = 0; i < nb && !again; i++)
+                for (size_t j = i + 1; j < nb && !again; j++) {
+                    mpz_gcd(g, B[i], B[j]);
+                    if (mpz_cmp_ui(g, 1) <= 0) continue;
+                    mpz_t x, y;
+                    mpz_init(x); mpz_init(y);
+                    mpz_divexact(x, B[i], g);
+                    mpz_divexact(y, B[j], g);
+                    mpz_set(B[i], g);
+                    mpz_set(B[j], x);
+                    if (nb == bcap) { bcap *= 2; B = realloc(B, bcap * sizeof(mpz_t)); }
+                    mpz_init_set(B[nb++], y);
+                    mpz_clear(x); mpz_clear(y);
+                    /* drop 1s and duplicates */
+                    size_t w = 0;
+                    for (size_t r = 0; r < nb; r++) {
+                        bool drop = mpz_cmp_ui(B[r], 1) == 0;
+                        for (size_t q = 0; q < w && !drop; q++) drop = mpz_cmp(B[q], B[r]) == 0;
+                        if (drop) { mpz_clear(B[r]); continue; }
+                        if (w != r) { mpz_init_set(B[w], B[r]); mpz_clear(B[r]); }
+                        w++;
+                    }
+                    nb = w;
+                    again = true;
+                }
+        }
+        /* exponent of every basis element */
+        Expr** X = malloc((nb ? nb : 1) * sizeof(Expr*));
+        /* (exponents are expanded below: -7 + 3 (1 - 4 e) + 4 (1 + 3 e) is 0) */
+        for (size_t k = 0; k < nb; k++) X[k] = expr_new_integer(0);
+        bool ok = true;
+        mpz_t r; mpz_init(r);
+        for (size_t i = 0; i < na && ok; i++) {
+            mpz_set(r, at[i].v);
+            for (size_t k = 0; k < nb; k++) {
+                long c = 0;
+                while (mpz_divisible_p(r, B[k])) { mpz_divexact(r, r, B[k]); c++; }
+                if (c)
+                    X[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ X[k], eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                            (Expr*[]){ expr_new_integer((int64_t)c), expr_copy(at[i].e) }, 2)) }, 2));
+            }
+            if (mpz_cmp_ui(r, 1) != 0) ok = false;
+        }
+        mpz_clear(r);
+        for (size_t k = 0; k < nb; k++) { Expr* x = expr_expand(X[k]); expr_free(X[k]); X[k] = x; }
+        if (ok) {
+            size_t cap2 = n + nb + 1, nn = 0;
+            Expr** fa = malloc(cap2 * sizeof(Expr*));
+            if (sign < 0) fa[nn++] = expr_new_integer(-1);
+            for (size_t k = 0; k < nb; k++) {
+                if (X[k]->type == EXPR_INTEGER && X[k]->data.integer == 0) continue;
+                fa[nn++] = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(B[k])), expr_copy(X[k]) }, 2);
+            }
+            for (size_t i = 0; i < n; i++) if (!used[i]) fa[nn++] = expr_copy(args[i]);
+            out = nn == 0 ? expr_new_integer(1)
+                          : expr_new_function(expr_new_symbol(SYM_Times), fa, nn);
+            free(fa);
+        }
+        for (size_t k = 0; k < nb; k++) { mpz_clear(B[k]); expr_free(X[k]); }
+        free(B); free(X);
+    }
+    mpz_clear(g); mpz_clear(num); mpz_clear(den);
+    for (size_t i = 0; i < na; i++) { mpz_clear(at[i].v); expr_free(at[i].e); }
+    free(at); free(used);
+    return out ? eval_and_free(out) : NULL;
 }
 
 /* The product with every splittable power replaced by its split, evaluated;
@@ -787,6 +983,8 @@ Expr* builtin_times(Expr* res) {
     {
         Expr* split = o3_split_powers(res->data.function.args, n);
         if (split) return split;
+        Expr* basis = o4_coprime_basis(res->data.function.args, n);
+        if (basis) return basis;
     }
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;

@@ -933,6 +933,25 @@ void test_power_of_product_split_o3() {
     assert_eval_eq("(x^a (I x)^b)", "Times[Power[Times[Complex[0, 1], x], b], Power[x, a]]", 1);
 }
 
+/* Numeric powers whose bases share factors are written over one coprime
+ * basis when an exponent is symbolic (expected values are the reference's);
+ * bases that share nothing stay. */
+void test_numeric_power_coprime_basis_o4() {
+    assert_eval_eq("ClearAll[a, b, x, y]", "Null", 0);
+    assert_eval_eq("{(3/4)^a (5/2)^b 2^(2a+b), 2^a 4^b, 2^a 8^a, 4^a 6^b, (1/4)^a 2^(2a), 12^a 2^-a}",
+                   "List[Times[Power[3, a], Power[5, b]], Power[2, Plus[a, Times[2, b]]], Power[16, a], "
+                   "Times[Power[2, Plus[Times[2, a], b]], Power[3, b]], 1, Power[6, a]]", 1);
+    assert_eval_eq("{(2/3)^a (9/4)^b, 4^a 2^(-2a) 3, 2^(1/2+a) Sqrt[2], 4^a/2, 8 2^a 4^b, 4 2^e, 12 2^n, 2^e/8}",
+                   "List[Power[Rational[2, 3], Plus[a, Times[-2, b]]], 3, Power[2, Plus[1, a]], "
+                   "Power[2, Plus[-1, Times[2, a]]], Power[2, Plus[3, a, Times[2, b]]], Power[2, Plus[2, e]], "
+                   "Times[3, Power[2, Plus[2, n]]], Power[2, Plus[-3, e]]]", 1);
+    /* gcds, no factoring: huge prime-power bases collapse */
+    assert_eval_eq("1/379037881^7 (p/379037881^4)^(-1 - 3 e) (r/379037881^3)^(-1 + 4 e) - p^(-1 - 3 e) r^(-1 + 4 e)", "0", 1);
+    assert_eval_eq("{3 4^a, 2^a 3^b, 2^x (2*10000000019)^y}",
+                   "List[Times[3, Power[4, a]], Times[Power[2, a], Power[3, b]], "
+                   "Times[Power[2, Plus[x, y]], Power[10000000019, y]]]", 1);
+}
+
 void test_coefficient_v592() {
     assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
     assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
@@ -989,6 +1008,7 @@ int main() {
     TEST(test_coefficient_v592);
     TEST(test_numeric_base_power_merge_v594);
     TEST(test_power_of_product_split_o3);
+    TEST(test_numeric_power_coprime_basis_o4);
     printf("All tests passed!\n");
     return 0;
 }

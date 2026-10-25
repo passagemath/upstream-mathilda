@@ -1854,16 +1854,16 @@ monotonically down.
     Log[Log[x]]^6/6`, `Integrate[E^x E^(6 E^x)/(1+E^(E^x)), x]`).  The
     **leading-coefficient cancellation / resonance** sub-case of `RdeBoundDegree`
     completes the SPDE degree machinery — the bound is widened monotonically to
-  - `"MeijerConvolution"` (definite, (0, Infinity); v0.460): `C x^alpha K1(x) K2(x)` with two kernels from `BesselJ`, `BesselY`, `BesselK`, `E^(-p x)`, `E^(-p x^2)`, `Cos`, `Sin` and `(a^2 + x^2)^-r` at arbitrary scales (`src/internal/MeijerConvolution.m`).
-    - Each kernel is written as a Meijer G-function of x^2; exp, cos and sin of x get there through the duplication formula.
-    - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
-    - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
-    - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
     `max(naive, m_res)` at the Bronstein resonance integer `m_res` (detected live for the
     exponential top), correct by the same certification-and-diff-back gate.  Only
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"MeijerConvolution"` (definite, (0, Infinity); v0.460): `C x^alpha K1(x) K2(x)` with two kernels from `BesselJ`, `BesselY`, `BesselK`, `E^(-p x)`, `E^(-p x^2)`, `Cos`, `Sin` and `(a^2 + x^2)^-r` at arbitrary scales (`src/internal/MeijerConvolution.m`).
+    - Each kernel is written as a Meijer G-function of x^2; exp, cos and sin of x get there through the duplication formula.
+    - The x^alpha weight is absorbed into the first G, and the convolution theorem (Prudnikov-Brychkov-Marichev 2.24.1.1) gives a single MeijerG, which Mathilda's MeijerG evaluator reduces where it can (pFq, Bessel, Gamma).
+    - Convergence at 0 and Infinity is checked from the kernels' asymptotics (with an equal-frequency rule for oscillatory products). An unproved condition is returned as a `ConditionalExpression`; a refuted one declines. No numeric quadrature is used.
+    - Example: `Integrate[BesselJ[nu, a x] E^(-p x), {x, 0, Infinity}, Assumptions -> a > 0 && p > 0 && nu > 0]` closes.
   - `"PolyLogLadder"` — the polylogarithm-ladder stage (`src/internal/PolyLogLadder.m`, v0.458). It covers two classes, both exact constructions accepted only after a differentiation check:
     - `R(x) Log[a x + b]^k`, where R is rational with poles anywhere (algebraic or complex roots of any multiplicity, denominator factors of degree <= 4), k is any power, there is one linear log kernel per term, and parameters may be symbolic. The partial fractions are taken in the kernel variable W = a x + b, so there is no splitting of a logarithm and no branch bookkeeping. The ladder is `INT Log[W]^k/(W - c) = Log[W]^k Log[1 - W/c] + k Sum (-1)^t (k-1)!/(k-1-t)! Log[W]^(k-1-t) PolyLog[t+2, W/c]`.
     - A polynomial in x times a rational function of trig/hyperbolic functions of linear arguments with one base frequency. TrigToExp writes it in the single kernel T = E^(base x), partial fractions are taken in T, and the exponential ladder `INT x^n/(T - rho) = Sum -(1/rho) n!/(n-k)!/base^(k+1) x^(n-k) PolyLog[k+1, rho/T]` applies; repeated roots use rho-derivatives of it.

@@ -21,6 +21,7 @@
 #include "expand.h"
 #include "sym_names.h"
 #include "flint_qqbar.h"   /* flint_qqbar_gen_minpoly_coeffs, for field Expand */
+#include "numeric.h"       /* expr_is_numeric_quantity: constant kernels stay out */
 
 #ifdef USE_FLINT
 
@@ -1194,14 +1195,185 @@ int flint_mpoly_is_zero(const Expr* e) {
     return result;
 }
 
-/* Shared core: compute the multivariate GCD of a, b over Q[vars]. When
+/* ------------------------------------------------------------------ */
+/*  Opaque kernels as variables (GCD / exact division)                 */
+/* ------------------------------------------------------------------ */
+
+/* A call with an ordinary head -- x[3], Pair[Momentum[p], Momentum[q]],
+ * Log[x] -- is a polynomial variable to PolynomialGCD and Cancel, exactly as a
+ * symbol is: the reference treats every such maximal subexpression as an
+ * opaque generator. collect_vars accepts only symbols, so these inputs used to
+ * fall to the classical GCD, which on some sizes answered 1:
+ * PolynomialGCD[(x[3]+x[6]+x[8]+x[9]) (...), x[3]+x[6]+x[8]+x[9]].
+ * kernel_abstract replaces each such node by a private symbol (one per
+ * distinct node), so the FLINT path sees an ordinary polynomial, and
+ * kernel_restore puts the nodes back into the result. */
+typedef struct { Expr** nodes; Expr** syms; size_t n, cap; } KernelTab;
+
+static void ktab_free(KernelTab* t) {
+    for (size_t i = 0; i < t->n; i++) { expr_free(t->nodes[i]); expr_free(t->syms[i]); }
+    free(t->nodes); free(t->syms);
+}
+
+static bool is_kernel_node(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const char* h = fn_head_name(e);
+    if (!h) return true;                       /* a compound head, f[a][b] */
+    return strcmp(h, "Plus") != 0 && strcmp(h, "Times") != 0 && strcmp(h, "Power") != 0 &&
+           strcmp(h, "Rational") != 0 && strcmp(h, "Complex") != 0;
+}
+
+/* A copy of e with every kernel node replaced by its private symbol; NULL on
+ * allocation failure. Kernels are found top-down, so a kernel is atomic. */
+static Expr* kernel_abstract(const Expr* e, KernelTab* t) {
+    if (is_kernel_node(e)) {
+        for (size_t i = 0; i < t->n; i++)
+            if (expr_eq((Expr*)e, t->nodes[i])) return expr_copy(t->syms[i]);
+        if (t->n == t->cap) {
+            size_t cap = t->cap ? 2 * t->cap : 8;
+            Expr** a = realloc(t->nodes, cap * sizeof(Expr*));
+            if (!a) return NULL;
+            t->nodes = a;
+            Expr** b = realloc(t->syms, cap * sizeof(Expr*));
+            if (!b) return NULL;
+            t->syms = b;
+            t->cap = cap;
+        }
+        char name[48];
+        snprintf(name, sizeof name, "FlintBridge`kernel%zu", t->n);
+        t->nodes[t->n] = expr_copy((Expr*)e);
+        t->syms[t->n] = expr_new_symbol(name);
+        t->n++;
+        return expr_copy(t->syms[t->n - 1]);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = kernel_abstract(e->data.function.args[i], t);
+        if (!args[i]) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); return NULL; }
+    }
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return out;
+}
+
+/* e with the private symbols of t replaced by their nodes; consumes e. */
+static Expr* kernel_restore(Expr* e, const KernelTab* t) {
+    if (!e || t->n == 0) return e;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < t->n; i++)
+            if (e->data.symbol.name == t->syms[i]->data.symbol.name) {
+                expr_free(e);
+                return expr_copy(t->nodes[i]);
+            }
+        return e;
+    }
+    if (e->type == EXPR_FUNCTION)
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            e->data.function.args[i] = kernel_restore(e->data.function.args[i], t);
+    return e;
+}
+
+static bool has_kernel_node(const Expr* e) {
+    if (is_kernel_node(e)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_kernel_node(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The symbols of e outside kernel nodes -- its ordinary polynomial variables
+ * (and constants such as Pi). Appended to *syms (interned names). */
+static void free_symbols_outside_kernels(const Expr* e, const char*** syms, size_t* n, size_t* cap) {
+    if (is_kernel_node(e)) return;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < *n; i++) if ((*syms)[i] == e->data.symbol.name) return;
+        if (*n == *cap) {
+            size_t c = *cap ? 2 * *cap : 16;
+            const char** t = realloc((void*)*syms, c * sizeof(char*));
+            if (!t) return;
+            *syms = t; *cap = c;
+        }
+        (*syms)[(*n)++] = e->data.symbol.name;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        free_symbols_outside_kernels(e->data.function.args[i], syms, n, cap);
+}
+
+static bool args_mention_any(const Expr* e, const char* const* syms, size_t n) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < n; i++) if (syms[i] == e->data.symbol.name) return true;
+        return false;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (args_mention_any(e->data.function.args[i], syms, n)) return true;
+    return false;
+}
+
+/* Every kernel node of e can stand as an independent variable: it is not a
+ * numeric constant (AlgebraicNumber[..], Root[..], Sin[1] obey algebraic
+ * relations an opaque variable would lose -- AlgebraicNumber[Sqrt[2], {0, 1}]^2
+ * is 2) and its arguments share no symbol with the ordinary variables (Sin[x]
+ * beside x is not independent of x). Otherwise the abstraction is not made
+ * and the input takes the path it always took. */
+static bool kernels_independent(const Expr* e, const char* const* syms, size_t n) {
+    if (is_kernel_node(e)) {
+        if (expr_is_numeric_quantity(e)) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (args_mention_any(e->data.function.args[i], syms, n)) return false;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!kernels_independent(e->data.function.args[i], syms, n)) return false;
+    return true;
+}
+
+/* Should a, b be run with their kernels abstracted (see kernel_abstract)? */
+static bool abstract_kernels_ok(const Expr* a, const Expr* b) {
+    if (!has_kernel_node(a) && !has_kernel_node(b)) return false;
+    const char** syms = NULL;
+    size_t n = 0, cap = 0;
+    free_symbols_outside_kernels(a, &syms, &n, &cap);
+    free_symbols_outside_kernels(b, &syms, &n, &cap);
+    bool ok = kernels_independent(a, syms, n) && kernels_independent(b, syms, n);
+    free((void*)syms);
+    return ok;
+}
+
+static Expr* flint_multivariate_gcd_plain(const Expr* a, const Expr* b, int normalize);
+
+/* Shared core: compute the multivariate GCD of a, b over Q[vars] -- opaque
+ * kernels among the variables (see kernel_abstract). */
+static Expr* flint_multivariate_gcd_core(const Expr* a, const Expr* b,
+                                         int normalize) {
+    if (!a || !b) return NULL;
+    if (!abstract_kernels_ok(a, b))
+        return flint_multivariate_gcd_plain(a, b, normalize);
+    KernelTab t = {0};
+    Expr* a2 = kernel_abstract(a, &t);
+    Expr* b2 = a2 ? kernel_abstract(b, &t) : NULL;
+    Expr* g = (a2 && b2) ? flint_multivariate_gcd_plain(a2, b2, normalize) : NULL;
+    expr_free(a2);
+    expr_free(b2);
+    g = kernel_restore(g, &t);
+    ktab_free(&t);
+    return g;
+}
+
+/* The GCD over Q[vars] for inputs whose variables are all symbols. When
  * `normalize` is false the raw FLINT (monic) GCD is returned; when true the
  * result is rescaled to the primitive-integer, positive-leading associate
  * that Mathilda's classical PolynomialGCD path produces — i.e. Gauss's
  * lemma: content(gcd) = gcd(content a, content b), pp(gcd) = pp(monic gcd).
  * Returns NULL for numeric or non-polynomial input (caller falls back). */
-static Expr* flint_multivariate_gcd_core(const Expr* a, const Expr* b,
-                                         int normalize) {
+static Expr* flint_multivariate_gcd_plain(const Expr* a, const Expr* b,
+                                          int normalize) {
     if (!a || !b) return NULL;
 
     VarSet vs;
@@ -1265,7 +1437,24 @@ Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b) {
 /* Multivariate exact division a / b over Q[x_1..x_n]. Returns the quotient
  * when b divides a exactly, NULL otherwise (or out of scope). Mirrors
  * flint_multivariate_gcd's recognition/conversion; uses fmpq_mpoly_divides. */
+static Expr* flint_multivariate_divexact_plain(const Expr* a, const Expr* b);
+
 Expr* flint_multivariate_divexact(const Expr* a, const Expr* b) {
+    if (!a || !b) return NULL;
+    if (!abstract_kernels_ok(a, b))
+        return flint_multivariate_divexact_plain(a, b);
+    KernelTab t = {0};
+    Expr* a2 = kernel_abstract(a, &t);
+    Expr* b2 = a2 ? kernel_abstract(b, &t) : NULL;
+    Expr* q = (a2 && b2) ? flint_multivariate_divexact_plain(a2, b2) : NULL;
+    expr_free(a2);
+    expr_free(b2);
+    q = kernel_restore(q, &t);
+    ktab_free(&t);
+    return q;
+}
+
+static Expr* flint_multivariate_divexact_plain(const Expr* a, const Expr* b) {
     if (!a || !b) return NULL;
 
     VarSet vs;

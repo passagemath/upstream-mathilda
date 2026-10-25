@@ -236,6 +236,22 @@ void test_bigint_poly() {
     run_test("PolynomialRemainder[104857600000000000000000000 x^2 - 104857600000000000000000000, x - 1, x]", "0");
 }
 
+/* Compound variables (x[i], Pair[...]) are opaque generators for the GCD, as
+ * symbols are; the classical fallback used to answer 1 on this size, and
+ * Cancel/Together left the fraction uncancelled (FeynCalc's FCFeynmanPrepare
+ * stalled on the bloated result). Expected values are the reference's. */
+void test_polynomialgcd_compound_variables() {
+    const char* p1 = "Expand[(x[3]+x[6]+x[8]+x[9]) (a x[1] x[2] x[3] + a x[1] x[3] x[4] + a x[2] x[3] x[4] + a x[1] x[3] x[5] + 2 x[2] x[3] x[5])]";
+    char buf[1024];
+    snprintf(buf, sizeof buf, "PolynomialGCD[%s, x[3]+x[6]+x[8]+x[9]]", p1);
+    run_test(buf, "Plus[x[3], x[6], x[8], x[9]]");
+    snprintf(buf, sizeof buf, "Cancel[%s/(x[3]+x[6]+x[8]+x[9])]", p1);
+    run_test(buf, "Plus[Times[a, x[1], x[2], x[3]], Times[a, x[1], x[3], x[4]], Times[a, x[2], x[3], x[4]], "
+                  "Times[a, x[1], x[3], x[5]], Times[2, x[2], x[3], x[5]]]");
+    run_test("PolynomialGCD[Expand[(Pair[p, q] + m^2) (Pair[p, p] - 1)], Expand[(Pair[p, q] + m^2) (Pair[p, p] + 1)]]",
+             "Plus[Power[m, 2], Pair[p, q]]");
+}
+
 int main() {
     setbuf(stdout, NULL);
     printf("Starting poly_tests\n");
@@ -249,6 +265,7 @@ int main() {
     TEST(test_level);
     TEST(test_expand_coeff);
     TEST(test_polynomialgcd);
+    TEST(test_polynomialgcd_compound_variables);
     TEST(test_polynomialextendedgcd);
     TEST(test_polynomiallcm);
     TEST(test_polynomial_div_rem);

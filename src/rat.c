@@ -273,6 +273,10 @@ static Expr* cancel_exact_div_strict(Expr* num, Expr* den) {
     if (v_count > 0) qsort(vars, v_count, sizeof(Expr*), compare_expr_ptrs);
 
     Expr* res = exact_poly_div(exp_num, exp_den, vars, v_count);
+    /* exact_poly_div leaves the quotient recursive in the variables
+     * ((a x[1] + a x[2]) x[3] x[4] + ...); the inputs are expanded, and so is
+     * the reference's quotient. */
+    if (res) { Expr* ex = expr_expand(res); expr_free(res); res = ex; }
 
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);
@@ -314,6 +318,10 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
     if (v_count > 0) qsort(vars, v_count, sizeof(Expr*), compare_expr_ptrs);
 
     Expr* res = exact_poly_div(exp_num, exp_den, vars, v_count);
+    /* exact_poly_div leaves the quotient recursive in the variables
+     * ((a x[1] + a x[2]) x[3] x[4] + ...); the inputs are expanded, and so is
+     * the reference's quotient. */
+    if (res) { Expr* ex = expr_expand(res); expr_free(res); res = ex; }
 
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);

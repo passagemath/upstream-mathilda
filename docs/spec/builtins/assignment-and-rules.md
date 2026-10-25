@@ -22,10 +22,10 @@
 - **Protected targets.** Assigning to a protected symbol is `Set::wrsym`
   ("Symbol Pi is Protected."); a rule for a protected tag is `Set::write`
   ("Tag Sin in Sin[x] is Protected."), as in the reference.
-- **Rule order.** A literal-headed call in a pattern (`{f___}`, `h[__]`) ranks
-  at least as specific as a typed blank, so `c[e_, {f___}, o:OptionsPattern[]]`
+- **Rule order.** A rule goes ahead of the stored rules whose patterns are
+  more general (see `DownValues`, Order). So `c[e_, {f___}, o:OptionsPattern[]]`
   is tried before `c[e_, f_, o:OptionsPattern[]]` whichever was defined first
-  (v0.586).
+  (v0.586; by pattern generality since v0.6022).
 - **Orderless heads.** A DownValue whose first pattern slot names a head fires
   through any argument of an `Orderless` head: `Pair[n_ x_Momentum, y_] := ...`
   applies to `Pair[Momentum[p], lm Momentum[p]]` (v0.586).
@@ -518,16 +518,31 @@ rule set takes 3.8 ms against 772 ms for the plain list.
   recursion, and a right-hand side such as `RandomInteger[...]` is shown held
   rather than evaluated afresh on each query.
 - Returns `{}` for a symbol that carries no rules of the requested kind.
-- **Order.** A new rule goes ahead of the existing ones it is more specific
-  than. Literal arguments rank above typed blanks, typed blanks above blanks,
-  and blanks above sequences; otherwise rules keep definition order.
-  - A guard does not make a rule more specific, wherever it sits: a condition
-    (`lhs /; c`, `rhs /; c`, or `x_ /; c` inside the pattern) or a pattern test
-    (`x_?test`). So `f[p[a_, a_]] := 1; f[p[a1_, b1_]] := 2 /; True` tries the
-    first rule first, as the reference does.
-  - Between two rules that are the same once their guards are removed, the
-    guarded one goes first: `f[x_] := 1; f[x_ /; x > 0] := 2` gives `f[3]` = `2`,
-    and so does `f[x_?Positive] := 2`.
+- **Order** (v0.6022, as in the reference). The list is ordered by pattern
+  generality, not by a score.
+  - **Pattern-free definitions** (`f[1]`, `f[g[a]]`) come first of all, in
+    definition order.
+  - **Strictly more general.** A new pattern rule goes ahead of the first
+    stored rule that matches everything it matches, and more. So `f[x_]`
+    follows `f[x_Integer]`, `f[x_?EvenQ]` and `f[x_ /; x > 0]`, and
+    `f[x__]` follows `f[x_, y_]`.
+  - **Incomparable.** Two patterns, neither of which covers the other, keep
+    definition order however specific either looks:
+    `f[x_Integer]; f[x_?EvenQ]` and `f[h[x__, y_]]; f[h[x_, y__]]`. So does
+    FeynCalc's `h[b___G, di_G, c__G] /; ..` before a later
+    `h[b___, G[5], c:G[_[__]].., d___]`, which a score had once moved ahead.
+  - **Mutual cover.** Of two patterns that cover each other the newer goes
+    first: `x_` and `x_^n_.`, or `h[x___, y___]` and `h[z___]`. Two that are
+    the same up to renaming are the exception: conditional definitions
+    `f[x_] := a /; c` kept side by side stay in definition order.
+  - **Guards** narrow a pattern but do not order it otherwise:
+    `f[p[a_, a_]] := 1; f[p[a1_, b1_]] := 2 /; True` tries the first rule
+    first, and `f[x_] := 1; f[x_ /; x > 0] := 2` gives `f[3]` = `2`.
+  - The comparison is structural and conservative. It understands typed
+    blanks, sequences, `Repeated` (`x:p..` is narrower than `x__`), defaults
+    (`x_^n_.` also matches what `x_` matches), alternatives, tests and
+    nonlinear patterns (`f[x_, x_]` is never taken as the more general).
+    When it cannot tell, it keeps definition order.
 
 ```mathematica
 In[1]:= f[x_] := x^2; DownValues[f]

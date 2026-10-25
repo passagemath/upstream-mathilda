@@ -29,9 +29,9 @@ typedef struct Rule {
      * does not apply); the filter then degrades to a no-op. */
     int32_t dispatch_arity;
     const char* first_arg_head_canon;
-    /* §3.6 specificity score. Larger = more specific. Rules in the list
-     * are sorted by descending specificity, with insertion order
-     * preserved as the tie-breaker for equal scores. */
+    /* §3.6 specificity score: a cheap key that rules out most candidates in
+     * add_rule's alpha-equivalent-redefinition search.  It does not order
+     * the list -- pattern generality does (see pattern_subsumes). */
     int32_t specificity;
     /* Hash of the pattern up to renaming of its pattern variables, so an
      * alpha-equivalent redefinition is found without normalising every
@@ -51,6 +51,12 @@ typedef struct Rule {
      * evaluates the result and yields v for a top-level Return[v], as the
      * reference returns from a definition (f[x_] := If[x > 0, Return[1], 2]). */
     uint8_t has_return;
+    /* Ordering facts about the pattern, fixed at insertion: 1 when it holds
+     * no pattern object at all (f[1]; such rules lead the list), and 1 when
+     * it names a pattern variable twice (f[x_, x_]; never taken as more
+     * general than another pattern). */
+    uint8_t literal;
+    uint8_t nonlinear;
     struct Rule* next;
 } Rule;
 

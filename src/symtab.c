@@ -985,23 +985,302 @@ static Expr* rule_result(const Rule* rule, Expr* result, const char* head) {
     return ev;
 }
 
-/* A copy of p with every Condition and PatternTest wrapper removed, at any
- * depth (g4[x_ /; x > 0] -> g4[x_]); *had set when one was removed. */
-static Expr* rule_unguarded(const Expr* p, bool* had) {
-    while (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
-           (p->data.function.head->data.symbol.name == SYM_Condition ||
-            p->data.function.head->data.symbol.name == SYM_PatternTest) &&
-           p->data.function.arg_count == 2) {
-        *had = true;
-        p = p->data.function.args[0];
+/* ---- Rule order: pattern generality --------------------------------------
+ *
+ * The reference tries a new definition ahead of an existing one only when the
+ * existing pattern is more general -- matches everything the new one matches
+ * (f[x_] after f[2], f[x_Integer] or f[x_ /; x > 0]); two patterns neither of
+ * which covers the other keep the order they were defined in, however
+ * "specific" either looks (FeynCalc's h[b___G, di_G, c__G] /; .. stays ahead of
+ * a later h[b___, G[5], c:G[_[__]].., d___]).  pattern_subsumes(g, s) answers
+ * "does g match every expression s matches?" structurally and conservatively:
+ * false whenever it cannot tell, which only ever keeps definition order. */
+
+typedef enum { PK_ONE, PK_OPT, PK_SEQ0, PK_SEQ1, PK_OTHER } PatKind;
+
+static bool pat_is(const Expr* e, const char* h) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+/* Pattern names and HoldPattern change nothing about what matches. */
+static const Expr* pat_unname(const Expr* p) {
+    for (;;) {
+        if (pat_is(p, SYM_Pattern) && p->data.function.arg_count == 2)
+            p = p->data.function.args[1];
+        else if (pat_is(p, SYM_HoldPattern) && p->data.function.arg_count == 1)
+            p = p->data.function.args[0];
+        else
+            return p;
     }
-    if (p->type != EXPR_FUNCTION) return expr_copy((Expr*)p);
-    size_t n = p->data.function.arg_count;
-    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
-    for (size_t i = 0; i < n; i++) a[i] = rule_unguarded(p->data.function.args[i], had);
-    Expr* r = expr_new_function(rule_unguarded(p->data.function.head, had), a, n);
-    free(a);
+}
+
+/* The restrictions on an s-side element (a test or condition only narrows
+ * what s matches, so g need not reproduce it). */
+static const Expr* pat_untested(const Expr* p) {
+    for (;;) {
+        p = pat_unname(p);
+        if ((pat_is(p, SYM_Condition) || pat_is(p, SYM_PatternTest)) &&
+            p->data.function.arg_count == 2)
+            p = p->data.function.args[0];
+        else
+            return p;
+    }
+}
+
+static bool pat_is_construct(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    return h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
+           h == SYM_Pattern || h == SYM_Optional || h == SYM_Alternatives ||
+           h == SYM_Repeated || h == SYM_RepeatedNull || h == SYM_Condition ||
+           h == SYM_PatternTest || h == SYM_HoldPattern || h == SYM_Verbatim ||
+           h == SYM_Except || h == SYM_OptionsPattern || h == SYM_PatternSequence ||
+           h == SYM_Longest || h == SYM_Shortest || h == SYM_OrderlessPatternSequence ||
+           h == SYM_KeyValuePattern;
+}
+
+/* How many arguments an argument-position element takes, and (for a sequence)
+ * the pattern each of them must match: *ep is NULL for OptionsPattern. */
+static PatKind pat_kind(const Expr* core, const Expr** ep, const Expr** blank0) {
+    size_t ac = core->type == EXPR_FUNCTION ? core->data.function.arg_count : 0;
+    *ep = NULL;
+    if (pat_is(core, SYM_BlankSequence) || pat_is(core, SYM_BlankNullSequence)) {
+        *ep = core;               /* read as Blank[h] by pat_elem_covers */
+        *blank0 = core;
+        return pat_is(core, SYM_BlankSequence) ? PK_SEQ1 : PK_SEQ0;
+    }
+    if ((pat_is(core, SYM_Repeated) || pat_is(core, SYM_RepeatedNull)) && ac == 1) {
+        *ep = core->data.function.args[0];
+        return pat_is(core, SYM_Repeated) ? PK_SEQ1 : PK_SEQ0;
+    }
+    if (pat_is(core, SYM_OptionsPattern)) return PK_SEQ0;
+    if (pat_is(core, SYM_Optional) && (ac == 1 || ac == 2)) {
+        *ep = core->data.function.args[0];
+        return PK_OPT;
+    }
+    if (pat_is(core, SYM_Repeated) || pat_is(core, SYM_RepeatedNull) ||
+        pat_is(core, SYM_PatternSequence) || pat_is(core, SYM_Longest) ||
+        pat_is(core, SYM_Shortest) || pat_is(core, SYM_OrderlessPatternSequence))
+        return PK_OTHER;
+    return PK_ONE;
+}
+
+static bool pat_sub1(const Expr* g, const Expr* s, int depth);
+
+/* For Plus[..], Times[..] or Power[..] whose arguments are all Optional but
+ * one, that one argument; NULL otherwise. */
+static const Expr* pat_defaults_to_one_arg(const Expr* p) {
+    if (!(pat_is(p, SYM_Plus) || pat_is(p, SYM_Times) || pat_is(p, SYM_Power))) return NULL;
+    const Expr* req = NULL;
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        const Expr* a = pat_unname(p->data.function.args[i]);
+        if (pat_is(a, SYM_Optional)) continue;
+        if (req) return NULL;
+        req = p->data.function.args[i];
+    }
+    return req;
+}
+
+/* A pattern-free left-hand side (f[1], f[g[a]]): it matches one expression,
+ * and the reference tries every such definition before any pattern. */
+static bool pat_is_literal(const Expr* p) {
+    if (p->type != EXPR_FUNCTION) return true;
+    if (pat_is_construct(p)) return false;
+    if (!pat_is_literal(p->data.function.head)) return false;
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (!pat_is_literal(p->data.function.args[i])) return false;
+    return true;
+}
+
+/* The head an atom has to the matcher: _Integer matches 3. */
+static const char* pat_atom_head(const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return SYM_Integer;
+        case EXPR_REAL: return SYM_Real;
+        case EXPR_STRING: return SYM_String;
+        case EXPR_SYMBOL: return SYM_Symbol;
+        default: return NULL;
+    }
+}
+
+/* Is a typed-blank element pattern Blank[h] / __h / ___h (h possibly absent)
+ * general enough for s (one element)? */
+static bool pat_blank_covers(const Expr* blank, const Expr* s) {
+    if (blank->data.function.arg_count == 0) return true;
+    const Expr* h = blank->data.function.args[0];
+    if (h->type != EXPR_SYMBOL) return false;
+    if (pat_is(s, SYM_Blank) || pat_is(s, SYM_BlankSequence) || pat_is(s, SYM_BlankNullSequence))
+        return s->data.function.arg_count == 1 && expr_eq(s->data.function.args[0], h);
+    if (s->type == EXPR_FUNCTION) {
+        if (pat_is_construct(s)) return false;
+        return s->data.function.head->type == EXPR_SYMBOL &&
+               s->data.function.head->data.symbol.name == h->data.symbol.name;
+    }
+    return pat_atom_head(s) == h->data.symbol.name;
+}
+
+/* Does element pattern ep (from a g-side sequence; NULL = OptionsPattern)
+ * cover the s-side argument element s? */
+static bool pat_elem_covers(const Expr* ep, const Expr* s_elem, int depth) {
+    const Expr* s = pat_untested(s_elem);
+    const Expr* sep = NULL; const Expr* sb = NULL;
+    PatKind sk = pat_kind(s, &sep, &sb);
+    if (sk == PK_OTHER) return false;
+    if (!ep) {                                         /* OptionsPattern[] */
+        if (sk == PK_SEQ0 && !sep && !sb) return true;  /* s: OptionsPattern too */
+        const Expr* one = sk == PK_OPT ? pat_untested(sep) : s;
+        return (sk == PK_ONE || sk == PK_OPT) &&
+               (pat_is(one, SYM_Rule) || pat_is(one, SYM_RuleDelayed)) && !pat_is_construct(one);
+    }
+    bool ep_blank = pat_is(ep, SYM_Blank) || pat_is(ep, SYM_BlankSequence) ||
+                    pat_is(ep, SYM_BlankNullSequence);
+    if (sk == PK_ONE || sk == PK_OPT) {
+        const Expr* one = sk == PK_OPT ? pat_untested(sep) : s;
+        return ep_blank ? pat_blank_covers(ep, one) : pat_sub1(ep, one, depth + 1);
+    }
+    /* s is itself a sequence: each of its elements must be covered. */
+    /* __h, ___h: covered by a blank sequence; x:p.. counts as the narrower
+     * of x:_.. and x__, as in the reference. */
+    if (sb) return (pat_is(ep, SYM_BlankSequence) || pat_is(ep, SYM_BlankNullSequence)) &&
+                   pat_blank_covers(ep, sb);
+    if (!sep) return ep_blank && ep->data.function.arg_count == 0;   /* OptionsPattern */
+    return ep_blank ? pat_blank_covers(ep, pat_untested(sep)) : pat_sub1(ep, sep, depth + 1);
+}
+
+/* Do g's argument elements G[i..] cover s's S[j..] -- every argument sequence
+ * S matches, G matches?  memo[i * (ns + 1) + j]: 0 unknown, 1 yes, 2 no. */
+static bool pat_cover(const Expr* const* G, size_t ng, size_t i,
+                      const Expr* const* S, size_t ns, size_t j,
+                      unsigned char* memo, int depth) {
+    if (i == ng) return j == ns;
+    unsigned char* m = &memo[i * (ns + 1) + j];
+    if (*m) return *m == 1;
+    bool res = false;
+    const Expr* g = pat_unname(G[i]);
+    const Expr* gep = NULL; const Expr* gb = NULL;
+    PatKind gk = pat_kind(g, &gep, &gb);
+    const Expr* sj = j < ns ? pat_untested(S[j]) : NULL;
+    const Expr* sep = NULL; const Expr* sb = NULL;
+    PatKind sk = sj ? pat_kind(sj, &sep, &sb) : PK_OTHER;
+    switch (gk) {
+        case PK_ONE:
+            res = sj && sk == PK_ONE && pat_sub1(G[i], S[j], depth + 1) &&
+                  pat_cover(G, ng, i + 1, S, ns, j + 1, memo, depth);
+            break;
+        case PK_OPT:
+            res = pat_cover(G, ng, i + 1, S, ns, j, memo, depth) ||
+                  (sj && (sk == PK_ONE || sk == PK_OPT) &&
+                   pat_sub1(gep, sk == PK_OPT ? sep : S[j], depth + 1) &&
+                   pat_cover(G, ng, i + 1, S, ns, j + 1, memo, depth));
+            break;
+        case PK_SEQ0: case PK_SEQ1: {
+            bool nonempty = false;
+            for (size_t k = j; ; k++) {
+                if (k > j) {
+                    const Expr* t = pat_untested(S[k - 1]);
+                    const Expr* tep = NULL; const Expr* tb = NULL;
+                    PatKind tk = pat_kind(t, &tep, &tb);
+                    if (!pat_elem_covers(gep, S[k - 1], depth)) break;
+                    if (tk == PK_ONE || tk == PK_SEQ1) nonempty = true;
+                }
+                if ((gk == PK_SEQ0 || nonempty) &&
+                    pat_cover(G, ng, i + 1, S, ns, k, memo, depth)) { res = true; break; }
+                if (k == ns) break;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+    *m = res ? 1 : 2;
+    return res;
+}
+
+/* Does the single pattern g match every expression the single pattern s does? */
+static bool pat_sub1(const Expr* g, const Expr* s, int depth) {
+    if (depth > 64) return false;
+    if (expr_eq(g, s)) return true;
+    g = pat_unname(g);
+    s = pat_unname(s);
+    if (expr_eq(g, s)) return true;
+    if (pat_is(g, SYM_Condition)) return false;                 /* g narrowed */
+    if (pat_is(g, SYM_PatternTest) && g->data.function.arg_count == 2) {
+        while (pat_is(s, SYM_Condition) && s->data.function.arg_count == 2)
+            s = pat_unname(s->data.function.args[0]);
+        return pat_is(s, SYM_PatternTest) && s->data.function.arg_count == 2 &&
+               expr_eq(g->data.function.args[1], s->data.function.args[1]) &&
+               pat_sub1(g->data.function.args[0], s->data.function.args[0], depth + 1);
+    }
+    if ((pat_is(s, SYM_Condition) || pat_is(s, SYM_PatternTest)) && s->data.function.arg_count == 2)
+        return pat_sub1(g, s->data.function.args[0], depth + 1);
+    if (pat_is(s, SYM_Alternatives)) {
+        if (s->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < s->data.function.arg_count; i++)
+            if (!pat_sub1(g, s->data.function.args[i], depth + 1)) return false;
+        return true;
+    }
+    if (pat_is(g, SYM_Alternatives)) {
+        for (size_t i = 0; i < g->data.function.arg_count; i++)
+            if (pat_sub1(g->data.function.args[i], s, depth + 1)) return true;
+        return false;
+    }
+    const Expr* ep = NULL; const Expr* b0 = NULL;
+    if (pat_kind(s, &ep, &b0) != PK_ONE) return false;      /* s is not one element */
+    /* A sum, product or power with default arguments (x_^n_., a_. x_,
+     * x_ + y_.) also matches what its one required argument matches, by the
+     * defaults: it and a lone blank cover each other. */
+    {
+        const Expr* req = pat_defaults_to_one_arg(g);
+        if (req) return pat_sub1(req, s, depth + 1);
+    }
+    if (pat_is(g, SYM_Blank)) return pat_blank_covers(g, s);
+    if (pat_is(g, SYM_Optional) && g->data.function.arg_count >= 1)
+        return pat_sub1(g->data.function.args[0], s, depth + 1);
+    if (g->type != EXPR_FUNCTION || pat_is_construct(g)) return false;
+    if (s->type != EXPR_FUNCTION || pat_is_construct(s)) return false;
+    if (!pat_sub1(g->data.function.head, s->data.function.head, depth + 1)) return false;
+    size_t ng = g->data.function.arg_count, ns = s->data.function.arg_count;
+    if (ng > 64 || ns > 64) return false;
+    unsigned char memo_buf[256];
+    size_t need = (ng + 1) * (ns + 1);
+    unsigned char* memo = need <= sizeof memo_buf ? memo_buf : calloc(need, 1);
+    if (!memo) return false;
+    if (memo == memo_buf) memset(memo_buf, 0, need);
+    bool r = pat_cover((const Expr* const*)g->data.function.args, ng, 0,
+                       (const Expr* const*)s->data.function.args, ns, 0, memo, depth);
+    if (memo != memo_buf) free(memo);
     return r;
+}
+
+/* Collect pattern names; true if one occurs twice (a nonlinear pattern such as
+ * f[x_, x_] matches less than its shape suggests). */
+static bool pat_repeats_name(const Expr* p, const char** seen, size_t* n, size_t cap) {
+    if (p->type != EXPR_FUNCTION) return false;
+    if (pat_is(p, SYM_Pattern) && p->data.function.arg_count == 2 &&
+        p->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* nm = p->data.function.args[0]->data.symbol.name;
+        for (size_t i = 0; i < *n; i++) if (seen[i] == nm) return true;
+        if (*n == cap) return true;                     /* too many to track */
+        seen[(*n)++] = nm;
+    }
+    if (pat_repeats_name(p->data.function.head, seen, n, cap)) return true;
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        if (pat_repeats_name(p->data.function.args[i], seen, n, cap)) return true;
+    return false;
+}
+
+static bool pattern_is_nonlinear(const Expr* p) {
+    const char* seen[64]; size_t n = 0;
+    return pat_repeats_name(p, seen, &n, 64);
+}
+
+/* Does pattern g match every expression pattern s matches?  g_nonlinear is
+ * pattern_is_nonlinear(g), which the caller has cached. */
+static bool pattern_subsumes(const Expr* g, bool g_nonlinear, const Expr* s) {
+    if (expr_eq(g, s)) return true;
+    if (g_nonlinear) return false;
+    return pat_sub1(g, s, 0);
 }
 
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
@@ -1084,36 +1363,46 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
     new_rule->delayed = delayed;
     new_rule->scoped_cond = scoped;
     new_rule->has_return = mentions_return(replacement);
+    new_rule->literal = pat_is_literal(canon) ? 1 : 0;
+    new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
     new_rule->next = NULL;
 
-    /* §3.6 stable insertion: walk until we find a rule with strictly
-     * lower specificity, then insert before it. Equal-specificity rules
-     * keep insertion order (earlier additions stay earlier) -- except that a
-     * conditioned rule goes ahead of an unconditioned one with the same
-     * pattern up to renaming (f[x_] := 1; f[y_] /; y > 0 := 2 tries the
-     * guarded rule first), as the reference orders them. */
+    /* Insert before the first stored rule that is strictly more general (it
+     * matches everything the new pattern does, and more): f[2] goes ahead of
+     * f[x_], and so does f[y_] /; y > 0 (its guard narrows it).  Patterns
+     * neither of which covers the other keep definition order, as in the
+     * reference; see pattern_subsumes.  Pattern-free definitions come first
+     * of all, in the order they were made. */
     Rule* prev = NULL;
     Rule* curr = *list;
-    bool new_cond = false;
-    Expr* new_base = rule_unguarded(canon, &new_cond);
+    bool literal = new_rule->literal;
+    while (curr && curr->literal) {                    /* literal rules lead */
+        prev = curr;
+        curr = curr->next;
+    }
     Expr* new_key = NULL;
-    while (curr && curr->specificity >= new_rule->specificity) {
-        if (new_cond && curr->specificity == new_rule->specificity) {
-            bool cur_cond = false;
-            Expr* cb = rule_unguarded(curr->pattern, &cur_cond);
-            if (!cur_cond) {
-                if (!new_key) new_key = pattern_alpha_normalize(new_base);
-                Expr* ck = pattern_alpha_normalize(cb);
-                bool same = expr_eq(ck, new_key);
-                expr_free(ck);
-                if (same) { expr_free(cb); break; }
-            }
-            expr_free(cb);
+    while (!literal && curr) {
+        /* Different fixed arities, or different heads of a fixed first
+         * argument, match disjoint sets: no need to compare further. */
+        bool disjoint =
+            (arity >= 0 && curr->dispatch_arity >= 0 && arity != curr->dispatch_arity) ||
+            (first_head && curr->first_arg_head_canon && first_head != curr->first_arg_head_canon);
+        if (!disjoint && pattern_subsumes(curr->pattern, curr->nonlinear, canon)) {
+            /* Strictly more general: the new rule goes first.  Of two that
+             * cover each other (x_ and x_^n_., h[x___, y___] and h[z___]) the
+             * newer goes first too, unless they are the same pattern up to
+             * renaming (conditional definitions f[x_] := a /; c kept side by
+             * side), which keep definition order. */
+            if (!pattern_subsumes(canon, new_rule->nonlinear, curr->pattern)) break;
+            if (!new_key) new_key = pattern_alpha_normalize(canon);
+            Expr* ck = pattern_alpha_normalize(curr->pattern);
+            bool same = expr_eq(ck, new_key);
+            expr_free(ck);
+            if (!same) break;
         }
         prev = curr;
         curr = curr->next;
     }
-    expr_free(new_base);
     if (new_key) expr_free(new_key);
     new_rule->next = curr;
     if (prev) {

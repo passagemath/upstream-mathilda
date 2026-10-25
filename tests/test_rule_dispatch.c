@@ -297,6 +297,45 @@ static void test_specificity_insertion_order_tie_break(void) {
     expr_free(p0); expr_free(p1); expr_free(p2);
 }
 
+/* The list is ordered by pattern generality, as in the reference: a new rule
+ * goes ahead of a stored one only when the stored pattern matches everything
+ * the new one does; incomparable patterns keep definition order whatever their
+ * scores; pattern-free definitions lead; of two patterns that cover each other
+ * the newer goes first.  Every expected order was read off the reference. */
+static void expect_order(const char* defs, const char* want) {
+    char* got = eval_str(defs);
+    if (strcmp(got, want) != 0) {
+        printf("  %s\n    want %s\n    got  %s\n", defs, want, got);
+        ASSERT(0);
+    }
+    free(got);
+}
+
+static void test_generality_order(void) {
+    /* FeynCalc DiracTrick: neither covers the other, so the guarded,
+     * earlier rule stays first (it had been moved behind on a score). */
+    expect_order("o1[h[b___G, di_G, c__G]] := 1 /; c1 /; c2; "
+                 "o1[h[b___, G[5], c:G[_[__]].., d___]] := 2; Last /@ DownValues[o1]",
+                 "{1, 2}");
+    expect_order("o2[x_] := 1; o2[x_Integer] := 2; o2[1] := 3; o2[x_String] := 4; "
+                 "o2[x_?EvenQ] := 5; Last /@ DownValues[o2]", "{3, 2, 4, 5, 1}");
+    expect_order("o3[x__] := 1; o3[x_, y_] := 2; o3[x_, y__] := 3; o3[1, y_] := 4; "
+                 "Last /@ DownValues[o3]", "{4, 2, 3, 1}");
+    expect_order("o4[x_Integer] := 1; o4[x_?EvenQ] := 2; Last /@ DownValues[o4]", "{1, 2}");
+    expect_order("o5[x_Integer] := 1; o5[x_Integer?EvenQ] := 2; Last /@ DownValues[o5]", "{2, 1}");
+    expect_order("o6[h[x___]] := 1; o6[h[x___G]] := 2; Last /@ DownValues[o6]", "{2, 1}");
+    expect_order("o7[h[x___G]] := 1; o7[h[G[1], x___]] := 2; Last /@ DownValues[o7]", "{1, 2}");
+    expect_order("o8[h[x__, y_]] := 1; o8[h[x_, y__]] := 2; Last /@ DownValues[o8]", "{1, 2}");
+    expect_order("o9[x_?NumericQ] := 1; o9[1] := 2; Last /@ DownValues[o9]", "{2, 1}");
+    expect_order("o10[h[x__]] := 1; o10[h[]] := 2; Last /@ DownValues[o10]", "{2, 1}");
+    expect_order("o11[x_] := 1; o11[x_^n_.] := 2; Last /@ DownValues[o11]", "{2, 1}");
+    expect_order("o12[x_^n_.] := 1; o12[x_] := 2; Last /@ DownValues[o12]", "{2, 1}");
+    expect_order("o13[x:(_)..] := 1; o13[x__] := 2; Last /@ DownValues[o13]", "{1, 2}");
+    expect_order("o14[x_ /; x > 0] := 1; o14[x_ /; x < 0] := 2; Last /@ DownValues[o14]", "{1, 2}");
+    expect_order("o15[x_, OptionsPattern[]] := 1; o15[x_, a -> 1] := 2; "
+                 "Last /@ DownValues[o15]", "{2, 1}");
+}
+
 static void test_specificity_overwrite_keeps_position(void) {
     symtab_clear_symbol("g6");
     add_down("g6", "g6[a_, 1]", "v1");
@@ -590,6 +629,7 @@ int main(void) {
     TEST(test_specificity_condition_adds_score);
     TEST(test_specificity_insertion_order_tie_break);
     TEST(test_specificity_overwrite_keeps_position);
+    TEST(test_generality_order);
     TEST(test_alpha_equivalent_redefinition_replaces);
 
     TEST(test_functional_specific_wins);

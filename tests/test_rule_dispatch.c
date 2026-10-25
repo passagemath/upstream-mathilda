@@ -255,14 +255,21 @@ static void test_specificity_blank_beats_blanksequence(void) {
 
 static void test_specificity_condition_adds_score(void) {
     symtab_clear_symbol("g4");
-    /* Plain x_ vs x_ /; cond -- the condition'd rule is more specific. */
+    /* Plain x_ vs x_ /; cond: a condition does not raise the score (the
+     * reference does not promote a guarded rule past a more specific one),
+     * but between two rules that differ only in a guard the guarded one goes
+     * first. */
     add_down("g4", "g4[x_]", "plain");
     add_down("g4", "g4[x_ /; x > 0]", "with_cond");
 
     Rule* head = symtab_get_down_values("g4");
     ASSERT(rule_list_length(head) == 2);
-    /* Condition'd rule scores higher. */
-    ASSERT(head->specificity > head->next->specificity);
+    ASSERT(head->specificity == head->next->specificity);
+    /* the guarded rule is the first one: the plain g4[x_] comes second */
+    Expr* plain = parse_expression("g4[x_]");
+    ASSERT(!expr_eq(head->pattern, plain));
+    ASSERT(expr_eq(head->next->pattern, plain));
+    expr_free(plain);
 }
 
 static void test_specificity_insertion_order_tie_break(void) {

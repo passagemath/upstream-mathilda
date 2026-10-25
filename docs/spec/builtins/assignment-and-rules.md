@@ -518,6 +518,16 @@ rule set takes 3.8 ms against 772 ms for the plain list.
   recursion, and a right-hand side such as `RandomInteger[...]` is shown held
   rather than evaluated afresh on each query.
 - Returns `{}` for a symbol that carries no rules of the requested kind.
+- **Order.** A new rule goes ahead of the existing ones it is more specific
+  than. Literal arguments rank above typed blanks, typed blanks above blanks,
+  and blanks above sequences; otherwise rules keep definition order.
+  - A guard does not make a rule more specific, wherever it sits: a condition
+    (`lhs /; c`, `rhs /; c`, or `x_ /; c` inside the pattern) or a pattern test
+    (`x_?test`). So `f[p[a_, a_]] := 1; f[p[a1_, b1_]] := 2 /; True` tries the
+    first rule first, as the reference does.
+  - Between two rules that are the same once their guards are removed, the
+    guarded one goes first: `f[x_] := 1; f[x_ /; x > 0] := 2` gives `f[3]` = `2`,
+    and so does `f[x_?Positive] := 2`.
 
 ```mathematica
 In[1]:= f[x_] := x^2; DownValues[f]

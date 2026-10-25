@@ -586,8 +586,14 @@ static int32_t pattern_specificity(const Expr* p) {
         if (h == SYM_RepeatedNull) {
             return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) - 100;
         }
-        if (h == SYM_Condition || h == SYM_PatternTest) {
-            return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) + 10;
+        /* A condition does not make a rule more specific: the reference keeps
+         * f[p[a_, a_]] := ... ahead of a later f[p[a1_, b1_]] := ... /; c, and a
+         * rule written rhs /; c1 /; c2 is not promoted past ones with a single
+         * condition (FeynCalc's fromGFAD rules depend on that order). Only
+         * between two rules that differ in nothing but the condition does the
+         * conditioned one go first -- see the insertion in add_rule. */
+        if (h == SYM_Condition || h == SYM_PatternTest) {   /* x_?test likewise */
+            return ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0;
         }
         if (h == SYM_Alternatives) {
             if (ac == 0) return 0;
@@ -979,6 +985,25 @@ static Expr* rule_result(const Rule* rule, Expr* result, const char* head) {
     return ev;
 }
 
+/* A copy of p with every Condition and PatternTest wrapper removed, at any
+ * depth (g4[x_ /; x > 0] -> g4[x_]); *had set when one was removed. */
+static Expr* rule_unguarded(const Expr* p, bool* had) {
+    while (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+           (p->data.function.head->data.symbol.name == SYM_Condition ||
+            p->data.function.head->data.symbol.name == SYM_PatternTest) &&
+           p->data.function.arg_count == 2) {
+        *had = true;
+        p = p->data.function.args[0];
+    }
+    if (p->type != EXPR_FUNCTION) return expr_copy((Expr*)p);
+    size_t n = p->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = rule_unguarded(p->data.function.args[i], had);
+    Expr* r = expr_new_function(rule_unguarded(p->data.function.head, had), a, n);
+    free(a);
+    return r;
+}
+
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
@@ -1063,13 +1088,33 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
 
     /* §3.6 stable insertion: walk until we find a rule with strictly
      * lower specificity, then insert before it. Equal-specificity rules
-     * keep insertion order (earlier additions stay earlier). */
+     * keep insertion order (earlier additions stay earlier) -- except that a
+     * conditioned rule goes ahead of an unconditioned one with the same
+     * pattern up to renaming (f[x_] := 1; f[y_] /; y > 0 := 2 tries the
+     * guarded rule first), as the reference orders them. */
     Rule* prev = NULL;
     Rule* curr = *list;
+    bool new_cond = false;
+    Expr* new_base = rule_unguarded(canon, &new_cond);
+    Expr* new_key = NULL;
     while (curr && curr->specificity >= new_rule->specificity) {
+        if (new_cond && curr->specificity == new_rule->specificity) {
+            bool cur_cond = false;
+            Expr* cb = rule_unguarded(curr->pattern, &cur_cond);
+            if (!cur_cond) {
+                if (!new_key) new_key = pattern_alpha_normalize(new_base);
+                Expr* ck = pattern_alpha_normalize(cb);
+                bool same = expr_eq(ck, new_key);
+                expr_free(ck);
+                if (same) { expr_free(cb); break; }
+            }
+            expr_free(cb);
+        }
         prev = curr;
         curr = curr->next;
     }
+    expr_free(new_base);
+    if (new_key) expr_free(new_key);
     new_rule->next = curr;
     if (prev) {
         prev->next = new_rule;

@@ -952,6 +952,18 @@ void test_numeric_power_coprime_basis_o4() {
                    "Times[Power[2, Plus[x, y]], Power[10000000019, y]]]", 1);
 }
 
+/* A condition does not promote a rule past an earlier, at-least-as-specific
+ * one; between rules that differ only in the condition the guarded one goes
+ * first. Expected values are the reference's (FeynCalc's fromGFAD rules). */
+void test_downvalue_order_conditions() {
+    assert_eval_eq("ClearAll[fH, fC, g1, g2, x, y]", "Null", 0);
+    assert_eval_eq("fH[p[a_,a_]] := \"spec\"; fH[p[a1_,b1_]] := \"gen\" /; True; fH[p[x,x]]", "\"spec\"", 0);
+    assert_eval_eq("fC[p[a_,a_] + q[a_,b_]] := \"spec\" /; True; "
+                   "fC[p[a1_,a1_] + q[a2_,b2_]] := \"gen\" /; True /; True; fC[p[x,x] + q[x,y]]", "\"spec\"", 0);
+    assert_eval_eq("g1[x_] := 1; g1[y_] /; y > 0 := 2; {g1[3], g1[-3]}", "{2, 1}", 0);
+    assert_eval_eq("g2[y_] /; y > 0 := 2; g2[x_] := 1; {g2[3], g2[-3]}", "{2, 1}", 0);
+}
+
 void test_coefficient_v592() {
     assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
     assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
@@ -1009,6 +1021,7 @@ int main() {
     TEST(test_numeric_base_power_merge_v594);
     TEST(test_power_of_product_split_o3);
     TEST(test_numeric_power_coprime_basis_o4);
+    TEST(test_downvalue_order_conditions);
     printf("All tests passed!\n");
     return 0;
 }

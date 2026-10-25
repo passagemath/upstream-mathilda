@@ -175,6 +175,12 @@ typedef struct SymbolDef {
      * is a SparseArray. It borrows the call and returns the answer, or NULL to
      * decline -- and then the gate (if any) answers. NULL: no kernel. */
     const void* sparse_native;
+    /* Hash index of the leading pattern-free DownValues (f[1] = ..., the
+     * memo entries of f[n_] := f[n] = ...), private to symtab.c: lookup and
+     * redefinition of such a rule are O(1) instead of a scan of every stored
+     * rule.  Valid only while it records the current down_values head;
+     * dropped at every removal. NULL: not built. */
+    struct LitIndex* lit_index;
     struct SymbolDef* next;   // hash-bucket chain (replaces the old SymEntry)
 } SymbolDef;
 

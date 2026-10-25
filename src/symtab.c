@@ -85,7 +85,10 @@ static void free_up_value_list(Rule* r) {
  * and its canonical name string in the table (so SYM_* and any live Expr keep
  * valid pointers) and KEEP is_system. This is what symtab_clear / symtab_init /
  * symtab_remove_symbol leave behind -- observationally an undefined symbol. */
+static void litidx_drop(SymbolDef* d);
+
 static void reset_node_payload(SymbolDef* d) {
+    litidx_drop(d);
     free_rule_list(d->own_values);   d->own_values = NULL;
     free_rule_list(d->down_values);  d->down_values = NULL;
     free_rule_list(d->sub_values);   d->sub_values = NULL;
@@ -1283,7 +1286,86 @@ static bool pattern_subsumes(const Expr* g, bool g_nonlinear, const Expr* s) {
     return pat_sub1(g, s, 0);
 }
 
-static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
+/* ---- Literal-rule index -------------------------------------------------
+ *
+ * Pattern-free definitions lead the DownValue list (see add_rule), and a
+ * pattern-free rule matches exactly the expression equal to its left-hand side,
+ * so they can be found by hash.  A memoised f[n_] := f[n] = ... over 10^4 values
+ * otherwise scanned (and matched against) every stored value per call and per
+ * new value: quadratic.  The index lists the rules of the literal prefix,
+ * keyed by expr_hash of the pattern; `tail` is the prefix's last rule.  It is
+ * trusted only while `head` is still the list head (Block and the optimisers
+ * swap whole lists from outside), and every removal in this file drops it.
+ * `multi`: two prefix rules share a left-hand side (conditional definitions
+ * kept side by side) -- lookups then fall back to the scan. */
+typedef struct LitIndex {
+    const Rule* head;
+    Rule* tail;
+    Rule** slot;
+    size_t n, cap;
+    bool multi;
+} LitIndex;
+
+static void litidx_drop(SymbolDef* d) {
+    if (!d || !d->lit_index) return;
+    free(d->lit_index->slot);
+    free(d->lit_index);
+    d->lit_index = NULL;
+}
+
+static Rule* litidx_find(const LitIndex* ix, const Expr* e) {
+    if (!ix->cap) return NULL;
+    size_t mask = ix->cap - 1;
+    for (size_t i = (size_t)expr_hash(e) & mask; ix->slot[i]; i = (i + 1) & mask)
+        if (expr_eq(ix->slot[i]->pattern, e)) return ix->slot[i];
+    return NULL;
+}
+
+static bool litidx_put(LitIndex* ix, Rule* r) {
+    if (2 * (ix->n + 1) > ix->cap) {
+        size_t nc = ix->cap ? 2 * ix->cap : 16;
+        Rule** ns = calloc(nc, sizeof(Rule*));
+        if (!ns) return false;
+        for (size_t i = 0; i < ix->cap; i++) {
+            Rule* q = ix->slot[i];
+            if (!q) continue;
+            size_t j = (size_t)expr_hash(q->pattern) & (nc - 1);
+            while (ns[j]) j = (j + 1) & (nc - 1);
+            ns[j] = q;
+        }
+        free(ix->slot);
+        ix->slot = ns;
+        ix->cap = nc;
+    }
+    if (litidx_find(ix, r->pattern)) ix->multi = true;
+    size_t mask = ix->cap - 1;
+    size_t i = (size_t)expr_hash(r->pattern) & mask;
+    while (ix->slot[i]) i = (i + 1) & mask;
+    ix->slot[i] = r;
+    ix->n++;
+    return true;
+}
+
+/* The valid index of d's DownValues, built when missing or stale; NULL on
+ * allocation failure (callers then scan). */
+static LitIndex* litidx_get(SymbolDef* d) {
+    if (d->lit_index && d->lit_index->head == d->down_values) return d->lit_index;
+    litidx_drop(d);
+    LitIndex* ix = calloc(1, sizeof(LitIndex));
+    if (!ix) return NULL;
+    for (Rule* r = d->down_values; r && r->literal; r = r->next) {
+        if (!litidx_put(ix, r)) { free(ix->slot); free(ix); return NULL; }
+        ix->tail = r;
+    }
+    ix->head = d->down_values;
+    d->lit_index = ix;
+    return ix;
+}
+
+/* `owner`: the symbol whose DownValues `list` is, so its literal index is
+ * used and kept; NULL for every other rule list. */
+static void add_rule_in(Rule** list, Expr* pattern, Expr* replacement, bool delayed,
+                        SymbolDef* owner) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
      * eval clock. This invalidates every cached evaluation in one shot
@@ -1314,7 +1396,35 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
      * same symbol, caught by expr_eq) never hashes at all. */
     Expr* key = NULL;
     uint8_t scoped = rhs_has_scoped_condition(replacement) ? 1 : 0;
-    for (Rule* curr = *list; curr; curr = curr->next) {
+    bool literal = pat_is_literal(canon);
+    LitIndex* ix = owner ? litidx_get(owner) : NULL;
+    if (ix && ix->multi) { litidx_drop(owner); ix = NULL; }
+    Rule* scan_from = *list;
+    if (ix) {
+        /* A pattern-free left-hand side can only equal a rule of the literal
+         * prefix, and a pattern one only a rule after it. */
+        if (literal) {
+            Rule* dup = litidx_find(ix, canon);
+            scan_from = NULL;
+            if (dup) {
+                if ((dup->scoped_cond || scoped) && !expr_eq(dup->replacement, replacement)) {
+                    litidx_drop(owner);       /* both kept: let the scan decide */
+                    ix = NULL;
+                    scan_from = *list;
+                } else {
+                    expr_free(dup->replacement);
+                    dup->replacement = expr_copy(replacement);
+                    dup->has_return = mentions_return(replacement);
+                    dup->delayed = delayed;
+                    expr_free(canon);
+                    return;
+                }
+            }
+        } else {
+            scan_from = ix->tail ? ix->tail->next : *list;
+        }
+    }
+    for (Rule* curr = scan_from; curr; curr = curr->next) {
         /* A conditional rule (scoped guard) is not replaced by a same-LHS
          * definition with a different RHS: both are kept, in order. */
         if ((curr->scoped_cond || scoped) && !expr_eq(curr->replacement, replacement))
@@ -1363,7 +1473,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
     new_rule->delayed = delayed;
     new_rule->scoped_cond = scoped;
     new_rule->has_return = mentions_return(replacement);
-    new_rule->literal = pat_is_literal(canon) ? 1 : 0;
+    new_rule->literal = literal ? 1 : 0;
     new_rule->nonlinear = pattern_is_nonlinear(canon) ? 1 : 0;
     new_rule->next = NULL;
 
@@ -1373,9 +1483,8 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
      * neither of which covers the other keep definition order, as in the
      * reference; see pattern_subsumes.  Pattern-free definitions come first
      * of all, in the order they were made. */
-    Rule* prev = NULL;
-    Rule* curr = *list;
-    bool literal = new_rule->literal;
+    Rule* prev = ix ? ix->tail : NULL;
+    Rule* curr = prev ? prev->next : *list;
     while (curr && curr->literal) {                    /* literal rules lead */
         prev = curr;
         curr = curr->next;
@@ -1410,6 +1519,17 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
     } else {
         *list = new_rule;
     }
+    if (ix) {
+        if (literal) {
+            if (litidx_put(ix, new_rule)) ix->tail = new_rule;
+            else { litidx_drop(owner); return; }
+        }
+        ix->head = *list;
+    }
+}
+
+static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
+    add_rule_in(list, pattern, replacement, delayed, NULL);
 }
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
     symtab_add_own_value_as(symbol_name, pattern, replacement, false);
@@ -1444,6 +1564,7 @@ Rule* symtab_detach_down_value_exact(const char* symbol_name, Expr* lhs) {
     SymbolDef* def = symtab_get_def(symbol_name);
     if (!def->down_values) return NULL;
     Expr* canon = pattern_canonicalize(expr_copy(lhs));
+    litidx_drop(def);
     Rule** pp = &def->down_values;
     Rule* found = NULL;
     for (; *pp; pp = &(*pp)->next) {
@@ -1468,7 +1589,7 @@ void symtab_rule_free(Rule* r) {
 void symtab_add_down_value_as(const char* symbol_name, Expr* pattern, Expr* replacement,
                               bool delayed) {
     SymbolDef* def = symtab_get_def(symbol_name);
-    add_rule(&def->down_values, pattern, replacement, delayed);
+    add_rule_in(&def->down_values, pattern, replacement, delayed, def);
     /* A DownValue changes how this head evaluates -- advance the rule epoch so
      * any GROUND node that uses it as a head is re-checked (add_rule already
      * bumped the eval clock). */
@@ -1492,6 +1613,7 @@ void symtab_clear_symbol(const char* symbol_name) {
     }
     def->own_values = NULL;
 
+    litidx_drop(def);
     curr = def->down_values;
     while (curr) {
         Rule* next = curr->next;
@@ -1670,6 +1792,7 @@ bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
 
     SymbolDef* def = symtab_get_def(symbol_name);
     Rule** list = own_value ? &def->own_values : &def->down_values;
+    if (!own_value) litidx_drop(def);
 
     Rule* prev = NULL;
     bool removed = false;
@@ -1846,7 +1969,22 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
     const bool down_flat = (def->attributes & ATTR_FLAT) != 0;
     const bool down_relaxed = (def->attributes & (ATTR_FLAT | ATTR_ORDERLESS)) != 0;
 
-    for (Rule* rule = def->down_values; rule; rule = rule->next) {
+    /* Pattern-free rules lead the list and each matches only the expression
+     * equal to it: try the one the index names, then go on after the prefix.
+     * (Flat and Orderless heads match a literal f[a, b] against more than its
+     * equal, so they scan.) */
+    Rule* hit = NULL;
+    Rule* start = def->down_values;
+    if (start->literal && !down_relaxed) {
+        LitIndex* ix = litidx_get(def);
+        if (ix && !ix->multi) {
+            hit = litidx_find(ix, expr);
+            start = ix->tail ? ix->tail->next : start;
+        }
+    }
+
+    for (Rule* rule = hit ? hit : start; rule;
+         rule = (rule == hit) ? start : rule->next) {
         /* Arity filter: only skip when both sides committed to a
          * specific arity that disagrees. A rule with -1 arity (variable)
          * always passes; an input never has variable arity. For a Flat head
@@ -2218,6 +2356,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                   : (which == 3) ? &def->format_values
                                  : &def->n_values;
 
+    if (which == 1) litidx_drop(def);
     if (which == 2)      free_up_value_list(*target);
     else if (which == 3) free_format_value_list(*target);
     else if (which == 4) free_n_value_list(*target);
@@ -2252,7 +2391,7 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 else if (which == 3) symtab_format_value_count += added;
                 else                 symtab_n_value_count += added;
             } else {
-                add_rule(target, lhs, rhs, delayed);
+                add_rule_in(target, lhs, rhs, delayed, which == 1 ? def : NULL);
             }
         }
     }

@@ -521,7 +521,12 @@ rule set takes 3.8 ms against 772 ms for the plain list.
 - **Order** (v0.6022, as in the reference). The list is ordered by pattern
   generality, not by a score.
   - **Pattern-free definitions** (`f[1]`, `f[g[a]]`) come first of all, in
-    definition order.
+    definition order. They are also kept in a per-symbol hash index (v0.6023),
+    so looking one up or redefining it does not scan the other stored values.
+    A memoised `f[n_] := f[n] = ...` over 20000 values takes ~0.03 s; it took
+    ~38 s, because every call matched against every stored value. A `Flat` or
+    `Orderless` head still scans, since a literal `f[a, b]` matches more than
+    its equal there.
   - **Strictly more general.** A new pattern rule goes ahead of the first
     stored rule that matches everything it matches, and more. So `f[x_]`
     follows `f[x_Integer]`, `f[x_?EvenQ]` and `f[x_ /; x > 0]`, and

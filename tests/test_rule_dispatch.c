@@ -336,6 +336,31 @@ static void test_generality_order(void) {
                  "Last /@ DownValues[o15]", "{2, 1}");
 }
 
+/* Pattern-free definitions are found through the literal index: memoisation
+ * is linear, and redefinition, removal, Block, DownValues[f] = ... and
+ * Flat/Orderless heads behave as with the scan (values from the reference). */
+static void test_literal_index(void) {
+    char* t = eval_str("ClearAll[mf]; mf[n_] := mf[n] = n; "
+                       "First[AbsoluteTiming[Do[mf[i], {i, 20000}]]] < 2");
+    ASSERT_STR_EQ(t, "True"); free(t);
+    t = eval_str("Length[DownValues[mf]]"); ASSERT_STR_EQ(t, "20001"); free(t);
+    t = eval_str("ClearAll[lf]; lf[x_] := g[x]; lf[1] = 10; lf[2] = 20; lf[1] =.; "
+                 "lf[2] = 21; {lf[1], lf[2], lf[3], Length[DownValues[lf]]}");
+    ASSERT_STR_EQ(t, "{g[1], 21, g[3], 2}"); free(t);
+    t = eval_str("Block[{lf}, lf[1] = 99; {lf[1], lf[2]}]");
+    ASSERT_STR_EQ(t, "{99, lf[2]}"); free(t);
+    t = eval_str("{lf[1], lf[2]}"); ASSERT_STR_EQ(t, "{g[1], 21}"); free(t);
+    t = eval_str("DownValues[lf] = {HoldPattern[lf[5]] :> 55, HoldPattern[lf[y_]] :> h[y]}; "
+                 "lf[7] = 77; {lf[5], lf[7], lf[2]}");
+    ASSERT_STR_EQ(t, "{55, 77, h[2]}"); free(t);
+    t = eval_str("ClearAll[lk]; lk[1] := 1 /; False; lk[1] := 2; lk[x_] := 3; {lk[1], lk[2]}");
+    ASSERT_STR_EQ(t, "{2, 3}"); free(t);
+    t = eval_str("ClearAll[lo]; SetAttributes[lo, Orderless]; lo[a, b] = 1; lo[b, a]");
+    ASSERT_STR_EQ(t, "1"); free(t);
+    t = eval_str("ClearAll[lp]; lp[{1, 2}] = 3; lp[1/2] = 6; {lp[{1, 2}], lp[1/2], lp[0.5]}");
+    ASSERT_STR_EQ(t, "{3, 6, lp[0.5]}"); free(t);
+}
+
 static void test_specificity_overwrite_keeps_position(void) {
     symtab_clear_symbol("g6");
     add_down("g6", "g6[a_, 1]", "v1");
@@ -630,6 +655,7 @@ int main(void) {
     TEST(test_specificity_insertion_order_tie_break);
     TEST(test_specificity_overwrite_keeps_position);
     TEST(test_generality_order);
+    TEST(test_literal_index);
     TEST(test_alpha_equivalent_redefinition_replaces);
 
     TEST(test_functional_specific_wins);

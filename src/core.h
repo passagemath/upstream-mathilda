@@ -27,6 +27,7 @@ Expr* builtin_sub_values(Expr* res);
 #if UP_VALUES
 Expr* builtin_up_values(Expr* res);
 Expr* builtin_format_values(Expr* res);
+Expr* builtin_n_values(Expr* res);
 #endif
 Expr* builtin_out(Expr* res);
 Expr* builtin_compoundexpression(Expr* res);

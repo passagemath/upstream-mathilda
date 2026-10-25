@@ -459,6 +459,25 @@ static void test_format_values(void) {
                    "{{Protected}, {HoldAll, Protected}, {HoldAllComplete}, \"System`\"}", 0);
 }
 
+/* N[x] = v, x /: N[x] = v and N[f[...], p_] := ... define NValues, not
+ * UpValues (FeynCalc's SharedObjectsUpValues tests: UpValues[Zeta2] is just
+ * the Conjugate rule). An N[x] rule is keyed N[x, {MachinePrecision,
+ * MachinePrecision}]. Expected values are the reference's. */
+static void test_n_values(void) {
+    assert_eval_eq("N[nz2] = 1.5; {NValues[nz2], UpValues[nz2], N[nz2], N[2 + nz2]}",
+                   "{{HoldPattern[N[nz2, {MachinePrecision, MachinePrecision}]] :> 1.5}, {}, 1.5, 3.5}", 0);
+    assert_eval_eq("nz4 /: N[nz4] = 2.; {NValues[nz4], UpValues[nz4]}",
+                   "{{HoldPattern[N[nz4, {MachinePrecision, MachinePrecision}]] :> 2.0}, {}}", 0);
+    assert_eval_eq("N[nz3, p_] := p; {NValues[nz3], N[nz3, 20]}", "{{HoldPattern[N[nz3, p_]] :> p}, 20.0}", 0);
+    assert_eval_eq("N[nf5[x_]] := x^2; {N[nf5[3]], DownValues[nf5]}", "{9.0, {}}", 0);
+    assert_eval_eq("nz6 /: N[nz6, p_] := N[Pi, p]; N[nz6]", "3.14159", 0);
+    assert_eval_eq("NValues[nz2] = {}; {NValues[nz2], N[nz2]}", "{{}, nz2}", 0);
+    assert_eval_eq("Clear[nz4]; NValues[nz4]", "{}", 0);
+    assert_eval_eq("Attributes[NValues]", "{HoldAll, Protected}", 0);
+    /* N[x, {p, a}] is a precision/accuracy pair, not a list to thread over */
+    assert_eval_eq("{N[Pi, {MachinePrecision, MachinePrecision}], Attributes[N]}", "{3.14159, {Protected}}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -512,6 +531,7 @@ int main(void) {
 
     TEST(test_set_upvalues);
     TEST(test_format_values);
+    TEST(test_n_values);
     printf("All UpValues tests passed.\n");
     return 0;
 }

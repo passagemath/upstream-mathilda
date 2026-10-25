@@ -1273,6 +1273,31 @@ static void install_format_rules(const char* tag, Expr* target, Expr* rhs, bool 
     if (!form) symtab_add_format_value(tag, lhs, rhs, delayed);
 }
 
+#if UP_VALUES
+/* Store an N-value N[x] = v / N[x, p] := v on `tag`'s NValues. A
+ * one-argument N[x] is stored as N[x, {MachinePrecision, MachinePrecision}],
+ * the form the reference stores and N asks for at machine precision. */
+static void install_n_value(const char* tag, Expr* lhs, Expr* rhs, bool delayed) {
+    if (lhs->data.function.arg_count != 1) {
+        symtab_add_n_value(tag, lhs, rhs, delayed);
+        return;
+    }
+    Expr* mp = expr_new_function(expr_new_symbol(SYM_List),
+                   (Expr*[]){ expr_new_symbol(SYM_MachinePrecision),
+                              expr_new_symbol(SYM_MachinePrecision) }, 2);
+    Expr* pat = expr_new_function(expr_new_symbol(SYM_N),
+                   (Expr*[]){ expr_copy(lhs->data.function.args[0]), mp }, 2);
+    symtab_add_n_value(tag, pat, rhs, delayed);
+    expr_free(pat);
+}
+
+static bool is_n_target(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == SYM_N &&
+           (e->data.function.arg_count == 1 || e->data.function.arg_count == 2);
+}
+#endif
+
 /*
  * apply_assignment:
  * Helper to handle the 'Set' (=) and 'SetDelayed' (:=) primitives.
@@ -1346,12 +1371,10 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
 
 #if UP_VALUES
     /* N[x] = v, N[f[...]] := v (and N[x, p] = v): an N-value of the symbol x or
-     * the head f, which the reference keeps in NValues; stored here as the
-     * UpValue x /: N[x] = v, which N consults (numeric.c n_value). N itself
-     * is Protected, so this is intercepted before the Protected guard. */
-    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->type == EXPR_SYMBOL &&
-        lhs->data.function.head->data.symbol.name == SYM_N &&
-        (lhs->data.function.arg_count == 1 || lhs->data.function.arg_count == 2)) {
+     * the head f, kept in NValues as in the reference; N consults them
+     * (numeric.c n_value). N itself is Protected, so this is intercepted
+     * before the Protected guard. */
+    if (is_n_target(lhs)) {
         Expr* x = lhs->data.function.args[0];
         const char* tag = NULL;
         if (x->type == EXPR_SYMBOL) tag = x->data.symbol.name;
@@ -1365,7 +1388,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 free(lt);
                 return true;
             }
-            symtab_add_up_value_as(tag, lhs, rhs, is_delayed);
+            install_n_value(tag, lhs, rhs, is_delayed);
             return true;
         }
     }
@@ -1381,7 +1404,8 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         && (lhs->data.function.head->data.symbol.name == SYM_UpValues
             || lhs->data.function.head->data.symbol.name == SYM_DownValues
             || lhs->data.function.head->data.symbol.name == SYM_OwnValues
-            || lhs->data.function.head->data.symbol.name == SYM_FormatValues)) {
+            || lhs->data.function.head->data.symbol.name == SYM_FormatValues
+            || lhs->data.function.head->data.symbol.name == SYM_NValues)) {
         const char* h = lhs->data.function.head->data.symbol.name;
         const char* target = lhs->data.function.args[0]->data.symbol.name;
         /* A list-assignment mutates `target`'s definitions, so it must honour
@@ -1399,6 +1423,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             && rhs->data.function.head->data.symbol.name == SYM_List) {
             if (h == SYM_UpValues)          symtab_set_up_values(target, rhs);
             else if (h == SYM_FormatValues) symtab_set_format_values(target, rhs);
+            else if (h == SYM_NValues)      symtab_set_n_values(target, rhs);
             else if (h == SYM_DownValues)   symtab_set_down_values(target, rhs);
             else                          symtab_set_own_values(target, rhs);
             return true;
@@ -1914,7 +1939,8 @@ static bool apply_up_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                         "Tag %s in the assignment is Protected.", syms[i]);
             continue;
         }
-        symtab_add_up_value_as(syms[i], pat, body, is_delayed);
+        if (is_n_target(pat)) install_n_value(syms[i], pat, body, is_delayed);   /* N[z] ^= v */
+        else symtab_add_up_value_as(syms[i], pat, body, is_delayed);
     }
     if (owned) expr_free(pat);
     return true;
@@ -1952,6 +1978,11 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
      * evaluation, only in output. */
     if (is_format_target(lhs) && tag_occurs_in(lhs, tagn)) {
         install_format_rules(tagn, lhs, rhs, is_delayed);
+        return true;
+    }
+    /* tag /: N[x] = v: an N-value of tag (the reference's NValues). */
+    if (is_n_target(lhs) && tag_occurs_in(lhs->data.function.args[0], tagn)) {
+        install_n_value(tagn, lhs, rhs, is_delayed);
         return true;
     }
     TagPos pos = classify_tag_position(tagn, lhs);

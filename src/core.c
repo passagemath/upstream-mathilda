@@ -388,6 +388,7 @@ void core_init(void) {
     symtab_add_builtin("UpValues", builtin_up_values);
 #endif
     symtab_add_builtin("FormatValues", builtin_format_values);
+    symtab_add_builtin("NValues", builtin_n_values);
     symtab_add_builtin("Out", builtin_out);
     symtab_add_builtin("Plus", builtin_plus);
     symtab_add_builtin("Times", builtin_times);
@@ -2522,6 +2523,20 @@ Expr* builtin_format_values(Expr* res) {
     if (arg->type == EXPR_STRING) {
         SymbolDef* d = symtab_lookup(arg->data.string);
         return d ? rules_to_list(d->format_values) : NULL;
+    }
+    return NULL;
+}
+
+/* NValues[sym] -> {HoldPattern[N[lhs, prec]] :> v, ...}: the values N gives
+ * sym (N[x] = v, x /: N[x] = v, N[f[...], p_] := ...); {} when none. */
+Expr* builtin_n_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL)
+        return rules_to_list(symtab_get_n_values(arg->data.symbol.name));
+    if (arg->type == EXPR_STRING) {
+        SymbolDef* d = symtab_lookup(arg->data.string);
+        return d ? rules_to_list(d->n_values) : NULL;
     }
     return NULL;
 }

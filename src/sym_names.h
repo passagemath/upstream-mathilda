@@ -596,6 +596,7 @@ extern const char* SYM_SetDelayed;
  * these, so they must be interned (not just used by string). */
 extern const char* SYM_UpValues;
 extern const char* SYM_FormatValues;
+extern const char* SYM_NValues;
 extern const char* SYM_Format;
 extern const char* SYM_MakeBoxes;
 extern const char* SYM_FormatType;

@@ -14,6 +14,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "symtab.h"
+#include "match.h"
 #include "sym_names.h"
 #include "root_numeric.h"
 #include "root.h"        /* rootsum_expand_over_roots: N over a RootSum */
@@ -564,23 +565,6 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
  * mentions its own tag again must not recurse without bound. */
 static int g_n_value_depth = 0;
 
-/* Does `tag` carry an UpValue for N -- z2 /: N[z2] = 1.5, h /: N[h[x_]] := ...,
- * or N[z4] = 5, which is stored the same way? */
-static bool has_n_upvalue(const char* tag) {
-    for (Rule* r = symtab_get_up_values(tag); r; r = r->next) {
-        const Expr* p = r->pattern;
-        while (p && p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
-               (p->data.function.head->data.symbol.name == SYM_HoldPattern ||
-                p->data.function.head->data.symbol.name == SYM_Condition) &&
-               p->data.function.arg_count >= 1)
-            p = p->data.function.args[0];
-        if (p && p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
-            p->data.function.head->data.symbol.name == SYM_N)
-            return true;
-    }
-    return false;
-}
-
 /* The value an N rule gives the symbol or call `e` whose tag is `tag`, at the
  * working precision -- N[e] at machine precision, N[e, digits] otherwise -- then
  * numericalized itself (z2 /: N[z2] = 3/2 gives 1.5); NULL when no N rule of
@@ -589,16 +573,28 @@ static bool has_n_upvalue(const char* tag) {
  * reference's N-value for {MachinePrecision, MachinePrecision} it serves only
  * machine N. */
 static Expr* n_value(const Expr* e, const char* tag, NumericSpec spec) {
-    if (symtab_up_value_count == 0 || g_n_value_depth > 64 || !has_n_upvalue(tag)) return NULL;
+    if (symtab_n_value_count == 0 || g_n_value_depth > 64) return NULL;
+    Rule* rules = symtab_get_n_values(tag);
+    if (!rules) return NULL;
+    /* Machine N asks for N[e, {MachinePrecision, MachinePrecision}], the key
+     * an N[e] = v rule is stored under; arbitrary precision for N[e, digits]. */
     Expr* call;
     if (spec.mode == NUMERIC_MODE_MACHINE) {
-        Expr* a[1] = { expr_copy((Expr*)e) };
-        call = expr_new_function(expr_new_symbol(SYM_N), a, 1);
+        Expr* mp = expr_new_function(expr_new_symbol(SYM_List),
+                       (Expr*[]){ expr_new_symbol(SYM_MachinePrecision),
+                                  expr_new_symbol(SYM_MachinePrecision) }, 2);
+        Expr* a[2] = { expr_copy((Expr*)e), mp };
+        call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     } else {
         Expr* a[2] = { expr_copy((Expr*)e), expr_new_integer((int64_t)(spec.bits * 0.30102999566398120 + 0.5)) };
         call = expr_new_function(expr_new_symbol(SYM_N), a, 2);
     }
-    Expr* v = apply_up_values(call);
+    Expr* v = NULL;
+    for (Rule* r = rules; r && !v; r = r->next) {
+        MatchEnv* env = env_new();
+        if (match(call, r->pattern, env)) v = replace_bindings(r->replacement, env);
+        env_free(env);
+    }
     expr_free(call);
     if (!v) return NULL;
     g_n_value_depth++;
@@ -2174,7 +2170,19 @@ Expr* builtin_n(Expr* res) {
 
     NumericSpec spec = numeric_machine_spec();
     if (argc == 2) {
-        if (!parse_precision_arg(res->data.function.args[1], &spec)) {
+        const Expr* p = res->data.function.args[1];
+        /* N[expr, {p, a}]: a precision goal and an accuracy goal. The
+         * precision goal decides (N[Pi, {MachinePrecision, MachinePrecision}]
+         * is machine Pi, N[Pi, {20, 20}] has 20 digits); an Infinity
+         * precision goal leaves the accuracy goal, used as the digit count. */
+        if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+            p->data.function.head->data.symbol.name == SYM_List && p->data.function.arg_count == 2) {
+            const Expr* pg = p->data.function.args[0];
+            if (pg->type == EXPR_SYMBOL && pg->data.symbol.name == SYM_Infinity)
+                pg = p->data.function.args[1];
+            p = pg;
+        }
+        if (!parse_precision_arg(p, &spec)) {
             return NULL;  /* non-numeric precision → remain unevaluated */
         }
     }
@@ -2483,14 +2491,19 @@ Expr* builtin_machinenumberq(Expr* res) {
  * ---------------------------------------------------------------------- */
 void numeric_init(void) {
     symtab_add_builtin("N", builtin_n);
-    symtab_get_def("N")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
+    /* Not Listable (the reference's N is only Protected): numericalize
+     * descends into lists itself, and N[x, {p, a}] is a precision/accuracy
+     * pair, not two precisions. */
+    symtab_get_def("N")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("N",
         "N[expr]\n"
         "\tGives a machine-precision numerical approximation of expr.\n"
         "N[expr, n]\n"
         "\tGives a numerical approximation to n decimal digits. Requires\n"
         "\ta USE_MPFR build; without it, a warning is emitted and machine\n"
-        "\tprecision is used.\n");
+        "\tprecision is used.\n"
+        "N[expr, {p, a}]\n"
+        "\tPrecision goal p and accuracy goal a; p is used (a when p is Infinity).\n");
 
     symtab_add_builtin("MachineNumberQ", builtin_machinenumberq);
     symtab_get_def("MachineNumberQ")->attributes |= ATTR_PROTECTED;

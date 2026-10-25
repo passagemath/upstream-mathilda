@@ -587,6 +587,7 @@ const char* SYM_SetDelayed = NULL;
 #if UP_VALUES
 const char* SYM_UpValues = NULL;
 const char* SYM_FormatValues = NULL;
+const char* SYM_NValues = NULL;
 const char* SYM_Format = NULL;
 const char* SYM_MakeBoxes = NULL;
 const char* SYM_FormatType = NULL;
@@ -1638,6 +1639,7 @@ void sym_names_init(void) {
 #if UP_VALUES
     SYM_UpValues                   = intern_symbol("UpValues");
     SYM_FormatValues               = intern_symbol("FormatValues");
+    SYM_NValues                    = intern_symbol("NValues");
     SYM_Format                     = intern_symbol("Format");
     SYM_MakeBoxes                  = intern_symbol("MakeBoxes");
     SYM_FormatType                 = intern_symbol("FormatType");

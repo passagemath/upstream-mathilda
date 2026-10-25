@@ -3921,6 +3921,10 @@ void info_init(void) {
     symtab_set_docstring("FormatValues",
         "FormatValues[s] gives the list of display rules for s, defined by Format[...] := ...\n"
         "\tor s /: MakeBoxes[..., form] := .... FormatValues[s] = {...} replaces them.");
+    symtab_set_docstring("NValues",
+        "NValues[s] gives the list of values N gives s or calls of s, defined by\n"
+        "\tN[s] = v, s /: N[s] = v or N[s[...], p_] := .... NValues[s] = {...} replaces\n"
+        "\tthem; an N[s] rule is listed as N[s, {MachinePrecision, MachinePrecision}].");
     symtab_set_docstring("Format",
         "Format[expr] := rhs (or Format[expr, form] := rhs) makes expr display as rhs.\n"
         "\tThe rules are FormatValues of expr's symbol; ToString and the REPL\n"

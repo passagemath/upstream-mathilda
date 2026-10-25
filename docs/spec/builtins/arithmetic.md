@@ -59,15 +59,23 @@ the implicit decision: `3.14`50` is 50-digit MPFR, `3.14``49` is
 Numerical evaluation.
 - `N[expr]` — machine-precision approximation.
 - `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
+- `N[expr, {p, a}]` — precision goal `p` and accuracy goal `a`. The precision
+  goal decides, and an `Infinity` precision goal leaves the accuracy goal as the
+  digit count. `N` is `Protected` only, not `Listable` (as in the reference), so
+  the pair is not threaded over: `N[Pi, {MachinePrecision, MachinePrecision}]`
+  is machine `Pi`.
 
 **N-values**: a rule for `N` attached to a symbol or a head is used wherever
 that symbol or call occurs, not only at the top: after `z2 /: N[z2] = 3/2` and
 `h /: N[h[x_]] := 2 x`, `N[2 + z2]` is `3.5` and `N[1 + h[3]]` is `7.`. The
 assignment `N[x] = v` (or `N[f[...]] := v`) stores the same rule on `x` (or on
-`f`), since `N` itself is `Protected`. A rule's value is numericalized itself
+`f`), since `N` itself is `Protected`. The rules are the symbol's `NValues`
+(never its `UpValues`). A rule `N[x] = v` is listed, and matched, as
+`N[x, {MachinePrecision, MachinePrecision}] :> v`, as in the reference;
+`NValues[x] = {...}` replaces the list and `Clear` removes it. A rule's value is numericalized itself
 (`N[x] = 5` makes `N[x]` `5.`). A rule written without a precision argument
 serves machine-precision `N` only, as the reference's N-value for
-`{MachinePrecision, MachinePrecision}` does. `NValues` is not provided.
+`{MachinePrecision, MachinePrecision}` does.
 
 **Held arguments**: in a position its head holds (`If`'s branches, a
 `Function` body, any `HoldFirst`/`HoldRest`/`HoldAll` slot) `N` numericalizes the

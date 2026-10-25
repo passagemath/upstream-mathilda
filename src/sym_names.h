@@ -595,6 +595,10 @@ extern const char* SYM_SetDelayed;
  * unit; the printer and list-setter intercepts compare head pointers against
  * these, so they must be interned (not just used by string). */
 extern const char* SYM_UpValues;
+extern const char* SYM_FormatValues;
+extern const char* SYM_Format;
+extern const char* SYM_MakeBoxes;
+extern const char* SYM_FormatType;
 extern const char* SYM_UpSet;
 extern const char* SYM_UpSetDelayed;
 extern const char* SYM_TagSet;

@@ -34,6 +34,21 @@ static void free_rule_list(Rule* r) {
     }
 }
 
+/* Running total of FormatValue rules (see symtab.h). */
+size_t symtab_format_value_count = 0;
+
+/* Free a FormatValue list, keeping symtab_format_value_count in step. */
+static void free_format_value_list(Rule* r) {
+    while (r) {
+        Rule* next = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        if (symtab_format_value_count) symtab_format_value_count--;
+        r = next;
+    }
+}
+
 #if UP_VALUES
 /* Running total of UpValue rules (see symtab.h). */
 size_t symtab_up_value_count = 0;
@@ -64,6 +79,7 @@ static void reset_node_payload(SymbolDef* d) {
 #if UP_VALUES
     free_up_value_list(d->up_values); d->up_values = NULL;
 #endif
+    free_format_value_list(d->format_values); d->format_values = NULL;
     if (d->docstring) { free(d->docstring); d->docstring = NULL; }
     if (d->default_options) { expr_free(d->default_options); d->default_options = NULL; }
     d->builtin_func = NULL;
@@ -1114,6 +1130,8 @@ void symtab_clear_symbol(const char* symbol_name) {
     free_up_value_list(def->up_values);
     def->up_values = NULL;
 #endif
+    free_format_value_list(def->format_values);
+    def->format_values = NULL;
 }
 
 void symtab_remove_symbol(const char* symbol_name) {
@@ -1806,7 +1824,7 @@ bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs) {
 }
 
 /* Shared backend for OwnValues[f]=list / DownValues[f]=list / UpValues[f]=list.
- * which: 0=own, 1=down, 2=up. Frees the existing target list, then installs each
+ * which: 0=own, 1=down, 2=up, 3=format. Frees the existing target list, then installs each
  * Rule/RuleDelayed[lhs,rhs] element (stripping an outer HoldPattern on lhs).
  * Malformed elements are skipped. Order follows add_rule's specificity sort
  * (insertion order the tie-break) -- identical to how a sequence of individual
@@ -1816,10 +1834,12 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
     SymbolDef* def = symtab_get_def(symbol_name);
     Rule** target = (which == 0) ? &def->own_values
                   : (which == 1) ? &def->down_values
-                                 : &def->up_values;
+                  : (which == 2) ? &def->up_values
+                                 : &def->format_values;
 
-    if (which == 2) free_up_value_list(*target);
-    else            free_rule_list(*target);
+    if (which == 2)      free_up_value_list(*target);
+    else if (which == 3) free_format_value_list(*target);
+    else                 free_rule_list(*target);
     *target = NULL;
 
     if (list && list->type == EXPR_FUNCTION &&
@@ -1842,10 +1862,11 @@ static void symtab_set_values_common(const char* symbol_name, const Expr* list,
                 lhs->data.function.arg_count == 1)
                 lhs = lhs->data.function.args[0];   /* unwrap HoldPattern */
 
-            if (which == 2) {
+            if (which == 2 || which == 3) {
                 size_t before = rule_list_len(*target);
                 add_rule(target, lhs, rhs, delayed);
-                symtab_up_value_count += rule_list_len(*target) - before;
+                if (which == 2) symtab_up_value_count += rule_list_len(*target) - before;
+                else            symtab_format_value_count += rule_list_len(*target) - before;
             } else {
                 add_rule(target, lhs, rhs, delayed);
             }
@@ -1864,4 +1885,23 @@ void symtab_set_down_values(const char* symbol_name, const Expr* list) {
 void symtab_set_up_values(const char* symbol_name, const Expr* list) {
     symtab_set_values_common(symbol_name, list, 2);
 }
+void symtab_set_format_values(const char* symbol_name, const Expr* list) {
+    symtab_set_values_common(symbol_name, list, 3);
+}
 #endif /* UP_VALUES */
+
+void symtab_add_format_value(const char* symbol_name, Expr* pattern, Expr* replacement,
+                             bool delayed) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    /* add_rule replaces a same-LHS rule in place or links a new one: count. */
+    size_t before = 0, after = 0;
+    for (const Rule* r = def->format_values; r; r = r->next) before++;
+    add_rule(&def->format_values, pattern, replacement, delayed);
+    for (const Rule* r = def->format_values; r; r = r->next) after++;
+    symtab_format_value_count += after - before;
+}
+
+Rule* symtab_get_format_values(const char* symbol_name) {
+    SymbolDef* d = node_find(symbol_name);
+    return d ? d->format_values : NULL;
+}

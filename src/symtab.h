@@ -71,6 +71,11 @@ typedef struct SymbolDef {
      * before the enclosing head's DownValues/builtin -- see apply_up_values. */
     Rule* up_values;
 #endif
+    /* FormatValues: display rules keyed on this symbol, installed by
+     * Format[lhs] := rhs and tag /: MakeBoxes[lhs, form] := rhs (or Format).
+     * Never consulted by evaluation; the OutputForm printer applies the ones
+     * that are not MakeBoxes rules. */
+    Rule* format_values;
     BuiltinFunc builtin_func; // C function evaluating this symbol
     uint32_t attributes;
     /* Phase 2 unified-table bookkeeping.
@@ -331,6 +336,15 @@ bool symtab_remove_matching_up_value(const char* symbol_name, const Expr* lhs);
 void symtab_set_own_values(const char* symbol_name, const Expr* list);
 void symtab_set_down_values(const char* symbol_name, const Expr* list);
 void symtab_set_up_values(const char* symbol_name, const Expr* list);
+/* FormatValues[f] = list (NULL or {} clears it); shares the backend above. */
+void symtab_set_format_values(const char* symbol_name, const Expr* list);
 #endif // UP_VALUES
+
+/* FormatValues. symtab_format_value_count is the total number of rules across
+ * every symbol, so the printer's format hook early-outs on 0. Add copies its
+ * arguments (a same-LHS rule is replaced). */
+extern size_t symtab_format_value_count;
+void  symtab_add_format_value(const char* symbol_name, Expr* pattern, Expr* replacement, bool delayed);
+Rule* symtab_get_format_values(const char* symbol_name);
 
 #endif // SYMTAB_H

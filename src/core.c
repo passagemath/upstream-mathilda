@@ -387,6 +387,7 @@ void core_init(void) {
 #if UP_VALUES
     symtab_add_builtin("UpValues", builtin_up_values);
 #endif
+    symtab_add_builtin("FormatValues", builtin_format_values);
     symtab_add_builtin("Out", builtin_out);
     symtab_add_builtin("Plus", builtin_plus);
     symtab_add_builtin("Times", builtin_times);
@@ -1343,6 +1344,16 @@ static Expr* unset_lhs(Expr* lhs) {
         /* e.g. Unset[5] -- not an assignable left-hand side. */
         return NULL;
     }
+
+#if UP_VALUES
+    /* FormatValues[f] =. clears the display rules of f (FeynCalc's Write2
+     * restores FortranForm this way). */
+    if (symbol_name == SYM_FormatValues && lhs->data.function.arg_count == 1 &&
+        lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        symtab_set_format_values(lhs->data.function.args[0]->data.symbol.name, NULL);
+        return expr_new_symbol(SYM_Null);
+    }
+#endif
 
     /* Protected symbols (every builtin among them) cannot be Unset,
      * mirroring Set's wrsym guard. */
@@ -2499,6 +2510,21 @@ Expr* builtin_up_values(Expr* res) {
     return NULL;
 }
 #endif
+
+/* FormatValues[sym] -> {HoldPattern[lhs] :> rhs, ...}: the display rules of sym
+ * (Format / tag /: MakeBoxes definitions). Accepts a symbol or a string naming
+ * an existing symbol; {} when there are none. */
+Expr* builtin_format_values(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL)
+        return rules_to_list(symtab_get_format_values(arg->data.symbol.name));
+    if (arg->type == EXPR_STRING) {
+        SymbolDef* d = symtab_lookup(arg->data.string);
+        return d ? rules_to_list(d->format_values) : NULL;
+    }
+    return NULL;
+}
 
 Expr* builtin_out(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;

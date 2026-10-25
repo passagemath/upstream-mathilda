@@ -1130,7 +1130,7 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
         }
     }
 
-    char* result_str = expr_to_string(evaluated);
+    char* result_str = expr_to_string_display(evaluated);
     char* latex_raw  = expr_to_latex(evaluated);   /* must be before expr_free */
     LatexParts sparts;
     char* slatex_raw = expr_to_latex_selectable(evaluated, &sparts);

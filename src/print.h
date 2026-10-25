@@ -20,6 +20,8 @@ void  mth_out_pop(FILE* prev);
 void expr_print(Expr* e);
 void expr_print_fullform(Expr* e);
 char* expr_to_string(Expr* e);
+/* expr_to_string with Format display rules applied (a front end's Out[]). */
+char* expr_to_string_display(Expr* e);
 char* expr_to_string_fullform(Expr* e);
 char* expr_to_string_outputform(Expr* e);   /* strings unquoted, as Print */
 

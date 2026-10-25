@@ -18,6 +18,10 @@
 #include "compile/compiled_function.h"
 #include "graph.h"   /* graph_is_list, for the Graph[...] summary form */
 #include "graph_hyper.h"   /* hypergraph_is_valid, for Hypergraph[...] */
+#include "symtab.h"        /* FormatValues */
+#include "match.h"
+#include "eval.h"
+#include "message.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -200,6 +204,39 @@ static int get_expr_prec(Expr* e) {
  * which makes a side-by-side run of the same .m file in the two systems
  * needlessly hard to compare -- see docs/experiments/. */
 static bool g_print_output_form = false;
+
+/* Display rules (FormatValues, from Format[...] := ...) apply to what a user
+ * sees -- ToString's OutputForm and the REPL's Out[] -- and never to the
+ * internal renderings expr_to_string feeds back into evaluation, nor inside
+ * InputForm or FullForm, nor in a script's Print (raw, as in wolframscript).
+ * Set by those entry points only. */
+static bool g_apply_formats = false;
+static int g_format_depth = 0;
+#define FORMAT_DEPTH_LIMIT 256
+
+/* The display rewrite of e under its symbol's FormatValues: the first plain
+ * (non-MakeBoxes) rule whose pattern matches, its right-hand side evaluated.
+ * NULL when no rule applies. */
+static Expr* format_value_rewrite(Expr* e) {
+    const Expr* k = e;
+    while (k->type == EXPR_FUNCTION) k = k->data.function.head;
+    if (k->type != EXPR_SYMBOL) return NULL;
+    for (Rule* r = symtab_get_format_values(k->data.symbol.name); r; r = r->next) {
+        const Expr* p = r->pattern;
+        if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+            p->data.function.head->data.symbol.name == SYM_MakeBoxes) continue;
+        MatchEnv* env = env_new();
+        Expr* out = NULL;
+        if (match(e, r->pattern, env)) {
+            Expr* bound = replace_bindings(r->replacement, env);
+            out = evaluate(bound);
+            expr_free(bound);
+        }
+        env_free(env);
+        if (out) return out;
+    }
+    return NULL;
+}
 
 static void print_string_literal(const char* s) {
     /* An explicit InputForm[...] inside Print keeps the quoted literal. */
@@ -452,6 +489,28 @@ static void fold_rational_coeff_into_den(Expr** num, size_t* nnum,
 
 static void print_standard(Expr* e, int parent_prec) {
     if (!e) { printf("Null"); return; }
+    /* Format[...] display rules. A rewrite is itself displayed (and so
+     * formatted again: Format[a[x_]] := b[x], Format[b[x_]] := 9 shows 9); a
+     * rule that keeps reproducing a match stops at FORMAT_DEPTH_LIMIT, as the
+     * reference stops at $RecursionLimit with Format::forml. */
+    if (g_apply_formats && symtab_format_value_count && g_inputform_depth == 0 &&
+        (e->type == EXPR_SYMBOL || e->type == EXPR_FUNCTION)) {
+        if (g_format_depth >= FORMAT_DEPTH_LIMIT) {
+            if (g_format_depth == FORMAT_DEPTH_LIMIT)
+                mth_message("Format", "forml",
+                            "Recursion depth limit $RecursionLimit exceeded while formatting output.");
+            g_format_depth++;   /* report once per print */
+        } else {
+            Expr* shown = format_value_rewrite(e);
+            if (shown) {
+                g_format_depth++;
+                print_standard(shown, parent_prec);
+                g_format_depth--;
+                expr_free(shown);
+                return;
+            }
+        }
+    }
     /* OutputForm (Print, ToString): Style[expr, opts...] is presentation only
      * -- with no front end to style it, it prints as expr. */
     if (g_print_output_form && e->type == EXPR_FUNCTION && e->data.function.arg_count >= 1 &&
@@ -1244,7 +1303,11 @@ static void print_standard(Expr* e, int parent_prec) {
 }
 
 void expr_print(Expr* e) {
+    bool saved_af = g_apply_formats;
+    g_apply_formats = true;
+    g_format_depth = 0;
     print_standard(e, 0);
+    g_apply_formats = saved_af;
     printf("\n");
 }
 
@@ -1299,6 +1362,19 @@ static char* str_capture_finish(StrCapture* c) {
 #endif
 }
 
+/* expr_to_string with display rules (Format) applied: what the front end shows
+ * for a result. Caller frees. */
+char* expr_to_string_display(Expr* e) {
+    bool saved_af = g_apply_formats;
+    int saved_fd = g_format_depth;
+    g_apply_formats = true;
+    g_format_depth = 0;
+    char* s = expr_to_string(e);
+    g_format_depth = saved_fd;
+    g_apply_formats = saved_af;
+    return s;
+}
+
 char* expr_to_string(Expr* e) {
     // Print to a memory buffer by diverting the print sink to it.
     StrCapture c;
@@ -1321,11 +1397,17 @@ char* expr_to_string_outputform(Expr* e) {
 
     FILE* prev = mth_out_push(c.f);
     bool saved_of = g_print_output_form;
+    bool saved_af = g_apply_formats;
     int saved_if = g_inputform_depth;
+    int saved_fd = g_format_depth;
     g_print_output_form = true;
+    g_apply_formats = true;
     g_inputform_depth = 0;
+    g_format_depth = 0;
     print_standard(e, 0);
+    g_format_depth = saved_fd;
     g_inputform_depth = saved_if;
+    g_apply_formats = saved_af;
     g_print_output_form = saved_of;
     mth_out_pop(prev);
 
@@ -1371,11 +1453,17 @@ char* numberform_format_result_to_string(const Expr* e) {
 
 Expr* builtin_print(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* No display rules here: a script's Print writes the raw expression, as
+     * wolframscript does (Format[k[x_]] := 11; Print[k[2]] shows k[2]), while
+     * ToString[k[2]] is 11. */
     bool saved = g_print_output_form;
+    bool saved_af = g_apply_formats;
     g_print_output_form = true;
+    g_apply_formats = false;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         print_standard(res->data.function.args[i], 0);
     }
+    g_apply_formats = saved_af;
     g_print_output_form = saved;
     printf("\n");
     /* B3: flush per Print so output appears incrementally down a pipe (stdout is

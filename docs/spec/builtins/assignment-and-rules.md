@@ -197,10 +197,9 @@ Out[3]= {h[2], f[k[2]]}
   A rule fires only when its whole pattern matches the assignment, so an
   upvalue with a different shape cannot intercept an unrelated `Set`. The
   definitional forms (`UpSet`, `TagSet`, ...) are not intercepted.
-- A `MakeBoxes`/`Format` rule tagged on a compound head
-  (`CLC /: MakeBoxes[CLC[x___][y___], fmt] := ...`) is stored as an upvalue.
-  The reference files such rules under `FormatValues`, which Mathilda does not
-  have.
+- A `MakeBoxes` or `Format` rule (`f /: MakeBoxes[f[x_], TraditionalForm] := ...`,
+  `CLC /: MakeBoxes[CLC[x___][y___], fmt] := ...`) is stored in the tag's
+  `FormatValues`, not its `UpValues`, as in the reference. See `FormatValues`.
 
 ```mathematica
 In[1]:= mod /: mod[a_, p_] + mod[b_, p_] := mod[Mod[a + b, p], p];
@@ -521,6 +520,43 @@ Out[1]= {HoldPattern[f[x_]] :> x^2}
 
 In[2]:= a = 5; OwnValues[a]
 Out[2]= {HoldPattern[a] :> 5}
+```
+
+## Format, FormatValues, MakeBoxes
+
+- `Format[expr] := rhs` / `Format[expr, form] := rhs`: display `expr` as `rhs`.
+- `FormatValues[f]`: the display rules of `f`, as `HoldPattern[lhs] :> rhs`.
+- `FormatValues[f] = {rules}` replaces them; `FormatValues[f] =.`, `Clear[f]`
+  and `ClearAll[f]` remove them.
+- `f /: MakeBoxes[lhs, form] := boxes` and `f /: Format[lhs] := rhs` store
+  their rule in `FormatValues[f]`, never in `UpValues[f]`.
+
+**Features**:
+- An untagged `Format` is keyed on the symbol of `expr`, or on its innermost
+  head. The stored rules are the reference's:
+  `Format[k[x_]] := x + 1` gives `{HoldPattern[MakeBoxes[k[x_], FormatType_]] :>
+  Format[x + 1, FormatType], HoldPattern[k[x_]] :> x + 1}`.
+  `Format[k[x_], OutputForm] := ...` stores only the plain rule, and other
+  forms store only the `MakeBoxes` rule.
+- `ToString` (OutputForm) and the REPL's `Out[]` apply the plain rules, inside
+  `Hold`, `HoldForm` and `HoldPattern` too. A result is formatted again
+  (`Format[a[x_]] := b[x]; Format[b[x_]] := 9` shows `a[1]` as `9`). A rule
+  that keeps producing a match stops with `Format::forml`.
+- `InputForm`, `FullForm` and evaluation never see the rules. A script's
+  `Print` writes the raw expression, as `wolframscript` does.
+- Mathilda has no box typesetting, so `MakeBoxes` rules are stored and listed
+  but not rendered.
+- `Format` is `Protected`, `FormatValues` is `HoldAll`/`Protected`, and
+  `MakeBoxes` is `HoldAllComplete` (a `System` symbol). An untagged
+  `MakeBoxes[...] := ...` is a DownValue of `MakeBoxes`. Assigning a format to
+  a `Protected` symbol gives `SetDelayed::write`.
+
+```mathematica
+In[1]:= Format[k[x_]] := x + 1; {ToString[k[3]], ToString[k[3], InputForm], k[3] === k[3]}
+Out[1]= {4, k[3], True}
+
+In[2]:= f /: MakeBoxes[f, TraditionalForm] := "F"; {UpValues[f], FormatValues[f]}
+Out[2]= {{}, {HoldPattern[MakeBoxes[f, TraditionalForm]] :> F}}
 ```
 
 ## ClearAll, Remove

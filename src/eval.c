@@ -1223,6 +1223,56 @@ static Expr* hoist_rhs_conditions(Expr* lhs, Expr* rhs, Expr** body) {
     return pat;
 }
 
+/* The symbol a Format target is keyed on: the symbol itself, or the innermost
+ * symbol head of a call (k[x_] -> k, k[a][b_] -> k). NULL otherwise. */
+static const char* format_target_tag(const Expr* e) {
+    while (e && e->type == EXPR_FUNCTION) e = e->data.function.head;
+    return (e && e->type == EXPR_SYMBOL) ? e->data.symbol.name : NULL;
+}
+
+/* MakeBoxes[lhs, form] or Format[lhs] / Format[lhs, form]: an assignment to
+ * either installs FormatValues, not a DownValue of the Protected head. */
+static bool is_format_target(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    return (h == SYM_Format && (n == 1 || n == 2)) || (h == SYM_MakeBoxes && n == 2);
+}
+
+/* Install the FormatValues the reference stores for an assignment to a format
+ * target, keyed on `tag`:
+ *   MakeBoxes[lhs, form] := rhs    ->  MakeBoxes[lhs, form] :> rhs
+ *   Format[lhs] := rhs             ->  MakeBoxes[lhs, FormatType_] :> Format[rhs, FormatType]
+ *                                      lhs :> rhs
+ *   Format[lhs, OutputForm] := rhs ->  lhs :> rhs
+ *   Format[lhs, form] := rhs       ->  MakeBoxes[lhs, form] :> Format[rhs, form]
+ * The plain lhs :> rhs rules are the ones the printer applies (print.c). */
+static void install_format_rules(const char* tag, Expr* target, Expr* rhs, bool delayed) {
+    if (target->data.function.head->data.symbol.name == SYM_MakeBoxes) {
+        symtab_add_format_value(tag, target, rhs, delayed);
+        return;
+    }
+    Expr* lhs = target->data.function.args[0];
+    Expr* form = target->data.function.arg_count == 2 ? target->data.function.args[1] : NULL;
+    if (form && form->type == EXPR_SYMBOL && form->data.symbol.name == SYM_OutputForm) {
+        symtab_add_format_value(tag, lhs, rhs, delayed);
+        return;
+    }
+    Expr* form_pat = form ? expr_copy(form)
+        : expr_new_function(expr_new_symbol(SYM_Pattern),
+              (Expr*[]){ expr_new_symbol(SYM_FormatType),
+                         expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2);
+    Expr* mb = expr_new_function(expr_new_symbol(SYM_MakeBoxes),
+                                 (Expr*[]){ expr_copy(lhs), form_pat }, 2);
+    Expr* fm = expr_new_function(expr_new_symbol(SYM_Format),
+                                 (Expr*[]){ expr_copy(rhs),
+                                            form ? expr_copy(form) : expr_new_symbol(SYM_FormatType) }, 2);
+    symtab_add_format_value(tag, mb, fm, delayed);
+    expr_free(mb);
+    expr_free(fm);
+    if (!form) symtab_add_format_value(tag, lhs, rhs, delayed);
+}
+
 /*
  * apply_assignment:
  * Helper to handle the 'Set' (=) and 'SetDelayed' (:=) primitives.
@@ -1274,6 +1324,26 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         return false;
     }
 
+    /* Format[lhs] = rhs / Format[lhs, form] := rhs: FormatValues of the symbol
+     * lhs is keyed on, as the reference stores them. Format is Protected, so
+     * this is intercepted before the Protected guard. (An untagged
+     * MakeBoxes[...] := rhs stays a DownValue of MakeBoxes, as in the
+     * reference; tag /: MakeBoxes[...] := rhs is handled by TagSet.) */
+    if (is_format_target(lhs) && lhs->data.function.head->data.symbol.name == SYM_Format) {
+        const char* tag = format_target_tag(lhs->data.function.args[0]);
+        if (tag) {
+            if (get_attributes(tag) & ATTR_PROTECTED) {
+                char* lt = expr_to_string_outputform(lhs->data.function.args[0]);
+                mth_message(is_delayed ? "SetDelayed" : "Set", "write",
+                            "Tag %s in %s is Protected.", tag, lt ? lt : "");
+                free(lt);
+                return true;
+            }
+            install_format_rules(tag, lhs, rhs, is_delayed);
+            return true;
+        }
+    }
+
 #if UP_VALUES
     /* N[x] = v, N[f[...]] := v (and N[x, p] = v): an N-value of the symbol x or
      * the head f, which the reference keeps in NValues; stored here as the
@@ -1310,7 +1380,8 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         && lhs->data.function.args[0]->type == EXPR_SYMBOL
         && (lhs->data.function.head->data.symbol.name == SYM_UpValues
             || lhs->data.function.head->data.symbol.name == SYM_DownValues
-            || lhs->data.function.head->data.symbol.name == SYM_OwnValues)) {
+            || lhs->data.function.head->data.symbol.name == SYM_OwnValues
+            || lhs->data.function.head->data.symbol.name == SYM_FormatValues)) {
         const char* h = lhs->data.function.head->data.symbol.name;
         const char* target = lhs->data.function.args[0]->data.symbol.name;
         /* A list-assignment mutates `target`'s definitions, so it must honour
@@ -1326,8 +1397,9 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
         if (rhs->type == EXPR_FUNCTION
             && rhs->data.function.head->type == EXPR_SYMBOL
             && rhs->data.function.head->data.symbol.name == SYM_List) {
-            if (h == SYM_UpValues)        symtab_set_up_values(target, rhs);
-            else if (h == SYM_DownValues) symtab_set_down_values(target, rhs);
+            if (h == SYM_UpValues)          symtab_set_up_values(target, rhs);
+            else if (h == SYM_FormatValues) symtab_set_format_values(target, rhs);
+            else if (h == SYM_DownValues)   symtab_set_down_values(target, rhs);
             else                          symtab_set_own_values(target, rhs);
             return true;
         }
@@ -1874,6 +1946,13 @@ static bool apply_tag_assignment(Expr* tag, Expr* lhs, Expr* rhs, bool is_delaye
     if (get_attributes(tagn) & ATTR_PROTECTED) {
         mth_message(head, "write", "Tag %s is Protected.", tagn);
         return false;
+    }
+    /* tag /: MakeBoxes[lhs, form] := rhs and tag /: Format[lhs] := rhs define
+     * FormatValues of tag, not UpValues: the reference never consults them in
+     * evaluation, only in output. */
+    if (is_format_target(lhs) && tag_occurs_in(lhs, tagn)) {
+        install_format_rules(tagn, lhs, rhs, is_delayed);
+        return true;
     }
     TagPos pos = classify_tag_position(tagn, lhs);
     if (pos == TAG_NOTFOUND) {

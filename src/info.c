@@ -3918,6 +3918,17 @@ void info_init(void) {
         "on $ContextPath.");
     symtab_set_docstring("OwnValues", "OwnValues[s] gives a list of own-value rules for s.");
     symtab_set_docstring("DownValues", "DownValues[s] gives a list of down-value rules for s.");
+    symtab_set_docstring("FormatValues",
+        "FormatValues[s] gives the list of display rules for s, defined by Format[...] := ...\n"
+        "\tor s /: MakeBoxes[..., form] := .... FormatValues[s] = {...} replaces them.");
+    symtab_set_docstring("Format",
+        "Format[expr] := rhs (or Format[expr, form] := rhs) makes expr display as rhs.\n"
+        "\tThe rules are FormatValues of expr's symbol; ToString and the REPL\n"
+        "\tapply them, InputForm and FullForm do not.");
+    symtab_set_docstring("MakeBoxes",
+        "MakeBoxes[expr, form] is the low-level box construction for expr in form.\n"
+        "\ts /: MakeBoxes[..., form] := boxes defines FormatValues of s. Mathilda\n"
+        "\thas no box typesetting, so these rules are stored but not rendered.");
 #if UP_VALUES
     symtab_set_docstring("UpValues",
         "UpValues[s] gives a list of up-value rules for s (values for g[..,s,..] or "

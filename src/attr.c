@@ -37,6 +37,9 @@ static SymbolAttr builtin_attrs[] = {
     {"ClearAttributes", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"OwnValues", ATTR_HOLDALL | ATTR_PROTECTED},
     {"DownValues", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"FormatValues", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Format", ATTR_PROTECTED},
+    {"MakeBoxes", ATTR_HOLDALLCOMPLETE},
 #if UP_VALUES
     {"UpValues", ATTR_HOLDALL | ATTR_PROTECTED},
     {"UpSet", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},

@@ -434,6 +434,31 @@ static void test_set_upvalues(void) {
     assert_eval_eq("s1plainA = 5; s1plainB[2] = 6; {s1plainA, s1plainB[2]}", "{5, 6}", 0);
 }
 
+/* tag /: MakeBoxes[...] := and Format[...] := define FormatValues, never
+ * UpValues (FeynCalc's SharedObjectsUpValues tests: UpValues[AntiQuarkField]
+ * is {}). Expected values are the reference's. */
+static void test_format_values(void) {
+    assert_eval_eq("fq1 /: MakeBoxes[fq1, TraditionalForm] := \"q\"; {UpValues[fq1], FormatValues[fq1]}",
+                   "{{}, {HoldPattern[MakeBoxes[fq1, TraditionalForm]] :> \"q\"}}", 0);
+    assert_eval_eq("fq2 /: Format[fq2[x_]] := x + 1; {UpValues[fq2], Length[FormatValues[fq2]], ToString[fq2[3]]}",
+                   "{{}, 2, \"4\"}", 0);
+    /* Untagged Format: the two rules the reference stores, keyed on the head. */
+    assert_eval_eq("Format[fq3[x_]] := fq3[x, x]; FullForm[FormatValues[fq3]]",
+                   "List[RuleDelayed[HoldPattern[MakeBoxes[fq3[Pattern[x, Blank[]]], Pattern[FormatType, Blank[]]]], "
+                   "Format[fq3[x, x], FormatType]], RuleDelayed[HoldPattern[fq3[Pattern[x, Blank[]]]], fq3[x, x]]]", 0);
+    assert_eval_eq("{ToString[fq3[1]], ToString[fq3[1], InputForm], fq3[1]}", "{\"fq3[1, 1]\", \"fq3[1]\", fq3[1]}", 0);
+    /* A rewrite is formatted again; the rules apply inside holds. */
+    assert_eval_eq("Format[fq4[x_]] := fq5[x]; Format[fq5[x_]] := 9; {ToString[fq4[1]], ToString[Hold[fq4[1]]]}",
+                   "{\"9\", \"Hold[9]\"}", 0);
+    assert_eval_eq("Format[fq6[x_], OutputForm] := 5; FormatValues[fq6]", "{HoldPattern[fq6[x_]] :> 5}", 0);
+    /* FormatValues[f] = {} and FormatValues[f] =. clear; so does Clear. */
+    assert_eval_eq("FormatValues[fq2] = {}; FormatValues[fq2]", "{}", 0);
+    assert_eval_eq("FormatValues[fq3] =.; FormatValues[fq3]", "{}", 0);
+    assert_eval_eq("Clear[fq5]; FormatValues[fq5]", "{}", 0);
+    assert_eval_eq("{Attributes[Format], Attributes[FormatValues], Attributes[MakeBoxes], Context[MakeBoxes]}",
+                   "{{Protected}, {HoldAll, Protected}, {HoldAllComplete}, \"System`\"}", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -486,6 +511,7 @@ int main(void) {
     TEST(test_flat_matchq_whole_expression);
 
     TEST(test_set_upvalues);
+    TEST(test_format_values);
     printf("All UpValues tests passed.\n");
     return 0;
 }

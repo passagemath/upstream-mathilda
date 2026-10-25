@@ -1668,8 +1668,9 @@ Yields `True` if no subexpression in `expr` matches `form`, and yields `False` o
 
 **Features**:
 - `Protected`.
-- By default, explores levels `{0, Infinity}` and option `Heads -> True` is enabled.
+- By default, explores levels `{0, Infinity}` and option `Heads -> True` is enabled (with an explicit level spec too).
 - `form` can be a structural pattern.
+- A `Rational` or `Complex` number is an atom whose head counts at the number's own level when heads are included, as in the reference: `FreeQ[I x, Complex]` and `FreeQ[f[1/2], Rational]` are `False`, `FreeQ[1/2, Rational, Heads -> False]` is `True`, and the number's parts are never visible (`FreeQ[f[1/2], 2]` is `True`). `MemberQ` with `Heads -> True` sees the head the same way. `Position`, `Count`, `Cases` and `DeleteCases` never see it (`Position[{I}, Complex]` is `{}`).
 
 ```mathematica
 In[1]:= FreeQ[{1, 2, 4, 1, 0}, 0]

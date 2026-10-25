@@ -1676,6 +1676,20 @@ static bool freeq_at_level(Expr* expr, Expr* form, int64_t current_level, LevelS
             return false; // Not free!
         }
         env_free(env);
+        /* A Rational / Complex number is an atom, but with Heads -> True its
+         * head counts at the atom's own level, as in the reference:
+         * FreeQ[I x, Complex] and FreeQ[f[1/2], Rational] are False, while
+         * its parts (the 2 of 1/2) are never visible.  FeynCalc's
+         * MomentumCombine gates its complex-momentum step on this. */
+        if (spec.heads && expr->type == EXPR_FUNCTION &&
+            expr->data.function.head->type == EXPR_SYMBOL &&
+            (expr->data.function.head->data.symbol.name == SYM_Rational ||
+             expr->data.function.head->data.symbol.name == SYM_Complex)) {
+            MatchEnv* henv = env_new();
+            bool hit = match(expr->data.function.head, form, henv);
+            env_free(henv);
+            if (hit) return false;
+        }
     }
 
     if (expr->type == EXPR_FUNCTION && !(expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol.name == SYM_Rational || expr->data.function.head->data.symbol.name == SYM_Complex))) {
@@ -1727,6 +1741,7 @@ Expr* builtin_freeq(Expr* res) {
     if (res->data.function.arg_count >= 3) {
         Expr* ls = res->data.function.args[2];
         spec = parse_level_spec(ls, 1, 1);
+        spec.heads = true;   /* FreeQ's Heads -> True default holds with a level spec too */
         if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
             // Already parsed by parse_level_spec
         } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {

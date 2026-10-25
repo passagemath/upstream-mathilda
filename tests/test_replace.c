@@ -25,9 +25,30 @@ void run_test(const char* input, const char* expected) {
     expr_free(evaled);
 }
 
+/* A Rational or Complex number is an atom: replacement, Cases, Count,
+ * Position and DeleteCases never reach its parts or its head, while FreeQ and
+ * MemberQ (with Heads -> True) see its head at its own level. Every expected
+ * value is the reference's. {1/2} /. 2 -> 3 was {1/3}; FeynCalc's
+ * MomentumCombine gates on FreeQ[expr, Complex]. */
+static void test_number_atoms(void) {
+    run_test("{{1/2} /. 2 -> 3, {1/2} /. 1 -> 5, {1/2} /. Rational -> f, {I} /. Complex -> h, {1/2} //. 2 -> 3}",
+             "{{1/2}, {1/2}, {1/2}, {I}, {1/2}}");
+    run_test("{1/2} /. Rational[a_, b_] -> g[a, b]", "{g[1, 2]}");
+    run_test("Replace[{1/2}, Rational -> f, Infinity, Heads -> True]", "{1/2}");
+    run_test("{Count[{1/2}, 2, Infinity], Cases[{1/2, I}, 2 | 0 | 1, Infinity], Position[{1/2}, 2], Position[{I}, Complex]}",
+             "{0, {}, {}, {}}");
+    run_test("{DeleteCases[{1/2, x}, 2, Infinity], DeleteCases[{I}, 0, Infinity]}", "{{1/2, x}, {I}}");
+    run_test("{FreeQ[I x, Complex], FreeQ[f[1/2], Rational], FreeQ[1/2, Rational, Heads -> False], FreeQ[f[I], Complex, 1], "
+             "FreeQ[f[I], Complex, {2}], FreeQ[f[1/2], 2]}",
+             "{False, False, True, False, True, True}");
+    run_test("{MemberQ[{1/2}, 2, Infinity], MemberQ[f[1/2], Rational, {1}, Heads -> True], MemberQ[{1/2}, Rational, Infinity]}",
+             "{False, True, False}");
+}
+
 int main() {
     symtab_init();
     core_init();
+    test_number_atoms();
     
     // ReplacePart[expr, i -> new]
     run_test("ReplacePart[{a, b, c, d}, 2 -> x]", "{a, x, c, d}");

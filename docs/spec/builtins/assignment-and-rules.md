@@ -415,6 +415,11 @@ Applies a rule or list of rules to transform each subpart of an expression.
 - Applies a rule only once to an expression.
 - Returns `expr` unmodified if no rules apply.
 - Maps across lists of rules appropriately.
+- **A `Rational` or `Complex` number is an atom**: rules never reach its parts
+  or its head (`{1/2} /. 2 -> 3` and `{1/2} /. Rational -> f` stay `{1/2}`, and
+  `{I} /. Complex -> h` stays `{I}`). A rule for the number as a whole still
+  matches: `{1/2} /. Rational[a_, b_] -> g[a, b]` is `{g[1, 2]}`. The same holds
+  for `Replace` at any level and for `ReplaceRepeated`.
 - **A guard on a delayed rule's right-hand side** is part of the match:
   `lhs :> body /; test` behaves as `lhs /; test :> body`, so a failing guard
   backtracks into other assignments of the pattern (which pair of a `Plus`)

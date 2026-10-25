@@ -1018,9 +1018,12 @@ static void test_method_heads(void) {
      * rejected by series_spec_vars_ok, and because the funnel notes a firing even
      * under Quiet[] the message would flip an enclosing Check[] to its failure
      * branch. layer2_series declines silently instead. */
+    /* ... but the top-level spec check does: a number is not a limit variable,
+     * for a method head as for Limit itself (Limit::ivar, as in the reference). */
     check("Check[Block[{x}, x = 5; Limit`Series[Sin[x]/x, x -> 0]], $Failed]",
-          "Limit`Series[1/5 Sin[5], 5 -> 0]");
-    check("Check[Block[{x}, x = 5; Limit[Sin[x]/x, x -> 0]], $Failed]", "0");
+          "$Failed");
+    /* A number is not a limit variable: Limit::ivar, as in the reference. */
+    check("Check[Block[{x}, x = 5; Limit[Sin[x]/x, x -> 0]], $Failed]", "$Failed");
 
     /* Every head is documented. */
     check("StringLength[Information[\"Limit`Oscillatory\"]] > 80", "True");

@@ -102,10 +102,20 @@ static bool in_level_spec(Expr* e, int64_t level, int64_t min_l, int64_t max_l,
     return true;
 }
 
+/* A Rational or Complex number is an atom to Cases / Count / Position: its
+ * parts (the 2 of 1/2) and its head are never visited, as in the reference --
+ * Count[{1/2}, 2, Infinity] is 0 and Position[{I}, Complex] is {}.  (FreeQ and
+ * MemberQ do see the head, at the atom's level; see funcprog.c.) */
+static bool pat_number_atom(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rational ||
+            e->data.function.head->data.symbol.name == SYM_Complex);
+}
+
 static void do_cases_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr* replacement, bool delayed, Expr*** results, size_t* count, size_t* cap, int64_t max_results) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
 
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             do_cases_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, replacement, delayed, results, count, cap, max_results);
         }
@@ -443,7 +453,7 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
         }
         result = expr_new_function(new_head, kept, nk);
         free(kept);
-    } else if (e->type == EXPR_FUNCTION) {
+    } else if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         size_t orig_count = e->data.function.arg_count;
         size_t cap = orig_count > 0 ? orig_count : 1;
         Expr** new_args = malloc(sizeof(Expr*) * cap);
@@ -597,7 +607,7 @@ Expr* builtin_delete_cases(Expr* res) {
 static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, Expr*** results, size_t* count, size_t* cap, int64_t max_results, int64_t* current_path, Expr** current_keys, size_t path_len) {
     if (max_results >= 0 && (int64_t)(*count) >= max_results) return;
 
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         int64_t* next_path = malloc(sizeof(int64_t) * (path_len + 1));
         Expr** next_keys = malloc(sizeof(Expr*) * (path_len + 1));
         if (path_len > 0) {
@@ -733,7 +743,7 @@ Expr* builtin_position(Expr* res) {
 }
 
 static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, size_t* count) {
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             do_count_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, count);
         }
@@ -837,9 +847,18 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
             return true;
         }
         env_free(env);
+        /* With Heads -> True, a number's head counts at the number's own
+         * level, as FreeQ sees it: MemberQ[f[1/2], Rational, {1}, Heads -> True]
+         * is True. Its parts are never visible. */
+        if (heads && pat_number_atom(e)) {
+            MatchEnv* henv = env_new();
+            bool hit = match(e->data.function.head, pattern, henv);
+            env_free(henv);
+            if (hit) return true;
+        }
     }
 
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             if (do_member_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern)) return true;
         }

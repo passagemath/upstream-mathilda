@@ -50,6 +50,7 @@
 #include "gruntz.h"       /* Gruntz mrv-algorithm limit engine (layer_gruntz) */
 #include "limit_osc.h"    /* oscillatory normal form (layer_oscillatory)     */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"   /* expr_is_numeric_quantity: Limit::ivar */
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -5204,6 +5205,19 @@ cleanup:
  * the divergent sub-expression is expected and handled. Muting applies only
  * while Limit is running; nested Limit calls nest cleanly via the counter. */
 Expr* builtin_limit(Expr* res) {
+    /* A number is not a limit variable: Block[{x}, x = 5; Limit[f, x -> 0]]
+     * asks for Limit[f, 5 -> 0], which the reference rejects with Limit::ivar
+     * and leaves unevaluated (so Check[...] takes its failure branch). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
+        Expr* spec = res->data.function.args[1];
+        if (head_is(spec, SYM_Rule) && spec->data.function.arg_count == 2 &&
+            expr_is_numeric_quantity(spec->data.function.args[0])) {
+            char* v = expr_to_string_outputform(spec->data.function.args[0]);
+            mth_message("Limit", "ivar", "%s is not a valid variable.", v ? v : "");
+            free(v);
+            return NULL;
+        }
+    }
     /* Inexact coefficients break the symbolic limit machinery (which
      * leans on Together / Cancel / Series, all rational-coefficient
      * algorithms). Rationalise inputs, run, and numericalise the limit

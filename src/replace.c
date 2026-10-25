@@ -431,6 +431,17 @@ static Expr* rule_try(const ReplaceRule* r, Expr* e) {
     return rule_finish(r, out);
 }
 
+/* A Rational or Complex number is an atom to every replacement traversal: its
+ * parts and head are never rewritten, as in the reference -- {1/2} /. 2 -> 3
+ * stays {1/2} (it was {1/3}), {1/2} /. 1 -> 5 stays {1/2}, and
+ * {I} /. Complex -> h stays {I}.  A rule for the number as a whole
+ * (Rational[a_, b_] -> g[a, b]) still matches it. */
+static bool rp_number_atom(const Expr* e) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rational ||
+            e->data.function.head->data.symbol.name == SYM_Complex);
+}
+
 static int64_t get_expr_depth_replace(Expr* e, bool heads) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
@@ -469,7 +480,7 @@ static Expr* do_replace_at_level(Expr* e, int64_t current_level, int64_t min_l, 
     }
 
     Expr* new_e = NULL;
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !rp_number_atom(e)) {
         Expr* new_head = e->data.function.head;
         if (heads) {
             new_head = do_replace_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, rules, num_rules);
@@ -588,7 +599,7 @@ static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
         if (repl) return repl;
     }
 
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !rp_number_atom(e)) {
         Expr* new_head = do_replace_all(e->data.function.head, rules, num_rules);
         /* Inside an atomic association the rules reach the values only: the
          * keys and the k -> v entries are never matched, so
@@ -744,7 +755,7 @@ static Expr* do_replace_all_idx(Expr* e, ReplaceRule* rules, const RuleIndex* ix
         if (repl) return repl;
     }
 
-    if (e->type == EXPR_FUNCTION) {
+    if (e->type == EXPR_FUNCTION && !rp_number_atom(e)) {
         Expr* new_head = do_replace_all_idx(e->data.function.head, rules, ix);
         bool assoc = assoc_is_wellformed(e);
         size_t count = e->data.function.arg_count;

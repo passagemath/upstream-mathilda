@@ -964,6 +964,23 @@ void test_downvalue_order_conditions() {
     assert_eval_eq("g2[y_] /; y > 0 := 2; g2[x_] := 1; {g2[3], g2[-3]}", "{2, 1}", 0);
 }
 
+/* OptionsPattern[] in any position takes a prefix of option arguments, and
+ * SyntacticNegativeQ reads a sum by its first term and a complex by its
+ * imaginary part. Expected values are the reference's (FeynCalc's
+ * SUNSimplify: SUND is Orderless, so SUND[args__, OptionsPattern[]] sorts to
+ * SUND[OptionsPattern[], args__]). */
+void test_optionspattern_position_and_syntactic_negative() {
+    assert_eval_eq("ClearAll[s, t, u, f, g, a, b, o, x, y, z]", "Null", 0);
+    assert_eval_eq("SetAttributes[s, Orderless]; {MatchQ[s[x], s[a__, OptionsPattern[]]], "
+                   "MatchQ[t[x], t[OptionsPattern[], a_]], s[x, y, z] /. s[args__, OptionsPattern[]] :> g[args]}",
+                   "{True, True, g[x, y, z]}", 0);
+    assert_eval_eq("{t[a -> 1, x] /. t[o:OptionsPattern[], b_] :> {{o}, b}, MatchQ[f[x], f[OptionsPattern[]]], "
+                   "MatchQ[u[x, a -> 1, y], u[_, OptionsPattern[], _]], MatchQ[t[a -> 1], t[OptionsPattern[], b_]]}",
+                   "{{{a -> 1}, x}, False, True, True}", 0);
+    assert_eval_eq("Internal`SyntacticNegativeQ /@ {-x - y, -1 + x, x - y, -2 x + y, -I, Complex[-1, 2], Complex[1, -2], (-x)^2}",
+                   "{True, True, False, True, True, False, True, False}", 0);
+}
+
 void test_coefficient_v592() {
     assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
     assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
@@ -1022,6 +1039,7 @@ int main() {
     TEST(test_power_of_product_split_o3);
     TEST(test_numeric_power_coprime_basis_o4);
     TEST(test_downvalue_order_conditions);
+    TEST(test_optionspattern_position_and_syntactic_negative);
     printf("All tests passed!\n");
     return 0;
 }

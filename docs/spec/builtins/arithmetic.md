@@ -539,6 +539,19 @@ Behaviour is added with rules (UpValues on the operands are the usual way). Bein
 longer product, leftmost first; see *Rules on Flat heads* in
 [assignment-and-rules.md](assignment-and-rules.md).
 
+## Internal`SyntacticNegativeQ
+Does an expression carry a minus sign in the leading position of its printed
+form? This is a syntactic test, not a sign test.
+- `Internal`SyntacticNegativeQ[expr]`
+
+**Features**:
+- True for a negative number or `Rational`, and for a `Complex` whose
+  imaginary part is negative. `Complex[1, -2]` and `-I` are `True`;
+  `Complex[-1, 2]` is `False`.
+- A `Times` or `Plus` is read by its first argument in canonical order:
+  `-2 x y`, `-a - b` and `-1 + x` are `True`, while `x - y` and `1 - 2 x` are
+  `False` (v0.6012, as in the reference; a sum used to be always `False`).
+
 ## Minus
 Arithmetic negation as a function.
 - `Minus[x]` is `-x`, i.e. `Times[-1, x]`.

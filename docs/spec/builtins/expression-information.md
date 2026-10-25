@@ -920,7 +920,7 @@ Removes `Hold`, `HoldForm`, `HoldPattern`, and `HoldComplete` in `expr`.
 **Features**:
 - `Protected`.
 - `ReleaseHold` removes only one layer of `Hold` etc.; it does not remove inner occurrences in nested `Hold` etc. functions.
-- `ReleaseHold` traverses into subexpressions of `expr` and strips any hold wrapper it finds, but does not recurse into the contents of the stripped wrapper.
+- `ReleaseHold` traverses into subexpressions of `expr`, heads included, and strips any hold wrapper it finds, but does not recurse into the contents of the stripped wrapper: `ReleaseHold[Hold[f][x]]` is `f[x]` and `ReleaseHold[Hold[Hold[f]][x]]` is `Hold[f][x]`, as in the reference (v0.6014).
 - When `expr` does not contain any hold wrappers, `ReleaseHold` acts as identity.
 - `ReleaseHold` removes all standard unevaluated containers: `Hold`, `HoldForm`, `HoldComplete`, and `HoldPattern`.
 

@@ -1674,9 +1674,13 @@ static Expr* release_hold_recursive(Expr* e) {
         }
     }
 
-    /* Not a hold wrapper: recurse into arguments (but not head) */
+    /* Not a hold wrapper: recurse into the head and the arguments -- one layer
+     * at every position, as the reference strips it: ReleaseHold[Hold[f][x]]
+     * is f[x] and ReleaseHold[Hold[Hold[f]][x]] is Hold[f][x] (FeynCalc builds
+     * Hold[Coefficient][...] and releases it this way). */
     if (e->type == EXPR_FUNCTION) {
-        bool changed = false;
+        Expr* new_head = release_hold_recursive(e->data.function.head);
+        bool changed = !expr_eq(new_head, e->data.function.head);
         Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             new_args[i] = release_hold_recursive(e->data.function.args[i]);
@@ -1685,10 +1689,11 @@ static Expr* release_hold_recursive(Expr* e) {
             }
         }
         if (changed) {
-            Expr* result = expr_new_function(expr_copy(e->data.function.head), new_args, e->data.function.arg_count);
+            Expr* result = expr_new_function(new_head, new_args, e->data.function.arg_count);
             free(new_args);
             return result;
         }
+        expr_free(new_head);
         /* No changes: free copies and return original copy */
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             expr_free(new_args[i]);

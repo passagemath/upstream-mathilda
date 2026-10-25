@@ -123,11 +123,22 @@ void test_releasehold_multi_arg_hold() {
     assert_eval_eq("ReleaseHold[Hold[1+1]]", "2", 0);
 }
 
+/* A hold wrapper in a HEAD is released too, one layer, as in the reference
+ * (FeynCalc builds Hold[Coefficient][...] and releases it). */
+static void test_releasehold_in_head(void) {
+    assert_eval_eq("ReleaseHold[Hold[f][x]]", "f[x]", 0);
+    assert_eval_eq("ReleaseHold[{Hold[Coefficient][a d, d, 1]}]", "{a}", 0);
+    assert_eval_eq("ReleaseHold[Hold[Hold[f]][x]]", "Hold[f][x]", 0);
+    assert_eval_eq("ReleaseHold[f[Hold[g]][x]]", "f[g][x]", 0);
+    assert_eval_eq("ReleaseHold[HoldForm[f][Hold[2]]]", "f[2]", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
 
     TEST(test_releasehold_basic_hold);
+    TEST(test_releasehold_in_head);
     TEST(test_releasehold_holdform);
     TEST(test_releasehold_holdcomplete);
     TEST(test_releasehold_holdpattern);

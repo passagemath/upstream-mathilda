@@ -2503,6 +2503,9 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             const size_t settle_argc = res->data.function.arg_count;
             const bool settle_ok = settle_argc <= SETTLE_SNAP_MAX;
             if (settle_ok) memcpy(settle_snap, res->data.function.args, sizeof(Expr*) * settle_argc);
+            /* Messages fired so far: a head that reports a message while
+             * declining has rejected the call (see the post-gate). */
+            const unsigned long step_msgs_before = mth_msg_fired_count();
 
             /* Trace: snapshot the reassembled f[evaluated_args] form, before
              * flatten/Flat/Listable/Orderless and before any rule fires, so the
@@ -3468,8 +3471,15 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             }
 
             /* Nothing rewrote the node: it comes to rest here, and a further
-             * step would only replay this one (see g_step_settled_depth). */
-            if (!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc))
+             * step would only replay this one (see g_step_settled_depth). A
+             * non-Listable head that declined a buffer WITH a message
+             * (Dot::dotsh on a packed vector) rejected the call: its
+             * materialised form rests too, rather than being re-asked and
+             * printing the message again. (A Listable head's materialised
+             * call still threads on the next step.) */
+            if ((!post_gated && settle_ok && eval_args_untouched(res, settle_snap, settle_argc)) ||
+                (post_gated && !(attrs & ATTR_LISTABLE) &&
+                 mth_msg_fired_count() != step_msgs_before))
                 g_step_settled_depth = eval_recursion_depth;
             return res;
         }
@@ -3712,7 +3722,10 @@ static Expr* evaluate_core(Expr* e) {
             current = next;
             next = NULL;
             is_fixed_point = true;
-        } else if (step_changed && step_settled && !trace_here && !gate_fired) {
+        } else if (step_changed && step_settled && !trace_here) {
+            /* (A pack-gate materialisation in this step is kept too: `next`
+             * is the newer representation, as the gate_fired branch below
+             * would also choose.) */
             expr_free(current);
             current = next;
             next = NULL;

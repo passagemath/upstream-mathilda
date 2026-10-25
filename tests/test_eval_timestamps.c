@@ -16,6 +16,7 @@
  */
 
 #include "core.h"
+#include "message.h"
 #include "expr.h"
 #include "symtab.h"
 #include "eval.h"
@@ -745,6 +746,26 @@ static void test_set_value_evaluated_once(void) {
     eval_str_is("Clear[zcnt, zg, zv, zw, zq, zq0]", "Null");
 }
 
+/* A declining call reports its message once: neither a confirming step, nor
+ * the value of an assignment, nor a materialised packed argument re-asks it. */
+static void msgs_fired_is(const char* in, unsigned long want) {
+    unsigned long before = mth_msg_fired_count();
+    Expr* p = parse_expression(in);
+    Expr* r = evaluate(p);
+    unsigned long got = mth_msg_fired_count() - before;
+    if (got != want) fprintf(stderr, "FAIL: %s fired %lu messages, expected %lu\n", in, got, want);
+    ASSERT(got == want);
+    expr_free(r); expr_free(p);
+}
+
+static void test_declining_call_reports_once(void) {
+    msgs_fired_is("Quiet[zm = {{1, 2}}; Det[zm]]", 1);
+    msgs_fired_is("Quiet[zd = Det[zm]]", 1);
+    msgs_fired_is("Quiet[za = Range[6]; Dot[za, {1, 2}]]", 1);
+    msgs_fired_is("Quiet[zr = Dot[za, {1, 2}]]", 1);
+    eval_str_is("Clear[zm, zd, za, zr]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -770,6 +791,7 @@ int main(void) {
     TEST(test_ground_invalidated_by_rule_epoch);
     TEST(test_symbolic_valued_assoc_updates_after_set);
     TEST(test_set_value_evaluated_once);
+    TEST(test_declining_call_reports_once);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

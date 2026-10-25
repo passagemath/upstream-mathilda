@@ -16,6 +16,7 @@
 #include "print.h"
 #include "repl_hooks.h"
 #include "quit.h"
+#include "message.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,24 +166,17 @@ static void test_pre_read_can_rewrite_to_valid_expression(void) {
 static void test_pre_read_non_string_return_falls_back(void) {
     clear_all_hooks();
     /* Pre-read that returns an integer instead of a string: the
-     * helper should warn (to stderr) and fall back to the original
-     * input. We can only test the fallback value here; the warning
-     * path is exercised but not asserted on. */
+     * helper warns ($PreRead::strret) and falls back to the original
+     * input. The warning is muted the way Quiet mutes it -- not by
+     * pointing stderr elsewhere, which (restored by reopening /dev/tty,
+     * absent without a terminal) silently swallowed every later FAIL
+     * line -- and a muted message still counts as fired. */
     run("$PreRead = Function[s, 42]");
-    /* Re-open stderr at /dev/null while the diagnostic fires so it
-     * does not clutter the test transcript. freopen is portable C99. */
-    fflush(stderr);
-    FILE* saved_err = freopen("/dev/null", "w", stderr);
+    unsigned long fired = mth_msg_fired_count();
+    mth_msg_suppress_push();
     char* out = repl_apply_pre_read("untouched");
-    if (saved_err) {
-        /* Restore. On macOS dup2-style restore needs a fresh fd; the
-         * simplest portable thing is to reopen stderr at /dev/tty. If
-         * /dev/tty is unavailable (CI), fall back to leaving it
-         * pointed at /dev/null -- the rest of the test does not write
-         * to stderr. */
-        FILE* restored = freopen("/dev/tty", "w", stderr);
-        (void)restored;
-    }
+    mth_msg_suppress_pop();
+    ASSERT(mth_msg_fired_count() == fired + 1);
     ASSERT(out != NULL);
     ASSERT_STR_EQ(out, "untouched");
     free(out);
@@ -597,9 +591,12 @@ static void test_quit_non_integer_does_not_request(void) {
 }
 
 /* Exit is a synonym rewritten to Quit; Quit[n] records exit status n and
- * stays inert so the enclosing CompoundExpression stops at it. */
+ * stays inert, so every enclosing CompoundExpression stops at it: nothing
+ * after it in the input runs -- not `qy = 2` in the Module, and not the
+ * trailing `qy` either, so the input's value is the inert Quit[3]. */
 static void test_exit_requests_quit_with_status(void) {
-    assert_eval_eq("qy = 0; Module[{}, qy = 1; Exit[3]; qy = 2]; qy", "1", 0);
+    assert_eval_eq("qy = 0; Module[{}, qy = 1; Exit[3]; qy = 2]; qy", "Quit[3]", 0);
+    assert_eval_eq("qy", "1", 0);
     ASSERT(mth_quit_requested());
     ASSERT(mth_quit_status() == 3);
     assert_eval_eq("Attributes[Exit]", "{Protected}", 0);

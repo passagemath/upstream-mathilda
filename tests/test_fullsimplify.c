@@ -93,7 +93,7 @@ int main(void) {
     chk("FullSimplify[Log[Csc[x] + Cot[x]], 0 < x < 4]", "Log[Cot[x] + Csc[x]]");
     chk("FullSimplify[Log[Sec[x] + Tan[x]], -Pi/2 < x < Pi/2]", "ArcTanh[Sin[x]]");
     chk("FullSimplify[Log[Sec[x] - Tan[x]], -Pi/2 < x < Pi/2]", "-ArcTanh[Sin[x]]");
-    chk("FullSimplify[Log[2 Sec[x] - 2 Tan[x]], -Pi/2 < x < Pi/2]", "Log[2] - ArcTanh[Sin[x]]");
+    chk("FullSimplify[Log[2 Sec[x] - 2 Tan[x]], -Pi/2 < x < Pi/2]", "-ArcTanh[Sin[x]] + Log[2]");
     chk("FullSimplify[Log[Sec[x] + Tan[x]], -5 Pi/2 < x < -3 Pi/2]", "ArcTanh[Sin[x]]");
     chk("FullSimplify[Log[Sec[2 x] + Tan[2 x]], 0 < x < Pi/4]", "ArcTanh[Sin[2 x]]");
     chk("Assuming[-Pi/2 < x < Pi/2, FullSimplify[Log[Sec[x] + Tan[x]]]]", "ArcTanh[Sin[x]]");

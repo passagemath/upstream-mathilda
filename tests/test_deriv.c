@@ -272,7 +272,7 @@ static void test_undifferentiable_subexpression(void) {
     snprintf(buf, sizeof(buf), "D[1 + %s + 2, x]", INT);
     check(buf, DINT);
     snprintf(buf, sizeof(buf), "D[%s + g[x], x]", INT);
-    snprintf(exp, sizeof(exp), "Plus[Derivative[1][g][x], %s]", DINT);
+    snprintf(exp, sizeof(exp), "Plus[%s, Derivative[1][g][x]]", DINT);
     check(buf, exp);
 
     /* Times: the product rule. */
@@ -283,7 +283,7 @@ static void test_undifferentiable_subexpression(void) {
     /* Power and composition: the chain rule. */
     snprintf(buf, sizeof(buf), "D[%s^2, x]", INT);
     snprintf(exp, sizeof(exp),
-             "Times[2, Inactive[Integrate][f[u], Power[x, Rational[1, 2]]], %s]",
+             "Times[2, %s, Inactive[Integrate][f[u], Power[x, Rational[1, 2]]]]",
              DINT);
     check(buf, exp);
     snprintf(buf, sizeof(buf), "D[Sin[%s], x]", INT);

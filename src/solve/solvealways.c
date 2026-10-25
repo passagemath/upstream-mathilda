@@ -18,6 +18,7 @@
  *     `Series` strip are NOT handled here; they are deferred.
  */
 
+#include "sort.h"   /* expr_orderless_sort */
 #include "solvealways.h"
 
 #include <stdbool.h>
@@ -302,6 +303,9 @@ static void compute_params(Expr* const* eqs, size_t n_eq,
             buf[kept++] = buf[i];
         }
     }
+    /* Canonical order, so the rules come out in the order the reference
+     * gives them ({a -> 2, b -> 1}), whatever the order of the terms. */
+    expr_orderless_sort(buf, kept);
     *out   = buf;
     *out_n = kept;
 }

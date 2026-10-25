@@ -190,9 +190,9 @@ int main(void) {
     if (!check("LogIntegral[Interval[{2, 3}]]",
                "Interval[{LogIntegral[2], LogIntegral[3]}]")) failures++;
     if (!check("PolyLog[2, Interval[{0, 1/2}]]",
-               "Interval[{0, -1/2 Log[2]^2 + 1/12 Pi^2}]")) failures++;
+               "Interval[{0, 1/12 Pi^2 - 1/2 Log[2]^2}]")) failures++;
     if (!check("PolyLog[3, Interval[{0, 1/2}]]",
-               "Interval[{0, 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]}]")) failures++; /* chained */
+               "Interval[{0, -1/12 Pi^2 Log[2] + 1/6 Log[2]^3 + 7/8 Zeta[3]}]")) failures++; /* chained */
     if (!check("Gamma[3, Interval[{1, 2}]]", "Interval[{5/E^2, 10/E}]")) failures++;  /* incomplete, 2nd arg */
 
     /* --- special functions with self-referential/awkward derivatives (bespoke

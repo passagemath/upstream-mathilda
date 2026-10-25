@@ -246,10 +246,10 @@ static void test_not_a_polynomial_variable(void) {
     check("Variables[AlgebraicNumber[Sqrt[2], {0, 1}] x^2 + 3]", "{x}");
     check("PolynomialGCD[Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 1)], "
           "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 2)]]",
-          "AlgebraicNumber[Sqrt[2], {0, 1}] + x");
+          "x + AlgebraicNumber[Sqrt[2], {0, 1}]");
     check("PolynomialGCD[Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 1)], "
           "Expand[(x + AlgebraicNumber[Sqrt[2], {0, 1}]) (x + 2)], Extension -> Automatic]",
-          "AlgebraicNumber[Sqrt[2], {0, 1}] + x");
+          "x + AlgebraicNumber[Sqrt[2], {0, 1}]");
 }
 
 /* Assert that PolynomialGCD[f, g] really is the gcd, given a known answer `d`.

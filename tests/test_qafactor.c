@@ -705,13 +705,13 @@ static void test_g6_x4_plus_1_q_sqrt2_i(void) {
      * so any future canonicalization shift is caught explicitly. */
     assert_factor_fullform_eq(
         "Factor[x^4 + 1, Extension -> {Sqrt[2], I}]",
-        "Times[Plus[Power[2, Rational[-1, 2]], "
+        "Times[Plus[Times[-1, Power[2, Rational[-1, 2]]], "
                    "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
               "Plus[Power[2, Rational[-1, 2]], "
-                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x], "
-              "Plus[Times[-1, Power[2, Rational[-1, 2]]], "
                    "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
               "Plus[Times[-1, Power[2, Rational[-1, 2]]], "
+                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x], "
+              "Plus[Power[2, Rational[-1, 2]], "
                    "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x]]");
 }
 

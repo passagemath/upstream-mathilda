@@ -56,7 +56,7 @@ static void test_gamma_recurrence_forms(void) {
     sf_zero("Gamma[x + 1] - x Gamma[x]");
     sf_to("Gamma[x + 2]/Gamma[x]", "x (1 + x)");
     sf_to("Gamma[x + 5]/Gamma[x + 2]", "(2 + x) (3 + x) (4 + x)");
-    sf_to("Gamma[x + 1] + Gamma[x]", "Gamma[x] (1 + x)");
+    sf_to("Gamma[x + 1] + Gamma[x]", "(1 + x) Gamma[x]");
     sf_to("Gamma[x + 1/2]/Gamma[x - 1/2]", "-1/2 + x");
     sf_to("Gamma[n + 1]/Gamma[n]", "n");
     /* (a span of 500 is the sf_fast guard; numerically Gamma[x + 500] at 30

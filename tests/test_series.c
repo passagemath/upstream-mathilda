@@ -169,8 +169,8 @@ static void test_series_binomial_symbolic(void) {
     /* Coefficients are n * (n-1) * ... * (n-k+1) / k!, kept unexpanded. */
     assert_outputform(
         "Series[(1+x)^n, {x, 0, 4}]",
-        "1 + n x + 1/2 n (-1 + n) x^2 + 1/6 n (-2 + n) (-1 + n) x^3 "
-        "+ 1/24 n (-3 + n) (-2 + n) (-1 + n) x^4 + O[x]^5");
+        "1 + n x + 1/2 (-1 + n) n x^2 + 1/6 (-2 + n) (-1 + n) n x^3 + 1/24 (-3 + n) (-2 + n) (-1 + n) n x^4 + O[x]^5"
+        "");
 }
 
 /* 9. Deep Laurent series: 1/Sin[x]^10. The engine matches Mathematica up to
@@ -214,7 +214,7 @@ static void test_series_loggamma_at_infinity(void) {
     setup_full();
     assert_outputform(
         "Normal[Series[LogGamma[x], {x, Infinity, 5}]]",
-        "1/2 Log[2 Pi] - x - 1/(360 x^3) + 1/(1260 x^5) + 1/(12 x) + Log[x] (-1/2 + x)");
+        "1/(1260 x^5) - 1/(360 x^3) + 1/(12 x) - x + 1/2 Log[2 Pi] + (-1/2 + x) Log[x]");
 }
 
 /* 10c. Stirling asymptotic expansions of PolyGamma[m, x] at Infinity
@@ -231,7 +231,7 @@ static void test_series_polygamma_at_infinity(void) {
     /* PolyGamma[x] (unindexed) normalises to PolyGamma[0, x] -> same head. */
     assert_outputform(
         "Normal[Series[PolyGamma[x], {x, Infinity, 4}]]",
-        "Log[x] - 1/(2 x) - 1/(12 x^2) + 1/(120 x^4)");
+        "1/(120 x^4) - 1/(12 x^2) - 1/(2 x) + Log[x]");
     /* Trigamma (m=1): 1/x + 1/(2x^2) + 1/(6x^3) - 1/(30x^5). */
     assert_fullform(
         "Series[PolyGamma[1, x], {x, Infinity, 5}]",
@@ -569,7 +569,7 @@ static void test_series_arctan_at_infinity(void) {
     /* Composes under Times: x (Pi/2 - ArcTan[x]) -> 1 - 1/(3x^2) + ... */
     assert_outputform(
         "Normal[Series[x (Pi/2 - ArcTan[x]), {x, Infinity, 4}]]",
-        "1 - 1/(3 x^2) + 1/(5 x^4)");
+        "1 + 1/(5 x^4) - 1/(3 x^2)");
 }
 static void test_series_arctanh(void) {
     setup_full();
@@ -789,12 +789,12 @@ static void test_series_arctanh_branch_point_pos(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTanh[x], {x, 1, 3}]",
-        "Plus[Times[Rational[1, 2], Log[2]], "
-        "Times[Complex[0, Rational[1, 2]], Pi], "
+        "Plus[Times[Complex[0, Rational[1, "
+        "2]], Pi], Times[Rational[1, 2], Log[2]], "
         "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
-        "Times[SeriesData[x, 1, List[0, Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
+        "Times[-1, Arg[Plus[-1, x]]]]]]], SeriesData[x, 1, List[0, "
+        "Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1]]]");
 }
 
 /* Family B — ArcTanh at -1. Log[x+1] singularity with coefficient +1/2. */
@@ -804,9 +804,9 @@ static void test_series_arctanh_branch_point_neg(void) {
         "Series[ArcTanh[x], {x, -1, 3}]",
         "Plus[Times[Rational[-1, 2], Log[2]], "
         "Times[Rational[1, 2], Log[Plus[1, x]]], "
-        "Times[SeriesData[x, -1, List[0, Rational[1, 4], Rational[1, 16], Rational[1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
+        "Times[-1, Arg[Plus[1, x]]]]]]], SeriesData[x, -1, List[0, "
+        "Rational[1, 4], Rational[1, 16], Rational[1, 48]], 0, 4, 1]]]");
 }
 
 /* Family B — ArcTan at +I. Log[x-I] singularity with coefficient -I/2. */
@@ -814,13 +814,13 @@ static void test_series_arctan_branch_point_pos_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTan[x], {x, I, 3}]",
-        "Plus[Times[Complex[0, Rational[1, 2]], Log[2]], "
-        "Times[Rational[1, 4], Pi], "
+        "Plus[Times[Rational[1, 4], Pi], Times[Complex[0, "
+        "Rational[1, 2]], Log[2]], "
         "Times[Complex[0, Rational[-1, 2]], Log[Plus[Complex[0, -1], x]]], "
-        "Times[SeriesData[x, Complex[0, 1], "
-        "List[0, Rational[1, 4], Complex[0, Rational[1, 16]], Rational[-1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, -1], x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, "
+        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
+        "-1], x]]]]]]], SeriesData[x, Complex[0, 1], List[0, "
+        "Rational[1, 4], Complex[0, Rational[1, 16]], Rational[-1, 48]], 0, 4, 1]]]");
 }
 
 /* Family B — ArcTan at -I. */
@@ -828,13 +828,13 @@ static void test_series_arctan_branch_point_neg_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcTan[x], {x, -I, 3}]",
-        "Plus[Times[Complex[0, Rational[-1, 2]], Log[2]], "
-        "Times[Rational[-3, 4], Pi], "
+        "Plus[Times[Rational[-3, 4], Pi], Times[Complex[0, "
+        "Rational[-1, 2]], Log[2]], "
         "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, 1], x]]], "
-        "Times[SeriesData[x, Complex[0, -1], "
-        "List[0, Rational[1, 4], Complex[0, Rational[-1, 16]], Rational[-1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, 1], x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, "
+        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
+        "1], x]]]]]]], SeriesData[x, Complex[0, -1], List[0, "
+        "Rational[1, 4], Complex[0, Rational[-1, 16]], Rational[-1, 48]], 0, 4, 1]]]");
 }
 
 /* Family B derived — ArcCot at +I (via Pi/2 - ArcTan identity). */
@@ -842,13 +842,13 @@ static void test_series_arccot_branch_point_pos_i(void) {
     setup_full();
     assert_fullform(
         "Series[ArcCot[x], {x, I, 3}]",
-        "Plus[Times[Complex[0, Rational[-1, 2]], Log[2]], "
-        "Times[Rational[1, 4], Pi], "
+        "Plus[Times[Rational[1, 4], Pi], Times[Complex[0, "
+        "Rational[-1, 2]], Log[2]], "
         "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, -1], x]]], "
-        "Times[SeriesData[x, Complex[0, 1], "
-        "List[0, Rational[-1, 4], Complex[0, Rational[-1, 16]], Rational[1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, -1], x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, "
+        "2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, "
+        "-1], x]]]]]]], SeriesData[x, Complex[0, 1], List[0, "
+        "Rational[-1, 4], Complex[0, Rational[-1, 16]], Rational[1, 48]], 0, 4, 1]]]");
 }
 
 /* Family B derived — ArcCoth at +1. */
@@ -858,9 +858,9 @@ static void test_series_arccoth_branch_point_pos(void) {
         "Series[ArcCoth[x], {x, 1, 3}]",
         "Plus[Times[Rational[1, 2], Log[2]], "
         "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
-        "Times[SeriesData[x, 1, List[0, Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]]]]");
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, 2], Pi], "
+        "Times[-1, Arg[Plus[-1, x]]]]]]], SeriesData[x, 1, List[0, "
+        "Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1]]]");
 }
 
 /* Family A retrofit — ArcSin at +1 (existing handler now routed through
@@ -1131,9 +1131,9 @@ static void test_series_symbolic_prefactor(void) {
      * factored Power around the expanded series. */
     assert_fullform(
         "Series[x^a Exp[x], {x, 0, 5}]",
-        "Times[SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6], "
-        "Rational[1, 24], Rational[1, 120]], 0, 6, 1], "
-        "Power[x, a]]");
+        "Times[Power[x, a], SeriesData[x, 0, List[1, 1, Rational[1, 2], "
+        "Rational[1, 6], Rational[1, 24], Rational[1, 120]], "
+        "0, 6, 1]]");
 }
 
 /* Laurent/compound-series-input case: Exp of a (Log[1+u])/u-style expression
@@ -1224,8 +1224,8 @@ static void test_binomial_monomial_symbolic_alpha(void) {
     setup_full();
     assert_outputform(
         "Series[(1 + x)^n, {x, 0, 4}]",
-        "1 + n x + 1/2 n (-1 + n) x^2 + 1/6 n (-2 + n) (-1 + n) x^3 "
-        "+ 1/24 n (-3 + n) (-2 + n) (-1 + n) x^4 + O[x]^5");
+        "1 + n x + 1/2 (-1 + n) n x^2 + 1/6 (-2 + n) (-1 + n) n x^3 + 1/24 (-3 + n) (-2 + n) (-1 + n) n x^4 + O[x]^5"
+        "");
 }
 
 /* Symbolic alpha over a non-unit leading term: (a + b x)^n. */
@@ -1534,32 +1534,32 @@ static void test_series_logintegral_at_zero(void) {
     assert_fullform(
         "Series[LogIntegral[x], {x, 0, 2}]",
         "SeriesData[x, 0, List[Times[Power[Log[x], -6], "
-        "Plus[120, Power[Log[x], 4], Power[Log[x], 5], "
-        "Times[2, Power[Log[x], 3]], Times[6, Power[Log[x], 2]], "
-        "Times[24, Log[x]]]], 0], 1, 3, 1]");
+        "Plus[120, Times[24, Log[x]], Times[6, Power[Log[x], "
+        "2]], Times[2, Power[Log[x], 3]], Power[Log[x], 4], "
+        "Power[Log[x], 5]]], 0], 1, 3, 1]");
     /* n = 1: 2n+2 = 4 terms; only x^1 is present, O-term at x^2. */
     assert_fullform(
         "Series[LogIntegral[x], {x, 0, 1}]",
         "SeriesData[x, 0, List[Times[Power[Log[x], -4], "
-        "Plus[6, Power[Log[x], 2], Power[Log[x], 3], Times[2, Log[x]]]]], "
+        "Plus[6, Times[2, Log[x]], Power[Log[x], 2], Power[Log[x], 3]]]], "
         "1, 2, 1]");
     /* Assumptions -> x > 0 yields the same principal form. */
     assert_fullform(
         "Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x > 0]",
         "SeriesData[x, 0, List[Times[Power[Log[x], -6], "
-        "Plus[120, Power[Log[x], 4], Power[Log[x], 5], "
-        "Times[2, Power[Log[x], 3]], Times[6, Power[Log[x], 2]], "
-        "Times[24, Log[x]]]], 0], 1, 3, 1]");
+        "Plus[120, Times[24, Log[x]], Times[6, Power[Log[x], "
+        "2]], Times[2, Power[Log[x], 3]], Power[Log[x], 4], "
+        "Power[Log[x], 5]]], 0], 1, 3, 1]");
     /* Assumptions -> x < 0: every Log[x] becomes Log[-x] and an additive
      * I Pi leads the series at the x^0 slot (nmin drops to 0). */
     assert_fullform(
         "Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x < 0]",
         "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], "
         "Times[Power[Log[Times[-1, x]], -6], "
-        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
-        "Times[2, Power[Log[Times[-1, x]], 3]], "
-        "Times[6, Power[Log[Times[-1, x]], 2]], "
-        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
+        "Plus[120, Times[24, Log[Times[-1, x]]], Times[6, Power[Log[Times[-1, "
+        "x]], 2]], Times[2, Power[Log[Times[-1, "
+        "x]], 3]], Power[Log[Times[-1, x]], 4], "
+        "Power[Log[Times[-1, x]], 5]]], 0], 0, 3, 1]");
 }
 
 /* ExpIntegralEi[x] at x = 0: the logarithmic series (DLMF 6.6.2)
@@ -1651,10 +1651,10 @@ static void test_series_arcsin_branch_point(void) {
     assert_fullform(
         "Series[ArcSin[x], {x, -1, 1}]",
         "Plus[Times[Rational[-1, 2], Pi], "
-        "Times[SeriesData[x, -1, "
-        "List[0, Power[2, Rational[1, 2]], 0], 0, 3, 2], "
-        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
-        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]]]]");
+        "Times[Power[-1, "
+        "Floor[Times[Rational[1, 2], Power[Pi, -1], Plus[Times[Rational[1, "
+        "2], Pi], Times[-1, Arg[Plus[1, x]]]]]]], "
+        "SeriesData[x, -1, List[0, Power[2, Rational[1, 2]], 0], 0, 3, 2]]]");
     /* ArcCos at x = -1: constant Pi, real coefficient. */
     assert_fullform(
         "Series[ArcCos[x], {x, -1, 1}]",
@@ -2142,9 +2142,9 @@ static void test_series_stress_00(void) {
         "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4]], 0, 3, 1]");
     assert_fullform("Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x < 0]",
         "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], Times[Power[Log[Times[-1, x]], -6], "
-        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
-        "Times[2, Power[Log[Times[-1, x]], 3]], Times[6, Power[Log[Times[-1, x]], 2]], "
-        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
+        "Plus[120, Times[24, Log[Times[-1, x]]], Times[6, Power[Log[Times[-1, "
+        "x]], 2]], Times[2, Power[Log[Times[-1, x]], 3]], Power[Log[Times[-1, x]], 4], "
+        "Power[Log[Times[-1, x]], 5]]], 0], 0, 3, 1]");
     assert_fullform("Series[CosIntegral[x], {x, 0, 4}, Assumptions -> x < 0]",
         "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 0, Rational[-1, 4], 0, Rational[1, 96]], 0, 5, 1]");
     assert_fullform("Series[CoshIntegral[x], {x, 0, 4}, Assumptions -> x < 0]",
@@ -2154,9 +2154,9 @@ static void test_series_stress_00(void) {
         "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
     assert_fullform("Block[{$Assumptions = x < 0}, Series[LogIntegral[x], {x, 0, 2}]]",
         "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], Times[Power[Log[Times[-1, x]], -6], "
-        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
-        "Times[2, Power[Log[Times[-1, x]], 3]], Times[6, Power[Log[Times[-1, x]], 2]], "
-        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
+        "Plus[120, Times[24, Log[Times[-1, x]]], Times[6, Power[Log[Times[-1, "
+        "x]], 2]], Times[2, Power[Log[Times[-1, x]], 3]], Power[Log[Times[-1, x]], 4], "
+        "Power[Log[Times[-1, x]], 5]]], 0], 0, 3, 1]");
     assert_fullform("Series[ExpIntegralEi[x], {x, 0, 2}, Assumptions -> Element[x, Reals] && x < 0]",
         "SeriesData[x, 0, List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
     assert_fullform("Assuming[x < 0, Series[CosIntegral[x], {x, 0, 4}]]",
@@ -2344,7 +2344,7 @@ static void test_series_stress_06(void) {
         "SeriesData[x, 0, List[1, 1], 0, 2, 1]");
     /* regression: no assumption keeps Cos[n Pi]. */
     assert_fullform("Series[Cos[n Pi] + x, {x, 0, 1}]",
-        "SeriesData[x, 0, List[Cos[Times[Pi, n]], 1], 0, 2, 1]");
+        "SeriesData[x, 0, List[Cos[Times[n, Pi]], 1], 0, 2, 1]");
     assert_fullform("Series[Sin[n Pi] + x, {x, 0, 1}, Assumptions -> Element[n, Integers]]",
         "SeriesData[x, 0, List[0, 1], 0, 2, 1]");
     assert_fullform("Series[Cos[n Pi]^2 + x, {x, 0, 1}, Assumptions -> Element[n, Integers]]",

@@ -100,8 +100,8 @@ static void test_reals_drop(void) {
 /* Integers domain:  x y == 6, x + y == 5  ->  {3,2} and {2,3}. */
 static void test_integers(void) {
     run_test("Solve[x y == 6 && x + y == 5, {x, y}, Integers]",
-             "List[List[Rule[x, 3], Rule[y, 2]], "
-                  "List[Rule[x, 2], Rule[y, 3]]]");
+             "List[List[Rule[x, 2], Rule[y, 3]], "
+                  "List[Rule[x, 3], Rule[y, 2]]]");
 }
 
 /* Mixed: quadratic in x, linear in y. */
@@ -115,20 +115,15 @@ static void test_quadratic_and_linear(void) {
 static void test_circle_hyperbola(void) {
     run_test("Solve[x^2 + y^2 == 25 && x^2 - y^2 == 7, {x, y}]",
              "List[List[Rule[x, -4], Rule[y, -3]], "
-                  "List[Rule[x, 4], Rule[y, -3]], "
                   "List[Rule[x, -4], Rule[y, 3]], "
+                  "List[Rule[x, 4], Rule[y, -3]], "
                   "List[Rule[x, 4], Rule[y, 3]]]");
 }
 
 /* Three variables (elementary symmetric): permutations of {1,2,3}. */
 static void test_three_var_symmetric(void) {
     run_test("Solve[x + y + z == 6 && x y z == 6 && x^2 + y^2 + z^2 == 14, {x, y, z}]",
-             "List[List[Rule[x, 3], Rule[y, 2], Rule[z, 1]], "
-                  "List[Rule[x, 2], Rule[y, 3], Rule[z, 1]], "
-                  "List[Rule[x, 3], Rule[y, 1], Rule[z, 2]], "
-                  "List[Rule[x, 1], Rule[y, 3], Rule[z, 2]], "
-                  "List[Rule[x, 2], Rule[y, 1], Rule[z, 3]], "
-                  "List[Rule[x, 1], Rule[y, 2], Rule[z, 3]]]");
+             "List[List[Rule[x, 1], Rule[y, 2], Rule[z, 3]], List[Rule[x, 1], Rule[y, 3], Rule[z, 2]], List[Rule[x, 2], Rule[y, 1], Rule[z, 3]], List[Rule[x, 2], Rule[y, 3], Rule[z, 1]], List[Rule[x, 3], Rule[y, 1], Rule[z, 2]], List[Rule[x, 3], Rule[y, 2], Rule[z, 1]]]");
 }
 
 /* List-form (not And) of equations is accepted too. */
@@ -169,8 +164,7 @@ static void test_single_eq_multivar(void) {
 /* Non-polynomial system (transcendental head): left unevaluated. */
 static void test_non_polynomial(void) {
     run_test("Solve[Sin[x] + y == 0 && x + y == 1, {x, y}]",
-             "Solve[And[Equal[Plus[Sin[x], y], 0], Equal[Plus[x, y], 1]], "
-                   "List[x, y]]");
+             "Solve[And[Equal[Plus[y, Sin[x]], 0], Equal[Plus[x, y], 1]], List[x, y]]");
 }
 
 /* Regression: a purely linear system must keep taking the linear path
@@ -201,11 +195,7 @@ static void test_unexpanded_product(void) {
  * y = -/+Sqrt[a]. */
 static void test_parametric_system(void) {
     run_test("Solve[{x^2 == a, x + y == 0}, {x, y}]",
-        "List["
-          "List[Rule[x, Power[a, Rational[1, 2]]], "
-               "Rule[y, Times[-1, Power[a, Rational[1, 2]]]]], "
-          "List[Rule[x, Times[-1, Power[a, Rational[1, 2]]]], "
-               "Rule[y, Power[a, Rational[1, 2]]]]]");
+        "List[List[Rule[x, Times[-1, Power[a, Rational[1, 2]]]], Rule[y, Power[a, Rational[1, 2]]]], List[Rule[x, Power[a, Rational[1, 2]]], Rule[y, Times[-1, Power[a, Rational[1, 2]]]]]]");
 }
 
 static void test_linear_regression(void) {

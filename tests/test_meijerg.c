@@ -338,10 +338,10 @@ void test_mg_reductions() {
     assert_str("MeijerG[{{1/2,1/2,1/2},{}},{{0},{-(3/2),-(3/2)}},-x]",
                "16/9 Sqrt[Pi] HypergeometricPFQ[{1/2, 1/2, 1/2}, {5/2, 5/2}, x]");
     assert_str("MeijerG[{{},{}},{{5},{4}},5]", "625 Sqrt[5] BesselJ[1, 2 Sqrt[5]]");
-    assert_str("MeijerG[{{1/2},{}},{{0},{0}},x]", "Sqrt[Pi] BesselI[0, 1/2 x] E^(-1/2 x)");
+    assert_str("MeijerG[{{1/2},{}},{{0},{0}},x]", "E^(-1/2 x) Sqrt[Pi] BesselI[0, 1/2 x]");
     assert_str("MeijerG[{{1/2,3/2},{}},{{0},{0}},x]", "-4 EllipticE[-x]");
     assert_str("MeijerG[{{},{}},{{b},{}},-x]", "E^x (-x)^b");
-    assert_str("MeijerG[{{a},{}},{{d},{}},x]", "Gamma[1 - a + d] x^d (1 + x)^(-1 + a - d)");   /* as the reference */
+    assert_str("MeijerG[{{a},{}},{{d},{}},x]", "x^d (1 + x)^(-1 + a - d) Gamma[1 - a + d]");   /* as the reference */
     assert_str("MeijerG[{{},{}},{{b,c},{}},z]", "2 z^(1/2 (b + c)) BesselK[b - c, 2 Sqrt[z]]");
     assert_str("MeijerG[{{1,1},{}},{{1},{0}},z]", "Log[1 + z]");
     /* stays: two 2F2 terms; p == q with m + n == p; the log case */
@@ -430,7 +430,7 @@ void test_mg_series() {
                "x^d (Gamma[1 - a + d] + (-1 + a - d) Gamma[1 - a + d] x + 1/2 (-2 + a - d) (-1 + a - d) Gamma[1 - a + d] x^2 + O[x]^3)");
     /* the log case: 2 z^(a+1/2) BesselK[1, 2 Sqrt[z]] */
     assert_str("Series[MeijerG[{{},{}},{{a,a+1},{}},z],{z,0,1}]",
-               "(1/Sqrt[z] + (-1 + 2 EulerGamma + Log[z]) Sqrt[z] + O[z]^(3/2)) z^(1/2 (1 + 2 a))");
+               "z^(1/2 (1 + 2 a)) (1/Sqrt[z] + (-1 + 2 EulerGamma + Log[z]) Sqrt[z] + O[z]^(3/2))");
     /* truncated series against the value (unreduced shapes, incl. log case) */
     const char* gs[] = {
         "MeijerG[{{1/3},{1/4}},{{1/5,1/6},{1/7}},x]",
@@ -451,7 +451,7 @@ void test_mg_series() {
 
 void test_mg_function_expand() {
     assert_str("FunctionExpand[MeijerG[{{1/2,1},{3,4}},{{1/5},{}},z]]",
-               "1/12 Gamma[1/5] Sqrt[Pi] HypergeometricPFQ[{1/5}, {1/2, 3, 4}, 1/z] - (256 Gamma[7/10] "
+               "1/12 Sqrt[Pi] Gamma[1/5] HypergeometricPFQ[{1/5}, {1/2, 3, 4}, 1/z] - (256 Gamma[7/10] "
                "HypergeometricPFQ[{7/10}, {3/2, 7/2, 9/2}, 1/z])/(1575 Sqrt[Pi] Sqrt[z])");
     assert_true("Abs[N[FunctionExpand[MeijerG[{{1/2,1},{3,4}},{{1/5},{}},z]] /. z -> 5/2, 30] - "
                 "N[MeijerG[{{1/2,1},{3,4}},{{1/5},{}},5/2], 30]] < 10^-25");
@@ -476,10 +476,10 @@ void test_mg_named_closed_forms() {
     /* 1F1(1/2; 3/2; -z) is the error function */
     assert_str("MeijerG[{{1},{}},{{1/2},{0}},z]", "Sqrt[Pi] Erf[Sqrt[z]]");
     check_mg30("Sqrt[Pi] Erf[Sqrt[7/3]]", "{{1},{}},{{1/2},{0}}", "7/3");
-    assert_str("MeijerG[{{1},{}},{{1/2},{0}},-z]", "(Sqrt[Pi] Erfi[Sqrt[z]] Sqrt[-z])/Sqrt[z]");
+    assert_str("MeijerG[{{1},{}},{{1/2},{0}},-z]", "(Sqrt[Pi] Sqrt[-z] Erfi[Sqrt[z]])/Sqrt[z]");
     check_mg30("MeijerG[{{1},{}},{{1/2},{0}},-z] /. z -> 5/2", "{{1},{}},{{1/2},{0}}", "-5/2");
     /* 2F1(1/2, 1; 3/2; -1/z): ArcTan */
-    assert_str("MeijerG[{{1/2},{1}},{{0,1/2},{}},z]", "(2 ArcTan[Sqrt[1/z]])/(Sqrt[z] Sqrt[1/z])");
+    assert_str("MeijerG[{{1/2},{1}},{{0,1/2},{}},z]", "(2 ArcTan[Sqrt[1/z]])/(Sqrt[1/z] Sqrt[z])");
     check_mg30("MeijerG[{{1/2},{1}},{{0,1/2},{}},z] /. z -> 3/7", "{{1/2},{1}},{{0,1/2},{}}", "3/7");
     /* Gamma-pair cancellation */
     assert_str("MeijerG[{{},{0}},{{0,0},{}},z]", "E^(-z)");

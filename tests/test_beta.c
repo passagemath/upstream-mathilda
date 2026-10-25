@@ -186,20 +186,20 @@ void test_beta_derivatives_two_arg() {
                    "Beta[1/2, x] (PolyGamma[0, x] - PolyGamma[0, 1/2 + x])", 0);
     /* Second derivative composes through the product rule and PolyGamma. */
     assert_eval_eq("D[Beta[a, b], {b, 2}]",
-                   "Beta[a, b] (PolyGamma[1, b] - PolyGamma[1, a + b]) + "
-                   "Beta[a, b] (PolyGamma[0, b] - PolyGamma[0, a + b])^2", 0);
+                   "Beta[a, b] (PolyGamma[0, b] - PolyGamma[0, a + b])^2"
+                   " + Beta[a, b] (PolyGamma[1, b] - PolyGamma[1, a + b])", 0);
 }
 
 void test_beta_derivatives_incomplete() {
     /* d/dz Beta[z,a,b] = z^(a-1) (1-z)^(b-1). */
-    assert_eval_eq("D[Beta[z, a, b], z]", "z^(-1 + a) (1 - z)^(-1 + b)", 0);
+    assert_eval_eq("D[Beta[z, a, b], z]", "(1 - z)^(-1 + b) z^(-1 + a)", 0);
     /* d/da, d/db are the generic inert partials. */
     assert_eval_eq("D[Beta[z, a, b], a]", "Derivative[0, 1, 0][Beta][z, a, b]", 0);
     /* generalized: d/dz1 and d/dz0 are the integrand at the endpoints. */
     assert_eval_eq("D[Beta[z0, z1, a, b], z1]",
-                   "z1^(-1 + a) (1 - z1)^(-1 + b)", 0);
+                   "(1 - z1)^(-1 + b) z1^(-1 + a)", 0);
     assert_eval_eq("D[Beta[z0, z1, a, b], z0]",
-                   "-z0^(-1 + a) (1 - z0)^(-1 + b)", 0);
+                   "-(1 - z0)^(-1 + b) z0^(-1 + a)", 0);
 }
 
 /* ---- attributes ------------------------------------------------------ */

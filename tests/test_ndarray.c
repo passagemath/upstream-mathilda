@@ -199,9 +199,9 @@ void test_ndarray_symbolic_combine_degrades() {
      * A numeric scalar still broadcasts (no warning), which is verified by the
      * scalar-broadcast tests. */
     assert_eval_eq("NDArray[{1., 3.}] + a",
-                   "NDArray[{1.0, 3.0}] + a", 0);
+                   "a + NDArray[{1.0, 3.0}]", 0);
     assert_eval_eq("c * NDArray[{1., 3.}]",
-                   "NDArray[{1.0, 3.0}] c", 0);
+                   "c NDArray[{1.0, 3.0}]", 0);
     assert_eval_eq("NDArray[{1., 3.}] ^ n",
                    "NDArray[{1.0, 3.0}]^n", 0);
     assert_eval_eq("b ^ NDArray[{1., 3.}]",
@@ -546,7 +546,7 @@ static void test_ndarray_plus_plain_list(void) {
     assert_eval_eq("NDArray[{1., 2.}] + {10, 20}", "NDArray[{11.0, 22.0}]", 0);
     assert_eval_eq("NDArray[{{1., 2.}, {3., 4.}}] + {10, 20}",
                    "NDArray[{{11.0, 12.0}, {23.0, 24.0}}]", 0);
-    assert_eval_eq("NDArray[{1., 2.}] + x", "NDArray[{1.0, 2.0}] + x", 0);
+    assert_eval_eq("NDArray[{1., 2.}] + x", "x + NDArray[{1.0, 2.0}]", 0);
 }
 
 int main() {

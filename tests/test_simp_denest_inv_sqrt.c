@@ -200,7 +200,7 @@ void test_idempotent_sqrt3_minus_sqrt2(void) {
      * Plus ordering keeps the positive Sqrt term first. */
     assert_eval_eq(
         "Simplify[Sqrt[3] - Sqrt[2]]",
-        "Sqrt[3] - Sqrt[2]", 0);
+        "-Sqrt[2] + Sqrt[3]", 0);
 }
 
 /* ---------------------------------------------------------------- */

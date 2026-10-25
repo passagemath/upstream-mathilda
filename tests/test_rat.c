@@ -114,14 +114,14 @@ void test_cancel_algebraic_generator() {
        fraction combination on the substituted form (not just GCD on
        num/den extracted directly) to produce y^(1/3)/(y - 1). */
     run_test("Cancel[1/(y^(2/3) - 1/y^(1/3))]",
-             "Times[Power[y, Rational[1, 3]], Power[Plus[-1, y], -1]]");
+             "Times[Power[Plus[-1, y], -1], Power[y, Rational[1, 3]]]");
 
     /* y^(73/24) / (y^(2/3) - 1/y^(1/3)) -- same shape with a non-trivial
        numerator. Substituting y = g^24 gives g^73 / (g^16 - 1/g^8) =
        g^81 / (g^24 - 1), and back-substitution yields
        y^(81/24) / (y - 1) = y^(27/8) / (y - 1). */
     run_test("Cancel[y^(73/24) / (y^(2/3) - 1/y^(1/3))]",
-             "Times[Power[y, Rational[27, 8]], Power[Plus[-1, y], -1]]");
+             "Times[Power[Plus[-1, y], -1], Power[y, Rational[27, 8]]]");
 }
 
 /* The generator pass also handles non-symbol bases such as Log[r] and
@@ -157,7 +157,7 @@ void test_cancel_dependent_power_generators() {
  * the rational expression in g collapses to -g^72/(g^24 - 1) = -y^3/(y - 1). */
 void test_together_algebraic_generator() {
     run_test("Together[y^(5/8) (y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))]",
-             "Times[-1, Power[y, 3], Power[Plus[-1, y], -1]]");
+             "Times[-1, Power[Plus[-1, y], -1], Power[y, 3]]");
 
     /* y^(2/3) - 1/y^(1/3)  =  (y - 1)/y^(1/3) */
     run_test("Together[y^(2/3) - 1/y^(1/3)]",
@@ -165,11 +165,11 @@ void test_together_algebraic_generator() {
 
     /* 1/y^(1/2) + 1/y^(1/3)  =  (1 + y^(1/6))/y^(1/2) */
     run_test("Together[1/y^(1/2) + 1/y^(1/3)]",
-             "Times[Power[y, Rational[-1, 2]], Plus[1, Power[y, Rational[1, 6]]]]");
+             "Times[Plus[1, Power[y, Rational[1, 6]]], Power[y, Rational[-1, 2]]]");
 
     /* Non-symbol base: Log[r]^(p/q) is treated identically. */
     run_test("Together[1/Log[r]^(1/2) + 1/Log[r]^(1/3)]",
-             "Times[Power[Log[r], Rational[-1, 2]], Plus[1, Power[Log[r], Rational[1, 6]]]]");
+             "Times[Plus[1, Power[Log[r], Rational[1, 6]]], Power[Log[r], Rational[-1, 2]]]");
 
     /* Constant-radical denominator with a NON-UNIT leading coefficient on the
      * polynomial variable: 1/(2x - Sqrt5) - 1/(2x + Sqrt5) = 2 Sqrt5/(4x^2 - 5).
@@ -192,10 +192,10 @@ void test_together_algebraic_generator() {
 void test_together_cancel_kernels() {
     /* Log[x] kernel: combines into one reduced fraction. */
     run_test("Together[1/(1 + Log[x]) + 1/(2 + Log[x])]",
-             "Times[Plus[3, Times[2, Log[x]]], Power[Plus[2, Power[Log[x], 2], Times[3, Log[x]]], -1]]");
+             "Times[Plus[3, Times[2, Log[x]]], Power[Plus[2, Times[3, Log[x]], Power[Log[x], 2]], -1]]");
     /* Inverse-trig kernel: same handling as Log. */
     run_test("Together[1/(1 + ArcTan[x]) + 1/(2 + ArcTan[x])]",
-             "Times[Plus[3, Times[2, ArcTan[x]]], Power[Plus[2, Power[ArcTan[x], 2], Times[3, ArcTan[x]]], -1]]");
+             "Times[Plus[3, Times[2, ArcTan[x]]], Power[Plus[2, Times[3, ArcTan[x]], Power[ArcTan[x], 2]], -1]]");
     /* Exp kernel: E^(k x) is treated as (E^x)^k, so the sum combines correctly
      * (the classical path left this uncombined — a latent bug now fixed). */
     run_test("Together[1/(1 + E^x) + 1/(2 + E^x)]",
@@ -215,10 +215,10 @@ void test_together_cancel_kernels() {
 
 void test_together() {
     run_test("Together[a/b + c/d]", "Times[Power[b, -1], Power[d, -1], Plus[Times[b, c], Times[a, d]]]");
-    run_test("Together[x^2/(x^2 - 1) + x/(x^2 - 1)]", "Times[x, Power[Plus[-1, x], -1]]");
+    run_test("Together[x^2/(x^2 - 1) + x/(x^2 - 1)]", "Times[Power[Plus[-1, x], -1], x]");
     run_test("Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]", "Times[Plus[6, Times[22, x], Times[18, Power[x, 2]], Times[4, Power[x, 3]]], Power[Plus[Times[6, x], Times[11, Power[x, 2]], Times[6, Power[x, 3]], Power[x, 4]], -1]]");
     run_test("Together[x^2/(x - y) - x y/(x - y)]", "x");
-    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Power[Plus[x, Power[x, 2]], -1], Plus[1, Times[2, x]]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
+    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Plus[1, Times[2, x]], Power[Plus[x, Power[x, 2]], -1]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
     run_test("Together[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Times[Plus[3, Times[2, x]], Power[Plus[2, Times[3, x], Power[x, 2]], -1]]");
 
     /* Q(i) Gaussian rationals: the plain-Q FLINT fast path declines on I, so these
@@ -229,9 +229,9 @@ void test_together() {
              "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");
     /* Complex coefficient over a real denominator (the undetermined-coefficient shape). */
     run_test("Together[a/(x - 1) + I b/(x - 2)]",
-             "Times[Power[Plus[2, Times[-3, x], Power[x, 2]], -1], "
-             "Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "
-             "Times[Complex[0, 1], b, x]]]");
+             "Times[Plus[Times[-2, a], Times[Complex[0, -1], b], Times[a, x], "
+             "Times[Complex[0, 1], b, x]], "
+             "Power[Plus[2, Times[-3, x], Power[x, 2]], -1]]");
 }
 
 int main() {

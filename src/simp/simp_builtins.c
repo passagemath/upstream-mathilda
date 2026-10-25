@@ -1855,6 +1855,23 @@ Expr* builtin_simplify(Expr* res) {
         }
     }
 
+    /* Power-distribution polish: the bottom-up pass simplifies each part, but
+     * a positive constant left inside a power of the reassembled result is
+     * never split, so like terms stay apart:
+     *   -4 (z/2)^(4/3) + 2^(2/3) z^(4/3)  ->  0
+     * (the Struve ODE identity at n = 1/3).  Kept only on a strict score
+     * improvement. */
+    {
+        Expr* dist = transform_power_distribute(best, ctx);
+        if (dist && !expr_eq(dist, best) &&
+            score_with_func(dist, opt_complexity) < score_with_func(best, opt_complexity)) {
+            expr_free(best);
+            best = dist;
+        } else if (dist) {
+            expr_free(dist);
+        }
+    }
+
     /* Sign canonicalisation: flip pairs of negative-leading Plus factors
      * inside a top-level Times so each binomial leads with its
      * positive-coefficient term, e.g.

@@ -136,7 +136,7 @@ int main() {
     run_test("1 + x + y /. x + y -> z", "1 + z");
     run_test("a + b + c /. x_ + y_ -> f[x, y]", "f[a, b + c]");   /* group absorption, unchanged */
     run_test("modr[1, 5] + modr[2, 5] /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5]");
-    run_test("modr[1, 5] + modr[2, 5] + xr /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "modr[3, 5] + xr");
+    run_test("modr[1, 5] + modr[2, 5] + xr /. modr[a_, p_] + modr[b_, p_] :> modr[Mod[a + b, p], p]", "xr + modr[3, 5]");
 
     /* Ordered (non-Orderless) Flat heads: the matched run may sit anywhere --
      * $FlatPre$___ + $FlatRest$___ -- leftmost run first, one rewrite per

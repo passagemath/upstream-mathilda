@@ -167,7 +167,7 @@ static void test_mixed_elementary(void) {
     assert_dintegral_zero("x f'[x] + f[x] + Cos[x]");
     /* d/dx(E^f f') = E^f f'^2 + E^f f'' -> antiderivative E^f f'. */
     run_eq("Integrate`Undefined[E^f[x]*f'[x]^2 + E^f[x]*f''[x], x]",
-           "Derivative[1][f][x] E^f[x]");
+           "E^f[x] Derivative[1][f][x]");
     assert_dintegral_zero("E^f[x]*f'[x]^2 + E^f[x]*f''[x]");
 }
 

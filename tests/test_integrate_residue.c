@@ -254,7 +254,7 @@ static void test_assumptions_option(void) {
 static void test_fourier_symbolic(void) {
     /* Integrate[Cos[k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
     check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
-             "Assumptions -> {a > 0, k > 0}]", "(Pi E^(-a k))/a");
+             "Assumptions -> {a > 0, k > 0}]", "(E^(-a k) Pi)/a");
     /* Sin is odd -> 0. */
     check_eq("Integrate[Sin[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
              "Assumptions -> {a > 0, k > 0}]", "0");
@@ -269,7 +269,7 @@ static void test_fourier_symbolic(void) {
     /* Bare complex-exponential kernel Exp[I k x] with symbolic parameters:
      * Integrate[Exp[I k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
     check_eq("Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
-             "Assumptions -> {a > 0, k > 0}]", "(Pi E^(-a k))/a");
+             "Assumptions -> {a > 0, k > 0}]", "(E^(-a k) Pi)/a");
     check_eq("Chop[N[(Integrate[Exp[I k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
              "Assumptions -> {a > 0, k > 0}] - Pi E^(-a k)/a) /. {a -> 12/10, k -> 9/10}]]",
              "0");
@@ -279,7 +279,7 @@ static void test_fourier_symbolic(void) {
      * wrong Pi E^-a/(2 a^2) instead of Pi (1+a) E^-a/(2 a^3). */
     check_eq("Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0, Method -> \"Residue\"]",
-             "(Pi (1 + a) E^(-a))/(2 a^3)");
+             "((1 + a) E^(-a) Pi)/(2 a^3)");
     check_eq("Chop[N[(Integrate[Cos[x]/(x^2+a^2)^2, {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0, Method -> \"Residue\"] "
              "- Pi (1 + a) E^(-a)/(2 a^3)) /. a -> 7/5]]", "0");
@@ -294,7 +294,7 @@ static void test_fourier_symbolic(void) {
      * for a nonzero input.  Correct value (Pi/b^2)(1 - E^(-a b)). */
     check_eq("Integrate[Sin[a x]/(x (x^2+b^2)), {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
-             "(Pi (1 - E^(-a b)))/b^2");
+             "((1 - E^(-a b)) Pi)/b^2");
     check_eq("With[{r = Integrate[Sin[a x]/(x (x^2+b^2)), {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
              "{FreeQ[r, Integrate], Chop[N[(r - Pi (1 - E^(-a b))/b^2) /. {a -> 1, b -> 1}]]}]",
@@ -316,9 +316,9 @@ static void test_fourier_symbolic(void) {
      * (numerator -> 0 at x=0), admitted only because Limit[f, x->0] is finite.
      * Half-line Pi (b-a)/2, whole-line Pi (b-a). */
     check_eq("Integrate[(Cos[a x] - Cos[b x])/x^2, {x, 0, Infinity}, "
-             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "1/2 Pi (-a + b)");
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "1/2 (-a + b) Pi");
     check_eq("Integrate[(Cos[a x] - Cos[b x])/x^2, {x, -Infinity, Infinity}, "
-             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "Pi (-a + b)");
+             "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]", "(-a + b) Pi");
     check_eq("With[{r = Integrate[(Cos[a x] - Cos[b x])/x^2, {x, 0, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
              "{FreeQ[r, Integrate], Chop[N[(r - Pi (b - a)/2) /. {a -> 2, b -> 5}]]}]",
@@ -340,7 +340,7 @@ static void test_fourier_symbolic(void) {
 static void test_rectangular(void) {
     /* Integrate[Exp[a x]/(Exp[x]+1)] = Pi/Sin[Pi a],  0 < a < 1. */
     check_eq("Integrate[Exp[a x]/(Exp[x]+1), {x, -Infinity, Infinity}, "
-             "Assumptions -> 0 < a < 1]", "Pi Csc[Pi a]");
+             "Assumptions -> 0 < a < 1]", "Pi Csc[a Pi]");
     check_eq("Chop[N[(Integrate[Exp[a x]/(Exp[x]+1), {x, -Infinity, Infinity}, "
              "Assumptions -> 0 < a < 1] - Pi/Sin[Pi a]) /. a -> 37/100]]", "0");
     /* Exp[a x]/(Exp[x]-1) style denominator is a genuine axis pole (Exp[x]=1 at
@@ -378,7 +378,7 @@ static void test_mellin(void) {
 static void test_mellin_symbolic_exponent(void) {
     /* Integrate[x^a/(x+1)^3, -1<a<2] = Pi a (1-a)/(2 Sin[Pi a]). */
     check_eq("Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
-             "Method -> \"Residue\"]", "1/2 Pi a (-1 + a) Csc[Pi (1 + a)]");
+             "Method -> \"Residue\"]", "1/2 (-1 + a) a Pi Csc[(1 + a) Pi]");
     check_eq("Chop[N[(Integrate[x^a/(x+1)^3, {x, 0, Infinity}, Assumptions -> -1 < a < 2, "
              "Method -> \"Residue\"] - Pi a (1 - a)/(2 Sin[Pi a])) /. a -> 1/2]]", "0");
 }
@@ -457,7 +457,7 @@ static void test_gaussian(void) {
     check_eq("Integrate[Exp[-x^2] Cos[2 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "Sqrt[Pi]/E");
     check_eq("Integrate[Exp[-x^2] Cos[2 a x], {x, -Infinity, Infinity}, Method -> \"Residue\", "
-             "Assumptions -> a > 0]", "Sqrt[Pi] E^(-a^2)");
+             "Assumptions -> a > 0]", "E^(-a^2) Sqrt[Pi]");
     /* Shifted exponent, Exp kernel, and a scaled leading coefficient. */
     check_eq("Integrate[Exp[-x^2 + 3 x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "E^(9/4) Sqrt[Pi]");
@@ -478,10 +478,10 @@ static void test_gaussian(void) {
      * E^(-b^2/(4a)); even half-line = half of it. */
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, -Infinity, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
-             "Sqrt[Pi/a] E^(-b^2/(4 a))");
+             "E^(-b^2/(4 a)) Sqrt[Pi/a]");
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]",
-             "1/2 Sqrt[Pi/a] E^(-b^2/(4 a))");
+             "1/2 E^(-b^2/(4 a)) Sqrt[Pi/a]");
     check_eq("With[{r = Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && b > 0, Method -> \"Residue\"]}, "
              "{FreeQ[r, Integrate], Chop[N[(r - Sqrt[Pi/a] Exp[-b^2/(4 a)]/2) "
@@ -490,7 +490,7 @@ static void test_gaussian(void) {
      * works on the FindInstance representative path too. */
     check_eq("Integrate[Exp[-a x^2] Cos[b x], {x, 0, Infinity}, "
              "Assumptions -> a > 0 && Element[b, Reals], Method -> \"Residue\"]",
-             "1/2 Sqrt[Pi/a] E^(-b^2/(4 a))");
+             "1/2 E^(-b^2/(4 a)) Sqrt[Pi/a]");
 }
 
 /* -------------------------------------------------------------------------
@@ -593,7 +593,7 @@ static void test_sector(void) {
      * n > m; Refine lacks the integer-gap step n > m && Integers => n >= m+1). */
     check_eq("Integrate[x^(2 m)/(1 + x^(2 n)), {x, 0, Infinity}, "
              "Assumptions -> Element[m, Integers] && Element[n, Integers] && n >= m + 1 && m >= 0, "
-             "Method -> \"Residue\"]", "(Pi Csc[(Pi (1 + 2 m))/(2 n)])/(2 n)");
+             "Method -> \"Residue\"]", "(Pi Csc[((1 + 2 m) Pi)/(2 n)])/(2 n)");
     check_eq("Chop[N[(Integrate[x^(2 m)/(1 + x^(2 n)), {x, 0, Infinity}, "
              "Assumptions -> Element[m, Integers] && Element[n, Integers] && n >= m + 1 && m >= 0, "
              "Method -> \"Residue\"] - Pi/(2 n) Csc[Pi(2 m+1)/(2 n)]) /. {m -> 1, n -> 2}]]", "0");
@@ -604,7 +604,7 @@ static void test_beta(void) {
     /* Case In[16]: x^a/(x+b)^c = b^(a+1-c) Gamma[a+1] Gamma[c-a-1]/Gamma[c]. */
     check_eq("Integrate[x^a/(x+b)^c, {x, 0, Infinity}, "
              "Assumptions -> b > 0 && c > a + 1 && a > -1, Method -> \"Residue\"]",
-             "(Gamma[1 + a] Gamma[-1 - a + c] b^(1 + a - c))/Gamma[c]");
+             "(b^(1 + a - c) Gamma[1 + a] Gamma[-1 - a + c])/Gamma[c]");
     check_eq("Chop[N[(Integrate[x^a/(x+b)^c, {x, 0, Infinity}, "
              "Assumptions -> b > 0 && c > a + 1 && a > -1, Method -> \"Residue\"] "
              "- b^(a+1-c) Beta[a+1, c-a-1]) /. {a -> 1/2, b -> 1, c -> 3}]]", "0");
@@ -643,18 +643,18 @@ static void test_mellin_power(void) {
      * stated as s > 0, not the Refine-unfriendly complex spelling Re[s] > 0). */
     check_eq("Integrate[x^(s-1) Exp[-a x^2], {x, 0, Infinity}, "
              "Assumptions -> s > 0 && a > 0, Method -> \"Residue\"]",
-             "1/2 Gamma[1/2 s] a^(-1/2 s)");
+             "1/2 a^(-1/2 s) Gamma[1/2 s]");
     check_eq("Chop[N[(Integrate[x^(s-1) Exp[-a x^2], {x,0,Infinity}, "
              "Assumptions -> s>0 && a>0, Method -> \"Residue\"] - a^(-s/2) Gamma[s/2]/2) "
              "/. {s -> 3/2, a -> 1}]]", "0");
     /* Case In[10]: x^p Sin[x^2] = (1/2) Gamma[(p+1)/2] Sin[Pi(p+1)/4]. */
     check_eq("Integrate[x^p Sin[x^2], {x, 0, Infinity}, "
              "Assumptions -> -1 < p < 1, Method -> \"Residue\"]",
-             "1/2 Gamma[1/2 (1 + p)] Sin[1/4 Pi (1 + p)]");
+             "1/2 Gamma[1/2 (1 + p)] Sin[1/4 (1 + p) Pi]");
     /* The Cos sibling. */
     check_eq("Integrate[x^p Cos[x^2], {x, 0, Infinity}, "
              "Assumptions -> -1 < p < 1, Method -> \"Residue\"]",
-             "1/2 Gamma[1/2 (1 + p)] Cos[1/4 Pi (1 + p)]");
+             "1/2 Cos[1/4 (1 + p) Pi] Gamma[1/2 (1 + p)]");
     /* A plain generalized-Fresnel (mu = 1): Sin[x^3] = Gamma[4/3] Sin[Pi/6] = Gamma[4/3]/2. */
     check_eq("Chop[N[Integrate[Sin[x^3], {x, 0, Infinity}, Method -> \"Residue\"] "
              "- Gamma[4/3]/2]]", "0");
@@ -672,11 +672,11 @@ static void test_hyperbolic_strip(void) {
     /* Case In[21]: Cosh[a x]/Cosh[b x] = (Pi/b) Sec[Pi a/(2 b)]. */
     check_eq("Integrate[Cosh[a x]/Cosh[b x], {x, -Infinity, Infinity}, "
              "Assumptions -> b > a > 0, Method -> \"Residue\"]",
-             "(Pi Sec[(Pi a)/(2 b)])/b");
+             "(Pi Sec[(a Pi)/(2 b)])/b");
     /* Case In[18]: E^(I a x)/Cosh[b x] = (Pi/b) Sech[Pi a/(2 b)]. */
     check_eq("Integrate[Exp[I a x]/Cosh[b x], {x, -Infinity, Infinity}, "
              "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
-             "(Pi Sech[(Pi a)/(2 b)])/b");
+             "(Pi Sech[(a Pi)/(2 b)])/b");
     /* Bare Sech integrates to Pi/b (the alpha = 0 term). */
     check_eq("Integrate[Sech[Pi x], {x, -Infinity, Infinity}, Method -> \"Residue\"]",
              "1");
@@ -706,11 +706,11 @@ static void test_hyperbolic_strip(void) {
     /* Case In[10]: Cos[a x]/Cosh[b x]^2 = Pi a Csch[Pi a/(2 b)]/b^2  (double pole). */
     check_eq("Integrate[Cos[a x]/Cosh[b x]^2, {x, -Infinity, Infinity}, "
              "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
-             "(Pi a Csch[(Pi a)/(2 b)])/b^2");
+             "(a Pi Csch[(a Pi)/(2 b)])/b^2");
     /* Cos/Cosh^3 (triple pole) = Pi(a^2+b^2) Sech[Pi a/(2b)]/(2 b^3). */
     check_eq("Integrate[Cos[a x]/Cosh[b x]^3, {x, -Infinity, Infinity}, "
              "Assumptions -> Element[a, Reals] && b > 0, Method -> \"Residue\"]",
-             "(Pi (a^2 + b^2) Sech[(Pi a)/(2 b)])/(2 b^3)");
+             "((a^2 + b^2) Pi Sech[(a Pi)/(2 b)])/(2 b^3)");
     /* Concrete double pole, numeric confirmation against the series value. */
     check_eq("With[{r = Integrate[Cos[a x]/Cosh[b x]^2, {x,-Infinity,Infinity}, "
              "Assumptions -> Element[a,Reals] && b>0, Method -> \"Residue\"]}, "

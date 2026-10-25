@@ -155,7 +155,7 @@ void test_hn_derivatives() {
                    "1/6 Pi^2 - HarmonicNumber[n, 2]", 0);
     /* d/dn H_n^(r) = r (Zeta[r+1] - HarmonicNumber[n, r+1]). */
     assert_eval_eq("D[HarmonicNumber[n, r], n]",
-                   "r (Zeta[1 + r] - HarmonicNumber[n, 1 + r])", 0);
+                   "r (-HarmonicNumber[n, 1 + r] + Zeta[1 + r])", 0);
     /* d/dr has no elementary closed form: generic partial. */
     assert_eval_eq("D[HarmonicNumber[n, r], r]",
                    "Derivative[0, 1][HarmonicNumber][n, r]", 0);

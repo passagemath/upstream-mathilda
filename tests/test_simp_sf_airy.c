@@ -129,7 +129,7 @@ static void test_fib_lucas(const char* H, bool pair) {
 
 static void test_fibonacci(void) {
     test_fib_lucas("Fibonacci", true);
-    sf_to("Fibonacci[n + 1] LucasL[n] - Fibonacci[n] LucasL[n + 1]", "2 Cos[Pi n]");
+    sf_to("Fibonacci[n + 1] LucasL[n] - Fibonacci[n] LucasL[n + 1]", "2 Cos[n Pi]");
 }
 static void test_lucas(void) { test_fib_lucas("LucasL", false); }
 

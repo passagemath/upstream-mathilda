@@ -69,7 +69,7 @@ static void test_plain_q(void) {
     spec("Cancel[(x^3-1)/(x-1)]", "Plus[1, x, Power[x, 2]]");
     spec("Cancel[(x^4-1)/(x^2-1)]", "Plus[1, Power[x, 2]]");
     spec("Cancel[(x^2+2x+1)/(x+1)]", "Plus[1, x]");
-    spec("Cancel[(2 x^2+4x)/(x^2-4)]", "Times[2, x, Power[Plus[-2, x], -1]]");
+    spec("Cancel[(2 x^2+4x)/(x^2-4)]", "Times[2, Power[Plus[-2, x], -1], x]");
     spec("Cancel[(6x^2-6)/(3x-3)]", "Plus[2, Times[2, x]]");
     spec("Cancel[(a x^2 - a)/(x-1)]", "Plus[a, Times[a, x]]");
     spec("Together[1/x+1/y]", "Times[Power[x, -1], Power[y, -1], Plus[x, y]]");
@@ -81,18 +81,18 @@ static void test_plain_q(void) {
     spec("Together[b/(x-a)+b/(x+a)]",
          "Times[-2, b, x, Power[Plus[Power[a, 2], Times[-1, Power[x, 2]]], -1]]");
     spec("Together[a/(x-1)+b/(x-2)]",
-         "Times[Power[Plus[2, Times[-3, x], Power[x, 2]], -1], "
-         "Plus[Times[-2, a], Times[-1, b], Times[a, x], Times[b, x]]]");
+         "Times[Plus[Times[-2, a], Times[-1, b], Times[a, x], Times[b, x]], "
+         "Power[Plus[2, Times[-3, x], Power[x, 2]], -1]]");
 }
 
 static void test_transcendental(void) {
     spec("Together[1/(1+Log[x])+1/Log[x]]",
-         "Times[Power[Plus[Log[x], Power[Log[x], 2]], -1], Plus[1, Times[2, Log[x]]]]");
+         "Times[Plus[1, Times[2, Log[x]]], Power[Plus[Log[x], Power[Log[x], 2]], -1]]");
     spec("Cancel[(Log[x]^2-1)/(Log[x]-1)]", "Plus[1, Log[x]]");
     spec("Together[1/Log[x]-1/Log[y]]",
          "Times[Power[Log[x], -1], Power[Log[y], -1], Plus[Times[-1, Log[x]], Log[y]]]");
     spec("Together[1/(1+ArcTan[x])+1/ArcTan[x]]",
-         "Times[Power[Plus[ArcTan[x], Power[ArcTan[x], 2]], -1], Plus[1, Times[2, ArcTan[x]]]]");
+         "Times[Plus[1, Times[2, ArcTan[x]]], Power[Plus[ArcTan[x], Power[ArcTan[x], 2]], -1]]");
     spec("Together[(E^(2x)-1)/(E^x-1)]", "Plus[1, Power[E, x]]");
     spec("Cancel[(E^(2x)-1)/(E^x+1)]", "Plus[-1, Power[E, x]]");
     spec("Together[1/(E^x-1)+1/(E^x+1)]",
@@ -128,8 +128,8 @@ static void test_number_field(void) {
          "Times[-1, Power[5, Rational[1, 2]], x], Power[x, 2]], -1]]");
     /* WL keeps a coprime constant fraction (no rationalization for Cancel). */
     spec("Cancel[(1+Sqrt[2])/(1-Sqrt[2])]",
-         "Times[Plus[1, Power[2, Rational[1, 2]]], "
-         "Power[Plus[1, Times[-1, Power[2, Rational[1, 2]]]], -1]]");
+         "Times[Power[Plus[1, Times[-1, Power[2, Rational[1, 2]]]], -1], "
+         "Plus[1, Power[2, Rational[1, 2]]]]");
 }
 
 static void test_cyclotomic(void) {
@@ -172,9 +172,9 @@ static void test_higher_radicands(void) {
     /* Q(Sqrt d), d >= 5: must NOT crash (TOGETHER_ALGEBRAIC_OVERFLOW.md) and must
      * give the WL-faithful combined form. Currently passes — pinned as a guard. */
     spec("Together[1/(x^2-5)+1/(x-Sqrt[5])]",
-         "Times[Power[Plus[-5, Power[x, 2]], -1], Plus[1, Power[5, Rational[1, 2]], x]]");
+         "Times[Plus[1, Power[5, Rational[1, 2]], x], Power[Plus[-5, Power[x, 2]], -1]]");
     spec("Together[1/(x^2-7)+1/(x-Sqrt[7])]",
-         "Times[Power[Plus[-7, Power[x, 2]], -1], Plus[1, Power[7, Rational[1, 2]], x]]");
+         "Times[Plus[1, Power[7, Rational[1, 2]], x], Power[Plus[-7, Power[x, 2]], -1]]");
 }
 
 int main(void) {

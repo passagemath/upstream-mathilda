@@ -158,7 +158,7 @@ void test_si_series_at_zero() {
 void test_si_series_at_infinity() {
     /* Normal form matches Pi/2 - Sin[x]/x^2 + Cos[x] (-1/x + 2/x^3). */
     assert_eval_eq("Normal[Series[SinIntegral[x], {x, Infinity, 3}]]",
-                   "1/2 Pi - Sin[x]/x^2 + Cos[x] (-1/x + 2/x^3)", 0);
+                   "1/2 Pi + (2/x^3 - 1/x) Cos[x] - Sin[x]/x^2", 0);
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

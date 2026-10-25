@@ -50,25 +50,25 @@ static void run_test(const char* input, const char* expected) {
  * so the surfaced order is (b, a). */
 static void test_linear(void) {
     run_test("SolveAlways[a x + b == 0, x]",
-             "List[List[Rule[b, 0], Rule[a, 0]]]");
+             "List[List[Rule[a, 0], Rule[b, 0]]]");
 }
 
 /* Vars as a one-element list -- same answer. */
 static void test_vars_as_list(void) {
     run_test("SolveAlways[a x + b == 0, {x}]",
-             "List[List[Rule[b, 0], Rule[a, 0]]]");
+             "List[List[Rule[a, 0], Rule[b, 0]]]");
 }
 
 /* List of equations: every coefficient of x in every eq must vanish. */
 static void test_list_of_equations(void) {
     run_test("SolveAlways[{a x + b == 0, c x + d == 0}, x]",
-             "List[List[Rule[b, 0], Rule[a, 0], Rule[d, 0], Rule[c, 0]]]");
+             "List[List[Rule[a, 0], Rule[b, 0], Rule[c, 0], Rule[d, 0]]]");
 }
 
 /* And of equations: identical to the list case. */
 static void test_and_of_equations(void) {
     run_test("SolveAlways[a x + b == 0 && c x + d == 0, x]",
-             "List[List[Rule[b, 0], Rule[a, 0], Rule[d, 0], Rule[c, 0]]]");
+             "List[List[Rule[a, 0], Rule[b, 0], Rule[c, 0], Rule[d, 0]]]");
 }
 
 /* Bivariate: (a+b) x + (a-b) y == 0 ⇒ a = b = 0. */

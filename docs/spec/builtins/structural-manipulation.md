@@ -464,15 +464,32 @@ Sorts elements of an expression into canonical order.
 **Features**:
 - `Protected`.
 - Uses an efficient quicksort algorithm.
-- Canonical order:
-    - Real numbers by numerical value.
-    - Complex numbers by real part, then imaginary part magnitude.
-    - Strings in collation order, on three levels; each later level breaks
-      ties of the one before (see below).
-    - Symbols by name.
-    - Expressions by length, then head, then parts depth-first.
-- Polynomial order: `x^n` sorts relative to `x`.
-- Numeric coefficient stripping: when a `Times` term has a leading numeric factor (Integer, Real, BigInt, MPFR, `Rational[n,d]`, `Complex[re,im]`, or a radical such as `Sqrt[2] = Power[2, 1/2]`), that factor is ignored when computing the term's main factor. As a result, `1 + x^2 + Sqrt[2] x` is canonicalised to `1 + Sqrt[2] x + x^2`, matching the reference's main-factor-first ordering.
+- Canonical order (v0.597; each rule measured against the reference):
+    - **Numbers first, by value.** A complex number orders by its real part,
+      then by the size of its imaginary part, negative first:
+      `-1 < -1 - I < 0 < -I < I < 1 < 1 - I < 1 + I < 1 - 2 I`. Equal values
+      put Integer before Real before Rational (`1 < 1.`, `0.5 < 1/2`).
+    - **Products** compare their non-numeric factors from the *last* one
+      backwards (any other expression counts as one factor), the shorter list
+      winning a tie, and then their numeric coefficients:
+      `-2 x < -x < x < 2 x < x^2`, `b < a x`, `y < x y < y^2 < x z`.
+    - **Powers** compare bases, then exponents, and any other expression
+      counts as `base^1`: `x^-1 < Sqrt[x] < x < x^2 < x^n < y`, and
+      `E^x < x` since `E < x`.
+    - **Sums** compare their terms the same way as products, with the
+      numeric term compared last: `a < 2 + a < a + b < 1 + a + b < a + c`.
+      A power is compared before a sum (`x^2 < a + x`, against `(a + x)^1`),
+      and a product before both (`a b < a + b`).
+    - **Atoms come before compound expressions**, and strings before
+      symbols. Symbols use the string collation of their names below, so
+      `a < A < b < B` and `x < x1 < xa < x$`.
+    - **Other expressions** compare their heads, then their lengths, then
+      their arguments from left to right: `f[b] < f[a, b] < g[a] < f[x][a]`,
+      and `{b} < {a, b}`.
+    - `Infinity` and `ComplexInfinity` order as the `DirectedInfinity[1]` and
+      `DirectedInfinity[]` they stand for.
+- The same comparison orders the arguments of `Orderless` heads, so
+  `Plus` and `Times` print in the reference's order: `a b C d`, `x^-2 + x^-1 + Sqrt[x]`.
 - Custom ordering function `p` can return `1`, `0`, `-1`, `True`, or `False`.
 
 **String order.** This is the same collation as WL's, checked against its sort
@@ -490,8 +507,8 @@ of 5,233 random printable-ASCII strings. The three levels:
 
 The result: `"a" < "A" < "a!" < "a1"`,
 `"a_b" < "a-b" < "a.b" < "ab" < "aB" < "Ab" < "ab."`, and `".hid"` sorts
-beside `"hid"`, after `"a.m"`. Only identical strings tie. Symbols still order
-by name (`strcmp`).
+beside `"hid"`, after `"a.m"`. Only identical strings tie. Symbols use the
+same collation on their names, without the context (v0.597).
 
 ```mathematica
 In[1]:= Sort[{d, b, c, a}]

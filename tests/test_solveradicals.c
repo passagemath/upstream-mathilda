@@ -135,14 +135,14 @@ static void test_parametric_nongen(void) {
              "List["
              "List[Rule[x, Times[Rational[1, 18], "
                   "Plus[30, a, "
-                       "Power[Plus[Power[Plus[-30, Times[-1, a]], 2], "
-                                  "Times[-36, Plus[25, Times[-1, c]]]], "
-                             "Rational[1, 2]]]]]], "
-             "List[Rule[x, Times[Rational[1, 18], "
-                  "Plus[30, a, "
                        "Times[-1, Power[Plus[Power[Plus[-30, Times[-1, a]], 2], "
                                               "Times[-36, Plus[25, Times[-1, c]]]], "
-                                        "Rational[1, 2]]]]]]]]");
+                                        "Rational[1, 2]]]]]]], "
+             "List[Rule[x, Times[Rational[1, 18], "
+                  "Plus[30, a, "
+                       "Power[Plus[Power[Plus[-30, Times[-1, a]], 2], "
+                                  "Times[-36, Plus[25, Times[-1, c]]]], "
+                             "Rational[1, 2]]]]]]]");
 }
 
 /* Regression: a rational-in-radical equation with a Power-valued, parametric

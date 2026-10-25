@@ -212,7 +212,7 @@ static void test_parametric_at_infinity(void) {
         "List[Power[E, Times[-1, a, x]]], 1, 2, 1]");                  /* E^(-a x)/(a x) */
     /* bare E_1 asymptotic (new emitter) */
     assert_fullform("Series[ExpIntegralE[1, x], {x, Infinity, 1}]",
-        "Times[SeriesData[Power[x, -1], 0, List[1], 1, 2, 1], Power[E, Times[-1, x]]]");
+        "Times[Power[E, Times[-1, x]], SeriesData[Power[x, -1], 0, List[1], 1, 2, 1]]");
 }
 
 int main(void) {

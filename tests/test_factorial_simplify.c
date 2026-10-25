@@ -36,7 +36,7 @@ void test_factorial_ratio_smaller_over_larger(void) {
     /* (n-2)! / n! -> 1/((n-1)*n). Mathilda keeps the factored
      * Times[Power[n,-1], Power[Plus[-1,n],-1]] form, which prints
      * as 1/(n*(-1+n)). */
-    assert_eval_eq("Simplify[(n-2)!/n!]", "1/(n (-1 + n))", 0);
+    assert_eval_eq("Simplify[(n-2)!/n!]", "1/((-1 + n) n)", 0);
 }
 
 void test_factorial_ratio_scaled_offset(void) {

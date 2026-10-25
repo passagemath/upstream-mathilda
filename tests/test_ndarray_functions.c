@@ -539,7 +539,7 @@ static void test_packed_scalar_ordering(void) {
     chk_eq("OrderedQ[{Table[1., {300}], \"abc\"}]", "False");
     /* ... and BEFORE a Symbol and a general expression, which still go through
      * the materialising path (step 3 reads elements). */
-    chk_eq("OrderedQ[{Table[1., {300}], xzz}]", "True");
+    chk_eq("OrderedQ[{Table[1., {300}], xzz}]", "False");
     chk_eq("OrderedQ[{Table[1., {300}], Sin[xzz]}]", "True");
     /* An integer buffer behaves identically. */
     chk_eq("OrderedQ[{5, Range[300]}]", "True");
@@ -549,7 +549,7 @@ static void test_packed_scalar_ordering(void) {
     chk_eq("OrderedQ[{Table[2., {300}], Table[1., {300}]}]", "False");
     /* Sort of a mixed bag: the full canonical order, in one assertion. */
     chk_eq("Map[Head, Sort[{Table[1., {300}], 5, \"abc\", xzz, 3 + 4 I, 2.5}]]",
-           "{Real, Integer, Complex, String, List, Symbol}");
+           "{Real, Complex, Integer, String, Symbol, List}");
     /* Orderless canonicalisation through a real head still sees a full list. */
     chk_eq("Length[Plus[Table[1., {300}], 5]]", "300");
     /* And the values GCD/LCM produce are unaffected by the sort shortcut. */

@@ -178,7 +178,7 @@ void test_hz_derivatives() {
     /* Symbolic-order derivative in a:
      * D[HurwitzZeta[s,a],{a,n}] = (-1)^n Pochhammer[s,n] HurwitzZeta[n+s,a]. */
     assert_eval_eq("D[HurwitzZeta[s, a], {a, n}]",
-                   "(-1)^n Pochhammer[s, n] HurwitzZeta[n + s, a]", 0);
+                   "(-1)^n HurwitzZeta[n + s, a] Pochhammer[s, n]", 0);
 }
 
 /* ---- symbolic fall-through ------------------------------------------ */

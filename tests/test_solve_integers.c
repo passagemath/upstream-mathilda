@@ -410,7 +410,7 @@ static void test_linear_parametric(void) {
     /* Three variables -> two parameters. */
     run_test("Solve[x + y + z == 5, {x, y, z}, Integers]",
         "List[List[Rule[x, C[1]], "
-             "Rule[y, Plus[C[2], Times[-1, C[1]]]], "
+             "Rule[y, Plus[Times[-1, C[1]], C[2]]], "
              "Rule[z, Plus[5, Times[-1, C[2]]]]]]");
 }
 

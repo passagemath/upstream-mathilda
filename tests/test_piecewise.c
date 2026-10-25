@@ -280,7 +280,7 @@ void test_unitstep() {
         {"D[UnitStep[x], x]",
          "Piecewise[List[List[Indeterminate, Equal[x, 0]]], 0]"},
         {"D[UnitStep[x, y, z], z]",
-         "Times[UnitStep[x, y], Piecewise[List[List[Indeterminate, Equal[z, 0]]], 0]]"},
+         "Times[Piecewise[List[List[Indeterminate, Equal[z, 0]]], 0], UnitStep[x, y]]"},
         {"D[UnitStep[x^2], x]",
          "Times[2, x, Piecewise[List[List[Indeterminate, Equal[Power[x, 2], 0]]], 0]]"},
         // Derivative w.r.t. a variable the argument does not contain is 0.

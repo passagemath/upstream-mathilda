@@ -272,12 +272,12 @@ static void test_polydecomp_canonical(void) {
  * to Pi/2 under the consistent complex canonical ordering). */
 static void test_trig_pre_pass_sin_plus_cos(void) {
     run_test("Solve[Sin[x] + Cos[x] == 1, x]",
-             "List[List[Rule[x, ConditionalExpression["
-                 "Times[2, C[1], Pi], "
+             "List[List[Rule[x, ConditionalExpression[Times[2, "
+                 "Pi, C[1]], "
                  "Element[C[1], Integers]]]], "
-                  "List[Rule[x, ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], "
-                       "Times[Rational[1, 2], Pi]], "
+                  "List[Rule[x, "
+                 "ConditionalExpression[Plus[Times[Rational[1, "
+                       "2], Pi], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -288,8 +288,8 @@ static void test_trig_pre_pass_sin_plus_cos(void) {
  * u with a single root unwinding to `C[1] Pi + ArcTan[1/2]`. */
 static void test_trig_pre_pass_tan(void) {
     run_test("Solve[Tan[x] - 1/2 == 0, x]",
-             "List[List[Rule[x, ConditionalExpression["
-                 "Plus[Times[C[1], Pi], ArcTan[Rational[1, 2]]], "
+             "List[List[Rule[x, "
+                 "ConditionalExpression[Plus[ArcTan[Rational[1, 2]], Times[Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -399,8 +399,8 @@ static void test_inverse_log(void) {
 static void test_inverse_exp(void) {
     run_test("Solve[Exp[x] == a, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[Complex[0, 2], C[1], Pi], Log[a]], "
+               "ConditionalExpression[Plus[Times[Complex[0, "
+                 "2], Pi, C[1]], Log[a]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -483,11 +483,11 @@ static void test_trig_pair(void) {
  * multi-branch complex log. */
 static void test_inverse_power_const_base(void) {
     run_test("Solve[2^x == 5, x]",
-             "List[List[Rule[x, ConditionalExpression[Plus[Times[Log[5], Power[Log[2], -1]], Times[Complex[0, 2], C[1], Power[Log[2], -1], Pi]], Element[C[1], Integers]]]]]");
+             "List[List[Rule[x, ConditionalExpression[Plus[Times[Complex[0, 2], Pi, C[1], Power[Log[2], -1]], Times[Power[Log[2], -1], Log[5]]], Element[C[1], Integers]]]]]");
     /* b^x == 1 -> x == 2 Pi I C[k] / Log[b] (constant Log[1] drops). */
     run_test("Solve[3^x == 1, x]",
-             "List[List[Rule[x, ConditionalExpression["
-                 "Times[Complex[0, 2], C[1], Power[Log[3], -1], Pi], "
+             "List[List[Rule[x, ConditionalExpression[Times[Complex[0, "
+                 "2], Pi, C[1], Power[Log[3], -1]], "
                  "Element[C[1], Integers]]]]]");
     /* Quadratic exponent: 2^(x^2) == 16 -- linear in u = x^2 via
      * peel_exp, then solvepoly's binomial root yields x = +-Sqrt[..].
@@ -501,12 +501,12 @@ static void test_inverse_power_const_base(void) {
 static void test_inverse_sin(void) {
     run_test("Solve[Sin[x] == a, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Pi, Times[2, C[1], Pi], Times[-1, ArcSin[a]]], "
+               "ConditionalExpression[Plus[Pi, "
+                 "Times[-1, ArcSin[a]], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], ArcSin[a]], "
+               "ConditionalExpression[Plus[ArcSin[a], "
+                 "Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -514,12 +514,12 @@ static void test_inverse_sin(void) {
 static void test_inverse_sin_concrete(void) {
     run_test("Solve[Sin[x] == 1/2, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], Times[Rational[5, 6], Pi]], "
+               "ConditionalExpression[Plus[Times[Rational[5, "
+                 "6], Pi], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], Times[Rational[1, 6], Pi]], "
+               "ConditionalExpression[Plus[Times[Rational[1, "
+                 "6], Pi], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -527,8 +527,8 @@ static void test_inverse_sin_concrete(void) {
 static void test_inverse_tan(void) {
     run_test("Solve[Tan[x] == a, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[C[1], Pi], ArcTan[a]], "
+               "ConditionalExpression[Plus[ArcTan[a], "
+                 "Times[Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -538,12 +538,12 @@ static void test_inverse_tan(void) {
 static void test_inverse_isolation(void) {
     run_test("Solve[2 Sin[x] - 1 == 0, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], Times[Rational[5, 6], Pi]], "
+               "ConditionalExpression[Plus[Times[Rational[5, "
+                 "6], Pi], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Times[2, C[1], Pi], Times[Rational[1, 6], Pi]], "
+               "ConditionalExpression[Plus[Times[Rational[1, "
+                 "6], Pi], Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -556,10 +556,10 @@ static void test_inverse_log_composite(void) {
     run_test("Solve[Log[x^2 + 1] + 1 == 0, x]",
              "List[List[Rule[x, "
                "Times[-1, Power[E, -1], "
-                     "Power[Times[-1, E, Plus[-1, E]], Rational[1, 2]]]]], "
+                     "Power[Times[-1, Plus[-1, E], E], Rational[1, 2]]]]], "
                   "List[Rule[x, "
                "Times[Power[E, -1], "
-                     "Power[Times[-1, E, Plus[-1, E]], Rational[1, 2]]]]]]");
+                     "Power[Times[-1, Plus[-1, E], E], Rational[1, 2]]]]]]");
 }
 
 /* ArcSin[x] == a -- inverse-of-inverse with the principal-strip
@@ -581,12 +581,12 @@ static void test_inverse_arcsin(void) {
 static void test_inverse_sin_zero(void) {
     run_test("Solve[Sin[x] == 0, x]",
              "List[List[Rule[x, "
-               "ConditionalExpression["
-                 "Plus[Pi, Times[2, C[1], Pi]], "
+               "ConditionalExpression[Plus[Pi, "
+                 "Times[2, Pi, C[1]]], "
                  "Element[C[1], Integers]]]], "
                   "List[Rule[x, "
-               "ConditionalExpression["
-                 "Times[2, C[1], Pi], "
+               "ConditionalExpression[Times[2, "
+                 "Pi, C[1]], "
                  "Element[C[1], Integers]]]]]");
 }
 
@@ -1123,7 +1123,7 @@ static void test_poly_in_kernel(void) {
     /* E^x + x == 0 is not a polynomial in one kernel (bare x remains):
      * left unevaluated. */
     run_test("Solve[E^x + x == 0, x]",
-             "Solve[Equal[Plus[x, Power[E, x]], 0], x]");
+             "Solve[Equal[Plus[Power[E, x], x], 0], x]");
 }
 
 /* Domains still outside the recognised set (Algebraics, Booleans,
@@ -1335,7 +1335,7 @@ static void test_linsys_many_indexed_unknowns(void) {
 static void test_linsys_nonlinear_declined(void) {
     /* x^2 + y == 1, x == y  =>  x^2 + x - 1 == 0  =>  x = (-1 +/- Sqrt[5])/2. */
     run_test("Solve[x^2 + y == 1 && x - y == 0, {x, y}]",
-             "List[List[Rule[x, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]]], List[Rule[x, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]]]]");
+             "List[List[Rule[x, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Times[-1, Power[5, Rational[1, 2]]]]]]], List[Rule[x, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]], Rule[y, Times[Rational[1, 2], Plus[-1, Power[5, Rational[1, 2]]]]]]]");
     /* Cross-term x*y: x y == 1, x + y == 2  =>  x = y = 1 (double root). */
     run_test("Solve[x y == 1 && x + y == 2, {x, y}]",
              "List[List[Rule[x, 1], Rule[y, 1]]]");

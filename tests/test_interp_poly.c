@@ -90,7 +90,7 @@ static void test_value_form(void) {
     run_print("Expand[InterpolatingPolynomial[{1,4,9,16},x]]", "x^2");
     /* Mathematica's exact nested form with rational divided differences. */
     run_print("InterpolatingPolynomial[{4,7,2,8,9},x]",
-              "4 + (-1 + x) (3 + (-2 + x) (-4 + (-3 + x) (19/6 - 35/24 (-4 + x))))");
+              "4 + (3 + (-4 + (19/6 - 35/24 (-4 + x)) (-3 + x)) (-2 + x)) (-1 + x)");
     run_print("InterpolatingPolynomial[{3,7},x]", "3 + 4 (-1 + x)");
     run_full("InterpolatingPolynomial[{5},x]", "5");
     /* Interpolation property at every node. */
@@ -113,8 +113,8 @@ static void test_pairs_form(void) {
 /* --- Hermite / confluent divided differences reproduce derivatives. --- */
 static void test_hermite(void) {
     run_print("InterpolatingPolynomial[{4,7,2,{8,0},9},x]",
-              "4 + (-1 + x) (3 + (-2 + x) (-4 + (-3 + x) "
-              "(19/6 + (-4 + x) (-107/36 + 109/72 (-4 + x)))))");
+              "4 + (3 + (-4 + (19/6 + (-107/36 + 109/72 (-4 + x)) "
+              "(-4 + x)) (-3 + x)) (-2 + x)) (-1 + x)");
     run_full("InterpolatingPolynomial[{4,7,2,{8,0},9},x] /. x->4", "8");       /* value */
     run_full("D[InterpolatingPolynomial[{4,7,2,{8,0},9},x],x] /. x->4", "0");  /* slope */
     run_full("InterpolatingPolynomial[{4,7,2,{8,0},9},x] /. x->2", "7");

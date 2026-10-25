@@ -108,7 +108,7 @@ void test_logexp_forward() {
         {"Exp[0.0]", "1.0"},
         {"Log[-1.0]", "0.0 + 3.14159*I"},
         {"Log[-1]", "I Pi"},
-        {"Log[-5]", "Log[5] + I Pi"},
+        {"Log[-5]", "I Pi + Log[5]"},
         {"Exp[Log[x]]", "x"},
         {"Exp[b Log[a]]", "a^b"},
         {"Exp[2 Log[x]]", "x^2"},
@@ -127,9 +127,9 @@ void test_logexp_forward() {
         /* Exact pure-imaginary arguments: Log[b I] = Log[|b|] + Sign[b] I Pi/2 */
         {"Log[I]", "(1/2*I) Pi"},
         {"Log[-I]", "(-1/2*I) Pi"},
-        {"Log[2 I]", "Log[2] + (1/2*I) Pi"},
-        {"Log[-3 I]", "Log[3] + (-1/2*I) Pi"},
-        {"Log[I/2]", "Log[1/2] + (1/2*I) Pi"},
+        {"Log[2 I]", "(1/2*I) Pi + Log[2]"},
+        {"Log[-3 I]", "(-1/2*I) Pi + Log[3]"},
+        {"Log[I/2]", "(1/2*I) Pi + Log[1/2]"},
         {"Log[2 + 3 I]", "Log[2 + 3*I]"},
         {NULL, NULL}
     };
@@ -259,7 +259,7 @@ static void test_log10_log2(void) {
     assert_eval_eq("Log2[x]", "Times[Power[Log[2], -1], Log[x]]", 1);
     assert_eval_eq("Attributes[Log10]", "{Listable, NumericFunction, Protected}", 0);
     assert_eval_eq("Attributes[Log2]", "{Listable, NumericFunction, Protected}", 0);
-    assert_eval_eq("D[Log10[x], x]", "1/(Log[10] x)", 0);
+    assert_eval_eq("D[Log10[x], x]", "1/(x Log[10])", 0);
     /* packed and visible-NDArray surfaces */
     assert_eval_eq("Log10[Range[1., 4.]]", "{0.0, 0.30103, 0.477121, 0.60206}", 0);
     assert_eval_eq("PackedArrayQ[Log10[Range[1., 4.]]]", "True", 0);
@@ -282,8 +282,8 @@ static void test_log_base_exact_rational(void) {
     assert_eval_eq("Log[1/2, 8]", "-3", 0);
     assert_eval_eq("Log[2/3, 4/9]", "2", 0);
     assert_eval_eq("Log[10, 1]", "0", 0);
-    assert_eval_eq("Log[2, 3]", "Times[Log[3], Power[Log[2], -1]]", 1);
-    assert_eval_eq("Log[6, 12]", "Times[Log[12], Power[Log[6], -1]]", 1);
+    assert_eval_eq("Log[2, 3]", "Times[Power[Log[2], -1], Log[3]]", 1);
+    assert_eval_eq("Log[6, 12]", "Times[Power[Log[6], -1], Log[12]]", 1);
 }
 
 int main() {

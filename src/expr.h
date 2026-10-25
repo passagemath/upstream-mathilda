@@ -210,23 +210,6 @@ typedef struct Expr {
              * the union's existing slack (NDArrayData/mpfr_t are larger), so
              * sizeof(Expr) is unchanged. */
             struct AssocIndex* index;
-            /* Persistent per-node cache of the DISTINCT interned symbol-name
-             * pointers appearing anywhere in this subtree, populated lazily the
-             * first time Orderless canonicalisation compares this node (sort.c)
-             * and reused by every later sort, so collect_symbols_in -- the
-             * dominant cost of ordering the large algebraic sums that
-             * Together/Cancel/Expand build during integration -- runs at most
-             * once per distinct node for the whole process, not once per sort.
-             * Like `index` it is benign structural metadata: NULL until
-             * computed, ignored by expr_eq/expr_hash/expr_compare, freed with
-             * the node, reset on expr_unshare, and -- since the symbol set is a
-             * pure function of structure -- invalidated at EXACTLY the points
-             * hash_cache is (expr_invalidate_hash).  Points at a heap {n,
-             * syms[n]} block whose entries are interned (never-freed) name
-             * pointers, so only the block itself is freed.  Unlike `index` this
-             * one does NOT fit the union's slack: it grows sizeof(Expr) by one
-             * pointer (a deliberate memory-for-speed trade on the hot sort). */
-            struct SymSetCache* symset_cache;
         } function;
         mpz_t bigint;
         NDArrayData ndarray;
@@ -281,18 +264,8 @@ bool expr_eq(const Expr* a, const Expr* b);
 int expr_compare(const Expr* a, const Expr* b);
 uint64_t expr_hash(const Expr* e);
 
-/* Persistent per-node symbol-set cache (see the `symset_cache` field above).
- * _get yields the cached distinct interned symbol-name pointers when present
- * (a function node whose cache has been populated), false otherwise; _put
- * installs the cache once (no-op if already present or e is not a function
- * node); _clear frees and NULLs it. The stored pointers are interned names
- * (never freed) -- only the block is freed. Defined in expr.c. */
-bool expr_symset_cache_get(const Expr* e, const char* const** syms_out, uint32_t* n_out);
-void expr_symset_cache_put(const Expr* e, const char* const* syms, size_t n);
-void expr_symset_cache_clear(Expr* e);
-
-/* Drop a node's memoized structural hash AND its symbol-set cache (both are
- * pure functions of the node's structure, so they invalidate together). MUST be
+/* Drop a node's memoized structural hash (a pure function of the node's
+ * structure). MUST be
  * called by any code that rewrites a live node's head/args/arg_count/scalar
  * payload IN PLACE (rather than building a fresh node), so a later expr_hash /
  * Orderless comparison recomputes instead of using the pre-mutation value. A
@@ -300,7 +273,6 @@ void expr_symset_cache_clear(Expr* e);
 static inline void expr_invalidate_hash(Expr* e) {
     if (!e) return;
     e->hash_cache = 0;
-    if (e->type == EXPR_FUNCTION && e->data.function.symset_cache) expr_symset_cache_clear(e);
 }
 
 /* BigInt constructors */

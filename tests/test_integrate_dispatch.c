@@ -447,7 +447,7 @@ static void test_step_and_impulse_indefinite(void) {
                    "1/2 Cos[1/2 a] HeavisideTheta[-1/2 a + x]", 0);
     /* a pulse (sum of steps) factor expands and closes term by term */
     assert_eval_eq("Integrate[x (UnitStep[x - 1] - UnitStep[x - 2]), x]",
-                   "(-1/2 + 1/2 x^2) UnitStep[-1 + x] + (2 - 1/2 x^2) UnitStep[-2 + x]", 0);
+                   "(2 - 1/2 x^2) UnitStep[-2 + x] + (-1/2 + 1/2 x^2) UnitStep[-1 + x]", 0);
     /* declines: symbolic slope, product of impulses, singular at the breakpoint */
     assert_eval_eq("Head[Integrate[x UnitStep[b x - a], x]]", "Integrate", 0);
     assert_eval_eq("Head[Integrate[DiracDelta[x - a] DiracDelta[x - b], x]]", "Integrate", 0);

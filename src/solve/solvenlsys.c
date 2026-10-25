@@ -45,6 +45,7 @@
  * allocations are released on every path.
  */
 
+#include "sort.h"   /* expr_orderless_sort */
 #include "solvenlsys.h"
 
 #include <stdbool.h>
@@ -344,6 +345,10 @@ static Expr* run_nl_search(Expr** orig, Expr** dens, int norig,
         free(c.sols);
         return NULL;
     }
+    /* The search enumerates the LAST variable's roots first, so its order
+     * says nothing; the reference lists solutions by their values in
+     * variable order (x first), which is the canonical order of the tuples. */
+    expr_orderless_sort(c.sols, (size_t)c.nsol);
     Expr* out = mk_list(c.sols, (size_t)c.nsol);
     free(c.sols);
     return out;

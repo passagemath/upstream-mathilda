@@ -71,7 +71,7 @@ void test_hermite_h_exact_values() {
 
 void test_hermite_h_special_values() {
     /* H_n(0) = 2^n Sqrt[Pi]/Gamma[(1-n)/2] for symbolic order. */
-    assert_eval_eq("HermiteH[n, 0]", "(Sqrt[Pi] 2^n)/Gamma[1/2 (1 - n)]", 0);
+    assert_eval_eq("HermiteH[n, 0]", "(2^n Sqrt[Pi])/Gamma[1/2 (1 - n)]", 0);
     /* Half-integer order at 0 collapses to the Gamma form. */
     assert_eval_eq("HermiteH[1/2, 0]", "(Sqrt[2] Sqrt[Pi])/Gamma[1/4]", 0);
 }
@@ -152,11 +152,11 @@ void test_hermite_h_derivative() {
 void test_hermite_h_series() {
     /* Taylor at a generic point (free via the derivative rule). */
     assert_eval_eq("Series[HermiteH[n, x], {x, x0, 2}]",
-        "HermiteH[n, x0] + 2 n HermiteH[-1 + n, x0] (x - x0) + "
-        "2 n (-1 + n) HermiteH[-2 + n, x0] (x - x0)^2 + O[x - x0]^3", 0);
+        "HermiteH[n, x0] + 2 n HermiteH[-1 + n, x0] (x - x0)"
+        " + 2 (-1 + n) n HermiteH[-2 + n, x0] (x - x0)^2 + O[x - x0]^3", 0);
     /* Asymptotic expansion at Infinity (symbolic order). */
     assert_eval_eq("Series[HermiteH[n, x], {x, Infinity, 2}]",
-                   "(2 x)^n (1 + (n (1 - n))/(4 x^2) + O[1/x]^4)", 0);
+                   "(2 x)^n (1 + ((1 - n) n)/(4 x^2) + O[1/x]^4)", 0);
     /* An integer-order polynomial expands via the generic path. */
     assert_eval_eq("Normal[Series[HermiteH[2, x], {x, 0, 4}]]", "-2 + 4 x^2", 0);
 }
@@ -166,7 +166,7 @@ void test_hermite_h_seriescoefficient() {
     assert_eval_eq("SeriesCoefficient[HermiteH[10, x], {x, 0, 4}]", "-403200", 0);
     /* Symbolic order, concrete index (m = 2). */
     assert_eval_eq("SeriesCoefficient[HermiteH[n, x], {x, 0, 2}]",
-                   "(2 Sqrt[Pi] n (-1 + n) 2^(-2 + n))/Gamma[1/2 (3 - n)]", 0);
+                   "(2 2^(-2 + n) (-1 + n) n Sqrt[Pi])/Gamma[1/2 (3 - n)]", 0);
     /* Symbolic index yields a Piecewise; check it reduces to the concrete value
      * at a sample. H_7 = -1680 x + 3360 x^3 - 1344 x^5 + 128 x^7, so the x^4
      * coefficient is 0 and the x^3 coefficient is 3360. */

@@ -28,7 +28,7 @@ void test_trig_forward() {
         {"Sec[0]", "1"},
         {"Csc[Pi/2]", "1"},
         // Exact values for d=12
-        {"Sin[Pi/12]", "Times[Rational[1, 4], Plus[Power[6, Rational[1, 2]], Times[-1, Power[2, Rational[1, 2]]]]]"},
+        {"Sin[Pi/12]", "Times[Rational[1, 4], Plus[Times[-1, Power[2, Rational[1, 2]]], Power[6, Rational[1, 2]]]]"},
         {"Cos[Pi/12]", "Times[Rational[1, 4], Plus[Power[2, Rational[1, 2]], Power[6, Rational[1, 2]]]]"},
         // Exact values for d=10, 5
         {"Sin[Pi/10]", "Times[Rational[1, 4], Plus[-1, Power[5, Rational[1, 2]]]]"},
@@ -353,7 +353,7 @@ void test_trig_degree() {
         {"Cos[120 Degree]", "Rational[-1, 2]"},
         {"Sin[210 Degree]", "Rational[-1, 2]"},              /* n >= d branch */
         {"Sin[15 Degree]",                                   /* d=12 case     */
-         "Times[Rational[1, 4], Plus[Power[6, Rational[1, 2]], Times[-1, Power[2, Rational[1, 2]]]]]"},
+         "Times[Rational[1, 4], Plus[Times[-1, Power[2, Rational[1, 2]]], Power[6, Rational[1, 2]]]]"},
         /* No closed form: 3/2 Degree = Pi/120 stays symbolic (not folded). */
         {"Sin[3/2 Degree]", "Sin[Times[Rational[3, 2], Degree]]"},
         /* Degree alone (= Pi/180) has no nice value: stays symbolic. */

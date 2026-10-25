@@ -95,7 +95,7 @@ void test_trigfactor_angle_sum_tan(void) {
     /* Sin[x+y]^2 + Tan[x+y] factors with Tan[x+y] pulled out; the clean
      * factored form preserves the angle-sum structure. */
     assert_eval_eq("TrigFactor[Sin[x+y]^2 + Tan[x+y]]",
-                   "Tan[x + y] (1 + Cos[x + y] Sin[x + y])", 0);
+                   "(1 + Cos[x + y] Sin[x + y]) Tan[x + y]", 0);
 }
 
 void test_trigfactor_cosh_power_factorization(void) {

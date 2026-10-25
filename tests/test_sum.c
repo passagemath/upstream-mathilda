@@ -117,8 +117,8 @@ int main(void) {
     check("Sum[i, {i, 1, n}]", "1/2 n (1 + n)");
     check("Sum[i^2, {i, 1, n}]", "1/6 n (1 + n) (1 + 2 n)");
     check("Sum[i^3, {i, 1, n}]", "1/4 n^2 (1 + n)^2");
-    check("Sum[i^2, i]", "1/6 i (-1 + i) (-1 + 2 i)");
-    check("Sum[i, i]", "1/2 i (-1 + i)");
+    check("Sum[i^2, i]", "1/6 (-1 + i) i (-1 + 2 i)");
+    check("Sum[i, i]", "1/2 (-1 + i) i");
     /* oracle: closed form at n=7 equals direct finite sum */
     same("Sum[i^2, {i, 1, n}] /. n -> 7", "Sum[i^2, {i, 1, 7}]");
     same("Sum[i^4, {i, 1, n}] /. n -> 9", "Sum[i^4, {i, 1, 9}]");
@@ -155,7 +155,7 @@ int main(void) {
     check("Sum[1/Sqrt[k^2 + 1], k]", "Sum[1/Sqrt[k^2 + 1], k]");
     check("Length[Sum[1/Sqrt[(a[i] - a[j])^2 + 1], {i, 1, 4}, {j, i + 1, 5}]]", "10");
     check("Sum[1/Sqrt[(i - j)^2 + 1], {i, 1, 3}, {j, i + 1, 4}]",
-          "1/Sqrt[10] + 2/Sqrt[5] + 3/Sqrt[2]");
+          "3/Sqrt[2] + 2/Sqrt[5] + 1/Sqrt[10]");
 
     /* ---- Closed-form-first on wide finite numeric ranges ----
      * A unit-step integer range with a polynomial/geometric body must

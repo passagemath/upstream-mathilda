@@ -68,7 +68,7 @@ static void test_beta_logweight(void) {
     check_eq("Integrate`Beta[x^2 (1-x)^3 Log[1-x], {x, 0, 1}]", "-37/3600");
     /* Mixed Log[x] Log[1-x] weight = d^2/dk dl Beta. */
     check_eq("Integrate`Beta[x^(1/2)(1-x)^(1/2) Log[x] Log[1-x], {x, 0, 1}]",
-             "1/48 Pi (9 - 12 Log[2] + 24 Log[2]^2 - Pi^2)");
+             "1/48 Pi (9 - Pi^2 - 12 Log[2] + 24 Log[2]^2)");
 }
 
 static void test_beta_negative(void) {
@@ -80,7 +80,7 @@ static void test_beta_negative(void) {
              "Integrate`Beta[1/(1 + x), {x, 0, 1}]");
     /* Wrong interval. */
     check_eq("Integrate`Beta[x^(1/2)(1-x)^(1/2), {x, 0, 2}]",
-             "Integrate`Beta[Sqrt[x] Sqrt[1 - x], {x, 0, 2}]");
+             "Integrate`Beta[Sqrt[1 - x] Sqrt[x], {x, 0, 2}]");
 }
 
 /* -------------------------------------------------------------------------
@@ -124,7 +124,7 @@ static void test_trigpower_vanishing(void) {
 static void test_trigpower_negative(void) {
     /* Symbolic n over [0, Pi]: parity undecidable -> unevaluated. */
     check_eq("Integrate`TrigPower[Sin[x]^2 Cos[x]^n, {x, 0, Pi}]",
-             "Integrate`TrigPower[Sin[x]^2 Cos[x]^n, {x, 0, Pi}]");
+             "Integrate`TrigPower[Cos[x]^n Sin[x]^2, {x, 0, Pi}]");
     /* Non-canonical interval. */
     check_eq("Integrate`TrigPower[Sin[x]^2 Cos[x]^2, {x, 0, Pi/3}]",
              "Integrate`TrigPower[Cos[x]^2 Sin[x]^2, {x, 0, 1/3 Pi}]");

@@ -204,7 +204,7 @@ static void test_inexact_contagion(void) {
     assert_eval_eq("1. Log[x[2]]", "Times[1.0, Log[x[2]]]", 1);
     assert_eval_eq("1. Abs[x[3]]", "Times[1.0, Abs[x[3]]]", 1);
     assert_eval_eq("0.5 (x[1] + x[2]^2)",
-                   "Times[0.5, Plus[Power[x[2], 2], x[1]]]", 1);
+                   "Times[0.5, Plus[x[1], Power[x[2], 2]]]", 1);
     /* But an exact numeric coefficient reached through a numeric head (Times)
      * still numericalizes: `1. + 2 x` → `1. + 2. x` (Mathematica-matched). */
     assert_eval_eq("1. + 2 x",     "Plus[1.0, Times[2.0, x]]", 1);

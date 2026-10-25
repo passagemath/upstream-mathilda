@@ -85,7 +85,7 @@ void test_lp_reduce_to_zeta() {
     assert_eval_eq("LerchPhi[1, 3, 1]", "Zeta[3]", 0);
     /* z = -1: 2^-s (Zeta[s, a/2] - Zeta[s, (a+1)/2]). */
     assert_eval_eq("LerchPhi[-1, s, 1/2]",
-                   "2^(-s) (-Zeta[s, 3/4] + Zeta[s, 1/4])", 0);
+                   "2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])", 0);
 }
 
 void test_lp_nonpositive_integer_a() {
@@ -237,7 +237,7 @@ void test_lp_include_singular_term() {
 void test_lp_derivatives() {
     /* d/dz Phi = (LerchPhi[z,-1+s,a] - a LerchPhi[z,s,a]) / z. */
     assert_eval_eq("D[LerchPhi[z, s, a], z]",
-                   "(-a LerchPhi[z, s, a] + LerchPhi[z, -1 + s, a])/z", 0);
+                   "(LerchPhi[z, -1 + s, a] - a LerchPhi[z, s, a])/z", 0);
     /* d/da Phi = -s LerchPhi[z, 1+s, a]. */
     assert_eval_eq("D[LerchPhi[z, s, a], a]", "-s LerchPhi[z, 1 + s, a]", 0);
     /* d/ds has no elementary closed form: generic partial. */
@@ -245,7 +245,7 @@ void test_lp_derivatives() {
                    "Derivative[0, 1, 0][LerchPhi][z, s, a]", 0);
     /* Chain rule through the first argument. */
     assert_eval_eq("D[LerchPhi[x^2, s, a], x]",
-                   "(2 (-a LerchPhi[x^2, s, a] + LerchPhi[x^2, -1 + s, a]))/x", 0);
+                   "(2 (LerchPhi[x^2, -1 + s, a] - a LerchPhi[x^2, s, a]))/x", 0);
     /* Chain rule through the third argument. */
     assert_eval_eq("D[LerchPhi[z, s, x^3], x]",
                    "-3 s x^2 LerchPhi[z, 1 + s, x^3]", 0);

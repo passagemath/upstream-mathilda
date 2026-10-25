@@ -80,7 +80,7 @@ static void test_log_trig(void) {
     check_antideriv("x^2 Log[2 Cos[x]]");
     check_antideriv("Log[Cosh[x]]");
     check_antideriv("Log[Tan[x]]");
-    check_eq("Integrate[x Log[Sin[x]], {x, 0, Pi}]", "-1/2 Log[2] Pi^2");
+    check_eq("Integrate[x Log[Sin[x]], {x, 0, Pi}]", "-1/2 Pi^2 Log[2]");
     check_eq("Chop[N[Integrate[Log[Sin[x]], {x, 0, Pi/4}] + (2 Catalan + Pi Log[2])/4]]", "0");
     check_eq("Chop[N[Integrate[Log[Cot[x/2]^2], {x, 0, Pi/2}] - 4 Catalan]]", "0");
 }

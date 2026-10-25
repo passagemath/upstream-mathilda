@@ -78,7 +78,7 @@ void test_chebyshev_t_exact_values() {
 
 void test_chebyshev_t_special_values() {
     /* T_n(0) = Cos[n Pi/2] for symbolic order. */
-    assert_eval_eq("ChebyshevT[n, 0]", "Cos[1/2 Pi n]", 0);
+    assert_eval_eq("ChebyshevT[n, 0]", "Cos[1/2 n Pi]", 0);
     /* T_n(1) = 1 for symbolic order. */
     assert_eval_eq("ChebyshevT[n, 1]", "1", 0);
     /* Table at Pi/2 (integer order, symbolic argument). */

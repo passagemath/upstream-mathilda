@@ -85,7 +85,7 @@ static void test_ratlog_unit(void) {
              "1/4 Log[3]^2");
     /* Second log power (n = 2). */
     check_eq("Integrate`RationalLog[Log[x]^2/((1+x)(2+x)), {x, 0, Infinity}]",
-             "1/3 Log[2] (Log[2]^2 + Pi^2)");
+             "1/3 Log[2] (Pi^2 + Log[2]^2)");
     /* Repeated pole. */
     check_eq("Integrate`RationalLog[Log[x]/(1+x)^2, {x, 0, Infinity}]", "0");
 }
@@ -93,7 +93,7 @@ static void test_ratlog_unit(void) {
 static void test_ratlog_negative(void) {
     /* Pole on the positive real axis (x = 1): PV only -> unevaluated. */
     check_eq("Integrate`RationalLog[Log[x]/((1-x)(2+x)), {x, 0, Infinity}]",
-             "Integrate`RationalLog[Log[x]/((2 + x) (1 - x)), {x, 0, Infinity}]");
+             "Integrate`RationalLog[Log[x]/((1 - x) (2 + x)), {x, 0, Infinity}]");
     /* No Log weight -> not this mechanism's job. */
     check_eq("Integrate`RationalLog[1/((1+x)(2+x)), {x, 0, Infinity}]",
              "Integrate`RationalLog[1/((1 + x) (2 + x)), {x, 0, Infinity}]");
@@ -126,7 +126,7 @@ static void test_stress(void) {
     check_eq("Integrate`SinPowerMonomial[Sin[x]^8/x^2, {x, 0, Infinity}]", "5/32 Pi");
     /* Distinct triple simple poles close to a clean combination of Log^2. */
     check_eq("Integrate`RationalLog[Log[x]/((1+x)(2+x)(3+x)), {x, 0, Infinity}]",
-             "-1/4 Log[3]^2 + 1/2 Log[2]^2");
+             "1/2 Log[2]^2 - 1/4 Log[3]^2");
 }
 
 int main(void) {

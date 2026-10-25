@@ -45,7 +45,7 @@ static void test_factorialpower_concrete(void) {
     assert_eval_eq("FactorialPower[n, 0]", "1", 0);
     assert_eval_eq("FactorialPower[5, 0]", "1", 0);
     /* Symbolic n with concrete k: expand to explicit product. */
-    assert_eval_eq("FactorialPower[n, 3]", "n (-2 + n) (-1 + n)", 0);
+    assert_eval_eq("FactorialPower[n, 3]", "(-2 + n) (-1 + n) n", 0);
     assert_eval_eq("FactorialPower[n, 1]", "n", 0);
     /* Both symbolic: stay unevaluated. */
     assert_eval_eq("FactorialPower[n, k]", "FactorialPower[n, k]", 0);
@@ -55,43 +55,43 @@ static void test_factorialpower_concrete(void) {
 static void test_bug8_dx_xn(void) {
     /* The Plus inside the exponent gets canonical "(-k+n)" ordering. */
     assert_eval_eq("D[x^n, {x, k}]",
-                   "FactorialPower[n, k] x^(-k + n)", 0);
+                   "x^(-k + n) FactorialPower[n, k]", 0);
     /* Concrete n: FactorialPower[3, k] stays unevaluated. */
     assert_eval_eq("D[x^3, {x, k}]",
-                   "FactorialPower[3, k] x^(3 - k)", 0);
+                   "x^(3 - k) FactorialPower[3, k]", 0);
     /* Constant pull-out: D[a x^n, {x, k}] = a x^(n-k) FactorialPower[n,k]. */
     assert_eval_eq("D[a*x^n, {x, k}]",
-                   "a FactorialPower[n, k] x^(-k + n)", 0);
+                   "a x^(-k + n) FactorialPower[n, k]", 0);
 }
 
 /* --- Bug 9: D[x^n, {n, k}] ------------------------------------------ */
 static void test_bug9_dn_xn(void) {
-    assert_eval_eq("D[x^n, {n, k}]", "Log[x]^k x^n", 0);
+    assert_eval_eq("D[x^n, {n, k}]", "x^n Log[x]^k", 0);
     /* Concrete base. */
-    assert_eval_eq("D[2^n, {n, k}]", "Log[2]^k 2^n", 0);
+    assert_eval_eq("D[2^n, {n, k}]", "2^n Log[2]^k", 0);
 }
 
 /* --- Sin / Cos / Sinh / Cosh of a linear argument ------------------- */
 static void test_trig_symbolic_order(void) {
     /* Basic D[Cos[x], {x, n}] = Cos[n Pi/2 + x] (canonical Plus order). */
     assert_eval_eq("D[Cos[x], {x, n}]",
-                   "Cos[1/2 Pi n + x]", 0);
+                   "Cos[1/2 n Pi + x]", 0);
     assert_eval_eq("D[Sin[x], {x, n}]",
-                   "Sin[1/2 Pi n + x]", 0);
+                   "Sin[1/2 n Pi + x]", 0);
 
     /* Linear chain rule: D[F[a x + b], {x, n}] = a^n F[n Pi/2 + a x + b]. */
     assert_eval_eq("D[Cos[3*x + 5], {x, n}]",
-                   "3^n Cos[5 + 1/2 Pi n + 3 x]", 0);
+                   "3^n Cos[5 + 1/2 n Pi + 3 x]", 0);
     assert_eval_eq("D[Sin[a*x + b], {x, n}]",
-                   "a^n Sin[b + 1/2 Pi n + a x]", 0);
+                   "a^n Sin[b + 1/2 n Pi + a x]", 0);
 
     /* Hyperbolic: (-I)^n Cos[n Pi/2 - I x] and I (-I)^n Sin[n Pi/2 - I x].
      * The printer keeps the parentheses around -I to preserve the
      * (-I)^n vs -(I^n) distinction. */
     assert_eval_eq("D[Cosh[x], {x, n}]",
-                   "(-I)^n Cos[1/2 Pi n - I x]", 0);
+                   "(-I)^n Cos[1/2 n Pi - I x]", 0);
     assert_eval_eq("D[Sinh[x], {x, n}]",
-                   "I (-I)^n Sin[1/2 Pi n - I x]", 0);
+                   "I (-I)^n Sin[1/2 n Pi - I x]", 0);
 
     /* Non-linear argument -> stays unevaluated. */
     assert_eval_eq("D[Cos[x^2], {x, n}]", "D[Cos[x^2], {x, n}]", 0);
@@ -105,11 +105,11 @@ static void test_symbolic_order_distributes(void) {
     assert_eval_eq("D[Pi, {x, k}]", "0", 0);
     /* Plus: distributes additively. */
     assert_eval_eq("D[a*x^n + b, {x, k}]",
-                   "a FactorialPower[n, k] x^(-k + n)", 0);
+                   "a x^(-k + n) FactorialPower[n, k]", 0);
     /* Multiple Power-in-x summands. */
     assert_eval_eq("D[x^n + x^m, {x, k}]",
-                   "FactorialPower[m, k] x^(-k + m)"
-                   " + FactorialPower[n, k] x^(-k + n)", 0);
+                   "x^(-k + m) FactorialPower[m, k]"
+                   " + x^(-k + n) FactorialPower[n, k]", 0);
 }
 
 int main(void) {

@@ -81,8 +81,8 @@ static void test_univariate_factors(void) {
                "Times[Plus[-3, x], Plus[-2, x], Plus[-1, x]]", 50.0);
     eval_check("Factor[x^10 - 1]",
                "Times[Plus[-1, x], Plus[1, x], "
-               "Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], "
-               "Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]]]", 100.0);
+               "Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]], "
+               "Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]]]", 100.0);
 }
 
 /* Regression: an UNEXPANDED Power[Plus[...], n] with numeric coefficients must not
@@ -95,7 +95,7 @@ static void test_unexpanded_power_input(void) {
     eval_check("Factor[(5 - 3 s)^2 - 30 s]",                 /* irreducible over Q */
                "Plus[25, Times[-60, s], Times[9, Power[s, 2]]]", 50.0);
     eval_check("Factor[(1 - s)^2 - (1 - s)]",
-               "Times[s, Plus[-1, s]]", 50.0);
+               "Times[Plus[-1, s], s]", 50.0);
     eval_check("Factor[(1 + 2 s)^2 - (1 + 2 s)]",
                "Times[2, s, Plus[1, Times[2, s]]]", 50.0);
 }
@@ -127,8 +127,8 @@ static void test_multivariate_via_factor_roots(void) {
      * smallest) variable it contains — a for (a - x), a^2 for (3 a^2 - 2 x y)
      * — giving a-leading factors, not the x-leading associates. */
     eval_check("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-               "Times[Plus[a, x], Plus[a, Times[-1, x]], "
-                     "Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]", 100.0);
+               "Times[Plus[a, Times[-1, x]], Plus[a, x], "
+               "Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]", 100.0);
 }
 
 /* Irreducibility short-circuit (Phase 1) -- 60x speedup vs main. */
@@ -146,8 +146,8 @@ static void test_factor_threads_over_logic_heads(void) {
     /* Cubic inside Less: factor each comparison argument. */
     eval_check("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]",
                "Inequality[1, Less, "
-                    "Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]], "
-                    "Less, 2]",
+               "Times[Power[Plus[1, x], -1], Plus[2, x], Plus[1, x, Power[x, 2]]], "
+               "Less, 2]",
                150.0);
 }
 
@@ -185,7 +185,7 @@ static void test_factor_of_a_product_stays_a_product(void) {
                "Times[Power[E, x], Power[Plus[1, x], 2]]", 200.0);
     /* Not exponential-specific: any factor the polynomial path cannot see. */
     eval_check("Factor[Log[x] (x^2 - 1)]",
-               "Times[Log[x], Plus[-1, x], Plus[1, x]]", 200.0);
+               "Times[Plus[-1, x], Plus[1, x], Log[x]]", 200.0);
     eval_check("Factor[y (x^2 - 1)]",
                "Times[Plus[-1, x], Plus[1, x], y]", 200.0);
     /* A denominator is the excluded case: a sum here is the right answer. */
@@ -322,12 +322,12 @@ static void test_factor_kernels_are_opaque(void) {
 static void test_factor_trivariate_high_degree_squarefree(void) {
     double ms = eval_check(
         "Factor[Expand[x^2 (z^13 - x^12) (z^4 + 3 x^9 - y^13) (17 - 5 y - z^14)]]",
-        "Times["
-            "Power[x, 2], "
-            "Plus[Times[-1, Power[x, 12]], Power[z, 13]], "
-            "Plus[-17, Times[5, y], Power[z, 14]], "
-            "Plus[Times[-3, Power[x, 9]], Power[y, 13], Times[-1, Power[z, 4]]]"
-        "]",
+        "Times[Power[x, "
+        "2], "
+        "Plus[Times[-3, Power[x, 9]], Power[y, 13], "
+        "Times[-1, Power[z, 4]]], Plus[Times[-1, "
+        "Power[x, 12]], Power[z, 13]], Plus[-17, Times[5, y], Power[z, "
+        "14]]]",
         5000.0);
     fprintf(stderr, "  trivariate user case: %.0f ms\n", ms);
 }

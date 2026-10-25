@@ -33,16 +33,16 @@ static void assert_cx_zero(const char* diff_expr) {
 /* ------------------------------------------------------------------ */
 void test_cx_trig(void) {
     assert_eval_eq("ComplexExpand[Sin[x + I y]]",
-                   "Sin[x] Cosh[y] + I Cos[x] Sinh[y]", 0);
+                   "Cosh[y] Sin[x] + I Cos[x] Sinh[y]", 0);
     assert_eval_eq("ComplexExpand[Cos[x + I y]]",
                    "Cos[x] Cosh[y] - I Sin[x] Sinh[y]", 0);
     assert_eval_eq("ComplexExpand[Sinh[x + I y]]",
-                   "I Cosh[x] Sin[y] + Sinh[x] Cos[y]", 0);
+                   "I Cosh[x] Sin[y] + Cos[y] Sinh[x]", 0);
     assert_eval_eq("ComplexExpand[Tan[x + I y]]",
                    "Sin[2 x]/(Cos[2 x] + Cosh[2 y]) + (I Sinh[2 y])/(Cos[2 x] + Cosh[2 y])", 0);
     /* A complex variable given via the second argument. */
     assert_eval_eq("ComplexExpand[Cosh[x + I y] + Tanh[z], {z}]",
-                   "Cosh[x] Cos[y] + I Sinh[x] Sin[y] + (I Sin[2 Im[z]])/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
+                   "Cos[y] Cosh[x] + (I Sin[2 Im[z]])/(Cos[2 Im[z]] + Cosh[2 Re[z]]) + I Sin[y] Sinh[x] + Sinh[2 Re[z]]/(Cos[2 Im[z]] + Cosh[2 Re[z]])", 0);
     /* Single complex variable given bare (not in a list). */
     assert_eval_eq("ComplexExpand[Sin[x], x]",
                    "Cosh[Im[x]] Sin[Re[x]] + I Cos[Re[x]] Sinh[Im[x]]", 0);
@@ -61,11 +61,11 @@ void test_cx_trig(void) {
 void test_cx_polynomial(void) {
     assert_eval_eq("ComplexExpand[Re[z^2], {z}]", "-Im[z]^2 + Re[z]^2", 0);
     assert_eval_eq("ComplexExpand[Re[z^5 - 2 z^3 - z + 1], z]",
-                   "1 + Re[z]^5 - 2 Re[z]^3 - Re[z] - 10 Im[z]^2 Re[z]^3 + 5 Im[z]^4 Re[z] + 6 Im[z]^2 Re[z]", 0);
+                   "1 - Re[z] + 6 Im[z]^2 Re[z] + 5 Im[z]^4 Re[z] - 2 Re[z]^3 - 10 Im[z]^2 Re[z]^3 + Re[z]^5", 0);
     assert_eval_eq("ComplexExpand[Re[2 z^3 - z + 1], z]",
-                   "1 - Re[z] + 2 Re[z]^3 - 6 Im[z]^2 Re[z]", 0);
+                   "1 - Re[z] - 6 Im[z]^2 Re[z] + 2 Re[z]^3", 0);
     assert_eval_eq("ComplexExpand[a + x^2, {x}]",
-                   "a - Im[x]^2 + Re[x]^2 + (2*I) Im[x] Re[x]", 0);
+                   "a - Im[x]^2 + (2*I) Im[x] Re[x] + Re[x]^2", 0);
     /* Negative integer power: correctness. */
     assert_cx_zero("ComplexExpand[z^-2, {z}] - z^-2");
 }
@@ -74,10 +74,10 @@ void test_cx_polynomial(void) {
 /* Exponential, logarithm, powers of numbers                          */
 /* ------------------------------------------------------------------ */
 void test_cx_exp_log(void) {
-    assert_eval_eq("ComplexExpand[3^(I x)]", "Cos[Log[3] x] + I Sin[Log[3] x]", 0);
+    assert_eval_eq("ComplexExpand[3^(I x)]", "Cos[x Log[3]] + I Sin[x Log[3]]", 0);
     assert_eval_eq("ComplexExpand[(-1)^(4 I/5)]", "E^(-4/5 Pi)", 0);
     assert_eval_eq("ComplexExpand[(-3)^(4 I/5)]",
-                   "Cos[4/5 Log[3]] E^(-4/5 Pi) + I E^(-4/5 Pi) Sin[4/5 Log[3]]", 0);
+                   "E^(-4/5 Pi) Cos[4/5 Log[3]] + I E^(-4/5 Pi) Sin[4/5 Log[3]]", 0);
     /* (-1)^(4/5): exact radicals from Mathilda's trig tables. */
     assert_eval_eq("ComplexExpand[(-1)^(4/5)]",
                    "-1/4 - 1/4 Sqrt[5] + (1/4*I) Sqrt[10 - 2 Sqrt[5]]", 0);
@@ -95,7 +95,7 @@ void test_cx_exp_log(void) {
 /* ------------------------------------------------------------------ */
 void test_cx_targetfunctions(void) {
     assert_eval_eq("ComplexExpand[Re[Tan[z]], z]",
-                   "Sin[2 Re[z]]/(Cosh[2 Im[z]] + Cos[2 Re[z]])", 0);
+                   "Sin[2 Re[z]]/(Cos[2 Re[z]] + Cosh[2 Im[z]])", 0);
     assert_eval_eq("ComplexExpand[Re[z^2], {z}, TargetFunctions -> {Abs, Arg}]",
                    "Abs[z]^2 Cos[Arg[z]]^2 - Abs[z]^2 Sin[Arg[z]]^2", 0);
     assert_eval_eq("ComplexExpand[Re[Tan[z]], z, TargetFunctions -> {Abs, Arg}]",
@@ -117,7 +117,7 @@ void test_cx_wrappers(void) {
     assert_eval_eq("ComplexExpand[Abs[z], {z}]", "Sqrt[Im[z]^2 + Re[z]^2]", 0);
     /* Sign of a complex variable -> z/Abs[z]. */
     assert_eval_eq("ComplexExpand[Sign[x], x]",
-                   "Re[x]/Sqrt[Im[x]^2 + Re[x]^2] + (I Im[x])/Sqrt[Im[x]^2 + Re[x]^2]", 0);
+                   "(I Im[x])/Sqrt[Im[x]^2 + Re[x]^2] + Re[x]/Sqrt[Im[x]^2 + Re[x]^2]", 0);
     /* Real variables pass through the real-valued wrappers. */
     assert_eval_eq("ComplexExpand[Re[x + y]]", "x + y", 0);
     assert_eval_eq("ComplexExpand[Im[x + y]]", "0", 0);
@@ -141,7 +141,7 @@ void test_cx_inverse(void) {
                    "{-1/2 Arg[1 - I (x + I y)] + 1/2 Arg[1 + I (x + I y)], -1/4 Log[1 + x^2 - 2 y + y^2] + 1/4 Log[1 + x^2 + 2 y + y^2]}", 0);
     /* Documented composite example. */
     assert_eval_eq("ComplexExpand[Re[ArcCot[x + I y]] + Im[ArcSinh[x - I y]]]",
-                   "Arg[x - I y + Sqrt[1 + (x - I y)^2]] - 1/2 Arg[1 - I/(x + I y)] + 1/2 Arg[1 + I/(x + I y)]", 0);
+                   "-1/2 Arg[1 - I/(x + I y)] + 1/2 Arg[1 + I/(x + I y)] + Arg[x + Sqrt[1 + (x - I y)^2] - I y]", 0);
     /* Every inverse head: correctness against the true function value. */
     assert_cx_zero("ComplexExpand[ArcSin[x + I y]] - ArcSin[x + I y]");
     assert_cx_zero("ComplexExpand[ArcCos[x + I y]] - ArcCos[x + I y]");
@@ -174,7 +174,7 @@ void test_cx_threading(void) {
 /* ------------------------------------------------------------------ */
 void test_cx_multivar(void) {
     assert_eval_eq("ComplexExpand[Sin[x] Exp[y], {x, y}]",
-                   "I Cosh[Im[x]] Sin[Re[x]] E^Re[y] Sin[Im[y]] + Cosh[Im[x]] Sin[Re[x]] Cos[Im[y]] E^Re[y] + I Cos[Re[x]] Sinh[Im[x]] Cos[Im[y]] E^Re[y] - Cos[Re[x]] Sinh[Im[x]] E^Re[y] Sin[Im[y]]", 0);
+                   "E^Re[y] Cos[Im[y]] Cosh[Im[x]] Sin[Re[x]] + I E^Re[y] Cosh[Im[x]] Sin[Im[y]] Sin[Re[x]] + I E^Re[y] Cos[Im[y]] Cos[Re[x]] Sinh[Im[x]] - E^Re[y] Cos[Re[x]] Sin[Im[y]] Sinh[Im[x]]", 0);
 }
 
 /* ------------------------------------------------------------------ */

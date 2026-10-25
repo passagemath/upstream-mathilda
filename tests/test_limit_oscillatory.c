@@ -177,7 +177,7 @@ static void test_imaginary_exponent(void) {
      * ComplexInfinity is arguably the answer and the layer abstains rather
      * than pick one. */
     check("Limit[x E^(I x), x -> Infinity]",
-          "Limit[x E^(I x), x -> Infinity]");
+          "Limit[E^(I x) x, x -> Infinity]");
 }
 
 /* ----------------------------------------------------------------- */

@@ -31,8 +31,8 @@ void test_expand() {
     run_test("Expand[(x+3)(x+2)]", "Plus[6, Times[5, x], Power[x, 2]]");
     run_test("Expand[(x+y)^2 (x-y)^2]", "Plus[Power[x, 4], Times[-2, Power[x, 2], Power[y, 2]], Power[y, 4]]");
     run_test("Expand[(x+y)^5 - (x^5+y^5)]", "Plus[Times[5, Power[x, 4], y], Times[10, Power[x, 3], Power[y, 2]], Times[10, Power[x, 2], Power[y, 3]], Times[5, x, Power[y, 4]]]");
-    run_test("Expand[(f[Subscript[x, 1]] + f[Subscript[x, 2]])^3]", "Plus[Power[f[Subscript[x, 1]], 3], Power[f[Subscript[x, 2]], 3], Times[3, Power[f[Subscript[x, 1]], 2], f[Subscript[x, 2]]], Times[3, Power[f[Subscript[x, 2]], 2], f[Subscript[x, 1]]]]");
-    run_test("Expand[(Sin[x] + Cos[x])^2]", "Plus[Power[Cos[x], 2], Power[Sin[x], 2], Times[2, Cos[x], Sin[x]]]");
+    run_test("Expand[(f[Subscript[x, 1]] + f[Subscript[x, 2]])^3]", "Plus[Power[f[Subscript[x, 1]], 3], Times[3, Power[f[Subscript[x, 1]], 2], f[Subscript[x, 2]]], Times[3, f[Subscript[x, 1]], Power[f[Subscript[x, 2]], 2]], Power[f[Subscript[x, 2]], 3]]");
+    run_test("Expand[(Sin[x] + Cos[x])^2]", "Plus[Power[Cos[x], 2], Times[2, Cos[x], Sin[x]], Power[Sin[x], 2]]");
     run_test("Expand[Sqrt[(1+x)^2]]", "Power[Power[Plus[1, x], 2], Rational[1, 2]]");
     run_test("Expand[1 < (x+y)^2 < 2]", "Inequality[1, Less, Plus[Power[x, 2], Times[2, x, y], Power[y, 2]], Less, 2]");
     

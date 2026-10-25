@@ -192,11 +192,11 @@ void test_zeta_derivatives() {
 void test_zeta_series() {
     /* Laurent expansion about s = 1 introduces the Stieltjes constants. */
     assert_eval_eq("Series[Zeta[x], {x, 1, 2}] // Normal",
-                   "EulerGamma + 1/(-1 + x) - StieltjesGamma[1] (-1 + x) + "
-                   "1/2 StieltjesGamma[2] (-1 + x)^2", 0);
+                   "EulerGamma + 1/(-1 + x) - (-1 + x) StieltjesGamma[1]"
+                   " + 1/2 (-1 + x)^2 StieltjesGamma[2]", 0);
     /* Taylor expansion about s = 0: zeta(0) = -1/2, zeta'(0) = -1/2 Log[2 Pi]. */
     assert_eval_eq("Series[Zeta[x], {x, 0, 1}] // Normal",
-                   "-1/2 - 1/2 Log[2 Pi] x", 0);
+                   "-1/2 - 1/2 x Log[2 Pi]", 0);
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

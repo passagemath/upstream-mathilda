@@ -200,7 +200,7 @@ static void test_together_qgamma_constant_canonical_linear_basis(void) {
         "0", 0);
     assert_eval_eq(
         "Cancel[1/(Sqrt[2] + Sqrt[3]), Extension -> Automatic]",
-        "Sqrt[3] - Sqrt[2]", 0);
+        "-Sqrt[2] + Sqrt[3]", 0);
     assert_eval_eq(
         "Cancel[(Sqrt[2] + Sqrt[3])/(Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
         "-5 - 2 Sqrt[6]", 0);

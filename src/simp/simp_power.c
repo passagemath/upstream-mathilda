@@ -328,6 +328,10 @@ Expr* transform_power_oneify(const Expr* e) {
 static bool is_constant_positive_factor(const Expr* x) {
     if (!x) return false;
     if (numeric_sign(x) == 1) return true;
+    /* numeric_sign reads integer and real literals only; a positive Rational
+     * (the 1/2 in (z/2)^(4/3)) is just as safe to distribute. */
+    int64_t rn, rd;
+    if (is_rational((Expr*)x, &rn, &rd) && rn > 0 && rd > 0) return true;
     if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol.name))
         return true;
     return false;

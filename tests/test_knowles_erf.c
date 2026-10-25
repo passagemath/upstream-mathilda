@@ -85,7 +85,7 @@ int main(void) {
     /* --- Exact-form pins (flagship results) --------------------------------- */
     exact("E^(-x^2 - Erf[x]^2)", "Times[Rational[1, 4], Pi, Erf[Erf[x]]]");
     exact("Erf[x] E^(-x^2 - Erf[x]^2)",
-          "Times[Rational[-1, 4], Power[Pi, Rational[1, 2]], Power[E, Times[-1, Power[Erf[x], 2]]]]");
+          "Times[Rational[-1, 4], Power[E, Times[-1, Power[Erf[x], 2]]], Power[Pi, Rational[1, 2]]]");
 
     /* --- Generated harder cases (nesting / mixed / Erfi) --------------------- */
     /* Triple nesting: INT exp(-x^2 - erf^2 x - erf^2(erf x)) = (const) erf(erf(erf x)). */

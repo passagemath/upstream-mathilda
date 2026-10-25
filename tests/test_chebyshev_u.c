@@ -77,7 +77,7 @@ void test_chebyshev_u_exact_values() {
 
 void test_chebyshev_u_special_values() {
     /* U_n(0) = Cos[n Pi/2] for symbolic order. */
-    assert_eval_eq("ChebyshevU[n, 0]", "Cos[1/2 Pi n]", 0);
+    assert_eval_eq("ChebyshevU[n, 0]", "Cos[1/2 n Pi]", 0);
     /* U_n(1) = n + 1 for symbolic order. */
     assert_eval_eq("ChebyshevU[n, 1]", "1 + n", 0);
     /* Table at Pi/2 (integer order, symbolic argument). */
@@ -149,7 +149,7 @@ void test_chebyshev_u_symbolic() {
 void test_chebyshev_u_derivative() {
     assert_eval_eq(
         "D[ChebyshevU[n, x], x]",
-        "(n x ChebyshevU[n, x] + (-1 - n) ChebyshevU[-1 + n, x])/(-1 + x^2)", 0);
+        "((-1 - n) ChebyshevU[-1 + n, x] + n x ChebyshevU[n, x])/(-1 + x^2)", 0);
     /* The derivative of an explicit polynomial is the polynomial's derivative. */
     assert_eval_eq("D[ChebyshevU[2, x], x]", "8 x", 0);
 }

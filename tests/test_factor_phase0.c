@@ -121,7 +121,7 @@ static void test_monomial_with_coefficient(void) {
     /* 2 x^2 y - 4 x y^2 = 2 x y (x - 2 y).  Common monomial after
      * the integer content (2) is also shared. */
     expect_fullform("Factor[2 x^2 y - 4 x y^2]",
-                    "Times[2, x, y, Plus[x, Times[-2, y]]]");
+                    "Times[2, x, Plus[x, Times[-2, y]], y]");
 }
 
 static void test_monomial_user_reported_case(void) {
@@ -265,7 +265,7 @@ static void test_regression_factor_roots_case(void) {
     /* = (a - x)(a + x)(3 a^2 - 2 x y): each factor positive-leading in its
      * first (alphabetically smallest) variable a / a^2. */
     expect_fullform("Factor[2 x^3 y - 2 a^2 x y - 3 a^2 x^2 + 3 a^4]",
-                    "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]");
+                    "Times[Plus[a, Times[-1, x]], Plus[a, x], Plus[Times[3, Power[a, 2]], Times[-2, x, y]]]");
 }
 
 /* =====================================================================
@@ -294,7 +294,7 @@ static void test_hensel_quadratic_y_in_two_factors(void) {
      * x - y^2 + 1 becomes -(y^2 - x - 1) with the sign pulled to a
      * leading -1. */
     expect_fullform("Factor[(x + y^2 - 1)(x - y^2 + 1)]",
-                    "Times[-1, Plus[-1, x, Power[y, 2]], Plus[-1, Times[-1, x], Power[y, 2]]]");
+                    "Times[-1, Plus[-1, Times[-1, x], Power[y, 2]], Plus[-1, x, Power[y, 2]]]");
 }
 
 static void test_hensel_three_factor_lift(void) {

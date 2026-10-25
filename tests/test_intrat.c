@@ -236,7 +236,7 @@ static void test_helpers_extract_constants(void) {
 static void test_helpers_apartlist(void) {
     /* Three-pole partial-fraction expansion as a List. */
     run_eq("Integrate`Helpers`ApartList[1/((x-1)(x-2)(x-3)), x]",
-           "{-1/(-2 + x), 1/(2 (-3 + x)), 1/(2 (-1 + x))}");
+           "{1/(2 (-3 + x)), -1/(-2 + x), 1/(2 (-1 + x))}");
 }
 
 static void test_intrationallogpart(void) {
@@ -646,7 +646,7 @@ static void test_closed_coefficient_distribution(void) {
     /* Concrete printed form check: outer 2 must be distributed and
      * Log[1/2 · q] reduced to Log[q]. */
     run_eq("Integrate`BronsteinRational[1/x/(1 - 2 x^2 + 2 x^4), x]",
-           "Log[x] + 1/2 ArcTan[-1 + 2 x^2] - 1/4 Log[1 - 2 x^2 + 2 x^4]");
+           "1/2 ArcTan[-1 + 2 x^2] + Log[x] - 1/4 Log[1 - 2 x^2 + 2 x^4]");
     assert_integral_correct("1/x/(1 - 2 x^2 + 2 x^4)");
 }
 

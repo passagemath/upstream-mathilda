@@ -5043,10 +5043,6 @@ static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
         tc_body_live = 0;
     } else {
         tc_body_live = 0;
-        /* The unwind may have jumped out of an Orderless sort with the
-         * per-sort symbol-set memo still installed; drop it so a later
-         * expr_compare cannot dereference the abandoned stack memo. */
-        sort_abort_reset();
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i];
     }
     mth_block_depth_unwind(saved_blkdep);

@@ -555,7 +555,7 @@ static void test_log_inverse_dt_substitution(void) {
     mute_stderr_once();
     check_eq("Eliminate[{Dt[y] == Log[x]/x Dt[x], u == Log[x],"
              " Dt[u == 1/x]}, {x, Dt[x]}]",
-             "Equal[Plus[Times[u, Dt[u], Power[E, u]], Dt[y]], 0]");
+             "Equal[Plus[Times[Power[E, u], u, Dt[u]], Dt[y]], 0]");
 }
 
 static void test_trig_memory_smoke(void) {

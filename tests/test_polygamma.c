@@ -186,7 +186,7 @@ void test_polygamma_derivatives() {
     /* Gamma now differentiates through PolyGamma. */
     assert_eval_eq("D[Gamma[x], x]", "Gamma[x] PolyGamma[0, x]", 0);
     assert_eval_eq("D[Gamma[z], {z, 2}]",
-                   "Gamma[z] PolyGamma[1, z] + Gamma[z] PolyGamma[0, z]^2", 0);
+                   "Gamma[z] PolyGamma[0, z]^2 + Gamma[z] PolyGamma[1, z]", 0);
 }
 
 /* ---- listability & attributes -------------------------------------- */

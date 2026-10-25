@@ -183,7 +183,7 @@ static void test_field_coefficients(void) {
 
     /* MonomialList shares the front end, so it benefits from the same fast path. */
     run_test("MonomialList[AlgebraicNumber[Sqrt[2],{0,1}] x^2 + 3, {x}]",
-             "List[Times[AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]], Power[x, 2]], 3]");
+             "List[Times[Power[x, 2], AlgebraicNumber[Power[2, Rational[1, 2]], List[0, 1]]], 3]");
 }
 
 /* CoefficientArrays returns SparseArrays (background 0) for every array

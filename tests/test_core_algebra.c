@@ -222,7 +222,7 @@ static void test_length_dimensions(void) {
 /* ---------------------------------------------------------------- Table */
 static void test_table(void) {
     ck("Table[k^2, {k, 5}]", "List[1, 4, 9, 16, 25]");
-    ck("Table[c[k] x, {k, 3}]", "List[Times[c[1], x], Times[c[2], x], Times[c[3], x]]");
+    ck("Table[c[k] x, {k, 3}]", "List[Times[x, c[1]], Times[x, c[2]], Times[x, c[3]]]");
     ck("Length[Table[k, {k, 2000}]]", "2000");
     /* The arithmetic-sentinel shape from the evaluator-throughput benchmark:
      * Table of symbolic terms, summed via @@, then Length. Value must be stable. */

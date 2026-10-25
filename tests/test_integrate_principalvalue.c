@@ -132,7 +132,7 @@ static void test_pv_symbolic_pole(void) {
     check_quiet("Integrate[1/x, {x, -a, b}, PrincipalValue -> True, Assumptions -> a > 0 && b > 0]",
                 "-Log[a] + Log[b]");
     check_quiet("Integrate[x/(x-a), {x, 0, 3a}, PrincipalValue -> True, Assumptions -> a > 0]",
-                "(3 + Log[2]) a");
+                "a (3 + Log[2])");
     /* 0 < a < b: the all-equal sample a = b = 2 used to reject this real PV. */
     check_quiet("Chop[N[(Integrate[1/(x-a), {x, 0, b}, PrincipalValue -> True, "
                 "Assumptions -> 0 < a < b] - Log[b/a - 1]) /. {a -> 2, b -> 7}, 30]]", "0");

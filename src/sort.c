@@ -29,24 +29,12 @@
  * that surface it.  The Orderless-attribute argument-sorting pipeline in
  * eval.c calls into this same comparator via expr.h.
  *
- * Algorithm, applied uniformly to every pair:
- *   1. Numeric atoms (Integer, Real, Rational, BigInt, MPFR) come first
- *      and compare by value.  Numeric < non-numeric.
- *   2. Strings come next, compared lexicographically.
- *   3. Everything else (Symbols and Functions) is compared by polynomial
- *      degree vector:
- *        - collect every Symbol name appearing in either expression,
- *        - sort those names in REVERSE alphabetical order so the
- *          lex-last variable is the most significant dimension,
- *        - for each name v, compute the polynomial degree of each side
- *          in v as a double (see expr_poly_degree),
- *        - lex-compare the degree vectors ascending.
- *      This makes `Plus[a x^2, b x]` sort as `b x + a x^2` and gives
- *      the multivariate grevlex-with-reverse-alpha display order on
- *      `Expand[(1 + x y^2 + y x^3)^3]`.
- *   4. Equal degree vectors fall back to a structural tiebreak: bare
- *      Symbol before compound, then head/arity/args recursively (each
- *      arg re-enters this same comparator).
+ * The order is the reference's, rule by rule (numbers first by value; then
+ * products, powers and sums compared as polynomial terms from the last factor;
+ * atoms before compound expressions; strings before symbols; symbols by the
+ * string collation; other expressions by head, length, arguments).  The rules,
+ * with examples, sit with their helpers in the "Canonical order" block below,
+ * just above expr_compare.
  * ==================================================================== */
 
 /* True for numeric atom kinds with an extractable double value. */
@@ -224,352 +212,6 @@ static int string_compare_canonical(const char* s1, const char* s2) {
     return (c > 0) - (c < 0);
 }
 
-/* Return true iff `e` contains a Symbol with the interned name `sym`
- * anywhere in its tree (heads and args included). */
-static bool expr_contains_symbol(const Expr* e, const char* sym) {
-    if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == sym;
-    if (e->type != EXPR_FUNCTION) return false;
-    if (expr_contains_symbol(e->data.function.head, sym)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        if (expr_contains_symbol(e->data.function.args[i], sym)) return true;
-    }
-    return false;
-}
-
-/* Polynomial degree of `e` in the variable `v`, as a double:
- *   0.0    -- e does not contain v.
- *   k > 0  -- e is v (k=1), Power[v, k] for positive integer or rational
- *             k, or a Times product whose direct factors sum to k.
- *   +inf   -- e contains v in a non-polynomial position: inside a
- *             compound that isn't bare-v / Power[v, positive rational]
- *             (e.g. Sin[v], Plus[..., v, ...], Power[v, negative],
- *             Power[non-v-containing-v, _]).
- *
- * Only DIRECT factors of a Times contribute to the sum; a non-poly
- * direct factor that itself contains v (e.g. Sin[v]) saturates the
- * result at +inf.  This matches Mathematica:
- *   - `Sin[x] + x`      displays as `x + Sin[x]`     (poly-in-x before non-poly).
- *   - `Sqrt[x] + x^2`   displays as `Sqrt[x] + x^2`  (deg 1/2 < 2).
- *   - `1/x + 1`         displays as `1 + 1/x`        (negative-exp x -> +inf).
- *   - `(3 + 6 a + 3 a^2) x` sorts by deg_x = 1 regardless of the Plus
- *      coefficient's internal a-degree. */
-static double expr_poly_degree(const Expr* e, const char* v) {
-    if (!e) return 0.0;
-    if (e->type == EXPR_SYMBOL) return (e->data.symbol.name == v) ? 1.0 : 0.0;
-    if (e->type != EXPR_FUNCTION) return 0.0;
-    if (e->data.function.head->type != EXPR_SYMBOL) {
-        return expr_contains_symbol(e, v) ? INFINITY : 0.0;
-    }
-    const char* h = e->data.function.head->data.symbol.name;
-    if (h == SYM_Power && e->data.function.arg_count == 2) {
-        const Expr* base = e->data.function.args[0];
-        const Expr* exp  = e->data.function.args[1];
-        if (base->type == EXPR_SYMBOL && base->data.symbol.name == v) {
-            if (exp->type == EXPR_INTEGER) {
-                int64_t k = exp->data.integer;
-                if (k < 0) return INFINITY;
-                return (double)k;
-            }
-            int64_t num, den;
-            if (is_rational((Expr*)exp, &num, &den) && den > 0) {
-                if (num < 0) return INFINITY;
-                return (double)num / (double)den;
-            }
-            return INFINITY;
-        }
-        return (expr_contains_symbol(base, v) || expr_contains_symbol(exp, v))
-               ? INFINITY : 0.0;
-    }
-    if (h == SYM_Times) {
-        double sum = 0.0;
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            double d = expr_poly_degree(e->data.function.args[i], v);
-            if (isinf(d)) return INFINITY;
-            sum += d;
-        }
-        return sum;
-    }
-    return expr_contains_symbol(e, v) ? INFINITY : 0.0;
-}
-
-/* Growable buffer of distinct interned-symbol-name pointers.  We need
- * collection to be ORDER-INDEPENDENT across a vs b: a silent truncation
- * after `a` would leave `b`'s unique symbols unrepresented, making the
- * resulting comparator asymmetric (compare(a,b) != -compare(b,a)) and
- * causing qsort on Orderless heads with hundreds of unknowns to
- * oscillate forever between two non-converging orderings. */
-typedef struct {
-    const char* stack_buf[64];  /* common-case avoid-malloc path */
-    const char** items;          /* points at stack_buf or heap     */
-    size_t count;
-    size_t cap;
-    bool ok;
-} SymSet;
-
-static void symset_init(SymSet* s) {
-    s->items = s->stack_buf;
-    s->count = 0;
-    s->cap = sizeof(s->stack_buf) / sizeof(s->stack_buf[0]);
-    s->ok = true;
-}
-
-static void symset_free(SymSet* s) {
-    if (s->items && s->items != s->stack_buf) free((void*)s->items);
-    s->items = NULL;
-}
-
-static bool symset_grow(SymSet* s) {
-    size_t new_cap = s->cap * 2;
-    const char** new_buf = (const char**)malloc(sizeof(const char*) * new_cap);
-    if (!new_buf) { s->ok = false; return false; }
-    memcpy(new_buf, s->items, sizeof(const char*) * s->count);
-    if (s->items != s->stack_buf) free((void*)s->items);
-    s->items = new_buf;
-    s->cap = new_cap;
-    return true;
-}
-
-static void symset_add(SymSet* s, const char* sym) {
-    if (!s->ok) return;
-    for (size_t i = 0; i < s->count; i++) {
-        if (s->items[i] == sym) return;
-    }
-    if (s->count >= s->cap && !symset_grow(s)) return;
-    s->items[s->count++] = sym;
-}
-
-/* Append every distinct Symbol-name pointer appearing in `e` into `s`,
- * DFS-visiting heads and args.  Grows the buffer as needed; never
- * truncates. */
-static void collect_symbols_in(const Expr* e, SymSet* s) {
-    if (!e || !s->ok) return;
-    if (e->type == EXPR_SYMBOL) {
-        symset_add(s, e->data.symbol.name);
-        return;
-    }
-    if (e->type != EXPR_FUNCTION) return;
-    collect_symbols_in(e->data.function.head, s);
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        collect_symbols_in(e->data.function.args[i], s);
-    }
-}
-
-/* qsort comparator that sorts char* pointers in REVERSE lex order, so
- * the lex-LAST variable name (e.g. `y` in {a, b, x, y}) ends up first
- * in the sorted array and drives the most significant dimension of the
- * degree-vector compare. */
-static int symbol_reverse_cmp(const void* pa, const void* pb) {
-    const char* a = *(const char* const*)pa;
-    const char* b = *(const char* const*)pb;
-    return strcmp(b, a);
-}
-
-/* ====================================================================
- * Per-sort symbol-set memoization.
- *
- * expr_compare's polynomial-degree tier (step 3, below) calls
- * collect_symbols_in on BOTH operands of every pairwise comparison. qsort
- * makes O(n log n) comparisons to canonicalise an n-argument Orderless head,
- * so each argument's whole subtree is re-walked O(log n) times -- and this
- * is the dominant cost of ordering the large algebraic sums that
- * Together/Cancel/Expand produce during symbolic integration (a residue loop
- * over an algebraic extension spends essentially all of its time right here).
- *
- * The symbol set of an expression is a pure function of its structure, and
- * for the duration of one Orderless sort the sorted arguments and every
- * subexpression they reach are immutable and are never freed. So memoize the
- * set by node identity: each distinct subtree is walked at most once for the
- * whole sort. Outside a sort (g_symmemo == NULL) expr_compare takes the
- * original direct-walk path, byte-for-byte unchanged; the memo only ever
- * caches collect_symbols_in, so the resulting order is identical.
- *
- * qsort takes no context pointer under C99, so the memo is a file-static
- * installed around the qsort, mirroring current_sort_p just below. A
- * TimeConstrained siglongjmp can in principle unwind out of the qsort with
- * the memo still installed; sort_abort_reset() (called at the timeout
- * recovery in core.c) drops the dangling pointer so a later comparison never
- * reads freed memory. The heap the abandoned memo held is a bounded one-time
- * leak, consistent with TimeConstrained's documented unwind-leak model.
- * ==================================================================== */
-typedef struct {
-    const Expr*  key;    /* node identity; NULL marks an empty slot         */
-    const char** syms;   /* symbol pointers, owned by the arena below       */
-    size_t       n;      /* number of symbols                               */
-} SymMemoSlot;
-
-/* Bump-allocated storage for the per-node symbol arrays. A per-node malloc
- * turned the memo into a net LOSS on the common many-small-term sort (the
- * allocation costs more than re-walking a 5-node term saves); the arena makes
- * a fill nearly free, so the memo helps big/repeated trees and never hurts.
- * Arena blocks never move, so a slot's `syms` pointer stays valid across a
- * table grow (which relocates only the slot structs). */
-typedef struct SymArenaBlock {
-    struct SymArenaBlock* next;
-    size_t used, cap;
-    const char* data[];  /* C99 flexible array member */
-} SymArenaBlock;
-
-typedef struct {
-    SymMemoSlot*   slots; /* open addressing; cap is a power of two          */
-    size_t         cap;
-    size_t         count;
-    SymArenaBlock* arena; /* owns every slot's syms array                    */
-    bool           ok;    /* cleared on OOM -> memo disabled, direct walk    */
-} SymMemo;
-
-static SymMemo* g_symmemo = NULL;
-
-static size_t symmemo_hash(const Expr* e, size_t mask) {
-    size_t p = (size_t)(uintptr_t)e;      /* pointers are aligned: mix the bits */
-    p ^= p >> 16;
-    p *= (size_t)0x45d9f3bU;
-    p ^= p >> 16;
-    return p & mask;
-}
-
-#define SYMARENA_BLOCK 2048u
-
-/* Bump-allocate n symbol slots from the arena; returns NULL only on OOM. */
-static const char** symarena_alloc(SymMemo* m, size_t n) {
-    if (n == 0) return NULL;
-    SymArenaBlock* b = m->arena;
-    if (!b || b->used + n > b->cap) {
-        size_t cap = n > SYMARENA_BLOCK ? n : SYMARENA_BLOCK;
-        b = (SymArenaBlock*)malloc(sizeof(SymArenaBlock) + cap * sizeof(const char*));
-        if (!b) return NULL;
-        b->used = 0; b->cap = cap; b->next = m->arena; m->arena = b;
-    }
-    const char** p = &b->data[b->used];
-    b->used += n;
-    return p;
-}
-
-/* Arm the memo without allocating: table and arena are created lazily on the
- * first tier-3 lookup, so a sort whose comparisons all settle at the cheap
- * numeric / symbol tiers (the overwhelmingly common tiny Plus/Times) allocates
- * nothing at all. */
-static void symmemo_begin(SymMemo* m) {
-    m->slots = NULL; m->cap = 0; m->count = 0; m->arena = NULL; m->ok = true;
-}
-
-static bool symmemo_alloc(SymMemo* m, size_t cap) {
-    m->slots = (SymMemoSlot*)calloc(cap, sizeof(SymMemoSlot));
-    m->cap = m->slots ? cap : 0;
-    return m->slots != NULL;
-}
-
-static void symmemo_free(SymMemo* m) {
-    SymArenaBlock* b = m->arena;
-    while (b) { SymArenaBlock* nx = b->next; free(b); b = nx; }
-    free(m->slots);
-    m->slots = NULL; m->cap = 0; m->count = 0; m->arena = NULL;
-}
-
-static bool symmemo_grow(SymMemo* m) {
-    size_t ncap = m->cap << 1;
-    SymMemoSlot* ns = (SymMemoSlot*)calloc(ncap, sizeof(SymMemoSlot));
-    if (!ns) return false;
-    size_t mask = ncap - 1;
-    for (size_t i = 0; i < m->cap; i++) {
-        if (!m->slots[i].key) continue;
-        size_t h = symmemo_hash(m->slots[i].key, mask);
-        while (ns[h].key) h = (h + 1) & mask;
-        ns[h] = m->slots[i];
-    }
-    free(m->slots);
-    m->slots = ns; m->cap = ncap;
-    return true;
-}
-
-/* Look up e's memoized symbol list, computing and inserting it on a miss, and
- * return it through *out_syms / *out_n.  Returns false (and disables the memo)
- * on any allocation failure, so the caller falls back to a direct
- * collect_symbols_in.
- *
- * The result is returned BY VALUE, never as a pointer into the slot array: a
- * subsequent lookup may grow (reallocate) that array, moving every slot. The
- * per-node `syms` heap block, by contrast, is only ever freed in
- * symmemo_free() at the end of the sort, so the returned pointer stays valid
- * across further lookups. */
-/* A/B toggle: MATHILDA_NO_SYMSET_CACHE=1 disables the persistent per-node
- * symbol-set cache (the per-sort memo still runs), so a differential run can
- * confirm the cache changes no canonical order. */
-static int symset_cache_off(void) {
-    static int off = -1;
-    if (off < 0) off = getenv("MATHILDA_NO_SYMSET_CACHE") ? 1 : 0;
-    return off;
-}
-
-static bool symmemo_lookup(const Expr* e, const char*** out_syms, size_t* out_n) {
-    SymMemo* m = g_symmemo;
-    if (!m->ok) return false;
-    if (!m->slots && !symmemo_alloc(m, 16)) { m->ok = false; return false; }   /* lazy first use */
-    if (m->count * 2u >= m->cap && !symmemo_grow(m)) { m->ok = false; return false; }
-    size_t mask = m->cap - 1;
-    size_t h = symmemo_hash(e, mask);
-    while (m->slots[h].key) {
-        if (m->slots[h].key == e) { *out_syms = m->slots[h].syms; *out_n = m->slots[h].n; return true; }
-        h = (h + 1) & mask;
-    }
-    /* miss: take the symbol set from the persistent per-node cache if one was
-     * built in an EARLIER sort (so a node is never re-walked), else compute it
-     * once and populate the cache for later sorts.  collect_symbols_in -- the
-     * dominant cost of ordering the large algebraic sums integration builds --
-     * thus runs at most once per distinct node across the whole process. */
-    SymSet tmp; symset_init(&tmp);
-    const char* const* ncs; uint32_t ncn;
-    if (!symset_cache_off() && expr_symset_cache_get(e, &ncs, &ncn)) {
-        for (uint32_t i = 0; i < ncn; i++) symset_add(&tmp, ncs[i]);
-    } else {
-        collect_symbols_in(e, &tmp);
-        if (tmp.ok && !symset_cache_off()) expr_symset_cache_put(e, tmp.items, tmp.count);
-    }
-    if (!tmp.ok) { symset_free(&tmp); m->ok = false; return false; }
-    const char** syms = NULL;
-    if (tmp.count) {
-        syms = symarena_alloc(m, tmp.count);
-        if (!syms) { symset_free(&tmp); m->ok = false; return false; }
-        memcpy(syms, tmp.items, sizeof(const char*) * tmp.count);
-    }
-    m->slots[h].key = e;
-    m->slots[h].syms = syms;
-    m->slots[h].n = tmp.count;
-    m->count++;
-    symset_free(&tmp);
-    *out_syms = syms;
-    *out_n = tmp.count;
-    return true;
-}
-
-/* Union the symbol set of one operand into vs, through the PERSISTENT per-node
- * cache: a hit costs a pointer read, a miss walks the node once and populates
- * the cache for every later comparison of it.
- *
- * The cache was previously consulted only from symmemo_lookup, i.e. only while
- * an Orderless sort was in flight.  A BARE expr_compare -- Plus's and Times'
- * already-sorted pre-check on every re-evaluation, a Sort, an ordering test --
- * therefore re-walked both whole subtrees on EVERY comparison, which is the
- * collect_symbols_in hot spot that the Charlwood profiles showed dominating the
- * large algebraic sums (68 % of A28 under builtin_plus -> expr_compare ->
- * collect_symbols_in).  symset_add dedups, so the union -- and therefore the
- * canonical order -- is identical to the direct walk. */
-static void symset_add_cached(const Expr* e, SymSet* vs) {
-    if (!e) return;
-    if (e->type != EXPR_FUNCTION || symset_cache_off()) { collect_symbols_in(e, vs); return; }
-    const char* const* cs; uint32_t cn;
-    if (expr_symset_cache_get(e, &cs, &cn)) {
-        for (uint32_t i = 0; i < cn; i++) symset_add(vs, cs[i]);
-        return;
-    }
-    SymSet tmp; symset_init(&tmp);
-    collect_symbols_in(e, &tmp);
-    if (!tmp.ok) { symset_free(&tmp); collect_symbols_in(e, vs); return; }
-    expr_symset_cache_put(e, tmp.items, tmp.count);
-    for (size_t i = 0; i < tmp.count; i++) symset_add(vs, tmp.items[i]);
-    symset_free(&tmp);
-}
-
 /* Compare two packed lists straight off their buffers. Valid ONLY when the
  * shapes match exactly and the elements materialise to the same head class,
  * because the List order is elementwise while a buffer scan would otherwise
@@ -609,6 +251,203 @@ static int nd_packed_compare_fast(const Expr* a, const Expr* b, bool* ok) {
         if (aim > bim) return 1;
     }
     return 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Numbers                                                            */
+/* ------------------------------------------------------------------ */
+
+/* Rank of a real number's representation, for two equal values:
+ * Integer < Real < Rational (1 < 1., 0.5 < 1/2). */
+static int num_rank(const Expr* e) {
+    if (expr_is_integer_like(e)) return 0;
+    if (e->type == EXPR_REAL) return 1;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return 1;
+#endif
+    return 2;
+}
+
+/* Compare sa*a with sb*b, a and b real numeric atoms, sa/sb = +1 or -1.
+ * Exact for two rational-likes; through doubles otherwise.  Value only. */
+static int real_value_cmp(const Expr* a, int sa, const Expr* b, int sb) {
+    /* Machine integers (the common case: coefficients, exponents). */
+    if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER &&
+        a->data.integer != INT64_MIN && b->data.integer != INT64_MIN) {
+        int64_t va = sa < 0 ? -a->data.integer : a->data.integer;
+        int64_t vb = sb < 0 ? -b->data.integer : b->data.integer;
+        return (va > vb) - (va < vb);
+    }
+    if (a->type == EXPR_REAL && b->type == EXPR_REAL) {
+        double va = sa * a->data.real, vb = sb * b->data.real;
+        return (va > vb) - (va < vb);
+    }
+    if (is_rational_like(a) && is_rational_like(b)) {
+        mpz_t an, ad, bn, bd;
+        rat_to_mpz_parts(a, an, ad);
+        rat_to_mpz_parts(b, bn, bd);
+        if (sa < 0) mpz_neg(an, an);
+        if (sb < 0) mpz_neg(bn, bn);
+        mpz_mul(an, an, bd);           /* denominators are positive */
+        mpz_mul(bn, bn, ad);
+        int c = mpz_cmp(an, bn);
+        mpz_clear(an); mpz_clear(ad); mpz_clear(bn); mpz_clear(bd);
+        return (c > 0) - (c < 0);
+    }
+    double va = sa * get_numeric_value(a);
+    double vb = sb * get_numeric_value(b);
+    return (va > vb) - (va < vb);
+}
+
+static int real_sign(const Expr* e) {
+    if (e->type == EXPR_INTEGER) return (e->data.integer > 0) - (e->data.integer < 0);
+    if (is_rational_like(e)) {
+        mpz_t n, d;
+        rat_to_mpz_parts(e, n, d);
+        int s = mpz_sgn(n);
+        mpz_clear(n); mpz_clear(d);
+        return s;
+    }
+    double v = get_numeric_value(e);
+    return (v > 0) - (v < 0);
+}
+
+static int real_cmp(const Expr* a, const Expr* b) {
+    int c = real_value_cmp(a, 1, b, 1);
+    if (c) return c;
+    int ra = num_rank(a), rb = num_rank(b);
+    return (ra > rb) - (ra < rb);
+}
+
+/* A number: a real numeric atom or a literal Complex.  Order by real part,
+ * then by the magnitude of the imaginary part (a real number has none), then
+ * negative imaginary part first:
+ *   -1 < -1 - I < 0 < -I < I < 1 < 1 - I < 1 + I < 1 - 2 I < 1. */
+static int number_cmp(const Expr* a, const Expr* b) {
+    const Expr* ra = is_complex_number(a) ? a->data.function.args[0] : a;
+    const Expr* rb = is_complex_number(b) ? b->data.function.args[0] : b;
+    const Expr* ia = is_complex_number(a) ? a->data.function.args[1] : NULL;
+    const Expr* ib = is_complex_number(b) ? b->data.function.args[1] : NULL;
+    int c = real_cmp(ra, rb);
+    if (c) return c;
+    if (!ia || !ib) return ia ? 1 : ib ? -1 : 0;
+    int sa = real_sign(ia), sb = real_sign(ib);
+    c = real_value_cmp(ia, sa < 0 ? -1 : 1, ib, sb < 0 ? -1 : 1);   /* |im| */
+    if (c) return c;
+    if (sa != sb) return sa < sb ? -1 : 1;
+    int qa = num_rank(ia), qb = num_rank(ib);
+    return (qa > qb) - (qa < qb);
+}
+
+static bool is_number(const Expr* e) {
+    return is_atomic_numeric(e) || is_complex_number(e);
+}
+
+/* ------------------------------------------------------------------ */
+/* Products, sums, powers                                             */
+/* ------------------------------------------------------------------ */
+
+static bool has_head(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+/* View e as `coef * f1 * ... * fn` (Times) or `num + t1 + ... + tn` (Plus):
+ * a leading number is split off; a non-`head` expression is one item. */
+static void split_items(const Expr* const* self, const char* head,
+                        const Expr** num, const Expr* const** items, size_t* n) {
+    const Expr* e = *self;
+    *num = NULL;
+    if (has_head(e, head) && e->data.function.arg_count > 0) {
+        const Expr* const* args = (const Expr* const*)e->data.function.args;
+        size_t k = e->data.function.arg_count;
+        if (k > 1 && is_number(args[0])) { *num = args[0]; args++; k--; }
+        *items = args;
+        *n = k;
+    } else {
+        *items = self;
+        *n = 1;
+    }
+}
+
+/* Compare two item lists from the LAST item backwards; the shorter list wins
+ * a tie. */
+static int items_cmp_rev(const Expr* const* ia, size_t na,
+                         const Expr* const* ib, size_t nb) {
+    size_t m = na < nb ? na : nb;
+    for (size_t i = 1; i <= m; i++) {
+        int c = expr_compare(ia[na - i], ib[nb - i]);
+        if (c) return c;
+    }
+    return (na > nb) - (na < nb);
+}
+
+/* Times / Plus rule.  `unit` is the value an absent number stands for (1 for
+ * a coefficient, 0 for a numeric term). */
+static int assoc_cmp(const Expr* a, const Expr* b, const char* head, const Expr* unit) {
+    const Expr *na, *nb;
+    const Expr* const* ia;
+    const Expr* const* ib;
+    size_t ka, kb;
+    split_items(&a, head, &na, &ia, &ka);
+    split_items(&b, head, &nb, &ib, &kb);
+    int c = items_cmp_rev(ia, ka, ib, kb);
+    if (c) return c;
+    if (na || nb) {
+        c = number_cmp(na ? na : unit, nb ? nb : unit);
+        if (c) return c;
+    }
+    bool ha = has_head(a, head), hb = has_head(b, head);
+    return ha == hb ? 0 : ha ? 1 : -1;
+}
+
+/* Power rule: bases, then exponents; a non-power is base^1. */
+static int power_cmp(const Expr* a, const Expr* b, const Expr* one) {
+    bool pa = has_head(a, SYM_Power) && a->data.function.arg_count == 2;
+    bool pb = has_head(b, SYM_Power) && b->data.function.arg_count == 2;
+    const Expr* ba = pa ? a->data.function.args[0] : a;
+    const Expr* bb = pb ? b->data.function.args[0] : b;
+    int c = expr_compare(ba, bb);
+    if (c) return c;
+    c = expr_compare(pa ? a->data.function.args[1] : one,
+                     pb ? b->data.function.args[1] : one);
+    if (c) return c;
+    return pa == pb ? 0 : pa ? 1 : -1;
+}
+
+/* Symbols by the string collation of their names without context, then by
+ * full name. */
+static const char* short_name(const char* s) {
+    const char* p = strrchr(s, '`');
+    return p ? p + 1 : s;
+}
+
+static int symbol_cmp(const Expr* a, const Expr* b) {
+    const char* x = a->data.symbol.name;
+    const char* y = b->data.symbol.name;
+    if (x == y) return 0;
+    int c = string_compare_canonical(short_name(x), short_name(y));
+    if (c) return c;
+    c = strcmp(x, y);
+    return (c > 0) - (c < 0);
+}
+
+static int opaque_cmp(const Expr* a, const Expr* b);
+
+static const Expr* infinity_alias(const Expr* e) {
+    static Expr* k_inf = NULL;
+    static Expr* k_cinf = NULL;
+    if (e->type != EXPR_SYMBOL) return e;
+    const char* n = e->data.symbol.name;
+    if (n != SYM_Infinity && n != SYM_ComplexInfinity) return e;
+    if (!k_inf) {
+        Expr* one[1];
+        one[0] = expr_new_integer(1);
+        k_inf = expr_new_function(expr_new_symbol(SYM_DirectedInfinity), one, 1);
+        k_cinf = expr_new_function(expr_new_symbol(SYM_DirectedInfinity), NULL, 0);
+    }
+    return n == SYM_Infinity ? k_inf : k_cinf;
 }
 
 int expr_compare(const Expr* a, const Expr* b) {
@@ -679,123 +518,45 @@ int expr_compare(const Expr* a, const Expr* b) {
         return -sign;
     }
 
-    /* 1. Numeric atoms. */
-    bool a_atomic = is_atomic_numeric(a);
-    bool b_atomic = is_atomic_numeric(b);
-    if (a_atomic && b_atomic) {
-        if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
-            if (a->data.integer < b->data.integer) return -1;
-            if (a->data.integer > b->data.integer) return 1;
-            return 0;
-        }
-        if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
-            mpz_t ma2, mb2;
-            expr_to_mpz(a, ma2);
-            expr_to_mpz(b, mb2);
-            int cmp = mpz_cmp(ma2, mb2);
-            mpz_clear(ma2);
-            mpz_clear(mb2);
-            return cmp;
-        }
-        /* Exact rationals (bignum components included).  The double fallback
-         * below reads a bignum-component Rational as 0 (get_numeric_value
-         * could not decode it), collapsing distinct values to a tie and
-         * misordering Sort/Min/Max/Median.  Cross-multiply exactly; both
-         * denominators are positive (canonical form), so the inequality
-         * direction is preserved. */
-        if (is_rational_like(a) && is_rational_like(b)) {
-            mpz_t an, ad, bn, bd, lhs, rhs;
-            rat_to_mpz_parts(a, an, ad);
-            rat_to_mpz_parts(b, bn, bd);
-            mpz_init(lhs); mpz_init(rhs);
-            mpz_mul(lhs, an, bd);
-            mpz_mul(rhs, bn, ad);
-            int c = mpz_cmp(lhs, rhs);
-            mpz_clear(an); mpz_clear(ad); mpz_clear(bn); mpz_clear(bd);
-            mpz_clear(lhs); mpz_clear(rhs);
-            if (c != 0) return c < 0 ? -1 : 1;
-            if (a->type != b->type) return (int)a->type - (int)b->type;
-            return 0;
-        }
-        double va = get_numeric_value(a);
-        double vb = get_numeric_value(b);
-        if (va < vb) return -1;
-        if (va > vb) return 1;
-        if (a->type != b->type) return (int)a->type - (int)b->type;
-        return 0;
-    }
-    if (a_atomic) return -1;
-    if (b_atomic) return 1;
+    /* Infinity and ComplexInfinity are symbols here; they order as the
+     * DirectedInfinity[1] and DirectedInfinity[] they stand for. */
+    a = infinity_alias(a);
+    b = infinity_alias(b);
+    if (a == b) return 0;
 
-    /* 1b. Complex numbers. A literal complex sits in its own tier just after
-     * the real numeric atoms and before all symbolic material (symbols, Pi,
-     * Log, Power, ...), mirroring Mathematica's `real < non-real complex <
-     * symbol` canonical order. Ordering among complexes is by real part then
-     * imaginary part (each a real numeric atom, compared exactly by the block
-     * above). This keeps `Complex[re, im]` out of the polynomial-degree
-     * machinery entirely, so its ordering no longer depends on whether a
-     * component happens to be an Integer or a Rational. */
-    bool a_cplx = is_complex_number(a);
-    bool b_cplx = is_complex_number(b);
-    if (a_cplx && b_cplx) {
-        int c = expr_compare(a->data.function.args[0], b->data.function.args[0]);
-        if (c != 0) return c;
-        return expr_compare(a->data.function.args[1], b->data.function.args[1]);
-    }
-    if (a_cplx) return -1;
-    if (b_cplx) return 1;
+    /* NDArray and CompiledFunction objects sort after everything. */
+    if (a->type == EXPR_NDARRAY || a->type == EXPR_COMPILED ||
+        b->type == EXPR_NDARRAY || b->type == EXPR_COMPILED)
+        return opaque_cmp(a, b);
 
-    /* 2. Strings. */
-    if (a->type == EXPR_STRING && b->type == EXPR_STRING) {
+    /* 1. Numbers first, by value. */
+    bool a_num = is_number(a), b_num = is_number(b);
+    if (a_num && b_num) return number_cmp(a, b);
+    if (a_num) return -1;
+    if (b_num) return 1;
+
+    /* 2-4. Products, then powers, then sums, as polynomial terms: a power
+     * is compared before a sum, so x^2 < a + x ((a + x)^1 against x^2). */
+    static Expr* k_zero = NULL;
+    static Expr* k_one = NULL;
+    if (!k_one) { k_zero = expr_new_integer(0); k_one = expr_new_integer(1); }
+    if (has_head(a, SYM_Times) || has_head(b, SYM_Times))
+        return assoc_cmp(a, b, SYM_Times, k_one);
+    if (has_head(a, SYM_Power) || has_head(b, SYM_Power))
+        return power_cmp(a, b, k_one);
+    if (has_head(a, SYM_Plus) || has_head(b, SYM_Plus))
+        return assoc_cmp(a, b, SYM_Plus, k_zero);
+
+    /* 5. Atoms before compound expressions; strings before symbols. */
+    if (a->type == EXPR_STRING && b->type == EXPR_STRING)
         return string_compare_canonical(a->data.string, b->data.string);
-    }
     if (a->type == EXPR_STRING) return -1;
     if (b->type == EXPR_STRING) return 1;
-
-    /* 3. Polynomial degree vector comparison. */
-    SymSet vs;
-    symset_init(&vs);
-    if (g_symmemo) {
-        /* Orderless sort in flight: take each operand's symbol set from the
-         * per-sort memo (computing it at most once per distinct subtree)
-         * instead of re-walking the trees on every comparison. symset_add
-         * dedups, so the union -- and therefore the ordering -- is identical
-         * to the direct walk. */
-        const char** sa; size_t na; const char** sb; size_t nb;
-        if (symmemo_lookup(a, &sa, &na) && symmemo_lookup(b, &sb, &nb)) {
-            /* sa stays valid across the second lookup: only slot structs move
-             * on a grow, never the per-node symbol arrays. */
-            for (size_t i = 0; i < na; i++) symset_add(&vs, sa[i]);
-            for (size_t i = 0; i < nb; i++) symset_add(&vs, sb[i]);
-        } else {                                   /* memo hit OOM: fall back */
-            collect_symbols_in(a, &vs);
-            collect_symbols_in(b, &vs);
-        }
-    } else {
-        symset_add_cached(a, &vs);
-        symset_add_cached(b, &vs);
-    }
-
-    qsort((void*)vs.items, vs.count, sizeof(const char*), symbol_reverse_cmp);
-
-    int deg_cmp = 0;
-    for (size_t i = 0; i < vs.count; i++) {
-        double da = expr_poly_degree(a, vs.items[i]);
-        double db = expr_poly_degree(b, vs.items[i]);
-        if (da < db) { deg_cmp = -1; break; }
-        if (da > db) { deg_cmp = 1; break; }
-    }
-    symset_free(&vs);
-    if (deg_cmp != 0) return deg_cmp;
-
-    /* 4. Structural tiebreak. */
-    if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) {
-        if (a->data.symbol.name == b->data.symbol.name) return 0;
-        return strcmp(a->data.symbol.name, b->data.symbol.name);
-    }
+    if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) return symbol_cmp(a, b);
     if (a->type == EXPR_SYMBOL) return -1;
     if (b->type == EXPR_SYMBOL) return 1;
 
+    /* 6. Head, then length, then the arguments left to right. */
     if (a->type == EXPR_FUNCTION && b->type == EXPR_FUNCTION) {
         int head_cmp = expr_compare(a->data.function.head, b->data.function.head);
         if (head_cmp != 0) return head_cmp;
@@ -808,7 +569,11 @@ int expr_compare(const Expr* a, const Expr* b) {
         }
         return 0;
     }
+    return 0;
+}
 
+/* NDArray / CompiledFunction ordering: after every other expression. */
+static int opaque_cmp(const Expr* a, const Expr* b) {
     /* 5. NDArrays: dtype, then rank, then dims, then row-major data (re then
      * im), lexicographic — a stable total order across dtypes. */
     if (a->type == EXPR_NDARRAY && b->type == EXPR_NDARRAY) {
@@ -856,61 +621,11 @@ static int sort_cmp_expr_ptrs(const void* a, const void* b) {
     return expr_compare(*(Expr* const*)a, *(Expr* const*)b);
 }
 
-/* True once e's node count reaches `budget`, visiting at most `budget` nodes
- * (early-exit size probe). *counter carries the running count across siblings. */
-static bool expr_size_atleast(const Expr* e, int budget, int* counter) {
-    if (*counter >= budget) return true;
-    if (!e) return false;
-    if (++(*counter) >= budget) return true;
-    if (e->type != EXPR_FUNCTION) return false;
-    if (expr_size_atleast(e->data.function.head, budget, counter)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (expr_size_atleast(e->data.function.args[i], budget, counter)) return true;
-    return false;
-}
-
-/* The memo repays its bookkeeping only when a term's subtree is big enough that
- * re-walking it on every comparison dominates -- for the tiny terms of an
- * ordinary Plus/Times the hash traffic would cost more than it saves. Probe a
- * few arguments (bounded work) and engage the memo only when one is large. */
-#define SYMMEMO_SIZE_GATE 48
-static bool orderless_worth_memo(Expr** args, size_t n) {
-    size_t probe[3];
-    probe[0] = 0; probe[1] = n / 2; probe[2] = n - 1;
-    for (int k = 0; k < 3; k++) {
-        int c = 0;
-        if (expr_size_atleast(args[probe[k]], SYMMEMO_SIZE_GATE, &c)) return true;
-    }
-    return false;
-}
-
-/* Canonically sort args[0..n) in place (the Orderless canonicalisation), with
- * the per-sort symbol-set memo installed so an n-term Plus/Times is ordered
- * without re-walking each term O(log n) times. The order is identical to a
- * plain qsort by expr_compare; only the redundant symbol collection is cached.
- * Small heads take the plain path (the memo cannot repay its allocation). */
+/* Canonically sort args[0..n) in place (the Orderless canonicalisation). */
 void expr_orderless_sort(Expr** args, size_t n) {
     if (!args || n < 2) return;
-    /* Escape hatch for A/B measurement and regression bisection. Read once. */
-    static int memo_off = -1;
-    if (memo_off < 0) memo_off = getenv("MATHILDA_NO_SYMMEMO") ? 1 : 0;
-    if (memo_off || !orderless_worth_memo(args, n)) {
-        qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
-        return;
-    }
-    SymMemo memo;
-    symmemo_begin(&memo);                       /* table allocated lazily, if ever */
-    SymMemo* prev = g_symmemo;
-    g_symmemo = &memo;
     qsort(args, n, sizeof(Expr*), sort_cmp_expr_ptrs);
-    g_symmemo = prev;
-    symmemo_free(&memo);
 }
-
-/* Drop any sort-scoped memo left dangling by a TimeConstrained siglongjmp that
- * unwound out of expr_orderless_sort mid-qsort. Called at the timeout recovery
- * so a subsequent expr_compare never dereferences the freed stack memo. */
-void sort_abort_reset(void) { g_symmemo = NULL; }
 
 /* ==================================================================== */
 

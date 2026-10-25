@@ -100,8 +100,8 @@ int main(void) {
     /* -------- symbolic pairs hold for ALL complex b (reflection formula), so
      * the result is Pi Sech[Pi b] / Pi b Csch[Pi b] -- never Im[...] forms,
      * which were wrong off the real line (b = I/4: 3.14159 vs 4.44288). -- */
-    check("FullSimplify[Gamma[1/2 + I b] Gamma[1/2 - I b]]", "Pi Sech[Pi b]");
-    check("FullSimplify[Gamma[1 + I b] Gamma[1 - I b]]", "Pi b Csch[Pi b]");
+    check("FullSimplify[Gamma[1/2 + I b] Gamma[1/2 - I b]]", "Pi Sech[b Pi]");
+    check("FullSimplify[Gamma[1 + I b] Gamma[1 - I b]]", "b Pi Csch[b Pi]");
     check("FullSimplify[Gamma[1 + x] Gamma[1 - x]]", "Pi x Csc[Pi x]");
     nsame("Gamma[1/2 + I b] Gamma[1/2 - I b] /. b -> I/4", "Pi Sech[Pi I/4]");
     nsame("Gamma[1 + I b] Gamma[1 - I b] /. b -> 3/10 + 7 I/10",

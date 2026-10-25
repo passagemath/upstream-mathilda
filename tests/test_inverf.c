@@ -119,10 +119,10 @@ void test_inverf_two_arg() {
 
 void test_inverf_derivatives() {
     assert_eval_eq("D[InverseErf[x], x]",
-                   "1/2 Sqrt[Pi] E^InverseErf[x]^2", 0);
+                   "1/2 E^InverseErf[x]^2 Sqrt[Pi]", 0);
     /* Second derivative (chain rule on the InverseErf-containing exponent). */
     assert_eval_eq("D[InverseErf[x], {x, 2}]",
-                   "1/2 Pi InverseErf[x] E^(2 InverseErf[x]^2)", 0);
+                   "1/2 E^(2 InverseErf[x]^2) Pi InverseErf[x]", 0);
     /* Series at the origin via the generic D-based Taylor fallback. */
     assert_eval_startswith("Series[InverseErf[x], {x, 0, 3}]",
                            "1/2 Sqrt[Pi] x");

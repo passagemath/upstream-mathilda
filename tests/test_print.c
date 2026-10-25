@@ -501,7 +501,7 @@ static void test_dot_infix(void) {
         { "Dot[a b, c]",           "(a b) . c" },
         { "Dot[1/2, a]",           "(1/2) . a" },
         { "f[a . b]",              "f[a . b]" },
-        { "Dot[a, b] + c",         "a . b + c" },
+        { "Dot[a, b] + c",         "c + a . b" },
         { "Dot[a, b] -> c",        "a . b -> c" },
         { "Dot[a, b][x]",          "(a . b)[x]" },
         { "Dot[a]",                "a" },

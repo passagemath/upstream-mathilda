@@ -51,7 +51,7 @@ static void test_factor_radical_symbol(void) {
      *   -> 1 + g - 2 g^2 - g^3 - 2 g^4
      *   -> -(1+2g)(g^3+g-1) after Factor. */
     run_test("Factor[1 + r^(1/5) - 2 r^(2/5) - r^(3/5) - 2 r^(4/5)]",
-             "-(-1 + r^(1/5) + r^(3/5)) (1 + 2 r^(1/5))");
+             "-(1 + 2 r^(1/5)) (-1 + r^(1/5) + r^(3/5))");
 
     /* Same shape, simpler exponents. */
     run_test("Factor[r^(1/2) - 1]", "-1 + Sqrt[r]");
@@ -62,7 +62,7 @@ static void test_factor_radical_compound_base(void) {
     /* Non-symbol base: the algebraic generator is a function call
      * (Log[r]) whose Power forms participate as Log[r]^(p/q). */
     run_test("Factor[1 + Log[r]^(1/5) - 2 Log[r]^(2/5) - Log[r]^(3/5) - 2 Log[r]^(4/5)]",
-             "-(-1 + Log[r]^(1/5) + Log[r]^(3/5)) (1 + 2 Log[r]^(1/5))");
+             "-(1 + 2 Log[r]^(1/5)) (-1 + Log[r]^(1/5) + Log[r]^(3/5))");
 }
 
 static void test_factor_exp(void) {

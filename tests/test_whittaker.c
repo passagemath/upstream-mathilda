@@ -134,8 +134,8 @@ void test_whittaker_compile() {
 
 void test_whittaker_derivative() {
     assert_eval_eq("D[WhittakerM[k, m, z], z]",
-        "((1/2 + k + m) WhittakerM[1 + k, m, z])/z + "
-        "(1/2 - k/z) WhittakerM[k, m, z]", 0);
+        "(1/2 - k/z) WhittakerM[k, m, "
+        "z] + ((1/2 + k + m) WhittakerM[1 + k, m, z])/z", 0);
     /* No elementary form for d/dk, d/dm -> inert Derivative. */
     assert_eval_eq("D[WhittakerM[k, m, z], k]",
                    "Derivative[1, 0, 0][WhittakerM][k, m, z]", 0);
@@ -164,10 +164,10 @@ void test_whittaker_series_zero() {
 void test_whittaker_series_infinity() {
     /* a = m-k+1/2 = -1 is a non-positive integer -> elementary closed form. */
     assert_eval_eq("Series[WhittakerM[2, 1/2, x], {x, Infinity, 5}]",
-                   "x E^(-1/2 x) (1 - 1/2 x)", 0);
+                   "E^(-1/2 x) (1 - 1/2 x) x", 0);
     /* a = 0 -> M_{1/2,0}(x) = Sqrt[x] E^(-x/2). */
     assert_eval_eq("Series[WhittakerM[1/2, 0, x], {x, Infinity, 3}]",
-                   "Sqrt[x] E^(-1/2 x)", 0);
+                   "E^(-1/2 x) Sqrt[x]", 0);
     /* Non-terminating / symbolic: no asymptotic machinery -> stays symbolic. */
     assert_eval_eq("Series[WhittakerM[1/3, 1/2, x], {x, Infinity, 3}]",
                    "Series[WhittakerM[1/3, 1/2, x], {x, Infinity, 3}]", 0);
@@ -291,7 +291,7 @@ void test_whittaker_w_terminating() {
 
 void test_whittaker_w_derivative() {
     assert_eval_eq("D[WhittakerW[k, m, z], z]",
-        "-WhittakerW[1 + k, m, z]/z + (1/2 - k/z) WhittakerW[k, m, z]", 0);
+        "(1/2 - k/z) WhittakerW[k, m, z] - WhittakerW[1 + k, m, z]/z", 0);
     assert_eval_eq("D[WhittakerW[k, m, z], k]",
                    "Derivative[1, 0, 0][WhittakerW][k, m, z]", 0);
     assert_eval_eq("D[WhittakerW[k, m, z], m]",
@@ -305,7 +305,7 @@ void test_whittaker_w_series() {
         "-2 x + 2 x^2 - 3/4 x^3 + 1/6 x^4 - 5/192 x^5 + 1/320 x^6 + O[x]^7", 0);
     /* Terminating case at Infinity -> the exact elementary closed form. */
     assert_eval_eq("Series[WhittakerW[2, 1/2, x], {x, Infinity, 5}]",
-                   "-x (2 - x) E^(-1/2 x)", 0);
+                   "-E^(-1/2 x) (2 - x) x", 0);
     /* Non-terminating / symbolic stays symbolic (deferred). */
     assert_eval_eq("Series[WhittakerW[1/3, 1/2, x], {x, Infinity, 3}]",
                    "Series[WhittakerW[1/3, 1/2, x], {x, Infinity, 3}]", 0);

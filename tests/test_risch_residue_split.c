@@ -120,8 +120,10 @@ static void test_partial_log_mixed(void) {
     assert_diff_zero_via("Integrate`RischTranscendental", MIXED_LOG);
     /* It is a genuine PARTIAL result: an Integrate[remainder, x] survives. */
     assert_integrate_presence("Integrate`RischTranscendental", MIXED_LOG, false);
-    /* The elementary constant-residue part is exactly Log[Log[x]]. */
-    run_test("Simplify[First[Integrate`RischTranscendental[" MIXED_LOG ", x]] - Log[Log[x]]]", "0");
+    /* The elementary constant-residue part is exactly Log[Log[x]] (selected by
+     * content, not position: the terms of the Plus are in canonical order). */
+    run_test("Simplify[Select[Integrate`RischTranscendental[" MIXED_LOG ", x], "
+             "FreeQ[#, Integrate] &] - Log[Log[x]]]", "0");
 }
 
 /* Scope boundary: the EXPONENTIAL (hyperexponential) monomial does not yet

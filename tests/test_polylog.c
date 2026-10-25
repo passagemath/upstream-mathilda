@@ -86,9 +86,9 @@ void test_polylog_at_minus_one() {
 
 void test_polylog_half() {
     /* The famous PolyLog[2, 1/2] and PolyLog[3, 1/2] closed forms. */
-    assert_eval_eq("PolyLog[2, 1/2]", "-1/2 Log[2]^2 + 1/12 Pi^2", 0);
+    assert_eval_eq("PolyLog[2, 1/2]", "1/12 Pi^2 - 1/2 Log[2]^2", 0);
     assert_eval_eq("PolyLog[3, 1/2]",
-                   "1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]", 0);
+                   "-1/12 Pi^2 Log[2] + 1/6 Log[2]^3 + 7/8 Zeta[3]", 0);
     /* Numerical agreement with the closed form. */
     assert_close("N[PolyLog[2, 1/2]]", 0.5822405264650125, 1e-12);
 }

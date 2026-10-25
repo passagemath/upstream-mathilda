@@ -47,23 +47,23 @@ static void assert_close(const char* input, double expected, double tol) {
 void test_legendreq_closed_forms() {
     /* Q_0(x) = (1/2)(Log[1+x] - Log[1-x]). */
     assert_eval_eq("LegendreQ[0, x]",
-                   "1/2 Log[1 + x] - 1/2 Log[1 - x]", 0);
+                   "-1/2 Log[1 - x] + 1/2 Log[1 + x]", 0);
     /* Q_1(x) = -1 + x L(x). */
     assert_eval_eq("LegendreQ[1, x]",
-                   "-1 + x (1/2 Log[1 + x] - 1/2 Log[1 - x])", 0);
+                   "-1 + x (-1/2 Log[1 - x] + 1/2 Log[1 + x])", 0);
     /* Q_2(x) = -3x/2 + (-1/2 + 3/2 x^2) L(x). */
     assert_eval_eq("LegendreQ[2, x]",
-                   "-3/2 x + (1/2 Log[1 + x] - 1/2 Log[1 - x]) "
-                   "(-1/2 + 3/2 x^2)", 0);
+                   "-3/2 x + (-1/2 + 3/2 x^2) "
+                   "(-1/2 Log[1 - x] + 1/2 Log[1 + x])", 0);
     /* Q_3(x). */
     assert_eval_eq("LegendreQ[3, x]",
-                   "2/3 - 5/2 x^2 + (1/2 Log[1 + x] - 1/2 Log[1 - x]) "
-                   "(-3/2 x + 5/2 x^3)", 0);
+                   "2/3 - 5/2 x^2 + (-3/2 x + 5/2 x^3) "
+                   "(-1/2 Log[1 - x] + 1/2 Log[1 + x])", 0);
     /* The fifth Legendre function of the second kind (headline example). */
     assert_eval_eq("LegendreQ[5, x]",
                    "-8/15 + 49/8 x^2 - 63/8 x^4 + "
-                   "(1/2 Log[1 + x] - 1/2 Log[1 - x]) "
-                   "(15/8 x - 35/4 x^3 + 63/8 x^5)", 0);
+                   "(15/8 x - 35/4 x^3 + 63/8 x^5) "
+                   "(-1/2 Log[1 - x] + 1/2 Log[1 + x])", 0);
 }
 
 /* ---- special value Q_n(0) ------------------------------------------- */
@@ -85,10 +85,10 @@ void test_legendreq_special_values() {
 
 void test_legendreq_listable() {
     assert_eval_eq("LegendreQ[{0, 1, 2}, x]",
-                   "{1/2 Log[1 + x] - 1/2 Log[1 - x], "
-                   "-1 + x (1/2 Log[1 + x] - 1/2 Log[1 - x]), "
-                   "-3/2 x + (1/2 Log[1 + x] - 1/2 Log[1 - x]) "
-                   "(-1/2 + 3/2 x^2)}", 0);
+                   "{-1/2 Log[1 - x] + 1/2 Log[1 + x], "
+                   "-1 + x (-1/2 Log[1 - x] + 1/2 Log[1 + x]), "
+                   "-3/2 x + (-1/2 + 3/2 x^2) "
+                   "(-1/2 Log[1 - x] + 1/2 Log[1 + x])}", 0);
     assert_eval_eq("LegendreQ[{}, x]", "{}", 0);
 }
 
@@ -167,7 +167,7 @@ void test_legendreq_types() {
 void test_legendreq_derivative() {
     /* d/dx Q_n(x) = ((-1-n) x Q_n + (1+n) Q_{n+1}) / (x^2 - 1). */
     assert_eval_eq("D[LegendreQ[n, x], x]",
-                   "((1 + n) LegendreQ[1 + n, x] + (-1 - n) x LegendreQ[n, x])/"
+                   "((-1 - n) x LegendreQ[n, x] + (1 + n) LegendreQ[1 + n, x])/"
                    "(-1 + x^2)", 0);
     /* The rule reproduces the closed-form derivative at a numeric point:
      * d/dx Q_2(x) at x = 0.4 equals the closed-form value. */

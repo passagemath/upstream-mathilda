@@ -182,10 +182,10 @@ static void test_equations(void) {
     /* The flagship 3-level split for a fully parametric quadratic. */
     run_test("Reduce[a x^2 + b x + c == 0, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-             "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], "
-             "Rational[1, 2]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], "
-             "Power[a, -1], Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], "
-             "Times[-4, a, c]], Rational[1, 2]]]]]]], And[Equal[a, 0], "
+             "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, "
+             "a, c]], Rational[1, 2]]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, "
+             "2], Power[a, -1], Plus[Times[-1, b], Power[Plus[Power[b, 2], "
+             "Times[-4, a, c]], Rational[1, 2]]]]]], And[Equal[a, 0], "
              "Unequal[b, 0], Equal[x, Times[-1, Power[b, -1], c]]], "
              "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
@@ -1531,9 +1531,9 @@ static void test_transcendental_log_exp(void) {
     /* Polynomial in Exp[t]: two 2 Pi I C[1] periodic families. */
     run_test("Reduce[Exp[2 t] - 3 Exp[t] + 2 == 0, t]",
              "Or[And[Element[C[1], Integers], "
-                    "Equal[t, Times[Complex[0, 2], C[1], Pi]]], "
+                    "Equal[t, Times[Complex[0, 2], Pi, C[1]]]], "
                 "And[Element[C[1], Integers], "
-                    "Equal[t, Plus[Log[2], Times[Complex[0, 2], C[1], Pi]]]]]");
+                    "Equal[t, Plus[Times[Complex[0, 2], Pi, C[1]], Log[2]]]]]");
 
     /* A single forward-trig equation is solved (its complete periodic family),
      * not echoed. */
@@ -1543,11 +1543,11 @@ static void test_transcendental_log_exp(void) {
      * split (not misrouted to the transcendental solver). */
     run_test("Reduce[a x^2 + b x + c == 0, x]",
              "Or[And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
-                 "Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, a, c]], "
-                 "Rational[1, 2]]]]]], "
-                 "And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], Power[a, -1], "
                  "Plus[Times[-1, b], Times[-1, Power[Plus[Power[b, 2], Times[-4, "
-                 "a, c]], Rational[1, 2]]]]]]], "
+                 "a, c]], Rational[1, "
+                 "2]]]]]]], And[Unequal[a, 0], Equal[x, Times[Rational[1, 2], "
+                 "Power[a, -1], Plus[Times[-1, b], Power[Plus[Power[b, 2], Times[-4, "
+                 "a, c]], Rational[1, 2]]]]]], "
                  "And[Equal[a, 0], Unequal[b, 0], Equal[x, Times[-1, Power[b, -1], c]]], "
                  "And[Equal[a, 0], Equal[b, 0], Equal[c, 0]]]");
 }
@@ -1686,9 +1686,9 @@ static void test_trig_ineq_region(void) {
 static void test_reals_parametric_families(void) {
     run_test("Reduce[Sin[x] == a, x, Reals]",
              "Or[And[Inequality[-1, LessEqual, a, LessEqual, 1], Element[C[1], Integers], "
-                 "Equal[x, Plus[Pi, Times[2, C[1], Pi], Times[-1, ArcSin[a]]]]], "
+                 "Equal[x, Plus[Pi, Times[-1, ArcSin[a]], Times[2, Pi, C[1]]]]], "
                 "And[Inequality[-1, LessEqual, a, LessEqual, 1], Element[C[1], Integers], "
-                 "Equal[x, Plus[Times[2, C[1], Pi], ArcSin[a]]]]]");
+                 "Equal[x, Plus[ArcSin[a], Times[2, Pi, C[1]]]]]]");
     run_test("Reduce[Exp[x] == a, x, Reals]", "And[Greater[a, 0], Equal[x, Log[a]]]");
     run_test("Reduce[Cosh[x] == a, x, Reals]",
              "Or[And[GreaterEqual[a, 1], Equal[x, Times[-1, ArcCosh[a]]]], "
@@ -1738,15 +1738,15 @@ static void test_reals_unknown_roots_decline(void) {
 static void test_reals_transcendental_root_isolation(void) {
     /* The headline case: x < -r || 0 < x < r with r the root of x - 2 Sin[x]. */
     run_test("Reduce[Sin[x] > x/2, x, Reals]",
-             "Or[Less[x, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], -1.89549]]], "
-             "Inequality[0, Less, x, Less, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], 1.89549]]]]");
+             "Or[Less[x, Root[List[Function[Plus[Times[-2, Sin[Slot[1]]], Slot[1]]], -1.89549]]], "
+             "Inequality[0, Less, x, Less, Root[List[Function[Plus[Times[-2, Sin[Slot[1]]], Slot[1]]], 1.89549]]]]");
     run_test("Reduce[Sin[x] >= x/2, x, Reals]",
-             "Or[LessEqual[x, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], -1.89549]]], "
-             "Inequality[0, LessEqual, x, LessEqual, Root[List[Function[Plus[Slot[1], Times[-2, Sin[Slot[1]]]]], 1.89549]]]]");
+             "Or[LessEqual[x, Root[List[Function[Plus[Times[-2, Sin[Slot[1]]], Slot[1]]], -1.89549]]], "
+             "Inequality[0, LessEqual, x, LessEqual, Root[List[Function[Plus[Times[-2, Sin[Slot[1]]], Slot[1]]], 1.89549]]]]");
     run_test("Abs[N[Reduce[Sin[x] > x/2, x, Reals][[2, 5]], 25] - 1.895494267033980947144036`25] < 10^-22",
              "True");
     run_test("Reduce[Cos[x] == x, x, Reals]",
-             "Equal[x, Root[List[Function[Plus[Slot[1], Times[-1, Cos[Slot[1]]]]], 0.739085]]]");
+             "Equal[x, Root[List[Function[Plus[Times[-1, Cos[Slot[1]]], Slot[1]]], 0.739085]]]");
     run_test("Abs[N[Reduce[Cos[x] == x, x, Reals][[2]], 30] - "
              "0.739085133215160641655312087674`30] < 10^-27", "True");
     /* Exp: right tail certified by the monotone-derivative chain. */

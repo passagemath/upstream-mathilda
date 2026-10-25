@@ -176,7 +176,7 @@ void test_chi_series_at_zero() {
 
 void test_chi_series_at_infinity() {
     assert_eval_eq("Normal[Series[CoshIntegral[x], {x, Infinity, 3}]]",
-                   "(-1/2*I) Pi + Cosh[x]/x^2 + Sinh[x] (1/x + 2/x^3)", 0);
+                   "(-1/2*I) Pi + Cosh[x]/x^2 + (2/x^3 + 1/x) Sinh[x]", 0);
 }
 
 /* ---- Integrate emission --------------------------------------------- */

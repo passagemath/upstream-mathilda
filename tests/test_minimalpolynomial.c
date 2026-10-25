@@ -121,7 +121,7 @@ static void test_unevaluated(void) {
     run_test("MinimalPolynomial[Pi, x]",
              "MinimalPolynomial[Pi, x]");
     run_test("MinimalPolynomial[x + Log[2], x]",
-             "MinimalPolynomial[Plus[Log[2], x], x]");
+             "MinimalPolynomial[Plus[x, Log[2]], x]");
 }
 
 /* A Root[] object whose NUMERIC refinement does not converge must still get its

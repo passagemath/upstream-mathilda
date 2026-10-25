@@ -74,19 +74,19 @@ void test_log_inverse_positive(void) {
 void test_log_power_real_exponent(void) {
     /* Log[a^p] -> p Log[a] when a positive and p real. */
     assert_eval_eq("Simplify[Log[a^p], a > 0 && Element[p, Reals]]",
-                   "Log[a] p", 0);
+                   "p Log[a]", 0);
 }
 
 void test_log_power_integer_exponent_through_real(void) {
     /* Integer exponent is real by lattice. */
     assert_eval_eq("Simplify[Log[a^n], a > 0 && Element[n, Integers]]",
-                   "Log[a] n", 0);
+                   "n Log[a]", 0);
 }
 
 void test_log_power_no_real_assumption(void) {
     /* Without proving the exponent real, the rewrite must NOT fire. */
     assert_eval_eq("Simplify[Log[a^p], a > 0]",
-                   "Log[a] p", 0);
+                   "p Log[a]", 0);
 }
 
 void test_log_power_negative_base(void) {
@@ -266,7 +266,7 @@ void test_exp_periodicity_sum(void) {
 }
 void test_exp_periodicity_no_integer(void) {
     assert_eval_eq("Simplify[Exp[x + 2 I Pi n] - Exp[x]]",
-                   "-E^x + E^((2*I) Pi n + x)", 0);
+                   "-E^x + E^((2*I) n Pi + x)", 0);
 }
 
 /* T5: (-1)^(k+n) integer-exponent split; and the full Cos[nPi]-Exp[I n Pi]. */
@@ -380,11 +380,11 @@ void test_pi_period_tan_any(void) {
 }
 void test_pi_period_no_integer_declines(void) {
     /* Without n integer, 2 n Pi is not an integer multiple of Pi. */
-    assert_eval_eq("Simplify[Sin[x + 2 n Pi]]", "Sin[2 Pi n + x]", 0);
+    assert_eval_eq("Simplify[Sin[x + 2 n Pi]]", "Sin[2 n Pi + x]", 0);
 }
 void test_pi_period_half_multiple_declines(void) {
     /* n Pi/2 is not an integer multiple of Pi. */
-    assert_eval_eq("Simplify[Sin[x + n Pi/2], Element[n, Integers]]", "Sin[1/2 Pi n + x]", 0);
+    assert_eval_eq("Simplify[Sin[x + n Pi/2], Element[n, Integers]]", "Sin[1/2 n Pi + x]", 0);
 }
 
 /* ---- v0.335: Sqrt-local radicand preparation (double/half-angle) ---- */
@@ -414,7 +414,7 @@ void test_sqrt_double_angle_no_assumption_declines(void) {
 void test_sqrt_prepare_longer_plus_declines(void) {
     /* 3-term Plus: the 2-element rule patterns do not match. */
     assert_eval_eq("Simplify[Sqrt[1 + Cos[2 x] + y], Element[x, Reals] && Element[y, Reals]]",
-                   "Sqrt[1 + Cos[2 x] + y]", 0);
+                   "Sqrt[1 + y + Cos[2 x]]", 0);
 }
 
 int main(void) {

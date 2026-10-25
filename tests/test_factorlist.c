@@ -61,14 +61,14 @@ void test_factorlist_options() {
     check("FactorList[x^2+1, Extension->I]", "{{1, 1}, {-I + x, 1}, {I + x, 1}}");
     /* Extension -> Sqrt[2]: algebraic factors (Mathilda's Factor normal form). */
     check("FactorList[x^4-2, Extension->Sqrt[2]]",
-          "{{1, 1}, {Sqrt[2] + x^2, 1}, {-Sqrt[2] + x^2, 1}}");
+          "{{1, 1}, {-Sqrt[2] + x^2, 1}, {Sqrt[2] + x^2, 1}}");
 }
 
 /* ---- Non-polynomial expressions (Factor treats kernels as generators) ---- */
 void test_factorlist_nonpolynomial() {
     /* Sqrt[x] is a generator; Power[x,1/2] is itself an irreducible factor. */
     check("FactorList[x^2-Sqrt[x]]",
-          "{{1, 1}, {Sqrt[x], 1}, {-1 + Sqrt[x], 1}, {1 + Sqrt[x] + x, 1}}");
+          "{{1, 1}, {-1 + Sqrt[x], 1}, {Sqrt[x], 1}, {1 + Sqrt[x] + x, 1}}");
 }
 
 /* ---- Round-trip invariant: Times @@ Power @@@ FactorList[p] == p ----

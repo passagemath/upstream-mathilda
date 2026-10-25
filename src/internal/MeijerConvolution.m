@@ -121,12 +121,31 @@ MeijerConvolution`Run[f_, x_Symbol, assum_] := Catch[Module[
   If[cond === False, Throw[$Failed, MeijerConvolution`fail]];
   (* u = x^2: x^alpha dx = u^((alpha+1)/2 - 1) du / 2 ;  s = (alpha+1)/2 *)
   s = (alpha + 1)/2;
-  w1 = K1[[4]]; w2 = K2[[4]];
+  (* Two oscillating kernels of different frequency make the integral
+     discontinuous where the frequencies cross (Weber-Schafheitlin), and the
+     theorem's G holds only on the side where its argument w2/w1 is below 1.
+     Build both orientations and choose by that side; the order of the factors
+     in the product must not decide the answer. *)
+  If[K1[[7]] === "osc" && K2[[7]] === "osc" && !TrueQ[Simplify[K1[[8]]^2 == K2[[8]]^2, assum]],
+    Module[{q = K2[[4]]/K1[[4]], lt, gt},
+      lt = MeijerConvolution`Prove[q < 1, assum];
+      gt = MeijerConvolution`Prove[q > 1, assum];
+      res = Which[
+        lt === True, MeijerConvolution`Conv[K1, K2, C, s, assum],
+        gt === True, MeijerConvolution`Conv[K2, K1, C, s, assum],
+        True, With[{r12 = MeijerConvolution`Conv[K1, K2, C, s, assum],
+                    r21 = MeijerConvolution`Conv[K2, K1, C, s, assum],
+                    c12 = Simplify[q < 1, assum], c21 = Simplify[q > 1, assum]},
+          Piecewise[{{r12, c12}, {r21, c21}}]]]],
+    res = MeijerConvolution`Conv[K1, K2, C, s, assum]];
+  If[cond === True, res, ConditionalExpression[res, cond]]],
+  MeijerConvolution`fail];
+
+(* The convolution theorem with u^(s-1) absorbed into the first kernel. *)
+MeijerConvolution`Conv[K1_, K2_, C_, s_, assum_] := Module[
+  {w1 = K1[[4]], w2 = K2[[4]], an, ap, bm, bq, cn, cp, dm, dq},
   an = K1[[2, 1]] + s - 1; ap = K1[[2, 2]] + s - 1;
   bm = K1[[3, 1]] + s - 1; bq = K1[[3, 2]] + s - 1;
   cn = K2[[2, 1]]; cp = K2[[2, 2]]; dm = K2[[3, 1]]; dq = K2[[3, 2]];
-  res = (C/2) K1[[1]] K2[[1]] w1^(1 - s) (1/w1) MeijerG[{Join[-bm, cn], Join[-bq, cp]},
-        {Join[-an, dm], Join[-ap, dq]}, w2/w1];
-  res = Simplify[res];
-  If[cond === True, res, ConditionalExpression[res, cond]]],
-  MeijerConvolution`fail];
+  Simplify[(C/2) K1[[1]] K2[[1]] w1^(1 - s) (1/w1) MeijerG[{Join[-bm, cn], Join[-bq, cp]},
+        {Join[-an, dm], Join[-ap, dq]}, w2/w1], assum]];

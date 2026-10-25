@@ -94,7 +94,7 @@ static void test_accept_forms(void) {
     accept_form("1/x+1/y", RCM_TOGETHER,
                 "Times[Power[x, -1], Power[y, -1], Plus[x, y]]");
     accept_form("1/(1+Log[x])+1/Log[x]", RCM_TOGETHER,
-                "Times[Power[Plus[Log[x], Power[Log[x], 2]], -1], Plus[1, Times[2, Log[x]]]]");
+                "Times[Plus[1, Times[2, Log[x]]], Power[Plus[Log[x], Power[Log[x], 2]], -1]]");
     accept_form("(E^(2x)-1)/(E^x-1)", RCM_TOGETHER, "Plus[1, Power[E, x]]");
     accept_form("1/(x-I)+1/(x+I)", RCM_TOGETHER,
                 "Times[2, x, Power[Plus[1, Power[x, 2]], -1]]");

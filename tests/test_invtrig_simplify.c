@@ -211,7 +211,7 @@ void test_invtrig_arctan_reciprocal_no_assumption(void) {
     /* Without sign info the sum is not collapsible (the value is
      * Pi/2 for x > 0 but -Pi/2 for x < 0). */
     assert_eval_eq("Simplify[ArcTan[x] + ArcTan[1/x]]",
-                   "ArcTan[x] + ArcTan[1/x]", 0);
+                   "ArcTan[1/x] + ArcTan[x]", 0);
 }
 
 void test_invtrig_arctan_reciprocal_positive(void) {

@@ -141,7 +141,7 @@ static void test_trivariate_already_factored_irreducible_x_indep(void) {
      * trivariate input.  Should factor as (y-z)(y+z) regardless of
      * which variable Phase 4 specialises. */
     check_factor("Factor[(y - z) (y + z) + 0 x]",
-                 "Times[Plus[y, z], Plus[y, Times[-1, z]]]");
+                 "Times[Plus[y, Times[-1, z]], Plus[y, z]]");
 }
 
 /* ====================================================================== */
@@ -277,15 +277,15 @@ static void test_f1_scale_mixed_monic_and_nonmonic(void) {
      * so neither variable is monic-after-content-extraction.  Three
      * factors: one Stage 2-like (2x+y), two monic ((x+y), (x+2y)). */
     check_factor("Factor[Expand[(2x+y)(x+y)(x+2y)]]",
-                 "Times[Plus[x, y], Plus[x, Times[2, y]], "
-                 "Plus[Times[2, x], y]]");
+                 "Times[Plus[x, y], Plus[Times[2, x], y], "
+                 "Plus[x, Times[2, y]]]");
 }
 
 static void test_f1_scale_a3_b3_quadratic(void) {
     /* 2 a^2 - 5 a b + 3 b^2 = (a - b)(2a - 3b).  lc_a = 2, lc_b = 3. */
     check_factor("Factor[2 a^2 - 5 a b + 3 b^2]",
-                 "Times[Plus[a, Times[-1, b]], "
-                 "Plus[Times[2, a], Times[-3, b]]]");
+                 "Times[Plus[Times[2, a], "
+                 "Times[-3, b]], Plus[a, Times[-1, b]]]");
 }
 
 static void test_f1_scale_irreducible_lc_two(void) {

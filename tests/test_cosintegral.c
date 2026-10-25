@@ -181,7 +181,7 @@ void test_ci_series_at_zero() {
 
 void test_ci_series_at_infinity() {
     assert_eval_eq("Normal[Series[CosIntegral[x], {x, Infinity, 3}]]",
-                   "-Cos[x]/x^2 + Sin[x] (1/x - 2/x^3)", 0);
+                   "-Cos[x]/x^2 + (-2/x^3 + 1/x) Sin[x]", 0);
 }
 
 void test_ci_series_at_point() {

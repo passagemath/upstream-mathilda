@@ -70,7 +70,7 @@ static void test_detection(void) {
  * ---------------------------------------------------------------------- */
 static void test_segment_values(void) {
     /* Marquee example: 1/x from 1-I to 2+3I. */
-    check_eq("Integrate[1/x, {x, 1 - I, 2 + 3 I}]", "Log[2 + 3*I] - Log[1 - I]");
+    check_eq("Integrate[1/x, {x, 1 - I, 2 + 3 I}]", "-Log[1 - I] + Log[2 + 3*I]");
     /* ... and its value, pinned numerically. */
     check_eq("Chop[N[Integrate[1/x, {x, 1 - I, 2 + 3 I}] "
              "- (Log[2 + 3 I] - Log[1 - I])]]", "0");
@@ -137,7 +137,7 @@ static void test_contours(void) {
 static void test_dispatch(void) {
     /* Explicit entry point matches the auto-dispatched result. */
     check_eq("Integrate`LineIntegral[1/x, {x, 1 - I, 2 + 3 I}]",
-             "Log[2 + 3*I] - Log[1 - I]");
+             "-Log[1 - I] + Log[2 + 3*I]");
     /* Explicit builtin with real endpoints degenerates to the ordinary integral. */
     check_eq("Integrate`LineIntegral[z^2, {z, 0, 2}]", "8/3");
 

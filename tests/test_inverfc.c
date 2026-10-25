@@ -111,10 +111,10 @@ void test_inverfc_arbitrary_precision() {
 
 void test_inverfc_derivatives() {
     assert_eval_eq("D[InverseErfc[x], x]",
-                   "-1/2 Sqrt[Pi] E^InverseErfc[x]^2", 0);
+                   "-1/2 E^InverseErfc[x]^2 Sqrt[Pi]", 0);
     /* Second derivative (two sign flips cancel: same shape as InverseErf'). */
     assert_eval_eq("D[InverseErfc[x], {x, 2}]",
-                   "1/2 Pi InverseErfc[x] E^(2 InverseErfc[x]^2)", 0);
+                   "1/2 E^(2 InverseErfc[x]^2) Pi InverseErfc[x]", 0);
 }
 
 /* ---- Listable & attributes ------------------------------------------ */

@@ -173,7 +173,7 @@ void test_shi_series_at_zero() {
 
 void test_shi_series_at_infinity() {
     assert_eval_eq("Normal[Series[SinhIntegral[x], {x, Infinity, 3}]]",
-                   "(-1/2*I) Pi + Sinh[x]/x^2 + Cosh[x] (1/x + 2/x^3)", 0);
+                   "(-1/2*I) Pi + (2/x^3 + 1/x) Cosh[x] + Sinh[x]/x^2", 0);
 }
 
 /* ---- Integrate emission --------------------------------------------- */

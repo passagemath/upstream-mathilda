@@ -342,7 +342,7 @@ static void test_flat_upvalue_longer_sum(void) {
     ev("mod70 /: mod70[a_, p_] + mod70[b_, p_] := mod70[Mod[a + b, p], p]");
     assert_eval_eq("mod70[1, 5] + mod70[2, 5]", "mod70[3, 5]", 0);               /* exact arity */
     assert_eval_eq("mod70[1, 5] + mod70[2, 5] + mod70[3, 5]", "mod70[1, 5]", 0);  /* leftover -> fixed point */
-    assert_eval_eq("mod70[1, 5] + mod70[2, 5] + z70", "mod70[3, 5] + z70", 0);   /* non-matching leftover kept */
+    assert_eval_eq("mod70[1, 5] + mod70[2, 5] + z70", "z70 + mod70[3, 5]", 0);   /* non-matching leftover kept */
     ev("d70 /: d70[a_] + d70[b_] := d70[a + b]");
     assert_eval_eq("d70[1] + d70[2] + d70[3]", "d70[6]", 0);
     assert_eval_eq("d70[1] + d70[2] + d70[3] + d70[4]", "d70[10]", 0);
@@ -352,7 +352,7 @@ static void test_flat_downvalue_leftover(void) {
     /* a user Flat+Orderless head: DownValue (not UpValue) fires with leftover */
     ev("SetAttributes[g71, {Flat, Orderless}]");
     ev("g71[k71[a_], k71[b_]] := k71[a + b]");
-    assert_eval_eq("g71[k71[1], k71[2], m71]", "g71[k71[3], m71]", 0);
+    assert_eval_eq("g71[k71[1], k71[2], m71]", "g71[m71, k71[3]]", 0);
 }
 
 static void test_flat_ordered_any_run(void) {

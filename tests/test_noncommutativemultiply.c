@@ -76,7 +76,7 @@ void test_ncm_print(void) {
     /* Plus (looser) is parenthesised as an NCM argument. */
     assert_eval_eq("(a + b) ** c", "(a + b) ** c", 0);
     /* NCM (tighter than Plus) is NOT parenthesised inside Plus. */
-    assert_eval_eq("a ** b + c", "a ** b + c", 0);
+    assert_eval_eq("a ** b + c", "c + a ** b", 0);
 }
 
 /* ---- 7. Precedence: Plus < Times < Dot < NCM < Power ---- */

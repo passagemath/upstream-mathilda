@@ -760,7 +760,7 @@ static void test_flint_poly_ops(void) {
     check_builtin("FLINT`Factor[Sin[x]]", "FLINT`Factor[Sin[x]]");
 
     /* FLINT`FactorSquareFree[p] — group by multiplicity, no irreducible split. */
-    check_builtin("FLINT`FactorSquareFree[(x - 1)^2 (x + 1)]", "(1 + x) (-1 + x)^2");
+    check_builtin("FLINT`FactorSquareFree[(x - 1)^2 (x + 1)]", "(-1 + x)^2 (1 + x)");
 
     /* Transparent Resultant now routes plain Q through FLINT and MUST equal
      * the classical convention (verified sign/degree-independent). */
@@ -790,16 +790,16 @@ static void test_flint_poly_ops(void) {
      * the primitive positive-leading convention with rational content split out,
      * matching Mathematica. A globally negative lead is pulled out as -1
      * (-x^2+y^2 -> -(x-y)(x+y)), the WL-canonical form. */
-    check_builtin("Factor[x^2 - y^2]", "(x + y) (x - y)");
-    check_builtin("Factor[-x^2 + y^2]", "-(x + y) (x - y)");
+    check_builtin("Factor[x^2 - y^2]", "(x - y) (x + y)");
+    check_builtin("Factor[-x^2 + y^2]", "-(x - y) (x + y)");
     check_builtin("Factor[4 x^2 - 9 y^2]", "(2 x - 3 y) (2 x + 3 y)");
-    check_builtin("Factor[2 x^2 - 2 y^2]", "2 (x + y) (x - y)");
+    check_builtin("Factor[2 x^2 - 2 y^2]", "2 (x - y) (x + y)");
     check_builtin("Factor[6 x^2 y + 9 x y^2]", "3 x y (2 x + 3 y)");
     check_builtin("Factor[x^2/4 - y^2/9]", "1/36 (3 x - 2 y) (3 x + 2 y)");
     /* Irreducible multivariate: single factor, unchanged. */
     check_builtin("Factor[x + y + z]", "x + y + z");
     /* Rational function: FLINT declines (denominator) -> classical Together. */
-    check_builtin("Factor[1/(x - y) + 1/(x + y)]", "(2 x)/((x + y) (x - y))");
+    check_builtin("Factor[1/(x - y) + 1/(x + y)]", "(2 x)/((x - y) (x + y))");
     /* Non-polynomial head: FLINT declines (Sin) -> classical treats Sin[x]
      * as a generator. */
     check_builtin("Factor[Sin[x]^2 - y^2]", "(Sin[x] + y) (Sin[x] - y)");

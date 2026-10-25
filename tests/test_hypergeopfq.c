@@ -56,9 +56,9 @@ static void test_reductions(void) {
     assert_eval_eq("HypergeometricPFQ[{1,1},{1/2},z]",
                    "1/(1 - z) + (Sqrt[z] ArcSin[Sqrt[z]])/(1 - z)^(3/2)", 0);
     assert_eval_eq("HypergeometricPFQ[{1,1},{3/2},z]",
-                   "ArcSin[Sqrt[z]]/(Sqrt[z] Sqrt[1 - z])", 0);
+                   "ArcSin[Sqrt[z]]/(Sqrt[1 - z] Sqrt[z])", 0);
     assert_eval_eq("HypergeometricPFQ[{2,1},{3/2},z]",
-                   "1/(2 (1 - z)) + ArcSin[Sqrt[z]]/(2 Sqrt[z] (1 - z)^(3/2))", 0);
+                   "1/(2 (1 - z)) + ArcSin[Sqrt[z]]/(2 (1 - z)^(3/2) Sqrt[z])", 0);
     /* Very-well-poised Ramanujan 4F3 (central-binomial-cubed 1/Pi class). */
     assert_eval_eq("HypergeometricPFQ[{1/2,1/2,1/2,5/4},{1/4,1,1},-1]", "2/Pi", 0);
     /* A nearby but non-matching 4F3 must NOT reduce. */
@@ -83,7 +83,7 @@ static void test_named_closed_forms(void) {
     assert_eval_eq("HypergeometricPFQ[{1/2},{3/2},z]", "(Sqrt[Pi] Erfi[Sqrt[z]])/(2 Sqrt[z])", 0);
     assert_eval_eq("HypergeometricPFQ[{-1/2},{1/2},z]", "E^z - Sqrt[Pi] Sqrt[z] Erfi[Sqrt[z]]", 0);
     assert_eval_eq("HypergeometricPFQ[{1},{3/2},-z]",
-                   "(Sqrt[Pi] Erfi[Sqrt[z]] E^(-z))/(2 Sqrt[z])", 0);
+                   "(E^(-z) Sqrt[Pi] Erfi[Sqrt[z]])/(2 Sqrt[z])", 0);
     assert_eval_eq("HypergeometricPFQ[{2},{3},z]", "(2 (E^z - (-1 + E^z)/z))/z", 0);
     /* a neither half-integer nor a positive integer: declined (the incomplete
      * gamma form has no numerics on its cut, the series does) */
@@ -95,7 +95,7 @@ static void test_named_closed_forms(void) {
     assert_eval_eq("HypergeometricPFQ[{1/2,1/2},{3/2},-z]", "ArcSinh[Sqrt[z]]/Sqrt[z]", 0);
     /* symbolic Gauss parameters stay, as in the reference system */
     assert_eval_eq("HypergeometricPFQ[{a,b},{c},1]", "HypergeometricPFQ[{a, b}, {c}, 1]", 0);
-    assert_eval_eq("HypergeometricPFQ[{1/3,1/2},{2},1]", "(2 Gamma[7/6])/(Gamma[5/3] Sqrt[Pi])", 0);
+    assert_eval_eq("HypergeometricPFQ[{1/3,1/2},{2},1]", "(2 Gamma[7/6])/(Sqrt[Pi] Gamma[5/3])", 0);
 
     const char* pts[] = { "7/3", "-7/3", "3/10", "-3/10", "2/5 + 3/4 I" };
     for (size_t k = 0; k < sizeof pts / sizeof pts[0]; k++) {

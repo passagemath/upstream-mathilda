@@ -886,6 +886,25 @@ void test_sequence_substitution_v592() {
 }
 
 /* Coefficient as the reference computes it, and nested option lists. */
+/* Numeric bases under one symbolic exponent merge, as in the reference.
+ * Comparisons by === so the checks do not depend on printed factor order. */
+void test_numeric_base_power_merge_v594() {
+    assert_eval_eq("ClearAll[a, b, x, y, f]", "Null", 0);
+    assert_eval_eq("{2^a 3^a === 6^a, 3^-a 5^a === (5/3)^a, 2^a 3^a 5^-a === (6/5)^a, "
+                   "3^-a 5^-a === 15^(-a), 2^(a b) 3^(a b) === 6^(a b)}",
+                   "{True, True, True, True, True}", 0);
+    /* One base that is not a positive real may join; two may not. */
+    assert_eval_eq("{(-2)^a 3^a === (-6)^a, (-2)^-a 3^a === (-2/3)^(-a), "
+                   "Head[(-2)^a (-3)^a], 2^a I^a === (2 I)^a}",
+                   "{True, True, Times, True}", 0);
+    /* Numeric-quantity bases merge; symbolic ones and unequal exponents do not. */
+    assert_eval_eq("{Sinh[1]^a Cosh[1]^a === (Cosh[1] Sinh[1])^a, "
+                   "Log[2]^a Log[3]^a === (Log[2] Log[3])^a}", "{True, True}", 0);
+    assert_eval_eq("{Head[x^a y^a], Head[2^a f[1]^a], Head[2^a 3^(2 a)], Head[2^a 3^b]}",
+                   "{Times, Times, Times, Times}", 0);
+    assert_eval_eq("Simplify[Sinh[1]^a (1 + Cosh[1])^(-a)]", "Tanh[1/2]^a", 0);
+}
+
 void test_coefficient_v592() {
     assert_eval_eq("ClearAll[a, b, c, d, l, x, y, ep, x1, x2, x3, ff, gg]", "Null", 0);
     assert_eval_eq("{Coefficient[a/x, x, -1], Coefficient[a/x + b x, x, -1], Coefficient[a/x^2 + 3, x, -2]}",
@@ -940,6 +959,7 @@ int main() {
     TEST(test_sign_normal_forms_v591);
     TEST(test_sequence_substitution_v592);
     TEST(test_coefficient_v592);
+    TEST(test_numeric_base_power_merge_v594);
     printf("All tests passed!\n");
     return 0;
 }

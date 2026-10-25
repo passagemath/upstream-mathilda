@@ -416,6 +416,18 @@ Symbolic product.
 **Features**:
 - `Flat`, `Orderless`, `Listable`.
 - Combines numeric constants and groups identical bases into `Power` expressions.
+- **Numeric bases under one symbolic exponent merge** (v0.594), as in the
+  reference: `2^a 3^a` is `6^a`, `3^-a 5^a` is `(5/3)^a`, `2^a 3^a 5^-a` is
+  `(6/5)^a`, and `Sinh[1]^a Cosh[1]^-a` is `Tanh[1]^a`. The exponents must be
+  equal or exactly opposite, and every base a numeric quantity. Symbolic bases
+  never merge: `x^a y^a` and `2^a f[1]^a` stay. `(b1 b2)^e = b1^e b2^e` needs
+  all but one base to be a positive real, so a group admits at most one other
+  base: `(-2)^a 3^a` is `(-6)^a`, while `(-2)^a (-3)^a` stays.
+  - The merged power keeps the exponent of its non-positive base, if there is
+    one, because only a positive base may be inverted to flip a sign.
+  - Otherwise a group whose exponents all agree keeps that exponent
+    (`3^-a 5^-a` is `15^(-a)`), and a mixed group takes the sign without a
+    negative leading coefficient (`a`, not `-a`).
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.

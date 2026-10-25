@@ -108,6 +108,36 @@ static bool is_positive_constant_expr(Expr* e) {
     return false;
 }
 
+/* True for Times[c, ...] with a negative numeric leading coefficient c, or a
+ * sum whose leading term is one: the exponent sign a merged power is written
+ * without (a, not -a; a - b, not b - a). */
+static bool exponent_looks_negative(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    /* A sum by its leading term: b - a reads as negative, a - b does not. */
+    if (h->data.symbol.name == SYM_Plus) return exponent_looks_negative(e->data.function.args[0]);
+    if (h->data.symbol.name != SYM_Times) return false;
+    const Expr* c = e->data.function.args[0];
+    if (c->type == EXPR_INTEGER) return c->data.integer < 0;
+    if (c->type == EXPR_BIGINT) return mpz_sgn(c->data.bigint) < 0;
+    if (c->type == EXPR_REAL) return c->data.real < 0.0;
+    int64_t n, d;
+    if (is_rational((Expr*)c, &n, &d)) return n < 0;
+    return false;
+}
+
+/* A numeric base is positive when that is provable, or when its machine
+ * value is a real clear of zero (Sinh[1], Log[2]): a numeric quantity has one
+ * value, so its sign is decided by evaluating it. */
+static bool numeric_base_positive(Expr* b) {
+    if (is_positive_constant_expr(b)) return true;
+    Expr* v = numericalize(b, numeric_machine_spec());
+    bool pos = v && v->type == EXPR_REAL && v->data.real > 1e-12;
+    if (v) expr_free(v);
+    return pos;
+}
+
 static Expr* multiply_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 #ifdef USE_MPFR
@@ -1083,6 +1113,81 @@ Expr* builtin_times(Expr* res) {
             i = (size_t)-1;
             break;
         }
+    }
+
+    /* Numeric bases under one symbolic exponent merge, as in the reference:
+     *   2^a 3^a -> 6^a,   3^-a 5^a -> (5/3)^a,   2^a 3^a 5^-a -> (6/5)^a,
+     *   (-2)^a 3^a -> (-6)^a,   Sinh[1]^-a Cosh[1]^a -> (Cosh[1]/Sinh[1])^a.
+     * (b1 b2)^e = b1^e b2^e holds whenever at most one of the bases is not a
+     * positive real, so a merged group admits at most one base this cannot
+     * prove positive ((-2)^a (-3)^a stays).  Only a positive base may be
+     * inverted to flip its exponent's sign ((1/z)^a is not z^-a for z < 0),
+     * so the group keeps the exponent of its unsigned base, if any; a group
+     * whose exponents all agree keeps that one (3^-a 5^-a -> 15^-a); a mixed
+     * group takes the sign without an explicit negative factor (a, not -a).
+     * Numeric exponents are the radical fusion's business above; bases that
+     * are not numeric quantities (x^a y^a, f[1]^a) never merge.  A power of a
+     * product stays a power, so the merge cannot cycle. */
+    for (size_t i = 0; i < group_count; i++) {
+        Expr* ei = groups[i].exponent;
+        if (expr_is_numeric_quantity(ei) || !expr_is_numeric_quantity(groups[i].base))
+            continue;
+        Expr* neg_ei = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(ei) }, 2));
+        /* Members: group indices, the first being i; flip[k] when the
+         * member's exponent is -ei. */
+        size_t* mem = malloc(sizeof(size_t) * group_count);
+        bool* flip = malloc(sizeof(bool) * group_count);
+        size_t nmem = 0;
+        int unsigned_k = -1;
+        mem[nmem] = i; flip[nmem] = false;
+        if (!numeric_base_positive(groups[i].base)) unsigned_k = 0;
+        nmem++;
+        for (size_t j = i + 1; j < group_count; j++) {
+            if (!expr_is_numeric_quantity(groups[j].base)) continue;
+            bool same = expr_eq(groups[j].exponent, ei);
+            if (!same && !expr_eq(groups[j].exponent, neg_ei)) continue;
+            if (!numeric_base_positive(groups[j].base)) {
+                if (unsigned_k >= 0) continue;
+                unsigned_k = (int)nmem;
+            }
+            mem[nmem] = j; flip[nmem] = !same;
+            nmem++;
+        }
+        if (nmem > 1) {
+            /* Target sign: the unsigned member's, else the non-negative-looking one. */
+            bool mixed = false;
+            for (size_t k = 1; k < nmem; k++) mixed = mixed || flip[k];
+            bool target_flip;
+            if (unsigned_k >= 0) target_flip = flip[unsigned_k];
+            else target_flip = mixed && exponent_looks_negative(ei);
+            Expr** fac = malloc(sizeof(Expr*) * nmem);
+            for (size_t k = 0; k < nmem; k++) {
+                Expr* b = expr_copy(groups[mem[k]].base);
+                fac[k] = flip[k] == target_flip ? b
+                    : expr_new_function(expr_new_symbol(SYM_Power),
+                          (Expr*[]){ b, expr_new_integer(-1) }, 2);
+            }
+            Expr* merged = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), fac, nmem));
+            free(fac);
+            expr_free(groups[i].base);
+            groups[i].base = merged;
+            if (target_flip) {           /* ei aliases groups[i].exponent */
+                expr_free(groups[i].exponent);
+                groups[i].exponent = expr_copy(neg_ei);
+            }
+            /* Drop the other members, highest index first. */
+            for (size_t k = nmem; k-- > 1; ) {
+                size_t j = mem[k];
+                expr_free(groups[j].base);
+                expr_free(groups[j].exponent);
+                for (size_t s2 = j; s2 + 1 < group_count; s2++) groups[s2] = groups[s2 + 1];
+                group_count--;
+            }
+        }
+        free(mem);
+        free(flip);
+        expr_free(neg_ei);
     }
 
     /* Trig / hyperbolic ratio canonicalization. After base grouping, look for

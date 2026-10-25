@@ -475,6 +475,22 @@ Expr* builtin_factor(Expr* res) {
     }
 
     Expr* f_num = NULL;
+#ifdef USE_FLINT
+    /* The numerator and denominator are genuine polynomials now, so the FLINT
+     * multivariate factoriser that a direct Factor[poly] uses applies to each:
+     * Factor of a large rational expression in 7 variables spent ~50 s in the
+     * classical FactorSquareFree / heuristic path below, where Together plus
+     * the two FLINT factorisations take ~1 s (FeynCalc's FactorList2). Plain
+     * single-argument form only, as for the fast path above. */
+    Expr* flint_den = NULL;
+    if (res->data.function.arg_count == 1 && num_vc >= 2) {
+        f_num = flint_polynomial_factor(num);
+        if (f_num) flint_den = flint_polynomial_factor(den);
+    }
+    if (f_num) {
+        /* fall through to the denominator below with flint_den set */
+    } else
+#endif
     if (num_vc == 1) {
         f_num = bz_factor_to_expr(num, num_vars[0]);
     } else if (num_vc == 2) {
@@ -513,6 +529,10 @@ Expr* builtin_factor(Expr* res) {
     size_t den_eff_vc   = inside_simplify ? num_vc   : den_vc;
 
     Expr* f_den = NULL;
+#ifdef USE_FLINT
+    if (flint_den) f_den = flint_den;
+    else
+#endif
     if (den_eff_vc == 0) {
         f_den = expr_copy(den);
     } else if (den_eff_vc == 1) {

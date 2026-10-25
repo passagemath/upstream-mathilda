@@ -2875,6 +2875,13 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             if (r) return r;
         }
 
+        /* A held expression is not a function of its contents: D[Hold[x], x]
+         * stays inert, as in the reference (and Sin[Hold[x]] gives
+         * Cos[Hold[x]] D[Hold[x], x]). */
+        if (h == SYM_Hold || h == SYM_HoldForm || h == SYM_HoldComplete ||
+            h == SYM_HoldPattern)
+            return NULL;
+
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);
@@ -2913,6 +2920,30 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             && head->data.function.args[0]->data.symbol.name == SYM_Integrate);
         if (x && inact_int && n == 2 && expr_eq(args[1], x))
             return expr_copy(args[0]);
+        /* An inactive integral over a non-list "variable" v (Sqrt[x], or a
+         * symbol other than x): the reference's Leibniz form
+         *   D[Inactive[Integrate][e, v], x] = e D[v, x] + Inactive[Integrate][D[e, x], v],
+         * so D[Inactive[Integrate][f[u], Sqrt[x]], x] is f[u]/(2 Sqrt[x]). */
+        bool v_is_list = n == 2 && args[1]->type == EXPR_FUNCTION &&
+                         is_sym(args[1]->data.function.head, "List");
+        if (x && inact_int && n == 2 && !v_is_list) {
+            Expr* dv = deriv_of(args[1], x, nonconsts);
+            Expr* de = deriv_of(args[0], x, nonconsts);
+            if (!dv || !de) { if (dv) expr_free(dv); if (de) expr_free(de); return NULL; }
+            dv = eval_and_free(dv);
+            de = eval_and_free(de);
+            Expr** terms = malloc(2 * sizeof(Expr*));
+            size_t nt = 0;
+            if (!(dv->type == EXPR_INTEGER && dv->data.integer == 0))
+                terms[nt++] = mk_fn2("Times", expr_copy(args[0]), dv);
+            else expr_free(dv);
+            if (!(de->type == EXPR_INTEGER && de->data.integer == 0)) {
+                Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                                  (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+                terms[nt++] = expr_new_function(inact, (Expr*[]){ de, expr_copy(args[1]) }, 2);
+            } else expr_free(de);
+            return nt == 0 ? (free(terms), expr_new_integer(0)) : mk_fnN_adopt(SYM_Plus, terms, nt);
+        }
         /* The DEFINITE companion — the same Leibniz rule the ACTIVE head gets above,
          * for Inactive[Integrate][e, {u, a, b}].  It is what lets a first integral
          * whose constant has been fitted at a point be written in the honest definite
@@ -2961,6 +2992,11 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fnN_adopt(SYM_Plus, terms, nt);
         }
 
+        /* Any other inactive integral (a list spec the rules above do not
+         * cover, e.g. {u, Sqrt[x]}) stays an inert D[...], as in the reference;
+         * it is not an unknown function of its arguments. */
+        if (inact_int) return NULL;
+
         Expr* r = deriv_of_derivative_form(f, x, nonconsts);
         if (r) return r;
 
@@ -2972,6 +3008,28 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
         if (is_sym(head->data.function.head, "InterpolatingFunction")) {
             return chain_rule_unknown(f, x, nonconsts);
         }
+
+        /* Any other compound head h[a][g1..gn] is an unknown function h[a] of
+         * its arguments, as in the reference: D[g[a][x], x] is
+         * Derivative[1][g[a]][x], by the same generic chain rule. A head that
+         * itself depends on x adds the derivative through the head, applied to
+         * the arguments: D[g[x][x], x] is Derivative[1][g[x]][x] +
+         * Derivative[1][g][x][x]. (FeynCalc's FCLoopGLIDifferentiate
+         * differentiates GLI[topo, {n..}][m] this way.) */
+        Expr* dhead = deriv_of(head, x, nonconsts);
+        if (!dhead) return NULL;
+        dhead = eval_and_free(dhead);
+        Expr* through_args = chain_rule_unknown(f, x, nonconsts);
+        if (!through_args) { expr_free(dhead); return NULL; }
+        if (dhead->type == EXPR_INTEGER && dhead->data.integer == 0) {
+            expr_free(dhead);
+            return through_args;
+        }
+        Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) a[i] = expr_copy(args[i]);
+        Expr* through_head = expr_new_function(dhead, a, n);
+        free(a);
+        return mk_fn2("Plus", through_args, through_head);
     }
 
     /* Give up -- caller keeps the expression unevaluated. */

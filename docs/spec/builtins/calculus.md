@@ -48,6 +48,15 @@ Partial derivative.
   `Exp`, `Log`, `Log[b, f]`, all six trig heads and their inverses,
   all six hyperbolic heads and their inverses, and threads
   element-wise over `List`.
+- **A compound head is an unknown function of its arguments** (v0.6013), as
+  in the reference: `D[g[a][x], x]` is `Derivative[1][g[a]][x]`, and
+  `D[g[a][x, y], x]` is `Derivative[1, 0][g[a]][x, y]`. A head that depends on
+  `x` adds the derivative through the head, applied to the arguments:
+  `D[g[x][x], x]` is `Derivative[1][g[x]][x] + Derivative[1][g][x][x]`.
+  An inactive integral over a non-list variable follows the Leibniz form
+  `e D[v, x] + Inactive[Integrate][D[e, x], v]`, so
+  `D[Inactive[Integrate][f[u], Sqrt[x]], x]` is `f[u]/(2 Sqrt[x])`. Any other
+  inactive integral, and a held expression (`D[Hold[x], x]`), stays inert.
 - For a single-argument unknown head, applies the standard chain
   rule `D[f[g], x] -> Derivative[1][f][g] * D[g, x]`.
 - For multi-argument unknown heads, emits the multi-index

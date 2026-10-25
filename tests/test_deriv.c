@@ -257,9 +257,11 @@ static void test_nonconstants(void) {
  * whose integration "variable" is not a symbol. Reached in the wild from
  * Integrate[1/((x^2 - 3x + 1) Sqrt[x^3 - x]), x], which segfaulted. */
 static void test_undifferentiable_subexpression(void) {
-    const char* INT = "Inactive[Integrate][f[u], Sqrt[x]]";
-    const char* DINT =
-        "D[Inactive[Integrate][f[u], Power[x, Rational[1, 2]]], x]";
+    /* The witness used to be Inactive[Integrate][f[u], Sqrt[x]]; the reference
+     * differentiates that by the Leibniz rule (see test_compound_head), so a
+     * held expression, which it keeps inert, stands in. */
+    const char* INT = "Hold[x]";
+    const char* DINT = "D[Hold[x], x]";
     char buf[512], exp[512];
 
     /* Bare: already worked -- compute_deriv's own NULL keeps D unevaluated. */
@@ -283,12 +285,12 @@ static void test_undifferentiable_subexpression(void) {
     /* Power and composition: the chain rule. */
     snprintf(buf, sizeof(buf), "D[%s^2, x]", INT);
     snprintf(exp, sizeof(exp),
-             "Times[2, %s, Inactive[Integrate][f[u], Power[x, Rational[1, 2]]]]",
+             "Times[2, %s, Hold[x]]",
              DINT);
     check(buf, exp);
     snprintf(buf, sizeof(buf), "D[Sin[%s], x]", INT);
     snprintf(exp, sizeof(exp),
-             "Times[Cos[Inactive[Integrate][f[u], Power[x, Rational[1, 2]]]], %s]",
+             "Times[Cos[Hold[x]], %s]",
              DINT);
     check(buf, exp);
 
@@ -310,11 +312,31 @@ static void test_undifferentiable_subexpression(void) {
     check(buf, "0");
 }
 
+/* A compound head is an unknown function of its arguments, as in the
+ * reference; a head depending on x adds the term through the head. FeynCalc's
+ * FCLoopGLIDifferentiate differentiates GLI[topo, {..}][m]. */
+static void test_compound_head(void) {
+    check("D[g[a][x], x]", "Derivative[1][g[a]][x]");
+    check("D[g[a, {1}][x], x]", "Derivative[1][g[a, List[1]]][x]");
+    check("D[g[a][x, y], x]", "Derivative[1, 0][g[a]][x, y]");
+    check("D[g[a][x^2], x]", "Times[2, x, Derivative[1][g[a]][Power[x, 2]]]");
+    check("D[g[a][x], {x, 2}]", "Derivative[2][g[a]][x]");
+    check("D[g[a][y], x]", "0");
+    check("D[g[x][y], x]", "Derivative[1][g][x][y]");
+    check("D[g[x][x], x]", "Plus[Derivative[1][g[x]][x], Derivative[1][g][x][x]]");
+    /* inactive integral: the Leibniz rule over a non-list variable, inert otherwise */
+    check("D[Inactive[Integrate][f[u], Sqrt[x]], x]", "Times[Rational[1, 2], Power[x, Rational[-1, 2]], f[u]]");
+    check("D[Inactive[Integrate][f[x, u], u], x]", "Inactive[Integrate][Derivative[1, 0][f][x, u], u]");
+    check("D[Inactive[Integrate][f[u], {u, Sqrt[x]}], x]",
+          "D[Inactive[Integrate][f[u], List[u, Power[x, Rational[1, 2]]]], x]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_base_cases);
+    TEST(test_compound_head);
     TEST(test_algebraic_rules);
     TEST(test_elementary_chain);
     TEST(test_chain_unknown);

@@ -175,7 +175,10 @@ Expr* builtin_surd(Expr* res) {
     } else if (n->type == EXPR_BIGINT) {
         k = mpz_sgn(n->data.bigint) > 0 ? INT64_MAX : INT64_MIN;  /* parity unused below */
     } else {
-        if (n->type == EXPR_REAL || n->type == EXPR_MPFR ||
+        if (n->type == EXPR_REAL ||
+#ifdef USE_MPFR
+            n->type == EXPR_MPFR ||
+#endif
             (n->type == EXPR_FUNCTION && expr_is_numeric_quantity(n))) {
             char* s = expr_to_string(res);
             mth_message("Surd", "int", "Integer expected at position 2 in %s.", s ? s : "");

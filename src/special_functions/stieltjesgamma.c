@@ -64,7 +64,9 @@ static Expr* sg_numeric(const Expr* n, const Expr* a) {
     if (sg_is_pole(a)) return expr_new_symbol(SYM_ComplexInfinity);
     Expr* r = flint_num_stieltjes(n, a);
     if (!r) return NULL;
+#ifdef USE_MPFR
     if (numeric_min_inexact_bits(a) <= 53) r = numeric_lower_mpfr_to_machine(r);
+#endif
     return r;
 }
 
@@ -74,7 +76,10 @@ Expr* builtin_stieltjesgamma(Expr* res) {
     if (argc != 1 && argc != 2) return NULL;
     Expr* n = res->data.function.args[0];
     bool n_numeric = n->type == EXPR_INTEGER || n->type == EXPR_BIGINT ||
-                     n->type == EXPR_REAL || n->type == EXPR_MPFR ||
+                     n->type == EXPR_REAL ||
+#ifdef USE_MPFR
+                     n->type == EXPR_MPFR ||
+#endif
                      (n->type == EXPR_FUNCTION &&
                       n->data.function.head->type == EXPR_SYMBOL &&
                       (n->data.function.head->data.symbol.name == SYM_Rational ||

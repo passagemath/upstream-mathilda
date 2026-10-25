@@ -54,10 +54,14 @@ static void spec_todo(const char* input, const char* desired) {
 }
 
 /* Prototype correctness: RatCanonPrototype[e] is math-equal to e, i.e.
- * Together[RatCanonPrototype[e] - (e)] collapses to 0. */
+ * Together[RatCanonPrototype[e] - (e)] collapses to 0.  A prototype that
+ * declines stays RatCanonPrototype[e], an opaque kernel to Together, so it is
+ * read as e itself (the check is then trivially true, never a false fail). */
 static void proto_ok(const char* inner) {
     char buf[512];
-    snprintf(buf, sizeof buf, "Together[RatCanonPrototype[%s] - (%s)]", inner, inner);
+    snprintf(buf, sizeof buf,
+             "Together[(RatCanonPrototype[%s] /. RatCanonPrototype -> Identity) - (%s)]",
+             inner, inner);
     spec(buf, "0");
 }
 

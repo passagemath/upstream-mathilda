@@ -115,6 +115,17 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
   Before, any `x[i]` sent the whole expression to the classical multivariate
   Euclid: a rational function in `x[1..7]` took ~29 s and now takes ~0.02 s.
   The same applies to `Cancel`.
+- **Function arguments and symbolic exponents are opaque** (v0.6021), as in
+  the reference. Together combines only through `Plus`, `Times` and `Power`
+  with a rational exponent, so `Together[Gamma[2 - D/2]]`,
+  `Together[f[1/a + 1/b]]`, `Together[Abs[1/a + 1/b]]`,
+  `Together[x^(1/a + 1/b)]` and `Together[(1/a + 1/b)^n]` are unchanged.
+  `Together[Sqrt[1/a + 1/b]]` is still `Sqrt[(a + b)/(a b)]`. The argument
+  used to be rewritten as well (`Gamma[1/2 (4 - D)]`), and it then no longer
+  matched the same kernel written elsewhere. That broke FeynCalc's
+  `FCFeynmanPrepare`. Together threads over `List`, `Equal`, `Unequal`, the
+  inequalities, `And`, `Or`, `Not`, `Rule` and `RuleDelayed`:
+  `Together[1/a + 1/b -> 1/c]` is `(a + b)/(a b) -> 1/c`.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).

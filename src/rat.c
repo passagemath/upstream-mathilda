@@ -1929,9 +1929,22 @@ static Expr* builtin_cancel_compute(Expr* res) {
     return cancel_recursive(arg);
 }
 
+/* The heads Together threads over, as in the reference: lists, equations and
+ * inequalities, logical connectives and rules.  And/Or/Not hold their
+ * arguments but reach Together already evaluated, so they thread too. */
+static bool together_threads_over(const char* head) {
+    return head == SYM_List || head == SYM_Equal || head == SYM_Unequal ||
+           head == SYM_Less || head == SYM_LessEqual || head == SYM_Greater ||
+           head == SYM_GreaterEqual || head == SYM_And || head == SYM_Or ||
+           head == SYM_Not || head == SYM_Rule || head == SYM_RuleDelayed;
+}
+
 static Expr* together_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    if (together_head_holds(e)) return expr_copy(e);
+    if (together_head_holds(e) &&
+        !(e->data.function.head->type == EXPR_SYMBOL &&
+          together_threads_over(e->data.function.head->data.symbol.name)))
+        return expr_copy(e);
     
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol.name;
@@ -2030,12 +2043,7 @@ static Expr* together_recursive(Expr* e) {
             return res;
         }
         
-        if (head == SYM_List ||
-            head == SYM_Equal || head == SYM_Less ||
-            head == SYM_LessEqual || head == SYM_Greater ||
-            head == SYM_GreaterEqual || head == SYM_And ||
-            head == SYM_Or || head == SYM_Not) {
-            
+        if (together_threads_over(head)) {
             size_t count = e->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -2045,7 +2053,23 @@ static Expr* together_recursive(Expr* e) {
             free(args);
             return ret;
         }
-        
+
+        /* Every other head is an opaque kernel, as in the reference: Together
+         * combines only through the field operations, so it never rewrites the
+         * argument of Gamma[2 - D/2], Sin[1/a + 1/b] or f[...], nor a symbolic
+         * exponent (x^(1/a + 1/b), (1/a + 1/b)^n).  A power with a rational
+         * exponent is algebraic in its base, which is combined:
+         * Sqrt[1/a + 1/b] -> Sqrt[(a + b)/(a b)]. */
+        if (head == SYM_Power && e->data.function.arg_count == 2) {
+            const Expr* ex = e->data.function.args[1];
+            bool rational_exp = ex->type == EXPR_INTEGER || ex->type == EXPR_BIGINT ||
+                (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL &&
+                 ex->data.function.head->data.symbol.name == SYM_Rational);
+            if (!rational_exp) return expr_copy(e);
+        } else if (head != SYM_Times) {
+            return expr_copy(e);
+        }
+
         size_t count = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {

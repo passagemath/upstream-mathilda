@@ -106,6 +106,25 @@ static void test_indexed_variables(void) {
              "First[AbsoluteTiming[Together[s^3/(s^2 - x[1]^2) - x[2]/(s + x[1])]]] < 5]");
 }
 
+/* Together combines only through the field operations: a function argument
+ * and a symbolic exponent are opaque, a power with a rational exponent has its
+ * base combined, and lists, equations, inequalities, logical connectives and
+ * rules are threaded over (values from the reference). */
+static void test_kernel_arguments_opaque(void) {
+    run_true("Together[Gamma[2 - D/2]] === Gamma[2 - D/2]");
+    run_true("Together[x2 FVD[p, mu] Gamma[2 - D/2]] === x2 FVD[p, mu] Gamma[2 - D/2]");
+    run_true("Together[f[1/a + 1/b]] === f[1/a + 1/b]");
+    run_true("Together[Abs[1/a + 1/b]] === Abs[1/a + 1/b]");
+    run_true("Together[x^(1/a + 1/b)] === x^(1/a + 1/b)");
+    run_true("Together[(1/a + 1/b)^n] === (1/a + 1/b)^n");
+    run_true("Together[Sqrt[1/a + 1/b]] === Sqrt[(a + b)/(a b)]");
+    run_true("Together[1/a + 1/b + Sin[1/a + 1/b]] === (a + b + a b Sin[1/a + 1/b])/(a b)");
+    run_true("Together[{1/a + 1/b, g[1/a + 1/b]}] === {(a + b)/(a b), g[1/a + 1/b]}");
+    run_true("Together[1/a + 1/b != 1/c] === ((a + b)/(a b) != 1/c)");
+    run_true("Together[1/a + 1/b > 0 && x] === ((a + b)/(a b) > 0 && x)");
+    run_true("Together[1/a + 1/b -> 1/c + 1/d] === ((a + b)/(a b) -> (c + d)/(c d))");
+}
+
 int main(void) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -116,6 +135,7 @@ int main(void) {
     TEST(test_field_cancel);
     TEST(test_field_reduced);
     TEST(test_indexed_variables);
+    TEST(test_kernel_arguments_opaque);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

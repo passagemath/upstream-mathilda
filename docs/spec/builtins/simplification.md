@@ -14,6 +14,24 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**Exponent and argument normal form** (v0.6007), applied before and after
+the search:
+- A compound exponent, or a compound argument of an ordinary head, that equals
+  another one in the same place after `Expand` takes the factored form of the
+  expansion, as the reference writes it. So `a^(3 (-1 + e)) - a^(-3 + 3 e)` and
+  `g[2 (1 + e)] - g[2 + 2 e]` are `0`, and `a^(3 (-1 + e)) b + a^(-3 + 3 e) c` is
+  `a^(3 (-1 + e)) (b + c)`.
+- An exponent whose expansion is strictly smaller is expanded:
+  `la^(2 + 2 (-1 + e))` is `la^(2 e)`.
+- A lone `a^(3 (-1 + e))` keeps its form.
+- Numeric powers with symbolic exponents across the whole expression are
+  written over one coprime basis, found by gcds (no factoring, so huge bases
+  are cheap). `(-a)^x` counts as `(-1)^x a^x`.
+  - Each basis power `b^t` is held as an opaque generator while the search
+    runs, so the equal-exponent merge cannot fold it back.
+  - `2^(2 - 2 e) 5^(1 - 2 e) (1 - 2 e) + 10^(1 - 2 e) (-2 + 4 e)` is then `0`.
+    So is FeynCalc's `FactorList2` check, a sum of products of big prime powers.
+
 `Simplify` runs a bounded heuristic search: it repeatedly applies a battery of
 transforms to the expression and its subexpressions, scores every candidate with
 a complexity measure, and keeps the lowest-scoring form. Transforms compose

@@ -19,6 +19,7 @@
 #include "qa.h"
 #include "qafactor.h"
 #include "simp_log.h"
+#include "expsplit.h"
 #include "flint_qqbar.h"
 
 #include <math.h>
@@ -1428,7 +1429,323 @@ static bool simp_has_rounding_head(const Expr* e) {
     return false;
 }
 
+/* ---- exponent and argument normal form ---------------------------------
+ *
+ * a^(3 (-1 + e)) - a^(-3 + 3 e) and g[2 (1 + e)] - g[2 + 2 e] are 0 to the
+ * reference's Simplify: the exponents (arguments) are one polynomial written
+ * two ways.  Before and after the pipeline, every compound exponent and every
+ * compound argument of an ordinary head is a "slot"; a slot is rewritten when
+ *   - another slot in the same place (an exponent of the same base, or the
+ *     same argument position of the same head) has the same expansion: all of
+ *     them take the factored form of that expansion, as the reference writes
+ *     it (a^(3 (-1 + e)) (b + c)), so the terms can combine; or
+ *   - it is an exponent whose expansion is strictly smaller:
+ *     la^(2 + 2 (-1 + e)) is la^(2 e).
+ * Every other slot keeps its form (a lone a^(3 (-1 + e)) stays). */
+typedef struct {
+    const Expr* parent;     /* the Power, or the call */
+    size_t pos;             /* argument index in parent */
+    Expr* expanded;         /* Expand of the slot */
+} ExpSlot;
+
+static long expn_leaves(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 1;
+    long n = expn_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) n += expn_leaves(e->data.function.args[i]);
+    return n;
+}
+
+static bool expn_head_is(const Expr* e, const char* h) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == h;
+}
+
+static bool expn_is_poly_slot(const Expr* c) {
+    return (expn_head_is(c, SYM_Plus) || expn_head_is(c, SYM_Times)) && !expr_is_numeric_like(c);
+}
+
+/* Is argument `pos` of e a slot? Exponents of Power; arguments of an
+ * ordinary (non-arithmetic, non-structural) head. */
+static bool expn_is_slot(const Expr* e, size_t pos) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    const Expr* c = e->data.function.args[pos];
+    if (!expn_is_poly_slot(c)) return false;
+    if (h == SYM_Power) return pos == 1 && e->data.function.arg_count == 2;
+    return h != SYM_Plus && h != SYM_Times && h != SYM_List && h != SYM_Rule &&
+           h != SYM_Equal && h != SYM_Less && h != SYM_Greater && h != SYM_LessEqual &&
+           h != SYM_GreaterEqual && h != SYM_And && h != SYM_Or && h != SYM_Not &&
+           h != SYM_Rational && h != SYM_Complex;
+}
+
+static void expn_collect(const Expr* e, ExpSlot** v, size_t* n, size_t* cap) {
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (expn_is_slot(e, i)) {
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 16; *v = realloc(*v, *cap * sizeof(ExpSlot)); }
+            (*v)[*n].parent = e;
+            (*v)[*n].pos = i;
+            (*v)[*n].expanded = expr_expand(e->data.function.args[i]);
+            (*n)++;
+        }
+        expn_collect(e->data.function.args[i], v, n, cap);
+    }
+}
+
+/* Slots i and j sit in the same place: exponents of equal bases, or the same
+ * argument position of calls with the same head. */
+static bool expn_same_place(const ExpSlot* a, const ExpSlot* b) {
+    if (a->pos != b->pos) return false;
+    if (!expr_eq(a->parent->data.function.head, b->parent->data.function.head)) return false;
+    if (expn_head_is(a->parent, SYM_Power))
+        return expr_eq(a->parent->data.function.args[0], b->parent->data.function.args[0]);
+    return a->parent->data.function.arg_count == b->parent->data.function.arg_count;
+}
+
+/* The replacement for slot (parent, pos), freshly owned, or NULL to keep it. */
+static Expr* expn_choice(const Expr* parent, size_t pos, const ExpSlot* v, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        if (v[i].parent != parent || v[i].pos != pos || !v[i].expanded) continue;
+        const Expr* p = parent->data.function.args[pos];
+        for (size_t j = 0; j < n; j++)
+            if (j != i && v[j].expanded && expn_same_place(&v[i], &v[j]) &&
+                !expr_eq(v[j].parent->data.function.args[v[j].pos], (Expr*)p) &&
+                expr_eq(v[j].expanded, v[i].expanded)) {
+                Expr* f = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor),
+                              (Expr*[]){ expr_copy(v[i].expanded) }, 1));
+                if (f && expr_eq(f, (Expr*)p)) { expr_free(f); return NULL; }
+                return f;
+            }
+        if (expn_head_is(parent, SYM_Power) && !expr_eq(v[i].expanded, (Expr*)p) &&
+            expn_leaves(v[i].expanded) < expn_leaves(p))
+            return expr_copy(v[i].expanded);
+        return NULL;
+    }
+    return NULL;
+}
+
+static Expr* expn_rebuild(const Expr* e, const ExpSlot* v, size_t n, bool* changed) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) {
+        Expr* ch = expn_is_slot(e, i) ? expn_choice(e, i, v, n) : NULL;
+        if (ch) { a[i] = ch; *changed = true; }
+        else a[i] = expn_rebuild(e->data.function.args[i], v, n, changed);
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    return r;
+}
+
+/* e in exponent/argument normal form (evaluated), or NULL when nothing
+ * changes. */
+static Expr* simp_normalize_exponents(const Expr* e) {
+    ExpSlot* v = NULL;
+    size_t n = 0, cap = 0;
+    expn_collect(e, &v, &n, &cap);
+    Expr* out = NULL;
+    if (n) {
+        bool changed = false;
+        Expr* r = expn_rebuild(e, v, n, &changed);
+        if (changed) out = eval_and_free(r);
+        else expr_free(r);
+    }
+    for (size_t i = 0; i < n; i++) expr_free(v[i].expanded);
+    free(v);
+    return out;
+}
+
+/* ---- numeric powers over one coprime basis --------------------------------
+ *
+ * Terms whose numeric powers share factors across the WHOLE expression, not
+ * just within one product, can only cancel once they are written over a
+ * common basis: 2^(2 - 2 e) 61600520868438199372961^(1 - 2 e) and
+ * 123201041736876398745922^(1 - 2 e) (twice the second base) are the same
+ * power family in different clothes.  The reference's Simplify finds such a
+ * sum to be 0 (FeynCalc's FactorList2 check).  This pre-pass gathers every
+ * power of a rational base with a symbolic exponent ((-a)^x as (-1)^x a^x,
+ * valid on the principal branch for a > 0), refines the
+ * bases into a coprime basis by gcds (no factoring, so huge bases are cheap),
+ * and rewrites each power as the product of basis powers; when every base is
+ * already a basis element nothing changes. */
+static bool nb_rat(const Expr* x, mpz_t num, mpz_t den) {
+    if (expr_is_integer_like(x)) {
+        mpz_t t; expr_to_mpz(x, t); mpz_set(num, t); mpz_clear(t); mpz_set_ui(den, 1);
+        return true;
+    }
+    if (expn_head_is(x, SYM_Rational) && x->data.function.arg_count == 2 &&
+        expr_is_integer_like(x->data.function.args[0]) && expr_is_integer_like(x->data.function.args[1])) {
+        mpz_t t;
+        expr_to_mpz(x->data.function.args[0], t); mpz_set(num, t); mpz_clear(t);
+        expr_to_mpz(x->data.function.args[1], t); mpz_set(den, t); mpz_clear(t);
+        return true;
+    }
+    return false;
+}
+
+static bool nb_is_power(const Expr* e) {
+    if (!expn_head_is(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    if (expr_is_numeric_like(e->data.function.args[1])) return false;
+    mpz_t n, d; mpz_init(n); mpz_init(d);
+    bool ok = nb_rat(e->data.function.args[0], n, d) && mpz_sgn(n) != 0;
+    if (ok) mpz_abs(n, n);
+    ok = ok && !(mpz_cmp_ui(n, 1) == 0 && mpz_cmp_ui(d, 1) == 0);
+    mpz_clear(n); mpz_clear(d);
+    return ok;
+}
+
+typedef struct { mpz_t* v; size_t n, cap; } NbList;
+
+static void nb_push(NbList* L, const mpz_t x) {
+    if (mpz_cmp_ui(x, 1) <= 0) return;
+    for (size_t i = 0; i < L->n; i++) if (mpz_cmp(L->v[i], x) == 0) return;
+    if (L->n == L->cap) { L->cap = L->cap ? 2 * L->cap : 16; L->v = realloc(L->v, L->cap * sizeof(mpz_t)); }
+    mpz_init_set(L->v[L->n++], x);
+}
+
+static void nb_collect(const Expr* e, NbList* L) {
+    if (e->type != EXPR_FUNCTION) return;
+    if (nb_is_power(e)) {
+        mpz_t n, d; mpz_init(n); mpz_init(d);
+        nb_rat(e->data.function.args[0], n, d);
+        mpz_abs(n, n);
+        nb_push(L, n); nb_push(L, d);
+        mpz_clear(n); mpz_clear(d);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) nb_collect(e->data.function.args[i], L);
+}
+
+/* Refine L into a coprime basis; true when some element had to split. */
+static bool nb_refine(NbList* L) {
+    bool split = false, again = true;
+    mpz_t g; mpz_init(g);
+    while (again) {
+        again = false;
+        for (size_t i = 0; i < L->n && !again; i++)
+            for (size_t j = i + 1; j < L->n && !again; j++) {
+                mpz_gcd(g, L->v[i], L->v[j]);
+                if (mpz_cmp_ui(g, 1) <= 0) continue;
+                mpz_t x, y; mpz_init(x); mpz_init(y);
+                mpz_divexact(x, L->v[i], g);
+                mpz_divexact(y, L->v[j], g);
+                NbList M = {0};
+                for (size_t k = 0; k < L->n; k++) if (k != i && k != j) nb_push(&M, L->v[k]);
+                nb_push(&M, g); nb_push(&M, x); nb_push(&M, y);
+                for (size_t k = 0; k < L->n; k++) mpz_clear(L->v[k]);
+                free(L->v);
+                *L = M;
+                mpz_clear(x); mpz_clear(y);
+                split = again = true;
+            }
+    }
+    mpz_clear(g);
+    return split;
+}
+
+/* n^e over the basis: the product of b^(k e). */
+static Expr* nb_over_basis(const mpz_t n0, const Expr* e, const NbList* B, int sgn) {
+    mpz_t n; mpz_init_set(n, n0);
+    Expr** f = malloc((B->n + 1) * sizeof(Expr*));
+    size_t nf = 0;
+    for (size_t k = 0; k < B->n; k++) {
+        long c = 0;
+        while (mpz_cmp_ui(n, 1) > 0 && mpz_divisible_p(n, B->v[k])) { mpz_divexact(n, n, B->v[k]); c++; }
+        if (!c) continue;
+        Expr* ex = expr_expand(eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ expr_new_integer((int64_t)(sgn * c)), expr_copy((Expr*)e) }, 2)));
+        f[nf++] = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_bigint_normalize(expr_new_bigint_from_mpz(B->v[k])), ex }, 2);
+    }
+    mpz_clear(n);
+    Expr* r = nf == 0 ? expr_new_integer(1) : expr_new_function(expr_new_symbol(SYM_Times), f, nf);
+    free(f);
+    return r;
+}
+
+static Expr* nb_rebuild(const Expr* e, const NbList* B);
+static Expr* nb_rebuild(const Expr* e, const NbList* B) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (nb_is_power(e)) {
+        mpz_t n, d; mpz_init(n); mpz_init(d);
+        nb_rat(e->data.function.args[0], n, d);
+        Expr* x = nb_rebuild(e->data.function.args[1], B);   /* 4^x inside the exponent too */
+        /* (-a)^x = (-1)^x a^x for a > 0 on the principal branch */
+        Expr* sgn = mpz_sgn(n) < 0
+            ? expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_new_integer(-1), expr_copy(x) }, 2)
+            : expr_new_integer(1);
+        mpz_abs(n, n);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ sgn, nb_over_basis(n, x, B, 1), nb_over_basis(d, x, B, -1) }, 3);
+        expr_free(x);
+        mpz_clear(n); mpz_clear(d);
+        return r;
+    }
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) a[i] = nb_rebuild(e->data.function.args[i], B);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    return r;
+}
+
+/* e with its numeric powers over one coprime basis, each b^t of the basis
+ * abstracted to a generator symbol (expsplit.c) BEFORE anything evaluates --
+ * evaluated, the equal-exponent merge would fold 2^(1 - 2 e) 48603329^(1 - 2 e)
+ * back into 97206658^(1 - 2 e) -- or NULL when no base splits.  The caller
+ * simplifies the result and restores it through *tab. */
+static Expr* simp_numeric_power_basis(const Expr* e, ExpSplitTab* tab) {
+    NbList L = {0};
+    nb_collect(e, &L);
+    Expr* out = NULL;
+    if (L.n >= 2 && nb_refine(&L)) {
+        Expr* r = nb_rebuild(e, &L);
+        out = expsplit_abstract(r, tab);
+        expr_free(r);
+    }
+    for (size_t k = 0; k < L.n; k++) mpz_clear(L.v[k]);
+    free(L.v);
+    return out;
+}
+
+static Expr* builtin_simplify_core(Expr* res);
+
 Expr* builtin_simplify(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+    Expr* pre = simp_normalize_exponents(res->data.function.args[0]);
+    ExpSplitTab nbtab = {0};
+    {
+        Expr* nb = simp_numeric_power_basis(pre ? pre : res->data.function.args[0], &nbtab);
+        if (nb) { if (pre) expr_free(pre); pre = nb; }
+    }
+    Expr* out;
+    if (pre) {
+        size_t argc = res->data.function.arg_count;
+        Expr** a = malloc(argc * sizeof(Expr*));
+        a[0] = pre;
+        for (size_t i = 1; i < argc; i++) a[i] = expr_copy(res->data.function.args[i]);
+        Expr* call = expr_new_function(expr_copy(res->data.function.head), a, argc);
+        free(a);
+        out = builtin_simplify_core(call);
+        if (nbtab.n) {                   /* put the basis generators back */
+            if (!out) out = expr_copy(call->data.function.args[0]);
+            out = expsplit_restore(out, &nbtab);
+            expsplit_free(&nbtab);
+            expr_free(call);
+        } else {
+            if (!out) return call;       /* Simplify[normalised] stays */
+            expr_free(call);
+        }
+    } else {
+        out = builtin_simplify_core(res);
+        if (!out) return NULL;
+    }
+    Expr* post = simp_normalize_exponents(out);
+    if (post) { expr_free(out); out = post; }
+    return out;
+}
+
+static Expr* builtin_simplify_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 1) return NULL;

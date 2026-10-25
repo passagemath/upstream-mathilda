@@ -59,11 +59,27 @@ void test_exptotrig() {
     printf("testing %s\n", "ExpToTrig[TrigToExp[Csch[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Csch[x]]]", "Csch[x]", 0);
 }
 
+/* Exponents and arguments that are one polynomial written two ways, and
+ * numeric powers that only cancel over a common coprime basis across terms,
+ * are 0 to Simplify, as in the reference (every expected value is the
+ * reference's); a lone exponent keeps its form. */
+static void test_simplify_exponent_normal_form(void) {
+    assert_eval_eq("Simplify[a^(3(-1+e)) - a^(-3+3e)]", "0", 0);
+    assert_eval_eq("Simplify[g[2(1+e)] - g[2+2e]]", "0", 0);
+    assert_eval_eq("Simplify[a^(3(-1+e))]", "a^(3 (-1 + e))", 0);
+    assert_eval_eq("Simplify[la^2 (la^2)^(e-1), la > 0]", "la^(2 e)", 0);
+    assert_eval_eq("Simplify[x^(2 + 2(-1+e))]", "x^(2 e)", 0);
+    assert_eval_eq("Simplify[a^(3(-1+e)) b + a^(-3+3e) c]", "a^(3 (-1 + e)) (b + c)", 0);
+    assert_eval_eq("Simplify[2^(2-2e) 5^(1-2e) (1-2e) + 10^(1-2e) (-2+4e)]", "0", 0);
+    assert_eval_eq("Simplify[(-21/10)^e 21^(-e) 10^e - (-1)^e]", "0", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
     test_trigtoexp();
     test_exptotrig();
+    test_simplify_exponent_normal_form();
     printf("All simp tests passed!\n");
     return 0;
 }

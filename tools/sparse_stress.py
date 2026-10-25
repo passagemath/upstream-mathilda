@@ -31,6 +31,7 @@ Exit status 0 when every case holds (or is EXEMPT), 1 otherwise.
 import argparse
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -314,11 +315,11 @@ def run_chunk(cases, valgrind=False, timeout=900):
         path = fh.name
     cmd = [BINARY, "-file", path]
     if valgrind:
-        # Memory errors (invalid reads/writes, uninitialised use) fail the run
-        # through the exit code. Leaks are compared against an empty script's
-        # (the startup baseline), so they are measured, not counted as errors.
-        cmd = ["valgrind", "--error-exitcode=99", "--leak-check=full",
-               "--errors-for-leak-kinds=none"] + cmd
+        # Memory errors are read from the log (see memory_errors): on macOS
+        # valgrind also reports system-call parameters inside libsystem
+        # (mach_msg2), which are not ours, so its exit code cannot be used.
+        # Leaks are compared against an empty script's (the startup baseline).
+        cmd = ["valgrind", "--leak-check=full", "--errors-for-leak-kinds=none"] + cmd
     try:
         p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
         rc, out, err = p.returncode, p.stdout, p.stderr
@@ -326,11 +327,29 @@ def run_chunk(cases, valgrind=False, timeout=900):
         rc, out, err = -1, "", "chunk timeout"
     os.unlink(path)
     if valgrind:
+        merr = memory_errors(err)
+        if merr:
+            rc = 99
+            err = merr
         lost = definitely_lost(err)
         base = leak_baseline()
         if lost is not None and base is not None and lost > base:
             out += f"LEAK\t{cases[0][0]}\tdefinitely lost {lost} bytes (startup baseline {base})\n"
     return rc, out, err
+
+
+MEMORY_ERROR_KINDS = ("Invalid read", "Invalid write", "Invalid free", "Mismatched free",
+                      "Conditional jump", "Use of uninitialised value", "Source and destination overlap")
+
+
+def memory_errors(valgrind_err):
+    # the first memory-error block of the log that is a real program error,
+    # or "" when there is none
+    blocks = re.split(r"\n==\d+== \n", valgrind_err)
+    for b in blocks:
+        if any(k in b for k in MEMORY_ERROR_KINDS):
+            return b[-1500:]
+    return ""
 
 
 def definitely_lost(valgrind_err):
@@ -356,8 +375,7 @@ def run_chunk_raw(text, valgrind=False, timeout=900):
         path = fh.name
     cmd = [BINARY, "-file", path]
     if valgrind:
-        cmd = ["valgrind", "--error-exitcode=99", "--leak-check=full",
-               "--errors-for-leak-kinds=none"] + cmd
+        cmd = ["valgrind", "--leak-check=full", "--errors-for-leak-kinds=none"] + cmd
     p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
     os.unlink(path)
     return p.returncode, p.stdout, p.stderr

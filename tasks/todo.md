@@ -94,14 +94,21 @@ Plan: ~/.claude/plans/let-s-thoroughly-stress-test-indexed-hopcroft.md.
 - [x] Phase 0: head sweep (1247 heads x 22 call shapes) -> gate modes; `tools/sparse_stress.py` differential fuzzer
 - [x] Phase 1: transparency gate (`src/sparse/sparse_gate.c`, `SymbolDef.sparse_mode`, eval pre/post hooks, 2^27 cap + SparseArray::dense, MATHILDA_SPARSE_DIAG=gate)
 - [x] Fuzz-found fixes: packed 0^0, `{0.,1.}^0` -> 1, `2.5^0` -> 1., -0.0 printing, symmetric Eigenvalues tie order, linalg FullForm messages, double message on declining builtins (evaluator settled step)
-- [ ] Full suite A/B vs HEAD worktree (core evaluator change) before push
-- [ ] Phase 2: native kernels (Dot SpMV/SpMM/SpGEMM, Transpose, structural ops, reductions, IdentityMatrix/DiagonalMatrix/KroneckerProduct sparse constructors, sparse LinearSolve direct+Krylov, Eigenvalues[s, k] Lanczos/Arnoldi)
+- [x] Full suite A/B vs HEAD worktree (core evaluator change) before push -- clean after fixing the settled-step rule (pointer snapshot) and the eigen test; pushed v0.574-v0.581
+- [x] Phase 2a: native reductions (v0.577), structural ops (v0.578), Dot/SpGEMM/MatrixPower/Inner (v0.579)
+- [ ] Phase 2b: sparse LinearSolve direct+Krylov, Eigenvalues[s, k] Lanczos/Arnoldi (worker running)
 - [ ] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
 - [ ] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
-- [ ] Follow-up (pre-existing, not sparse): `x = Total[t]` re-emits a message after Set (eval clock churn invalidates the stamp)
+- [x] `x = rhs` re-evaluated its value after the assignment (double messages, Quiet leak) -- v0.581
+- [x] Fuzz/worker-found fixes: constructor NULL-side crash (v0.580), Unitize (v0.582), dense KroneckerProduct/triangularize/Transpose/Reverse/IdentityMatrix/Flatten (v0.583), MatrixRank generic rank (v0.575)
 - [ ] Follow-up (pre-existing): `Eigensystem` does not exist
 - [ ] Follow-up (pre-existing): non-symmetric machine Eigenvalues tie order: {{1.,2.},{0.,-1.}} -> {1.,-1.}, expected {-1.,1.}
 - [ ] Follow-up (pre-existing): `ReplaceAll[s, 1]` (a non-rule) returns s; it should stay unevaluated
+- [x] `MatrixRank` of a 5x5 mixing machine reals, a symbol and 25-digit integers ran > 30 s -- v0.575
+- [ ] Follow-up: `a = Range[6]; Dot[a, {1,2}]` prints Dot::dotsh twice (builtin declines a packed arg -> post-gate unpacks -> re-run)
+- [ ] Follow-up: `Take[{1,...,6}, 10]` emits no Take::take
+- [ ] Follow-up: dense exact matrix 2-norm `Norm[{{1,0,0},{0,0,2},{0,-1,4}}]` unevaluated
+- [ ] Follow-up: `nd_parallel_for` spawns threads per call (no pool); limits small-op speed (Max, A.M10)
 
 # SparseArray (2026-10-23)
 
@@ -140,78 +147,216 @@ Plan: ~/.claude/plans/similar-to-our-simp-bessel-merry-pudding.md. Derivations: 
 - [ ] Follow-up: N[LaguerreL[nu, -1, x]] stays unevaluated (numeric generalized Laguerre at a = -1)
 - [ ] Follow-up: Simplify bottom-up spends minutes in TrigReduce on `E^-w (poly in w^(2a+j))` (no special function involved); see test_simp_sf_gamma.c GammaIncomplete note
 
-# DSolve — next 500 of Nasser's corpus (§2.2.41–§2.2.45)
+# Group F crypto benchmarks (2026-10-21)
 
-Plan: `~/.claude/plans/let-s-continue-our-implementation-sleepy-rain.md`
-Start version: 0.411 (after M67 / §2.2.40 / problem 4000).
+Plan: ~/.claude/plans/let-s-create-20-additional-quiet-clover.md. Roadmap: benchmarks/CRYPTO_GAPS.md.
 
-Per block: fetch → convert → indvar-audit → register gate+scoreboard → measure
-baseline → diagnose dominant gap → general root-cause fix → re-measure + lower
-baseline → regression A/B → track (STATUS/README/reports/changelog/PLAN) →
-version bump + git tag.
+- [x] Harness: PARI/GP system in run_all.py, 3-digit experiments, `--only` ranges, harness.gp, crypto_data.{m,py,gp}
+- [x] 20 experiments 100-119 (.m/.py/.gp + README each), labels and checks agree across 4 systems except real Mathilda bugs
+- [x] Full four-system run; CRYPTO_GAPS.md ranked roadmap; README / requirements / changelog
+- [ ] NEXT (from CRYPTO_GAPS.md, in order):
+  - [ ] C1 Return inside While/For exits only the loop
+  - [ ] C2 AppendTo/PrependTo no-op on packed lists
+  - [ ] C3 MapThread unevaluated on substituted packed arrays
+  - [ ] C4 Partition[l,n,d,kL,{}] unevaluated
+  - [ ] C5 CoefficientList[p,x,n]
+  - [ ] C6 Quiet leaks Inverse::method / Thread::tdlen (stdout)
+  - [ ] C7 Module temporaries never removed (leak + progressive slowdown)
+  - [ ] C8/P3 MultiplicativeOrder discrete log: Pohlig-Hellman + BSGS/rho, no cap
+  - [ ] A1 Bit* family (ND + Compile surfaces) — [x] BitXor v0.508 (all surfaces, bignums, ::int); [x] BitAnd v0.510 (all surfaces, bignums, WL-verified simplification, no message); [x] BitOr v0.511; [x] BitNot v0.512 (all surfaces incl. autocompile, bignums, involution, ::argx; NumPy-level); BitShift* open; A2 Hash SHA-2/MD5; A3 Modulus-> linear algebra
+  - [ ] P1 integer ListConvolve; P4 packing through Quotient/Map/Dot; P2 Association insertion
+  - [ ] P5 fp-LLL; P6 machine-int Sqrt; P8 Times product tree; P9 InterpolatingPolynomial Modulus; P10 PrimitiveRoot; P11 PolynomialRemainder x^n+1
 
-## Block 1 — §2.2.41 (problems 4001–4100), milestone M69, target v0.412
-- [x] Fetch `Ch2.S1.SS41.htm`
-- [x] Convert → `DE_examples_2241.m` (label 2.2.41) — 100 scalar, 6 IVP
-- [x] `make check-corpus-indvar` green + eyeball spot-check
-- [x] Add `dsolve_corpus_2_2_41_tests` to CMakeLists (baseline 25) + STATUS/README blocks
-- [x] Measure honest baseline → 71/100 (29 non-PASS); dominant gap = regular-singular 2nd-order linear
-- [x] Land general fix: confluent-Whittaker recogniser in normal-form pre-pass → 75/100
-- [x] No masked-wrong-answer (fully 1F1-verified; degenerate 2μ∈ℤ correctly declines)
-- [x] Regression A/B on 7 prior sections: 0 regress, §2.2.20 −4 bonus; specialform unit-test exprs byte-identical HEAD
-- [x] version bump 0.411→0.412; changelog + PLAN M69 + report written
-- [x] gates: §2.2.41 ctest 25≤25 PASS; check-c99 rc=0; check-messages OK; dsolve_tests aborts on PRE-EXISTING exact-ODE test (byte-identical HEAD, not mine)
-- [x] commit + tag v0.412
+## Review
+Results: see benchmarks/CRYPTO_GAPS.md headline. All headline bugs re-verified by the lead on the current binary; the 110 Fermat root cause was corrected (machine-int `Sqrt`, not bignum sqrt).
 
-## Block 2 — §2.2.42 (4101–4200), M70, v0.413 ✅
-- [x] Fetch + convert → DE_examples_2242.m (88 scalar/20 IVP, 12 systems); indvar green
-- [x] Baseline 98/100 (2 non-PASS: 4175 coupled system, 4183 integer-c Jacobi)
-- [x] General fix: coupled leading-matrix LinearSolve fallback in dsolve_linsys_extract_Ab → 99/100
-- [x] A/B systems-heavy (§2223/2229/2239/2240): 0 regress, 0 FAIL; valgrind no new leaks (baseline-identical)
-- [x] gate baseline 1; STATUS/README/PLAN/changelog; version 0.412→0.413
-- [x] commit + tag v0.413
+# Kernel fixes from the book pass (2026-10-20)
 
-## Block 3 — §2.2.43 (4201–4300), M71, v0.414 ✅
-- [x] Fetch + convert → DE_examples_2243.m (100 scalar/15 IVP); indvar green
-- [x] Baseline 92/100 (8 non-PASS; dominant = 5-case first-order _linear cluster)
-- [x] Root cause: ∫Sec·Tan² (≡Sin²/Cos³) spins 12s COLD in Integrate Linearity stage (TrigReduce can't clear trig denom)
-- [x] General fix: Linearity declines a pure Sin^a Cos^b monomial w/ trig denom → Weierstrass closes (0.03s). integrate.c → 93/100
-- [x] Caught + fixed own over-broad-guard regression (§2.2.35-3461); narrowed to pure monomials
-- [x] integrate+risch ctest 100% (33/33); A/B §2230/35/37 no regression; 3497 pre-existing flaky
-- [x] gate baseline 7; STATUS/README/PLAN/changelog; version 0.413→0.414; check-c99/messages green
-- [x] commit + tag v0.414
+Plan: ~/.claude/plans/let-s-update-the-mathilda-cryptic-bee.md (W1-W7). Parallel worktree workers; lead integrates serially with version bumps v0.482+.
 
-## Block 4 — §2.2.44 (4301–4400), M72, v0.415 ✅
-- [x] Fetch + convert → DE_examples_2244.m (100 scalar/2 IVP; 29 sympy=False); indvar green
-- [x] Baseline 91/100 (9 non-PASS; one = 4369 non-interruptible HANG)
-- [x] Root cause: 4369 (trivial linear ODE) needs ∫Sin²/(1+Cos) — a NON-monomial rational trig that thrashes Linearity (M71 monomial guard missed it)
-- [x] General fix: generalize guard to is_rational_trig_in_x (Weierstrass domain); 4369 hang → 0s PASS → 92/100
-- [x] integrate+risch ctest 100%; A/B §2230/35/36/37 identical non-PASS; §2.2.43 still 7; 3461 still PASS
-- [x] gate baseline 8; STATUS/README/PLAN/changelog; version 0.414→0.415; c99/messages green
-- [x] commit + tag v0.415
+- [x] W1 Integrate: spurious Infinity::indet (Check), Exp[-xt]/t^2 hang, zeta(3), PV symbolic, PV Log[b/a], E1 family
+- [x] W2 MeijerG/PolyLog reductions (Erf, BesselK, Pi/2, Pi/4, Catalan, -7 zeta(3)/16)
+- [x] W3 DSolve vpS leak + answer simplification; Limit DirectedInfinity
+- [x] W4 PolyLog[0,2,2.] real; D StruveH; D PolyLog[n,p,z]; StruveH half-integer; HypergeometricU[-n,..]; DirichletL exact Interval
+- [x] W5 Minimize: TimeConstraint overrun + separable const factor; simplified optima; MZ_MAX_INEQ cap; open-boundary pole; slow LPs; docstring
+- [x] W6 StringCases $n; ToCharacterCode enc; IntegerString Roman; TakeLargest ties; Definition ^=; Dot printing; ::tagpos; Plus/Times honour cleared Orderless
+- [x] W7 Compile: Boole; exact Chop tolerance
+- [x] integrate serially (v0.482-v0.507, tagged), full-suite A/B vs fe2fcb54: 35 failing suites identical to baseline (same FAIL lines)
+- [x] book follow-through (a4bb2d19; 564 pp, check-links OK)
 
-## Block 5 — §2.2.45 (4401–4500), M73, v0.416 ✅
-- [x] Fetch + convert → DE_examples_2245.m (100 scalar/0 IVP; 17 sympy=False); indvar green
-- [x] Baseline 93/100 (7 non-PASS; heterogeneous hard/gated gaps)
-- [x] General fix: NEW DSolve`InverseOrientation method (reciprocal dx/dy==1/F, recurse, implicit first integral) → 4408, 94/100
-- [x] Caught+fixed own latency regression (4323 via nested recursion) → gated top-level-only; killswitch A/B 0 regression
-- [x] Bonus: fixed pre-existing solverad.c container-array leak (valgrind back to baseline)
-- [x] gate baseline 6; STATUS/README/PLAN/changelog/calculus.md; version 0.415→0.416; c99/messages green
-- [x] commit + tag v0.416
+# Book update v0.290 -> v0.480 (2026-10-20)
 
-## Review — the next 500 (§2.2.41–§2.2.45, M69–M73, v0.412–v0.416)
-All five 100-problem blocks (problems 4001–4500) landed as gated corpus sections,
-each with a general root-cause fix, 0 FAIL, 0 crash, A/B-confirmed no regression:
-- §2.2.41 (M69, v0.412): 71→75. Confluent-Whittaker recogniser in the normal-form pre-pass (1F1 closed forms for y'-carrying regular-singular 2nd-order linear).
-- §2.2.42 (M70, v0.413): 98→99. Coupled leading-form first-order linear SYSTEM (leading-matrix LinearSolve fallback).
-- §2.2.43 (M71, v0.414): 92→93. Trig-rational ∫Sin^a/Cos^b monomial no longer spins in the Integrate Linearity stage (→ Weierstrass).
-- §2.2.44 (M72, v0.415): 91→92. Generalised that guard to any rational-trig-of-x (removes a non-interruptible hang; 4369).
-- §2.2.45 (M73, v0.416): 93→94. New DSolve`InverseOrientation (x(y) reciprocal) + a Solve-subsystem leak fix.
-Each general fix validated: integrate+risch ctest 100% (33/33) for the Integrate
-changes; killswitch / HEAD A/B for the DSolve changes; valgrind clean; all prior
-gates held (the pre-existing M68 drift in older §2.2.x and the pre-existing
-dsolve_tests exact-ODE abort were confirmed HEAD-identical, not introduced here).
-5 git tags pushed (v0.412–v0.416).
+Plan: ~/.claude/plans/let-s-update-the-mathilda-cryptic-bee.md. Backlog + status: book/BOOK_UPDATE_REVIEW.md.
+
+- [x] Step 0 backlog (BOOK_UPDATE_REVIEW.md)
+- [x] Wave 1 REVIEW fixes R1-R5, R7, R8, R10 (R6 -> A, R9 -> B)
+- [ ] Wave 2/3 writers A-G (parallel, disjoint chapters)
+- [ ] spurious Integrate::nonelem kernel fix (worktree agent)
+- [ ] site index regen, check-links, usage, pdf, index terms, changelog, commit
+
+# RandomPrime (v0.468, 2026-10-19)
+
+Plan: ~/.claude/plans/pasted-content-id-4ce0-let-s-implement-steady-widget.md
+
+- [x] shared PrimeQ test mth_is_prime_u64/_mpz (facint.c); PrimeQ routed through it
+- [x] RandomPrime in random.c (table / u64 rejection / mpz rejection + existence scan), packed output
+- [x] SYM_RandomPrime, Protected, docstring, SKIP_DIMS entry
+- [x] tests (test_random.c, 10 cases incl. primality cross-check)
+- [x] docs (random-number-generation.md, changelog), version bump
+- [x] valgrind (per-call clean), check-c99/messages/packed-aware, PrimeQ test binaries (primenu stale expectation is pre-existing)
+
+# Mathar integral corpus + Integrate extensions (campaign, 2026-10-18)
+
+Plan: ~/.claude/plans/i-would-like-to-cozy-swan.md.  Source: arXiv:1207.5845 TeX
+(scratchpad, sha256 in corpus header).  Tooling: tools/mathar/ (extract.py,
+tex2m.py, verify.wls [Mathematica oracle], instance.wls, build_corpus.py,
+check_override.py, overrides.json).
+
+- [x] TeX->InputForm translator + extractor (1007 integral sites; 593 auto-translated)
+- [ ] oracle verification of auto translations
+- [ ] hand repair (sharded agents) of SKIP-PARSE / oracle-rejected entries -> overrides.json
+- [ ] corpus files + runner test_mathar_corpus.c (S/N modes, parallel pool, JSON) + CMake
+- [ ] baseline run; fix every WRONG / CRASH first
+- [ ] triage doc docs/design/mathar_integrate_triage.md (classes ranked)
+- [ ] extension stages, one per class (commit + version + tag each)
+- [ ] backlog of remaining classes
+
+# BlakeRationalBaseDescent rebuild (v0.456)
+
+Plan: ~/.claude/plans/in-factorisation-temp-we-have-velvety-phoenix.md.
+Sources: factorisation_temp/rational_base_descent_revised.tex, lattice_rbd.tex.
+(v0.455 was taken by a concurrent strings commit.)
+
+- [x] fi_rbd.h core API; fi_rbd_descent.c (Classic, Exact scaled + jump + batched gcd, AllHits, multiplier)
+- [x] fi_rbd_bases.c (Stern-Brocot BFS, Sum order, perfect-power filter, simplest rational)
+- [x] fi_rbd.c glue + hit cache; FiRbdOpts in FiCtx; suboptions + alias heads in fi_builtin.c
+- [x] threaded deterministic base search (FiClaim cap, lowest index wins)
+- [x] fi_rbd_lll.c (native integral LLL; FLINT fmpz_lll dispatch)
+- [x] fi_rbd_lattice.c (HG detector, square-free part + p-adic integer roots, (t,d) selection); Lattice/TwoPass/Coppersmith
+- [x] tests (paper examples, comb, multiplier, lattice 197-bit, edge cases, docstrings)
+- [x] verify_methods.py --rbd-planted (975 calls, 0 wrong); perf old vs new; leaks 0; no-FLINT compile
+- [x] extensive parent docstring (user request), docs, changelog, version 0.456
+
+## Review (v0.456)
+- All the papers' claims reproduced (independent Python reference): Ex.1 (512, -2/0), 2^1041+1 four hits,
+  R_2224 14 hits, (153^153+1)/154 7 hits, comb sweep 533 bases -> 22/7 and 11/7 only.
+- Exact kernel 37-100x faster per base than v0.454 (single thread); threads on top.
+- The paper's 2048-bit challenge modulus factored with no base given: 106 s wall, 16 threads.
+- Bugs found on the way: HG rows not square-free (p-adic finder needs h/gcd(h,h'));
+  lattice regions too coarse for TimeConstrained; cofactor fallback cost on AllHits leftovers;
+  verify generator looped forever when (a/b)^k/q was too small to hold a prime.
+- Open: native LLL slow (0.2-0.7 s per call at 197 bits vs ms with FLINT).
+
+# DirichletCharacter + DirichletL (v0.450)
+
+Plan: ~/.claude/plans/pasted-content-id-6d9a-let-s-implement-stateful-locket.md.
+Ground truth (wolframscript 14): DirichletCharacter attrs {Protected} (threads
+over lists internally); DirichletL {Listable, NHoldAll, Protected} -- user asked
+Listable|NumericFunction|Protected. 2^a (a>=3) digit order: (-1)-digit most
+significant, then the 5-digit; prime-power digits smallest prime first. Value =
+unit * E^(I Pi r), r in (-1,1] (Mathilda does not canonicalise E^(I Pi r), so the
+engine folds). Messages: intp / invl / int. Exact: s<=0 always (B_{n,chi}),
+s=1 primitive non-principal; s>=2 only k=1. Mathematica MR ~300-500 us, AP 8 ms.
+
+- [x] character engine `dirichlet.{c,h}` (factor, PH discrete log, conductor, cache)
+- [x] DirichletCharacter builtin + messages + list threading + packed path
+- [x] DirichletL exact (k=1 Zeta, s<=0 gen. Bernoulli, s=1 primitive)
+- [x] machine kernel `sf_machine_dirichlet.c` (E-M with expm1 tail, functional eq.)
+- [x] FLINT acb_dirichlet_l bridge; HurwitzZeta template fallback; precision tracking
+- [x] N keeps k, j exact (numericalize special case)
+- [x] NDArray/packed path, AWARE, REG_N, Compile infer/emit (MeijerG-style)
+- [x] Interval (arb ball + derivative-sign certification), real characters
+- [x] info.c, sym_names, docs, changelog, version 0.450, audit tool probes
+- [x] tests (test_dirichletcharacter.c, test_dirichletl.c) + valgrind
+- [x] benchmark 97-special-functions
+
+## Review (v0.450)
+- Mathematica parity: 148,138 character values; 1152 exact L-values; all spec examples.
+- Machine kernel <= 6e-14 rel (3000 random cases vs arb); five surfaces bit-identical.
+- Throughput run caught a silent slow path: complex chi at real s < 1/2 declined in
+  sfg_loggamma_c (negative real axis) -> arb fallback, 368 us/call. Fixed (real lgamma
+  + sign phase); now 3.5 us.
+- valgrind: totals identical for trivial / 1x / 4x workloads (startup baseline only).
+- Found, not fixed (pre-existing, core): (1) SameQ of a packed complex array vs its
+  evaluated List fails when an element has im == 0 (Complex[x,0.] vs x); (2) a
+  message from an unevaluated call inside Quiet re-fires when the enclosing
+  expression re-evaluates it (LerchPhi/HurwitzZeta/JacobiSymbol too); (3)
+  test_numeric N[E^(I Pi/4)-(-1)^(1/4),32] and a stale AiryBi stress gap fail.
+
+# MeijerG machine kernel for the log case (v0.446)
+
+Goal: `MeijerGlog` (b's an integer apart) ran 119 s per 10^6 buffer / 456 us scalar,
+because every point fell to the arb perturbation engine. Replace with an exact
+machine residue-series kernel.
+
+Method: G = -sum of residues of F(s) w^s at the poles s = beta + k of each
+integer-spaced class of b_1..b_m. Laurent expansion of F at s = beta + eps
+(arb, once per plan), then the exact rational step F(s+1) = F(s) R(s) in
+double-double to tabulate c[k][j] (the coefficient of w^(beta+k) log^j w). Per
+point: ascending sum in double, measured cancellation; re-sum in double-double
+when > 6 bits are lost (log w, w carried as dd); arb only past 45 bits / table end.
+
+- [x] `sf_dd.h`: dd + complex dd arithmetic, exp/log/sincos in dd
+- [x] `flint_mg_laurent`: Laurent coefficients of prod Gamma(x_i + s_i eps)^(+-1)
+- [x] log table build in `sf_mg_plan`; `sf_mg_plan_free`; memo owns tables
+- [x] per-point evaluator (real + complex lanes, double then dd)
+- [x] scalar path memoises log-case plans; ndarray/flat free correctly
+- [x] tests vs mpmath (real, complex, dual p>q, multiplicity 3, r != 1, shifts), valgrind
+- [x] surfaces bit-for-bit (scalar / List / packed / NDArray / Compile)
+- [x] benchmark re-run, report + tex, docs/spec + changelog, v0.446
+
+## Review
+Pushed `bf002df8` (tag v0.446) and `f3c6185b` (benchmark). MeijerGlog 456 -> 2.99 us
+scalar, 119 s -> 0.32 s per 10^6 buffer; 36 references <= 4.5e-16. Found on the way:
+the dual's `1 - b` rounding was amplified ~100x (fixed in the log table; the non-log
+Slater dual still forms it in double).
+
+# Special-Functions Shootout benchmark
+
+Plan: `~/.claude/plans/let-s-write-a-benchmark-optimized-hammock.md`
+
+Self-contained 4-engine benchmark (Mathilda vs Python scipy+mpmath, Maxima, wolframscript)
+over machine-real / complex / arbitrary-precision, measuring speed (scalar latency +
+machine-real vectorized throughput) and accuracy (cross-engine agreement, no oracle).
+Standalone folder `benchmarks/97-special-functions/` (numbered to shelve with the rest, but
+skipped by `run_all.py` discovery via its `STANDALONE` set). No version bump.
+
+## Build
+- [x] Confirm engines present: Mathilda, venv scipy/mpmath/numpy, Maxima 5.49, wolframscript 14.0
+- [x] Probe engine I/O formats (Mathilda InputForm/SetPrecision; Maxima interval/bigfloat/complex)
+- [x] Verify scipy/mpmath callable names + sympy availability
+- [x] `registry.py` — 46 numeric heads + 7 exact heads, per-engine templates + domains + callables
+- [x] `run_shootout.py` — generate `.m`/`.mac`, run 4 engines, parse, agreement+timing → results JSON
+- [x] Smoke subset across 4 engines × 3 regimes; fixed 3 parser bugs (WL backtick, dps-before-parse, Maxima complex)
+- [x] Full numeric sweep (53 cases); disagreements all real (Maxima branch/symbolic), not parser bugs
+- [x] Vectorized machine-real throughput (Mathilda packed vs scipy)
+- [x] Exact-arithmetic section (Fibonacci/LucasL/BernoulliB/EulerE/HarmonicNumber/BarnesG/Hyperfactorial)
+- [x] `report.py` — results JSON → LaTeX longtable/booktabs fragments + macros
+- [x] `special_function_performance.tex` — standalone article; rendered PDF (10 pp)
+- [x] `README.md`
+- [x] changelog note `docs/spec/changelog/2026-10-12.md`
+- [x] Send PDF to user + headline summary
+
+## Review
+
+Delivered `benchmarks/97-special-functions/` (numbered for shelving; `run_all.py` skips it via
+its `STANDALONE` set): `registry.py`
+(spine), `run_shootout.py` (4-engine driver), `report.py` (JSON→LaTeX), `special_function_performance.tex`
++ rendered PDF, `README.md`, `results/2026-10-17.json`. Contributor-facing tooling, no kernel change,
+**no version bump**.
+
+Results (53 numeric heads × 3 regimes × 4 engines):
+- **Coverage:** Mathilda 152 head×regime cells = Mathematica 152 = Python 152 (mpmath fallback); Maxima 124
+  (lacks HurwitzZeta/PolyLog/HypergeometricU/Whittaker numerics + orthopoly-at-complex).
+- **Accuracy (agreement, no oracle):** MR/C ~13–16 digits, AP ~50; exactly **1** genuine disagreement
+  (Maxima `expintegral_chi` adds a spurious iπ on the real axis). All 7 exact heads byte-identical.
+- **Speed:** scalar latency — Mathilda ~12× (MR) / ~9× (C) slower than SciPy's compiled C per call, but
+  **~2× faster in arbitrary precision** (often the fastest engine). Vectorized throughput (10⁶ buffer):
+  Mathilda's packed kernels beat SciPy on most heads, up to **209× (StruveH), 136× (BesselY), 46× (BesselJ)**.
+
+Key gotchas fixed: wolframscript `InputForm` backtick precision suffix; parsing CAS AP strings before raising
+mpmath dps (truncated 50-digit values to 15); Maxima complex `a*%i+b` / nounform / `%pi` partial-eval; scipy
+0-d-ndarray + complex-declining funcs → mpmath fallback; sympy-import charged to first exact timing.
 
 ---
 
@@ -241,6 +386,35 @@ biggest wins were not DSolve methods but core correctness: Together/Cancel were 
 value-changing (binder substitution, Log expansion), Factor could crash the kernel, and
 ∫Secⁿ hung. Ten older gates are red on HEAD already (drift since M73) — flagged, not
 rebaselined.
+
+---
+
+# MeijerG (+ minimal FunctionExpand) — v0.445
+
+Plan: `~/.claude/plans/pasted-content-id-088c-let-s-implement-warm-map.md`.
+
+- [x] Mathematica calibration probes (reduction policy, hdiv, z = 0, Gamma-pair move)
+- [x] Machine Slater engine `src/special_functions/sf_machine_meijerg.{c,h}` (plan + eval, arb fallback)
+- [x] arb engine in `src/flint_num_bridge.c` (regularized pFq, log case by adaptive perturbation)
+- [x] Builtin `src/special_functions/meijer_g.{c,h}`: validation, sort, hdiv, threading, z=0, reductions
+- [x] NDArray/packed (AWARE) + ndkernels nary kernel + Compile (cap 8 -> 24, real-arm imag check, VKERNN tile op)
+- [x] D (deriv.c), Series (series.c; + Puiseux O-term fix), FunctionExpand
+- [x] tests/test_meijerg.c + CMake; valgrind (REPL 1x/4x + test binary == Print[1] baseline; fixed times.c uninit)
+- [x] audits (c99, messages, packed-aware, compile-coverage [HEAD_SHAPES], nd-surfaces, fastpath gate)
+- [x] benchmark registry + run + report/tex (results/2026-10-17-final-v0445.json)
+- [x] docs (special-functions.md, changelog), version 0.445, commit + tag
+
+## Review — MeijerG (v0.445)
+MeijerG with exact/symbolic, machine, arb and complex numerics; buffers; Compile at scalar
+and rank-1 (new VKERNN tile op); D, Series (log case by exact eps-Laurent), FunctionExpand.
+Fastest engine in all 9 shootout cells (mpmath 2-234x, Mathematica 11-670x slower).
+Four core bugs surfaced and fixed: Series Puiseux O-term (x^(p/q), q>2), a Times<->Power
+radical-fusion cycle ($RecursionLimit), a Times uninitialised read, NumericQ on list args;
+plus MPFR 2F1 via arb (60 ms -> <1 ms near |z|=1) and a Compile real-arm wrong answer
+(imaginary part dropped). Full ctest: 20 failures, all reproduced on HEAD (per-record A/B:
+0 regressions, 11 corpus records U->P).
+
+---
 
 # DSolve — the next 500 (§2.2.51–§2.2.55, Problems 5001–5500, M79–M83)
 
@@ -274,3 +448,20 @@ Plan: `~/.claude/plans/let-s-continue-our-dsolve-snoopy-biscuit.md`. One batch, 
 - **Residue 38:** Abel 2nd type, Riccati/Chini with symbolic exponents, elliptic
   separables, symmetry classes, `y = G(x,y')`, lincoeff `F(L1/L2)`, the `u = E^(2y)`
   substitution.
+
+## Integrate: Bessel hypergeometric / MeijerG stage (v0.544, 2026-10-23)
+
+- [x] Derive and numerically verify D1-D7: series (Chu-Vandermonde 2F3), Sin reflection, term-by-term with Log split, Mellin-Barnes reps (Y, K, KK, IK, JY, J^2+Y^2), recurrence/Wronskian reduction, telescoping for Int D_n/x
+- [x] `src/internal/BesselHyper.m` + `try_besselhyper` after Holonomic, `Method -> "BesselHypergeometric"`
+- [x] `tests/test_integrate_bessel_hyper.c` (diff-back at 3 points, 1e-20)
+- [x] Holonomic / integrate suites; check-c99, check-messages; valgrind (stage pinned: no new leak)
+- [x] Docs (calculus.md), changelog, version 0.544
+
+### Review
+All 9 originally failing probes now close, plus integer/symbolic Y/K orders.
+Boundary (declines): >2 factors, different arguments, mixed ordinary/modified
+families, Mellin log-degenerate cases with nothing to telescope.
+Pre-existing, not from this change: `integrate_risch_transcendental_tests`
+fails on `x*2.71828^(-x)` (closed by ParallelMixedTower); a 64-byte
+Module-scoping leak on `Integrate[BesselJ[0,x]^3, x]` in a later cascade stage
+(both Bessel stages pinned are clean).

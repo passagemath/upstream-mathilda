@@ -288,6 +288,19 @@ static void factor_kernel_case(const char* poly) {
     assert_eval_eq(buf, "0", 0);
 }
 
+/* Gaussian-integer coefficients: the content is taken over Z[i] (its
+ * first-quadrant associate), times I when the rest is purely imaginary, and
+ * the primitive part's sign goes into it -- the reference's forms. */
+static void test_factor_gaussian_content(void) {
+    assert_eval_eq("{Factor[4 I a - 4 I b], Factor[2 I x + 2 I], Factor[-I a + I b], "
+                   "Factor[(1 + I) a + 2 b], Factor[2 I a + 4 b], Factor[I x^2 - I], "
+                   "Factor[-2 I a - 2 I b], Factor[(2 + 2 I) a + (4 + 4 I) b], Factor[I a + b], "
+                   "Factor[56 I - 30 I d + 3 I d^2], Factor[I a b - I c d], FactorList[4 I a - 4 I b]}",
+                   "{(4*I) (a - b), (2*I) (1 + x), -I (a - b), (1 + I) (a + (1 - I) b), "
+                   "2 (I a + 2 b), I (-1 + x) (1 + x), -(2*I) (a + b), (2 + 2*I) (a + 2 b), I a + b, "
+                   "I (56 - 30 d + 3 d^2), I (a b - c d), {{4*I, 1}, {a - b, 1}}}", 0);
+}
+
 static void test_factor_kernels_are_opaque(void) {
     factor_kernel_case("x^2 BesselJ[-2/3, x]^2 + x BesselJ[1/3, x]^2 + 1");
     factor_kernel_case("x^2 Log[x]^2 + x Log[2 x]^2 + 1");
@@ -363,6 +376,7 @@ int main(void) {
     TEST(test_factor_trig_monomial);
     TEST(test_factor_trivariate_high_degree_squarefree);
     TEST(test_factor_kernels_are_opaque);
+    TEST(test_factor_gaussian_content);
 
     printf("All baseline tests passed!\n");
     return 0;

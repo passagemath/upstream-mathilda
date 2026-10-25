@@ -1,3 +1,191 @@
+/* ---- Gaussian content ----------------------------------------------------
+ *
+ * A polynomial with Gaussian-integer coefficients, at least one of them not
+ * real, has its content taken over Z[i], as in the reference:
+ * Factor[(1 + I) a + 2 b] is (1 + I) (a + (1 - I) b), and when what is left
+ * is purely imaginary the unit I goes into the content too:
+ * Factor[4 I a - 4 I b] is (4 I) (a - b), Factor[I x^2 - I] is
+ * I (-1 + x) (1 + x).  The content is the gcd's associate in the first
+ * quadrant (re > 0, im >= 0); the remaining sign is the ordinary real-content
+ * sign of the primitive part.  p = g (p/g) whatever p is, so the rewrite is
+ * value-preserving; it declines (NULL) on anything that is not a sum of terms
+ * with Gaussian-integer coefficients and no denominators, and when the
+ * content is 1 (a real integer content is the classical path's). */
+static bool gc_coeff(const Expr* t, mpz_t re, mpz_t im) {
+    const Expr* c = t;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+        t->data.function.head->data.symbol.name == SYM_Times && t->data.function.arg_count >= 1) {
+        for (size_t i = 1; i < t->data.function.arg_count; i++) {
+            const Expr* f = t->data.function.args[i];
+            if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
+                f->data.function.head->data.symbol.name == SYM_Power && f->data.function.arg_count == 2) {
+                const Expr* ex = f->data.function.args[1];
+                if (!(ex->type == EXPR_INTEGER && ex->data.integer > 0)) return false;
+            } else if (expr_is_numeric_like(f)) return false;
+        }
+        c = t->data.function.args[0];
+    } else if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL &&
+               t->data.function.head->data.symbol.name == SYM_Power) {
+        const Expr* ex = t->data.function.args[1];
+        if (!(t->data.function.arg_count == 2 && ex->type == EXPR_INTEGER && ex->data.integer > 0)) return false;
+    }
+    if (expr_is_integer_like(c)) {
+        mpz_t v; expr_to_mpz(c, v); mpz_set(re, v); mpz_clear(v); mpz_set_ui(im, 0);
+        return true;
+    }
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+        c->data.function.head->data.symbol.name == SYM_Complex && c->data.function.arg_count == 2 &&
+        expr_is_integer_like(c->data.function.args[0]) && expr_is_integer_like(c->data.function.args[1])) {
+        mpz_t v;
+        expr_to_mpz(c->data.function.args[0], v); mpz_set(re, v); mpz_clear(v);
+        expr_to_mpz(c->data.function.args[1], v); mpz_set(im, v); mpz_clear(v);
+        return true;
+    }
+    if (expr_is_numeric_like(c)) return false;   /* a rational, real or radical coefficient */
+    mpz_set_ui(re, 1); mpz_set_ui(im, 0);        /* a bare monomial */
+    return true;
+}
+
+/* q = round(n / d) componentwise, d > 0 */
+static void gc_round_div(mpz_t q, const mpz_t n, const mpz_t d) {
+    mpz_t t; mpz_init(t);
+    mpz_mul_2exp(t, n, 1); mpz_add(t, t, d);     /* floor((2n + d) / 2d) */
+    mpz_mul_2exp(q, d, 1);
+    mpz_fdiv_q(q, t, q);
+    mpz_clear(t);
+}
+
+/* (ar + ai i) <- gcd over Z[i] of itself and (br + bi i); b is clobbered */
+static void gc_gcd(mpz_t ar, mpz_t ai, mpz_t br, mpz_t bi) {
+    mpz_t nr, ni, N, qr, qi, t;
+    mpz_inits(nr, ni, N, qr, qi, t, NULL);
+    while (mpz_sgn(br) || mpz_sgn(bi)) {
+        /* q = round(a conj(b) / |b|^2) */
+        mpz_mul(nr, ar, br); mpz_addmul(nr, ai, bi);
+        mpz_mul(ni, ai, br); mpz_submul(ni, ar, bi);
+        mpz_mul(N, br, br); mpz_addmul(N, bi, bi);
+        gc_round_div(qr, nr, N); gc_round_div(qi, ni, N);
+        /* r = a - q b; a <- b; b <- r */
+        mpz_mul(t, qr, br); mpz_submul(t, qi, bi); mpz_sub(nr, ar, t);
+        mpz_mul(t, qr, bi); mpz_addmul(t, qi, br); mpz_sub(ni, ai, t);
+        mpz_swap(ar, br); mpz_swap(ai, bi);
+        mpz_swap(br, nr); mpz_swap(bi, ni);
+    }
+    mpz_clears(nr, ni, N, qr, qi, t, NULL);
+}
+
+static Expr* gc_number(const mpz_t re, const mpz_t im) {
+    Expr* r = expr_bigint_normalize(expr_new_bigint_from_mpz(re));
+    if (mpz_sgn(im) == 0) return r;
+    return expr_new_function(expr_new_symbol(SYM_Complex),
+        (Expr*[]){ r, expr_bigint_normalize(expr_new_bigint_from_mpz(im)) }, 2);
+}
+
+static Expr* factor_gaussian_content(const Expr* arg) {
+    /* a sum, or a product that expands to one: Factor[-(16 I) (56 - 30 D +
+     * 3 D^2) a b] otherwise went to the classical path expanded, and came
+     * back 16 a b (-56 I + (30 I) D - (3 I) D^2) */
+    if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL ||
+        (arg->data.function.head->data.symbol.name != SYM_Plus &&
+         arg->data.function.head->data.symbol.name != SYM_Times)) return NULL;
+    /* A product with a non-real Gaussian-integer coefficient keeps it as its
+     * content and factors the rest, as the reference does: Factor of
+     * -(4 I) (a b - c d + ...) leaves the sum's orientation alone (taking the
+     * content of the expansion, 4 I, would flip it). */
+    if (arg->data.function.head->data.symbol.name == SYM_Times) {
+        const Expr* c = arg->data.function.args[0];
+        if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+            c->data.function.head->data.symbol.name == SYM_Complex &&
+            expr_is_integer_like(c->data.function.args[0]) &&
+            expr_is_integer_like(c->data.function.args[1])) {
+            size_t n = arg->data.function.arg_count;
+            Expr** rest = malloc(sizeof(Expr*) * (n - 1));
+            for (size_t i = 1; i < n; i++) rest[i - 1] = expr_copy(arg->data.function.args[i]);
+            Expr* r = n - 1 == 1 ? rest[0] : expr_new_function(expr_new_symbol(SYM_Times), rest, n - 1);
+            free(rest);
+            Expr* fr = eval_and_free(expr_new_function(expr_new_symbol("Factor"), (Expr*[]){ r }, 1));
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_copy((Expr*)c), fr }, 2));
+        }
+    }
+    Expr* e = expr_expand((Expr*)arg);
+    Expr* out = NULL;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Plus) {
+        size_t n = e->data.function.arg_count;
+        mpz_t gr, gi, cr, ci;
+        mpz_inits(gr, gi, cr, ci, NULL);
+        bool ok = true, any_complex = false, all_imag = true;
+        for (size_t i = 0; i < n && ok; i++) {
+            ok = gc_coeff(e->data.function.args[i], cr, ci);
+            if (!ok) break;
+            if (mpz_sgn(ci)) any_complex = true;
+            gc_gcd(gr, gi, cr, ci);
+        }
+        if (ok && any_complex && (mpz_sgn(gr) || mpz_sgn(gi))) {
+            /* first-quadrant associate: multiply by i until re > 0, im >= 0 */
+            for (int k = 0; k < 4 && !(mpz_sgn(gr) > 0 && mpz_sgn(gi) >= 0); k++) {
+                mpz_neg(gr, gr); mpz_swap(gr, gi);   /* (r + i m) i = -m + i r */
+            }
+            /* purely imaginary remainder: every c / g has a zero real part */
+            mpz_t N, nr; mpz_inits(N, nr, NULL);
+            mpz_mul(N, gr, gr); mpz_addmul(N, gi, gi);
+            for (size_t i = 0; i < n && all_imag; i++) {
+                gc_coeff(e->data.function.args[i], cr, ci);
+                mpz_mul(nr, cr, gr); mpz_addmul(nr, ci, gi);   /* Re(c conj(g)) */
+                if (mpz_sgn(nr)) all_imag = false;
+            }
+            mpz_clears(N, nr, NULL);
+            if (all_imag) { mpz_neg(gi, gi); mpz_swap(gr, gi); }   /* g <- g i */
+            if (!(mpz_cmp_ui(gr, 1) == 0 && mpz_sgn(gi) == 0)) {
+                Expr* g = gc_number(gr, gi);
+                Expr* prim = eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                    (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Power),
+                                       (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2),
+                                   expr_copy(e) }, 2)) }, 1));
+                /* the sign FactorList gives the primitive part goes into the
+                 * content, so -I a + I b is -I (a - b), not I (-a + b).  Only
+                 * in at most two variables, where the reference's sign is the
+                 * lex one FactorList uses; over more it follows no monomial
+                 * order (it keeps (4 I) (-SP[t, z] LC[c, d, k, p] + ...)), and
+                 * the input's own orientation is what it keeps there. */
+                size_t nv = 0, vcap = 4;
+                Expr** vs = malloc(sizeof(Expr*) * vcap);
+                collect_variables(prim, &vs, &nv, &vcap);
+                for (size_t k = 0; k < nv; k++) expr_free(vs[k]);
+                free(vs);
+                Expr* fl = nv > 2 ? expr_new_symbol("Null")
+                    : eval_and_free(expr_new_function(expr_new_symbol("FactorList"),
+                        (Expr*[]){ expr_copy(prim) }, 1));
+                if (fl->type == EXPR_FUNCTION && fl->data.function.arg_count >= 1) {
+                    const Expr* c0 = fl->data.function.args[0];
+                    if (c0->type == EXPR_FUNCTION && c0->data.function.arg_count == 2) {
+                        const Expr* c = c0->data.function.args[0];
+                        bool neg = (c->type == EXPR_INTEGER && c->data.integer < 0) ||
+                                   (c->type == EXPR_BIGINT && mpz_sgn(c->data.bigint) < 0);
+                        if (neg) {
+                            g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                    (Expr*[]){ expr_new_integer(-1), g }, 2));
+                            prim = eval_and_free(expr_new_function(expr_new_symbol("Expand"),
+                                    (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                        (Expr*[]){ expr_new_integer(-1), prim }, 2)) }, 1));
+                        }
+                    }
+                }
+                expr_free(fl);
+                Expr* fp = eval_and_free(expr_new_function(expr_new_symbol("Factor"),
+                    (Expr*[]){ prim }, 1));
+                out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ g, fp }, 2));
+            }
+        }
+        mpz_clears(gr, gi, cr, ci, NULL);
+    }
+    expr_free(e);
+    return out;
+}
+
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -356,6 +544,17 @@ Expr* builtin_factor(Expr* res) {
                 expr_free(memo_key);
             }
             return final;
+        }
+    }
+
+    if (res->data.function.arg_count == 1) {
+        Expr* gf = factor_gaussian_content(arg);
+        if (gf) {
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, gf);
+                expr_free(memo_key);
+            }
+            return gf;
         }
     }
 

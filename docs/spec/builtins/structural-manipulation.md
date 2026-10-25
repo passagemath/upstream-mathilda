@@ -1503,6 +1503,22 @@ Factors a polynomial over the integers.
 **Features**:
 - `Listable`, `Protected`.
 - **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — the conventional normalisation), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
+- **Gaussian-integer content** (v0.6018), as in the reference. A polynomial
+  with Gaussian-integer coefficients, at least one not real, takes its
+  content over Z[i]:
+  - `Factor[(1 + I) a + 2 b]` is `(1 + I) (a + (1 - I) b)`. The content is the
+    first-quadrant associate of the gcd.
+  - When what is left is purely imaginary, `I` joins the content:
+    `Factor[4 I a - 4 I b]` is `(4 I) (a - b)`, and `Factor[I x^2 - I]` is
+    `I (-1 + x) (1 + x)`.
+  - In at most two variables the primitive part's sign moves into the
+    content too (`Factor[-I a + I b]` is `-I (a - b)`). Over more variables
+    the input's orientation is kept, as the reference keeps it.
+  - A product with such a coefficient keeps it and factors the rest:
+    `Factor[-(16 I) (56 - 30 D + 3 D^2) a b]` stays as it is. It used to come
+    back as `16 a b (-56 I + (30 I) D - (3 I) D^2)`.
+  - Not yet: full factoring over Z[i]. The reference gives
+    `Factor[I x^2 + I]` as `(1 + I x) (I + x)`; here it is `I (1 + x^2)`.
 - When given a rational expression, first resolves dependencies over `Together` before factoring.
 - **Powers with a symbolic exponent factor over their generators.** The input
   is rewritten with each `b^t` as a private symbol, factored, and put back

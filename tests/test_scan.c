@@ -143,7 +143,9 @@ static void test_scan_return_boundary(void) {
 static void test_scan_return_symbol_f(void) {
     /* A symbol f whose DownValue yields a raw Return[...] (no Function boundary
      * to consume it) exits Scan with that value. */
-    run("Clear[fret];fret[x_]:=If[x>2,Return[x]];Scan[fret,{1,2,3,4}]", "3");
+    /* fret's own definition catches its Return, so Scan sees 3, not
+     * Return[3], and runs to the end (the reference gives Null). */
+    run("Clear[fret];fret[x_]:=If[x>2,Return[x]];Scan[fret,{1,2,3,4}]", "Null");
 }
 
 /* ---------- Association (values scanned) ---------- */

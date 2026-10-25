@@ -294,10 +294,10 @@ static void test_return_targeting_non_existent_head_at_top(void) {
 }
 
 static void test_return_inside_user_defined_function(void) {
-    /* User-level f[x_] := body. Without a wrapping Function/Module, the
-     * Return marker survives at top level (matches Mathematica). */
+    /* User-level f[x_] := body: the definition itself is a boundary, so the
+     * Return yields its value (the reference gives 6). */
     check_eq("Clear[f]; f[x_] := Return[x + 1]; f[5]",
-                   "Return[6]");
+                   "6");
     /* Wrapping the body in a Module traps it. */
     check_eq("Clear[g]; g[x_] := Module[{}, Return[x + 1]]; g[5]",
                    "6");
@@ -383,6 +383,30 @@ static void test_return_symbol_metadata(void) {
     ASSERT(strstr(doc, "h") != NULL); /* mentions the 2-arg form */
 }
 
+/* A definition is a boundary too: a rule whose evaluated right-hand side is
+ * Return[v] yields v, for own, down, sub and up values; only one top-level
+ * Return is stripped. Every expected value is the reference's. FeynCalc's
+ * cartesianIntegralQ[ex_] := Which[..., Return[True], ...] leaked Return[True],
+ * so TrueQ of it was False. */
+static void test_return_from_definition(void) {
+    check_eq("rd1[x_] := Return[x]; rd1[1]", "1");
+    check_eq("rd2[x_] := Which[x > 0, Return[True], True, Return[False]]; {rd2[1], rd2[-1], TrueQ[rd2[1]]}",
+             "{True, False, True}");
+    check_eq("rd3[x_] := If[x > 0, Return[1]]; {rd3[1], rd3[-1]}", "{1, Null}");
+    check_eq("rd4[x_] := (Do[Return[x], {3}]; 7); rd4[1]", "7");
+    check_eq("rd5[x_] := rd6[x]; rd6[x_] := Return[x + 1]; rd5[1]", "2");
+    check_eq("rd7[x_] := Return[]; rd7[1]", "Null");
+    check_eq("rd8[x_][y_] := Return[x y]; rd8[2][3]", "6");
+    check_eq("rh9 /: rk9[rh9[x_]] := Return[x]; rk9[rh9[5]]", "5");
+    check_eq("rx12 := Return[3]; rx12", "3");
+    /* only the top level, and only once */
+    check_eq("rd11[x_] := Return[Return[x]]; rd11[2]", "Return[2]");
+    check_eq("rd14[x_] := Return[x] + 1; rd14[2]", "1 + Return[2]");
+    check_eq("rd15[x_] := {Return[x]}; rd15[2]", "{Return[2]}");
+    check_eq("rd16[x_] := Hold[Return[x]]; rd16[1]", "Hold[Return[1]]");
+    check_eq("rfac[n_] := If[n <= 1, Return[1], Return[n rfac[n - 1]]]; rfac[20]", "2432902008176640000");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -418,6 +442,7 @@ int main(void) {
     TEST(test_return_targeted_at_do);
 
     TEST(test_return_targeted_no_match_propagates_to_top);
+    TEST(test_return_from_definition);
 
     TEST(test_return_one_arg_innermost_boundary);
 

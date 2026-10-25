@@ -369,7 +369,7 @@ Exits the nearest enclosing scope or loop, yielding a value.
 - `Return[]`: Yields `Null` (shorthand for `Return[Null]`).
 - `Return[expr, h]`: Yields `expr` from the *nearest enclosing boundary* whose head is the symbol `h`. Boundaries with a different head propagate the marker outward unchanged so that `h` can be reached.
 
-**Recognised boundary heads**: `Function`, `Module`, `Block`, `With`, `Do`, `For`, `While`. `CompoundExpression` and other Hold-free heads (including `If`, `Which`, `Switch`) propagate `Return` through unchanged so it can reach the enclosing boundary.
+**Recognised boundary heads**: `Function`, `Module`, `Block`, `With`, `Do`, `For`, `While`, and the application of a definition: an own, down, sub or up value whose evaluated right-hand side is `Return[v]` yields `v` (`f[x_] := If[x > 0, Return[1], 2]` gives `f[3] = 1`; `x := Return[3]` gives `x = 3`). Only the top level is stripped, once: `f[x_] := Return[x] + 1` gives `1 + Return[x]`, and `Return[Return[x]]` gives `Return[x]`, as in the reference. Only rules whose right-hand side mentions `Return` pay for this (a flag computed when the rule is stored). `CompoundExpression` and other Hold-free heads (including `If`, `Which`, `Switch`) propagate `Return` through unchanged so it can reach the enclosing boundary.
 
 **Features**:
 - `Protected`. No Hold attributes — arguments are evaluated before the marker takes effect.

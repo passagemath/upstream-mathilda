@@ -47,6 +47,10 @@ typedef struct Rule {
      * falls through to the next rule.  Such a rule is not replaced by a later
      * definition with the same LHS. */
     uint8_t scoped_cond;
+    /* 1 when the replacement mentions Return: applying the rule then
+     * evaluates the result and yields v for a top-level Return[v], as the
+     * reference returns from a definition (f[x_] := If[x > 0, Return[1], 2]). */
+    uint8_t has_return;
     struct Rule* next;
 } Rule;
 

@@ -938,6 +938,33 @@ static Expr* try_scoped_condition(Expr* bound) {
 bool  symtab_rhs_has_scoped_condition(Expr* rhs) { return rhs_has_scoped_condition(rhs); }
 Expr* symtab_try_scoped_condition(Expr* bound)   { return try_scoped_condition(bound); }
 
+/* Does e mention the symbol Return anywhere (heads included)? */
+static bool mentions_return(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Return;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (mentions_return(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (mentions_return(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The value of applying `rule` of `head` when its rewrite is `result`: for a
+ * rule whose right-hand side mentions Return, the result is evaluated here and
+ * a top-level Return[v] (or Return[v, head]) yields v, Return[] Null -- the
+ * reference's return from a definition. Return[v, other] and a Return below
+ * the top level (1 + Return[2]) are left as they are. Consumes result. */
+static Expr* rule_result(const Rule* rule, Expr* result, const char* head) {
+    if (!rule->has_return || !result) return result;
+    Expr* ev = evaluate(result);
+    expr_free(result);
+    Expr* v = NULL;
+    if (eval_classify_return(ev, head, &v) == EVAL_RETURN_CONSUME) {
+        expr_free(ev);
+        return v;
+    }
+    return ev;
+}
+
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed) {
     /* Any change to an OwnValue/DownValue list could change the meaning
      * of any expression that touches this symbol, so bump the global
@@ -978,6 +1005,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
+            curr->has_return = mentions_return(replacement);
             curr->delayed = delayed;
             expr_free(canon);
             if (key) expr_free(key);
@@ -999,6 +1027,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
             curr->pattern = canon;          /* same alpha_hash: keep it */
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
+            curr->has_return = mentions_return(replacement);
             curr->delayed = delayed;
             expr_free(key);
             return;
@@ -1015,6 +1044,7 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement, bool delayed
     new_rule->alpha_hash = ahash;
     new_rule->delayed = delayed;
     new_rule->scoped_cond = scoped;
+    new_rule->has_return = mentions_return(replacement);
     new_rule->next = NULL;
 
     /* §3.6 stable insertion: walk until we find a rule with strictly
@@ -1388,7 +1418,7 @@ Expr* apply_sub_values(SymbolDef* def, Expr* expr) {
             if (v) return v;
             continue;
         }
-        return result;
+        return rule_result(rule, result, def->symbol_name);
     }
     return NULL;
 }
@@ -1533,7 +1563,7 @@ Expr* apply_down_values_def(SymbolDef* def, Expr* expr) {
                 result = resolved;
             }
             env_free(env);
-            return result;
+            return rule_result(rule, result, def->symbol_name);
         }
         env_free(env);
     }
@@ -1573,13 +1603,13 @@ Expr* apply_own_values(Expr* expr) {
          * check that also guards against any exotic caller. */
         if (rule->pattern->type == EXPR_SYMBOL &&
             rule->pattern->data.symbol.name == expr->data.symbol.name) {
-            return expr_copy(rule->replacement);
+            return rule_result(rule, expr_copy(rule->replacement), def->symbol_name);
         }
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
             Expr* result = replace_bindings(rule->replacement, env);
             env_free(env);
-            return result;
+            return rule_result(rule, result, def->symbol_name);
         }
         env_free(env);
         rule = rule->next;
@@ -1688,7 +1718,7 @@ static Expr* apply_up_values_for_def(SymbolDef* def, Expr* expr, bool orderless)
                 result = resolved;
             }
             env_free(env);
-            return result;
+            return rule_result(rule, result, def->symbol_name);
         }
         env_free(env);
     }

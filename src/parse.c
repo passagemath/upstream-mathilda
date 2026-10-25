@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "utf8.h"   /* \[Name] / \:hhhh escapes in string literals */
+#include "linear_boxes.h"   /* \!\( ... \) */
 #include "common.h"
 #include "expr.h"
 #include "context.h"
@@ -110,6 +111,7 @@ static size_t src_letter(const char* p) {
     uint32_t cp;
     size_t n = src_nonascii(p, &cp);
     if (!n) return 0;
+    if (lb_cp_escape(cp)) return 0;              /* a box control character */
     const U8CharInfo* ci = u8_char_class(cp);
     return (!ci || ci->cls == U8C_LETTER) ? n : 0;
 }
@@ -1011,6 +1013,30 @@ static Expr* parse_string(ParserState* s) {
             s->pos += esc_len;
             continue;
         }
+        uint32_t box_cp;
+        if (c == '\\' && (box_cp = lb_escape_cp(s->pos[1])) != 0) {
+            /* \! \( \) \* ...: the box control characters, kept as the
+             * reference's private-use code points so a string holding linear
+             * box syntax still reads as boxes (ToExpression["\!\(x\)"]). */
+            enc_len = u8_encode(box_cp, enc);
+            if (i + enc_len >= cap) {
+                size_t ncap = cap * 2;
+                char* nb = (buffer == stackbuf) ? (char*)malloc(ncap)
+                                                : (char*)realloc(buffer, ncap);
+                if (!nb) {
+                    if (buffer != stackbuf) free(buffer);
+                    fprintf(stderr, "Out of memory parsing string literal\n");
+                    return NULL;
+                }
+                if (buffer == stackbuf) memcpy(nb, stackbuf, i);
+                buffer = nb;
+                cap = ncap;
+            }
+            memcpy(buffer + i, enc, enc_len);
+            i += enc_len;
+            s->pos += 2;
+            continue;
+        }
         if (c == '\\' && (s->pos[1] == '\n' || s->pos[1] == '\r')) {
             /* Line continuation: a backslash at the end of a line drops both
              * characters, so "ab\<newline>cd" is "abcd".  Before a CRLF only
@@ -1629,6 +1655,21 @@ static Expr* parse_primary(ParserState* s) {
      * line breaks appearing *after* this token can terminate the statement. */
     s->saw_newline = 0;
 
+    /* \!\( ... \) / \( ... \): linear box syntax, lowered to InputForm text
+     * and read as the expression the boxes display (linear_boxes.c). */
+    if (lb_group_open(s->pos)) {
+        const char* end = NULL;
+        char* text = lb_group_to_input(s->pos, &end);
+        Expr* e = text ? parse_expression(text) : NULL;
+        free(text);
+        if (!e) {
+            parse_err("Invalid linear box syntax\n");
+            return NULL;
+        }
+        s->pos = end;
+        return e;
+    }
+
     switch (*s->pos) {
         case '"': return parse_string(s);
         case '{': return parse_list(s);
@@ -1816,7 +1857,7 @@ static bool named_prefix(const ParserState* s) {
 static bool can_start_primary(const char* p) {
     unsigned char c = (unsigned char)*p;
     return isalpha(c) || isdigit(c) || c == '.' || c == '{' || c == '(' || c == '"' || c == '_' || c == '`' || c == '$' || c == '#' || c == '%' ||
-           src_letter(p) > 0;
+           src_letter(p) > 0 || lb_group_open(p) > 0;
 }
 
 /* Scan a numeric literal starting at `p` (pointing at the first digit, or a

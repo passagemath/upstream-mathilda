@@ -305,6 +305,7 @@ endif()
 set(COMMON_SRC
     ../src/expr.c
     ../src/parse.c
+    ../src/linear_boxes.c
     ../src/eval.c
     ../src/trace.c
     ../src/message.c

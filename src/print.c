@@ -22,6 +22,8 @@
 #include "match.h"
 #include "eval.h"
 #include "message.h"
+#include "linear_boxes.h"   /* box control characters print as escapes */
+#include "utf8.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -238,11 +240,35 @@ static Expr* format_value_rewrite(Expr* e) {
     return NULL;
 }
 
+/* The box control character (\!, \(, \), \* ... as private-use code
+ * points) starting at p, written as its escape -- the reference shows them
+ * that way in every form: Print["a\(b\)c"] is a\(b\)c. Returns the bytes
+ * consumed, 0 when p does not start one. */
+static size_t print_box_escape(const char* p) {
+    if ((unsigned char)p[0] != 0xEF) return 0;
+    size_t n = 0, i = 0;
+    while (n < 3 && p[n]) n++;
+    const char* esc = lb_cp_escape(u8_decode(p, n, &i));
+    if (!esc) return 0;
+    fputs(esc, MTH_POUT);
+    return i;
+}
+
 static void print_string_literal(const char* s) {
     /* An explicit InputForm[...] inside Print keeps the quoted literal. */
-    if (g_print_output_form && g_inputform_depth == 0) { fputs(s, MTH_POUT); return; }
+    if (g_print_output_form && g_inputform_depth == 0) {
+        if (!strstr(s, "\xEF")) { fputs(s, MTH_POUT); return; }
+        for (const char* p = s; *p; ) {
+            size_t k = print_box_escape(p);
+            if (k) { p += k; continue; }
+            putchar((unsigned char)*p++);
+        }
+        return;
+    }
     putchar('"');
     for (const char* p = s; *p; p++) {
+        size_t k = print_box_escape(p);
+        if (k) { p += k - 1; continue; }
         switch (*p) {
             case '\n': fputs("\\n", MTH_POUT); break;
             case '\t': fputs("\\t", MTH_POUT); break;

@@ -1408,6 +1408,33 @@ void test_flat_chain_provenance() {
     assert_parse_eq("1.5e-3",         "0.0015");
 }
 
+/* Linear box syntax: \!\( ... \) groups with \*Box[...] items read as the
+ * expressions they display, both in source and inside a string handed to
+ * ToExpression (FeynCalc's tests write powers and fractions this way). The
+ * control characters in a string are the reference's private-use code points.
+ * Every expected value is the reference's. */
+static void test_linear_box_syntax(void) {
+    assert_eval_eq("ToCharacterCode[\"\\!\\(\\)\\*\"]", "List[63425, 63433, 63424, 63432]", 1);
+    assert_eval_eq("StringLength[\"\\(\\)\"]", "2", 1);
+    assert_eval_eq("ToExpression[\"\\!\\(\\*SuperscriptBox[\\(mb\\), \\(2\\)]\\)-x\"]",
+                   "Plus[Power[mb, 2], Times[-1, x]]", 1);
+    assert_eval_eq("ToExpression[\"a + \\!\\(\\*FractionBox[\\(x + 1\\), \\(y\\)]\\) + "
+                   "\\!\\(\\*SqrtBox[\\(z \\(-1\\)\\)]\\) + \\!\\(\\*SubscriptBox[\\(p\\), \\(2\\)]\\)\"]",
+                   "Plus[a, Times[Plus[1, x], Power[y, -1]], Power[Times[-1, z], Rational[1, 2]], Subscript[p, 2]]", 1);
+    assert_eval_eq("ToExpression[\"\\!\\(\\*SuperscriptBox[\\(mb\\), \\(2\\)] - \\*SqrtBox[\\(4\\)]\\)\"]",
+                   "Plus[-2, Power[mb, 2]]", 1);
+    /* juxtaposed groups multiply */
+    assert_eval_eq("ToExpression[\"\\!\\(\\*SuperscriptBox[\\(mb\\), \\(2\\)]\\) \\!\\(\\*SuperscriptBox[\\(la\\), \\(2\\)]\\)\"]",
+                   "Times[Power[la, 2], Power[mb, 2]]", 1);
+    /* nested boxes; RowBox of strings; a bare group */
+    assert_eval_eq("ToExpression[\"\\!\\(\\*SuperscriptBox[\\(a\\), \\(\\*FractionBox[\\(1\\), \\(2\\)]\\)]\\)\"]",
+                   "Power[a, Rational[1, 2]]", 1);
+    assert_eval_eq("ToExpression[\"\\!\\(\\*RowBox[{\\\"a\\\", \\\"+\\\", \\\"b\\\"}]\\)\"]", "Plus[a, b]", 1);
+    assert_eval_eq("{ToExpression[\"\\!\\(x + y\\)\"], ToExpression[\"\\(x\\)\"]}", "List[Plus[x, y], x]", 1);
+    /* the same syntax directly in source */
+    assert_eval_eq("\\!\\(\\*SuperscriptBox[\\(q\\), \\(3\\)]\\) + 1", "Plus[1, Power[q, 3]]", 1);
+}
+
 int main() {
     /* The parser builds expressions with the cached SYM_* symbol pointers
      * (e.g. expr_new_symbol(SYM_List)), which are only populated by
@@ -1453,6 +1480,7 @@ int main() {
     TEST(test_reading_creates_symbols);
     TEST(test_named_characters_in_source);
     TEST(test_flat_chain_provenance);
+    TEST(test_linear_box_syntax);
 
     printf("\nAll parser tests passed!\n");
     return 0;

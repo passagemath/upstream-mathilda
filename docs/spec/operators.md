@@ -112,6 +112,31 @@ reference prints `\[Mu]`. Box input (`\!\(\*SuperscriptBox[...]\)`) is not read.
 
 
 
+## Linear box syntax: `\!\( ... \)`
+
+`\( ... \)` groups box text, `\*` introduces a box expression, and an
+optional `\!` in front asks for the boxes to be read as the expression they
+display. FeynCalc's tests write powers and fractions this way:
+`\!\(\*SuperscriptBox[\(mb\), \(2\)]\) - x` is `mb^2 - x`.
+
+- Mathilda has no box language, so a group is lowered to InputForm text and
+  parsed (`src/linear_boxes.c`).
+  - Plain text is copied, and a nested `\( X \)` becomes `( X )`.
+  - `SuperscriptBox[a, b]` becomes `a^b`, `SubscriptBox` becomes
+    `Subscript`, `FractionBox[a, b]` becomes `a/b`, and `SqrtBox[a]`
+    becomes `Sqrt[a]`. `OverscriptBox`, `UnderscriptBox` and
+    `SubsuperscriptBox` map to their heads.
+  - `RowBox[{...}]` concatenates its elements, `FormBox`, `StyleBox`,
+    `TagBox` and `AdjustmentBox` show their first argument, and
+    `InterpretationBox[b, expr]` stands for `expr`.
+- Juxtaposed groups multiply, as in the reference.
+- In a string literal, `\!`, `\(`, `\)`, `\*`, `\@`, `\^`, `\&`, `\%`, `\+`,
+  `\/`, `\_` and ``\` `` are the reference's private-use characters (U+F7C1,
+  U+F7C9, U+F7C0, U+F7C8, ...).
+  - So `StringLength["\(\)"]` is `2`, and `ToExpression` of such a string
+    reads the boxes.
+  - Every form prints them back as their escapes.
+
 ## Number literals: `e` exponents
 
 The reference writes an exponent only as `*^` (`1.5*^-3`). Mathilda also

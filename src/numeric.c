@@ -1920,8 +1920,13 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
     }
 #endif
 
+    /* Only the numeric arguments take the inexact precision, as in the
+     * reference: 1.5 + Pi + a is 4.64159 + a, but 1.5 - a stays 1.5 - a (not
+     * 1.5 - 1.0 a), 1.5 + a - a is 1.5, and 1.5 (2 + a) and 1.5 + Sqrt[2] a
+     * keep their exact parts. */
     for (size_t i = 0; i < n; i++) {
-        out[i] = numericalize(args[i], spec);
+        out[i] = expr_is_numeric_quantity(args[i]) ? numericalize(args[i], spec)
+                                                   : expr_copy(args[i]);
     }
     return true;
 }

@@ -205,9 +205,15 @@ static void test_inexact_contagion(void) {
     assert_eval_eq("1. Abs[x[3]]", "Times[1.0, Abs[x[3]]]", 1);
     assert_eval_eq("0.5 (x[1] + x[2]^2)",
                    "Times[0.5, Plus[x[1], Power[x[2], 2]]]", 1);
-    /* But an exact numeric coefficient reached through a numeric head (Times)
-     * still numericalizes: `1. + 2 x` → `1. + 2. x` (Mathematica-matched). */
-    assert_eval_eq("1. + 2 x",     "Plus[1.0, Times[2.0, x]]", 1);
+    /* Only the NUMERIC summands and factors take the inexact precision, as in
+     * the reference (checked): a non-numeric term keeps its exact
+     * coefficient, so 1. - x is not 1. - 1. x, 1. + x - x is 1., and a
+     * non-numeric factor such as (2 + a) is not touched. */
+    assert_eval_eq("1. + 2 x",     "Plus[1.0, Times[2, x]]", 1);
+    assert_eval_eq("{1. - x, 1. + x - x, 1.5 (2 + a), 1. + Sqrt[2] x, 2.5 + Pi + x/3}",
+                   "List[Plus[1.0, Times[-1, x]], 1.0, Times[1.5, Plus[2, a]], "
+                   "Plus[1.0, Times[Power[2, Rational[1, 2]], x]], "
+                   "Plus[5.64159, Times[Rational[1, 3], x]]]", 1);
     /* Explicit N[] is different from contagion — it threads everywhere, so
      * N[x[1]] == x[1.] exactly as in Mathematica. */
     assert_eval_eq("N[x[1]]",      "x[1.0]", 1);

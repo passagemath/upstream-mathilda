@@ -105,9 +105,12 @@ a held branch.
   higher-precision value collapses to machine precision
   (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.
 - Contagion is **narrower than explicit `N`**: an approximate operand in a
-  `Plus`/`Times` numericalizes the *exact numeric* parts of its siblings
-  (including coefficients reached through nested numeric heads — `1. + 2 x` →
-  `1. + 2. x`, `1. + Sin[2]` → `1.9093`) but does **not** thread into the
+  `Plus`/`Times` numericalizes only those siblings that are *numeric*
+  quantities (`1. + Sin[2]` → `1.9093`, `1. + Pi + x` → `4.14159 + x`), as
+  in the reference (v0.6019). A sibling that is not numeric keeps its exact
+  parts: `1. + 2 x` stays `1. + 2 x` (it was `1. + 2. x`), `1. - x` is not
+  `1. - 1. x`, `1. + x - x` is `1.` (it was `1. + 0. x`), and `1.5 (2 + a)`
+  stays as it is. Nor does contagion thread into the
   arguments of a non-numeric head. So `0.333 x[1]` stays `0.333 x[1]` (the `1`
   is `x`'s argument, not an arithmetic operand) and `1. Abs[x[3]]` keeps
   `x[3]`. Explicit `N[]` still threads everywhere, so `N[x[1]]` is `x[1.]`.

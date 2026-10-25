@@ -234,6 +234,19 @@ void test_timeconstrained_restores_dsolve_depth() {
     assert_eval_eq("Head[DSolve[y'[x] == 1/(x y[x] + x^3 y[x]^3), y, x]]", "List", 0);
 }
 
+/* A call with a pattern head (g_[y__]) matches ONE operand of a Flat call,
+ * never a group h[...] of several (the reference's semantics). */
+static void test_match_flat_pattern_head_single_operand(void) {
+    assert_eval_eq("ClearAll[ff, q, r]; SetAttributes[ff, {Flat, Orderless}]; "
+                   "{ReplaceList[ff[a[1], b[2], c[3]], ff[g_[y__], c[3]] :> {g, {y}}], "
+                   "ff[a[1], b[2], c[3]] /. ff[g_[y__], c[3]] :> {g, {y}}, "
+                   "ReplaceList[ff[a[1], b[2], c[3]], ff[x_, c[3]] :> x]}",
+                   "{{}, ff[b[2], {a, {1}}], {ff[a[1], b[2]]}}", 0);
+    assert_eval_eq("SetAttributes[q, Orderless]; "
+                   "q /: q[z_, x_] f_[y__] := r[z, f]; FreeQ[q[a, b] e[a] g[b], r[_, Times]]",
+                   "True", 0);
+}
+
 int main() {
     symtab_init();
     TEST(test_match_basic);
@@ -246,6 +259,7 @@ int main() {
     TEST(test_match_patterntest);
     TEST(test_match_condition_backtracks_into_nested);
     TEST(test_match_condition_oneidentity_optional_default);
+    TEST(test_match_flat_pattern_head_single_operand);
     TEST(test_timeconstrained_restores_dsolve_depth);
     printf("All match tests passed!\n");
     return 0;

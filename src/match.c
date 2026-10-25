@@ -2104,6 +2104,16 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                     max_k = (n_exprs > 0) ? 1 : 0;
                 }
             }
+        } else if (inner_p && inner_p->type == EXPR_FUNCTION &&
+                   inner_p->data.function.head &&
+                   inner_p->data.function.head->type != EXPR_SYMBOL) {
+            /* A call with a pattern (or compound) head, g_[y__] or _[x_],
+             * matches one operand, never a group pat_head[subset]: in the
+             * reference ReplaceList[ff[a[1], b[2], c[3]], ff[g_[y__], c[3]]
+             * :> ...] (ff Flat, Orderless) is {}, and an UpValue
+             * q[z_, x_] f_[y__] never tries f -> Times over the other
+             * factors (FeynCalc's DiracTrace PairContract rules). */
+            max_k = (n_exprs > 0) ? 1 : 0;
         } else if (inner_p && inner_p->type != EXPR_FUNCTION) {
             /* A literal atom (integer/real/symbol/string/bigint) as a
              * pattern element can only match a single subject element that

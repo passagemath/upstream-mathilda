@@ -176,6 +176,14 @@ Gives the number of elements or subexpressions that match a pattern.
   is covered by the ordinary path, so its default match is listed once.
   A guarded form keeps this: `MatchQ[h[g], a_. h[b_] /; FreeQ[{a, b}, h]]` is
   `True` with `a -> 1` (before v0.586 the guard made a head mismatch final).
+- **A call with a pattern head matches one operand of a Flat call**
+  (v0.6020), as in the reference. `g_[y__]` and `_[x_]` never take a group
+  `h[...]` of several operands: `ReplaceList[ff[a[1], b[2], c[3]],
+  ff[g_[y__], c[3]] :> g]` is `{}` for a Flat, Orderless `ff`, and
+  `ff[a[1], b[2], c[3]] /. ff[g_[y__], c[3]] :> {g, {y}}` is
+  `ff[b[2], {a, {1}}]`. Before, `g` could bind `ff` over `a[1], b[2]`. In a
+  product, the UpValue `q /: q[z_, x_] f_[y__] := ...` used to try
+  `f -> Times` over all the other factors.
 - **Flat without OneIdentity** differs from the reference in `ReplaceList` enumeration.
   The reference binds a one-operand slice both as `h[b]` and as `b` and repeats matches;
   Mathilda binds `b` once. These cases are recorded, report-only, in

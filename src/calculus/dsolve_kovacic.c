@@ -913,10 +913,13 @@ static Expr* kovacic_deobfuscate(Expr* e, const char* xvar) {
     e = apply_rules(e, "E^(s_) :> E^(Expand[s])");
     e = apply_rules(e, "E^(Plus[a_, b__]) :> E^a E^(Plus[b])");
     e = apply_rules(e, "E^(c_. Log[u_]) :> u^c");
-    char rule[512];
+    /* xvar is pasted into the rule text, so the pattern variables live in a
+     * private context: a bare p_ or r_ would capture an ODE variable named p or r. */
+    char rule[640];
     snprintf(rule, sizeof(rule),
-        "(p_)^(r_ /; ! IntegerQ[r]) /; PolynomialQ[p, %s] && ! FreeQ[p, %s] :> "
-        "(Times @@ ((First[#]^(Last[#] r)) & /@ FactorList[p]))", xvar, xvar);
+        "(Kovacic`p_)^(Kovacic`r_ /; ! IntegerQ[Kovacic`r]) /; PolynomialQ[Kovacic`p, %s] && "
+        "! FreeQ[Kovacic`p, %s] :> "
+        "(Times @@ ((First[#]^(Last[#] Kovacic`r)) & /@ FactorList[Kovacic`p]))", xvar, xvar);
     e = apply_rules(e, rule);
     return eval_and_free(ds_call1("PowerExpand", e));
 }

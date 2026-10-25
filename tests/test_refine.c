@@ -221,6 +221,20 @@ static void test_directed_infinity(void) {
     check("Refine[{x, DirectedInfinity[c]}, c > 0]", "{x, Infinity}");
 }
 
+/* The assumption rules are built as text with the user's symbols pasted in;
+ * a user symbol named like one of their pattern variables (r, p, rest, base,
+ * c, m, k) used to be captured by it: Refine[1/Sqrt[r^2], r > 0] was -2 and
+ * Refine[Log[p^3], p > 0] was 3 Log[3]. */
+static void test_pattern_name_capture(void) {
+    check("Refine[1/Sqrt[r^2], r > 0]", "1/r");
+    check("Refine[Log[p^3], p > 0]", "3 Log[p]");
+    check("Refine[Sqrt[rest^2 y^2], rest > 0]", "rest Sqrt[y^2]");
+    check("Refine[Sqrt[base^2], base > 0]", "base");
+    check("Refine[(-1)^(2 m), Element[m, Integers]]", "1");
+    check("Simplify[c^2/Sqrt[c^2], c > 0]", "c");
+    check("Refine[Sqrt[r^2 rest], r > 0]", "r Sqrt[rest]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -235,6 +249,7 @@ int main(void) {
     test_errors_edges();
     test_stress_fixes();
     TEST(test_refine_re_of_real_terms);
+    TEST(test_pattern_name_capture);
     test_directed_infinity();
     printf("All Refine tests passed.\n");
     return 0;

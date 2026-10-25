@@ -1604,8 +1604,12 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     ar_filter_to_input(nonpos,    &nnp,   input);
     ar_filter_to_input(abslt1,    &nab,   input);
 
-    /* Build a single rule list "{r1, r2, ...}" as a string, then parse. */
-    char buf[8192];
+    /* Build a single rule list "{r1, r2, ...}" as a string, then parse.  The
+     * user's symbols are pasted into the text, so every pattern variable lives
+     * in the AssumeRules` context: a bare r_ would capture a user symbol r in
+     * the replacement (Power[Power[r, 2], r_] :> Power[r, 2 r] turned
+     * Refine[1/Sqrt[r^2], r > 0] into -2). */
+    char buf[32768];
     size_t off = 0;
     int wrote_any = 0;
 
@@ -1627,10 +1631,10 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         /* General (x^2)^r -> x^(2r) for x > 0 (valid for any rational r, since
          * x^2 > 0): covers 1/Sqrt[x^2] = (x^2)^(-1/2) -> 1/x and the
          * (x^2)^(3/2) -> x^3 that arise from Laurent/fractional radical powers. */
-        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[%s, 2 r]", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], AssumeRules`r_] :> Power[%s, 2 AssumeRules`r]", x, x);
         /* Sqrt[x^2 * rest] -> x * Sqrt[rest] for x > 0; lets multi-factor
          * radicals like Sqrt[x^2 y^2] reduce one symbol at a time. */
-        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> %s Power[Times[rest], Rational[1, 2]]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], AssumeRules`rest___], Rational[1, 2]] :> %s Power[Times[AssumeRules`rest], Rational[1, 2]]", x, x);
         /* Abs[x] -> x  for x > 0 */
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         /* Sign[x] -> 1  for x > 0 */
@@ -1640,19 +1644,19 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         /* Conjugate[x] -> x  for x > 0 (x is real) */
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Log[x^p] -> p Log[x]  for x > 0 (any real p; v1 accepts symbolic p too) */
-        SEP(); EMIT("Log[Power[%s, p_]] :> p Log[%s]", x, x);
+        SEP(); EMIT("Log[Power[%s, AssumeRules`p_]] :> AssumeRules`p Log[%s]", x, x);
         /* Log[x rest] -> Log[x] + Log[rest]  for x > 0: a positive real factor
          * never shifts the branch (arg[x rest] = arg[rest]), so it splits off
          * exactly. Peels one positive factor at a time; Log[x] (bare) does not
          * re-match this Times pattern, so it terminates. */
-        SEP(); EMIT("Log[Times[%s, rest___]] :> Log[%s] + Log[Times[rest]]", x, x);
+        SEP(); EMIT("Log[Times[%s, AssumeRules`rest___]] :> Log[%s] + Log[Times[AssumeRules`rest]]", x, x);
         /* Inverse-trig sum identity: ArcTan[x] + ArcTan[1/x] -> Pi/2  for x > 0.
          * Mathilda's matcher does NOT perform orderless-Plus subset matching
          * out of the box (unlike Mathematica), so the rule must explicitly
          * absorb the trailing terms via `+ rest___` and re-emit them. The
          * BlankNullSequence pattern matches 0 or more remaining terms, so
          * the bare two-term sum reduces too. */
-        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> Pi/2 + rest", x, x);
+        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + AssumeRules`rest___ :> Pi/2 + AssumeRules`rest", x, x);
         /* ArcCosh double-angle reduction: ArcCosh[2x^2 - 1] -> 2 ArcCosh[x]
          * for x > 0. The identity holds for any complex x with the
          * principal branch (verified for x in [0,1] via the i*ArcCos bridge
@@ -1668,8 +1672,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
          * exponent p). Emitted once per unordered pair. */
         for (size_t j = i + 1; j < npos; j++) {
             const char* y = positives[j];
-            SEP(); EMIT("Times[Power[%s, p_], Power[%s, p_], rest___] :> "
-                        "Power[Times[%s, %s], p] rest", x, y, x, y);
+            SEP(); EMIT("Times[Power[%s, AssumeRules`p_], Power[%s, AssumeRules`p_], AssumeRules`rest___] :> "
+                        "Power[Times[%s, %s], AssumeRules`p] AssumeRules`rest", x, y, x, y);
         }
     }
 
@@ -1687,13 +1691,13 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> -%s", x, x);
         /* General (x^2)^r -> (-x)^(2r) for x < 0 (x^2 = (-x)^2, -x > 0):
          * covers 1/Sqrt[x^2] = (x^2)^(-1/2) -> 1/(-x) and (x^2)^(3/2) -> -x^3. */
-        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[Times[-1, %s], 2 r]", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], AssumeRules`r_] :> Power[Times[-1, %s], 2 AssumeRules`r]", x, x);
         /* Sqrt[x^2 * rest] -> -x * Sqrt[rest] for x < 0. */
-        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> -%s Power[Times[rest], Rational[1, 2]]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], AssumeRules`rest___], Rational[1, 2]] :> -%s Power[Times[AssumeRules`rest], Rational[1, 2]]", x, x);
         /* Mirror of the x > 0 inverse-trig sum: ArcTan[x] + ArcTan[1/x]
          * -> -Pi/2 for x < 0. Same `+ rest___` trick as above to handle
          * the embedded-in-larger-sum case. */
-        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> -Pi/2 + rest", x, x);
+        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + AssumeRules`rest___ :> -Pi/2 + AssumeRules`rest", x, x);
         /* Log[x] -> I Pi + Log[-x]  for x < 0 (principal branch). */
         SEP(); EMIT("Log[%s] :> I Pi + Log[-%s]", x, x);
         /* Half-integer power of a negative real, principal branch:
@@ -1702,7 +1706,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
          * x^(3/2) -> -I (-x)^(3/2). The RHS base Times[-1,x] cannot re-match
          * Power[x, _] and Power[I, p] folds to a concrete Complex, so it
          * terminates. The multiplicative analogue of the Log rule above. */
-        SEP(); EMIT("Power[%s, Rational[p_, 2]] :> Power[I, p] Power[Times[-1, %s], Rational[p, 2]]", x, x);
+        SEP(); EMIT("Power[%s, Rational[AssumeRules`p_, 2]] :> Power[I, AssumeRules`p] Power[Times[-1, %s], Rational[AssumeRules`p, 2]]", x, x);
     }
 
     /* Non-positive (x <= 0, but not proven strictly negative): Abs[x] -> -x,
@@ -1716,8 +1720,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> -%s", x, x);
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> -%s", x, x);
-        SEP(); EMIT("Power[Power[%s, 2], r_] :> Power[Times[-1, %s], 2 r]", x, x);
-        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> -%s Power[Times[rest], Rational[1, 2]]", x, x);
+        SEP(); EMIT("Power[Power[%s, 2], AssumeRules`r_] :> Power[Times[-1, %s], 2 AssumeRules`r]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], AssumeRules`rest___], Rational[1, 2]] :> -%s Power[Times[AssumeRules`rest], Rational[1, 2]]", x, x);
     }
 
     /* For real-but-unknown-sign, Sqrt[x^2] -> Abs[x]. Skip symbols already
@@ -1729,7 +1733,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (sym_already_listed(nonpos, nnp, x)) continue;
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> Abs[%s]", x, x);
         /* Sqrt[x^2 * rest] -> Abs[x] * Sqrt[rest] for real x. */
-        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> Abs[%s] Power[Times[rest], Rational[1, 2]]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], AssumeRules`rest___], Rational[1, 2]] :> Abs[%s] Power[Times[AssumeRules`rest], Rational[1, 2]]", x, x);
         /* Conjugate[x] -> x  for real x. */
         SEP(); EMIT("Conjugate[%s] :> %s", x, x);
         /* Log[x^2] -> 2 Log[Abs[x]] for real x (|x| keeps the argument real
@@ -1751,26 +1755,26 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Cos[Pi %s] :> Power[-1, %s]", n, n);
         SEP(); EMIT("Tan[%s Pi] :> 0", n);
         SEP(); EMIT("Tan[Pi %s] :> 0", n);
-        SEP(); EMIT("Power[-1, Times[m_Integer /; EvenQ[m], %s]] :> 1", n);
-        SEP(); EMIT("Power[Power[-1, %s], m_Integer /; EvenQ[m]] :> 1", n);
+        SEP(); EMIT("Power[-1, Times[AssumeRules`m_Integer /; EvenQ[AssumeRules`m], %s]] :> 1", n);
+        SEP(); EMIT("Power[Power[-1, %s], AssumeRules`m_Integer /; EvenQ[AssumeRules`m]] :> 1", n);
         /* (-1)^(k + n) -> (-1)^k (-1)^n for integer n and any k: an integer
          * additive shift in a (-1) exponent splits out so the sign factor can
          * fold and cancel (e.g. (-1)^n + (-1)^(n+1) -> 0). Sound for integer k
          * since (-1)^(k+r) = (-1)^k (-1)^r exactly. */
-        SEP(); EMIT("Power[-1, Plus[k_Integer, %s]] :> Power[-1, k] Power[-1, %s]", n, n);
+        SEP(); EMIT("Power[-1, Plus[AssumeRules`k_Integer, %s]] :> Power[-1, AssumeRules`k] Power[-1, %s]", n, n);
         /* Shift identities: Cos[x + n Pi] -> (-1)^n Cos[x], likewise Sin, and
          * Tan[x + n Pi] -> Tan[x] (period Pi), for integer n. The rest___
          * absorbs the remaining Plus terms (Plus[] -> 0 gives the bare
          * Cos[n Pi] case too). */
-        SEP(); EMIT("Cos[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Cos[Plus[rest]]", n, n);
-        SEP(); EMIT("Sin[Plus[Times[%s, Pi], rest___]] :> Power[-1, %s] Sin[Plus[rest]]", n, n);
-        SEP(); EMIT("Tan[Plus[Times[%s, Pi], rest___]] :> Tan[Plus[rest]]", n);
+        SEP(); EMIT("Cos[Plus[Times[%s, Pi], AssumeRules`rest___]] :> Power[-1, %s] Cos[Plus[AssumeRules`rest]]", n, n);
+        SEP(); EMIT("Sin[Plus[Times[%s, Pi], AssumeRules`rest___]] :> Power[-1, %s] Sin[Plus[AssumeRules`rest]]", n, n);
+        SEP(); EMIT("Tan[Plus[Times[%s, Pi], AssumeRules`rest___]] :> Tan[Plus[AssumeRules`rest]]", n);
         /* Exp periodicity for integer n: e^(2 I Pi n + rest) -> e^rest, and the
          * odd-multiple e^(I Pi n + rest) -> (-1)^n e^rest. The evaluator keeps
          * Exp[sum] fused and does not know n is an integer, so this peel must be
          * assumption-gated here. */
-        SEP(); EMIT("Power[E, Plus[Times[2 I, Pi, %s], rest___]] :> Power[E, Plus[rest]]", n);
-        SEP(); EMIT("Power[E, Plus[Times[I, Pi, %s], rest___]] :> Power[-1, %s] Power[E, Plus[rest]]", n, n);
+        SEP(); EMIT("Power[E, Plus[Times[2 I, Pi, %s], AssumeRules`rest___]] :> Power[E, Plus[AssumeRules`rest]]", n);
+        SEP(); EMIT("Power[E, Plus[Times[I, Pi, %s], AssumeRules`rest___]] :> Power[-1, %s] Power[E, Plus[AssumeRules`rest]]", n, n);
     }
 
     /* Even-exponent identities: (-1)^m = 1 when m is even, and the
@@ -1784,8 +1788,8 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[-1, %s] :> 1", m);
         /* Literal-integer multiplier (handles concrete numbers without
          * needing them in the integer set). */
-        SEP(); EMIT("Power[-1, k_Integer %s] :> 1", m);
-        SEP(); EMIT("Power[Power[-1, k_Integer], %s] :> 1", m);
+        SEP(); EMIT("Power[-1, AssumeRules`k_Integer %s] :> 1", m);
+        SEP(); EMIT("Power[Power[-1, AssumeRules`k_Integer], %s] :> 1", m);
         for (size_t j = 0; j < nint; j++) {
             const char* k = integers[j];
             SEP(); EMIT("Power[-1, %s %s] :> 1", k, m);
@@ -1803,14 +1807,14 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> %s", x, x);
         /* (x^p)^q -> x^(p q) handled structurally (needs p real); see above. */
-        SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> %s Power[Times[rest], Rational[1, 2]]", x, x);
+        SEP(); EMIT("Power[Times[Power[%s, 2], AssumeRules`rest___], Rational[1, 2]] :> %s Power[Times[AssumeRules`rest], Rational[1, 2]]", x, x);
     }
 
     /* Symbols with -1 < b < 1: (a^b)^c -> a^(b c) on the principal branch,
      * for any base a. */
     for (size_t i = 0; i < nab; i++) {
         const char* b = abslt1[i];
-        SEP(); EMIT("Power[Power[base_, %s], c_] :> Power[base, %s c]", b, b);
+        SEP(); EMIT("Power[Power[AssumeRules`base_, %s], AssumeRules`c_] :> Power[AssumeRules`base, %s AssumeRules`c]", b, b);
     }
 
     /* Equal[u, v] facts -> two-way substitution rules. We use immediate

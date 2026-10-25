@@ -426,7 +426,11 @@ Symbolic product.
 - Combines numeric constants and groups identical bases into `Power` expressions.
 - **Numeric bases under one symbolic exponent merge** (v0.594), as in the
   reference: `2^a 3^a` is `6^a`, `3^-a 5^a` is `(5/3)^a`, `2^a 3^a 5^-a` is
-  `(6/5)^a`, and `Sinh[1]^a Cosh[1]^-a` is `Tanh[1]^a`. The exponents must be
+  `(6/5)^a`, and `Sinh[1]^a Cosh[1]^-a` is `Tanh[1]^a`. Since v0.6016 any
+  exponent that is not an integer, a rational or a machine real counts, so a
+  numeric one merges too: `2^Sqrt[2] 3^-Sqrt[2]` is `(2/3)^Sqrt[2]`, `2^Pi 3^Pi`
+  is `6^Pi`, `2^I 3^-I` is `(2/3)^I` (rational exponents are the radical
+  fusion's: `Sqrt[2]/Sqrt[3]` is `Sqrt[2/3]`). The exponents must be
   equal or exactly opposite, and every base a numeric quantity. Symbolic bases
   never merge: `x^a y^a` and `2^a f[1]^a` stay. `(b1 b2)^e = b1^e b2^e` needs
   all but one base to be a positive real, so a group admits at most one other
@@ -435,7 +439,16 @@ Symbolic product.
     one, because only a positive base may be inverted to flip a sign.
   - Otherwise a group whose exponents all agree keeps that exponent
     (`3^-a 5^-a` is `15^(-a)`), and a mixed group takes the sign without a
-    negative leading coefficient (`a`, not `-a`).
+    negative leading coefficient (`a`, not `-a`). A sum takes the sign whose
+    last term is negative (v0.6016): `2^(1 + a) 3^(-1 - a)` is
+    `(3/2)^(-1 - a)`, `2^(a - 1) 3^(1 - a)` is `(3/2)^(1 - a)`, and
+    `2^(1 + Sqrt[3]) 3^(-1 - Sqrt[3])` is `(3/2)^(-1 - Sqrt[3])`. A last term
+    with a complex coefficient reads as negative when the printer writes it
+    with a minus (`-I t`, `(-1 + I) t`); a product flips only for a negative
+    imaginary coefficient (`2^(-I t) 3^(I t)` is `(3/2)^(I t)`, while
+    `(2/3)^((-1 + I) t)` stays); a complex number keeps the sign with a
+    positive imaginary part (`2^(-I) 3^I` is `(3/2)^I`). Exponents with an
+    inexact number do not merge (`2^(2.5 t) 3^(-2.5 t)` stays).
 - **A power of a product splits off its positive numeric factors** (v0.6005),
   as in the reference, when it is a factor of a larger product and its
   exponent is not a number:
@@ -463,6 +476,10 @@ Symbolic product.
     `m^-7 (p/m^4)^(-1 - 3 e) (r/m^3)^(-1 + 4 e)` collapses with no integer
     factoring.
   - Bases that share nothing stay as they are (`3 4^a`, `2^a 3^b`).
+  - A shared factor calls for the basis only when at least one of the two
+    powers has a symbolic exponent (v0.6016): `17 Sqrt[17]` stays. Rewritten
+    as `17^(3/2)` it evaluated straight back, an endless loop through `Times`
+    (`$RecursionLimit::reclim`).
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.

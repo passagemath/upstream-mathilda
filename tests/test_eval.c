@@ -950,6 +950,28 @@ void test_numeric_power_coprime_basis_o4() {
     assert_eval_eq("{3 4^a, 2^a 3^b, 2^x (2*10000000019)^y}",
                    "List[Times[3, Power[4, a]], Times[Power[2, a], Power[3, b]], "
                    "Times[Power[2, Plus[x, y]], Power[10000000019, y]]]", 1);
+    /* only a symbolic exponent calls for the basis: 17 Sqrt[17] as 17^(3/2)
+     * evaluates straight back, an endless loop through Times (reclim) */
+    assert_eval_eq("{17 Sqrt[17], 9 Sqrt[3] 3^a, -153 Sqrt[17] 23^(-2 + 4 Sqrt[17]) 10^(2 - 4 Sqrt[17])}",
+                   "List[Times[17, Power[17, Rational[1, 2]]], Power[3, Plus[Rational[5, 2], a]], "
+                   "Times[-153, Power[Rational[10, 23], Plus[2, Times[-4, Power[17, Rational[1, 2]]]]], "
+                   "Power[17, Rational[1, 2]]]]", 1);
+    /* opposite exponents merge for any non-rational exponent, numeric ones
+     * included; a sum keeps the sign whose LAST term is negative */
+    assert_eval_eq("{2^Sqrt[2] 3^-Sqrt[2], 2^Pi 3^Pi, 2^I 3^-I, 2^(1+a) 3^(-1-a), 2^(a-1) 3^(1-a), "
+                   "2^(-a+b) 3^(a-b), 2^(1+Sqrt[3]) 3^(-1-Sqrt[3]), 2^(1-Sqrt[2]) 3^(Sqrt[2]-1)}",
+                   "{(2/3)^Sqrt[2], 6^Pi, (2/3)^I, (3/2)^(-1 - a), (3/2)^(1 - a), (3/2)^(a - b), "
+                   "(3/2)^(-1 - Sqrt[3]), (2/3)^(1 - Sqrt[2])}", 0);
+    /* complex coefficients: in a sum the last term reads as negative as the
+     * printer writes it (-I t, (-1 + I) t); a product flips only for a
+     * negative imaginary coefficient; a complex number keeps im > 0.  The
+     * first case looped through Simplify's RadicalCanon (a stack overflow)
+     * while the merged sign disagreed with the split one's. */
+    assert_eval_eq("{4^(5/8 - I t) 5^(-5/8 + I t), 2^(-I t) 3^(I t), 2^((-1 + I) t) 3^((1 - I) t), "
+                   "2^(1 + (-1 + I) t) 3^(-1 + (1 - I) t), 2^(-I) 3^I, 2^(1 - I) 3^(-1 + I), "
+                   "2^(2.5 t) 3^(-2.5 t)}",
+                   "{(4/5)^(5/8 - I t), (3/2)^(I t), (2/3)^((-1 + I) t), (2/3)^(1 + (-1 + I) t), "
+                   "(3/2)^I, (3/2)^(-1 + I), 2^(2.5 t) 3^(-2.5 t)}", 0);
 }
 
 /* A condition does not promote a rule past an earlier, at-least-as-specific

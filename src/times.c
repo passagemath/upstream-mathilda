@@ -109,22 +109,72 @@ static bool is_positive_constant_expr(Expr* e) {
     return false;
 }
 
-/* True for Times[c, ...] with a negative numeric leading coefficient c, or a
- * sum whose leading term is one: the exponent sign a merged power is written
- * without (a, not -a; a - b, not b - a). */
+/* Sign of a real number atom: -1, 0 or 1 (0 also for a non-number). */
+static int real_atom_sign(const Expr* c) {
+    if (c->type == EXPR_INTEGER) return (c->data.integer > 0) - (c->data.integer < 0);
+    if (c->type == EXPR_BIGINT) return mpz_sgn(c->data.bigint);
+    if (c->type == EXPR_REAL) return (c->data.real > 0.0) - (c->data.real < 0.0);
+    if (c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+        c->data.function.head->data.symbol.name == SYM_Rational && c->data.function.arg_count == 2)
+        return real_atom_sign(c->data.function.args[0]);
+    return 0;
+}
+
+static bool is_complex_atom(const Expr* c) {
+    return c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL &&
+           c->data.function.head->data.symbol.name == SYM_Complex && c->data.function.arg_count == 2;
+}
+
+/* A term of a sum reads as negative, as the printer writes it with a minus:
+ * a negative real leading coefficient, or a complex one whose real part is
+ * negative, or zero with a negative imaginary part (-I t, (-1 + I) t). */
+static bool term_looks_negative(const Expr* t) {
+    if (t->type != EXPR_FUNCTION || t->data.function.head->type != EXPR_SYMBOL ||
+        t->data.function.head->data.symbol.name != SYM_Times || t->data.function.arg_count < 2)
+        return false;
+    const Expr* c = t->data.function.args[0];
+    if (is_complex_atom(c)) {
+        int re = real_atom_sign(c->data.function.args[0]);
+        return re < 0 || (re == 0 && real_atom_sign(c->data.function.args[1]) < 0);
+    }
+    return real_atom_sign(c) < 0;
+}
+
+/* The exponent sign a merged power is written without, as in the reference:
+ *  - a product with a negative real leading coefficient (a, not -a), or a
+ *    negative imaginary one (I t, not -I t); any other complex coefficient
+ *    never flips: (2/3)^((-1 + I) t) and (2/3)^((1 - I) t) stay;
+ *  - a sum whose LAST term does not read as negative (a - b, not b - a;
+ *    1 - a, not -1 + a; -1 - Sqrt[3], not 1 + Sqrt[3]; 1 - I t, not
+ *    -1 + I t);
+ *  - a complex number with a negative imaginary part (I, not -I; -1 + I, not
+ *    1 - I). */
 static bool exponent_looks_negative(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
+    if (!e) return false;
+    if (is_complex_atom(e)) return real_atom_sign(e->data.function.args[1]) < 0;
+    if (e->type != EXPR_FUNCTION || e->data.function.arg_count < 2) return false;
     const Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return false;
-    /* A sum by its leading term: b - a reads as negative, a - b does not. */
-    if (h->data.symbol.name == SYM_Plus) return exponent_looks_negative(e->data.function.args[0]);
+    if (h->data.symbol.name == SYM_Plus)
+        return !term_looks_negative(e->data.function.args[e->data.function.arg_count - 1]);
     if (h->data.symbol.name != SYM_Times) return false;
     const Expr* c = e->data.function.args[0];
-    if (c->type == EXPR_INTEGER) return c->data.integer < 0;
-    if (c->type == EXPR_BIGINT) return mpz_sgn(c->data.bigint) < 0;
-    if (c->type == EXPR_REAL) return c->data.real < 0.0;
-    int64_t n, d;
-    if (is_rational((Expr*)c, &n, &d)) return n < 0;
+    if (is_complex_atom(c))
+        return real_atom_sign(c->data.function.args[0]) == 0 &&
+               real_atom_sign(c->data.function.args[1]) < 0;
+    return real_atom_sign(c) < 0;
+}
+
+/* Does e contain a machine or arbitrary-precision real?  The reference leaves
+ * 2^(2.5 t) 3^(-2.5 t) and 2^(1.5 + a) 3^(-1.5 - a) unmerged. */
+static bool contains_inexact(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_inexact(e->data.function.args[i])) return true;
     return false;
 }
 
@@ -648,26 +698,31 @@ static Expr* o4_coprime_basis(Expr* const* args, size_t n) {
     /* interaction: two atoms with different exponents whose values share a
      * factor.  Atoms with equal exponents are multiplied together first, as
      * the reference merges 2^a 8^a into 16^a before anything else; only a
-     * factor still shared across different exponents calls for the basis. */
+     * factor still shared across different exponents calls for the basis.
+     * At least one of the two must have a symbolic exponent: 17 Sqrt[17]
+     * would otherwise be rewritten 17^(3/2), which evaluates straight back
+     * to 17 Sqrt[17] -- an endless loop through Times. */
     bool share = false;
     mpz_t g; mpz_init(g);
     {
         size_t nm = 0;
         mpz_t* mv = malloc((na ? na : 1) * sizeof(mpz_t));
         Expr** me = malloc((na ? na : 1) * sizeof(Expr*));
+        bool* ms = malloc((na ? na : 1) * sizeof(bool));
         for (size_t i = 0; i < na; i++) {
             size_t k = 0;
             while (k < nm && !expr_eq(me[k], at[i].e)) k++;
-            if (k == nm) { mpz_init_set(mv[nm], at[i].v); me[nm] = at[i].e; nm++; }
+            if (k == nm) { mpz_init_set(mv[nm], at[i].v); me[nm] = at[i].e; ms[nm] = !expr_is_numeric_like(at[i].e); nm++; }
             else mpz_mul(mv[k], mv[k], at[i].v);
         }
         for (size_t i = 0; i < nm && !share; i++)
             for (size_t j = i + 1; j < nm && !share; j++) {
+                if (!ms[i] && !ms[j]) continue;
                 mpz_gcd(g, mv[i], mv[j]);
                 if (mpz_cmp_ui(g, 1) > 0) share = true;
             }
         for (size_t i = 0; i < nm; i++) mpz_clear(mv[i]);
-        free(mv); free(me);
+        free(mv); free(me); free(ms);
     }
     Expr* out = NULL;
     if (share) {
@@ -1486,12 +1541,17 @@ Expr* builtin_times(Expr* res) {
      * so the group keeps the exponent of its unsigned base, if any; a group
      * whose exponents all agree keeps that one (3^-a 5^-a -> 15^-a); a mixed
      * group takes the sign without an explicit negative factor (a, not -a).
-     * Numeric exponents are the radical fusion's business above; bases that
+     * Rational exponents are the radical fusion's business above; any other
+     * numeric exponent merges the same way (2^Sqrt[2] 3^-Sqrt[2] is
+     * (2/3)^Sqrt[2], 2^Pi 3^Pi is 6^Pi); bases that
      * are not numeric quantities (x^a y^a, f[1]^a) never merge.  A power of a
      * product stays a power, so the merge cannot cycle. */
     for (size_t i = 0; i < group_count; i++) {
         Expr* ei = groups[i].exponent;
-        if (expr_is_numeric_quantity(ei) || !expr_is_numeric_quantity(groups[i].base))
+        if (expr_is_integer_like(ei) || contains_inexact(ei) ||
+            (ei->type == EXPR_FUNCTION && ei->data.function.head->type == EXPR_SYMBOL &&
+             ei->data.function.head->data.symbol.name == SYM_Rational) ||
+            !expr_is_numeric_quantity(groups[i].base))
             continue;
         Expr* neg_ei = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ expr_new_integer(-1), expr_copy(ei) }, 2));

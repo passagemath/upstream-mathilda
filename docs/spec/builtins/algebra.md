@@ -107,6 +107,14 @@ Puts terms in a sum over a common denominator, and cancels factors in the result
   rewritten: `Together[Log[x^2] + 1/x]` is `(1 + x Log[x^2])/x`, not `2 Log[x]` (false
   for `x < 0`), and `Log[-w]` is not split into `I Pi + Log[w]` — matching the reference.
   The same holds for `Cancel` and `Factor`.
+- **Indexed variables are ordinary variables** (v0.6017). `x[3]`, and any
+  inert user head whose arguments are atoms or such nodes (`Momentum[p]`,
+  `Pair[Momentum[p], Momentum[q]]`), is one polynomial variable on the FLINT
+  path, exactly like a symbol. So `Together[1/(1 - x[1]) - 1/(1 + x[1])]` is
+  `-(2 x[1])/(-1 + x[1]^2)`, the form the same fraction gets over `x1`.
+  Before, any `x[i]` sent the whole expression to the classical multivariate
+  Euclid: a rational function in `x[1..7]` took ~29 s and now takes ~0.02 s.
+  The same applies to `Cancel`.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).

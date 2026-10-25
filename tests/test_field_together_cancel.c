@@ -92,6 +92,20 @@ static void test_field_reduced(void) {
              "Together[s (x - s)/((x - s)(x + 1))] ]] ");
 }
 
+/* An indexed variable x[i] (or an inert user head such as Pair[p, q]) is an
+ * ordinary polynomial variable on the FLINT path, so the answer is the one the
+ * same fraction gets over symbols, and a 7-variable case is fast (it fell to
+ * the classical multivariate Euclid: ~29 s). */
+static void test_indexed_variables(void) {
+    run_true("(Together[1/(1 - x[1]) - 1/(1 + x[1])] /. x[1] -> x1) === "
+             "Together[1/(1 - x1) - 1/(1 + x1)]");
+    run_true("Together[a/x[1] + b/x[2]] === (b x[1] + a x[2])/(x[1] x[2])");
+    run_true("Cancel[(x[1]^2 - x[2]^2)/(x[1] - x[2])] === x[1] + x[2]");
+    run_true("Together[1/(p[a, 1] - q) + 1/(q - p[a, 1])] === 0");
+    run_true("With[{s = Sum[x[i], {i, 7}]}, "
+             "First[AbsoluteTiming[Together[s^3/(s^2 - x[1]^2) - x[2]/(s + x[1])]]] < 5]");
+}
+
 int main(void) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -101,6 +115,7 @@ int main(void) {
     TEST(test_field_together_value);
     TEST(test_field_cancel);
     TEST(test_field_reduced);
+    TEST(test_indexed_variables);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

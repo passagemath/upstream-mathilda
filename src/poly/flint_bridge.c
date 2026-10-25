@@ -3810,13 +3810,46 @@ static int km_is_generic_kernel_head(const char* h) {
  * evaluate() collapses the algebraic relations (√3² → 3, I² → -1). Whether the
  * capture is actually USED is decided in km_build (gated on an Exp kernel being
  * present) so pure-radical Together/Cancel keep their classical output form. */
-static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck) {
+/* An inert indexed / user-head atom -- x[3], Momentum[p], Pair[Momentum[p],
+ * Momentum[q]] -- that the classical Together/Cancel already treats as one
+ * opaque polynomial variable (collect_variables), exactly like a symbol.  The
+ * head is a symbol with no C builtin (so no evaluator canonicalisation such as
+ * 1/Sin -> Csc can make the readback diverge), the node is not a numeric
+ * constant (an algebraic relation would be lost), and every argument is an atom
+ * or, recursively, another such node: no Plus/Times/Power inside, so the
+ * classical path's descent into the arguments (together_recursive maps over
+ * them) has nothing to combine and substituting the whole node is
+ * output-identical.  Without this, a rational function in indexed variables
+ * x[1..n] fell to the classical multivariate Euclid: Together over x[1..7] and
+ * two symbols at total degree ~10 took ~29 s, against ~0.1 s here. */
+static int km_is_inert_head_atom(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL)
+        return 0;
+    SymbolDef* def = symtab_lookup(e->data.function.head->data.symbol.name);
+    if (def && def->builtin_func) return 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        const Expr* a = e->data.function.args[i];
+        if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT || a->type == EXPR_STRING)
+            continue;
+        if (a->type == EXPR_SYMBOL) {
+            if (strncmp(a->data.symbol.name, "$flk", 4) == 0 ||
+                strncmp(a->data.symbol.name, "~flk", 4) == 0) return 0;
+            continue;
+        }
+        if (!km_is_inert_head_atom(a)) return 0;
+    }
+    return !expr_is_numeric_quantity(e);
+}
+
+static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck,
+                   EPtrList* ok) {
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT:
             return 1;
         case EXPR_SYMBOL:
             /* reserve the fresh-symbol namespace so backward-subst is unambiguous */
-            return strncmp(e->data.symbol.name, "$flk", 4) == 0 ? 0 : 1;
+            return (strncmp(e->data.symbol.name, "$flk", 4) == 0 ||
+                    strncmp(e->data.symbol.name, "~flk", 4) == 0) ? 0 : 1;
         case EXPR_FUNCTION: {
             const char* h = fn_head_name(e);
             if (!h) return 0;
@@ -3826,7 +3859,7 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck) {
                 return epl_push_unique(ck, e);
             if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
                 for (size_t i = 0; i < n; i++)
-                    if (!km_walk(e->data.function.args[i], gk, xk, ck)) return 0;
+                    if (!km_walk(e->data.function.args[i], gk, xk, ck, ok)) return 0;
                 return 1;
             }
             if (strcmp(h, "Power") == 0) {
@@ -3834,7 +3867,7 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck) {
                 const Expr* base = e->data.function.args[0];
                 const Expr* ex   = e->data.function.args[1];
                 if (ex->type == EXPR_INTEGER)                    /* ring power */
-                    return km_walk(base, gk, xk, ck);
+                    return km_walk(base, gk, xk, ck, ok);
                 /* non-integer exponent: E^e is an exponential kernel; an integer
                  * base to a rational power (Sqrt[d], d^(p/q), (-1)^(p/q)) is an
                  * algebraic-number constant. */
@@ -3848,6 +3881,8 @@ static int km_walk(const Expr* e, EPtrList* gk, EPtrList* xk, EPtrList* ck) {
             }
             if (km_is_generic_kernel_head(h))
                 return epl_push_unique(gk, e);                   /* opaque kernel */
+            if (km_is_inert_head_atom(e))
+                return epl_push_unique(ok, e);                   /* x[3], Pair[..] */
             return 0;   /* trig/hyperbolic, and every other head */
         }
         default:
@@ -3912,10 +3947,16 @@ static Expr* km_int_ratio(const Expr* a, const Expr* b) {
     return NULL;
 }
 
+static int km_cmp_expr_ptr(const void* a, const void* b) {
+    return expr_compare(*(const Expr* const*)a, *(const Expr* const*)b);
+}
+
 /* Build the kernel map for `e`. Returns 0 to decline (see block comment). */
 static int km_build(const Expr* e, KernMap* km) {
-    EPtrList gk = {0}, xk = {0}, ck = {0};
-    if (!km_walk(e, &gk, &xk, &ck)) { epl_free(&gk); epl_free(&xk); epl_free(&ck); return 0; }
+    EPtrList gk = {0}, xk = {0}, ck = {0}, ok = {0};
+    if (!km_walk(e, &gk, &xk, &ck, &ok)) {
+        epl_free(&gk); epl_free(&xk); epl_free(&ck); epl_free(&ok); return 0;
+    }
 
     /* Substitute algebraic-number constants (Sqrt[d], i, …) so the reduction runs
      * over Q(√d, i)[generators] via fmpz_mpoly_q instead of the classical
@@ -3930,10 +3971,26 @@ static int km_build(const Expr* e, KernMap* km) {
      * trig kernels, so pure-trig Together/Cancel (kept in Cos/Cot/Csc form by
      * contract) never reaches here. */
     if (ck.n == 1 && xk.n == 0 && gk.n == 0) {
-        epl_free(&gk); epl_free(&xk); epl_free(&ck); return 0;
+        epl_free(&gk); epl_free(&xk); epl_free(&ck); epl_free(&ok); return 0;
     }
 
     char buf[32];
+    /* Inert head atoms (x[3], ...): ordinary variables, one fresh symbol each.
+     * They do not count as a "kernel" in the gate above, so a lone radical over
+     * indexed variables keeps the classical path exactly as over symbols.
+     * The fresh names are chosen to sort (by the strcmp that orders the
+     * fmpz_mpoly variables) where the atoms sort canonically -- after every
+     * ordinary symbol ('~' follows the letters), and among themselves in
+     * expr_compare order -- so the sign normalisation fmpz_mpoly_q_canonicalise
+     * applies (positive leading denominator coefficient) is the one the same
+     * fraction gets with the atoms renamed to symbols in that position. */
+    if (ok.n > 1) qsort(ok.v, ok.n, sizeof(*ok.v), km_cmp_expr_ptr);
+    for (size_t i = 0; i < ok.n; i++) {
+        snprintf(buf, sizeof buf, "~flk%06zu", i);
+        Expr* sym = expr_new_symbol(buf);
+        if (!km_add_bwd(km, expr_copy(sym), expr_copy((Expr*)ok.v[i])) ||
+            !km_add_fwd(km, expr_copy((Expr*)ok.v[i]), sym)) goto fail;
+    }
     /* Independent kernels (incl. algebraic constants): one fresh symbol each. */
     for (size_t i = 0; i < gk.n; i++) {
         snprintf(buf, sizeof buf, "$flk%d", km->ctr++);
@@ -3978,10 +4035,10 @@ static int km_build(const Expr* e, KernMap* km) {
         }
     }
 
-    epl_free(&gk); epl_free(&xk); epl_free(&ck);
+    epl_free(&gk); epl_free(&xk); epl_free(&ck); epl_free(&ok);
     return 1;
 fail:
-    epl_free(&gk); epl_free(&xk); epl_free(&ck);
+    epl_free(&gk); epl_free(&xk); epl_free(&ck); epl_free(&ok);
     return 0;
 }
 

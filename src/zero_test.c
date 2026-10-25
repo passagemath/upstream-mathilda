@@ -1261,11 +1261,31 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
     if (exact) e = exact;
     double prev = mag0;
     ZeroTestResult rr = ZERO_TEST_TRUE;
-    /* On an exact point, a residual that keeps falling at least half as fast
-     * as the bits added, through the top rung, is a zero whose cancellation
-     * runs deeper than the floor assumes (1 - Tanh[x]^2 at |x| ~ 17 costs ~100
-     * bits); a genuine value plateaus instead. */
-    bool tracks_bits = exact != NULL;
+    /* On an exact point every rung carries real precision, so climb them all:
+     * a cancellation deeper than the low rungs (1 - Tanh[x/2]^2 cubed at |x| ~
+     * 60 needs ~400 bits) leaves the first rungs at the same uncancelled value,
+     * which is NOT a plateau of the true value.  Decide on the top two rungs: a
+     * zero still falls at least half as fast as the bits added, a genuine value
+     * holds. */
+    if (exact) {
+        double ms[PRECISION_LADDER_LEN];
+        ZeroTestResult top = ZERO_TEST_TRUE;
+        int got = 0;
+        ms[0] = mag0;
+        for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
+            double m = 0.0;
+            top = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
+                                scale > 0.0 ? scale : -1.0, NULL);
+            if (top == ZERO_TEST_UNKNOWN) { top = ZERO_TEST_TRUE; break; }  /* MPFR gone: lenient */
+            ms[i] = m; got = i;
+        }
+        if (got >= 2) {
+            long gained = PRECISION_LADDER[got] - PRECISION_LADDER[got - 1];
+            if (ms[got] <= ms[got - 1] * ldexp(1.0, (int)(-gained / 2))) top = ZERO_TEST_TRUE;
+        }
+        expr_free(exact);
+        return top;
+    }
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
         /* Reuse the machine-precision operand scale (precision-independent). */
@@ -1273,12 +1293,8 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
                            scale > 0.0 ? scale : -1.0, NULL);
         if (rr == ZERO_TEST_UNKNOWN) { rr = ZERO_TEST_TRUE; break; }  /* MPFR gone: lenient */
         if (m >= prev * 0.5) break;       /* plateaued: value resolved, trust rung */
-        long gained = PRECISION_LADDER[i] - PRECISION_LADDER[i - 1];
-        if (!(m <= prev * ldexp(1.0, (int)(-gained / 2)))) tracks_bits = false;
         prev = m;
-        if (i == PRECISION_LADDER_LEN - 1 && tracks_bits) rr = ZERO_TEST_TRUE;
     }
-    if (exact) expr_free(exact);
     return rr;   /* the plateau rung's verdict, or the top-rung floor's */
 }
 

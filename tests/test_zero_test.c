@@ -1127,14 +1127,16 @@ static void test_huge_cancel_preserves_normal_identities(void) {
  * the cancellation noise of 1 - Tanh[x/2]^2 (~100 bits at |x| ~ 34) read as
  * a plateaued non-zero.  The ladder now climbs on the point's exact value, and
  * a residual that keeps falling with the bits added is a zero.  Before v0.593
- * half of these shifted identities came out False. */
+ * half of these shifted identities came out False.  Since v0.596 every rung is
+ * climbed on an exact point and the top two decide: at |x| ~ 60 the cancellation
+ * needs ~400 bits, so the 200-bit rung still showed the uncancelled value. */
 static void test_huge_cancel_machine_point_exact_climb(void) {
     assert_pzq("ztF[x_] := -(2 Tanh[x/2])/(-1 + Tanh[x/2]^2) - "
                "(16 Tanh[x/2])/(3 - 6 Tanh[x/2]^2 + 3 Tanh[x/2]^4) - "
                "(16 Tanh[x/2])/(-3 + 9 Tanh[x/2]^2 - 9 Tanh[x/2]^4 + 3 Tanh[x/2]^6); Null",
                "Null");
     assert_pzq("Union[Table[PossibleZeroQ[D[ztF[x + k], x] - "
-               "Cosh[x + k] Cosh[2 x + 2 k]], {k, 1, 10}]]", "{True}");
+               "Cosh[x + k] Cosh[2 x + 2 k]], {k, 1, 20}]]", "{True}");
     /* The same terms plus a genuine constant stay non-zero.  (A constant
      * below ~10^-2 is still missed -- a pre-existing sampler gap, every draw
      * lands at |x| where the scale is ~10^40.) */

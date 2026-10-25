@@ -324,8 +324,10 @@ Pipeline (each stage exits early on a definite verdict):
    re-evaluated up the ladder. The sample is drawn as a machine real, and a
    machine number stays one under `N`, so the climb uses the point's **exact**
    dyadic value. Otherwise every rung would recompute the same rounded point and
-   read its noise as a plateaued non-zero. A residual that keeps falling at least
-   half as fast as the bits added, through the top rung, is a zero (v0.593). Half
+   read its noise as a plateaued non-zero. On the exact point every rung is
+   climbed: a deep cancellation (about 400 bits at `|x| ~ 60`) can leave the first
+   rungs at the same uncancelled value. The top two rungs decide: a residual still
+   falling at least half as fast as the bits added is a zero (v0.593, v0.596). Half
    of a family of shifted `Tanh`-antiderivative round-trips
    (`D[F[x + k], x] - Cosh[x + k] Cosh[2 x + 2 k]`) came out `False` before.
 

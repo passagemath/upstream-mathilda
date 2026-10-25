@@ -127,12 +127,47 @@ static bool cmp_exact_rational(const Expr* e, mpq_t q) {
     return true;
 }
 
+/* +1 for Infinity / DirectedInfinity[d] with d > 0, -1 for -Infinity /
+ * DirectedInfinity[d] with d < 0 (Times[-1, Infinity] is how -Infinity
+ * evaluates), 0 for anything else -- ComplexInfinity, I Infinity and
+ * DirectedInfinity[] are not on the real line. */
+static int real_infinity_sign(const Expr* e) {
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_Infinity ? 1 : 0;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return 0;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    Expr* const* A = e->data.function.args;
+    const Expr* dir = NULL;
+    if (h == SYM_DirectedInfinity && n == 1) dir = A[0];
+    else if (h == SYM_Times && n == 2 && A[1]->type == EXPR_SYMBOL &&
+             A[1]->data.symbol.name == SYM_Infinity) dir = A[0];
+    if (!dir) return 0;
+    if (dir->type == EXPR_INTEGER) return (dir->data.integer > 0) - (dir->data.integer < 0);
+    if (dir->type == EXPR_REAL) return (dir->data.real > 0) - (dir->data.real < 0);
+    int64_t p, q;
+    if (is_rational(dir, &p, &q)) return (p > 0) - (p < 0);
+    return 0;
+}
+
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     double va, vb;
     int64_t na, da, nb, db;
     bool exact_a, exact_b;
 
     *can_compare = false;
+
+    /* The real infinities order against each other and against every real
+     * number, as in the reference: 0 < Infinity, -Infinity < Pi, Infinity <=
+     * Infinity. A complex or symbolic other side stays undecided. */
+    {
+        int ia = real_infinity_sign(a), ib = real_infinity_sign(b);
+        if (ia || ib) {
+            if (ia && ib) { *can_compare = true; return (ia > ib) - (ia < ib); }
+            if (!get_numeric_value(ia ? b : a, &va, &na, &da, &exact_a)) return 0;
+            *can_compare = true;
+            return ia ? ia : -ib;
+        }
+    }
 
     /* Interval vs scalar: decide only when the interval lies entirely on one
      * side of the scalar (disjoint), so Interval[{5,8}] > Pi -> True. An

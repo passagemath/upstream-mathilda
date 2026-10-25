@@ -599,6 +599,25 @@ void test_equal_lists_tolerance() {
     assert_eval_eq("{0.1 + 0.2} == {0.3} == {0.3}", "True", 0);
 }
 
+/* The real infinities order against reals and each other (reference values).
+ * FeynCalc's MaxIterations -> Infinity loop guard counter < Infinity stayed
+ * unevaluated, so NestWhileList stopped after one element. */
+static void test_infinity_ordering(void) {
+    assert_eval_eq("{0 < Infinity, 1/2 < Infinity, 0. < Infinity, Pi < Infinity, Infinity > 0, -Infinity < 0}",
+                   "List[True, True, True, True, True, True]", 1);
+    assert_eval_eq("{Infinity < Infinity, Infinity <= Infinity, -Infinity < Infinity, 1 < -Infinity, Infinity > Infinity}",
+                   "List[False, True, True, False, False]", 1);
+    assert_eval_eq("{1 < 2 < Infinity, 1 < Infinity < 2, Infinity >= -Infinity, -Infinity <= -Infinity, N[Infinity] < 1}",
+                   "List[True, False, True, True, False]", 1);
+    assert_eval_eq("{DirectedInfinity[1] > 5, DirectedInfinity[-1] < -5}", "List[True, True]", 1);
+    /* not on the real line, or not numeric: undecided */
+    assert_eval_eq("Quiet[{x < Infinity, I < Infinity, ComplexInfinity < 1, DirectedInfinity[I] < 1}]",
+                   "List[Less[x, Infinity], Less[Complex[0, 1], Infinity], "
+                   "Less[ComplexInfinity, 1], Less[DirectedInfinity[Complex[0, 1]], 1]]", 1);
+    assert_eval_eq("cinf = 0; Length[NestWhileList[(cinf++; If[cinf > 3, {}, {#}]) &, {{}, p}, (# =!= {}) && (cinf < Infinity) &]]",
+                   "5", 1);
+}
+
 int main() {
     symtab_init();
     core_init();

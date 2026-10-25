@@ -71,7 +71,9 @@ rdTruth[b_] := Which[TrueQ[b], 1, b === False, 0, True, -1];
  * from spuriously "disagreeing" with their own inputs at the excluded points. *)
 rdBadOperand[o_, pt_, dom_] := Module[{v, nv},
   v = o /. pt;
-  If[! FreeQ[v, ComplexInfinity | Indeterminate | DirectedInfinity], Return[True]];
+  (* Infinity too: Mathilda's -Infinity is Times[-1, Infinity], not a
+   * DirectedInfinity, and since v0.6002 it orders against reals. *)
+  If[! FreeQ[v, ComplexInfinity | Indeterminate | DirectedInfinity | Infinity], Return[True]];
   If[! MemberQ[{Reals, Integers, Rationals}, dom], Return[False]];
   nv = N[v];
   NumericQ[nv] && TrueQ[Im[nv] != 0]];

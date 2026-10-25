@@ -112,6 +112,11 @@ Tests strict ascending order.
 - `Less[x, y, z, ...]` (written `x < y < z`): tests the whole chain.
 - An `Indeterminate` argument gives `False`; likewise for `LessEqual`,
   `Greater` and `GreaterEqual`.
+- `Infinity` and `-Infinity` (and `DirectedInfinity[d]` for a real `d`) order
+  against every real number and each other, for all four orderings:
+  `0 < Infinity`, `-Infinity < Pi` and `Infinity <= Infinity` are `True`, and
+  `Infinity < Infinity` is `False`. A symbolic or complex other side, or
+  `ComplexInfinity`, stays unevaluated.
 
 ## LessEqual
 Tests non-strict ascending order.

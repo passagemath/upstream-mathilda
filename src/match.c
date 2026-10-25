@@ -1548,6 +1548,102 @@ static bool seq_commit(MatchEnv* env, void* data) {
                                c->condition, c->pat_head, c->total_pats, c->parent);
 }
 
+/* OptionsPattern slot `opt_pat` taking exprs[0..take) (each an option rule
+ * or a list of them) and the later pattern elements matching the rest; see
+ * the OptionsPattern branch of match_args_internal. */
+static bool opt_match_prefix(Expr** exprs, size_t take, size_t n_exprs, Expr** pats, size_t n_pats,
+                             Expr* opt_pat, Expr* bind_sym, Expr* extra_bind_sym, Expr* seq_cond,
+                             MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats,
+                             ParentMatch* parent) {
+        size_t cap = (take ? take : 1), cnt = 0;
+        Expr** collected = malloc(sizeof(Expr*) * cap);
+        bool ok = true;
+        /* Each argument is a rule or a list of rules, lists nested to any
+         * depth ({{a -> 5}}), flattened in order, as the reference accepts. */
+        size_t sp = 0, scap = 8;
+        Expr** stack = malloc(sizeof(Expr*) * scap);
+        for (size_t i = take; i-- > 0; ) {
+            if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
+            stack[sp++] = exprs[i];
+        }
+        while (sp > 0 && ok) {
+            Expr* a = stack[--sp];
+            if (mo_is_option_rule(a)) {
+                if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
+                collected[cnt++] = a;
+            } else if (mo_is_list(a)) {
+                for (size_t j = a->data.function.arg_count; j-- > 0; ) {
+                    if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
+                    stack[sp++] = a->data.function.args[j];
+                }
+            } else {
+                ok = false;
+            }
+        }
+        free(stack);
+        if (ok) {
+            /* OptionsPattern[{o -> v, ...}] (or a single rule) carries its own
+             * defaults: append them AFTER the passed options, so OptionValue's
+             * first-match lookup sees a passed value first and the default
+             * otherwise. A symbol argument is handled below. */
+            Expr* dflt = (opt_pat->data.function.arg_count >= 1)
+                         ? opt_pat->data.function.args[0] : NULL;
+            size_t nd = 0;
+            if (dflt && mo_is_list(dflt)) nd = dflt->data.function.arg_count;
+            else if (dflt && mo_is_option_rule(dflt)) nd = 1;
+            Expr** items = malloc(sizeof(Expr*) * (cnt + nd ? cnt + nd : 1));
+            for (size_t i = 0; i < cnt; i++) items[i] = expr_copy(collected[i]);
+            for (size_t i = 0; i < nd; i++)
+                items[cnt + i] = expr_copy(mo_is_list(dflt) ? dflt->data.function.args[i] : dflt);
+            Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt + nd);
+            free(items);
+            size_t saved = env->count;
+            env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
+            expr_free(optlist);
+            /* If the pattern is OptionsPattern[s] (a target symbol), record s so
+             * OptionValue resolves an unpassed option's DEFAULT against s's
+             * Options, not the enclosing definition's own (A9). A bare
+             * OptionsPattern[] leaves this unset -> the enclosing head is used. */
+            if (opt_pat->data.function.arg_count >= 1
+                && opt_pat->data.function.args[0]->type == EXPR_SYMBOL) {
+                Expr* tgt = expr_copy(opt_pat->data.function.args[0]);
+                env_set(env, "$OptionsPatternHead$", tgt);
+                expr_free(tgt);
+            }
+            /* If the OptionsPattern was named (opts : OptionsPattern[]), also
+             * bind that symbol to a Sequence of the matched options so the RHS
+             * can splice them -- Sequence @@ ..., {opts}, or passing opts down
+             * to another call. WL binds the name to the option sequence; an
+             * empty match binds Sequence[] which vanishes on splice. Without
+             * this only OptionValue (via $OptionsPattern$) works, not the
+             * common opts-forwarding idiom. */
+            /* The name binds the arguments as written -- {a -> 1}, b -> 2 stays
+             * a list and a rule, not the flattened rules -- as in the reference
+             * (f[x_, o:OptionsPattern[]] := {o}; f[1, {a->1}, b->2] is
+             * {{a -> 1}, b -> 2}). */
+            Expr* named[2] = { bind_sym, extra_bind_sym };
+            for (int nb = 0; nb < 2; nb++) {
+                if (!named[nb] || named[nb]->type != EXPR_SYMBOL) continue;
+                Expr** sitems = malloc(sizeof(Expr*) * (take ? take : 1));
+                for (size_t i = 0; i < take; i++) sitems[i] = expr_copy(exprs[i]);
+                Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), sitems, take);
+                free(sitems);
+                env_set(env, named[nb]->data.symbol.name, seq);
+                expr_free(seq);
+            }
+            /* The rest of the pattern list matches the arguments after the prefix. */
+            if ((!seq_cond || eval_seq_conditions(seq_cond, env)) &&
+                match_args_internal(exprs + take, n_exprs - take, pats + 1, n_pats - 1, env,
+                                    condition, pat_head, total_pats, parent)) {
+                free(collected);
+                return true;
+            }
+            env_rollback(env, saved);
+        }
+        free(collected);
+        return false;
+}
+
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent) {
     
     if (n_pats == 0) {
@@ -1855,93 +1951,21 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     if (opt_pat->type == EXPR_FUNCTION
         && opt_pat->data.function.head->type == EXPR_SYMBOL
         && opt_pat->data.function.head->data.symbol.name == SYM_OptionsPattern) {
-        size_t cap = (n_exprs ? n_exprs : 1), cnt = 0;
-        Expr** collected = malloc(sizeof(Expr*) * cap);
-        bool ok = true;
-        /* Each argument is a rule or a list of rules, lists nested to any
-         * depth ({{a -> 5}}), flattened in order, as the reference accepts. */
-        size_t sp = 0, scap = 8;
-        Expr** stack = malloc(sizeof(Expr*) * scap);
-        for (size_t i = n_exprs; i-- > 0; ) {
-            if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
-            stack[sp++] = exprs[i];
-        }
-        while (sp > 0 && ok) {
-            Expr* a = stack[--sp];
-            if (mo_is_option_rule(a)) {
-                if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
-                collected[cnt++] = a;
-            } else if (mo_is_list(a)) {
-                for (size_t j = a->data.function.arg_count; j-- > 0; ) {
-                    if (sp == scap) { scap *= 2; stack = realloc(stack, sizeof(Expr*) * scap); }
-                    stack[sp++] = a->data.function.args[j];
-                }
-            } else {
-                ok = false;
-            }
-        }
-        free(stack);
-        if (ok) {
-            /* OptionsPattern[{o -> v, ...}] (or a single rule) carries its own
-             * defaults: append them AFTER the passed options, so OptionValue's
-             * first-match lookup sees a passed value first and the default
-             * otherwise. A symbol argument is handled below. */
-            Expr* dflt = (opt_pat->data.function.arg_count >= 1)
-                         ? opt_pat->data.function.args[0] : NULL;
-            size_t nd = 0;
-            if (dflt && mo_is_list(dflt)) nd = dflt->data.function.arg_count;
-            else if (dflt && mo_is_option_rule(dflt)) nd = 1;
-            Expr** items = malloc(sizeof(Expr*) * (cnt + nd ? cnt + nd : 1));
-            for (size_t i = 0; i < cnt; i++) items[i] = expr_copy(collected[i]);
-            for (size_t i = 0; i < nd; i++)
-                items[cnt + i] = expr_copy(mo_is_list(dflt) ? dflt->data.function.args[i] : dflt);
-            Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt + nd);
-            free(items);
-            size_t saved = env->count;
-            env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
-            expr_free(optlist);
-            /* If the pattern is OptionsPattern[s] (a target symbol), record s so
-             * OptionValue resolves an unpassed option's DEFAULT against s's
-             * Options, not the enclosing definition's own (A9). A bare
-             * OptionsPattern[] leaves this unset -> the enclosing head is used. */
-            if (opt_pat->data.function.arg_count >= 1
-                && opt_pat->data.function.args[0]->type == EXPR_SYMBOL) {
-                Expr* tgt = expr_copy(opt_pat->data.function.args[0]);
-                env_set(env, "$OptionsPatternHead$", tgt);
-                expr_free(tgt);
-            }
-            /* If the OptionsPattern was named (opts : OptionsPattern[]), also
-             * bind that symbol to a Sequence of the matched options so the RHS
-             * can splice them -- Sequence @@ ..., {opts}, or passing opts down
-             * to another call. WL binds the name to the option sequence; an
-             * empty match binds Sequence[] which vanishes on splice. Without
-             * this only OptionValue (via $OptionsPattern$) works, not the
-             * common opts-forwarding idiom. */
-            /* The name binds the arguments as written -- {a -> 1}, b -> 2 stays
-             * a list and a rule, not the flattened rules -- as in the reference
-             * (f[x_, o:OptionsPattern[]] := {o}; f[1, {a->1}, b->2] is
-             * {{a -> 1}, b -> 2}). */
-            Expr* named[2] = { bind_sym, extra_bind_sym };
-            for (int nb = 0; nb < 2; nb++) {
-                if (!named[nb] || named[nb]->type != EXPR_SYMBOL) continue;
-                Expr** sitems = malloc(sizeof(Expr*) * (n_exprs ? n_exprs : 1));
-                for (size_t i = 0; i < n_exprs; i++) sitems[i] = expr_copy(exprs[i]);
-                Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), sitems, n_exprs);
-                free(sitems);
-                env_set(env, named[nb]->data.symbol.name, seq);
-                expr_free(seq);
-            }
-            /* Consume every remaining expr; the rest of the pattern list must
-             * match against zero arguments. */
-            if ((!seq_cond || eval_seq_conditions(seq_cond, env)) &&
-                match_args_internal(exprs + n_exprs, 0, pats + 1, n_pats - 1, env,
-                                    condition, pat_head, total_pats, parent)) {
-                free(collected);
+        /* Not necessarily the last pattern element: s[a__, OptionsPattern[]]
+         * on an Orderless head is sorted to s[OptionsPattern[], a__], and
+         * t[OptionsPattern[], a_] matches t[x] in the reference. So the slot
+         * takes a PREFIX of option arguments -- the longest first, down to
+         * none -- and the rest goes to the later pattern elements. As the last
+         * element only the whole run can succeed, as before. */
+        size_t run = 0;                    /* leading arguments that are options */
+        while (run < n_exprs && (mo_is_option_rule(exprs[run]) || mo_is_list(exprs[run]))) run++;
+        for (size_t take = run + 1; take-- > 0; ) {
+            if (n_pats == 1 && take != n_exprs) continue;   /* last slot: everything */
+            if (opt_match_prefix(exprs, take, n_exprs, pats, n_pats, opt_pat, bind_sym,
+                                 extra_bind_sym, seq_cond, env, condition, pat_head,
+                                 total_pats, parent))
                 return true;
-            }
-            env_rollback(env, saved);
         }
-        free(collected);
         return false;
     }
 

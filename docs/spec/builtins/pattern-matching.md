@@ -197,6 +197,13 @@ Gives the number of elements or subexpressions that match a pattern.
   `q[1, o -> 2] == 2` (v0.475).
 - Option lists may nest to any depth: `gg[x_, OptionsPattern[]]` matches
   `gg[1, {{a -> 5}}]` (v0.592).
+- **Any position** (v0.6011). `OptionsPattern[]` need not be the last element.
+  Before later elements it takes a leading run of option arguments, longest
+  first and down to none, and the rest go to the later elements:
+  `MatchQ[t[x], t[OptionsPattern[], a_]]` is `True`, and
+  `t[a -> 1, x] /. t[o:OptionsPattern[], b_] :> {{o}, b}` is `{{a -> 1}, x}`.
+  On an `Orderless` head the slot sorts first: `s[a__, OptionsPattern[]]`
+  becomes `s[OptionsPattern[], a__]` and still matches `s[x]`.
 - **Named and guarded.** `opts:OptionsPattern[]` binds `opts` to the option
   arguments as written: a list of rules stays a list (`f[x_, o:OptionsPattern[]]
   := {o}; f[1, {a -> 1}, b -> 2]` is `{{a -> 1}, b -> 2}`). A guard on it,

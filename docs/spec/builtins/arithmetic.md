@@ -1269,21 +1269,33 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
 - `Protected`, `Listable`, `NumericFunction`.
 - Exact integer/integer path uses GMP (`mpz_bin_ui`), including the
   Pascal extension `Binomial[n, m] = (-1)^m Binomial[m-n-1, m]` for
-  negative `n`.
+  negative `n`. When both are negative the Gamma quotient's poles cancel for
+  `m ≤ n`: `Binomial[n, m] = (-1)^(n-m) Binomial[-m-1, n-m]`, so
+  `Binomial[-1, -1] = 1` and `Binomial[-2, -5] = -4`; `m > n` gives `0`.
+  The smaller of `m` and `n - m` is used, so `Binomial[2^70 + 1, 2^70]`
+  evaluates.
 - Machine-precision real branch via `tgamma`. Fires when either operand
   is a machine real; the other may be any real-numeric leaf (integer,
   bigint, rational, MPFR) — so `Binomial[2.5, 1/5] → 1.34885`. If an
   operand is symbolic the branch declines and the form stays symbolic
   (`Binomial[2.5, x]`) rather than reading the sibling as `0`.
 - Symmetric identity: when `n - m` simplifies to a non-negative
-  integer `k ≤ 32`, reduces to `Binomial[n, k]` and expands as a
+  integer `k ≤ 32` (`k ≤ 5` when `n` is not an explicit number, as in the
+  reference: `Binomial[a + 5, a]` expands, `Binomial[a + 6, a]` stays), reduces to `Binomial[n, k]` and expands as a
   falling-factorial polynomial. This catches `Binomial[n, n - 1] → n`,
   `Binomial[9/2, 7/2] → 9/2`, `Binomial[n + 1, n - 1] → n (n + 1)/2`,
   etc.
-- Concrete non-negative integer `m ≤ 32` with any other `n` (symbolic,
-  rational, complex, …) expands to the falling-factorial polynomial
+- Concrete non-negative integer `m ≤ 32` (`m ≤ 5` for a symbolic `n`) with
+  any other `n` (symbolic, rational, complex, …) expands to the falling-factorial polynomial
   `n (n-1) (n-2) ... (n-m+1) / m!`, which the `Times`/`Plus` folders
   then simplify.
+- Exact rationals off the integer lattice. If `m` or `n - m` is a negative
+  integer and `n` is not, the result is `0` (`Binomial[1/3, 4/3] = 0`). If
+  `n`, `m` and `n - m` are all multiples of `1/2`, every Gamma is a rational
+  multiple of a power of `Sqrt[Pi]` and the quotient closes:
+  `Binomial[0, 1/2] = 2/Pi` and `Binomial[5, 1/2] = 512/(63 Pi)`. When `n` is a
+  negative integer the result is `ComplexInfinity` (`Binomial[-2, 1/2]`). Any
+  other rational pair stays symbolic (`Binomial[1/3, 1/2]`).
 - Arbitrary-precision real branch via MPFR (`mpfr_gamma`), evaluating the
   Gamma quotient at the working precision. It leaves the exact rational
   form symbolic — `Binomial[7/3, 1/5]` stays `Binomial[7/3, 1/5]`, as in
@@ -1354,6 +1366,43 @@ Out[15]= -0.0833333 - 0.0833333 I
 
 In[16]:= Binomial[2. + I, 7 - 3 I]
 Out[16]= -75.4683 + 106.815 I
+```
+
+## Multinomial
+
+The multinomial coefficient $(n_1 + n_2 + \dots)!/(n_1!\,n_2!\cdots)$.
+
+- `Multinomial[n1, n2, ...]`
+
+**Features**:
+- `Protected`, `Listable`, `NumericFunction`, `Orderless`.
+- Evaluated as the product of binomials over the partial sums of the sorted
+  arguments, `Binomial[n1 + n2, n2] Binomial[n1 + n2 + n3, n3] ...`, so it
+  inherits `Binomial`'s closed forms and pole conventions:
+  `Multinomial[-5, 2, 1] = -12`, `Multinomial[1/2, -1/2] = 2/Pi`.
+- Exact zeros drop out (`Multinomial[a, b, 0]` is `Binomial[a + b, b]`).
+  `Multinomial[]` and `Multinomial[x]` are `1`.
+- Two arguments always give `Binomial[n1 + n2, n2]`.
+- Three or more give the product only when at most one argument is not an
+  explicit number and at most one binomial stays unevaluated:
+  `Multinomial[2, 3, 4, a] = 1260 Binomial[9 + a, a]`,
+  `Multinomial[1, 1/3, 1/5] = 23/15 Binomial[8/15, 1/3]`. Otherwise the call
+  stays (`Multinomial[2, a, b]`, `Multinomial[1, E, Pi]`,
+  `Multinomial[1/5, 1/3, 1/2]`). These rules were measured against the
+  reference.
+- `Compile[]` lowers it to the same product of binomials, at scalar and array
+  shapes. A compiled body sums in the written order, while the interpreter sums
+  in the sorted order, so a machine-real answer can differ in the last bit.
+
+```mathematica
+In[1]:= Multinomial[2, 3, 4, 5]
+Out[1]= 2522520
+
+In[2]:= Multinomial[a, 2]
+Out[2]= 1/2 (1 + a) (2 + a)
+
+In[3]:= Multinomial[1.5, 2, a]
+Out[3]= 4.375 Binomial[3.5 + a, a]
 ```
 
 ## Fibonacci

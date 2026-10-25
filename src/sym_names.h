@@ -251,6 +251,7 @@ extern const char* SYM_Function;
 extern const char* SYM_Beta;
 extern const char* SYM_Gamma;
 extern const char* SYM_Binomial;
+extern const char* SYM_Multinomial;
 extern const char* SYM_BarnesG;
 extern const char* SYM_QPochhammer;
 extern const char* SYM_AiryBi;

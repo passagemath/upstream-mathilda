@@ -199,6 +199,10 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
         Expr* ex = norm_try_expand(e);
         if (ex) { bool ok = infer_type(c, ex, out); expr_free(ex); return ok; }
     }
+    if (h == SYM_Multinomial) {   /* product of Binomials (multinomial_try_expand) */
+        Expr* ex = multinomial_try_expand(e);
+        if (ex) { bool ok = infer_type(c, ex, out); expr_free(ex); return ok; }
+    }
     /* Association read ops (B1): typed by the shared resolver.  Returns false for
      * a non-association Length/Values so the array branch below still handles it. */
     { CompileType at; if (try_infer_assoc(c, h, A, na, &at)) { *out = at; return true; } }

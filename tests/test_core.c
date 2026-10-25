@@ -1122,6 +1122,55 @@ void test_binomial(void) {
 
     e = parse_expression("Binomial[-1, 0]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "1") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Both indices negative: the Gamma quotient's poles cancel when m <= n,
+     * (-1)^(n-m) Binomial[-m-1, n-m]; m > n is 0 (reference values). */
+    assert_eval_eq("{Binomial[-1, -1], Binomial[-1, -3], Binomial[-2, -5], Binomial[-2, -1], Binomial[-3, -1]}",
+                   "List[1, 1, -4, 0, 0]", 1);
+    /* The smaller of m and n - m is the one that must fit a machine word. */
+    assert_eval_eq("Binomial[2^70 + 1, 2^70]", "1180591620717411303425", 1);
+    /* Exact rationals: a denominator pole gives 0, a half-integer lattice point
+     * closes over Sqrt[Pi], a numerator pole is ComplexInfinity, anything else
+     * stays (reference values). */
+    assert_eval_eq("{Binomial[1/3, 4/3], Binomial[1/3, -2], Binomial[3/2, 5/2], Binomial[-1/2, -3/2]}",
+                   "List[0, 0, 0, Rational[-1, 2]]", 1);
+    assert_eval_eq("{Binomial[0, 1/2], Binomial[5, 1/2], Binomial[3, -1/2], Binomial[-5/2, -7/2]}",
+                   "List[Times[2, Power[Pi, -1]], Times[Rational[512, 63], Power[Pi, -1]], "
+                   "Times[Rational[32, 35], Power[Pi, -1]], Rational[-5, 2]]", 1);
+    assert_eval_eq("{Binomial[-2, 1/2], Binomial[-1, -1/2]}", "List[ComplexInfinity, ComplexInfinity]", 1);
+    assert_eval_eq("{Binomial[1/3, 1/2], Binomial[1/4, 1/2], Binomial[x, -1]}",
+                   "List[Binomial[Rational[1, 3], Rational[1, 2]], Binomial[Rational[1, 4], Rational[1, 2]], Binomial[x, -1]]", 1);
+    /* A symbolic n expands only up to k = 5; an explicit number n further. */
+    assert_eval_eq("{Head[Binomial[a + 5, a]], Head[Binomial[a + 6, a]], Head[Binomial[a, 6]]}",
+                   "List[Times, Binomial, Binomial]", 1);
+    assert_eval_eq("Binomial[28/3, 1/3]", "Rational[3803800, 1594323]", 1);
+}
+
+/* Multinomial: the product of binomials over the partial sums of the sorted
+ * arguments, with the reference's declines.  Every expected value is the
+ * reference's output. */
+void test_multinomial(void) {
+    assert_eval_eq("{Multinomial[], Multinomial[x], Multinomial[0, 0, 0], Multinomial[x, 0]}",
+                   "List[1, 1, 1, 1]", 1);
+    assert_eval_eq("{Multinomial[2, 3, 4, 5], Multinomial[-5, 2, 1], Multinomial[-2, 1], Multinomial[-1, -1], Multinomial[3, -1, -1]}",
+                   "List[2522520, -12, -1, 0, 0]", 1);
+    assert_eval_eq("Multinomial[a, b, 0]", "Binomial[Plus[a, b], b]", 1);
+    assert_eval_eq("Multinomial[a, b, c, 0]", "Multinomial[a, b, c]", 1);
+    assert_eval_eq("Multinomial[a, 2]", "Times[Rational[1, 2], Plus[1, a], Plus[2, a]]", 1);
+    assert_eval_eq("{Multinomial[1/2, -1/2], Multinomial[-1/2, -1/2], Multinomial[1, 1, I], Multinomial[1, 2, 1/3]}",
+                   "List[Times[2, Power[Pi, -1]], ComplexInfinity, Complex[1, 3], Rational[140, 27]]", 1);
+    /* One unevaluated binomial is kept in the product; two, or two symbolic
+     * arguments, leave Multinomial alone. */
+    assert_eval_eq("Multinomial[1, 1/3, 1/5]", "Times[Rational[23, 15], Binomial[Rational[8, 15], Rational[1, 3]]]", 1);
+    assert_eval_eq("Multinomial[2, 3, 4, a]", "Times[1260, Binomial[Plus[9, a], a]]", 1);
+    assert_eval_eq("Multinomial[-2, 1, a]", "Times[-1, Binomial[Plus[-1, a], a]]", 1);
+    assert_eval_eq("{Multinomial[1/2, 1/3, 1/5], Multinomial[2, a, b], Multinomial[1, E, Pi]}",
+                   "List[Multinomial[Rational[1, 5], Rational[1, 3], Rational[1, 2]], Multinomial[2, a, b], Multinomial[1, E, Pi]]", 1);
+    assert_eval_eq("Multinomial[{1, 2}, 3]", "List[4, 10]", 1);
+    assert_eval_eq("Multinomial[1.5, 2, a]", "Times[4.375, Binomial[Plus[3.5, a], a]]", 1);
+    assert_eval_eq("Attributes[Multinomial]", "List[Listable, NumericFunction, Orderless, Protected]", 1);
+    /* Compile[] lowers it to the same product of binomials. */
+    assert_eval_eq("Compile[{{n, _Integer}}, Multinomial[n, 2, 3]][-7]", "-60", 1);
 }
 
 void test_nextprime(void) {
@@ -1420,6 +1469,7 @@ int main(void) {
     TEST(test_eulerphi);
     TEST(test_factorial);
     TEST(test_binomial);
+    TEST(test_multinomial);
     TEST(test_nextprime);
     TEST(test_depth);
     TEST(test_leafcount);

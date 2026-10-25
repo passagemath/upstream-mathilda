@@ -24,6 +24,7 @@ void numbertheory_init(void) {
     symtab_add_builtin("Factorial2", builtin_factorial2);
     symtab_add_builtin("FactorialPower", builtin_factorialpower);
     symtab_add_builtin("Binomial", builtin_binomial);
+    symtab_add_builtin("Multinomial", builtin_multinomial);
     symtab_add_builtin("Divisible", builtin_divisible);
     symtab_add_builtin("CoprimeQ", builtin_coprimeq);
     symtab_add_builtin("Divisors", builtin_divisors);
@@ -51,6 +52,9 @@ void numbertheory_init(void) {
     symtab_set_docstring("FactorialPower",
         "FactorialPower[n, k]\n\tThe falling factorial n (n - 1) (n - 2) ... (n - k + 1).\n\tFor non-negative integer k, expands to a product of k linear factors;\n\tequivalent to n! / (n - k)! when both are non-negative integers.\n\tFor a negative integer k and numeric n, 1/((n + 1) ... (n + |k|)).\n\tFor a non-integer numeric k (under N), Gamma[n+1]/Gamma[n-k+1].\nFactorialPower[x, n, h]\n\tThe falling factorial with step h, x (x - h) ... (x - (n - 1) h);\n\th^n Gamma[x/h + 1]/Gamma[x/h - n + 1] for a non-integer n.\n\tEvaluated for numeric x and h; symbolic arguments stay unevaluated.");
     symtab_get_def("Binomial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+    symtab_get_def("Multinomial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_ORDERLESS);
+    symtab_set_docstring("Multinomial",
+        "Multinomial[n1, n2, ...]\n\tThe multinomial coefficient (n1 + n2 + ...)! / (n1! n2! ...).\n\tTwo arguments give Binomial[n1 + n2, n2]; more give the product of\n\tbinomials over the partial sums when at most one argument is\n\tsymbolic. Exact zeros drop out; Multinomial[] and Multinomial[n] are 1.");
     symtab_get_def("Divisible")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("CoprimeQ")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_ORDERLESS);
     symtab_get_def("Divisors")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);

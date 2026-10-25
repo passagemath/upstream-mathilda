@@ -251,6 +251,7 @@ const char* SYM_Function = NULL;
 const char* SYM_Beta = NULL;
 const char* SYM_Gamma = NULL;
 const char* SYM_Binomial = NULL;
+const char* SYM_Multinomial = NULL;
 const char* SYM_BarnesG = NULL;
 const char* SYM_QPochhammer = NULL;
 const char* SYM_GaussianIntegers = NULL;
@@ -1295,6 +1296,7 @@ void sym_names_init(void) {
     SYM_Beta                       = intern_symbol("Beta");
     SYM_Gamma                      = intern_symbol("Gamma");
     SYM_Binomial                   = intern_symbol("Binomial");
+    SYM_Multinomial                = intern_symbol("Multinomial");
     SYM_BarnesG                    = intern_symbol("BarnesG");
     SYM_QPochhammer                = intern_symbol("QPochhammer");
     SYM_GaussianIntegers           = intern_symbol("GaussianIntegers");

@@ -233,6 +233,92 @@ static Expr* binomial_gamma_quotient(Expr* n, Expr* m) {
     return eval_and_free(quotient);
 }
 
+/* An exact Integer, BigInt or Rational as an mpq (initialised here only on
+ * success). */
+static bool binomial_to_mpq(const Expr* e, mpq_t out) {
+    if (expr_is_integer_like(e)) {
+        mpz_t z;
+        expr_to_mpz(e, z);
+        mpq_init(out);
+        mpq_set_z(out, z);
+        mpz_clear(z);
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Rational &&
+        expr_is_integer_like(e->data.function.args[0]) &&
+        expr_is_integer_like(e->data.function.args[1])) {
+        mpz_t a, b;
+        expr_to_mpz(e->data.function.args[0], a);
+        expr_to_mpz(e->data.function.args[1], b);
+        mpq_init(out);
+        mpq_set_num(out, a);
+        mpq_set_den(out, b);
+        mpq_canonicalize(out);
+        mpz_clears(a, b, NULL);
+        return true;
+    }
+    return false;
+}
+
+/* True when a Gamma survived the quotient's evaluation (it did not close). */
+static bool binomial_has_gamma(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Gamma) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (binomial_has_gamma(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool mpq_is_negative_integer(const mpq_t q) {
+    return mpz_cmp_ui(mpq_denref(q), 1) == 0 && mpq_sgn(q) < 0;
+}
+
+/* Binomial[n, m] for exact rationals n, m, not both integers -- the reference's
+ * closed forms of Gamma[n+1] / (Gamma[m+1] Gamma[n-m+1]):
+ *   - a denominator pole (m or n - m a negative integer) with a finite
+ *     numerator (n not a negative integer) gives 0: Binomial[1/3, 4/3] = 0;
+ *   - n, m and n - m all multiples of 1/2: every Gamma is a rational multiple
+ *     of a power of Sqrt[Pi], so the quotient is closed -- ComplexInfinity when
+ *     n is a negative integer (Binomial[-2, 1/2]), else e.g.
+ *     Binomial[0, 1/2] = 2/Pi.
+ * Anything else (Binomial[1/3, 1/2]) returns NULL and stays symbolic. */
+static Expr* binomial_exact_rational(Expr* arg_n, Expr* arg_m) {
+    mpq_t n, m, d;
+    if (!binomial_to_mpq(arg_n, n)) return NULL;
+    if (!binomial_to_mpq(arg_m, m)) { mpq_clear(n); return NULL; }
+    mpq_init(d);
+    mpq_sub(d, n, m);
+    Expr* out = NULL;
+    bool n_pole = mpq_is_negative_integer(n);
+    if (!n_pole && (mpq_is_negative_integer(m) || mpq_is_negative_integer(d))) {
+        out = expr_new_integer(0);
+    } else if (mpz_cmp_ui(mpq_denref(n), 2) <= 0 && mpz_cmp_ui(mpq_denref(m), 2) <= 0 &&
+               mpz_cmp_ui(mpq_denref(d), 2) <= 0) {
+        if (n_pole) {
+            out = expr_new_symbol(SYM_ComplexInfinity);
+        } else {
+            Expr* val = binomial_gamma_quotient(arg_n, arg_m);
+            if (val && !binomial_has_gamma(val)) out = val;
+            else expr_free(val);
+        }
+    }
+    mpq_clears(n, m, d, NULL);
+    return out;
+}
+
+/* The largest k for which Binomial[n, k] (or Binomial[n, n - k]) is expanded
+ * as the falling factorial: the reference expands a symbolic n only up to
+ * k = 5 (Binomial[a + 5, 5] is a product, Binomial[a + 6, 6] stays), and an
+ * explicit number n -- 28/3, 1 + I -- as far as the polynomial helper goes. */
+static int64_t binomial_expand_cap(const Expr* n) {
+    Expr *re, *im;
+    if (expr_is_numeric_like(n) || is_complex((Expr*)n, &re, &im)) return 32;
+    return 5;
+}
+
 /* Binomial[n, m] -- generalised binomial coefficient
  *
  *     Binomial[n, m] = Gamma[n+1] / (Gamma[m+1] * Gamma[n - m + 1])
@@ -243,10 +329,10 @@ static Expr* binomial_gamma_quotient(Expr* n, Expr* m) {
  *      m - n - 1, m] for n < 0, m >= 0.
  *   2. Either arg machine-precision real: tgamma path -> EXPR_REAL.
  *   3. Symmetric identity: if Subtract[n, m] simplifies to a non-negative
- *      integer k <= 32, expand Binomial[n, k] as a falling-factorial
+ *      integer k <= 32 (k <= 5 for a symbolic n), expand Binomial[n, k] as a falling-factorial
  *      polynomial.  This catches Binomial[n, n-1] -> n,
  *      Binomial[9/2, 7/2] -> 9/2, Binomial[n+1, n-1] -> n (n+1) / 2, ...
- *   4. Concrete non-negative integer m <= 32 with anything-n: expand
+ *   4. Concrete non-negative integer m <= 32 (5 for a symbolic n): expand
  *      Binomial[n, m] as a falling-factorial polynomial.  Handles
  *      Binomial[n, 4] -> n(n-1)(n-2)(n-3)/24 and lets the Times/Plus
  *      folders simplify complex / rational n (Binomial[1+I, 5]
@@ -269,12 +355,40 @@ Expr* builtin_binomial(Expr* res) {
         expr_to_mpz(arg_m, m);
 
         if (mpz_sgn(m) < 0) {
+            /* Both negative with m <= n: the Gamma quotient's poles cancel,
+             * Binomial[n, m] = (-1)^(n-m) Binomial[-m-1, n-m] (Binomial[-1, -1]
+             * is 1, Binomial[-2, -5] is -4).  Every other negative m is 0. */
+            if (mpz_sgn(n) < 0 && mpz_cmp(m, n) <= 0) {
+                mpz_t top, k;
+                mpz_inits(top, k, NULL);
+                mpz_neg(top, m);
+                mpz_sub_ui(top, top, 1);             /* -m - 1 */
+                mpz_sub(k, n, m);                    /* n - m >= 0 */
+                Expr* out = NULL;
+                if (mpz_fits_ulong_p(k)) {
+                    unsigned long kk = mpz_get_ui(k);
+                    mpz_bin_ui(top, top, kk);
+                    if (kk & 1UL) mpz_neg(top, top);
+                    out = expr_bigint_normalize(expr_new_bigint_from_mpz(top));
+                }
+                mpz_clears(n, m, top, k, NULL);
+                return out;
+            }
             mpz_clears(n, m, NULL);
             return expr_new_integer(0);
         }
         if (mpz_sgn(n) >= 0 && mpz_cmp(m, n) > 0) {
             mpz_clears(n, m, NULL);
             return expr_new_integer(0);
+        }
+        /* Binomial[n, m] = Binomial[n, n - m] for 0 <= m <= n: take the
+         * smaller index, so Binomial[2^70 + 1, 2^70] is 2^70 + 1. */
+        if (mpz_sgn(n) >= 0) {
+            mpz_t rest;
+            mpz_init(rest);
+            mpz_sub(rest, n, m);
+            if (mpz_cmp(rest, m) < 0) mpz_set(m, rest);
+            mpz_clear(rest);
         }
         /* mpz_bin_ui needs m to fit in unsigned long; pathologically
          * large m has no finite expansion we'd want anyway. */
@@ -339,7 +453,7 @@ Expr* builtin_binomial(Expr* res) {
         }
         expr_free(diff_eval);
 
-        if (k >= 0) {
+        if (k >= 0 && k <= binomial_expand_cap(arg_n)) {
             Expr* poly = binomial_polynomial(arg_n, k);
             if (poly) return poly;
         }
@@ -347,8 +461,14 @@ Expr* builtin_binomial(Expr* res) {
 
     /* --- (4) concrete non-negative integer m: falling-factorial expand. --- */
     if (arg_m->type == EXPR_INTEGER && arg_m->data.integer >= 0 &&
-        arg_m->data.integer <= 32) {
+        arg_m->data.integer <= binomial_expand_cap(arg_n)) {
         return binomial_polynomial(arg_n, arg_m->data.integer);
+    }
+
+    /* --- (4b) exact rationals off the integer lattice. --- */
+    {
+        Expr* out = binomial_exact_rational(arg_n, arg_m);
+        if (out) return out;
     }
 
 #ifdef USE_MPFR

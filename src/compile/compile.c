@@ -1923,6 +1923,35 @@ Expr* build_map_scalar_over_array(const char* h, Expr* const* A, size_t na) {
     return expr_new_function(expr_new_symbol(SYM_Map), margs, 2);
 }
 
+/* Multinomial[n1, ..., nk] -> Binomial[n1 + n2, n2] Binomial[n1 + n2 + n3, n3] ...,
+ * the product the interpreter's builtin_multinomial evaluates (src/numbertheory/
+ * multinomial.c), built unevaluated so Binomial's integer and real lowerings run
+ * it.  No argument or one gives 1.  Over runtime numbers every argument is an
+ * explicit number, so the interpreter's symbolic-argument declines cannot
+ * arise; a dropped exact zero is a Binomial[s, 0] = 1 factor here.  Shared with
+ * infer_type (compile_infer.c). */
+Expr* multinomial_try_expand(const Expr* e) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.head->data.symbol.name != SYM_Multinomial) return NULL;
+    size_t na = e->data.function.arg_count;
+    Expr* const* A = e->data.function.args;
+    if (na <= 1) return expr_new_integer(1);
+    Expr** factors = (Expr**)malloc((na - 1) * sizeof(Expr*));
+    if (!factors) return NULL;
+    Expr* partial = expr_copy(A[0]);
+    for (size_t i = 1; i < na; i++) {
+        Expr* pa[2] = { partial, expr_copy(A[i]) };
+        partial = expr_new_function(expr_new_symbol(SYM_Plus), pa, 2);
+        Expr* ba[2] = { expr_copy(partial), expr_copy(A[i]) };
+        factors[i - 1] = expr_new_function(expr_new_symbol(SYM_Binomial), ba, 2);
+    }
+    expr_free(partial);
+    Expr* out = na == 2 ? factors[0]
+                        : expr_new_function(expr_new_symbol(SYM_Times), factors, na - 1);
+    free(factors);
+    return out;
+}
+
 Expr* norm_try_expand(const Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL
         || e->data.function.head->data.symbol.name != SYM_Norm) return NULL;
@@ -2049,6 +2078,10 @@ static bool emit_node(Ctx* c, const Expr* e, Val* out) {
      * A declared-array operand yields NULL here and takes the V_NORM delegate below. */
     if (h == SYM_Norm) {
         Expr* ex = norm_try_expand(e);
+        if (ex) { bool ok = emit_node(c, ex, out); expr_free(ex); return ok; }
+    }
+    if (h == SYM_Multinomial) {
+        Expr* ex = multinomial_try_expand(e);
         if (ex) { bool ok = emit_node(c, ex, out); expr_free(ex); return ok; }
     }
 

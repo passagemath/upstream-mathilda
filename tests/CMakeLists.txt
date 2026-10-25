@@ -369,6 +369,7 @@ set(COMMON_SRC
     ../src/numbertheory/factorialpower.c
     ../src/numbertheory/factorial2.c
     ../src/numbertheory/binomial.c
+    ../src/numbertheory/multinomial.c
     ../src/numbertheory/primitiveroot.c
     ../src/numbertheory/multiplicativeorder.c
     ../src/numbertheory/divisible.c

@@ -781,6 +781,11 @@ bool nd_norm2_encode(const Expr* p, CompileType ta, double* imm_r);
  * passes agree on which Norm calls become scalar bodies. */
 Expr* norm_try_expand(const Expr* e);
 
+/* Multinomial[n1, ..., nk] -> the unevaluated product of Binomials over the
+ * partial sums (1 for k <= 1).  Defined in compile.c; used by emit_node and
+ * infer_type alike. */
+Expr* multinomial_try_expand(const Expr* e);
+
 /* Chop[arr, rest...] / Clip[arr, rest...] over a rank-1 array lower by mapping
  * the SCALAR lowering over the buffer: Map[Function[H[Slot[1], rest...]], arr].
  * The array answer is then the scalar one applied elementwise, bit for bit, and

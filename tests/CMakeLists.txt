@@ -785,6 +785,7 @@ set(COMMON_SRC
     ../src/sym_names.c
     ../src/version.c
     ../src/repl_hooks.c
+    ../src/dialog.c
     ../src/options.c
     ../src/options_builtin.c
     ../src/calculus/integrate.c
@@ -4181,6 +4182,16 @@ else()
     target_link_libraries(return_tests gmp m)
 endif()
 add_test(NAME return_tests COMMAND return_tests)
+
+add_executable(dialog_tests test_dialog.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dialog_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(dialog_tests gmp m ${ECM_LIB})
+    add_dependencies(dialog_tests build_ecm)
+else()
+    target_link_libraries(dialog_tests gmp m)
+endif()
+add_test(NAME dialog_tests COMMAND dialog_tests)
 
 add_executable(repl_hooks_tests test_repl_hooks.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(repl_hooks_tests PRIVATE ../src)

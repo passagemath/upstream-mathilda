@@ -3553,6 +3553,15 @@ static Expr* eval_report_uncaught_break_continue(Expr* e) {
     return expr_new_function(expr_new_symbol(SYM_Hold), one, 1);
 }
 
+/* See eval.h. */
+Expr* eval_report_uncaught(Expr* e) {
+    if (eval_is_inflight_throw(e))          return eval_report_uncaught_throw(e);
+    if (eval_is_inflight_abort(e))          return eval_report_uncaught_abort(e);
+    if (eval_is_inflight_goto(e))           return eval_report_uncaught_goto(e);
+    if (eval_is_inflight_break_continue(e)) return eval_report_uncaught_break_continue(e);
+    return e;
+}
+
 static Expr* evaluate_core(Expr* e);
 
 Expr* evaluate(Expr* e) {
@@ -3663,14 +3672,7 @@ static Expr* evaluate_core(Expr* e) {
         if (current->type == EXPR_FUNCTION && eval_fixed_point_reusable(current)) {
             eval_recursion_depth--;
             if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
-            if (is_top_level && eval_is_inflight_throw(current))
-                current = eval_report_uncaught_throw(current);
-            else if (is_top_level && eval_is_inflight_abort(current))
-                current = eval_report_uncaught_abort(current);
-            else if (is_top_level && eval_is_inflight_goto(current))
-                current = eval_report_uncaught_goto(current);
-            else if (is_top_level && eval_is_inflight_break_continue(current))
-                current = eval_report_uncaught_break_continue(current);
+            if (is_top_level) current = eval_report_uncaught(current);
             return current;
         }
 
@@ -3777,14 +3779,7 @@ static Expr* evaluate_core(Expr* e) {
             if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
             /* An in-flight Throw that survives to the top level is uncaught
              * (any enclosing Catch would have consumed it at depth >= 1). */
-            if (is_top_level && eval_is_inflight_throw(current))
-                current = eval_report_uncaught_throw(current);
-            else if (is_top_level && eval_is_inflight_abort(current))
-                current = eval_report_uncaught_abort(current);
-            else if (is_top_level && eval_is_inflight_goto(current))
-                current = eval_report_uncaught_goto(current);
-            else if (is_top_level && eval_is_inflight_break_continue(current))
-                current = eval_report_uncaught_break_continue(current);
+            if (is_top_level) current = eval_report_uncaught(current);
             return current;
         }
 

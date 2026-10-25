@@ -788,24 +788,20 @@ void mth_block_depth_unwind(int depth) {
     if (!block_stack) block_depth = 0;
 }
 
-Expr* builtin_block(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
-    Expr* vars = res->data.function.args[0];
-    Expr* body = res->data.function.args[1];
-
-    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
-
-    size_t var_count = vars->data.function.arg_count;
-
+/* Localise the symbols named by specs[0..n): each a Symbol (left unset) or
+ * Set[sym, value] (value evaluated, in order, after the earlier symbols are
+ * already localised -- the order Block uses). Pushes and returns the frame;
+ * mth_block_leave pops it. Specs of any other shape are skipped. */
+void* mth_block_enter(Expr* const* specs, size_t n) {
     BlockFrame* frame = malloc(sizeof(BlockFrame));
-    frame->saved = calloc(var_count ? var_count : 1, sizeof(BlockSavedVar));
-    frame->count = var_count;
+    frame->saved = calloc(n ? n : 1, sizeof(BlockSavedVar));
+    frame->count = n;
     frame->next  = block_stack;
     block_stack  = frame;
     block_depth++;
 
-    for (size_t i = 0; i < var_count; i++) {
-        Expr* v = vars->data.function.args[i];
+    for (size_t i = 0; i < n; i++) {
+        Expr* v = specs[i];
         const char* name = NULL;
         Expr* init_val = NULL;
 
@@ -840,6 +836,30 @@ Expr* builtin_block(Expr* res) {
             }
         }
     }
+    return frame;
+}
+
+/* Pop and restore a frame from mth_block_enter. An inner Block always pops
+ * before its outer one, so the frame is on top; one a TimeConstrained unwind
+ * already drained (mth_block_depth_unwind) is no longer there and is left
+ * alone. */
+void mth_block_leave(void* f) {
+    BlockFrame* frame = f;
+    if (frame && block_stack == frame) {
+        block_stack = frame->next;
+        block_depth--;
+        blk_restore_frame(frame);
+    }
+}
+
+Expr* builtin_block(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* vars = res->data.function.args[0];
+    Expr* body = res->data.function.args[1];
+
+    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
+
+    void* frame = mth_block_enter(vars->data.function.args, vars->data.function.arg_count);
 
     Expr* final_res = evaluate(body);
 
@@ -853,14 +873,7 @@ Expr* builtin_block(Expr* res) {
         }
     }
 
-    /* Pop this frame (an inner Block always pops before its outer one, so the
-     * top of the stack is ours) and restore. */
-    if (block_stack == frame) {
-        block_stack = frame->next;
-        block_depth--;
-        blk_restore_frame(frame);
-    }
-
+    mth_block_leave(frame);
     return final_res;
 }
 

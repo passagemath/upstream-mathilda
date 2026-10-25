@@ -412,6 +412,83 @@ Ends the Mathilda session.
 - Pipe (sidecar) mode ignores the request, so a notebook cell cannot kill its kernel.
 - Attributes: `Protected`.
 
+## Dialog
+Opens a nested session inside an evaluation: a sequence of input and output
+lines, read from the terminal, until the user returns.
+- `Dialog[]`: initiates a dialog.
+- `Dialog[expr]`: initiates a dialog with `expr` as the current value of `%`
+  (shown as the dialog's first `Out` line).
+- `Dialog[expr, DialogSymbols :> {x, y = y0, ...}]`: gives `x`, `y`, ... local
+  values within the dialog (`y` starting at `y0`), restored on exit.
+- `Dialog[expr, DialogProlog :> pro]`: evaluates `pro` before the dialog starts.
+
+**Exit and value**:
+- `Return[expr]` exits, and `expr` is the value of `Dialog`. `Return[]` exits
+  with the value of the last line; so does an end of input when
+  `$IgnoreEOF = False` (the default). The value is `Null` if no line ran.
+- Only an input that *is* `Return[]` or `Return[x]` exits. A `Return` that
+  evaluation produces is an ordinary value: `If[True, Return[4]]` and
+  `Return[4];` print `Return[4]` and stay in the dialog, and `z := Return[9]; z`
+  is `9`.
+- A trailing `;` hides a line's `Out` but keeps its value: `8;` stores
+  `Out[n] = 8`, and a following `Return[]` returns `8`.
+- `$IgnoreEOF = True` ignores an end-of-file character typed at a terminal; at
+  the end of a pipe or file the dialog ends anyway.
+- `Quit[]` in a dialog ends the session.
+
+**Session behaviour**:
+- Order on entry: localize (`$Line`, `$MessageList`, `$Epilog`, then the
+  `DialogSymbols`), evaluate `DialogProlog`, evaluate `expr`.
+- Numbering continues from the global `$Line` (`Dialog[5]` on line 2 shows
+  `Out[3]= 5` and then prompts `In[4]:=`). On exit it reverts: the next line
+  is numbered as if there had been no dialog. `In[n]`/`Out[n]` written in the
+  dialog stay defined.
+- Prompts and `Out` lines are indented one space per open dialog.
+- `$MessageList` is fresh on each dialog line; the outer one is restored on
+  exit. A `$Epilog` set inside the dialog is evaluated when it exits; the
+  global one is not.
+- `$PreRead`, `$Pre`, `$Post` and `$PrePrint` apply to dialog lines as at the
+  top level.
+- Each dialog line is a top level of its own: an uncaught `Throw` is reported
+  (`Throw::nocatch`) and becomes `Hold[Throw[...]]`, `Abort[]` gives `$Aborted`,
+  `Break[]` gives `Break::nofwd` -- and the dialog continues. An enclosing
+  `Catch` does not see a `Throw` typed in the dialog. A `Throw` from
+  `DialogProlog` or `expr` does leave `Dialog`, which then never prompts.
+- A `TimeConstrained` timeout through a dialog restores everything it
+  localized, as for `Block`.
+- Input comes from readline at the terminal and from stdin under `-file`. With
+  no input source -- the NDJSON pipe protocol, an embedding host -- a dialog
+  sees an end of input at once: it localizes, runs `DialogProlog`, evaluates
+  `expr`, runs its `$Epilog` and returns `expr`, printing nothing.
+
+**Messages**: `Dialog::nonopt` (a second positional argument), `Dialog::optx`
+(an unknown option), `Dialog::lvlist` (`DialogSymbols` not a list),
+`Dialog::lvsym` (an entry that is not a symbol or `sym = value`),
+`Dialog::dup` (a symbol twice). Each leaves the call unevaluated.
+
+**Attributes**: `Dialog` is `HoldAll, Protected`; `DialogSymbols`,
+`DialogProlog` are `Protected`. `Options[Dialog]` is
+`{DialogProlog -> Null, DialogSymbols -> {}}` (`SetOptions` applies). A list
+of option rules is accepted as the options, and the first setting of an
+option wins.
+
+```mathematica
+In[1]:= x = 1
+Out[1]= 1
+
+In[2]:= r = Dialog[x + 1, DialogSymbols :> {x = 10}]
+ Out[3]= 11
+
+ In[4]:= x = 5
+ Out[4]= 5
+
+ In[5]:= Return[x^2]
+Out[2]= 25
+
+In[3]:= {r, x, $Line}
+Out[3]= {25, 1, 3}
+```
+
 ## Catch / Throw
 Non-local exit: `Throw` stops evaluation and hands a value to the nearest
 enclosing `Catch`. Unlike `Return` (which only escapes a scope boundary), a

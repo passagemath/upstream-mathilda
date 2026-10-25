@@ -84,6 +84,14 @@ bool eval_is_inflight_goto(const Expr* e);
  * be reported (Break::nofwd / Continue::nofwd) and rendered inert. */
 bool eval_is_inflight_break_continue(const Expr* e);
 
+/* Finish an in-flight sentinel that reached a top level, as evaluate() does
+ * at depth 0: an uncaught Throw is reported (Throw::nocatch) and becomes
+ * Hold[Throw[...]] (or f[v, tag]), Abort[] becomes $Aborted (and is noted for
+ * eval_take_top_abort), Goto / Break / Continue are reported and made inert.
+ * Anything else is returned unchanged. Takes ownership of `e`. For a nested
+ * top level -- a Dialog input line -- which evaluate() runs at depth > 0. */
+Expr* eval_report_uncaught(Expr* e);
+
 // Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
 // when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
 // user DownValues that re-evaluate, etc.). Default 1024 (matches Mathematica).

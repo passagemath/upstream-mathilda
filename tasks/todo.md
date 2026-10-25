@@ -1,3 +1,32 @@
+# Dialog[] (2026-10-26)
+
+Ground truth from the local 14.0 kernel (interactive mode, piped and pty): numbering continues from
+the global $Line (+1), Dialog[expr] shows expr as the first dialog Out line, only an INPUT of the
+form Return[] / Return[x] exits (a Return produced by evaluation does not), Return[] gives the last
+line's value (a `;` line's value counts: `8;` then Return[] is 8), dialog lines are top-level
+(Throw::nocatch, Break::nofwd, Abort[] -> $Aborted stay inside), prompts indent one space per level,
+on exit numbering reverts, Options[Dialog] = {DialogProlog -> Null, DialogSymbols -> {}},
+Dialog::optx / ::nonopt / ::lvlist leave the call unevaluated, $IgnoreEOF = False.
+
+- [x] modular.c: C-side Block API (mth_block_enter/mth_block_leave), builtin_block refactored onto it
+- [x] eval.c: exported eval_report_uncaught() (the top-level sentinel chain, used twice in evaluate_core)
+- [x] src/dialog.{c,h}: session helpers ($Line / In / Out) moved from repl.c; reader/writer hooks;
+      the dialog loop; builtin_dialog (HoldAll, Protected), options + messages, $IgnoreEOF,
+      DialogSymbols/DialogProlog (Protected), docstrings, sym_names entries
+- [x] repl.c: interactive reader (readline, add_history) and a stdin reader for -file; pipe mode none
+- [x] tests/test_dialog.c (scripted reader + capturing writer): numbering, %, Return forms, EOF,
+      $IgnoreEOF, $Epilog, $MessageList, DialogSymbols/Prolog order, nesting, Throw/Break/Abort,
+      $Pre/$Post, Quit, bad options, Protected, no reader; valgrind/leaks clean
+- [x] docs: control-flow.md, changelog, version bump + tag
+
+Review: 26/26 dialog_tests; leaks --atExit 0 for dialog_tests and a -file script with nested dialogs;
+evaluator / Block / Return / Catch-Throw / Abort / Goto / TimeConstrained / message suites pass;
+interactive pty transcript matches the reference session line for line; check-c99, check-messages OK.
+- [ ] Follow-up (pre-existing): the top-level REPL prints `Out[n]= Null` for `x = 5;` / `Print[..]` and stores
+      Out[n] = Null for a `;` line (the dialog loop does neither); repl.c process_input could use the dialog's
+      line handling
+- [ ] Follow-up (pre-existing at HEAD): repl_hooks_tests aborts in test_exit_requests_quit_with_status
+
 # FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
 
 Plan: ~/.claude/plans/let-s-continue-our-feyncalc-humble-karp.md. Gap doc: packages/feyncalc/FEYNCALC_GAPS.md (local).

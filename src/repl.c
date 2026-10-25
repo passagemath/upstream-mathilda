@@ -21,6 +21,7 @@
 #include "print_latex.h"
 #include "version.h"
 #include "quit.h"
+#include "dialog.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,112 +48,14 @@ void mth_block_graveyard_flush(void);   /* modular.c: free Block values parked b
 
 #define MAX_INPUT_LEN 10240
 
-/* Advance past whitespace and (* ... *) comments (nested comments allowed),
- * returning the first character that is neither — the terminating NUL if the
- * text holds nothing else. An unterminated comment is deliberately NOT
- * skipped: the returned pointer is its opening '(', because that is a genuine
- * error and that is where it starts. Script mode uses the position to point
- * at the offending token; is_blank_or_comment_only() only asks whether
- * anything is left. */
-static const char* skip_blanks_and_comments(const char* s) {
-    while (*s) {
-        if (isspace((unsigned char)*s)) {
-            s++;
-        } else if (s[0] == '(' && s[1] == '*') {
-            const char* open = s;
-            int depth = 1;
-            s += 2;
-            while (*s && depth > 0) {
-                if (s[0] == '(' && s[1] == '*') { depth++; s += 2; }
-                else if (s[0] == '*' && s[1] == ')') { depth--; s += 2; }
-                else { s++; }
-            }
-            if (depth > 0) return open;  /* unterminated comment is a real error */
-        } else {
-            return s;
-        }
-    }
-    return s;
-}
-
-/* True if `s` consists only of whitespace and (* ... *) comments. Used to
- * distinguish a no-op line from a genuine parse failure, so the REPL doesn't
- * shout "Parse error" at a stray comment. */
-static int is_blank_or_comment_only(const char* s) {
-    return *skip_blanks_and_comments(s) == '\0';
-}
-
-/* Mathematica strips a top-level NumberForm from the value stored in Out[n]/%,
- * so `%` (and arithmetic on it) sees the underlying number rather than the
- * inert format wrapper -- while the displayed Out[n]= line still uses the
- * wrapper's formatting. The stripping is TOP-LEVEL only: a nested NumberForm,
- * or one bound to a variable via Set, is preserved. Returns a BORROWED pointer
- * into `e` (or `e` itself when there is nothing to strip). */
-static Expr* out_value_unwrapped(Expr* e) {
-    if (e && e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_NumberForm
-        && e->data.function.arg_count >= 1)
-        return e->data.function.args[0];
-    return e;
-}
-
-/* ---------------------------------------------------------------------------
- * Session history: $Line, In[n], Out[n].
- *
- * `%` is not a REPL feature, it is a KERNEL one. The parser turns it into
- * Out[-1] (parse.c) and builtin_out resolves the negative index against $Line,
- * so a front end that evaluates without recording this bookkeeping leaves `%`
- * sitting in its output unevaluated. The notebook did exactly that -- pipe mode
- * evaluated statements and recorded none of them, so `Integrate[x^5 E^x, x]`
- * followed by `% // Factor` printed a literal `Out[-1]`.
- *
- * Both front ends go through these three helpers, so the history cannot drift
- * between them again.
- * ------------------------------------------------------------------------- */
-
-/* Set $Line = line. Must run BEFORE evaluation: a `%` in the input is
- * Out[$Line - 1], so $Line has to already name the line being evaluated for
- * `%` to mean "the previous result". */
-static void repl_set_line(int line) {
-    mth_message_list_reset();     /* $MessageList covers one input line */
-    Expr* line_sym = expr_new_symbol(SYM_DollarLine);
-    Expr* line_val = expr_new_integer(line);
-    symtab_add_own_value("$Line", line_sym, line_val);
-    expr_free(line_sym);
-    expr_free(line_val);
-}
-
-/* Store In[line] = parsed. Called before any $Pre hook runs, so In[n] reflects
- * what the user typed rather than whatever a hook made of it. Borrows `parsed`
- * (add_down_value copies it); expr_new_function consumes the head and arg it is
- * given, so only the pattern is ours to free. */
-static void repl_store_in(int line, Expr* parsed) {
-    Expr* in_arg = expr_new_integer(line);
-    Expr* in_pattern = expr_new_function(expr_new_symbol(SYM_In), &in_arg, 1);
-    symtab_add_down_value("In", in_pattern, parsed);
-    expr_free(in_pattern);
-}
-
-/* Store Out[line] = evaluated, with a top-level NumberForm stripped. Borrows
- * `evaluated`; a NULL value (nothing displayable) stores nothing.
- *
- * Stored for EVERY statement, including one ending in ';' and one that
- * evaluated to Null, because `x = 5;` followed by `%` is 5 in Mathematica: a
- * suppressed result is still the session's previous result. */
-static void repl_store_out(int line, Expr* evaluated) {
-    if (!evaluated) return;
-    Expr* out_arg = expr_new_integer(line);
-    Expr* out_pattern = expr_new_function(expr_new_symbol(SYM_Out), &out_arg, 1);
-    symtab_add_down_value("Out", out_pattern, out_value_unwrapped(evaluated));
-    expr_free(out_pattern);
-}
+/* Session history ($Line, In[n], Out[n]) and the blank-input helpers live in
+ * dialog.c, shared with Dialog[]'s input loop. */
 
 void process_input(const char* input, int line_number) {
     if (strlen(input) == 0) return;
-    if (is_blank_or_comment_only(input)) return;
+    if (mth_is_blank_or_comment_only(input)) return;
 
-    repl_set_line(line_number);
+    mth_session_set_line(line_number);
 
     /* $PreRead: text-level hook applied to the raw input string
      * before parsing. Pass-through (a strdup of `input`) when unset. */
@@ -170,7 +73,7 @@ void process_input(const char* input, int line_number) {
         return;
     }
 
-    repl_store_in(line_number, parsed);
+    mth_session_store_in(line_number, parsed);
 
     /* $Pre: applied to the parsed expression. Consumes our reference
      * to `parsed`; we treat the result as the new input to evaluate. */
@@ -202,7 +105,7 @@ void process_input(const char* input, int line_number) {
     /* Store Out[line_number] = evaluated (post-$Post, pre-$PrePrint:
      * Mathematica's documented ordering). The full `evaluated` is kept for the
      * formatted display below. */
-    repl_store_out(line_number, evaluated);
+    mth_session_store_out(line_number, evaluated);
 
     /* $PrePrint: applied only for display. Out[n] keeps the
      * pre-$PrePrint value above; here we render a possibly modified
@@ -984,8 +887,8 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
     int line = 0;
     if (cell) {
         line = ++g_pipe_line;
-        repl_set_line(line);
-        repl_store_in(line, parsed);
+        mth_session_set_line(line);
+        mth_session_store_in(line, parsed);
         pipe_emit_line(id, line);
     }
 
@@ -998,7 +901,7 @@ static void pipe_eval_statement(Expr* parsed, int id, bool show_result, bool cel
     /* Out[line] BEFORE every early return below: a result that is suppressed by
      * ';', is Null, or is a picture rather than an expression is still the
      * session's previous result, and `%` must find it. */
-    if (cell) repl_store_out(line, evaluated);
+    if (cell) mth_session_store_out(line, evaluated);
 
     if (!evaluated) return;
 
@@ -1230,7 +1133,7 @@ static void pipe_process_input(const char* input, int id, bool cell) {
         if (!e) {
             /* NULL is both end of input and a syntax error: anything but blanks
              * and comments left over is the error. */
-            if (*skip_blanks_and_comments(start) != '\0') failed = true;
+            if (*mth_skip_blanks_and_comments(start) != '\0') failed = true;
             break;
         }
         if (n == cap) {
@@ -1466,7 +1369,7 @@ static int run_script_file(const char* path) {
              * and it starts at the first significant character — not at
              * stmt_start, which is still sitting on the newline that ended
              * the previous statement. */
-            const char* err = skip_blanks_and_comments(stmt_start);
+            const char* err = mth_skip_blanks_and_comments(stmt_start);
             if (*err != '\0') {
                 report_error_at(path, buffer, err, "syntax error");
                 status = 1;
@@ -1502,6 +1405,29 @@ static int run_script_file(const char* path) {
     repl_apply_epilog();
     fflush(stdout);
     return status;
+}
+
+/* Dialog[] input readers (see main). Each shows the prompt and returns one
+ * malloc'd line, or NULL at end of input. */
+#ifndef NO_READLINE
+static char* dialog_read_readline(const char* prompt, void* ctx) {
+    (void)ctx;
+    char* line = readline(prompt);
+    if (line && *line) add_history(line);
+    return line;
+}
+#endif
+
+static char* dialog_read_stdin(const char* prompt, void* ctx) {
+    (void)ctx;
+    fputs(prompt, stdout);
+    fflush(stdout);
+    char* line = pipe_read_line(stdin);
+    /* A terminal echoes the typed line and its newline; a pipe does not, so
+     * end the prompt line here and the Out line starts on its own, as at a
+     * terminal. */
+    if (line && !isatty(fileno(stdin))) { fputc('\n', stdout); fflush(stdout); }
+    return line;
 }
 
 static void print_usage(FILE* out, const char* prog) {
@@ -1578,6 +1504,20 @@ int main(int argc, char** argv) {
      * cannot be located the loader prints a LoadModule::nofile diagnostic —
      * far better than the previous silent load of a non-functional kernel. */
     mathilda_load_module("init.m");
+
+    /* Where Dialog[] reads its lines: the terminal (readline) when there is
+     * one, a script's stdin under -file, and nowhere in pipe mode, where stdin
+     * is the protocol -- a dialog there sees end of input at once. */
+    MthDialogIO dio = { NULL, NULL, NULL, false };
+    if (!pipe_mode) {
+        dio.interactive = isatty(fileno(stdin)) != 0;
+#ifndef NO_READLINE
+        dio.read = dio.interactive ? dialog_read_readline : dialog_read_stdin;
+#else
+        dio.read = dialog_read_stdin;
+#endif
+        mth_dialog_set_io(&dio);
+    }
 
     int rc = 0;
     if (script) {

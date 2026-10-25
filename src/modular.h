@@ -26,6 +26,12 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
  * a jump -- otherwise a Block-installed temporary rule (a rewrite hook, say)
  * would stay installed for the rest of the session. Same pattern as the
  * async-defer count and the message-suppression depth. */
+/* C-side Block: localise the symbols named by specs[0..n) (a Symbol, or
+ * Set[sym, value] with the value evaluated) exactly as Block[{specs}, ...]
+ * does, and restore them. Every enter is paired with one leave; the frame
+ * also unwinds with mth_block_depth_unwind like a Block's. Used by Dialog. */
+void* mth_block_enter(Expr* const* specs, size_t n);
+void  mth_block_leave(void* frame);
 int  mth_block_depth_save(void);
 void mth_block_depth_unwind(int depth);
 /* Free the Block rule lists parked by a TimeConstrained unwind (see modular.c).

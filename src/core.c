@@ -17,6 +17,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "message.h"    /* message_init(): Quiet / Check / Message */
+#include "dialog.h"     /* dialog_init(): Dialog */
 #include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
 #include "tc_unwind_safe.h" /* may the SIGPROF handler unwind here? */
 #include "parse.h"
@@ -311,6 +312,7 @@ void core_init(void) {
     message_init();          /* Quiet / Check / Message */
     system_constants_init();
     repl_hooks_init();
+    dialog_init();           /* Dialog, DialogSymbols, DialogProlog, $IgnoreEOF */
     parfrac_init();
     contfrac_init();
     modular_init();

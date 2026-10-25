@@ -27,8 +27,10 @@ interactive pty transcript matches the reference session line for line; check-c9
       line handling
 - [x] repl_hooks_tests: test_exit_requests_quit_with_status expected the input after Exit[3] to run (value is Quit[3]);
       the $PreRead test's stderr -> /dev/null -> /dev/tty restore hid every later FAIL line off a terminal
-- [ ] Follow-up: 15 more test files restore stderr with freopen("/dev/tty") (test_trig.c, test_logexp.c, test_symbol.c,
-      test_real_digits.c, ...): off a terminal every later FAIL line is lost -- mute via mth_msg_suppress_push/pop instead
+- [x] 14 more test files restored stderr with freopen("/dev/tty"): now test_stderr_redirect/restore (dup2) in
+      test_utils.h, and test_symbol.c mutes via mth_msg_suppress_push/pop
+- [ ] Follow-up: ~30 test binaries point stderr at /dev/null for the REST of the run (silence_stderr(),
+      `if (!done) freopen("/dev/null")`, the findmin/nm_* suites): any FAIL line after that is lost too
 
 # FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
 

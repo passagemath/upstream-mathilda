@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 extern struct Expr* parse_expression(const char*);
 extern struct Expr* evaluate(struct Expr*);
@@ -29,6 +30,34 @@ static inline void test_load_init_m(void) {
     }
     struct Expr* c = parse_expression("Get[\"src/internal/init.m\"]");
     if (c) { struct Expr* r = evaluate(c); expr_free(c); if (r) expr_free(r); }
+}
+
+/* Point stderr (fd 2) at `path`, truncated, until test_stderr_restore; for a
+ * test that reads back the messages a call printed. Returns the saved
+ * descriptor, or -1 with stderr untouched. The swap is at the descriptor, so
+ * the stderr FILE stays valid whatever happens -- and restoring by dup2, not
+ * by reopening /dev/tty, keeps stderr working without a terminal: under CI or
+ * a pipe that reopen fails, and every later FAIL line was silently lost. */
+static inline int test_stderr_redirect(const char* path) {
+    fflush(stderr);
+    int saved = dup(STDERR_FILENO);
+    if (saved < 0) return -1;
+    int fd = open(path, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0 || dup2(fd, STDERR_FILENO) < 0) {
+        if (fd >= 0) close(fd);
+        close(saved);
+        return -1;
+    }
+    close(fd);
+    return saved;
+}
+
+/* Undo test_stderr_redirect (a no-op for -1). */
+static inline void test_stderr_restore(int saved) {
+    if (saved < 0) return;
+    fflush(stderr);
+    dup2(saved, STDERR_FILENO);
+    close(saved);
 }
 
 static inline void assert_eval_eq(const char* input, const char* expected, int is_fullform) {

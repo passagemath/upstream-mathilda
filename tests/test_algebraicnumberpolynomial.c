@@ -65,15 +65,14 @@ static void check_zero(const char* expr) {
  * caller frees) and write the printed result into *out (also heap). */
 static char* eval_capturing_stderr(const char* input, char** out) {
     const char* path = "/tmp/mathilda_anp_stderr.log";
-    fflush(stderr);
-    if (!freopen(path, "w+", stderr)) { if (out) *out = NULL; return NULL; }
+    int saved_stderr = test_stderr_redirect(path);
+    if (saved_stderr < 0) { if (out) *out = NULL; return NULL; }
     Expr* p = parse_expression(input);
     Expr* e = evaluate(p);
     if (out) *out = expr_to_string(e);
     expr_free(p);
     expr_free(e);
-    fflush(stderr);
-    freopen("/dev/tty", "w", stderr);
+    test_stderr_restore(saved_stderr);
 
     FILE* f = fopen(path, "r");
     if (!f) return NULL;

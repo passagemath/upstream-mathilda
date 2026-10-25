@@ -6,6 +6,7 @@
  * EXPR_SYMBOL.
  */
 
+#include "message.h"
 #include "test_utils.h"
 #include "expr.h"
 #include "eval.h"
@@ -94,13 +95,10 @@ static void test_symbol_invalid_starts_with_digit(void) {
      * return the original expression unevaluated. */
     Expr* parsed = parse_expression("Symbol[\"1x\"]");
     ASSERT(parsed != NULL);
-    /* Silence the symname error message on stderr for clean test output. */
-    FILE* saved_stderr = stderr;
-    (void)saved_stderr;
-    freopen("/dev/null", "w", stderr);
+    /* Mute the Symbol::symname message the way Quiet does. */
+    mth_msg_suppress_push();
     Expr* result = evaluate(parsed);
-    /* Reopen stderr to the terminal. */
-    freopen("/dev/tty", "w", stderr);
+    mth_msg_suppress_pop();
 
     expr_free(parsed);
     char* s = expr_to_string(result);
@@ -112,9 +110,9 @@ static void test_symbol_invalid_starts_with_digit(void) {
 static void test_symbol_invalid_empty_string(void) {
     Expr* parsed = parse_expression("Symbol[\"\"]");
     ASSERT(parsed != NULL);
-    freopen("/dev/null", "w", stderr);
+    mth_msg_suppress_push();
     Expr* result = evaluate(parsed);
-    freopen("/dev/tty", "w", stderr);
+    mth_msg_suppress_pop();
 
     expr_free(parsed);
     char* s = expr_to_string(result);
@@ -126,9 +124,9 @@ static void test_symbol_invalid_empty_string(void) {
 static void test_symbol_invalid_punctuation(void) {
     Expr* parsed = parse_expression("Symbol[\"a-b\"]");
     ASSERT(parsed != NULL);
-    freopen("/dev/null", "w", stderr);
+    mth_msg_suppress_push();
     Expr* result = evaluate(parsed);
-    freopen("/dev/tty", "w", stderr);
+    mth_msg_suppress_pop();
 
     expr_free(parsed);
     char* s = expr_to_string(result);

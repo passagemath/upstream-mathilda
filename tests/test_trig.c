@@ -253,8 +253,8 @@ void test_arc_trig_mpfr_complex(void) {
  * *out_result_str (also heap-allocated). Mirrors test_logexp.c. */
 static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     const char* path = "/tmp/mathilda_trig_stderr.log";
-    fflush(stderr);
-    if (!freopen(path, "w+", stderr)) {
+    int saved_stderr = test_stderr_redirect(path);
+    if (saved_stderr < 0) {
         if (out_result_str) *out_result_str = NULL;
         return NULL;
     }
@@ -263,8 +263,7 @@ static char* eval_capturing_stderr(const char* input, char** out_result_str) {
     if (out_result_str) *out_result_str = expr_to_string(e);
     expr_free(p);
     expr_free(e);
-    fflush(stderr);
-    freopen("/dev/tty", "w", stderr);
+    test_stderr_restore(saved_stderr);
 
     FILE* f = fopen(path, "r");
     if (!f) return NULL;

@@ -96,6 +96,14 @@ int main(void) {
     core_init();
 
     /* ---- Stage 0: finite explicit expansion ---- */
+    /* Gosper's SolveAlways also solves for a PARAMETER of the summand (x -> -1
+     * for Binomial[3, k] x^k); an antidifference valid at that value alone was
+     * returned, so these were 0 and -x^3. */
+    check("Sum[Binomial[3, k] x^k, {k, 0, 3}]", "1 + 3 x + 3 x^2 + x^3");
+    check("Sum[Binomial[3, k] x^k, {k, 0, 2}]", "1 + 3 x + 3 x^2");
+    check("Expand[(x + 2)^60] === Sum[Binomial[60, k] x^k 2^(60 - k), {k, 0, 60}]", "True");
+    check("Check[Sum[Binomial[3, k] x^k, {k, 0, 3}], $Failed] === 1 + 3 x + 3 x^2 + x^3", "True");
+    same("Sum[k k!, {k, 0, n}]", "(n + 1)! - 1");
     check("Sum[i, {i, 1, 10}]", "55");
     check("Sum[i^2, {i, 1, 100}]", "338350");
     check("Sum[2^i, {i, 0, 10}]", "2047");

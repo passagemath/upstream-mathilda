@@ -3847,7 +3847,14 @@ Gosper's algorithm for indefinite summation of a hypergeometric term
 Gosper–Petkovšek normal form (dispersion + gcd peeling) → degree-bounded
 key equation `a(i) x(i+1) - b(i-1) x(i) = c(i)` → antidifference
 `F = (b(i-1)/c(i)) x(i) t(i)`.  Returns unevaluated when `t` is not a
-hypergeometric term or is not Gosper-summable.  Two summand shapes are rejected
+hypergeometric term or is not Gosper-summable.  **Every antidifference is
+certified (v0.6041):** a key-equation solution is accepted only when it binds the
+ansatz coefficients alone (`SolveAlways` also solves for parameters, and for
+`Binomial[3, i] x^i` returned `x -> -1`), and `F = R t` is returned only if
+`R(i+1) r(i) - R(i) - 1` is identically 0 (`r` the term ratio), an exact
+rational-function check.  Before this, `Sum[Binomial[3, k] x^k, {k, 0, 3}]` was 0.
+The `SolveAlways` probe runs under `Quiet`, so an under-determined ansatz's
+`Solve::nsdim` neither prints nor trips `Check`.  Two summand shapes are rejected
 structurally up front, before the term-ratio `Simplify` that can diverge on them:
 a fractional power of an `i`-dependent base (e.g. `Sqrt[p(i)]`, irrational term
 ratio — this kept nested finite sums like the Thomson-problem repulsion

@@ -114,8 +114,8 @@ void test_expand_all() {
      * no x and stays factored. */
     run_test("ExpandAll[(f[(x+y)^2] + g[(y+z)^2])^2, x]",
              "Plus[Power[f[Plus[Power[x, 2], Times[2, x, y], Power[y, 2]]], 2], "
-             "Power[g[Power[Plus[y, z], 2]], 2], "
-             "Times[2, f[Plus[Power[x, 2], Times[2, x, y], Power[y, 2]]], g[Power[Plus[y, z], 2]]]]");
+             "Times[2, f[Plus[Power[x, 2], Times[2, x, y], Power[y, 2]]], g[Power[Plus[y, z], 2]]], "
+             "Power[g[Power[Plus[y, z], 2]], 2]]");
 
     /* Threads over lists, expanding a numerator power and a denominator power. */
     run_test("ExpandAll[{(1+x)^2, 1/(1+y)^2}]",

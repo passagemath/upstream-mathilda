@@ -175,10 +175,9 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
     Expr* num = sum_eval("Numerator", na, 1);
     Expr* dna[1] = { expr_copy(ratio) };
     Expr* den = sum_eval("Denominator", dna, 1);
-    expr_free(ratio);
 
     if (!poly_in(num, var) || !poly_in(den, var)) {
-        expr_free(num); expr_free(den);
+        expr_free(num); expr_free(den); expr_free(ratio);
         return NULL;
     }
 
@@ -268,8 +267,12 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
 
         Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                        (Expr*[]){ eqn, sum_int(0) }, 2);
-        Expr* saa[2] = { eq, expr_copy(var) };
-        Expr* sol = sum_eval("SolveAlways", saa, 2);
+        /* An internal probe: an under-determined ansatz (Solve::nsdim) is an
+         * expected outcome, not the user's message -- and leaking it would make
+         * Check[Sum[...], ...] take its failure branch. */
+        Expr* qa[1] = { expr_new_function(expr_new_symbol("SolveAlways"),
+                            (Expr*[]){ eq, expr_copy(var) }, 2) };
+        Expr* sol = sum_eval("Quiet", qa, 1);
 
         bool solved = false;
         if (sol->type == EXPR_FUNCTION
@@ -277,7 +280,21 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
             && sol->data.function.head->data.symbol.name == SYM_List
             && sol->data.function.arg_count >= 1) {
             Expr* rules = sol->data.function.args[0];
-            if (rules->type == EXPR_FUNCTION
+            /* SolveAlways solves for EVERY symbol other than var, so a rule can
+             * pin a parameter of the summand: for Binomial[3, k] x^k it returns
+             * x -> -1 beside the coefficients, and applying only the coefficient
+             * rules gave an antidifference valid at x = -1 alone (Sum[..., {k, 0,
+             * 3}] was 0).  Accept a solution only if it binds coefficients. */
+            bool coeffs_only = rules->type == EXPR_FUNCTION;
+            for (size_t ri = 0; coeffs_only && ri < rules->data.function.arg_count; ri++) {
+                Expr* rl = rules->data.function.args[ri];
+                Expr* lhs = (rl->type == EXPR_FUNCTION && rl->data.function.arg_count == 2)
+                                ? rl->data.function.args[0] : NULL;
+                bool hit = false;
+                for (int k = 0; lhs && k <= d && !hit; k++) hit = expr_eq(lhs, csym[k]);
+                coeffs_only = hit;
+            }
+            if (coeffs_only
                 && rules->data.function.arg_count >= 1) {
                 /* apply the solution, then zero any free coefficients. */
                 Expr* ra[2] = { expr_copy(x), expr_copy(rules) };
@@ -303,11 +320,31 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
 
     Expr* result = NULL;
     if (x_sol) {
-        /* 4. F = (b(var-1)/c) * x * t, cleaned with Cancel. */
+        /* 4. F = R t with R = b(var-1) x / c, cleaned with Cancel. */
         Expr* Rcoef = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ expr_copy(bb), x_sol,
                                      expr_new_function(expr_new_symbol(SYM_Power),
                                          (Expr*[]){ expr_copy(c), sum_int(-1) }, 2) }, 3);
+        /* Certificate: F(var+1) - F(var) == t  <=>  R(var+1) r - R - 1 == 0, a
+         * rational-function identity in var (r the term ratio) -- exact, and
+         * cheap.  A failed check is a decline, never an answer. */
+        Expr* Rsh = shift_var(Rcoef, var, 1);
+        Expr* cert = expr_new_function(expr_new_symbol(SYM_Plus),
+                         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                                        (Expr*[]){ Rsh, expr_copy(ratio) }, 2),
+                                    expr_new_function(expr_new_symbol(SYM_Times),
+                                        (Expr*[]){ sum_int(-1), expr_copy(Rcoef) }, 2),
+                                    sum_int(-1) }, 3);
+        Expr* cta[1] = { cert };
+        Expr* cz = sum_eval("Together", cta, 1);
+        bool certified = cz->type == EXPR_INTEGER && cz->data.integer == 0;
+        expr_free(cz);
+        if (!certified) {
+            expr_free(Rcoef);
+            expr_free(ratio); expr_free(bb);
+            expr_free(a); expr_free(b); expr_free(c);
+            return NULL;
+        }
         Expr* Fraw = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ Rcoef, expr_copy(t) }, 2);
         Expr* F = evaluate(Fraw);
@@ -316,7 +353,7 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
         result = sum_eval("Cancel", ca, 1);
     }
 
-    expr_free(bb);
+    expr_free(ratio); expr_free(bb);
     expr_free(a); expr_free(b); expr_free(c);
     return result;
 }

@@ -9,7 +9,7 @@ is shown equal (or the new behaviour shown right).
 ## W1 Wrong answers (first)
 - [x] integer_assume_simplify: unsound for real n -- three root causes (prov_pos real exponent, Reduce complex
       inequalities, mod-2 even-coefficient early return) ; v0.6027
-- [ ] sf_machine_error: Erf[1.*^300 + 1.*^300 I] returns a Real (complex argument)
+- [x] sf_machine_error: Erf of a huge complex argument dropped its imaginary part; erf = 1 - erfc via arb ; v0.6029
 - [ ] numeric: N[E^(I Pi/4) - (-1)^(1/4), 32] leaves 3.3e-52 (1 - I), expected an exact-zero result
 - [x] fit: NumericSpec.contagion was stack garbage at 30+ sites; moved to file-static state ; v0.6028
 ## W2 Capability regressions

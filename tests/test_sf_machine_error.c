@@ -263,8 +263,13 @@ void test_kernel_declines() {
     assert_eval_eq("InverseErfc[2.]", "-Infinity", 0);
     assert_eval_eq("InverseErf[1.5]", "InverseErf[1.5]", 0);
     assert_eval_startswith("Erfi[27.]", "8.33752");           /* MPFR, beyond double range */
-    /* |z|^2 beyond any MPFR guard precision: unevaluated, not an MPFR abort. */
-    assert_eval_eq("Head[Erf[1.*^300 + 1.*^300 I]]", "Erf", 0);
+    /* |z|^2 beyond any MPFR guard precision: erf z = 1 - erfc z with erfc from
+     * arb (never an MPFR abort). erfc z ~ e^{-z^2}/(z Sqrt[Pi]) is ~4e-301 here,
+     * so erf z is 1 plus a tiny COMPLEX part -- a Real 1.0 dropped it. */
+    assert_eval_eq("Head[Erf[1.*^300 + 1.*^300 I]]", "Complex", 0);
+    assert_eval_eq("Erf[1.*^300 + 1.*^300 I] == 1 - Erfc[1.*^300 + 1.*^300 I]", "True", 0);
+    assert_eval_eq("Erf[-1.*^300 - 1.*^300 I] == -Erf[1.*^300 + 1.*^300 I]", "True", 0);
+    assert_eval_eq("0 < Abs[Im[Erf[1.*^300 + 1.*^300 I]]] < 1.*^-300", "True", 0);
     /* huge |z| next to the real axis stays on the machine axis series */
     assert_eval_startswith("Im[FresnelC[1.*^10 + 1.*^-10 I]]", "3.67608");
     assert_eval_startswith("Re[FresnelC[1.*^-8 + 3.*^7 I]]", "1.15476");

@@ -435,7 +435,42 @@ static Expr* erf_one_arg(Expr* arg) {
                 (void)erf_to_double(re, &rd);
                 (void)erf_to_double(im, &id);
                 if (rd * rd + id * id > ERF_ARB_Z2) {
-                    Expr* v = flint_num_erf(arg);
+                    /* erf z = 1 - erfc z, with erfc from arb (erf z = -(1 -
+                     * erfc(-z)) when Re z < 0, so erfc stays the small or
+                     * the dominant term, never ~1: no cancellation). arb's
+                     * erf is accurate relative to |erf z| ~ 1, so a tiny
+                     * imaginary part (erf(1e300 (1 + I)) = 1 - 8.2e-302 I)
+                     * came back as 0 and the answer as a Real; erfc carries
+                     * both parts componentwise. */
+                    Expr* w = (rd >= 0.0) ? expr_copy(arg)
+                        : eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                              (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
+                    Expr* ec = flint_num_erfc(w);
+                    /* At 53 bits arb's ball for a tiny erfc can be [0 +- r]:
+                     * erfc(1e300 (1 + I)) came back 0.0, and 1 - 0 is then
+                     * not "degenerate", so the caller never retried. Retry
+                     * erfc itself at a higher precision, as Erfc[] does. */
+                    if (ec && ((ec->type == EXPR_REAL && ec->data.real == 0.0)
+                               || (ec->type == EXPR_MPFR && mpfr_zero_p(ec->data.mpfr)))) {
+                        Expr* call = expr_new_function(expr_new_symbol("Erfc"),
+                                         (Expr*[]){ expr_copy(w) }, 1);
+                        Expr* p = numeric_promote_machine_call(call);
+                        expr_free(call);
+                        if (p) { expr_free(ec); ec = p; }
+                    }
+                    expr_free(w);
+                    Expr* v = NULL;
+                    if (ec) {
+                        v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                                (Expr*[]){ expr_new_integer(1),
+                                           expr_new_function(expr_new_symbol(SYM_Times),
+                                               (Expr*[]){ expr_new_integer(-1), ec }, 2) }, 2));
+                        if (rd < 0.0)
+                            v = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                    (Expr*[]){ expr_new_integer(-1), v }, 2));
+                    } else {
+                        v = flint_num_erf(arg);
+                    }
                     if (v) return out_prec <= 53 ? numeric_lower_mpfr_to_machine(v) : v;
                 }
             }

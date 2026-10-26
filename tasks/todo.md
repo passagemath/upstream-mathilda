@@ -37,9 +37,9 @@ is shown equal (or the new behaviour shown right).
 - [ ] Simplify[Re[1 + a] > 0, a > -1] stays unevaluated while Refine gives True (Simplify should subsume Refine)
 - [ ] Refine[ConditionalExpression[v, 1 + a > 0], a > -1] does not reduce to v; ConditionalExpression[v, c] - y does
       not combine to ConditionalExpression[v - y, c]
-- [ ] Integrate[E^Sin[x], x] spends the full 10 s ParallelMixedSpecial cascade budget before declining (since
-      v0.240); a Risch non-elementarity certificate for e^g over a trig tower would decide it at once.  This is
-      why dsolve_m34 times out on y'' + Cos[x] y' - Sin[x] y == 0 (exact; needs Integrate[E^Sin[x]])
+- [x] Integrate[E^Sin[x], x] spent the full 10 s ParallelMixedSpecial budget: not a missing certificate but a
+      wrong tower (E^(r Tan[x]), r free -- trigStep's parity tests read a transcendental r as a coefficient) and
+      ClassifyPrime on the free r never returning.  Both fixed (v0.6038): 10.2 s -> 0.66 s, dsolve_m34 passes
 - [ ] Integrate[(1 + Cos[4] Csc[2]^2)/(1 + Cos[2 + Y] Csc[2] Csc[Y]), Y] at HEAD ignores TimeConstrained[_, 20]
       (> 10 min); with this batch it aborts at 20 s -- find which stage was not unwinding
 - [ ] A rule whose RHS has a scoping construct binding a pattern variable is alpha-renamed:
@@ -59,13 +59,15 @@ is shown equal (or the new behaviour shown right).
 - [ ] The corpus prelude accepted a WRONG implicit answer for 2.2.37-3683 before v0.355 (residual 1.14 by the
       implicit-function rule) -- its implicit verify can be fooled; and 2.2.26-2524..2526's old implicit
       Riccati answers were wrong too (now declined, correctly)
-- [ ] Exact's potential integral and Integrate[E^Sin[x]] both pay ParallelMixedSpecial's 10 s cascade budget to
-      decline (2.2.8-753 at 10.6 s against the corpus' 8 s; dsolve_m34)
+- [ ] Exact's potential integral pays ParallelMixedSpecial's 10 s cascade budget to decline (2.2.8-753 at 10.6 s
+      against the corpus' 8 s); recheck after the v0.6038 tower fix
+- [ ] ClassifyPrime[T, c] does not terminate for a constant c (TowerSpecialPlaces now filters constants out;
+      the function itself should decline)
 - [ ] dsolve_tests / m61 / m63 run 150-200 s (alarm raised to 400 s in each main); the costs are no-crash /
       implicit checks that were as slow at v0.350, and F1's Bessel quadratures now closing (2-15 s each)
 
 ## W6 Keep it from drifting again
-- [ ] CI job: build the CMake suite and run ctest; fail on any non-baselined failure
+- [x] CI job: .github/workflows/tests.yml -- `ctest -LE nightly` (unit suites) on push/PR, the full suite daily
 
 # Dialog[] (2026-10-26)
 

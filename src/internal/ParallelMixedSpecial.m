@@ -845,7 +845,11 @@ TowerSpecialPlaces[T_] := Module[{gens = T["gens"], cand, out = {}, pl},
   cand = Rest[gens];
   Do[Do[If[Can[comp] === 0, Continue[]];
       Do[If[FreeQ[part, Alternatives @@ gens], Continue[]];
-        cand = Join[cand, FactorsOf[part][[All, 1]]], {part, {Numerator[Can[comp]], Denominator[Can[comp]]}}],
+        (* only factors carrying a generator: a constant (a parameter a in
+           E^(a Tan[x])) is no prime of the tower, and ClassifyPrime on one
+           does not terminate *)
+        cand = Join[cand, Select[FactorsOf[part][[All, 1]], ! FreeQ[#, Alternatives @@ gens] &]],
+        {part, {Numerator[Can[comp]], Denominator[Can[comp]]}}],
       {comp, d}], {d, T["derivs"]}];
   Do[If[! TrueQ[QuietCheck[ClassifyPrime[T, pp][[4]], False]], Continue[]];
     pl = LinearPlaces[T, pp];

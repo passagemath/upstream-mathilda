@@ -446,6 +446,35 @@ static void test_extended_bounds_restores(void) {
         "ExtendedBounds installs the extended hooks and restores the originals");
 }
 
+/* An exponential of a trig function gets a tower RATIONAL in its tangent:
+ * trigStep's parity tests reduce modulo r^2 = 1/(1 + t^2) by PolynomialRemainder,
+ * which held E^(t r) as an opaque coefficient, so E^Sin[x] read as "even" and
+ * became E^(r t) with r a free symbol -- a wrong tower, and a 10 s search in it
+ * (the cascade's whole ParallelMixedSpecial budget, dsolve_m34). */
+static void test_trig_exponent_tower(void) {
+    const char* fs[] = { "E^Sin[x]", "E^Cos[x]", "Sin[x] E^Sin[x]", "E^Sin[2 x]" };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[1024];
+        snprintf(buf, sizeof(buf),
+            "Module[{bt = Catch[Quiet[ParallelMixed`BuildTower[%s, x,"
+            " \"StructureTheorem\" -> True]], \"build\"], T},"
+            " T = bt[[1]];"
+            " Complement[Select[Cases[{bt[[2]], T[\"derivs\"]}, _Symbol, Infinity],"
+            " ! NumericQ[#] &], T[\"gens\"]] === {}]", fs[i]);
+        assert_true_msg(buf, fs[i]);
+    }
+    /* a constant factor of a derivative (a, in E^(a Tan[x])) is not a prime of
+     * the tower; ClassifyPrime on one did not terminate */
+    assert_true_msg(
+        "Module[{bt = Catch[Quiet[ParallelMixed`BuildTower[E^(a Tan[x]), x,"
+        " \"StructureTheorem\" -> True]], \"build\"]},"
+        " ListQ[TimeConstrained[ParallelMixed`Private`TowerSpecialPlaces[bt[[1]]], 5, $Aborted]]]",
+        "TowerSpecialPlaces skips constant factors");
+    /* and the cascade declines E^Sin[x] promptly */
+    assert_true_msg("First[Timing[Quiet[Integrate[E^Sin[x], x]]]] < 5",
+                    "Integrate[E^Sin[x], x] declines in under 5 s");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -472,6 +501,7 @@ int main(void) {
     TEST(test_additive_split_two_radicals);
     TEST(test_part2_unchanged);
     TEST(test_extended_bounds_restores);
+    TEST(test_trig_exponent_tower);
 
     printf("All ParallelMixedSpecial tests passed!\n");
     return 0;

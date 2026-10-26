@@ -2438,7 +2438,13 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
     ph = Table[Unique["b"], {Length[bases]}];
     e2 = e1 /. Thread[bases -> ph];
     redB[z_] := ToPair[(z /. {s -> tn rr, c -> rr}), rr, qr];
-    (* parity rules (change of the integration variable), when the trigonometric
+    (* Every reduction below is modulo r^2 = q by PolynomialRemainder, which
+       holds a transcendental occurrence of r (E^(t r), from E^Sin[x]) as an
+       opaque coefficient.  A pair still containing r is therefore NOT a
+       reduction, and the parity it reports is meaningless: E^Sin[x] passed as
+       "even" and became E^(r t), r a free symbol, in the tower t = tan x.
+       Each test below also requires the pair to be free of r.
+       parity rules (change of the integration variable), when the trigonometric
        functions of x carry the whole x-dependence and no tower exists yet:
          odd in sin:  F = B(cos x) sin x,  int F dx = -int B(u) du,  u = cos x
          odd in cos:  F = B(sin x) cos x,  int F dx =  int B(u) du,  u = sin x
@@ -2449,7 +2455,7 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
       rr2 = Unique["r"];
       basesS = ToPair[# /. s -> rr2, rr2, If[hyper, c^2 - 1, 1 - c^2]] & /@ bases;   (* s^2 = 1 - c^2, or c^2 - 1 *)
       outerS = ToPair[e2 /. s -> rr2, rr2, If[hyper, c^2 - 1, 1 - c^2]];
-      If[AllTrue[basesS, #[[2]] === 0 &] && outerS[[1]] === 0,
+      If[AllTrue[basesS, #[[2]] === 0 && FreeQ[#, rr2] &] && outerS[[1]] === 0 && FreeQ[outerS, rr2],
         uNew = Unique["u"];
         expr = (If[hyper, 1, -1] outerS[[2]] /. c -> uNew) /. Thread[ph -> (basesS[[All, 1]] /. c -> uNew)];
         gens = {uNew}; derivs = {{1, 0}}; T = Tower[gens, derivs, None, m];
@@ -2458,14 +2464,14 @@ BuildTower[integrand_, x_Symbol, OptionsPattern[]] := Module[
         Return[Null, Module]];
       basesC = ToPair[# /. c -> rr2, rr2, 1 + If[hyper, 1, -1] s^2] & /@ bases;   (* c^2 = 1 - s^2, or 1 + s^2 *)
       outerC = ToPair[e2 /. c -> rr2, rr2, 1 + If[hyper, 1, -1] s^2];
-      If[AllTrue[basesC, #[[2]] === 0 &] && outerC[[1]] === 0,
+      If[AllTrue[basesC, #[[2]] === 0 && FreeQ[#, rr2] &] && outerC[[1]] === 0 && FreeQ[outerC, rr2],
         uNew = Unique["u"];
         expr = (outerC[[2]] /. s -> uNew) /. Thread[ph -> (basesC[[All, 1]] /. s -> uNew)];
         gens = {uNew}; derivs = {{1, 0}}; T = Tower[gens, derivs, None, m];
         AppendTo[back, uNew -> If[hyper, Sinh[a], Sin[a]]];
         record[uNew, If[hyper, Sinh[a], Sin[a]]];
         Return[Null, Module]]];
-    evenQ = AllTrue[Append[redB /@ bases, redB[e2]], #[[2]] === 0 &];
+    evenQ = AllTrue[Append[redB /@ bases, redB[e2]], #[[2]] === 0 && FreeQ[#, rr] &];
     Da0 = TowerD[T, toTuple[a]];
     If[evenQ,
       (* the outer expression, with the radical bases as placeholders, reduces

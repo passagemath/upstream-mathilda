@@ -3411,6 +3411,7 @@ machine doubles.
 
 - **Symbolic-parameter residue families.** A pole's half-plane is classified at a sample point of the assumed region. The closed form is then re-derived with the poles classified at up to three further generic points of the same region, and it is withdrawn when they disagree. Radical root expressions can swap identities inside the region: `1/(1 + 2 a x^2 + b x^4)` across `a^2 = b`. A withdrawn value leaves the integral to the later stages.
 - **ParallelMixedTower** (cascade and `Method -> "ParallelMixedTower"`) declines an integrand in which a kernel outside its elementary class (anything other than `Plus`, `Times`, `Power`, `Exp`, `Log`, trig, hyperbolic, their inverses and radicals) is applied to an x-dependent argument. Both it and the ParallelMixedSpecial cascade stage reject a result that mentions a symbol absent from the integrand. ParallelMixedSpecial also rejects `$Aborted`.
+- **Trig towers (v0.6038).** BuildTower rewrites the trig functions of one argument through `t = Tan[a]` only when the reduction modulo `r^2 = 1/(1 + t^2)` leaves no `r` behind. A transcendental occurrence such as `E^Sin[x]` takes the half-angle `t = Tan[a/2]`; it used to give the tower `E^(r Tan[x])` with `r` free. TowerSpecialPlaces skips factors that carry no generator. `Integrate[E^Sin[x], x]` declines in 0.66 s, down from 10.2 s.
 
 Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDefiniteIntegralsCorpus.m`, `tests/MatharIndefiniteIntegralsCorpus.m`.
 

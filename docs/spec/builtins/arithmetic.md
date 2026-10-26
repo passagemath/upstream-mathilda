@@ -84,6 +84,25 @@ structure but does not evaluate it: `N[If[y == 2, Print[a], y + 1]]` is
 numericalization `Equal` does on a symbolic side, so `If[...] == 2` never runs
 a held branch.
 
+**Adaptive precision**: `N[expr, p]` aims for `p` good digits. Cancellation
+in a sum loses leading digits, so when an addition during the evaluation lost
+more bits than the working precision's guard, `N` evaluates again with 64 more
+working bits, and repeats until two successive results agree to `p` digits.
+The limit is `p + $MaxExtraPrecision` digits (default 50). A part that keeps
+shrinking as the precision rises is the residue of an exact cancellation, and
+it is `0` at precision `p`. Any other part that never settles is kept, and `N`
+emits `N::meprec` ("Internal precision limit $MaxExtraPrecision = 50.
+reached while evaluating ..."). If a higher precision comes back worse
+(`Overflow[]`, a non-finite value), `N` stops and keeps the last good result.
+An expression that cancels nothing is evaluated once, as before. Examples:
+`N[Cos[10^-20] - 1, 20]` is `-4.99999999999999999999*10^-41` (it was an exact
+`0.0`); `N[E^(I Pi/4) - (-1)^(1/4), 32]` and
+`N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40]` are `0` (they were `10^-52`- and
+`10^-60`-size "values"). Machine-number inputs gain no digits, so
+`N[0.1 + 0.2 - 0.3, 32]` stays `5.55112*10^-17`. Only the `N` builtin's
+`N[expr, p]` adapts; internal working-precision numericalization evaluates
+once.
+
 **Precision semantics**:
 - `N[expr]` gives a **machine-precision** approximation of the whole result. It
   targets machine precision even when `expr` is already an approximate

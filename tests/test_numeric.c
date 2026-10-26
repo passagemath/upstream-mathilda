@@ -429,6 +429,24 @@ static void test_barnesg_arbitrary_precision(void) {
     assert_eval_eq("N[BarnesG[x + 2] - x Gamma[x]^2 BarnesG[x] /. x -> 17/10, 30] == 0", "True", 0);
 }
 
+/* N[expr, p] promises p good digits, so it raises the working precision until
+ * two evaluations agree (up to $MaxExtraPrecision). One fixed-precision run
+ * reported cancellation noise as digits: N[Cos[10^-20] - 1, 20] was an exact
+ * 0.0 (it is -5*10^-41) and the exact zero below was 3*10^-52 at p = 32. */
+static void test_n_adaptive_precision(void) {
+    /* a genuine cancellation keeps its digits */
+    assert_eval_startswith("N[Cos[10^-20] - 1, 20]", "-4.99999999999999999999e-41");
+    assert_eval_eq("Abs[N[Cos[10^-20] - 1, 32]/(-5*10^-41) - 1] < 10^-30", "True", 0);
+    /* an exact zero comes out as zero at every precision */
+    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 50]", "0.0 + 0.0*I", 0);
+    assert_eval_eq("N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40] == 0", "True", 0);
+    /* genuine small values and plain cases are untouched */
+    assert_eval_startswith("N[Exp[-200], 32]", "1.38389652673673753064868145697908e-87");
+    assert_eval_startswith("N[Pi - 314159265358979323846/10^20, 30]", "2.643383279502884197169399375107e-21");
+    /* machine inputs gain no digits under N[_, p], so their noise stays */
+    assert_eval_startswith("N[0.1 + 0.2 - 0.3, 32]", "5.55112e-17");
+}
+
 /* Phase 8: end-to-end MPFR-complex corner cases. The infrastructure
  * landed in earlier phases (per-builtin wirings + numeric_mpfr_complex_pow);
  * this test fixes the behaviour at the REPL level so future regressions
@@ -533,6 +551,7 @@ int main(void) {
     TEST(test_set_accuracy);
     TEST(test_listable_prec);
     TEST(test_n_prec_complex_pow);
+    TEST(test_n_adaptive_precision);
     TEST(test_barnesg_arbitrary_precision);
     TEST(test_mpfr_complex_corner_cases);
     TEST(test_n_does_not_evaluate_held_arguments);

@@ -884,6 +884,22 @@ Expr* builtin_solve(Expr* res) {
     }
 
     Expr* expr = expr_copy(res->data.function.args[0]);
+    /* {eqn} in ONE variable is eqn: it goes down the same path as the bare
+     * equation (the List branch is the system dispatch, which has no
+     * transcendental solver -- Solve[{Log[y] == 3}, y] stayed unevaluated).
+     * Several variables keep the system dispatch's own conventions. */
+    bool one_var = vars->type == EXPR_SYMBOL
+        || (vars->type == EXPR_FUNCTION && vars->data.function.head->type == EXPR_SYMBOL
+            && vars->data.function.head->data.symbol.name == SYM_List
+            && vars->data.function.arg_count == 1);
+    while (one_var && expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL
+           && expr->data.function.head->data.symbol.name == SYM_List
+           && expr->data.function.arg_count == 1) {
+        Expr* inner = expr->data.function.args[0];
+        expr->data.function.args[0] = NULL;
+        expr_free(expr);
+        expr = inner;
+    }
 
     /* Compound-variable pre-pass: every non-symbol entry in `vars` is
      * substituted with a fresh internal symbol throughout `expr` so

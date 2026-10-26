@@ -1414,12 +1414,26 @@ static void test_approx_mixed_real_mpfr_picks_min(void) {
 }
 #endif
 
+/* {eqn} in one variable is eqn (the list form went to the system dispatch,
+ * which has no transcendental solver); several variables keep the system
+ * conventions.  An exponential kernel may carry a radical: u = E^(2 c) turns
+ * the IVP constant fit below into a radical equation in u. */
+static void test_one_element_list_and_radical_kernel(void) {
+    assert_eval_eq("Solve[{Log[y] == 3}, y] === Solve[Log[y] == 3, y] === {{y -> E^3}}", "True", 0);
+    assert_eval_eq("Solve[{Log[y] == 3}, {y}] === {{y -> E^3}}", "True", 0);
+    assert_eval_eq("Head[Quiet[Solve[{x^2 + y == 1}, {x, y}]]]", "Solve", 0);
+    assert_eval_eq("Module[{s = Quiet[Solve[-1 + 1/2 E^(-2 c) Sqrt[4 E^(4 c) - 4 E^(2 c) (-1 - E^(2 c))] == 1, c]]}, "
+                   "Length[s] >= 1 && AllTrue[s, Chop[N[(-1 + 1/2 E^(-2 c) Sqrt[4 E^(4 c) - 4 E^(2 c) (-1 - E^(2 c))] - 1) "
+                   "/. (# /. ConditionalExpression[v_, _] :> v /. C[_] -> 0), 30]] == 0 &]]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     printf("Running solve tests...\n");
     TEST(test_linear);
+    TEST(test_one_element_list_and_radical_kernel);
     TEST(test_quadratic_real);
     TEST(test_quadratic_complex_and_reals);
     TEST(test_multiplicity);

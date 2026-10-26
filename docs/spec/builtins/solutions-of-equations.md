@@ -812,6 +812,8 @@ In[19]:= Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]
 Out[19]= {}                        (* over-determined, inconsistent *)
 ```
 
+**v0.6036.** In one variable, `Solve[{eqn}, x]` is `Solve[eqn, x]` (`Solve[{Log[y] == 3}, y]` is `{{y -> E^3}}`). The exponential-kernel stage (`u = E^(c x)`) hands a u-equation that is algebraic but not polynomial to the radical solver.
+
 ## Reduce
 
 Reduces a statement of equations and inequalities to a complete, quantifier-free

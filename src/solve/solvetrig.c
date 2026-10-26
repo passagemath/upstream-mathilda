@@ -21,6 +21,7 @@
 #include "poly.h"
 #include "solveinv.h"
 #include "solvepoly.h"
+#include "solverad.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -533,6 +534,11 @@ static Expr* solve_u_and_unwind(Expr* poly_in_u, Expr* usym, Expr* kernel,
     Expr* u_eq = eval_and_free(mk_fn2("Equal", expr_copy(poly_in_u), mk_int(0)));
     SolvePolyOpts po = { false, false };
     Expr* u_sols = solvepoly_solve_polynomial_equality(u_eq, usym, NULL, &po);
+    /* Algebraic but not polynomial in u -- a radical of a polynomial in the
+     * kernel, as an IVP constant fit leaves it (E^(-2 c) Sqrt[8 E^(4 c) + 4 E^(2 c)]
+     * == 4 at u = E^(2 c)): the radical specialist clears it and verifies its
+     * roots against the u-equation. */
+    if (!u_sols) u_sols = solverad_solve_radicals_equality(u_eq, usym, NULL);
     expr_free(u_eq);
     if (!u_sols || !head_is_sym(u_sols, SYM_List)
         || u_sols->data.function.arg_count == 0) {

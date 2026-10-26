@@ -78,8 +78,18 @@ jobs:
             cmake -S tests -B tests/build
           fi
 
+      # Every suite links the whole library; 587 sanitizer-instrumented copies
+      # do not fit on a runner's disk, so a filtered run builds only its own
+      # targets (each ctest name is its executable's name).
       - name: Build test suites
-        run: cmake --build tests/build -j"$(nproc)"
+        run: |
+          if [ -n "$FILTER" ]; then
+            tg=$(cd tests/build && ctest -N -R "$FILTER" | sed -n 's/^ *Test *#[0-9]*: //p' | tr '\n' ' ')
+            echo "targets: $tg"
+            cmake --build tests/build -j"$(nproc)" --target $tg
+          else
+            cmake --build tests/build -j"$(nproc)"
+          fi
 
       # --timeout is per test: dsolve_corpus_2_1_2 takes ~25 min on a laptop.
       # --repeat until-pass:2 is deliberately absent; a flaky suite should fail.

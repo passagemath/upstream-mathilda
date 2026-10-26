@@ -204,6 +204,11 @@ if(USE_FLINT)
         add_compile_definitions(USE_FLINT)
         include_directories(${FLINT_INCLUDE_DIRS})
         link_directories(${FLINT_LIBRARY_DIRS})
+        # Debian/Ubuntu's flint.pc lists only the transitive gmp/mpfr and omits
+        # flint itself (the makefile's FLINT block has the same fixup).
+        if(NOT "flint" IN_LIST FLINT_LIBRARIES)
+            list(INSERT FLINT_LIBRARIES 0 flint)
+        endif()
         link_libraries(${FLINT_LIBRARIES})
     else()
         message(WARNING "FLINT >= 3.0 not detected; building tests with USE_FLINT=OFF")

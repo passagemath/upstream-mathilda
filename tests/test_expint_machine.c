@@ -206,7 +206,11 @@ void test_expint_special() {
     assert_true("ExpIntegralEi[800.] > 10^344");
     assert_true("ExpIntegralEi[-800.] < 0 && ExpIntegralEi[-800.] > -1.*^-300");
     assert_eval_eq("ExpIntegralE[2, 800.]", "0.0", 0);       /* IEEE underflow, as before */
-    assert_eval_eq("ExpIntegralE[5/2, 1.]", "ExpIntegralE[5/2, 1.0]", 0);
+    /* an exact order with a machine argument is a machine computation (exact
+     * and inexact arguments numericalize together): E_{5/2}(1) =
+     * Int_1^Infinity E^-t t^(-5/2) dt = 0.126487819593254 (NIntegrate agrees) */
+    assert_true("MachineNumberQ[ExpIntegralE[5/2, 1.]] && "
+                "Abs[ExpIntegralE[5/2, 1.] - 0.126487819593254] < 1.*^-14");
     /* exact input stays exact / symbolic */
     assert_eval_eq("SinIntegral[0]", "0", 0);
     assert_eval_eq("LogIntegral[2]", "LogIntegral[2]", 0);

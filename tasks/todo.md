@@ -13,20 +13,57 @@ is shown equal (or the new behaviour shown right).
 - [x] numeric: N[expr, p] adapts its working precision until p digits settle ($MaxExtraPrecision, N::meprec) ; v0.6031
 - [x] fit: NumericSpec.contagion was stack garbage at 30+ sites; moved to file-static state ; v0.6028
 ## W2 Capability regressions
-- [ ] integrate_diffunderint: 4 FAILs, (x^a - 1)/Log[x] and (x^a - x^b)/Log[x] no longer close
+- [x] integrate_diffunderint: the inner integral is now ConditionalExpression[1/(1+a), Re[1+a] > 0]; the stage carries the
+      condition (plain under a > -1, decided by Refine) -- 3 expectations were missing the convergence condition
 - [ ] DSolve: 31 corpus cases over baseline in 17 sections (per-case diff vs ce03e99d 2026-10-18), dsolve_tests
       t_m37_abel_air, dsolve_m61 (Bessel family), dsolve_m34 (cubic series), dsolve_m63 + corpus 2.1.2 timeouts
 ## W3 Behaviour changes to judge
-- [ ] packed_list (5): ToNDArray / ToPackedArray[{1, 2.5}] now pack a mixed list; Apart[1/(x^2 - 1)]
-- [ ] ndarray_linalg (4): Chop of NDArray gives exact 0s; Chop[Normalize[{1.*^200, 1.*^200}] - ...]; Eigenvalues[NDArray]
+- [x] packed_list (5): stale -- explicit ToNDArray/ToPackedArray widens by design (c47229b8, 2026-09-03); automatic
+      packing stays lossless (now asserted); Apart print form
+- [x] ndarray_linalg (4): Chop's exact 0 is its documented semantics (92453b91); Eigenvalues[NDArray] -> NDArray (convention);
+      REAL BUG fixed: Equal/Unequal left a visible NDArray vs List unevaluated
 - [ ] plot3d (4): polygon counts (18 vs 9) for PlotPoints -> 4, MaxRecursion -> 0
-- [ ] expint_machine: ExpIntegralE[5/2, 1.] now numeric (verify value); risch_transcendental (2):
-      Integrate[x 2.71828^-x, x] now integrates (verify antiderivative by differentiation)
-- [ ] flint_bridge: Factor[Sin[x]^2 - y^2]
+- [x] expint_machine: numeric value verified by quadrature (v0.477 mixed-argument numericalize); risch_transcendental (2):
+      inexact-base antiderivative verified by differentiation, inexact-out as the test intended
+- [x] flint_bridge: Factor print form under canonical order
 ## W4 Print-form drift (verify equality numerically, then update)
-- [ ] normalize, legendreq (2), stats (Correlation), simp (2: TrigToExp[Tanh] order), trigexpand, ml_dist (FullForm reals)
+- [x] normalize, legendreq (2), stats, simp (2), trigexpand, ml_dist: forms proven equal (symbolic + numeric); LegendreQ[1/2, 5.]
+      verified against Legendre's ODE and 30 digits; FullForm now prints every digit of a machine real
 ## W5 Timeouts (profile, as NMinimize)
 - [ ] simp_sf_airy (Struve, known 22 s), mathar_regression, mathar_definite_corpus, dsolve_m63, corpus 2.1.2
+## Found along the way (not test drift; separate work)
+- [ ] NOT IMPLEMENTED (unevaluated even on exact matrices): Eigensystem, MatrixExp, SingularValueList,
+      CholeskyDecomposition, MatrixFunction, HessenbergDecomposition
+- [ ] Simplify[Re[1 + a] > 0, a > -1] stays unevaluated while Refine gives True (Simplify should subsume Refine)
+- [ ] Refine[ConditionalExpression[v, 1 + a > 0], a > -1] does not reduce to v; ConditionalExpression[v, c] - y does
+      not combine to ConditionalExpression[v - y, c]
+- [ ] Integrate[E^Sin[x], x] spends the full 10 s ParallelMixedSpecial cascade budget before declining (since
+      v0.240); a Risch non-elementarity certificate for e^g over a trig tower would decide it at once.  This is
+      why dsolve_m34 times out on y'' + Cos[x] y' - Sin[x] y == 0 (exact; needs Integrate[E^Sin[x]])
+- [ ] Integrate[(1 + Cos[4] Csc[2]^2)/(1 + Cos[2 + Y] Csc[2] Csc[Y]), Y] at HEAD ignores TimeConstrained[_, 20]
+      (> 10 min); with this batch it aborts at 20 s -- find which stage was not unwinding
+- [ ] A rule whose RHS has a scoping construct binding a pattern variable is alpha-renamed:
+      Function[{x}, b] /. Function[v_, w_] :> Function[v, w] gives Function[v$1, ..] (the danger set holds the
+      pattern names for the Module-shadow case, A11).  Decide the intended substitution semantics.
+- [ ] The message funnel has the General::stop template but does not cap repeats: a DSolve IVP fit prints
+      Solve::ifun four times
+- [ ] DSolve[{y'' + y'^2 + y' == 0, y[0] == 0, y'[0] == 1}] is -I Pi + Log[-2 + E^-x] (correct, principal
+      branch) where Log[2 - E^-x] is the natural form: the general solution carries Log[E^-x - C[1]]
+- [ ] Integrate`RischTranscendental[6^x/(6^x + 1), x] returned an UNVERIFIED 0 when Solve[{eq}, {x, y}] (one
+      equation, several unknowns) solved instead of declining -- the stage trusts a Solve shape; it should
+      diff-back verify (seen while trying the {eqn} unwrap for several variables; the unwrap is one-variable only)
+- [ ] DSolve corpus 2.2.33-3275 (y y'' - y^2 y' == y'^2, y[0]==2, y'[0]==1) and -3277 (y y'' == y^3 + y'^2,
+      y[0]==1, y'[0]==2) regressed at b3c5eb34 (v0.267): the general solution became the Tanh family
+      -C[2]/2 + C[2]/2 Tanh[C[2](C[1]-x)/2], which meets these conditions only at complex constants (the old
+      E^(C[2] x)/(C[1] - E^(C[2] x)/C[2]) fits with real ones); 3277's implicit form leaves C[2] unfitted
+- [ ] The corpus prelude accepted a WRONG implicit answer for 2.2.37-3683 before v0.355 (residual 1.14 by the
+      implicit-function rule) -- its implicit verify can be fooled; and 2.2.26-2524..2526's old implicit
+      Riccati answers were wrong too (now declined, correctly)
+- [ ] Exact's potential integral and Integrate[E^Sin[x]] both pay ParallelMixedSpecial's 10 s cascade budget to
+      decline (2.2.8-753 at 10.6 s against the corpus' 8 s; dsolve_m34)
+- [ ] dsolve_tests / m61 / m63 run 150-200 s (alarm raised to 400 s in each main); the costs are no-crash /
+      implicit checks that were as slow at v0.350, and F1's Bessel quadratures now closing (2-15 s each)
+
 ## W6 Keep it from drifting again
 - [ ] CI job: build the CMake suite and run ctest; fail on any non-baselined failure
 

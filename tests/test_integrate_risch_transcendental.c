@@ -1117,11 +1117,16 @@ static void test_constant_base_exponentials(void) {
     assert_rm_num("6^x/(6^x + 1)");             /* -> Log[1+6^x]/Log[6] */
     assert_rm_num("5^x/(25^x - 1)");            /* 25 = 5^2 */
 
-    /* INEXACT base must NOT be force-integrated to a (degraded) exact closed
-     * form: the float base is rationalised upstream, and debasing is suppressed
-     * so the general Integrate stays unevaluated (inexact-in / inexact-out). */
-    assert_eval_eq("Head[Integrate[x*2.71828^(-x), x]]", "Integrate", 0);
-    assert_eval_eq("Head[Integrate[x^2*2.71828^(-x), x]]", "Integrate", 0);
+    /* An INEXACT base is integrated inexact-in / inexact-out: never into an
+     * exact closed form built from the rationalised float (no Rational leaks
+     * in), and correct by differentiation. Int x b^-x = -b^-x (x Log[b] + 1)/
+     * Log[b]^2, so 1/Log[2.71828]^2 = 1.0000013 is the prefactor. */
+    assert_eval_eq("Module[{r = Integrate[x*2.71828^(-x), x]}, Head[r] =!= Integrate && "
+                   "FreeQ[r, _Rational] && Abs[(D[r, x] - x*2.71828^(-x)) /. x -> 1.7] < 1.*^-12]",
+                   "True", 0);
+    assert_eval_eq("Module[{r = Integrate[x^2*2.71828^(-x), x]}, Head[r] =!= Integrate && "
+                   "FreeQ[r, _Rational] && Abs[(D[r, x] - x^2*2.71828^(-x)) /. x -> 1.7] < 1.*^-12]",
+                   "True", 0);
 }
 
 /* ================= DISPATCH CASE MATRIX =================

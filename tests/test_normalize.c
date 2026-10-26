@@ -47,7 +47,7 @@
 static void test_exact_3vec(void) {
     /* Documented example: Normalize[{1, 5, 1}].  Norm = Sqrt[27] = 3 Sqrt[3]. */
     assert_eval_eq("Normalize[{1, 5, 1}]",
-                   "{1/3/Sqrt[3], 5/3/Sqrt[3], 1/3/Sqrt[3]}", 0);
+                   "{1/(3 Sqrt[3]), 5/(3 Sqrt[3]), 1/(3 Sqrt[3])}", 0);
 }
 
 static void test_pythagorean_3_4(void) {

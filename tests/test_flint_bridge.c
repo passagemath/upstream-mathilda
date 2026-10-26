@@ -802,7 +802,9 @@ static void test_flint_poly_ops(void) {
     check_builtin("Factor[1/(x - y) + 1/(x + y)]", "(2 x)/((x - y) (x + y))");
     /* Non-polynomial head: FLINT declines (Sin) -> classical treats Sin[x]
      * as a generator. */
-    check_builtin("Factor[Sin[x]^2 - y^2]", "(Sin[x] + y) (Sin[x] - y)");
+    /* canonical order puts y before Sin[x]: -(y - Sin[x]) (y + Sin[x]) is
+     * (Sin[x] + y) (Sin[x] - y) */
+    check_builtin("Factor[Sin[x]^2 - y^2]", "-(y - Sin[x]) (y + Sin[x])");
 }
 
 /* ------------------------------------------------------------------ */

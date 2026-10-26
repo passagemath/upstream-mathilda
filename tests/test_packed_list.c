@@ -226,12 +226,16 @@ void test_bool_packing_matches_plain(void) {
 }
 
 void test_declines_what_it_cannot_represent(void) {
-    /* Each of these must come back as the ORIGINAL list, unpacked. A mixed
-     * exact/inexact list is the important one: a uniform buffer cannot hold an
-     * Integer head on one element and a Real head on another, so widening it
-     * would silently change {1, 2.5} into {1., 2.5}. */
-    assert_eval_eq("NDArrayQ[ToNDArray[{1, 2.5}]]", "False", 0);
-    assert_eval_eq("ToNDArray[{1, 2.5}]", "{1, 2.5}", 0);
+    /* A uniform buffer cannot hold an Integer head on one element and a Real
+     * head on another, so AUTOMATIC packing must leave a mixed exact/inexact
+     * list alone -- widening it would silently change {1, 2.5} into {1., 2.5}.
+     * An EXPLICIT ToNDArray is the user asking for the buffer, so it widens
+     * (c47229b8, 2026-09-03: "ToPackedArray coerces mixed Integer/Real"). */
+    assert_eval_eq("v = {1, 2.5}; {NDArrayQ[v], Head /@ v}", "{False, {Integer, Real}}", 0);
+    assert_eval_eq("NDArrayQ[Table[If[k == 3, 2.5, k], {k, 10}]]", "False", 0);
+    assert_eval_eq("NDArrayQ[ToNDArray[{1, 2.5}]]", "True", 0);
+    assert_eval_eq("ToNDArray[{1, 2.5}]", "{1.0, 2.5}", 0);
+    /* Each of these must come back as the ORIGINAL list, unpacked. */
     assert_eval_eq("NDArrayQ[ToNDArray[{1, 2, x}]]", "False", 0);
     assert_eval_eq("NDArrayQ[ToNDArray[{1/2, 1/3}]]", "False", 0);
     assert_eval_eq("NDArrayQ[ToNDArray[{{1., 2.}, {3.}}]]", "False", 0);   /* ragged */
@@ -1539,7 +1543,8 @@ static void test_no_two_headed_results(void) {
     for (size_t i = 0; i < sizeof(THRESHOLD) / sizeof(THRESHOLD[0]); i++)
         assert_eval_eq(THRESHOLD[i], "True", 0);
     /* Apart goes through parfrac.c's RowReduce. */
-    assert_eval_eq("Apart[1/(x^2 - 1)]", "-1/2/(1 + x) + 1/2/(-1 + x)", 0);
+    assert_eval_eq("Apart[1/(x^2 - 1)]", "1/(2 (-1 + x)) - 1/(2 (1 + x))", 0);
+    assert_eval_eq("Together[Apart[1/(x^2 - 1)] - 1/(x^2 - 1)]", "0", 0);
 
     /* The point of all of the above: single-headed means packable. */
     static const char* const PACKS[] = {
@@ -2130,9 +2135,11 @@ void test_packedarray_aliases(void) {
     assert_eval_eq("DataType[ToPackedArray[{1., 2.}, DataType -> \"float32\"]]",
                    "\"float32\"", 0);
     assert_eval_eq("Dimensions[ToPackedArray[{{1., 2.}, {3., 4.}}]]", "{2, 2}", 0);
-    /* Declines identically, rather than throwing or half-packing. */
-    assert_eval_eq("ToPackedArray[{1, 2.5}]", "{1, 2.5}", 0);
-    assert_eval_eq("NDArrayQ[ToPackedArray[{1, 2.5}]]", "False", 0);
+    /* An explicit request widens a mixed Integer/Real list, like ToNDArray. */
+    assert_eval_eq("ToPackedArray[{1, 2.5}]", "{1.0, 2.5}", 0);
+    assert_eval_eq("NDArrayQ[ToPackedArray[{1, 2.5}]]", "True", 0);
+    /* What it cannot represent it declines identically, rather than throwing
+     * or half-packing. */
     assert_eval_eq("NDArrayQ[ToPackedArray[{1, 2, x}]]", "False", 0);
     assert_eval_eq("NDArrayQ[ToPackedArray[{}]]", "False", 0);
     /* Idempotent, and inverse of the other alias in both directions. */

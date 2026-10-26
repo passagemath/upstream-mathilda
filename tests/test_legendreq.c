@@ -76,7 +76,7 @@ void test_legendreq_special_values() {
     assert_eval_eq("LegendreQ[3, 0]", "2/3", 0);
     /* Non-integer order: the exact Gamma special value. */
     assert_eval_eq("LegendreQ[1/2, 0]",
-                   "-(1/2 Gamma[3/4] Sqrt[Pi])/(Sqrt[2] Gamma[5/4])", 0);
+                   "-(Sqrt[Pi] Gamma[3/4])/(2 Sqrt[2] Gamma[5/4])", 0);
     /* Its numeric value is ~ -0.847213. */
     assert_close("N[LegendreQ[1/2, 0]]", -0.8472130847939791, 1e-9);
 }
@@ -130,9 +130,11 @@ void test_legendreq_symbolic() {
     assert_eval_eq("LegendreQ[1/2, y]", "LegendreQ[1/2, y]", 0);
     /* Negative integer order is singular -> deferred. */
     assert_eval_eq("LegendreQ[-2, x]", "LegendreQ[-2, x]", 0);
-    /* Numeric series outside the cut |x| < 1 is deferred (stays symbolic for a
-     * non-integer order). */
-    assert_eval_eq("LegendreQ[1/2, 5.0]", "LegendreQ[1/2, 5.0]", 0);
+    /* Outside the cut |x| < 1 a non-integer order is evaluated (no longer
+     * deferred): complex-valued for x > 1, it satisfies Legendre's equation
+     * (1 - x^2) y'' - 2 x y' + nu (nu + 1) y = 0 and agrees with 30 digits. */
+    assert_eval_eq("Head[LegendreQ[1/2, 5.0]]", "Complex", 0);
+    assert_eval_eq("Abs[LegendreQ[1/2, 5.0] - N[LegendreQ[1/2, 5], 30]] < 1.*^-14", "True", 0);
 }
 
 /* ---- associated Legendre (type 1) ----------------------------------- */

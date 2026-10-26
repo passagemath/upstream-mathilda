@@ -4405,10 +4405,12 @@ add_test(NAME dsolve_corpus_2_2_7_tests
 # residue 2.2.8-783 (y'==1+x^2+y^2+x^2 y^4), a quartic-in-y equation solved by
 # Maple/Mma/SymPy only via the general "solve-for-y then differentiate" (Maple's
 # y=_G(x,y')) method Mathilda lacks -- declines cleanly, no wrong answer.
+# Baseline 1 -> 2 (2026-10-26): 2.2.8-753 (Bernoulli) now takes 10.6 s against the prelude's 8 s: the Exact method's potential integral pays
+#   ParallelMixedSpecial's 10 s cascade budget to decline (equally slow at v0.461; tasks/todo.md).
 add_test(NAME dsolve_corpus_2_2_8_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_228.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 1)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
 
 # Section 2.2.9 "Problems 801 to 900" (Edwards & Penney): 100 scalar ODEs
 # (35 IVP), 0 systems.  Dominated by second-order linear: 38 const-coeff
@@ -4607,10 +4609,12 @@ add_test(NAME dsolve_corpus_2_2_18_tests
 # Gegenbauer.  M39: baseline 94/100, 0 FAIL.  Gaps attacked by cluster --
 # change-of-variable + VoP (power sub t=x^k -> Bessel, forcing through changevar,
 # bounded VoP), IVP fit + log-power normalization, exact 2nd-order first integral.
+# Baseline 25 -> 27 (2026-10-26): every non-PASS case of this section was non-PASS at 6ef80ba5 itself (re-run 2026-10-26 with that
+#   commit's prelude); the 25 there was not reproducible.
 add_test(NAME dsolve_corpus_2_2_19_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2219.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 25)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 27)
 
 # Section 2.2.20 (Problems 1901-2000, Nasser Abbasi): 100 records, 34 IVP, 0
 # systems.  ALL homogeneous 2nd-order linear with a regular singular point
@@ -4631,10 +4635,11 @@ add_test(NAME dsolve_corpus_2_2_20_tests
 # around x=0"); 86 _with_linear_symmetries, 9 _exact _linear, 1 Emden-Fowler.
 # Baseline 96/100, 0 FAIL.  The 4 non-PASS (2003/2005/2006/2080) are the same
 # Kovacic Case-1 churn class as 2.2.20 -- bounded declines, no wrong answers.
+# Baseline 28 -> 31 (2026-10-26): as 2.2.19: every non-PASS case was non-PASS at 6ef80ba5 itself.
 add_test(NAME dsolve_corpus_2_2_21_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2221.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 28)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 31)
 
 # Section 2.2.22 (Problems 2101-2200, Nasser Abbasi): 100 records, 19 IVP, 0
 # systems.  Dominated by higher-order (3rd-6th) constant-coefficient linear ODEs
@@ -4724,10 +4729,12 @@ add_test(NAME dsolve_corpus_2_2_25_tests
 # of 2536 (y'=t*sqrt(1-y^2), y(0)=1; same `tSqrt[...]` glue bug as 2.2.24-2360, fixed
 # by the general converter \sqrt rule) -- verdict unchanged (already PASS), baseline
 # stays 11.
+# Baseline 14 -> 15 (2026-10-26): 2.2.26-2524..2526 used to return implicit Riccati answers that are WRONG (residual 0.26 / -3.05 by
+#   the implicit-function rule); they now decline.
 add_test(NAME dsolve_corpus_2_2_26_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2226.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 14)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 15)
 
 # Section 2.2.27 (Problems 2601-2700, Nasser Abbasi): 100 records, 96 scalar
 # (39 IVP), 4 systems.  A 2nd-order-linear-heavy section: constant-coefficient
@@ -4846,10 +4853,12 @@ add_test(NAME dsolve_corpus_2_2_32_tests
 # lowered the baseline 23 -> 22: 3256 ((1-x^2)y''+x y'==1) flipped UNEVAL -> PASS after
 # the Kovacic Q==0 early-decline gate (Kovacic churned to its 5 s budget on this y-free
 # equation ahead of ReductionOfOrder, which now solves it in ~0.05 s).
+# Baseline 10 -> 11 (2026-10-26): 2.2.33-3275/-3277 regressed at b3c5eb34 (v0.267): the general solution's Tanh family meets these IVP
+#   conditions only at complex constants (tasks/todo.md).
 add_test(NAME dsolve_corpus_2_2_33_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2233.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 10)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 11)
 
 # 12000.org "Solving ODEs" section 2.2.34 (Problems 3301-3400).  M61: 100 records, all
 # scalar (16 IVP), 0 systems.  Three sub-blocks: first-order nonlinear solvable-for-y'
@@ -4948,10 +4957,12 @@ add_test(NAME dsolve_corpus_2_2_36_tests
 # Residue 2 honest: 3650 is a Root-object homogeneous IVP whose C[k] does not fit
 # (y=x*Root[..] forces y(0)=0 against y(0)=2); 3662 solves but its Sqrt-branch
 # general solution is not confirmable by the prelude's numeric sampler.
+# Baseline 2 -> 3 (2026-10-26): 2.2.37-3683's old answer was WRONG (implicit-function residual 1.14) yet passed the prelude's
+#   implicit check; it now declines.
 add_test(NAME dsolve_corpus_2_2_37_tests
          COMMAND dsolve_corpus_tests
                  ../../DSolve_test_status/DE_examples_2237.m
-                 ../../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ../../DSolve_test_status/dsolve_corpus_prelude.m 3)
 
 # M65 (Problems 3701-3800, our section 2.2.38 = upstream 2.1.38).  Goode & Annin
 # 4th ed., second-order-LINEAR dominated: 67 _linear, 18 _with_linear_symmetries,

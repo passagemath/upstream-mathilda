@@ -52,12 +52,13 @@ void test_plot3d_invalid_args_stay_unevaluated(void) {
 void test_plot3d_honors_plot_points_and_max_recursion(void) {
     /* PlotPoints sets the *initial* per-axis grid resolution; MaxRecursion
      * -> 0 disables all whole-grid refinement, so a PlotPoints -> 4 grid
-     * has exactly (4-1)^2 = 9 quad cells -> 9 Polygon[] primitives (no
-     * Mesh, no ColorFunction, so nothing else is emitted). */
+     * has exactly (4-1)^2 = 9 quad cells -> 9 Polygon[] primitives. Each is
+     * preceded by its cell's colour (the Viridis ColorFunction is the default
+     * since d5f63022), so the primitive list is 9 colours + 9 polygons. */
     assert_eval_eq(
         "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0, Mesh -> None][[1]]]",
-        "9", 0);
+        "18", 0);
     assert_eval_eq(
         "Length[Cases[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0, Mesh -> None][[1]], Polygon[___]]]",
@@ -69,15 +70,19 @@ void test_plot3d_mesh_default_and_toggle(void) {
      * draws each shared edge exactly once: for a 4x4 grid (9 cells) there
      * are 2x3 = 6 horizontal interior edges and 3x2 = 6 vertical interior
      * edges (domain perimeter edges are suppressed), so:
-     *   9 polygons + 1 GrayLevel directive + 12 Line edges = 22. */
+     *   9 cell colours + 9 polygons + 1 GrayLevel directive + 12 Line edges = 31. */
     assert_eval_eq(
         "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
         " MaxRecursion -> 0][[1]]]",
-        "22", 0);
-    /* The mesh color directive sits right after all 9 polygon fills. */
+        "31", 0);
+    assert_eval_eq(
+        "Count[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
+        " MaxRecursion -> 0][[1]], _Line]",
+        "12", 0);
+    /* The mesh color directive sits right after all 9 coloured polygon fills. */
     assert_eval_eq(
         "Head[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 4,"
-        " MaxRecursion -> 0][[1]][[10]]]",
+        " MaxRecursion -> 0][[1]][[19]]]",
         "GrayLevel", 0);
     /* Mesh -> None removes both the directive and the wireframe lines. */
     assert_eval_eq(
@@ -296,8 +301,8 @@ void test_plot3d_polygon_vertices_are_3d(void) {
     /* Every Polygon[] vertex is a {x,y,z} triple, not {x,y} -- the one
      * structural difference from Plot's 2D Polygon usage (Filling). */
     assert_eval_eq(
-        "Length[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
-        " MaxRecursion -> 0, Mesh -> None][[1]][[1]][[1]][[1]]]",
+        "Length[First[Cases[Plot3D[x + y, {x, 0, 1}, {y, 0, 1}, PlotPoints -> 2,"
+        " MaxRecursion -> 0, Mesh -> None][[1]], _Polygon]][[1, 1]]]",
         "3", 0);
 }
 

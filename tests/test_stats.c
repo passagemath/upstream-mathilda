@@ -564,7 +564,7 @@ void test_correlation() {
     assert_eval_eq("Correlation[{1.5,3,5,10},{2,1.25,15,8}]", "0.475976", 0);
     /* Symbolic (real transcendentals) closed form. */
     assert_eval_eq("Simplify[Correlation[{1,Pi,2},{2,2,1}]]",
-                   "(1/2 (-3 + Pi))/Sqrt[3 - 3 Pi + Pi^2]", 0);
+                   "(-3 + Pi)/(2 Sqrt[3 - 3 Pi + Pi^2])", 0);
     /* Complex vectors. */
     assert_eval_eq("Correlation[{2+I,3-2I,5+4I},{I,1+2I,10-5I}]", "(-7/2 + 28*I)/Sqrt[1139]", 0);
     /* Auto-correlation diagonal is exactly 1 for exact/symbolic data ... */

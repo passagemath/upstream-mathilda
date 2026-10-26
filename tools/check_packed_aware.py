@@ -45,6 +45,16 @@ SRC = os.path.join(ROOT, "src")
 # and rejected" from "never noticed".
 # ---------------------------------------------------------------------------
 EXEMPT = {
+    "Equal": "comparison with no buffer kernel (src/comparisons.c). Its "
+    "ndarray_delist_and_reeval branch exists only so a VISIBLE NDArray compares "
+    "through its nested List rather than staying unevaluated; for a packed "
+    "argument the gate's materialisation is exactly that delist, so going on "
+    "AWARE would buy nothing.",
+    "Unequal": "as Equal -- the same equal_via_lists.",
+    "UnsameQ": "boundary artifact of the Expr*-only FN_DEF scan: the int-returning "
+    "Equal helpers (list_equal_verdict, which calls builtin_equal per element) sit "
+    "between builtin_unsameq and builtin_equal, so their text is scanned as "
+    "UnsameQ's body. UnsameQ is structural identity and has no NDArray path.",
     "Permute": "structural reorder with no buffer kernel (src/funcprog.c). Its "
     "ndarray_delist_and_reeval branch exists only so a VISIBLE NDArray is answered "
     "rather than left unevaluated; for a packed argument the gate's materialisation "

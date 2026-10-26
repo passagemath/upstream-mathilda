@@ -4897,3 +4897,11 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
 I started a full HEAD-vs-new A/B of all ~585 test binaries (DSolve corpus included) for the SparseArray functional-heads work. My reason was that it touched "core paths" (eval.c listable_sparse, iter.c, part.c). The user asked: "If DSolve doesn't use SparseArray, then why are we running its test corpus?"
 
 Rule: the full suite is only for Plus/Times/Power canonical-form changes. For anything else, run the binaries for the heads actually touched: grep `tests/test_*.c` for the heads and files changed. Add the static audits and the wolframscript diffs. A change to a shared file is not a reason to run everything.
+
+## 2026-10-27: an NDArray branch in a builtin trips check-packed-aware
+v0.6034 added a visible-NDArray branch to Equal/Unequal and was pushed without
+`make check-packed-aware`; the Linux CI job failed. Any edit that adds
+`is_ndarray(` or `ndarray_delist_and_reeval` to a builtin must run the CI
+`check-*` targets locally (c99, messages, packed-aware, menu-ids,
+pipe-protocol). The audit attributes code to the preceding `Expr* NAME(`
+definition, so a non-Expr* static helper is charged to the builtin above it.

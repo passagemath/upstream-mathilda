@@ -458,17 +458,6 @@ static int list_equal_verdict(Expr* a, Expr* b) {
  * Equal returns True if its arguments are identical (SameQ) or numerically equal (2 == 2.0).
  * Otherwise it returns NULL (unevaluated).
  */
-/* A visible NDArray[...] operand: compare through its nested List, as the
- * packed surface already is (list_equal_verdict), so NDArray[{3., 2.}] ==
- * {3., 2.} is True rather than unevaluated -- the representations must agree. */
-static bool has_visible_ndarray_operand(const Expr* res) {
-    for (size_t i = 0; i < res->data.function.arg_count; i++) {
-        const Expr* a = res->data.function.args[i];
-        if (is_ndarray(a) && !is_packed_list(a)) return true;
-    }
-    return false;
-}
-
 /* Decide through the Lists; when that does not settle, leave the call as the
  * user wrote it (NDArray[...] == x stays NDArray[...] == x). */
 static Expr* equal_via_lists(Expr* res) {
@@ -479,6 +468,19 @@ static Expr* equal_via_lists(Expr* res) {
         return NULL;
     }
     return r;
+}
+
+/* (Kept below equal_via_lists: check_packed_aware.py attributes an
+ * is_ndarray() call to the preceding Expr* definition.)
+ * A visible NDArray[...] operand: compare through its nested List, as the
+ * packed surface already is (list_equal_verdict), so NDArray[{3., 2.}] ==
+ * {3., 2.} is True rather than unevaluated -- the representations must agree. */
+static bool has_visible_ndarray_operand(const Expr* res) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (is_ndarray(a) && !is_packed_list(a)) return true;
+    }
+    return false;
 }
 
 Expr* builtin_equal(Expr* res) {

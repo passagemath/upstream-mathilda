@@ -141,6 +141,11 @@ bool meminfo_peak(uint64_t* bytes) {
 #else
     *bytes = (uint64_t)ru.ru_maxrss * (uint64_t)1024; /* Linux: kilobytes */
 #endif
+    /* Linux keeps the high-water mark lazily (hiwater_rss is folded in from the
+     * split per-CPU RSS counters), so ru_maxrss can read a few pages BELOW the
+     * live /proc/self/statm figure.  A peak is never below the current value. */
+    uint64_t cur = 0;
+    if (meminfo_current(&cur) && cur > *bytes) *bytes = cur;
     return true;
 #endif
 }

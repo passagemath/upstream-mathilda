@@ -1805,10 +1805,10 @@ Gives the peak number of bytes resident for the Mathilda process over its lifeti
   largest value some earlier call to `MemoryInUse` happened to observe. That distinction is
   the point: a polled maximum misses any spike falling between two polls, and a status bar
   polling once a second would miss nearly every spike worth knowing about.
-- The peak never decreases within a run. It and `MemoryInUse[]` are read from two different
-  OS counters (`getrusage` versus the per-task resident size), so the two are not guaranteed
-  to agree to the byte at a given instant — near startup `ru_maxrss` can even read a page
-  below the current RSS, so `MaxMemoryUsed[] >= MemoryInUse[]` is not a reliable invariant.
+- The peak never decreases within a run, and `MaxMemoryUsed[] >= MemoryInUse[]` holds. The
+  two are read from different OS counters (`getrusage` versus the per-task resident size), and
+  Linux folds its high-water mark in lazily, so `ru_maxrss` can read a few pages below the
+  live RSS. The peak is therefore clamped to the current resident size (v0.6039).
 - **`ru_maxrss` is in different units on the two platforms** — bytes on Darwin, kilobytes on
   Linux — so it is scaled per platform. An unconverted use is wrong by a factor of 1024 on
   one of them while looking plausible on both.

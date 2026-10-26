@@ -1262,6 +1262,27 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
             }
             if (lim_c) expr_free(lim_c);
         }
+        /* A POSITIVE leading exponent whose coefficient mentions x only through
+         * logarithms (x Log[x] + (I Pi/2) x: Series of x Log[1 - E^(-I x)] at 0)
+         * still vanishes -- x^p Log[x]^m -> 0 for p > 0.  Replace each Log of an
+         * x-bearing argument by a fresh symbol; an x-free remainder settles it. */
+        if (leading_num > 0 && (!prefactor || !expr_contains(prefactor, ctx->x))) {
+            Expr* lg = mk_sym("Limit`logpart");
+            Expr* rule = expr_new_function(expr_new_symbol(SYM_RuleDelayed),
+                (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Log),
+                               (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Pattern),
+                                   (Expr*[]){ mk_sym("Limit`la"), expr_new_function(expr_new_symbol(SYM_Blank), NULL, 0) }, 2) }, 1),
+                           lg }, 2);
+            Expr* stripped = simp(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                                  (Expr*[]){ expr_copy(leading_coef), rule }, 2));
+            bool only_logs = !expr_contains(stripped, ctx->x);
+            expr_free(stripped);
+            if (only_logs) {
+                expr_free(leading_coef);
+                if (prefactor) expr_free(prefactor);
+                return mk_int(0);
+            }
+        }
         expr_free(leading_coef);
         if (prefactor) expr_free(prefactor);
         return NULL;

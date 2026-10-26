@@ -402,6 +402,26 @@ static bool rt_expr_has_head(Expr* e, const char* h) {
  * correct-by-construction rational integrator plus the diff-back gate; the
  * RootSum it emits is recognised by the generalized D[RootSum] collapse
  * (src/root.c). */
+/* True iff `e` is a rational function of `t`: t occurs only through Plus,
+ * Times and integer powers (anything free of t is a coefficient). */
+static bool rt_is_rational_in(const Expr* e, Expr* t) {
+    if (rt_free_of_x((Expr*)e, t)) return true;
+    if (expr_eq((Expr*)e, t)) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == intern_symbol("Plus") || h == intern_symbol("Times")) {
+        for (size_t i = 0; i < n; i++)
+            if (!rt_is_rational_in(e->data.function.args[i], t)) return false;
+        return true;
+    }
+    if (h == intern_symbol("Power") && n == 2) {
+        const Expr* q = e->data.function.args[1];
+        return (q->type == EXPR_INTEGER) && rt_is_rational_in(e->data.function.args[0], t);
+    }
+    return false;
+}
+
 Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
     Expr* uexp = NULL;
     Expr* F = rt_exp_kernelize(f, x, &uexp);
@@ -412,13 +432,17 @@ Expr* rt_exp_ratreduce_case(Expr* f, Expr* x) {
     Expr* result = NULL;
 
     /* Gates: F is a rational function of the kernel t ALONE (no residual x, no
-     * nested exp/log of x), it genuinely depends on t, and u' is free of x
+     * nested exp/log of x, and no Log / trig / exp OF t either: Log[Sin[5/4] +
+     * Sin[3 x/8]] kernelizes to Log[p(t)], whose "rational" integral over t is
+     * a dilogarithm the recursive Integrate ground on for 55 s before
+     * declining), it genuinely depends on t, and u' is free of x
      * (a linear exponent -> constant log-derivative, so the Jacobian 1/(u' t)
      * is rational in t). */
     bool ok = F && up
         && rt_free_of_x(F, x)
         && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL
         && !rt_free_of_x(F, t)
+        && rt_is_rational_in(F, t)
         && rt_free_of_x(up, x);
 
     if (ok) {

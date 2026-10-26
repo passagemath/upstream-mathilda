@@ -69,6 +69,20 @@ static void assert_closes(const char* integral, const char* expected,
     assert_eval_eq(buf, "0", 0);
 }
 
+/* Assert <integral> is ConditionalExpression[v, c] with v - <expected> == 0
+ * and c true on <inside>, false on <outside>: the result of a parameter
+ * integral whose inner integral converges only on a region (Integrate[x^a,
+ * {x, 0, 1}] needs Re[a] > -1), returned without assumptions to decide it. */
+static void assert_closes_cond(const char* integral, const char* expected,
+                               const char* inside, const char* outside) {
+    char buf[1400];
+    snprintf(buf, sizeof(buf),
+             "Module[{r = %s}, Head[r] === ConditionalExpression && "
+             "Simplify[r[[1]] - (%s)] === 0 && Refine[r[[2]], %s] === True && "
+             "Refine[r[[2]], %s] === False]", integral, expected, inside, outside);
+    assert_eval_eq(buf, "True", 0);
+}
+
 /* Assert |N[(<integral> - <expected>) /. subst]| < 1e-8.  Used where the result
  * is correct but Simplify cannot PROVE the two forms equal (e.g. it does not
  * know ArcTan[b/a] + ArcTan[a/b] == Pi/2, or combine a split Log).  This is a
@@ -97,8 +111,12 @@ static void assert_head_unevaluated(const char* input, const char* head) {
 
 /* Log-in-the-denominator / power families over [0,1]. */
 static void test_log_denominator(void) {
-    assert_closes("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, Method -> \"DiffUnderInt\"]",
-                  "Log[1 + a]", "");
+    /* Converges only for Re[a] > -1: conditional without assumptions,
+     * plain under a > -1. */
+    assert_closes_cond("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, Method -> \"DiffUnderInt\"]",
+                       "Log[1 + a]", "a > -1", "a < -1");
+    assert_closes("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, Method -> \"DiffUnderInt\", Assumptions -> a > -1]",
+                  "Log[1 + a]", "a > -1");
     assert_closes("Integrate[(x^a - x^b)/Log[x], {x, 0, 1}, "
                   "Method -> \"DiffUnderInt\", Assumptions -> {a > -1, b > -1}]",
                   "Log[(1 + a)/(1 + b)]", "a > -1 && b > -1");
@@ -237,11 +255,11 @@ static void test_arccos_emit_guard(void) {
 
 /* Reachable three ways: Method string, the alias, and the direct builtin. */
 static void test_routing(void) {
-    assert_closes("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, "
-                  "Method -> \"DifferentiationUnderIntegral\"]",
-                  "Log[1 + a]", "");
-    assert_closes("Integrate`DiffUnderInt[(x^a - 1)/Log[x], {x, 0, 1}]",
-                  "Log[1 + a]", "");
+    assert_closes_cond("Integrate[(x^a - 1)/Log[x], {x, 0, 1}, "
+                       "Method -> \"DifferentiationUnderIntegral\"]",
+                       "Log[1 + a]", "a > -1", "a < -1");
+    assert_closes_cond("Integrate`DiffUnderInt[(x^a - 1)/Log[x], {x, 0, 1}]",
+                       "Log[1 + a]", "a > -1", "a < -1");
     /* Also picked up by the Automatic cascade (an integral only this method
      * closes): no Method option given. */
     assert_closes("Integrate[Sin[a x]^2/x^2, {x, 0, Infinity}, "

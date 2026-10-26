@@ -2294,6 +2294,29 @@ static Expr* stage_linear_ode(const Expr* f, const Expr* g, const Expr* x,
 /* -------------------------------------------------------------------------
  * Stage A -- pure quadrature (lambda = 0).
  * ---------------------------------------------------------------------- */
+/* True iff `e` is the symbol True / False. */
+static bool dui_is_bool(const Expr* e, bool v) {
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol.name, v ? "True" : "False") == 0;
+}
+
+/* The verified closed form I under the inner integral's convergence condition
+ * `cond` (NULL: none): plain I when the assumptions prove it, NULL (decline)
+ * when they refute it, else ConditionalExpression[I, cond]. Takes I. */
+static Expr* dui_under_condition(Expr* I, const Expr* cond, const Expr* assumptions) {
+    if (!cond || !I) return I;
+    /* Refine decides a condition the assumptions state outright (Re[1 + a] > 0
+     * under a > -1), which Simplify leaves standing; Simplify then tidies it. */
+    Expr* c = assumptions ? ev2("Refine", expr_copy((Expr*)cond), expr_copy((Expr*)assumptions)) : NULL;
+    if (!c || !(dui_is_bool(c, true) || dui_is_bool(c, false))) {
+        Expr* base = c ? c : expr_copy((Expr*)cond);
+        c = simplify_with(base, assumptions);
+        expr_free(base);
+    }
+    if (!c || dui_is_bool(c, true)) { if (c) expr_free(c); return I; }
+    if (dui_is_bool(c, false)) { expr_free(c); expr_free(I); return NULL; }
+    return mk_fn2("ConditionalExpression", I, c);
+}
+
 /* One parameter attempt.  `zero_base_only` restricts find_base to an EXACT
  * (sign-independent) zero base; see the two-pass driver below.  Returns an owned
  * verified closed form, or NULL to move on. */
@@ -2311,7 +2334,19 @@ static Expr* stage_quadrature_param(const Expr* f, const Expr* x, const Expr* a,
      * parameter-integration from closing. */
     Expr* J = inner_definite(g, x, a, b, assumptions, pb, np);
     if (J) { Expr* Js = simplify_with(J, assumptions); expr_free(J); J = Js; }
+    /* A conditionally convergent inner integral (Integrate[x^a, {x, 0, 1}] is
+     * ConditionalExpression[1/(1 + a), Re[1 + a] > 0]): continue with its value,
+     * and give the result that condition -- the parameter integral of a
+     * ConditionalExpression does not close, which made the whole stage decline. */
+    Expr* Jcond = NULL;
+    if (J && head_name_is(J, "ConditionalExpression") && J->data.function.arg_count == 2) {
+        Jcond = expr_copy(J->data.function.args[1]);
+        Expr* v = expr_copy(J->data.function.args[0]);
+        expr_free(J);
+        J = v;
+    }
     if (!J || contains_head(J, "Integrate") || !is_finite_value(J)) {
+        if (Jcond) expr_free(Jcond);
         if (J) expr_free(J);
         /* Stage A's inner integral did not close.  Try Stage B: J = lambda I + M,
          * a first-order linear ODE in the parameter (e.g. Exp[-a^2 x^2] Cos[b x]).
@@ -2328,18 +2363,27 @@ static Expr* stage_quadrature_param(const Expr* f, const Expr* x, const Expr* a,
     if (!G || contains_head(G, "Integrate") || !is_finite_value(G)) {
         if (G) expr_free(G);
         expr_free(J);
+        if (Jcond) expr_free(Jcond);
         return NULL;
     }
 
     /* Base point with an exact known value I(p0). */
     Expr* p0 = NULL; Expr* I0 = NULL;
     if (!find_base(f, x, a, b, assumptions, p, pb, np, zero_base_only, &p0, &I0)) {
-        expr_free(G); expr_free(J); return NULL;
+        expr_free(G); expr_free(J); if (Jcond) expr_free(Jcond); return NULL;
+    }
+    /* The base must lie where the inner integral converges: I(p) is pinned
+     * by continuity from I(p0) only within that region. */
+    if (Jcond) {
+        Expr* at = eval_at_param(Jcond, p, p0);
+        bool outside = !at || dui_is_bool(at, false);
+        if (at) expr_free(at);
+        if (outside) { expr_free(p0); expr_free(I0); expr_free(G); expr_free(J); expr_free(Jcond); return NULL; }
     }
 
     /* I(p) = G(p) - G(p0) + I(p0). */
     Expr* Gp0 = eval_at_param(G, p, p0);
-    if (!Gp0) { expr_free(p0); expr_free(I0); expr_free(G); expr_free(J); return NULL; }
+    if (!Gp0) { expr_free(p0); expr_free(I0); expr_free(G); expr_free(J); if (Jcond) expr_free(Jcond); return NULL; }
 
     Expr* sum = mk_fn2("Plus", expr_copy(G),
                        mk_fn2("Plus",
@@ -2364,10 +2408,13 @@ static Expr* stage_quadrature_param(const Expr* f, const Expr* x, const Expr* a,
     expr_free(J);
     if (ok) {
         Expr* cl = diui_finalize(I, assumptions);
-        if (cl) { expr_free(I); return cl; }
-        return I;
+        if (cl) { expr_free(I); I = cl; }
+        Expr* out = dui_under_condition(I, Jcond, assumptions);
+        if (Jcond) expr_free(Jcond);
+        return out;
     }
     if (I) expr_free(I);
+    if (Jcond) expr_free(Jcond);
     return NULL;
 }
 

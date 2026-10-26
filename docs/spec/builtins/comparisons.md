@@ -89,6 +89,8 @@ Out[3]= False
 - An `Indeterminate` argument gives `False`, per IEEE 754 — see
   [Indeterminate and IEEE unordered comparison](#indeterminate-and-ieee-unordered-comparison).
 
+**v0.6034.** A visible `NDArray[...]` operand compares through its nested List, as a packed list does: `NDArray[{3., 2.}] == {3., 2.}` is `True`, and arrays that differ in an element are `False`. `Unequal` likewise.
+
 ## Unequal
 Tests whether expressions are unequal.
 - `Unequal[x, y]` (written `x != y`): `True` if `x` and `y` are provably

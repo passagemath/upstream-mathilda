@@ -71,10 +71,12 @@ static void test_inverse_real(void) {
     /* Result is a closed-system NDArray of float64. */
     assert_eval_eq("Head[Inverse[NDArray[{{4., 3.}, {6., 3.}}]]]", "NDArray", 0);
     assert_eval_eq("DataType[Inverse[NDArray[{{4., 3.}, {6., 3.}}]]]", "\"float64\"", 0);
-    /* A . A^-1 == I (Chop kills rounding noise). */
+    /* A . A^-1 == I (Chop kills rounding noise). Chop replaces a near-zero
+     * approximate number by the EXACT 0 (its documented semantics), which no
+     * float64 buffer holds, so the answer is a plain List of exact zeros. */
     assert_eval_eq("Chop[Dot[Inverse[NDArray[{{4., 3.}, {6., 3.}}]], "
                    "NDArray[{{4., 3.}, {6., 3.}}]] - NDArray[{{1., 0.}, {0., 1.}}]]",
-                   "NDArray[{{0.0, 0.0}, {0.0, 0.0}}]", 0);
+                   "{{0, 0}, {0, 0}}", 0);
 }
 
 static void test_inverse_edge(void) {
@@ -150,7 +152,7 @@ static void test_normalize(void) {
     /* Overflow-safe: a well-scaled huge vector normalises to the unit vector,
      * not the zero vector (which the naive Sqrt[Sum[x^2]] produced). */
     assert_eval_eq("Chop[Normalize[{1.*10^200, 1.*10^200}] - {1., 1.}/Sqrt[2.]]",
-                   "{0.0, 0.0}", 0);
+                   "{0, 0}", 0);
 }
 
 /* ---------------- Cross ---------------- */
@@ -163,10 +165,17 @@ static void test_cross(void) {
 
 /* ---------------- Delist-backed factorisations / predicates ---------------- */
 static void test_eigen(void) {
-    /* Previously crashed on NDArray; now delists to the numeric kernel. */
-    assert_eval_eq("Eigenvalues[NDArray[{{2., 0.}, {0., 3.}}]]", "{3.0, 2.0}", 0);
+    /* Previously crashed on NDArray; now runs the numeric kernel, and a
+     * visible NDArray in gives an NDArray out (as Inverse, Eigenvectors do). */
+    assert_eval_eq("Eigenvalues[NDArray[{{2., 0.}, {0., 3.}}]]", "NDArray[{3.0, 2.0}]", 0);
+    /* The representations agree: Equal compares a visible NDArray through its
+     * List (it stayed unevaluated), in both orders and for Unequal. */
     assert_eval_eq("Eigenvalues[NDArray[{{2., 0.}, {0., 3.}}]] == "
                    "Eigenvalues[{{2., 0.}, {0., 3.}}]", "True", 0);
+    assert_eval_eq("{3.0, 2.0} == NDArray[{3.0, 2.0}]", "True", 0);
+    assert_eval_eq("NDArray[{3.0, 2.0}] == {3.0, 2.5}", "False", 0);
+    assert_eval_eq("NDArray[{3.0, 2.0}] != {3.0, 2.5}", "True", 0);
+    assert_eval_eq("NDArray[{1., 2.}] == x", "NDArray[{1.0, 2.0}] == x", 0);   /* undecided: as written */
 }
 
 static void test_factorisations_evaluate(void) {

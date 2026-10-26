@@ -4,6 +4,7 @@
  * Implements structural comparison functions similar to the Wolfram Language.
  */
 
+#include "ndarray.h"
 #include "comparisons.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -457,6 +458,29 @@ static int list_equal_verdict(Expr* a, Expr* b) {
  * Equal returns True if its arguments are identical (SameQ) or numerically equal (2 == 2.0).
  * Otherwise it returns NULL (unevaluated).
  */
+/* A visible NDArray[...] operand: compare through its nested List, as the
+ * packed surface already is (list_equal_verdict), so NDArray[{3., 2.}] ==
+ * {3., 2.} is True rather than unevaluated -- the representations must agree. */
+static bool has_visible_ndarray_operand(const Expr* res) {
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (is_ndarray(a) && !is_packed_list(a)) return true;
+    }
+    return false;
+}
+
+/* Decide through the Lists; when that does not settle, leave the call as the
+ * user wrote it (NDArray[...] == x stays NDArray[...] == x). */
+static Expr* equal_via_lists(Expr* res) {
+    Expr* r = ndarray_delist_and_reeval(res);
+    if (r && r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL
+        && expr_eq(r->data.function.head, res->data.function.head)) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 Expr* builtin_equal(Expr* res) {
     if (res->type != EXPR_FUNCTION) {
         return NULL;
@@ -466,6 +490,7 @@ Expr* builtin_equal(Expr* res) {
     if (res->data.function.arg_count < 2) {
         return expr_new_symbol(SYM_True);
     }
+    if (has_visible_ndarray_operand(res)) return equal_via_lists(res);
 
     /* IEEE unordered: a NaN operand makes every pair it takes part in False. */
     if (has_nan_operand(res)) {
@@ -554,6 +579,7 @@ Expr* builtin_unequal(Expr* res) {
     if (res->data.function.arg_count < 2) {
         return expr_new_symbol(SYM_True);
     }
+    if (has_visible_ndarray_operand(res)) return equal_via_lists(res);
     
     bool all_definitely_unequal = true;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {

@@ -116,13 +116,11 @@ void test_ndarray_listq_always_false() {
 /* ---------- Equality / structural comparison ---------- */
 
 void test_ndarray_equality() {
-    /* Structurally-equal NDArray values are decided True via expr_eq, same
-     * as identical Lists. Unequal ones stay symbolically unevaluated --
-     * matching e.g. {1, 2} == {1, 3}, which is also not a decidable
-     * numeric comparison and is left as Equal[...]. */
+    /* NDArray values compare as their Lists do: equal ones are True and
+     * ones with a differing element are False, as {1, 2} == {1, 3} is. */
     assert_eval_eq("NDArray[{{1, 2}, {3, 4}}] == NDArray[{{1, 2}, {3, 4}}]", "True", 0);
-    assert_eval_eq("NDArray[{{1, 2}, {3, 4}}] == NDArray[{{1, 2}, {3, 5}}]",
-                   "NDArray[{{1.0, 2.0}, {3.0, 4.0}}] == NDArray[{{1.0, 2.0}, {3.0, 5.0}}]", 0);
+    assert_eval_eq("NDArray[{{1, 2}, {3, 4}}] == NDArray[{{1, 2}, {3, 5}}]", "False", 0);
+    assert_eval_eq("{{1, 2}, {3, 4}} == {{1, 2}, {3, 5}}", "False", 0);
 }
 
 void test_ndarray_sameq() {

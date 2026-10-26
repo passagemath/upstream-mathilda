@@ -71,6 +71,24 @@ jobs:
           ctest $sel -j"$(nproc)" --timeout "$to" --output-on-failure \
                 --output-junit ctest-junit.xml
 
+      # A crashed suite's block-buffered stdout dies with it, so the log shows
+      # nothing past the last flush. Rerun each failed suite unbuffered under
+      # gdb: the last test name it printed, and a backtrace if it crashes.
+      - name: Backtraces for failed suites
+        if: failure()
+        working-directory: tests/build
+        run: |
+          sudo apt-get install -y --no-install-recommends gdb >/dev/null
+          f=Testing/Temporary/LastTestsFailed.log
+          [ -f "$f" ] || exit 0
+          for t in $(cut -d: -f2 "$f"); do
+            [ -x "./$t" ] || continue
+            echo "::group::$t"
+            timeout 900 stdbuf -o0 -e0 gdb -q -batch -ex run -ex bt -ex quit --args "./$t" 2>&1 \
+              | grep -v "^\[New Thread\|^\[Thread .* exited\|Solve::ifun" | tail -80
+            echo "::endgroup::"
+          done
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

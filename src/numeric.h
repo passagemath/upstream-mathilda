@@ -63,13 +63,11 @@ typedef enum {
 typedef struct {
     NumericMode mode;
     long bits;
-    /* Inexact-contagion intent (set only by numeric_contagion_args when a
-     * Plus/Times has an inexact operand). When true, numericalize() must NOT
-     * thread into the arguments of a non-numeric head: `1.0 x[1]` stays
-     * `1.0 x[1]`, never `1.0 x[1.0]`. Numeric heads (Plus, Times, Power, Sin,
-     * ...) still recurse, so `1.0 + 2 x` → `1. + 2. x`. Explicit N[] leaves
-     * this false and keeps threading everywhere (N[x[1]] == x[1.]). */
-    bool contagion;
+    /* Two fields only, and keep it that way: 30+ call sites declare a
+     * NumericSpec uninitialised and set .mode / .bits, so any further field
+     * is stack garbage there (a `contagion` flag here was garbage-true at
+     * -O2 and stopped N threading into List: Fit[..., WorkingPrecision -> 24]
+     * returned the exact fit). Per-call state lives in numeric.c instead. */
 } NumericSpec;
 
 /* Decimal-digit equivalent of one full machine double's mantissa,
@@ -89,7 +87,6 @@ static inline NumericSpec numeric_machine_spec(void) {
     NumericSpec s;
     s.mode = NUMERIC_MODE_MACHINE;
     s.bits = 0;
-    s.contagion = false;
     return s;
 }
 

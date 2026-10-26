@@ -252,7 +252,6 @@ static Expr* hermite_numeric_hyp(const Expr* n_e, const Expr* x_e) {
     NumericSpec hi;
     hi.mode = NUMERIC_MODE_MPFR;
     hi.bits = op + hermite_hyp_guard_bits(x_e);
-    hi.contagion = false;
     Expr* hiout = numericalize(cf, hi);           /* evaluate with guard digits */
     expr_free(cf);
     if (!hiout || !cheb_is_number_leaf(hiout)) { expr_free(hiout); return NULL; }
@@ -264,7 +263,6 @@ static Expr* hermite_numeric_hyp(const Expr* n_e, const Expr* x_e) {
     } else {
         tgt.mode = NUMERIC_MODE_MPFR_CAP;
         tgt.bits = op;
-        tgt.contagion = false;
     }
     Expr* out = numericalize(hiout, tgt);
     expr_free(hiout);

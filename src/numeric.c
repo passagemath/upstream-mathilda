@@ -652,6 +652,17 @@ static Expr* numericalize_rec(const Expr* e, NumericSpec spec);
  * state an unwind left behind never leak into an unrelated call. */
 static int g_n_held_depth = 0;
 
+/* Inexact-contagion intent, set only while numeric_contagion_args
+ * numericalizes the exact operands of a Plus / Times that has an inexact one:
+ * then numericalize must NOT thread into the arguments of a non-numeric head
+ * (`1.0 x[1]` stays `1.0 x[1]`, never `1.0 x[1.0]`); numeric heads (Plus,
+ * Times, Power, Sin, ...) still recurse, so `1.0 + 2 x` -> `1. + 2. x`. Every
+ * other entry -- explicit N[], and each internal caller -- runs with it off
+ * (N[x[1]] == x[1.]), because the public numericalize() clears it. It used to
+ * be a NumericSpec field, which callers that build their spec by hand left
+ * uninitialised. */
+static bool g_n_contagion = false;
+
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     /* An N rule on the head (h /: N[h[x_]] := ...) gives the whole call's value. */
     if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
@@ -820,9 +831,9 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
      * an unbound x[1.0] and silently break, e.g., NMinimize's indexed-variable
      * substitution). A numeric head (Plus, Times, Power, Sin, ...) still
      * recurses below, so `1.0 + 2 x` → `1. + 2. x` and `1.0 + Sin[2]` numericalizes.
-     * Explicit N[] leaves spec.contagion false and keeps threading everywhere,
+     * Explicit N[] runs with g_n_contagion off and keeps threading everywhere,
      * matching Mathematica's N[x[1]] == x[1.]. */
-    if (spec.contagion) {
+    if (g_n_contagion) {
         const Expr* h = e->data.function.head;
         bool numeric_head = h && h->type == EXPR_SYMBOL
             && (get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION);
@@ -939,7 +950,7 @@ static Expr* numericalize_sparse_cb(const Expr* v, void* ctx) {
 
 static Expr* numericalize_sparse(const Expr* e, NumericSpec spec) {
     /* Inexact contagion never reaches into a raw object. */
-    if (spec.contagion) return expr_copy((Expr*)e);
+    if (g_n_contagion) return expr_copy((Expr*)e);
     Expr* r = sp_map_values(e, numericalize_sparse_cb, &spec, spec.mode == NUMERIC_MODE_MACHINE);
     return r ? r : expr_copy((Expr*)e);
 }
@@ -1777,9 +1788,25 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec);
 
 Expr* numericalize(const Expr* e, NumericSpec spec) {
     int saved = g_n_held_depth;
+    bool saved_contagion = g_n_contagion;
     g_n_held_depth = 0;
+    g_n_contagion = false;
     Expr* r = numericalize_top(e, spec);
     g_n_held_depth = saved;
+    g_n_contagion = saved_contagion;
+    return r;
+}
+
+/* numericalize for an exact operand of an inexact Plus / Times: as above,
+ * but with g_n_contagion on for the duration. */
+static Expr* numericalize_contagion(const Expr* e, NumericSpec spec) {
+    int saved = g_n_held_depth;
+    bool saved_contagion = g_n_contagion;
+    g_n_held_depth = 0;
+    g_n_contagion = true;
+    Expr* r = numericalize_top(e, spec);
+    g_n_held_depth = saved;
+    g_n_contagion = saved_contagion;
     return r;
 }
 
@@ -1911,8 +1938,7 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * values carrying more digits. With only MPFR operands, pick the
      * minimum MPFR precision so e.g. 1.0`50 + 1.0`20 lands at 20 digits
      * rather than preserving the 50-digit operand. */
-    NumericSpec spec = numeric_machine_spec();
-    spec.contagion = true;   /* do not thread N into non-numeric heads' args */
+    NumericSpec spec = numeric_machine_spec();   /* numericalize_contagion below */
 #ifdef USE_MPFR
     if (!any_machine && min_mpfr_prec > 0) {
         spec.mode = NUMERIC_MODE_MPFR;
@@ -1925,7 +1951,7 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * 1.5 - 1.0 a), 1.5 + a - a is 1.5, and 1.5 (2 + a) and 1.5 + Sqrt[2] a
      * keep their exact parts. */
     for (size_t i = 0; i < n; i++) {
-        out[i] = expr_is_numeric_quantity(args[i]) ? numericalize(args[i], spec)
+        out[i] = expr_is_numeric_quantity(args[i]) ? numericalize_contagion(args[i], spec)
                                                    : expr_copy(args[i]);
     }
     return true;

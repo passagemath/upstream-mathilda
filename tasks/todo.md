@@ -11,8 +11,7 @@ is shown equal (or the new behaviour shown right).
       inequalities, mod-2 even-coefficient early return) ; v0.6027
 - [ ] sf_machine_error: Erf[1.*^300 + 1.*^300 I] returns a Real (complex argument)
 - [ ] numeric: N[E^(I Pi/4) - (-1)^(1/4), 32] leaves 3.3e-52 (1 - I), expected an exact-zero result
-- [ ] fit: Fit[..., WorkingPrecision -> 24] returns the exact fit in fit_tests at -O2, correct at -O3 and
-      standalone -> undefined behaviour (uninitialised NumericSpec field? see memory)
+- [x] fit: NumericSpec.contagion was stack garbage at 30+ sites; moved to file-static state ; v0.6028
 ## W2 Capability regressions
 - [ ] integrate_diffunderint: 4 FAILs, (x^a - 1)/Log[x] and (x^a - x^b)/Log[x] no longer close
 - [ ] DSolve: 31 corpus cases over baseline in 17 sections (per-case diff vs ce03e99d 2026-10-18), dsolve_tests

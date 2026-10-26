@@ -570,6 +570,20 @@ static void test_cg_rosenbrock_converges(void) {
                "Method -> \"ConjugateGradient\"]] < 1.*^-12, False]");
 }
 
+/* An Abs term under a general constraint: the solver's gradient takes
+ * d/du Abs[u] = Sign[u] over the reals (D itself keeps Abs' symbolic, a number
+ * at no point, which sent every such gradient to finite differences), and the
+ * constraint and its gradient run compiled (fm_progs_register). The optimum
+ * 1/9 at {1/3, 5/3}: on x + y = 2, f = t + (t - 1/3)^2 for x = 1/3 - t, whose
+ * slope 1 + 2 (t - 1/3) is positive for t >= 0, so t = 0. */
+static void test_abs_objective_with_constraint(void) {
+    check_true("Module[{r = FindMinimum[{Abs[x - 1/3] + (y - 2)^2, x + y <= 2}, {{x, 0}, {y, 0}}]},"
+               " Abs[First[r] - 1/9] < 1*^-4 && Abs[(x /. Last[r]) - 1/3] < 1*^-4 &&"
+               " Abs[(y /. Last[r]) - 5/3] < 1*^-3]");
+    check_true("Module[{r = NMinimize[{Abs[x - 1/3] + (y - 2)^2, x + y <= 2}, {x, y}]},"
+               " Abs[First[r] - 1/9] < 1*^-4]");
+}
+
 static void test_hs071_default_method(void) {
     /* Hock-Schittkowski 71: the default QuasiNewton penalty path stalled at
      * 19.84 because the projected BFGS had no active set on the bound x1 = 1.
@@ -673,6 +687,7 @@ int main(void) {
     TEST(test_cvmit_warning);
     TEST(test_cg_rosenbrock_converges);
     TEST(test_hs071_default_method);
+    TEST(test_abs_objective_with_constraint);
     TEST(test_stress_beale);
 
     /* 13. Memory */

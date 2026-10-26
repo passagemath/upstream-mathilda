@@ -1397,6 +1397,21 @@ objective value before returning.
   (`FindMinimum[Sum[(v[i]-i)^2, {i,1,3}], Table[v[i], {i,1,3}]]` →
   `{0., {v[1]->1., v[2]->2., v[3]->3.}}`).  The objective is compiled over the
   fresh symbols, so an indexed problem runs at the same speed as the explicit one.
+- **Constraints run compiled too.** At `MachinePrecision` the general
+  constraints and their gradient components are compiled once, along with the
+  objective, and the penalty / augmented-Lagrangian path evaluates them on the
+  register machine (a numeric gradient component is read directly). Before
+  this, every constraint and every component of its gradient went through the
+  interpreter at every point. `NMinimize`'s local polish used that path, so a
+  20-variable portfolio problem with 41 linear constraints took 17 s instead of
+  0.5 s. Like the objective, they stay interpreted when an `EvaluationMonitor`
+  is set (`FindMinimum`) or at a higher `WorkingPrecision`.
+- **Kinks.** For the gradient, the solvers differentiate over the reals:
+  `Abs'[u]` is `Sign[u]` (and `Sign[0] = 0`, a subgradient at the kink) and
+  `Sign'[u]` is `0`. `D` itself keeps `Derivative[1][Abs][u]`, which is right
+  over the complexes, so it is unchanged everywhere else. But it is a number
+  at no point, so an `Abs` term used to send the whole gradient to finite
+  differences.
 
 Although `FindMinimum` is `HoldAll`, only the **variables** stay held: the
 starting values, the bounds of `{x, xstart, xmin, xmax}`, and the values of

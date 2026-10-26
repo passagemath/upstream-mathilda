@@ -604,6 +604,21 @@ extern Expr** g_fm_grad_exprs;
 extern CompiledProgram** g_fm_grad_progs;
 extern size_t g_fm_grad_n;
 
+/* Compiled programs for the other expressions a solve evaluates over and over
+ * -- the general constraints and their gradient components -- keyed by node
+ * identity and consulted by fm_eval_scalar / fm_eval_gradient after the
+ * objective registration above. Without them the penalty path evaluated every
+ * constraint, and each component of its gradient, in the interpreter at every
+ * point, re-binding all n variables each time, though the driver had already
+ * compiled the constraints for its own search. Programs are borrowed. A
+ * driver takes fm_progs_mark() before registering and fm_progs_release(mark)
+ * before freeing the programs or the expressions, so a nested solve leaves its
+ * caller's entries in place. A registered node is alive (the driver holds it),
+ * so its address cannot be reused by another expression meanwhile. */
+size_t fm_progs_mark(void);
+void   fm_progs_register(const Expr* e, CompiledProgram* p, size_t nargs);
+void   fm_progs_release(size_t mark);
+
 /* ============ cross-file function prototypes ============ */
 
 void fm_warn(const char* fn, const char* tag, const char* fmt, ...);

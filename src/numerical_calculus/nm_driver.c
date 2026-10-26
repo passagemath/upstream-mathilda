@@ -273,6 +273,8 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
     double* xbest = NULL;
     Expr* result_out = NULL;
     CompiledProgram*  f_prog = NULL;   /* compiled objective (machine prec)     */
+    CompiledProgram** cg_progs = NULL; /* ngens x n: compiled constraint gradient components */
+    size_t            prog_mark = fm_progs_mark();
     CompiledProgram** g_progs = NULL;  /* compiled general constraints          */
 
     /* Declared here (before the first `goto cleanup`) so the cleanup path always
@@ -354,6 +356,23 @@ Expr* nm_minimize_driver(Expr* res, const char* fn_name) {
                                                      n, COMPILE_FOLD_GLOBALS);
                 if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
                 g_progs[k] = p;
+                fm_progs_register(gens[k].expr, p, n);
+            }
+            /* The local polish's penalty path also differentiates every
+             * constraint at every point: compile those components too (a
+             * numeric constant needs no program -- fm_eval_gradient reads it
+             * directly). */
+            cg_progs = (CompiledProgram**)calloc(ngens * (n ? n : 1), sizeof(CompiledProgram*));
+            for (size_t k = 0; cg_progs && k < ngens; k++) {
+                if (!gens[k].grad_exprs) continue;
+                for (size_t i = 0; i < n; i++) {
+                    Expr* gi = gens[k].grad_exprs[i];
+                    if (!gi || gi->type == EXPR_INTEGER || gi->type == EXPR_REAL) continue;
+                    CompiledProgram* p = compile_expr_ex(gi, cnames, ctypes, n, COMPILE_FOLD_GLOBALS);
+                    if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
+                    cg_progs[k * n + i] = p;
+                    fm_progs_register(gi, p, n);
+                }
             }
         }
         free(cnames); free(ctypes);
@@ -546,6 +565,11 @@ cleanup:
     g_fm_obj_expr  = NULL;     /* deregister the objective before f_prog is freed */
     g_fm_obj_prog  = NULL;
     g_fm_obj_nargs = 0;
+    fm_progs_release(prog_mark);   /* ... and the constraint programs */
+    if (cg_progs) {
+        for (size_t k = 0; k < ngens * (n ? n : 1); k++) if (cg_progs[k]) compiled_free(cg_progs[k]);
+        free(cg_progs);
+    }
     if (f_prog) compiled_free(f_prog);
     if (g_progs) {
         for (size_t k = 0; k < ngens; k++) if (g_progs[k]) compiled_free(g_progs[k]);

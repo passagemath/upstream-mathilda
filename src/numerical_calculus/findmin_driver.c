@@ -186,6 +186,8 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     Expr* result_out = NULL;
     CompiledProgram*  f_prog = NULL;      /* machine-precision compiled objective */
     CompiledProgram** grad_progs = NULL;  /* per-component compiled exact gradient */
+    CompiledProgram** con_progs = NULL;   /* ngens x (1 + n): each constraint, then its gradient */
+    size_t            prog_mark = fm_progs_mark();
     size_t n = 0;
     bool two_start = false;       /* scalar {x, x0, x1} form */
     double two_start_x1 = 0.0;
@@ -410,6 +412,23 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
                                                      COMPILE_FOLD_GLOBALS);
                 if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
                 grad_progs[i] = p;
+            }
+        }
+        /* The penalty / augmented-Lagrangian path evaluates every general
+         * constraint and its gradient at every point; serve them compiled too
+         * (fm_progs_register). A numeric gradient component needs no program. */
+        if (ngens > 0) {
+            con_progs = (CompiledProgram**)calloc(ngens * (1 + n), sizeof(CompiledProgram*));
+            for (size_t k = 0; con_progs && k < ngens; k++) {
+                for (size_t i = 0; i <= n; i++) {
+                    Expr* e = (i == 0) ? gens[k].expr
+                                       : (gens[k].grad_exprs ? gens[k].grad_exprs[i - 1] : NULL);
+                    if (!e || e->type == EXPR_INTEGER || e->type == EXPR_REAL) continue;
+                    CompiledProgram* p = compile_expr_ex(e, cnames, ctypes, n, COMPILE_FOLD_GLOBALS);
+                    if (p && compiled_result_type(p) != CT_REAL) { compiled_free(p); p = NULL; }
+                    con_progs[k * (1 + n) + i] = p;
+                    fm_progs_register(e, p, n);
+                }
             }
         }
         free(cnames); free(ctypes);
@@ -695,6 +714,11 @@ cleanup:
     g_fm_grad_exprs = NULL;
     g_fm_grad_progs = NULL;
     g_fm_grad_n = 0;
+    fm_progs_release(prog_mark);   /* ... and the constraint programs */
+    if (con_progs) {
+        for (size_t k = 0; k < ngens * (1 + n); k++) if (con_progs[k]) compiled_free(con_progs[k]);
+        free(con_progs);
+    }
     if (f_prog) compiled_free(f_prog);
     if (grad_progs) {
         for (size_t i = 0; i < n; i++) if (grad_progs[i]) compiled_free(grad_progs[i]);

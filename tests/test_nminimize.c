@@ -1490,7 +1490,9 @@ static void test_txncost_portfolio(void) {
      * solving each convex QP (scipy), is −0.0334. DifferentialEvolution left it at
      * +0.12, but RandomSearch's multi-start polish concentrates the weights onto
      * the high-return assets and reaches −0.0334 — the MIQP optimum — at 40
-     * restarts in ~4 s. Asserts the near-optimal value, Σw=1, binary z, the
+     * restarts in ~0.5 s (17 s while the polish evaluated the 41 constraints
+     * and their gradients in the interpreter; 4 s before the 2026-09-28
+     * active-set fix multiplied its iterations). Asserts the near-optimal value, Σw=1, binary z, the
      * |w−w0| ≤ z coupling, and non-negativity. Deterministic under RandomSeed. */
     check_true(
         "Module[{n = 10, mu, cov, w0, w, z, dw, obj, cons, r, o, sol, wv, zv},"
@@ -1519,7 +1521,8 @@ static void test_fixed_charge_flow(void) {
      * RandomSearch cannot even find a feasible flow, and the milp optimum (191.72,
      * scipy) is out of reach for the general derivative-free solver. Automatic
      * (DE with the dimension-scaled budget) DOES find a valid flow (~877, ~4.6× the
-     * optimum) in ~4 s — this test pins that honest outcome: a FEASIBLE flow
+     * optimum) in ~12 s -- most of it the compiled best-of-4 default DE of v0.264,
+     * a deliberate reliability budget -- and this test pins that honest outcome: a FEASIBLE flow
      * (finite cost, every conservation equality satisfied, binary arcs,
      * non-negative flows), documenting that flow-conservation MILP optimality
      * remains a limitation. Deterministic under the default seed. */

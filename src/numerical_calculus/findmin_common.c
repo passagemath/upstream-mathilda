@@ -3,6 +3,7 @@
  * findmin_internal.h. Do not add cross-file helpers here without a
  * prototype in that header. */
 #include "findmin_internal.h"
+#include <stdint.h>
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 
 
@@ -497,12 +498,94 @@ Expr**            g_fm_grad_exprs = NULL;
 CompiledProgram** g_fm_grad_progs = NULL;   /* len g_fm_grad_n, entries may be NULL */
 size_t            g_fm_grad_n     = 0;
 
+/* ---- the program registry (see fm_progs_mark in findmin_internal.h) ---- */
+
+typedef struct { const Expr* e; CompiledProgram* p; size_t nargs; } FmProgEntry;
+static FmProgEntry* g_fm_progs = NULL;     /* registration stack            */
+static size_t       g_fm_nprogs = 0, g_fm_progs_cap = 0;
+static size_t*      g_fm_prog_slots = NULL; /* open-addressing hash: 1 + index, 0 = empty */
+static size_t       g_fm_prog_nslots = 0;   /* power of two, >= 2 * g_fm_nprogs */
+
+static size_t fm_prog_hash(const Expr* e) {
+    uintptr_t h = (uintptr_t)e;
+    h ^= h >> 17; h *= (uintptr_t)0x9E3779B97F4A7C15ull; h ^= h >> 29;
+    return (size_t)h;
+}
+
+static void fm_progs_rehash(void) {
+    free(g_fm_prog_slots);
+    g_fm_prog_slots = NULL; g_fm_prog_nslots = 0;
+    if (g_fm_nprogs == 0) return;
+    size_t ns = 16;
+    while (ns < 2 * g_fm_nprogs) ns *= 2;
+    g_fm_prog_slots = (size_t*)calloc(ns, sizeof(size_t));
+    if (!g_fm_prog_slots) return;           /* lookups then just miss */
+    g_fm_prog_nslots = ns;
+    for (size_t i = 0; i < g_fm_nprogs; i++) {
+        size_t s = fm_prog_hash(g_fm_progs[i].e) & (ns - 1);
+        while (g_fm_prog_slots[s]) s = (s + 1) & (ns - 1);
+        g_fm_prog_slots[s] = i + 1;          /* a later entry for the same node wins */
+    }
+}
+
+size_t fm_progs_mark(void) { return g_fm_nprogs; }
+
+void fm_progs_register(const Expr* e, CompiledProgram* p, size_t nargs) {
+    if (!e || !p) return;
+    if (g_fm_nprogs == g_fm_progs_cap) {
+        size_t nc = g_fm_progs_cap ? 2 * g_fm_progs_cap : 64;
+        FmProgEntry* ne = (FmProgEntry*)realloc(g_fm_progs, nc * sizeof(FmProgEntry));
+        if (!ne) return;
+        g_fm_progs = ne; g_fm_progs_cap = nc;
+    }
+    g_fm_progs[g_fm_nprogs].e = e;
+    g_fm_progs[g_fm_nprogs].p = p;
+    g_fm_progs[g_fm_nprogs].nargs = nargs;
+    g_fm_nprogs++;
+    if (2 * g_fm_nprogs > g_fm_prog_nslots) {
+        fm_progs_rehash();
+    } else {
+        size_t s = fm_prog_hash(e) & (g_fm_prog_nslots - 1);
+        while (g_fm_prog_slots[s]) s = (s + 1) & (g_fm_prog_nslots - 1);
+        g_fm_prog_slots[s] = g_fm_nprogs;
+    }
+}
+
+void fm_progs_release(size_t mark) {
+    if (mark >= g_fm_nprogs) return;
+    g_fm_nprogs = mark;
+    fm_progs_rehash();
+    if (g_fm_nprogs == 0) { free(g_fm_progs); g_fm_progs = NULL; g_fm_progs_cap = 0; }
+}
+
+static CompiledProgram* fm_prog_lookup(const Expr* e, size_t nargs) {
+    if (!g_fm_prog_nslots) return NULL;
+    size_t s = fm_prog_hash(e) & (g_fm_prog_nslots - 1);
+    CompiledProgram* found = NULL;
+    for (size_t k; (k = g_fm_prog_slots[s]) != 0; s = (s + 1) & (g_fm_prog_nslots - 1)) {
+        const FmProgEntry* en = &g_fm_progs[k - 1];
+        if (en->e == e && en->nargs == nargs) found = en->p;   /* keep probing: latest wins */
+    }
+    return found;
+}
+
+/* A numeric atom needs no evaluation: a linear constraint's gradient is all
+ * such constants. */
+static bool fm_atom_value(const Expr* e, double* out) {
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
+    return false;
+}
+
 /* Evaluate the bound objective and return a double; NULL on failure. */
 bool fm_eval_scalar(Expr* f, FmVarBind* binds,
                            const double* x, size_t n,
                            const FmOpts* opts, double* out) {
     if (g_fm_obj_prog && f == g_fm_obj_expr && n == g_fm_obj_nargs
         && compiled_eval_real(g_fm_obj_prog, x, out) && isfinite(*out))
+        return true;
+    CompiledProgram* prog = fm_prog_lookup(f, n);
+    if (prog && compiled_eval_real(prog, x, out) && isfinite(*out))
         return true;
     Expr** xv = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
     for (size_t i = 0; i < n; i++) xv[i] = expr_new_real(x[i]);
@@ -517,11 +600,67 @@ bool fm_eval_scalar(Expr* f, FmVarBind* binds,
     return ok;
 }
 
-/* Build (and evaluate) D[f, x]. */
+/* h is Derivative[1][fn]. */
+static bool fm_is_first_derivative_of(const Expr* h, const char* fn) {
+    if (!h || h->type != EXPR_FUNCTION || h->data.function.arg_count != 1) return false;
+    const Expr* a = h->data.function.args[0];
+    const Expr* d = h->data.function.head;
+    return a->type == EXPR_SYMBOL && a->data.symbol.name == fn
+        && d->type == EXPR_FUNCTION && d->data.function.arg_count == 1
+        && d->data.function.head->type == EXPR_SYMBOL
+        && d->data.function.head->data.symbol.name == SYM_Derivative
+        && d->data.function.args[0]->type == EXPR_INTEGER
+        && d->data.function.args[0]->data.integer == 1;
+}
+
+/* The optimizer's variables are real, and over the reals d/du Abs[u] is
+ * Sign[u] (Sign[0] = 0, a subgradient at the kink) and d/du Sign[u] is 0
+ * almost everywhere. D keeps Derivative[1][Abs][u] symbolic -- right over the
+ * complexes, so it stays that way globally -- but it is a number at no point:
+ * every gradient component holding one failed, so the solver fell back to
+ * central differences (2n objective evaluations per gradient) and could not
+ * compile the gradient. An objective with |w - w0| terms paid ~40 evaluations
+ * per gradient on 20 variables. Returns `e` (unchanged, same reference) or a
+ * rewritten tree; takes ownership of `e`. */
+static Expr* fm_real_derivatives(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (n == 1 && fm_is_first_derivative_of(h, SYM_Abs)) {
+        Expr* u = fm_real_derivatives(expr_copy(e->data.function.args[0]));
+        expr_free(e);
+        return expr_new_function(expr_new_symbol(SYM_Sign), &u, 1);
+    }
+    if (n == 1 && fm_is_first_derivative_of(h, SYM_Sign)) {
+        expr_free(e);
+        return expr_new_integer(0);
+    }
+    Expr** args = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = e->data.function.args[i];
+        Expr* r = fm_real_derivatives(expr_copy(a));
+        if (r != a && !args) {
+            args = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t j = 0; j < i; j++) args[j] = expr_copy(e->data.function.args[j]);
+        }
+        if (args) args[i] = r;
+        else expr_free(r);   /* unchanged: drop the extra reference */
+    }
+    if (!args) return e;
+    Expr* out = expr_new_function(expr_copy(h), args, n);
+    free(args);
+    expr_free(e);
+    return out;
+}
+
+/* Build (and evaluate) D[f, x], with the real-variable derivatives of Abs
+ * and Sign (see fm_real_derivatives). */
 static Expr* fm_compute_partial(Expr* f, Expr* var) {
     Expr* args[2] = { expr_copy(f), expr_copy(var) };
     Expr* call = expr_new_function(expr_new_symbol(SYM_D), args, 2);
-    return eval_and_free(call);
+    Expr* d = eval_and_free(call);
+    Expr* r = fm_real_derivatives(d);
+    return r == d ? d : eval_and_free(r);
 }
 
 /* Compute the symbolic gradient — list of D[f, x_i]. Returns NULL if any
@@ -602,6 +741,10 @@ bool fm_eval_gradient(Expr** g_exprs, FmVarBind* binds,
         if (reg && g_fm_grad_progs[i]
             && compiled_eval_real(g_fm_grad_progs[i], x, &g_out[i])
             && isfinite(g_out[i]))
+            continue;
+        if (fm_atom_value(g_exprs[i], &g_out[i])) continue;
+        CompiledProgram* prog = fm_prog_lookup(g_exprs[i], n);
+        if (prog && compiled_eval_real(prog, x, &g_out[i]) && isfinite(g_out[i]))
             continue;
         if (!xv) {
             xv = (Expr**)malloc(sizeof(Expr*) * n);

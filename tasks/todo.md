@@ -31,8 +31,11 @@ interactive pty transcript matches the reference session line for line; check-c9
       test_utils.h, and test_symbol.c mutes via mth_msg_suppress_push/pop
 - [x] 35 test binaries pointed stderr at /dev/null for the rest of the run: now test_mute_messages() (a whole-run
       Quiet frame), stderr stays open
-- [ ] Follow-up (pre-existing at HEAD): nminimize_tests is killed by test_utils.h's whole-binary alarm(120) watchdog
-      at test 82/86 (test_txncost_portfolio) -- the suite needs > 120 s; SIGALRM ends it with no FAIL line
+- [x] nminimize_tests killed by the alarm(120) watchdog (171 s): the penalty path interpreted every constraint and
+      its gradient (393f2767's active-set BFGS multiplied the iterations), and Abs' sent gradients to finite
+      differences. Constraint programs registered (fm_progs_register), Abs' -> Sign in the solver gradient; 54 s ; v0.6026
+- [ ] Follow-up: test_fixed_charge_flow takes 33 s inside nminimize_tests but ~12 s standalone -- state left by
+      earlier tests in the binary?
 
 # FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
 

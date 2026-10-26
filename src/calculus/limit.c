@@ -5051,7 +5051,21 @@ static Expr* limit_preprocess(Expr* f, Expr** opts, size_t nopts) {
         else if (amb) expr_free(amb);
     }
     if (assum) {
-        Expr* refined = simp(mk_fn2("Refine", expr_copy(cur), assum)); /* consumes assum */
+        /* Under builtin_limit's Block the ambient $Assumptions IS the option.
+         * Passing it again as Refine's second argument would evaluate it first,
+         * and Element[a, Integers] evaluates to True when $Assumptions holds it,
+         * so Refine would see no assumption at all.  One-argument Refine reads
+         * the ambient value instead. */
+        Expr* amb = read_dollar_assumptions();
+        bool ambient_is_assum = amb && expr_eq(amb, assum);
+        if (amb) expr_free(amb);
+        Expr* refined;
+        if (ambient_is_assum) {
+            expr_free(assum);
+            refined = simp(mk_fn1("Refine", expr_copy(cur)));
+        } else {
+            refined = simp(mk_fn2("Refine", expr_copy(cur), assum)); /* consumes assum */
+        }
         if (refined && !expr_eq(refined, cur)) { expr_free(cur); cur = refined; }
         else if (refined) expr_free(refined);
     }
@@ -5246,10 +5260,64 @@ Expr* builtin_limit(Expr* res) {
     if (internal_args_contain_inexact(res)) {
         return internal_rationalize_then_numericalize(res, builtin_limit);
     }
+    /* An Assumptions option is threaded through Limit's own layers as an
+     * AssumeCtx, but the Series, Simplify and zero tests those layers call read
+     * the AMBIENT $Assumptions -- so Limit[x (ArcTan[a x] - Pi/2), x ->
+     * Infinity, Assumptions -> a > 0] expanded ArcTan without a > 0, kept a
+     * (-1 + Sqrt[a^2]/a) Pi/2 term and answered DirectedInfinity[...].
+     * Evaluate the call inside Block[{$Assumptions = assum}, ...], as Assuming
+     * does (the option overrides the ambient value, so it is not and-ed in).
+     * The inner call sees $Assumptions === assum and proceeds. */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count > 2) {
+        Expr* opt = find_assumptions_opt(res->data.function.args + 2,
+                                         res->data.function.arg_count - 2);
+        if (opt && !is_sym(opt, "Automatic")) {
+            Expr* cur = read_dollar_assumptions();
+            bool scoped = cur && expr_eq(cur, opt);
+            if (cur) expr_free(cur);
+            if (!scoped) {
+                Expr* set = expr_new_function(expr_new_symbol(SYM_Set),
+                    (Expr*[]){ expr_new_symbol("$Assumptions"), expr_copy(opt) }, 2);
+                /* The body is Limit`Scoped[call]: HoldAllComplete, so the
+                 * already-evaluated arguments are not evaluated again under
+                 * the new $Assumptions (Element[n, Integers] would become
+                 * True and the option would be lost). */
+                Expr* blk = expr_new_function(expr_new_symbol(SYM_Block),
+                    (Expr*[]){ expr_new_function(expr_new_symbol(SYM_List),
+                                   (Expr*[]){ set }, 1),
+                               expr_new_function(expr_new_symbol("Limit`Scoped"),
+                                   (Expr*[]){ expr_copy(res) }, 1) }, 2);
+                Expr* r = evaluate(blk);
+                expr_free(blk);
+                if (r && r->type == EXPR_FUNCTION
+                    && r->data.function.head->type == EXPR_SYMBOL
+                    && strcmp(r->data.function.head->data.symbol.name, "Limit`Scoped") == 0) {
+                    expr_free(r);            /* the scoped call declined */
+                    return NULL;
+                }
+                return r;
+            }
+        }
+    }
     arith_warnings_mute_push();
     Expr* out = builtin_limit_impl(res);
     arith_warnings_mute_pop();
     return out;
+}
+
+/* Limit`Scoped[Limit[...]]: run a Limit call whose arguments are ALREADY
+ * evaluated, without evaluating them again (HoldAllComplete).  Only built by
+ * builtin_limit, inside the Block that scopes $Assumptions to an Assumptions
+ * option.  NULL (the call declined) leaves Limit`Scoped[...] for the caller to
+ * recognise. */
+static Expr* builtin_limit_scoped(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* call = res->data.function.args[0];
+    if (!head_is(call, SYM_Limit)) return NULL;
+    Expr* c = expr_copy(call);
+    Expr* r = builtin_limit(c);
+    expr_free(c);
+    return r;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -5301,6 +5369,12 @@ static void register_limit_method(const char* sym, Expr* (*fn)(Expr*),
 /* ---------------------------------------------------------------------- */
 void limit_init(void) {
     symtab_add_builtin("Limit", builtin_limit);
+    symtab_add_builtin("Limit`Scoped", builtin_limit_scoped);
+    symtab_get_def("Limit`Scoped")->attributes |= ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED;
+    symtab_set_docstring("Limit`Scoped",
+        "Limit`Scoped[Limit[...]] evaluates an already-evaluated Limit call without "
+        "re-evaluating its arguments; internal, used to scope $Assumptions to an "
+        "Assumptions option.");
 
     /* Limit does not hold its arguments in Mathematica -- Attributes[Limit]
      * is {Protected}. The first argument f must be evaluated

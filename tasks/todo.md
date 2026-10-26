@@ -61,6 +61,10 @@ is shown equal (or the new behaviour shown right).
       Riccati answers were wrong too (now declined, correctly)
 - [ ] Exact's potential integral pays ParallelMixedSpecial's 10 s cascade budget to decline (2.2.8-753 at 10.6 s
       against the corpus' 8 s); recheck after the v0.6038 tower fix
+- [ ] Element[x, dom] decides from $Assumptions during plain evaluation (simp_builtins.c builtin_element), so
+      Block[{$Assumptions = Element[a, Integers]}, Refine[e, Element[a, Integers]]] passes Refine a True and
+      $Assumptions itself evaluates to True.  Only assumption-aware functions should consult it; check what relies
+      on the current behaviour before changing it (Limit works around it, v0.6044)
 - [ ] Root is HoldAll (src/root.c root_init), so its INDEX is never evaluated: k = 2; Root[#^2 - 2 &, k] and
       Table[Root[f, k], {k, 4}] stay symbolic.  Function holds its own body, so HoldFirst (or none) suffices
 - [ ] ClassifyPrime[T, c] does not terminate for a constant c (TowerSpecialPlaces now filters constants out;

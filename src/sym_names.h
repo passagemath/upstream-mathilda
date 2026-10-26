@@ -361,6 +361,7 @@ extern const char* SYM_KroneckerDelta;
 extern const char* SYM_Less;
 extern const char* SYM_LeastSquares;
 extern const char* SYM_LessEqual;
+extern const char* SYM_Limit;
 extern const char* SYM_Level;
 extern const char* SYM_Levin;
 extern const char* SYM_Lexicographic;

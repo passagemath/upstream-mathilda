@@ -359,6 +359,7 @@ const char* SYM_KroneckerDelta = NULL;
 const char* SYM_Less = NULL;
 const char* SYM_LeastSquares = NULL;
 const char* SYM_LessEqual = NULL;
+const char* SYM_Limit = NULL;
 const char* SYM_Level = NULL;
 const char* SYM_Levin = NULL;
 const char* SYM_Lexicographic = NULL;
@@ -1414,6 +1415,7 @@ void sym_names_init(void) {
     SYM_Less                       = intern_symbol("Less");
     SYM_LeastSquares               = intern_symbol("LeastSquares");
     SYM_LessEqual                  = intern_symbol("LessEqual");
+    SYM_Limit                      = intern_symbol("Limit");
     SYM_Level                      = intern_symbol("Level");
     SYM_Levin                      = intern_symbol("Levin");
     SYM_Lexicographic              = intern_symbol("Lexicographic");

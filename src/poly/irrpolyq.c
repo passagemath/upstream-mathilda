@@ -609,6 +609,12 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
         Expr* probe_alpha_owned = NULL;
         if (mode == EXT_MODE_EXPLICIT && alpha_expr) {
             probe_alpha = alpha_expr;
+        } else if (mode == EXT_MODE_AUTOMATIC) {
+            /* Each specialised univariate keeps the algebraic coefficients,
+             * so Factor's own Extension -> Automatic finds the field there:
+             * x^2 + 2 Sqrt[3] x y + 3 y^2 at y = 2 is (x + 2 Sqrt[3])^2. */
+            probe_alpha_owned = expr_new_symbol(SYM_Automatic);
+            probe_alpha = probe_alpha_owned;
         } else if (mode == EXT_MODE_ALL) {
             probe_alpha_owned = expr_new_symbol(SYM_I);
             probe_alpha = probe_alpha_owned;

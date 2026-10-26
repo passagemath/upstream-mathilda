@@ -74,10 +74,32 @@ static bool lang_true(const char* input) {
  * (40 digits) both differ from the in-method gate, so this is genuinely independent.
  *
  * `eqn` is solved with DSolve; `resid` is the ODE residual written in terms of `b`. */
+static int m61_inert_seen = 0;
 static void m61_verify(const char* eqn, const char* resid) {
     char buf[2600];
+    /* A later Integrate stage may close the quadrature (a Bessel x power ->
+     * HypergeometricPFQ); a closed answer is checked by its own residual at the
+     * same points and precision.  F1 counts the inert ones so the family still
+     * exercises the inert path. */
     snprintf(buf, sizeof(buf),
-        "Module[{s = DSolve[%s, y, x], b, r, zs, pieces, i},"
+        "m61s = DSolve[%s, y, x]; Head[m61s] === List && Length[m61s] >= 1 && FreeQ[m61s, Inactive]",
+        eqn);
+    char* closed = eval_str(buf);
+    bool is_closed = (strcmp(closed, "True") == 0);
+    free(closed);
+    if (is_closed) {
+        snprintf(buf, sizeof(buf),
+            "Module[{s = m61s, b, r},"
+            "  FreeQ[s, SeriesData] && (b = s[[1]][[1]][[2]][[2]]; r = %s;"
+            "  Max[Table[Abs[N[r /. {C[1] -> 17/13, C[2] -> -23/19} /. x -> pt, 40]],"
+            "             {pt, {23/50, 91/100, 157/100, 211/100}}]] < 10^-25)]",
+            resid);
+        ASSERT_TRUE(buf);
+        return;
+    }
+    m61_inert_seen++;
+    snprintf(buf, sizeof(buf),
+        "Module[{s = m61s, b, r, zs, pieces, i},"
         "  Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive] &&"
         "  FreeQ[s, SeriesData] &&"
         "  (b = s[[1]][[1]][[2]][[2]];"
@@ -95,7 +117,7 @@ static void m61_verify(const char* eqn, const char* resid) {
         "                               40]],"
         "                         {pt, {23/50, 91/100, 157/100, 211/100}}]],"
         "               {p, pieces}]] < 10^-25)))]",
-        eqn, resid);
+        resid);
     ASSERT_TRUE(buf);
 }
 
@@ -126,6 +148,8 @@ static void t_m61_bessel_family(void) {
                "x D[b, {x, 2}] + 3 D[b, x] - b - x");
     m61_verify("x y''[x] + y'[x] - 2 y[x] x == x^2",
                "x D[b, {x, 2}] + D[b, x] - 2 b x - x^2");
+    fprintf(stderr, "  F1: %d of 21 members inert\n", m61_inert_seen);
+    ASSERT_MSG(m61_inert_seen >= 1, "F1 no longer reaches the inert path");
 }
 
 /* ---- F2: where the quadratures close, nothing changes ---------------------- */
@@ -212,8 +236,11 @@ static void t_m61_series_basis_declines(void) {
                 "== -2 x^2 + x, y, x], Inactive]");
     ASSERT_TRUE("FreeQ[DSolve[3 x^2 (x + 1) y''[x] + x (5 - x) y'[x] "
                 "+ (2 x^2 - 1) y[x] == -x^3, y, x], Inactive]");
-    ASSERT_TRUE("FreeQ[DSolve[4 x^2 y''[x] - 3 (x^2 + x) y'[x] + 2 y[x] == x, y, x], "
-                "Inactive]");
+    /* 4 x^2 y'' - 3 (x^2 + x) y' + 2 y == x was a series-basis member; its basis
+     * is now the closed x^(7/8 +- Sqrt[17]/8) 1F1 pair (Whittaker pass), so an inert
+     * particular over it is legitimate -- it must verify independently instead. */
+    m61_verify("4 x^2 y''[x] - 3 (x^2 + x) y'[x] + 2 y[x] == x",
+               "4 x^2 D[b, {x, 2}] - 3 (x^2 + x) D[b, x] + 2 b - x");
 }
 
 /* ---- F5: an IVP cannot be fitted, so it must decline ---------------------- */
@@ -262,6 +289,10 @@ static void t_m61_declines(void) {
 }
 
 int main(void) {
+    /* The shared alarm(120) in test_utils.h is too short for this suite:
+     * ~155 s measured (2026-10-26): F1 now closes 18 of its 21 quadratures
+     * through the Bessel -> HypergeometricPFQ stage, which costs 2-15 s each. */
+    alarm(400);
     symtab_init();
     core_init();
     test_load_init_m();

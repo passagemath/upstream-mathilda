@@ -285,8 +285,35 @@ static Expr* of_find_factor(Expr** a, int n, const char* x) {
             if (df >= 1) pole_width += df;
         }
 
+    /* Degree bound on the polynomial part (the Newton polygon at infinity): if
+     * r ~ x^d, then r^n must be balanced by some a_k r^k ~ x^(deg a_k + k d), so
+     * d <= max_k deg(a_k)/(n - k) over the nonzero a_k, k < n (deg = numerator
+     * minus denominator degree).  Above it the determining system only forces the
+     * extra coefficients to 0 -- but solving that wider system is what does not
+     * return: (x^3 + 2) y'' + 4 x y' + y == 0 at pd = 2 (6 unknowns) ran > 60 s. */
+    int pd_max = 2;
+    {
+        int best_num = -1, best_den = 1;      /* max deg(a_k)/(n-k), as a fraction */
+        bool any = false;
+        for (int k = 0; k < n; k++) {
+            if (ds_is_zero(a[k])) continue;
+            Expr* t = fn1("Together", expr_copy(a[k]));
+            Expr* num = fn1("Numerator", expr_copy(t));
+            Expr* den = fn1("Denominator", t);
+            int dk = of_degree_in(num, x) - of_degree_in(den, x);
+            expr_free(num); expr_free(den);
+            if (!any || (long)dk * best_den > (long)best_num * (n - k)) {
+                best_num = dk; best_den = n - k; any = true;
+            }
+        }
+        if (any) {
+            int fl = best_num >= 0 ? best_num / best_den : -((-best_num + best_den - 1) / best_den);
+            pd_max = fl < 0 ? 0 : (fl < 2 ? fl : 2);
+        }
+    }
+
     Expr* found = NULL;
-    for (int pd = 0; pd <= 2 && !found; pd++) {
+    for (int pd = 0; pd <= pd_max && !found; pd++) {
         for (int po = 1; po <= OF_MAX_POLE_ORDER && !found; po++) {
             if (pd + 1 + po * pole_width > OF_MAX_UNKNOWNS) continue;
             int counter = 1;

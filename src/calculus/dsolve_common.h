@@ -417,6 +417,7 @@ Expr* ds_delist(Expr* e);
 
 /* Zero recognition: strict (proved zero) / proved-nonzero, via zero_test. */
 bool  ds_is_zero(const Expr* e);      /* ZERO_TEST_TRUE                        */
+bool  ds_is_zero_real_params(const Expr* e);  /* ds_is_zero, free symbols real */
 bool  ds_is_nonzero(const Expr* e);   /* ZERO_TEST_FALSE                       */
 /* STRUCTURAL zero (Expand[e] === 0): gate constructions on a possibly-DECAYING
  * expression with this, never ds_is_zero -- zero_test false-positives on decay. */

@@ -652,6 +652,8 @@ In[24]:= Limit[x^a/(x^a + 1), x -> Infinity, Assumptions -> a > 0]
 Out[24]= 1
 ```
 
+**v0.6033.** The Series layer settles a positive leading exponent whose coefficient mentions x only through logarithms: `Limit[x Log[1 - E^(-I x)], x -> 0]` is `0`.
+
 ## Residue
 
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
@@ -1024,6 +1026,16 @@ Out[4]= {{y -> Function[{x}, C[1] + C[2] x + 7/2 x^2]}}
 
 Options: `GeneratedParameters` (constant head, default `C`), `Assumptions`,
 `Method`, `IncludeSingularSolutions`.
+
+**v0.6037.**
+- The constant-coefficient and Euler bases pair complex roots with the parameters taken real (`y'' + a^2 y == 0` has the Cos/Sin basis).
+- Kummer's equation behind an exponential (`P = p0 + p1/x`, `Q = q0 + q1/x`) is solved with `E^(lambda x) {1F1, U}`.
+- OperatorFactor bounds its polynomial ansatz by the Newton polygon at infinity.
+- Linearizable tries linear reductions first and takes a trig kernel of y alone.
+- Riccati no longer simplifies across an unevaluated integral.
+- Undetermined coefficients verifies a structurally zero residual without Simplify, and keeps the raw `A Cos + B Sin` form.
+- The integrating factor's exponents are simplified, and Exact drops a variable its coefficient only appears to depend on.
+- IVP fits evaluate a basis that is singular at the point by PowerExpand (or a one-sided limit), and prefer real constants.
 
 ## Integrate (rational-function integration, Phase 1-8d)
 
@@ -3401,6 +3413,10 @@ machine doubles.
 - **ParallelMixedTower** (cascade and `Method -> "ParallelMixedTower"`) declines an integrand in which a kernel outside its elementary class (anything other than `Plus`, `Times`, `Power`, `Exp`, `Log`, trig, hyperbolic, their inverses and radicals) is applied to an x-dependent argument. Both it and the ParallelMixedSpecial cascade stage reject a result that mentions a symbol absent from the integrand. ParallelMixedSpecial also rejects `$Aborted`.
 
 Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDefiniteIntegralsCorpus.m`, `tests/MatharIndefiniteIntegralsCorpus.m`.
+
+**v0.6033.**
+- The exp-kernel rational reduction requires an integrand rational in its kernel.
+- Differentiation under the integral sign carries the inner integral's ConditionalExpression condition to the answer (`Integrate[(x^a - 1)/Log[x], {x, 0, 1}]` is `ConditionalExpression[Log[1 + a], Re[1 + a] > 0]`).
 
 ## Integrate`IntRationalLogPart
 

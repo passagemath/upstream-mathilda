@@ -20,6 +20,7 @@
 #include "../common.h"
 #include "../internal.h"
 #include "../zero_test.h"
+#include "../simp/simp.h"      /* assume_ctx_from_expr: ds_is_zero_real_params */
 #include "../ndarray.h"
 #include "../parse.h"           /* parse_expression: verify-residual normalisation rule */
 #include "integrate.h"          /* g_integrate_quiet: silence speculative nonelem */
@@ -75,6 +76,46 @@ bool ds_contains(const Expr* e, const char* name) {
 
 bool ds_is_zero(const Expr* e)    { return zero_test_decide(e) == ZERO_TEST_TRUE; }
 bool ds_is_nonzero(const Expr* e) { return zero_test_decide(e) == ZERO_TEST_FALSE; }
+
+/* Free non-numeric symbols in argument positions of e (heads skipped), each once. */
+static void ds_collect_params(const Expr* e, Expr*** out, size_t* n, size_t* cap) {
+    if (e->type == EXPR_SYMBOL) {
+        Expr* nq = eval_and_free(ds_call1("NumericQ", expr_copy((Expr*)e)));
+        bool numeric = nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+        expr_free(nq);
+        if (numeric) return;
+        for (size_t i = 0; i < *n; i++)
+            if ((*out)[i]->data.symbol.name == e->data.symbol.name) return;
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*n)++] = expr_copy((Expr*)e);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        ds_collect_params(e->data.function.args[i], out, n, cap);
+}
+
+/* ds_is_zero with every free parameter of e assumed real.  The real-coefficient
+ * conventions of a DSolve basis (a conjugate root pair -> Cos/Sin) take the
+ * parameters as real; the plain zero test samples a symbol under Conjugate/Re/Im
+ * at complex points, where Sqrt[-a^2] and -Sqrt[-a^2] are no conjugate pair. */
+bool ds_is_zero_real_params(const Expr* e) {
+    Expr** syms = NULL; size_t n = 0, cap = 0;
+    ds_collect_params(e, &syms, &n, &cap);
+    if (n == 0) { free(syms); return ds_is_zero(e); }
+    Expr** facts = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        facts[i] = expr_new_function(expr_new_symbol(SYM_Element),
+                       (Expr*[]){ syms[i], expr_new_symbol(SYM_Reals) }, 2);
+    free(syms);
+    Expr* assum = expr_new_function(expr_new_symbol(SYM_And), facts, n);
+    free(facts);
+    AssumeCtx* ctx = assume_ctx_from_expr(assum);
+    bool z = zero_test_decide_assuming(e, ctx) == ZERO_TEST_TRUE;
+    assume_ctx_free(ctx);
+    expr_free(assum);
+    return z;
+}
 
 /* STRUCTURAL zero test: Expand[e] is the literal integer 0.  Use this -- not
  * ds_is_zero/zero_test -- to GATE a construction on "is this expression exactly
@@ -1348,6 +1389,23 @@ static Expr* ds_fit_sequential(const DSolveProblem* P, const Expr* body,
  * FIT_OK / FIT_EMPTY / FIT_UNDEF (see the enum) so the caller can drop a branch that
  * an initial condition cannot be met on while keeping its siblings.  An undecided
  * scalar fit (Solve stays unevaluated) keeps the general solution as FIT_OK. */
+/* True when every fitted constant of the Solve branch `cb` (a List of
+ * C[k] -> value rules) is real at its principal member: a numeric value whose N
+ * has no imaginary part.  A non-numeric value (a symbolic parameter) counts as
+ * real -- this only orders branches, it never rejects one. */
+static bool ds_fit_branch_real(const Expr* cb) {
+    for (size_t i = 0; i < cb->data.function.arg_count; i++) {
+        const Expr* r = cb->data.function.args[i];
+        if (!head_is(r, SYM_Rule) || r->data.function.arg_count != 2) continue;
+        Expr* v = ds_collapse_principal(expr_copy(r->data.function.args[1]));
+        Expr* nv = eval_and_free(ds_call1("N", v));
+        bool cplx = nv->type == EXPR_FUNCTION && head_is(nv, SYM_Complex);
+        expr_free(nv);
+        if (cplx) return false;
+    }
+    return true;
+}
+
 static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                                   bool* no_solution, int* fit_state) {
     if (no_solution) *no_solution = false;
@@ -1432,7 +1490,39 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         Expr* bexpr = expr_copy((Expr*)fitbody);
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
-        bexpr = ds_subst(bexpr, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        Expr* atpt = ds_subst(expr_copy(bexpr), expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        if (ds_contains(atpt, SYM_Indeterminate) || ds_contains(atpt, SYM_ComplexInfinity)
+            || ds_contains(atpt, SYM_DirectedInfinity) || ds_contains(atpt, SYM_Infinity)) {
+            /* The basis is singular AT the point as written -- (x^2/2)^(1/4)/Sqrt[x]
+             * at 0, a removable 0 * ComplexInfinity -- so substitution says nothing.
+             * PowerExpand the expression first (the real basis is written for x > 0,
+             * where (x^2/2)^(1/4)/Sqrt[x] is 2^(-1/4)); failing that, take the limit
+             * from the right.  A genuine pole stays infinite and the fit decides as
+             * before. */
+            Expr* pe = eval_and_free(ds_call1("PowerExpand", expr_copy((Expr*)fitbody)));
+            for (int d = 0; d < P->conds[c].order; d++)        /* expand, then differentiate */
+                pe = ds_d(pe, expr_new_symbol(xvar));
+            pe = ds_subst(pe, expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+            if (!ds_contains(pe, SYM_Indeterminate) && !ds_contains(pe, SYM_ComplexInfinity)
+                && !ds_contains(pe, SYM_DirectedInfinity) && !ds_contains(pe, SYM_Infinity)) {
+                expr_free(atpt); atpt = pe; pe = NULL;
+            }
+            if (pe) expr_free(pe);
+        }
+        if (ds_contains(atpt, SYM_Indeterminate) || ds_contains(atpt, SYM_ComplexInfinity)
+            || ds_contains(atpt, SYM_DirectedInfinity) || ds_contains(atpt, SYM_Infinity)) {
+            Expr* lim = eval_and_free(expr_new_function(expr_new_symbol(intern_symbol("Limit")),
+                (Expr*[]){ expr_copy(bexpr),
+                           expr_new_function(expr_new_symbol(SYM_Rule),
+                               (Expr*[]){ expr_new_symbol(xvar), expr_copy(P->conds[c].point) }, 2),
+                           expr_new_function(expr_new_symbol(SYM_Rule),
+                               (Expr*[]){ expr_new_symbol(intern_symbol("Direction")),
+                                          expr_new_string("FromAbove") }, 2) }, 3));
+            if (lim && !ds_has_head(lim, intern_symbol("Limit"))) { expr_free(atpt); atpt = lim; }
+            else if (lim) expr_free(lim);
+        }
+        expr_free(bexpr);
+        bexpr = atpt;
         bexpr = ds_generic_step_derivative(bexpr);
         eqs[neq++] = expr_new_function(expr_new_symbol(SYM_Equal),
                         (Expr*[]){ bexpr, eval_and_free(expr_copy(P->conds[c].value)) }, 2);
@@ -1482,9 +1572,16 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
              * (numeric check inconclusive), preserving prior single-branch behavior. */
             size_t nbr = solres->data.function.arg_count;
             Expr* branch = solres->data.function.args[0];   /* List[Rule[C[k],val],...] */
-            for (size_t bi = 0; bi < nbr && nbr > 1; bi++) {
+            /* Two passes: a verified branch whose fitted constants are real first
+             * (Solve may list Log[-1/Sqrt[2]] before Log[1/Sqrt[2]] when only
+             * E^(2 C[1]) is pinned -- both fit, the real one is the answer to
+             * give), then any verified branch. */
+            bool picked = false;
+            for (int pass = 0; pass < 2 && !picked && nbr > 1; pass++)
+            for (size_t bi = 0; bi < nbr; bi++) {
                 Expr* cb = solres->data.function.args[bi];
                 if (!head_is(cb, SYM_List)) continue;
+                if (pass == 0 && !ds_fit_branch_real(cb)) continue;
                 Expr* cand = eval_and_free(internal_replace_all(
                     (Expr*[]){ expr_copy((Expr*)body), expr_copy(cb) }, 2));
                 /* Compare candidate families at their PRINCIPAL member: a transcendental
@@ -1495,7 +1592,7 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                 cand = ds_collapse_principal(cand);
                 bool ok = ds_branch_num_ok(P, cand);
                 expr_free(cand);
-                if (ok) { branch = cb; break; }
+                if (ok) { branch = cb; picked = true; break; }
             }
             if (head_is(branch, SYM_List)) {
                 fitted = eval_and_free(internal_replace_all(
@@ -3490,11 +3587,46 @@ static Expr* linfac_mu(Expr* Pcoef, const char* xvar) {
     return mu;
 }
 
+/* Simplify the exponent of every E^g in e that mentions x, keeping a rewrite
+ * only when it is strictly smaller.  mu and q each carry their own exponential,
+ * and their exponents can cancel to a constant that the evaluator does not see:
+ * mu = E^(-1/2 - 1/2 Cos[2 x]) (Simplify's form of E^(-Cos[x]^2)) times
+ * q = E^(-Sin[x]^2) is E^-1, yet Integrate spent its whole budget on it
+ * (y' + 2 Cos[x] Sin[x] y == E^(-Sin[x]^2), section 2.2.16-1559).  Consumes e. */
+static Expr* linfac_simplify_exponents(Expr* e, const char* xvar) {
+    if (e->type != EXPR_FUNCTION) return e;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_E
+        /* structural: ds_free_of probes numerically and calls this exponent x-free */
+        && ds_contains(e->data.function.args[1], intern_symbol(xvar))) {
+        Expr* g = e->data.function.args[1];
+        Expr* sg = ds_simplify(expr_copy(g));
+        if (leaf_count_internal(sg, true) < leaf_count_internal(g, true)) {
+            Expr* r = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(SYM_E), sg));
+            expr_free(e);
+            return r;
+        }
+        expr_free(sg);
+        return e;
+    }
+    if (!head_is(e, SYM_Times) && !head_is(e, SYM_Plus)) return e;
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        a[i] = linfac_simplify_exponents(expr_copy(e->data.function.args[i]), xvar);
+    Expr* r = eval_and_free(expr_new_function(expr_copy(e->data.function.head), a, n));
+    free(a);
+    expr_free(e);
+    return r;
+}
+
 Expr* dsolve_linear_factor_solve(Expr* Pcoef, Expr* Qcoef, const char* xvar) {
     Expr* mu = linfac_mu(Pcoef, xvar);                             /* consumes Pcoef */
     if (!mu) { expr_free(Qcoef); return NULL; }
     g_integrate_quiet++;
     Expr* integrand = eval_and_free(ds_call2(SYM_Times, expr_copy(mu), Qcoef)); /* consumes Qcoef */
+    integrand = linfac_simplify_exponents(integrand, xvar);
     /* Hand Integrate the CANCELLED integrand when cancellation genuinely shrinks it.
      * mu q routinely carries a factor common to numerator and denominator that the
      * evaluator leaves expanded -- (x^2+1) y' == 1 + x^2 - y ArcCot[x] gives
@@ -3747,7 +3879,7 @@ Expr** dsolve_homog_basis(const Expr* charpoly, const char* lam, const char* xva
                 for (size_t k = 0; k < R.ndist && c < 0; k++) {
                     if (k == i || used[k]) continue;
                     Expr* diff = eval_and_free(ds_call2(SYM_Subtract, expr_copy(R.roots[k]), expr_copy(conj)));
-                    if (ds_is_zero(diff)) c = (long)k;
+                    if (ds_is_zero_real_params(diff)) c = (long)k;
                     expr_free(diff);
                 }
                 expr_free(conj);

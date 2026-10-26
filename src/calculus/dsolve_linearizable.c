@@ -113,7 +113,11 @@ static int g_lz_active = 0;
  * (Power[E, y]), 2 = a circular-trig function of y.  Skipping the others avoids a
  * costly Simplify on a substitution that cannot linearise (e.g. Log on a trig
  * ODE builds Sin[Exp[u]], on which Simplify spins). */
-static bool lz_has_kernel(const Expr* e, int kind, const char* y) {
+/* kind 2 (circular trig) needs a kernel of y ALONE: u = Sin[y] / Cos[y] / Tan[y]
+ * cannot linearise Sin[1 + 3 x - 3 y] (an argument mixing x and y does not split,
+ * unlike E^(x - y) = E^x E^-y), and simplifying toward it cost > 10 s
+ * (section 2.2.37-3673).  `x` is the independent variable. */
+static bool lz_has_kernel(const Expr* e, int kind, const char* y, const char* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* h = e->data.function.head;
     if (h->type == EXPR_SYMBOL) {
@@ -128,12 +132,13 @@ static bool lz_has_kernel(const Expr* e, int kind, const char* y) {
         if (kind == 2) {
             static const char* const TR[] = { "Sin","Cos","Tan","Cot","Sec","Csc", NULL };
             for (int i = 0; TR[i]; i++) if (strcmp(n, TR[i]) == 0
-                && ds_contains(e->data.function.args[0], y)) return true;
+                && ds_contains(e->data.function.args[0], y)
+                && !ds_contains(e->data.function.args[0], x)) return true;
         }
     }
-    if (lz_has_kernel(h, kind, y)) return true;
+    if (lz_has_kernel(h, kind, y, x)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (lz_has_kernel(e->data.function.args[i], kind, y)) return true;
+        if (lz_has_kernel(e->data.function.args[i], kind, y, x)) return true;
     return false;
 }
 
@@ -162,9 +167,16 @@ Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch) {
     static const char* const PHI[] = { "Log", "Exp", "Sin", "Cos", "Tan", NULL };
     static const char* const PSI[] = { "Exp", "Log", "ArcSin", "ArcCos", "ArcTan", NULL };
 
-    Expr** out = NULL;
-    for (int c = 0; PHI[c] && !out; c++) {
-        if (!lz_has_kernel(Fy, lz_cand_kind(c), Ysym)) continue;   /* pre-filter */
+    /* Reduce every candidate first (G[c], or NULL when it does not linearise),
+     * then solve in two passes: the LINEAR reductions, integrated directly, before
+     * any candidate that needs the recursive cascade.  A nonlinear reduction (u =
+     * Sin[y] on a Cot[x] Cot[y] right-hand side gives a Bernoulli in u) recursed
+     * into a full nested DSolve that could cost seconds, while a later candidate
+     * (u = Cos[y]: u' == u Tan[x]) was linear all along. */
+    enum { NCAND = 5 };
+    Expr* Gc[NCAND] = { NULL };
+    for (int c = 0; PHI[c]; c++) {
+        if (!lz_has_kernel(Fy, lz_cand_kind(c), Ysym, intern_symbol(xvar))) continue;   /* pre-filter */
         /* dphi = d/dY phi[Y] */
         Expr* phiY = ds_call1(PHI[c], expr_new_symbol(Ysym));
         Expr* dphi = ds_d(phiY, expr_new_symbol(Ysym));
@@ -178,19 +190,36 @@ Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch) {
         Expr* G = eval_and_free(ds_subst(Gy, expr_new_symbol(Ysym), psiU));  /* consumes Gy */
 
         if (lz_has_frac_power_of_u(G, usym)) { expr_free(G); continue; }     /* genuine Sqrt: reject */
-        if (lz_has_arc_of_u(G, usym)) {              /* inverse left uncollapsed: full Simplify may fix */
-            G = ds_simplify(G);
+        if (lz_has_arc_of_u(G, usym)) {              /* inverse left uncollapsed */
+            /* TrigExpand first: it opens Sin[1 + 3 x - 3 ArcSin[u]] into algebraic
+             * forms in milliseconds, and a substitution that does not linearise
+             * then shows its Sqrt[1 - u^2] -- full Simplify spent > 10 s on that
+             * argument (y' == Sin[1 + 3 x - 3 y]^2, section 2.2.37-3673).  Only
+             * an inverse that survives TrigExpand goes on to Simplify. */
+            G = eval_and_free(ds_call1("TrigExpand", G));
+            if (lz_has_frac_power_of_u(G, usym)) { expr_free(G); continue; }
+            if (lz_has_arc_of_u(G, usym)) G = ds_simplify(G);
             if (lz_has_frac_power_of_u(G, usym) || lz_has_arc_of_u(G, usym)) { expr_free(G); continue; }
         }
         if (!ds_free_of(G, Ysym)) { expr_free(G); continue; }
+        Gc[c] = G;
+    }
 
+    Expr** out = NULL;
+    for (int pass = 0; pass < 2 && !out; pass++)
+    for (int c = 0; PHI[c] && !out; c++) {
+        Expr* G = Gc[c];
+        if (!G) continue;
         /* Solve u' == G(x,u).  When G is LINEAR in u — u' == A(x) u + B(x) —
          * integrate directly (fast, no recursion).  Otherwise (Bernoulli, …)
          * recurse into the scalar cascade under the re-entry guard. */
         Expr* dGu = ds_d(expr_copy(G), expr_new_symbol(usym));       /* dG/du */
+        bool linear = ds_free_of(dGu, usym);
+        if (linear != (pass == 0)) { expr_free(dGu); continue; }
+        Gc[c] = NULL;                                                /* consumed below */
         Expr** ubodies = NULL;
         size_t nb = 0;
-        if (ds_free_of(dGu, usym)) {                                 /* linear */
+        if (linear) {
             Expr* B  = ds_subst(expr_copy(G), expr_new_symbol(usym), expr_new_integer(0));
             Expr* Pc = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(dGu)));
             Expr* ub = dsolve_linear_factor_solve(Pc, B, xvar);      /* consumes Pc, B */
@@ -229,6 +258,7 @@ Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch) {
         out = yb;
         *nbranch = nb;
     }
+    for (int c = 0; c < NCAND; c++) expr_free(Gc[c]);
 
     expr_free(Fy);
     return out;

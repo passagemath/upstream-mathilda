@@ -86,7 +86,7 @@ static size_t euler_basis(const Expr* w, DSolveRoots* R, int n, Expr** basis) {
             for (size_t k = 0; k < R->ndist && cc < 0; k++) {
                 if (k == i || used[k]) continue;
                 Expr* diff = eval_and_free(ds_call2(SYM_Subtract, expr_copy(R->roots[k]), expr_copy(conj)));
-                if (ds_is_zero(diff)) cc = (long)k;
+                if (ds_is_zero_real_params(diff)) cc = (long)k;   /* parameters real */
                 expr_free(diff);
             }
             expr_free(conj);

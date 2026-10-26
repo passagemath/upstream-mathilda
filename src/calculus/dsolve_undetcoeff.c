@@ -21,6 +21,7 @@
  * only in this first cut; g == 0 (homogeneous) is left to constcoeff.
  */
 #include "dsolve_common.h"
+#include "../core.h"          /* leaf_count_internal */
 #include "../sym_names.h"
 #include "../eval.h"
 #include "../sym_intern.h"
@@ -107,8 +108,12 @@ static bool uc_cand_solves(const Expr* cand, Expr** a, int n, const char* xvar,
         Lc = eval_and_free(ds_call2(SYM_Plus, Lc,
                  ds_call2(SYM_Times, expr_copy(a[j]), dj)));
     }
-    Expr* resid = eval_and_free(ds_call1("Simplify",
-                      ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T))));
+    Expr* diff = eval_and_free(ds_call2(SYM_Subtract, Lc, expr_copy((Expr*)T)));
+    /* A determined UC combination usually cancels exactly: a structural zero is
+     * not the zero-test false positive the Simplify below guards against, and
+     * skips seconds of Simplify on a trig residual (section 2.2.10-916). */
+    if (ds_is_structural_zero(diff)) { expr_free(diff); return true; }
+    Expr* resid = eval_and_free(ds_call1("Simplify", diff));
     bool z = ds_is_zero(resid);
     expr_free(resid);
     return z;
@@ -276,7 +281,10 @@ static Expr* uc_particular(const Expr* T, Expr** a, int n, const char* xvar) {
                      * clean, self-verifying raw form. */
                     if (uc_cand_solves(cand, a, n, xvar, T)) {
                         Expr* cand_s = ds_simplify(expr_copy(cand));
-                        if (uc_cand_solves(cand_s, a, n, xvar, T)) {
+                        /* tidier only if SMALLER: the ArcTan-phase rewrite of
+                         * A Cos[b x] + B Sin[b x] is longer, not tidier */
+                        if (leaf_count_internal(cand_s, true) < leaf_count_internal(cand, true)
+                            && uc_cand_solves(cand_s, a, n, xvar, T)) {
                             yp = cand_s; expr_free(cand);
                         } else {
                             expr_free(cand_s); yp = cand;

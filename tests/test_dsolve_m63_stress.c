@@ -166,7 +166,8 @@ static void t_m63_budget_is_general(void) {
 static void t_m63_separable_controls(void) {
     /* Sub-millisecond members: these also show the TimeConstrained wrapper costs
      * nothing when the integral closes immediately. */
-    ASSERT_TRUE("DSolve[y'[x] == 2 x y[x], y, x] === {{y -> Function[{x}, C[1] E^x^2]}}");
+    /* a Function body is held, so it is written in canonical order (E^x^2 C[1]) */
+    ASSERT_TRUE("DSolve[y'[x] == 2 x y[x], y, x] === {{y -> Function[{x}, E^x^2 C[1]]}}");
     ASSERT_TRUE("Head[DSolve[y'[x] == y[x]^2/(x^2 + 1), y, x]] === List");
     ASSERT_TRUE("DSolve[y'[x] == y[x]/(x Log[x]), y, x] === {{y -> Function[{x}, C[1] Log[x]]}}");
     double t = seconds_of("DSolve[y'[x] == 2 x y[x], y, x]");
@@ -267,6 +268,9 @@ static void t_m63_repaired_record_shapes(void) {
 }
 
 int main(void) {
+    /* The shared alarm(120) in test_utils.h is too short for this suite:
+     * ~200 s measured (2026-10-26). */
+    alarm(400);
     setvbuf(stdout, NULL, _IOLBF, 0);   /* the shared alarm() loses buffered output */
     symtab_init();
     core_init();

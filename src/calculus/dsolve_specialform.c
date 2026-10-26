@@ -1132,6 +1132,77 @@ static bool hgc_num_ok(const DSolveProblem* P, const Expr* cand,
     return ok;
 }
 
+/* Kummer row of dsolve_specialform_try (see the comment at its call): the
+ * C[1], C[2] basis of y'' + Pc y' + Qc y == 0, or NULL. */
+static Expr* specialform_kummer_basis(Expr* Pc, Expr* Qc, const char* xvar) {
+    Expr* out = NULL;
+    Expr* xP = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Pc)));
+    Expr* slope = ds_d(expr_copy(xP), expr_new_symbol(xvar));
+    if (ds_free_of(slope, xvar) && !ds_is_zero(slope)) {
+        Expr* ks = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(slope)));  /* s */
+        Expr* kb = ds_simplify(ds_subst(expr_copy(xP), expr_new_symbol(xvar), expr_new_integer(0)));  /* b */
+        Expr* xQ = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc)));
+        if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && specialform_is_number(kb)) {
+            Expr* ka = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
+                           ds_call2(SYM_Times, expr_copy(xQ), powneg1_sf(expr_copy(ks)))));  /* a */
+            Expr* iq = eval_and_free(ds_call1("IntegerQ", expr_copy(kb)));
+            bool bint = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
+            expr_free(iq);
+            bool bpos = bint && kb->type == EXPR_INTEGER && kb->data.integer >= 1;
+            Expr* z = eval_and_free(ds_call2(SYM_Times, expr_copy(ks), expr_new_symbol(xvar)));
+            /* M = 1F1[a, b, z];  Mbar = z^(1-b) 1F1[a-b+1, 2-b, z];  U = U[a, b, z] */
+            Expr* M = NULL;
+            if (!bint || bpos)
+                M = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
+                        (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+            Expr* Mbar = NULL;
+            if (!bpos) {
+                Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy(z),
+                                 ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(kb))));
+                Expr* a2 = eval_and_free(ds_call2(SYM_Plus,
+                               ds_call2(SYM_Subtract, expr_copy(ka), expr_copy(kb)), expr_new_integer(1)));
+                Expr* b2 = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(2), expr_copy(kb)));
+                Expr* h2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
+                               (Expr*[]){ a2, b2, expr_copy(z) }, 3));
+                Mbar = eval_and_free(ds_call2(SYM_Times, zpow, h2));
+            }
+            /* Degenerate integer case: U[a, b, z] collapses onto the 1F1
+             * solution when that solution is a polynomial (times z^(1-b)):
+             *   b >= 1, a == -n:            U = (-1)^n (b)_n 1F1[-n, b, z]
+             *   b <= 0, a - b + 1 == -n:    U = z^(1-b) U[-n, 2-b, z] ~ Mbar
+             * (Wronskian of {1F1, U} carries 1/Gamma(a) resp. 1/Gamma(a-b+1)).
+             * Both reduce to the Kummer equation in (-n, B) with B = b resp.
+             * 2-b >= 1 -- the second via w = z^(b-1) y -- whose logarithmic
+             * partner specialform_kummer_log_partner supplies. */
+            int64_t dn = -1, dB = 0;
+            if (bint && kb->type == EXPR_INTEGER && ka->type == EXPR_INTEGER) {
+                int64_t ia = ka->data.integer, ib = kb->data.integer;
+                if (!sf_small_int(ia) || !sf_small_int(ib)) ;   /* decline below */
+                else if (bpos && ia <= 0)              { dn = -ia;         dB = ib; }
+                else if (!bpos && ia - ib + 1 <= 0) { dn = -(ia - ib + 1); dB = 2 - ib; }
+            }
+            if (dn >= 0) {
+                Expr* w2 = specialform_kummer_log_partner(dn, dB, z);
+                if (w2 && !bpos)
+                    w2 = eval_and_free(ds_call2(SYM_Times, eval_and_free(ds_call2(SYM_Power,
+                             expr_copy(z), ds_call2(SYM_Subtract, expr_new_integer(1),
+                             expr_copy(kb)))), w2));
+                if (w2) out = combo(bpos ? M : Mbar, w2);
+                else { expr_free(M); expr_free(Mbar); }   /* too large: decline */
+            } else if (!bint) out = combo(M, Mbar);
+            else {
+                Expr* U = eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricU),
+                              (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
+                out = combo(bpos ? M : Mbar, U);
+            }
+            expr_free(z); expr_free(ka);
+        }
+        expr_free(ks); expr_free(kb); expr_free(xQ);
+    }
+    expr_free(slope); expr_free(xP);
+    return out;
+}
+
 Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
     /* normalised second-order form y'' + Pc y' + Qc y == 0 (homogeneous only) */
     Expr* Pc; Expr* Qc;
@@ -1262,71 +1333,52 @@ Expr** dsolve_specialform_try(DSolveProblem* P, size_t* nbranch) {
      * x y'' - 2x y' - y == 0 (s == 2, §2.2.47-4603).  b must be a NUMBER: a symbolic
      * exponent z^(1-b) makes the verify residual a symbolic-power + pFq sum on which
      * zero_test hangs; a stays free (symbolic). */
+    if (!general) general = specialform_kummer_basis(Pc, Qc, xvar);
+
+    /* ---- Kummer behind an exponential: P == p0 + p1/x, Q == q0 + q1/x, q0 != 0 ----
+     * y == E^(lambda x) w with lambda^2 + p0 lambda + q0 == 0 removes the constant
+     * part of Q: w'' + (P + 2 lambda) w' + (Q + lambda P + lambda^2) w == 0, whose
+     * coefficients (p0 + 2 lambda) + p1/x and (q1 + lambda p1)/x are the Kummer
+     * row's.  The root lambda = (-p0 - Sqrt[p0^2 - 4 q0])/2 makes the scale
+     * s = -(p0 + 2 lambda) = Sqrt[disc] positive, so z = s x is real; disc must be
+     * a positive constant (disc == 0 leaves no x-term in P, a negative one a
+     * complex basis).  x y'' - (x - 1) y' - x y == 0 (§2.2.40-4000) is
+     * E^((1 - Sqrt[5]) x/2) (C[1] 1F1[(5 - Sqrt[5])/10, 1, Sqrt[5] x] + C[2] U[..]).
+     * The Liouville/Whittaker pass declines it (2 mu == 0, the degenerate case
+     * that U resolves here).  Numerically gated like the other composed forms. */
     if (!general) {
         Expr* xP = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Pc)));
-        Expr* slope = ds_d(expr_copy(xP), expr_new_symbol(xvar));
-        if (ds_free_of(slope, xvar) && !ds_is_zero(slope)) {
-            Expr* ks = eval_and_free(ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(slope)));  /* s */
-            Expr* kb = ds_simplify(ds_subst(expr_copy(xP), expr_new_symbol(xvar), expr_new_integer(0)));  /* b */
-            Expr* xQ = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc)));
-            if (ds_free_of(kb, xvar) && ds_free_of(xQ, xvar) && specialform_is_number(kb)) {
-                Expr* ka = ds_simplify(ds_call2(SYM_Times, expr_new_integer(-1),
-                               ds_call2(SYM_Times, expr_copy(xQ), powneg1_sf(expr_copy(ks)))));  /* a */
-                Expr* iq = eval_and_free(ds_call1("IntegerQ", expr_copy(kb)));
-                bool bint = (iq->type == EXPR_SYMBOL && iq->data.symbol.name == SYM_True);
-                expr_free(iq);
-                bool bpos = bint && kb->type == EXPR_INTEGER && kb->data.integer >= 1;
-                Expr* z = eval_and_free(ds_call2(SYM_Times, expr_copy(ks), expr_new_symbol(xvar)));
-                /* M = 1F1[a, b, z];  Mbar = z^(1-b) 1F1[a-b+1, 2-b, z];  U = U[a, b, z] */
-                Expr* M = NULL;
-                if (!bint || bpos)
-                    M = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
-                            (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
-                Expr* Mbar = NULL;
-                if (!bpos) {
-                    Expr* zpow = eval_and_free(ds_call2(SYM_Power, expr_copy(z),
-                                     ds_call2(SYM_Subtract, expr_new_integer(1), expr_copy(kb))));
-                    Expr* a2 = eval_and_free(ds_call2(SYM_Plus,
-                                   ds_call2(SYM_Subtract, expr_copy(ka), expr_copy(kb)), expr_new_integer(1)));
-                    Expr* b2 = eval_and_free(ds_call2(SYM_Subtract, expr_new_integer(2), expr_copy(kb)));
-                    Expr* h2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Hypergeometric1F1),
-                                   (Expr*[]){ a2, b2, expr_copy(z) }, 3));
-                    Mbar = eval_and_free(ds_call2(SYM_Times, zpow, h2));
+        Expr* xQ = ds_simplify(ds_call2(SYM_Times, expr_new_symbol(xvar), expr_copy(Qc)));
+        Expr* p0 = ds_d(expr_copy(xP), expr_new_symbol(xvar));
+        Expr* q0 = ds_d(expr_copy(xQ), expr_new_symbol(xvar));
+        if (ds_free_of(p0, xvar) && ds_free_of(q0, xvar) && !ds_is_zero(q0)) {
+            Expr* disc = ds_simplify(ds_call2(SYM_Subtract,
+                             ds_call2(SYM_Power, expr_copy(p0), expr_new_integer(2)),
+                             ds_call2(SYM_Times, expr_new_integer(4), expr_copy(q0))));
+            Expr* pos = eval_and_free(ds_call1("Positive", expr_copy(disc)));
+            if (pos->type == EXPR_SYMBOL && pos->data.symbol.name == SYM_True) {
+                Expr* lam = ds_simplify(ds_call2(SYM_Times,
+                                ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_new_integer(-1), expr_copy(p0)),
+                                    ds_call2(SYM_Times, expr_new_integer(-1), ds_call1("Sqrt", expr_copy(disc)))),
+                                ds_call2(SYM_Power, expr_new_integer(2), expr_new_integer(-1))));
+                Expr* P2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(Pc),
+                               ds_call2(SYM_Times, expr_new_integer(2), expr_copy(lam))));
+                Expr* Q2 = ds_simplify(ds_call2(SYM_Plus, expr_copy(Qc),
+                               ds_call2(SYM_Plus, ds_call2(SYM_Times, expr_copy(lam), expr_copy(Pc)),
+                                   ds_call2(SYM_Power, expr_copy(lam), expr_new_integer(2)))));
+                Expr* base = specialform_kummer_basis(P2, Q2, xvar);
+                if (base) {
+                    Expr* mu = eval_and_free(ds_call2(SYM_Power, expr_new_symbol(SYM_E),
+                                   ds_call2(SYM_Times, expr_copy(lam), expr_new_symbol(xvar))));
+                    Expr* cand = eval_and_free(ds_call1("Expand", ds_call2(SYM_Times, mu, base)));
+                    if (sf_num_ok(P, cand, xvar, P->fun_names[0])) general = cand;
+                    else expr_free(cand);
                 }
-                /* Degenerate integer case: U[a, b, z] collapses onto the 1F1
-                 * solution when that solution is a polynomial (times z^(1-b)):
-                 *   b >= 1, a == -n:            U = (-1)^n (b)_n 1F1[-n, b, z]
-                 *   b <= 0, a - b + 1 == -n:    U = z^(1-b) U[-n, 2-b, z] ~ Mbar
-                 * (Wronskian of {1F1, U} carries 1/Gamma(a) resp. 1/Gamma(a-b+1)).
-                 * Both reduce to the Kummer equation in (-n, B) with B = b resp.
-                 * 2-b >= 1 -- the second via w = z^(b-1) y -- whose logarithmic
-                 * partner specialform_kummer_log_partner supplies. */
-                int64_t dn = -1, dB = 0;
-                if (bint && kb->type == EXPR_INTEGER && ka->type == EXPR_INTEGER) {
-                    int64_t ia = ka->data.integer, ib = kb->data.integer;
-                    if (!sf_small_int(ia) || !sf_small_int(ib)) ;   /* decline below */
-                    else if (bpos && ia <= 0)              { dn = -ia;         dB = ib; }
-                    else if (!bpos && ia - ib + 1 <= 0) { dn = -(ia - ib + 1); dB = 2 - ib; }
-                }
-                if (dn >= 0) {
-                    Expr* w2 = specialform_kummer_log_partner(dn, dB, z);
-                    if (w2 && !bpos)
-                        w2 = eval_and_free(ds_call2(SYM_Times, eval_and_free(ds_call2(SYM_Power,
-                                 expr_copy(z), ds_call2(SYM_Subtract, expr_new_integer(1),
-                                 expr_copy(kb)))), w2));
-                    if (w2) general = combo(bpos ? M : Mbar, w2);
-                    else { expr_free(M); expr_free(Mbar); }   /* too large: decline */
-                } else if (!bint) general = combo(M, Mbar);
-                else {
-                    Expr* U = eval_and_free(expr_new_function(expr_new_symbol(SYM_HypergeometricU),
-                                  (Expr*[]){ expr_copy(ka), expr_copy(kb), expr_copy(z) }, 3));
-                    general = combo(bpos ? M : Mbar, U);
-                }
-                expr_free(z); expr_free(ka);
+                expr_free(lam); expr_free(P2); expr_free(Q2);
             }
-            expr_free(ks); expr_free(kb); expr_free(xQ);
+            expr_free(pos); expr_free(disc);
         }
-        expr_free(slope); expr_free(xP);
+        expr_free(xP); expr_free(xQ); expr_free(p0); expr_free(q0);
     }
 
     /* ---- Gauss (hypergeometric 2F1) on the canonical interval W = x(1-x) ---- */

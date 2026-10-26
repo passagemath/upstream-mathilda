@@ -38,7 +38,43 @@ static void check_form(const char* input, const char* expected) {
     ASSERT_MSG(e != NULL, "Failed to parse: %s", input);
     Expr* v = evaluate(e);
     char* got = expr_to_string_fullform(v);
-    ASSERT_MSG(strcmp(got, expected) == 0,
+    bool same = strcmp(got, expected) == 0;
+    if (!same) {
+        /* `expected` is written in input syntax: compare the evaluated
+         * expressions, not two spellings of them.  A Function body is held, so
+         * both sides have their bodies evaluated (canonical order) first. */
+        Expr* pe0 = parse_expression(expected);
+        if (pe0) {
+            Expr* ve0 = evaluate(pe0);
+            char* want = expr_to_string_fullform(ve0);
+            same = strcmp(got, want) == 0;
+            free(want);
+            expr_free(ve0);
+            expr_free(pe0);
+        }
+    }
+    if (!same) {
+        /* Apply builds the Function at evaluation time: a Function written in
+         * the rule's right-hand side would be alpha-renamed by the rule. */
+        const char* norm = ") /. Function[cfv_, cfb_] :> Apply[Function, {cfv, cfb}]";
+        char* sides[2] = { NULL, NULL };
+        const char* src[2] = { input, expected };
+        for (int k = 0; k < 2; k++) {
+            size_t len = strlen(src[k]) + strlen(norm) + 2;
+            char* buf = malloc(len);
+            snprintf(buf, len, "(%s%s", src[k], norm);
+            Expr* pe = parse_expression(buf);
+            free(buf);
+            if (!pe) continue;
+            Expr* ve = evaluate(pe);
+            sides[k] = expr_to_string_fullform(ve);
+            expr_free(ve);
+            expr_free(pe);
+        }
+        same = sides[0] && sides[1] && strcmp(sides[0], sides[1]) == 0;
+        free(sides[0]); free(sides[1]);
+    }
+    ASSERT_MSG(same,
                "Mismatch for %s\n    expected: %s\n    got:      %s", input, expected, got);
     free(got);
     expr_free(v);
@@ -392,6 +428,29 @@ static void t_hypergeometric_kummer(void) {
     check_true("Not[FreeQ[DSolve[x y''[x] + (3/2 - x) y'[x] - 2 y[x] == 0, y[x], x], "
                "HypergeometricPFQ]]");
 }
+/* Kummer behind an exponential: P = p0 + p1/x, Q = q0 + q1/x with q0 != 0 is
+ * E^(lambda x) times a Kummer basis (lambda^2 + p0 lambda + q0 == 0).
+ * x y'' - (x - 1) y' - x y == 0 (corpus 2.2.40-4000) has irrational lambda and
+ * b == 1 (U partner); x y'' + (2 - 3x) y' + 2 x y == 0 is the degenerate
+ * (ExpIntegralEi) partner behind E^x.  The residual is checked numerically at
+ * three points (the 1F1/U residual is a contiguous relation). */
+static void t_hypergeometric_kummer_shifted(void) {
+    static const char* const lhs[] = {
+        "x y''[x] - (x - 1) y'[x] - x y[x]",
+        "x y''[x] + (2 - 3 x) y'[x] + 2 x y[x]",
+    };
+    char buf[1024];
+    for (size_t i = 0; i < sizeof(lhs) / sizeof(lhs[0]); i++) {
+        snprintf(buf, sizeof buf,
+            "Module[{g}, g = y[x] /. DSolve[%s == 0, y[x], x][[1]]; "
+            "Max[Abs[Table[N[((%s) /. y -> Function[x, Evaluate[g]]) "
+            "/. {C[1] -> 1/3, C[2] -> 2/7, x -> x0}, 20], {x0, {1/2, 3, 7/3}}]]] < 10^-15]",
+            lhs[i], lhs[i]);
+        check_true(buf);
+    }
+    check_true("!FreeQ[DSolve[x y''[x] - (x - 1) y'[x] - x y[x] == 0, y[x], x], "
+               "HypergeometricU[1/10 (5 - Sqrt[5]), 1, Sqrt[5] x]]");
+}
 /* Degenerate Kummer: when the 1F1 solution is a polynomial (b >= 1, a == -n, or
  * b <= 0, a - b + 1 == -n), HypergeometricU[a, b, z] is a constant multiple of it,
  * so the {1F1, U} basis is linearly DEPENDENT.  The recogniser must emit the
@@ -421,7 +480,7 @@ static void t_hypergeometric_kummer_degenerate(void) {
         check_true(buf);
     }
     /* the repro, verbatim */
-    check_form("DSolve[x y''[x] + (1 - x) y'[x] + 2 y[x] == 0, y[x], x]",
+    check_true("DSolve[x y''[x] + (1 - x) y'[x] + 2 y[x] == 0, y[x], x] === "
                "{{y[x] -> C[1] (1 - 2 x + 1/2 x^2) + C[2] (E^x (3/2 - 1/2 x) + "
                "ExpIntegralEi[x] (1 - 2 x + 1/2 x^2))}}");
     /* symbolic a stays on the generic {1F1, U} basis (no degeneracy decidable) */
@@ -451,10 +510,10 @@ static void t_hypergeometric_gauss_symbolic_ab(void) {
                "y[x], x], HypergeometricPFQ]]");
 }
 static void t_hypergeometric_integer_declines(void) {
-    /* integer exponent b = 2 -> SpecialFunctionForm declines (head left unevaluated),
-     * so no singular pFq lower-parameter branch is emitted */
-    check_true("Head[DSolve`SpecialFunctionForm[x y''[x] + (2 - x) y'[x] - 3 y[x] == 0, y, x]] "
-               "=== DSolve`SpecialFunctionForm");
+    /* integer exponent b = 2: no singular pFq lower-parameter branch
+     * (1F1[a - 1, 0, x]) is emitted; Tricomi's U is the second solution */
+    check_true("Module[{r = DSolve`SpecialFunctionForm[x y''[x] + (2 - x) y'[x] - 3 y[x] == 0, y, x]}, "
+               "!FreeQ[r, HypergeometricU[3, 2, x]] && FreeQ[r, HypergeometricPFQ[_, {0}, _]]]");
 }
 
 /* ---- M17: affine -> Gauss 2F1 for non-canonical regular singular points, and
@@ -974,6 +1033,26 @@ static void t_m32_integrate_erf_variable(void) {
  * Implicit first integrals are verified by the implicit-function rule: for an
  * exact M + N y' == 0 the returned relation G(x,y) == C has G_x = mu M, G_y = mu N,
  * so M + N(-G_x/G_y) == 0 identically -- checked here with PossibleZeroQ. */
+/* Drift fixes, 2026-10-26.
+ * IVP at a basis singularity: y'' + x y' - 2 y == 0's basis carries
+ * (x^2/2)^(1/4)/Sqrt[x], a removable 0 * ComplexInfinity at x = 0, and the fit
+ * read the conditions as inconsistent ({} -- "no solution") since v0.461 (a literal
+ * False makes a linear system inconsistent); it now evaluates the PowerExpanded
+ * body there.  An integrating factor whose exponent cancels against the forcing's
+ * (E^(-Cos^2) E^(-Sin^2) = 1/E) no longer spins Integrate, and Exact integrates a
+ * mu(x) coefficient that only LOOKS Y-dependent (2 Tan[x] spelled with Y). */
+static void t_drift_ivp_singular_basis_and_exponents(void) {
+    check_true("Module[{f = y /. DSolve[{y''[x] + x y'[x] - 2 y[x] == 0, y[0] == 1, y'[0] == 0}, y, x][[1]]}, "
+               "Chop[N[{f[1/2] - 5/4, f[2] - 5}, 30]] == {0, 0}]");
+    check_true("Module[{f = y /. DSolve[{y''[x] + x y'[x] + 2 y[x] == 0, y[0] == 0, y'[0] == 1}, y, x][[1]]}, "
+               "Chop[N[f[1] - E^(-1/2), 30]] == 0]");
+    check_true("TimeConstrained[DSolve[y'[x] + 2 Cos[x] Sin[x] y[x] == E^(-Sin[x]^2), y, x], 10, $Aborted] "
+               "=!= $Aborted && FreeQ[DSolve[y'[x] + 2 Cos[x] Sin[x] y[x] == E^(-Sin[x]^2), y, x], Integrate]");
+    check_true("Module[{s = TimeConstrained[DSolve[y[x]^2 + y'[x] (Cos[x]^2 + Sin[2 x] y[x]) == 0, y, x], 20, $Aborted]}, "
+               "Head[s] === List && Length[s] >= 1 && AllTrue[s, Chop[N[(y[x]^2 + y'[x] (Cos[x]^2 + Sin[2 x] y[x])) "
+               "/. # /. {C[1] -> 2/7, x -> 3/10}, 30]] == 0 &]]");
+}
+
 static void t_m33_exact_transcendental(void) {
     /* 1201: exact with an E^(x y) coefficient -- Integrate[M,x] comes back in a Tan
      * half-angle form, so the potential is built from the OTHER coefficient (Path 2). */
@@ -2461,16 +2540,26 @@ static void t_m37_abel_air(void) {
      * DSolve`AbelAIR (scaling u=y/s -> separable), returned as an implicit first integral
      * and verified by the implicit-function rule: the total x-derivative of G, with y'
      * replaced by the ODE, is identically zero. */
-    /* 1604 (class B): y' + y == 2x E^-x/(1+E^x y). */
-    check_true("Module[{r, g, f}, f = (2 x E^(-x))/(1+E^x y[x]) - y[x]; "
-               "r = DSolve[y'[x]+y[x]==(2 x E^(-x))/(1+E^x y[x]), y, x]; "
-               "MatchQ[r, {{_Equal}}] && (g = r[[1,1,1]] - r[[1,1,2]]; "
-               "PossibleZeroQ[D[g, x] /. Derivative[1][y][x] -> f])]");
-    /* 1607 (class A): y' - 2y == x E^2x/(1 - y E^-2x). */
-    check_true("Module[{r, g, f}, f = (x E^(2 x))/(1-y[x] E^(-2 x)) + 2 y[x]; "
-               "r = DSolve[y'[x]-2 y[x]==(x E^(2 x))/(1-y[x] E^(-2 x)), y, x]; "
-               "MatchQ[r, {{_Equal}}] && (g = r[[1,1,1]] - r[[1,1,2]]; "
-               "PossibleZeroQ[D[g, x] /. Derivative[1][y][x] -> f])]");
+    /* 1604 (class B): y' + y == 2x E^-x/(1+E^x y); 1607 (class A):
+     * y' - 2y == x E^2x/(1 - y E^-2x).  The relation is quadratic in y, so DSolve
+     * may also return it solved -- two explicit branches, each checked by its
+     * residual at a fixed constant and three points. */
+    static const char* const abel[][2] = {
+        { "y'[x]+y[x]==(2 x E^(-x))/(1+E^x y[x])", "(2 x E^(-x))/(1+E^x y[x]) - y[x]" },
+        { "y'[x]-2 y[x]==(x E^(2 x))/(1-y[x] E^(-2 x))", "(x E^(2 x))/(1-y[x] E^(-2 x)) + 2 y[x]" },
+    };
+    char buf[1024];
+    for (size_t i = 0; i < sizeof(abel) / sizeof(abel[0]); i++) {
+        snprintf(buf, sizeof buf,
+            "Module[{r, g, f}, f = %s; r = DSolve[%s, y, x]; "
+            "Which[MatchQ[r, {{_Equal}}], (g = r[[1,1,1]] - r[[1,1,2]]; "
+            "PossibleZeroQ[D[g, x] /. Derivative[1][y][x] -> f]), "
+            "MatchQ[r, {{_Rule}, {_Rule}}], AllTrue[Flatten[Table[N[(D[y[x], x] - f) /. br "
+            "/. {C[1] -> 3/7, x -> x0}, 20], {br, r}, {x0, {1/3, 2, 5/2}}]], Abs[#] < 10^-15 &], "
+            "True, False]]",
+            abel[i][1], abel[i][0]);
+        check_true(buf);
+    }
     /* 1606 (squared denominator (E^x+y)^2): the degree-2 linear-factor branch. */
     check_true("MatchQ[DSolve[y'[x]-y[x]==((x+1) E^(4 x))/((E^x+y[x])^2), y, x], {{_Equal}}]");
     /* Anti-overfit: a DIFFERENT scaling-reducible Abel-2nd-kind form, (y+x)y' == y + x^2/(y+x). */
@@ -3019,9 +3108,16 @@ static void t_m60_bessel_inverse_power(void) {
  * coefficient of that linear form to vanish is the whole correctness statement (the
  * identity must hold for an arbitrary value of each antiderivative).  Sample points
  * and precision differ from the in-method gate, so this is an independent check. */
+/* A later Integrate stage may close the quadrature (Bessel x power ->
+ * HypergeometricPFQ); a closed answer is checked by its residual at the same
+ * points and precision instead. */
 #define M61_VERIFY(ode, residual)                                                    \
     "Module[{s = DSolve[" ode ", y, x], b, r, zs, pieces, i},"                       \
-    "  Head[s] === List && Length[s] >= 1 && !FreeQ[s, Inactive] &&"                 \
+    "  Head[s] === List && Length[s] >= 1 && FreeQ[s, SeriesData] &&"                \
+    "  If[FreeQ[s, Inactive],"                                                       \
+    "   b = s[[1]][[1]][[2]][[2]]; r = " residual ";"                                \
+    "   Max[Table[Abs[N[r /. {C[1] -> 17/13, C[2] -> -23/19} /. x -> pt, 40]],"     \
+    "             {pt, {23/50, 91/100, 157/100, 211/100}}]] < 10^-25,"               \
     "  (b = s[[1]][[1]][[2]][[2]];"                                                  \
     "   r = " residual ";"                                                           \
     "   zs = DeleteDuplicates@Cases[r, Inactive[Integrate][__], {0, Infinity}];"     \
@@ -3036,7 +3132,7 @@ static void t_m60_bessel_inverse_power(void) {
     "     Max[Table[Max[Table[Abs[N[p /. {C[1] -> 17/13, C[2] -> -23/19} /. x -> pt,"\
     "                             40]],"                                             \
     "                        {pt, {23/50, 91/100, 157/100, 211/100}}]],"             \
-    "               {p, pieces}]] < 10^-25)))]"
+    "               {p, pieces}]] < 10^-25)))]]"
 
 /* The flagship: a 2nd-order linear ODE at a singular point whose Bessel homogeneous
  * set makes the variation-of-parameters quadratures non-elementary (§2.2.34-3387). */
@@ -3191,9 +3287,9 @@ static void t_m61_bounded_latency(void) {
      * recursion was an unbounded DSolve whose implicit results it then discards. */
     check_true("TimeConstrained[DSolve[(-x y'[x] + y[x])^2 == 1 + y'[x]^2, y, x], 8, "
                "$Aborted] =!= $Aborted");
-    /* its own targets still solve */
-    check_form("DSolve`NthAlgebraic[y'[x]^2 == 4 y[x], y, x]",
-               "{{y -> Function[{x}, (C[1] - x)^2]}, {y -> Function[{x}, (C[1] + x)^2]}}");
+    /* its own targets still solve (the sign branches (C[1] -+ x)^2 are one family
+     * under C[1] -> -C[1], so one or two branches may come back; each must verify) */
+    check_all_branches("DSolve`NthAlgebraic[y'[x]^2 == 4 y[x], y, x]", "y'[x]^2 - 4 y[x]");
 }
 
 
@@ -3243,8 +3339,12 @@ static void t_m62_gammapower(void) {
  * whole method used to decline with its general solution already in hand. */
 static void t_m62_sequential_constant_fit(void) {
     check_true("FreeQ[DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x], C]");
-    check_form("DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0, y'[0] == 1}, y, x]",
-               "{{y -> Function[{x}, Log[2 - E^(-x)]]}}");
+    /* the fitted answer meets the ODE and both conditions (it is Log[2 - E^(-x)]
+     * for x > -Log[2], spelled -I Pi + Log[-2 + E^(-x)] when the general solution
+     * carries Log[E^(-x) - C[1]]) */
+    check_true("Module[{f = y /. DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0, y'[0] == 1}, "
+               "y, x][[1]]}, Chop[N[{f[0], f'[0] - 1, f''[1/2] + f'[1/2]^2 + f'[1/2], "
+               "f[1] - Log[2 - E^(-1)]}, 30]] == {0, 0, 0, 0}]");
     /* under-determined: exactly one constant survives */
     check_true("Length[Union[Cases[DSolve[{y''[x] + y'[x]^2 + y'[x] == 0, y[0] == 0}, y, x], "
                "C[_], Infinity]]] == 1");
@@ -3391,6 +3491,10 @@ static void t_clean_answer_forms(void) {
 }
 
 int main(void) {
+    /* The shared alarm(120) in test_utils.h is too short for this suite:
+     * 293 tests, ~175 s measured (2026-10-26); the heavy ones are no-crash and
+     * implicit-answer checks that were as slow at v0.350. */
+    alarm(400);
     symtab_init();
     core_init();
     test_load_init_m();   /* match production: deriv.m rules + CRC integral tables */
@@ -3470,6 +3574,7 @@ int main(void) {
     TEST(t_kovacic_highdegree_no_hang);
     TEST(t_hypergeometric_kummer);
     TEST(t_hypergeometric_kummer_degenerate);
+    TEST(t_hypergeometric_kummer_shifted);
     TEST(t_hypergeometric_gauss);
     TEST(t_method_hypergeometric_kummer);
     TEST(t_hypergeometric_symbolic_a);
@@ -3514,6 +3619,7 @@ int main(void) {
     /* M33: §2.2.13 exact-method robustness (transcendental / denominator-clearing /
      * mu(y) trig + implicit-verify Together) and exact-vs-homogeneous IVP fall-through */
     TEST(t_m33_exact_transcendental);
+    TEST(t_drift_ivp_singular_basis_and_exponents);
     TEST(t_m33_exact_rational_clear);
     TEST(t_m33_exact_mu_trig);
     TEST(t_m33_exact_homogeneous_ivp_fallthrough);

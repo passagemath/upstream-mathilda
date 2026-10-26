@@ -353,7 +353,12 @@ Expr** dsolve_riccati_try(DSolveProblem* P, size_t* nbranch) {
     Expr* num  = ds_call2(SYM_Times, expr_new_integer(-1), up);
     Expr* den  = eval_and_free(ds_call2(SYM_Times, expr_copy(q2), ubody));   /* consumes ubody */
     Expr* raw  = eval_and_free(ds_call2(SYM_Times, num, powneg1(den)));
-    Expr* body = riccati_has_special(raw) ? raw : ds_simplify(raw);
+    /* Never Simplify across an unevaluated Integrate (as ric_from_particular):
+     * Simplify's transforms rewrite inside it and every rewrite re-runs the
+     * integration cascade -- y' == 2x - (1 + x^2) y + y^2 (section 2.2.47-4658,
+     * u carries Integrate[E^(x + x^3/3)]) spent its whole budget there. */
+    Expr* body = (riccati_has_special(raw) || ds_has_head(raw, SYM_Integrate)
+                  || ds_has_head(raw, SYM_Inactive)) ? raw : ds_simplify(raw);
 
     expr_free(q0); expr_free(q1); expr_free(q2);
 

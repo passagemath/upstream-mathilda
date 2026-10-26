@@ -313,6 +313,26 @@ static Expr* exact_mu_u_factor(const Expr* M, const Expr* N, const Expr* diff,
     return Mu;
 }
 
+/* r is free of `var` (ds_free_of, which decides numerically) yet may still
+ * MENTION it: ((2 - 2 Cos[2 x]) Y + Sin[2 x])/(Cos[x]^2 + Sin[2 x] Y) is 2 Tan[x]
+ * for every Y.  Integrating the Y-bearing spelling sent RischTranscendental
+ * spinning (section 2.2.35-3461).  Since the value does not depend on var, any
+ * admissible value of var gives the same function: substitute 0, or 1 when 0 is
+ * singular.  r consumed. */
+static Expr* exact_drop_var(Expr* r, const char* var) {
+    if (!ds_contains(r, intern_symbol(var))) return r;
+    for (int v = 0; v <= 1; v++) {
+        Expr* t = ds_subst(expr_copy(r), expr_new_symbol(var), expr_new_integer(v));
+        if (!ds_contains(t, SYM_Indeterminate) && !ds_contains(t, SYM_ComplexInfinity)
+            && !ds_contains(t, SYM_DirectedInfinity)) {
+            expr_free(r);
+            return t;
+        }
+        expr_free(t);
+    }
+    return r;
+}
+
 /* Integrate[e, v] -- unbounded as before, or (`deadline` > 0) inside what is left
  * of that wall-clock deadline, a timeout reading as non-elementary (a decline).
  * The bound is used only for a mu(u) factor, whose potentials can be far harder
@@ -383,6 +403,7 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
         /* mu(x): (M_y - N_x)/N free of Y */
         Expr* r1 = eval_and_free(ds_call2(SYM_Times, expr_copy(diff), pw_inv(expr_copy(N))));
         if (ds_free_of(r1, Yn)) {
+            r1 = exact_drop_var(r1, Yn);
             Expr* r1int = ds_integrate(expr_copy(r1), expr_new_symbol(xvar));
             if (!ds_has_head(r1int, SYM_Integrate)) Mu = eval_and_free(ds_call1("Exp", r1int));
             else expr_free(r1int);
@@ -396,6 +417,7 @@ static Expr* exact_potential(DSolveProblem* P, const char* xvar, const char* Yn,
             Expr* r2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
                 expr_new_integer(-1), expr_copy(diff), pw_inv(expr_copy(M)) }, 3));
             if (ds_free_of(r2, xvar)) {
+                r2 = exact_drop_var(r2, xvar);
                 Expr* r2int = ds_integrate(expr_copy(r2), expr_new_symbol(Yn));
                 if (!ds_has_head(r2int, SYM_Integrate)) Mu = eval_and_free(ds_call1("Exp", r2int));
                 else expr_free(r2int);

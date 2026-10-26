@@ -1,0 +1,82 @@
+name: Tests (ctest)
+
+# build.yml proves the tree COMPILES on Linux and Windows; nothing ran the
+# CMake test suite, so it drifted unseen -- by 2026-10-26, 42 of 417 suites
+# failed, and dsolve_tests had stopped at its 37th test for weeks with ~250
+# later tests never running. This workflow runs it.
+#
+# Two tiers, chosen by the `nightly` ctest label (tests/CMakeLists.txt, end):
+#   push / pull_request   ctest -LE nightly   -- every unit suite (~320)
+#   schedule / dispatch   ctest               -- adds the corpus replays,
+#                         stress batteries and bench_* timing gates (~97),
+#                         about 80% of the suite's serial time.
+
+on:
+  push:
+    branches: [main]
+    paths: ["src/**", "tests/**", "makefile", ".github/workflows/tests.yml"]
+  pull_request:
+    paths: ["src/**", "tests/**", "makefile", ".github/workflows/tests.yml"]
+  schedule:
+    - cron: "17 15 * * *"   # daily; off the hour, when runners are less loaded
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "push (unit suites) or full (adds corpus/stress/bench)"
+        type: choice
+        options: [full, push]
+        default: full
+
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes a running push-tier job.
+concurrency:
+  group: tests-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  ctest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      FULL: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tier == 'full') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same optional dependencies as build.yml, so the suites exercise the
+      # FLINT/LAPACK/PCRE2/FFTW/ECM paths users get.
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake libgmp-dev libmpfr-dev libreadline-dev \
+            libecm-dev liblapacke-dev libopenblas-dev \
+            libflint-dev libpcre2-dev libfftw3-dev
+          sudo apt-get install -y --no-install-recommends libraylib-dev libx11-dev \
+            || echo "raylib unavailable -- tests build with USE_GRAPHICS=OFF"
+
+      - name: Configure
+        run: cmake -S tests -B tests/build
+
+      - name: Build test suites
+        run: cmake --build tests/build -j"$(nproc)"
+
+      # --timeout is per test: dsolve_corpus_2_1_2 takes ~25 min on a laptop.
+      # --repeat until-pass:2 is deliberately absent; a flaky suite should fail.
+      - name: Run ctest
+        working-directory: tests/build
+        run: |
+          if [ "$FULL" = "true" ]; then sel=""; to=3600; else sel="-LE nightly"; to=900; fi
+          ctest $sel -j"$(nproc)" --timeout "$to" --output-on-failure \
+                --output-junit ctest-junit.xml
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-${{ env.FULL == 'true' && 'full' || 'push' }}
+          path: |
+            tests/build/ctest-junit.xml
+            tests/build/Testing/Temporary/LastTest.log
+          if-no-files-found: ignore

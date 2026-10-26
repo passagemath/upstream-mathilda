@@ -5617,3 +5617,19 @@ add_test(NAME productlog_machine_tests COMMAND productlog_machine_tests)
 add_executable(legendre_machine_tests test_legendre_machine.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(legendre_machine_tests PRIVATE ../src)
 add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)
+
+# CI tiers (.github/workflows/tests.yml).  Every push runs `ctest -LE nightly`;
+# the scheduled run takes everything.  A test goes in the nightly tier by NAME,
+# so a new suite is on the push tier unless it is named like the slow families:
+#   *corpus*, *stress*  -- corpus replays and stress batteries, ~80% of the
+#                          suite's serial time (dsolve_corpus_2_1_2 alone ~25 min);
+#   bench_*             -- wall-clock regression gates, which a shared runner's
+#                          load turns into noise on a per-push run.
+# Large unit suites (dsolve_tests, intrat_tests, ...) stay on the push tier on
+# purpose: dsolve_tests sat broken for weeks because nothing ran it.
+get_property(_mathilda_all_tests DIRECTORY PROPERTY TESTS)
+foreach(_t IN LISTS _mathilda_all_tests)
+    if(_t MATCHES "corpus|stress|^bench_")
+        set_tests_properties(${_t} PROPERTIES LABELS nightly)
+    endif()
+endforeach()

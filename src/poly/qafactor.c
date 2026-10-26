@@ -2656,9 +2656,11 @@ Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
 
     Expr* result = NULL;
     /* lcm(a, b) = a * b / gcd(a, b); fold left-to-right. */
+    bool coprime = true;          /* every fold gcd a constant */
     QAUPoly* L = qaupoly_copy(ps[0]);
     for (size_t i = 1; i < argc && L; i++) {
         QAUPoly* gp = qaupoly_gcd(L, ps[i]);
+        if (!gp || gp->deg > 0) coprime = false;
         QAUPoly* prod = qaupoly_mul(L, ps[i]);
         QAUPoly *quot = NULL, *rem = NULL;
         if (gp && qaupoly_divrem(prod, gp, &quot, &rem)) {
@@ -2674,7 +2676,34 @@ Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
         if (gp) qaupoly_free(gp);
         qaupoly_free(prod);
     }
-    if (L && !qaupoly_is_zero(L)) {
+    /* Pairwise-coprime inputs: the LCM is their product.  Build it from the
+     * caller's own radicals rather than rendering back through the primitive
+     * element, whose expansion in gamma leaves an unreduced zero behind:
+     * PolynomialLCM[x + 2^(1/3), x + 3^(1/3), Extension -> Automatic] carried
+     * a constant term of 6^(1/3) plus five cube-root terms summing to 0.
+     * Taken only when the product's leading coefficient is rational, so making
+     * it monic is a rational division. */
+    if (L && coprime) {
+        Expr** fs = malloc(sizeof(Expr*) * argc);
+        for (size_t i = 0; i < argc; i++) fs[i] = expr_copy(argv[i]);
+        Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times), fs, argc) }, 1));
+        free(fs);
+        Expr* deg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Exponent),
+                        (Expr*[]){ expr_copy(prod), expr_copy((Expr*)poly_var) }, 2));
+        Expr* lc = eval_and_free(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                       (Expr*[]){ expr_copy(prod), expr_copy((Expr*)poly_var), deg }, 3));
+        if (expr_is_integer_like(lc) || is_rational(lc, NULL, NULL)) {
+            result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+                         (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+                             (Expr*[]){ prod, expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ lc, expr_new_integer(-1) }, 2) }, 2) }, 1));
+            prod = NULL; lc = NULL;
+        }
+        if (prod) expr_free(prod);
+        if (lc) expr_free(lc);
+    }
+    if (!result && L && !qaupoly_is_zero(L)) {
         QAUPoly* monic = qaupoly_make_monic(L);
         if (monic) {
             result = qaupoly_to_expr_alpha(monic, poly_var->data.symbol.name,

@@ -247,6 +247,26 @@ static void test_match_flat_pattern_head_single_operand(void) {
                    "True", 0);
 }
 
+/* A failing c1_. Cosh[a_] + c2_. Cosh[b_] + r___ /; cond over a wide sum is
+ * polynomial: neither the Optional-coefficient element (whose required
+ * Cosh[a_] cannot take a Plus group) nor the leftover retry (r___ already
+ * catches the rest) enumerates subsets.  Both were 2^n -- 20 s for TrigReduce
+ * on a 16-term Cosh/Sinh sum; at 30 terms either alone would never finish. */
+static void test_match_flat_orderless_no_subset_blowup(void) {
+    assert_eval_eq("ws = Sum[c[k] Cosh[k u], {k, 30}]; "
+                   "TimeConstrained[{MatchQ[ws, c1_. Cosh[a_] + c2_. Cosh[b_] + r___ /; SameQ[a + b, 0]], "
+                   "ws /. (c1_. Cosh[a_] + c2_. Cosh[b_] + r___ /; SameQ[a + b, 0]) :> 0}, 10, $Aborted] === {False, ws}",
+                   "True", 0);
+    assert_eval_eq("3 Cosh[x] + 2 Cosh[-x] + y /. c1_. Cosh[a_] + c2_. Cosh[b_] + r___ "
+                   "/; SameQ[Expand[a + b], 0] :> (c1 + c2) Cosh[a] + r",
+                   "y + 5 Cosh[x]", 0);
+    /* A condition that reads r still gets the leftover retry. */
+    assert_eval_eq("{a + b + c + d /. (a + r___ /; Length[{r}] == 2) :> f[r], "
+                   "a + b + c + d /. (a + r__ /; Length[{r}] == 1) :> f[r], "
+                   "2 x y /. c_. x^n_. :> {c, n}}",
+                   "{d + f[b, c], c + d + f[b], {2 y, 1}}", 0);
+}
+
 int main() {
     symtab_init();
     TEST(test_match_basic);
@@ -260,6 +280,7 @@ int main() {
     TEST(test_match_condition_backtracks_into_nested);
     TEST(test_match_condition_oneidentity_optional_default);
     TEST(test_match_flat_pattern_head_single_operand);
+    TEST(test_match_flat_orderless_no_subset_blowup);
     TEST(test_timeconstrained_restores_dsolve_depth);
     printf("All match tests passed!\n");
     return 0;

@@ -276,6 +276,8 @@ In[5]:= op /: op[i_] ** op[j_] := op[i + j];
 Out[5]= x ** op[3] ** y ** op[7]
 ```
 
+**v0.6032 (cost).** A failing rule on a wide Flat, Orderless sum no longer tries every subset of its operands. An Optional-coefficient element such as `c_. Cosh[a_]` takes only a single operand when its required part, a call on a fixed non-OneIdentity head, cannot equal a group. The leftover retry is skipped when the pattern already ends in a free `r___` that no condition reads. Matches are unchanged; 30-term sums are linear rather than exponential.
+
 ## Replace
 Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules]`: Applies rules to the entire expression.

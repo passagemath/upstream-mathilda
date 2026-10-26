@@ -302,6 +302,26 @@ static bool pat_has_optional(Expr* p) {
     return false;
 }
 
+/* True when `p` can never match a group `flat_head[x1, ..., xk]` (k >= 2): a
+ * literal atom, or a call on a fixed symbol head other than `flat_head` that is
+ * neither a pattern construct nor OneIdentity (so no default can collapse it). */
+static bool flat_elem_rejects_group(const Expr* p, const char* flat_head) {
+    if (p->type != EXPR_FUNCTION) return true;
+    const Expr* hd = p->data.function.head;
+    if (hd->type != EXPR_SYMBOL) return false;
+    const char* h = hd->data.symbol.name;
+    if (h == flat_head
+        || h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
+        || h == SYM_Pattern || h == SYM_HoldPattern || h == SYM_Alternatives
+        || h == SYM_Condition || h == SYM_PatternTest || h == SYM_Optional
+        || h == SYM_Shortest || h == SYM_Longest || h == SYM_Repeated
+        || h == SYM_RepeatedNull || h == SYM_Except || h == SYM_Verbatim
+        || h == SYM_PatternSequence || h == SYM_OptionsPattern)
+        return false;
+    SymbolDef* d = symtab_get_def(h);
+    return !(d && (d->attributes & ATTR_ONEIDENTITY));
+}
+
 /* True when `p` contains no pattern construct at any depth (heads included),
  * so it can only match an expression structurally equal to itself. */
 static bool pat_is_literal(const Expr* p) {
@@ -2100,6 +2120,24 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                 for (size_t ai = 0; has_oid && !oid_can_absorb
                                     && ai < inner_p->data.function.arg_count; ai++)
                     oid_can_absorb = pat_has_optional(inner_p->data.function.args[ai]);
+                /* Through defaults, the group is absorbed by what is left once
+                 * every optional argument takes its default: nothing, or one
+                 * argument that may itself match pat_head[...].  Two or more
+                 * required arguments keep inner_p's own head, and a required
+                 * call on a fixed non-OneIdentity head (Cosh[a_] in
+                 * c_. Cosh[a_]) cannot equal the group -- without this a sum of
+                 * coefficient-times-Cosh terms enumerated every subset. */
+                if (oid_can_absorb && inner_p->data.function.arg_count > 1) {
+                    size_t n_req = 0;
+                    Expr* req = NULL;
+                    for (size_t ai = 0; ai < inner_p->data.function.arg_count; ai++)
+                        if (!pat_has_optional(inner_p->data.function.args[ai])) {
+                            n_req++;
+                            req = inner_p->data.function.args[ai];
+                        }
+                    if (n_req >= 2 || (req && flat_elem_rejects_group(req, pat_head->data.symbol.name)))
+                        oid_can_absorb = false;
+                }
                 if (!oid_can_absorb) {
                     max_k = (n_exprs > 0) ? 1 : 0;
                 }
@@ -2671,6 +2709,61 @@ static Expr* flat_augment_pattern(Expr* pattern, const char* flat_head) {
     return NULL;
 }
 
+/* Occurrences of the symbol `name` anywhere in `e` (heads included). */
+static size_t flat_symbol_count(const Expr* e, const char* name) {
+    if (!e) return 0;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol.name, name) == 0;
+    if (e->type != EXPR_FUNCTION) return 0;
+    size_t c = flat_symbol_count(e->data.function.head, name);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        c += flat_symbol_count(e->data.function.args[i], name);
+    return c;
+}
+
+/* True when `name` occurs in the guard of some Condition inside `e`. */
+static bool flat_guard_mentions(const Expr* e, const char* name) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Condition
+        && e->data.function.arg_count == 2
+        && flat_symbol_count(e->data.function.args[1], name) > 0) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (flat_guard_mentions(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+/* True when the flat call `inner` (of `pattern`) has an element that is an
+ * untyped, untested sequence blank -- `___`, `__`, or `r___` / `r__` whose name
+ * occurs nowhere else in the pattern and in no guard of the replacement.  For
+ * an Orderless head such an element makes the leftover retry redundant: any
+ * augmented match {non-r elements -> their operands, r -> S, $FlatRest$ -> L}
+ * is also a plain match with r -> S + L, because nothing reads r's binding to
+ * accept or reject it.  The plain match has already failed, so the augmented
+ * one must too -- and with r no longer last it would enumerate every subset of
+ * the operands for r (2^n tries), e.g. the TrigReduce cancellation rule
+ * c1_. Cosh[a_] + c2_. Cosh[b_] + r___ /; ... over a 16-term sum (20 s). */
+static bool flat_has_free_rest(Expr* pattern, Expr* inner, Expr* replacement) {
+    for (size_t i = 0; i < inner->data.function.arg_count; i++) {
+        Expr* a = inner->data.function.args[i];
+        const char* name = NULL;
+        if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol.name == SYM_Pattern
+            && a->data.function.arg_count == 2
+            && a->data.function.args[0]->type == EXPR_SYMBOL) {
+            name = a->data.function.args[0]->data.symbol.name;
+            a = a->data.function.args[1];
+        }
+        if (a->type != EXPR_FUNCTION || a->data.function.head->type != EXPR_SYMBOL
+            || a->data.function.arg_count != 0) continue;
+        const char* bh = a->data.function.head->data.symbol.name;
+        if (bh != SYM_BlankSequence && bh != SYM_BlankNullSequence) continue;
+        if (!name) return true;
+        if (flat_symbol_count(pattern, name) == 1
+            && !flat_guard_mentions(replacement, name)) return true;
+    }
+    return false;
+}
+
 /* head[replacement, $FlatRest$] -- the matched RHS plus the spliced leftovers. */
 static Expr* flat_augment_replacement(Expr* replacement, const char* flat_head) {
     Expr** a = malloc(sizeof(Expr*) * 2);
@@ -2717,6 +2810,9 @@ Expr* match_flat_leftover(Expr* expr, Expr* pattern, Expr* replacement, MatchEnv
     /* (c) only now, the attribute lookup: the head must actually be Flat */
     uint32_t attrs = get_attributes(flat_head);
     if (!(attrs & ATTR_FLAT)) return NULL;
+    /* (d) an Orderless head with a free trailing catcher cannot gain a match */
+    if ((attrs & ATTR_ORDERLESS) && flat_has_free_rest(pattern, inner, replacement))
+        return NULL;
 
     Expr* aug_pat = flat_augment_pattern(pattern, flat_head);
     if (!aug_pat) return NULL;

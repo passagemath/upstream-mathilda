@@ -34,8 +34,13 @@ interactive pty transcript matches the reference session line for line; check-c9
 - [x] nminimize_tests killed by the alarm(120) watchdog (171 s): the penalty path interpreted every constraint and
       its gradient (393f2767's active-set BFGS multiplied the iterations), and Abs' sent gradients to finite
       differences. Constraint programs registered (fm_progs_register), Abs' -> Sign in the solver gradient; 54 s ; v0.6026
-- [ ] Follow-up: test_fixed_charge_flow takes 33 s inside nminimize_tests but ~12 s standalone -- state left by
-      earlier tests in the binary?
+- [x] test_fixed_charge_flow 33 s in nminimize_tests vs ~12 s standalone: the CMake test build had no -O (no build
+      type); now -O2 -g by default (asserts kept). Full-suite A/B: 0 new failures, 4 fixed
+- [ ] Follow-up (pre-existing, identical at -O0 and -O2): 42 of 417 registered tests fail on main -- 20 DSolve
+      corpus/stress, 16 "Subprocess aborted" (numeric, simp, stats, fit, packed_list, ndarray_linalg, ml_dist,
+      normalize, risch_transcendental, diffunderint, plot3d, sf_machine_error, legendreq, expint_machine,
+      integer_assume_simplify, trigexpand), 3 SIGALRM (dsolve_m63_stress, simp_sf_airy, mathar_regression),
+      2 Timeout (mathar_definite_corpus, dsolve_corpus_2_1_2), flint_bridge
 
 # FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
 

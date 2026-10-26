@@ -30,6 +30,18 @@ endif()
 # add_test() line remain invisible to ctest.
 enable_testing()
 
+# Optimise by default. With no build type CMake passes no -O at all, so the whole
+# library the tests link -- evaluator, compiled-code VM, kernels -- ran at -O0, about
+# 2.6x slower than the -O3 binary users run: NMinimize's fixed-charge-flow test took
+# 34 s here against 12 s in ./Mathilda, and suites crept toward the 120 s watchdog in
+# test_utils.h for no reason in Mathilda itself. Not CMAKE_BUILD_TYPE=Release: that adds
+# -DNDEBUG, which turns every assert() in the tests into a no-op. A caller who sets
+# a build type or an -O level of their own (-DCMAKE_C_FLAGS=-O0 for a debugging build)
+# keeps it.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_C_FLAGS MATCHES "-O")
+    add_compile_options(-O2 -g)
+endif()
+
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
 option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)

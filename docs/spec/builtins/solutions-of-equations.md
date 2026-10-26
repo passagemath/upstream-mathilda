@@ -1847,6 +1847,7 @@ closed-form radical expressions.
 - `ToRadicals[expr]`
 
 **Features**:
+- **Canonical order is decided on values, not roundoff (v0.6040).** The numeric path sorts its QR eigenvalue estimates before Newton refinement, and compares Re and |Im| within the estimates' accuracy (2^-30 relative from LAPACK, half the working precision from MPFR QR). Roots on the imaginary axis and conjugate pairs therefore take the same index on every LAPACK build: `Root[49 + 18 #^2 + #^4 &, 4]` is `3.83 I` everywhere.
 
 - `Protected`.
 - Closed-form radicals are always returned when the polynomial has degree

@@ -61,6 +61,8 @@ is shown equal (or the new behaviour shown right).
       Riccati answers were wrong too (now declined, correctly)
 - [ ] Exact's potential integral pays ParallelMixedSpecial's 10 s cascade budget to decline (2.2.8-753 at 10.6 s
       against the corpus' 8 s); recheck after the v0.6038 tower fix
+- [ ] Root is HoldAll (src/root.c root_init), so its INDEX is never evaluated: k = 2; Root[#^2 - 2 &, k] and
+      Table[Root[f, k], {k, 4}] stay symbolic.  Function holds its own body, so HoldFirst (or none) suffices
 - [ ] ClassifyPrime[T, c] does not terminate for a constant c (TowerSpecialPlaces now filters constants out;
       the function itself should decline)
 - [ ] dsolve_tests / m61 / m63 run 150-200 s (alarm raised to 400 s in each main); the costs are no-crash /

@@ -299,16 +299,61 @@ static int classify_real(const mpfr_t re, const mpfr_t im,
     return is_real;
 }
 
+/* Compare two QR estimates x, y of mathematically comparable quantities,
+ * treating them as EQUAL when |x - y| <= tol * scale.  The estimates carry
+ * roundoff of their own -- a purely imaginary root's real part comes back as
+ * +-1e-17 noise from LAPACK, and the noise differs between LAPACK builds
+ * (Accelerate vs OpenBLAS) -- so an exact comparison lets that noise, not the
+ * canonical order, decide: Root[49 + 18 #^2 + #^4 &, 4] was +3.83 I on macOS and
+ * another root on Linux. */
+static int cmp_within(const mpfr_t x, const mpfr_t y, const mpfr_t tol_abs) {
+    mpfr_t d; mpfr_init2(d, mpfr_get_prec(x));
+    mpfr_sub(d, x, y, MPFR_RNDN);
+    int c = 0;
+    if (mpfr_cmpabs(d, tol_abs) > 0) c = mpfr_sgn(d);
+    mpfr_clear(d);
+    return c;
+}
+
+/* root_canonical_cmp_mpfr's order on ESTIMATES: Re and |Im| compare equal
+ * within tol_rel * max(1, |a|, |b|). */
+static int canonical_cmp_estimates(const mpfr_t a_re, const mpfr_t a_im, int a_real,
+                                   const mpfr_t b_re, const mpfr_t b_im, int b_real,
+                                   const mpfr_t tol_rel) {
+    if (a_real != b_real) return a_real ? -1 : 1;
+    mpfr_prec_t bits = mpfr_get_prec(a_re);
+    mpfr_t sc, t, tol, aa, bb;
+    mpfr_inits2(bits, sc, t, tol, aa, bb, (mpfr_ptr)0);
+    mpfr_set_ui(sc, 1, MPFR_RNDN);
+    mpfr_hypot(t, a_re, a_im, MPFR_RNDN); mpfr_max(sc, sc, t, MPFR_RNDN);
+    mpfr_hypot(t, b_re, b_im, MPFR_RNDN); mpfr_max(sc, sc, t, MPFR_RNDN);
+    mpfr_mul(tol, sc, tol_rel, MPFR_RNDN);
+    int c = cmp_within(a_re, b_re, tol);
+    if (c == 0 && !a_real) {
+        mpfr_abs(aa, a_im, MPFR_RNDN);
+        mpfr_abs(bb, b_im, MPFR_RNDN);
+        c = cmp_within(aa, bb, tol);
+        if (c == 0) {                 /* conjugates: more-negative Im first */
+            int sa = mpfr_sgn(a_im), sb = mpfr_sgn(b_im);
+            c = (sa < sb) ? -1 : (sa > sb) ? 1 : 0;
+        }
+    }
+    mpfr_clears(sc, t, tol, aa, bb, (mpfr_ptr)0);
+    return c;
+}
+
 /* Sort an array of root candidates in canonical order.  Each root
  * carries (re, im, is_real).  We use the same backing arrays directly
- * (in-place insertion sort — n is small, typically <= 10). */
+ * (in-place insertion sort -- n is small, typically <= 10).  `tol_rel` is the
+ * relative accuracy of the estimates (see canonical_cmp_estimates). */
 static void canonical_sort_roots(mpfr_t* re, mpfr_t* im, int* is_real,
-                                 size_t n) {
+                                 size_t n, const mpfr_t tol_rel) {
     mpfr_prec_t bits = (n > 0) ? mpfr_get_prec(re[0]) : 53;
     for (size_t i = 1; i < n; i++) {
         for (size_t j = i; j > 0; j--) {
-            int c = root_canonical_cmp_mpfr(re[j], im[j], is_real[j],
-                                            re[j - 1], im[j - 1], is_real[j - 1]);
+            int c = canonical_cmp_estimates(re[j], im[j], is_real[j],
+                                            re[j - 1], im[j - 1], is_real[j - 1],
+                                            tol_rel);
             if (c >= 0) break;
             /* swap j and j-1 */
             mpfr_t tmp; mpfr_init2(tmp, bits);
@@ -597,7 +642,15 @@ static Expr* solve_root_core(const mpfr_t* c_wp, int n, int64_t k,
     }
 
     /* ---- Step 5: canonical sort ---- */
-    canonical_sort_roots(eval_re, eval_im, is_real_flags, Nmat);
+    {
+        /* Accuracy of the estimates: double from LAPACK (2^-30 leaves room for
+         * a mildly ill-conditioned root), else half the MPFR QR precision. */
+        mpfr_t tol_rel; mpfr_init2(tol_rel, wp);
+        mpfr_set_ui(tol_rel, 1, MPFR_RNDN);
+        mpfr_div_2si(tol_rel, tol_rel, want_machine ? 30L : (long)wp / 2, MPFR_RNDN);
+        canonical_sort_roots(eval_re, eval_im, is_real_flags, Nmat, tol_rel);
+        mpfr_clear(tol_rel);
+    }
 
     /* ---- Pick the k-th candidate ---- */
     size_t idx = (size_t)(k - 1);

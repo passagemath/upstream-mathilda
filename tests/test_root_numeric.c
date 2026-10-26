@@ -100,6 +100,25 @@ static void test_conjugate_pair_positive_im_second(void) {
                "Im[r] > 0 && Abs[r^3 + r + 1] < 1.*^-20]");
 }
 
+/* Roots whose real parts are EQUAL (all on the imaginary axis, or a
+ * conjugate pair): the QR estimates' real parts are roundoff of either sign,
+ * and the sign differs between LAPACK builds, so the order must not depend
+ * on it.  49 + 18 x^2 + x^4 (all roots on the imaginary axis) orders by |Im|,
+ * then the negative member first: -1.83 I, 1.83 I, -3.83 I, 3.83 I. */
+static void test_equal_real_parts_order(void) {
+    const char* want[] = { "-1.828", "1.828", "-3.828", "3.828" };
+    for (int k = 1; k <= 4; k++) {
+        char buf[256];
+        snprintf(buf, sizeof buf,
+            "With[{r = N[Root[Function[49 + 18 #1^2 + #1^4], %d]]},"
+            " Abs[Re[r]] < 1.*^-10 && Abs[Im[r] - (%s)] < 1.*^-3]", k, want[k - 1]);
+        check_true(buf);
+    }
+    /* x^4 + 1: Re -1/Sqrt[2] pair first, more-negative Im first in each pair */
+    check_true("Chop[N[Root[Function[#1^4 + 1], #] & /@ Range[4]] - "
+               "{-1 - I, -1 + I, 1 - I, 1 + I}/Sqrt[2]] == {0, 0, 0, 0}");
+}
+
 /* ------------------------------------------------------------------ */
 /* 3. All-real quartic: x^4 - 10 x^2 + 1, roots = +/- (sqrt(3) +/- sqrt(2)) */
 /* ------------------------------------------------------------------ */
@@ -183,6 +202,7 @@ int main(void) {
     TEST(test_one_real_first);
     TEST(test_conjugate_pair_negative_im_first);
     TEST(test_conjugate_pair_positive_im_second);
+    TEST(test_equal_real_parts_order);
 
     TEST(test_quartic_ascending);
 

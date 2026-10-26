@@ -521,7 +521,9 @@ Expr** dsolve_first_order_series_try(DSolveProblem* P, size_t* nbranch) {
     if (!F) return NULL;
     int N = FROB_ORDER;
 
-    Expr** a = malloc((size_t)(N + 1) * sizeof(Expr*));
+    /* calloc: a loop that stops early (a pole at x0) leaves the later slots
+     * unwritten, and the decline path frees every a[k] (glibc segfault). */
+    Expr** a = calloc((size_t)(N + 1), sizeof(Expr*));
     a[0] = ds_const(1);                                    /* a_0 = C[1] */
     bool ok = true;
     /* a pole at x0=0 (F not analytic there) legitimately forms 1/0 while probing;

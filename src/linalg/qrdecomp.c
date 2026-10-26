@@ -276,8 +276,11 @@ bool qr_symbolic_core(Expr** A_flat, int n, int p,
     /* Q has at most min(n, p) columns -- the maximum possible rank. */
     int rank_cap = (n < p) ? n : p;
 
-    /* Working column slots for Q: n rows x rank_cap columns. */
-    Expr** Q = (Expr**)malloc(sizeof(Expr*) * (size_t)n * (size_t)rank_cap);
+    /* Working column slots for Q: n rows x rank_cap columns.  calloc: a
+     * rank-deficient input fills only rk < rank_cap columns, and the unused
+     * slots are freed below -- uninitialised, that freed garbage pointers
+     * (a segfault on glibc; macOS's allocator happened to hand back zeros). */
+    Expr** Q = (Expr**)calloc((size_t)n * (size_t)rank_cap, sizeof(Expr*));
     /* Working R: rank_cap rows x p cols, initialised to zero. */
     Expr** R = (Expr**)malloc(sizeof(Expr*) * (size_t)rank_cap * (size_t)p);
     for (int t = 0; t < rank_cap * p; t++) R[t] = expr_new_integer(0);

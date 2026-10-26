@@ -5019,7 +5019,8 @@ Expr* flint_tower_reduce(const Expr* frac,
     VarSet params; memset(&params, 0, sizeof params);
     for (size_t i = 0; i < all.count; i++)
         if (var_index(&fvars, all.names[i]) < 0) varset_add(&params, all.names[i]);
-    qsort(params.names, params.count, sizeof(char*), cmp_str);
+    if (params.count > 1)   /* names is NULL when empty: qsort(NULL, 0) is UB */
+        qsort(params.names, params.count, sizeof(char*), cmp_str);
     for (size_t i = 0; i < params.count; i++) varset_add(&fvars, params.names[i]);
     varset_free(&params); varset_free(&all);
     if (fvars.count == 0) { varset_free(&fvars); return NULL; }

@@ -2502,7 +2502,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
             Expr* settle_snap[SETTLE_SNAP_MAX];
             const size_t settle_argc = res->data.function.arg_count;
             const bool settle_ok = settle_argc <= SETTLE_SNAP_MAX;
-            if (settle_ok) memcpy(settle_snap, res->data.function.args, sizeof(Expr*) * settle_argc);
+            if (settle_ok && settle_argc > 0)   /* args is NULL for f[] */
+                memcpy(settle_snap, res->data.function.args, sizeof(Expr*) * settle_argc);
             /* Messages fired so far: a head that reports a message while
              * declining has rejected the call (see the post-gate). */
             const unsigned long step_msgs_before = mth_msg_fired_count();

@@ -172,8 +172,10 @@ void test_legendre_deferred() {
     assert_eval_eq("LegendreP[2, -1, x]", "LegendreP[2, -1, x]", 0);
     /* Out-of-range type is deferred. */
     assert_eval_eq("LegendreP[2, 1, 4, z]", "LegendreP[2, 1, 4, z]", 0);
-    /* Numeric series outside its disk of convergence is deferred. */
-    assert_eval_eq("LegendreP[1.5, 5.0]", "LegendreP[1.5, 5.0]", 0);
+    /* Outside the series' disk of convergence the value is the analytic
+     * continuation, 2F1(-nu, nu + 1; 1; (1 - z)/2) at (1 - 5)/2 = -2 (off the
+     * cut): 13.32184253126767618... */
+    assert_eval_eq("Abs[LegendreP[1.5, 5.0] - 13.321842531267676] < 1.*^-12", "True", 0);
 }
 
 /* ---- diagnostics & attributes --------------------------------------- */

@@ -188,7 +188,10 @@ static void test_assumed_limit_stress2(void) {
     assert_eval_eq("Simplify[(Limit[Log[x^a + y^a]/Log[x], x -> Infinity, Assumptions -> a > 0 && y > 0]) - a]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Log[x^a + y^a]/Log[x], x -> Infinity, Assumptions -> a < 0 && y > 0]) - 0]", "0", 0);
     assert_eval_eq("Simplify[(Limit[x ((1 + a/x)^b - 1), x -> Infinity, Assumptions -> Element[a, Reals] && Element[b, Reals]]) - a b]", "0", 0);
-    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/(c^x - d^x), x -> 0, Assumptions -> a > 0 && b > 0 && c > 0 && d > 0 && c != d]) - Log[a/b]/Log[c/d]]", "0", 0);
+    /* The limit may come back as (Log[a] - Log[b])/(Log[c] - Log[d]); that
+     * equals Log[a/b]/Log[c/d] only under the same positivity, so the check
+     * Simplifies under it. */
+    assert_eval_eq("Simplify[(Limit[(a^x - b^x)/(c^x - d^x), x -> 0, Assumptions -> a > 0 && b > 0 && c > 0 && d > 0 && c != d]) - Log[a/b]/Log[c/d], a > 0 && b > 0 && c > 0 && d > 0]", "0", 0);
     assert_eval_eq("Simplify[(Limit[(x^a - y^a)/(x - y), x -> y, Assumptions -> y > 0 && Element[a, Reals]]) - a y^(a - 1)]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Exp[a x^2 + b x + c]/Exp[a x^2 + d x + e], x -> -Infinity, Assumptions -> a > 0 && b > d]) - 0]", "0", 0);
     assert_eval_eq("Simplify[(Limit[Sin[a x + b]/(a x + b), x -> Infinity, Assumptions -> a > 0 && Element[b, Reals]]) - 0]", "0", 0);

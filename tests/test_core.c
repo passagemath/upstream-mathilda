@@ -1097,7 +1097,7 @@ void test_binomial(void) {
 
     /* Symbolic n with concrete small m: falling-factorial polynomial. */
     e = parse_expression("Binomial[n, 4]"); res = evaluate(e); s = expr_to_string_fullform(res);
-    assert(strcmp(s, "Times[Rational[1, 24], n, Plus[-3, n], Plus[-2, n], Plus[-1, n]]") == 0);
+    assert(strcmp(s, "Times[Rational[1, 24], Plus[-3, n], Plus[-2, n], Plus[-1, n], n]") == 0);
     free(s); expr_free(res); expr_free(e);
 
     /* Symmetric identity for symbolic n: Subtract[n, n-1] = 1. */

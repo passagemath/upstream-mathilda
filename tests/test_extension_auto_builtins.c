@@ -394,13 +394,14 @@ static void test_pgcd_multivar_single_alpha_shared_no_gamma(void) {
 }
 
 static void test_pgcd_multivar_single_alpha_shared_with_gamma(void) {
-    /* gcd((a Sqrt[2] + 1) x, (a Sqrt[2] + 1) y) = a Sqrt[2] + 1.
-     * The shared factor is linear in γ (Sqrt[2]); Q[γ,a,x,y]-GCD
-     * finds it. */
+    /* gcd((a Sqrt[2] + 1) x, (a Sqrt[2] + 1) y) = a Sqrt[2] + 1, up to a unit
+     * of Q(Sqrt[2]).  The shared factor is linear in γ (Sqrt[2]); the
+     * multivariate number-field GCD (flint_field_gcd, v0.230) certifies a
+     * MONIC candidate, so it comes back as a + 1/Sqrt[2]. */
     assert_eval_eq(
         "PolynomialGCD[(a Sqrt[2] + 1) x, (a Sqrt[2] + 1) y, "
         "Extension -> Automatic]",
-        "1 + Sqrt[2] a", 0);
+        "1/Sqrt[2] + a", 0);
 }
 
 static void test_pgcd_multivar_single_alpha_coprime(void) {
@@ -428,18 +429,14 @@ static void test_pgcd_multivar_multi_alpha_two_vars_unit_factor(void) {
      * Q(γ) (their product is 2 - 3 = -1, both nonzero), so neither
      * contributes to the canonical GCD.
      *
-     * Phase D limitation: the substitute-back approach computes the
-     * Q[γ, x, y]-GCD (γ treated as polynomial variable).  Under the
-     * primitive-element substitution γ = Sqrt[2] + Sqrt[3] one input
-     * becomes (x^2 - y^2)·γ and the other (x^2 - y^2)·γ·(γ^2 - 10),
-     * so the Q[γ,x,y]-GCD is (x^2 - y^2)·γ — which substitutes back
-     * to (x^2 - y^2)(Sqrt[2] + Sqrt[3]).  This is still a Q(γ)-divisor
-     * of both inputs (Sqrt[2] + Sqrt[3] is a unit in Q(γ)), just not
-     * the canonical monic form.  Documented boundary. */
+     * The Phase D substitute-back approach (γ as a polynomial variable)
+     * returned the non-canonical (x^2 - y^2)(Sqrt[2] + Sqrt[3]); the native
+     * multivariate number-field GCD (flint_field_gcd, v0.230) works in Q(γ)
+     * itself and gives the canonical answer. */
     assert_eval_eq(
         "PolynomialGCD[(x^2 - y^2) (Sqrt[2] + Sqrt[3]), "
         "(x^2 - y^2) (Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
-        "Sqrt[2] x^2 + Sqrt[3] x^2 - Sqrt[2] y^2 - Sqrt[3] y^2", 0);
+        "x^2 - y^2", 0);
 }
 
 /* --- Multivariate LCM: γ-free common factor --- */

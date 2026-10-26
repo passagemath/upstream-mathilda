@@ -820,6 +820,7 @@ Expr* flint_num_airy_ai(const Expr* z)       { return nb_eval1(z, nb_airy_ai);  
  * guard bits and ~e|z|^2 terms (16 s at |z| = 100 vs milliseconds here). */
 Expr* flint_num_erf(const Expr* z)  { return nb_eval1(z, acb_hypgeom_erf);  }
 Expr* flint_num_erfc(const Expr* z) { return nb_eval1(z, acb_hypgeom_erfc); }
+Expr* flint_num_barnesg(const Expr* z) { return nb_eval1(z, acb_barnes_g); }
 Expr* flint_num_erfi(const Expr* z) { return nb_eval1(z, acb_hypgeom_erfi); }
 Expr* flint_num_airy_ai_prime(const Expr* z) { return nb_eval1(z, nb_airy_aip); }
 Expr* flint_num_airy_bi(const Expr* z)       { return nb_eval1(z, nb_airy_bi);  }
@@ -2236,6 +2237,7 @@ Expr* flint_num_polylog(const Expr* s, const Expr* z) { (void)s; (void)z; return
 Expr* flint_num_airy_ai(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_erf(const Expr* z)  { (void)z; return NULL; }
 Expr* flint_num_erfc(const Expr* z) { (void)z; return NULL; }
+Expr* flint_num_barnesg(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_erfi(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_ai_prime(const Expr* z) { (void)z; return NULL; }
 Expr* flint_num_airy_bi(const Expr* z) { (void)z; return NULL; }

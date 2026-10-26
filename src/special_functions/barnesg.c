@@ -12,6 +12,7 @@
  * Memory: honours the builtin ownership contract.
  */
 
+#include "flint_num_bridge.h" /* flint_num_barnesg: arb for arbitrary precision */
 #include "barnesg.h"
 #include "numeric.h"
 #include "eval.h"
@@ -108,6 +109,16 @@ static bool barnes_is_inexact(const Expr* e) {
 
 static Expr* barnesg_numeric(Expr* w) {
     long bits = barnes_target_bits(w);
+    /* Arbitrary precision: arb's Barnes G. The 12-term asymptotic below
+     * reaches D digits only after shifting the argument by R ~ 10^((D+4)/24)
+     * and dividing out R Gamma factors -- ~50 at 30 digits, ~3200 at 80, where
+     * Exp[(Z^2/2) Log[Z]] ~ e^(4*10^7) came back Overflow[] and the cost had
+     * grown 50-fold. The machine path keeps the series (shared, bit for bit,
+     * with the other numeric surfaces); the series stays the fallback. */
+    if (bits > 53) {
+        Expr* v = flint_num_barnesg(w);
+        if (v) return v;
+    }
     double D = (double)bits * 0.30103;                 /* target decimal digits */
     long R = (long)ceil(pow(10.0, (D + 4.0) / 24.0)) + 1;  /* shift so 12 terms reach D */
     if (R < 12) R = 12;

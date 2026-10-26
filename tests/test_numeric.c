@@ -420,6 +420,15 @@ static void test_n_prec_complex_pow(void) {
                            "0.20787957635076190854695561983");
 }
 
+/* BarnesG at arbitrary precision goes through arb: the 12-term asymptotic
+ * needed ~10^(D/24) Gamma factors and overflowed at 80 digits. */
+static void test_barnesg_arbitrary_precision(void) {
+    assert_eval_startswith("N[BarnesG[37/10], 80]",
+        "1.47004087379182024528585019115859644390187499791247432441168975852307655158787");
+    assert_eval_eq("N[BarnesG[37/10], 75] - N[BarnesG[37/10], 200] == 0", "True", 0);
+    assert_eval_eq("N[BarnesG[x + 2] - x Gamma[x]^2 BarnesG[x] /. x -> 17/10, 30] == 0", "True", 0);
+}
+
 /* Phase 8: end-to-end MPFR-complex corner cases. The infrastructure
  * landed in earlier phases (per-builtin wirings + numeric_mpfr_complex_pow);
  * this test fixes the behaviour at the REPL level so future regressions
@@ -524,6 +533,7 @@ int main(void) {
     TEST(test_set_accuracy);
     TEST(test_listable_prec);
     TEST(test_n_prec_complex_pow);
+    TEST(test_barnesg_arbitrary_precision);
     TEST(test_mpfr_complex_corner_cases);
     TEST(test_n_does_not_evaluate_held_arguments);
 #endif

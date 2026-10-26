@@ -553,9 +553,13 @@ bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
             }
             if (plus_ok && any) return true;
         }
-        /* Power: positive base raised to anything is positive. */
+        /* Power: a positive base to a REAL power is positive (p^q =
+         * Exp[q Log[p]] with q Log[p] real). Not to any power: E^(I x) is on
+         * the unit circle, and treating E^((2 I) n Pi) as positive made
+         * Arg[I E^(2 I n Pi)] = Pi/2 and Simplify[Arg[Exp[I Pi (2 n + 1/2)]]
+         * - Pi/2, Element[n, Reals]] = 0, both false for non-integer n. */
         if (h == SYM_Power && n == 2) {
-            if (prov_pos(ctx, a[0])) return true;
+            if (prov_pos(ctx, a[0]) && prov_re(ctx, a[1])) return true;
         }
         /* Exp[real] is strictly positive. */
         if (h == SYM_Exp && n == 1) {

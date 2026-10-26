@@ -181,6 +181,19 @@ void test_int_soundness_declines(void) {
     assert_eval_eq("Simplify[Sin[(n + m) Pi], Element[{n,m},Reals]] === 0", "False", 0);
     /* The Arg fold must not fire for a non-integer phase. */
     assert_eval_eq("Simplify[Arg[Exp[I Pi (2 n + 1/2)]] - Pi/2, Element[n,Reals]] === 0", "False", 0);
+    /* ... nor its three ingredients. E^(2 I n Pi) is 1 only for integer n (an
+     * even coefficient must not make 2 n vanish mod 2 before n is shown to be
+     * an integer); it is not positive for real n (a positive base needs a REAL
+     * exponent); and Arg[E^(I x)] is not 0 for real x (Reduce must not decide
+     * E^(I x) > 0 by a real sign diagram). */
+    assert_eval_eq("Simplify[E^(2 I n Pi), Element[n,Reals]] === E^(2 I n Pi)", "True", 0);
+    assert_eval_eq("Simplify[E^(2 I n Pi) > 0, Element[n,Reals]] === True", "False", 0);
+    assert_eval_eq("Refine[Arg[E^(I x)], Element[x,Reals]] === Arg[E^(I x)]", "True", 0);
+    assert_eval_eq("Refine[Arg[I E^(I x)], Element[x,Reals]] === Arg[I E^(I x)]", "True", 0);
+    /* ... while the integer case still folds. */
+    assert_eval_eq("Simplify[E^(2 I n Pi), Element[n,Integers]]", "1", 0);
+    assert_eval_eq("Simplify[E^(I n Pi), Element[n,Integers]]", "(-1)^n", 0);
+    assert_eval_eq("Simplify[E^(2 I n Pi + x), Element[n,Integers]]", "E^x", 0);
     /* Rounding/mod rules need integrality: Floor[n] != n, Floor[n+x] shift,
      * and Mod[n,1] != 0 (it is FractionalPart[n]) for real n. */
     assert_eval_eq("Simplify[Floor[n] - n, Element[n,Reals]] === 0", "False", 0);

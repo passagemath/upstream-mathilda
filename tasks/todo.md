@@ -1,3 +1,36 @@
+# Test-suite drift: 42 failing registered tests (2026-10-26)
+
+Inventory (ctest on main at -O2; assert binaries re-run with NDEBUG so every FAIL prints): ~37 individual
+failures behind 42 tests. Root cause of the drift: CI only compiles; nothing runs the suite. Rule for every
+item: confirm the failure, then decide CODE BUG vs STALE EXPECTATION from first principles (derivation +
+numeric check), never from another system's output; a stale expectation is fixed only after the new form
+is shown equal (or the new behaviour shown right).
+
+## W1 Wrong answers (first)
+- [x] integer_assume_simplify: unsound for real n -- three root causes (prov_pos real exponent, Reduce complex
+      inequalities, mod-2 even-coefficient early return) ; v0.6027
+- [ ] sf_machine_error: Erf[1.*^300 + 1.*^300 I] returns a Real (complex argument)
+- [ ] numeric: N[E^(I Pi/4) - (-1)^(1/4), 32] leaves 3.3e-52 (1 - I), expected an exact-zero result
+- [ ] fit: Fit[..., WorkingPrecision -> 24] returns the exact fit in fit_tests at -O2, correct at -O3 and
+      standalone -> undefined behaviour (uninitialised NumericSpec field? see memory)
+## W2 Capability regressions
+- [ ] integrate_diffunderint: 4 FAILs, (x^a - 1)/Log[x] and (x^a - x^b)/Log[x] no longer close
+- [ ] DSolve: 31 corpus cases over baseline in 17 sections (per-case diff vs ce03e99d 2026-10-18), dsolve_tests
+      t_m37_abel_air, dsolve_m61 (Bessel family), dsolve_m34 (cubic series), dsolve_m63 + corpus 2.1.2 timeouts
+## W3 Behaviour changes to judge
+- [ ] packed_list (5): ToNDArray / ToPackedArray[{1, 2.5}] now pack a mixed list; Apart[1/(x^2 - 1)]
+- [ ] ndarray_linalg (4): Chop of NDArray gives exact 0s; Chop[Normalize[{1.*^200, 1.*^200}] - ...]; Eigenvalues[NDArray]
+- [ ] plot3d (4): polygon counts (18 vs 9) for PlotPoints -> 4, MaxRecursion -> 0
+- [ ] expint_machine: ExpIntegralE[5/2, 1.] now numeric (verify value); risch_transcendental (2):
+      Integrate[x 2.71828^-x, x] now integrates (verify antiderivative by differentiation)
+- [ ] flint_bridge: Factor[Sin[x]^2 - y^2]
+## W4 Print-form drift (verify equality numerically, then update)
+- [ ] normalize, legendreq (2), stats (Correlation), simp (2: TrigToExp[Tanh] order), trigexpand, ml_dist (FullForm reals)
+## W5 Timeouts (profile, as NMinimize)
+- [ ] simp_sf_airy (Struve, known 22 s), mathar_regression, mathar_definite_corpus, dsolve_m63, corpus 2.1.2
+## W6 Keep it from drifting again
+- [ ] CI job: build the CMake suite and run ctest; fail on any non-baselined failure
+
 # Dialog[] (2026-10-26)
 
 Ground truth from the local 14.0 kernel (interactive mode, piped and pty): numbering continues from

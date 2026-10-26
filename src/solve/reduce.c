@@ -220,6 +220,88 @@ static bool reduce_is_pure_exp_resid(const Expr* resid, const Expr* var) {
     return reduce_is_transcendental_resid(resid, var) && !reduce_has_log(resid, var);
 }
 
+/* True iff `e` holds an explicit non-real number: the symbol I or a Complex[...]. */
+static bool reduce_has_complex_number(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, SYM_Complex)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_has_complex_number(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True iff `e` contains a call with head `h`. */
+static bool reduce_mentions_head(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (reduce_mentions_head(e->data.function.args[i], h)) return true;
+    return false;
+}
+
+/* `ComplexExpand[part[d]]` with every symbol real (the Reals reading), or
+ * NULL when that does not come out real (a Re, Im or I survives). Owned. */
+static Expr* reduce_real_part_of(const char* part, const Expr* d) {
+    Expr* in = expr_new_function(expr_new_symbol(part), (Expr*[]){ expr_copy((Expr*)d) }, 1);
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol("ComplexExpand"), &in, 1));
+    if (reduce_has_complex_number(r) || reduce_mentions_head(r, SYM_Re) || reduce_mentions_head(r, SYM_Im)) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+/* Over the Reals an ordering inequality holds only where both sides are real,
+ * so `l > r` between possibly non-real quantities means Im[l - r] == 0 &&
+ * Re[l - r] > 0 (likewise <, <=, >=). The sign-diagram engines assume a
+ * real-valued function: they sampled E^(I x) at x = 0, saw 1 > 0 and no real
+ * root, and returned True for Reduce[E^(I x) > 0, x, Reals] (the answer is
+ * x == 2 Pi C[1]) -- which in turn made Refine take E^((2 I) n Pi) > 0 and
+ * Arg[E^(I x)] = 0 for every real x. Rebuilds `e` with each such atom split.
+ * Sets *had when one was found; returns NULL (decline) when an atom with a
+ * visibly complex side cannot be split (an Inequality chain, or a part that
+ * ComplexExpand leaves non-real). Owned. */
+static Expr* reduce_split_complex_ineqs(const Expr* e, bool* had) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    const char* hn = (h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    bool ord = (hn == SYM_Less || hn == SYM_LessEqual || hn == SYM_Greater || hn == SYM_GreaterEqual);
+    if ((ord && n == 2) || hn == SYM_Inequality) {
+        bool cx = false;
+        for (size_t i = 0; i < n; i++)
+            if (reduce_has_complex_number(e->data.function.args[i])) { cx = true; break; }
+        if (!cx) return expr_copy((Expr*)e);
+        *had = true;
+        if (!ord) return NULL;
+        Expr* d = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy(e->data.function.args[0]),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(e->data.function.args[1]) }, 2) }, 2));
+        Expr* re = reduce_real_part_of(SYM_Re, d);
+        Expr* im = reduce_real_part_of(SYM_Im, d);
+        expr_free(d);
+        if (!re || !im) { expr_free(re); expr_free(im); return NULL; }
+        Expr* im_eq = expr_new_function(expr_new_symbol(SYM_Equal), (Expr*[]){ im, expr_new_integer(0) }, 2);
+        Expr* re_rel = expr_new_function(expr_new_symbol(hn), (Expr*[]){ re, expr_new_integer(0) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_And), (Expr*[]){ im_eq, re_rel }, 2);
+    }
+    Expr** args = (Expr**)malloc((n ? n : 1) * sizeof(Expr*));
+    if (!args) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = reduce_split_complex_ineqs(e->data.function.args[i], had);
+        if (!args[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(args[j]);
+            free(args);
+            return NULL;
+        }
+    }
+    Expr* out = expr_new_function(expr_copy((Expr*)h), args, n);
+    free(args);
+    return out;
+}
+
 /* Residual lhs - rhs of an Equal[lhs, rhs] atom (owned, evaluated). */
 static Expr* reduce_eq_atom_resid(const Expr* eqatom) {
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
@@ -773,6 +855,27 @@ static Expr* reduce_impl(Expr* res) {
     Expr* owned_pre = NULL;
     bool reals_dom = (dom == NULL
                       || (dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Reals));
+
+    /* An ordering inequality between non-real quantities: split it into its
+     * real meaning (see reduce_split_complex_ineqs) and reduce that, or leave
+     * the call unevaluated -- never hand it to the real-valued engines. */
+    if (reals_dom) {
+        bool had = false;
+        Expr* split = reduce_split_complex_ineqs(expr, &had);
+        if (had) {
+            Expr* out = NULL;
+            if (split) {
+                Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Reduce),
+                    (Expr*[]){ split, expr_copy((Expr*)vars), expr_new_symbol(SYM_Reals) }, 3));
+                if (is_head(r, SYM_Reduce)) expr_free(r);
+                else out = r;
+            }
+            expr_free(owned_list);
+            expr_free(owned_vars);
+            return out;
+        }
+        expr_free(split);
+    }
     if (nv == 1 && reals_dom && reduce_stmt_has_realfn(expr, vlist[0])) {
         force_reals = true;
         bool changed = false;

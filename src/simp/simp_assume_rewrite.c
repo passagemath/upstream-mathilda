@@ -375,10 +375,15 @@ static int ivp_term_decompose(const AssumeCtx* ctx, const Expr* term,
     if (sr_head(term, "Times")) { nf = term->data.function.arg_count;
         facs = (const Expr* const*)term->data.function.args; }
     else { nf = 1; facs = &single; }
+    /* An even coefficient makes the term vanish mod 2 only once every other
+     * factor is shown to be an integer: returning 0 at the coefficient let
+     * (-1)^(2 n) -> 1 -- so E^(2 I n Pi) -> 1 and Arg[Exp[I Pi (2 n + 1/2)]]
+     * -> Pi/2 -- for a merely real n. So scan every factor first. */
+    bool even = false;
     for (size_t i = 0; i < nf; i++) {
         const Expr* f = facs[i];
         int lp = lit_parity(f);
-        if (lp >= 0) { if (lp == 0) return 0; continue; }   /* integer coeff */
+        if (lp >= 0) { if (lp == 0) even = true; continue; }   /* integer coeff */
         /* a generator factor: g or Power[g, positive-integer] */
         const Expr* g = f;
         if (sr_head(f, "Power") && f->data.function.arg_count == 2) {
@@ -397,7 +402,7 @@ static int ivp_term_decompose(const AssumeCtx* ctx, const Expr* term,
         if (!seen) gens[(*ngen)++] = g;
     }
     (void)coeff_odd;
-    return 1;
+    return even ? 0 : 1;
 }
 
 /* Boolean-ring reduction of an integer-valued polynomial E modulo 2.

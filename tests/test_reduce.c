@@ -891,6 +891,21 @@ static void test_cad_algebraic_fibre(void) {
  *  a few representative outputs are pinned here.                     *
  * ------------------------------------------------------------------ */
 
+/* Over the Reals an ordering inequality holds only where both sides are real:
+ * f > 0 means Im f == 0 && Re f > 0. The sign-diagram engines assume a real-
+ * valued function -- they sampled E^(I x) at x = 0 and answered True for all
+ * x (the truth is x == 2 Pi k). A complex-valued inequality is now split, or
+ * left unevaluated, never handed to them. */
+static void test_complex_valued_inequalities(void) {
+    run_test("Head[Reduce[E^(I x) > 0, x, Reals]]", "Reduce");
+    run_test("Head[Reduce[Cos[x] + I Sin[x] > 0, x, Reals]]", "Reduce");
+    run_test("Reduce[I > 0, x, Reals]", "False");          /* Im part 1 != 0 */
+    run_test("Reduce[x + I > 0, x, Reals]", "False");
+    run_test("Reduce[I x > 0, x, Reals]", "False");        /* Im = x, Re = 0 */
+    run_test("Reduce[x > 1, x, Reals]", "Greater[x, 1]");  /* real: untouched */
+    run_test("Reduce[x^2 < 4, x, Reals]", "Inequality[-2, Less, x, Less, 2]");
+}
+
 static void test_real_functions(void) {
     /* Nested radicals: the equation is an identity on an interval. */
     run_test("Reduce[Sqrt[x + 3 - 4 Sqrt[x - 1]] + Sqrt[x + 8 - 6 Sqrt[x - 1]] == 1, x, Reals]",
@@ -1897,6 +1912,7 @@ int main(void) {
     TEST(test_rational_domain);
     TEST(test_inequality_defaults_reals);
     TEST(test_decline_soundness);
+    TEST(test_complex_valued_inequalities);
     TEST(test_real_functions);
     TEST(test_piecewise_functions);
     TEST(test_cad_real);

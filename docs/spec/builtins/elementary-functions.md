@@ -305,6 +305,8 @@ to `ComplexInfinity`: `ArcSin[ComplexInfinity]`, `ArcCos[ComplexInfinity]`,
 `ComplexInfinity`/`DirectedInfinity` stays unevaluated because the value
 (`∓ I Pi/2`) depends on the direction of approach.
 
+**v0.6035.** All 36 compositions `f[g[x]]` of the six circular functions and their inverses evaluate to their principal-branch algebraic forms, e.g. `Csc[ArcSin[u]] -> 1/u`, `Sec[ArcTan[u]] -> Sqrt[1 + u^2]`, `Sin[ArcCot[u]] -> 1/(Sqrt[1 + 1/u^2] u)`, `Cos[ArcSec[u]] -> 1/u`. ArcCot, ArcSec and ArcCsc are ArcTan, ArcCos and ArcSin at `1/x`.
+
 
 ## TrigToExp
 Converts trigonometric and hyperbolic functions in `expr` to exponentials.

@@ -47,6 +47,15 @@ static void test_times_zero_infinity(void) {
     check_full("0 ComplexInfinity", "Indeterminate");
 }
 
+/* A symbolic factor does not save 0 * Infinity: 0 C[2] ComplexInfinity is
+ * Indeterminate, not 0 (an IVP fit at a basis singularity read 0 == 1). */
+static void test_times_zero_infinity_symbolic(void) {
+    check_full("Quiet[Times[0, c, ComplexInfinity]]", "Indeterminate");
+    check_full("Quiet[Times[0, c, d, Infinity]]", "Indeterminate");
+    check_full("Quiet[Times[0, c, Power[0, -1/2]]]", "Indeterminate");
+    check_full("Times[0, c]", "0");
+}
+
 static void test_times_scaled_infinity(void) {
     /* Positive coefficient absorbs into Infinity. */
     check_full("5 Infinity", "Infinity");
@@ -174,6 +183,7 @@ int main(void) {
     core_init();
 
     TEST(test_times_zero_infinity);
+    TEST(test_times_zero_infinity_symbolic);
     TEST(test_times_scaled_infinity);
     TEST(test_times_inf_inf);
     TEST(test_times_indeterminate);

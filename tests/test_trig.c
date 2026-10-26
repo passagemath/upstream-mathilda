@@ -399,6 +399,23 @@ void test_trig_exact_table_numeric() {
         }
 }
 
+/* Every f[g[u]] of the six circular functions and their six inverses
+ * evaluates to its principal-branch algebraic form, and agrees with
+ * direct numerical evaluation at real and complex points (18 of the 36
+ * used to stay unevaluated, e.g. Csc[ArcSin[u]], Sec[ArcTan[u]]). */
+void test_trig_of_inverse_all_pairs() {
+    assert_eval_eq("fs = {Sin, Cos, Tan, Cot, Sec, Csc}; "
+                   "gs = {ArcSin, ArcCos, ArcTan, ArcCot, ArcSec, ArcCsc}; "
+                   "FreeQ[Table[f[g[u]], {f, fs}, {g, gs}], "
+                   "(Sin | Cos | Tan | Cot | Sec | Csc)[(ArcSin | ArcCos | ArcTan | ArcCot | ArcSec | ArcCsc)[_]]]",
+                   "True", 0);
+    assert_eval_eq("Max[Flatten[Table[Abs[N[(f[g[v]] /. v -> p) - f[N[g[p], 40]], 30]], "
+                   "{f, fs}, {g, gs}, {p, {3/10, -7/10, 2, -3, 1/2 + I, -2 - 3 I/2}}]]] < 10^-25",
+                   "True", 0);
+    assert_eval_eq("{Csc[ArcSin[u]], Sec[ArcTan[u]], Cos[ArcSec[u]], Sin[ArcCsc[u]]}",
+                   "{1/u, Sqrt[1 + u^2], 1/u, 1/u}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -408,6 +425,7 @@ int main() {
     TEST(test_trig_forward);
     TEST(test_trig_inverse);
     TEST(test_trig_forward_of_inverse);
+    TEST(test_trig_of_inverse_all_pairs);
     TEST(test_trig_mpfr_complex);
     TEST(test_arc_trig_mpfr_complex);
     TEST(test_elementary_argx);

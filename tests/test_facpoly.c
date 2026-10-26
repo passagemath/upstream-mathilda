@@ -136,12 +136,28 @@ void test_factor() {
     run_test("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]", "Inequality[1, Less, Times[Power[Plus[1, x], -1], Plus[2, x], Plus[1, x, Power[x, 2]]], Less, 2]");
 }
 
+/* A transcendental constant (Sqrt[Pi], E) is an indeterminate to the FLINT
+ * factoriser: an uncombined rational expression whose denominator carried
+ * Sqrt[Pi] fell to the heuristic path (61 s on the 13-generator Struve ODE
+ * residual below); results are unchanged otherwise. */
+void test_factor_transcendental_constants() {
+    assert_eval_eq("{Factor[Pi x + Pi], Factor[Sqrt[Pi] x^2 - Sqrt[Pi]], Factor[E^2 x^2 - 1], "
+                   "Factor[(x^2 - 1)/(Sqrt[Pi] (x - 1))]}",
+                   "{Pi (1 + x), Sqrt[Pi] (-1 + x) (1 + x), (-1 + E x) (1 + E x), (1 + x)/Sqrt[Pi]}", 0);
+    assert_eval_eq("e = z^2 D[StruveH[a + b, z], {z, 2}] + z D[StruveH[a + b, z], z] + (z^2 - (a + b)^2) StruveH[a + b, z] "
+                   "- 4 (z/2)^(a + b + 1)/(Sqrt[Pi] Gamma[a + b + 1/2]); "
+                   "f = TimeConstrained[Factor[e], 10, $Aborted]; f =!= $Aborted && "
+                   "Chop[N[(f - e) /. {a -> 1/3, b -> 1/5, z -> 7/10}, 30]] == 0",
+                   "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
 
     printf("Running facpoly tests...\n");
     TEST(test_factorsquarefree);
+    TEST(test_factor_transcendental_constants);
     TEST(test_factorsquarefree_f4_fastpath);
     TEST(test_factor_xp_minus_c_regression);
     TEST(test_factor_bivariate_content_regression);

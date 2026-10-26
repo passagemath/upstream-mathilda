@@ -1030,6 +1030,20 @@ Expr* builtin_times(Expr* res) {
                     (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
             }
             expr_free(coeff);
+            /* A symbolic factor does not save 0 * Infinity: the collector below
+             * would let the 0 absorb everything, ComplexInfinity included, so
+             * 0 C[2] ComplexInfinity came out 0 -- an IVP fit at a basis
+             * singularity then read 0 == 1 and reported "no solution". */
+            for (size_t i = 0; i < n; i++) {
+                Expr* arg = res->data.function.args[i];
+                if ((arg->type == EXPR_INTEGER && arg->data.integer == 0) ||
+                    (arg->type == EXPR_REAL && arg->data.real == 0.0)) {
+                    const char* what = (cinf_count > 0) ? "ComplexInfinity" : "Infinity";
+                    mth_message_gated(g_arith_warnings_muted, "Infinity", "indet",
+                            "Indeterminate expression 0 %s encountered.", what);
+                    return expr_new_symbol(SYM_Indeterminate);
+                }
+            }
             /* fall through: keep symbolic, let the rest run */
         }
     }

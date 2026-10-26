@@ -1271,6 +1271,11 @@ char* poly_make_fresh_gen(Expr* e) {
  * ring structure collect_variables descends through (Plus, Times, List and
  * Power), so a kernel is matched exactly where it acts as a generator. */
 static Expr* kern_forward(const Expr* e, const PolyKernelMap* map) {
+    if (e->type == EXPR_SYMBOL) {               /* a transcendental constant kernel */
+        for (size_t i = 0; i < map->n; i++)
+            if (expr_eq((Expr*)e, map->kern[i])) return expr_copy(map->sym[i]);
+        return expr_copy((Expr*)e);
+    }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     for (size_t i = 0; i < map->n; i++)
         if (expr_eq((Expr*)e, map->kern[i])) return expr_copy(map->sym[i]);
@@ -1286,14 +1291,54 @@ static Expr* kern_forward(const Expr* e, const PolyKernelMap* map) {
     return r;
 }
 
+/* A transcendental constant (Pi, E, EulerGamma, Catalan). */
+static bool kern_is_transc_const(const Expr* e) {
+    if (e->type != EXPR_SYMBOL) return false;
+    const char* n = e->data.symbol.name;
+    return n == SYM_Pi || n == SYM_E || n == SYM_EulerGamma || n == SYM_Catalan;
+}
+
+/* Collect, through the ring structure (Plus, Times, List, Power), the
+ * transcendental constants c and their fractional powers c^(p/q) -- Sqrt[Pi]
+ * in a Gamma-function identity.  They are numbers to collect_variables, yet
+ * not rational, so FLINT declined the polynomial and Factor fell back to the
+ * heuristic path (60 s on a 13-generator Struve residual).  A transcendental
+ * c is algebraically independent over Q, so as an indeterminate it is exact. */
+static void kern_collect_consts(const Expr* e, Expr*** vars, size_t* vc, size_t* vcap) {
+    const Expr* hit = NULL;
+    if (kern_is_transc_const(e)) hit = e;
+    else if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+             && e->data.function.head->data.symbol.name == SYM_Power
+             && e->data.function.arg_count == 2
+             && kern_is_transc_const(e->data.function.args[0])) {
+        const Expr* q = e->data.function.args[1];
+        if (q->type == EXPR_INTEGER) hit = e->data.function.args[0];
+        else if (q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL
+                 && q->data.function.head->data.symbol.name == SYM_Rational) hit = e;
+        else return;                            /* E^x etc.: a function kernel already */
+    }
+    if (hit) {
+        for (size_t i = 0; i < *vc; i++) if (expr_eq((*vars)[i], (Expr*)hit)) return;
+        if (*vc == *vcap) { *vcap *= 2; *vars = realloc(*vars, sizeof(Expr*) * *vcap); }
+        (*vars)[(*vc)++] = expr_copy((Expr*)hit);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return;
+    const char* hn = e->data.function.head->data.symbol.name;
+    if (hn != SYM_Plus && hn != SYM_Times && hn != SYM_List && hn != SYM_Power) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        kern_collect_consts(e->data.function.args[i], vars, vc, vcap);
+}
+
 Expr* poly_kernels_to_symbols(const Expr* e, PolyKernelMap* map) {
     map->kern = NULL; map->sym = NULL; map->n = 0;
     size_t vc = 0, vcap = 8;
     Expr** vars = malloc(sizeof(Expr*) * vcap);
     collect_variables((Expr*)e, &vars, &vc, &vcap);
+    kern_collect_consts(e, &vars, &vc, &vcap);
     size_t nk = 0;
     for (size_t i = 0; i < vc; i++)
-        if (vars[i]->type == EXPR_FUNCTION) nk++;
+        if (vars[i]->type == EXPR_FUNCTION || kern_is_transc_const(vars[i])) nk++;
     if (nk == 0) {
         for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
         free(vars);
@@ -1311,7 +1356,7 @@ Expr* poly_kernels_to_symbols(const Expr* e, PolyKernelMap* map) {
     int ctr = 0;
     char buf[48];
     for (size_t i = 0; i < vc; i++) {
-        if (vars[i]->type != EXPR_FUNCTION) { expr_free(vars[i]); continue; }
+        if (vars[i]->type != EXPR_FUNCTION && !kern_is_transc_const(vars[i])) { expr_free(vars[i]); continue; }
         do snprintf(buf, sizeof buf, "zzzk$%04d", ctr++);
         while (walk_has_symbol_name((Expr*)e, buf));
         map->kern[map->n] = vars[i];                  /* adopt */

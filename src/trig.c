@@ -257,15 +257,22 @@ static Expr* arccos_i_fold(Expr* arg) {
 
 /*
  * try_simp_forward_of_inverse:
- * Universal forward-of-inverse identities for trig functions. `outer` is the
- * forward head ("Sin","Cos","Tan",...), `arg` is the body of that call. If
- * `arg` is an inverse-trig call whose pairing with `outer` yields a closed
- * algebraic form, return the rewritten Expr*; otherwise NULL. Identities
- * follow the principal-branch conventions Mathematica exposes:
- *   Sin[ArcCos[x]] -> Sqrt[1-x^2]      Cos[ArcSin[x]] -> Sqrt[1-x^2]
- *   Sin[ArcTan[x]] -> x/Sqrt[1+x^2]    Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
- *   Tan[ArcSin[x]] -> x/Sqrt[1-x^2]    Tan[ArcCos[x]] -> Sqrt[1-x^2]/x
- *   Tan[ArcCot[x]] -> 1/x              Cot[ArcTan[x]] -> 1/x
+ * Forward-of-inverse identities for the six circular functions. `outer` is the
+ * forward head ("Sin", "Cos", "Tan", "Cot", "Sec", "Csc"), `arg` the body of
+ * that call. When `arg` is g[x] for an inverse head g, the pair
+ * (s, c) = (Sin[g[x]], Cos[g[x]]) has a closed algebraic form on the principal
+ * branch, and every outer head is one of s, c, s/c, c/s, 1/c, 1/s:
+ *   g = ArcSin:  s = x,                    c = Sqrt[1 - x^2]
+ *   g = ArcCos:  s = Sqrt[1 - x^2],        c = x
+ *   g = ArcTan:  s = x/Sqrt[1 + x^2],      c = 1/Sqrt[1 + x^2]
+ *   g = ArcCot:  s = 1/(x Sqrt[1 + 1/x^2]), c = 1/Sqrt[1 + 1/x^2]
+ *   g = ArcSec:  s = Sqrt[1 - 1/x^2],      c = 1/x
+ *   g = ArcCsc:  s = 1/x,                  c = Sqrt[1 - 1/x^2]
+ * The last three are the first three at 1/x, by the definitions
+ * ArcCot[x] = ArcTan[1/x], ArcSec[x] = ArcCos[1/x], ArcCsc[x] = ArcSin[1/x].
+ * Each identity holds for every complex x off the branch points
+ * (Sin[ArcCos[x]] = Sqrt[1 - x^2] is the principal square root throughout).
+ * The pairing f[f^-1[x]] = x is handled by the callers (strip_inverse_call).
  * The inverse-of-forward direction (e.g. ArcSin[Sin[x]]) is intentionally
  * NOT folded -- those reduce to x only on the principal domain of each f.
  */
@@ -274,66 +281,48 @@ static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
     if (!arg->data.function.head ||
         arg->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* inner = arg->data.function.head->data.symbol.name;
+    int g = strcmp(inner, "ArcSin") == 0 ? 0 : strcmp(inner, "ArcCos") == 0 ? 1
+          : strcmp(inner, "ArcTan") == 0 ? 2 : strcmp(inner, "ArcCot") == 0 ? 3
+          : strcmp(inner, "ArcSec") == 0 ? 4 : strcmp(inner, "ArcCsc") == 0 ? 5 : -1;
+    if (g < 0) return NULL;
+    int f = strcmp(outer, "Sin") == 0 ? 0 : strcmp(outer, "Cos") == 0 ? 1
+          : strcmp(outer, "Tan") == 0 ? 2 : strcmp(outer, "Cot") == 0 ? 3
+          : strcmp(outer, "Sec") == 0 ? 4 : strcmp(outer, "Csc") == 0 ? 5 : -1;
+    if (f < 0) return NULL;
+
+    /* t = x, or 1/x for the reciprocal inverses (ArcCot/ArcSec/ArcCsc) */
     Expr* x = arg->data.function.args[0];
-
-    /* Helpers to build common subexpressions: Sqrt[1 - x^2], Sqrt[1 + x^2],
-     * x / Sqrt[1 - x^2], etc. We construct the unevaluated tree and let the
-     * outer evaluator canonicalise (it folds Plus, Power, Times). */
-    #define SQRT_OF(arg_e)                                                     \
-        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
-            (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
-    #define X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
-            (Expr*[]){ expr_copy(x), expr_new_integer(2) }, 2))
-    #define ONE_MINUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
-            (Expr*[]){ expr_new_integer(1),                                    \
-                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), \
-                           (Expr*[]){ expr_new_integer(-1), X_SQ() }, 2)) }, 2))
-    #define ONE_PLUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
-            (Expr*[]){ expr_new_integer(1), X_SQ() }, 2))
-
-    if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcCos") == 0) {
-        return SQRT_OF(ONE_MINUS_X_SQ());
+    Expr* t = (g >= 3)
+        ? expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2)
+        : expr_copy(x);
+    /* r = Sqrt[1 - t^2] (ArcSin/ArcCos/ArcSec/ArcCsc) or Sqrt[1 + t^2] (ArcTan/ArcCot) */
+    int sign = (g == 2 || g == 3) ? 1 : -1;
+    Expr* t2 = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2);
+    Expr* rad = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_new_integer(1),
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ expr_new_integer(sign), t2 }, 2) }, 2);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ rad, make_rational(1, 2) }, 2);
+    Expr *sn, *cs;
+    switch (g) {
+        case 0: case 5: sn = t; cs = r; break;                   /* ArcSin, ArcCsc */
+        case 1: case 4: sn = r; cs = t; break;                   /* ArcCos, ArcSec */
+        default:                                                 /* ArcTan, ArcCot */
+            sn = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ t,
+                     expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ expr_copy(r), expr_new_integer(-1) }, 2) }, 2);
+            cs = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ r, expr_new_integer(-1) }, 2);
+            break;
     }
-    if (strcmp(outer, "Cos") == 0 && strcmp(inner, "ArcSin") == 0) {
-        return SQRT_OF(ONE_MINUS_X_SQ());
+    #define RECIP(e_) expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ (e_), expr_new_integer(-1) }, 2)
+    Expr* out;
+    switch (f) {
+        case 0:  out = sn; expr_free(cs); break;
+        case 1:  out = cs; expr_free(sn); break;
+        case 2:  out = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ sn, RECIP(cs) }, 2); break;
+        case 3:  out = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ cs, RECIP(sn) }, 2); break;
+        case 4:  out = RECIP(cs); expr_free(sn); break;
+        default: out = RECIP(sn); expr_free(cs); break;
     }
-    if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcTan") == 0) {
-        Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-            (Expr*[]){ den, expr_new_integer(-1) }, 2));
-        return make_times(expr_copy(x), inv);
-    }
-    if (strcmp(outer, "Cos") == 0 && strcmp(inner, "ArcTan") == 0) {
-        Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
-        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-            (Expr*[]){ den, expr_new_integer(-1) }, 2));
-    }
-    if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcSin") == 0) {
-        Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-            (Expr*[]){ den, expr_new_integer(-1) }, 2));
-        return make_times(expr_copy(x), inv);
-    }
-    if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCos") == 0) {
-        Expr* num = SQRT_OF(ONE_MINUS_X_SQ());
-        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
-        return make_times(num, inv_x);
-    }
-    if ((strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCot") == 0) ||
-        (strcmp(outer, "Cot") == 0 && strcmp(inner, "ArcTan") == 0)) {
-        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
-            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
-    }
-
-    #undef SQRT_OF
-    #undef X_SQ
-    #undef ONE_MINUS_X_SQ
-    #undef ONE_PLUS_X_SQ
-    return NULL;
+    #undef RECIP
+    return eval_and_free(out);
 }
 
 /*
@@ -911,6 +900,7 @@ Expr* builtin_sec(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Sec", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcSec"); if (inv) return inv; }
+    { Expr* f = try_simp_forward_of_inverse("Sec", arg); if (f) return f; }
 
     // Sec is even: Sec[-x] -> Sec[x]
     { Expr* f = even_fold(arg, "Sec"); if (f) return f; }
@@ -962,6 +952,7 @@ Expr* builtin_csc(Expr* res) {
     if (is_interval(arg)) { Expr* r = interval_apply_function("Csc", arg); if (r) return r; }
 
     { Expr* inv = strip_inverse_call(arg, "ArcCsc"); if (inv) return inv; }
+    { Expr* f = try_simp_forward_of_inverse("Csc", arg); if (f) return f; }
 
     // Csc is odd: Csc[-x] -> -Csc[x]
     { Expr* f = odd_fold(arg, "Csc"); if (f) return f; }

@@ -531,6 +531,8 @@ In[3]:= 14/Sqrt[10]
 Out[3]= 7 Sqrt[2/5]
 ```
 
+**v0.6035.** A symbolic factor does not rescue `0 * Infinity`: `0 c ComplexInfinity` is `Indeterminate`, with `Infinity::indet`, as `0 ComplexInfinity` is.
+
 ## NonCommutativeMultiply (**)
 
 A general associative, but non-commutative, form of multiplication. Use it as a

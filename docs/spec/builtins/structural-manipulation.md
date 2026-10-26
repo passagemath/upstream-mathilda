@@ -1561,6 +1561,8 @@ In[8]:= Factor[Integrate[f[x], x] x^2 - Integrate[f[x], x]]
 Out[8]= (-1 + x) (1 + x) Integrate[f[x], x]
 ```
 
+**v0.6035.** The transcendental constants Pi, E, EulerGamma and Catalan, and their fractional powers (`Sqrt[Pi]`), are indeterminates to the multivariate factoriser, so a rational expression carrying them reaches FLINT. A 13-generator Struve residual went from 61 s to 2.5 ms. `Factor[x^2 - Pi^2]` is `(-Pi + x) (Pi + x)`.
+
 ## FactorList
 Gives a list of the irreducible factors of a polynomial together with their exponents.
 - `FactorList[poly]`

@@ -167,7 +167,7 @@ static void test_no_leak_many_calls(void) {
 int main(void) {
     symtab_init();
     core_init();
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     TEST(test_quadratic_exact);
     TEST(test_illcond_n10_c1e6);

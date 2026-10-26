@@ -314,7 +314,7 @@ int main(void) {
     core_init();
     /* Numeric routines emit expected diagnostics (lstol at a hard bound, etc.);
      * keep them off stdout so only FAIL lines show. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* G1 unconstrained + scaling */
     TEST(test_rosenbrock_2d);

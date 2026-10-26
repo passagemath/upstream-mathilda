@@ -33,7 +33,7 @@
 static void mute_stderr_once(void) {
     static int done = 0;
     if (!done) {
-        freopen("/dev/null", "w", stderr);
+        test_mute_messages();
         done = 1;
     }
 }

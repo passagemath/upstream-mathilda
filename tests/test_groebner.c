@@ -53,7 +53,7 @@ static void check_true(const char* input) {
 /* Suppress stderr once for nimpl/argt diagnostics. */
 static void mute_stderr_once(void) {
     static int done = 0;
-    if (!done) { freopen("/dev/null", "w", stderr); done = 1; }
+    if (!done) { test_mute_messages(); done = 1; }
 }
 
 /* ------------------------------------------------------------------ */

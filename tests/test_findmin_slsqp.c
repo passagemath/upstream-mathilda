@@ -295,7 +295,7 @@ int main(void) {
     core_init();
     /* Numeric routines emit expected diagnostics (infeas, lstol, ...); keep
      * them off stdout so only FAIL lines show. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* S1 unconstrained reduction */
     TEST(test_rosenbrock_2d);

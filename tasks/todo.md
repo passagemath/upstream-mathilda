@@ -29,8 +29,10 @@ interactive pty transcript matches the reference session line for line; check-c9
       the $PreRead test's stderr -> /dev/null -> /dev/tty restore hid every later FAIL line off a terminal
 - [x] 14 more test files restored stderr with freopen("/dev/tty"): now test_stderr_redirect/restore (dup2) in
       test_utils.h, and test_symbol.c mutes via mth_msg_suppress_push/pop
-- [ ] Follow-up: ~30 test binaries point stderr at /dev/null for the REST of the run (silence_stderr(),
-      `if (!done) freopen("/dev/null")`, the findmin/nm_* suites): any FAIL line after that is lost too
+- [x] 35 test binaries pointed stderr at /dev/null for the rest of the run: now test_mute_messages() (a whole-run
+      Quiet frame), stderr stays open
+- [ ] Follow-up (pre-existing at HEAD): nminimize_tests is killed by test_utils.h's whole-binary alarm(120) watchdog
+      at test 82/86 (test_txncost_portfolio) -- the suite needs > 120 s; SIGALRM ends it with no FAIL line
 
 # FeynCalc H1: named characters, test harness, first baseline (2026-10-24)
 

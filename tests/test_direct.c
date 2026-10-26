@@ -354,7 +354,7 @@ int main(void) {
 
     /* Expected diagnostics (option-scoping warnings) write to stderr; keep the
      * test output clean. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* 1. Shape */
     TEST(test_shape);

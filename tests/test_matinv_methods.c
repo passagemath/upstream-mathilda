@@ -37,7 +37,7 @@
 
 static void silence_stderr(void) {
     fflush(stderr);
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 }
 
 static void run_test_str(const char* input, const char* expected) {

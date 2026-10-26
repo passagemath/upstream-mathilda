@@ -171,7 +171,7 @@ static void test_no_leak_many_calls(void) {
 int main(void) {
     symtab_init();
     core_init();
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* Q1 curvature */
     TEST(test_rosenbrock);

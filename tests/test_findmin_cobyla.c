@@ -222,7 +222,7 @@ static void test_hs071(void) {
 int main(void) {
     symtab_init();
     core_init();
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* C1 unconstrained */
     TEST(test_uncon_quadratic);

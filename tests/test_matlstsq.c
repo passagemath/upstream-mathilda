@@ -51,7 +51,7 @@
  * of the contract; their textual output is informational. */
 static void silence_stderr(void) {
     fflush(stderr);
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 }
 
 /* Parse, evaluate, compare to expected (FullForm). */

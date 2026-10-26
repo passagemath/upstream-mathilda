@@ -526,7 +526,7 @@ int main(void) {
 
     /* Intended-error / decline tests write diagnostics to stderr; keep output
      * clean. Successful exact solves are silent. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* 1. Shape */
     TEST(test_result_shape);

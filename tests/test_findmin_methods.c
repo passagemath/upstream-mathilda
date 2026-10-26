@@ -270,7 +270,7 @@ static void test_automatic(void) {
 int main(void) {
     symtab_init();
     core_init();
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     TEST(test_quadratic_bowl);
     TEST(test_rosenbrock);

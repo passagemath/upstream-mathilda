@@ -32,6 +32,18 @@ static inline void test_load_init_m(void) {
     if (c) { struct Expr* r = evaluate(c); expr_free(c); if (r) expr_free(r); }
 }
 
+/* Mute Mathilda's messages for the rest of the run, the way a Quiet around
+ * everything would: for a test whose calls emit expected diagnostics. Stderr
+ * itself stays open, so every FAIL line still shows -- pointing stderr at
+ * /dev/null, as these tests used to, hid the failures along with the noise.
+ * A Check[] inside still sees its messages, and they still count as fired.
+ * Idempotent. */
+void mth_msg_suppress_push(void);
+static inline void test_mute_messages(void) {
+    static int muted = 0;
+    if (!muted) { mth_msg_suppress_push(); muted = 1; }
+}
+
 /* Point stderr (fd 2) at `path`, truncated, until test_stderr_restore; for a
  * test that reads back the messages a call printed. Returns the saved
  * descriptor, or -1 with stderr untouched. The swap is at the descriptor, so

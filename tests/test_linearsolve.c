@@ -35,7 +35,7 @@
 /* Suppress LinearSolve::nosol / ::lvec1 / ::matrix messages while
  * running the negative-path tests.  We still want the *behaviour*
  * (return unevaluated) to be tested, just not the noise on stderr. */
-static void silence_stderr(void) { fflush(stderr); freopen("/dev/null", "w", stderr); }
+static void silence_stderr(void) { fflush(stderr); test_mute_messages(); }
 
 static void run_test(const char* input, const char* expected) {
     Expr* e = parse_expression(input);

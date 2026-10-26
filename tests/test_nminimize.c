@@ -1630,7 +1630,7 @@ int main(void) {
 
     /* Diagnostics write to stderr on the intended-error tests; keep the test
      * output clean. NMinimize itself is silent on successful solves. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* 1. Shape */
     TEST(test_result_shape);

@@ -194,7 +194,7 @@ int main(void) {
     core_init();
     /* Numeric routines emit expected diagnostics (nimpl for the rejected
      * general constraint, etc.); keep them off stdout so only FAIL lines show. */
-    freopen("/dev/null", "w", stderr);
+    test_mute_messages();
 
     /* N1 unconstrained smooth */
     TEST(test_rosenbrock_2d);
